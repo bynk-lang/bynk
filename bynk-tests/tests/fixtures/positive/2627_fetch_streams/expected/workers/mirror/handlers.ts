@@ -35,7 +35,11 @@ export const api = {
 export const upload = {
   async call(target: string, deps: { Fetch: bynk.Fetch }): globalThis.Promise<number> {
     const put = { method: Method.Put, url: target, contentType: Some("text/plain"), authorization: None, headers: new globalThis.Map<string, string>(), body: None };
-    const parts = (async function* () { for (const __e of [new globalThis.TextEncoder().encode("a"), new globalThis.TextEncoder().encode("b"), new globalThis.TextEncoder().encode("c")]) { yield __e; } })();
+    const parts = (async function* () {
+      for (const __e of [new globalThis.TextEncoder().encode("a"), new globalThis.TextEncoder().encode("b"), new globalThis.TextEncoder().encode("c")]) {
+        yield __e;
+      }
+    })();
     const sent = await deps.Fetch.sendStream(put, parts, { timeout: None, redirect: Redirect.Manual });
     switch (sent.tag) {
       case "Ok": {
@@ -61,8 +65,32 @@ export const both = {
         switch (second.tag) {
           case "Ok": {
             const b = second.value;
-            const x = await (async (__s) => { const __m = __s as unknown as { [k: symbol]: boolean }; const __k = globalThis.Symbol.for("bynk.stream.read"); if (__m[__k]) { throw new globalThis.Error("bynk: a stream can be read only once"); } __m[__k] = true; const __r = []; for await (const __e of __s) { __r.push(__e); } return __r; })(a.body);
-            const y = await (async (__s) => { const __m = __s as unknown as { [k: symbol]: boolean }; const __k = globalThis.Symbol.for("bynk.stream.read"); if (__m[__k]) { throw new globalThis.Error("bynk: a stream can be read only once"); } __m[__k] = true; const __r = []; for await (const __e of __s) { __r.push(__e); } return __r; })(b.body);
+            const x = await (async (__s) => {
+              const __m = __s as unknown as { [k: symbol]: boolean };
+              const __k = globalThis.Symbol.for("bynk.stream.read");
+              if (__m[__k]) {
+                throw new globalThis.Error("bynk: a stream can be read only once");
+              }
+              __m[__k] = true;
+              const __r = [];
+              for await (const __e of __s) {
+                __r.push(__e);
+              }
+              return __r;
+            })(a.body);
+            const y = await (async (__s) => {
+              const __m = __s as unknown as { [k: symbol]: boolean };
+              const __k = globalThis.Symbol.for("bynk.stream.read");
+              if (__m[__k]) {
+                throw new globalThis.Error("bynk: a stream can be read only once");
+              }
+              __m[__k] = true;
+              const __r = [];
+              for await (const __e of __s) {
+                __r.push(__e);
+              }
+              return __r;
+            })(b.body);
             return (x).length + (y).length;
           }
           case "Err": {
@@ -85,8 +113,32 @@ export const twice = {
     switch (got.tag) {
       case "Ok": {
         const r = got.value;
-        const x = await (async (__s) => { const __m = __s as unknown as { [k: symbol]: boolean }; const __k = globalThis.Symbol.for("bynk.stream.read"); if (__m[__k]) { throw new globalThis.Error("bynk: a stream can be read only once"); } __m[__k] = true; const __r = []; for await (const __e of __s) { __r.push(__e); } return __r; })(r.body);
-        const y = await (async (__s) => { const __m = __s as unknown as { [k: symbol]: boolean }; const __k = globalThis.Symbol.for("bynk.stream.read"); if (__m[__k]) { throw new globalThis.Error("bynk: a stream can be read only once"); } __m[__k] = true; const __r = []; for await (const __e of __s) { __r.push(__e); } return __r; })(r.body);
+        const x = await (async (__s) => {
+          const __m = __s as unknown as { [k: symbol]: boolean };
+          const __k = globalThis.Symbol.for("bynk.stream.read");
+          if (__m[__k]) {
+            throw new globalThis.Error("bynk: a stream can be read only once");
+          }
+          __m[__k] = true;
+          const __r = [];
+          for await (const __e of __s) {
+            __r.push(__e);
+          }
+          return __r;
+        })(r.body);
+        const y = await (async (__s) => {
+          const __m = __s as unknown as { [k: symbol]: boolean };
+          const __k = globalThis.Symbol.for("bynk.stream.read");
+          if (__m[__k]) {
+            throw new globalThis.Error("bynk: a stream can be read only once");
+          }
+          __m[__k] = true;
+          const __r = [];
+          for await (const __e of __s) {
+            __r.push(__e);
+          }
+          return __r;
+        })(r.body);
         return (x).length + (y).length;
       }
       case "Err": {

@@ -176,7 +176,7 @@ fn lower_effect_kernel_call(
 /// [`Built`] (1A.20, Decision G): the `List` kernel returns a node when its
 /// operands are nodes (1A.18a), a delegated kernel's `Lowered` passes through
 /// `Pre::absorb_built` unprinted, and the one family that is still text, the
-/// `Stream` generators, is `Err` (`// 1A:` at its arm below).
+/// `Stream` generators, is a node too (1A.35a part B).
 pub(in crate::emitter) fn lower_kernel_method_call(
     e: &Expr,
     receiver: &Expr,
@@ -249,12 +249,11 @@ pub(in crate::emitter) fn lower_kernel_method_call(
             // v0.100: a chained op on a `Stream` — the receiver already *is* an
             // async iterable, so it is the source directly. Emitted inline as
             // async-generator IIFEs (builders) / an async drain (`collect`).
-            // 1A: the `Stream` generators stay text until a generator node exists.
             KernelOp::Stream(op) => {
-                let recv = pre.lower(receiver, cx);
-                let a: Vec<String> = args.iter().map(|x| pre.lower(x, cx)).collect();
-                if let Some(s) = lower_stream_method(recv, op, &a) {
-                    return Some(Err(s));
+                let recv = pre.lower_node(receiver, cx);
+                let a: Vec<LoweredExpr> = args.iter().map(|x| pre.lower_node(x, cx)).collect();
+                if let Some(built) = lower_stream_method(recv, op, a) {
+                    return Some(built);
                 }
             }
             // #3051: a case's recording `TestConnection[F]`.

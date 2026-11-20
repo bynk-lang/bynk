@@ -19,11 +19,12 @@ use super::super::lower::{
     node_or_text, runtime_ctor_call, settle_built,
 };
 use super::super::lower_ctx::LowerCtx;
-use super::super::lower_list::key_is_plain;
+use super::super::lower_list::{id, key_is_plain, take};
 use super::super::ts_types::{ts_ty_to_ts_type, ts_type_ref_to_ts_type};
 use super::super::{Expr, ExprKind, Ident, TypeRef};
 use super::codec_statics::lower_json_codec_call;
 use super::kernel_scalar::identity;
+use super::query::stream_generator;
 
 /// `a.b`.
 fn member(object: TsExpr, property: &str) -> TsExpr {
@@ -573,11 +574,30 @@ pub(in crate::emitter) fn lower_runtime_value_static_call(
         // lowers to a host async iterable; `of` wraps a list as an async generator.
         // Emitted inline (no runtime import), like the collection kernels.
         (StaticOp::Stream(StreamStatic::Of), 1) => {
-            let xs = pre.lower(&args[0], cx);
-            // 1A: generator expression has no bynk_ts node
-            Some(Err(format!(
-                "(async function* () {{ for (const __e of {xs}) {{ yield __e; }} }})()"
-            )))
+            let xs = pre.lower_node(&args[0], cx);
+            Some(node_or_text(
+                vec![xs],
+                |n| {
+                    let [xs] = take::<1, _>(n);
+                    // `(async function* () { for (const __e of xs) { yield __e; } })()`
+                    let each = TsStmt::for_of(
+                        "__e",
+                        xs,
+                        TsStmt::block(
+                            vec![TsStmt::expr_stmt(TsExpr::Yield(Box::new(id("__e"))), None)],
+                            None,
+                        ),
+                        None,
+                    );
+                    stream_generator(None, vec![each])
+                },
+                |t| {
+                    format!(
+                        "(async function* () {{ for (const __e of {}) {{ yield __e; }} }})()",
+                        t[0]
+                    )
+                },
+            ))
         }
         _ => None,
     }
@@ -590,6 +610,8 @@ mod tests {
 
     /// `(text exits, emitted TypeScript)` for a one-function commons.
     fn exits(body: &str) -> (usize, String) {
+        // The text arguments read `String.splitRegex` as text (see `force_text`).
+        let _text = crate::emitter::lower::force_text::arm("splitRegex");
         TEXT_EXITS.with(|c| c.set(0));
         let ts = emit_source(&format!("commons st\n{body}\n"));
         (TEXT_EXITS.with(|c| c.get()), ts)
@@ -822,15 +844,16 @@ mod tests {
         assert!(ts.contains("return Ok(__r0.value);"), "{ts}");
     }
 
-    /// `Stream.of` stays text (an async generator has no `bynk_ts` node).
+    /// `Stream.of` is a node (1A.35a part B): an async generator over a `for…of` and a `yield`,
+    /// laid out across lines, with every token of the one-line text it replaced.
     #[test]
-    fn stream_of_stays_text() {
+    fn stream_of_is_an_async_generator_node() {
         let (n, ts) = exits("fn f(xs: List[String]) -> Stream[String] { Stream.of(xs) }");
         assert_eq!(
             returned(&ts),
-            "(async function* () { for (const __e of xs) { yield __e; } })()"
+            "(async function* () {\n    for (const __e of xs) {\n      yield __e;\n    }\n  })()"
         );
-        assert!(n > 0, "{ts}");
+        assert_eq!(n, 0, "{ts}");
     }
 
     /// A static on a declared type: with and without explicit type arguments,

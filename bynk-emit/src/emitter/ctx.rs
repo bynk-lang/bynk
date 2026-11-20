@@ -471,9 +471,9 @@ pub struct SystemJobServices {
 pub struct SystemHttpClaims {
     /// The `(service, method, path)` routes whose `by` actor is a refinement.
     pub routes: HashSet<(String, String, String)>,
-    /// Each refinement actor's witness claims, as a JavaScript object literal
-    /// (`bynk_check::actors::claim_witness_js`).
-    pub actors: HashMap<String, String>,
+    /// Each refinement actor's witness claims, name and value in order
+    /// (`bynk_check::actors::claim_witness`), which the emitter builds into an object literal.
+    pub actors: HashMap<String, Vec<(String, bynk_check::actors::WitnessValue)>>,
     /// #2155: each actor-sum route with a credentialed member, and its
     /// primary member — the actor a call with no principal acts as. Its
     /// signing drivers take the acting actor's name.

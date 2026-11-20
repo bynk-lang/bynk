@@ -216,8 +216,9 @@
 //! own node list grows: file by file, against real content.
 
 use crate::program::{
-    TsArrowBody, TsBinaryOp, TsBindingName, TsClassMethod, TsDecl, TsExpr, TsLit, TsMappedModifier,
-    TsObjectEntry, TsParam, TsProgram, TsStmt, TsStmtKind, TsType, TsTypeMember, TsUnaryOp,
+    TsArrowBody, TsBinaryOp, TsBindingName, TsClassMethod, TsDecl, TsDeclarator, TsExpr, TsLit,
+    TsMappedModifier, TsObjectEntry, TsParam, TsProgram, TsStmt, TsStmtKind, TsSwitchCase, TsType,
+    TsTypeMember, TsUnaryOp,
 };
 use crate::source_map::SourceMapBuilder;
 use bynk_syntax::span::Span;
@@ -645,9 +646,14 @@ fn render_stmt_kind(
             binding,
             iter,
             body,
+            is_await,
         } => {
             out.push_str(&indent(depth));
-            out.push_str("for (const ");
+            out.push_str(if *is_await {
+                "for await (const "
+            } else {
+                "for (const "
+            });
             out.push_str(binding);
             out.push_str(" of ");
             render_expr(out, iter, depth, &mut map);
@@ -672,6 +678,9 @@ fn render_stmt_kind(
             out.push_str("++)");
             render_branch(out, body, depth, map.as_mut().map(|t| t.reborrow()));
         }
+        TsStmtKind::While { cond, body } => render_while(out, cond, body, depth, map),
+        TsStmtKind::Labelled { label, body } => render_labelled(out, label, body, depth, map),
+        TsStmtKind::LetList(decls) => render_let_list(out, decls, depth, &mut map),
         TsStmtKind::TryCatch {
             try_block,
             catch_param,
@@ -695,13 +704,13 @@ fn render_stmt_kind(
             out.push_str(&indent(depth));
             out.push_str("}\n");
         }
-        TsStmtKind::Continue => {
+        TsStmtKind::Continue(label) => {
             out.push_str(&indent(depth));
-            out.push_str("continue;\n");
+            render_jump(out, "continue", label.as_deref());
         }
-        TsStmtKind::Break => {
+        TsStmtKind::Break(label) => {
             out.push_str(&indent(depth));
-            out.push_str("break;\n");
+            render_jump(out, "break", label.as_deref());
         }
         TsStmtKind::Assign { target, value } => {
             out.push_str(&indent(depth));
@@ -723,82 +732,7 @@ fn render_stmt_kind(
         TsStmtKind::Switch {
             discriminant,
             cases,
-        } => {
-            out.push_str(&indent(depth));
-            out.push_str("switch (");
-            render_expr(out, discriminant, depth, &mut map);
-            out.push_str(") {\n");
-            for case in cases {
-                debug_assert!(
-                    case.labels.is_empty() || !case.default_braced,
-                    "TsSwitchCase.default_braced only means something on the default (no labels) case — review of #1402's own nit"
-                );
-                // Review of #1446: the mirror invariant for `case_braced`
-                // (Arc E slice 6, #1445) — it only means something on a
-                // non-`default` (labelled) case; every real label-less call
-                // site sets it `true` with no effect (`default_braced` owns
-                // that arm's bracing instead), which would silently swallow a
-                // future caller's `false` there.
-                debug_assert!(
-                    !case.labels.is_empty() || case.case_braced,
-                    "TsSwitchCase.case_braced only means something on a non-default (labelled) case"
-                );
-                // 1A.13 (#3714): a case's span is recorded at the start of its
-                // first label line, before its indentation.
-                if let Some(span) = case.span {
-                    note_span_at(out.len(), span, map.as_mut());
-                }
-                if case.labels.is_empty() {
-                    out.push_str(&indent(depth + 1));
-                    if case.default_braced {
-                        out.push_str("default: {\n");
-                        for s in &case.body {
-                            render_stmt(out, s, depth + 2, map.as_mut().map(|t| t.reborrow()));
-                        }
-                        out.push_str(&indent(depth + 1));
-                        out.push_str("}\n");
-                    } else {
-                        out.push_str("default:\n");
-                        for s in &case.body {
-                            render_stmt(out, s, depth + 2, map.as_mut().map(|t| t.reborrow()));
-                        }
-                    }
-                    continue;
-                }
-                // Shared-body labels stack, one `case x:` line each; only the
-                // last carries the opening brace.
-                let last = case.labels.len() - 1;
-                for (i, label) in case.labels.iter().enumerate() {
-                    out.push_str(&indent(depth + 1));
-                    out.push_str("case ");
-                    render_expr(out, label, depth, &mut map);
-                    if i < last {
-                        out.push_str(":\n");
-                    }
-                }
-                // Arc E slice 6 (#1445): `case_braced` is the non-`default`
-                // mirror of `default_braced` — `emit_sum_codec`'s own
-                // payload-free variant case (`case "Pending":\n  return {
-                // kind: "Pending" };`) is real, unbraced content sitting
-                // right beside a braced payload-carrying sibling in the same
-                // switch (`212_json_codec`'s own `Status` fixture).
-                if case.case_braced {
-                    out.push_str(": {\n");
-                    for s in &case.body {
-                        render_stmt(out, s, depth + 2, map.as_mut().map(|t| t.reborrow()));
-                    }
-                    out.push_str(&indent(depth + 1));
-                    out.push_str("}\n");
-                } else {
-                    out.push_str(":\n");
-                    for s in &case.body {
-                        render_stmt(out, s, depth + 2, map.as_mut().map(|t| t.reborrow()));
-                    }
-                }
-            }
-            out.push_str(&indent(depth));
-            out.push_str("}\n");
-        }
+        } => render_switch(out, discriminant, cases, depth, map),
         TsStmtKind::InlineBlock(stmts) => {
             out.push_str(&indent(depth));
             render_inline_block(out, stmts);
@@ -814,6 +748,175 @@ fn render_stmt_kind(
         // a reuse of `Verbatim`).
         TsStmtKind::Raw(text) => out.push_str(text),
     }
+}
+
+/// `switch (<discriminant>) { <cases> }`, [`TsStmtKind::Switch`]'s renderer.
+fn render_switch(
+    out: &mut String,
+    discriminant: &TsExpr,
+    cases: &[TsSwitchCase],
+    depth: usize,
+    mut map: Option<MergeTarget<'_>>,
+) {
+    out.push_str(&indent(depth));
+    out.push_str("switch (");
+    render_expr(out, discriminant, depth, &mut map);
+    out.push_str(") {\n");
+    for case in cases {
+        debug_assert!(
+            case.labels.is_empty() || !case.default_braced,
+            "TsSwitchCase.default_braced only means something on the default (no labels) case — review of #1402's own nit"
+        );
+        // Review of #1446: the mirror invariant for `case_braced`
+        // (Arc E slice 6, #1445) — it only means something on a
+        // non-`default` (labelled) case; every real label-less call
+        // site sets it `true` with no effect (`default_braced` owns
+        // that arm's bracing instead), which would silently swallow a
+        // future caller's `false` there.
+        debug_assert!(
+            !case.labels.is_empty() || case.case_braced,
+            "TsSwitchCase.case_braced only means something on a non-default (labelled) case"
+        );
+        // 1A.13 (#3714): a case's span is recorded at the start of its
+        // first label line, before its indentation.
+        if let Some(span) = case.span {
+            note_span_at(out.len(), span, map.as_mut());
+        }
+        if case.labels.is_empty() {
+            out.push_str(&indent(depth + 1));
+            if case.default_braced {
+                out.push_str("default: {\n");
+                for s in &case.body {
+                    render_stmt(out, s, depth + 2, map.as_mut().map(|t| t.reborrow()));
+                }
+                out.push_str(&indent(depth + 1));
+                out.push_str("}\n");
+            } else {
+                out.push_str("default:\n");
+                for s in &case.body {
+                    render_stmt(out, s, depth + 2, map.as_mut().map(|t| t.reborrow()));
+                }
+            }
+            continue;
+        }
+        // Shared-body labels stack, one `case x:` line each; only the
+        // last carries the opening brace.
+        let last = case.labels.len() - 1;
+        for (i, label) in case.labels.iter().enumerate() {
+            out.push_str(&indent(depth + 1));
+            out.push_str("case ");
+            render_expr(out, label, depth, &mut map);
+            if i < last {
+                out.push_str(":\n");
+            }
+        }
+        // Arc E slice 6 (#1445): `case_braced` is the non-`default`
+        // mirror of `default_braced` — `emit_sum_codec`'s own
+        // payload-free variant case (`case "Pending":\n  return {
+        // kind: "Pending" };`) is real, unbraced content sitting
+        // right beside a braced payload-carrying sibling in the same
+        // switch (`212_json_codec`'s own `Status` fixture).
+        if case.case_braced {
+            out.push_str(": {\n");
+            for s in &case.body {
+                render_stmt(out, s, depth + 2, map.as_mut().map(|t| t.reborrow()));
+            }
+            out.push_str(&indent(depth + 1));
+            out.push_str("}\n");
+        } else {
+            out.push_str(":\n");
+            for s in &case.body {
+                render_stmt(out, s, depth + 2, map.as_mut().map(|t| t.reborrow()));
+            }
+        }
+    }
+    out.push_str(&indent(depth));
+    out.push_str("}\n");
+}
+
+/// `continue;` / `break;`, or `continue <label>;` / `break <label>;`, ending the line.
+fn render_jump(out: &mut String, keyword: &str, label: Option<&str>) {
+    out.push_str(keyword);
+    if let Some(label) = label {
+        out.push(' ');
+        out.push_str(label);
+    }
+    out.push_str(";\n");
+}
+
+/// `while (<cond>) <body>`, [`TsStmtKind::While`]'s renderer: the body is braced or inline
+/// as for `for...of`.
+fn render_while(
+    out: &mut String,
+    cond: &TsExpr,
+    body: &TsStmt,
+    depth: usize,
+    mut map: Option<MergeTarget<'_>>,
+) {
+    out.push_str(&indent(depth));
+    out.push_str("while (");
+    render_expr(out, cond, depth, &mut map);
+    out.push(')');
+    render_branch(out, body, depth, map);
+}
+
+/// `<label>: <body>`, [`TsStmtKind::Labelled`]'s renderer: a block or loop body continues the
+/// label's line (`label: {`, `label: while (…) {`), anything else follows it inline. A loop's own
+/// body keeps the source map, so its statements record their checkpoints as they would unlabelled.
+fn render_labelled(
+    out: &mut String,
+    label: &str,
+    body: &TsStmt,
+    depth: usize,
+    mut map: Option<MergeTarget<'_>>,
+) {
+    out.push_str(&indent(depth));
+    out.push_str(label);
+    out.push(':');
+    if let TsStmtKind::While { cond, body: inner } = &body.kind {
+        out.push(' ');
+        note_span(out.len(), body, map.as_mut());
+        out.push_str("while (");
+        render_expr(out, cond, depth, &mut map);
+        out.push(')');
+        render_branch(out, inner, depth, map);
+    } else {
+        render_branch(out, body, depth, map);
+    }
+}
+
+/// `let a, b: T, c!: T, d = e;`, [`TsStmtKind::LetList`]'s renderer.
+fn render_let_list(
+    out: &mut String,
+    decls: &[TsDeclarator],
+    depth: usize,
+    m: &mut Option<MergeTarget<'_>>,
+) {
+    out.push_str(&indent(depth));
+    out.push_str("let ");
+    for (i, d) in decls.iter().enumerate() {
+        if i > 0 {
+            out.push_str(", ");
+        }
+        out.push_str(&d.name);
+        debug_assert!(
+            !d.definite || (d.ty.is_some() && d.init.is_none()),
+            "TsDeclarator::definite needs a type and no initialiser (`{}!` is otherwise a syntax error)",
+            d.name
+        );
+        if d.definite {
+            out.push('!');
+        }
+        if let Some(ty) = &d.ty {
+            out.push_str(": ");
+            render_type(out, ty);
+        }
+        if let Some(init) = &d.init {
+            out.push_str(" = ");
+            render_expr(out, init, depth, m);
+        }
+    }
+    out.push_str(";\n");
 }
 
 /// `if`/`for...of`'s own body: braces (and a nested block) when `branch` is
@@ -858,9 +961,12 @@ fn render_branch(
         | TsStmtKind::If { .. }
         | TsStmtKind::ForOf { .. }
         | TsStmtKind::For { .. }
+        | TsStmtKind::While { .. }
+        | TsStmtKind::Labelled { .. }
+        | TsStmtKind::LetList(_)
         | TsStmtKind::TryCatch { .. }
-        | TsStmtKind::Continue
-        | TsStmtKind::Break
+        | TsStmtKind::Continue(_)
+        | TsStmtKind::Break(_)
         | TsStmtKind::Assign { .. }
         | TsStmtKind::Comment(_)
         | TsStmtKind::DocComment(_)
@@ -942,8 +1048,21 @@ fn render_compact_stmts(out: &mut String, stmts: &[TsStmt], depth: usize) {
 /// something plausible instead of crashing.
 fn render_inline_stmt(out: &mut String, stmt: &TsStmt, depth: usize) {
     match &stmt.kind {
-        TsStmtKind::Continue => out.push_str("continue;\n"),
-        TsStmtKind::Break => out.push_str("break;\n"),
+        TsStmtKind::Continue(label) => render_jump(out, "continue", label.as_deref()),
+        TsStmtKind::Break(label) => render_jump(out, "break", label.as_deref()),
+        // A loop or label heads its own line and nests at the real `depth`, which the
+        // fallback below (rendered at depth 0) would not.
+        TsStmtKind::While { cond, body } => {
+            out.push_str("while (");
+            render_expr(out, cond, depth, &mut None);
+            out.push(')');
+            render_branch(out, body, depth, None);
+        }
+        TsStmtKind::Labelled { label, body } => {
+            out.push_str(label);
+            out.push(':');
+            render_branch(out, body, depth, None);
+        }
         TsStmtKind::Return(expr) => {
             out.push_str("return");
             if let Some(expr) = expr {
@@ -996,6 +1115,8 @@ fn render_inline_stmt(out: &mut String, stmt: &TsStmt, depth: usize) {
         | TsStmtKind::Decl(_)
         | TsStmtKind::Const { .. }
         | TsStmtKind::Let { .. }
+        // 1A.35a part B: one line, like `Let`.
+        | TsStmtKind::LetList(_)
         | TsStmtKind::If { .. }
         | TsStmtKind::ForOf { .. }
         // Arc E slice 7 (#1447): not reachable today — `ListInst`/
@@ -1154,6 +1275,8 @@ fn needs_parens_as_operand(expr: &TsExpr) -> bool {
             | TsExpr::Conditional { .. }
             | TsExpr::Assign { .. }
             | TsExpr::AddAssign { .. }
+            | TsExpr::Function { .. }
+            | TsExpr::Yield(_)
     )
 }
 
@@ -1162,7 +1285,10 @@ fn needs_parens_as_operand(expr: &TsExpr) -> bool {
 /// re-read as `(new f()).g()`.
 fn new_callee_needs_parens(callee: &TsExpr) -> bool {
     match callee {
-        TsExpr::Call { .. } | TsExpr::DefaultIife { .. } | TsExpr::New { .. } => true,
+        TsExpr::Call { .. }
+        | TsExpr::OptionalCall { .. }
+        | TsExpr::DefaultIife { .. }
+        | TsExpr::New { .. } => true,
         TsExpr::Member { object, .. }
         | TsExpr::OptionalMember { object, .. }
         | TsExpr::Index { object, .. }
@@ -1186,6 +1312,9 @@ fn new_callee_needs_parens(callee: &TsExpr) -> bool {
         | TsExpr::NonNull(_)
         | TsExpr::Assign { .. }
         | TsExpr::AddAssign { .. }
+        | TsExpr::Sequence(_)
+        | TsExpr::Function { .. }
+        | TsExpr::Yield(_)
         | TsExpr::Lit(_) => false,
     }
 }
@@ -1282,7 +1411,8 @@ fn render_binary_operand(
         | TsExpr::Arrow { .. }
         | TsExpr::Conditional { .. }
         | TsExpr::Assign { .. }
-        | TsExpr::AddAssign { .. } => true,
+        | TsExpr::AddAssign { .. }
+        | TsExpr::Yield(_) => true,
         // #2955 review: a unary or `await` operand directly left of `**` is a
         // JS syntax error (`!a ** b`, `typeof a ** b`, `await a ** b`), not a
         // precedence question, so it always parenthesizes there.
@@ -1362,6 +1492,7 @@ fn render_binary_operand(
         | TsExpr::OptionalIndex { .. }
         | TsExpr::TypeApp { .. }
         | TsExpr::Call { .. }
+        | TsExpr::OptionalCall { .. }
         | TsExpr::DefaultIife { .. }
         | TsExpr::New { .. }
         | TsExpr::Object { .. }
@@ -1373,6 +1504,8 @@ fn render_binary_operand(
         | TsExpr::Paren(_)
         | TsExpr::Spread(_)
         | TsExpr::NonNull(_)
+        | TsExpr::Sequence(_)
+        | TsExpr::Function { .. }
         | TsExpr::Lit(_) => false,
     };
     if needs_parens {
@@ -1713,7 +1846,10 @@ fn render_cast_operand(
 ) {
     let needs_parens = matches!(
         expr,
-        TsExpr::Binary { .. } | TsExpr::Arrow { .. } | TsExpr::Conditional { .. }
+        TsExpr::Binary { .. }
+            | TsExpr::Arrow { .. }
+            | TsExpr::Conditional { .. }
+            | TsExpr::Yield(_)
     );
     if needs_parens {
         out.push('(');
@@ -1722,6 +1858,73 @@ fn render_cast_operand(
     } else {
         render_expr(out, expr, depth, m);
     }
+}
+
+/// A unary operator and its operand: `!x`, `typeof x`, `-x`, `void x`, `++x`.
+fn render_unary(
+    out: &mut String,
+    op: TsUnaryOp,
+    expr: &TsExpr,
+    depth: usize,
+    m: &mut Option<MergeTarget<'_>>,
+) {
+    out.push_str(match op {
+        TsUnaryOp::Not => "!",
+        TsUnaryOp::Typeof => "typeof ",
+        TsUnaryOp::Neg => "-",
+        TsUnaryOp::Void => "void ",
+        TsUnaryOp::PreIncrement => "++",
+    });
+    // `- -x` must not print as the decrement `--x`.
+    let nested_neg = op == TsUnaryOp::Neg
+        && matches!(
+            *expr,
+            TsExpr::Unary {
+                op: TsUnaryOp::Neg,
+                ..
+            }
+        );
+    if nested_neg {
+        out.push('(');
+        render_expr(out, expr, depth, m);
+        out.push(')');
+    } else {
+        render_operand(out, expr, depth, m);
+    }
+}
+
+/// `test ? consequent : alternate`.
+fn render_conditional(
+    out: &mut String,
+    test: &TsExpr,
+    consequent: &TsExpr,
+    alternate: &TsExpr,
+    depth: usize,
+    m: &mut Option<MergeTarget<'_>>,
+) {
+    // `test` prints like a `ShortCircuitExpression` (the real JS/TS
+    // grammar position) — an `Arrow` or a nested `Conditional` there
+    // needs parens (grammar), a `Binary`/`As`/anything else doesn't.
+    // `consequent`/`alternate` are `AssignmentExpression` positions
+    // and admit a nested `Arrow`/`Conditional` with no parens at all
+    // (right-associative chaining, e.g. `a ? b : c ? d : e`, is
+    // already the correct reading) — neither needs the operand
+    // machinery the way `test` does.
+    let test_needs_parens = matches!(
+        test,
+        TsExpr::Arrow { .. } | TsExpr::Conditional { .. } | TsExpr::Yield(_)
+    );
+    if test_needs_parens {
+        out.push('(');
+        render_expr(out, test, depth, m);
+        out.push(')');
+    } else {
+        render_expr(out, test, depth, m);
+    }
+    out.push_str(" ? ");
+    render_expr(out, consequent, depth, m);
+    out.push_str(" : ");
+    render_expr(out, alternate, depth, m);
 }
 
 fn render_expr(out: &mut String, expr: &TsExpr, depth: usize, m: &mut Option<MergeTarget<'_>>) {
@@ -1799,6 +2002,13 @@ fn render_expr(out: &mut String, expr: &TsExpr, depth: usize, m: &mut Option<Mer
             out.push(')');
         }
         // 1A.20 (#3721, Decision A): the instantiation expression `f<A, B>`.
+        // 1A.35a part B: `callee?.(args)`.
+        TsExpr::OptionalCall { callee, args } => {
+            render_operand(out, callee, depth, m);
+            out.push_str("?.(");
+            render_expr_list(out, args, depth, m);
+            out.push(')');
+        }
         TsExpr::TypeApp { callee, type_args } => {
             debug_assert!(
                 !type_args.is_empty(),
@@ -1907,30 +2117,7 @@ fn render_expr(out: &mut String, expr: &TsExpr, depth: usize, m: &mut Option<Mer
             render_cast_operand(out, expr, depth, m);
             out.push_str(" as const");
         }
-        TsExpr::Unary { op, expr } => {
-            out.push_str(match op {
-                TsUnaryOp::Not => "!",
-                TsUnaryOp::Typeof => "typeof ",
-                TsUnaryOp::Neg => "-",
-                TsUnaryOp::Void => "void ",
-            });
-            // `- -x` must not print as the decrement `--x`.
-            let nested_neg = *op == TsUnaryOp::Neg
-                && matches!(
-                    **expr,
-                    TsExpr::Unary {
-                        op: TsUnaryOp::Neg,
-                        ..
-                    }
-                );
-            if nested_neg {
-                out.push('(');
-                render_expr(out, expr, depth, m);
-                out.push(')');
-            } else {
-                render_operand(out, expr, depth, m);
-            }
-        }
+        TsExpr::Unary { op, expr } => render_unary(out, *op, expr, depth, m),
         TsExpr::Binary { op, left, right } => {
             render_binary_operand(out, *op, left, true, depth, m);
             out.push_str(match op {
@@ -1957,29 +2144,7 @@ fn render_expr(out: &mut String, expr: &TsExpr, depth: usize, m: &mut Option<Mer
             test,
             consequent,
             alternate,
-        } => {
-            // `test` prints like a `ShortCircuitExpression` (the real JS/TS
-            // grammar position) — an `Arrow` or a nested `Conditional` there
-            // needs parens (grammar), a `Binary`/`As`/anything else doesn't.
-            // `consequent`/`alternate` are `AssignmentExpression` positions
-            // and admit a nested `Arrow`/`Conditional` with no parens at all
-            // (right-associative chaining, e.g. `a ? b : c ? d : e`, is
-            // already the correct reading) — neither needs the operand
-            // machinery the way `test` does.
-            let test_needs_parens =
-                matches!(**test, TsExpr::Arrow { .. } | TsExpr::Conditional { .. });
-            if test_needs_parens {
-                out.push('(');
-                render_expr(out, test, depth, m);
-                out.push(')');
-            } else {
-                render_expr(out, test, depth, m);
-            }
-            out.push_str(" ? ");
-            render_expr(out, consequent, depth, m);
-            out.push_str(" : ");
-            render_expr(out, alternate, depth, m);
-        }
+        } => render_conditional(out, test, consequent, alternate, depth, m),
         TsExpr::Paren(inner) => {
             out.push('(');
             render_expr(out, inner, depth, m);
@@ -2008,7 +2173,83 @@ fn render_expr(out: &mut String, expr: &TsExpr, depth: usize, m: &mut Option<Mer
             render_expr(out, value, depth, m);
         }
         TsExpr::Lit(lit) => render_lit(out, lit),
+        TsExpr::Sequence(items) => render_sequence(out, items, depth, m),
+        TsExpr::Function {
+            is_async,
+            is_generator,
+            params,
+            return_type,
+            body,
+        } => render_function(
+            out,
+            (*is_async, *is_generator),
+            params,
+            return_type.as_ref(),
+            body,
+            depth,
+            m,
+        ),
+        TsExpr::Yield(inner) => {
+            out.push_str("yield ");
+            render_expr(out, inner, depth, m);
+        }
     }
+}
+
+/// `(a, b)`, [`TsExpr::Sequence`]'s renderer: always bracketed, so a comma never reads as an
+/// argument or element separator.
+fn render_sequence(
+    out: &mut String,
+    items: &[TsExpr],
+    depth: usize,
+    m: &mut Option<MergeTarget<'_>>,
+) {
+    debug_assert!(
+        items.len() >= 2,
+        "TsExpr::Sequence needs at least two items; one is just the expression"
+    );
+    out.push('(');
+    for (i, item) in items.iter().enumerate() {
+        if i > 0 {
+            out.push_str(", ");
+        }
+        render_expr(out, item, depth, m);
+    }
+    out.push(')');
+}
+
+/// `async function* (params): ret { body }`, [`TsExpr::Function`]'s renderer: the body is the
+/// multi-line form an arrow's [`TsArrowBody::Multiline`] prints, one level deeper than the line
+/// the function starts on.
+fn render_function(
+    out: &mut String,
+    (is_async, is_generator): (bool, bool),
+    params: &[TsParam],
+    return_type: Option<&TsType>,
+    body: &[TsStmt],
+    depth: usize,
+    m: &mut Option<MergeTarget<'_>>,
+) {
+    if is_async {
+        out.push_str("async ");
+    }
+    out.push_str(if is_generator {
+        "function* ("
+    } else {
+        "function ("
+    });
+    render_params(out, params);
+    out.push(')');
+    if let Some(rt) = return_type {
+        out.push_str(": ");
+        render_type(out, rt);
+    }
+    out.push_str(" {\n");
+    for s in body {
+        render_stmt(out, s, depth + 1, m.as_mut().map(|t| t.reborrow()));
+    }
+    out.push_str(&indent(depth));
+    out.push('}');
 }
 
 /// A postfix `!` binds tighter than `await` and unary `!`/`-`/`typeof`, so those operands are
@@ -2068,7 +2309,9 @@ fn starts_with_object(expr: &TsExpr) -> bool {
         | TsExpr::OptionalMember { object, .. }
         | TsExpr::Index { object, .. }
         | TsExpr::OptionalIndex { object, .. } => starts_with_object(object),
-        TsExpr::Call { callee, .. } | TsExpr::TypeApp { callee, .. } => starts_with_object(callee),
+        TsExpr::Call { callee, .. }
+        | TsExpr::OptionalCall { callee, .. }
+        | TsExpr::TypeApp { callee, .. } => starts_with_object(callee),
         TsExpr::As { expr, .. } => starts_with_object(expr),
         TsExpr::AsConst(expr) => starts_with_object(expr),
         TsExpr::DefaultIife { .. } => false,
@@ -2088,6 +2331,9 @@ fn starts_with_object(expr: &TsExpr) -> bool {
         | TsExpr::NonNull(_)
         | TsExpr::Assign { .. }
         | TsExpr::AddAssign { .. }
+        | TsExpr::Sequence(_)
+        | TsExpr::Function { .. }
+        | TsExpr::Yield(_)
         | TsExpr::Lit(_) => false,
     }
 }
@@ -2113,6 +2359,8 @@ fn render_arrow_body(
                 render_expr(out, expr, depth, m);
             }
         }
+        // An empty body is `{}`, not `{  }` (1A.35a part B: the no-op `settle`).
+        TsArrowBody::Block(stmts) if stmts.is_empty() => out.push_str("{}"),
         TsArrowBody::Block(stmts) => {
             out.push_str("{ ");
             render_compact_stmts(out, stmts, depth);
@@ -2643,11 +2891,12 @@ fn stmt_contains_raw(stmt: &TsStmt) -> bool {
         | TsStmtKind::Decl(_)
         | TsStmtKind::Const { .. }
         | TsStmtKind::Let { .. }
+        | TsStmtKind::LetList(_)
         | TsStmtKind::ExprStmt(_)
         | TsStmtKind::Return(_)
         | TsStmtKind::Throw(_)
-        | TsStmtKind::Continue
-        | TsStmtKind::Break
+        | TsStmtKind::Continue(_)
+        | TsStmtKind::Break(_)
         | TsStmtKind::Assign { .. }
         | TsStmtKind::Comment(_)
         | TsStmtKind::DocComment(_)
@@ -2660,7 +2909,10 @@ fn stmt_contains_raw(stmt: &TsStmt) -> bool {
         } => {
             stmt_contains_raw(then_branch) || else_branch.as_deref().is_some_and(stmt_contains_raw)
         }
-        TsStmtKind::ForOf { body, .. } | TsStmtKind::For { body, .. } => stmt_contains_raw(body),
+        TsStmtKind::ForOf { body, .. }
+        | TsStmtKind::For { body, .. }
+        | TsStmtKind::While { body, .. }
+        | TsStmtKind::Labelled { body, .. } => stmt_contains_raw(body),
         TsStmtKind::TryCatch {
             try_block,
             catch_block,
@@ -2803,7 +3055,14 @@ fn render_params(out: &mut String, params: &[TsParam]) {
         if p.rest {
             out.push_str("...");
         }
-        out.push_str(&p.name);
+        match &p.array_pattern {
+            Some(names) => {
+                out.push('[');
+                out.push_str(&names.join(", "));
+                out.push(']');
+            }
+            None => out.push_str(&p.name),
+        }
         if p.optional {
             out.push('?');
         }
@@ -9144,6 +9403,332 @@ mod tests {
                 ty: TsType::named("T"),
             }),
             "(a as unknown) as T"
+        );
+    }
+
+    // --- 1A.35a part B: labels, `while`, multi-declarator `let`, sequence, optional call,
+    // generators, `for await`, `++x` and array-pattern parameters ---
+
+    fn num(n: &str) -> TsExpr {
+        TsExpr::Lit(TsLit::Num(n.to_string()))
+    }
+
+    fn lt(a: TsExpr, b: TsExpr) -> TsExpr {
+        TsExpr::Binary {
+            op: TsBinaryOp::LessThan,
+            left: Box::new(a),
+            right: Box::new(b),
+        }
+    }
+
+    /// `while (cond) { … }`, braced as `for...of`'s body is, and inline for a bare statement.
+    #[test]
+    fn a_while_loop_prints_its_body_braced_or_inline() {
+        let braced = TsStmt::while_stmt(
+            lt(id("i"), num("3")),
+            TsStmt::block(vec![TsStmt::increment(id("i"), None)], None),
+            None,
+        );
+        assert_eq!(print_stmt(&braced, 0), "while (i < 3) {\n  i++;\n}\n");
+        assert_eq!(print_stmt(&braced, 1), "  while (i < 3) {\n    i++;\n  }\n");
+        let inline = TsStmt::while_stmt(id("go"), TsStmt::break_stmt(None), None);
+        assert_eq!(print_stmt(&inline, 0), "while (go) break;\n");
+    }
+
+    /// A label continues its statement's line: `label: {` and `label: while (true) {`, and a
+    /// labelled `continue` / `break` names it.
+    #[test]
+    fn a_labelled_statement_and_its_jumps_print_on_the_label_line() {
+        let block = TsStmt::labelled(
+            "out",
+            TsStmt::block(vec![TsStmt::break_label_stmt("out", None)], None),
+            None,
+        );
+        assert_eq!(print_stmt(&block, 0), "out: {\n  break out;\n}\n");
+        let looped = TsStmt::labelled(
+            "LOOP",
+            TsStmt::while_stmt(
+                TsExpr::Lit(TsLit::Bool(true)),
+                TsStmt::block(vec![TsStmt::continue_label_stmt("LOOP", None)], None),
+                None,
+            ),
+            None,
+        );
+        assert_eq!(
+            print_stmt(&looped, 1),
+            "  LOOP: while (true) {\n    continue LOOP;\n  }\n"
+        );
+        // A bare `continue` / `break` still prints without a label.
+        assert_eq!(print_stmt(&TsStmt::continue_stmt(None), 0), "continue;\n");
+        assert_eq!(print_stmt(&TsStmt::break_stmt(None), 0), "break;\n");
+    }
+
+    /// A label on a statement inside an inline branch nests at the real depth.
+    #[test]
+    fn a_labelled_loop_inside_an_inline_block_keeps_its_depth() {
+        let inner = TsStmt::labelled(
+            "L",
+            TsStmt::while_stmt(
+                id("c"),
+                TsStmt::block(vec![TsStmt::continue_label_stmt("L", None)], None),
+                None,
+            ),
+            None,
+        );
+        let outer = TsStmt::if_stmt(id("a"), inner, None);
+        assert_eq!(
+            print_stmt(&outer, 1),
+            "  if (a) L: while (c) {\n    continue L;\n  }\n"
+        );
+    }
+
+    #[test]
+    fn a_let_list_prints_each_declarator() {
+        let plain = TsStmt::let_list(vec![TsDeclarator::new("a"), TsDeclarator::new("b")], None);
+        assert_eq!(print_stmt(&plain, 0), "let a, b;\n");
+        let mixed = TsStmt::let_list(
+            vec![
+                TsDeclarator::new("a").typed(TsType::named("number")),
+                TsDeclarator::new("b").definite(TsType::named("T")),
+                TsDeclarator::new("c").init(num("1")),
+            ],
+            None,
+        );
+        assert_eq!(print_stmt(&mixed, 1), "  let a: number, b!: T, c = 1;\n");
+    }
+
+    /// A comma expression brackets itself, so it is safe as an argument, an arrow body and a
+    /// callee's operand.
+    #[test]
+    fn a_sequence_brackets_itself() {
+        let seq = TsExpr::Sequence(vec![
+            TsExpr::Call {
+                callee: Box::new(TsExpr::Member {
+                    object: Box::new(id("s")),
+                    property: "delete".to_string(),
+                }),
+                args: vec![id("x")],
+            },
+            id("s"),
+        ]);
+        assert_eq!(print_expr(&seq), "(s.delete(x), s)");
+        let call = TsExpr::Call {
+            callee: Box::new(id("f")),
+            args: vec![seq.clone(), id("y")],
+        };
+        assert_eq!(print_expr(&call), "f((s.delete(x), s), y)");
+        let arrow = TsExpr::Arrow {
+            params: vec![TsParam::new("s", None)],
+            is_async: false,
+            generics: Vec::new(),
+            return_type: None,
+            body: Box::new(TsArrowBody::Expr(Box::new(seq))),
+        };
+        assert_eq!(print_expr(&arrow), "(s) => (s.delete(x), s)");
+    }
+
+    #[test]
+    fn an_optional_call_prints_question_dot_parens() {
+        let member = TsExpr::Member {
+            object: Box::new(id("o")),
+            property: "track".to_string(),
+        };
+        let call = TsExpr::OptionalCall {
+            callee: Box::new(member),
+            args: vec![],
+        };
+        assert_eq!(print_expr(&call), "o.track?.()");
+        // A member of an optional call is a plain member access, and `new` brackets it.
+        let chained = TsExpr::Member {
+            object: Box::new(call.clone()),
+            property: "x".to_string(),
+        };
+        assert_eq!(print_expr(&chained), "o.track?.().x");
+        let new = TsExpr::New {
+            callee: Box::new(chained),
+            args: vec![],
+        };
+        assert_eq!(print_expr(&new), "new (o.track?.().x)()");
+        // A looser callee is bracketed.
+        let sum = TsExpr::Binary {
+            op: TsBinaryOp::Or,
+            left: Box::new(id("a")),
+            right: Box::new(id("b")),
+        };
+        let looser = TsExpr::OptionalCall {
+            callee: Box::new(sum),
+            args: vec![num("1")],
+        };
+        assert_eq!(print_expr(&looser), "(a || b)?.(1)");
+    }
+
+    /// A generator function expression prints its body one level deeper, `yield` as an
+    /// expression statement, `for await` over an async iterable, and brackets as a callee.
+    #[test]
+    fn an_async_generator_with_yield_and_for_await_prints_as_an_iife() {
+        let generator = TsExpr::Function {
+            is_async: true,
+            is_generator: true,
+            params: vec![TsParam::new("__s", None)],
+            return_type: None,
+            body: vec![TsStmt::for_await_of(
+                "__e",
+                id("__s"),
+                TsStmt::block(
+                    vec![TsStmt::expr_stmt(TsExpr::Yield(Box::new(id("__e"))), None)],
+                    None,
+                ),
+                None,
+            )],
+        };
+        let call = TsExpr::Call {
+            callee: Box::new(generator),
+            args: vec![id("src")],
+        };
+        assert_eq!(
+            print_stmt(&TsStmt::expr_stmt(call.clone(), None), 0),
+            "(async function* (__s) {\n  for await (const __e of __s) {\n    yield __e;\n  }\n})(src);\n"
+        );
+        assert_eq!(
+            print_stmt(&TsStmt::expr_stmt(call, None), 1),
+            "  (async function* (__s) {\n    for await (const __e of __s) {\n      yield __e;\n    }\n  })(src);\n"
+        );
+    }
+
+    #[test]
+    fn a_plain_function_expression_and_a_bracketed_yield() {
+        let function = TsExpr::Function {
+            is_async: false,
+            is_generator: false,
+            params: vec![TsParam::new("a", Some(TsType::named("number")))],
+            return_type: Some(TsType::named("number")),
+            body: vec![TsStmt::return_stmt(Some(id("a")), None)],
+        };
+        assert_eq!(
+            print_expr(&function),
+            "function (a: number): number {\n  return a;\n}"
+        );
+        // `yield` binds looser than every operator, so it is bracketed as an operand.
+        let yielded = TsExpr::Yield(Box::new(id("v")));
+        let call = TsExpr::Call {
+            callee: Box::new(id("f")),
+            args: vec![yielded.clone()],
+        };
+        assert_eq!(print_expr(&call), "f(yield v)");
+        let sum = TsExpr::Binary {
+            op: TsBinaryOp::Add,
+            left: Box::new(yielded.clone()),
+            right: Box::new(num("1")),
+        };
+        assert_eq!(print_expr(&sum), "(yield v) + 1");
+        let cast = TsExpr::As {
+            expr: Box::new(yielded),
+            ty: TsType::named("T"),
+        };
+        assert_eq!(print_expr(&cast), "(yield v) as T");
+    }
+
+    #[test]
+    fn a_prefix_increment_prints_before_its_operand() {
+        let inc = TsExpr::Unary {
+            op: TsUnaryOp::PreIncrement,
+            expr: Box::new(id("__i")),
+        };
+        let test = TsExpr::Binary {
+            op: TsBinaryOp::GreaterThanEq,
+            left: Box::new(inc),
+            right: Box::new(id("__n")),
+        };
+        assert_eq!(print_expr(&test), "++__i >= __n");
+    }
+
+    #[test]
+    fn an_array_pattern_parameter_prints_in_place_of_its_name() {
+        let arrow = TsExpr::Arrow {
+            params: vec![TsParam::array_pattern(
+                vec!["__k".to_string(), "__v".to_string()],
+                None,
+            )],
+            is_async: false,
+            generics: Vec::new(),
+            return_type: None,
+            body: Box::new(TsArrowBody::Expr(Box::new(id("__v")))),
+        };
+        assert_eq!(print_expr(&arrow), "([__k, __v]) => __v");
+        let typed = TsParam::array_pattern(
+            vec![String::new(), "b".to_string()],
+            Some(TsType::named("T")),
+        );
+        let mut out = String::new();
+        render_params(&mut out, &[typed, TsParam::new("c", None)]);
+        assert_eq!(out, "[, b]: T, c");
+    }
+
+    /// `for await` awaits, whatever its body does; a `while`, a label and a `let` list are
+    /// walked for an `await` in their expressions.
+    #[test]
+    fn the_new_statements_are_walked_for_awaits() {
+        use crate::expr_contains_await;
+        let awaiting = || TsExpr::Await(Box::new(id("p")));
+        let for_await = TsStmt::for_await_of("e", id("s"), TsStmt::block(vec![], None), None);
+        let wrap = |stmt: TsStmt| TsExpr::Function {
+            is_async: true,
+            is_generator: false,
+            params: vec![],
+            return_type: None,
+            body: vec![stmt],
+        };
+        assert!(expr_contains_await(&wrap(for_await)));
+        let in_cond = TsStmt::while_stmt(awaiting(), TsStmt::block(vec![], None), None);
+        assert!(expr_contains_await(&wrap(in_cond)));
+        let in_label = TsStmt::labelled(
+            "L",
+            TsStmt::while_stmt(id("c"), TsStmt::expr_stmt(awaiting(), None), None),
+            None,
+        );
+        assert!(expr_contains_await(&wrap(in_label)));
+        let in_let = TsStmt::let_list(vec![TsDeclarator::new("a").init(awaiting())], None);
+        assert!(expr_contains_await(&wrap(in_let)));
+        assert!(!expr_contains_await(&wrap(TsStmt::let_list(
+            vec![TsDeclarator::new("a")],
+            None
+        ))));
+        assert!(expr_contains_await(&TsExpr::Sequence(vec![
+            id("a"),
+            awaiting()
+        ])));
+        assert!(expr_contains_await(&TsExpr::OptionalCall {
+            callee: Box::new(id("f")),
+            args: vec![awaiting()],
+        }));
+        assert!(expr_contains_await(&TsExpr::Yield(Box::new(awaiting()))));
+    }
+
+    /// The statements of a labelled loop record their checkpoints exactly as they would in an
+    /// unlabelled one (1A.35a part B): the label does not hide them from the source map.
+    #[test]
+    fn a_labelled_loops_statements_record_their_spans() {
+        let inner = TsStmt::return_stmt(Some(id("x")), sp(7));
+        let looped = TsStmt::labelled(
+            "L",
+            TsStmt::while_stmt(id("c"), TsStmt::block(vec![inner.clone()], None), None),
+            sp(1),
+        );
+        let (text, spans) = print_stmt_with_spans(&looped, 0);
+        assert_eq!(text, "L: while (c) {\n  return x;\n}\n");
+        assert_eq!(
+            spans,
+            vec![
+                (0, Span::new(1, 2)),
+                (text.find("  return").unwrap(), Span::new(7, 8))
+            ]
+        );
+        // The same loop unlabelled records the same inner checkpoint.
+        let bare = TsStmt::while_stmt(id("c"), TsStmt::block(vec![inner], None), None);
+        let (text, spans) = print_stmt_with_spans(&bare, 0);
+        assert_eq!(
+            spans,
+            vec![(text.find("  return").unwrap(), Span::new(7, 8))]
         );
     }
 }

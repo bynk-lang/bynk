@@ -35,5 +35,27 @@ export function roundTrip(a: number, b: number): number {
 }
 
 export function textOperand(p: string): number {
-  return (((((__s: string, __r: globalThis.RegExp): readonly string[] => { if (__s.length === 0) { return __r.exec(__s) === null ? [""] : []; } const __out: string[] = []; let __p = 0; let __q = 0; while (__q < __s.length) { __r.lastIndex = __q; const __hit = __r.exec(__s); const __e = __r.lastIndex; if (__hit === null || __e === __p) { __q++; } else { __out.push(__s.slice(__p, __q)); __p = __e; __q = __p; } } __out.push(__s.slice(__p)); return __out; })(p, new globalThis.RegExp(",", "y"))).length + 1)) * 2;
+  return ((((__s: string, __r: globalThis.RegExp): readonly string[] => {
+    if (__s.length === 0) {
+      return __r.exec(__s) === null ? [""] : [];
+    }
+    const __out: string[] = [];
+    let __p = 0;
+    let __q = 0;
+    while (__q < __s.length) {
+      __r.lastIndex = __q;
+      const __hit = __r.exec(__s);
+      const __e = __r.lastIndex;
+      if (__hit === null || __e === __p) {
+        __q++;
+      }
+      else {
+        __out.push(__s.slice(__p, __q));
+        __p = __e;
+        __q = __p;
+      }
+    }
+    __out.push(__s.slice(__p));
+    return __out;
+  })(p, new globalThis.RegExp(",", "y"))).length + 1) * 2;
 }

@@ -17,8 +17,8 @@ use bynk_syntax::span::Span;
 
 use super::ctx::TailSlot;
 use super::lower::{
-    CLAIM_SCOPE_DECLARATION, Lowered, LoweredExpr, LoweredStmt, PatPath, Pre, and_join,
-    build_value_bin_op, call_site_principal, emit_pattern_bindings, expect_location_raw,
+    Lowered, LoweredExpr, LoweredStmt, PatPath, Pre, and_join, build_value_bin_op,
+    call_site_principal, claim_scope_declaration, emit_pattern_bindings, expect_location_raw,
     expect_source_text_raw, literal_label_node, member_node, num_lit, pattern_tests, str_node,
     ternary_built,
 };
@@ -324,11 +324,9 @@ pub(super) fn block_body_with_return(
 /// the claims and rethrows; after it the claims are confirmed and the result is
 /// returned. `indent` is the column of the first statement.
 ///
-/// The `__claims` initialiser stays one text statement (`// 1A:`): its type
-/// assertion carries a generic method signature (`note<C>(...)`), which
-/// `bynk_ts`'s type members cannot express. The rest is the printer's own
-/// layout, which puts the body one `try` block and one closure deeper than the
-/// text wrapper did.
+/// The `__claims` initialiser is a node too ([`claim_scope_declaration`], 1A.35a part B). The
+/// layout is the printer's own, which puts the body one `try` block and one closure deeper than
+/// the text wrapper did.
 pub(super) fn claim_scoped(body: Body, indent: usize) -> Body {
     use bynk_ts::{TsBindingName, TsExpr, TsLit, TsStmt};
     let ident = |name: &str| TsExpr::Ident(name.to_string());
@@ -366,8 +364,7 @@ pub(super) fn claim_scoped(body: Body, indent: usize) -> Body {
         None,
     );
     let mut wrapped = Body::new();
-    // 1A: a text statement, as `bynk_ts` cannot write the type assertion.
-    wrapped.push(Item::line(CLAIM_SCOPE_DECLARATION));
+    wrapped.push(stmt_item(claim_scope_declaration()));
     wrapped.push(stmt_item(TsStmt::let_stmt(
         TsBindingName::Ident("__r".to_string()),
         None,
@@ -425,7 +422,7 @@ fn emit_block_inner(body: &mut Body, block: &Block, cx: &mut LowerCtx, async_tai
                 let ternary = Pre::new()
                     .finish_built(ternary_built(cond_expr, then_tail.expr, else_tail.expr))
                     .expr;
-                body.push(tail_item(cx, pre.all_nodes(), ternary));
+                push_tail(body, cx, pre.all_nodes(), ternary);
             } else {
                 // A branch hoisted after all — the case `simple_expr` used to
                 // mispredict (#945, and the `ListLit`/`InterpStr` fallthrough
@@ -453,7 +450,7 @@ fn emit_block_inner(body: &mut Body, block: &Block, cx: &mut LowerCtx, async_tai
             let tail = lower_tail_expr(&block.tail, cx, async_tail);
             body.extend(tail.pre_items());
             let pre_nodes = tail.pre_all_nodes();
-            body.push(tail_item(cx, pre_nodes, tail.expr));
+            push_tail(body, cx, pre_nodes, tail.expr);
         }
     }
     cx.shadow_scopes.pop();
@@ -476,17 +473,28 @@ fn stmt_item(stmt: bynk_ts::TsStmt) -> Item {
     Item::Node(Box::new(stmt))
 }
 
-/// [`tail_stmt`] as an item (1A.11): `return <value>;` is a `Return` node when
-/// the value and every statement hoisted before it are nodes, otherwise today's
-/// text. The [`TailSlot`] form puts two statements on one line, so it stays a
-/// `Line` until the slot's labelled block is a node too (S3).
-fn tail_item(cx: &LowerCtx, pre_nodes: bool, value: LoweredExpr) -> Item {
+/// [`tail_stmt`] as items (1A.11): `return <value>;` is a `Return` node when the value and
+/// every statement hoisted before it are nodes, otherwise today's text. Inside a
+/// statement-form value expression the tail is the slot's `Assign` and a labelled `break`
+/// (1A.35a part B), under the same condition.
+fn push_tail(body: &mut Body, cx: &LowerCtx, pre_nodes: bool, value: LoweredExpr) {
     match (&cx.tail_slot, value) {
         (None, LoweredExpr::Node(n)) if pre_nodes => {
-            stmt_item(bynk_ts::TsStmt::return_stmt(Some(n), None))
+            body.push(stmt_item(bynk_ts::TsStmt::return_stmt(Some(n), None)));
         }
-        // 1A: the `TailSlot` form and a text value are `Line`s.
-        (_, value) => Item::Line(tail_stmt(cx, &value.into_text())),
+        (Some(TailSlot { slot, label }), LoweredExpr::Node(n)) if pre_nodes => {
+            body.push(stmt_item(bynk_ts::TsStmt::assign(
+                bynk_ts::TsExpr::Ident(slot.clone()),
+                n,
+                None,
+            )));
+            body.push(stmt_item(bynk_ts::TsStmt::break_label_stmt(
+                label.clone(),
+                None,
+            )));
+        }
+        // 1A: a text value, or a text hoisted statement, keeps the text.
+        (_, value) => body.push(Item::Line(tail_stmt(cx, &value.into_text()))),
     }
 }
 
@@ -598,7 +606,7 @@ fn pure_tail_branch(tail: Lowered, cx: &LowerCtx) -> Body {
     let mut body = Body::new();
     body.extend(tail.pre_items());
     let pre_nodes = tail.pre_all_nodes();
-    body.push(tail_item(cx, pre_nodes, tail.expr));
+    push_tail(&mut body, cx, pre_nodes, tail.expr);
     body
 }
 
@@ -753,21 +761,38 @@ pub(super) fn hoist_value_as_statement(
     let slot = cx.fresh();
     let label = slot.clone() + "_out";
     let mut pre = Pre::new();
+    let saved = cx.tail_slot.replace(TailSlot {
+        slot: slot.clone(),
+        label: label.clone(),
+    });
+    let mut body = Body::new();
+    emit(&mut body, cx);
+    cx.tail_slot = saved;
     // Typed for the same reason as `hoist_if_as_statement`'s slot: inference
     // gives up on a `let` whose assignments sit beside a `return`.
+    //
+    // As statement nodes when every item of the body is one (1A.35a part B): `let slot: T;`
+    // then the labelled block. A body with a text line keeps the text form below.
+    if let Some(stmts) = body.to_nodes() {
+        pre.push_node(bynk_ts::TsStmt::let_stmt(
+            bynk_ts::TsBindingName::Ident(slot.clone()),
+            checked_ty_node(e, cx),
+            None,
+            None,
+        ));
+        pre.push_node(bynk_ts::TsStmt::labelled(
+            label,
+            bynk_ts::TsStmt::block(stmts, None),
+            None,
+        ));
+        return pre.finish(LoweredExpr::Node(bynk_ts::TsExpr::Ident(slot)));
+    }
     let annotation = checked_ty_ts(e, cx)
         .map(|ty| ": ".to_string() + &ty)
         .unwrap_or_default();
     pre.push_text(format!("let {slot}{annotation};"));
-    pre.push_text(label.clone() + ": {");
-    let saved = cx.tail_slot.replace(TailSlot {
-        slot: slot.clone(),
-        label,
-    });
+    pre.push_text(label + ": {");
     // The body is spliced into `pre` as text, so it records no checkpoints.
-    let mut body = Body::new();
-    emit(&mut body, cx);
-    cx.tail_slot = saved;
     let mut text = String::new();
     render_text(&body, &mut text, INDENT_STEP);
     pre.extend_text(text.lines().map(str::to_string));
@@ -1977,7 +2002,7 @@ fn match_body(body: &mut Body, arm_body: &MatchBody, cx: &mut LowerCtx, async_ta
             let tail = lower_tail_expr(e, cx, async_tail);
             body.extend(tail.pre_items());
             let pre_nodes = tail.pre_all_nodes();
-            body.push(tail_item(cx, pre_nodes, tail.expr));
+            push_tail(body, cx, pre_nodes, tail.expr);
         }
         MatchBody::Block(b) => emit_block_inner(body, b, cx, async_tail),
     }
@@ -2283,7 +2308,10 @@ mod body_tests {
         let mut map = SourceMapBuilder::new();
         map.add_source("t.bynk", "x".repeat(200));
         bynk_ts::print_stmt_and_merge(&mut out, &stmt, 0, &mut map, 0);
-        let declaration = format!("function f() {{\n  {CLAIM_SCOPE_DECLARATION}\n");
+        let declaration = format!(
+            "function f() {{\n  {}\n",
+            crate::emitter::lower::CLAIM_SCOPE_DECLARATION
+        );
         let rest = out.strip_prefix(&declaration).expect("declaration first");
         assert_eq!(
             rest,
@@ -2608,6 +2636,8 @@ mod stmt_node_tests {
 
     /// `(Item::Line items rendered, emitted module)` for a single commons.
     fn emitted(src: &str) -> (usize, String) {
+        // The text values read a `Set` `remove` as text (see `force_text`).
+        let _text = crate::emitter::lower::force_text::arm("Set.remove");
         LINES_RENDERED.with(|c| c.set(0));
         let ts = crate::testkit::emit_source(src);
         (LINES_RENDERED.with(|c| c.get()), ts)
@@ -2766,20 +2796,33 @@ mod stmt_node_tests {
     }
 
     #[test]
-    fn the_tail_slot_form_stays_a_line() {
-        // #1750: `slot = value; break label;` is two statements on one line, so
-        // it is text until the labelled block is a node (S3).
+    fn the_tail_slot_form_is_an_assignment_and_a_labelled_break() {
+        // #1750: `slot = value; break label;` is two statement nodes (1A.35a part B), one per
+        // line, inside the labelled block.
         let src = "commons slot\n\n\
             fn f(a: Option[Int], r: Result[Int, String]) -> Result[Int, String] {\n  \
             let n = if a is Some(v) { r? + v } else { 0 }\n  Ok(n)\n}\n";
-        let (lines, ts) = emitted(src);
-        assert!(lines >= 2, "{ts}");
+        let (_, ts) = emitted(src);
         let body = body_of(&ts, "f");
         assert!(
-            body.contains("      __r0 = __r1.value + v; break __r0_out;\n"),
+            body.contains("      __r0 = __r1.value + v;\n      break __r0_out;\n"),
             "{body}"
         );
-        assert!(body.contains("      __r0 = 0; break __r0_out;\n"), "{body}");
+        assert!(
+            body.contains("      __r0 = 0;\n      break __r0_out;\n"),
+            "{body}"
+        );
+    }
+
+    /// A text value keeps the one-line `slot = value; break label;` text (a `Set` `remove` forced
+    /// to text: see `force_text`).
+    #[test]
+    fn a_text_tail_slot_value_keeps_its_one_line_form() {
+        let src = "commons slot2\n\n\
+            fn f(c: Bool, s: Set[String], u: String, r: Result[Bool, String]) -> Result[Bool, String] {\n  \
+            let n = if c { r? } else { s.remove(u).contains(u) }\n  Ok(n)\n}\n";
+        let (lines, ts) = emitted(src);
+        assert!(lines >= 1, "{ts}");
     }
 }
 
@@ -2790,6 +2833,8 @@ mod arrow_node_tests {
     use super::*;
 
     fn emitted(src: &str) -> (usize, String) {
+        // The text values read a `Set` `remove` as text (see `force_text`).
+        let _text = crate::emitter::lower::force_text::arm("Set.remove");
         LINES_RENDERED.with(|c| c.set(0));
         let ts = crate::testkit::emit_source(src);
         (LINES_RENDERED.with(|c| c.get()), ts)
@@ -2883,6 +2928,8 @@ mod match_node_tests {
     use super::*;
 
     fn emitted(src: &str) -> (usize, String) {
+        // The text values read a `Set` `remove` as text (see `force_text`).
+        let _text = crate::emitter::lower::force_text::arm("Set.remove");
         LINES_RENDERED.with(|c| c.set(0));
         let ts = crate::testkit::emit_source(src);
         (LINES_RENDERED.with(|c| c.get()), ts)
@@ -3005,7 +3052,7 @@ mod match_node_tests {
         );
         assert!(
             ts.contains(
-                "  __r0_out: {\n    switch (s.tag) {\n      case \"Circle\": {\n        const r = s.r;\n        const __r1 = parse(r);\n        if (__r1.tag === \"Err\") return __r1;\n        __r0 = __r1.value; break __r0_out;\n      }\n"
+                "  __r0_out: {\n    switch (s.tag) {\n      case \"Circle\": {\n        const r = s.r;\n        const __r1 = parse(r);\n        if (__r1.tag === \"Err\") return __r1;\n        __r0 = __r1.value;\n        break __r0_out;\n      }\n"
             ),
             "{ts}"
         );
@@ -3083,6 +3130,8 @@ mod par_node_tests {
     use super::*;
 
     fn emitted(src: &str) -> (usize, String) {
+        // The text values read a `Set` `remove` as text (see `force_text`).
+        let _text = crate::emitter::lower::force_text::arm("Set.remove");
         LINES_RENDERED.with(|c| c.set(0));
         let ts = crate::testkit::emit_source(src);
         (LINES_RENDERED.with(|c| c.get()), ts)

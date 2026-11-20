@@ -4,7 +4,7 @@ use super::ctx::*;
 use super::lower::{Built, LoweredExpr, node_or_text};
 use super::lower_call::test_calls::debug_str;
 use super::lower_list::{call, id};
-use super::ts_types::ts_ty;
+use super::ts_types::ts_ty_to_ts_type;
 use super::*;
 use bynk_check::firstparty::FirstPartyCap;
 
@@ -80,7 +80,7 @@ pub(crate) struct LowerCtx<'a> {
     /// then-branch's binding that reads the temp (`const m = __r1 as Q;`)
     /// finds it in scope. `None` outside such a right operand. #1751: also set
     /// around the right operand of a plain `&&`/`||`/`implies`.
-    pub(crate) is_temp_hoist: Option<Vec<String>>,
+    pub(crate) is_temp_hoist: Option<Vec<bynk_ts::TsStmt>>,
     /// #1752 (generalising #1751): the `is` tests, by span, whose tag test was
     /// emitted out of line: inside a short-circuit right operand that lowered
     /// to an arrow or a hoisted `if`. TypeScript cannot carry such a test's
@@ -985,10 +985,10 @@ impl<'a> LowerCtx<'a> {
     /// the route is refinement-guarded: the acting refinement's witness
     /// claims, or `{}` for any other actor.
     ///
-    /// A node, except for an actor's witness claims, which stay text: the
-    /// table (`SystemHttpClaims::actors`) is built in `bynk-driver`
-    /// (`tests_emit/system_support.rs`) from `bynk_check::actors::claim_witness_js`,
-    /// outside `bynk-emit/src/emitter` (1A.26, #3727, Decision B).
+    /// A node. An actor's witness claims come from the table
+    /// (`SystemHttpClaims::actors`) `bynk-driver` builds from
+    /// `bynk_check::actors::claim_witness`, as data, and are built into the object literal
+    /// here (1A.35a part B; they were text before).
     pub(crate) fn system_http_claims_arg(
         &self,
         route: &(String, String, String),
@@ -1018,9 +1018,8 @@ impl<'a> LowerCtx<'a> {
                     .as_ref()
                     .and_then(|a| system_http_claims.actors.get(a))
                 {
-                    // 1A: the witness claims are a JavaScript object literal built in
-                    // `bynk-driver` (`system_support.rs`), outside the emitter.
-                    Some(witness) => Built::Err(witness.clone()).into(),
+                    // The actor's witness claims, as `{ "name": value, … }`.
+                    Some(witness) => LoweredExpr::Node(witness_claims_node(witness)),
                     None => LoweredExpr::Node(bynk_ts::TsExpr::object(vec![])),
                 },
             ),
@@ -1413,8 +1412,8 @@ impl<'a> LowerCtx<'a> {
     /// definite-assignment declaration plus an in-place assignment. The
     /// assignment stays where the receiver was evaluated, so the right operand
     /// is still evaluated only when the left operand holds. The in-place
-    /// statement is a node when `lowered` is; the hoisted `let tmp!: T;` stays
-    /// text (1A: `bynk_ts` has no definite-assignment `let`).
+    /// statement is a node when `lowered` is; the hoisted `let tmp!: T;` is a
+    /// definite-assignment `let` node (1A.35a part B).
     pub(super) fn declare_is_temp(
         &mut self,
         value: &Expr,
@@ -1426,10 +1425,14 @@ impl<'a> LowerCtx<'a> {
             .commons()
             .expr_types
             .get(&value.id)
-            .map(|te| ts_ty(te.ty, self.ty_render()));
+            .map(|te| ts_ty_to_ts_type(te.ty, self.ty_render()));
         let hoisting = match (self.is_temp_hoist.as_mut(), ty) {
             (Some(hoist), Some(ty)) => {
-                hoist.push(format!("let {tmp}!: {ty};"));
+                // `let tmp!: T;`, a definite-assignment declaration.
+                hoist.push(bynk_ts::TsStmt::let_list(
+                    vec![bynk_ts::TsDeclarator::new(tmp).definite(ty)],
+                    None,
+                ));
                 true
             }
             _ => false,
@@ -1674,4 +1677,25 @@ impl<'a> LowerCtx<'a> {
             _ => None,
         }
     }
+}
+
+/// An actor's witness claims as an object literal: each claim a quoted key, so a name that is not
+/// an identifier reads the same, and `true` or its string value.
+fn witness_claims_node(witness: &[(String, bynk_check::actors::WitnessValue)]) -> bynk_ts::TsExpr {
+    use bynk_check::actors::WitnessValue;
+    bynk_ts::TsExpr::object_entries(
+        witness
+            .iter()
+            .map(|(name, value)| {
+                let value = match value {
+                    WitnessValue::True => bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Bool(true)),
+                    WitnessValue::Str(v) => bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(v.clone())),
+                };
+                bynk_ts::TsObjectEntry::prop(
+                    format!("\"{}\"", bynk_ts::escape_ts_literal(name)),
+                    value,
+                )
+            })
+            .collect(),
+    )
 }
