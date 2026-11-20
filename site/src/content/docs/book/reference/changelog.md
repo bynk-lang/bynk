@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.639.43** | A record literal that leaves a defaulted field out is built as a TypeScript node rather than text, so two generated files print an enclosing closure on several lines instead of one (a ruled, whitespace-only change); no change to what the emitted code does |
 | **v0.639.42** | The built-in `Option`, `Result`, `Set` and `Map` kernel methods in generated code are built as TypeScript nodes rather than text, so redundant brackets round receivers are gone and several generated files, among them the standard-library `string.ts` and `locale.ts`, print an enclosing closure with different layout; no change to what the emitted code does |
 | **v0.639.41** | The built-in `Int`, `Float`, `Decimal`, `Duration`, `Instant`, `Bytes` and `String` kernel methods in generated code are built as TypeScript nodes rather than text, so redundant brackets round receivers are gone and several generated files, among them the standard-library `string.ts`, print an enclosing closure with different layout; no change to what the emitted code does |
 | **v0.639.40** | The built-in kernel methods on connections, request views, cookies, `within`, `race`, `detach` and `Effect[Result]` combinators in generated code are built as TypeScript nodes rather than text, so redundant brackets round receivers are gone and twelve generated files print an enclosing closure with different layout; no change to what the emitted code does |
