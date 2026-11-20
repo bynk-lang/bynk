@@ -310,7 +310,12 @@ fn lower_base_literal(base: BaseType, e: &Expr) -> Result<String, DefaultReason>
         DefaultValue::Num(digits) => digits,
         DefaultValue::Str(text) => format!("\"{}\"", bynk_ts::escape_ts_literal(&text)),
         DefaultValue::Bool(b) => b.to_string(),
-        _ => unreachable!("`base_value` returns only `Num`, `Str` and `Bool`"),
+        // #2622: a `Decimal` is a JSON string on the wire, its canonical text, which the
+        // decoder then parses.
+        DefaultValue::Decimal { coefficient, scale } => {
+            format!("\"{}\"", bynk_syntax::decimal::render(&coefficient, scale))
+        }
+        _ => unreachable!("`base_value` returns only `Num`, `Str`, `Bool` and `Decimal`"),
     })
 }
 
@@ -344,18 +349,18 @@ fn base_value(base: BaseType, e: &Expr) -> Result<DefaultValue, DefaultReason> {
         } else {
             lexeme.clone()
         })),
-        // #2622: a `Decimal` is a JSON string on the wire, so its default is the
-        // canonical text, which the decoder then parses. The in-memory form keeps
-        // that text as a `Str` for now (1A.31, Decision D).
+        // #3801: a `Decimal` is its coefficient and scale; the wire text is rendered from
+        // them by [`lower_base_literal`] (#2622), the in-memory value by the emitter.
         (BaseType::Decimal, ExprKind::DecimalLit { coef, scale, .. }) => {
             let signed = if negate && bynk_syntax::decimal::sign(coef) != 0 {
                 format!("-{coef}")
             } else {
                 coef.clone()
             };
-            Ok(DefaultValue::Str(bynk_syntax::decimal::render(
-                &signed, *scale,
-            )))
+            Ok(DefaultValue::Decimal {
+                coefficient: signed,
+                scale: *scale,
+            })
         }
         (BaseType::String, ExprKind::StrLit(s)) if !negate => Ok(DefaultValue::Str(s.clone())),
         (BaseType::Bool, ExprKind::BoolLit(b)) if !negate => Ok(DefaultValue::Bool(*b)),
@@ -569,10 +574,21 @@ fn empty_collection(init: &Expr, collection: &str) -> Result<(), DefaultReason> 
 pub enum DefaultValue {
     /// A number's lexeme, sign included (`5`, `-5`, `1e3`, `3600000`).
     Num(String),
-    /// A string's value, unescaped. A `Decimal` default is its canonical text here (the wire
-    /// shape; see Decision D of #3732).
+    /// A string's value, unescaped.
     Str(String),
     Bool(bool),
+    /// A `Decimal`: its coefficient's digits, sign included, and its scale (#3801). In memory
+    /// it is `{ coefficient, scale }`; only the wire form is the canonical text.
+    Decimal {
+        coefficient: String,
+        scale: u32,
+    },
+    /// A value of the refined type `name` (#3759): its base value, which the checker has
+    /// already found satisfies the refinement, branded as that type.
+    Refined {
+        name: String,
+        value: Box<DefaultValue>,
+    },
     /// A record: every declared field, in declaration order.
     Record(Vec<(String, DefaultValue)>),
     /// A sum variant and its payload fields.
@@ -628,7 +644,10 @@ fn value_in(
                 return Err(DefaultReason::UnresolvedType(id.name.clone()));
             };
             match &decl.body {
-                TypeBody::Refined { base, .. } => base_value(*base, init),
+                TypeBody::Refined { base, .. } => Ok(DefaultValue::Refined {
+                    name: id.name.clone(),
+                    value: Box::new(base_value(*base, init)?),
+                }),
                 TypeBody::Opaque { base, .. } => match qualified_call(init) {
                     Some((type_name, "unsafe", [lit])) if type_name == id.name => {
                         base_value(*base, lit)
@@ -769,6 +788,18 @@ mod tests {
     fn some(v: DefaultValue) -> DefaultValue {
         DefaultValue::Some(Box::new(v))
     }
+    fn dec(coefficient: &str, scale: u32) -> DefaultValue {
+        DefaultValue::Decimal {
+            coefficient: coefficient.to_string(),
+            scale,
+        }
+    }
+    fn refined(name: &str, v: DefaultValue) -> DefaultValue {
+        DefaultValue::Refined {
+            name: name.to_string(),
+            value: Box::new(v),
+        }
+    }
     fn sum(variant: &str, fields: Vec<(&str, DefaultValue)>) -> DefaultValue {
         DefaultValue::Sum {
             variant: variant.to_string(),
@@ -790,7 +821,9 @@ mod tests {
     /// `(field type, default, the tree, the text the deleted `lower_field_default_value` produced)`.
     /// The text column was captured from the `String` renderer before it was deleted
     /// (1A.31, #3732), so the old output and the new tree sit side by side; `bynk-emit` prints
-    /// each tree and compares it with the same text.
+    /// each tree and compares it with the same text. The `Decimal` (#3801) and refined (#3759)
+    /// rows are the corrected text: the old renderer wrote the wire string and an unbranded
+    /// number there.
     pub fn cases() -> Vec<(&'static str, &'static str, DefaultValue, &'static str)> {
         vec![
             ("Int", "5", num("5"), "5"),
@@ -806,9 +839,21 @@ mod tests {
             ("String", "\"x\"", text("x"), "\"x\""),
             ("String", "\"a\\\"b\\n\"", text("a\"b\n"), "\"a\\\"b\\n\""),
             ("String", "\"\"", text(""), "\"\""),
-            ("Decimal", "0.00d", text("0.00"), "\"0.00\""),
-            ("Decimal", "-1.50d", text("-1.50"), "\"-1.50\""),
-            ("Age", "3", num("3"), "3"),
+            // #3801: in memory, a `Decimal` is its coefficient and scale, not its wire text.
+            (
+                "Decimal",
+                "0.00d",
+                dec("000", 2),
+                "{ coefficient: 0n, scale: 2 }",
+            ),
+            (
+                "Decimal",
+                "-1.50d",
+                dec("-150", 2),
+                "{ coefficient: -150n, scale: 2 }",
+            ),
+            // #3759: a refined default is branded as its type.
+            ("Age", "3", refined("Age", num("3")), "(3 as Age)"),
             ("Tok", "Tok.unsafe(\"k\")", text("k"), "\"k\""),
             (
                 "Inner",
@@ -964,6 +1009,8 @@ mod tests {
         for (ty, init, wire) in [
             ("String", "\"a\\\"b\"", "\"a\\\"b\""),
             ("Decimal", "-1.50d", "\"-1.50\""),
+            ("Decimal", "0.00d", "\"0.00\""),
+            ("Age", "3", "3"),
             ("Int", "-5", "-5"),
             ("Bool", "true", "true"),
         ] {

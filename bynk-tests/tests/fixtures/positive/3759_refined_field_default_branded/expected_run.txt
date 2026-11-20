@@ -1,0 +1,2 @@
+# #3759: an omitted refined field default is branded as its refined type.
+passed=3 failed=0

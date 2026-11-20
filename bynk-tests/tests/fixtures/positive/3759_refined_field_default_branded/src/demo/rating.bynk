@@ -1,0 +1,27 @@
+commons demo.rating
+
+---
+#3759: a record literal that leaves out a refined field takes its default as a
+value of the refined type, so the construction type-checks and the field is
+used as a `Rating`.
+---
+type Rating = Int where InRange(1, 5)
+
+type Review = {
+  text: String,
+  rating: Rating = 5,
+  scores: List[Rating] = [3, 4],
+  best: Option[Rating] = Some(5),
+}
+
+fn plain() -> Review {
+  Review { text: "Good" }
+}
+
+fn stars(r: Rating) -> Int {
+  r + 0
+}
+
+fn ratingOf(r: Review) -> Rating {
+  r.rating
+}

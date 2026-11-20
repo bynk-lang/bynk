@@ -4625,6 +4625,12 @@ fn lower_record_construction(
     // `default_value_node`) so it needs nothing imported into this module. The checker has
     // already required every field without a default, and rejected any default that has no
     // such value. A default is a node (1A.31, #3732), so a record that takes one stays one.
+    // #3759: a refined default is branded as `lower_expr` brands an admitted refined literal.
+    let in_test_scaffold = cx.in_test_scaffold();
+    let brand = |name: &str, raw: bynk_ts::TsExpr| match in_test_scaffold {
+        true => unchecked_construct_test_node(name, raw, false),
+        false => unchecked_construct(&cx.consumed_type_name(name), raw, false),
+    };
     let types = &cx.commons().types;
     if let Some(decl) = types.get(&type_name.name)
         && let TypeBody::Record(r) = &decl.body
@@ -4639,7 +4645,7 @@ fn lower_record_construction(
             match bynk_check::wire_default::field_default_value(init, &declared.type_ref, types) {
                 Ok(v) => {
                     slots.push(FieldSlot::Prop(declared.name.name.clone()));
-                    let node: Built = Ok(default_value_node(&v));
+                    let node: Built = Ok(default_value_node(&v, &brand));
                     children.push(node.into());
                 }
                 // The checker rejected any default that has no value: a missing

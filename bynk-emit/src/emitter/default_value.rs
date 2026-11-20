@@ -9,31 +9,37 @@
 use bynk_check::wire_default::DefaultValue;
 use bynk_ts::{TsExpr, TsLit, TsObjectEntry};
 
+/// How a refined value is branded as its type: given the type's name and the base value's node,
+/// the branded node (#3759). The caller decides, because the spelling depends on where the record
+/// is built (`lower_expr` brands an admitted refined literal the same way).
+pub(super) type Brand<'a> = &'a dyn Fn(&str, TsExpr) -> TsExpr;
+
 /// The node for a default value.
-pub(super) fn default_value_node(value: &DefaultValue) -> TsExpr {
+pub(super) fn default_value_node(value: &DefaultValue, brand: Brand<'_>) -> TsExpr {
+    let node = |v: &DefaultValue| default_value_node(v, brand);
+    let entries = |fields: &[(String, DefaultValue)]| {
+        fields
+            .iter()
+            .map(|(key, v)| TsObjectEntry::prop(key.clone(), node(v)))
+            .collect()
+    };
     match value {
         DefaultValue::Num(digits) => TsExpr::Lit(TsLit::Num(digits.clone())),
         DefaultValue::Str(text) => TsExpr::Lit(TsLit::Str(text.clone())),
         DefaultValue::Bool(b) => TsExpr::Lit(TsLit::Bool(*b)),
-        DefaultValue::Record(fields) => object(
-            fields
-                .iter()
-                .map(|(key, v)| TsObjectEntry::prop(key.clone(), default_value_node(v)))
-                .collect(),
-        ),
-        DefaultValue::Sum { variant, fields } => tagged(
-            variant,
-            fields
-                .iter()
-                .map(|(key, v)| TsObjectEntry::prop(key.clone(), default_value_node(v)))
-                .collect(),
-        ),
-        DefaultValue::Some(v) => payload("Some", "value", v),
+        // #3801: the in-memory decimal, the node a `Decimal` literal lowers to.
+        DefaultValue::Decimal { coefficient, scale } => {
+            super::lower::decimal_lit(coefficient, *scale)
+        }
+        DefaultValue::Refined { name, value } => brand(name, node(value)),
+        DefaultValue::Record(fields) => object(entries(fields)),
+        DefaultValue::Sum { variant, fields } => tagged(variant, entries(fields)),
+        DefaultValue::Some(v) => payload("Some", "value", node(v)),
         DefaultValue::None => tagged("None", vec![]),
-        DefaultValue::Ok(v) => payload("Ok", "value", v),
-        DefaultValue::Err(v) => payload("Err", "error", v),
+        DefaultValue::Ok(v) => payload("Ok", "value", node(v)),
+        DefaultValue::Err(v) => payload("Err", "error", node(v)),
         DefaultValue::List(items) => TsExpr::Array {
-            items: items.iter().map(default_value_node).collect(),
+            items: items.iter().map(node).collect(),
             multiline: false,
         },
         DefaultValue::EmptyMap => empty_collection("Map"),
@@ -55,14 +61,8 @@ fn tagged(variant: &str, rest: Vec<TsObjectEntry>) -> TsExpr {
 }
 
 /// `{ tag: "<variant>" as const, <key>: <value> }`.
-fn payload(variant: &str, key: &str, value: &DefaultValue) -> TsExpr {
-    tagged(
-        variant,
-        vec![TsObjectEntry::prop(
-            key.to_string(),
-            default_value_node(value),
-        )],
-    )
+fn payload(variant: &str, key: &str, value: TsExpr) -> TsExpr {
+    tagged(variant, vec![TsObjectEntry::prop(key.to_string(), value)])
 }
 
 /// `new globalThis.<collection>()`: through `globalThis`, so a type of the same name in scope
@@ -91,9 +91,29 @@ mod tests {
     fn some(v: DefaultValue) -> DefaultValue {
         DefaultValue::Some(Box::new(v))
     }
+    fn dec(coefficient: &str, scale: u32) -> DefaultValue {
+        DefaultValue::Decimal {
+            coefficient: coefficient.to_string(),
+            scale,
+        }
+    }
+    fn refined(name: &str, v: DefaultValue) -> DefaultValue {
+        DefaultValue::Refined {
+            name: name.to_string(),
+            value: Box::new(v),
+        }
+    }
+    /// The production brand: `(value as Name)`.
+    fn print(value: &DefaultValue) -> String {
+        let brand = |name: &str, raw: TsExpr| {
+            crate::emitter::ts_types::unchecked_construct(name, raw, false)
+        };
+        print_expr(&default_value_node(value, &brand))
+    }
 
     /// Every case: the tree, and the text the deleted `lower_field_default_value` printed for it
-    /// (captured before it was deleted; `bynk-check`'s tests pair the same text with the same trees).
+    /// (captured before it was deleted; `bynk-check`'s tests pair the same text with the same trees),
+    /// apart from the `Decimal` (#3801) and refined (#3759) rows, which are the corrected text.
     fn cases() -> Vec<(DefaultValue, &'static str)> {
         let sum = |v: &str, f: Vec<(&str, DefaultValue)>| DefaultValue::Sum {
             variant: v.to_string(),
@@ -115,6 +135,16 @@ mod tests {
             (text("a\"b\n"), "\"a\\\"b\\n\""),
             (text(""), "\"\""),
             (text("0.00"), "\"0.00\""),
+            // #3801: a `Decimal` is the in-memory `{ coefficient, scale }`.
+            (dec("000", 2), "{ coefficient: 0n, scale: 2 }"),
+            (dec("-0", 1), "{ coefficient: 0n, scale: 1 }"),
+            (dec("-150", 2), "{ coefficient: -150n, scale: 2 }"),
+            // #3759: a refined value is branded by the caller's brand.
+            (refined("Age", num("3")), "(3 as Age)"),
+            (
+                DefaultValue::List(vec![refined("Age", num("1"))]),
+                "[(1 as Age)]",
+            ),
             (
                 record(vec![("n", num("7")), ("s", text("i"))]),
                 "{ n: 7, s: \"i\" }",
@@ -157,7 +187,7 @@ mod tests {
     #[test]
     fn a_node_prints_the_text_the_string_renderer_wrote() {
         for (value, old) in cases() {
-            assert_eq!(print_expr(&default_value_node(&value)), old, "{value:?}");
+            assert_eq!(print(&value), old, "{value:?}");
         }
     }
 
@@ -167,10 +197,7 @@ mod tests {
     /// reported in the PR (it would be a group (b) change).
     #[test]
     fn an_empty_record_prints_as_braces() {
-        assert_eq!(
-            print_expr(&default_value_node(&DefaultValue::Record(vec![]))),
-            "{}"
-        );
+        assert_eq!(print(&DefaultValue::Record(vec![])), "{}");
     }
 
     /// Decision C2: single-line spacing inside the braces and `as const` inside a property.
@@ -178,7 +205,7 @@ mod tests {
     fn single_line_objects_keep_their_spacing() {
         let nested = some(DefaultValue::None);
         assert_eq!(
-            print_expr(&default_value_node(&nested)),
+            print(&nested),
             "{ tag: \"Some\" as const, value: { tag: \"None\" as const } }"
         );
     }
@@ -186,16 +213,16 @@ mod tests {
     /// Decision C3: the sign is in the text, so a negative number is one literal, never `-(-x)`.
     #[test]
     fn a_negative_number_is_one_literal() {
-        assert_eq!(print_expr(&default_value_node(&num("-5"))), "-5");
+        assert_eq!(print(&num("-5")), "-5");
         let in_list = DefaultValue::List(vec![num("-1"), num("-2")]);
-        assert_eq!(print_expr(&default_value_node(&in_list)), "[-1, -2]");
+        assert_eq!(print(&in_list), "[-1, -2]");
     }
 
     /// Decision C4: a float lexeme prints as written.
     #[test]
     fn a_float_lexeme_prints_as_written() {
         for lexeme in ["1e3", "5", "0.5", "-2.5e-3"] {
-            assert_eq!(print_expr(&default_value_node(&num(lexeme))), lexeme);
+            assert_eq!(print(&num(lexeme)), lexeme);
         }
     }
 }
