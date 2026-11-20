@@ -482,7 +482,7 @@ pub fn body_writes_state(body: &Block, program: &TypedCommons) -> bool {
             // #2194: the mutating set is the store-op registry's own
             // `mutates` flag. A `Callee::Store` already carries the op
             // resolved against its field's kind, so the op name alone decides.
-            Some(Callee::Store { op, .. }) => bynk_check::store_ops::is_mutating_any(op),
+            Some(Callee::Store { op, .. }) => op.mutates(),
             _ => false,
         }
     }

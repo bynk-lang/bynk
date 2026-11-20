@@ -566,6 +566,30 @@ fn per_unit_infos(
     (sequence_info, boundary_info)
 }
 
+/// The callees of a unit's checked files that later passes read (events emits, cross-context
+/// service calls and agent calls), merged into the project-wide accumulator.
+fn retain_unit_callees(
+    unit_callees: &mut project_model::UnitCallees,
+    name: &str,
+    checked: &[Arc<crate::checker::TypedCommons>],
+) {
+    unit_callees.entry(name.to_string()).or_default().extend(
+        checked
+            .iter()
+            .flat_map(|t| &t.callees)
+            .filter(|(_, c)| {
+                project_model::is_events_emit(c)
+                    || matches!(
+                        c,
+                        crate::checker::Callee::Cross { .. } | crate::checker::Callee::Agent { .. }
+                    )
+            })
+            .map(|(id, c)| (*id, c.clone())),
+    );
+    #[cfg(test)]
+    crate::testkit::note_callees(name, checked.iter().flat_map(|t| &t.callees));
+}
+
 fn analyse_project_inner(
     roots: &Roots,
     overlay: &HashMap<PathBuf, String>,
@@ -1055,20 +1079,7 @@ fn analyse_project_inner(
             checked.extend(typed);
         }
         crate::phase_timing::mark(crate::phase_timing::Level::Unit);
-        unit_callees.entry(name.clone()).or_default().extend(
-            checked
-                .iter()
-                .flat_map(|t| &t.callees)
-                .filter(|(_, c)| {
-                    project_model::is_events_emit(c)
-                        || matches!(
-                            c,
-                            crate::checker::Callee::Cross { .. }
-                                | crate::checker::Callee::Agent { .. }
-                        )
-                })
-                .map(|(id, c)| (*id, c.clone())),
-        );
+        retain_unit_callees(&mut unit_callees, name, &checked);
         // #2719: the unit's needs-context set, and the calls that would carry
         // the execution context where none exists.
         let plan_errors = exec_plan.extend(&checked.iter().map(|t| &**t).collect::<Vec<_>>());

@@ -2874,7 +2874,8 @@ pub(crate) fn check_effect_detach_method(
 ) -> Option<TyId> {
     let tys = ctx.tys;
     if ctx.in_agent_handler {
-        if let Some(Callee::Store { field, op }) = ctx.callees.get(&receiver.id) {
+        if let Some(Callee::Store { field, op, .. }) = ctx.callees.get(&receiver.id) {
+            let op = op.name();
             ctx.errors.push(
                 CompileError::new(
                     "bynk.detach.store_op",

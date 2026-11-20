@@ -4,8 +4,12 @@
 //! Moved out of `lower.rs` (back-half paydown 1A.20, #3721, Decision E): the first of the
 //! `lower_call/` files the dispatch run (1A.20 to 1A.30) fills.
 
-use bynk_check::builtin_names::types::*;
 use bynk_check::checker::{Callee, Ty};
+use bynk_check::kernel_op::{
+    BytesStatic, DecimalStatic, DurationStatic, FloatStatic, InstantStatic, IntStatic, IntrinsicNs,
+    ListStatic, MapStatic, RequestCookiesStatic, RequestHeadersStatic, RequestQueryStatic,
+    SetStatic, StaticOp, StreamStatic, TokenClaimsStatic,
+};
 use bynk_ts::{
     TsArrowBody, TsBinaryOp, TsBindingName, TsExpr, TsLit, TsParam, TsStmt, TsType, TsUnaryOp,
 };
@@ -278,11 +282,14 @@ pub(in crate::emitter) fn lower_scalar_static_call(
     if let ExprKind::Ident(_) = &receiver.kind
         && matches!(
             cx.commons().callee(e.id),
-            Some(Callee::Intrinsic { ns, .. }) if *ns == HTTP_RESULT
+            Some(Callee::Intrinsic {
+                ns: IntrinsicNs::HttpResult,
+                ..
+            })
         )
     {
         cx.note_http_result();
-        let args_lowered = lower_http_variant_args(&method.name, args, pre, cx);
+        let args_lowered = lower_http_variant_args(e, args, pre, cx);
         return Some(call_built(
             member_node("HttpResult", &method.name),
             args_lowered,
@@ -309,7 +316,12 @@ pub(in crate::emitter) fn lower_scalar_static_call(
     if let ExprKind::Ident(_) = &receiver.kind
         && matches!(
             cx.commons().callee(e.id),
-            Some(Callee::Intrinsic { ns, op }) if (*ns == LIST || *ns == MAP || *ns == SET) && op == "empty"
+            Some(Callee::Intrinsic {
+                op: StaticOp::List(ListStatic::Empty)
+                    | StaticOp::Map(MapStatic::Empty)
+                    | StaticOp::Set(SetStatic::Empty),
+                ..
+            })
         )
         && args.is_empty()
     {
@@ -345,7 +357,10 @@ pub(in crate::emitter) fn lower_scalar_static_call(
     if let ExprKind::Ident(_) = &receiver.kind
         && matches!(
             cx.commons().callee(e.id),
-            Some(Callee::Intrinsic { ns, op }) if *ns == SET && op == "of"
+            Some(Callee::Intrinsic {
+                op: StaticOp::Set(SetStatic::Of),
+                ..
+            })
         )
         && args.len() == 1
         && let Some(Ty::Set(t)) = cx.commons().expr_ty(e.id).as_deref()
@@ -361,18 +376,22 @@ pub(in crate::emitter) fn lower_scalar_static_call(
     // v0.22b: the typed JSON codec (ADR 0045).
     // 1A: the codec's decoders and encoders are their own family (1A.21); it
     // stays as it is, and a node it returns passes through.
-    if let Some(built) = lower_json_codec_call(e, receiver, method, args, cx, pre) {
+    if let Some(built) = lower_json_codec_call(e, receiver, args, cx, pre) {
         return Some(built);
     }
     // K6b (#2598): `Float.pi()` and `Float.e()`.
     if let ExprKind::Ident(_) = &receiver.kind
-        && matches!(
-            cx.commons().callee(e.id),
-            Some(Callee::Intrinsic { ns, op }) if *ns == FLOAT && (op == "pi" || op == "e")
-        )
+        && let Some(Callee::Intrinsic {
+            op: StaticOp::Float(constant @ (FloatStatic::Pi | FloatStatic::E)),
+            ..
+        }) = cx.commons().callee(e.id)
         && args.is_empty()
     {
-        let constant = if method.name == "pi" { "PI" } else { "E" };
+        let constant = if *constant == FloatStatic::Pi {
+            "PI"
+        } else {
+            "E"
+        };
         return Some(Ok(member(member_node("globalThis", "Math"), constant)));
     }
     // v0.22a: the numeric parse statics — `Int.parse(s)` / `Float.parse(s)`
@@ -383,15 +402,16 @@ pub(in crate::emitter) fn lower_scalar_static_call(
     // them here followed by `.`), so unlike `List`/`Map` this specific guard
     // never had a real shadowing gap to close — converted for consistency
     // with every other static-constructor branch in this function.
-    if let ExprKind::Ident(id) = &receiver.kind
-        && matches!(
-            cx.commons().callee(e.id),
-            Some(Callee::Intrinsic { ns, op }) if (*ns == INT || *ns == FLOAT) && op == "parse"
-        )
+    if let ExprKind::Ident(_) = &receiver.kind
+        && let Some(Callee::Intrinsic {
+            op: parse @ (StaticOp::Int(IntStatic::Parse) | StaticOp::Float(FloatStatic::Parse)),
+            ..
+        }) = cx.commons().callee(e.id)
         && args.len() == 1
     {
+        let is_int = matches!(parse, StaticOp::Int(_));
         let s = pre.lower_node(&args[0], cx);
-        return Some(parse_iife(id.name == INT, s));
+        return Some(parse_iife(is_int, s));
     }
     // v0.86 (ADR 0112): `Duration.millis(n)` — the runtime `Int`→`Duration`
     // constructor. A `Duration` lowers to its milliseconds, so this is the
@@ -405,7 +425,10 @@ pub(in crate::emitter) fn lower_scalar_static_call(
     if let ExprKind::Ident(_) = &receiver.kind
         && matches!(
             cx.commons().callee(e.id),
-            Some(Callee::Intrinsic { ns, op }) if *ns == DURATION && op == "millis"
+            Some(Callee::Intrinsic {
+                op: StaticOp::Duration(DurationStatic::Millis),
+                ..
+            })
         )
         && args.len() == 1
     {
@@ -415,7 +438,10 @@ pub(in crate::emitter) fn lower_scalar_static_call(
     if let ExprKind::Ident(_) = &receiver.kind
         && matches!(
             cx.commons().callee(e.id),
-            Some(Callee::Intrinsic { ns, op }) if *ns == INSTANT && op == "fromIso"
+            Some(Callee::Intrinsic {
+                op: StaticOp::Instant(InstantStatic::FromIso),
+                ..
+            })
         )
         && args.len() == 1
     {
@@ -428,7 +454,10 @@ pub(in crate::emitter) fn lower_scalar_static_call(
     if let ExprKind::Ident(_) = &receiver.kind
         && matches!(
             cx.commons().callee(e.id),
-            Some(Callee::Intrinsic { ns, op }) if *ns == INSTANT && op == "fromEpochMillis"
+            Some(Callee::Intrinsic {
+                op: StaticOp::Instant(InstantStatic::FromEpochMillis),
+                ..
+            })
         )
         && args.len() == 1
     {
@@ -442,150 +471,115 @@ pub(in crate::emitter) fn lower_scalar_static_call(
 pub(in crate::emitter) fn lower_runtime_value_static_call(
     e: &Expr,
     receiver: &Expr,
-    method: &Ident,
     args: &[Expr],
     cx: &mut LowerCtx,
     pre: &mut Pre,
 ) -> Option<Built> {
-    // v0.110 (ADR 0142 D2): the `Bytes` static constructors. `fromUtf8` is the
-    // UTF-8 encoding of a string (total); `fromBase64` is a guarded base64
-    // decode returning `Option` (`None` on invalid base64); `empty` is the
-    // zero octet sequence.
-    if let ExprKind::Ident(_) = &receiver.kind
-        && matches!(cx.commons().callee(e.id), Some(Callee::Intrinsic { ns, .. }) if *ns == BYTES)
-    {
-        match (method.name.as_str(), args.len()) {
-            ("fromUtf8", 1) => {
-                let s = pre.lower_node(&args[0], cx);
-                return Some(node_or_text(
-                    vec![s],
-                    |c| TsExpr::Call {
-                        callee: Box::new(member(new(global("TextEncoder"), vec![]), "encode")),
-                        args: c,
-                    },
-                    |c| format!("new globalThis.TextEncoder().encode({})", c.join(", ")),
-                ));
-            }
-            ("fromBase64", 1) => {
-                let s = pre.lower_node(&args[0], cx);
-                cx.note_bytes();
-                return Some(runtime_ctor_call(None, "__bynkBytesFromBase64", s));
-            }
-            // #2016: the guarded hex and base64url decodes, `None` on bad input.
-            ("fromHex", 1) => {
-                let s = pre.lower_node(&args[0], cx);
-                cx.note_bytes_ops();
-                return Some(runtime_ctor_call(None, "__bynkBytesFromHex", s));
-            }
-            ("fromBase64Url", 1) => {
-                let s = pre.lower_node(&args[0], cx);
-                cx.note_bytes_ops();
-                return Some(runtime_ctor_call(None, "__bynkBytesFromBase64Url", s));
-            }
-            ("empty", 0) => {
-                return Some(Ok(new(global("Uint8Array"), vec![])));
-            }
-            _ => {}
+    // The operation the checker resolved for this call (1A.33): one match over the
+    // closed `StaticOp`, not a name comparison per family. The arity stays checked here, as the
+    // checker only reports a mismatch.
+    let ExprKind::Ident(_) = &receiver.kind else {
+        return None;
+    };
+    let Some(Callee::Intrinsic { op, .. }) = cx.commons().callee(e.id) else {
+        return None;
+    };
+    let op = *op;
+    match (op, args.len()) {
+        // v0.110 (ADR 0142 D2): the `Bytes` static constructors. `fromUtf8` is the
+        // UTF-8 encoding of a string (total); `fromBase64` is a guarded base64
+        // decode returning `Option` (`None` on invalid base64); `empty` is the
+        // zero octet sequence.
+        (StaticOp::Bytes(BytesStatic::FromUtf8), 1) => {
+            let s = pre.lower_node(&args[0], cx);
+            Some(node_or_text(
+                vec![s],
+                |c| TsExpr::Call {
+                    callee: Box::new(member(new(global("TextEncoder"), vec![]), "encode")),
+                    args: c,
+                },
+                |c| format!("new globalThis.TextEncoder().encode({})", c.join(", ")),
+            ))
         }
-    }
-    // #2622: `Decimal.parse(s)` and `Decimal.fromInt(n)`.
-    if let ExprKind::Ident(_) = &receiver.kind
-        && matches!(cx.commons().callee(e.id), Some(Callee::Intrinsic { ns, .. }) if *ns == DECIMAL)
-    {
-        match (method.name.as_str(), args.len()) {
-            ("parse", 1) => {
-                let s = pre.lower_node(&args[0], cx);
-                cx.note_decimal("__bynkDecimalParse");
-                return Some(runtime_ctor_call(None, "__bynkDecimalParse", s));
-            }
-            ("fromInt", 1) => {
-                let n = pre.lower_node(&args[0], cx);
-                cx.note_decimal("__bynkDecimalFromInt");
-                return Some(runtime_ctor_call(None, "__bynkDecimalFromInt", n));
-            }
-            _ => {}
+        (StaticOp::Bytes(BytesStatic::FromBase64), 1) => {
+            let s = pre.lower_node(&args[0], cx);
+            cx.note_bytes();
+            Some(runtime_ctor_call(None, "__bynkBytesFromBase64", s))
         }
-    }
-    // #2380 (L5): `TokenClaims.of(lines)` builds the runtime's claims view.
-    if let ExprKind::Ident(_) = &receiver.kind
-        && matches!(cx.commons().callee(e.id), Some(Callee::Intrinsic { ns, op }) if *ns == TOKEN_CLAIMS && op == "of")
-        && args.len() == 1
-    {
-        let xs = pre.lower_node(&args[0], cx);
-        cx.note_token_claims();
-        return Some(runtime_ctor_call(None, "__tokenClaims", xs));
-    }
-    // #2341 (L4): `RequestHeaders.of(lines)` / `RequestHeaders.empty()` build
-    // the runtime's headers view from `"name: value"` lines.
-    if let ExprKind::Ident(_) = &receiver.kind
-        && matches!(cx.commons().callee(e.id), Some(Callee::Intrinsic { ns, .. }) if *ns == REQUEST_HEADERS)
-    {
-        match (method.name.as_str(), args.len()) {
-            ("of", 1) => {
-                let xs = pre.lower_node(&args[0], cx);
-                cx.note_request_headers();
-                return Some(runtime_ctor_call(None, "__requestHeaders", xs));
-            }
-            ("empty", 0) => {
-                cx.note_request_headers();
-                return Some(Ok(call("__requestHeaders", vec![TsExpr::array(vec![])])));
-            }
-            _ => {}
+        // #2016: the guarded hex and base64url decodes, `None` on bad input.
+        (StaticOp::Bytes(BytesStatic::FromHex), 1) => {
+            let s = pre.lower_node(&args[0], cx);
+            cx.note_bytes_ops();
+            Some(runtime_ctor_call(None, "__bynkBytesFromHex", s))
         }
-    }
-    // #2854: `RequestQuery.of(pairs)` / `RequestQuery.empty()` build the
-    // runtime's query view from `"name=value"` pairs.
-    if let ExprKind::Ident(_) = &receiver.kind
-        && matches!(cx.commons().callee(e.id), Some(Callee::Intrinsic { ns, .. }) if *ns == REQUEST_QUERY)
-    {
-        match (method.name.as_str(), args.len()) {
-            ("of", 1) => {
-                let xs = pre.lower_node(&args[0], cx);
-                cx.note_request_query();
-                return Some(runtime_ctor_call(None, "__requestQuery", xs));
-            }
-            ("empty", 0) => {
-                cx.note_request_query();
-                return Some(Ok(call("__requestQuery", vec![TsExpr::array(vec![])])));
-            }
-            _ => {}
+        (StaticOp::Bytes(BytesStatic::FromBase64Url), 1) => {
+            let s = pre.lower_node(&args[0], cx);
+            cx.note_bytes_ops();
+            Some(runtime_ctor_call(None, "__bynkBytesFromBase64Url", s))
         }
-    }
-    // #3277: `RequestCookies.of(pairs)` / `RequestCookies.empty()` build the
-    // runtime's cookies view from `"name=value"` pairs.
-    if let ExprKind::Ident(_) = &receiver.kind
-        && matches!(cx.commons().callee(e.id), Some(Callee::Intrinsic { ns, .. }) if *ns == REQUEST_COOKIES)
-    {
-        match (method.name.as_str(), args.len()) {
-            ("of", 1) => {
-                let xs = pre.lower_node(&args[0], cx);
-                cx.note_request_cookies();
-                return Some(runtime_ctor_call(None, "__requestCookies", xs));
-            }
-            ("empty", 0) => {
-                cx.note_request_cookies();
-                return Some(Ok(call("__requestCookies", vec![TsExpr::array(vec![])])));
-            }
-            _ => {}
+        (StaticOp::Bytes(BytesStatic::Empty), 0) => Some(Ok(new(global("Uint8Array"), vec![]))),
+        // #2622: `Decimal.parse(s)` and `Decimal.fromInt(n)`.
+        (StaticOp::Decimal(DecimalStatic::Parse), 1) => {
+            let s = pre.lower_node(&args[0], cx);
+            cx.note_decimal("__bynkDecimalParse");
+            Some(runtime_ctor_call(None, "__bynkDecimalParse", s))
         }
+        (StaticOp::Decimal(DecimalStatic::FromInt), 1) => {
+            let n = pre.lower_node(&args[0], cx);
+            cx.note_decimal("__bynkDecimalFromInt");
+            Some(runtime_ctor_call(None, "__bynkDecimalFromInt", n))
+        }
+        // #2380 (L5): `TokenClaims.of(lines)` builds the runtime's claims view.
+        (StaticOp::TokenClaims(TokenClaimsStatic::Of), 1) => {
+            let xs = pre.lower_node(&args[0], cx);
+            cx.note_token_claims();
+            Some(runtime_ctor_call(None, "__tokenClaims", xs))
+        }
+        // #2341 (L4): `RequestHeaders.of(lines)` / `RequestHeaders.empty()` build
+        // the runtime's headers view from `"name: value"` lines.
+        (StaticOp::RequestHeaders(RequestHeadersStatic::Of), 1) => {
+            let xs = pre.lower_node(&args[0], cx);
+            cx.note_request_headers();
+            Some(runtime_ctor_call(None, "__requestHeaders", xs))
+        }
+        (StaticOp::RequestHeaders(RequestHeadersStatic::Empty), 0) => {
+            cx.note_request_headers();
+            Some(Ok(call("__requestHeaders", vec![TsExpr::array(vec![])])))
+        }
+        // #2854: `RequestQuery.of(pairs)` / `RequestQuery.empty()` build the
+        // runtime's query view from `"name=value"` pairs.
+        (StaticOp::RequestQuery(RequestQueryStatic::Of), 1) => {
+            let xs = pre.lower_node(&args[0], cx);
+            cx.note_request_query();
+            Some(runtime_ctor_call(None, "__requestQuery", xs))
+        }
+        (StaticOp::RequestQuery(RequestQueryStatic::Empty), 0) => {
+            cx.note_request_query();
+            Some(Ok(call("__requestQuery", vec![TsExpr::array(vec![])])))
+        }
+        // #3277: `RequestCookies.of(pairs)` / `RequestCookies.empty()` build the
+        // runtime's cookies view from `"name=value"` pairs.
+        (StaticOp::RequestCookies(RequestCookiesStatic::Of), 1) => {
+            let xs = pre.lower_node(&args[0], cx);
+            cx.note_request_cookies();
+            Some(runtime_ctor_call(None, "__requestCookies", xs))
+        }
+        (StaticOp::RequestCookies(RequestCookiesStatic::Empty), 0) => {
+            cx.note_request_cookies();
+            Some(Ok(call("__requestCookies", vec![TsExpr::array(vec![])])))
+        }
+        // v0.100: `Stream.of(xs)` — the deterministic in-memory source. A `Stream`
+        // lowers to a host async iterable; `of` wraps a list as an async generator.
+        // Emitted inline (no runtime import), like the collection kernels.
+        (StaticOp::Stream(StreamStatic::Of), 1) => {
+            let xs = pre.lower(&args[0], cx);
+            // 1A: generator expression has no bynk_ts node
+            Some(Err(format!(
+                "(async function* () {{ for (const __e of {xs}) {{ yield __e; }} }})()"
+            )))
+        }
+        _ => None,
     }
-    // v0.100: `Stream.of(xs)` — the deterministic in-memory source. A `Stream`
-    // lowers to a host async iterable; `of` wraps a list as an async generator.
-    // Emitted inline (no runtime import), like the collection kernels.
-    if let ExprKind::Ident(_) = &receiver.kind
-        && matches!(
-            cx.commons().callee(e.id),
-            Some(Callee::Intrinsic { ns, op }) if *ns == STREAM && op == "of"
-        )
-        && args.len() == 1
-    {
-        let xs = pre.lower(&args[0], cx);
-        // 1A: generator expression has no bynk_ts node
-        return Some(Err(format!(
-            "(async function* () {{ for (const __e of {xs}) {{ yield __e; }} }})()"
-        )));
-    }
-    None
 }
 
 #[cfg(test)]

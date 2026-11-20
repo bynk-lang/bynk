@@ -41,7 +41,7 @@
 //! never reach), so they're covered directly below.
 
 use bynk_check::checker::{self, Callee};
-use bynk_check::kernel_op::{KernelOp, ListOp, StringOp};
+use bynk_check::kernel_op::{DurationStatic, KernelOp, ListOp, StaticOp, StringOp};
 use bynk_check::resolver;
 use bynk_syntax::{lexer, parser};
 
@@ -303,7 +303,7 @@ commons demo {
     let callees = callees_for(src);
     assert!(
         callees.iter().any(
-            |c| matches!(c, Callee::Intrinsic { ns, op } if *ns == "Duration" && op == "millis")
+            |c| matches!(c, Callee::Intrinsic { op, .. } if *op == StaticOp::Duration(DurationStatic::Millis))
         ),
         "expected a Callee::Intrinsic{{ ns: \"Duration\", op: \"millis\" }}, got {callees:?}"
     );

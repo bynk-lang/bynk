@@ -825,7 +825,7 @@ pub(crate) fn check_faults(faults: &FaultsExpr, span: Span, ctx: &mut Ctx) -> Op
     }
     let call_ty = type_of(call, None, ctx);
     match principal {
-        Some(p) if p.actor.name == "Nobody" => {
+        Some(p) if calls::record_principal(p, ctx) == CallSitePrincipal::Nobody => {
             if let Some(identity) = &p.identity {
                 let _ = type_of(identity, None, ctx);
                 // #1878 review: the route-shape checks are skipped (the tier

@@ -8,7 +8,7 @@
 //! The call-site principal (`by Alice(...)`) reaches these as nodes (`LowerCtx::call_site_identity`
 //! and friends, Decision B); a principal that is still text makes the call text.
 
-use bynk_check::checker::{Callee, Ty};
+use bynk_check::checker::{Callee, HandlerAddress, Ty, WsAddress};
 use bynk_model::IrHttpMethod;
 use bynk_ts::{TsExpr, TsObjectEntry};
 
@@ -144,15 +144,26 @@ fn identity_deps(identity: LoweredExpr, claims: Option<LoweredExpr>) -> LoweredE
 }
 
 /// The key the addressed handler's principal is looked up under (a sum handler's `deps.who`).
-fn sum_handler_key(method: &Ident, args: &[Expr]) -> Option<String> {
-    match (IrHttpMethod::from_ident(&method.name), args.first()) {
-        (Some(verb), Some(first)) => match &first.kind {
-            ExprKind::StrLit(path) => Some(crate::emitter::http_handler_method_name_ir(verb, path)),
-            _ => None,
-        },
-        _ if method.name == "call" => Some("call".to_string()),
+fn sum_handler_key(address: Option<&HandlerAddress>) -> Option<String> {
+    match address {
+        Some(HandlerAddress::Http {
+            verb,
+            path: Some(path),
+        }) => Some(crate::emitter::http_handler_method_name_ir(
+            IrHttpMethod::from(*verb),
+            path,
+        )),
+        Some(HandlerAddress::Call) => Some("call".to_string()),
         // #3051: a websocket `open` reads its principal as an `on call` or http handler does.
-        _ if method.name == "open" => Some("open".to_string()),
+        Some(HandlerAddress::Ws(WsAddress::Open)) => Some("open".to_string()),
+        _ => None,
+    }
+}
+
+/// The address the checker resolved for the test-service call `e`, if it recorded one.
+fn test_address(cx: &LowerCtx, e: &Expr) -> Option<HandlerAddress> {
+    match cx.commons().callee(e.id) {
+        Some(Callee::TestService { address, .. }) => Some(address.clone()),
         _ => None,
     }
 }
@@ -309,20 +320,23 @@ pub(in crate::emitter) fn lower_test_asset_fetch_call(
 /// when the call is not one. #2136: the driver builds the platform-shaped event and settles the
 /// execution context itself.
 pub(in crate::emitter) fn lower_system_schedule_call(
+    e: &Expr,
     receiver: &Expr,
-    method: &Ident,
     args: &[Expr],
     cx: &mut LowerCtx,
     pre: &mut Pre,
 ) -> Option<Built> {
     if let ExprKind::Ident(id) = &receiver.kind {
-        let driver = match (method.name.as_str(), args.first().map(|a| &a.kind)) {
-            ("schedule", Some(ExprKind::StrLit(expr))) => cx.system_schedule_driver(&id.name, expr),
-            ("message", _) => cx.system_message_driver(&id.name),
+        let address = test_address(cx, e);
+        let driver = match &address {
+            Some(HandlerAddress::Schedule { expr: Some(expr) }) => {
+                cx.system_schedule_driver(&id.name, expr)
+            }
+            Some(HandlerAddress::Message) => cx.system_message_driver(&id.name),
             _ => None,
         };
         if let Some(driver) = driver {
-            let skip = usize::from(method.name == "schedule");
+            let skip = usize::from(matches!(address, Some(HandlerAddress::Schedule { .. })));
             let rest = lower_args(&args[skip..], cx, pre);
             return Some(node_or_text(
                 rest,
@@ -506,7 +520,6 @@ fn serialised(lowered: LoweredExpr, ty: &TypeRef, wire: Wire, cx: &LowerCtx) -> 
 pub(in crate::emitter) fn lower_system_http_call(
     e: &Expr,
     receiver: &Expr,
-    method: &Ident,
     args: &[Expr],
     cx: &mut LowerCtx,
     pre: &mut Pre,
@@ -517,10 +530,15 @@ pub(in crate::emitter) fn lower_system_http_call(
     if !cx.is_system_http_service(&svc.name) {
         return None;
     }
-    let verb = IrHttpMethod::from_ident(&method.name)?;
-    let ExprKind::StrLit(path) = &args.first()?.kind else {
+    let Some(HandlerAddress::Http {
+        verb,
+        path: Some(path),
+    }) = test_address(cx, e)
+    else {
         return None;
     };
+    let verb = IrHttpMethod::from(verb);
+    let path = &path;
     let route = (svc.name.clone(), verb.as_str().to_string(), path.clone());
     if !cx.has_system_http_route(&route) {
         return Some(wrong_method_call(&svc.name, verb, path));
@@ -594,23 +612,20 @@ pub(in crate::emitter) fn lower_system_http_call(
 ///
 /// 1A: needs typeof and indexed-access TsTypes: `bynk_ts` has neither, so these three IIFEs stay text.
 fn websocket_lifecycle_call(
-    shape: &str,
+    shape: &WsAddress,
     svc: &str,
     args: &[Expr],
     deps: &LoweredExpr,
     cx: &mut LowerCtx,
     pre: &mut Pre,
 ) -> String {
-    let mut parts = shape.split(' ');
-    let which = parts.next().unwrap_or_default();
-    let nums: Vec<usize> = parts.filter_map(|p| p.parse().ok()).collect();
     let tc = args
         .first()
         .map(|a| pre.lower(a, cx))
         .unwrap_or_else(|| "undefined".to_string());
     let sig = |m: &str| format!("Parameters<typeof {svc}.{m}>");
-    match which {
-        "open" => {
+    match shape {
+        WsAddress::Open => {
             let route: Vec<String> = args[1..].iter().map(|a| pre.lower(a, cx)).collect();
             let mut parts = vec!["__c".to_string()];
             parts.extend(route.iter().cloned());
@@ -622,11 +637,8 @@ fn websocket_lifecycle_call(
                 route.join(", ")
             )
         }
-        "message" => {
-            let (frame_idx, n) = (
-                nums.first().copied().unwrap_or(0),
-                nums.get(1).copied().unwrap_or(1),
-            );
+        WsAddress::Message { frame } => {
+            let (frame_idx, n) = frame.map_or((0, 1), |f| (f.frame_index, f.params));
             let frame = args
                 .get(1)
                 .map(|a| pre.lower(a, cx))
@@ -648,8 +660,8 @@ fn websocket_lifecycle_call(
                 parts.join(", ")
             )
         }
-        _ => {
-            let n = nums.first().copied().unwrap_or(0);
+        WsAddress::Close { params } => {
+            let n = params.unwrap_or(0);
             let p = sig("close");
             let mut parts = vec!["__c".to_string()];
             for i in 0..n {
@@ -687,26 +699,26 @@ pub(in crate::emitter) fn lower_test_service_call(
     // settles each addressed call, so the case's expectations see the sends' effects. Read
     // before anything lowers.
     let helper = settle_helper(cx);
-    let sum_key = sum_handler_key(method, args);
+    let address = test_address(cx, e);
+    let sum_key = sum_handler_key(address.as_ref());
     let DepsArg { value: deps, plain } = test_deps(cx, &svc.name, sum_key.as_deref());
     let settle = |built: Built| Some(settle_with(helper, built));
     // http address: the method is an HTTP verb and the first argument is the route pattern
     // string. The key is a pure function of verb + path; the remaining args are the handler's
     // positional params.
-    if let Some(verb) = IrHttpMethod::from_ident(&method.name)
-        && let Some(first) = args.first()
-        && let ExprKind::StrLit(path) = &first.kind
+    if let Some(HandlerAddress::Http {
+        verb,
+        path: Some(path),
+    }) = &address
     {
-        let key = crate::emitter::http_handler_method_name_ir(verb, path);
+        let key = crate::emitter::http_handler_method_name_ir(IrHttpMethod::from(*verb), path);
         let rest = lower_args(&args[1..], cx, pre);
         return settle(address_call(&svc.name, &key, rest, deps));
     }
     if let Some(facts) = handler_facts(cx, &svc.name) {
         // cron address: the emitted key is position-indexed among the service's same-kind
         // handlers; cron drops the leading schedule string.
-        if method.name == "schedule"
-            && let Some(ExprKind::StrLit(expr)) = args.first().map(|a| &a.kind)
-        {
+        if let Some(HandlerAddress::Schedule { expr: Some(expr) }) = &address {
             let idx = facts.cron.iter().position(|c| c == expr);
             let key = crate::emitter::cron_handler_method_name(
                 &svc.name,
@@ -715,14 +727,11 @@ pub(in crate::emitter) fn lower_test_service_call(
             let rest = lower_args(&args[1..], cx, pre);
             return settle(address_call(&svc.name, &key, rest, deps));
         }
-        if let Some(Callee::TestService { address, .. }) = cx.commons().callee(e.id)
-            && let Some(shape) = address.strip_prefix("ws ")
-        {
-            let shape = shape.to_string();
-            let text = websocket_lifecycle_call(&shape, &svc.name, args, &deps, cx, pre);
+        if let Some(HandlerAddress::Ws(shape)) = &address {
+            let text = websocket_lifecycle_call(shape, &svc.name, args, &deps, cx, pre);
             return settle(Err(text));
         }
-        if method.name == "message" && facts.has_message {
+        if matches!(address, Some(HandlerAddress::Message)) && facts.has_message {
             // A `from queue` service binds exactly one queue and declares one `on message`
             // handler, so the position index is 0.
             let key = crate::emitter::queue_handler_method_name(&svc.name, 0);
@@ -737,7 +746,7 @@ pub(in crate::emitter) fn lower_test_service_call(
         // (`tests_emit::event_delivery_helper`), which supplies the default envelope and calls
         // the service's generated `event` method, whose prologue runs the pattern filter and the
         // `via schema(N)` guard as every real delivery does. An omitted envelope is `undefined`.
-        if method.name == "event" && facts.has_event {
+        if matches!(address, Some(HandlerAddress::Event)) && facts.has_event {
             cx.runtime_use().note_test_event_service(&svc.name);
             let undefined = || LoweredExpr::Node(id("undefined"));
             let payload = args

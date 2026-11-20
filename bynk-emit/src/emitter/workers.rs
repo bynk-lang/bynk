@@ -348,7 +348,7 @@ pub fn emit_worker_compose(
     // v0.15: cross-context capabilities this Worker uses (in handlers or in a
     // local provider's `given`) → `deps_key → consumed_context`. Their
     // providers are instantiated locally (model A1).
-    let cross_caps = worker_cross_caps(table, consumes, aliases, flattened);
+    let cross_caps = worker_cross_caps(context, table, consumes, aliases, flattened);
 
     // Locale capability track, slice 2 (#882, Decision C): only when this
     // Worker both consumes `bynk`'s `Locale` and has a uniquely-detected
@@ -1134,6 +1134,7 @@ pub fn emit_worker_compose(
 /// v0.15: cross-context capabilities this Worker references in handlers or in
 /// a local provider's `given`, as `deps_key → consumed_context`.
 fn worker_cross_caps(
+    context: &str,
     table: &UnitTable,
     consumes: &[String],
     aliases: &HashMap<String, String>,
@@ -1175,7 +1176,9 @@ fn worker_cross_caps(
         // `handler_cross_caps`. Without this, Workers-mode compose
         // tries to construct a `bynk__binding.EventsProvider` that
         // does not exist.
-        if c.name == "Events" && flattened.get(&c.name).map(String::as_str) == Some("bynk") {
+        if bynk_check::firstparty::resolve(&c.name, context, flattened)
+            == Some(bynk_check::firstparty::FirstPartyCap::Events)
+        {
             continue;
         }
         if let Some(p) = &c.context {

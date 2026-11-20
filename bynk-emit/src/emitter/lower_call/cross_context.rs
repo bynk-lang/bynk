@@ -6,6 +6,8 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
+use bynk_check::checker::Callee;
+use bynk_check::kernel_op::{ListStatic, MapStatic, StaticOp};
 use bynk_ts::{TsExpr, TsType};
 
 use super::super::emit::{flatten_emit_ident_chain, test_scaffold_ns};
@@ -127,15 +129,16 @@ pub(crate) fn holds_callee_typed(e: &Expr, cx: &LowerCtx) -> bool {
                 ..
             })
         ),
-        ExprKind::MethodCall {
-            receiver,
-            method,
-            args,
-            ..
-        } => {
-            method.name == "empty"
-                && args.is_empty()
-                && matches!(&receiver.kind, ExprKind::Ident(id) if id.name == "List" || id.name == "Map")
+        // 1A.33: the recorded intrinsic, not the receiver's spelling.
+        ExprKind::MethodCall { args, .. } => {
+            args.is_empty()
+                && matches!(
+                    cx.commons().callee(e.id),
+                    Some(Callee::Intrinsic {
+                        op: StaticOp::List(ListStatic::Empty) | StaticOp::Map(MapStatic::Empty),
+                        ..
+                    })
+                )
         }
         ExprKind::Paren(inner)
         | ExprKind::Some(inner)

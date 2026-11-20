@@ -1845,6 +1845,9 @@ pub struct CallSiteActor {
     /// #2380 (L5): the verified-token claims an `Oidc` actor's handler reads
     /// (`by Workload("id", TokenClaims.of([…]))`), at the in-process tiers.
     pub claims: Option<Box<Expr>>,
+    /// An id of this clause's own (1A.33), allocated from the expression counter so the
+    /// checker can record what the principal resolves to beside the call's own callees.
+    pub id: ExprId,
     pub span: Span,
 }
 
@@ -2078,7 +2081,7 @@ pub enum HttpVariantPayload {
 }
 
 /// One variant of the built-in `HttpResult[T]` sum (v0.9 §3.3).
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct HttpVariant {
     pub name: &'static str,
     pub payload: HttpVariantPayload,
@@ -2397,7 +2400,7 @@ pub enum QueueVariantPayload {
 }
 
 /// One variant of the built-in `QueueResult` sum (v0.44).
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct QueueVariant {
     pub name: &'static str,
     pub payload: QueueVariantPayload,
@@ -4991,6 +4994,7 @@ fn f(x: Int) -> Int {
                 actor: _,
                 identity,
                 claims: _,
+                id: _,
                 span: _,
             }) = principal
                 && let Some(identity) = identity
@@ -5227,6 +5231,7 @@ fn f(x: Int) -> Int {
                     actor: _,
                     identity,
                     claims: _,
+                    id: _,
                     span: _,
                 }) = principal
                     && let Some(identity) = identity

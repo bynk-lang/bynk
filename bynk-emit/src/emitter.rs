@@ -52,6 +52,7 @@ use bynk_check::builtin_names::map_query;
 use bynk_check::builtin_names::methods::RAW;
 use bynk_check::builtin_names::types::*;
 use bynk_check::checker::{CheckedProgram, ExprId, NamedKind, Ty, TyId, TypedCommons, Types};
+use bynk_check::kernel_op::{FormStatic, JsonStatic, StaticOp, YamlStatic};
 use bynk_check::project_model::BuildTarget;
 use bynk_check::symbols::UnitTable;
 use bynk_model::TypeShape;
@@ -615,11 +616,7 @@ pub fn emit_project(
                 extend_with_span(&mut body, item_stmts, s.span);
             }
             CommonsItem::Agent(a) => {
-                let state: Vec<_> = a
-                    .store_fields
-                    .iter()
-                    .map(|f| lower_store_field_shape_ir(f, program))
-                    .collect();
+                let state = emit::agent_state_ir(a, program);
                 let mut item_stmts = emit_agent(a, &state, commons, ctx, source_text);
                 if let Some(first) = item_stmts.first_mut() {
                     first.span = Some(a.span);
@@ -791,7 +788,7 @@ pub fn emit_project(
     // on `stmt.span`/`stmt.nested_map`, which travel with the statement
     // itself; prepending the header is now ordinary `Vec` splicing, nothing
     // to rebase.
-    let mut program_stmts = write_header(commons, ctx);
+    let mut program_stmts = write_header(commons, ctx, program);
     // #1486: `write_header`'s own last statement (the runtime import, when
     // the file has any commons items) sits directly adjacent to whatever
     // `stmts` starts with — genuinely import-kind itself whenever
@@ -1241,22 +1238,22 @@ fn collect_json_codec_roots(commons: &TypedCommons) -> Vec<TypeRef> {
             let ExprKind::MethodCall { args, .. } = &e.kind else {
                 return;
             };
-            let Some(bynk_check::checker::Callee::Intrinsic { ns, op }) =
+            let Some(bynk_check::checker::Callee::Intrinsic { op, .. }) =
                 commons.callees.get(&e.id)
             else {
                 return;
             };
             // #3214: `Yaml.decode[T]` decodes through the same codec helpers.
-            if *ns != JSON && *ns != YAML && *ns != FORM {
-                return;
-            }
-            match op.as_str() {
-                "decode" | "decodeSql" => {
+            match op {
+                StaticOp::Json(JsonStatic::Decode | JsonStatic::DecodeSql)
+                | StaticOp::Yaml(YamlStatic::Decode)
+                | StaticOp::Form(FormStatic::Decode) => {
                     if let Some(Ty::Result(t, _)) = commons.expr_ty(e.id).as_deref() {
                         push_ground(*t, &mut roots);
                     }
                 }
-                "encode" | "encodePlain" => {
+                StaticOp::Json(JsonStatic::Encode | JsonStatic::EncodePlain)
+                | StaticOp::Form(FormStatic::Encode) => {
                     if let Some(a) = args.first()
                         && let Some(t) = commons.expr_types.get(&a.id).map(|te| te.ty)
                     {
@@ -3914,7 +3911,11 @@ fn cookie_runtime_imports(ru: &RuntimeUse, parts: &mut Vec<&str>) {
     }
 }
 
-fn write_header(commons: &TypedCommons, ctx: &EmitProjectCtx) -> Vec<bynk_ts::TsStmt> {
+fn write_header(
+    commons: &TypedCommons,
+    ctx: &EmitProjectCtx,
+    program: &CheckedProgram,
+) -> Vec<bynk_ts::TsStmt> {
     // Arc C, slice 30 (#1392): the 2-line banner converts to two real
     // `TsStmt::Comment` statements, the same `events_fanout.rs`-established
     // precedent (#1317) every other Arc C header already uses.
@@ -4084,10 +4085,7 @@ fn write_header(commons: &TypedCommons, ctx: &EmitProjectCtx) -> Vec<bynk_ts::Ts
         }
         // v0.96 (ADR 0124): an agent whose load-time validation gate fires imports
         // the `rehydrationViolation` fault helper.
-        let has_rehydration_gate = commons.commons.items.iter().any(|i| match i {
-            CommonsItem::Agent(a) => emit::agent_needs_rehydrate(a, &commons.types),
-            _ => false,
-        });
+        let has_rehydration_gate = emit::commons_need_rehydrate(commons, program);
         // State-migrations S2 (#2224): a `migrate` step decodes its old shape
         // (a failure is a `RehydrationViolation`) and turns a throw into
         // `MigrationFailed`.
@@ -4121,19 +4119,7 @@ fn write_header(commons: &TypedCommons, ctx: &EmitProjectCtx) -> Vec<bynk_ts::Ts
         }
         // Ordered store collections (#3254): the handle classes an agent's state is made
         // of, and the helpers that put them in wire form and fill them back.
-        let mut state_names: Vec<&'static str> = commons
-            .commons
-            .items
-            .iter()
-            .filter_map(|i| match i {
-                CommonsItem::Agent(a) => Some(emit::agent_state_runtime_names(a, &commons.types)),
-                _ => None,
-            })
-            .flatten()
-            .collect();
-        state_names.sort_unstable();
-        state_names.dedup();
-        parts.extend(state_names);
+        parts.extend(emit::commons_state_runtime_names(commons, program));
         let has_versioned_agent = commons.commons.items.iter().any(|i| match i {
             CommonsItem::Agent(a) => ctx.agent_schema_versions.contains_key(&a.name.name),
             _ => false,
@@ -4149,12 +4135,7 @@ fn write_header(commons: &TypedCommons, ctx: &EmitProjectCtx) -> Vec<bynk_ts::Ts
         // v0.104/v0.105 (real-time track slice 3b): on Workers a `store Map[K,
         // Connection]` persists the connection id; its entry ops re-resolve the live
         // socket via `resolveConnection` and read a connection's id via `connIdOf`.
-        if workers
-            && commons.commons.items.iter().any(|i| match i {
-                CommonsItem::Agent(a) => emit::agent_has_held_storage(a),
-                _ => false,
-            })
-        {
+        if workers && emit::commons_have_held_storage(commons, program) {
             parts.push("__resolveConnection");
             parts.push("__connIdOf");
         }

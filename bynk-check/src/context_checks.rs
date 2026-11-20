@@ -7,6 +7,7 @@ use crate::checker::{
 };
 use crate::hints::HintSink;
 use crate::index::{RefSink, SymbolKind};
+use crate::kernel_op::{FormStatic, JsonStatic, StaticOp, YamlStatic};
 use crate::locals::LocalsSink;
 use crate::requirements::RequirementSink;
 use crate::resolver::{self, ResolvedCommons};
@@ -173,17 +174,16 @@ fn decode_targets(e: &Expr, typed: &checker::TypedCommons) -> Vec<TyId> {
     use checker::Callee;
     use checker::codable::{WitnessKind, witness_list};
     match typed.callees.get(&e.id) {
-        Some(Callee::Intrinsic { ns, op })
-            if (*ns == crate::builtin_names::types::JSON
-                || *ns == crate::builtin_names::types::YAML
-                || *ns == crate::builtin_names::types::FORM)
-                && matches!(op.as_str(), "decode" | "decodeSql") =>
-        {
-            match typed.expr_ty(e.id).as_deref() {
-                Some(Ty::Result(t, _)) => vec![*t],
-                _ => Vec::new(),
-            }
-        }
+        Some(Callee::Intrinsic {
+            op:
+                StaticOp::Json(JsonStatic::Decode | JsonStatic::DecodeSql)
+                | StaticOp::Yaml(YamlStatic::Decode)
+                | StaticOp::Form(FormStatic::Decode),
+            ..
+        }) => match typed.expr_ty(e.id).as_deref() {
+            Some(Ty::Result(t, _)) => vec![*t],
+            _ => Vec::new(),
+        },
         // #2865: a typed `D1` read decodes its row.
         Some(Callee::D1Select { row, .. }) => vec![*row],
         Some(

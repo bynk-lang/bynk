@@ -41,6 +41,28 @@ use crate::index::SymbolKey;
 /// does not make a root unique.
 static NEXT_ROOT: AtomicUsize = AtomicUsize::new(0);
 
+thread_local! {
+    /// The resolved callees [`crate::analysis`] gathered for each unit during the
+    /// current thread's latest analysis (1A.33): the checker's recorded
+    /// classification, which the project result otherwise keeps only in part.
+    static CALLEES: std::cell::RefCell<HashMap<String, Vec<crate::checker::Callee>>> =
+        std::cell::RefCell::new(HashMap::new());
+}
+
+/// Record a unit's callees as the analysis walks it (called from
+/// [`crate::analysis`], test builds only).
+pub(crate) fn note_callees<'a>(
+    unit: &str,
+    callees: impl Iterator<Item = (&'a bynk_syntax::ast::ExprId, &'a crate::checker::Callee)>,
+) {
+    CALLEES.with(|c| {
+        c.borrow_mut()
+            .entry(unit.to_string())
+            .or_default()
+            .extend(callees.map(|(_, callee)| callee.clone()));
+    });
+}
+
 /// Analyse the project made of `files` (`(relative path, source)` pairs).
 pub(crate) fn analyse(files: &[(&str, &str)]) -> Analysed {
     analyse_with(files, None)
@@ -59,6 +81,7 @@ pub(crate) fn analyse_with(
         NEXT_ROOT.fetch_add(1, Ordering::Relaxed)
     ));
     let _ = std::fs::remove_dir_all(&root);
+    CALLEES.with(|c| c.borrow_mut().clear());
     let mut overlay = HashMap::new();
     for (rel, src) in files {
         let path = root.join(rel);
@@ -77,8 +100,10 @@ pub(crate) fn analyse_with(
         ),
         None => analyse_project(&roots, &overlay, &bynk_project::SchemaLock::Off),
     };
+    let callees = CALLEES.with(|c| std::mem::take(&mut *c.borrow_mut()));
     Analysed {
         root,
+        callees,
         sources: files
             .iter()
             .map(|(rel, src)| (PathBuf::from(rel), (*src).to_string()))
@@ -91,6 +116,7 @@ pub(crate) fn analyse_with(
 /// locate an expression by its text instead of by a hand-counted offset.
 pub(crate) struct Analysed {
     root: PathBuf,
+    callees: HashMap<String, Vec<crate::checker::Callee>>,
     sources: HashMap<PathBuf, String>,
     pub(crate) analysis: ProjectAnalysis,
 }
@@ -102,6 +128,11 @@ impl Drop for Analysed {
 }
 
 impl Analysed {
+    /// Every callee the checker recorded in the unit named `unit` (1A.33).
+    pub(crate) fn callees_in(&self, unit: &str) -> &[crate::checker::Callee] {
+        self.callees.get(unit).map(Vec::as_slice).unwrap_or(&[])
+    }
+
     /// Every diagnostic's category, errors and warnings alike, in reported
     /// order.
     pub(crate) fn categories(&self) -> Vec<&'static str> {

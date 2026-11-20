@@ -33,6 +33,8 @@ pub mod architecture_facts;
 pub mod assets;
 pub mod ast_text;
 pub mod builtin_names;
+#[cfg(test)]
+mod callee_tests;
 pub mod capability_paths;
 pub mod check_pipeline;
 pub mod checker;

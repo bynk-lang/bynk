@@ -6,7 +6,9 @@
 
 use std::sync::Arc;
 
-use bynk_check::checker::{NamedKind, Ty, TyId};
+use bynk_check::actors::CallSitePrincipal;
+use bynk_check::checker::{Callee, NamedKind, Ty, TyId};
+use bynk_check::kernel_op::{StaticOp, TokenClaimsStatic};
 use bynk_syntax::ast::{
     BaseType, BinOp, Block, Expr, ExprKind, MatchArm, Pattern, PatternBindingKind, Statement,
     TypeBody,
@@ -16,8 +18,9 @@ use bynk_syntax::span::Span;
 use super::ctx::TailSlot;
 use super::lower::{
     CLAIM_SCOPE_DECLARATION, Lowered, LoweredExpr, LoweredStmt, PatPath, Pre, and_join,
-    build_value_bin_op, emit_pattern_bindings, expect_location_raw, expect_source_text_raw,
-    literal_label_node, member_node, num_lit, pattern_tests, str_node, ternary_built,
+    build_value_bin_op, call_site_principal, emit_pattern_bindings, expect_location_raw,
+    expect_source_text_raw, literal_label_node, member_node, num_lit, pattern_tests, str_node,
+    ternary_built,
 };
 use super::lower_call::codec_statics::json_encode;
 use super::lower_ctx::LowerCtx;
@@ -894,11 +897,12 @@ fn lower_effect_let_value(
         // identity — the *raw* lowered value (`"bob"`), which unit deps
         // folds with an `as any` brand cast and the system driver passes
         // as the JWT `sub` verbatim.
-        if principal.actor.name == "Nobody" {
+        let kind = call_site_principal(cx, principal);
+        if kind == CallSitePrincipal::Nobody {
             cx.call_site_no_credential = true;
-        } else if let Some(variant) = bad_signature_driver(&principal.actor.name) {
+        } else if let CallSitePrincipal::BadCredential(bad) = kind {
             // #2135: `by Forged` / `by Stale` name no identity either.
-            cx.call_site_bad_signature = Some(variant);
+            cx.call_site_bad_signature = Some(bad.driver());
         } else {
             // 1A: a still-text principal makes the call text (`call_site_identity`,
             // `call_site_claims`, `call_site_claim_lines`).
@@ -909,15 +913,19 @@ fn lower_effect_let_value(
             // and never builds the in-process `TokenClaims` value, so the
             // lines are lowered once and in place of it.
             let literal_lines = match principal.claims.as_deref().map(|c| &c.kind) {
-                Some(ExprKind::MethodCall {
-                    receiver,
-                    method,
-                    args,
-                    ..
-                }) if cx.is_system_oidc_body()
-                    && method.name == "of"
-                    && args.len() == 1
-                    && matches!(&receiver.kind, ExprKind::Ident(id) if id.name == "TokenClaims") =>
+                Some(ExprKind::MethodCall { args, .. })
+                    if cx.is_system_oidc_body()
+                        && args.len() == 1
+                        && matches!(
+                            principal
+                                .claims
+                                .as_deref()
+                                .and_then(|c| cx.commons().callee(c.id)),
+                            Some(Callee::Intrinsic {
+                                op: StaticOp::TokenClaims(TokenClaimsStatic::Of),
+                                ..
+                            })
+                        ) =>
                 {
                     Some(&args[0])
                 }
@@ -1149,20 +1157,6 @@ fn statement(body: &mut Body, stmt: &Statement, cx: &mut LowerCtx) {
     body.push(Item::Mark(stmt.span()));
     match stmt {
         Statement::Let(l) => {
-            // Track `let x = AgentName(key)` so subsequent `x.method(args)`
-            // calls can dispatch through the agent class.
-            if l.name.name != "_"
-                && let ExprKind::Call {
-                    name,
-                    args: ctor_args,
-                    ..
-                } = &l.value.kind
-                && cx.local_agents.contains(&name.name)
-                && ctor_args.len() == 1
-            {
-                cx.local_agent_vars
-                    .insert(l.name.name.clone(), name.name.clone());
-            }
             let mut pre = Pre::new();
             let value = pre.lower_node(&l.value, cx);
             body.extend(pre.items());
