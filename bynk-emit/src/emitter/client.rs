@@ -449,6 +449,7 @@ pub fn emit_client(
             doc: None,
             inline: false,
             body: vec![TsStmt::return_stmt(Some(call), None)],
+            span: None,
         });
     }
     body.extend(doc(

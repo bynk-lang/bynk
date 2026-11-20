@@ -313,26 +313,26 @@ pub(super) fn emit_test_deps(
     // reading `this.Events` rather than a captured value: the recording
     // wrapper lands on the deps object after this factory runs.
     if uses_emit {
-        entries.push(TsObjectEntry::Method {
-            name: "__eventsDispatch".to_string(),
-            is_async: true,
-            generics: Vec::new(),
-            params: vec![TsParam {
-                name: "events".to_string(),
-                ty: Some(TsType::named_with_args(
-                    "globalThis.Array",
-                    vec![TsType::named(bynk_emit::emitter::EVENTS_WIRE_EVENT_TS_TYPE)],
-                )),
-                optional: false,
-            }],
-            return_type: None,
-            doc: None,
-            inline: true,
-            body: vec![TsStmt::raw(
-                "for (const ev of events) await this.Events.emit(ev.payload);",
+        entries.push(
+            TsObjectEntry::method(
+                "__eventsDispatch",
+                true,
+                vec![TsParam {
+                    name: "events".to_string(),
+                    ty: Some(TsType::named_with_args(
+                        "globalThis.Array",
+                        vec![TsType::named(bynk_emit::emitter::EVENTS_WIRE_EVENT_TS_TYPE)],
+                    )),
+                    optional: false,
+                }],
                 None,
-            )],
-        });
+                vec![TsStmt::raw(
+                    "for (const ev of events) await this.Events.emit(ev.payload);",
+                    None,
+                )],
+            )
+            .inlined(),
+        );
     }
     // The same `"{  }"` double-space quirk `workers.rs`/`project.rs`/
     // `emit.rs`/`gen_ts_for_ty` (this file, Arc C slice 31) already carry as

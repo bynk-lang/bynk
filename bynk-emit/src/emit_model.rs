@@ -748,10 +748,7 @@ pub fn instantiate_provider_ts_expr(
                 bynk_ts::TsExpr::Ident(env.to_string()),
             ));
         }
-        Some(bynk_ts::TsExpr::Object {
-            entries,
-            multiline: false,
-        })
+        Some(bynk_ts::TsExpr::object_entries(entries))
     } else {
         deps_obj
     };

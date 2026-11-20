@@ -1397,9 +1397,10 @@ fn render_stmt_level_expr(
     if let TsExpr::Object {
         entries,
         multiline: true,
+        end_span,
     } = expr
     {
-        render_multiline_object(out, entries, depth, m);
+        render_multiline_object(out, entries, *end_span, depth, m);
     } else if let TsExpr::Array {
         items,
         multiline: true,
@@ -1422,6 +1423,7 @@ fn render_stmt_level_expr(
 fn render_multiline_object(
     out: &mut String,
     entries: &[TsObjectEntry],
+    end_span: Option<Span>,
     depth: usize,
     m: &mut Option<MergeTarget<'_>>,
 ) {
@@ -1440,6 +1442,11 @@ fn render_multiline_object(
     out.push_str("{\n");
     for entry in entries {
         render_multiline_object_entry(out, entry, depth, m.as_mut().map(|t| t.reborrow()));
+    }
+    // 1A.32a: what follows the last entry belongs to the object's declaration, not
+    // to that entry's final body line.
+    if let Some(span) = end_span {
+        note_span_at(out.len(), span, m.as_mut());
     }
     out.push_str(&indent(depth));
     out.push('}');
@@ -1518,7 +1525,11 @@ fn render_multiline_object_entry(
             doc,
             inline,
             body,
+            span,
         } => {
+            if let Some(span) = span {
+                note_span_at(out.len(), *span, map.as_mut());
+            }
             if let Some(text) = doc {
                 render_doc_comment(out, text, depth + 1);
             }
@@ -1629,6 +1640,7 @@ fn render_object_entry_inline(
             doc,
             inline,
             body,
+            ..
         } => {
             // Review of #1338, finding 2: a JSDoc block has no single-line
             // form — not reachable through this function today: every real
@@ -2642,12 +2654,15 @@ fn render_class_method(
     out: &mut String,
     method: &TsClassMethod,
     depth: usize,
-    map: Option<MergeTarget<'_>>,
+    mut map: Option<MergeTarget<'_>>,
 ) {
     debug_assert!(
         depth == 0 || !contains_raw(&method.body),
         "render_class_method: a Raw method body's own baked-in indent only matches depth 0"
     );
+    if let Some(span) = method.span {
+        note_span_at(out.len(), span, map.as_mut());
+    }
     if let Some(text) = &method.doc {
         render_doc_comment(out, text, depth + 1);
     }
@@ -2808,17 +2823,23 @@ fn render_decl_body(
                 render_type(out, ty);
             }
             out.push_str(" = ");
-            render_stmt_level_expr(out, init, depth, &mut None);
+            render_stmt_level_expr(out, init, depth, &mut map);
             out.push_str(";\n");
         }
         TsDecl::Class {
             name,
+            implements,
             fields,
             constructor,
             methods,
+            end_span,
         } => {
             out.push_str("class ");
             out.push_str(name);
+            for (i, ty) in implements.iter().enumerate() {
+                out.push_str(if i == 0 { " implements " } else { ", " });
+                render_type(out, ty);
+            }
             out.push_str(" {\n");
             for f in fields {
                 out.push_str(&indent(depth + 1));
@@ -2854,6 +2875,11 @@ fn render_decl_body(
                 }
                 render_class_method(out, m, depth, map.as_mut().map(|t| t.reborrow()));
                 wrote_member = true;
+            }
+            // 1A.32a: the closing line belongs to the class, not to the last
+            // method's final body line.
+            if let Some(span) = end_span {
+                note_span_at(out.len(), *span, map.as_mut());
             }
             out.push_str(&indent(depth));
             out.push_str("}\n");
@@ -3211,6 +3237,7 @@ mod tests {
             return_type: None,
             doc: None,
             body: vec![raw],
+            span: None,
         };
 
         let mut out = String::from("class C {\n");
@@ -3251,6 +3278,7 @@ mod tests {
             doc: None,
             inline: false,
             body: vec![raw],
+            span: None,
         };
 
         let mut out = String::from("export const svc = {\n");
@@ -3538,6 +3566,7 @@ mod tests {
 
         let class = TsDecl::Class {
             name: "C".to_string(),
+            implements: Vec::new(),
             fields: Vec::new(),
             constructor: Some(TsClassCtor {
                 params: Vec::new(),
@@ -3551,7 +3580,9 @@ mod tests {
                 return_type: None,
                 doc: None,
                 body: vec![method_raw],
+                span: None,
             }],
+            end_span: None,
         };
 
         let mut out = String::new();
@@ -4175,10 +4206,12 @@ mod tests {
                     None,
                 ),
             ],
+            span: None,
         };
 
         let class = TsDecl::Export(Box::new(TsDecl::Class {
             name: "EventsFanoutDO".to_string(),
+            implements: Vec::new(),
             fields: vec![TsClassField {
                 name: "env".to_string(),
                 ty: TsType::named_with_args(
@@ -4189,6 +4222,7 @@ mod tests {
             }],
             constructor: Some(real_ctor),
             methods: vec![fetch],
+            end_span: None,
         }));
 
         let mut program = TsProgram::new();
@@ -5134,6 +5168,7 @@ mod tests {
                         Some(TsExpr::Ident("a".to_string())),
                         None,
                     )],
+                    span: None,
                 },
             ])),
             None,
@@ -5931,6 +5966,7 @@ mod tests {
                     doc: None,
                     inline: false,
                     body: vec![],
+                    span: None,
                 },
             ])),
             None,
@@ -7092,7 +7128,9 @@ mod tests {
                 doc: None,
                 inline: false,
                 body: vec![TsStmt::raw("    return value as Uuid;\n", None)],
+                span: None,
             }],
+            None,
             0,
             &mut None,
         );
@@ -7135,7 +7173,9 @@ mod tests {
                     Some(TsExpr::Ident("{ value: f(self.value) }".to_string())),
                     None,
                 )],
+                span: None,
             }],
+            None,
             0,
             &mut None,
         );
@@ -7163,7 +7203,9 @@ mod tests {
                 doc: None,
                 inline: false,
                 body: vec![],
+                span: None,
             }],
+            None,
             0,
             &mut None,
         );
@@ -7194,7 +7236,9 @@ mod tests {
                 doc: Some("Compute the duration between two timestamps.".to_string()),
                 inline: false,
                 body: vec![TsStmt::raw("    return 0;\n", None)],
+                span: None,
             }],
+            None,
             0,
             &mut None,
         );
@@ -7255,7 +7299,9 @@ mod tests {
                     }),
                     None,
                 )],
+                span: None,
             }],
+            None,
             0,
             &mut None,
         );
@@ -7301,12 +7347,14 @@ mod tests {
                 }),
                 None,
             )],
+            span: None,
         };
 
         let mut whole_object = String::new();
         render_multiline_object(
             &mut whole_object,
             std::slice::from_ref(&entry),
+            None,
             0,
             &mut None,
         );
@@ -7487,6 +7535,7 @@ mod tests {
                 }),
                 None,
             )],
+            span: None,
         };
         assert_eq!(
             print_class_method(&method, 0),
@@ -7516,6 +7565,7 @@ mod tests {
                 Some(TsExpr::Ident("state".to_string())),
                 None,
             )],
+            span: None,
         };
         assert_eq!(
             print_class_method(&method, 0),
@@ -7538,6 +7588,7 @@ mod tests {
             return_type: Some(TsType::named("void")),
             doc: Some("Debits the account.".to_string()),
             body: vec![],
+            span: None,
         };
         assert_eq!(
             print_class_method(&method, 0),
@@ -8171,10 +8222,12 @@ mod tests {
             doc: None,
             inline: false,
             body: vec![TsStmt::return_stmt(Some(id("x")), sp(7))],
+            span: None,
         };
         let object = TsExpr::Object {
             entries: vec![entry],
             multiline: true,
+            end_span: None,
         };
         let stmt = TsStmt::return_stmt(Some(object), sp(3));
         let (text, spans) = print_stmt_with_spans(&stmt, 1);
@@ -8479,6 +8532,7 @@ mod tests {
                 TsStmt::const_stmt(TsBindingName::Ident("a".into()), None, id("x"), sp(5)),
                 TsStmt::return_stmt(Some(id("a")), sp(9)),
             ],
+            span: None,
         };
         let mut out = String::from("class C {\n");
         let mut map = SourceMapBuilder::new();
@@ -8548,6 +8602,166 @@ mod tests {
         assert_eq!(print_stmt(&decl, 0), "function f() {\n  return a;\n}\n");
     }
 
+    /// A class with `implements` prints the clause after its name, one type or several; an empty
+    /// vector prints as before (1A.32a).
+    #[test]
+    fn a_class_prints_its_implements_clause() {
+        let class = |implements: Vec<TsType>| {
+            print_stmt(
+                &TsStmt::decl(
+                    TsDecl::class("C", Vec::new(), None, Vec::new()).implementing(implements),
+                    None,
+                ),
+                0,
+            )
+        };
+        assert_eq!(class(Vec::new()), "class C {\n}\n");
+        assert_eq!(
+            class(vec![TsType::named("Cap")]),
+            "class C implements Cap {\n}\n"
+        );
+        assert_eq!(
+            class(vec![TsType::named("A"), TsType::named("B")]),
+            "class C implements A, B {\n}\n"
+        );
+    }
+
+    /// A class method's span maps its first printed line, its doc comment when it has one, and the
+    /// class's `end_span` maps the closing brace line, not the last method's final body line
+    /// (1A.32a). A `nested_map` on a body statement merges beside the member span.
+    #[test]
+    fn a_class_records_member_and_closing_spans_beside_a_nested_map() {
+        let mut sub = SourceMapBuilder::new();
+        sub.record(0, Span::new(41, 42));
+        let mut raw = TsStmt::raw("    carried();\n", None);
+        raw.nested_map = Some(sub);
+        let method =
+            |name: &str, doc: Option<&str>, span: usize, body: Vec<TsStmt>| TsClassMethod {
+                doc: doc.map(str::to_owned),
+                span: sp(span),
+                ..TsClassMethod::new(name, false, Vec::new(), None, body)
+            };
+        let class = TsDecl::class(
+            "C",
+            Vec::new(),
+            None,
+            vec![
+                method("a", Some("Does a."), 10, vec![raw]),
+                method(
+                    "b",
+                    None,
+                    20,
+                    vec![TsStmt::return_stmt(Some(id("x")), sp(25))],
+                ),
+            ],
+        )
+        .ending_at(Span::new(90, 91));
+        let mut out = String::new();
+        let mut map = SourceMapBuilder::new();
+        print_stmt_and_merge(&mut out, &TsStmt::decl(class, None), 0, &mut map, 0);
+        let lines: Vec<(&str, usize)> = map
+            .checkpoint_spans()
+            .iter()
+            .map(|(o, s)| (line_at(&out, *o), s.start))
+            .collect();
+        assert_eq!(
+            lines,
+            [
+                ("  /**", 10),
+                ("    carried();", 41),
+                ("  b() {", 20),
+                ("    return x;", 25),
+                ("}", 90),
+            ]
+        );
+    }
+
+    /// An object entry's span and a multiline object's `end_span` record the same way, through a
+    /// top-level `const` (1A.32a); a nested map still merges beside them.
+    #[test]
+    fn a_const_object_records_entry_and_closing_spans_beside_a_nested_map() {
+        let mut sub = SourceMapBuilder::new();
+        sub.record(0, Span::new(41, 42));
+        let mut raw = TsStmt::raw("    carried();\n", None);
+        raw.nested_map = Some(sub);
+        let entry =
+            |name: &str, doc: Option<&str>, span: usize, body: Vec<TsStmt>| TsObjectEntry::Method {
+                name: name.to_string(),
+                is_async: false,
+                generics: Vec::new(),
+                params: Vec::new(),
+                return_type: None,
+                doc: doc.map(str::to_owned),
+                inline: false,
+                body,
+                span: sp(span),
+            };
+        let init = TsExpr::multiline_object_ending_at(
+            vec![
+                entry("a", Some("Does a."), 10, vec![raw]),
+                entry(
+                    "b",
+                    None,
+                    20,
+                    vec![TsStmt::return_stmt(Some(id("x")), sp(25))],
+                ),
+            ],
+            Span::new(90, 91),
+        );
+        let decl = TsDecl::ConstDecl {
+            name: "S".to_string(),
+            ty: None,
+            init,
+        };
+        let mut out = String::new();
+        let mut map = SourceMapBuilder::new();
+        print_stmt_and_merge(&mut out, &TsStmt::decl(decl, None), 0, &mut map, 0);
+        let lines: Vec<(&str, usize)> = map
+            .checkpoint_spans()
+            .iter()
+            .map(|(o, s)| (line_at(&out, *o), s.start))
+            .collect();
+        assert_eq!(
+            lines,
+            [
+                ("  /**", 10),
+                ("    carried();", 41),
+                ("  b() {", 20),
+                ("    return x;", 25),
+                ("};", 90),
+            ]
+        );
+    }
+
+    /// With no span set, no member or closing line is recorded, so every existing caller's map is
+    /// unchanged (1A.32a).
+    #[test]
+    fn a_class_and_a_const_object_without_spans_record_nothing() {
+        let class = TsDecl::class(
+            "C",
+            Vec::new(),
+            None,
+            vec![TsClassMethod::new("a", false, Vec::new(), None, Vec::new())],
+        );
+        let object = TsDecl::ConstDecl {
+            name: "S".to_string(),
+            ty: None,
+            init: TsExpr::multiline_object_entries(vec![TsObjectEntry::method(
+                "a",
+                false,
+                Vec::new(),
+                None,
+                Vec::new(),
+            )]),
+        };
+        for decl in [class, object] {
+            let mut out = String::new();
+            let mut map = SourceMapBuilder::new();
+            print_stmt_and_merge(&mut out, &TsStmt::decl(decl, None), 0, &mut map, 0);
+            assert!(map.checkpoint_spans().is_empty(), "{out}");
+        }
+    }
+
     /// 1A.25 (#3726, Decision C): `as` is left-associative, so a left-nested `As` operand needs no
     /// brackets; the cast chain the cross-context boundary builds prints as `a as unknown as T`.
     #[test]
@@ -8576,6 +8790,7 @@ mod tests {
                 TsObjectEntry::Prop("value".to_string(), TsExpr::Ident("v".to_string())),
             ],
             multiline: false,
+            end_span: None,
         };
         assert_eq!(print_expr(&tag), "\"Some\" as const");
         assert_eq!(print_expr(&obj), "{ tag: \"Some\" as const, value: v }");
@@ -8600,6 +8815,7 @@ mod tests {
                 TsExpr::AsConst(Box::new(TsExpr::Lit(TsLit::Str("None".to_string())))),
             )],
             multiline: false,
+            end_span: None,
         };
         assert_eq!(
             print_expr(&arrow(obj)),

@@ -361,15 +361,13 @@ pub(super) fn emit_stub_class(
             "    throw new globalThis.Error(\"bynk: no stub clause matched for {cap}.{method}\");\n"
         ));
 
-        let method_node = TsClassMethod {
-            name: method.clone(),
-            private: false,
-            is_async: true,
+        let method_node = TsClassMethod::new(
+            method.clone(),
+            true,
             params,
-            return_type: Some(return_ty),
-            doc: None,
-            body: vec![TsStmt::raw(body_text, None)],
-        };
+            Some(return_ty),
+            vec![TsStmt::raw(body_text, None)],
+        );
         out.push_str(&bynk_ts::print_class_method(&method_node, 0));
     }
     out.push_str("}\n");

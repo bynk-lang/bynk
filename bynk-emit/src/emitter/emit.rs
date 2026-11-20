@@ -317,6 +317,7 @@ fn emit_refined_type(
                 None,
             ),
         ],
+        span: None,
     }];
     // ADR 0182: only opaque types expose a public `unsafe` constructor. A refined
     // or alias type omits it — host code cannot bypass the predicate — and its
@@ -336,6 +337,7 @@ fn emit_refined_type(
             doc: None,
             inline: false,
             body: vec![bynk_ts::TsStmt::return_stmt(Some(cast_to_name), None)],
+            span: None,
         });
     }
     entries.extend(emit_attached_methods(
@@ -843,6 +845,7 @@ pub(crate) fn emit_forwarded_methods(
             // every other real `Method` entry in this tree.
             inline: true,
             body,
+            span: None,
         };
         entries.push(entry);
     }
@@ -994,6 +997,7 @@ fn emit_method(
         doc,
         inline: false,
         body,
+        span: None,
     }
 }
 
@@ -2894,6 +2898,7 @@ pub(crate) fn emit_provider(
             return_type: Some(ts_type_ref_to_ts_type(&op.return_type, None)),
             doc: None,
             body,
+            span: None,
         };
         // #2280: anchor the op's header and prologue to its own `fn` line
         // rather than the previous op's last body line.
@@ -3437,6 +3442,7 @@ pub(crate) fn emit_service(
             doc: handler.documentation.as_deref().map(str::to_owned),
             inline: false,
             body,
+            span: None,
         };
         // The object (`export const {name} = { ... }`) is always printed at
         // depth 0 — `object_depth` names that once so this call's own depth
@@ -4187,6 +4193,7 @@ pub(crate) fn emit_make_surface(
                     },
                     None,
                 )],
+                span: None,
             });
             continue;
         }
@@ -4235,6 +4242,7 @@ pub(crate) fn emit_make_surface(
             doc: None,
             inline: false,
             body: vec![bynk_ts::TsStmt::return_stmt(Some(call), None)],
+            span: None,
         });
     }
     let func_decl = bynk_ts::TsStmt::decl(
@@ -5474,18 +5482,17 @@ fn emit_agent_load_commit_state(
         ));
         stmts
     };
-    let load_state_method = bynk_ts::TsClassMethod {
-        name: "loadState".to_string(),
-        private: true,
-        is_async: true,
-        params: Vec::new(),
-        return_type: Some(bynk_ts::TsType::named_with_args(
+    let load_state_method = bynk_ts::TsClassMethod::new(
+        "loadState",
+        true,
+        Vec::new(),
+        Some(bynk_ts::TsType::named_with_args(
             "globalThis.Promise",
             vec![bynk_ts::TsType::named(state_ty.clone())],
         )),
-        doc: None,
-        body: load_state_body,
-    };
+        load_state_body,
+    )
+    .private();
     let class_depth = 0;
     out.push_str(&bynk_ts::print_class_method(
         &load_state_method,
@@ -5772,18 +5779,17 @@ fn emit_agent_load_commit_state(
     };
     let (commit_state_body, commit_state_params) =
         commit_state_params(commit_state_body, &state_ty, ctx, fields_const);
-    let commit_state_method = bynk_ts::TsClassMethod {
-        name: "commitState".to_string(),
-        private: true,
-        is_async: true,
-        params: commit_state_params,
-        return_type: Some(bynk_ts::TsType::named_with_args(
+    let commit_state_method = bynk_ts::TsClassMethod::new(
+        "commitState",
+        true,
+        commit_state_params,
+        Some(bynk_ts::TsType::named_with_args(
             "globalThis.Promise",
             vec![bynk_ts::TsType::named("void")],
         )),
-        doc: None,
-        body: commit_state_body,
-    };
+        commit_state_body,
+    )
+    .private();
     out.push_str(&bynk_ts::print_class_method(
         &commit_state_method,
         class_depth,
@@ -6730,6 +6736,7 @@ fn emit_agent_handlers(
             return_type: Some(ret),
             doc: h.documentation.as_deref().map(str::to_owned),
             body: body.into_stmts(INDENT_STEP * 2),
+            span: None,
         };
         // #2270: anchor the method header and prologue to the handler's own
         // `on call` line. Without this they inherit the previous checkpoint,
@@ -7216,22 +7223,20 @@ fn emit_agent_dispatch(
             }),
             None,
         ));
-        let fetch_method = bynk_ts::TsClassMethod {
-            name: "fetch".to_string(),
-            private: false,
-            is_async: true,
-            params: vec![bynk_ts::TsParam {
+        let fetch_method = bynk_ts::TsClassMethod::new(
+            "fetch",
+            true,
+            vec![bynk_ts::TsParam {
                 name: "request".to_string(),
                 ty: Some(bynk_ts::TsType::named("globalThis.Request")),
                 optional: false,
             }],
-            return_type: Some(bynk_ts::TsType::named_with_args(
+            Some(bynk_ts::TsType::named_with_args(
                 "globalThis.Promise",
                 vec![bynk_ts::TsType::named("globalThis.Response")],
             )),
-            doc: None,
-            body: fetch_stmts,
-        };
+            fetch_stmts,
+        );
         out.push_str(&bynk_ts::print_class_method(&fetch_method, 0));
         writeln!(out).unwrap();
         // v0.106 (slice 3b-iii): the inbound/close dispatch — Cloudflare calls
@@ -8606,6 +8611,7 @@ fn emit_ws_do_method(
         return_type: Some(ts_type_ref_to_ts_type(&h.return_type, None)),
         doc: None,
         body,
+        span: None,
     };
     let class_depth = 0;
     // The printer records each body statement's checkpoint at its own offset in
@@ -9387,11 +9393,10 @@ fn emit_ws_dispatch_handlers(
             })),
             None,
         ));
-        let message_method = bynk_ts::TsClassMethod {
-            name: "webSocketMessage".to_string(),
-            private: false,
-            is_async: true,
-            params: vec![
+        let message_method = bynk_ts::TsClassMethod::new(
+            "webSocketMessage",
+            true,
+            vec![
                 bynk_ts::TsParam {
                     name: "ws".to_string(),
                     ty: Some(bynk_ts::TsType::named(ws_ty)),
@@ -9406,13 +9411,12 @@ fn emit_ws_dispatch_handlers(
                     optional: false,
                 },
             ],
-            return_type: Some(bynk_ts::TsType::named_with_args(
+            Some(bynk_ts::TsType::named_with_args(
                 "globalThis.Promise",
                 vec![bynk_ts::TsType::named("void")],
             )),
-            doc: None,
-            body: stmts,
-        };
+            stmts,
+        );
         out.push_str(&bynk_ts::print_class_method(&message_method, 0));
         writeln!(out).unwrap();
     }
@@ -9440,11 +9444,10 @@ fn emit_ws_dispatch_handlers(
             })),
             None,
         ));
-        let close_method = bynk_ts::TsClassMethod {
-            name: "webSocketClose".to_string(),
-            private: false,
-            is_async: true,
-            params: vec![
+        let close_method = bynk_ts::TsClassMethod::new(
+            "webSocketClose",
+            true,
+            vec![
                 bynk_ts::TsParam {
                     name: "ws".to_string(),
                     ty: Some(bynk_ts::TsType::named(ws_ty)),
@@ -9466,13 +9469,12 @@ fn emit_ws_dispatch_handlers(
                     optional: false,
                 },
             ],
-            return_type: Some(bynk_ts::TsType::named_with_args(
+            Some(bynk_ts::TsType::named_with_args(
                 "globalThis.Promise",
                 vec![bynk_ts::TsType::named("void")],
             )),
-            doc: None,
-            body: stmts,
-        };
+            stmts,
+        );
         out.push_str(&bynk_ts::print_class_method(&close_method, 0));
         writeln!(out).unwrap();
     }

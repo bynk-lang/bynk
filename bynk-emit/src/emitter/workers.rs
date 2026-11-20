@@ -282,13 +282,10 @@ fn fanout_events(context: &str, layout: &bynk_project::worker_layout::WorkerLayo
         // Parenthesised, or the braces read as the arrow's body.
         body: Box::new(TsArrowBody::Expr(Box::new(TsExpr::Paren(Box::new(
             as_expr(
-                TsExpr::Object {
-                    entries: vec![
-                        TsObjectEntry::Spread(ident("e")),
-                        TsObjectEntry::Prop("publisher".to_string(), str_lit(context.to_string())),
-                    ],
-                    multiline: false,
-                },
+                TsExpr::object_entries(vec![
+                    TsObjectEntry::Spread(ident("e")),
+                    TsObjectEntry::Prop("publisher".to_string(), str_lit(context.to_string())),
+                ]),
                 TsType::named(crate::emitter::EVENTS_WIRE_EVENT_TS_TYPE),
             ),
         ))))),
@@ -1298,6 +1295,7 @@ fn emit_call_wrapper(
             member_chain(ident("handlers"), &[sname, "call"]),
             call_args,
         )))],
+        span: None,
     }
 }
 
@@ -1341,6 +1339,7 @@ fn emit_rejected_wrapper(sname: &str) -> TsObjectEntry {
             member_chain(ident("handlers"), &[sname, "rejected"]),
             vec![ident("why"), ident("deps")],
         )))],
+        span: None,
     }
 }
 
@@ -1390,6 +1389,7 @@ fn emit_event_wrapper(sname: &str, h: &Handler, protocol: &ServiceProtocol) -> T
             member_chain(ident("handlers"), &[sname, "event"]),
             args,
         )))],
+        span: None,
     }
 }
 
@@ -1427,6 +1427,7 @@ fn emit_cron_wrapper(sname: &str, cron_idx: usize, h: &Handler) -> TsObjectEntry
             member_chain(ident("handlers"), &[sname, &method_key]),
             call_args,
         )))],
+        span: None,
     }
 }
 
@@ -1530,6 +1531,7 @@ fn emit_queue_wrapper(
             member_chain(ident("handlers"), &[sname, &method_key]),
             call_args,
         )))],
+        span: None,
     }
 }
 
@@ -1832,16 +1834,7 @@ fn emit_websocket_upgrade(
             str_lit("Internal Server Error"),
             status_object("500"),
         ]))));
-        TsObjectEntry::Method {
-            name: method_name.clone(),
-            is_async: true,
-            generics: Vec::new(),
-            params,
-            return_type: None,
-            doc: None,
-            inline: false,
-            body: stmts,
-        }
+        TsObjectEntry::method(method_name.clone(), true, params, None, stmts)
     };
     // The checker rejects zero / multiple transfers
     // (`bynk.ws.open_transfer_shape`) and a key the edge cannot evaluate
@@ -2060,16 +2053,7 @@ fn emit_websocket_upgrade(
         )],
     ))));
 
-    TsObjectEntry::Method {
-        name: method_name,
-        is_async: true,
-        generics: Vec::new(),
-        params,
-        return_type: None,
-        doc: None,
-        inline: false,
-        body: stmts,
-    }
+    TsObjectEntry::method(method_name, true, params, None, stmts)
 }
 
 // `stmts`/`secret_body` in the functions below are built incrementally —
@@ -2210,6 +2194,7 @@ fn emit_http_wrapper(
             doc: None,
             inline: false,
             body: stmts,
+            span: None,
         };
     }
 
@@ -2237,6 +2222,7 @@ fn emit_http_wrapper(
             member_chain(ident("handlers"), &[sname, &method_key]),
             call_args,
         )))],
+        span: None,
     }
 }
 
@@ -2389,6 +2375,7 @@ fn emit_http_oidc_wrapper(
         doc: None,
         inline: false,
         body: stmts,
+        span: None,
     }
 }
 
@@ -2596,6 +2583,7 @@ fn emit_http_signed_cookie_wrapper(
         doc: None,
         inline: false,
         body: stmts,
+        span: None,
     }
 }
 
@@ -2939,16 +2927,7 @@ fn emit_http_sum_wrapper(
         call_args,
     ))));
 
-    TsObjectEntry::Method {
-        name: method_key,
-        is_async: true,
-        generics: Vec::new(),
-        params,
-        return_type: None,
-        doc: None,
-        inline: false,
-        body: stmts,
-    }
+    TsObjectEntry::method(method_key, true, params, None, stmts)
 }
 
 /// v0.176 (#642): the user-named types appearing anywhere in a type-ref, including

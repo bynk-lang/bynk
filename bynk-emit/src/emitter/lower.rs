@@ -4489,10 +4489,7 @@ fn object_built(has_spread: bool, slots: Vec<FieldSlot>, children: Vec<LoweredEx
                     FieldSlot::Shorthand(key) => bynk_ts::TsObjectEntry::Shorthand(key.clone()),
                 });
             }
-            bynk_ts::TsExpr::Object {
-                entries,
-                multiline: false,
-            }
+            bynk_ts::TsExpr::object_entries(entries)
         },
         |texts| {
             let mut texts = texts.into_iter();

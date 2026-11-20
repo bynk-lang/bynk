@@ -226,10 +226,9 @@ fn walk_decl<'a>(decl: &'a TsDecl, out: &mut Vec<(VerbatimOrigin, &'a str)>) {
         TsDecl::Export(inner) => walk_decl(inner, out),
         TsDecl::ConstDecl { init, .. } => walk_expr(init, out),
         TsDecl::Class {
-            name: _,
-            fields: _,
             constructor,
             methods,
+            ..
         } => {
             if let Some(ctor) = constructor {
                 for s in &ctor.body {
@@ -1453,9 +1452,16 @@ pub enum TsExpr {
     /// depth-unaware `render_expr` recursion, which cannot honour
     /// `multiline` — not reachable from any real `bynk-emit` call site
     /// today, but worth knowing before nesting one that way.
+    ///
+    /// `end_span` (1A.32a) is only read for `multiline: true`: the source span the
+    /// closing `}` line maps to, so what follows the last entry belongs to the
+    /// declaration the object initialises rather than to the last entry's final
+    /// body line. `None` records nothing. Build one with
+    /// [`TsExpr::multiline_object_ending_at`].
     Object {
         entries: Vec<TsObjectEntry>,
         multiline: bool,
+        end_span: Option<Span>,
     },
     /// An array literal, e.g. `[{ binding: "x", service: "y" }]`.
     /// `multiline: false` (the ordinary case, via [`TsExpr::array`]) always
@@ -1621,6 +1627,7 @@ impl TsExpr {
                 .map(|(k, v)| TsObjectEntry::Prop(k, v))
                 .collect(),
             multiline: false,
+            end_span: None,
         }
     }
 
@@ -1635,6 +1642,7 @@ impl TsExpr {
                 .map(|(k, v)| TsObjectEntry::Prop(k, v))
                 .collect(),
             multiline: true,
+            end_span: None,
         }
     }
 
@@ -1649,6 +1657,7 @@ impl TsExpr {
         TsExpr::Object {
             entries,
             multiline: false,
+            end_span: None,
         }
     }
 
@@ -1660,6 +1669,18 @@ impl TsExpr {
         TsExpr::Object {
             entries,
             multiline: true,
+            end_span: None,
+        }
+    }
+
+    /// [`TsExpr::multiline_object_entries`] whose closing `}` line maps to
+    /// `end_span` (1A.32a) — a service object's closing line belongs to the
+    /// service, not to its last handler's final body line.
+    pub fn multiline_object_ending_at(entries: Vec<TsObjectEntry>, end_span: Span) -> Self {
+        TsExpr::Object {
+            entries,
+            multiline: true,
+            end_span: Some(end_span),
         }
     }
 
@@ -1778,10 +1799,48 @@ pub enum TsObjectEntry {
         /// `Method` entry in this tree, all of which are multi-line.
         inline: bool,
         body: Vec<TsStmt>,
+        /// As [`TsClassMethod::span`]: where the entry's first printed line (its
+        /// doc comment, if it has one) maps to. `None` records nothing.
+        span: Option<Span>,
     },
     /// `...expr` — an object-spread entry (Decision A, gap 2), e.g. `{
     /// ...deps, identity: __caller }`.
     Spread(TsExpr),
+}
+
+impl TsObjectEntry {
+    /// A multi-line, non-generic, undocumented method entry with no span: the
+    /// shape of nearly every method entry. Build any other with the variant
+    /// directly.
+    pub fn method(
+        name: impl Into<String>,
+        is_async: bool,
+        params: Vec<TsParam>,
+        return_type: Option<TsType>,
+        body: Vec<TsStmt>,
+    ) -> Self {
+        TsObjectEntry::Method {
+            name: name.into(),
+            is_async,
+            generics: Vec::new(),
+            params,
+            return_type,
+            doc: None,
+            inline: false,
+            body,
+            span: None,
+        }
+    }
+
+    /// This entry with its body compact on the signature's own line (a no-op for an
+    /// entry that is not a method). See `inline` on [`TsObjectEntry::Method`].
+    #[must_use]
+    pub fn inlined(mut self) -> Self {
+        if let TsObjectEntry::Method { inline, .. } = &mut self {
+            *inline = true;
+        }
+        self
+    }
 }
 
 /// `!x` (`events_fanout.rs`'s `!Array.isArray(subs)`, `!binding`) and
@@ -2273,6 +2332,42 @@ pub struct TsClassMethod {
     /// immediately before its header line.
     pub doc: Option<String>,
     pub body: Vec<TsStmt>,
+    /// The source span the method's first printed line maps to (its doc comment,
+    /// if it has one), so the header and prologue anchor to the method's own
+    /// declaration rather than to the previous member's last body line (#2280,
+    /// 1A.32a). `None` records nothing.
+    pub span: Option<Span>,
+}
+
+impl TsClassMethod {
+    /// A public, undocumented method with no span. Set `private`, `doc` or `span`
+    /// with struct update (`TsClassMethod { private: true, ..TsClassMethod::new(..) }`)
+    /// when one is needed.
+    pub fn new(
+        name: impl Into<String>,
+        is_async: bool,
+        params: Vec<TsParam>,
+        return_type: Option<TsType>,
+        body: Vec<TsStmt>,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            private: false,
+            is_async,
+            params,
+            return_type,
+            doc: None,
+            body,
+            span: None,
+        }
+    }
+
+    /// This method with the `private` modifier.
+    #[must_use]
+    pub fn private(mut self) -> Self {
+        self.private = true;
+        self
+    }
 }
 
 /// A top-level declaration. `Import`, `Export`, `Interface`, `ConstDecl`,
@@ -2392,11 +2487,18 @@ pub enum TsDecl {
         ty: Option<TsType>,
         init: TsExpr,
     },
+    /// `class Name implements A, B { ... }`. `implements` is empty for a class that
+    /// names no interface, and prints as before. `end_span` is the source span
+    /// the closing `}` line maps to (1A.32a), so what follows the last member
+    /// belongs to the declaration rather than to that member's final body line;
+    /// `None` records nothing there. Build one with [`TsDecl::class`].
     Class {
         name: String,
+        implements: Vec<TsType>,
         fields: Vec<TsClassField>,
         constructor: Option<TsClassCtor>,
         methods: Vec<TsClassMethod>,
+        end_span: Option<Span>,
     },
     /// `function name(params): ret { body }` (`is_async: false`) or `async
     /// function name(params): ret { body }` (`is_async: true`) — a top-level
@@ -2460,6 +2562,50 @@ pub enum TsDecl {
     /// `TsDecl::ConstDecl` with a synthetic placeholder `init` would print
     /// wrong (`= <something>;` where nothing should appear at all).
     DeclareConst { name: String, ty: TsType },
+}
+
+impl TsDecl {
+    /// A class with no `implements` clause and no closing-line span: the shape
+    /// every class had before 1A.32a. Name the extras with [`TsDecl::implementing`]
+    /// and [`TsDecl::ending_at`].
+    pub fn class(
+        name: impl Into<String>,
+        fields: Vec<TsClassField>,
+        constructor: Option<TsClassCtor>,
+        methods: Vec<TsClassMethod>,
+    ) -> Self {
+        TsDecl::Class {
+            name: name.into(),
+            implements: Vec::new(),
+            fields,
+            constructor,
+            methods,
+            end_span: None,
+        }
+    }
+
+    /// This class with `implements` as its `implements` clause. A declaration that
+    /// is not a class is returned unchanged.
+    #[must_use]
+    pub fn implementing(mut self, implements: Vec<TsType>) -> Self {
+        if let TsDecl::Class {
+            implements: slot, ..
+        } = &mut self
+        {
+            *slot = implements;
+        }
+        self
+    }
+
+    /// This class with its closing `}` line mapped to `span`. A declaration that
+    /// is not a class is returned unchanged.
+    #[must_use]
+    pub fn ending_at(mut self, span: Span) -> Self {
+        if let TsDecl::Class { end_span, .. } = &mut self {
+            *end_span = Some(span);
+        }
+        self
+    }
 }
 
 /// Which family of residual, not-yet-converted emission a [`TsStmt::verbatim`]

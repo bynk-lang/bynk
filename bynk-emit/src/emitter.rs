@@ -2540,6 +2540,7 @@ fn emit_context_rebrands(
                     }),
                     None,
                 )],
+                span: None,
             };
             let mut entries = vec![of_entry];
             // ADR 0182: only opaque types have a public `.unsafe` to forward.
@@ -2570,6 +2571,7 @@ fn emit_context_rebrands(
                         }),
                         None,
                     )],
+                    span: None,
                 });
             }
             // v0.132.1 (#481): forward the commons' user-defined attached methods

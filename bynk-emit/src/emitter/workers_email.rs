@@ -98,5 +98,6 @@ pub(super) fn emit_email_handler(
         doc: None,
         inline: false,
         body: vec![TsStmt::raw(text, None)],
+        span: None,
     }
 }

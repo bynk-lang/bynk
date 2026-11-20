@@ -2271,6 +2271,7 @@ mod body_tests {
                 return_type: None,
                 doc: None,
                 body: build().into_stmts(indent),
+                span: None,
             };
             // A method's body sits two steps in, so only indent 4 is a method.
             if indent != 4 {

@@ -43,10 +43,7 @@ pub(super) fn default_value_node(value: &DefaultValue) -> TsExpr {
 
 /// A one-line object literal.
 fn object(entries: Vec<TsObjectEntry>) -> TsExpr {
-    TsExpr::Object {
-        entries,
-        multiline: false,
-    }
+    TsExpr::object_entries(entries)
 }
 
 /// `{ tag: "<variant>" as const, …rest }`.
