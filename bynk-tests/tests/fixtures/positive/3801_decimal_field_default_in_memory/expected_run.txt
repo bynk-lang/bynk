@@ -1,0 +1,2 @@
+# #3801: an omitted `Decimal` field default is the in-memory decimal value.
+passed=2 failed=0
