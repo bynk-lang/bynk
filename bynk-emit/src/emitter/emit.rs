@@ -4275,14 +4275,21 @@ pub(crate) fn agent_needs_rehydrate(
     })
 }
 
+/// The agents a unit declares.
+fn commons_agents(commons: &TypedCommons) -> impl Iterator<Item = &AgentDecl> {
+    commons.commons.items.iter().filter_map(|i| {
+        if let CommonsItem::Agent(a) = i {
+            Some(a)
+        } else {
+            None
+        }
+    })
+}
+
 /// Whether any agent of the unit emits a rehydration gate.
 pub(crate) fn commons_need_rehydrate(commons: &TypedCommons, program: &CheckedProgram) -> bool {
-    commons.commons.items.iter().any(|i| match i {
-        CommonsItem::Agent(a) => {
-            agent_needs_rehydrate(a, &agent_state_ir(a, program), &commons.types)
-        }
-        _ => false,
-    })
+    commons_agents(commons)
+        .any(|a| agent_needs_rehydrate(a, &agent_state_ir(a, program), &commons.types))
 }
 
 /// The runtime names every agent of the unit's state wiring references, sorted and unique.
@@ -4290,20 +4297,15 @@ pub(crate) fn commons_state_runtime_names(
     commons: &TypedCommons,
     program: &CheckedProgram,
 ) -> Vec<&'static str> {
-    let mut names: Vec<&'static str> = commons
-        .commons
-        .items
-        .iter()
-        .filter_map(|i| match i {
-            CommonsItem::Agent(a) => Some(agent_state_runtime_names(
+    let mut names: Vec<&'static str> = commons_agents(commons)
+        .flat_map(|a| {
+            agent_state_runtime_names(
                 a,
                 &agent_state_ir(a, program),
                 commons.tys(),
                 &commons.types,
-            )),
-            _ => None,
+            )
         })
-        .flatten()
         .collect();
     names.sort_unstable();
     names.dedup();
@@ -4312,12 +4314,8 @@ pub(crate) fn commons_state_runtime_names(
 
 /// Whether any agent of the unit has a held `Map[K, Connection]`.
 pub(crate) fn commons_have_held_storage(commons: &TypedCommons, program: &CheckedProgram) -> bool {
-    commons.commons.items.iter().any(|i| match i {
-        CommonsItem::Agent(a) => {
-            agent_has_held_storage(a, &agent_state_ir(a, program), commons.tys())
-        }
-        _ => false,
-    })
+    commons_agents(commons)
+        .any(|a| agent_has_held_storage(a, &agent_state_ir(a, program), commons.tys()))
 }
 
 /// The runtime names an agent's state wiring references (#3254): the handle classes its
@@ -4530,7 +4528,11 @@ pub(crate) fn held_map_fields<'a>(
             StoreKindIr::Map(_, v) if held_frame_ty(*v, tys).is_some() => {
                 Some((&f.name, &f.kind.args[1]))
             }
-            _ => None,
+            StoreKindIr::Map(..)
+            | StoreKindIr::Cell(_)
+            | StoreKindIr::Set(_)
+            | StoreKindIr::Cache(..)
+            | StoreKindIr::Log(..) => None,
         })
         .collect()
 }
@@ -6905,7 +6907,10 @@ fn emit_agent_handlers(
                         StoreKindIr::Map(_, v) => {
                             matches!(*commons.tys().get(*v), Ty::Connection(_))
                         }
-                        _ => false,
+                        StoreKindIr::Cell(_)
+                        | StoreKindIr::Set(_)
+                        | StoreKindIr::Cache(..)
+                        | StoreKindIr::Log(..) => false,
                     })
                     .map(|f| f.field.clone())
                     .collect(),

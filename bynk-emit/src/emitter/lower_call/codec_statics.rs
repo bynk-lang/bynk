@@ -106,7 +106,24 @@ pub(in super::super) fn lower_json_codec_call(
                 return Some(apply_decoder(decoder, arg));
             }
         }
-        _ => {}
+        StaticOp::List(_)
+        | StaticOp::Map(_)
+        | StaticOp::Set(_)
+        | StaticOp::Int(_)
+        | StaticOp::Float(_)
+        | StaticOp::Decimal(_)
+        | StaticOp::Duration(_)
+        | StaticOp::Instant(_)
+        | StaticOp::Bytes(_)
+        | StaticOp::TokenClaims(_)
+        | StaticOp::RequestHeaders(_)
+        | StaticOp::RequestQuery(_)
+        | StaticOp::RequestCookies(_)
+        | StaticOp::Stream(_)
+        | StaticOp::HttpResult(_)
+        | StaticOp::QueueResult(_)
+        | StaticOp::TestConnection(_)
+        | StaticOp::TestRun(_) => {}
     }
     None
 }
