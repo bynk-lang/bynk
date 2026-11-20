@@ -1,4 +1,4 @@
-commons demo
+context demo
 
 ---
 `is` tests a value against a pattern and narrows it. Inside the `if`, `n` is an
@@ -9,5 +9,14 @@ fn useValue(r: Result[Int, String]) -> Int {
     n
   } else {
     0
+  }
+}
+
+---
+Run calls `service playground`: one `Ok` and one `Err`, so you see both branches.
+---
+service playground {
+  on call() -> Effect[List[Int]] {
+    [useValue(Ok(7)), useValue(Err("missing"))]
   }
 }

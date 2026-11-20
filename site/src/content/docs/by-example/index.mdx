@@ -12,6 +12,11 @@ browser playground, and _projects_, complete example apps that each compile to a
 deployable Cloudflare Worker. Read them in any order; every example type-checks as
 shown.
 
+Each snippet ends with a `service playground`. The playground's **Run** calls that
+service's `on call` handler, which may take arguments, and nothing else: a program
+without a `service playground` still compiles and type-checks there, but Run has
+nothing to call.
+
 ## Snippets
 
 <CardGrid>
