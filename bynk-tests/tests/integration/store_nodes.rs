@@ -285,6 +285,7 @@ fn cases() -> Vec<(&'static str, &'static str, &'static str)> {
 
 #[test]
 fn every_store_operation_prints_as_pinned() {
+    let _text = text_counters::force_text("splitRegex");
     let mut checked = 0;
     for (src, file, text, target, module) in sources() {
         let (exits, emitted) = emit(&[(file, text)], target, module);
@@ -307,6 +308,7 @@ fn every_store_operation_prints_as_pinned() {
 
 #[test]
 fn a_text_argument_falls_back_to_the_one_line_text_byte_for_byte() {
+    let _text = text_counters::force_text("splitRegex");
     // Each arm, over an argument that is still text: the one-line IIFE the arm printed before.
     let (_, bundle) = emit(&[("fall.bynk", TEXT_ARGS)], BuildTarget::Bundle, "fall.ts");
     for (name, want) in [

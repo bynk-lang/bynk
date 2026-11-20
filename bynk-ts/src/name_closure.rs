@@ -306,8 +306,11 @@ pub fn module_exports(program: &TsProgram) -> ModuleExports {
             | TsStmtKind::For { .. }
             | TsStmtKind::TryCatch { .. }
             | TsStmtKind::Block(_)
-            | TsStmtKind::Continue
-            | TsStmtKind::Break
+            | TsStmtKind::Continue(_)
+            | TsStmtKind::Break(_)
+            | TsStmtKind::While { .. }
+            | TsStmtKind::Labelled { .. }
+            | TsStmtKind::LetList(_)
             | TsStmtKind::Assign { .. }
             | TsStmtKind::Comment(_)
             | TsStmtKind::DocComment(_)
@@ -678,7 +681,14 @@ impl Walk {
 
     fn params(&mut self, params: &[TsParam]) {
         for p in params {
-            self.bind(&p.name);
+            match &p.array_pattern {
+                Some(names) => {
+                    for n in names.iter().filter(|n| !n.is_empty()) {
+                        self.bind(n);
+                    }
+                }
+                None => self.bind(&p.name),
+            }
             if let Some(t) = &p.ty {
                 self.ty(t);
             }
@@ -737,10 +747,25 @@ impl Walk {
                 binding,
                 iter,
                 body,
+                is_await: _,
             } => {
                 self.bind(binding);
                 self.expr(iter);
                 self.stmt(body);
+            }
+            TsStmtKind::While { cond, body } => {
+                self.expr(cond);
+                self.stmt(body);
+            }
+            TsStmtKind::Labelled { label: _, body } => self.stmt(body),
+            TsStmtKind::LetList(decls) => {
+                for d in decls {
+                    self.bind(&d.name);
+                    self.opt_ty(&d.ty);
+                    if let Some(e) = &d.init {
+                        self.expr(e);
+                    }
+                }
             }
             TsStmtKind::For {
                 name,
@@ -787,8 +812,8 @@ impl Walk {
                     self.stmts(&case.body);
                 }
             }
-            TsStmtKind::Continue
-            | TsStmtKind::Break
+            TsStmtKind::Continue(_)
+            | TsStmtKind::Break(_)
             | TsStmtKind::Comment(_)
             | TsStmtKind::DocComment(_)
             | TsStmtKind::Blank => {}
@@ -994,7 +1019,29 @@ impl Walk {
             | TsExpr::Paren(e)
             | TsExpr::Spread(e)
             | TsExpr::NonNull(e)
+            | TsExpr::Yield(e)
             | TsExpr::Unary { expr: e, .. } => self.expr(e),
+            TsExpr::Sequence(items) => {
+                for i in items {
+                    self.expr(i);
+                }
+            }
+            TsExpr::OptionalCall { callee, args } => {
+                self.expr(callee);
+                for a in args {
+                    self.expr(a);
+                }
+            }
+            TsExpr::Function {
+                params,
+                return_type,
+                body,
+                ..
+            } => {
+                self.params(params);
+                self.opt_ty(return_type);
+                self.stmts(body);
+            }
             TsExpr::As { expr, ty } => {
                 self.expr(expr);
                 self.ty(ty);
@@ -1024,7 +1071,7 @@ impl Walk {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::program::{TsArrowBody, VerbatimOrigin};
+    use crate::program::{TsArrowBody, TsDeclarator, VerbatimOrigin};
 
     fn program(stmts: Vec<TsStmt>) -> TsProgram {
         TsProgram { stmts }
@@ -1531,5 +1578,62 @@ mod tests {
             value_imports(&p),
             [("./m.js".to_string(), "Batch".to_string())]
         );
+    }
+
+    /// 1A.35a part B: the new statements and expressions bind what they declare and use what
+    /// they mention, so a program built from them reports only the genuinely unbound names.
+    #[test]
+    fn the_part_b_nodes_bind_and_use_their_names() {
+        let id = |n: &str| TsExpr::Ident(n.to_string());
+        let generator = TsExpr::Function {
+            is_async: true,
+            is_generator: true,
+            params: vec![TsParam::array_pattern(
+                vec!["k".to_string(), "v".to_string()],
+                None,
+            )],
+            return_type: None,
+            body: vec![
+                TsStmt::let_list(
+                    vec![
+                        TsDeclarator::new("a"),
+                        TsDeclarator::new("b").typed(TsType::named("Missing")),
+                    ],
+                    None,
+                ),
+                TsStmt::labelled(
+                    "LOOP",
+                    TsStmt::while_stmt(
+                        id("a"),
+                        TsStmt::block(
+                            vec![
+                                TsStmt::for_await_of(
+                                    "e",
+                                    id("src"),
+                                    TsStmt::expr_stmt(
+                                        TsExpr::Sequence(vec![
+                                            TsExpr::Yield(Box::new(id("e"))),
+                                            TsExpr::OptionalCall {
+                                                callee: Box::new(id("k")),
+                                                args: vec![id("v"), id("b")],
+                                            },
+                                        ]),
+                                        None,
+                                    ),
+                                    None,
+                                ),
+                                TsStmt::continue_label_stmt("LOOP", None),
+                            ],
+                            None,
+                        ),
+                        None,
+                    ),
+                    None,
+                ),
+            ],
+        };
+        let p = program(vec![TsStmt::expr_stmt(generator, None)]);
+        // `a`, `b`, `k`, `v` and `e` are bound inside; `src` and the type `Missing` are not.
+        assert_eq!(unbound_names(&p), ["Missing", "src"]);
     }
 }

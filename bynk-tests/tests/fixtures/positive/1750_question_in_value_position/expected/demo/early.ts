@@ -37,9 +37,11 @@ export function withBinding(a: Option<number>, r: Result<number, string>): Resul
       const v = (a as Extract<typeof a, { tag: "Some" }>).value;
       const __r1 = r;
       if (__r1.tag === "Err") return __r1;
-      __r0 = __r1.value + v; break __r0_out;
+      __r0 = __r1.value + v;
+      break __r0_out;
     } else {
-      __r0 = 0; break __r0_out;
+      __r0 = 0;
+      break __r0_out;
     }
   }
   const n = __r0;
@@ -53,9 +55,11 @@ export function withStatement(c: boolean, r: Result<number, string>): Result<num
       const __r1 = r;
       if (__r1.tag === "Err") return __r1;
       const x = __r1.value;
-      __r0 = x + 1; break __r0_out;
+      __r0 = x + 1;
+      break __r0_out;
     } else {
-      __r0 = 0; break __r0_out;
+      __r0 = 0;
+      break __r0_out;
     }
   }
   const n = __r0;
@@ -70,10 +74,12 @@ export function matchExpr(o: Option<number>, r: Result<number, string>): Result<
         const v = o.value;
         const __r1 = r;
         if (__r1.tag === "Err") return __r1;
-        __r0 = __r1.value + v; break __r0_out;
+        __r0 = __r1.value + v;
+        break __r0_out;
       }
       case "None": {
-        __r0 = 0; break __r0_out;
+        __r0 = 0;
+        break __r0_out;
       }
     }
     throw new globalThis.Error("non-exhaustive match");
@@ -91,10 +97,12 @@ export function matchBlock(o: Option<number>, r: Result<number, string>): Result
         const __r1 = r;
         if (__r1.tag === "Err") return __r1;
         const x = __r1.value;
-        __r0 = x + v; break __r0_out;
+        __r0 = x + v;
+        break __r0_out;
       }
       case "None": {
-        __r0 = 0; break __r0_out;
+        __r0 = 0;
+        break __r0_out;
       }
     }
     throw new globalThis.Error("non-exhaustive match");
@@ -117,10 +125,12 @@ export function nested(o: Option<number>, c: boolean, r: Result<number, string>)
         } else {
           __r2 = v;
         }
-        __r0 = __r2; break __r0_out;
+        __r0 = __r2;
+        break __r0_out;
       }
       case "None": {
-        __r0 = 0; break __r0_out;
+        __r0 = 0;
+        break __r0_out;
       }
     }
     throw new globalThis.Error("non-exhaustive match");
@@ -144,12 +154,15 @@ export function nestedGuard(o: Option<number>, r: Result<number, string>): Resul
         const __r1 = r;
         if (__r1.tag === "Err") return __r1;
         if (__r1.value > 0) {
-          __r0 = w; break __r0_out;
+          __r0 = w;
+          break __r0_out;
         }
-        __r0 = 0; break __r0_out;
+        __r0 = 0;
+        break __r0_out;
       }
       case "None": {
-        __r0 = 0; break __r0_out;
+        __r0 = 0;
+        break __r0_out;
       }
     }
     throw new globalThis.Error("non-exhaustive match");
@@ -197,10 +210,12 @@ export function embedded(o: Option<number>, fail: boolean): Result<number, AppEr
         const __r1 = risky(fail);
         if (__r1.tag === "Err") return Err(AppError.Io(__r1.error));
         const x = __r1.value;
-        __r0 = x + v; break __r0_out;
+        __r0 = x + v;
+        break __r0_out;
       }
       case "None": {
-        __r0 = 0; break __r0_out;
+        __r0 = 0;
+        break __r0_out;
       }
     }
     throw new globalThis.Error("non-exhaustive match");

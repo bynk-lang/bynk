@@ -241,6 +241,7 @@ fn param(name: &str, ty: TsType) -> TsParam {
         ty: Some(ty),
         optional: false,
         rest: false,
+        array_pattern: None,
     }
 }
 

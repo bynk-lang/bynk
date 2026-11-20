@@ -121,7 +121,11 @@ async function test_a_streamed_body_round_trips_through_the_router() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_blobs_http_PUT_blobs_Param_name("a.bin", (async function* () { for (const __e of [new globalThis.TextEncoder().encode("abc"), new globalThis.TextEncoder().encode("de")]) { yield __e; } })(), undefined, "");
+    const r = await __sysdrive_blobs_http_PUT_blobs_Param_name("a.bin", (async function* () {
+      for (const __e of [new globalThis.TextEncoder().encode("abc"), new globalThis.TextEncoder().encode("de")]) {
+        yield __e;
+      }
+    })(), undefined, "");
     if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "a.bin 5"))) { throw __bynkExpectFailure("tests/blobs.bynk:16:10", 581, 599, "expect r is Ok(\"a.bin 5\")"); }
     return { pass: true };
   } catch (e) {
@@ -137,7 +141,11 @@ async function test_a_body_of_exactly_the_cap_is_delivered_whole() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_blobs_http_PUT_blobs_Param_name("cap.bin", (async function* () { for (const __e of [new globalThis.TextEncoder().encode("01234567"), new globalThis.TextEncoder().encode("01234567"), new globalThis.TextEncoder().encode("01234567"), new globalThis.TextEncoder().encode("01234567"), new globalThis.TextEncoder().encode("01234567"), new globalThis.TextEncoder().encode("01234567"), new globalThis.TextEncoder().encode("01234567"), new globalThis.TextEncoder().encode("01234567")]) { yield __e; } })(), undefined, "");
+    const r = await __sysdrive_blobs_http_PUT_blobs_Param_name("cap.bin", (async function* () {
+      for (const __e of [new globalThis.TextEncoder().encode("01234567"), new globalThis.TextEncoder().encode("01234567"), new globalThis.TextEncoder().encode("01234567"), new globalThis.TextEncoder().encode("01234567"), new globalThis.TextEncoder().encode("01234567"), new globalThis.TextEncoder().encode("01234567"), new globalThis.TextEncoder().encode("01234567"), new globalThis.TextEncoder().encode("01234567")]) {
+        yield __e;
+      }
+    })(), undefined, "");
     if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "cap.bin 64"))) { throw __bynkExpectFailure("tests/blobs.bynk:21:10", 953, 974, "expect r is Ok(\"cap.bin 64\")"); }
     return { pass: true };
   } catch (e) {

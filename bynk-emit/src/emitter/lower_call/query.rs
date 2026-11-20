@@ -1,14 +1,14 @@
 //! The `Query` and `Stream` method vocabularies (back-half paydown 1A.22, #3723, Decision E):
-//! `lower_query_method` and its shape helpers, which build nodes, and the stream generators,
-//! which stay text. Moved out of `lower.rs` byte for byte, then the `Query` vocabulary
-//! converted.
+//! `lower_query_method` and its shape helpers, which build nodes, and the stream generators.
+//! Moved out of `lower.rs` byte for byte, then the `Query` vocabulary converted, and the stream
+//! generators (1A.35a part B).
 
 use bynk_check::checker::Ty;
 use bynk_check::kernel_op::{QueryOp, StreamOp};
 use bynk_ts::{TsArrowBody, TsBinaryOp, TsExpr, TsStmt, TsType, print_type};
 
 use super::super::internal_fault::FaultSite;
-use super::super::lower::{Built, LoweredExpr, decimal_lit, node_or_text};
+use super::super::lower::{Built, LoweredExpr, decimal_lit, node_or_text, str_node};
 use super::super::lower_ctx::LowerCtx;
 use super::super::lower_list::{
     JoinSides, applied, array_ts, arrow, arrow_with, assign, awaited_apply, bail_on_err, binary,
@@ -43,36 +43,208 @@ pub(in crate::emitter) fn note_par_fan_out(cx: &LowerCtx, method: &Ident) {
 /// K-streams (#2623): a stream is single-pass. Each op claims its source when
 /// it first reads it ([`STREAM_CLAIM`]): a builder when its generator is first
 /// pulled, so building is free and draining claims; `collect` when it runs.
-// 1A: generator and for-await have no bynk_ts node, so the `Stream` generators stay text (#3723,
-// Decision A); their caller hands over text and returns `Err`.
+///
+/// The generators are nodes (1A.35a part B): an `async function*` expression with a `yield`
+/// and a `for await`, built when the source and every argument are nodes, and today's text
+/// otherwise.
 pub(in crate::emitter) fn lower_stream_method(
-    source: String,
+    source: LoweredExpr,
     op: StreamOp,
-    a: &[String],
-) -> Option<String> {
+    a: Vec<LoweredExpr>,
+) -> Option<Built> {
     let claim = STREAM_CLAIM;
-    match (op, a) {
+    let mut kids = vec![source];
+    kids.extend(a);
+    Some(match (op, kids.len()) {
         // -- builders (return an AsyncIterable) --
-        (StreamOp::Map, [f]) => Some(format!(
-            "(async function* (__s) {{ {claim} for await (const __e of __s) {{ yield ({f})(__e); }} }})({source})"
-        )),
-        (StreamOp::Take, [n]) => Some(format!(
-            "(async function* (__s) {{ {claim} const __n = {n}; if (__n <= 0) {{ return; }} let __i = 0; for await (const __e of __s) {{ yield __e; if (++__i >= __n) {{ return; }} }} }})({source})"
-        )),
+        (StreamOp::Map, 2) => node_or_text(
+            kids,
+            |n| {
+                let [source, f] = take::<2, _>(n);
+                let mut body = stream_claim();
+                body.push(for_await_of(
+                    "__e",
+                    id("__s"),
+                    block(vec![expr_stmt(TsExpr::Yield(Box::new(applied(
+                        f,
+                        id("__e"),
+                    ))))]),
+                ));
+                stream_generator(Some(source), body)
+            },
+            |t| {
+                format!(
+                    "(async function* (__s) {{ {claim} for await (const __e of __s) {{ yield ({f})(__e); }} }})({source})",
+                    f = t[1],
+                    source = t[0]
+                )
+            },
+        ),
+        (StreamOp::Take, 2) => node_or_text(
+            kids,
+            |n| {
+                let [source, count] = take::<2, _>(n);
+                let mut body = stream_claim();
+                body.push(const_("__n", None, count));
+                body.push(TsStmt::if_stmt(
+                    binary(TsBinaryOp::LessThanEq, id("__n"), zero()),
+                    block(vec![TsStmt::return_stmt(None, None)]),
+                    None,
+                ));
+                body.push(let_("__i", zero()));
+                let step = TsExpr::Unary {
+                    op: bynk_ts::TsUnaryOp::PreIncrement,
+                    expr: Box::new(id("__i")),
+                };
+                body.push(for_await_of(
+                    "__e",
+                    id("__s"),
+                    block(vec![
+                        expr_stmt(TsExpr::Yield(Box::new(id("__e")))),
+                        TsStmt::if_stmt(
+                            binary(TsBinaryOp::GreaterThanEq, step, id("__n")),
+                            block(vec![TsStmt::return_stmt(None, None)]),
+                            None,
+                        ),
+                    ]),
+                ));
+                stream_generator(Some(source), body)
+            },
+            |t| {
+                format!(
+                    "(async function* (__s) {{ {claim} const __n = {n}; if (__n <= 0) {{ return; }} let __i = 0; for await (const __e of __s) {{ yield __e; if (++__i >= __n) {{ return; }} }} }})({source})",
+                    n = t[1],
+                    source = t[0]
+                )
+            },
+        ),
         // -- terminal (drains to a list; Effect-typed) --
-        (StreamOp::Collect, []) => Some(format!(
-            "(async (__s) => {{ {claim} const __r = []; for await (const __e of __s) {{ __r.push(__e); }} return __r; }})({source})"
-        )),
-        _ => None,
-    }
+        (StreamOp::Collect, 1) => node_or_text(
+            kids,
+            |n| {
+                let [source] = take::<1, _>(n);
+                let mut body = stream_claim();
+                body.push(const_("__r", None, TsExpr::array(vec![])));
+                body.push(for_await_of(
+                    "__e",
+                    id("__s"),
+                    block(vec![expr_stmt(call(
+                        member(id("__r"), "push"),
+                        vec![id("__e")],
+                    ))]),
+                ));
+                body.push(ret(id("__r")));
+                call(
+                    TsExpr::Arrow {
+                        params: vec![param("__s", None)],
+                        is_async: true,
+                        generics: Vec::new(),
+                        return_type: None,
+                        body: Box::new(TsArrowBody::Multiline(body)),
+                    },
+                    vec![source],
+                )
+            },
+            |t| {
+                format!(
+                    "(async (__s) => {{ {claim} const __r = []; for await (const __e of __s) {{ __r.push(__e); }} return __r; }})({source})",
+                    source = t[0]
+                )
+            },
+        ),
+        _ => return None,
+    })
 }
+
+/// `for await (const <binding> of <iter>) <body>`.
+fn for_await_of(binding: &str, iter: TsExpr, body: TsStmt) -> TsStmt {
+    TsStmt::for_await_of(binding, iter, body, None)
+}
+
+/// `(async function* (__s) { <body> })(<source>)`, or with no source `(async function* () { … })()`:
+/// an immediately invoked async generator, the `AsyncIterable` a stream op returns.
+pub(super) fn stream_generator(source: Option<TsExpr>, body: Vec<TsStmt>) -> TsExpr {
+    call(
+        TsExpr::Function {
+            is_async: true,
+            is_generator: true,
+            params: source.iter().map(|_| param("__s", None)).collect(),
+            return_type: None,
+            body,
+        },
+        source.into_iter().collect(),
+    )
+}
+
+/// [`STREAM_CLAIM`] as statements: mark the stream `__s` read, or throw if it already was.
+fn stream_claim() -> Vec<TsStmt> {
+    let symbol_flags = TsType::Object(vec![bynk_ts::TsTypeMember::index(
+        "k",
+        TsType::named("symbol"),
+        TsType::named("boolean"),
+    )]);
+    let mark = || TsExpr::Index {
+        object: Box::new(id("__m")),
+        index: Box::new(id("__k")),
+    };
+    vec![
+        const_(
+            "__m",
+            None,
+            TsExpr::As {
+                expr: Box::new(TsExpr::As {
+                    expr: Box::new(id("__s")),
+                    ty: TsType::named("unknown"),
+                }),
+                ty: symbol_flags,
+            },
+        ),
+        const_(
+            "__k",
+            None,
+            call(
+                member(member(id("globalThis"), "Symbol"), "for"),
+                vec![str_node(STREAM_READ_SYMBOL)],
+            ),
+        ),
+        TsStmt::if_stmt(
+            mark(),
+            block(vec![TsStmt::throw_stmt(
+                TsExpr::New {
+                    callee: Box::new(member(id("globalThis"), "Error")),
+                    args: vec![str_node("bynk: a stream can be read only once")],
+                },
+                None,
+            )]),
+            None,
+        ),
+        assign(mark(), TsExpr::Lit(bynk_ts::TsLit::Bool(true))),
+    ]
+}
+
+/// The `Symbol.for` key the runtime marks a consumed stream with (`runtime/http.ts`). It is a
+/// runtime symbol name, not a diagnostic code, so it is spelt in two pieces: the registry scan
+/// reads a `bynk.*.*` literal as a code. A macro, so the node form ([`STREAM_READ_SYMBOL`]) and
+/// the text form ([`STREAM_CLAIM`]) share the one spelling.
+macro_rules! stream_read_symbol {
+    () => {
+        concat!("bynk", ".stream.read")
+    };
+}
+
+/// The key as a string, for the node form of the claim.
+const STREAM_READ_SYMBOL: &str = stream_read_symbol!();
 
 /// K-streams (#2623): mark the stream `__s` as read, or fault if it already
 /// was. The mark lives on the stream object under a registered symbol, so it
 /// holds across modules, and the runtime's response bodies set the same one
 /// (`claimStream` in `bynk-emit/runtime/src/http.ts`). Inline, so a file that
 /// uses streams still needs no runtime import (ADR 0128 D6).
-const STREAM_CLAIM: &str = "const __m = __s as unknown as { [k: symbol]: boolean }; const __k = globalThis.Symbol.for(\"bynk.stream.read\"); if (__m[__k]) { throw new globalThis.Error(\"bynk: a stream can be read only once\"); } __m[__k] = true;";
+const STREAM_CLAIM: &str = concat!(
+    "const __m = __s as unknown as { [k: symbol]: boolean }; const __k = globalThis.Symbol.for(\"",
+    stream_read_symbol!(),
+    "\"); if (__m[__k]) { throw new globalThis.Error(\"bynk: a stream can be read only once\"); } __m[__k] = true;"
+);
 
 /// What `lower_query_method` needs to know about the receiver beyond its
 /// already-lowered arguments: the element types, and whether a key-based
@@ -1598,28 +1770,57 @@ mod tests {
         }
     }
 
-    /// `Stream` generators have no node (no `yield` or `for await` in `bynk_ts`): they stay
-    /// text, byte for byte.
+    /// `Stream` generators are nodes (1A.35a part B): over node operands they print, laid out
+    /// across lines, every token of the one-line text they replaced; over text operands they
+    /// are that text, byte for byte.
     #[test]
-    fn the_stream_generators_stay_text() {
+    fn the_stream_generators_are_nodes_over_node_operands() {
         let claim = STREAM_CLAIM;
+        let squash = |built: Option<Built>| match built.expect("a stream op") {
+            Ok(n) => bynk_ts::print_expr(&n)
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" "),
+            Err(t) => panic!("text, not a node: {t}"),
+        };
+        let node = |name: &str| LoweredExpr::Node(id(name));
         assert_eq!(
-            lower_stream_method("src".into(), StreamOp::Map, &["f".to_string()]),
-            Some(format!(
+            squash(lower_stream_method(
+                node("src"),
+                StreamOp::Map,
+                vec![node("f")]
+            )),
+            format!(
                 "(async function* (__s) {{ {claim} for await (const __e of __s) {{ yield (f)(__e); }} }})(src)"
-            ))
+            )
         );
         assert_eq!(
-            lower_stream_method("src".into(), StreamOp::Take, &["n".to_string()]),
-            Some(format!(
+            squash(lower_stream_method(
+                node("src"),
+                StreamOp::Take,
+                vec![node("n")]
+            )),
+            format!(
                 "(async function* (__s) {{ {claim} const __n = n; if (__n <= 0) {{ return; }} let __i = 0; for await (const __e of __s) {{ yield __e; if (++__i >= __n) {{ return; }} }} }})(src)"
-            ))
+            )
         );
         assert_eq!(
-            lower_stream_method("src".into(), StreamOp::Collect, &[]),
-            Some(format!(
+            squash(lower_stream_method(node("src"), StreamOp::Collect, vec![])),
+            format!(
                 "(async (__s) => {{ {claim} const __r = []; for await (const __e of __s) {{ __r.push(__e); }} return __r; }})(src)"
-            ))
+            )
+        );
+        // A text operand keeps today's one-line text.
+        let text = |t: &str| LoweredExpr::Text(t.to_string());
+        let Some(Err(printed)) = lower_stream_method(text("src"), StreamOp::Map, vec![node("f")])
+        else {
+            panic!("a text source keeps its text");
+        };
+        assert_eq!(
+            printed,
+            format!(
+                "(async function* (__s) {{ {claim} for await (const __e of __s) {{ yield (f)(__e); }} }})(src)"
+            )
         );
     }
 
