@@ -51,6 +51,8 @@ mod integration {
     mod call_hierarchy_index;
     #[path = "capability_paths.rs"]
     mod capability_paths;
+    #[path = "carrier_source_map.rs"]
+    mod carrier_source_map;
     #[path = "check_format_short.rs"]
     mod check_format_short;
     #[path = "codec_statics_nodes.rs"]
