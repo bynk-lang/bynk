@@ -84,13 +84,13 @@ fn human(report: &Report, colour: bool) -> String {
         };
         let style = match cap.level {
             Level::Ok => Some(Style::Green),
-            Level::Warn => Some(Style::Yellow),
+            Level::Warn => Some(Style::Amber),
             Level::Fail if cap.optional => None,
             Level::Fail => Some(Style::Red),
         };
         let paint = |text: &str| match style {
             Some(style) => paint(colour, style, text),
-            None => paint(colour, Style::Dim, text),
+            None => paint(colour, Style::Blue, text),
         };
         out.push_str(&format!(
             "{} {} [{}]{}\n",

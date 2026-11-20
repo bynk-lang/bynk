@@ -19,6 +19,7 @@
 //! Unix only. On Windows each wrangler's job object holds its tree (#1762), and
 //! [`install`] does nothing.
 
+use bynk_driver::emsg;
 use std::sync::atomic::{AtomicI32, Ordering};
 
 /// The signal received since [`install`], or 0 for none.
@@ -38,7 +39,7 @@ pub fn install() {
             action.sa_flags = libc::SA_RESTART | libc::SA_RESETHAND;
             libc::sigemptyset(&mut action.sa_mask);
             if libc::sigaction(sig, &action, std::ptr::null_mut()) != 0 {
-                eprintln!(
+                emsg!(
                     "bynk dev: could not install a handler for signal {sig}; stopping \
                      `bynk dev` with it may leave its workerd processes running."
                 );

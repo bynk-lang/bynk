@@ -16,6 +16,7 @@
 //! a registry are serialised. It speaks plain HTTP and binds loopback by
 //! default: put a TLS-terminating proxy in front to serve beyond this machine.
 
+use bynk_driver::emsg;
 use std::io::Read;
 use std::path::{Component, Path, PathBuf};
 
@@ -75,7 +76,7 @@ pub fn serve(
         .to_ip()
         .ok_or("the server isn't on an IP address")?;
     if !bound.ip().is_loopback() {
-        eprintln!(
+        emsg!(
             "bynk: warning: serving on {bound}, beyond this machine, over plain HTTP — tokens travel in clear unless a TLS-terminating proxy is in front"
         );
     }

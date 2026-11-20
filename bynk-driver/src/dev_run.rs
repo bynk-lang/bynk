@@ -15,6 +15,7 @@
 //!
 //! Groups run in turn; their results are reported together.
 
+use crate::emsg;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitCode, Stdio};
@@ -71,7 +72,7 @@ pub fn run(program: &str, args: &DevRunArgs) -> ExitCode {
         if args.json {
             crate::test_stream::print_run(args.stream, &TestRun::runtime_error(message, None));
         } else {
-            eprintln!("{program} test: {message}");
+            emsg!("{program} test: {message}");
         }
         ExitCode::FAILURE
     };
@@ -94,7 +95,7 @@ pub fn run(program: &str, args: &DevRunArgs) -> ExitCode {
                 &TestRun::empty().with_remote(format!("remote:{DEV}"), &[]),
             );
         } else {
-            eprintln!("{program} test: no `system` suites to run against `bynk dev`");
+            emsg!("{program} test: no `system` suites to run against `bynk dev`");
         }
         return ExitCode::SUCCESS;
     }
@@ -103,7 +104,7 @@ pub fn run(program: &str, args: &DevRunArgs) -> ExitCode {
     for (i, group) in plan.groups.iter().enumerate() {
         let vars = dev_vars(group, &plan.secrets, &plan.session_secrets);
         if !args.json {
-            eprintln!(
+            emsg!(
                 "{program} test: starting `bynk dev`{}",
                 if group.is_empty() {
                     String::new()

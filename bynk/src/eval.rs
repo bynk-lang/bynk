@@ -3,6 +3,7 @@
 //! [`bynk_driver::eval::evaluate`]; this reads the snippet and the unsaved
 //! buffers and prints the result.
 
+use bynk_driver::emsg;
 use std::io::Read as _;
 use std::process::ExitCode;
 use std::time::Duration;
@@ -21,7 +22,7 @@ fn print(report: &EvalReport) -> ExitCode {
     match serde_json::to_string(report) {
         Ok(text) => println!("{text}"),
         Err(e) => {
-            eprintln!("bynk eval: could not render the result: {e}");
+            emsg!("bynk eval: could not render the result: {e}");
             return ExitCode::FAILURE;
         }
     }

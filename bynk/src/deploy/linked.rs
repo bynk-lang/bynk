@@ -25,6 +25,8 @@
 
 use super::*;
 use crate::migrate::live::{self, Credentials, Rest};
+use bynk_driver::colour;
+use bynk_driver::emsg;
 
 /// The account's Secrets Stores, as far as linking needs them. A trait so the
 /// resolution is tested against a fake and the REST client against a stub.
@@ -341,16 +343,16 @@ pub(crate) fn link_ai_search_for_run(
     let search = match RestAiSearch::from_env() {
         Ok(search) => search,
         Err(e) => {
-            eprintln!("bynk: {e}");
+            emsg!("bynk: {e}");
             return false;
         }
     };
     let (warnings, problems) = link_ai_search(order, resources, &search);
     for warning in &warnings {
-        eprintln!("{warning}");
+        colour::eprintln(warning);
     }
     for problem in &problems {
-        eprintln!("bynk: {problem}");
+        emsg!("bynk: {problem}");
     }
     problems.is_empty()
 }
@@ -568,16 +570,16 @@ pub(crate) fn link_mtls_for_run(
     let client = match RestMtls::from_env() {
         Ok(client) => client,
         Err(e) => {
-            eprintln!("bynk: {e}");
+            emsg!("bynk: {e}");
             return None;
         }
     };
     let links = link_mtls(order, resources, &client, time::OffsetDateTime::now_utc());
     for warning in &links.warnings {
-        eprintln!("{warning}");
+        colour::eprintln(warning);
     }
     for problem in &links.problems {
-        eprintln!("bynk: {problem}");
+        emsg!("bynk: {problem}");
     }
     links.problems.is_empty().then_some(links.linked)
 }
@@ -648,7 +650,7 @@ fn link_stored_secrets_for_run(
     let stores = match RestStores::from_env() {
         Ok(stores) => stores,
         Err(e) => {
-            eprintln!("bynk: {e}");
+            emsg!("bynk: {e}");
             return None;
         }
     };
@@ -656,7 +658,7 @@ fn link_stored_secrets_for_run(
         Ok(linked) => Some(linked),
         Err(problems) => {
             for problem in problems {
-                eprintln!("bynk: {problem}");
+                emsg!("bynk: {problem}");
             }
             None
         }

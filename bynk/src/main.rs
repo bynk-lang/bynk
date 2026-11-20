@@ -1,5 +1,6 @@
 // `bynk` — the Bynk driver binary. See the crate docs in `lib.rs`.
 
+use bynk_driver::emsg;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
@@ -33,7 +34,7 @@ fn main() -> ExitCode {
         // A panic has already printed its message.
         Ok(Err(_)) => ExitCode::FAILURE,
         Err(e) => {
-            eprintln!("bynk: could not start: {e}");
+            emsg!("bynk: could not start: {e}");
             ExitCode::FAILURE
         }
     }
@@ -213,7 +214,7 @@ fn run() -> ExitCode {
                 return ExitCode::FAILURE;
             }
             let Some(root) = find_project_root(&input) else {
-                eprintln!(
+                emsg!(
                     "bynk: no `bynk.toml` found in `{}` or above; run from a project",
                     input.display()
                 );
@@ -351,7 +352,7 @@ fn run() -> ExitCode {
             format,
         } => {
             let Some(root) = find_project_root(&path) else {
-                eprintln!(
+                emsg!(
                     "bynk: not inside a Bynk project (no bynk.toml found from `{}`)",
                     path.display()
                 );
@@ -359,7 +360,7 @@ fn run() -> ExitCode {
             };
             match bynk::registry::commands::add_dependency(&root, &package, alias.as_deref()) {
                 Ok(line) => {
-                    eprintln!("bynk: added {line}");
+                    emsg!("bynk: added {line}");
                     if matches!(format, bynk::cli::DeployFormatArg::Json) {
                         println!(
                             "{}",
@@ -377,7 +378,7 @@ fn run() -> ExitCode {
                     }
                 }
                 Err(e) => {
-                    eprintln!("bynk: {e}");
+                    emsg!("bynk: {e}");
                     ExitCode::FAILURE
                 }
             }
@@ -409,7 +410,7 @@ fn run() -> ExitCode {
                 ExitCode::SUCCESS
             }
             Err(e) => {
-                eprintln!("bynk: {e}");
+                emsg!("bynk: {e}");
                 ExitCode::FAILURE
             }
         },
@@ -434,7 +435,7 @@ fn run() -> ExitCode {
                     ExitCode::SUCCESS
                 }
                 Err(e) => {
-                    eprintln!("bynk: {e}");
+                    emsg!("bynk: {e}");
                     ExitCode::FAILURE
                 }
             }
@@ -447,7 +448,7 @@ fn run() -> ExitCode {
             format,
         } => {
             let Some(root) = find_project_root(&path) else {
-                eprintln!(
+                emsg!(
                     "bynk: not inside a Bynk project (no bynk.toml found from `{}`)",
                     path.display()
                 );
@@ -460,7 +461,7 @@ fn run() -> ExitCode {
             if run_check(root.clone(), CheckFormatArg::Short, None, false, false)
                 != ExitCode::SUCCESS
             {
-                eprintln!("bynk: not published: the package doesn't check");
+                emsg!("bynk: not published: the package doesn't check");
                 return ExitCode::FAILURE;
             }
             let json = matches!(format, bynk::cli::DeployFormatArg::Json);
@@ -484,7 +485,7 @@ fn run() -> ExitCode {
                     ExitCode::SUCCESS
                 }
                 Err(e) => {
-                    eprintln!("bynk: {e}");
+                    emsg!("bynk: {e}");
                     ExitCode::FAILURE
                 }
             }
@@ -498,14 +499,14 @@ fn run() -> ExitCode {
             let root = find_project_root(&path).unwrap_or(path);
             match bynk::registry::publish::yank(&root, &package, &version, undo) {
                 Ok(registry) => {
-                    eprintln!(
+                    emsg!(
                         "bynk: {} {package} {version} on `{registry}`",
                         if undo { "un-yanked" } else { "yanked" }
                     );
                     ExitCode::SUCCESS
                 }
                 Err(e) => {
-                    eprintln!("bynk: {e}");
+                    emsg!("bynk: {e}");
                     ExitCode::FAILURE
                 }
             }
@@ -533,7 +534,7 @@ fn run() -> ExitCode {
             match bynk::approve::run(&root, &mode) {
                 Ok(()) => ExitCode::SUCCESS,
                 Err(e) => {
-                    eprintln!("bynk: {e}");
+                    emsg!("bynk: {e}");
                     ExitCode::FAILURE
                 }
             }
@@ -563,7 +564,7 @@ fn prepare_offering_approval(input: &Path, opts: bynk::fetch::FetchOptions) -> b
             true
         }
         Err(e) => {
-            eprintln!("bynk: {e}");
+            emsg!("bynk: {e}");
             false
         }
     }
@@ -587,7 +588,7 @@ fn fetch_json(input: &Path, opts: bynk::fetch::FetchOptions) -> ExitCode {
             ExitCode::SUCCESS
         }
         Err(e) => {
-            eprintln!("bynk: {e}");
+            emsg!("bynk: {e}");
             ExitCode::FAILURE
         }
     }
@@ -615,7 +616,7 @@ fn project_root(input: &Path, lock: bynk::fetch::FetchOptions) -> Option<PathBuf
     }
     let root = find_project_root(input);
     if root.is_none() {
-        eprintln!(
+        emsg!(
             "bynk: no `bynk.toml` found in `{}` or above; run from a project",
             input.display()
         );
@@ -672,7 +673,7 @@ fn prepare(input: &Path, opts: bynk::fetch::FetchOptions) -> bool {
             true
         }
         Err(e) => {
-            eprintln!("bynk: {e}");
+            emsg!("bynk: {e}");
             false
         }
     }
@@ -732,7 +733,7 @@ fn prepare_each(input: &Path, each: bool, opts: bynk::fetch::FetchOptions) -> Pr
                         true
                     }
                     Err(e) => {
-                        eprintln!("bynk: {}: {e}", dir.display());
+                        emsg!("bynk: {}: {e}", dir.display());
                         false
                     }
                 };
@@ -822,7 +823,7 @@ fn account_result(result: Result<(), bynk::fetch::FetchError>) -> ExitCode {
     match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
-            eprintln!("bynk: {e}");
+            emsg!("bynk: {e}");
             ExitCode::FAILURE
         }
     }
@@ -860,7 +861,7 @@ fn run_registry(command: bynk::cli::RegistryCommand) -> ExitCode {
         }
         RegistryCommand::Rotate { dir, key, key_out } => commands::rotate(&dir, &key, &key_out)
             .map(|k| {
-                eprintln!(
+                emsg!(
                     "bynk: appended {k} to the key chain; its private key is `{}` — publish `config.json`",
                     key_out.display()
                 )
@@ -870,7 +871,7 @@ fn run_registry(command: bynk::cli::RegistryCommand) -> ExitCode {
             key,
             delegate_out,
         } => commands::delegate(&dir, &key, &delegate_out).map(|k| {
-            eprintln!(
+            emsg!(
                 "bynk: delegated signing to {k}; its private key is `{}` — publish `config.json`, then sign with it",
                 delegate_out.display()
             )
@@ -881,12 +882,12 @@ fn run_registry(command: bynk::cli::RegistryCommand) -> ExitCode {
             key,
             force,
         } => commands::revoke(&dir, &key, &target, force).map(|n| {
-            eprintln!(
+            emsg!(
                 "bynk: revoked {target} ({n} line(s) still signed by it) — publish `config.json`"
             )
         }),
         RegistryCommand::Resign { dir, key } => commands::resign(&dir, &key)
-            .map(|n| eprintln!("bynk: re-signed {n} index line(s) — publish the index files")),
+            .map(|n| emsg!("bynk: re-signed {n} index line(s) — publish the index files")),
         RegistryCommand::Init { dir, id, key_out } => {
             let key_out = key_out.unwrap_or_else(|| commands::default_key_path(&id));
             commands::init(&dir, &id, &key_out).map(|pin| {
@@ -899,7 +900,7 @@ fn run_registry(command: bynk::cli::RegistryCommand) -> ExitCode {
             })
         }
         RegistryCommand::Add { dir, package, key } => {
-            commands::add(&dir, &package, &key).map(|what| eprintln!("bynk: added {what}"))
+            commands::add(&dir, &package, &key).map(|what| emsg!("bynk: added {what}"))
         }
         RegistryCommand::Serve {
             dir,
@@ -907,7 +908,7 @@ fn run_registry(command: bynk::cli::RegistryCommand) -> ExitCode {
             tokens,
             listen,
         } => bynk::registry::serve::serve(&dir, &key, &tokens, &listen, |addr| {
-            eprintln!(
+            emsg!(
                 "bynk: serving registry `{}` on {addr} (publish API at {addr}/api)",
                 dir.display()
             );
@@ -930,7 +931,7 @@ fn run_registry(command: bynk::cli::RegistryCommand) -> ExitCode {
             version,
             undo,
         } => commands::yank(&dir, &package, &version, undo).map(|()| {
-            eprintln!(
+            emsg!(
                 "bynk: {} {package} {version}",
                 if undo { "un-yanked" } else { "yanked" }
             )
@@ -942,20 +943,20 @@ fn run_registry(command: bynk::cli::RegistryCommand) -> ExitCode {
             reason,
         } => commands::withdraw(&dir, &package, &version, &reason).map(|archive| {
             if archive != commands::ArchiveOutcome::Finished {
-                eprintln!("bynk: withdrew {package} {version}");
+                emsg!("bynk: withdrew {package} {version}");
             }
             match archive {
                 commands::ArchiveOutcome::Deleted => {
-                    eprintln!("bynk: deleted its archive");
+                    emsg!("bynk: deleted its archive");
                 }
-                commands::ArchiveOutcome::Shared(other) => eprintln!(
+                commands::ArchiveOutcome::Shared(other) => emsg!(
                     "bynk: warning: kept its archive, which {other} names too (the same tree)"
                 ),
                 commands::ArchiveOutcome::Missing => {
-                    eprintln!("bynk: its archive was already gone");
+                    emsg!("bynk: its archive was already gone");
                 }
                 commands::ArchiveOutcome::Finished => {
-                    eprintln!("bynk: it was already withdrawn; deleted the archive left behind");
+                    emsg!("bynk: it was already withdrawn; deleted the archive left behind");
                 }
             }
         }),
@@ -963,7 +964,7 @@ fn run_registry(command: bynk::cli::RegistryCommand) -> ExitCode {
     match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
-            eprintln!("bynk: {e}");
+            emsg!("bynk: {e}");
             ExitCode::FAILURE
         }
     }
@@ -973,7 +974,7 @@ fn run_registry(command: bynk::cli::RegistryCommand) -> ExitCode {
 /// check failed (`bynk.registry.nonconformant`).
 fn run_conformance(opts: bynk::registry::conformance::Options, json: bool) -> ExitCode {
     use bynk::registry::conformance::Outcome;
-    eprintln!("bynk: registry conformance against {}", opts.index);
+    emsg!("bynk: registry conformance against {}", opts.index);
     let report = bynk::registry::conformance::run(&opts);
     if json {
         print!("{}", report.render_json());
@@ -983,7 +984,7 @@ fn run_conformance(opts: bynk::registry::conformance::Options, json: bool) -> Ex
         }
     }
     if let Some(p) = &report.published {
-        eprintln!("bynk: published (and left yanked) the throwaway package `{p}`");
+        emsg!("bynk: published (and left yanked) the throwaway package `{p}`");
     }
     let summary = format!(
         "{} passed, {} failed, {} skipped",
@@ -1000,10 +1001,10 @@ fn run_conformance(opts: bynk::registry::conformance::Options, json: bool) -> Ex
                 c.spec
             );
         }
-        eprintln!("bynk: {summary}");
+        emsg!("bynk: {summary}");
         ExitCode::FAILURE
     } else {
-        eprintln!("bynk: {summary}");
+        emsg!("bynk: {summary}");
         ExitCode::SUCCESS
     }
 }
@@ -1065,7 +1066,7 @@ fn run_dev_sub(sub: bynk::cli::DevSub) -> ExitCode {
         ),
     };
     let Some(project_root) = find_project_root(&path) else {
-        eprintln!(
+        emsg!(
             "bynk: not inside a Bynk project (no bynk.toml found from `{}`)",
             path.display()
         );
@@ -1078,7 +1079,7 @@ fn run_dev(path: PathBuf, opts: DevOptions) -> ExitCode {
     let tb = SystemToolbox;
 
     let Some(project_root) = find_project_root(&path) else {
-        eprintln!(
+        emsg!(
             "bynk: not inside a Bynk project (no bynk.toml found from `{}`)",
             path.display()
         );
@@ -1115,7 +1116,7 @@ fn run_tail_command(
 fn run_tail(path: PathBuf, opts: bynk::tail::TailOptions) -> ExitCode {
     let tb = SystemToolbox;
     let Some(project_root) = find_project_root(&path) else {
-        eprintln!(
+        emsg!(
             "bynk: not inside a Bynk project (no bynk.toml found from `{}`)",
             path.display()
         );
@@ -1130,7 +1131,7 @@ fn run_tail(path: PathBuf, opts: bynk::tail::TailOptions) -> ExitCode {
 fn run_deploy(path: PathBuf, opts: DeployOptions) -> ExitCode {
     let tb = SystemToolbox;
     let Some(project_root) = find_project_root(&path) else {
-        eprintln!(
+        emsg!(
             "bynk: not inside a Bynk project (no bynk.toml found from `{}`)",
             path.display()
         );
@@ -1169,7 +1170,7 @@ fn refuse_workspace_root(command: &str, root: &Path) -> bool {
     if !bynk_driver::project::is_workspace_root(root) {
         return false;
     }
-    eprintln!(
+    emsg!(
         "bynk {command}: `{}` is a workspace root, not a project — run `bynk {command}` inside a member",
         root.display()
     );
@@ -1210,12 +1211,12 @@ fn in_bynk_repo(start: &Path) -> bool {
 
 fn report_prepared(done: &bynk::fetch::Prepared) {
     for f in &done.fetched {
-        eprintln!("bynk: fetched {f}");
+        emsg!("bynk: fetched {f}");
     }
     for w in &done.warnings {
-        eprintln!("bynk: warning: {w}");
+        emsg!("bynk: warning: {w}");
     }
     if done.wrote_lock {
-        eprintln!("bynk: wrote bynk.lock");
+        emsg!("bynk: wrote bynk.lock");
     }
 }

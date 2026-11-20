@@ -15,6 +15,7 @@
 //! listing), and it is never printed or put in an error. Only the token goes to
 //! stdout, so `$(bynk token Reader --sub me)` works.
 
+use bynk_driver::emsg;
 use std::collections::BTreeMap;
 use std::path::Path;
 use std::process::ExitCode;
@@ -56,7 +57,7 @@ pub fn run(root: &Path, req: &Request) -> ExitCode {
             ExitCode::SUCCESS
         }
         Err(e) => {
-            eprintln!("bynk: {e}");
+            emsg!("bynk: {e}");
             ExitCode::FAILURE
         }
     }

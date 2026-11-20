@@ -24,6 +24,7 @@
 //! checker's reason. Any other diagnostic in a synthesised suite is a bug in
 //! this module, never a skip, so a run cannot pass green by skipping everything.
 
+use crate::emsg;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
@@ -410,7 +411,7 @@ pub fn prepare(
         if json {
             crate::test_stream::print_run(stream, &TestRun::runtime_error(message, None));
         } else {
-            eprintln!("{program} test: {message}");
+            emsg!("{program} test: {message}");
         }
         std::process::ExitCode::FAILURE
     };
@@ -451,7 +452,7 @@ pub fn prepare(
                 crate::print_project_failure(&failure);
             }
             if let Some(note) = note {
-                eprintln!("{program} test: {note}");
+                emsg!("{program} test: {note}");
             }
             return Err(std::process::ExitCode::FAILURE);
         }

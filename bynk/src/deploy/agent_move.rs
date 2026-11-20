@@ -8,6 +8,8 @@
 //! `--accept-fresh-agent`, which starts it fresh and records that the old script still holds
 //! the data. (A supported, state-preserving move is future work, ADR 0874.)
 
+use bynk_driver::colour;
+use bynk_driver::emsg;
 use std::collections::BTreeMap;
 
 use super::config::Resources;
@@ -193,10 +195,10 @@ pub(crate) fn gate(moves: &[AgentMove], accepted: &[String]) -> bool {
     let refused = refusals(moves, accepted);
     let unused = unused_accepts(moves, accepted);
     for why in &refused {
-        eprintln!("bynk: {why}");
+        emsg!("bynk: {why}");
     }
     for name in &unused {
-        eprintln!(
+        emsg!(
             "bynk: `--accept-fresh-agent {name}` names no context that would move with agent state in this run"
         );
     }
@@ -204,7 +206,7 @@ pub(crate) fn gate(moves: &[AgentMove], accepted: &[String]) -> bool {
         return false;
     }
     for m in moves {
-        eprint!("{}", fresh_warning(m));
+        colour::eprint(&fresh_warning(m));
     }
     true
 }

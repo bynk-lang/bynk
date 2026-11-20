@@ -41,14 +41,31 @@ when `bynk` colours its output:
 | `always` | Always, into a pipe or a file too, whatever the environment says. |
 | `never` | Never, whatever the environment says. |
 
-What is coloured: `bynk test`'s ✓ (green), ✗ (red), suite headings and closing
-tally; the `--coverage` table, each file's bar and percentage green from 80%,
-amber from 50% and red below, with its uncovered lines red; `bynk doctor`'s
-marks; rich diagnostics; the [build progress](#build-progress) lines; and
-`--help`. Machine-readable output (`--format json`, `ndjson` and `short`) is
-never coloured. The choice is passed on to the `wrangler` that `bynk dev` and
-`bynk tail` start, as `NO_COLOR=1` under `never` and `FORCE_COLOR=1` under
-`always`.
+Each colour has one meaning: **blue** for information, **green** for success,
+**red** for an error or a failure, **amber** for a warning, and **bold** for a
+heading. What is coloured:
+
+- `bynk test`: a passing case's ✓ green, a failing case red, suite headings
+  bold, and the closing tally.
+- `--coverage`: each file's bar and percentage green from 80%, amber from 50%
+  and red below, with its uncovered lines red.
+- `--mutate`: each mutant's progress line by its outcome (killed or timed out
+  green, survived red, not covered by any suite amber, invalid blue), and in the
+  report the counts, the `SURVIVED` and `NO SUITE` labels, and the score, banded
+  as coverage is.
+- `bynk revert`: each Worker's heading bold, each check's `ok` green or
+  `refused` red, and the verdict.
+- The `error:`, `warning:` and `note:` label of a message on stderr, such as
+  `bynk test: warning: no tests found`.
+- `bynk doctor`'s marks, rich diagnostics, the
+  [build progress](#build-progress) lines, and `--help`.
+
+Machine-readable output (`--format json` and `ndjson`, and `bynk check`'s and
+`bynk doctor`'s `--format short`) is never coloured. Under `auto` nothing
+written to a pipe or a file is coloured either, so a script reading
+`bynk revert`'s plan sees plain text. The choice is passed on to the `wrangler`
+that `bynk dev` and `bynk tail` start, as `NO_COLOR=1` under `never` and
+`FORCE_COLOR=1` under `always`.
 
 ## Installing npm packages
 

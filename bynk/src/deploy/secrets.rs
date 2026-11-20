@@ -1,4 +1,5 @@
 use super::*;
+use bynk_driver::colour;
 
 // ---------------------------------------------------------------------------
 // Slice 3: secrets at deploy time (ADR 0195)
@@ -730,7 +731,7 @@ pub(crate) fn prepare_bindings(
     // below for the whole story would be wrong, and this is the only place that
     // can tell them (ADR 0196 D2).
     if !declared.reads_complete {
-        eprint!("{}", unseen_reads_notice(environment, worker));
+        colour::eprint(&unseen_reads_notice(environment, worker));
     }
     // Asked live, never recorded: presence is the only observable Cloudflare
     // offers (it does not return values), and a recorded answer could only ever
@@ -766,7 +767,7 @@ pub(crate) fn prepare_bindings(
     for want in &wanted {
         match secret_action(&want.name, present.as_ref(), secrets.force) {
             SecretAction::SkipPresent => {
-                eprint!("{}", kept_binding_notice(environment, worker, &want.name));
+                colour::eprint(&kept_binding_notice(environment, worker, &want.name));
                 continue;
             }
             SecretAction::Set | SecretAction::Overwrite => {}

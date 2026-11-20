@@ -15,6 +15,7 @@
 //! at all exits non-zero. Neither is an error state for the feature — a
 //! half-covered set is a designed, documented condition.
 
+use bynk_driver::emsg;
 use std::process::ExitCode;
 
 use bynk_syntax::diagnostics::{self, Explain};
@@ -81,7 +82,7 @@ pub fn run(code: &str) -> ExitCode {
             ExitCode::SUCCESS
         }
         Lookup::Unknown => {
-            eprintln!(
+            emsg!(
                 "error: `{code}` is not a diagnostic code the compiler emits.\n\
                  Diagnostic codes look like `bynk.resolve.unknown_type`; see \
                  {}/book/reference/diagnostics/ for the full list.",

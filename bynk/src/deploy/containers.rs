@@ -22,6 +22,7 @@
 //! `wrangler deploy --dry-run`, which builds a Dockerfile image.
 
 use super::*;
+use bynk_driver::emsg;
 use std::path::PathBuf;
 
 /// Name what `bynk.toml` adopts for `environment` on the declarations: the
@@ -48,9 +49,9 @@ pub(crate) fn apply_container_adoptions(
         // An entry for a container the project no longer declares is not an
         // error when there are none at all: nothing would build either way.
         let settings = bynk_project::containers::try_read_containers_deploy(project_root)
-            .map_err(|e| eprintln!("bynk: {e}"))?;
+            .map_err(|e| emsg!("bynk: {e}"))?;
         if let Some(capability) = settings.keys().next() {
-            eprintln!(
+            emsg!(
                 "bynk: `[deploy.containers.{capability}]` in bynk.toml names no `Container` capability in this project"
             );
             return Err(());
@@ -58,7 +59,7 @@ pub(crate) fn apply_container_adoptions(
         return Ok(());
     }
     let settings = bynk_project::containers::try_read_containers_deploy(project_root)
-        .map_err(|e| eprintln!("bynk: {e}"))?;
+        .map_err(|e| emsg!("bynk: {e}"))?;
     // An entry that names no declared capability would be silently ignored,
     // and the deploy would build an image the team meant to adopt.
     let capabilities: Vec<&str> = resources
@@ -72,7 +73,7 @@ pub(crate) fn apply_container_adoptions(
         let hint = bynk_project::paths::did_you_mean(capability, capabilities.iter().copied())
             .map(|c| format!("; did you mean `{c}`?"))
             .unwrap_or_default();
-        eprintln!(
+        emsg!(
             "bynk: `[deploy.containers.{capability}]` in bynk.toml names no `Container` capability in this project{hint}; an entry that matches nothing would have the deploy build an image you meant to adopt"
         );
         return Err(());
@@ -80,7 +81,7 @@ pub(crate) fn apply_container_adoptions(
     for (capability, entry) in &settings {
         if !entry.image.contains_key(environment) {
             let named: Vec<&str> = entry.image.keys().map(String::as_str).collect();
-            eprintln!(
+            emsg!(
                 "bynk: note: `[deploy.containers.{capability}]` adopts an image only for {}; under `{environment}` the deploy builds one",
                 named.join(", ")
             );

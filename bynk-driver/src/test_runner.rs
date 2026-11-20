@@ -11,6 +11,7 @@
 //! its bare name, so a Windows npm shim (`tsc.cmd`) runs, and a runner that is
 //! found but won't start is reported as such rather than as missing.
 
+use crate::emsg;
 use std::path::{Path, PathBuf};
 use std::process::{Command as ProcCommand, ExitCode, Stdio};
 
@@ -437,7 +438,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
             if json {
                 crate::test_stream::print_run(stream, &TestRun::runtime_error(message, None));
             } else {
-                eprintln!("{program} test: {message}");
+                emsg!("{program} test: {message}");
             }
             return ExitCode::FAILURE;
         }
@@ -477,7 +478,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
             if json {
                 crate::test_stream::print_run(stream, &TestRun::runtime_error(message, None));
             } else {
-                eprintln!("{program} test: {message}");
+                emsg!("{program} test: {message}");
             }
             return ExitCode::FAILURE;
         }
@@ -493,7 +494,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
                 if json {
                     crate::test_stream::print_run(stream, &TestRun::runtime_error(message, None));
                 } else {
-                    eprintln!("{program} test: {message}");
+                    emsg!("{program} test: {message}");
                 }
                 ExitCode::FAILURE
             };
@@ -574,9 +575,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
             Some(hex) => Some(hex),
             None => {
                 if !json {
-                    eprintln!(
-                        "{program} test: ignoring --seed `{raw}` (not a hex value like 0x5f3a)"
-                    );
+                    emsg!("{program} test: ignoring --seed `{raw}` (not a hex value like 0x5f3a)");
                 }
                 None
             }
@@ -585,7 +584,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
     };
     let output_root = output_root_for(&input, output.as_deref());
     if !input.is_dir() {
-        eprintln!(
+        emsg!(
             "{program} test: input `{}` must be a project directory containing `.bynk` files",
             input.display()
         );
@@ -821,7 +820,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
         // a debug run (`--inspect`) can resolve `.bynk` breakpoints. Harmless for a
         // normal run, which transpiles via `tsc` and ignores the trailer.
         if let Err(e) = crate::write_document(path, doc, &out.artefacts.docs, &output_root) {
-            eprintln!(
+            emsg!(
                 "{program} test: could not write `{}`: {e}",
                 output_root.join(path).display()
             );
@@ -871,7 +870,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
             if let Err(e) =
                 crate::write_document(path, doc, &workers_out.artefacts.docs, &output_root)
             {
-                eprintln!(
+                emsg!(
                     "{program} test: could not write `{}`: {e}",
                     output_root.join(path).display()
                 );
@@ -889,7 +888,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
         .flatten()
     {
         if let Err(e) = crate::write_modules_for_node(modules, &output_root) {
-            eprintln!("{program} test: could not write a WebAssembly module: {e}");
+            emsg!("{program} test: could not write a WebAssembly module: {e}");
             return ExitCode::FAILURE;
         }
     }
@@ -903,7 +902,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
         // Rich `--no-run` is the CI emit helper: write the runner modules and
         // report where they landed. (JSON `--no-run` already returned above with
         // the discovery document — it never reaches here.)
-        eprintln!("{program} test: tests emitted to {}", main_ts.display());
+        emsg!("{program} test: tests emitted to {}", main_ts.display());
         return ExitCode::SUCCESS;
     }
 
@@ -1015,7 +1014,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
                         Some(f) => crate::print_project_failure(f),
                         None => eprint!("{detail}"),
                     }
-                    eprintln!(
+                    emsg!(
                         "{program} test: tsc reported errors against {}",
                         tsconfig.display()
                     );
@@ -1076,7 +1075,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
                             &TestRun::runtime_error(format!("could not run node: {e}"), None),
                         );
                     } else {
-                        eprintln!(
+                        emsg!(
                             "{program} test: tsc succeeded but `node {}` failed: {e}",
                             main_js.display()
                         );
@@ -1156,7 +1155,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
             ),
         );
     } else {
-        eprintln!(
+        emsg!(
             "{program} test: requires either `tsc` (with Node.js) or `tsx` on PATH. \
              Install one of:\n{}",
             install_advice(manager, false)
@@ -1183,12 +1182,12 @@ fn report_no_tests(
         };
         crate::test_stream::print_run(stream, &run);
     } else if require_tests {
-        eprintln!(
+        emsg!(
             "{program} test: error: no tests found in {}",
             input.display()
         );
     } else {
-        eprintln!(
+        emsg!(
             "{program} test: warning: no tests found in {}",
             input.display()
         );
@@ -1229,7 +1228,7 @@ fn report_timeout(program: &str, json: bool, stream: bool, e: &std::io::Error) -
     if json {
         crate::test_stream::print_run(stream, &TestRun::timeout_error(e.to_string()));
     } else {
-        eprintln!("{program} test: the run {e}");
+        emsg!("{program} test: the run {e}");
     }
     ExitCode::FAILURE
 }
@@ -1252,7 +1251,7 @@ fn report_start_failures(
             &TestRun::runtime_error("no test runner could be started", Some(failures.join("\n"))),
         );
     } else {
-        eprintln!("{program} test: no test runner could be started:");
+        emsg!("{program} test: no test runner could be started:");
         for failure in failures {
             eprintln!("  - {failure}");
         }
@@ -1407,7 +1406,7 @@ fn finish_runner(
         let status =
             crate::test_stream::forward(cmd, &mut events, &mut std::io::stdout().lock(), aliases)?;
         for warning in events.warnings() {
-            eprintln!("{}", warning.line(program));
+            crate::colour::eprintln(&warning.line(program));
         }
         // #2842: the files are written once the run is over, and only if the
         // runner got as far as its report.
@@ -1415,7 +1414,7 @@ fn finish_runner(
             && let Some(report) = run.report_for(events.snapshot_report())
             && let Err(e) = run.settle(&report)
         {
-            eprintln!("{program} test: could not update snapshots: {e}");
+            emsg!("{program} test: could not update snapshots: {e}");
             return Ok(ExitCode::FAILURE);
         }
         events.unmatched().report(program);
@@ -1457,11 +1456,11 @@ fn finish_runner(
         };
         crate::test_stream::print_text(&doc.render());
         for warning in doc.warnings() {
-            eprintln!("{}", warning.line(program));
+            crate::colour::eprintln(&warning.line(program));
         }
         unmatched.report(program);
         if let Some(e) = settle_failed {
-            eprintln!("{program} test: could not update snapshots: {e}");
+            emsg!("{program} test: could not update snapshots: {e}");
             return Ok(ExitCode::FAILURE);
         }
         Ok(exit_from(out.status.success()))
@@ -1482,7 +1481,7 @@ fn finish_runner(
                 Some(report) => match run.settle(&report) {
                     Ok(counts) => counts,
                     Err(e) => {
-                        eprintln!("{program} test: could not update snapshots: {e}");
+                        emsg!("{program} test: could not update snapshots: {e}");
                         return Ok(ExitCode::FAILURE);
                     }
                 },
@@ -1675,7 +1674,7 @@ fn coverage_unsupported(program: &str, json: bool, message: impl Into<String>) -
         // `--format ndjson` refuses `--coverage` before this is reachable.
         crate::test_stream::print_run(false, &TestRun::runtime_error(message, None));
     } else {
-        eprintln!("{program} test --coverage: {message}");
+        emsg!("{program} test --coverage: {message}");
     }
     ExitCode::FAILURE
 }
@@ -1742,7 +1741,7 @@ fn run_with_coverage(
             .with_coverage(&report);
         print!("{}", doc.render());
         for warning in doc.warnings() {
-            eprintln!("{}", warning.line(program));
+            crate::colour::eprintln(&warning.line(program));
         }
         unmatched.report(program);
         exit_from(out.status.success())
@@ -1759,7 +1758,7 @@ fn run_with_coverage(
             Ok(s) => s,
             Err(e) => {
                 let _ = std::fs::remove_dir_all(&cov_dir);
-                eprintln!("{program} test --coverage: could not run node: {e}");
+                emsg!("{program} test --coverage: could not run node: {e}");
                 return ExitCode::FAILURE;
             }
         };
@@ -1814,10 +1813,10 @@ fn run_inspect(
     smoke: bool,
 ) -> ExitCode {
     let Some(node) = resolve_tool("node") else {
-        eprintln!("{program} test --inspect: `node` was not found on PATH");
+        emsg!("{program} test --inspect: `node` was not found on PATH");
         return ExitCode::FAILURE;
     };
-    eprintln!("{program} test --inspect: launching the test runner under Node's inspector.");
+    emsg!("{program} test --inspect: launching the test runner under Node's inspector.");
     eprintln!("  Attach a JavaScript debugger to the inspector URL below; breakpoints set");
     eprintln!("  in `.bynk` sources resolve through the emitted source maps.");
     eprintln!("  (Requires Node \u{2265} 22.6 for TypeScript type-stripping.)");
@@ -1845,7 +1844,7 @@ fn run_inspect(
     {
         Ok(s) => exit_from(s.success()),
         Err(e) => {
-            eprintln!("{program} test --inspect: could not run node: {e}");
+            emsg!("{program} test --inspect: could not run node: {e}");
             ExitCode::FAILURE
         }
     }
@@ -2083,7 +2082,7 @@ fn fail_run(program: &str, json: bool, stream: bool, msg: String) -> ExitCode {
     if json {
         crate::test_stream::print_run(stream, &TestRun::runtime_error(msg, None));
     } else {
-        eprintln!("{program} test: {msg}");
+        emsg!("{program} test: {msg}");
     }
     ExitCode::FAILURE
 }

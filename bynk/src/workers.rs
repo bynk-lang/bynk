@@ -6,6 +6,7 @@
 //! and `deploy.rs` reached across for it, which left `dev` reading as `deploy`'s
 //! utility library. It lives here instead — a sibling of both, owned by neither.
 
+use bynk_driver::emsg;
 use std::path::Path;
 use std::process::Command;
 
@@ -129,7 +130,7 @@ pub fn compile_once_reporting(
         match bynk_driver::schema_lock::read(project_root) {
             Ok(existing) => SchemaLock::On { existing },
             Err(e) => {
-                eprintln!(
+                emsg!(
                     "bynk: could not read {}: {e}",
                     bynk_driver::schema_lock::lock_path(project_root).display()
                 );
@@ -147,7 +148,7 @@ pub fn compile_once_reporting(
             .progress(progress)
             .tests(false),
         Err(e) => {
-            eprintln!("bynk: {e}");
+            emsg!("bynk: {e}");
             return false;
         }
     };
@@ -168,13 +169,13 @@ pub fn compile_once_reporting(
     if let Some(content) = &output.schema_lock
         && let Err(e) = bynk_driver::schema_lock::write(project_root, content)
     {
-        eprintln!(
+        emsg!(
             "bynk: could not write {}: {e}",
             bynk_driver::schema_lock::lock_path(project_root).display()
         );
     }
     if let Err(e) = bynk_driver::write_output(&output, build_dir) {
-        eprintln!(
+        emsg!(
             "bynk: could not write build output under `{}`: {e}",
             build_dir.display()
         );
@@ -197,7 +198,7 @@ pub fn compile_once_reporting(
         setting.as_deref(),
         mode,
     ) {
-        eprintln!("bynk: {e}");
+        emsg!("bynk: {e}");
         return false;
     }
     true

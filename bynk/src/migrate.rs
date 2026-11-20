@@ -7,6 +7,7 @@
 //! it (read-only, as `bynk check` does), and reads `bynk.deploy.lock` only for
 //! the environments each Worker is pushed in.
 
+use bynk_driver::emsg;
 use std::collections::BTreeMap;
 use std::path::Path;
 use std::process::ExitCode;
@@ -178,7 +179,7 @@ pub fn status(root: &Path, format: StatusFormat) -> ExitCode {
             ExitCode::SUCCESS
         }
         Err(e) => {
-            eprintln!("bynk migrate status: {e}");
+            emsg!("bynk migrate status: {e}");
             ExitCode::FAILURE
         }
     }
@@ -230,7 +231,7 @@ pub fn sweep(root: &Path, opts: &SweepOptions) -> ExitCode {
         Ok(true) => ExitCode::SUCCESS,
         Ok(false) => ExitCode::FAILURE,
         Err(e) => {
-            eprintln!("bynk migrate sweep: {e}");
+            emsg!("bynk migrate sweep: {e}");
             ExitCode::FAILURE
         }
     }
@@ -370,7 +371,7 @@ fn confirm(yes: bool) -> bool {
         return true;
     }
     if !std::io::stdin().is_terminal() {
-        eprintln!("bynk: refusing to change Cloudflare in a non-interactive session without --yes");
+        emsg!("bynk: refusing to change Cloudflare in a non-interactive session without --yes");
         return false;
     }
     eprint!("Sweep? [y/N] ");

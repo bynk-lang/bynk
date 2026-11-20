@@ -8,6 +8,7 @@
 //! the smoke run's declared-status table (walked by `bynk-ide`), and the path
 //! of this binary for `--against dev`.
 
+use bynk_driver::emsg;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
@@ -22,7 +23,7 @@ pub fn run(args: TestArgs) -> ExitCode {
     let workspace = match bynk_driver::workspace_at_each(&args.input, args.each) {
         Ok(w) => w,
         Err(message) => {
-            eprintln!("bynk test: {message}");
+            emsg!("bynk test: {message}");
             return ExitCode::FAILURE;
         }
     };
@@ -30,7 +31,7 @@ pub fn run(args: TestArgs) -> ExitCode {
         let workspace = match workspace {
             Ok(w) => w,
             Err(e) => {
-                eprintln!(
+                emsg!(
                     "bynk test: {}: {e}",
                     bynk_driver::display_path(Path::new(""), &args.input.join("bynk.toml"))
                 );
@@ -38,7 +39,7 @@ pub fn run(args: TestArgs) -> ExitCode {
             }
         };
         if let Some(refusal) = workspace_refusal(&args) {
-            eprintln!("bynk test: {refusal}");
+            emsg!("bynk test: {refusal}");
             return ExitCode::FAILURE;
         }
         let members: Vec<PathBuf> = workspace
@@ -108,7 +109,7 @@ fn run_one(mut args: TestArgs) -> ExitCode {
         match std::env::current_exe() {
             Ok(path) => args.dev_command = Some(path),
             Err(e) => {
-                eprintln!("bynk test: could not find this `bynk` binary to start `bynk dev`: {e}");
+                emsg!("bynk test: could not find this `bynk` binary to start `bynk dev`: {e}");
                 return ExitCode::FAILURE;
             }
         }
@@ -132,7 +133,7 @@ fn run_one(mut args: TestArgs) -> ExitCode {
     match declared_file {
         Some(Ok(path)) => args.declared_statuses = Some(path),
         Some(Err(e)) => {
-            eprintln!(
+            emsg!(
                 "bynk test: could not write the smoke table, so undeclared statuses are not checked: {e}"
             );
         }

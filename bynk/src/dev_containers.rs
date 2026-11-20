@@ -20,6 +20,7 @@
 //!   faults with a message that names Docker, rather than failing as an
 //!   inscrutable start. Nothing else about the session changes.
 
+use bynk_driver::colour;
 use std::collections::BTreeMap;
 use std::path::Path;
 
@@ -147,9 +148,9 @@ pub(crate) fn building_note(containers: &Containers) -> Option<String> {
 pub(crate) fn session(tb: &dyn Toolbox, containers: &Containers) -> bool {
     let state = docker(tb);
     if let Some(warning) = docker_warning(state, containers) {
-        eprintln!("{warning}");
+        colour::eprintln(&warning);
     } else if let Some(note) = building_note(containers) {
-        eprintln!("{note}");
+        colour::eprintln(&note);
     }
     state != Docker::Running && !containers.is_empty()
 }
@@ -165,7 +166,7 @@ pub(crate) fn for_session(
     let containers = served_containers(workers_dir, &names);
     let remote = crate::dev::is_remote(wrangler_args);
     if let Some(refusal) = remote_refusal(&containers, remote) {
-        eprintln!("{refusal}");
+        colour::eprintln(&refusal);
         return None;
     }
     Some(containers)

@@ -30,6 +30,7 @@
 //! | `IsoDate`             | `format: date`, `minLength: 10`, `maxLength: 10`    |
 //! | `Matches("p")`        | `pattern: "^(?:p)$"` (the codec anchors the match) |
 
+use bynk_driver::emsg;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -121,7 +122,7 @@ pub fn run(
     let doc = match document(&manifest_info(root), &analysis, service) {
         Ok(d) => d,
         Err(e) => {
-            eprintln!("bynk: {e}");
+            emsg!("bynk: {e}");
             return ExitCode::FAILURE;
         }
     };
@@ -145,7 +146,7 @@ pub fn run(
         Some(path) => match std::fs::write(path, text) {
             Ok(()) => ExitCode::SUCCESS,
             Err(e) => {
-                eprintln!("bynk: cannot write {}: {e}", path.display());
+                emsg!("bynk: cannot write {}: {e}", path.display());
                 ExitCode::FAILURE
             }
         },

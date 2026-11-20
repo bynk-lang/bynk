@@ -32,6 +32,7 @@ mod render;
 mod tools;
 mod workspace;
 
+use bynk_driver::emsg;
 use std::io::{BufRead, Write};
 use std::path::Path;
 use std::process::ExitCode;
@@ -54,7 +55,7 @@ pub fn run(path: &Path) -> ExitCode {
     let workspace = match Workspace::new(path) {
         Ok(w) => w,
         Err(e) => {
-            eprintln!("bynk mcp: {e}");
+            emsg!("bynk mcp: {e}");
             return ExitCode::FAILURE;
         }
     };

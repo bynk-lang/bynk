@@ -28,6 +28,7 @@
 //! read. There, `bynk dev` puts each wrangler in a job object instead, which
 //! holds the whole tree, orphans included, and stops it as one (#1762).
 
+use bynk_driver::emsg;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -97,7 +98,7 @@ fn report_survivors(why: &str, pids: &[u32]) {
         .map(u32::to_string)
         .collect::<Vec<_>>()
         .join(" ");
-    eprintln!(
+    emsg!(
         "bynk dev: could not stop leftover processes ({why}): {pids}. They may hold \
          ports the next `bynk dev` needs; stop them by hand."
     );
