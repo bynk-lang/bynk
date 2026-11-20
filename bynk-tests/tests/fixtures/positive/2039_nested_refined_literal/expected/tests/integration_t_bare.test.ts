@@ -9,6 +9,8 @@ import * as __ns_t_bare from "../workers/t-bare/handlers.js";
 import worker___ns_t_bare from "../workers/t-bare/index.js";
 import * as __ns_t_pay from "../workers/t-pay/handlers.js";
 import worker___ns_t_pay from "../workers/t-pay/index.js";
+import * as __ns_t_orders from "./../t/orders.js";
+import * as __ns_t_values from "./../t/values.js";
 
 class ExpectationError extends Error {
   location: string;
@@ -71,6 +73,11 @@ async function test_an_Option_payload_from_a_caller_with_no_uses() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
+    const { Order } = __ns_t_orders;
+    type Order = __ns_t_orders.Order;
+    const { Cents, Delta } = __ns_t_values;
+    type Cents = __ns_t_values.Cents;
+    type Delta = __ns_t_values.Delta;
     const r = await __callService(deps.env.T_BARE, "optional", {}, (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j), "integration", "dd672d33f8960d4c", deps.env, "t.bare");
     if (!(r === 250)) { throw __bynkExpectFailure("tests/bare.bynk:6:10", 226, 234, "expect r == 250\n  expected: r == 250\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((250))); }
     return { pass: true };
@@ -87,6 +94,11 @@ async function test_list_elements_from_a_caller_with_no_uses() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
+    const { Order } = __ns_t_orders;
+    type Order = __ns_t_orders.Order;
+    const { Cents, Delta } = __ns_t_values;
+    type Cents = __ns_t_values.Cents;
+    type Delta = __ns_t_values.Delta;
     const r = await __callService(deps.env.T_BARE, "listed", {}, (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j), "integration", "f7febdbbf05f2a13", deps.env, "t.bare");
     if (!(r === 6)) { throw __bynkExpectFailure("tests/bare.bynk:11:10", 347, 353, "expect r == 6\n  expected: r == 6\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((6))); }
     return { pass: true };
@@ -103,6 +115,11 @@ async function test_a_Result_payload_from_a_caller_with_no_uses() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
+    const { Order } = __ns_t_orders;
+    type Order = __ns_t_orders.Order;
+    const { Cents, Delta } = __ns_t_values;
+    type Cents = __ns_t_values.Cents;
+    type Delta = __ns_t_values.Delta;
     const r = await __callService(deps.env.T_BARE, "settled", {}, (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j), "integration", "ade64568b6210661", deps.env, "t.bare");
     if (!(r === 7)) { throw __bynkExpectFailure("tests/bare.bynk:16:10", 470, 476, "expect r == 7\n  expected: r == 7\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((7))); }
     return { pass: true };
@@ -119,6 +136,11 @@ async function test_empty_constructors_from_a_caller_with_no_uses() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
+    const { Order } = __ns_t_orders;
+    type Order = __ns_t_orders.Order;
+    const { Cents, Delta } = __ns_t_values;
+    type Cents = __ns_t_values.Cents;
+    type Delta = __ns_t_values.Delta;
     const r = await __callService(deps.env.T_BARE, "empties", {}, (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j), "integration", "4f13368f5b68f575", deps.env, "t.bare");
     if (!(r === 0)) { throw __bynkExpectFailure("tests/bare.bynk:21:10", 595, 601, "expect r == 0\n  expected: r == 0\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((0))); }
     return { pass: true };
@@ -135,6 +157,11 @@ async function test_a_negative_literal_from_a_caller_with_no_uses() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
+    const { Order } = __ns_t_orders;
+    type Order = __ns_t_orders.Order;
+    const { Cents, Delta } = __ns_t_values;
+    type Cents = __ns_t_values.Cents;
+    type Delta = __ns_t_values.Delta;
     const r = await __callService(deps.env.T_BARE, "shifted", {}, (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j), "integration", "038ebfaa81479d05", deps.env, "t.bare");
     if (!(r === -3)) { throw __bynkExpectFailure("tests/bare.bynk:26:10", 720, 727, "expect r == -3\n  expected: r == -3\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((-3))); }
     return { pass: true };
@@ -151,6 +178,11 @@ async function test_an_Err_payload_from_a_caller_with_no_uses() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
+    const { Order } = __ns_t_orders;
+    type Order = __ns_t_orders.Order;
+    const { Cents, Delta } = __ns_t_values;
+    type Cents = __ns_t_values.Cents;
+    type Delta = __ns_t_values.Delta;
     const r = await __callService(deps.env.T_BARE, "refunded", {}, (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j), "integration", "c93052377526220d", deps.env, "t.bare");
     if (!(r === 5)) { throw __bynkExpectFailure("tests/bare.bynk:31:10", 843, 849, "expect r == 5\n  expected: r == 5\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((5))); }
     return { pass: true };
@@ -167,6 +199,11 @@ async function test_a_parenthesised_literal_from_a_caller_with_no_uses() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
+    const { Order } = __ns_t_orders;
+    type Order = __ns_t_orders.Order;
+    const { Cents, Delta } = __ns_t_values;
+    type Cents = __ns_t_values.Cents;
+    type Delta = __ns_t_values.Delta;
     const r = await __callService(deps.env.T_BARE, "parenthesised", {}, (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j), "integration", "7d1e7cad088cabf1", deps.env, "t.bare");
     if (!(r === 12)) { throw __bynkExpectFailure("tests/bare.bynk:36:10", 979, 986, "expect r == 12\n  expected: r == 12\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((12))); }
     return { pass: true };
@@ -183,6 +220,11 @@ async function test_a_record_field_from_a_caller_with_no_uses() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
+    const { Order } = __ns_t_orders;
+    type Order = __ns_t_orders.Order;
+    const { Cents, Delta } = __ns_t_values;
+    type Cents = __ns_t_values.Cents;
+    type Delta = __ns_t_values.Delta;
     const r = await __callService(deps.env.T_BARE, "placed", {}, (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j), "integration", "e09b92e804722c23", deps.env, "t.bare");
     if (!(r === 40)) { throw __bynkExpectFailure("tests/bare.bynk:41:10", 1100, 1107, "expect r == 40\n  expected: r == 40\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((40))); }
     return { pass: true };

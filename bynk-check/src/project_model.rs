@@ -6564,6 +6564,12 @@ pub fn close_view_types(
         &mut HashMap::new(),
         seeds,
         |r, owner, bound| {
+            // #3760: a name a participant's handler signature reaches but the
+            // view already binds receives the value structurally, as for a
+            // unit's consumed signatures (#1932), so it is not a conflict.
+            if r.signature {
+                return;
+            }
             if bound != Some(owner) && seen.insert(r.name.clone()) {
                 conflicts.push(ViewConflict {
                     name: r.name.clone(),
