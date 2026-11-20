@@ -473,6 +473,398 @@ impl KernelOp {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Static intrinsics (1A.33, Decision B)
+// ---------------------------------------------------------------------------
+
+kernel_ops! {
+/// `List.empty()`.
+    ListStatic {
+        Empty = "empty", "List.empty() -> List[T]";
+    }
+/// `Map.empty()`.
+    MapStatic {
+        Empty = "empty", "Map.empty() -> Map[K, V]";
+    }
+/// `Set.empty()` / `Set.of(xs)` (K6a, #2596).
+    SetStatic {
+        Empty = "empty", "Set.empty() -> Set[T]";
+        Of = "of", "Set.of(items: List[T]) -> Set[T]";
+    }
+/// `Int.parse(s)` (v0.22a).
+    IntStatic {
+        Parse = "parse", "Int.parse(s: String) -> Option[Int]";
+    }
+/// `Float.parse(s)`, and the K6b (#2598) constants `Float.pi()` / `Float.e()`.
+    FloatStatic {
+        Parse = "parse", "Float.parse(s: String) -> Option[Float]";
+        Pi = "pi", "Float.pi() -> Float";
+        E = "e", "Float.e() -> Float";
+    }
+/// `Decimal.parse(s)` / `Decimal.fromInt(n)` (#2622).
+    DecimalStatic {
+        Parse = "parse", "Decimal.parse(s: String) -> Option[Decimal]";
+        FromInt = "fromInt", "Decimal.fromInt(n: Int) -> Decimal";
+    }
+/// `Duration.millis(n)` (v0.86, ADR 0112).
+    DurationStatic {
+        Millis = "millis", "Duration.millis(n: Int) -> Duration";
+    }
+/// `Instant.fromEpochMillis(n)` / `Instant.fromIso(s)`.
+    InstantStatic {
+        FromEpochMillis = "fromEpochMillis", "Instant.fromEpochMillis(n: Int) -> Instant";
+        FromIso = "fromIso", "Instant.fromIso(s: String) -> Option[Instant]";
+    }
+/// The `Bytes` static constructors (v0.110, ADR 0142 D2).
+    BytesStatic {
+        FromUtf8 = "fromUtf8", "Bytes.fromUtf8(s: String) -> Bytes";
+        FromBase64 = "fromBase64", "Bytes.fromBase64(s: String) -> Option[Bytes]";
+        FromHex = "fromHex", "Bytes.fromHex(s: String) -> Option[Bytes]";
+        FromBase64Url = "fromBase64Url", "Bytes.fromBase64Url(s: String) -> Option[Bytes]";
+        Empty = "empty", "Bytes.empty() -> Bytes";
+    }
+/// `TokenClaims.of(lines)` (#2380, L5).
+    TokenClaimsStatic {
+        Of = "of", "TokenClaims.of(lines: List[String]) -> TokenClaims";
+    }
+/// `RequestHeaders.of(lines)` / `RequestHeaders.empty()` (#2341, L4).
+    RequestHeadersStatic {
+        Of = "of", "RequestHeaders.of(lines: List[String]) -> RequestHeaders";
+        Empty = "empty", "RequestHeaders.empty() -> RequestHeaders";
+    }
+/// `RequestQuery.of(pairs)` / `RequestQuery.empty()` (#2854).
+    RequestQueryStatic {
+        Of = "of", "RequestQuery.of(pairs: List[String]) -> RequestQuery";
+        Empty = "empty", "RequestQuery.empty() -> RequestQuery";
+    }
+/// `RequestCookies.of(pairs)` / `RequestCookies.empty()` (#3277).
+    RequestCookiesStatic {
+        Of = "of", "RequestCookies.of(pairs: List[String]) -> RequestCookies";
+        Empty = "empty", "RequestCookies.empty() -> RequestCookies";
+    }
+/// `Stream.of(xs)` (v0.100).
+    StreamStatic {
+        Of = "of", "Stream.of(items: List[T]) -> Stream[T]";
+    }
+/// The typed `Json` codec statics (v0.22b, ADR 0045).
+    JsonStatic {
+        Encode = "encode", "Json.encode(value: T) -> String";
+        EncodePlain = "encodePlain", "Json.encodePlain(value: T) -> String";
+        Decode = "decode", "Json.decode[T](s: String) -> Result[T, DecodeError]";
+        DecodeSql = "decodeSql", "Json.decodeSql[T](row: String) -> Result[T, DecodeError]";
+    }
+/// `Yaml.decode[T]` (#3214).
+    YamlStatic {
+        Decode = "decode", "Yaml.decode[T](s: String) -> Result[T, DecodeError]";
+    }
+/// `Form.decode[T]` / `Form.encode(v)` (#3276).
+    FormStatic {
+        Encode = "encode", "Form.encode(value: T) -> String";
+        Decode = "decode", "Form.decode[T](s: String) -> Result[T, DecodeError]";
+    }
+/// `TestConnection[F]()`, the test-side connection constructor.
+    TestConnectionStatic {
+        New = "new", "TestConnection[F]() -> TestConnection[F]";
+    }
+/// `run.id`, a test run's identity (#2138).
+    TestRunStatic {
+        Id = "id", "run.id -> String";
+    }
+}
+
+/// The namespace a [`crate::checker::Callee::Intrinsic`] belongs to: the built-in
+/// type (or, for `TestRun`, the test-body value) a static operation hangs off.
+/// Closed: every namespace the checker records is a variant, so a consumer
+/// matches exhaustively rather than comparing against a `builtin_names` constant.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum IntrinsicNs {
+    Json,
+    Yaml,
+    Form,
+    List,
+    Map,
+    Set,
+    Int,
+    Float,
+    Decimal,
+    Duration,
+    Instant,
+    Bytes,
+    TokenClaims,
+    RequestHeaders,
+    RequestQuery,
+    RequestCookies,
+    Stream,
+    /// An `HttpResult` variant reference or construction (`NotFound`, `HttpResult.Ok(x)`).
+    HttpResult,
+    /// A `QueueResult` variant (`Ack`, `Retry(reason)`).
+    QueueResult,
+    TestConnection,
+    /// `run.id` ([`crate::checker::RUN_ID_NS`]).
+    TestRun,
+}
+
+impl IntrinsicNs {
+    /// The namespace's source spelling (the `builtin_names` constant it replaces).
+    pub const fn name(self) -> &'static str {
+        use crate::builtin_names::types as t;
+        match self {
+            IntrinsicNs::Json => t::JSON,
+            IntrinsicNs::Yaml => t::YAML,
+            IntrinsicNs::Form => t::FORM,
+            IntrinsicNs::List => t::LIST,
+            IntrinsicNs::Map => t::MAP,
+            IntrinsicNs::Set => t::SET,
+            IntrinsicNs::Int => t::INT,
+            IntrinsicNs::Float => t::FLOAT,
+            IntrinsicNs::Decimal => t::DECIMAL,
+            IntrinsicNs::Duration => t::DURATION,
+            IntrinsicNs::Instant => t::INSTANT,
+            IntrinsicNs::Bytes => t::BYTES,
+            IntrinsicNs::TokenClaims => t::TOKEN_CLAIMS,
+            IntrinsicNs::RequestHeaders => t::REQUEST_HEADERS,
+            IntrinsicNs::RequestQuery => t::REQUEST_QUERY,
+            IntrinsicNs::RequestCookies => t::REQUEST_COOKIES,
+            IntrinsicNs::Stream => t::STREAM,
+            IntrinsicNs::HttpResult => t::HTTP_RESULT,
+            IntrinsicNs::QueueResult => t::QUEUE_RESULT,
+            IntrinsicNs::TestConnection => "TestConnection",
+            IntrinsicNs::TestRun => crate::checker::RUN_ID_NS,
+        }
+    }
+}
+
+/// A resolved static intrinsic: the operation a [`crate::checker::Callee::Intrinsic`]
+/// names, in the closed vocabulary of its namespace. Built by the checker once the
+/// call's method name is known to belong to the namespace, so an unknown method
+/// never gets a callee.
+///
+/// The two sum-variant namespaces (`HttpResult`, `QueueResult`) carry the variant
+/// table entry the parser already owns (`bynk_syntax::ast::HTTP_VARIANTS` /
+/// `QUEUE_VARIANTS`), which is a closed static table.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StaticOp {
+    List(ListStatic),
+    Map(MapStatic),
+    Set(SetStatic),
+    Int(IntStatic),
+    Float(FloatStatic),
+    Decimal(DecimalStatic),
+    Duration(DurationStatic),
+    Instant(InstantStatic),
+    Bytes(BytesStatic),
+    TokenClaims(TokenClaimsStatic),
+    RequestHeaders(RequestHeadersStatic),
+    RequestQuery(RequestQueryStatic),
+    RequestCookies(RequestCookiesStatic),
+    Stream(StreamStatic),
+    Json(JsonStatic),
+    Yaml(YamlStatic),
+    Form(FormStatic),
+    HttpResult(bynk_syntax::ast::HttpVariant),
+    QueueResult(bynk_syntax::ast::QueueVariant),
+    TestConnection(TestConnectionStatic),
+    TestRun(TestRunStatic),
+}
+
+impl StaticOp {
+    /// The namespace this operation belongs to.
+    pub const fn ns(self) -> IntrinsicNs {
+        match self {
+            StaticOp::List(_) => IntrinsicNs::List,
+            StaticOp::Map(_) => IntrinsicNs::Map,
+            StaticOp::Set(_) => IntrinsicNs::Set,
+            StaticOp::Int(_) => IntrinsicNs::Int,
+            StaticOp::Float(_) => IntrinsicNs::Float,
+            StaticOp::Decimal(_) => IntrinsicNs::Decimal,
+            StaticOp::Duration(_) => IntrinsicNs::Duration,
+            StaticOp::Instant(_) => IntrinsicNs::Instant,
+            StaticOp::Bytes(_) => IntrinsicNs::Bytes,
+            StaticOp::TokenClaims(_) => IntrinsicNs::TokenClaims,
+            StaticOp::RequestHeaders(_) => IntrinsicNs::RequestHeaders,
+            StaticOp::RequestQuery(_) => IntrinsicNs::RequestQuery,
+            StaticOp::RequestCookies(_) => IntrinsicNs::RequestCookies,
+            StaticOp::Stream(_) => IntrinsicNs::Stream,
+            StaticOp::Json(_) => IntrinsicNs::Json,
+            StaticOp::Yaml(_) => IntrinsicNs::Yaml,
+            StaticOp::Form(_) => IntrinsicNs::Form,
+            StaticOp::HttpResult(_) => IntrinsicNs::HttpResult,
+            StaticOp::QueueResult(_) => IntrinsicNs::QueueResult,
+            StaticOp::TestConnection(_) => IntrinsicNs::TestConnection,
+            StaticOp::TestRun(_) => IntrinsicNs::TestRun,
+        }
+    }
+
+    /// The operation's source spelling (a variant's name for the sum namespaces).
+    pub const fn name(self) -> &'static str {
+        match self {
+            StaticOp::List(o) => o.name(),
+            StaticOp::Map(o) => o.name(),
+            StaticOp::Set(o) => o.name(),
+            StaticOp::Int(o) => o.name(),
+            StaticOp::Float(o) => o.name(),
+            StaticOp::Decimal(o) => o.name(),
+            StaticOp::Duration(o) => o.name(),
+            StaticOp::Instant(o) => o.name(),
+            StaticOp::Bytes(o) => o.name(),
+            StaticOp::TokenClaims(o) => o.name(),
+            StaticOp::RequestHeaders(o) => o.name(),
+            StaticOp::RequestQuery(o) => o.name(),
+            StaticOp::RequestCookies(o) => o.name(),
+            StaticOp::Stream(o) => o.name(),
+            StaticOp::Json(o) => o.name(),
+            StaticOp::Yaml(o) => o.name(),
+            StaticOp::Form(o) => o.name(),
+            StaticOp::HttpResult(v) => v.name,
+            StaticOp::QueueResult(v) => v.name,
+            StaticOp::TestConnection(o) => o.name(),
+            StaticOp::TestRun(o) => o.name(),
+        }
+    }
+
+    /// The operation spelt `name` in namespace `ns`, if the namespace has one.
+    pub fn resolve(ns: IntrinsicNs, name: &str) -> Option<StaticOp> {
+        Some(match ns {
+            IntrinsicNs::List => StaticOp::List(ListStatic::from_name(name)?),
+            IntrinsicNs::Map => StaticOp::Map(MapStatic::from_name(name)?),
+            IntrinsicNs::Set => StaticOp::Set(SetStatic::from_name(name)?),
+            IntrinsicNs::Int => StaticOp::Int(IntStatic::from_name(name)?),
+            IntrinsicNs::Float => StaticOp::Float(FloatStatic::from_name(name)?),
+            IntrinsicNs::Decimal => StaticOp::Decimal(DecimalStatic::from_name(name)?),
+            IntrinsicNs::Duration => StaticOp::Duration(DurationStatic::from_name(name)?),
+            IntrinsicNs::Instant => StaticOp::Instant(InstantStatic::from_name(name)?),
+            IntrinsicNs::Bytes => StaticOp::Bytes(BytesStatic::from_name(name)?),
+            IntrinsicNs::TokenClaims => StaticOp::TokenClaims(TokenClaimsStatic::from_name(name)?),
+            IntrinsicNs::RequestHeaders => {
+                StaticOp::RequestHeaders(RequestHeadersStatic::from_name(name)?)
+            }
+            IntrinsicNs::RequestQuery => {
+                StaticOp::RequestQuery(RequestQueryStatic::from_name(name)?)
+            }
+            IntrinsicNs::RequestCookies => {
+                StaticOp::RequestCookies(RequestCookiesStatic::from_name(name)?)
+            }
+            IntrinsicNs::Stream => StaticOp::Stream(StreamStatic::from_name(name)?),
+            IntrinsicNs::Json => StaticOp::Json(JsonStatic::from_name(name)?),
+            IntrinsicNs::Yaml => StaticOp::Yaml(YamlStatic::from_name(name)?),
+            IntrinsicNs::Form => StaticOp::Form(FormStatic::from_name(name)?),
+            IntrinsicNs::HttpResult => StaticOp::HttpResult(bynk_syntax::ast::http_variant(name)?),
+            IntrinsicNs::QueueResult => {
+                StaticOp::QueueResult(bynk_syntax::ast::queue_variant(name)?)
+            }
+            IntrinsicNs::TestConnection => {
+                StaticOp::TestConnection(TestConnectionStatic::from_name(name)?)
+            }
+            IntrinsicNs::TestRun => StaticOp::TestRun(TestRunStatic::from_name(name)?),
+        })
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Store entry operations (1A.33, Decision C)
+// ---------------------------------------------------------------------------
+//
+// `MapOp`/`SetOp` above are the *value* kernels' vocabularies (`length`, `keys`,
+// `insert`); a `store` field's entry operations are a different vocabulary
+// (`put`, `remove`, `upsert`), enumerated for hover in [`crate::store_ops`]. They get
+// their own enums here, declared once with the same macro.
+
+kernel_ops! {
+/// The entry operations of a `store Map[K, V]` and a `store Cache[K, V]` (the
+/// same names; a cache's apply expiry). ADR 0110, ADR 0113.
+    MapStoreOp {
+        Put = "put", "put(key: K, value: V) -> Effect[()]";
+        Get = "get", "get(key: K) -> Effect[Option[V]]";
+        Remove = "remove", "remove(key: K) -> Effect[()]";
+        Contains = "contains", "contains(key: K) -> Effect[Bool]";
+        Size = "size", "size() -> Effect[Int]";
+        Update = "update", "update(key: K, f: (V) -> V) -> Effect[()]";
+        Upsert = "upsert", "upsert(key: K, initial: V, f: (V) -> V) -> Effect[()]";
+    }
+/// The entry operations of a `store Set[T]` (v0.83).
+    SetStoreOp {
+        Add = "add", "add(item: T) -> Effect[()]";
+        Remove = "remove", "remove(item: T) -> Effect[()]";
+        Contains = "contains", "contains(item: T) -> Effect[Bool]";
+        Size = "size", "size() -> Effect[Int]";
+    }
+/// The one method-shaped operation of a `store Cell[T]` (v0.98, ADR 0125).
+    CellStoreOp {
+        Update = "update", "update(f: (T) -> T) -> Effect[()]";
+    }
+/// The one effectful write of a `store Log[T]` (v0.95, ADR 0121).
+    LogStoreOp {
+        Append = "append", "append(entry: T) -> Effect[()]";
+    }
+/// The time-window roots of a `store Log[T]`: they lift the log into a lazy `Query[T]`.
+    LogWindowOp {
+        Since = "since", "since(start: Instant) -> Query[T]";
+        Before = "before", "before(end: Instant) -> Query[T]";
+        Between = "between", "between(start: Instant, end: Instant) -> Query[T]";
+        Recent = "recent", "recent(count: Int) -> Query[T]";
+        Reversed = "reversed", "reversed() -> Query[T]";
+    }
+}
+
+/// A resolved effectful entry operation on a `store` field, carried in
+/// [`crate::checker::Callee::Store`]: the field's kind and the operation on it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum StoreEntryOp {
+    Map(MapStoreOp),
+    Cache(MapStoreOp),
+    Set(SetStoreOp),
+    Cell(CellStoreOp),
+    Log(LogStoreOp),
+}
+
+impl StoreEntryOp {
+    /// The operation's source spelling.
+    pub const fn name(self) -> &'static str {
+        match self {
+            StoreEntryOp::Map(o) | StoreEntryOp::Cache(o) => o.name(),
+            StoreEntryOp::Set(o) => o.name(),
+            StoreEntryOp::Cell(o) => o.name(),
+            StoreEntryOp::Log(o) => o.name(),
+        }
+    }
+
+    /// Whether the operation writes the field (a write the handler's implicit
+    /// commit persists). The same flags [`crate::store_ops`] carries for hover.
+    pub fn mutates(self) -> bool {
+        crate::store_ops::is_mutating(self.kind_head(), self.name())
+    }
+
+    /// The storage kind's head identifier (`"Map"`, `"Cache"`, …).
+    const fn kind_head(self) -> &'static str {
+        match self {
+            StoreEntryOp::Map(_) => "Map",
+            StoreEntryOp::Cache(_) => "Cache",
+            StoreEntryOp::Set(_) => "Set",
+            StoreEntryOp::Cell(_) => "Cell",
+            StoreEntryOp::Log(_) => "Log",
+        }
+    }
+}
+
+/// A resolved lifting operation on a `store` field, carried in
+/// [`crate::checker::Callee::Query`]: a query builder or terminal ([`QueryOp`]), or
+/// a `Log`'s time-window root ([`LogWindowOp`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum StoreQueryOp {
+    Query(QueryOp),
+    LogWindow(LogWindowOp),
+}
+
+impl StoreQueryOp {
+    /// The operation's source spelling.
+    pub const fn name(self) -> &'static str {
+        match self {
+            StoreQueryOp::Query(o) => o.name(),
+            StoreQueryOp::LogWindow(o) => o.name(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -513,6 +905,30 @@ mod tests {
             ResultOp,
             EffectOp,
             EffectResultOp,
+            ListStatic,
+            MapStatic,
+            SetStatic,
+            IntStatic,
+            FloatStatic,
+            DecimalStatic,
+            DurationStatic,
+            InstantStatic,
+            BytesStatic,
+            TokenClaimsStatic,
+            RequestHeadersStatic,
+            RequestQueryStatic,
+            RequestCookiesStatic,
+            StreamStatic,
+            JsonStatic,
+            YamlStatic,
+            FormStatic,
+            TestConnectionStatic,
+            TestRunStatic,
+            MapStoreOp,
+            SetStoreOp,
+            CellStoreOp,
+            LogStoreOp,
+            LogWindowOp,
         );
     }
 

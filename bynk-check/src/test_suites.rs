@@ -3926,6 +3926,8 @@ fn typecheck_case_body_recording(
             callees: &mut callees,
         },
     );
+    #[cfg(test)]
+    crate::testkit::note_callees(target_name, callees.iter());
     (expr_types, callees)
 }
 

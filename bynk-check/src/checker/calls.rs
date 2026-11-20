@@ -1109,10 +1109,7 @@ fn check_test_connection_new(
     let frame = resolve_type_ref(&type_args[0], &ctx.input.types, tys)?;
     ctx.callees.insert(
         expr_id,
-        Callee::Intrinsic {
-            ns: "TestConnection",
-            op: "new".to_string(),
-        },
+        Callee::intrinsic(StaticOp::TestConnection(TestConnectionStatic::New)),
     );
     Some(tys.intern(Ty::TestConnection(frame)))
 }
@@ -1701,6 +1698,22 @@ pub(crate) fn check_arg(arg: &Expr, expected: TyId, what: &str, ctx: &mut Ctx) {
     }
 }
 
+/// 1A.33 (Decision A): which first-party capability the local name `cap` is, seen from
+/// the unit being checked: declared here (this unit is `bynk`) or flattened in from it.
+fn local_first_party(cap: &str, ctx: &Ctx) -> Option<crate::firstparty::FirstPartyCap> {
+    crate::firstparty::resolve(
+        cap,
+        &ctx.input.commons.name.joined(),
+        &ctx.input.cross_context.flattened_caps,
+    )
+}
+
+/// 1A.33 (Decision A): which first-party capability `consumed.cap` is: the capability is
+/// declared in `consumed`, so it is bynk's own exactly when `consumed` is the `bynk` unit.
+fn cross_first_party(consumed: &str, cap: &str) -> Option<crate::firstparty::FirstPartyCap> {
+    crate::firstparty::resolve(cap, consumed, &HashMap::new())
+}
+
 /// Record a capability reference's binding edge, qualifying flattened bare
 /// names (`consumes U { Cap }`) to their providing unit (v0.25). A bare
 /// non-flattened name is the consuming unit's own declaration — qualified
@@ -1748,6 +1761,7 @@ pub(crate) fn check_static_call(
                 cap: type_name.name.clone(),
                 op: method.name.clone(),
                 wire: None,
+                first_party: local_first_party(&type_name.name, ctx),
             },
         );
         let mut err = CompileError::new(
@@ -1815,6 +1829,7 @@ pub(crate) fn check_static_call(
                 cap: type_name.name.clone(),
                 op: method.name.clone(),
                 wire: None,
+                first_party: local_first_party(&type_name.name, ctx),
             },
         );
         if !ctx.effectful {
@@ -2012,16 +2027,9 @@ pub(crate) fn check_static_call(
                 // own `Events` with an `emit` method — only bynk's own
                 // capability (declared here, in `bynk` itself, or flattened
                 // in via `consumes bynk { Events }`) gets this check.
-                let is_first_party_events = type_name.name == "Events"
-                    && method.name == "emit"
-                    && (ctx.input.commons.name.joined() == crate::firstparty::BYNK_UNIT
-                        || ctx
-                            .input
-                            .cross_context
-                            .flattened_caps
-                            .get("Events")
-                            .map(String::as_str)
-                            == Some(crate::firstparty::BYNK_UNIT));
+                let is_first_party_events = method.name == "emit"
+                    && local_first_party(&type_name.name, ctx)
+                        == Some(crate::firstparty::FirstPartyCap::Events);
                 if is_first_party_events && let Ty::Named { name: ename, .. } = &*tys.get(ty) {
                     if ctx.input.is_local_event(ename) {
                         // Locally-declared event — the owner. Fine.
@@ -2999,13 +3007,9 @@ fn check_request_cookies_static_call(
     expr_id: ExprId,
     ctx: &mut Ctx,
 ) -> Option<TyId> {
-    ctx.callees.insert(
-        expr_id,
-        Callee::Intrinsic {
-            ns: REQUEST_COOKIES,
-            op: method.name.clone(),
-        },
-    );
+    if let Some(op) = StaticOp::resolve(IntrinsicNs::RequestCookies, &method.name) {
+        ctx.callees.insert(expr_id, Callee::intrinsic(op));
+    }
     check_request_cookies_static(method, args, span, ctx)
 }
 
@@ -3190,19 +3194,15 @@ pub(crate) fn check_method_call(
         && (id.name == LIST || id.name == MAP || id.name == SET)
     {
         let ns = if id.name == LIST {
-            LIST
+            IntrinsicNs::List
         } else if id.name == MAP {
-            MAP
+            IntrinsicNs::Map
         } else {
-            SET
+            IntrinsicNs::Set
         };
-        ctx.callees.insert(
-            expr_id,
-            Callee::Intrinsic {
-                ns,
-                op: method.name.clone(),
-            },
-        );
+        if let Some(op) = StaticOp::resolve(ns, &method.name) {
+            ctx.callees.insert(expr_id, Callee::intrinsic(op));
+        }
         return check_collection_static(id, method, args, span, expected, ctx);
     }
     // v0.22a: the numeric parse statics — `Int.parse(s)` / `Float.parse(s)`.
@@ -3211,14 +3211,14 @@ pub(crate) fn check_method_call(
     if let ExprKind::Ident(id) = &receiver.kind
         && (id.name == INT || id.name == FLOAT)
     {
-        let ns = if id.name == INT { INT } else { FLOAT };
-        ctx.callees.insert(
-            expr_id,
-            Callee::Intrinsic {
-                ns,
-                op: method.name.clone(),
-            },
-        );
+        let ns = if id.name == INT {
+            IntrinsicNs::Int
+        } else {
+            IntrinsicNs::Float
+        };
+        if let Some(op) = StaticOp::resolve(ns, &method.name) {
+            ctx.callees.insert(expr_id, Callee::intrinsic(op));
+        }
         return check_numeric_parse_static(id, method, args, span, ctx);
     }
     // #2622: the `Decimal` statics — `Decimal.parse(s)` / `Decimal.fromInt(n)`.
@@ -3227,13 +3227,9 @@ pub(crate) fn check_method_call(
         && ctx.lookup(DECIMAL).is_none()
         && !ctx.input.types.contains_key(DECIMAL)
     {
-        ctx.callees.insert(
-            expr_id,
-            Callee::Intrinsic {
-                ns: DECIMAL,
-                op: method.name.clone(),
-            },
-        );
+        if let Some(op) = StaticOp::resolve(IntrinsicNs::Decimal, &method.name) {
+            ctx.callees.insert(expr_id, Callee::intrinsic(op));
+        }
         return check_decimal_static(method, args, span, ctx);
     }
     // v0.86 (ADR 0112): the `Duration.millis(n)` static constructor — the way to
@@ -3243,13 +3239,9 @@ pub(crate) fn check_method_call(
         && ctx.lookup(DURATION).is_none()
         && !ctx.input.types.contains_key(DURATION)
     {
-        ctx.callees.insert(
-            expr_id,
-            Callee::Intrinsic {
-                ns: DURATION,
-                op: method.name.clone(),
-            },
-        );
+        if let Some(op) = StaticOp::resolve(IntrinsicNs::Duration, &method.name) {
+            ctx.callees.insert(expr_id, Callee::intrinsic(op));
+        }
         return check_duration_static(method, args, span, ctx);
     }
     // v0.90 (ADR 0114 D6): the `Instant.fromEpochMillis(n)` static constructor.
@@ -3258,13 +3250,9 @@ pub(crate) fn check_method_call(
         && ctx.lookup(INSTANT).is_none()
         && !ctx.input.types.contains_key(INSTANT)
     {
-        ctx.callees.insert(
-            expr_id,
-            Callee::Intrinsic {
-                ns: INSTANT,
-                op: method.name.clone(),
-            },
-        );
+        if let Some(op) = StaticOp::resolve(IntrinsicNs::Instant, &method.name) {
+            ctx.callees.insert(expr_id, Callee::intrinsic(op));
+        }
         return check_instant_static(method, args, span, ctx);
     }
     // v0.110 (ADR 0142 D2): the `Bytes` static constructors —
@@ -3274,13 +3262,9 @@ pub(crate) fn check_method_call(
         && ctx.lookup(BYTES).is_none()
         && !ctx.input.types.contains_key(BYTES)
     {
-        ctx.callees.insert(
-            expr_id,
-            Callee::Intrinsic {
-                ns: BYTES,
-                op: method.name.clone(),
-            },
-        );
+        if let Some(op) = StaticOp::resolve(IntrinsicNs::Bytes, &method.name) {
+            ctx.callees.insert(expr_id, Callee::intrinsic(op));
+        }
         return check_bytes_static(method, args, span, ctx);
     }
     // #2380 (L5): `TokenClaims.of(lines)` — how a test builds the claims an
@@ -3290,13 +3274,9 @@ pub(crate) fn check_method_call(
         && ctx.lookup(TOKEN_CLAIMS).is_none()
         && !ctx.input.types.contains_key(TOKEN_CLAIMS)
     {
-        ctx.callees.insert(
-            expr_id,
-            Callee::Intrinsic {
-                ns: TOKEN_CLAIMS,
-                op: method.name.clone(),
-            },
-        );
+        if let Some(op) = StaticOp::resolve(IntrinsicNs::TokenClaims, &method.name) {
+            ctx.callees.insert(expr_id, Callee::intrinsic(op));
+        }
         return check_token_claims_static(method, args, span, ctx);
     }
     // #2341 (L4): `RequestHeaders.of(lines)` / `RequestHeaders.empty()` — how
@@ -3306,13 +3286,9 @@ pub(crate) fn check_method_call(
         && ctx.lookup(REQUEST_HEADERS).is_none()
         && !ctx.input.types.contains_key(REQUEST_HEADERS)
     {
-        ctx.callees.insert(
-            expr_id,
-            Callee::Intrinsic {
-                ns: REQUEST_HEADERS,
-                op: method.name.clone(),
-            },
-        );
+        if let Some(op) = StaticOp::resolve(IntrinsicNs::RequestHeaders, &method.name) {
+            ctx.callees.insert(expr_id, Callee::intrinsic(op));
+        }
         return check_request_headers_static(method, args, span, ctx);
     }
     // #2854: `RequestQuery.of(pairs)` / `RequestQuery.empty()` — how a test
@@ -3322,13 +3298,9 @@ pub(crate) fn check_method_call(
         && ctx.lookup(REQUEST_QUERY).is_none()
         && !ctx.input.types.contains_key(REQUEST_QUERY)
     {
-        ctx.callees.insert(
-            expr_id,
-            Callee::Intrinsic {
-                ns: REQUEST_QUERY,
-                op: method.name.clone(),
-            },
-        );
+        if let Some(op) = StaticOp::resolve(IntrinsicNs::RequestQuery, &method.name) {
+            ctx.callees.insert(expr_id, Callee::intrinsic(op));
+        }
         return check_request_query_static(method, args, span, ctx);
     }
     // #3277: `RequestCookies.of(pairs)` / `RequestCookies.empty()`, the test-side
@@ -3346,13 +3318,9 @@ pub(crate) fn check_method_call(
         && ctx.lookup(JSON).is_none()
         && !ctx.input.types.contains_key(JSON)
     {
-        ctx.callees.insert(
-            expr_id,
-            Callee::Intrinsic {
-                ns: JSON,
-                op: method.name.clone(),
-            },
-        );
+        if let Some(op) = StaticOp::resolve(IntrinsicNs::Json, &method.name) {
+            ctx.callees.insert(expr_id, Callee::intrinsic(op));
+        }
         return check_json_static(JSON, method, type_args, args, span, expected, ctx);
     }
     // #3214: `Yaml.decode[T]`, the YAML front end of the same typed decode.
@@ -3361,13 +3329,9 @@ pub(crate) fn check_method_call(
         && ctx.lookup(YAML).is_none()
         && !ctx.input.types.contains_key(YAML)
     {
-        ctx.callees.insert(
-            expr_id,
-            Callee::Intrinsic {
-                ns: YAML,
-                op: method.name.clone(),
-            },
-        );
+        if let Some(op) = StaticOp::resolve(IntrinsicNs::Yaml, &method.name) {
+            ctx.callees.insert(expr_id, Callee::intrinsic(op));
+        }
         return check_json_static(YAML, method, type_args, args, span, expected, ctx);
     }
     // #3276: `Form.decode[T]` / `Form.encode(v)`, the form-body mapping as a codec.
@@ -3376,13 +3340,9 @@ pub(crate) fn check_method_call(
         && ctx.lookup(FORM).is_none()
         && !ctx.input.types.contains_key(FORM)
     {
-        ctx.callees.insert(
-            expr_id,
-            Callee::Intrinsic {
-                ns: FORM,
-                op: method.name.clone(),
-            },
-        );
+        if let Some(op) = StaticOp::resolve(IntrinsicNs::Form, &method.name) {
+            ctx.callees.insert(expr_id, Callee::intrinsic(op));
+        }
         return check_json_static(FORM, method, type_args, args, span, expected, ctx);
     }
     // v0.100: the `Stream.of(xs)` static constructor (real-time track slice 0).
@@ -3391,13 +3351,9 @@ pub(crate) fn check_method_call(
         && ctx.lookup(STREAM).is_none()
         && !ctx.input.types.contains_key(STREAM)
     {
-        ctx.callees.insert(
-            expr_id,
-            Callee::Intrinsic {
-                ns: STREAM,
-                op: method.name.clone(),
-            },
-        );
+        if let Some(op) = StaticOp::resolve(IntrinsicNs::Stream, &method.name) {
+            ctx.callees.insert(expr_id, Callee::intrinsic(op));
+        }
         return check_stream_static(method, args, span, ctx);
     }
     // v0.20b: `insert`/`prepend` return their receiver's collection type —
@@ -4273,6 +4229,7 @@ fn check_test_service_address(
             Callee::TestService {
                 service: id.name.clone(),
                 address: "call".to_string(),
+                address_t: HandlerAddress::Call,
                 extra_headers: false,
             },
         );
@@ -4316,6 +4273,11 @@ fn check_test_service_address(
             Callee::TestService {
                 service: id.name.clone(),
                 address: method.name.clone(),
+                address_t: HandlerAddress::Http {
+                    verb: bynk_syntax::ast::HttpMethod::from_ident(&method.name)
+                        .expect("the branch's guard"),
+                    path: None,
+                },
                 extra_headers: false,
             },
         );
@@ -4412,6 +4374,11 @@ fn check_test_service_address(
             Callee::TestService {
                 service: id.name.clone(),
                 address: format!("{} {path}", method.name),
+                address_t: HandlerAddress::Http {
+                    verb: bynk_syntax::ast::HttpMethod::from_ident(&method.name)
+                        .expect("the branch's guard"),
+                    path: Some(path.to_string()),
+                },
                 extra_headers: false,
             },
         );
@@ -4505,6 +4472,11 @@ fn check_test_service_address(
                     Callee::TestService {
                         service: id.name.clone(),
                         address: format!("{} {path}", method.name),
+                        address_t: HandlerAddress::Http {
+                            verb: bynk_syntax::ast::HttpMethod::from_ident(&method.name)
+                                .expect("the branch's guard"),
+                            path: Some(path.to_string()),
+                        },
                         extra_headers: true,
                     },
                 );
@@ -4567,6 +4539,7 @@ fn check_test_service_address(
             Callee::TestService {
                 service: id.name.clone(),
                 address: "schedule".to_string(),
+                address_t: HandlerAddress::Schedule { expr: None },
                 extra_headers: false,
             },
         );
@@ -4591,6 +4564,9 @@ fn check_test_service_address(
             Callee::TestService {
                 service: id.name.clone(),
                 address: format!("schedule {expr}"),
+                address_t: HandlerAddress::Schedule {
+                    expr: Some(expr.to_string()),
+                },
                 extra_headers: false,
             },
         );
@@ -4625,6 +4601,7 @@ fn check_test_service_address(
             Callee::TestService {
                 service: id.name.clone(),
                 address: "message".to_string(),
+                address_t: HandlerAddress::Message,
                 extra_headers: false,
             },
         );
@@ -4661,6 +4638,7 @@ fn check_test_service_address(
             Callee::TestService {
                 service: id.name.clone(),
                 address: "event".to_string(),
+                address_t: HandlerAddress::Event,
                 extra_headers: false,
             },
         );
@@ -4728,6 +4706,11 @@ fn check_ws_address(
         Callee::TestService {
             service: service.clone(),
             address: format!("ws {which}"),
+            address_t: HandlerAddress::Ws(match which {
+                "open" => WsAddress::Open,
+                "message" => WsAddress::Message { frame: None },
+                _ => WsAddress::Close { params: None },
+            }),
             extra_headers: false,
         },
     );
@@ -4784,6 +4767,12 @@ fn check_ws_address(
                 Callee::TestService {
                     service: service.clone(),
                     address: format!("ws message {frame_idx} {}", handler.params.len()),
+                    address_t: HandlerAddress::Ws(WsAddress::Message {
+                        frame: Some(WsMessageShape {
+                            frame_index: frame_idx,
+                            params: handler.params.len(),
+                        }),
+                    }),
                     extra_headers: false,
                 },
             );
@@ -4817,6 +4806,9 @@ fn check_ws_address(
                 Callee::TestService {
                     service: service.clone(),
                     address: format!("ws close {}", handler.params.len()),
+                    address_t: HandlerAddress::Ws(WsAddress::Close {
+                        params: Some(handler.params.len()),
+                    }),
                     extra_headers: false,
                 },
             );
@@ -6049,6 +6041,7 @@ fn check_cross_context_capability_call(
             cap: cap.to_string(),
             op: method.name.clone(),
             wire: None,
+            first_party: cross_first_party(consumed, cap),
         },
     );
     // Capability calls require an effectful body (same rule as local ones).
@@ -6248,6 +6241,7 @@ fn check_cross_context_capability_call(
                     cap: cap.to_string(),
                     op: method.name.clone(),
                     wire: Some(wire),
+                    first_party: cross_first_party(consumed, cap),
                 },
             );
         }
@@ -6919,6 +6913,7 @@ fn record_capability_wire(
             cap: cap.to_string(),
             op: name.to_string(),
             wire: Some(wire),
+            first_party: local_first_party(cap, ctx),
         },
     );
     true

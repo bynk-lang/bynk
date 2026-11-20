@@ -28,6 +28,10 @@ use crate::kernel_op::{
     RequestHeadersOp, RequestQueryOp, ResultOp, SetOp, StreamOp, StringOp, TestConnectionOp,
     TokenClaimsOp,
 };
+use crate::kernel_op::{
+    CellStoreOp, IntrinsicNs, LogStoreOp, LogWindowOp, MapStoreOp, SetStoreOp, StaticOp,
+    StoreEntryOp, StoreQueryOp, TestConnectionStatic, TestRunStatic,
+};
 use crate::locals::LocalsSink;
 use crate::requirements::{
     Materialize, Requirement, RequirementSink, RequirementSource, StoreKind,
@@ -644,7 +648,16 @@ pub enum Callee {
     /// `Map.empty`, `Int.parse`/`Float.parse`, `Duration.millis`,
     /// `Instant.fromEpochMillis`, `Bytes.fromUtf8`/`fromBase64`/`empty`,
     /// `Json.decode`/`encode`, `Stream.of`.
-    Intrinsic { ns: &'static str, op: String },
+    ///
+    /// `ns_t`/`op_t` (1A.33, Decision B) are the closed typed form of `ns`/`op`:
+    /// built only for a method the namespace has, so an unknown method gets no
+    /// callee. Build one with [`Callee::intrinsic`].
+    Intrinsic {
+        ns: &'static str,
+        op: String,
+        ns_t: crate::kernel_op::IntrinsicNs,
+        op_t: crate::kernel_op::StaticOp,
+    },
     /// #2620: `unreachable(msg)` / `todo(msg)` — the ambient built-ins that
     /// fault when evaluated. `kind` is the runtime fault kind (`Unreachable` /
     /// `Todo`); the call's type is [`Ty::Never`].
@@ -655,6 +668,10 @@ pub enum Callee {
         cap: String,
         op: String,
         wire: Option<Arc<codable::CapEncoding>>,
+        /// 1A.33 (Decision A): which first-party capability this is, when it is
+        /// bynk's own ([`crate::firstparty::resolve`]); `None` for any other
+        /// capability, including a same-named one from another unit (#934).
+        first_party: Option<crate::firstparty::FirstPartyCap>,
     },
     /// #2865: `Cap.select[T](tail, params)` / `Cap.firstAs[T](tail, params)` on
     /// a derived `D1` instance. Not a declared operation: the compiler writes
@@ -696,6 +713,9 @@ pub enum Callee {
         cap: String,
         op: String,
         wire: Option<Arc<codable::CapEncoding>>,
+        /// 1A.33 (Decision A): which first-party capability `unit.cap` is, when it is
+        /// bynk's own.
+        first_party: Option<crate::firstparty::FirstPartyCap>,
     },
     /// A cross-context service call (`B.service(...)` / `Alias.service(...)`).
     Cross { unit: String, service: String },
@@ -714,9 +734,12 @@ pub enum Callee {
     /// consumer (e.g. go-to-definition on the address), not typing.
     /// `extra_headers` (#2910): a trailing `RequestHeaders` argument sent to a
     /// route that declares no `headers:` parameter — a `system`-tier-only form.
+    ///
+    /// `address_t` (1A.33, Decision D) is the typed form of `address`.
     TestService {
         service: String,
         address: String,
+        address_t: HandlerAddress,
         extra_headers: bool,
     },
     /// #1883, slice 3: `svc.GET(asset)` in a test body — an asset fetch,
@@ -735,7 +758,14 @@ pub enum Callee {
     /// store-field ladder lives directly in `checker.rs`'s own `type_of`,
     /// never reaching any of them — extending P6.0's own recording surface
     /// past the boundary its "Done when" deliberately drew.
-    Store { field: String, op: String },
+    ///
+    /// `op_t` (1A.33, Decision C) is the typed form of `op`, built only for an
+    /// operation the field's kind has.
+    Store {
+        field: String,
+        op: String,
+        op_t: crate::kernel_op::StoreEntryOp,
+    },
     /// A query builder/terminal call that *lifts* a bare `store` `Map`/`Log`
     /// field into a lazy `Query[V]` (`is_query_op`'s own gate,
     /// `checker.rs`'s `type_of`) — R6.12's own named target (P6.2, #1143).
@@ -752,9 +782,12 @@ pub enum Callee {
     /// `Callee::Kernel` already (P6.0); `Query` here exists only because the
     /// lift call's own outer expression never passes through any of
     /// `calls.rs`'s six functions to get one.
+    ///
+    /// `op_t` (1A.33, Decision C) is the typed form of `op`.
     Query {
         field: String,
         op: String,
+        op_t: crate::kernel_op::StoreQueryOp,
         role: QueryRole,
     },
     /// #2617: a bare name that resolves to a `const` (one of this unit's, a
@@ -770,6 +803,63 @@ pub enum Callee {
     /// otherwise replace (one id, one entry), so the constant's SQL is still
     /// prepared.
     Const(String, Option<Box<d1::D1SqlSite>>),
+}
+
+impl Callee {
+    /// A static-intrinsic callee for the resolved operation `op`: the typed form
+    /// and its source spellings, which always agree.
+    pub fn intrinsic(op: crate::kernel_op::StaticOp) -> Callee {
+        Callee::Intrinsic {
+            ns: op.ns().name(),
+            op: op.name().to_string(),
+            ns_t: op.ns(),
+            op_t: op,
+        }
+    }
+}
+
+/// Where a test-body service address (`svc.call(…)`, `svc.GET("/p")`,
+/// `svc.schedule("*/5 * * * *")`, `ws.open(…)`) is aimed: the typed form of
+/// [`Callee::TestService`]'s `address` string (1A.33, Decision D).
+///
+/// The checker first records the kind of address as soon as the method is known
+/// (a verb with no path yet, a schedule with no expression yet) and then enriches
+/// it once the route or expression is read, so those fields are optional.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum HandlerAddress {
+    /// `svc.call(…)`: the `on call` handler.
+    Call,
+    /// `svc.<VERB>(path, …)`: an `on http` handler, matched by its route once `path` is known.
+    Http {
+        verb: bynk_syntax::ast::HttpMethod,
+        path: Option<String>,
+    },
+    /// `svc.schedule(expr, …)`: a cron handler, matched by its schedule once `expr` is known.
+    Schedule { expr: Option<String> },
+    /// `svc.message(msg)`: the queue `on message` handler.
+    Message,
+    /// `svc.event(payload, …)`: the `on event` handler.
+    Event,
+    /// A WebSocket lifecycle address on a `TestConnection`.
+    Ws(WsAddress),
+}
+
+/// The WebSocket lifecycle step of a [`HandlerAddress::Ws`]. `Message` and `Close`
+/// carry what the emitter needs once the handler is matched: the index of the
+/// inbound-frame parameter and the parameter count, and the count for `close`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum WsAddress {
+    Open,
+    Message { frame: Option<WsMessageShape> },
+    Close { params: Option<usize> },
+}
+
+/// The shape of a `ws message` handler: which parameter takes the inbound frame
+/// and how many parameters it has.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct WsMessageShape {
+    pub frame_index: usize,
+    pub params: usize,
 }
 
 /// Whether a [`Callee::Query`] call returns another `Query[T]` (chainable)
@@ -5026,13 +5116,8 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
                     // variant reference, the shape P6.1's Decision C had
                     // excluded from bare-global resolution until a sink like
                     // this existed for it.
-                    ctx.callees.insert(
-                        expr.id,
-                        Callee::Intrinsic {
-                            ns: HTTP_RESULT,
-                            op: v.name.to_string(),
-                        },
-                    );
+                    ctx.callees
+                        .insert(expr.id, Callee::intrinsic(StaticOp::HttpResult(v)));
                     check_http_variant(id.span, v, &[], expected, ctx)
                 } else {
                     check_ident_at(expr.id, id, expected, ctx)
@@ -5043,13 +5128,8 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
                     || peel_to_queue_result(ctx.return_ty, tys))
             {
                 // v0.44: a bare QueueResult variant (`Ack`) in a queue handler.
-                ctx.callees.insert(
-                    expr.id,
-                    Callee::Intrinsic {
-                        ns: QUEUE_RESULT,
-                        op: qv.name.to_string(),
-                    },
-                );
+                ctx.callees
+                    .insert(expr.id, Callee::intrinsic(StaticOp::QueueResult(qv)));
                 check_queue_variant(id.span, qv, &[], ctx)
             } else {
                 check_ident_at(expr.id, id, expected, ctx)
@@ -5078,13 +5158,8 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
                 let owned_elsewhere = ctx.input.fns.contains_key(&name.name)
                     || user_sum_owns_variant(ctx, &name.name);
                 if http_variant_applies(owned_elsewhere, expected, ctx) {
-                    ctx.callees.insert(
-                        expr.id,
-                        Callee::Intrinsic {
-                            ns: HTTP_RESULT,
-                            op: v.name.to_string(),
-                        },
-                    );
+                    ctx.callees
+                        .insert(expr.id, Callee::intrinsic(StaticOp::HttpResult(v)));
                     check_http_variant(expr.span, v, args, expected, ctx)
                 } else {
                     // Falling straight to `check_call` (rather than the
@@ -5098,13 +5173,8 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
                     || peel_to_queue_result(ctx.return_ty, tys))
             {
                 // v0.44: a QueueResult variant call (`Retry(reason)`).
-                ctx.callees.insert(
-                    expr.id,
-                    Callee::Intrinsic {
-                        ns: QUEUE_RESULT,
-                        op: qv.name.to_string(),
-                    },
-                );
+                ctx.callees
+                    .insert(expr.id, Callee::intrinsic(StaticOp::QueueResult(qv)));
                 check_queue_variant(expr.span, qv, args, ctx)
             } else {
                 check_call(name, type_args, args, expr.span, expected, expr.id, ctx)
@@ -5136,10 +5206,7 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
             // body where nothing else is named `run`.
             ctx.callees.insert(
                 expr.id,
-                Callee::Intrinsic {
-                    ns: RUN_ID_NS,
-                    op: "id".to_string(),
-                },
+                Callee::intrinsic(StaticOp::TestRun(TestRunStatic::Id)),
             );
             Some(tys.intern(Ty::Base(BaseType::String)))
         }
@@ -5201,13 +5268,8 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
                         ));
                         return None;
                     }
-                    ctx.callees.insert(
-                        expr.id,
-                        Callee::Intrinsic {
-                            ns: HTTP_RESULT,
-                            op: v.name.to_string(),
-                        },
-                    );
+                    ctx.callees
+                        .insert(expr.id, Callee::intrinsic(StaticOp::HttpResult(v)));
                     check_http_variant(field.span, v, &[], expected, ctx)
                 } else {
                     ctx.errors.push(CompileError::new(
@@ -5289,49 +5351,61 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
                             // not", never "builder or terminal" (`query_role`
                             // itself, not this call site).
                             let role = query_role(result, &method.name, tys);
-                            ctx.callees.insert(
-                                expr.id,
-                                Callee::Query {
-                                    field: id.name.clone(),
-                                    op: method.name.clone(),
-                                    role,
-                                },
-                            );
+                            if let Some(op_t) = QueryOp::from_name(&method.name) {
+                                ctx.callees.insert(
+                                    expr.id,
+                                    Callee::Query {
+                                        field: id.name.clone(),
+                                        op: method.name.clone(),
+                                        op_t: StoreQueryOp::Query(op_t),
+                                        role,
+                                    },
+                                );
+                            }
                             result
                         } else {
-                            ctx.callees.insert(
-                                expr.id,
-                                Callee::Store {
-                                    field: id.name.clone(),
-                                    op: method.name.clone(),
-                                },
-                            );
+                            if let Some(op_t) = MapStoreOp::from_name(&method.name) {
+                                ctx.callees.insert(
+                                    expr.id,
+                                    Callee::Store {
+                                        field: id.name.clone(),
+                                        op: method.name.clone(),
+                                        op_t: StoreEntryOp::Map(op_t),
+                                    },
+                                );
+                            }
                             check_store_map_op(method, args, k, v, expr.span, ctx)
                         }
                     }
                     // v0.83: `<set>.<op>(…)` on a `store Set[T]` field —
                     // effectful storage-set ops.
                     StoreField::Set(t) => {
-                        ctx.callees.insert(
-                            expr.id,
-                            Callee::Store {
-                                field: id.name.clone(),
-                                op: method.name.clone(),
-                            },
-                        );
+                        if let Some(op_t) = SetStoreOp::from_name(&method.name) {
+                            ctx.callees.insert(
+                                expr.id,
+                                Callee::Store {
+                                    field: id.name.clone(),
+                                    op: method.name.clone(),
+                                    op_t: StoreEntryOp::Set(op_t),
+                                },
+                            );
+                        }
                         check_store_set_op(method, args, t, expr.span, ctx)
                     }
                     // v0.87 (ADR 0113): `<cache>.<op>(…)` on a `store
                     // Cache[K, V]` field — the storage-map ops plus a `given
                     // Clock` requirement (eviction).
                     StoreField::Cache(k, v, _ttl) => {
-                        ctx.callees.insert(
-                            expr.id,
-                            Callee::Store {
-                                field: id.name.clone(),
-                                op: method.name.clone(),
-                            },
-                        );
+                        if let Some(op_t) = MapStoreOp::from_name(&method.name) {
+                            ctx.callees.insert(
+                                expr.id,
+                                Callee::Store {
+                                    field: id.name.clone(),
+                                    op: method.name.clone(),
+                                    op_t: StoreEntryOp::Cache(op_t),
+                                },
+                            );
+                        }
                         check_store_cache_op(method, args, k, v, expr.span, ctx)
                     }
                     // v0.95 (ADR 0121): `<log>.<op>(…)` on a `store Log[T]`
@@ -5357,6 +5431,7 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
                                 Callee::Store {
                                     field: id.name.clone(),
                                     op: method.name.clone(),
+                                    op_t: StoreEntryOp::Log(LogStoreOp::Append),
                                 },
                             );
                             check_store_log_op(method, args, t, expr.span, ctx)
@@ -5368,14 +5443,22 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
                         {
                             let result = check_store_log_op(method, args, t, expr.span, ctx);
                             let role = query_role(result, &method.name, tys);
-                            ctx.callees.insert(
-                                expr.id,
-                                Callee::Query {
-                                    field: id.name.clone(),
-                                    op: method.name.clone(),
-                                    role,
-                                },
-                            );
+                            let op_t = LogWindowOp::from_name(&method.name)
+                                .map(StoreQueryOp::LogWindow)
+                                .or_else(|| {
+                                    QueryOp::from_name(&method.name).map(StoreQueryOp::Query)
+                                });
+                            if let Some(op_t) = op_t {
+                                ctx.callees.insert(
+                                    expr.id,
+                                    Callee::Query {
+                                        field: id.name.clone(),
+                                        op: method.name.clone(),
+                                        op_t,
+                                        role,
+                                    },
+                                );
+                            }
                             result
                         }
                         _ => check_store_log_op(method, args, t, expr.span, ctx),
@@ -5384,13 +5467,16 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
                     // Cell[T]` field — the one method-shaped cell op (read is
                     // the bare name, write is `:=`).
                     StoreField::Cell(t) => {
-                        ctx.callees.insert(
-                            expr.id,
-                            Callee::Store {
-                                field: id.name.clone(),
-                                op: method.name.clone(),
-                            },
-                        );
+                        if let Some(op_t) = CellStoreOp::from_name(&method.name) {
+                            ctx.callees.insert(
+                                expr.id,
+                                Callee::Store {
+                                    field: id.name.clone(),
+                                    op: method.name.clone(),
+                                    op_t: StoreEntryOp::Cell(op_t),
+                                },
+                            );
+                        }
                         check_store_cell_op(method, args, t, expr.span, ctx)
                     }
                 }
@@ -5401,13 +5487,8 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
                 && id.name == HTTP_RESULT
             {
                 if let Some(v) = http_variant(&method.name) {
-                    ctx.callees.insert(
-                        expr.id,
-                        Callee::Intrinsic {
-                            ns: HTTP_RESULT,
-                            op: v.name.to_string(),
-                        },
-                    );
+                    ctx.callees
+                        .insert(expr.id, Callee::intrinsic(StaticOp::HttpResult(v)));
                     check_http_variant(expr.span, v, args, expected, ctx)
                 } else {
                     ctx.errors.push(CompileError::new(

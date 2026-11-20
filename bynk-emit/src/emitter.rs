@@ -1241,7 +1241,7 @@ fn collect_json_codec_roots(commons: &TypedCommons) -> Vec<TypeRef> {
             let ExprKind::MethodCall { args, .. } = &e.kind else {
                 return;
             };
-            let Some(bynk_check::checker::Callee::Intrinsic { ns, op }) =
+            let Some(bynk_check::checker::Callee::Intrinsic { ns, op, .. }) =
                 commons.callees.get(&e.id)
             else {
                 return;

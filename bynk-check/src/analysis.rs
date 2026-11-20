@@ -1069,6 +1069,8 @@ fn analyse_project_inner(
                 })
                 .map(|(id, c)| (*id, c.clone())),
         );
+        #[cfg(test)]
+        crate::testkit::note_callees(name, checked.iter().flat_map(|t| &t.callees));
         // #2719: the unit's needs-context set, and the calls that would carry
         // the execution context where none exists.
         let plan_errors = exec_plan.extend(&checked.iter().map(|t| &**t).collect::<Vec<_>>());

@@ -2078,7 +2078,7 @@ pub enum HttpVariantPayload {
 }
 
 /// One variant of the built-in `HttpResult[T]` sum (v0.9 §3.3).
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct HttpVariant {
     pub name: &'static str,
     pub payload: HttpVariantPayload,
@@ -2397,7 +2397,7 @@ pub enum QueueVariantPayload {
 }
 
 /// One variant of the built-in `QueueResult` sum (v0.44).
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct QueueVariant {
     pub name: &'static str,
     pub payload: QueueVariantPayload,

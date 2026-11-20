@@ -309,7 +309,7 @@ pub(in crate::emitter) fn lower_scalar_static_call(
     if let ExprKind::Ident(_) = &receiver.kind
         && matches!(
             cx.commons().callee(e.id),
-            Some(Callee::Intrinsic { ns, op }) if (*ns == LIST || *ns == MAP || *ns == SET) && op == "empty"
+            Some(Callee::Intrinsic { ns, op, .. }) if (*ns == LIST || *ns == MAP || *ns == SET) && op == "empty"
         )
         && args.is_empty()
     {
@@ -345,7 +345,7 @@ pub(in crate::emitter) fn lower_scalar_static_call(
     if let ExprKind::Ident(_) = &receiver.kind
         && matches!(
             cx.commons().callee(e.id),
-            Some(Callee::Intrinsic { ns, op }) if *ns == SET && op == "of"
+            Some(Callee::Intrinsic { ns, op, .. }) if *ns == SET && op == "of"
         )
         && args.len() == 1
         && let Some(Ty::Set(t)) = cx.commons().expr_ty(e.id).as_deref()
@@ -368,7 +368,7 @@ pub(in crate::emitter) fn lower_scalar_static_call(
     if let ExprKind::Ident(_) = &receiver.kind
         && matches!(
             cx.commons().callee(e.id),
-            Some(Callee::Intrinsic { ns, op }) if *ns == FLOAT && (op == "pi" || op == "e")
+            Some(Callee::Intrinsic { ns, op, .. }) if *ns == FLOAT && (op == "pi" || op == "e")
         )
         && args.is_empty()
     {
@@ -386,7 +386,7 @@ pub(in crate::emitter) fn lower_scalar_static_call(
     if let ExprKind::Ident(id) = &receiver.kind
         && matches!(
             cx.commons().callee(e.id),
-            Some(Callee::Intrinsic { ns, op }) if (*ns == INT || *ns == FLOAT) && op == "parse"
+            Some(Callee::Intrinsic { ns, op, .. }) if (*ns == INT || *ns == FLOAT) && op == "parse"
         )
         && args.len() == 1
     {
@@ -405,7 +405,7 @@ pub(in crate::emitter) fn lower_scalar_static_call(
     if let ExprKind::Ident(_) = &receiver.kind
         && matches!(
             cx.commons().callee(e.id),
-            Some(Callee::Intrinsic { ns, op }) if *ns == DURATION && op == "millis"
+            Some(Callee::Intrinsic { ns, op, .. }) if *ns == DURATION && op == "millis"
         )
         && args.len() == 1
     {
@@ -415,7 +415,7 @@ pub(in crate::emitter) fn lower_scalar_static_call(
     if let ExprKind::Ident(_) = &receiver.kind
         && matches!(
             cx.commons().callee(e.id),
-            Some(Callee::Intrinsic { ns, op }) if *ns == INSTANT && op == "fromIso"
+            Some(Callee::Intrinsic { ns, op, .. }) if *ns == INSTANT && op == "fromIso"
         )
         && args.len() == 1
     {
@@ -428,7 +428,7 @@ pub(in crate::emitter) fn lower_scalar_static_call(
     if let ExprKind::Ident(_) = &receiver.kind
         && matches!(
             cx.commons().callee(e.id),
-            Some(Callee::Intrinsic { ns, op }) if *ns == INSTANT && op == "fromEpochMillis"
+            Some(Callee::Intrinsic { ns, op, .. }) if *ns == INSTANT && op == "fromEpochMillis"
         )
         && args.len() == 1
     {
@@ -508,7 +508,7 @@ pub(in crate::emitter) fn lower_runtime_value_static_call(
     }
     // #2380 (L5): `TokenClaims.of(lines)` builds the runtime's claims view.
     if let ExprKind::Ident(_) = &receiver.kind
-        && matches!(cx.commons().callee(e.id), Some(Callee::Intrinsic { ns, op }) if *ns == TOKEN_CLAIMS && op == "of")
+        && matches!(cx.commons().callee(e.id), Some(Callee::Intrinsic { ns, op, .. }) if *ns == TOKEN_CLAIMS && op == "of")
         && args.len() == 1
     {
         let xs = pre.lower_node(&args[0], cx);
@@ -575,7 +575,7 @@ pub(in crate::emitter) fn lower_runtime_value_static_call(
     if let ExprKind::Ident(_) = &receiver.kind
         && matches!(
             cx.commons().callee(e.id),
-            Some(Callee::Intrinsic { ns, op }) if *ns == STREAM && op == "of"
+            Some(Callee::Intrinsic { ns, op, .. }) if *ns == STREAM && op == "of"
         )
         && args.len() == 1
     {
