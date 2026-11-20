@@ -1,6 +1,6 @@
 ---
 level: patch
-changelog: The checker records each call's resolution as closed typed values (a static operation, a store operation, a test address, a first-party capability, a call-site principal) and the emitter reads them instead of comparing names; generated TypeScript and source maps are unchanged. One behaviour tightens: a same-named capability that is not bynk's own `Events` no longer counts as an `Events.emit`
+changelog: The checker records each call's resolution as closed typed values (a static operation, a store operation, a test address, a first-party capability, a call-site principal) and the emitter reads them instead of comparing names; generated TypeScript and source maps are unchanged. One behaviour tightens: a same-named capability that is not bynk's own `Events` no longer counts as an `Events.emit`. Two first-party decisions now key on the capability's identity rather than a name: locale negotiation goes to any external provider of bynk's own `Locale` (today only `LocaleProvider`), and an `Idempotency` call inside the `bynk` unit itself counts as first-party (no such call exists today); neither changes any output
 ---
 refactor(check,emit): the emitter reads resolved callees and store kinds, not names (1A.33)
 

@@ -763,10 +763,13 @@ pub fn instantiate_provider_ts_expr(
     {
         args.push(bynk_ts::TsExpr::Ident(env.to_string()));
     }
-    // Locale capability track, slice 2 (#882, Decision C): only the
-    // `(bynk, LocaleProvider)` pair ever receives these — every other
-    // provider's construction is unaffected since every other call site
-    // passes `None`.
+    // Locale capability track, slice 2 (#882, Decision C): only an external
+    // provider of bynk's own `Locale` capability receives these. Since 1A.33
+    // the test is the capability's first-party identity, not the provider's
+    // name: today that is exactly `LocaleProvider`, the one `provides Locale`
+    // in `bynk.bynk`, and any later first-party `Locale` provider would need
+    // the same negotiation arguments. Every other provider's construction is
+    // unaffected, since every other call site passes `None`.
     if provider.external
         && first_party_of(cap, provider_ctx) == Some(FirstPartyCap::Locale)
         && let Some(loc) = locale_negotiation

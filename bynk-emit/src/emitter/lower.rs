@@ -1837,6 +1837,30 @@ fn cap_op_param_names(cx: &LowerCtx, cap: &str, op: &str) -> Vec<String> {
         .unwrap_or_default()
 }
 
+/// 1A.33: what the checker recorded for a call-site principal clause (`by Nobody`, a reserved
+/// bad credential driven by `BadCredential::driver`, or an actor).
+///
+/// Every checker path that accepts a `by` clause records it. If one ever does
+/// not, fall back to the same single classification the checker uses
+/// (`CallSitePrincipal::of`) rather than treating `Nobody` or `Forged` as an
+/// ordinary actor of that name, and flag the gap in debug builds.
+pub(super) fn call_site_principal(
+    cx: &LowerCtx,
+    principal: &bynk_syntax::ast::CallSiteActor,
+) -> CallSitePrincipal {
+    match cx.commons().callee(principal.id) {
+        Some(Callee::Principal(p)) => p.clone(),
+        _ => {
+            debug_assert!(
+                false,
+                "unrecorded call-site principal `{}`",
+                principal.actor.name
+            );
+            CallSitePrincipal::of(&principal.actor.name)
+        }
+    }
+}
+
 /// Lower a fault claim, `<call> faults` (#1706), to a `Bool` JavaScript
 /// expression: an async IIFE that awaits the call and yields `true` when it
 /// threw. An `ExpectationError` is re-thrown, not counted — a failed `expect`
@@ -1852,18 +1876,6 @@ fn cap_op_param_names(cx: &LowerCtx, cap: &str, op: &str) -> Vec<String> {
 /// hoists is placed inside the `try`, not in the enclosing statement's
 /// prelude: a fault raised while evaluating the call's arguments is the call
 /// faulting too, and must not escape the claim.
-/// 1A.33: what the checker recorded for a call-site principal clause (`by Nobody`, a reserved
-/// bad credential driven by `BadCredential::driver`, or an actor).
-pub(super) fn call_site_principal(
-    cx: &LowerCtx,
-    principal: &bynk_syntax::ast::CallSiteActor,
-) -> CallSitePrincipal {
-    match cx.commons().callee(principal.id) {
-        Some(Callee::Principal(p)) => p.clone(),
-        _ => CallSitePrincipal::Actor(principal.actor.name.clone()),
-    }
-}
-
 fn lower_faults(faults: &FaultsExpr, cx: &mut LowerCtx) -> Built {
     let FaultsExpr { call, principal } = faults;
     let saved_identity = cx.call_site_identity.take();
