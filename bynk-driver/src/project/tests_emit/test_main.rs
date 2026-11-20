@@ -128,29 +128,26 @@ pub(super) fn sysdrive_driver(
     // an actor-sum route.
     takes_as: bool,
 ) -> TsStmt {
-    params.push(TsParam {
-        name: "__sub".to_string(),
-        ty: Some(TsType::named("string")),
-        optional: false,
-    });
+    params.push(TsParam::new(
+        "__sub".to_string(),
+        Some(TsType::named("string")),
+    ));
     // #2019: a refinement-guarded route signs the claims the acting actor
     // presents (`{}` for a non-refinement actor) next to `sub`.
     if signs_claims {
-        params.push(TsParam {
-            name: "__claims".to_string(),
-            ty: Some(TsType::named_with_args(
+        params.push(TsParam::new(
+            "__claims".to_string(),
+            Some(TsType::named_with_args(
                 "globalThis.Record",
                 vec![TsType::named("string"), TsType::named("unknown")],
             )),
-            optional: false,
-        });
+        ));
     }
     if takes_as {
-        params.push(TsParam {
-            name: "__as".to_string(),
-            ty: Some(TsType::named("string")),
-            optional: false,
-        });
+        params.push(TsParam::new(
+            "__as".to_string(),
+            Some(TsType::named("string")),
+        ));
     }
     let mut body = Vec::new();
     if let Some(stmt) = body_stmt {
@@ -297,11 +294,7 @@ pub(super) fn build_run_function(entries: &[(String, String)]) -> Vec<TsStmt> {
         const_(
             "want",
             TsExpr::Arrow {
-                params: vec![TsParam {
-                    name: "n".to_string(),
-                    ty: Some(TsType::named("string")),
-                    optional: false,
-                }],
+                params: vec![TsParam::new("n".to_string(), Some(TsType::named("string")))],
                 is_async: false,
                 generics: Vec::new(),
                 return_type: Some(TsType::named("boolean")),
@@ -330,20 +323,15 @@ pub(super) fn build_run_function(entries: &[(String, String)]) -> Vec<TsStmt> {
                 name: "run".to_string(),
                 generics: Vec::new(),
                 params: vec![
-                    TsParam {
-                        name: "only".to_string(),
-                        ty: Some(TsType::named("string")),
-                        optional: true,
-                    },
-                    TsParam {
-                        name: "onCase".to_string(),
-                        ty: Some(TsType::Fn {
+                    TsParam::optional("only".to_string(), Some(TsType::named("string"))),
+                    TsParam::optional(
+                        "onCase".to_string(),
+                        Some(TsType::Fn {
                             names: vec![],
                             params: vec![TsType::named("CaseResult")],
                             ret: Box::new(TsType::named("void")),
                         }),
-                        optional: true,
-                    },
+                    ),
                 ],
                 return_type: None,
                 body,
@@ -480,11 +468,10 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt, pg: 
             ty: TsType::Object(vec![
                 TsTypeMember::method(
                     "exit",
-                    vec![TsParam {
-                        name: "code".to_string(),
-                        ty: Some(TsType::named("number")),
-                        optional: false,
-                    }],
+                    vec![TsParam::new(
+                        "code".to_string(),
+                        Some(TsType::named("number")),
+                    )],
                     TsType::named("never"),
                 ),
                 TsTypeMember::prop(
@@ -569,11 +556,7 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt, pg: 
             ident("modules"),
             "filter",
             vec![TsExpr::Arrow {
-                params: vec![TsParam {
-                    name: "m".to_string(),
-                    ty: None,
-                    optional: false,
-                }],
+                params: vec![TsParam::new("m".to_string(), None)],
                 is_async: false,
                 generics: Vec::new(),
                 return_type: None,
@@ -655,11 +638,10 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt, pg: 
         const_(
             "emit",
             TsExpr::Arrow {
-                params: vec![TsParam {
-                    name: "o".to_string(),
-                    ty: Some(TsType::named("unknown")),
-                    optional: false,
-                }],
+                params: vec![TsParam::new(
+                    "o".to_string(),
+                    Some(TsType::named("unknown")),
+                )],
                 is_async: false,
                 generics: Vec::new(),
                 return_type: None,
@@ -723,11 +705,7 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt, pg: 
                     TsDecl::Function {
                         name: "report".to_string(),
                         generics: Vec::new(),
-                        params: vec![TsParam {
-                            name: "r".to_string(),
-                            ty: Some(TsType::named("Result")),
-                            optional: false,
-                        }],
+                        params: vec![TsParam::new("r".to_string(), Some(TsType::named("Result")))],
                         return_type: None,
                         body: detach.wrap_ndjson(vec![TsStmt::if_else_same_line_stmt(
                             member(ident("r"), "pass"),
@@ -854,11 +832,7 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt, pg: 
                     TsDecl::Function {
                         name: "report".to_string(),
                         generics: Vec::new(),
-                        params: vec![TsParam {
-                            name: "r".to_string(),
-                            ty: Some(TsType::named("Result")),
-                            optional: false,
-                        }],
+                        params: vec![TsParam::new("r".to_string(), Some(TsType::named("Result")))],
                         return_type: None,
                         body: detach.wrap_human(vec![TsStmt::if_else_same_line_stmt(
                             member(ident("r"), "pass"),

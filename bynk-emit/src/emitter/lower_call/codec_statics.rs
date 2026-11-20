@@ -215,6 +215,7 @@ fn param(name: &str, ty: TsType) -> TsParam {
         name: name.to_string(),
         ty: Some(ty),
         optional: false,
+        rest: false,
     }
 }
 

@@ -2527,11 +2527,10 @@ fn emit_context_rebrands(
                 name: "of".to_string(),
                 is_async: false,
                 generics: Vec::new(),
-                params: vec![bynk_ts::TsParam {
-                    name: "value".to_string(),
-                    ty: Some(bynk_ts::TsType::named(ts_base_name)),
-                    optional: false,
-                }],
+                params: vec![bynk_ts::TsParam::new(
+                    "value".to_string(),
+                    Some(bynk_ts::TsType::named(ts_base_name)),
+                )],
                 return_type: Some(bynk_ts::TsType::named_with_args(
                     "Result",
                     vec![
@@ -2562,11 +2561,10 @@ fn emit_context_rebrands(
                     name: "unsafe".to_string(),
                     is_async: false,
                     generics: Vec::new(),
-                    params: vec![bynk_ts::TsParam {
-                        name: "value".to_string(),
-                        ty: Some(bynk_ts::TsType::named(ts_base_name)),
-                        optional: false,
-                    }],
+                    params: vec![bynk_ts::TsParam::new(
+                        "value".to_string(),
+                        Some(bynk_ts::TsType::named(ts_base_name)),
+                    )],
                     return_type: Some(bynk_ts::TsType::named(name.clone())),
                     doc: None,
                     inline: true,

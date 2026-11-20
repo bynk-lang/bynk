@@ -5396,11 +5396,10 @@ fn emit_composition_root(
     let mut referenced_units: BTreeSet<String> = BTreeSet::new();
 
     let compose_params: Vec<TsParam> = if thread_env {
-        vec![TsParam {
-            name: "env".to_string(),
-            ty: Some(TsType::named("unknown")),
-            optional: true,
-        }]
+        vec![TsParam::optional(
+            "env".to_string(),
+            Some(TsType::named("unknown")),
+        )]
     } else {
         Vec::new()
     };
@@ -5603,14 +5602,13 @@ fn emit_composition_root(
             let dispatch_body =
                 format!("{{ for (const ev of events) {{ switch (ev.type) {{ {cases}}} }} }}");
             let arrow = TsExpr::Arrow {
-                params: vec![TsParam {
-                    name: "events".to_string(),
-                    ty: Some(TsType::named_with_args(
+                params: vec![TsParam::new(
+                    "events".to_string(),
+                    Some(TsType::named_with_args(
                         "globalThis.Array",
                         vec![TsType::named(bynk_emit::emitter::EVENTS_WIRE_EVENT_TS_TYPE)],
                     )),
-                    optional: false,
-                }],
+                )],
                 is_async: true,
                 generics: Vec::new(),
                 return_type: None,

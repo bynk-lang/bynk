@@ -583,13 +583,12 @@ pub(super) fn emit_test_history_property_function(
         TsBindingName::Ident("__drive".to_string()),
         None,
         TsExpr::Arrow {
-            params: vec![TsParam {
-                name: "seq".to_string(),
-                ty: Some(TsType::named(
+            params: vec![TsParam::new(
+                "seq".to_string(),
+                Some(TsType::named(
                     "globalThis.Array<{ h: number, args: unknown[] }>",
                 )),
-                optional: false,
-            }],
+            )],
             is_async: false,
             generics: Vec::new(),
             return_type: None,

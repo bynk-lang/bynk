@@ -317,14 +317,13 @@ pub(super) fn emit_test_deps(
             TsObjectEntry::method(
                 "__eventsDispatch",
                 true,
-                vec![TsParam {
-                    name: "events".to_string(),
-                    ty: Some(TsType::named_with_args(
+                vec![TsParam::new(
+                    "events".to_string(),
+                    Some(TsType::named_with_args(
                         "globalThis.Array",
                         vec![TsType::named(bynk_emit::emitter::EVENTS_WIRE_EVENT_TS_TYPE)],
                     )),
-                    optional: false,
-                }],
+                )],
                 None,
                 vec![TsStmt::raw(
                     "for (const ev of events) await this.Events.emit(ev.payload);",
@@ -381,11 +380,7 @@ pub(super) fn emit_test_deps(
             ]
             .into_iter()
             .filter(|(_, _, on)| *on)
-            .map(|(name, ty, _)| TsParam {
-                name: name.to_string(),
-                ty: Some(TsType::named(ty)),
-                optional: true,
-            })
+            .map(|(name, ty, _)| TsParam::optional(name.to_string(), Some(TsType::named(ty))))
             .collect(),
             return_type: None,
             body,

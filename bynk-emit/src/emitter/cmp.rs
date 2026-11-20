@@ -220,11 +220,7 @@ impl<'a> CmpGen<'a> {
             call(
                 "__bynkCmpFix",
                 vec![TsExpr::Arrow {
-                    params: vec![TsParam {
-                        name: self_ident,
-                        ty: None,
-                        optional: false,
-                    }],
+                    params: vec![TsParam::new(self_ident, None)],
                     is_async: false,
                     generics: Vec::new(),
                     return_type: None,

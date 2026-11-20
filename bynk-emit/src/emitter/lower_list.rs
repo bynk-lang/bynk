@@ -99,6 +99,7 @@ pub(super) fn param(name: &str, ty: Option<TsType>) -> TsParam {
         name: name.to_string(),
         ty,
         optional: false,
+        rest: false,
     }
 }
 

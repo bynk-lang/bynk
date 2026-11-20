@@ -193,11 +193,10 @@ fn parse_iife(is_int: bool, s: LoweredExpr) -> Built {
                 ),
             ];
             let arrow = TsExpr::Arrow {
-                params: vec![TsParam {
-                    name: "__s".to_string(),
-                    ty: Some(TsType::named("string")),
-                    optional: false,
-                }],
+                params: vec![TsParam::new(
+                    "__s".to_string(),
+                    Some(TsType::named("string")),
+                )],
                 is_async: false,
                 generics: vec![],
                 return_type: None,

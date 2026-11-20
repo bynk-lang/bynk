@@ -118,6 +118,7 @@ fn stmt_contains_await(stmt: &TsStmt) -> bool {
         TsStmtKind::Verbatim { text, .. } | TsStmtKind::Raw(text) => text.contains("await"),
         TsStmtKind::Decl(_)
         | TsStmtKind::Continue
+        | TsStmtKind::Break
         | TsStmtKind::Comment(_)
         | TsStmtKind::DocComment(_)
         | TsStmtKind::Blank => false,
@@ -173,11 +174,7 @@ mod tests {
     #[test]
     fn an_await_inside_a_nested_arrow_body_is_found() {
         let arrow = TsExpr::Arrow {
-            params: vec![TsParam {
-                name: "x".to_string(),
-                ty: None,
-                optional: false,
-            }],
+            params: vec![TsParam::new("x".to_string(), None)],
             is_async: true,
             generics: Vec::new(),
             return_type: None,

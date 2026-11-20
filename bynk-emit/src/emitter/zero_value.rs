@@ -11,7 +11,8 @@ pub(super) fn render_zero_value(z: &ZeroValue) -> String {
     bynk_ts::print_expr(&zero_expr(z))
 }
 
-fn zero_expr(z: &ZeroValue) -> TsExpr {
+/// The zero value as a node, for a caller that places it in a tree.
+pub(super) fn zero_expr(z: &ZeroValue) -> TsExpr {
     match z {
         ZeroValue::Number => TsExpr::Lit(TsLit::Num("0".to_string())),
         ZeroValue::False => TsExpr::Lit(TsLit::Bool(false)),

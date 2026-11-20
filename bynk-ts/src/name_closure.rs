@@ -307,6 +307,7 @@ pub fn module_exports(program: &TsProgram) -> ModuleExports {
             | TsStmtKind::TryCatch { .. }
             | TsStmtKind::Block(_)
             | TsStmtKind::Continue
+            | TsStmtKind::Break
             | TsStmtKind::Assign { .. }
             | TsStmtKind::Comment(_)
             | TsStmtKind::DocComment(_)
@@ -769,6 +770,7 @@ impl Walk {
                 }
             }
             TsStmtKind::Continue
+            | TsStmtKind::Break
             | TsStmtKind::Comment(_)
             | TsStmtKind::DocComment(_)
             | TsStmtKind::Blank => {}
@@ -1025,11 +1027,10 @@ mod tests {
             TsDecl::Export(Box::new(TsDecl::Function {
                 name: name.to_string(),
                 generics: vec![],
-                params: vec![TsParam {
-                    name: "value".to_string(),
-                    ty: Some(TsType::named(param_ty)),
-                    optional: false,
-                }],
+                params: vec![TsParam::new(
+                    "value".to_string(),
+                    Some(TsType::named(param_ty)),
+                )],
                 return_type: Some(TsType::named("__JsonValue")),
                 body: vec![TsStmt::return_stmt(
                     Some(TsExpr::Call {
@@ -1147,11 +1148,10 @@ mod tests {
             TsDecl::Function {
                 name: "f".to_string(),
                 generics: vec!["T".to_string()],
-                params: vec![TsParam {
-                    name: "path: string = \"$\"".to_string(),
-                    ty: Some(TsType::named("T")),
-                    optional: false,
-                }],
+                params: vec![TsParam::new(
+                    "path: string = \"$\"".to_string(),
+                    Some(TsType::named("T")),
+                )],
                 return_type: None,
                 body: vec![
                     TsStmt::const_stmt(

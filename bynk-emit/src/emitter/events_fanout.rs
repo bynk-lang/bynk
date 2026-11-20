@@ -178,14 +178,16 @@ fn fanout_program(
     program.push(TsStmt::decl(
         TsDecl::Export(Box::new(TsDecl::class(
             EVENTS_FANOUT_CLASS_NAME,
-            vec![TsClassField {
-                name: "env".to_string(),
-                ty: TsType::named_with_args(
-                    "globalThis.Record",
-                    vec![TsType::named("string"), TsType::named("__ServiceBinding")],
-                ),
-                private: true,
-            }],
+            vec![
+                TsClassField::new(
+                    "env",
+                    TsType::named_with_args(
+                        "globalThis.Record",
+                        vec![TsType::named("string"), TsType::named("__ServiceBinding")],
+                    ),
+                )
+                .private(),
+            ],
             Some(events_fanout_ctor()),
             vec![events_fanout_fetch(publisher)],
         ))),
@@ -238,16 +240,11 @@ fn event_routes_table(routes: &BTreeMap<String, Vec<(String, String)>>) -> TsExp
 fn events_fanout_ctor() -> TsClassCtor {
     TsClassCtor {
         params: vec![
-            TsParam {
-                name: "_state".to_string(),
-                ty: Some(TsType::named("__DurableObjectState")),
-                optional: false,
-            },
-            TsParam {
-                name: "env".to_string(),
-                ty: Some(TsType::named("unknown")),
-                optional: true,
-            },
+            TsParam::new(
+                "_state".to_string(),
+                Some(TsType::named("__DurableObjectState")),
+            ),
+            TsParam::optional("env".to_string(), Some(TsType::named("unknown"))),
         ],
         body: vec![TsStmt::assign(
             TsExpr::Member {
@@ -428,11 +425,10 @@ fn events_fanout_fetch(publisher: Option<&str>) -> TsClassMethod {
         name: "fetch".to_string(),
         private: false,
         is_async: true,
-        params: vec![TsParam {
-            name: "request".to_string(),
-            ty: Some(TsType::named("globalThis.Request")),
-            optional: false,
-        }],
+        params: vec![TsParam::new(
+            "request".to_string(),
+            Some(TsType::named("globalThis.Request")),
+        )],
         return_type: Some(TsType::named_with_args(
             "globalThis.Promise",
             vec![TsType::named("globalThis.Response")],

@@ -760,11 +760,10 @@ pub(super) fn binding_gen(
                                 ),
                                 "map",
                                 vec![TsExpr::Arrow {
-                                    params: vec![TsParam {
-                                        name: "__n".to_string(),
-                                        ty: Some(TsType::named("bigint")),
-                                        optional: false,
-                                    }],
+                                    params: vec![TsParam::new(
+                                        "__n".to_string(),
+                                        Some(TsType::named("bigint")),
+                                    )],
                                     is_async: false,
                                     generics: Vec::new(),
                                     return_type: None,
@@ -789,11 +788,10 @@ pub(super) fn binding_gen(
                                 ),
                                 "map",
                                 vec![TsExpr::Arrow {
-                                    params: vec![TsParam {
-                                        name: "__s".to_string(),
-                                        ty: Some(TsType::named("string")),
-                                        optional: false,
-                                    }],
+                                    params: vec![TsParam::new(
+                                        "__s".to_string(),
+                                        Some(TsType::named("string")),
+                                    )],
                                     is_async: false,
                                     generics: Vec::new(),
                                     return_type: None,
@@ -847,11 +845,7 @@ pub(super) fn gen_descriptor_entry(name: Option<TsExpr>, bg: &BindingGen) -> TsE
     entries.push((
         "gen".to_string(),
         TsExpr::Arrow {
-            params: vec![TsParam {
-                name: "rng".to_string(),
-                ty: Some(TsType::named("any")),
-                optional: false,
-            }],
+            params: vec![TsParam::new("rng".to_string(), Some(TsType::named("any")))],
             is_async: false,
             generics: Vec::new(),
             return_type: None,
@@ -881,11 +875,7 @@ pub(super) fn gen_descriptor_entry(name: Option<TsExpr>, bg: &BindingGen) -> TsE
     entries.push((
         "shrink".to_string(),
         TsExpr::Arrow {
-            params: vec![TsParam {
-                name: "v".to_string(),
-                ty: Some(TsType::named("any")),
-                optional: false,
-            }],
+            params: vec![TsParam::new("v".to_string(), Some(TsType::named("any")))],
             is_async: false,
             generics: Vec::new(),
             return_type: None,
@@ -895,11 +885,7 @@ pub(super) fn gen_descriptor_entry(name: Option<TsExpr>, bg: &BindingGen) -> TsE
     entries.push((
         "show".to_string(),
         TsExpr::Arrow {
-            params: vec![TsParam {
-                name: "v".to_string(),
-                ty: Some(TsType::named("any")),
-                optional: false,
-            }],
+            params: vec![TsParam::new("v".to_string(), Some(TsType::named("any")))],
             is_async: false,
             generics: Vec::new(),
             return_type: None,
