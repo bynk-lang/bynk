@@ -66,9 +66,7 @@ fn a_record_that_omits_defaulted_fields_prints_as_a_node_with_no_text_exit() {
     let defaults = r#"mode: { tag: "Fast" as const }, retry: { times: 3, backoff: 1.5 }, tags: ["a", "b"], limit: { tag: "None" as const }, seen: new globalThis.Set(), index: new globalThis.Map(), delta: -5, ok: { tag: "Ok" as const, value: 1 } }"#;
     for line in [
         format!("return {{ url, {defaults};"),
-        format!(
-            r#"return {{ url, limit: Some(n), mode: {{ tag: "Fast" as const }}, retry: {{ times: 3, backoff: 1.5 }}, tags: ["a", "b"], seen: new globalThis.Set(), index: new globalThis.Map(), delta: -5, ok: {{ tag: "Ok" as const, value: 1 }} }};"#
-        ),
+        r#"return { url, limit: Some(n), mode: { tag: "Fast" as const }, retry: { times: 3, backoff: 1.5 }, tags: ["a", "b"], seen: new globalThis.Set(), index: new globalThis.Map(), delta: -5, ok: { tag: "Ok" as const, value: 1 } };"#.to_string(),
     ] {
         assert_line(&text, &line);
     }
