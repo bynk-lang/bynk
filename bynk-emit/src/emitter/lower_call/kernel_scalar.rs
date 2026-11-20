@@ -34,7 +34,7 @@ fn finish(pre: Pre, built: Option<Built>) -> Option<Lowered> {
 /// path, which can never bind looser than its parent.
 pub(super) fn identity(pre: &mut Pre, operand: &Expr, cx: &mut LowerCtx) -> Built {
     match pre.lower_node(operand, cx) {
-        LoweredExpr::Text(t) if !is_simple_path(&t) => paren(LoweredExpr::Text(t)),
+        LoweredExpr::Text(t) if !is_simple_path(&t) => paren(LoweredExpr::from(Err(t))),
         other => built_of(other),
     }
 }
