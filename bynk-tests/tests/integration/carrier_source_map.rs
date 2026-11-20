@@ -11,8 +11,10 @@
 //! raw generated-line index would shift for layout alone; pairing each mapped
 //! line's text with its source line moves only when a mapping really moves.
 //!
-//! The expectation was written against the output before the carriers became
-//! nodes and must not change with them.
+//! The carrier expectations were written against the output before the
+//! carriers became nodes and must not change with them. The type-method case
+//! pins the one ruled change: method bodies in a top-level `const` now map to
+//! their own lines.
 
 use std::path::Path;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -320,4 +322,40 @@ const CHAT_MAP: &str = "\
 33 33 33 33 33 33 33 33 33 33 33 33 33 33 33 33
 33 33 33 33 33 33 33 33 33 33 33 33 33 33 33 33
 33 33 33 33 33 33 33 33 33 33 33 33 33 33 33 33
+";
+
+const MONEY: &str = "commons commerce.money {
+  type Money = Int where NonNegative
+
+  fn Money.fromMinorUnits(n: Int) -> Result[Money, ValidationError] {
+    Money.of(n)
+  }
+}
+";
+
+/// A type's methods print as a top-level `const` object. Since 1A.32a a
+/// top-level `const` passes its method entries' spans to the module map
+/// (before, they were dropped and the whole object mapped to the commons
+/// header), so each statement in a method body maps to its own source line, as
+/// a free function's does. Ruled on in #3808: the more precise mapping is kept
+/// and pinned here.
+#[test]
+fn a_type_method_body_maps_to_its_own_source_line() {
+    let (ts, map) = compile(&[("commerce/money.bynk", MONEY)], None, "commerce/money.ts");
+    let lines = decode(extract_field(&map, "mappings"));
+    let body = ts
+        .lines()
+        .position(|l| l.trim() == "return Money.of(n);")
+        .expect("the method body line");
+    assert_eq!(
+        lines.get(body).copied().flatten(),
+        Some(4),
+        "the method body maps to its own `Money.of(n)` line (0-based source line 4), not the commons header"
+    );
+    check(snapshot(&ts, &map), MONEY_MAP, "money.ts");
+}
+
+const MONEY_MAP: &str = "\
+- - - - 1 1 1 1 1 1 1 1 1 1 1 1
+4 4 4
 ";
