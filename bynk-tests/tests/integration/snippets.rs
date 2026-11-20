@@ -90,6 +90,25 @@ fn attr<'a>(tag: &'a str, name: &str) -> Option<&'a str> {
     Some(&tag[start..start + len])
 }
 
+/// `s` with all whitespace removed.
+fn compact(s: &str) -> String {
+    s.chars().filter(|c| !c.is_whitespace()).collect()
+}
+
+/// A single-file unit's declarations, without its header: the inside of a
+/// braced `commons x { … }`, or everything after the first line otherwise.
+/// Whitespace is removed, so layout differences don't count.
+fn unit_body(source: &str) -> String {
+    let all = compact(source);
+    let header = source.lines().next().unwrap_or("");
+    if header.trim_end().ends_with('{') {
+        let open = all.find('{').expect("a braced header");
+        all[open + 1..all.len() - 1].to_string()
+    } else {
+        all[compact(header).len()..].to_string()
+    }
+}
+
 #[test]
 fn every_runnable_example_has_a_playground_service() {
     let mut pages = Vec::new();
@@ -126,6 +145,18 @@ fn every_runnable_example_has_a_playground_service() {
                     page.display()
                 )),
                 Err(msg) => failures.push(format!("{}: {played}: {msg}", page.display())),
+            }
+            // A `playgroundSrc` is a runnable copy of the program the page shows;
+            // it must still carry that program, or Run would run a stale one.
+            if let (Some(shown), Some(_)) = (attr(tag, "src"), attr(tag, "playgroundSrc")) {
+                let shown_source = fs::read_to_string(repo_root().join(shown))
+                    .unwrap_or_else(|e| panic!("{}: read {shown}: {e}", page.display()));
+                if !compact(&source).contains(&unit_body(&shown_source)) {
+                    failures.push(format!(
+                        "{}: {played} no longer carries the declarations of {shown}",
+                        page.display()
+                    ));
+                }
             }
         }
     }

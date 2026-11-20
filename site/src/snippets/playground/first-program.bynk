@@ -1,5 +1,9 @@
 context demo
 
+// The runnable copy of ../first-program.bynk (tutorial 1), with a
+// `service playground` added. Keep its declarations in step with that file:
+// the snippets gate checks that they still match.
+
 type Id = Int
 
 fn classify(n: Int) -> String {
