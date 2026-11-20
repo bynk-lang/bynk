@@ -10,6 +10,7 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::Write as _;
 use std::sync::Arc;
 
+use super::internal_fault::FaultSite;
 use super::zero_value::{render_zero_value, zero_expr as zero_value_expr};
 use crate::emit_model::EmitProjectCtx;
 use bynk_check::actors::ActorDecl;
@@ -135,6 +136,19 @@ pub(crate) fn emit_type_in(
     }
     stmts.extend(shape_stmts);
     stmts
+}
+
+/// A state field's zero value as TypeScript text. The checker admits a field with no initialiser
+/// only when its type has a zero (`bynk.agents.non_zeroable_state_field`), so none is a missing
+/// fact (1A.34), reported at the field.
+fn state_field_zero(f: &RecordField, commons: &TypedCommons, ctx: &EmitProjectCtx) -> String {
+    zero_value_ts(&f.type_ref, f.refinement.as_ref(), &commons.types).unwrap_or_else(|| {
+        let site = FaultSite {
+            sink: &ctx.runtime_use,
+            span: f.span,
+        };
+        bynk_ts::print_expr(&site.missing_fact("zero value for a state field"))
+    })
 }
 
 /// The TypeScript zero-value expression for a state field, or `None` if its
@@ -8603,8 +8617,7 @@ fn emit_agent_state_record(
                 format!("(() => {{ {} return {expr}; }})()", pre.stmts().join(" "))
             }
         } else {
-            zero_value_ts(&f.type_ref, f.refinement.as_ref(), &commons.types)
-                .unwrap_or_else(|| "undefined as never".to_string())
+            state_field_zero(f, commons, ctx)
         };
         if val.contains('\n') {
             zero_record_has_multiline_value = true;

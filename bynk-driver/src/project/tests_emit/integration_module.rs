@@ -45,6 +45,7 @@ pub(super) fn emit_integration_module(
     tys: &Arc<Types>,
     // #3032 / #2991: whether any suite source calls `Json.encodePlain`.
     plain_json: bool,
+    runtime_use: &RuntimeUse,
 ) -> Option<(PathBuf, TsProgram, Option<String>, RunnableTest)> {
     // #914: the test-scaffold module's runtime import list is emitted below as a
     // fixed set, but the bodies spliced into it lower through the ordinary `Bytes`
@@ -56,7 +57,6 @@ pub(super) fn emit_integration_module(
     // named type; `lower_json_codec_call` records the root on this `runtime_use`,
     // and the codec closure is generated for those roots after the cases lower
     // (below), as `emit_test_module` does for a unit suite.
-    let runtime_use = RuntimeUse::default();
     // #2991: a suite calling `Json.encodePlain` needs its own `Option` encoders to
     // carry the plain branch.
     runtime_use.set_plain_json(plain_json);
@@ -278,7 +278,7 @@ pub(super) fn emit_integration_module(
         emit_system_job_support(
             suite,
             unit_tables,
-            &runtime_use,
+            runtime_use,
             participants.first().is_some_and(sends),
         )
     };
@@ -370,7 +370,7 @@ pub(super) fn emit_integration_module(
     let http_support = emit_system_http_support(
         suite,
         unit_tables,
-        &runtime_use,
+        runtime_use,
         with_env,
         remote.is_some(),
         smoke,
@@ -619,7 +619,7 @@ pub(super) fn emit_integration_module(
             test_suites::integration_resolved(view, cross_context, test_suites::SuiteItems::NONE),
             participants.first().and_then(|p| unit_tables.get(p)),
             &mut typed,
-            &runtime_use,
+            runtime_use,
             &mut harness_bound,
             tys,
         );
@@ -662,13 +662,13 @@ pub(super) fn emit_integration_module(
             harness_bound,
             input.source,
             &input.rel_path,
-            &runtime_use,
+            runtime_use,
             remote.is_some(),
         );
         case_out.push_str(&suite_late_codecs(
             input.suite_fns,
             &typed,
-            &runtime_use,
+            runtime_use,
             roots_mark,
         ));
         for (p, names) in &participant_types {
@@ -781,7 +781,7 @@ pub(super) fn emit_integration_module(
                     &view.types,
                     "",
                     &qual,
-                    &runtime_use,
+                    runtime_use,
                 ),
             ));
             stmts.extend(bynk_emit::emitter::serialisation::decls_as_stmts(
@@ -789,7 +789,7 @@ pub(super) fn emit_integration_module(
                     &codec_insts,
                     &view.types,
                     &qual,
-                    &runtime_use,
+                    runtime_use,
                 ),
             ));
         }
@@ -800,7 +800,7 @@ pub(super) fn emit_integration_module(
     // own `names` (deduped against the fixed set already listed) and splice
     // the finished import statement in at its reserved position, the same
     // ordering `emit_project`'s own deferred `write_header` relies on.
-    append_runtime_use_imports(&mut runtime_names, &runtime_use);
+    append_runtime_use_imports(&mut runtime_names, runtime_use);
     let mut head =
         emitter::runtime_files::runtime_import_stmts(false, &runtime_names, &runtime_import);
     // #3277: a case that reads a result's cookies names the `Cookie` type.

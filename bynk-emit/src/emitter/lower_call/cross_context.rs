@@ -177,18 +177,18 @@ pub(crate) fn lower_workers_cross_context_call(
     // emitter ran, so an absent signature is the emitter disagreeing with the
     // checker — a compiler bug. It used to lower to `value as JsonValue` and an
     // `((j: any) => ({ tag: "Ok", value: j }))` identity deserialiser, shipping
-    // an unvalidated `any` to production to paper over that bug. Fail instead.
-    let svc = info
+    // an unvalidated `any` to production to paper over that bug. Fail instead:
+    // 1A.34 reports it as a `bynk.internal.missing_checker_fact` fault at the call.
+    let Some(svc) = info
         .consumed_services
         .get(consumed)
         .and_then(|map| map.get(&method.name))
-        .unwrap_or_else(|| {
-            panic!(
-                "bynk.emit.unresolved_cross_context_signature: no signature for \
-                 `{consumed}.{}` at emit time, though the checker resolved the call",
-                method.name
-            )
-        });
+    else {
+        return Ok(cx.missing_fact(
+            method.span,
+            format_args!("service signature for `{consumed}.{}`", method.name),
+        ));
+    };
 
     // #661 (ADR 0199 Decision G discharged): a context's own handlers generate
     // their *own* codecs for the contracts they participate in
@@ -209,22 +209,24 @@ pub(crate) fn lower_workers_cross_context_call(
         String::new()
     };
 
-    // One invariant for arity, asserted once, in both directions. The checker
+    // One invariant for arity, checked once, in both directions. The checker
     // validated it (`bynk.consumes.service_arity`) before emit ran, so a mismatch
     // either way is the emitter disagreeing with the checker — the same internal
-    // fault the signature lookup above asserts on, and it gets the same answer.
+    // fault the signature lookup above reports, and it gets the same answer.
     // (Previously the two directions disagreed: a surplus argument panicked, while
     // a missing one silently emitted `null` into the args object — quietly sending
     // a wrong payload for exactly the fault the other direction refused to ship.)
-    assert_eq!(
-        args.len(),
-        svc.params.len(),
-        "bynk.emit.unresolved_cross_context_signature: `{consumed}.{}` takes {} argument(s) \
-         but the call site has {}, though the checker accepted the call's arity",
-        method.name,
-        svc.params.len(),
-        args.len(),
-    );
+    if args.len() != svc.params.len() {
+        return Ok(cx.missing_fact(
+            method.span,
+            format_args!(
+                "argument count for `{consumed}.{}`: its signature takes {} but the call has {}",
+                method.name,
+                svc.params.len(),
+                args.len()
+            ),
+        ));
+    }
 
     // #1932: a type of the callee's this consumer neither imports nor names
     // has its codecs generated here under a renamed name (#1846); the call
@@ -820,29 +822,59 @@ mod tests {
         info
     }
 
-    fn lower_workers(info: &CrossContextInfo, args: &[Expr]) -> Built {
+    fn lower_workers(
+        info: &CrossContextInfo,
+        args: &[Expr],
+    ) -> (Built, Vec<crate::emitter::InternalFault>) {
         let commons = TypedCommons::empty();
         let ru = RuntimeUse::default();
         let module = ModuleCtx::new(&commons, info, &ru, UnitFacts::detached());
         let mut cx = LowerCtx::new(module, BodyMode::Method);
         let mut pre = Pre::new();
-        lower_workers_cross_context_call("shop.pay", &ident("charge"), args, 0, &mut cx, &mut pre)
+        let built = lower_workers_cross_context_call(
+            "shop.pay",
+            &ident("charge"),
+            args,
+            0,
+            &mut cx,
+            &mut pre,
+        );
+        (built, ru.take_faults())
     }
 
     /// The checker resolved the call before the emitter ran, so an absent signature is a compiler
     /// bug and fails (#642), as it did before the call was a node.
     #[test]
-    #[should_panic(expected = "bynk.emit.unresolved_cross_context_signature: no signature for")]
     fn a_call_with_no_signature_is_an_internal_fault() {
-        let _ = lower_workers(&info_with(false, Vec::new()), &[]);
+        let (built, faults) = lower_workers(&info_with(false, Vec::new()), &[]);
+        assert_eq!(
+            bynk_ts::print_expr(&built.expect("lowering continues")),
+            "undefined"
+        );
+        assert_eq!(faults.len(), 1, "{faults:?}");
+        assert_eq!(faults[0].span, ident("charge").span);
+        assert!(
+            faults[0]
+                .what
+                .contains("service signature for `shop.pay.charge`"),
+            "{faults:?}"
+        );
     }
 
-    /// An arity mismatch is the same fault, in either direction.
+    /// An arity mismatch is the same fault, in either direction, and lowering continues.
     #[test]
-    #[should_panic(expected = "takes 1 argument(s) but the call site has 0")]
     fn a_call_whose_arity_disagrees_with_the_signature_is_an_internal_fault() {
         let info = info_with(true, vec![("total".to_string(), named("Int"))]);
-        let _ = lower_workers(&info, &[]);
+        let (built, faults) = lower_workers(&info, &[]);
+        assert_eq!(
+            bynk_ts::print_expr(&built.expect("lowering continues")),
+            "undefined"
+        );
+        assert_eq!(faults.len(), 1, "{faults:?}");
+        assert!(
+            faults[0].what.contains("takes 1 but the call has 0"),
+            "{faults:?}"
+        );
     }
 
     /// A zero-argument call is a node whose payload is the empty object.
@@ -851,7 +883,9 @@ mod tests {
         let mut info = info_with(true, Vec::new());
         info.consumed_types
             .insert("shop.pay".to_string(), Default::default());
-        let call = lower_workers(&info, &[]).expect("a zero-argument call is a node");
+        let (call, faults) = lower_workers(&info, &[]);
+        assert!(faults.is_empty(), "{faults:?}");
+        let call = call.expect("a zero-argument call is a node");
         let printed = bynk_ts::print_expr(&call);
         assert!(
             printed.starts_with("__callService(deps.env.SHOP_PAY, \"charge\", {}, "),

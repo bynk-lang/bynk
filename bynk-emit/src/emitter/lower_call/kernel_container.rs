@@ -110,23 +110,24 @@ fn is_tag(recv: LoweredExpr, tag: &'static str) -> Built {
     )
 }
 
-/// The `Option[B]` or `Result[_, _]` a combinator call was checked at, peeled with `peel`; a
-/// mismatch is the finding #28 panic, unchanged.
+/// The `Option[B]` or `Result[_, _]` a combinator call was checked at, peeled with `peel`. A
+/// call the checker recorded at another type is a missing fact (1A.34): it is reported at the
+/// call, and `placeholder` (the receiver's own type) stands in so lowering continues. The output
+/// of a unit with a fault is never used.
 fn call_ty(
     e: &Expr,
     cx: &LowerCtx,
     what: &str,
     expected: &str,
+    placeholder: TyId,
     peel: impl FnOnce(&Ty) -> Option<TyId>,
 ) -> TyId {
     match cx.commons().expr_ty(e.id).as_deref().and_then(peel) {
         Some(t) => t,
-        None => panic!(
-            "bynk internal error (finding #28): emitter expected `{expected}` recorded for \
-             {what} at {:?}, but found {:?} — the checker should already have typed it",
-            e.span,
-            cx.commons().expr_ty(e.id).as_deref()
-        ),
+        None => {
+            cx.missing_fact_ty(e.span, format_args!("`{expected}` type for {what}"));
+            placeholder
+        }
     }
 }
 
@@ -149,10 +150,17 @@ pub(in crate::emitter) fn lower_option_kernel(
     let built: Option<Built> = match (op, args) {
         (OptionOp::Map, [f]) => {
             // The call's checked type is `Option[B]` — peel for B.
-            let b = call_ty(e, cx, "an `Option.map` call", "Option[_]", |ty| match ty {
-                Ty::Option(b) => Some(*b),
-                _ => None,
-            });
+            let b = call_ty(
+                e,
+                cx,
+                "an `Option.map` call",
+                "Option[_]",
+                inner,
+                |ty| match ty {
+                    Ty::Option(b) => Some(*b),
+                    _ => None,
+                },
+            );
             let (b, bs) = (ts_ty_to_ts_type(b, tys), ts_ty(b, tys));
             let kids = operands(&mut pre, cx, &[receiver, f]);
             Some(node_or_text(
@@ -186,6 +194,7 @@ pub(in crate::emitter) fn lower_option_kernel(
                 cx,
                 "an `Option.andThen` call",
                 "Option[_]",
+                inner,
                 |ty| match ty {
                     Ty::Option(b) => Some(*b),
                     _ => None,
@@ -246,6 +255,7 @@ pub(in crate::emitter) fn lower_option_kernel(
                 cx,
                 "an `Option.okOr` call",
                 "Result[_, _]",
+                inner,
                 |ty| match ty {
                     Ty::Result(_, err) => Some(*err),
                     _ => None,
@@ -355,6 +365,7 @@ pub(in crate::emitter) fn lower_result_kernel(
                 cx,
                 "a `Result.map` call",
                 "Result[_, _]",
+                ok,
                 |ty| match ty {
                     Ty::Result(b, _) => Some(*b),
                     _ => None,
@@ -390,6 +401,7 @@ pub(in crate::emitter) fn lower_result_kernel(
                 cx,
                 "a `Result.andThen` call",
                 "Result[_, _]",
+                ok,
                 |ty| match ty {
                     Ty::Result(b, _) => Some(*b),
                     _ => None,
@@ -426,6 +438,7 @@ pub(in crate::emitter) fn lower_result_kernel(
                 cx,
                 "a `Result.mapErr` call",
                 "Result[_, _]",
+                ok,
                 |ty| match ty {
                     Ty::Result(_, f) => Some(*f),
                     _ => None,
@@ -973,24 +986,31 @@ mod tests {
         int
     }
 
+    /// The call under test sits at bytes 7..11; every operand sits at 0..0.
+    fn call_span() -> Span {
+        Span::new(7, 11)
+    }
+
     fn ident(id: u32) -> Expr {
+        let span = if id == 1 {
+            call_span()
+        } else {
+            Span::new(0, 0)
+        };
         Expr {
             id: ExprId(id),
             kind: ExprKind::Ident(Ident {
                 name: "x".to_string(),
-                span: Span::new(0, 0),
+                span,
             }),
-            span: Span::new(0, 0),
+            span,
         }
     }
 
-    /// A combinator call whose checked type is not `Option[_]` is checker and emitter drift: the
-    /// finding #28 panic, with the same message.
+    /// A combinator call whose checked type is not `Option[_]` is checker and emitter drift: a
+    /// missing type fact (1A.34), recorded at the call's span, and lowering continues.
     #[test]
-    #[should_panic(
-        expected = "bynk internal error (finding #28): emitter expected `Option[_]` recorded for an `Option.map` call at"
-    )]
-    fn an_untyped_option_call_panics_with_the_finding_28_message() {
+    fn an_untyped_option_call_is_a_missing_type_fact() {
         let mut commons = TypedCommons::empty();
         let int = typed_as_int(&mut commons);
         let cross = bynk_check::resolver::CrossContextInfo::default();
@@ -1000,15 +1020,22 @@ mod tests {
             BodyMode::Method,
         );
         let (e, recv, f) = (ident(1), ident(2), ident(3));
-        let _ = lower_option_kernel(&e, &recv, OptionOp::Map, &[f], int, &mut cx);
+        let lowered = lower_option_kernel(&e, &recv, OptionOp::Map, &[f], int, &mut cx);
+        assert!(lowered.is_some(), "lowering continues past the fault");
+        let faults = ru.take_faults();
+        assert_eq!(faults.len(), 1, "{faults:?}");
+        assert_eq!(faults[0].span, call_span());
+        assert!(
+            faults[0]
+                .what
+                .contains("`Option[_]` type for an `Option.map` call"),
+            "{faults:?}"
+        );
     }
 
     /// The same for a `Result` combinator.
     #[test]
-    #[should_panic(
-        expected = "bynk internal error (finding #28): emitter expected `Result[_, _]` recorded for a `Result.mapErr` call at"
-    )]
-    fn an_untyped_result_call_panics_with_the_finding_28_message() {
+    fn an_untyped_result_call_is_a_missing_type_fact() {
         let mut commons = TypedCommons::empty();
         let int = typed_as_int(&mut commons);
         let cross = bynk_check::resolver::CrossContextInfo::default();
@@ -1018,6 +1045,16 @@ mod tests {
             BodyMode::Method,
         );
         let (e, recv, f) = (ident(1), ident(2), ident(3));
-        let _ = lower_result_kernel(&e, &recv, ResultOp::MapErr, &[f], int, int, &mut cx);
+        let lowered = lower_result_kernel(&e, &recv, ResultOp::MapErr, &[f], int, int, &mut cx);
+        assert!(lowered.is_some(), "lowering continues past the fault");
+        let faults = ru.take_faults();
+        assert_eq!(faults.len(), 1, "{faults:?}");
+        assert_eq!(faults[0].span, call_span());
+        assert!(
+            faults[0]
+                .what
+                .contains("`Result[_, _]` type for a `Result.mapErr` call"),
+            "{faults:?}"
+        );
     }
 }

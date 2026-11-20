@@ -327,6 +327,39 @@ impl<'a> LowerCtx<'a> {
         self.module.runtime_use
     }
 
+    /// 1A.34: a checker fact lowering needs is absent. Records an
+    /// [`InternalFault`](super::InternalFault) at `span` and returns the
+    /// `undefined` identifier, so lowering continues and every fault of the unit
+    /// is reported. `what` names the fact ("type for a `fold` call").
+    pub(crate) fn missing_fact(
+        &self,
+        span: bynk_syntax::span::Span,
+        what: impl std::fmt::Display,
+    ) -> bynk_ts::TsExpr {
+        self.fault_site(span).missing_fact(what)
+    }
+
+    /// [`Self::missing_fact`] for a type position.
+    pub(crate) fn missing_fact_ty(
+        &self,
+        span: bynk_syntax::span::Span,
+        what: impl std::fmt::Display,
+    ) -> bynk_ts::TsType {
+        self.fault_site(span).missing_fact_ty(what)
+    }
+
+    /// The sink and a span, for a helper that reports a missing fact without
+    /// holding the context.
+    pub(crate) fn fault_site(
+        &self,
+        span: bynk_syntax::span::Span,
+    ) -> super::internal_fault::FaultSite<'a> {
+        super::internal_fault::FaultSite {
+            sink: self.runtime_use(),
+            span,
+        }
+    }
+
     /// v0.8 build target.
     pub(crate) fn target(&self) -> BuildTarget {
         self.module.target

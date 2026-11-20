@@ -12,6 +12,7 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
+use super::internal_fault::undefined_node;
 use super::workers_entry::wire_ident;
 use crate::emit_model::{ImportExt, LocaleNegotiationArgs};
 use crate::emitter::http_handler_method_name_ir;
@@ -2376,7 +2377,8 @@ fn session_deps_entry(table: &UnitTable) -> Option<TsObjectEntry> {
     let keys = actors
         .iter()
         .map(|s| {
-            let previous = s.previous.as_deref().map_or(ident("undefined"), probe);
+            // A legitimate default: no previous secret is `undefined`.
+            let previous = s.previous.as_deref().map_or_else(undefined_node, probe);
             (
                 crate::emitter::escape_ts_string(&s.actor),
                 TsExpr::object(vec![
@@ -2504,7 +2506,8 @@ fn emit_http_signed_cookie_wrapper(
     ));
     let previous = match &seam.previous {
         Some(var) => secret_probe_expr(&crate::emitter::escape_ts_string(var)),
-        None => ident("undefined"),
+        // A legitimate default: no previous secret is `undefined`.
+        None => undefined_node(),
     };
     stmts.push(const_(
         "__session",

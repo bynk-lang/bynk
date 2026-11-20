@@ -11,6 +11,7 @@ use bynk_ts::{
     print_type,
 };
 
+use super::internal_fault::FaultSite;
 use super::lower::{Built, Pre, decimal_lit, ident_node, node_or_text, num_lit};
 use super::lower_ctx::LowerCtx;
 use super::ts_types::{TyRender, ts_ty, ts_ty_to_ts_type};
@@ -18,8 +19,9 @@ use super::{BaseType, Expr};
 
 /// v0.150 (ADR 0174): peel a `traverseTry`/`parTraverseTry` call's checked type
 /// `Effect[Result[List[U], E]]` to the `U` TS — the short-circuit collect's
-/// output-array element annotation. Falls back to `any` if the shape is absent.
-pub(super) fn list_ok_elem(call_ty: Option<TyId>, tys: TyRender<'_>) -> TsType {
+/// output-array element annotation. A call whose checked type is not that shape
+/// is a missing checker fact (1A.34).
+pub(super) fn list_ok_elem(call_ty: Option<TyId>, tys: TyRender<'_>, at: FaultSite<'_>) -> TsType {
     match call_ty.map(|t| tys.get(t)).as_deref() {
         Some(Ty::Effect(inner)) => match &*tys.get(*inner) {
             Ty::Result(ok, _) => match &*tys.get(*ok) {
@@ -28,13 +30,15 @@ pub(super) fn list_ok_elem(call_ty: Option<TyId>, tys: TyRender<'_>) -> TsType {
             },
             _ => ts_ty_to_ts_type(*inner, tys),
         },
-        _ => any_ty(),
+        _ => {
+            at.missing_fact_ty("`Effect[Result[List[_], _]]` type for a short-circuit collect call")
+        }
     }
 }
 
-/// The `any` fallback of a checked shape that is absent (an already-diagnosed
-/// program), the one place the lowering names it: the list kernel's and a UFCS
-/// call's receiver argument that is not in scope everywhere.
+/// `any`, the one place the lowering spells it, for what is deliberate and not a fallback: the
+/// `HttpResult` cookie read and the test scaffold's `as any` (typing choices), and the named
+/// widening [`super::internal_fault::unnameable_receiver_type_arg`] (#2795).
 pub(super) fn any_ty() -> TsType {
     TsType::named("any")
 }
@@ -481,13 +485,7 @@ fn list_fold(a: &ListArm, init: &Expr, f: &Expr, pre: &mut Pre, cx: &mut LowerCt
         .expr_types
         .get(&e.id)
         .map(|te| ts_ty_to_ts_type(te.ty, tys))
-        .unwrap_or_else(|| {
-            panic!(
-                "bynk internal error (finding #28): emitter has no recorded type for a \
-                     `fold` call at {:?} — the checker should already have typed it",
-                e.span
-            )
-        });
+        .unwrap_or_else(|| cx.missing_fact_ty(e.span, "type for a `fold` call"));
     let acc_ts = print_type(&acc);
     let recv = pre.lower_node(a.receiver, cx);
     let init = pre.lower_node(init, cx);
@@ -533,11 +531,7 @@ fn list_fold_eff(a: &ListArm, init: &Expr, f: &Expr, pre: &mut Pre, cx: &mut Low
     let acc = match cx.commons().expr_ty(e.id).as_deref() {
         Some(Ty::Effect(acc)) => ts_ty_to_ts_type(*acc, tys),
         Some(_) => ts_ty_to_ts_type(cx.commons().expr_types[&e.id].ty, tys),
-        None => panic!(
-            "bynk internal error (finding #28): emitter has no recorded type for a \
-                     `foldEff` call at {:?} — the checker should already have typed it",
-            e.span
-        ),
+        None => cx.missing_fact_ty(e.span, "type for a `foldEff` call"),
     };
     let acc_ts = print_type(&acc);
     let recv = pre.lower_node(a.receiver, cx);
@@ -649,12 +643,7 @@ fn list_traverse_all(a: &ListArm, f: &Expr, pre: &mut Pre, cx: &mut LowerCtx) ->
             Ty::List(el) => ts_ty_to_ts_type(*el, tys),
             _ => ts_ty_to_ts_type(*inner, tys),
         },
-        other => panic!(
-            "bynk internal error (finding #28): emitter expected `Effect[List[_]]` \
-                     recorded for a `traverseAll` call at {:?}, but found {other:?} — the \
-                     checker should already have typed it",
-            e.span
-        ),
+        _ => cx.missing_fact_ty(e.span, "`Effect[List[_]]` type for a `traverseAll` call"),
     };
     let res_arr = array_ts(&res);
     let recv = pre.lower_node(a.receiver, cx);
@@ -744,7 +733,10 @@ fn list_sequence(a: &ListArm, name: ListOp, pre: &mut Pre, cx: &mut LowerCtx) ->
             };
             (ok_ty, err_ty)
         }
-        _ => (any_ty(), any_ty()),
+        _ => {
+            let missing = cx.missing_fact_ty(e.span, "`Result` type for a `sequence` call");
+            (missing.clone(), missing)
+        }
     };
     let (ok_arr, err_arr) = (array_ts(&ok), array_ts(&err));
     let recv = pre.lower_node(a.receiver, cx);
@@ -833,7 +825,11 @@ fn list_sequence(a: &ListArm, name: ListOp, pre: &mut Pre, cx: &mut LowerCtx) ->
 fn list_traverse_try(a: &ListArm, f: &Expr, pre: &mut Pre, cx: &mut LowerCtx) -> Built {
     let (e, xs_ts) = (a.e, &a.xs_ts);
     let tys = cx.ty_render();
-    let u = list_ok_elem(cx.commons().expr_types.get(&e.id).map(|te| te.ty), tys);
+    let u = list_ok_elem(
+        cx.commons().expr_types.get(&e.id).map(|te| te.ty),
+        tys,
+        cx.fault_site(e.span),
+    );
     let u_arr = array_ts(&u);
     let recv = pre.lower_node(a.receiver, cx);
     let f = pre.lower_node(f, cx);
@@ -870,7 +866,11 @@ fn list_par_traverse_try(a: &ListArm, f: &Expr, pre: &mut Pre, cx: &mut LowerCtx
     let (e, xs_ts, elem_ts) = (a.e, &a.xs_ts, &a.elem_ts);
     let tys = cx.ty_render();
     cx.note_settle_all();
-    let u = list_ok_elem(cx.commons().expr_types.get(&e.id).map(|te| te.ty), tys);
+    let u = list_ok_elem(
+        cx.commons().expr_types.get(&e.id).map(|te| te.ty),
+        tys,
+        cx.fault_site(e.span),
+    );
     let u_arr = array_ts(&u);
     let recv = pre.lower_node(a.receiver, cx);
     let f = pre.lower_node(f, cx);
@@ -1767,8 +1767,10 @@ pub(super) fn group_by_body(elem: &TsType, iter: TsExpr, key: TsExpr, into: TsEx
 }
 
 /// v0.94 (ADR 0120): the TS element type of a join's `other` collection (its
-/// `List`/`Query` element), for typing the hash-map buckets. Falls back to
-/// `unknown` if the checker recorded no type (an already-diagnosed program).
+/// `List`/`Query` element), for typing the hash-map buckets. `unknown` when the
+/// first argument is not a collection: every query method that takes an argument
+/// computes this (the `QueryShape`'s `other_elem`), and only a join reads it, so
+/// `unknown` there is a legitimate default and not a missing fact (1A.34 sweep).
 pub(super) fn join_other_elem(args: &[Expr], cx: &LowerCtx) -> TsType {
     let tys = cx.ty_render();
     match cx.commons().expr_ty(args[0].id).as_deref() {

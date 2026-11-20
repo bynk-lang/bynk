@@ -22,6 +22,7 @@
 //! doc comment for the full accounting).
 
 use super::*;
+use bynk_emit::emitter::RuntimeUse;
 use bynk_emit::emitter::wrangler::WorkerBinding;
 // #1759: every namespace a test module imports, from one definition.
 use bynk_check::checker::Types;
@@ -63,6 +64,18 @@ pub(in crate::project) use self::test_module::duplicated_export_reexports;
 pub(in crate::project) use self::test_module::emit_commons_barrel;
 pub(in crate::project) use self::test_module::merged_unit_helpers;
 use self::test_module::*;
+
+/// 1A.34: a checker fact a suite's lowering needed and did not find is a compiler fault, reported
+/// as a `bynk.internal.missing_checker_fact` diagnostic at the `.bynk` span (the case body's), and
+/// the module's output is not used. Read once the module has lowered.
+fn drain_internal_faults(errors: &mut Vec<CompileError>, runtime_use: &RuntimeUse) {
+    errors.extend(
+        runtime_use
+            .take_faults()
+            .into_iter()
+            .map(bynk_emit::emitter::InternalFault::into_compile_error),
+    );
+}
 
 /// P5.4: `test <target>` suite processing. The checking half (target/`stub`
 /// resolution, duplicate-case-name detection, case/property body
@@ -161,6 +174,7 @@ pub(crate) fn process_tests(
                 .unwrap_or_default();
 
         // -- Phase 5: emit TypeScript test module. --
+        let runtime_use = RuntimeUse::default();
         let emit_out = emit_test_module(
             target_name,
             target_kind,
@@ -195,8 +209,10 @@ pub(crate) fn process_tests(
             ),
             d1_migrations,
             snapshot_files,
+            &runtime_use,
             tys,
         );
+        drain_internal_faults(errors, &runtime_use);
         if let Some((path, program, source_map, runnable)) = emit_out {
             outputs.push(StagedFile {
                 output_path: path,
@@ -427,7 +443,8 @@ pub(crate) fn process_integration_tests(
         // #1814: the harness view the cases were checked in.
         let view =
             test_suites::integration_view(&uses_targets, &participants, unit_tables, unit_uses);
-        if let Some((path, program, source_map, runnable)) = emit_integration_module(
+        let runtime_use = RuntimeUse::default();
+        let emitted = emit_integration_module(
             &suite_name,
             &participants,
             &harness_participants,
@@ -446,7 +463,10 @@ pub(crate) fn process_integration_tests(
             errors,
             tys,
             super::project_mentions_encode_plain(parsed),
-        ) {
+            &runtime_use,
+        );
+        drain_internal_faults(errors, &runtime_use);
+        if let Some((path, program, source_map, runnable)) = emitted {
             outputs.push(StagedFile {
                 output_path: path,
                 document: Document::Ts(program),

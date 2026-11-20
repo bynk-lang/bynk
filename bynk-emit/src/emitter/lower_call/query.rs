@@ -7,15 +7,15 @@ use bynk_check::checker::Ty;
 use bynk_check::kernel_op::{QueryOp, StreamOp};
 use bynk_ts::{TsArrowBody, TsBinaryOp, TsExpr, TsStmt, TsType, print_type};
 
+use super::super::internal_fault::FaultSite;
 use super::super::lower::{Built, LoweredExpr, decimal_lit, node_or_text};
 use super::super::lower_ctx::LowerCtx;
 use super::super::lower_list::{
-    JoinSides, any_ty, applied, array_ts, arrow, arrow_with, assign, awaited_apply, bail_on_err,
-    binary, block, call, clamped_at_zero, const_, distinct_by_body, expr_stmt, for_of,
-    group_by_body, id, iife_block, join_body, join_other_elem, kernel_key_comparator,
-    key_fn_is_plain, key_is_plain, let_, list_ok_elem, member, method_call_bare, method_sort,
-    param, paren, push_value, ret, sort_order, sort_plain_by, spread, take, with_comparator,
-    with_comparator_node, zero,
+    JoinSides, applied, array_ts, arrow, arrow_with, assign, awaited_apply, bail_on_err, binary,
+    block, call, clamped_at_zero, const_, distinct_by_body, expr_stmt, for_of, group_by_body, id,
+    iife_block, join_body, join_other_elem, kernel_key_comparator, key_fn_is_plain, key_is_plain,
+    let_, list_ok_elem, member, method_call_bare, method_sort, param, paren, push_value, ret,
+    sort_order, sort_plain_by, spread, take, with_comparator, with_comparator_node, zero,
 };
 use super::super::ts_types::{TyRender, ts_ty_to_ts_type};
 use super::super::{BaseType, Expr, Ident, RuntimeUse, TyId};
@@ -93,6 +93,8 @@ pub(in crate::emitter) struct QueryShape<'a> {
     /// The module's runtime-helper record, so a lowering that needs a helper
     /// imports it (`Query.sum` over a `Decimal` key needs `__bynkDecimalAdd`, #3421).
     pub(in crate::emitter) runtime_use: &'a RuntimeUse,
+    /// The operation's `.bynk` span, where a missing checker fact is reported (1A.34).
+    pub(in crate::emitter) span: bynk_syntax::span::Span,
 }
 
 /// The `other` side's element type of a `joinOn`/`leftJoin`, for the callers' [`QueryShape`]
@@ -306,6 +308,14 @@ struct Arm<'a> {
 }
 
 impl Arm<'_> {
+    /// Where this operation reports a checker fact it needs and does not find.
+    fn fault_site(&self) -> FaultSite<'_> {
+        FaultSite {
+            sink: self.shape.runtime_use,
+            span: self.shape.span,
+        }
+    }
+
     /// The operation as a node when its source and every argument are nodes, else today's
     /// text (see `node_or_text`). `node` and `text` receive the source, then the arguments.
     fn built_vec(
@@ -1021,7 +1031,9 @@ impl Arm<'_> {
                 Ty::List(el) => ts_ty_to_ts_type(*el, tys),
                 _ => ts_ty_to_ts_type(*inner, tys),
             },
-            _ => any_ty(),
+            _ => self
+                .fault_site()
+                .missing_fact_ty("`Effect[List[_]]` type for a `traverseAll` call"),
         };
         let res_arr = array_ts(&res);
         self.built(
@@ -1069,7 +1081,7 @@ impl Arm<'_> {
     // v0.150 (ADR 0174): the short-circuit collect terminals — stop at the first `Err`,
     // returning `Result[List[U], E]`.
     fn traverse_try(self) -> Built {
-        let u = list_ok_elem(self.result_ty, self.tys);
+        let u = list_ok_elem(self.result_ty, self.tys, self.fault_site());
         let u_arr = array_ts(&u);
         self.built(
             |o, [f]| {
@@ -1097,7 +1109,7 @@ impl Arm<'_> {
     }
 
     fn par_traverse_try(self) -> Built {
-        let u = list_ok_elem(self.result_ty, self.tys);
+        let u = list_ok_elem(self.result_ty, self.tys, self.fault_site());
         let u_arr = array_ts(&u);
         self.built(
             |o, [f]| {
@@ -1224,6 +1236,21 @@ mod tests {
         }
     }
 
+    /// The call's checked type the collect operations read: `Effect[List[Int]]` for `traverseAll`,
+    /// `Effect[Result[List[Int], Int]]` for the short-circuit ones, and none for the rest.
+    fn result_ty(env: &Env, op: QueryOp) -> Option<TyId> {
+        let int = env.tys.intern(Ty::Base(BaseType::Int));
+        let list = env.tys.intern(Ty::List(int));
+        match op {
+            QueryOp::TraverseAll => Some(env.tys.intern(Ty::Effect(list))),
+            QueryOp::TraverseTry | QueryOp::ParTraverseTry => {
+                let result = env.tys.intern(Ty::Result(list, int));
+                Some(env.tys.intern(Ty::Effect(result)))
+            }
+            _ => None,
+        }
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn lower(
         env: &Env,
@@ -1241,6 +1268,7 @@ mod tests {
             keyed,
             key_cmp,
             runtime_use: &env.runtime_use,
+            span: bynk_syntax::span::Span::new(3, 8),
         };
         lower_query_method(
             source,
@@ -1330,7 +1358,7 @@ mod tests {
                 (&elem, &other),
                 keyed,
                 comparator(cmp),
-                None,
+                result_ty(&env, op),
             );
             assert_eq!(node_print(built), node, "{op:?} keyed={keyed} cmp={cmp}");
         }
@@ -1359,7 +1387,7 @@ mod tests {
                 (&elem, &other),
                 keyed,
                 comparator(cmp),
-                None,
+                result_ty(&env, op),
             );
             assert_eq!(text_of(from_source), text, "{op:?} keyed={keyed} cmp={cmp}");
             if !args.is_empty() {
@@ -1375,7 +1403,7 @@ mod tests {
                         (&elem, &other),
                         keyed,
                         comparator(cmp),
-                        None,
+                        result_ty(&env, op),
                     );
                     assert_eq!(
                         text_of(built),
@@ -1391,10 +1419,38 @@ mod tests {
                     (&elem, &other),
                     keyed,
                     comparator(cmp),
-                    None,
+                    result_ty(&env, op),
                 );
                 assert_eq!(text_of(all_text), text, "{op:?} text arguments");
             }
+        }
+    }
+
+    /// A collect whose call the checker recorded no `Effect[..]` type for is a missing type fact
+    /// (1A.34), recorded at the operation's span; the operation still lowers.
+    #[test]
+    fn a_collect_without_a_result_type_is_a_missing_fact() {
+        let (elem, other) = (named("Item"), named("Other"));
+        for op in [
+            QueryOp::TraverseAll,
+            QueryOp::TraverseTry,
+            QueryOp::ParTraverseTry,
+        ] {
+            let env = env();
+            let built = lower(
+                &env,
+                op,
+                values(LoweredExpr::Node(id("src"))),
+                arg_nodes(&["f"]),
+                (&elem, &other),
+                false,
+                None,
+                None,
+            );
+            assert!(built.is_some(), "{op:?} still lowers");
+            let faults = env.runtime_use.take_faults();
+            assert_eq!(faults.len(), 1, "{op:?}: {faults:?}");
+            assert_eq!(faults[0].span, bynk_syntax::span::Span::new(3, 8), "{op:?}");
         }
     }
 

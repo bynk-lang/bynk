@@ -1,6 +1,6 @@
 //! `cargo xtask greenfield-status` — the probe harness (track doc §8, proposal #999).
 //!
-//! Twenty-five probes measuring the tree against `design/bynk-greenfield-compiler.md`:
+//! Twenty-six probes measuring the tree against `design/bynk-greenfield-compiler.md`:
 //! the twelve in track doc §8, `emit_abi_shapes` (ADR 0310's probe, #999 Decision E —
 //! this slice measures the emit-ABI enumeration guard but does not wire it; wiring is
 //! packaging-track work), phase 7's own four — `ts_writes`, `ts_any`,
@@ -14,11 +14,11 @@
 //! crate-hygiene track's M-3 ratchet, `model_readers_beyond_emit` (B1, #2939), and its H-3 gate,
 //! `unused_deps` (A4, #2976).
 //!
-//! **Twenty-five are gated**, committed and diffed: `workspace_lints`, `fs_below_driver`,
+//! **Twenty-six are gated**, committed and diffed: `workspace_lints`, `fs_below_driver`,
 //! `options_sources`, `hoist_sinks`, `span_keyed_maps`, `emit_diagnostics`,
 //! `ide_emit_edge`, `ast_importers`, `emit_abi_shapes`, `ts_writes`, `ts_any`,
 //! `verbatim_origins`, `verbatim_sites`, `incremental_query_types`,
-//! `unconsumed_ir_items`, `diagnostic_coverage`, `model_readers_beyond_emit`, `unused_deps`, `explained_codes`, `ts_raw_sites_emit`, `ts_raw_sites_testgen`, `ts_text_idents`, `lowering_text_bridge`, `stmt_text_lines`, `emit_thread_locals`. Ten of these are
+//! `unconsumed_ir_items`, `diagnostic_coverage`, `model_readers_beyond_emit`, `unused_deps`, `explained_codes`, `ts_raw_sites_emit`, `ts_raw_sites_testgen`, `ts_text_idents`, `lowering_text_bridge`, `stmt_text_lines`, `emit_thread_locals`, `emit_silent_fallbacks`. Ten of these are
 //! zero/closure-shaped — a boolean, or a count pinned at a small, argued floor
 //! (`ast_importers` = 5, `emit_abi_shapes` = 1). Phase 7's own four are the same shape:
 //! each converged toward an argued floor over dozens of slices, the same trajectory
@@ -42,7 +42,7 @@
 //! **Two kinds of gate** (#3679, amending ADR 0389/0390). Every gated probe is
 //! *exact-match*: a live reading that differs from its committed row fails unless a
 //! pending file names it in `probes:`. The [`GROWTH_PROBES`] (`ts_writes`, `ts_any`,
-//! `emit_abi_shapes`, `verbatim_sites`, `ts_raw_sites_emit`, `ts_raw_sites_testgen`, `ts_text_idents`, `lowering_text_bridge`, `stmt_text_lines`, `span_keyed_maps`, `emit_thread_locals`) are also *directional*:
+//! `emit_abi_shapes`, `verbatim_sites`, `ts_raw_sites_emit`, `ts_raw_sites_testgen`, `ts_text_idents`, `lowering_text_bridge`, `stmt_text_lines`, `span_keyed_maps`, `emit_thread_locals`, `emit_silent_fallbacks`) are also *directional*:
 //! `growth_probes_never_rise` (`xtask/tests/greenfield_status.rs`) fails when the
 //! live leading count exceeds the committed one unless a pending file *raises* the
 //! probe with a reason (`raises:`), which the stamp then records in
@@ -117,7 +117,7 @@ pub fn run(root: &Path) -> Report {
 /// The gated probes' names, in [`run_gated`]'s order — what a pending file's
 /// `probes` key may cite. `greenfield_status_table_is_current` asserts this
 /// matches the probes [`run_gated`] actually returns, so the two cannot drift.
-pub const GATED_PROBES: [&str; 25] = [
+pub const GATED_PROBES: [&str; 26] = [
     "workspace_lints",
     "fs_below_driver",
     "options_sources",
@@ -137,6 +137,7 @@ pub const GATED_PROBES: [&str; 25] = [
     "lowering_text_bridge",
     "stmt_text_lines",
     "emit_thread_locals",
+    "emit_silent_fallbacks",
     "incremental_query_types",
     "unconsumed_ir_items",
     "diagnostic_coverage",
@@ -147,12 +148,12 @@ pub const GATED_PROBES: [&str; 25] = [
 
 /// The gated probes that only a reasoned, recorded `raises:` may increase
 /// (#3679, ADR 0389/0390 amended): `ts_writes`, `ts_any`, `emit_abi_shapes`,
-/// `verbatim_sites`, `ts_raw_sites_emit` and `ts_raw_sites_testgen` (the split of `ts_raw_sites`, #3681), `ts_text_idents` (#3681), `lowering_text_bridge` (1A.2, #3694), `stmt_text_lines` (1A.10, #3711), `span_keyed_maps`, `emit_thread_locals` (1A.19). Probes already at a zero or closure
+/// `verbatim_sites`, `ts_raw_sites_emit` and `ts_raw_sites_testgen` (the split of `ts_raw_sites`, #3681), `ts_text_idents` (#3681), `lowering_text_bridge` (1A.2, #3694), `stmt_text_lines` (1A.10, #3711), `span_keyed_maps`, `emit_thread_locals` (1A.19), `emit_silent_fallbacks` (1A.34). Probes already at a zero or closure
 /// floor are excluded (their exact-match row pins them), as are
 /// `verbatim_origins` (an argued floor of 2) and `model_readers_beyond_emit`
 /// (which has the opposite direction). A subset of [`GATED_PROBES`], pinned by
 /// a unit test.
-pub const GROWTH_PROBES: [&str; 11] = [
+pub const GROWTH_PROBES: [&str; 12] = [
     "ts_writes",
     "ts_any",
     "emit_abi_shapes",
@@ -164,9 +165,10 @@ pub const GROWTH_PROBES: [&str; 11] = [
     "stmt_text_lines",
     "span_keyed_maps",
     "emit_thread_locals",
+    "emit_silent_fallbacks",
 ];
 
-/// The twenty-five gated (zero/closure/ratchet) probes only — what [`gated_disagreements`] diffs.
+/// The twenty-six gated (zero/closure/ratchet) probes only — what [`gated_disagreements`] diffs.
 pub fn run_gated(root: &Path) -> Vec<Probe> {
     vec![
         workspace_lints(root),
@@ -188,6 +190,7 @@ pub fn run_gated(root: &Path) -> Vec<Probe> {
         lowering_text_bridge(root),
         stmt_text_lines(root),
         emit_thread_locals(root),
+        emit_silent_fallbacks(root),
         incremental_query_types(root),
         unconsumed_ir_items(root),
         diagnostic_coverage(root),
@@ -2349,6 +2352,79 @@ fn emit_thread_locals_violations(files: &[(PathBuf, String)]) -> usize {
     count
 }
 
+/// 1A.34 (#3735, Decision E): the silent fallbacks in `bynk-emit`'s production source, where a
+/// missing checker fact (or a legitimate absence) is answered by writing `any` or `undefined`
+/// instead of by `LowerCtx::missing_fact` (a reported fault) or by an `Option` rendered once as
+/// `undefined_node()`. A growth probe ([`GROWTH_PROBES`]): it reads 0 and a new fallback needs a
+/// pending file's `raises:` with a reason.
+///
+/// **The pattern, precisely.** A line counts when, outside comments and `#[cfg(test)]` modules,
+/// it holds a *fallback position* and, after it on the same line, an *`any`/`undefined`
+/// construction*:
+/// - fallback positions: `.unwrap_or_else(`, `.unwrap_or(`, `.map_or(`, `.map_or_else(`,
+///   and the match arms `_ =>`, `None =>`, `Err(_) =>`;
+/// - constructions: a string literal `"any"`, a string literal that begins `"undefined`
+///   (`"undefined"`, `"undefined as never"`, `"undefined /* .. */"`), which covers
+///   `TsType::named("any")`, `ident("undefined")` and `Ident("undefined".to_string())`; the
+///   named-widening helper's predecessor `any_ty` (call or function path); and the closure name
+///   `undefined` (`unwrap_or_else(undefined)`).
+///
+/// So `.unwrap_or_else(|| "any")`, `_ => any_ty()` and `None => ident("undefined")` count, and
+/// `.unwrap_or_else(undefined_node)` (a legitimate default, rendered once), a call to
+/// `cx.missing_fact(..)` and `fn unnameable_receiver_type_arg() -> TsType { TsType::named("any") }`
+/// (the one named widening: a function body, with no fallback position on its line) do not.
+///
+/// **Known gaps, accepted as the other line scanners accept theirs:** an arm whose value sits on
+/// the next line, and a fallback spelt through a helper of another name, read as clean. The
+/// sweep's classification of every remaining fallback is in the slice's PR, not in this count.
+fn emit_silent_fallbacks(root: &Path) -> Probe {
+    Probe {
+        name: "emit_silent_fallbacks",
+        gated: true,
+        reads: emit_silent_fallbacks_violations(&rust_files_relative(&root.join("bynk-emit/src")))
+            .to_string(),
+    }
+}
+
+/// Whether `line` holds a fallback position followed by an `any`/`undefined` construction
+/// (see [`emit_silent_fallbacks`] for the pattern).
+fn line_is_silent_fallback(line: &str) -> bool {
+    const POSITIONS: [&str; 7] = [
+        ".unwrap_or_else(",
+        ".unwrap_or(",
+        ".map_or(",
+        ".map_or_else(",
+        "_ =>",
+        "None =>",
+        "Err(_) =>",
+    ];
+    const CONSTRUCTIONS: [&str; 4] = ["\"any\"", "\"undefined", "any_ty", "undefined)"];
+    POSITIONS.iter().any(|position| {
+        line.match_indices(position).any(|(at, _)| {
+            let rest = &line[at + position.len()..];
+            CONSTRUCTIONS.iter().any(|c| rest.contains(c))
+        })
+    })
+}
+
+/// [`emit_silent_fallbacks`]'s counting logic over an explicit file list.
+fn emit_silent_fallbacks_violations(files: &[(PathBuf, String)]) -> usize {
+    let mut count = 0usize;
+    for (_, contents) in files {
+        let lines: Vec<&str> = contents.lines().collect();
+        let ranges = test_mod_ranges(&lines);
+        for (i, line) in lines.iter().enumerate() {
+            if in_test_range(i, &ranges) || is_line_comment(line) {
+                continue;
+            }
+            if line_is_silent_fallback(line) {
+                count += 1;
+            }
+        }
+    }
+    count
+}
+
 /// Whether a `#[cfg(..)]` attribute line gates the next item on `test` alone, or on
 /// `any(..)` with a bare `test` arm. Anything else counts as production: a `not(..)`
 /// predicate (`#[cfg(not(test))]` compiles into every product build), `all(..)`,
@@ -4110,7 +4186,7 @@ pub fn render_table(report: &Report) -> String {
          `diagnostic_coverage` added by #1662; `model_readers_beyond_emit` added by \
          crate-hygiene B1 (#2939); `unused_deps` added by crate-hygiene A4 (#2976); `explained_codes` added by #3163; `ts_raw_sites`/`ts_text_idents` added by #3681; `lowering_text_bridge` added by #3694; `stmt_text_lines` added by #3711; \
          `ts_raw_sites` split into `ts_raw_sites_emit`/`ts_raw_sites_testgen` and `emit_thread_locals` \
-         added by 1A.19. Twenty-five \
+         added by 1A.19; `emit_silent_fallbacks` added by 1A.34. Twenty-six \
          probes are gated — a disagreement between this file and a fresh run fails \
          `greenfield_status_table_is_current` (`xtask/tests/greenfield_status.rs`). \
          Five are trend probes, reported only.\n\n",
@@ -4494,7 +4570,8 @@ mod tests {
         | `lowering_text_bridge` | yes | 128 |\n\
         | `stmt_text_lines` | yes | 70 |\n\
         | `span_keyed_maps` | yes | 2 |\n\
-        | `emit_thread_locals` | yes | 2 |\n";
+        | `emit_thread_locals` | yes | 2 |\n\
+        | `emit_silent_fallbacks` | yes | 15 |\n";
 
     fn growth_live(ts_writes: &str, abi: &str) -> Vec<Probe> {
         vec![
@@ -4509,6 +4586,7 @@ mod tests {
             gated("stmt_text_lines", "70"),
             gated("span_keyed_maps", "2"),
             gated("emit_thread_locals", "2"),
+            gated("emit_silent_fallbacks", "15"),
         ]
     }
 
@@ -4726,6 +4804,58 @@ mod tests {
             emit_thread_locals_violations(&files_of(&[("a.rs", src)])),
             4,
             "the bare one and the `windows`-, `not(test)`- and `attestation`-gated ones; test-gated, commented and longer names excluded"
+        );
+    }
+
+    #[test]
+    fn emit_silent_fallbacks_counts_a_fallback_position_followed_by_any_or_undefined() {
+        let counted = [
+            "let t = r.map(f).unwrap_or_else(|| \"any\");",
+            "let t = r.unwrap_or_else(any_ty);",
+            "        _ => any_ty(),",
+            "        _ => (any_ty(), any_ty()),",
+            "        None => ident(\"undefined\"),",
+            "let p = s.as_deref().map_or(ident(\"undefined\"), probe);",
+            "    .unwrap_or_else(|| \"undefined as never\".to_string())",
+            "    .unwrap_or_else(|| \"undefined\".to_string());",
+            "        Err(_) => TsType::named(\"any\"),",
+            "        None => return pre.finish_text(\"undefined /* mock */\".to_string()),",
+            "let slot = all.pop().unwrap_or_else(undefined);",
+            "let n = x.unwrap_or(\"any\");",
+        ];
+        for line in counted {
+            assert!(line_is_silent_fallback(line), "should count: {line}");
+        }
+        let clean = [
+            // a legitimate default, rendered once
+            "mock_value_of(ty, cx, depth, at).unwrap_or_else(undefined_node)",
+            "let previous = s.map_or_else(undefined_node, probe);",
+            // a reported fault
+            "None => cx.missing_fact(span, \"type for a call\"),",
+            ".unwrap_or_else(|| cx.missing_fact_ty(e.span, \"type\"))",
+            // the named widening: a function body, no fallback position on the line
+            "    TsType::named(\"any\")",
+            "pub(crate) fn unnameable_receiver_type_arg() -> TsType { any_ty() }",
+            // a plain construction that is not in a fallback position
+            "let ty = any_ty();",
+            "TsExpr::Ident(\"undefined\".to_string())",
+            // the other fallbacks, and the construction before the position
+            ".unwrap_or_else(|| \"unknown\".to_string())",
+            "let a = \"any\"; let b = r.unwrap_or_else(|| 1);",
+        ];
+        for line in clean {
+            assert!(!line_is_silent_fallback(line), "should not count: {line}");
+        }
+    }
+
+    #[test]
+    fn emit_silent_fallbacks_skips_comments_and_cfg_test_modules() {
+        let src = "// _ => any_ty(),\n\
+                   fn f() { let a = r.unwrap_or_else(|| \"any\"); }\n\n\
+                   #[cfg(test)]\nmod tests {\n    fn t() { let a = r.unwrap_or_else(|| \"any\"); }\n}\n";
+        assert_eq!(
+            emit_silent_fallbacks_violations(&files_of(&[("a.rs", src)])),
+            1
         );
     }
 

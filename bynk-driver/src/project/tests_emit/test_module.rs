@@ -76,6 +76,7 @@ pub(super) fn emit_test_module(
     d1_migrations: &D1Migrations,
     // #2842: the stored snapshot files, inlined for the suites that take one.
     snapshot_files: Option<&BTreeMap<String, String>>,
+    runtime_use: &RuntimeUse,
     tys: &Arc<Types>,
 ) -> Option<(PathBuf, TsProgram, Option<String>, RunnableTest)> {
     // #914: the test-scaffold module's runtime import list is emitted below as a
@@ -90,7 +91,6 @@ pub(super) fn emit_test_module(
         .filter_map(|&i| parsed[i].test())
         .flat_map(|d| d.types.iter().cloned())
         .collect();
-    let runtime_use = RuntimeUse::default();
     // #2991: a suite calling `Json.encodePlain` needs its own `Option` encoders to
     // carry the plain branch.
     runtime_use.set_plain_json(super::super::project_mentions_encode_plain(parsed));
@@ -516,7 +516,7 @@ pub(super) fn emit_test_module(
             unit_uses,
             unit_consumes,
             unit_consumes_aliases,
-            &runtime_use,
+            runtime_use,
             hidden,
             tys,
         );
@@ -664,7 +664,7 @@ pub(super) fn emit_test_module(
                 unit_consumes_aliases,
                 parsed[i].source(),
                 &rel_path,
-                &runtime_use,
+                runtime_use,
                 suite,
                 hidden,
                 (!test_suites::snapshot_expects(&case.body).is_empty())
@@ -739,7 +739,7 @@ pub(super) fn emit_test_module(
                     unit_consumes_aliases,
                     parsed[i].source(),
                     &rel_path,
-                    &runtime_use,
+                    runtime_use,
                     suite,
                     hidden,
                     tys,
@@ -758,7 +758,7 @@ pub(super) fn emit_test_module(
                     unit_consumes_aliases,
                     parsed[i].source(),
                     &rel_path,
-                    &runtime_use,
+                    runtime_use,
                     suite,
                     hidden,
                     tys,
@@ -808,7 +808,7 @@ pub(super) fn emit_test_module(
             unit_consumes,
             unit_consumes_aliases,
             &rep_rel_path,
-            &runtime_use,
+            runtime_use,
             hidden,
             tys,
         );
@@ -878,7 +878,7 @@ pub(super) fn emit_test_module(
                     &synthetic.types,
                     target_name,
                     &qual,
-                    &runtime_use,
+                    runtime_use,
                 ),
             ));
             stmts.extend(bynk_emit::emitter::serialisation::decls_as_stmts(
@@ -886,7 +886,7 @@ pub(super) fn emit_test_module(
                     &codec_insts,
                     &synthetic.types,
                     &qual,
-                    &runtime_use,
+                    runtime_use,
                 ),
             ));
         }
@@ -952,7 +952,7 @@ pub(super) fn emit_test_module(
     // listed) and splice the finished import statement in at its reserved
     // position, the same ordering `emit_project`'s own deferred `write_header`
     // relies on.
-    append_runtime_use_imports(&mut runtime_names, &runtime_use);
+    append_runtime_use_imports(&mut runtime_names, runtime_use);
     stmts.splice(
         import_idx..import_idx,
         emitter::runtime_files::runtime_import_stmts(false, &runtime_names, &runtime_import),
