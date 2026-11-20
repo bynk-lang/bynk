@@ -584,7 +584,7 @@ pub enum DefaultValue {
         scale: u32,
     },
     /// A value of the refined type `name` (#3759): its base value, which the checker has
-    /// already found satisfies the refinement, branded as that type.
+    /// already found satisfies the refinement. The emitter brands the field that holds it.
     Refined {
         name: String,
         value: Box<DefaultValue>,
@@ -603,6 +603,28 @@ pub enum DefaultValue {
     List(Vec<DefaultValue>),
     EmptyMap,
     EmptySet,
+}
+
+impl DefaultValue {
+    /// Whether the value holds a refined value anywhere (#3759): its field then needs a cast to
+    /// the field's declared type, which brands it.
+    pub fn holds_refined(&self) -> bool {
+        match self {
+            DefaultValue::Refined { .. } => true,
+            DefaultValue::Record(fields) | DefaultValue::Sum { fields, .. } => {
+                fields.iter().any(|(_, v)| v.holds_refined())
+            }
+            DefaultValue::Some(v) | DefaultValue::Ok(v) | DefaultValue::Err(v) => v.holds_refined(),
+            DefaultValue::List(items) => items.iter().any(DefaultValue::holds_refined),
+            DefaultValue::Num(_)
+            | DefaultValue::Str(_)
+            | DefaultValue::Bool(_)
+            | DefaultValue::Decimal { .. }
+            | DefaultValue::None
+            | DefaultValue::EmptyMap
+            | DefaultValue::EmptySet => false,
+        }
+    }
 }
 
 /// The [`DefaultValue`] of a field's default `init`, given the field's `expected` type and the
@@ -821,9 +843,8 @@ mod tests {
     /// `(field type, default, the tree, the text the deleted `lower_field_default_value` produced)`.
     /// The text column was captured from the `String` renderer before it was deleted
     /// (1A.31, #3732), so the old output and the new tree sit side by side; `bynk-emit` prints
-    /// each tree and compares it with the same text. The `Decimal` (#3801) and refined (#3759)
-    /// rows are the corrected text: the old renderer wrote the wire string and an unbranded
-    /// number there.
+    /// each tree and compares it with the same text. The `Decimal` rows (#3801) are the corrected
+    /// text: the old renderer wrote the wire string there.
     pub fn cases() -> Vec<(&'static str, &'static str, DefaultValue, &'static str)> {
         vec![
             ("Int", "5", num("5"), "5"),
@@ -852,8 +873,8 @@ mod tests {
                 dec("-150", 2),
                 "{ coefficient: -150n, scale: 2 }",
             ),
-            // #3759: a refined default is branded as its type.
-            ("Age", "3", refined("Age", num("3")), "(3 as Age)"),
+            // #3759: a refined default is marked; the emitter brands the field that holds it.
+            ("Age", "3", refined("Age", num("3")), "3"),
             ("Tok", "Tok.unsafe(\"k\")", text("k"), "\"k\""),
             (
                 "Inner",
@@ -989,6 +1010,32 @@ mod tests {
             field.init.clone().expect("a default"),
             field.type_ref.clone(),
         )
+    }
+
+    /// #3759: only a value with a refined part needs its field branded.
+    #[test]
+    fn holds_refined_finds_a_refined_value_at_any_depth() {
+        let r = refined("Age", num("3"));
+        for v in [
+            r.clone(),
+            some(r.clone()),
+            DefaultValue::Err(Box::new(r.clone())),
+            DefaultValue::List(vec![num("1"), r.clone()]),
+            record(vec![("a", num("1")), ("b", r.clone())]),
+            sum("V", vec![("x", r)]),
+        ] {
+            assert!(v.holds_refined(), "{v:?}");
+        }
+        for v in [
+            num("3"),
+            dec("150", 2),
+            DefaultValue::None,
+            DefaultValue::List(vec![num("1")]),
+            record(vec![("a", text("x"))]),
+            DefaultValue::EmptyMap,
+        ] {
+            assert!(!v.holds_refined(), "{v:?}");
+        }
     }
 
     #[test]

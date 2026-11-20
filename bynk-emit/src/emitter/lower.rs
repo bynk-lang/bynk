@@ -1675,7 +1675,7 @@ pub(crate) fn lower_expr(e: &Expr, cx: &mut LowerCtx) -> Lowered {
         ExprKind::Question(inner) => return lower_question(e, inner, cx),
         ExprKind::RecordConstruction {
             type_name, fields, ..
-        } => lowered_or_text!(pre, lower_record_construction(type_name, fields, cx)),
+        } => lowered_or_text!(pre, lower_record_construction(e, type_name, fields, cx)),
         ExprKind::FieldAccess { .. }
             if matches!(
                 cx.commons().callees.get(&e.id),
@@ -4613,7 +4613,28 @@ fn object_built(has_spread: bool, slots: Vec<FieldSlot>, children: Vec<LoweredEx
     )
 }
 
+/// #3759: the TS type of `record[field]`, the slot a defaulted field's value fills, so a refined
+/// value in it is cast to its position's type (`default_value_node`). Indexed from the record's
+/// type as the checker typed this construction: the refined type may not be nameable here (the
+/// record can come from a unit this one imports without its field types), but the record is,
+/// since this literal names it. In test scaffolding a declared type is not nameable, so the slot
+/// is `any`, as `unchecked_construct_test_node` brands a refined literal there.
+fn default_slot(e: &Expr, type_name: &Ident, field: &str, cx: &LowerCtx) -> bynk_ts::TsType {
+    if cx.in_test_scaffold() {
+        return bynk_ts::TsType::named("any");
+    }
+    let record = match cx.commons().expr_types.get(&e.id) {
+        Some(te) => ts_ty_to_ts_type(te.ty, cx.ty_render()),
+        None => bynk_ts::TsType::named(cx.consumed_type_name(&type_name.name)),
+    };
+    bynk_ts::TsType::Indexed {
+        object: Box::new(record),
+        index: Box::new(bynk_ts::TsType::StringLiteral(field.to_string())),
+    }
+}
+
 fn lower_record_construction(
+    e: &Expr,
     type_name: &Ident,
     fields: &[FieldInit],
     cx: &mut LowerCtx,
@@ -4625,12 +4646,6 @@ fn lower_record_construction(
     // `default_value_node`) so it needs nothing imported into this module. The checker has
     // already required every field without a default, and rejected any default that has no
     // such value. A default is a node (1A.31, #3732), so a record that takes one stays one.
-    // #3759: a refined default is branded as `lower_expr` brands an admitted refined literal.
-    let in_test_scaffold = cx.in_test_scaffold();
-    let brand = |name: &str, raw: bynk_ts::TsExpr| match in_test_scaffold {
-        true => unchecked_construct_test_node(name, raw, false),
-        false => unchecked_construct(&cx.consumed_type_name(name), raw, false),
-    };
     let types = &cx.commons().types;
     if let Some(decl) = types.get(&type_name.name)
         && let TypeBody::Record(r) = &decl.body
@@ -4645,7 +4660,11 @@ fn lower_record_construction(
             match bynk_check::wire_default::field_default_value(init, &declared.type_ref, types) {
                 Ok(v) => {
                     slots.push(FieldSlot::Prop(declared.name.name.clone()));
-                    let node: Built = Ok(default_value_node(&v, &brand));
+                    // #3759: a refined value in it is cast to its position's type.
+                    let slot = v
+                        .holds_refined()
+                        .then(|| default_slot(e, type_name, &declared.name.name, cx));
+                    let node: Built = Ok(default_value_node(&v, slot.as_ref()));
                     children.push(node.into());
                 }
                 // The checker rejected any default that has no value: a missing

@@ -5,9 +5,7 @@ import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 
 /**
- * #3759: a record literal that leaves out a refined field takes its default as a
- * value of the refined type, so the construction type-checks and the field is
- * used as a `Rating`.
+ * #3759: the refined type, declared apart from the record that uses it.
  */
 export type Rating = number & { readonly __brand: "Rating" };
 
@@ -22,25 +20,3 @@ export const Rating = {
     return Ok(value as Rating);
   },
 };
-
-export interface Review {
-  readonly text: string;
-  readonly rating: Rating;
-  readonly scores: readonly Rating[];
-  readonly best: Option<Rating>;
-}
-
-export const Review = {
-};
-
-export function plain(): Review {
-  return { text: "Good", rating: (5 as Rating), scores: [(3 as Rating), (4 as Rating)], best: { tag: "Some" as const, value: (5 as Rating) } };
-}
-
-export function stars(r: Rating): number {
-  return r + 0;
-}
-
-export function ratingOf(r: Review): Rating {
-  return r.rating;
-}

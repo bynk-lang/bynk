@@ -1,0 +1,20 @@
+commons demo.review
+
+uses demo.rating
+
+---
+#3759: a record whose defaults hold `Rating` values, at the top level and
+nested in a list, an option, a sum payload and a sub-record.
+---
+type Stars = | Unrated | Rated(score: Rating)
+
+type Detail = { score: Rating = 4 }
+
+type Review = {
+  text: String,
+  rating: Rating = 5,
+  scores: List[Rating] = [3, 4],
+  best: Option[Rating] = Some(5),
+  stars: Stars = Rated(2),
+  detail: Detail = Detail { },
+}
