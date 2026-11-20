@@ -650,14 +650,11 @@ pub enum Callee {
     /// `Instant.fromEpochMillis`, `Bytes.fromUtf8`/`fromBase64`/`empty`,
     /// `Json.decode`/`encode`, `Stream.of`.
     ///
-    /// `ns_t`/`op_t` (1A.33, Decision B) are the closed typed form of `ns`/`op`:
-    /// built only for a method the namespace has, so an unknown method gets no
-    /// callee. Build one with [`Callee::intrinsic`].
+    /// `ns` and `op` (1A.33, Decision B) are closed: built only for a method the namespace
+    /// has, so an unknown method gets no callee. Build one with [`Callee::intrinsic`].
     Intrinsic {
-        ns: &'static str,
-        op: String,
-        ns_t: crate::kernel_op::IntrinsicNs,
-        op_t: crate::kernel_op::StaticOp,
+        ns: crate::kernel_op::IntrinsicNs,
+        op: crate::kernel_op::StaticOp,
     },
     /// #2620: `unreachable(msg)` / `todo(msg)` — the ambient built-ins that
     /// fault when evaluated. `kind` is the runtime fault kind (`Unreachable` /
@@ -736,11 +733,10 @@ pub enum Callee {
     /// `extra_headers` (#2910): a trailing `RequestHeaders` argument sent to a
     /// route that declares no `headers:` parameter — a `system`-tier-only form.
     ///
-    /// `address_t` (1A.33, Decision D) is the typed form of `address`.
+    /// `address` (1A.33, Decision D) is typed: where the address is aimed.
     TestService {
         service: String,
-        address: String,
-        address_t: HandlerAddress,
+        address: HandlerAddress,
         extra_headers: bool,
     },
     /// #1883, slice 3: `svc.GET(asset)` in a test body — an asset fetch,
@@ -760,12 +756,10 @@ pub enum Callee {
     /// never reaching any of them — extending P6.0's own recording surface
     /// past the boundary its "Done when" deliberately drew.
     ///
-    /// `op_t` (1A.33, Decision C) is the typed form of `op`, built only for an
-    /// operation the field's kind has.
+    /// `op` (1A.33, Decision C) is typed, built only for an operation the field's kind has.
     Store {
         field: String,
-        op: String,
-        op_t: crate::kernel_op::StoreEntryOp,
+        op: crate::kernel_op::StoreEntryOp,
     },
     /// A query builder/terminal call that *lifts* a bare `store` `Map`/`Log`
     /// field into a lazy `Query[V]` (`is_query_op`'s own gate,
@@ -784,11 +778,10 @@ pub enum Callee {
     /// lift call's own outer expression never passes through any of
     /// `calls.rs`'s six functions to get one.
     ///
-    /// `op_t` (1A.33, Decision C) is the typed form of `op`.
+    /// `op` (1A.33, Decision C) is typed.
     Query {
         field: String,
-        op: String,
-        op_t: crate::kernel_op::StoreQueryOp,
+        op: crate::kernel_op::StoreQueryOp,
         role: QueryRole,
     },
     /// #2617: a bare name that resolves to a `const` (one of this unit's, a
@@ -812,15 +805,9 @@ pub enum Callee {
 }
 
 impl Callee {
-    /// A static-intrinsic callee for the resolved operation `op`: the typed form
-    /// and its source spellings, which always agree.
+    /// A static-intrinsic callee for the resolved operation `op`.
     pub fn intrinsic(op: crate::kernel_op::StaticOp) -> Callee {
-        Callee::Intrinsic {
-            ns: op.ns().name(),
-            op: op.name().to_string(),
-            ns_t: op.ns(),
-            op_t: op,
-        }
+        Callee::Intrinsic { ns: op.ns(), op }
     }
 }
 
@@ -851,6 +838,30 @@ pub enum HandlerAddress {
 }
 
 impl HandlerAddress {
+    /// A `schedule` address once its cron expression is read.
+    pub fn schedule(expr: &str) -> HandlerAddress {
+        HandlerAddress::Schedule {
+            expr: Some(expr.to_string()),
+        }
+    }
+
+    /// A `ws message` address once its handler is matched.
+    pub fn ws_message(frame_index: usize, params: usize) -> HandlerAddress {
+        HandlerAddress::Ws(WsAddress::Message {
+            frame: Some(WsMessageShape {
+                frame_index,
+                params,
+            }),
+        })
+    }
+
+    /// A `ws close` address once its handler is matched.
+    pub fn ws_close(params: usize) -> HandlerAddress {
+        HandlerAddress::Ws(WsAddress::Close {
+            params: Some(params),
+        })
+    }
+
     /// The address as the diagnostics write it (`POST /orders`, `call`, `ws open`).
     pub fn describe(&self) -> String {
         match self {
@@ -5379,26 +5390,24 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
                             // not", never "builder or terminal" (`query_role`
                             // itself, not this call site).
                             let role = query_role(result, &method.name, tys);
-                            if let Some(op_t) = QueryOp::from_name(&method.name) {
+                            if let Some(op) = QueryOp::from_name(&method.name) {
                                 ctx.callees.insert(
                                     expr.id,
                                     Callee::Query {
                                         field: id.name.clone(),
-                                        op: method.name.clone(),
-                                        op_t: StoreQueryOp::Query(op_t),
+                                        op: StoreQueryOp::Query(op),
                                         role,
                                     },
                                 );
                             }
                             result
                         } else {
-                            if let Some(op_t) = MapStoreOp::from_name(&method.name) {
+                            if let Some(op) = MapStoreOp::from_name(&method.name) {
                                 ctx.callees.insert(
                                     expr.id,
                                     Callee::Store {
                                         field: id.name.clone(),
-                                        op: method.name.clone(),
-                                        op_t: StoreEntryOp::Map(op_t),
+                                        op: StoreEntryOp::Map(op),
                                     },
                                 );
                             }
@@ -5408,13 +5417,12 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
                     // v0.83: `<set>.<op>(…)` on a `store Set[T]` field —
                     // effectful storage-set ops.
                     StoreField::Set(t) => {
-                        if let Some(op_t) = SetStoreOp::from_name(&method.name) {
+                        if let Some(op) = SetStoreOp::from_name(&method.name) {
                             ctx.callees.insert(
                                 expr.id,
                                 Callee::Store {
                                     field: id.name.clone(),
-                                    op: method.name.clone(),
-                                    op_t: StoreEntryOp::Set(op_t),
+                                    op: StoreEntryOp::Set(op),
                                 },
                             );
                         }
@@ -5424,13 +5432,12 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
                     // Cache[K, V]` field — the storage-map ops plus a `given
                     // Clock` requirement (eviction).
                     StoreField::Cache(k, v, _ttl) => {
-                        if let Some(op_t) = MapStoreOp::from_name(&method.name) {
+                        if let Some(op) = MapStoreOp::from_name(&method.name) {
                             ctx.callees.insert(
                                 expr.id,
                                 Callee::Store {
                                     field: id.name.clone(),
-                                    op: method.name.clone(),
-                                    op_t: StoreEntryOp::Cache(op_t),
+                                    op: StoreEntryOp::Cache(op),
                                 },
                             );
                         }
@@ -5458,8 +5465,7 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
                                 expr.id,
                                 Callee::Store {
                                     field: id.name.clone(),
-                                    op: method.name.clone(),
-                                    op_t: StoreEntryOp::Log(LogStoreOp::Append),
+                                    op: StoreEntryOp::Log(LogStoreOp::Append),
                                 },
                             );
                             check_store_log_op(method, args, t, expr.span, ctx)
@@ -5471,18 +5477,17 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
                         {
                             let result = check_store_log_op(method, args, t, expr.span, ctx);
                             let role = query_role(result, &method.name, tys);
-                            let op_t = LogWindowOp::from_name(&method.name)
+                            let op = LogWindowOp::from_name(&method.name)
                                 .map(StoreQueryOp::LogWindow)
                                 .or_else(|| {
                                     QueryOp::from_name(&method.name).map(StoreQueryOp::Query)
                                 });
-                            if let Some(op_t) = op_t {
+                            if let Some(op) = op {
                                 ctx.callees.insert(
                                     expr.id,
                                     Callee::Query {
                                         field: id.name.clone(),
-                                        op: method.name.clone(),
-                                        op_t,
+                                        op,
                                         role,
                                     },
                                 );
@@ -5495,13 +5500,12 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
                     // Cell[T]` field — the one method-shaped cell op (read is
                     // the bare name, write is `:=`).
                     StoreField::Cell(t) => {
-                        if let Some(op_t) = CellStoreOp::from_name(&method.name) {
+                        if let Some(op) = CellStoreOp::from_name(&method.name) {
                             ctx.callees.insert(
                                 expr.id,
                                 Callee::Store {
                                     field: id.name.clone(),
-                                    op: method.name.clone(),
-                                    op_t: StoreEntryOp::Cell(op_t),
+                                    op: StoreEntryOp::Cell(op),
                                 },
                             );
                         }

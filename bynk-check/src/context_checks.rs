@@ -175,7 +175,7 @@ fn decode_targets(e: &Expr, typed: &checker::TypedCommons) -> Vec<TyId> {
     use checker::codable::{WitnessKind, witness_list};
     match typed.callees.get(&e.id) {
         Some(Callee::Intrinsic {
-            op_t:
+            op:
                 StaticOp::Json(JsonStatic::Decode | JsonStatic::DecodeSql)
                 | StaticOp::Yaml(YamlStatic::Decode)
                 | StaticOp::Form(FormStatic::Decode),

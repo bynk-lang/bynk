@@ -294,10 +294,10 @@ fn walk_block(
 /// `:=` and `.update` keep `store` writes sequential (track Q4): a binding whose
 /// expression is itself a mutating store operation is refused.
 fn reject_store_write(value: &Expr, ctx: &mut Ctx) {
-    if let Some(Callee::Store { field, op_t, .. }) = ctx.callees.get(&value.id)
-        && op_t.mutates()
+    if let Some(Callee::Store { field, op, .. }) = ctx.callees.get(&value.id)
+        && op.mutates()
     {
-        let op = op_t.name();
+        let op = op.name();
         let msg = format!(
             "a `par` block cannot hold the store write `{field}.{op}(…)`: store writes stay sequential"
         );
@@ -324,12 +324,12 @@ struct StoreAccess {
 /// mentioned or called (the closure may call it, or hand it on), unless an inner
 /// lambda parameter, `let` or pattern binds the same name.
 fn scan_store_access(e: &Expr, ctx: &Ctx, shadow: &mut Vec<String>, out: &mut Vec<StoreAccess>) {
-    if let Some(Callee::Store { field, op_t, .. }) = ctx.callees.get(&e.id) {
+    if let Some(Callee::Store { field, op, .. }) = ctx.callees.get(&e.id) {
         out.push(StoreAccess {
             span: e.span,
             field: field.clone(),
-            op: op_t.name().to_string(),
-            writes: op_t.mutates(),
+            op: op.name().to_string(),
+            writes: op.mutates(),
         });
     }
     let named = |name: &Ident, shadow: &[String]| {

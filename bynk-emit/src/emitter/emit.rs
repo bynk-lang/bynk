@@ -4275,6 +4275,51 @@ pub(crate) fn agent_needs_rehydrate(
     })
 }
 
+/// Whether any agent of the unit emits a rehydration gate.
+pub(crate) fn commons_need_rehydrate(commons: &TypedCommons, program: &CheckedProgram) -> bool {
+    commons.commons.items.iter().any(|i| match i {
+        CommonsItem::Agent(a) => {
+            agent_needs_rehydrate(a, &agent_state_ir(a, program), &commons.types)
+        }
+        _ => false,
+    })
+}
+
+/// The runtime names every agent of the unit's state wiring references, sorted and unique.
+pub(crate) fn commons_state_runtime_names(
+    commons: &TypedCommons,
+    program: &CheckedProgram,
+) -> Vec<&'static str> {
+    let mut names: Vec<&'static str> = commons
+        .commons
+        .items
+        .iter()
+        .filter_map(|i| match i {
+            CommonsItem::Agent(a) => Some(agent_state_runtime_names(
+                a,
+                &agent_state_ir(a, program),
+                commons.tys(),
+                &commons.types,
+            )),
+            _ => None,
+        })
+        .flatten()
+        .collect();
+    names.sort_unstable();
+    names.dedup();
+    names
+}
+
+/// Whether any agent of the unit has a held `Map[K, Connection]`.
+pub(crate) fn commons_have_held_storage(commons: &TypedCommons, program: &CheckedProgram) -> bool {
+    commons.commons.items.iter().any(|i| match i {
+        CommonsItem::Agent(a) => {
+            agent_has_held_storage(a, &agent_state_ir(a, program), commons.tys())
+        }
+        _ => false,
+    })
+}
+
 /// The runtime names an agent's state wiring references (#3254): the handle classes its
 /// state is made of, and the helpers that put them into wire form and fill them back.
 /// Mirrors what `emit_agent_state_record`/`emit_agent_state_persistence` emit.

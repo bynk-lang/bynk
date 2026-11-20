@@ -2796,7 +2796,7 @@ fn check_event_address_tier(
         .filter_map(|c| match c {
             checker::Callee::TestService {
                 service,
-                address_t: checker::HandlerAddress::Event,
+                address: checker::HandlerAddress::Event,
                 ..
             } => Some(service.as_str()),
             _ => None,
@@ -2838,7 +2838,7 @@ fn check_ws_address_tier(
         .filter_map(|c| match c {
             checker::Callee::TestService {
                 service,
-                address_t: checker::HandlerAddress::Ws(_),
+                address: checker::HandlerAddress::Ws(_),
                 ..
             } => Some(service.as_str()),
             _ => None,
@@ -2878,14 +2878,14 @@ fn check_extra_headers_tier(
     }
     for e in exprs_in_order(&case.body) {
         let Some(checker::Callee::TestService {
-            address_t,
+            address,
             extra_headers: true,
             ..
         }) = callees.get(&e.id)
         else {
             continue;
         };
-        let address = address_t.describe();
+        let address = address.describe();
         errors.push(
             CompileError::new(
                 "bynk.test.service_call_arity",
@@ -2966,7 +2966,7 @@ fn check_call_address_tier(
         .filter_map(|c| match c {
             checker::Callee::TestService {
                 service,
-                address_t: checker::HandlerAddress::Call,
+                address: checker::HandlerAddress::Call,
                 ..
             } => Some(service.as_str()),
             _ => None,
@@ -3042,7 +3042,7 @@ pub fn remote_unsupported(
         Callee::Cross { unit, service } => Some(format!("{unit}.{service}")),
         Callee::TestService {
             service,
-            address_t: checker::HandlerAddress::Call,
+            address: checker::HandlerAddress::Call,
             ..
         } => Some(service.clone()),
         _ => None,
@@ -3075,12 +3075,12 @@ pub fn remote_unsupported(
         if let Some(svc) = named(&|c| match c {
             Callee::TestService {
                 service,
-                address_t: checker::HandlerAddress::Schedule { .. },
+                address: checker::HandlerAddress::Schedule { .. },
                 ..
             } if address == "schedule" => Some(service.clone()),
             Callee::TestService {
                 service,
-                address_t: checker::HandlerAddress::Message,
+                address: checker::HandlerAddress::Message,
                 ..
             } if address == "message" => Some(service.clone()),
             _ => None,

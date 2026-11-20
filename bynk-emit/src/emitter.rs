@@ -1238,13 +1238,13 @@ fn collect_json_codec_roots(commons: &TypedCommons) -> Vec<TypeRef> {
             let ExprKind::MethodCall { args, .. } = &e.kind else {
                 return;
             };
-            let Some(bynk_check::checker::Callee::Intrinsic { op_t, .. }) =
+            let Some(bynk_check::checker::Callee::Intrinsic { op, .. }) =
                 commons.callees.get(&e.id)
             else {
                 return;
             };
             // #3214: `Yaml.decode[T]` decodes through the same codec helpers.
-            match op_t {
+            match op {
                 StaticOp::Json(JsonStatic::Decode | JsonStatic::DecodeSql)
                 | StaticOp::Yaml(YamlStatic::Decode)
                 | StaticOp::Form(FormStatic::Decode) => {
@@ -4085,12 +4085,7 @@ fn write_header(
         }
         // v0.96 (ADR 0124): an agent whose load-time validation gate fires imports
         // the `rehydrationViolation` fault helper.
-        let has_rehydration_gate = commons.commons.items.iter().any(|i| match i {
-            CommonsItem::Agent(a) => {
-                emit::agent_needs_rehydrate(a, &emit::agent_state_ir(a, program), &commons.types)
-            }
-            _ => false,
-        });
+        let has_rehydration_gate = emit::commons_need_rehydrate(commons, program);
         // State-migrations S2 (#2224): a `migrate` step decodes its old shape
         // (a failure is a `RehydrationViolation`) and turns a throw into
         // `MigrationFailed`.
@@ -4124,24 +4119,7 @@ fn write_header(
         }
         // Ordered store collections (#3254): the handle classes an agent's state is made
         // of, and the helpers that put them in wire form and fill them back.
-        let mut state_names: Vec<&'static str> = commons
-            .commons
-            .items
-            .iter()
-            .filter_map(|i| match i {
-                CommonsItem::Agent(a) => Some(emit::agent_state_runtime_names(
-                    a,
-                    &emit::agent_state_ir(a, program),
-                    commons.tys(),
-                    &commons.types,
-                )),
-                _ => None,
-            })
-            .flatten()
-            .collect();
-        state_names.sort_unstable();
-        state_names.dedup();
-        parts.extend(state_names);
+        parts.extend(emit::commons_state_runtime_names(commons, program));
         let has_versioned_agent = commons.commons.items.iter().any(|i| match i {
             CommonsItem::Agent(a) => ctx.agent_schema_versions.contains_key(&a.name.name),
             _ => false,
@@ -4157,16 +4135,7 @@ fn write_header(
         // v0.104/v0.105 (real-time track slice 3b): on Workers a `store Map[K,
         // Connection]` persists the connection id; its entry ops re-resolve the live
         // socket via `resolveConnection` and read a connection's id via `connIdOf`.
-        if workers
-            && commons.commons.items.iter().any(|i| match i {
-                CommonsItem::Agent(a) => emit::agent_has_held_storage(
-                    a,
-                    &emit::agent_state_ir(a, program),
-                    commons.tys(),
-                ),
-                _ => false,
-            })
-        {
+        if workers && emit::commons_have_held_storage(commons, program) {
             parts.push("__resolveConnection");
             parts.push("__connIdOf");
         }

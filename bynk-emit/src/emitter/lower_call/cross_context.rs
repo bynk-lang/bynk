@@ -135,7 +135,7 @@ pub(crate) fn holds_callee_typed(e: &Expr, cx: &LowerCtx) -> bool {
                 && matches!(
                     cx.commons().callee(e.id),
                     Some(Callee::Intrinsic {
-                        op_t: StaticOp::List(ListStatic::Empty) | StaticOp::Map(MapStatic::Empty),
+                        op: StaticOp::List(ListStatic::Empty) | StaticOp::Map(MapStatic::Empty),
                         ..
                     })
                 )

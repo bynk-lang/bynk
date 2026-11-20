@@ -283,7 +283,7 @@ pub(in crate::emitter) fn lower_scalar_static_call(
         && matches!(
             cx.commons().callee(e.id),
             Some(Callee::Intrinsic {
-                ns_t: IntrinsicNs::HttpResult,
+                ns: IntrinsicNs::HttpResult,
                 ..
             })
         )
@@ -317,7 +317,7 @@ pub(in crate::emitter) fn lower_scalar_static_call(
         && matches!(
             cx.commons().callee(e.id),
             Some(Callee::Intrinsic {
-                op_t: StaticOp::List(ListStatic::Empty)
+                op: StaticOp::List(ListStatic::Empty)
                     | StaticOp::Map(MapStatic::Empty)
                     | StaticOp::Set(SetStatic::Empty),
                 ..
@@ -358,7 +358,7 @@ pub(in crate::emitter) fn lower_scalar_static_call(
         && matches!(
             cx.commons().callee(e.id),
             Some(Callee::Intrinsic {
-                op_t: StaticOp::Set(SetStatic::Of),
+                op: StaticOp::Set(SetStatic::Of),
                 ..
             })
         )
@@ -382,7 +382,7 @@ pub(in crate::emitter) fn lower_scalar_static_call(
     // K6b (#2598): `Float.pi()` and `Float.e()`.
     if let ExprKind::Ident(_) = &receiver.kind
         && let Some(Callee::Intrinsic {
-            op_t: StaticOp::Float(constant @ (FloatStatic::Pi | FloatStatic::E)),
+            op: StaticOp::Float(constant @ (FloatStatic::Pi | FloatStatic::E)),
             ..
         }) = cx.commons().callee(e.id)
         && args.is_empty()
@@ -404,7 +404,7 @@ pub(in crate::emitter) fn lower_scalar_static_call(
     // with every other static-constructor branch in this function.
     if let ExprKind::Ident(_) = &receiver.kind
         && let Some(Callee::Intrinsic {
-            op_t: parse @ (StaticOp::Int(IntStatic::Parse) | StaticOp::Float(FloatStatic::Parse)),
+            op: parse @ (StaticOp::Int(IntStatic::Parse) | StaticOp::Float(FloatStatic::Parse)),
             ..
         }) = cx.commons().callee(e.id)
         && args.len() == 1
@@ -426,7 +426,7 @@ pub(in crate::emitter) fn lower_scalar_static_call(
         && matches!(
             cx.commons().callee(e.id),
             Some(Callee::Intrinsic {
-                op_t: StaticOp::Duration(DurationStatic::Millis),
+                op: StaticOp::Duration(DurationStatic::Millis),
                 ..
             })
         )
@@ -439,7 +439,7 @@ pub(in crate::emitter) fn lower_scalar_static_call(
         && matches!(
             cx.commons().callee(e.id),
             Some(Callee::Intrinsic {
-                op_t: StaticOp::Instant(InstantStatic::FromIso),
+                op: StaticOp::Instant(InstantStatic::FromIso),
                 ..
             })
         )
@@ -455,7 +455,7 @@ pub(in crate::emitter) fn lower_scalar_static_call(
         && matches!(
             cx.commons().callee(e.id),
             Some(Callee::Intrinsic {
-                op_t: StaticOp::Instant(InstantStatic::FromEpochMillis),
+                op: StaticOp::Instant(InstantStatic::FromEpochMillis),
                 ..
             })
         )
@@ -481,10 +481,10 @@ pub(in crate::emitter) fn lower_runtime_value_static_call(
     let ExprKind::Ident(_) = &receiver.kind else {
         return None;
     };
-    let Some(Callee::Intrinsic { op_t, .. }) = cx.commons().callee(e.id) else {
+    let Some(Callee::Intrinsic { op, .. }) = cx.commons().callee(e.id) else {
         return None;
     };
-    let op = *op_t;
+    let op = *op;
     match (op, args.len()) {
         // v0.110 (ADR 0142 D2): the `Bytes` static constructors. `fromUtf8` is the
         // UTF-8 encoding of a string (total); `fromBase64` is a guarded base64

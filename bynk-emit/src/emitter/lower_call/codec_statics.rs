@@ -50,10 +50,10 @@ pub(in super::super) fn lower_json_codec_call(
 ) -> Option<Built> {
     // The codec operation the checker resolved for this call (1A.33). Every form below takes
     // exactly one argument.
-    let Some(Callee::Intrinsic { op_t, .. }) = cx.commons().callees.get(&e.id) else {
+    let Some(Callee::Intrinsic { op, .. }) = cx.commons().callees.get(&e.id) else {
         return None;
     };
-    let op = *op_t;
+    let op = *op;
     if args.len() != 1 {
         return None;
     }

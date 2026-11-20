@@ -4228,8 +4228,7 @@ fn check_test_service_address(
             expr_id,
             Callee::TestService {
                 service: id.name.clone(),
-                address: "call".to_string(),
-                address_t: HandlerAddress::Call,
+                address: HandlerAddress::Call,
                 extra_headers: false,
             },
         );
@@ -4272,12 +4271,7 @@ fn check_test_service_address(
             expr_id,
             Callee::TestService {
                 service: id.name.clone(),
-                address: method.name.clone(),
-                address_t: HandlerAddress::Http {
-                    verb: bynk_syntax::ast::HttpMethod::from_ident(&method.name)
-                        .expect("the branch's guard"),
-                    path: None,
-                },
+                address: http_address(method, None),
                 extra_headers: false,
             },
         );
@@ -4373,12 +4367,7 @@ fn check_test_service_address(
             expr_id,
             Callee::TestService {
                 service: id.name.clone(),
-                address: format!("{} {path}", method.name),
-                address_t: HandlerAddress::Http {
-                    verb: bynk_syntax::ast::HttpMethod::from_ident(&method.name)
-                        .expect("the branch's guard"),
-                    path: Some(path.to_string()),
-                },
+                address: http_address(method, Some(path)),
                 extra_headers: false,
             },
         );
@@ -4471,12 +4460,7 @@ fn check_test_service_address(
                     expr_id,
                     Callee::TestService {
                         service: id.name.clone(),
-                        address: format!("{} {path}", method.name),
-                        address_t: HandlerAddress::Http {
-                            verb: bynk_syntax::ast::HttpMethod::from_ident(&method.name)
-                                .expect("the branch's guard"),
-                            path: Some(path.to_string()),
-                        },
+                        address: http_address(method, Some(path)),
                         extra_headers: true,
                     },
                 );
@@ -4538,8 +4522,7 @@ fn check_test_service_address(
             expr_id,
             Callee::TestService {
                 service: id.name.clone(),
-                address: "schedule".to_string(),
-                address_t: HandlerAddress::Schedule { expr: None },
+                address: HandlerAddress::Schedule { expr: None },
                 extra_headers: false,
             },
         );
@@ -4563,10 +4546,7 @@ fn check_test_service_address(
             expr_id,
             Callee::TestService {
                 service: id.name.clone(),
-                address: format!("schedule {expr}"),
-                address_t: HandlerAddress::Schedule {
-                    expr: Some(expr.to_string()),
-                },
+                address: HandlerAddress::schedule(expr),
                 extra_headers: false,
             },
         );
@@ -4600,8 +4580,7 @@ fn check_test_service_address(
             expr_id,
             Callee::TestService {
                 service: id.name.clone(),
-                address: "message".to_string(),
-                address_t: HandlerAddress::Message,
+                address: HandlerAddress::Message,
                 extra_headers: false,
             },
         );
@@ -4637,8 +4616,7 @@ fn check_test_service_address(
             expr_id,
             Callee::TestService {
                 service: id.name.clone(),
-                address: "event".to_string(),
-                address_t: HandlerAddress::Event,
+                address: HandlerAddress::Event,
                 extra_headers: false,
             },
         );
@@ -4705,8 +4683,7 @@ fn check_ws_address(
         expr_id,
         Callee::TestService {
             service: service.clone(),
-            address: format!("ws {which}"),
-            address_t: HandlerAddress::Ws(match which {
+            address: HandlerAddress::Ws(match which {
                 "open" => WsAddress::Open,
                 "message" => WsAddress::Message { frame: None },
                 _ => WsAddress::Close { params: None },
@@ -4766,13 +4743,7 @@ fn check_ws_address(
                 expr_id,
                 Callee::TestService {
                     service: service.clone(),
-                    address: format!("ws message {frame_idx} {}", handler.params.len()),
-                    address_t: HandlerAddress::Ws(WsAddress::Message {
-                        frame: Some(WsMessageShape {
-                            frame_index: frame_idx,
-                            params: handler.params.len(),
-                        }),
-                    }),
+                    address: HandlerAddress::ws_message(frame_idx, handler.params.len()),
                     extra_headers: false,
                 },
             );
@@ -4805,10 +4776,7 @@ fn check_ws_address(
                 expr_id,
                 Callee::TestService {
                     service: service.clone(),
-                    address: format!("ws close {}", handler.params.len()),
-                    address_t: HandlerAddress::Ws(WsAddress::Close {
-                        params: Some(handler.params.len()),
-                    }),
+                    address: HandlerAddress::ws_close(handler.params.len()),
                     extra_headers: false,
                 },
             );
@@ -4877,6 +4845,14 @@ fn with_open_sum_note(err: CompileError, handler: &TestHandler, ctx: &Ctx) -> Co
     }
 }
 
+/// The typed address of `svc.<VERB>(…)`: the verb is the method, the route once it is read.
+fn http_address(method: &Ident, path: Option<&str>) -> HandlerAddress {
+    HandlerAddress::Http {
+        verb: bynk_syntax::ast::HttpMethod::from_ident(&method.name).expect("the branch's guard"),
+        path: path.map(str::to_string),
+    }
+}
+
 /// 1A.33: classify a call-site principal clause ([`CallSitePrincipal::of`], the one
 /// classification of the reserved names) and record it on the clause's own id, so the emitter
 /// and the later passes read what the checker decided. Idempotent.
@@ -4933,11 +4909,39 @@ fn oidc_only_principal(bad: BadCredential) -> Option<OidcOnlyPrincipal> {
     })
 }
 
+/// #2380 (L5): a call-site principal's claims (`by W("id", claims)`) are a `TokenClaims`, and
+/// only an `Oidc` actor's handler reads them.
+fn check_principal_claims(p: &bynk_syntax::ast::CallSiteActor, ctx: &mut Ctx) {
+    let tys = ctx.tys;
+    if let Some(claims) = &p.claims {
+        let want = tys.intern(Ty::TokenClaims);
+        check_arg(claims, want, "the principal's claims", ctx);
+        let oidc = ctx.test_actors.get(&p.actor.name).is_some_and(|decl| {
+            decl.auth
+                .as_ref()
+                .is_some_and(|a| a.name.as_str() == "Oidc")
+        });
+        if !oidc {
+            ctx.errors.push(
+                CompileError::new(
+                    "bynk.test.principal_claims_not_oidc",
+                    claims.span,
+                    format!(
+                        "`{}` isn't an `Oidc` actor, so its handlers read no token claims",
+                        p.actor.name
+                    ),
+                )
+                .with_note("claims are passed as `by Workload(\"id\", TokenClaims.of([\"name: value\"]))` for an `Oidc` actor"),
+            );
+        }
+    }
+}
+
 pub(crate) fn nobody_outcome(value: &Expr, ty: TyId, ctx: &Ctx) -> TyId {
     let is_http_address = matches!(
         ctx.callees.get(&value.id),
         Some(Callee::TestService {
-            address_t: HandlerAddress::Http { .. },
+            address: HandlerAddress::Http { .. },
             ..
         })
     );
@@ -5085,31 +5089,8 @@ pub(crate) fn check_effect_let_principal(
     let tys = ctx.tys;
     // 1A.33: classify the clause once; the rules below read the result.
     let kind = principal.map(|p| record_principal(p, ctx));
-    // #2380 (L5): a call-site principal's claims (`by W("id", claims)`) are a
-    // `TokenClaims`, and only an `Oidc` actor's handler reads them.
-    if let Some(p) = principal
-        && let Some(claims) = &p.claims
-    {
-        let want = tys.intern(Ty::TokenClaims);
-        check_arg(claims, want, "the principal's claims", ctx);
-        let oidc = ctx.test_actors.get(&p.actor.name).is_some_and(|decl| {
-            decl.auth
-                .as_ref()
-                .is_some_and(|a| a.name.as_str() == "Oidc")
-        });
-        if !oidc {
-            ctx.errors.push(
-                CompileError::new(
-                    "bynk.test.principal_claims_not_oidc",
-                    claims.span,
-                    format!(
-                        "`{}` isn't an `Oidc` actor, so its handlers read no token claims",
-                        p.actor.name
-                    ),
-                )
-                .with_note("claims are passed as `by Workload(\"id\", TokenClaims.of([\"name: value\"]))` for an `Oidc` actor"),
-            );
-        }
+    if let Some(p) = principal {
+        check_principal_claims(p, ctx);
     }
     let ExprKind::MethodCall {
         receiver,

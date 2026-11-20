@@ -303,7 +303,7 @@ commons demo {
     let callees = callees_for(src);
     assert!(
         callees.iter().any(
-            |c| matches!(c, Callee::Intrinsic { op_t, .. } if *op_t == StaticOp::Duration(DurationStatic::Millis))
+            |c| matches!(c, Callee::Intrinsic { op, .. } if *op == StaticOp::Duration(DurationStatic::Millis))
         ),
         "expected a Callee::Intrinsic{{ ns: \"Duration\", op: \"millis\" }}, got {callees:?}"
     );

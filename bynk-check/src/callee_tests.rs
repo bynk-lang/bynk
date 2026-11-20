@@ -24,9 +24,9 @@ fn static_ops(source: &str) -> Vec<StaticOp> {
     callees_for(source)
         .into_iter()
         .filter_map(|c| match c {
-            Callee::Intrinsic { ns_t, op_t, .. } => {
-                assert_eq!(op_t.ns(), ns_t, "the typed namespace follows the operation");
-                Some(op_t)
+            Callee::Intrinsic { ns, op, .. } => {
+                assert_eq!(op.ns(), ns, "the typed namespace follows the operation");
+                Some(op)
             }
             _ => None,
         })
@@ -167,9 +167,7 @@ service intake from queue("orders") {
         .callees_in("demo.inbox")
         .iter()
         .filter_map(|c| match c {
-            Callee::Intrinsic { op_t, .. } if op_t.ns() == IntrinsicNs::QueueResult => {
-                Some(op_t.name())
-            }
+            Callee::Intrinsic { op, .. } if op.ns() == IntrinsicNs::QueueResult => Some(op.name()),
             _ => None,
         })
         .collect();
@@ -242,17 +240,17 @@ fn every_static_operation_round_trips_and_names_its_namespace() {
     }
 }
 
-/// `Callee::intrinsic` keeps the string and typed forms in step.
+/// `Callee::intrinsic` takes its namespace from the operation.
 #[test]
-fn the_intrinsic_constructor_derives_the_strings_from_the_typed_form() {
-    let Callee::Intrinsic { ns, op, ns_t, op_t } =
+fn the_intrinsic_constructor_derives_the_namespace_from_the_operation() {
+    let Callee::Intrinsic { ns, op } =
         Callee::intrinsic(StaticOp::Duration(DurationStatic::Millis))
     else {
         panic!("an intrinsic")
     };
-    assert_eq!((ns, op.as_str()), ("Duration", "millis"));
-    assert_eq!(ns_t, IntrinsicNs::Duration);
-    assert_eq!(op_t, StaticOp::Duration(DurationStatic::Millis));
+    assert_eq!((ns.name(), op.name()), ("Duration", "millis"));
+    assert_eq!(ns, IntrinsicNs::Duration);
+    assert_eq!(op, StaticOp::Duration(DurationStatic::Millis));
 }
 
 // ---- store operations ------------------------------------------------------
@@ -309,7 +307,7 @@ fn each_store_entry_operation_records_its_typed_operation() {
     let store = |field: &str, typed: StoreEntryOp| {
         assert!(
             callees.iter().any(|c| matches!(c,
-                Callee::Store { field: f, op, op_t } if f == field && *op_t == typed && op == typed.name())),
+                Callee::Store { field: f, op } if f == field && *op == typed)),
             "{field}: {typed:?} missing from {callees:?}"
         );
     };
@@ -333,7 +331,7 @@ fn a_lifting_store_operation_records_its_query_operation() {
     let query = |field: &str, typed: StoreQueryOp| {
         assert!(
             callees.iter().any(|c| matches!(c,
-                Callee::Query { field: f, op, op_t, .. } if f == field && *op_t == typed && op == typed.name())),
+                Callee::Query { field: f, op, .. } if f == field && *op == typed)),
             "{field}: {typed:?} missing from {callees:?}"
         );
     };
@@ -567,11 +565,8 @@ fn test_addresses(files: &[(&str, &str)], unit: &str) -> Vec<(String, HandlerAdd
         .iter()
         .filter_map(|c| match c {
             Callee::TestService {
-                service,
-                address,
-                address_t,
-                ..
-            } => Some((format!("{service} {address}"), address_t.clone())),
+                service, address, ..
+            } => Some((format!("{service} {}", address.describe()), address.clone())),
             _ => None,
         })
         .collect()
@@ -780,7 +775,7 @@ fn a_websocket_lifecycle_address_records_its_typed_form() {
         a.callees_in("chat").iter().any(|c| matches!(
             c,
             Callee::Intrinsic {
-                op_t: StaticOp::TestConnection(TestConnectionStatic::New),
+                op: StaticOp::TestConnection(TestConnectionStatic::New),
                 ..
             }
         )),
@@ -789,7 +784,7 @@ fn a_websocket_lifecycle_address_records_its_typed_form() {
     has("Gateway ws open", WsAddress::Open);
     // `roomId` is the first of two parameters, so the frame is the second.
     has(
-        "Gateway ws message 1 2",
+        "Gateway ws message",
         WsAddress::Message {
             frame: Some(WsMessageShape {
                 frame_index: 1,
@@ -797,7 +792,7 @@ fn a_websocket_lifecycle_address_records_its_typed_form() {
             }),
         },
     );
-    has("Gateway ws close 1", WsAddress::Close { params: Some(1) });
+    has("Gateway ws close", WsAddress::Close { params: Some(1) });
 }
 
 /// `run.id`, a test run's identity, is its own intrinsic.
@@ -818,8 +813,8 @@ fn run_id_records_the_test_run_intrinsic() {
         a.callees_in("shop.ledger").iter().any(|c| matches!(
             c,
             Callee::Intrinsic {
-                ns_t: IntrinsicNs::TestRun,
-                op_t: StaticOp::TestRun(TestRunStatic::Id),
+                ns: IntrinsicNs::TestRun,
+                op: StaticOp::TestRun(TestRunStatic::Id),
                 ..
             }
         )),
@@ -882,4 +877,32 @@ fn every_call_site_principal_is_recorded_once_and_an_actor_is_not_reserved() {
         );
     }
     assert_eq!(recorded.iter().filter(|p| !p.is_reserved()).count(), 1);
+}
+
+/// #934's class: a same-named, non-first-party `Events` whose operation is `emit` does not
+/// count as an emit (it used to, by name), while bynk's own `Events.emit` does.
+#[test]
+fn only_bynks_own_events_emit_counts_as_an_emit() {
+    use crate::project_model::is_events_emit;
+    let other = analyse(&[
+        ("vendor.bynk", OTHER_ADAPTER),
+        ("vendor.binding.ts", OTHER_BINDING),
+        (
+            "demo/orders.bynk",
+            "context demo.orders\n\nconsumes vendor { Events }\n\nservice reserve {\n  on call() -> Effect[()] given Events {\n    Events.emit(\"order\")\n  }\n}\n",
+        ),
+    ]);
+    other.assert_clean();
+    let callees = other.callees_in("demo.orders");
+    assert!(callees.iter().any(
+        |c| matches!(c, Callee::Capability { cap, op, .. } if cap == "Events" && op == "emit")
+    ));
+    assert!(!callees.iter().any(is_events_emit), "{callees:?}");
+
+    let own = analyse(&[(
+        "shop/hooks.bynk",
+        "context shop.hooks\n\nconsumes bynk { Events }\n\nevent Seen = { id: String }\n\nservice api {\n  on call(id: String) -> Effect[()] given Events {\n    Events.emit[Seen](Seen { id: id })\n  }\n}\n",
+    )]);
+    own.assert_clean();
+    assert!(own.callees_in("shop.hooks").iter().any(is_events_emit));
 }

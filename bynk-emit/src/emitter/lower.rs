@@ -347,8 +347,8 @@ fn settle_kind(
     // position is pure; called with `<-` it isn't a safe address, so it ends
     // the segment below.
     let safety = |e: &bynk_syntax::ast::Expr| match callees.get(&e.id) {
-        Some(Callee::TestService { address_t, .. }) => Some(matches!(
-            address_t,
+        Some(Callee::TestService { address, .. }) => Some(matches!(
+            address,
             HandlerAddress::Http {
                 verb: bynk_syntax::ast::HttpMethod::Get,
                 ..
@@ -1693,7 +1693,7 @@ pub(crate) fn lower_expr(e: &Expr, cx: &mut LowerCtx) -> Lowered {
             if matches!(
                 cx.commons().callees.get(&e.id),
                 Some(bynk_check::checker::Callee::Intrinsic {
-                    ns_t: IntrinsicNs::TestRun,
+                    ns: IntrinsicNs::TestRun,
                     ..
                 })
             ) =>
@@ -3532,7 +3532,7 @@ fn lower_ident(e: &Expr, id: &Ident, cx: &mut LowerCtx) -> Built {
     if matches!(
         cx.commons().callee(e.id),
         Some(Callee::Intrinsic {
-            ns_t: IntrinsicNs::HttpResult,
+            ns: IntrinsicNs::HttpResult,
             ..
         })
     ) {
@@ -3543,7 +3543,7 @@ fn lower_ident(e: &Expr, id: &Ident, cx: &mut LowerCtx) -> Built {
     if matches!(
         cx.commons().callee(e.id),
         Some(Callee::Intrinsic {
-            ns_t: IntrinsicNs::QueueResult,
+            ns: IntrinsicNs::QueueResult,
             ..
         })
     ) {
@@ -3638,7 +3638,7 @@ pub(super) fn lower_http_variant_args(
     let raw_error = matches!(
         cx.commons().callee(e.id),
         Some(Callee::Intrinsic {
-            op_t: StaticOp::HttpResult(v),
+            op: StaticOp::HttpResult(v),
             ..
         }) if v.payload == bynk_syntax::ast::HttpVariantPayload::RawError
     );
@@ -3719,7 +3719,7 @@ fn lower_call(e: &Expr, name: &Ident, args: &[Expr], cx: &mut LowerCtx) -> Lower
     // #3051: `TestConnection[F]()` — a case's recording handle for a websocket
     // connection.
     if let Some(Callee::Intrinsic {
-        ns_t: IntrinsicNs::TestConnection,
+        ns: IntrinsicNs::TestConnection,
         ..
     }) = cx.commons().callee(e.id)
     {
@@ -3748,7 +3748,7 @@ fn lower_call(e: &Expr, name: &Ident, args: &[Expr], cx: &mut LowerCtx) -> Lower
     if matches!(
         cx.commons().callee(e.id),
         Some(Callee::Intrinsic {
-            ns_t: IntrinsicNs::HttpResult,
+            ns: IntrinsicNs::HttpResult,
             ..
         })
     ) {
@@ -3763,7 +3763,7 @@ fn lower_call(e: &Expr, name: &Ident, args: &[Expr], cx: &mut LowerCtx) -> Lower
     if matches!(
         cx.commons().callee(e.id),
         Some(Callee::Intrinsic {
-            ns_t: IntrinsicNs::QueueResult,
+            ns: IntrinsicNs::QueueResult,
             ..
         })
     ) {
@@ -4663,7 +4663,7 @@ fn lower_field_access(e: &Expr, receiver: &Expr, field: &Ident, cx: &mut LowerCt
         && matches!(
             cx.commons().callee(e.id),
             Some(Callee::Intrinsic {
-                ns_t: IntrinsicNs::HttpResult,
+                ns: IntrinsicNs::HttpResult,
                 ..
             })
         )

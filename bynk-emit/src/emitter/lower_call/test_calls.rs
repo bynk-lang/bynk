@@ -163,7 +163,7 @@ fn sum_handler_key(address: Option<&HandlerAddress>) -> Option<String> {
 /// The address the checker resolved for the test-service call `e`, if it recorded one.
 fn test_address(cx: &LowerCtx, e: &Expr) -> Option<HandlerAddress> {
     match cx.commons().callee(e.id) {
-        Some(Callee::TestService { address_t, .. }) => Some(address_t.clone()),
+        Some(Callee::TestService { address, .. }) => Some(address.clone()),
         _ => None,
     }
 }

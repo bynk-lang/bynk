@@ -922,7 +922,7 @@ fn lower_effect_let_value(
                                 .as_deref()
                                 .and_then(|c| cx.commons().callee(c.id)),
                             Some(Callee::Intrinsic {
-                                op_t: StaticOp::TokenClaims(TokenClaimsStatic::Of),
+                                op: StaticOp::TokenClaims(TokenClaimsStatic::Of),
                                 ..
                             })
                         ) =>
