@@ -850,8 +850,26 @@ pub fn run(
         return ExitCode::FAILURE;
     }
 
-    let build_dir = project_root.join(".bynk").join("deploy");
-    if let Err(e) = workers::prepare_build_dir(project_root, &build_dir) {
+    // #3796: a dry run builds somewhere disposable, so it writes nothing to
+    // the project; a real deploy keeps its build under `.bynk/deploy`.
+    let scratch = if opts.dry_run {
+        match workers::ScratchBuildDir::new() {
+            Ok(scratch) => Some(scratch),
+            Err(e) => {
+                emsg!("bynk: could not prepare build directory: {e}");
+                return ExitCode::FAILURE;
+            }
+        }
+    } else {
+        None
+    };
+    let build_dir = match &scratch {
+        Some(scratch) => scratch.path().to_path_buf(),
+        None => project_root.join(".bynk").join("deploy"),
+    };
+    if scratch.is_none()
+        && let Err(e) = workers::prepare_build_dir(project_root, &build_dir)
+    {
         emsg!("bynk: could not prepare build directory: {e}");
         return ExitCode::FAILURE;
     }
