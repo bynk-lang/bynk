@@ -4478,7 +4478,7 @@ fn object_built(has_spread: bool, slots: Vec<FieldSlot>, children: Vec<LoweredEx
             for slot in &slots {
                 entries.push(match slot {
                     FieldSlot::Prop(key) => match nodes.next() {
-                        Some(v) => bynk_ts::TsObjectEntry::Prop(key.clone(), v),
+                        Some(v) => bynk_ts::TsObjectEntry::prop(key.clone(), v),
                         None => unreachable!("one child per `Prop` slot"),
                     },
                     FieldSlot::Shorthand(key) => bynk_ts::TsObjectEntry::Shorthand(key.clone()),

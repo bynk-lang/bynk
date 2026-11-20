@@ -315,7 +315,7 @@ pub(crate) fn lower_workers_cross_context_call(
             .params
             .iter()
             .zip(args_serialised)
-            .map(|((name, _), serialised)| bynk_ts::TsObjectEntry::Prop(name.clone(), serialised))
+            .map(|((name, _), serialised)| bynk_ts::TsObjectEntry::prop(name.clone(), serialised))
             .collect();
         bynk_ts::TsExpr::object_entries(entries)
     };

@@ -18,14 +18,14 @@ pub(super) fn default_value_node(value: &DefaultValue) -> TsExpr {
         DefaultValue::Record(fields) => object(
             fields
                 .iter()
-                .map(|(key, v)| TsObjectEntry::Prop(key.clone(), default_value_node(v)))
+                .map(|(key, v)| TsObjectEntry::prop(key.clone(), default_value_node(v)))
                 .collect(),
         ),
         DefaultValue::Sum { variant, fields } => tagged(
             variant,
             fields
                 .iter()
-                .map(|(key, v)| TsObjectEntry::Prop(key.clone(), default_value_node(v)))
+                .map(|(key, v)| TsObjectEntry::prop(key.clone(), default_value_node(v)))
                 .collect(),
         ),
         DefaultValue::Some(v) => payload("Some", "value", v),
@@ -49,7 +49,7 @@ fn object(entries: Vec<TsObjectEntry>) -> TsExpr {
 /// `{ tag: "<variant>" as const, …rest }`.
 fn tagged(variant: &str, rest: Vec<TsObjectEntry>) -> TsExpr {
     let tag = TsExpr::AsConst(Box::new(TsExpr::Lit(TsLit::Str(variant.to_string()))));
-    let mut entries = vec![TsObjectEntry::Prop("tag".to_string(), tag)];
+    let mut entries = vec![TsObjectEntry::prop("tag".to_string(), tag)];
     entries.extend(rest);
     object(entries)
 }
@@ -58,7 +58,7 @@ fn tagged(variant: &str, rest: Vec<TsObjectEntry>) -> TsExpr {
 fn payload(variant: &str, key: &str, value: &DefaultValue) -> TsExpr {
     tagged(
         variant,
-        vec![TsObjectEntry::Prop(
+        vec![TsObjectEntry::prop(
             key.to_string(),
             default_value_node(value),
         )],

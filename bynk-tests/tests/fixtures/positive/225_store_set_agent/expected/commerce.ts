@@ -51,7 +51,11 @@ export class Audience {
     __reportUnknownStoredKeys("Audience", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateAudienceState(__merged, __wholesale);
-    if (__readsLazily(this)) { __attachLazy(this.state.storage, __merged, __lazyFieldsOfAudience); } else { __hydrateAudienceState(__merged, __wholesale) }
+    if (__readsLazily(this)) {
+      __attachLazy(this.state.storage, __merged, __lazyFieldsOfAudience);
+    } else {
+      __hydrateAudienceState(__merged, __wholesale);
+    }
     return __merged;
   }
 

@@ -115,7 +115,11 @@ export class Tally {
     __reportUnknownStoredKeys("Tally", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateTallyState(__merged, __wholesale);
-    if (__readsLazily(this)) { __attachLazy(this.state.storage, __merged, __lazyFieldsOfTally); } else { __hydrateTallyState(__merged, __wholesale) }
+    if (__readsLazily(this)) {
+      __attachLazy(this.state.storage, __merged, __lazyFieldsOfTally);
+    } else {
+      __hydrateTallyState(__merged, __wholesale);
+    }
     return __merged;
   }
 

@@ -651,12 +651,12 @@ fn lower_http_result(
             let added = if clear {
                 TsExpr::object_entries(vec![
                     TsObjectEntry::Spread(paren(arg)),
-                    TsObjectEntry::Prop("value".to_string(), str_node("")),
-                    TsObjectEntry::Prop(
+                    TsObjectEntry::prop("value".to_string(), str_node("")),
+                    TsObjectEntry::prop(
                         "maxAge".to_string(),
                         call(id("Some"), vec![TsExpr::Lit(TsLit::Num("0".to_string()))]),
                     ),
-                    TsObjectEntry::Prop(
+                    TsObjectEntry::prop(
                         "expires".to_string(),
                         call(id("Some"), vec![TsExpr::Lit(TsLit::Num("0".to_string()))]),
                     ),
@@ -666,7 +666,7 @@ fn lower_http_result(
             };
             let record = TsExpr::object_entries(vec![
                 TsObjectEntry::Spread(id("__r")),
-                TsObjectEntry::Prop("cookies".to_string(), TsExpr::array(vec![held, added])),
+                TsObjectEntry::prop("cookies".to_string(), TsExpr::array(vec![held, added])),
             ]);
             call(
                 paren(arrow(vec![param("__r", Some(any_ty()))], paren(record))),

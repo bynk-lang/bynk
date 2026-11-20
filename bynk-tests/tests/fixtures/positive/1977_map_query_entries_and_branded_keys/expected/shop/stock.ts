@@ -72,7 +72,11 @@ export class Box {
     __reportUnknownStoredKeys("Box", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateBoxState(__merged, __wholesale);
-    if (__readsLazily(this)) { __attachLazy(this.state.storage, __merged, __lazyFieldsOfBox); } else { __hydrateBoxState(__merged, __wholesale) }
+    if (__readsLazily(this)) {
+      __attachLazy(this.state.storage, __merged, __lazyFieldsOfBox);
+    } else {
+      __hydrateBoxState(__merged, __wholesale);
+    }
     return __merged;
   }
 
@@ -154,7 +158,11 @@ export class ByKey {
     __reportUnknownStoredKeys("ByKey", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateByKeyState(__merged, __wholesale);
-    if (__readsLazily(this)) { __attachLazy(this.state.storage, __merged, __lazyFieldsOfByKey); } else { __hydrateByKeyState(__merged, __wholesale) }
+    if (__readsLazily(this)) {
+      __attachLazy(this.state.storage, __merged, __lazyFieldsOfByKey);
+    } else {
+      __hydrateByKeyState(__merged, __wholesale);
+    }
     return __merged;
   }
 
@@ -252,7 +260,11 @@ export class Ledger {
     __reportUnknownStoredKeys("Ledger", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateLedgerState(__merged, __wholesale);
-    if (__readsLazily(this)) { __attachLazy(this.state.storage, __merged, __lazyFieldsOfLedger); } else { __hydrateLedgerState(__merged, __wholesale) }
+    if (__readsLazily(this)) {
+      __attachLazy(this.state.storage, __merged, __lazyFieldsOfLedger);
+    } else {
+      __hydrateLedgerState(__merged, __wholesale);
+    }
     return __merged;
   }
 

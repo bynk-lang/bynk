@@ -195,7 +195,7 @@ fn new_response(args: Vec<TsExpr>) -> TsExpr {
 fn deps_spread_with(key: &str, value: TsExpr) -> TsExpr {
     TsExpr::object_entries(vec![
         TsObjectEntry::Spread(ident("deps")),
-        TsObjectEntry::Prop(key.to_string(), value),
+        TsObjectEntry::prop(key.to_string(), value),
     ])
 }
 
@@ -280,7 +280,7 @@ fn fanout_events(context: &str, layout: &bynk_project::worker_layout::WorkerLayo
             as_expr(
                 TsExpr::object_entries(vec![
                     TsObjectEntry::Spread(ident("e")),
-                    TsObjectEntry::Prop("publisher".to_string(), str_lit(context.to_string())),
+                    TsObjectEntry::prop("publisher".to_string(), str_lit(context.to_string())),
                 ]),
                 TsType::named(crate::emitter::EVENTS_WIRE_EVENT_TS_TYPE),
             ),
@@ -657,7 +657,7 @@ pub fn emit_worker_compose(
     deps_entries.extend(session_deps_entry(table));
     // v0.79: the execution context rides in `deps.__exec` for `detach` sends.
     if ctx_uses_send {
-        deps_entries.push(TsObjectEntry::Prop("__exec".to_string(), ident("exec")));
+        deps_entries.push(TsObjectEntry::prop("__exec".to_string(), ident("exec")));
     }
     // Events track, slice 0 (spine #936, ADR 0284): a publishing handler's
     // release-at-commit event batch is handed to this context's own fan-out
@@ -681,7 +681,7 @@ pub fn emit_worker_compose(
                 vec![member(ident("env"), bind), fanout_events(context, layout)],
             )))),
         };
-        deps_entries.push(TsObjectEntry::Prop("__eventsDispatch".to_string(), arrow));
+        deps_entries.push(TsObjectEntry::prop("__eventsDispatch".to_string(), arrow));
     }
     // #1321: the pre-conversion `writeln!(out, "  const deps = {{ {} }};",
     // deps_entries.join(", "))` template always has a space on each side of
@@ -2323,8 +2323,8 @@ fn emit_http_oidc_wrapper(
         // #2380 (L5): the binder's `.claims` read the verified token's claims.
         call_args.push(TsExpr::object_entries(vec![
             TsObjectEntry::Spread(ident("deps")),
-            TsObjectEntry::Prop("identity".to_string(), member(ident("__id"), "value")),
-            TsObjectEntry::Prop(
+            TsObjectEntry::prop("identity".to_string(), member(ident("__id"), "value")),
+            TsObjectEntry::prop(
                 "claims".to_string(),
                 call(
                     ident("__tokenClaims"),
@@ -2383,7 +2383,7 @@ fn session_deps_entry(table: &UnitTable) -> Option<TsObjectEntry> {
             )
         })
         .collect();
-    Some(TsObjectEntry::Prop(
+    Some(TsObjectEntry::prop(
         "__session".to_string(),
         TsExpr::object(keys),
     ))
@@ -2543,7 +2543,7 @@ fn emit_http_signed_cookie_wrapper(
         ));
         call_args.push(TsExpr::object_entries(vec![
             TsObjectEntry::Spread(ident("deps")),
-            TsObjectEntry::Prop("identity".to_string(), member(ident("__id"), "value")),
+            TsObjectEntry::prop("identity".to_string(), member(ident("__id"), "value")),
         ]));
     } else {
         call_args.push(ident("deps"));

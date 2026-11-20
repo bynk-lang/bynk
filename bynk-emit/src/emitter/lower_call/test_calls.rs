@@ -79,9 +79,9 @@ struct DepsArg {
 fn who_deps(actor: &str, identity: Option<LoweredExpr>) -> LoweredExpr {
     let tag = bridge(debug_str(actor));
     let who = |tag: TsExpr, identity: Option<TsExpr>| {
-        let mut fields = vec![TsObjectEntry::Prop("tag".to_string(), tag)];
-        fields.extend(identity.map(|i| TsObjectEntry::Prop("identity".to_string(), i)));
-        deps_with(vec![TsObjectEntry::Prop(
+        let mut fields = vec![TsObjectEntry::prop("tag".to_string(), tag)];
+        fields.extend(identity.map(|i| TsObjectEntry::prop("identity".to_string(), i)));
+        deps_with(vec![TsObjectEntry::prop(
             "who".to_string(),
             TsExpr::object_entries(fields),
         )])
@@ -123,12 +123,12 @@ fn identity_deps(identity: LoweredExpr, claims: Option<LoweredExpr>) -> LoweredE
             let mut nodes = c.into_iter();
             let mut entries = Vec::new();
             if let Some(identity) = nodes.next() {
-                entries.push(TsObjectEntry::Prop(
+                entries.push(TsObjectEntry::prop(
                     "identity".to_string(),
                     paren_as_any(identity),
                 ));
             }
-            entries.extend(nodes.map(|claims| TsObjectEntry::Prop("claims".to_string(), claims)));
+            entries.extend(nodes.map(|claims| TsObjectEntry::prop("claims".to_string(), claims)));
             deps_with(entries)
         },
         |t| {
@@ -254,7 +254,7 @@ fn inbound_email_call(service: &str, key: &str, mail: LoweredExpr) -> Built {
                 member(id(service), key),
                 vec![
                     id("__m"),
-                    deps_with(vec![TsObjectEntry::Prop("identity".to_string(), sender)]),
+                    deps_with(vec![TsObjectEntry::prop("identity".to_string(), sender)]),
                 ],
             );
             call(

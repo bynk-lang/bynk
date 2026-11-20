@@ -269,12 +269,12 @@ pub(super) fn build_run_function(entries: &[(String, String)]) -> Vec<TsStmt> {
                 const_(
                     "r",
                     TsExpr::object_entries(vec![
-                        TsObjectEntry::Prop("name".to_string(), str_lit(name.to_string())),
+                        TsObjectEntry::prop("name".to_string(), str_lit(name.to_string())),
                         TsObjectEntry::Spread(TsExpr::Paren(Box::new(await_expr(call(
                             ident(runner_name),
                             vec![],
                         ))))),
-                        TsObjectEntry::Prop(
+                        TsObjectEntry::prop(
                             "durationMs".to_string(),
                             call(ident("__bynkCaseSince"), vec![ident("started")]),
                         ),
@@ -416,11 +416,11 @@ impl DetachReports {
             return Vec::new();
         }
         vec![
-            TsObjectEntry::Prop(
+            TsObjectEntry::prop(
                 "detached_failures".to_string(),
                 ident("(detached.length > 0 ? detached.length : undefined)"),
             ),
-            TsObjectEntry::Prop(
+            TsObjectEntry::prop(
                 "detached".to_string(),
                 ident("(detached.length > 0 ? detached : undefined)"),
             ),
@@ -587,7 +587,7 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt, pg: 
     // retried them.
     let remote = tests.iter().any(|t| t.remote);
     let retries_entry = || {
-        remote.then(|| TsObjectEntry::Prop("retries".to_string(), member(ident("r"), "retries")))
+        remote.then(|| TsObjectEntry::prop("retries".to_string(), member(ident("r"), "retries")))
     };
     // Track C (#2266): a failed generative case reports how to reproduce it as
     // data — `kind`, `seed` and, when shrinking produced one, `counterexample` —
@@ -608,7 +608,7 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt, pg: 
         // type-checks.
         ["kind", "seed", "counterexample"]
             .into_iter()
-            .map(|k| TsObjectEntry::Prop(k.to_string(), member(ident("r"), k)))
+            .map(|k| TsObjectEntry::prop(k.to_string(), member(ident("r"), k)))
             .collect()
     };
 
@@ -616,7 +616,7 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt, pg: 
     // own `run`. Only the stream carries it; `--format json` keeps its document
     // deterministic and drops it.
     let duration_entry =
-        || TsObjectEntry::Prop("durationMs".to_string(), member(ident("r"), "durationMs"));
+        || TsObjectEntry::prop("durationMs".to_string(), member(ident("r"), "durationMs"));
 
     // #2842: the modules that take a snapshot export `__bynkSnapshotReport`; the
     // run hands the driver every selected one's report — as an event in the stream,
@@ -657,8 +657,8 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt, pg: 
             },
         ),
         emit_call(vec![
-            TsObjectEntry::Prop("type".to_string(), str_lit("run-begin")),
-            TsObjectEntry::Prop("suites".to_string(), member(ident("active"), "length")),
+            TsObjectEntry::prop("type".to_string(), str_lit("run-begin")),
+            TsObjectEntry::prop("suites".to_string(), member(ident("active"), "length")),
         ]),
         TsStmt::for_of(
             "m",
@@ -693,10 +693,10 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt, pg: 
                     ),
                 ),
                 emit_call(vec![
-                    TsObjectEntry::Prop("type".to_string(), str_lit("suite-begin")),
-                    TsObjectEntry::Prop("name".to_string(), ident("suite")),
+                    TsObjectEntry::prop("type".to_string(), str_lit("suite-begin")),
+                    TsObjectEntry::prop("name".to_string(), ident("suite")),
                     TsObjectEntry::Shorthand("kind".to_string()),
-                    TsObjectEntry::Prop(
+                    TsObjectEntry::prop(
                         "tests".to_string(),
                         call(ident("planned"), vec![member(ident("m"), "names")]),
                     ),
@@ -713,13 +713,13 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt, pg: 
                                 TsStmt::increment(ident("passed"), None),
                                 emit_call(
                                     vec![
-                                        TsObjectEntry::Prop("type".to_string(), str_lit("case")),
+                                        TsObjectEntry::prop("type".to_string(), str_lit("case")),
                                         TsObjectEntry::Shorthand("suite".to_string()),
-                                        TsObjectEntry::Prop(
+                                        TsObjectEntry::prop(
                                             "name".to_string(),
                                             member(ident("r"), "name"),
                                         ),
-                                        TsObjectEntry::Prop("outcome".to_string(), str_lit("pass")),
+                                        TsObjectEntry::prop("outcome".to_string(), str_lit("pass")),
                                     ]
                                     .into_iter()
                                     .chain(retries_entry())
@@ -732,21 +732,21 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt, pg: 
                                 TsStmt::increment(ident("failed"), None),
                                 emit_call(
                                     vec![
-                                        TsObjectEntry::Prop("type".to_string(), str_lit("case")),
+                                        TsObjectEntry::prop("type".to_string(), str_lit("case")),
                                         TsObjectEntry::Shorthand("suite".to_string()),
-                                        TsObjectEntry::Prop(
+                                        TsObjectEntry::prop(
                                             "name".to_string(),
                                             member(ident("r"), "name"),
                                         ),
-                                        TsObjectEntry::Prop("outcome".to_string(), str_lit("fail")),
-                                        TsObjectEntry::Prop(
+                                        TsObjectEntry::prop("outcome".to_string(), str_lit("fail")),
+                                        TsObjectEntry::prop(
                                             "message".to_string(),
                                             and_expr(
                                                 member(ident("r"), "error"),
                                                 member(member(ident("r"), "error"), "message"),
                                             ),
                                         ),
-                                        TsObjectEntry::Prop(
+                                        TsObjectEntry::prop(
                                             "location".to_string(),
                                             and_expr(
                                                 member(ident("r"), "error"),
@@ -755,7 +755,7 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt, pg: 
                                         ),
                                         // #2272: the declaration a violated invariant or transition
                                         // names; absent (`JSON.stringify` drops it) otherwise.
-                                        TsObjectEntry::Prop(
+                                        TsObjectEntry::prop(
                                             "violation".to_string(),
                                             and_expr(
                                                 member(ident("r"), "error"),
@@ -763,7 +763,7 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt, pg: 
                                             ),
                                         ),
                                         // #2272: the steps of a failed history that an agent refused.
-                                        TsObjectEntry::Prop(
+                                        TsObjectEntry::prop(
                                             "refusals".to_string(),
                                             and_expr(
                                                 member(ident("r"), "error"),
@@ -791,19 +791,19 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt, pg: 
                     vec![member(ident("m"), "run"), ident("report")],
                 ))),
                 emit_call(vec![
-                    TsObjectEntry::Prop("type".to_string(), str_lit("suite-end")),
-                    TsObjectEntry::Prop("name".to_string(), ident("suite")),
+                    TsObjectEntry::prop("type".to_string(), str_lit("suite-end")),
+                    TsObjectEntry::prop("name".to_string(), ident("suite")),
                 ]),
             ]),
             None,
         ),
         emit_call(vec![
-            TsObjectEntry::Prop("type".to_string(), str_lit("run-end")),
+            TsObjectEntry::prop("type".to_string(), str_lit("run-end")),
             TsObjectEntry::Shorthand("passed".to_string()),
             TsObjectEntry::Shorthand("failed".to_string()),
             // #2273: the `--suite`/`--case` values that selected nothing; absent
             // (`JSON.stringify` drops an undefined) unless a filter went unmatched.
-            TsObjectEntry::Prop("unmatched".to_string(), call(ident("unmatched"), vec![])),
+            TsObjectEntry::prop("unmatched".to_string(), call(ident("unmatched"), vec![])),
         ]),
     ];
     // #2842: the snapshot report goes ahead of `run-end`.

@@ -311,6 +311,11 @@ const WALLET_MAP: &str = "\
 48 48 48 48 48 48 48 48 48 48 48 48 48 48 48 48
 48 48 48 48 48 48 48 48 48
 ";
+// Ten `33` entries joined the trailing run (256 entries to 266) in 1A.32c-1, when the WebSocket
+// frame decode's two `try`/`catch` and the close handler's `void code; void reason; void
+// wasClean;` became nodes and now print one statement per line. Each extra generated line
+// inherits the dispatch method's span. That is line growth from the ruled re-layout, not a
+// moved mapping: every other entry is unchanged.
 const CHAT_MAP: &str = "\
 - - - - - - - - - - - 2 2 2 2 2
 2 2 2 2 3 3 3 3 3 3 3 3 3 4 4 4
@@ -328,6 +333,7 @@ const CHAT_MAP: &str = "\
 33 33 33 33 33 33 33 33 33 33 33 33 33 33 33 33
 33 33 33 33 33 33 33 33 33 33 33 33 33 33 33 33
 33 33 33 33 33 33 33 33 33 33 33 33 33 33 33 33
+33 33 33 33 33 33 33 33 33 33
 ";
 
 const MONEY: &str = "commons commerce.money {

@@ -264,7 +264,7 @@ fn walk_arrow_body<'a>(body: &'a TsArrowBody, out: &mut Vec<(VerbatimOrigin, &'a
 
 fn walk_object_entry<'a>(entry: &'a TsObjectEntry, out: &mut Vec<(VerbatimOrigin, &'a str)>) {
     match entry {
-        TsObjectEntry::Prop(_, v) => walk_expr(v, out),
+        TsObjectEntry::Prop { value, .. } => walk_expr(value, out),
         TsObjectEntry::Shorthand(_) => {}
         TsObjectEntry::Method { body, .. } => {
             for s in body {
@@ -1639,7 +1639,7 @@ impl TsExpr {
         TsExpr::Object {
             entries: entries
                 .into_iter()
-                .map(|(k, v)| TsObjectEntry::Prop(k, v))
+                .map(|(k, v)| TsObjectEntry::prop(k, v))
                 .collect(),
             multiline: false,
             end_span: None,
@@ -1654,7 +1654,7 @@ impl TsExpr {
         TsExpr::Object {
             entries: entries
                 .into_iter()
-                .map(|(k, v)| TsObjectEntry::Prop(k, v))
+                .map(|(k, v)| TsObjectEntry::prop(k, v))
                 .collect(),
             multiline: true,
             end_span: None,
@@ -1752,8 +1752,14 @@ impl TsExpr {
 /// correct change).
 #[derive(Debug, Clone)]
 pub enum TsObjectEntry {
-    /// `key: value`.
-    Prop(String, TsExpr),
+    /// `key: value`, with an optional JSDoc block before it (printed the
+    /// way [`TsObjectEntry::Method`]'s `doc` is). Build it with
+    /// [`TsObjectEntry::prop`] and [`TsObjectEntry::with_doc`].
+    Prop {
+        key: String,
+        value: TsExpr,
+        doc: Option<String>,
+    },
     /// `key` alone — object-literal property shorthand, e.g. `{ cap1,
     /// cap2 }`. Distinct from `Prop(name, TsExpr::Ident(name))`, which
     /// prints `name: name`, not the shorthand form real TypeScript
@@ -1824,6 +1830,25 @@ pub enum TsObjectEntry {
 }
 
 impl TsObjectEntry {
+    /// An undocumented `key: value` entry: the shape of nearly every `Prop`.
+    pub fn prop(key: impl Into<String>, value: TsExpr) -> Self {
+        TsObjectEntry::Prop {
+            key: key.into(),
+            value,
+            doc: None,
+        }
+    }
+
+    /// This entry with a JSDoc block before it (a no-op for an entry that is
+    /// not a `Prop`). See `doc` on [`TsObjectEntry::Prop`].
+    #[must_use]
+    pub fn with_doc(mut self, text: impl Into<String>) -> Self {
+        if let TsObjectEntry::Prop { doc, .. } = &mut self {
+            *doc = Some(text.into());
+        }
+        self
+    }
+
     /// A multi-line, non-generic, undocumented method entry with no span: the
     /// shape of nearly every method entry. Build any other with the variant
     /// directly.
@@ -1870,6 +1895,10 @@ pub enum TsUnaryOp {
     /// parenthesised by the same rule as `!`, and a negated negation as
     /// `-(-x)`, never the decrement `--x`.
     Neg,
+    /// `void x` (1A.32c-1): evaluates its operand and discards it, as the
+    /// idiom for marking a parameter used. Printed with its operand
+    /// bracketed by the same rule as `!` and `typeof`.
+    Void,
 }
 
 /// `??` (`events_fanout.rs`'s `env ?? {}`), plus three more real operators

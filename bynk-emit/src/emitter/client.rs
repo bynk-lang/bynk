@@ -420,7 +420,7 @@ pub fn emit_client(
                     .params
                     .iter()
                     .zip(encoded)
-                    .map(|((name, _), e)| TsObjectEntry::Prop(name.clone(), e))
+                    .map(|((name, _), e)| TsObjectEntry::prop(name.clone(), e))
                     .collect(),
             ),
         };
