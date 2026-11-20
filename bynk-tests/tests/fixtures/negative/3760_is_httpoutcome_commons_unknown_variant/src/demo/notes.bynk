@@ -1,0 +1,5 @@
+commons demo.notes
+
+type Note = {
+	text: String,
+}
