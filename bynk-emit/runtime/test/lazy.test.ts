@@ -2,10 +2,11 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { EntryOverlay, commitStored, expiredRange, noteClock, readStored } from "../src/entries.ts";
 import type { EntryField } from "../src/entries.ts";
-import { LazyStoreCache, LazyStoreLog, LazyStoreMap, LazyStoreSet } from "../src/lazy.ts";
+import { LazyStoreCache, LazyStoreLog, LazyStoreMap, LazyStoreSet, SCAN_PAGE } from "../src/lazy.ts";
 import { StoreCache, StoreLog, StoreMap, StoreSet, fillLog, fillMap, fillSet, wireLog, wireMap, wirePostings, wireSet } from "../src/store.ts";
 import type { CacheEntry, Indexer } from "../src/store.ts";
 import { InMemoryStorage } from "../src/storage.ts";
+import type { DurableObjectListOptions } from "../src/storage.ts";
 
 // The storage-backed handles against the in-memory ones (#3189, the lazy-read slice): the same
 // operations through both must read the same, and leave byte-identical stored state.
@@ -345,4 +346,31 @@ test("reaping drops an expiry key whose entry is gone, instead of re-reading it 
   await flushLazy(l);
   assert.deepEqual([...(await s.list({ prefix: "x/hits/" })).keys()], [], "both expiry keys are gone");
   assert.equal(((await s.get("c/hits")) as { size: number }).size, 0);
+});
+
+// #3747: Durable Object storage rejects a `list` with both `start` and `startAfter`. A `Log` window
+// with a lower bound sets `start`; once it spans more than one page, the pages after the first must
+// not carry it alongside the `startAfter` cursor.
+class PlatformListStorage extends InMemoryStorage {
+  override async list<T>(options?: DurableObjectListOptions): Promise<Map<string, T>> {
+    if (options?.start !== undefined && options.startAfter !== undefined) {
+      throw new TypeError("list() cannot be called with both start and startAfter values.");
+    }
+    return super.list<T>(options);
+  }
+}
+
+test("a Log window wider than one scan page reads every entry (#3747)", async () => {
+  const s = new PlatformListStorage();
+  const n = SCAN_PAGE * 2 + 7;
+  const write = loadLazy(s);
+  for (let i = 0; i < n; i += 1) await write.audit.append(i, 1000 + i);
+  await flushLazy(write);
+  const read = loadLazy(s).audit;
+  const all = Array.from({ length: n }, (_, i) => i);
+  assert.deepEqual(await read.since(1000), all, "since, from the first entry");
+  assert.deepEqual(await read.since(900), all, "since, from before the first entry");
+  assert.deepEqual(await read.between(1000, 1000 + n), all, "between");
+  assert.deepEqual(await read.since(1005), all.slice(5), "since, from inside the log");
+  assert.deepEqual(await read.before(1000 + n), all, "before");
 });

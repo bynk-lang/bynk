@@ -300,6 +300,10 @@ export function utf8Compare(a: string, b: string): number {
 }
 
 function listFrom<T>(data: ReadonlyMap<string, unknown>, options?: DurableObjectListOptions): Map<string, T> {
+  // As Durable Object storage does (#3747), so a caller that passes both fails here too.
+  if (options?.start !== undefined && options.startAfter !== undefined) {
+    throw new TypeError("list() cannot be called with both start and startAfter values.");
+  }
   const prefix = options?.prefix ?? "";
   const keys: string[] = [];
   for (const k of data.keys()) {

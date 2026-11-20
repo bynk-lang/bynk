@@ -195,12 +195,21 @@ fn is_prunable_output_extension(ext: &str) -> bool {
 }
 
 fn prune_stale_output(out: &ProjectOutput, dir: &Path) -> std::io::Result<()> {
+    prune_output_except(dir, &expected_output_paths(out))
+}
+
+/// [`write_output`]'s reconciliation, against an explicit set of the
+/// root-relative paths a run wrote. #3748: `bynk test` writes one or two
+/// compiles' documents into the same root, so it names the union itself.
+pub(crate) fn prune_output_except(
+    dir: &Path,
+    expected: &std::collections::HashSet<PathBuf>,
+) -> std::io::Result<()> {
     if !dir.is_dir() {
         return Ok(());
     }
-    let expected = expected_output_paths(out);
     let mut dirs_visited = Vec::new();
-    prune_stale_output_dir(dir, dir, &expected, &mut dirs_visited)?;
+    prune_stale_output_dir(dir, dir, expected, &mut dirs_visited)?;
     // Remove directories left empty by the file removals above, deepest first
     // (a parent only empties out once its children are gone). `remove_dir` is
     // a no-op error (ignored) on anything still non-empty — e.g. a directory
