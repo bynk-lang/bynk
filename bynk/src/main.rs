@@ -39,9 +39,10 @@ fn main() -> ExitCode {
     }
 }
 
-fn run() -> ExitCode {
-    // clap renders its help and errors while it parses, so it is told the
-    // `--color` choice ahead of the parse.
+/// Parse the arguments, and set the process-wide `--quiet` and `--color`.
+/// clap renders its help and errors while it parses, so it is told the
+/// `--color` choice ahead of the parse.
+fn parse_cli() -> Cli {
     let mut command = bynk::cli::command();
     if let Some(choice) = bynk_driver::colour::ColourChoice::from_args(std::env::args_os()) {
         command = command.color(choice.clap());
@@ -49,6 +50,11 @@ fn run() -> ExitCode {
     let cli = Cli::from_arg_matches(&command.get_matches()).unwrap_or_else(|e| e.exit());
     bynk_driver::progress::set_quiet(cli.quiet);
     bynk_driver::colour::set_choice(cli.color);
+    cli
+}
+
+fn run() -> ExitCode {
+    let cli = parse_cli();
     match cli.command {
         Command::Doctor {
             input,
