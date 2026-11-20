@@ -6593,12 +6593,19 @@ pub fn close_view_types(
 ///   resolve, or the result is untyped and an `is` test on it is unchecked.
 ///   A signature crosses to the case structurally, as a consumed service's
 ///   does (#1932), so a name the view already binds is not a conflict.
+///
+/// Every identity is seeded before any signature. The walk marks a commons
+/// type visited however it was first reached, so a signature reach that came
+/// first would swallow the conflict an identity reaching the same type
+/// reports (review of #3835).
 fn harness_seeds(imported: &[String], unit_tables: &HashMap<String, UnitTable>) -> Vec<Reached> {
     let mut seeds = Vec::new();
-    for u in imported {
-        let Some(t) = unit_tables.get(u) else {
-            continue;
-        };
+    let tables = || {
+        imported
+            .iter()
+            .filter_map(|u| Some((u, unit_tables.get(u)?)))
+    };
+    for (u, t) in tables() {
         let mut actors: Vec<_> = t.actors.iter().collect();
         actors.sort_by_key(|(n, _)| n.as_str());
         for (_, a) in actors {
@@ -6608,6 +6615,8 @@ fn harness_seeds(imported: &[String], unit_tables: &HashMap<String, UnitTable>) 
                 push_refs(names, u, u, &mut seeds);
             }
         }
+    }
+    for (u, t) in tables() {
         let mut services: Vec<&ServiceDecl> = t.services.values().collect();
         services.sort_by(|a, b| a.name.name.cmp(&b.name.name));
         for h in services.into_iter().flat_map(|s| &s.handlers) {
@@ -7561,6 +7570,66 @@ mod view_closure_tests {
             reach.hidden
         );
         assert!(types.contains_key("Repo"));
+    }
+
+    /// Review of #3835: a participant's handler signature reaches a commons
+    /// type without a conflict (#3760), but that reach must not claim the
+    /// type first and so swallow the conflict another participant's actor
+    /// identity reports for it (#3064). The walk marks a commons type visited
+    /// however it was reached, so identities are seeded before signatures.
+    #[test]
+    fn a_signature_reach_does_not_swallow_an_identity_conflict() {
+        let lib = table(
+            "t.lib",
+            UnitKind::Commons,
+            "commons t.lib\n\ntype X = String where NonEmpty\n\ntype Wrap = { x: X }\n\ntype Id = { x: X }\n",
+        );
+        let a = table(
+            "t.a",
+            UnitKind::Context,
+            "context t.a\n\nuses t.lib\n\nservice s {\n  on call() -> Effect[Wrap] { Effect.pure(Wrap { x: X.unsafe(\"x\") }) }\n}\n",
+        );
+        let b = table(
+            "t.b",
+            UnitKind::Context,
+            "context t.b\n\nuses t.lib\n\nactor U { auth = Internal, identity = Id }\n",
+        );
+        // The suite's own `X`, a different declaration from `t.lib`'s.
+        let mine = table(
+            "t.mine",
+            UnitKind::Commons,
+            "commons t.mine\n\ntype X = Int\n",
+        );
+        let mut types = mine.types.clone();
+        let tables: HashMap<String, UnitTable> = [
+            ("t.lib".to_string(), lib),
+            ("t.a".to_string(), a),
+            ("t.b".to_string(), b),
+            ("t.mine".to_string(), mine),
+        ]
+        .into();
+        let uses: HashMap<String, Vec<String>> = [
+            ("t.a".to_string(), vec!["t.lib".to_string()]),
+            ("t.b".to_string(), vec!["t.lib".to_string()]),
+        ]
+        .into();
+        let reach = close_view_types(
+            &["t.a".to_string(), "t.b".to_string()],
+            &tables,
+            &uses,
+            &mut types,
+            &HashMap::new(),
+            &mut HashMap::new(),
+            true,
+        );
+        assert!(
+            reach
+                .conflicts
+                .iter()
+                .any(|c| c.name == "X" && c.via == "t.b"),
+            "{:?}",
+            reach.conflicts
+        );
     }
 }
 
