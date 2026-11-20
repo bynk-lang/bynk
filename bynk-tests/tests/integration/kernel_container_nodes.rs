@@ -144,3 +144,18 @@ fn size_(s: Set[String], x: String) -> Int { s.remove(x).length() }
         "return (((__s: globalThis.Set<string>) => (__s.delete(x), __s as ReadonlySet<string>))(new globalThis.Set<string>(s))).size;",
     );
 }
+
+/// 1A.30 review (nit): a receiver that is itself a node but not an identifier. A conditional
+/// receiver is bracketed under the member access, and the whole expression stays a node. The
+/// source's own parentheses lower to a `Paren` node and the printer brackets the conditional
+/// again, so the receiver prints doubly bracketed: today's bytes, pinned as they are.
+#[test]
+fn a_conditional_receiver_is_bracketed_and_stays_a_node() {
+    let src = r#"context ops.jobs
+
+fn pick(c: Bool, a: Set[String], b: Set[String]) -> Int { (if c { a } else { b }).length() }
+"#;
+    let (exits, text) = mem(src);
+    assert_eq!(exits, 0, "no text exit:\n{text}");
+    assert_line(&text, "return ((c ? a : b)).size;");
+}
