@@ -5480,6 +5480,13 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         anchor: "what-it-refuses",
     },
     Explain {
+        code: "bynk.service.duplicate_call_handler",
+        blurb: "A service with no `from` clause is called by its name, `svc.call(…)`, so it has one entry: exactly one `on call` handler. A second would never run, since only one of the two can answer the call. To offer a second operation, declare a second service.",
+        example: "service greet {\n    on call(name: String) -> Effect[String] { … }\n    on call(name: String) -> Effect[String] { … }   // ✗ a second `on call`\n}\n\nservice greet {\n    on call(name: String) -> Effect[String] { … }   // ✓ one handler\n}\n\nservice farewell {                                  // ✓ a second operation is a second service\n    on call(name: String) -> Effect[String] { … }\n}",
+        page: "/book/spec/static-semantics",
+        anchor: "57-handlers",
+    },
+    Explain {
         code: "bynk.service.missing_from",
         blurb: "A service with no `from` clause is a call service, and admits only `on call` handlers; the protocol in the header is what says how a handler is invoked. A handler of another form needs its protocol named: `from http` for a route, `from cron`, `from queue(\"…\")`, `from websocket(…)` or `from Events(E)`. The error suggests the one that fits the handler. If the service really is a mix, split it (see `bynk.service.mixed_protocols`).",
         example: "service worker {\n    on message(m: String) -> Effect[QueueResult] { … }   // ✗ no `from` clause\n}\n\nservice worker from queue(\"jobs\") {   // ✓ the protocol is named\n    on message(m: String) -> Effect[QueueResult] { … }\n}",
@@ -10943,6 +10950,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.secrets.computed_name",
         "A `bynk.Secrets` read names its secret with a computed expression rather than a literal, so `bynk deploy` cannot plan it (warning).",
     )),
+    dg(
+        "bynk.service.duplicate_call_handler",
+        "A service declares more than one `on call` handler; it has exactly one.",
+        &["service_decl"],
+    ),
     dg(
         "bynk.service.missing_from",
         "A `from`-less service has a handler other than `on call`.",

@@ -1,0 +1,2 @@
+bynk.service.duplicate_call_handler
+the service `playground` has more than one `on call` handler — it needs exactly one

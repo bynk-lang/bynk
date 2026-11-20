@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **896** codes in total.
+There are **897** codes in total.
 
 ## Agents
 
@@ -867,6 +867,7 @@ There are **896** codes in total.
 
 | Code | Summary | Construct | Severity |
 |---|---|---|---|
+| [`bynk.service.duplicate_call_handler`](/book/spec/static-semantics/#57-handlers) | A service declares more than one `on call` handler; it has exactly one. | [`service_decl`](/book/reference/grammar/#rule-service_decl) | — |
 | [`bynk.service.missing_from`](/book/reference/grammar/#rule-service_protocol) | A `from`-less service has a handler other than `on call`. | [`service_decl`](/book/reference/grammar/#rule-service_decl) | — |
 | [`bynk.service.mixed_protocols`](/book/reference/grammar/#rule-service_protocol) | A service mixes handler forms that do not match its `from <protocol>`. | [`service_decl`](/book/reference/grammar/#rule-service_decl) | — |
 | [`bynk.service.outside_context`](/book/reference/grammar/#rule-service_decl) | A `service` was declared outside a context. | [`service_decl`](/book/reference/grammar/#rule-service_decl) | — |

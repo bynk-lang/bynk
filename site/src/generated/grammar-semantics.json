@@ -1716,6 +1716,10 @@
       "summary": "Two services share a name."
     },
     {
+      "code": "bynk.service.duplicate_call_handler",
+      "summary": "A service declares more than one `on call` handler; it has exactly one."
+    },
+    {
       "code": "bynk.service.missing_from",
       "summary": "A `from`-less service has a handler other than `on call`."
     },

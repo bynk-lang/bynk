@@ -1819,6 +1819,8 @@ allows (`bynk.parse.nesting_too_deep`).
 
 A `service` MUST be declared inside a context (`bynk.service.outside_context`) and
 every service handler MUST return an `Effect` (`bynk.service.return_not_effect`).
+A service with no `from` clause MUST declare exactly one `on call` handler; a second
+is `bynk.service.duplicate_call_handler`.
 
 An HTTP handler MUST return `Effect[HttpResult[T]]`
 (`bynk.http.return_not_effect_http_result`); its route MUST be well-formed and

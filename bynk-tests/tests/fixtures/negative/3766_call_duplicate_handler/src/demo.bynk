@@ -1,0 +1,13 @@
+context demo
+
+// #3766: two `on call` handlers in one service; the second would silently
+// shadow the first, so a service has exactly one.
+service playground {
+  on call() -> Effect[String] {
+    Effect.pure("first")
+  }
+
+  on call() -> Effect[String] {
+    Effect.pure("second")
+  }
+}

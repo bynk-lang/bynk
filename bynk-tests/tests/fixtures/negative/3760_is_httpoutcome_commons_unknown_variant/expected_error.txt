@@ -1,0 +1,2 @@
+bynk.types.is_unknown_variant
+type `HttpOutcome[Note]` has no variant `Created`

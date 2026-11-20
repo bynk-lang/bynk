@@ -6525,9 +6525,9 @@ pub fn close_view_types(
     types: &mut HashMap<String, Arc<TypeDecl>>,
     fns: &HashMap<String, Arc<FnDecl>>,
     methods: &mut HashMap<String, ResolverMethodTable>,
-    // #3064: also reach the `identity` types of the imported units' actors
-    // (a `system` suite's participants), resolved in the actor's own scope.
-    actor_identities: bool,
+    // A `system` harness: also reach what its participants' actors and
+    // service handlers name ([`harness_seeds`]).
+    harness: bool,
 ) -> ViewReach {
     let mut imported_from: HashMap<String, String> = HashMap::new();
     for u in imported {
@@ -6545,23 +6545,11 @@ pub fn close_view_types(
             }
         }
     }
-    let mut seeds: Vec<Reached> = Vec::new();
-    if actor_identities {
-        for u in imported {
-            let Some(t) = unit_tables.get(u) else {
-                continue;
-            };
-            let mut actors: Vec<_> = t.actors.iter().collect();
-            actors.sort_by_key(|(n, _)| n.as_str());
-            for (_, a) in actors {
-                if let Some(id) = &a.identity {
-                    let mut names = Vec::new();
-                    type_ref_names(id, &HashSet::new(), &mut names);
-                    push_refs(names, u, u, &mut seeds);
-                }
-            }
-        }
-    }
+    let seeds = if harness {
+        harness_seeds(imported, unit_tables)
+    } else {
+        Vec::new()
+    };
     let mut conflicts: Vec<ViewConflict> = Vec::new();
     let mut seen: HashSet<String> = HashSet::new();
     let hidden = close_imported(
@@ -6587,6 +6575,45 @@ pub fn close_view_types(
         },
     );
     ViewReach { hidden, conflicts }
+}
+
+/// The extra seeds of a `system` harness's view, each resolved in its
+/// declaring participant's scope:
+///
+/// - #3064: the `identity` types of the participants' actors;
+/// - #3760: the parameter and return types of their service handlers. A case
+///   drives those handlers and binds what they return, so a commons type that
+///   only a handler's signature names (`-> Effect[HttpResult[Note]]`) must
+///   resolve, or the result is untyped and an `is` test on it is unchecked.
+///   A signature crosses to the case structurally, as a consumed service's
+///   does (#1932), so a name the view already binds is not a conflict.
+fn harness_seeds(imported: &[String], unit_tables: &HashMap<String, UnitTable>) -> Vec<Reached> {
+    let mut seeds = Vec::new();
+    for u in imported {
+        let Some(t) = unit_tables.get(u) else {
+            continue;
+        };
+        let mut actors: Vec<_> = t.actors.iter().collect();
+        actors.sort_by_key(|(n, _)| n.as_str());
+        for (_, a) in actors {
+            if let Some(id) = &a.identity {
+                let mut names = Vec::new();
+                type_ref_names(id, &HashSet::new(), &mut names);
+                push_refs(names, u, u, &mut seeds);
+            }
+        }
+        let mut services: Vec<&ServiceDecl> = t.services.values().collect();
+        services.sort_by(|a, b| a.name.name.cmp(&b.name.name));
+        for h in services.into_iter().flat_map(|s| &s.handlers) {
+            let mut names = Vec::new();
+            for p in &h.params {
+                type_ref_names(&p.type_ref, &HashSet::new(), &mut names);
+            }
+            type_ref_names(&h.return_type, &HashSet::new(), &mut names);
+            push_refs_with(names, u, u, true, &mut seeds);
+        }
+    }
+    seeds
 }
 
 /// #1814: what [`close_view_types`] found.
