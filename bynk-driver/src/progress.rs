@@ -28,15 +28,28 @@ pub fn terminal_sink() -> Option<ProgressSink> {
 }
 
 fn printer_if(on: bool) -> Option<ProgressSink> {
-    on.then(|| Arc::new(|event: &ProgressEvent| eprintln!("{}", line(event))) as ProgressSink)
+    let colour = crate::colour::stderr();
+    on.then(|| {
+        Arc::new(move |event: &ProgressEvent| eprintln!("{}", coloured_line(event, colour)))
+            as ProgressSink
+    })
+}
+
+/// [`line`], with the verb green and bold when `colour` is on, as `cargo` has it.
+fn coloured_line(event: &ProgressEvent, colour: bool) -> String {
+    use crate::colour::{Style, paint};
+    let (verb, name) = match event {
+        ProgressEvent::Started(name) => ("Compiling", name),
+        ProgressEvent::Finished(name) => ("Finished", name),
+    };
+    let verb = format!("{verb:>10}");
+    let verb = paint(colour, Style::Green, &paint(colour, Style::Bold, &verb));
+    format!("{verb} {name}")
 }
 
 /// One event's line: a right-aligned verb, then the context, as `cargo` does.
 pub fn line(event: &ProgressEvent) -> String {
-    match event {
-        ProgressEvent::Started(name) => format!("{:>10} {name}", "Compiling"),
-        ProgressEvent::Finished(name) => format!("{:>10} {name}", "Finished"),
-    }
+    coloured_line(event, false)
 }
 
 #[cfg(test)]

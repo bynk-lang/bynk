@@ -40,11 +40,11 @@ pub fn render_errors_plain(errors: &[CompileError], source: &str, filename: &str
     String::from_utf8_lossy(&render_all(errors, source, filename, false)).into_owned()
 }
 
-/// Render to stderr, used by the CLI. Coloured only when [`stderr_color`]
-/// allows it.
-pub fn print_errors(errors: &[CompileError], source: &str, filename: &str) {
+/// Render to stderr, used by the CLI; coloured when `color` is on (the
+/// caller's `--color` decision for stderr: `crate::colour::stderr`).
+pub fn print_errors(errors: &[CompileError], source: &str, filename: &str, color: bool) {
     use std::io::Write;
-    let out = render_all(errors, source, filename, stderr_color());
+    let out = render_all(errors, source, filename, color);
     let _ = std::io::stderr().lock().write_all(&out);
 }
 
@@ -138,9 +138,15 @@ pub fn render_error_in_plain(
 }
 
 /// [`render_error_in`] to stderr, coloured as [`print_errors`] is.
-pub fn print_error_in(err: &CompileError, source: &str, filename: &str, homes: &[LabelHome<'_>]) {
+pub fn print_error_in(
+    err: &CompileError,
+    source: &str,
+    filename: &str,
+    homes: &[LabelHome<'_>],
+    color: bool,
+) {
     use std::io::Write;
-    let out = render_in(err, source, filename, homes, stderr_color());
+    let out = render_in(err, source, filename, homes, color);
     let _ = std::io::stderr().lock().write_all(&out);
 }
 
@@ -417,37 +423,6 @@ fn ceil_char(s: &str, mut i: usize) -> usize {
         i += 1;
     }
     i
-}
-
-/// #1666: whether diagnostics on stderr are coloured: only when stderr is a
-/// terminal and `NO_COLOR` is unset or empty (<https://no-color.org>). Colour
-/// piped into a file or a CI log is noise, and ariadne colours per character,
-/// so it multiplied the output's size by about twenty.
-///
-/// #1777: `FORCE_COLOR` (<https://force-color.org>) or `CLICOLOR_FORCE`
-/// (<https://bixense.com/clicolors/>), set to anything but the empty string or
-/// `0`, turns colour on without a terminal, for `less -R` or a CI log that
-/// renders ANSI. `0` means "don't force", not "force off": `NO_COLOR` is the
-/// off switch, and it wins over both. That is clap's order for `NO_COLOR` and
-/// `CLICOLOR_FORCE`; clap doesn't read `FORCE_COLOR`, so only
-/// `CLICOLOR_FORCE` also colours clap's own help and errors.
-pub fn stderr_color() -> bool {
-    use std::io::IsTerminal;
-    color_allowed(std::io::stderr().is_terminal(), |name| {
-        std::env::var_os(name)
-    })
-}
-
-/// [`stderr_color`]'s decision, over whether stderr is a terminal and a
-/// lookup of the environment.
-fn color_allowed(is_terminal: bool, var: impl Fn(&str) -> Option<std::ffi::OsString>) -> bool {
-    let set = |name| var(name).is_some_and(|v| !v.is_empty());
-    let forced = |name| var(name).is_some_and(|v| !v.is_empty() && v != "0");
-    if set("NO_COLOR") {
-        false
-    } else {
-        is_terminal || forced("FORCE_COLOR") || forced("CLICOLOR_FORCE")
-    }
 }
 
 /// Render project-level errors as plain `[category] message` lines — the
@@ -727,38 +702,6 @@ mod tests {
             rendered.contains("declared here (mid-codepoint, another file)"),
             "a mid-codepoint label must survive as a note:\n{rendered}"
         );
-    }
-
-    /// #1666: colour needs a terminal, and `NO_COLOR` set to anything but
-    /// the empty string turns it off. #1777: `FORCE_COLOR` or
-    /// `CLICOLOR_FORCE`, set to anything but the empty string or `0`, turns
-    /// it on without one; `NO_COLOR` wins over both.
-    #[test]
-    fn color_needs_a_terminal_or_a_force_and_no_no_color() {
-        use std::ffi::OsString;
-        let allowed = |is_terminal, vars: &[(&str, &str)]| {
-            color_allowed(is_terminal, |name| {
-                vars.iter()
-                    .find(|(n, _)| *n == name)
-                    .map(|(_, v)| OsString::from(v))
-            })
-        };
-        assert!(allowed(true, &[]));
-        assert!(allowed(true, &[("NO_COLOR", "")]));
-        assert!(!allowed(true, &[("NO_COLOR", "1")]));
-        assert!(!allowed(false, &[]));
-        assert!(!allowed(false, &[("NO_COLOR", "")]));
-
-        for force in ["FORCE_COLOR", "CLICOLOR_FORCE"] {
-            assert!(allowed(false, &[(force, "1")]), "{force}=1");
-            assert!(allowed(false, &[(force, "true")]), "{force}=true");
-            assert!(!allowed(false, &[(force, "")]), "{force}= is unset");
-            assert!(!allowed(false, &[(force, "0")]), "{force}=0 doesn't force");
-            assert!(allowed(true, &[(force, "0")]), "{force}=0 doesn't forbid");
-            assert!(allowed(false, &[(force, "1"), ("NO_COLOR", "")]));
-            assert!(!allowed(false, &[(force, "1"), ("NO_COLOR", "1")]));
-            assert!(!allowed(true, &[(force, "1"), ("NO_COLOR", "1")]));
-        }
     }
 
     /// #1666: a megabyte line renders as a window around the label, marked

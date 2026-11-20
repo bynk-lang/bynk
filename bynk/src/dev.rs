@@ -815,14 +815,13 @@ pub fn run(
         // stack frame into generated code is rewritten to the `.bynk` line it
         // came from. On a terminal it is left alone: piping would turn off
         // wrangler's colour and interactive hotkeys. Piped output is not a
-        // terminal, so colour is asked back for when ours is one.
+        // terminal, so colour is asked back for when ours is one. `--color
+        // always`/`never` is passed on either way.
         let piped = pipes_output(opts);
+        bynk_driver::colour::apply_to_child(&mut cmd, piped);
         if piped {
             cmd.stdout(std::process::Stdio::piped())
                 .stderr(std::process::Stdio::piped());
-            if std::io::IsTerminal::is_terminal(&std::io::stderr()) && !no_colour() {
-                cmd.env("FORCE_COLOR", "1");
-            }
         } else if opts.format == DevFormat::Json {
             // #2094: stdout is the event stream, so wrangler's banner and
             // request log go to stderr with the rest of the readable output.
@@ -1078,10 +1077,6 @@ fn pipes_output(opts: &DevOptions) -> bool {
         || opts.trace_events
         || !std::io::stdout().is_terminal()
         || !std::io::stderr().is_terminal()
-}
-
-fn no_colour() -> bool {
-    std::env::var_os("NO_COLOR").is_some_and(|v| !v.is_empty())
 }
 
 /// Forward a spawned wrangler's stdout and stderr (#2474), a line at a time,

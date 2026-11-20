@@ -1459,7 +1459,7 @@ fn finish_runner(
             return Ok(ExitCode::FAILURE);
         }
         Ok(exit_from(out.status.success()))
-    } else if aliases.is_empty() && snapshots.is_none() {
+    } else if aliases.is_empty() && snapshots.is_none() && !crate::colour::stdout() {
         let status = cmd
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit())
@@ -1469,7 +1469,8 @@ fn finish_runner(
         // #2461: a doc test's output names the real file, not the synthetic
         // one it was compiled from, so the lines are rewritten on the way.
         // #2842: and the snapshot report line is taken out of the output.
-        let (status, report) = run_aliased(cmd, aliases)?;
+        // And with colour on, the runner's plain lines are coloured.
+        let (status, report) = run_aliased(cmd, aliases, crate::colour::stdout())?;
         if let Some(run) = snapshots {
             let counts = match run.report_for(report.as_ref()) {
                 Some(report) => match run.settle(&report) {
@@ -1581,6 +1582,7 @@ fn output_within(
 fn run_aliased(
     mut cmd: ProcCommand,
     aliases: &[(String, String)],
+    colour: bool,
 ) -> std::io::Result<(std::process::ExitStatus, Option<crate::snapshots::Report>)> {
     use std::io::{BufRead, BufReader, Write};
     // Reads raw bytes a line at a time (as `test_stream::forward` does), so a
@@ -1592,6 +1594,7 @@ fn run_aliased(
         aliases: &[(String, String)],
         mut out: impl Write,
         report: Option<&mut Option<crate::snapshots::Report>>,
+        colour: bool,
     ) {
         let mut report = report;
         let mut reader = BufReader::new(pipe);
@@ -1611,6 +1614,11 @@ fn run_aliased(
                 continue;
             }
             let line = crate::doc_examples::apply_aliases(&line, aliases);
+            let line = if colour {
+                crate::colour::test_line(&line)
+            } else {
+                line.into_owned()
+            };
             let _ = out.write_all(line.as_bytes());
             let _ = out.flush();
         }
@@ -1620,12 +1628,18 @@ fn run_aliased(
     let err_aliases = aliases.to_vec();
     let errors = std::thread::spawn(move || {
         if let Some(pipe) = stderr_pipe {
-            forward(pipe, &err_aliases, std::io::stderr().lock(), None);
+            forward(pipe, &err_aliases, std::io::stderr().lock(), None, false);
         }
     });
     let mut report = None;
     if let Some(pipe) = child.stdout.take() {
-        forward(pipe, aliases, std::io::stdout().lock(), Some(&mut report));
+        forward(
+            pipe,
+            aliases,
+            std::io::stdout().lock(),
+            Some(&mut report),
+            colour,
+        );
     }
     let status = child.wait()?;
     let _ = errors.join();
@@ -1721,10 +1735,14 @@ fn run_with_coverage(
         unmatched.report(program);
         exit_from(out.status.success())
     } else {
-        let status = cmd
-            .stdout(Stdio::inherit())
-            .stderr(Stdio::inherit())
-            .status();
+        let colour = crate::colour::stdout();
+        let status = if colour {
+            run_aliased(cmd, &[], true).map(|(status, _)| status)
+        } else {
+            cmd.stdout(Stdio::inherit())
+                .stderr(Stdio::inherit())
+                .status()
+        };
         let status = match status {
             Ok(s) => s,
             Err(e) => {
@@ -1734,7 +1752,7 @@ fn run_with_coverage(
             }
         };
         let report = collect();
-        print!("{}", crate::coverage::render_rich(&report));
+        print!("{}", crate::coverage::render_rich(&report, colour));
         exit_from(status.success())
     };
     let _ = std::fs::remove_dir_all(&cov_dir);

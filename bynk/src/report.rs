@@ -29,8 +29,15 @@ fn level_word(cap: &CapabilityReport) -> &'static str {
 }
 
 pub fn render(report: &Report, format: Format) -> String {
+    render_coloured(report, format, false)
+}
+
+/// [`render`], with the human table's marks coloured when `colour` is on: an
+/// ok capability green, a warning yellow, a failure red. `short` and `json`
+/// are never coloured.
+pub fn render_coloured(report: &Report, format: Format, colour: bool) -> String {
     match format {
-        Format::Human => human(report),
+        Format::Human => human(report, colour),
         Format::Short => short(report),
         Format::Json => json(report),
     }
@@ -54,7 +61,8 @@ fn short(report: &Report) -> String {
     out
 }
 
-fn human(report: &Report) -> String {
+fn human(report: &Report, colour: bool) -> String {
+    use bynk_driver::colour::{Style, paint};
     let mut out = String::new();
     let header = if report.is_all_ok() {
         "bynk doctor — your environment is ready".to_string()
@@ -74,10 +82,21 @@ fn human(report: &Report) -> String {
             Level::Fail if cap.optional => "·",
             Level::Fail => "✗",
         };
+        let style = match cap.level {
+            Level::Ok => Some(Style::Green),
+            Level::Warn => Some(Style::Yellow),
+            Level::Fail if cap.optional => None,
+            Level::Fail => Some(Style::Red),
+        };
+        let paint = |text: &str| match style {
+            Some(style) => paint(colour, style, text),
+            None => paint(colour, Style::Dim, text),
+        };
         out.push_str(&format!(
-            "{mark} {} [{}]{}\n",
+            "{} {} [{}]{}\n",
+            paint(mark),
             cap.capability.token(),
-            level_word(cap),
+            paint(level_word(cap)),
             if cap.optional { " (optional)" } else { "" }
         ));
         for row in &cap.rows {

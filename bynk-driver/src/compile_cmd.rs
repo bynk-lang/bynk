@@ -543,12 +543,12 @@ fn compile_file(prog: &str, input: &Path, output: &Path, emit: EmitFormat) -> Ex
             // #2838: a hint is for the editor, not the terminal.
             let warnings = crate::render::without_hints(&compiled.warnings);
             if !warnings.is_empty() {
-                crate::render::print_errors(&warnings, &source, &filename);
+                crate::render::print_errors(&warnings, &source, &filename, crate::colour::stderr());
             }
             ExitCode::SUCCESS
         }
         Err(errors) => {
-            crate::render::print_errors(&errors, &source, &filename);
+            crate::render::print_errors(&errors, &source, &filename, crate::colour::stderr());
             ExitCode::FAILURE
         }
     }

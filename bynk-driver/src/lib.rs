@@ -15,6 +15,7 @@ use bynk_fmt::{FormatOptions, IndentStyle, format_source};
 use project::{CompileOptions, ProjectPathsError, try_read_project_paths_with};
 use render::LabelHome;
 
+pub mod colour;
 pub mod compile_cmd;
 pub mod contracts_lock;
 pub mod coverage;
@@ -597,7 +598,7 @@ fn print_attributed(
             (_, None) => LabelHome::Unavailable,
         })
         .collect();
-    crate::render::print_error_in(&ae.error, text, label, &homes);
+    crate::render::print_error_in(&ae.error, text, label, &homes, crate::colour::stderr());
 }
 
 /// #1772: the path a diagnostic names, as a user would type it from the
@@ -1040,7 +1041,12 @@ pub fn run_fmt(prog: &str, args: &FmtArgs) -> ExitCode {
                     }
                 }
                 Err(e) => {
-                    crate::render::print_errors(&e.errors, &source, "<stdin>");
+                    crate::render::print_errors(
+                        &e.errors,
+                        &source,
+                        "<stdin>",
+                        crate::colour::stderr(),
+                    );
                     return ExitCode::FAILURE;
                 }
             }
@@ -1075,7 +1081,7 @@ pub fn run_fmt(prog: &str, args: &FmtArgs) -> ExitCode {
                 }
             }
             Err(e) => {
-                crate::render::print_errors(&e.errors, &source, &filename);
+                crate::render::print_errors(&e.errors, &source, &filename, crate::colour::stderr());
                 had_error = true;
             }
         }
@@ -1474,7 +1480,12 @@ fn check_one(prog: &str, input: &Path, short: bool, member: Option<&Path>) -> bo
                     if short {
                         crate::render::print_errors_short(&warnings, &source, &filename);
                     } else {
-                        crate::render::print_errors(&warnings, &source, &filename);
+                        crate::render::print_errors(
+                            &warnings,
+                            &source,
+                            &filename,
+                            crate::colour::stderr(),
+                        );
                     }
                 }
                 true
@@ -1483,7 +1494,12 @@ fn check_one(prog: &str, input: &Path, short: bool, member: Option<&Path>) -> bo
                 if short {
                     crate::render::print_errors_short(&errors, &source, &filename);
                 } else {
-                    crate::render::print_errors(&errors, &source, &filename);
+                    crate::render::print_errors(
+                        &errors,
+                        &source,
+                        &filename,
+                        crate::colour::stderr(),
+                    );
                 }
                 false
             }
