@@ -1,4 +1,4 @@
-commons demo
+context demo
 
 ---
 An opaque type is backed by another type but is nominally distinct: an `OrderId`
@@ -12,4 +12,16 @@ Construct it through the checked `.of` constructor, which returns a `Result`.
 ---
 fn parse(raw: String) -> Result[OrderId, ValidationError] {
   OrderId.of(raw)
+}
+
+---
+Run calls `service playground`, which parses a raw string into an `OrderId`.
+---
+service playground {
+  on call() -> Effect[String] {
+    match parse("order-42") {
+      Ok(_) => "parsed an OrderId"
+      Err(e) => e.message
+    }
+  }
 }

@@ -1,4 +1,4 @@
-commons demo
+context demo
 
 ---
 Errors are values: a function that can fail returns `Result`, and a value that
@@ -21,5 +21,14 @@ fn label(o: Option[Int]) -> String {
   match o {
     Some(n) => "present"
     None => "absent"
+  }
+}
+
+---
+Run calls `service playground`, which labels one present value and one absent one.
+---
+service playground {
+  on call() -> Effect[List[String]] {
+    [label(ok(3).ok()), label(empty())]
   }
 }

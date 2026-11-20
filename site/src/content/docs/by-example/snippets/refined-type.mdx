@@ -15,6 +15,7 @@ tracks the difference between a raw `String` and a `Subject` everywhere.
 The pay-off is in `greeting`: because its parameter is a `Subject`, it never
 validates its input. Every `Subject` in existence has already passed the check at
 the point it was constructed, so the body can simply use it. Open it in the
-playground to see the type-check pass.
+playground to see the type-check pass, and press **Run** to see one string accepted
+and one rejected.
 
 <Example src="site/src/snippets/refined-type.bynk" runnable embed />

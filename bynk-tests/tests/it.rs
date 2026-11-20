@@ -175,6 +175,8 @@ mod integration {
     mod text_exit_counters;
     #[path = "trace_requests.rs"]
     mod trace_requests;
+    #[path = "types_reference_methods.rs"]
+    mod types_reference_methods;
     #[path = "unit_context_facts.rs"]
     mod unit_context_facts;
     #[path = "wire_shape_drift.rs"]

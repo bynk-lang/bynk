@@ -78,7 +78,12 @@ identity, even when they look like plain aliases.
 Let us make the program do something. Replace the contents of `demo.bynk` with
 this — then edit and run it right here, without leaving the page:
 
-<Example src="site/src/snippets/first-program.bynk" title="demo.bynk" runnable embed />
+<Example src="site/src/snippets/first-program.bynk" playgroundSrc="site/src/snippets/playground/first-program.bynk" title="demo.bynk" runnable embed />
+
+The playground's **Run** calls one thing: the `on call` handler of a service
+named `playground`. A `commons` has no services, so the in-page editor opens a
+version of `demo.bynk` as a `context` with a small `service playground` that
+calls `classify`. You will meet contexts and services in later tutorials.
 
 `fn classify(n: Int) -> String { … }` declares a function taking an `Int` and
 returning a `String`. Bynk is expression-oriented: the `if`/`else if`/`else` is
