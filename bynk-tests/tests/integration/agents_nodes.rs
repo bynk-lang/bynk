@@ -299,12 +299,12 @@ fn the_agent_constructs_leave_no_text_exit() {
     assert_line(&text, "const r = __makeRoom(__r0.value);");
 }
 
-/// A key the lowering still holds as text (a refined literal's brand cast) falls back to the
-/// text call, byte for byte: the call is the same line as a node would print.
+/// A refined literal's brand cast is a node (`unchecked_construct`), so the call keyed by it is
+/// no longer a text exit; the line prints byte for byte as the text call did.
 #[test]
-fn a_text_key_falls_back_byte_for_byte() {
+fn a_refined_key_is_a_node_and_prints_byte_for_byte() {
     let (exits, text) = project(SRC, SUITE, false);
-    assert!(exits > 0, "the refined key is still text");
+    assert_eq!(exits, 0, "the refined key is a node:\n{text}");
     let found = lines_with(&text, "__makeTag(");
     assert!(
         found

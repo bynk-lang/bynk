@@ -120,33 +120,33 @@ async function test_a_typed_multipart_body_round_trips_through_the_router() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     void (await (async (__d) => {
-        switch (__d.tag) {
-          case "Some": {
-            const png = __d.value;
-            const __r0 = __bynkBytesFromBase64("eA==");
-            switch (__r0.tag) {
-              case "Some": {
-                const x = __r0.value;
-                const photo = { filename: Some("a b.png"), contentType: "image/png", bytes: png };
-                const extra = { filename: Some("x.txt"), contentType: "text/plain", bytes: x };
-                const r = await __sysdrive_api_http_POST_upload({ title: ("Hi" as any), caption: Some("sunset"), age: Some(3), tags: ["a", "b"], photo: photo, cover: Some(extra), extras: [extra, extra] }, undefined, "");
-                if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "Hi sunset a b.png image/png 7 1 2 2"))) { throw __bynkExpectFailure("tests/api.bynk:26:14", 1050, 1096, "expect r is Ok(\"Hi sunset a b.png image/png 7 1 2 2\")"); }
-                return undefined;
-              }
-              case "None": {
-                if (!(false)) { throw __bynkExpectFailure("tests/api.bynk:29:14", 1132, 1137, "expect false"); }
-                return undefined;
-              }
+      switch (__d.tag) {
+        case "Some": {
+          const png = __d.value;
+          const __r0 = __bynkBytesFromBase64("eA==");
+          switch (__r0.tag) {
+            case "Some": {
+              const x = __r0.value;
+              const photo = { filename: Some("a b.png"), contentType: "image/png", bytes: png };
+              const extra = { filename: Some("x.txt"), contentType: "text/plain", bytes: x };
+              const r = await __sysdrive_api_http_POST_upload({ title: ("Hi" as any), caption: Some("sunset"), age: Some(3), tags: ["a", "b"], photo: photo, cover: Some(extra), extras: [extra, extra] }, undefined, "");
+              if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "Hi sunset a b.png image/png 7 1 2 2"))) { throw __bynkExpectFailure("tests/api.bynk:26:14", 1050, 1096, "expect r is Ok(\"Hi sunset a b.png image/png 7 1 2 2\")"); }
+              return undefined;
             }
-            throw new globalThis.Error("non-exhaustive match");
+            case "None": {
+              if (!(false)) { throw __bynkExpectFailure("tests/api.bynk:29:14", 1132, 1137, "expect false"); }
+              return undefined;
+            }
           }
-          case "None": {
-            if (!(false)) { throw __bynkExpectFailure("tests/api.bynk:34:12", 1180, 1185, "expect false"); }
-            return undefined;
-          }
+          throw new globalThis.Error("non-exhaustive match");
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(__bynkBytesFromBase64("UE5HREFUQQ==")));
+        case "None": {
+          if (!(false)) { throw __bynkExpectFailure("tests/api.bynk:34:12", 1180, 1185, "expect false"); }
+          return undefined;
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(__bynkBytesFromBase64("UE5HREFUQQ==")));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

@@ -254,15 +254,14 @@ pub(crate) fn lower_workers_cross_context_call(
         // it. Where the caller doesn't name the callee's type (it was renamed
         // above), cast the argument to what the codec takes.
         if renames.is_some_and(|r| type_ref_names_any(param_ty, r)) && holds_callee_typed(a, cx) {
-            let codec = bynk_ts::print_expr(&crate::emitter::serialisation::serialise_ref_via(
-                &wire_ty,
-                &ns,
-                cx.runtime_use(),
-            ));
-            // 1A: `bynk_ts` has no `typeof`/indexed-access type, so the codec's
-            // parameter type is spelled as text in a named type.
-            let codec_param = ["globalThis.Parameters<typeof ", codec.as_str(), ">[0]"].concat();
-            lowered = cast_through_unknown(lowered, TsType::named(codec_param));
+            // `globalThis.Parameters<typeof codec>[0]`: the codec's parameter type.
+            let codec =
+                crate::emitter::serialisation::serialise_ref_via(&wire_ty, &ns, cx.runtime_use());
+            let codec_param = TsType::indexed(
+                TsType::named_with_args("globalThis.Parameters", vec![TsType::type_of(codec)]),
+                TsType::number_literal(0),
+            );
+            lowered = cast_through_unknown(lowered, codec_param);
         } else {
             // #2035: a value the caller builds for a named parameter type
             // carries the caller's brand on its commons parts (`Map.empty()`

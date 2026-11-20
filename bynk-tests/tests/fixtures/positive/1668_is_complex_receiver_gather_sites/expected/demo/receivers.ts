@@ -71,13 +71,13 @@ export function valueIf(o: Option<number>, k: number): number {
     case 0: {
       const __r0 = id(o);
       return (() => {
-    if (((__c: boolean) => __c)(__r0.tag === "Some")) {
-      const v = (__r0 as Extract<typeof __r0, { tag: "Some" }>).value;
-      return v;
-    } else {
-      return 1;
-    }
-  })();
+        if (((__c: boolean) => __c)(__r0.tag === "Some")) {
+          const v = (__r0 as Extract<typeof __r0, { tag: "Some" }>).value;
+          return v;
+        } else {
+          return 1;
+        }
+      })();
     }
     default: {
       return 2;
@@ -164,14 +164,14 @@ export function negatedOrValue(a: Option<number>, b: Option<number>): number {
   const __r0 = id(a);
   let __r1!: Option<number>;
   const n = (() => {
-    if (!(((__c: boolean) => __c)(__r0.tag === "Some")) || (() => { __r1 = id(b); return !(((__c: boolean) => __c)(__r1.tag === "Some")); })()) {
-      return 0;
-    } else {
-      const x = (__r0 as Extract<typeof __r0, { tag: "Some" }>).value;
-      const y = (__r1 as Extract<typeof __r1, { tag: "Some" }>).value;
-      return x + y;
-    }
-  })();
+  if (!(((__c: boolean) => __c)(__r0.tag === "Some")) || (() => { __r1 = id(b); return !(((__c: boolean) => __c)(__r1.tag === "Some")); })()) {
+    return 0;
+  } else {
+    const x = (__r0 as Extract<typeof __r0, { tag: "Some" }>).value;
+    const y = (__r1 as Extract<typeof __r1, { tag: "Some" }>).value;
+    return x + y;
+  }
+})();
   return n;
 }
 
@@ -225,7 +225,7 @@ export function plainImplies(c: boolean, b: Option<number>): number {
 
 export function inLambda(c: boolean, b: Option<number>, xs: readonly number[]): boolean {
   return c || (xs).some((__x: number) => ((e: number) => {
-const __r0 = id(b);
-  return ((__c: boolean) => __c)(__r0.tag === "Some") && ((() => { const y = (__r0 as Extract<typeof __r0, { tag: "Some" }>).value; return y === e; })());
-})(__x));
+    const __r0 = id(b);
+    return ((__c: boolean) => __c)(__r0.tag === "Some") && ((() => { const y = (__r0 as Extract<typeof __r0, { tag: "Some" }>).value; return y === e; })());
+  })(__x));
 }

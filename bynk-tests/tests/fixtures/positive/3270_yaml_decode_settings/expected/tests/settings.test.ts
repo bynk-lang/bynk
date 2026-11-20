@@ -49,20 +49,20 @@ async function test_decodes_the_settings_file() {
     type Triage = __ns_settings.Triage;
     const text = "# Which features the App runs here.\ntriage:\n  enabled: true\n  labels: [bug, enhancement]   # suggestions only\nnudges:\n  enabled: true\n  after_days: 7\n";
     void (((__d) => {
-        switch (__d.tag) {
-          case "Ok": {
-            const s = __d.value;
-            if (!(s.mode === "auto")) { throw __bynkExpectFailure("tests/settings.test.bynk:9:16", 516, 532, "expect s.mode == \"auto\"\n  expected: s.mode == \"auto\"\n  actual:   " + __bynkShow((s.mode)) + " == " + __bynkShow(("auto"))); }
-            if (!(__bynkEq(s.triage.labels, ["bug", "enhancement"]))) { throw __bynkExpectFailure("tests/settings.test.bynk:10:16", 548, 589, "expect s.triage.labels == [\"bug\", \"enhancement\"]\n  expected: s.triage.labels == [\"bug\", \"enhancement\"]\n  actual:   " + __bynkShow((s.triage.labels)) + " == " + __bynkShow((["bug", "enhancement"]))); }
-            if (!(__bynkEq(s.nudges, Some({ enabled: true, after_days: (7 as any) })))) { throw __bynkExpectFailure("tests/settings.test.bynk:11:16", 605, 662, "expect s.nudges == Some(Nudges { enabled: true, after_days: 7 })\n  expected: s.nudges == Some(Nudges { enabled: true, after_days: 7 })\n  actual:   " + __bynkShow((s.nudges)) + " == " + __bynkShow((Some({ enabled: true, after_days: (7 as any) })))); }
-            return undefined;
-          }
-          case "Err": {
-            return __bynkExpect((false), "tests/settings.test.bynk:13:24", 694, 699, "expect false");
-          }
+      switch (__d.tag) {
+        case "Ok": {
+          const s = __d.value;
+          if (!(s.mode === "auto")) { throw __bynkExpectFailure("tests/settings.test.bynk:9:16", 516, 532, "expect s.mode == \"auto\"\n  expected: s.mode == \"auto\"\n  actual:   " + __bynkShow((s.mode)) + " == " + __bynkShow(("auto"))); }
+          if (!(__bynkEq(s.triage.labels, ["bug", "enhancement"]))) { throw __bynkExpectFailure("tests/settings.test.bynk:10:16", 548, 589, "expect s.triage.labels == [\"bug\", \"enhancement\"]\n  expected: s.triage.labels == [\"bug\", \"enhancement\"]\n  actual:   " + __bynkShow((s.triage.labels)) + " == " + __bynkShow((["bug", "enhancement"]))); }
+          if (!(__bynkEq(s.nudges, Some({ enabled: true, after_days: (7 as any) })))) { throw __bynkExpectFailure("tests/settings.test.bynk:11:16", 605, 662, "expect s.nudges == Some(Nudges { enabled: true, after_days: 7 })\n  expected: s.nudges == Some(Nudges { enabled: true, after_days: 7 })\n  actual:   " + __bynkShow((s.nudges)) + " == " + __bynkShow((Some({ enabled: true, after_days: (7 as any) })))); }
+          return undefined;
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(load(text)));
+        case "Err": {
+          return __bynkExpect((false), "tests/settings.test.bynk:13:24", 694, 699, "expect false");
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(load(text)));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -116,17 +116,17 @@ async function test_an_empty_mapping_takes_every_default() {
     type Settings = __ns_settings.Settings;
     type Triage = __ns_settings.Triage;
     void (((__d) => {
-        switch (__d.tag) {
-          case "Ok": {
-            const s = __d.value;
-            return __bynkExpect((__bynkEq(s.nudges, Some({ enabled: false, after_days: (3 as any) }))), "tests/settings.test.bynk:29:23", 1117, 1175, "expect s.nudges == Some(Nudges { enabled: false, after_days: 3 })");
-          }
-          case "Err": {
-            return __bynkExpect((false), "tests/settings.test.bynk:30:24", 1199, 1204, "expect false");
-          }
+      switch (__d.tag) {
+        case "Ok": {
+          const s = __d.value;
+          return __bynkExpect((__bynkEq(s.nudges, Some({ enabled: false, after_days: (3 as any) }))), "tests/settings.test.bynk:29:23", 1117, 1175, "expect s.nudges == Some(Nudges { enabled: false, after_days: 3 })");
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(load("triage: {enabled: false, labels: []}\nnudges: {}\n")));
+        case "Err": {
+          return __bynkExpect((false), "tests/settings.test.bynk:30:24", 1199, 1204, "expect false");
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(load("triage: {enabled: false, labels: []}\nnudges: {}\n")));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

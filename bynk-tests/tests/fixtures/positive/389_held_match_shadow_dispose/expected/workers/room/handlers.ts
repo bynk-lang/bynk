@@ -75,17 +75,17 @@ export class Room {
   async swap(conn: Connection<ServerFrame>, slot: Option<Connection<ServerFrame>>, deps: {}): globalThis.Promise<void> {
     const __state = await this.loadState();
     const __r1 = await ((__d) => {
-    switch (__d.tag) {
-      case "Some": {
-        const __r0 = __d.value;
-        return __r0.close();
+      switch (__d.tag) {
+        case "Some": {
+          const __r0 = __d.value;
+          return __r0.close();
+        }
+        case "None": {
+          return globalThis.Promise.resolve(undefined);
+        }
       }
-      case "None": {
-        return globalThis.Promise.resolve(undefined);
-      }
-    }
-    throw new globalThis.Error("non-exhaustive match");
-  })(slot);
+      throw new globalThis.Error("non-exhaustive match");
+    })(slot);
     return conn.close();
   }
 

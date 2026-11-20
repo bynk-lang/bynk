@@ -23,9 +23,9 @@ use std::rc::Rc;
 use bynk_check::checker::{Callee, TypedCommons};
 use bynk_syntax::ast::{Block, Expr, ExprId, ExprKind, FnDecl, FnName, MatchBody};
 
-use super::lower::Pre;
+use super::lower::{LoweredExpr, Pre};
 use super::lower_ctx::LowerCtx;
-use super::lower_stmt::{Body, Item, block_body_with_return};
+use super::lower_stmt::{Body, Item, assign_item, block_body_with_return, const_item};
 use super::ts_types::{ts_ty, ts_type_ref};
 use super::*;
 
@@ -332,7 +332,8 @@ pub(super) fn emit_continue(body: &mut Body, e: &Expr, cx: &mut LowerCtx) -> boo
         return false;
     };
     let mut pre = Pre::new();
-    let vals: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
+    let vals: Vec<LoweredExpr> = args.iter().map(|a| pre.lower_node(a, cx)).collect();
+    let pre_nodes = pre.all_nodes();
     body.extend(pre.items());
     // Every slot is assigned, even where the argument looks like the parameter's
     // own name: a binder in the body can share a parameter's name, and the
@@ -340,12 +341,17 @@ pub(super) fn emit_continue(body: &mut Body, e: &Expr, cx: &mut LowerCtx) -> boo
     // is evaluated into a temporary before any loop variable changes, so
     // `f(b, a)` swaps and `f(n - 1, acc + n)` reads the old `n`.
     let temps: Vec<String> = vals.iter().map(|_| cx.fresh()).collect();
-    for (v, t) in vals.iter().zip(&temps) {
-        body.push(Item::Line(format!("const {t} = {v};")));
+    for (v, t) in vals.into_iter().zip(&temps) {
+        body.push(const_item(pre_nodes, t, None, v, false));
     }
     for (s, t) in plan.slots.iter().zip(&temps) {
-        body.push(Item::Line(format!("{} = {t};", s.var)));
+        body.push(assign_item(
+            true,
+            bynk_ts::TsExpr::Ident(s.var.clone()),
+            LoweredExpr::Node(bynk_ts::TsExpr::Ident(t.clone())),
+        ));
     }
+    // 1A: `continue LABEL;` waits for a labelled `continue` node.
     body.push(Item::Line(format!("continue {LABEL};")));
     true
 }

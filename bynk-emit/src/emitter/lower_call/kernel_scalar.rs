@@ -895,6 +895,42 @@ mod tests {
         (TEXT_EXITS.with(|c| c.get()), ts)
     }
 
+    /// `is_simple_path` decides whether a text operand needs brackets: only a bare name or a
+    /// dotted path of names is left as it stands (#3823).
+    #[test]
+    fn is_simple_path_accepts_only_names_and_dotted_paths() {
+        for simple in [
+            "x",
+            "x1",
+            "_x",
+            "$x",
+            "a.b",
+            "a.b.c",
+            "__r0",
+            "globalThis.Math",
+        ] {
+            assert!(is_simple_path(simple), "{simple:?} is a simple path");
+        }
+        for compound in [
+            "",
+            "a + b",
+            "a.b()",
+            "a[0]",
+            "-a",
+            "a ? b : c",
+            "(a)",
+            "a b",
+            "\"a\"",
+            "a.b + 1",
+            "a?.b",
+        ] {
+            assert!(!is_simple_path(compound), "{compound:?} needs brackets");
+        }
+        // The check is about characters, not about whether the text is an identifier; a
+        // number literal is a node by the time it reaches here, so this never matters.
+        assert!(is_simple_path("1.5"));
+    }
+
     /// The returned expression of `export function f`.
     fn returned(ts: &str) -> String {
         let at = ts.find("export function f(").expect("f");

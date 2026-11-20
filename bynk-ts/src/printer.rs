@@ -2299,6 +2299,7 @@ fn render_type(out: &mut String, ty: &TsType) {
         TsType::TypeOf(operand) => render_type_of(out, operand),
         TsType::Indexed { object, index } => render_indexed_type(out, object, index),
         TsType::StringLiteral(text) => render_lit(out, &TsLit::Str(text.clone())),
+        TsType::NumberLiteral(n) => out.push_str(&n.to_string()),
     }
 }
 
@@ -2784,7 +2785,8 @@ fn type_admits_undefined(ty: &TsType) -> bool {
         | TsType::Mapped { .. }
         | TsType::TypeOf(_)
         | TsType::Indexed { .. }
-        | TsType::StringLiteral(_) => false,
+        | TsType::StringLiteral(_)
+        | TsType::NumberLiteral(_) => false,
     }
 }
 
@@ -4497,6 +4499,20 @@ mod tests {
                 TsType::named("K"),
             )),
             "(A | B)[K]"
+        );
+    }
+
+    /// An integer literal type indexes a tuple type: `Parameters<typeof f>[0]`.
+    #[test]
+    fn print_type_renders_a_number_literal_index() {
+        assert_eq!(print_type(&TsType::number_literal(7)), "7");
+        let params = TsType::named_with_args(
+            "Parameters",
+            vec![TsType::type_of(TsExpr::Ident("f".to_string()))],
+        );
+        assert_eq!(
+            print_type(&TsType::indexed(params, TsType::number_literal(0))),
+            "Parameters<typeof f>[0]"
         );
     }
 

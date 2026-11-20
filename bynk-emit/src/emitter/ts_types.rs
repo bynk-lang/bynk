@@ -12,11 +12,21 @@ use super::*;
 /// closed. Its admitted / generated values are branded with an inline `as` cast
 /// — byte-for-byte the old `.unsafe` body (`return value as T`) at the call site,
 /// but not a callable API surface a consumer can reach.
-pub(crate) fn unchecked_construct(name: &str, value: &str, is_opaque: bool) -> String {
+pub(crate) fn unchecked_construct(
+    name: &str,
+    value: bynk_ts::TsExpr,
+    is_opaque: bool,
+) -> bynk_ts::TsExpr {
     if is_opaque {
-        format!("{name}.unsafe({value})")
+        bynk_ts::TsExpr::Call {
+            callee: Box::new(super::lower::member_node(name, "unsafe")),
+            args: vec![value],
+        }
     } else {
-        format!("({value} as {name})")
+        bynk_ts::TsExpr::Paren(Box::new(bynk_ts::TsExpr::As {
+            expr: Box::new(value),
+            ty: bynk_ts::TsType::named(name),
+        }))
     }
 }
 

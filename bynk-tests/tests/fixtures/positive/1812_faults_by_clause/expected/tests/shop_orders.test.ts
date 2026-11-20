@@ -82,7 +82,17 @@ async function test_a_ledger_fault_faults_bob_s_order() {
     const { Order, UserId, api } = __ns_shop_orders;
     type Order = __ns_shop_orders.Order;
     type UserId = __ns_shop_orders.UserId;
-    if (!((await (async () => { try { await (api.http_POST_orders({ sku: "w" }, { ...deps, identity: (("bob" as any) as any) })); return false; } catch (__e) { if (__e instanceof ExpectationError) { throw __e; } return true; } })()))) { throw __bynkExpectFailure("tests/shop/orders.bynk:11:12", 376, 438, "expect api.POST(\"/orders\", Order { sku: \"w\" }) by Buyer(\"bob\") faults\n  the call returned without faulting"); }
+    if (!((await (async () => {
+      try {
+        await (api.http_POST_orders({ sku: "w" }, { ...deps, identity: (("bob" as any) as any) }));
+        return false;
+      } catch (__e) {
+        if (__e instanceof ExpectationError) {
+          throw __e;
+        }
+        return true;
+      }
+    })()))) { throw __bynkExpectFailure("tests/shop/orders.bynk:11:12", 376, 438, "expect api.POST(\"/orders\", Order { sku: \"w\" }) by Buyer(\"bob\") faults\n  the call returned without faulting"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

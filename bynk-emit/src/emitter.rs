@@ -43,8 +43,8 @@ use std::sync::Arc;
 // grounding for why this API stays as-is while `bynk-ts`'s own printer
 // gets a second, simpler way to use the same type.
 use bynk_ts::{
-    SourceMapBuilder, TsType, decimal_range_condition, decimal_signed_coef,
-    pred_condition_and_message, pred_condition_and_message_for,
+    SourceMapBuilder, TsType, decimal_signed_coef, pred_condition_and_message,
+    pred_condition_and_message_for,
 };
 
 use crate::emit_model::{EmitProjectCtx, ImportExt};

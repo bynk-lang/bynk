@@ -840,12 +840,6 @@ fn lower_const_literal_node(e: &Expr) -> Option<bynk_ts::TsExpr> {
     }
 }
 
-/// [`lower_const_literal_node`] printed, for `lower_expr`'s refined-literal
-/// branch (still text: it also builds the production `(lit as T)` form).
-fn lower_const_literal_raw(e: &Expr) -> Option<String> {
-    lower_const_literal_node(e).map(|n| bynk_ts::print_expr(&n))
-}
-
 /// The text of a unary operator applied to its operand's lowered `inner`.
 ///
 /// A negated negation (`- -x`, `- -5`) would otherwise splice to `--x`, which
@@ -1315,6 +1309,7 @@ impl LoweredStmt {
 impl Lowered {
     /// An expression that hoists nothing, built as text — the common leaf
     /// case. A text construction site: counted by `lowering_text_bridge`.
+    #[cfg(test)]
     pub(crate) fn bare(expr: impl Into<String>) -> Self {
         Lowered {
             pre: Vec::new(),
@@ -1584,7 +1579,7 @@ pub(crate) fn lower_expr(e: &Expr, cx: &mut LowerCtx) -> Lowered {
         kind: NamedKind::Refined(_),
         ..
     }) = cx.commons().expr_ty(e.id).as_deref()
-        && let Some(raw) = lower_const_literal_raw(e)
+        && let Some(raw) = lower_const_literal_node(e)
     {
         // ADR 0182: in GENERATED TEST scaffolding a branded type is in scope only
         // as an `any`-typed value binding (`const { T } = ns as any`), never as a
@@ -1593,13 +1588,13 @@ pub(crate) fn lower_expr(e: &Expr, cx: &mut LowerCtx) -> Lowered {
         // (refined → `(raw as any)`) there, exactly as the `Val[T](lit)` mock path
         // does. Production emission keeps the real `(raw as T)` brand.
         if cx.in_test_scaffold() {
-            return Lowered::bare(unchecked_construct_test(name, &raw, false));
+            return Lowered::node(unchecked_construct_test_node(name, raw, false));
         }
         // #2058: a consumed context's refined type is named under its
         // namespace; the module imports no bare name for it.
-        return Lowered::bare(unchecked_construct(
+        return Lowered::node(unchecked_construct(
             &cx.consumed_type_name(name),
-            &raw,
+            raw,
             false,
         ));
     }
@@ -1744,8 +1739,21 @@ pub(crate) fn lower_expr(e: &Expr, cx: &mut LowerCtx) -> Lowered {
         }
         ExprKind::Is { value, pattern } => lowered_or_text!(pre, lower_is(value, pattern, cx)),
         ExprKind::EffectPure(inner) => {
-            let inner_expr = pre.lower(inner, cx);
-            format!("globalThis.Promise.resolve({inner_expr})")
+            let child = pre.lower_node(inner, cx);
+            built_or_text!(
+                pre,
+                node_or_text(
+                    vec![child],
+                    |c| bynk_ts::TsExpr::Call {
+                        callee: Box::new(bynk_ts::TsExpr::Member {
+                            object: Box::new(member_node("globalThis", "Promise")),
+                            property: "resolve".to_string(),
+                        }),
+                        args: vec![one(c)],
+                    },
+                    |c| format!("globalThis.Promise.resolve({})", one(c)),
+                )
+            )
         }
         ExprKind::RecordSpread {
             type_name: _,
@@ -2898,6 +2906,21 @@ fn variant_payload(value_text: &str, tag: &str, unnarrowed: bool) -> String {
     }
 }
 
+/// [`variant_payload`] as a node: `(recv as Extract<typeof recv, { tag: "V" }>)`.
+fn variant_payload_node(recv: &bynk_ts::TsExpr, tag: &str) -> bynk_ts::TsExpr {
+    use bynk_ts::{TsExpr, TsType, TsTypeMember};
+    let proven = TsType::Object(vec![TsTypeMember::Prop {
+        name: "tag".to_string(),
+        ty: TsType::string_literal(tag),
+        optional: false,
+        readonly: false,
+    }]);
+    TsExpr::Paren(Box::new(TsExpr::As {
+        expr: Box::new(recv.clone()),
+        ty: TsType::named_with_args("Extract", vec![TsType::type_of(recv.clone()), proven]),
+    }))
+}
+
 /// #1752: record the `is` tests in `rhs`, a short-circuit right operand
 /// about to be emitted out of line (inside an arrow, or a hoisted `if`), as
 /// unable to narrow their receivers anywhere else. A test is recorded under
@@ -2945,9 +2968,9 @@ fn binding_stmt(local: &str, init: LoweredExpr) -> LoweredStmt {
 
 /// The `const name = …;` declarations for one matched `is` test: nodes where
 /// the receiver is a node and the read has a node form (a record field, a list
-/// element or rest, the refined narrowing cast), text otherwise (a variant
-/// payload read through its `Extract` cast, and an or-pattern's `let` and
-/// `if`/`else` dispatch).
+/// element or rest, the refined narrowing cast, a variant payload read through
+/// its `Extract` cast, an or-pattern's `if`/`else` dispatch), text otherwise (a
+/// text receiver, and an or-pattern's `let a, b;`, which has no node).
 fn emit_is_test_bindings(
     e: &Expr,
     cx: &mut LowerCtx,
@@ -3005,8 +3028,13 @@ fn emit_is_test_bindings(
                 // #1653: renamed when it shadows (`o is Some(o)`), so the
                 // declaration can't read itself in its temporal dead zone.
                 let local = cx.bind_local_name(&name.name);
-                // 1A: the payload read goes through the `Extract<typeof …>` cast.
-                let read: Built = Err(format!("{payload}.{field}"));
+                let read: Built = match recv.node() {
+                    Some(r) => Ok(bynk_ts::TsExpr::Member {
+                        object: Box::new(variant_payload_node(r, &variant.name)),
+                        property: field.clone(),
+                    }),
+                    None => Err(format!("{payload}.{field}")),
+                };
                 out.push(binding_stmt(&local, read.into()));
             }
         }
@@ -3054,9 +3082,9 @@ fn emit_is_test_bindings(
                 .iter()
                 .map(|id| cx.bind_local_name(&id.name))
                 .collect();
-            let mut lines: Vec<String> = Vec::new();
-            lines.push(format!("let {};", decl.join(", ")));
+            out.push(LoweredStmt::Text(format!("let {};", decl.join(", "))));
             let last = alts.len() - 1;
+            let mut arms = Vec::with_capacity(alts.len());
             for (i, alt) in alts.iter().enumerate() {
                 let (tag, pairs) = match alt {
                     // #2680: a list alternative is told apart by its length,
@@ -3068,21 +3096,21 @@ fn emit_is_test_bindings(
                                 let local = cx
                                     .resolved_local_name(&n.name)
                                     .unwrap_or_else(|| ts_ident(&n.name));
-                                pairs.push((local, format!("{value_text}[{j}]")));
+                                pairs.push((local, recv.index(j).lowered()));
                             }
                         }
                         if let Some(binder) = rest.as_ref().and_then(|r| r.binder.as_ref()) {
                             let local = cx
                                 .resolved_local_name(&binder.name)
                                 .unwrap_or_else(|| ts_ident(&binder.name));
-                            pairs.push((local, list_rest_expr(&value_text, elems.len())));
+                            pairs.push((local, list_rest_value(&recv, elems.len())));
                         }
                         let mut tests = Vec::new();
                         pattern_tests(&recv, disc_ty, alt, cx, &mut tests);
                         let cond = if tests.is_empty() {
-                            "true".to_string()
+                            LoweredExpr::Node(bool_node(true))
                         } else {
-                            and_join(tests).into_text()
+                            and_join(tests)
                         };
                         (Some(cond), pairs)
                     }
@@ -3108,13 +3136,27 @@ fn emit_is_test_bindings(
                             // #1765 review: out of line, the dispatch below
                             // starts from the whole union, so its last arm (a
                             // bare `else`) isn't narrowed to this variant.
-                            let payload = variant_payload(&value_text, &variant.name, true);
-                            pairs.push((local, payload + "." + &field));
+                            let read: Built = match recv.node() {
+                                Some(r) => Ok(bynk_ts::TsExpr::Member {
+                                    object: Box::new(variant_payload_node(r, &variant.name)),
+                                    property: field.clone(),
+                                }),
+                                None => Err(format!(
+                                    "{}.{field}",
+                                    variant_payload(&value_text, &variant.name, true)
+                                )),
+                            };
+                            pairs.push((local, read.into()));
                         }
-                        (
-                            Some(format!("{value_text}.tag === \"{}\"", variant.name)),
-                            pairs,
-                        )
+                        let tag_test: Built = match recv.node() {
+                            Some(r) => Ok(bynk_ts::TsExpr::Binary {
+                                op: bynk_ts::TsBinaryOp::StrictEq,
+                                left: Box::new(member_node_of(r, "tag")),
+                                right: Box::new(str_node(variant.name.clone())),
+                            }),
+                            None => Err(format!("{value_text}.tag === \"{}\"", variant.name)),
+                        };
+                        (Some(LoweredExpr::from(tag_test)), pairs)
                     }
                     // #2641: a record alternative has no tag to test; its
                     // depth-1 names read straight off the receiver.
@@ -3129,26 +3171,26 @@ fn emit_is_test_bindings(
                             let local = cx
                                 .resolved_local_name(&bound.name)
                                 .unwrap_or_else(|| ts_ident(&bound.name));
-                            pairs.push((local, format!("{value_text}.{}", fname.name)));
+                            pairs.push((local, recv.member(&fname.name).lowered()));
                         }
                         (None, pairs)
                     }
                     _ => (None, Vec::new()),
                 };
-                if i == last {
-                    lines.push("} else {".to_string());
+                let cond = if i == last {
+                    None
                 } else {
-                    let cond = tag.unwrap_or_else(|| "true".to_string());
-                    let kw = if i == 0 { "if" } else { "} else if" };
-                    lines.push(format!("{kw} ({cond}) {{"));
-                }
-                for (name, path) in &pairs {
-                    lines.push(format!("  {name} = {path};"));
-                }
+                    Some(tag.unwrap_or_else(|| LoweredExpr::Node(bool_node(true))))
+                };
+                arms.push(OrArm {
+                    cond,
+                    assigns: pairs,
+                });
             }
-            lines.push("}".to_string());
-            // 1A: the `let` and the dispatch stay text statements.
-            out.extend(lines.into_iter().map(LoweredStmt::Text));
+            match or_dispatch_stmt(&arms) {
+                Some(stmt) => out.push(LoweredStmt::Node(Box::new(stmt))),
+                None => out.extend(or_dispatch_lines(arms).into_iter().map(LoweredStmt::Text)),
+            }
         }
     }
 }
@@ -3584,9 +3626,8 @@ fn lower_ident(e: &Expr, id: &Ident, cx: &mut LowerCtx) -> Built {
         && let TypeBody::Sum(s) = &decl.body
         && s.variants.iter().any(|v| v.name.name == id.name)
     {
-        if let Some(lit) = consumed_variant_literal(e, type_name, &id.name, &[], cx) {
-            // 1A: text until the consumed-variant literal converts
-            return Err(lit);
+        if let Ok(built) = consumed_variant_literal(e, type_name, &id.name, Vec::new(), cx) {
+            return built;
         }
         return Ok(member_node(type_name, &id.name));
     }
@@ -3617,33 +3658,60 @@ fn consumed_variant_literal(
     e: &Expr,
     sum: &str,
     tag: &str,
-    args: &[String],
+    args: Vec<LoweredExpr>,
     cx: &LowerCtx,
-) -> Option<String> {
-    if !cx.is_consumed_context_type(sum) {
-        return None;
-    }
-    let decl = cx.commons().types.get(sum)?;
-    let TypeBody::Sum(s) = &decl.body else {
-        return None;
+) -> Result<Built, Vec<LoweredExpr>> {
+    let shape = (|| {
+        if !cx.is_consumed_context_type(sum) {
+            return None;
+        }
+        let decl = cx.commons().types.get(sum)?;
+        let TypeBody::Sum(s) = &decl.body else {
+            return None;
+        };
+        let variant = s.variants.iter().find(|v| v.name.name == tag)?;
+        if variant.payload.len() != args.len() {
+            return None;
+        }
+        let ty = cx.commons().expr_types.get(&e.id)?.ty;
+        let props: Vec<String> = variant
+            .payload
+            .iter()
+            .map(|p| crate::emitter::payload_prop(&p.name.name))
+            .collect();
+        Some((
+            crate::emitter::ts_types::ts_ty_to_ts_type(ty, cx.ty_render()),
+            props,
+        ))
+    })();
+    let Some((ty, props)) = shape else {
+        return Err(args);
     };
-    let variant = s.variants.iter().find(|v| v.name.name == tag)?;
-    if variant.payload.len() != args.len() {
-        return None;
-    }
-    let ty = cx.commons().expr_types.get(&e.id)?.ty;
-    let ts_ty = bynk_ts::print_type(&crate::emitter::ts_types::ts_ty_to_ts_type(
-        ty,
-        cx.ty_render(),
-    ));
-    let mut fields = vec![format!("tag: \"{tag}\"")];
-    for (p, a) in variant.payload.iter().zip(args) {
-        fields.push(format!(
-            "{}: {a}",
-            crate::emitter::payload_prop(&p.name.name)
-        ));
-    }
-    Some(format!("({{ {} }} as {ts_ty})", fields.join(", ")))
+    let text_ty = bynk_ts::print_type(&ty);
+    Ok(node_or_text(
+        args,
+        |c| {
+            let mut entries = vec![bynk_ts::TsObjectEntry::prop(
+                "tag".to_string(),
+                str_node(tag),
+            )];
+            entries.extend(
+                props
+                    .iter()
+                    .zip(c)
+                    .map(|(p, a)| bynk_ts::TsObjectEntry::prop(p.clone(), a)),
+            );
+            bynk_ts::TsExpr::Paren(Box::new(bynk_ts::TsExpr::As {
+                expr: Box::new(bynk_ts::TsExpr::object_entries(entries)),
+                ty,
+            }))
+        },
+        |t| {
+            let mut fields = vec![format!("tag: \"{tag}\"")];
+            fields.extend(props.iter().zip(&t).map(|(p, a)| format!("{p}: {a}")));
+            format!("({{ {} }} as {text_ty})", fields.join(", "))
+        },
+    ))
 }
 
 /// Lower a variant call's arguments. #2341 (L4): a `RawError`'s first argument
@@ -3819,19 +3887,12 @@ fn lower_call(e: &Expr, name: &Ident, args: &[Expr], cx: &mut LowerCtx) -> Lower
     // type (the same re-derivation this whole `Callee` precedent, P6.0,
     // exists to close).
     if let Some(Callee::Ctor { sum, tag }) = cx.commons().callee(e.id) {
-        if cx.is_consumed_context_type(&sum.name.name) {
-            // 1A: a consumed-context variant literal is built as text over the
-            // printed arguments; if it declines, the call falls back to text
-            // over the same printed arguments.
-            let texts: Vec<String> = args_lowered
-                .into_iter()
-                .map(LoweredExpr::into_text)
-                .collect();
-            if let Some(lit) = consumed_variant_literal(e, &sum.name.name, tag, &texts, cx) {
-                return pre.finish_text(lit);
-            }
-            return pre.finish_text(format!("{}.{}({})", sum.name.name, tag, texts.join(", ")));
-        }
+        let args_lowered = match consumed_variant_literal(e, &sum.name.name, tag, args_lowered, cx)
+        {
+            Ok(built) => return pre.finish_built(built),
+            // Not an inline literal: the companion call below.
+            Err(args) => args,
+        };
         let callee = bynk_ts::TsExpr::Member {
             object: Box::new(ident_node(&sum.name.name)),
             property: tag.to_string(),
@@ -4713,9 +4774,9 @@ fn lower_field_access(e: &Expr, receiver: &Expr, field: &Ident, cx: &mut LowerCt
     // is, so the callee's module stays a type-only import.
     if let ExprKind::Ident(id) = &receiver.kind
         && !cx.is_local(&id.name)
-        && let Some(lit) = consumed_variant_literal(e, &id.name, &field.name, &[], cx)
+        && let Ok(built) = consumed_variant_literal(e, &id.name, &field.name, Vec::new(), cx)
     {
-        return pre.finish_text(lit);
+        return pre.finish_built(built);
     }
     // Agent-handler `self.<key>` rewrite.
     if cx.in_agent_handler()
@@ -4775,8 +4836,18 @@ fn lower_field_access(e: &Expr, receiver: &Expr, field: &Ident, cx: &mut LowerCt
             ..
         }) = cx.commons().expr_ty(receiver.id).as_deref()
     {
-        // 1A: text until the `as` assertion has a node for a base-type name
-        return pre.finish_text(format!("({} as {})", r.into_text(), ts_base(*base)));
+        let base = ts_base(*base);
+        let built = node_or_text(
+            vec![r],
+            |c| {
+                bynk_ts::TsExpr::Paren(Box::new(bynk_ts::TsExpr::As {
+                    expr: Box::new(one(c)),
+                    ty: bynk_ts::TsType::named(base),
+                }))
+            },
+            |c| format!("({} as {base})", one(c)),
+        );
+        return pre.finish_built(built);
     }
     built_or_text_lowered(
         pre,
@@ -5566,9 +5637,8 @@ pub(super) fn pattern_tests(
         }
         // #472: `p where predicate` — the inner pattern's own tests, then the
         // predicate as a boolean guard over the runtime value at `path`,
-        // reusing `refined_check_as_bool` verbatim (the same helper `value is
-        // RefinedType` lowers through). That helper builds text, so a refined
-        // arm's tests stay text.
+        // reusing `refined_check_as_bool` (the same helper `value is
+        // RefinedType` lowers through).
         Pattern::Refined {
             inner, predicate, ..
         } => {
@@ -5590,8 +5660,15 @@ pub(super) fn pattern_tests(
             for p in &predicate.predicates {
                 cx.note_predicate(&p.kind);
             }
-            let check: Built = Err(refined_check_as_bool(path.as_str(), base, Some(predicate)));
-            tests.push(check.into());
+            let recv = match path.node() {
+                Some(n) => n.clone(),
+                None => text_value(path.as_str()),
+            };
+            tests.push(LoweredExpr::Node(refined_check_as_bool(
+                recv,
+                base,
+                Some(predicate),
+            )));
         }
         // #2680: a length test (none for `[..]`, which matches every list),
         // then each refutable element against `path[i]`.
@@ -5876,34 +5953,103 @@ pub(super) fn emit_pattern_bindings(
                 .collect();
             body.push(Item::Line(format!("let {};", decl.join(", "))));
             let last = alts.len() - 1;
+            let mut arms = Vec::with_capacity(alts.len());
             for (i, alt) in alts.iter().enumerate() {
-                if i == last {
-                    body.push(Item::Line("} else {".to_string()));
+                let cond = if i == last {
+                    None
                 } else {
                     let mut t = Vec::new();
                     pattern_tests(path, path_ty, alt, cx, &mut t);
-                    let cond = if t.is_empty() {
-                        "true".to_string()
+                    Some(if t.is_empty() {
+                        LoweredExpr::Node(bool_node(true))
                     } else {
-                        and_join(t).into_text()
-                    };
-                    let kw = if i == 0 { "if" } else { "} else if" };
-                    body.push(Item::Line(format!("{kw} ({cond}) {{")));
-                }
-                let mut assigns = Body::new();
+                        and_join(t)
+                    })
+                };
                 let mut pairs = Vec::new();
-                pattern_binding_paths(path.as_str(), path_ty, alt, cx, &mut pairs);
-                for (name, p) in &pairs {
-                    let local = cx
-                        .resolved_local_name(name)
-                        .unwrap_or_else(|| ts_ident(name));
-                    assigns.push(Item::Line(format!("{local} = {p};")));
-                }
-                body.push(Item::Indent(assigns));
+                pattern_binding_paths(path, path_ty, alt, cx, &mut pairs);
+                let assigns = pairs
+                    .into_iter()
+                    .map(|(name, value)| {
+                        let local = cx
+                            .resolved_local_name(&name)
+                            .unwrap_or_else(|| ts_ident(&name));
+                        (local, value)
+                    })
+                    .collect();
+                arms.push(OrArm { cond, assigns });
             }
-            body.push(Item::Line("}".to_string()));
+            match or_dispatch_stmt(&arms) {
+                Some(stmt) => body.push(Item::Node(Box::new(stmt))),
+                None => body.extend(or_dispatch_lines(arms).into_iter().map(Item::Line)),
+            }
         }
     }
+}
+
+/// One alternative of an or-pattern's dispatch: its test (none for the last, the bare
+/// `else`) and the shared names it assigns, each from the path the alternative binds it at.
+struct OrArm {
+    cond: Option<LoweredExpr>,
+    assigns: Vec<(String, LoweredExpr)>,
+}
+
+/// `recv.property` over a node receiver.
+fn member_node_of(recv: &bynk_ts::TsExpr, property: &str) -> bynk_ts::TsExpr {
+    bynk_ts::TsExpr::Member {
+        object: Box::new(recv.clone()),
+        property: property.to_string(),
+    }
+}
+
+/// `if (c0) { a = p; } else if (c1) { … } else { … }` over nodes, when every test and every
+/// path is one.
+fn or_dispatch_stmt(arms: &[OrArm]) -> Option<bynk_ts::TsStmt> {
+    use bynk_ts::{TsExpr, TsStmt};
+    let node = |e: &LoweredExpr| match e {
+        LoweredExpr::Node(n) => Some(n.clone()),
+        LoweredExpr::Text(_) => None,
+    };
+    let block = |arm: &OrArm| -> Option<TsStmt> {
+        let stmts = arm
+            .assigns
+            .iter()
+            .map(|(local, value)| {
+                Some(TsStmt::assign(
+                    TsExpr::Ident(local.clone()),
+                    node(value)?,
+                    None,
+                ))
+            })
+            .collect::<Option<Vec<_>>>()?;
+        Some(TsStmt::block(stmts, None))
+    };
+    let (last, rest) = arms.split_last()?;
+    let mut chain = block(last)?;
+    for arm in rest.iter().rev() {
+        let cond = node(arm.cond.as_ref()?)?;
+        chain = TsStmt::if_else_same_line_stmt(cond, block(arm)?, chain, None);
+    }
+    Some(chain)
+}
+
+/// [`or_dispatch_stmt`]'s text: the same chain as lines, for a test or path that is still text.
+fn or_dispatch_lines(arms: Vec<OrArm>) -> Vec<String> {
+    let mut lines = Vec::new();
+    for (i, arm) in arms.into_iter().enumerate() {
+        match arm.cond {
+            None => lines.push("} else {".to_string()),
+            Some(cond) => {
+                let kw = if i == 0 { "if" } else { "} else if" };
+                lines.push(format!("{kw} ({}) {{", cond.into_text()));
+            }
+        }
+        for (local, value) in arm.assigns {
+            lines.push(format!("  {local} = {};", value.into_text()));
+        }
+    }
+    lines.push("}".to_string());
+    lines
 }
 
 /// `const <local> = <value>;` as an item (see `lower_stmt::const_item`).
@@ -5937,16 +6083,16 @@ fn list_rest_value(path: &PatPath, n: usize) -> LoweredExpr {
 /// writing `const` declarations, so an or-pattern's per-alternative dispatch
 /// (above) can assign a shared `let` from whichever alternative matched.
 fn pattern_binding_paths(
-    path: &str,
+    path: &PatPath,
     path_ty: Option<TyId>,
     pattern: &Pattern,
     cx: &LowerCtx,
-    out: &mut Vec<(String, String)>,
+    out: &mut Vec<(String, LoweredExpr)>,
 ) {
     let tys = cx.ty_render();
     match pattern {
         Pattern::Wildcard(_) | Pattern::Literal { .. } | Pattern::Range(_) => {}
-        Pattern::Binding(id) => out.push((id.name.clone(), path.to_string())),
+        Pattern::Binding(id) => out.push((id.name.clone(), path.lowered())),
         Pattern::Variant {
             variant, bindings, ..
         } => {
@@ -5958,7 +6104,7 @@ fn pattern_binding_paths(
                     }
                 };
                 let field_ty = cx.payload_field_ty(path_ty, &variant.name, i, tys.types());
-                pattern_binding_paths(&format!("{path}.{field}"), field_ty, b.pattern(), cx, out);
+                pattern_binding_paths(&path.member(&field), field_ty, b.pattern(), cx, out);
             }
         }
         // Never reached from the parser (an `Or`'s alternatives are always
@@ -5976,21 +6122,21 @@ fn pattern_binding_paths(
         Pattern::List { elems, rest, .. } => {
             let elem_ty = list_elem_ty(path_ty, cx);
             for (i, sub) in elems.iter().enumerate() {
-                pattern_binding_paths(&format!("{path}[{i}]"), elem_ty, sub, cx, out);
+                pattern_binding_paths(&path.index(i), elem_ty, sub, cx, out);
             }
             if let Some(binder) = rest.as_ref().and_then(|r| r.binder.as_ref()) {
-                out.push((binder.name.clone(), list_rest_expr(path, elems.len())));
+                out.push((binder.name.clone(), list_rest_value(path, elems.len())));
             }
         }
         Pattern::Record { fields, .. } => {
             for (name, sub) in fields {
-                let field_path = format!("{path}.{}", name.name);
+                let field_path = path.member(&name.name);
                 match sub {
                     Some(sub) => {
                         let field_ty = record_field_ty(path_ty, &name.name, cx);
                         pattern_binding_paths(&field_path, field_ty, sub, cx, out);
                     }
-                    None => out.push((name.name.clone(), field_path)),
+                    None => out.push((name.name.clone(), field_path.lowered())),
                 }
             }
         }
@@ -6016,11 +6162,18 @@ fn lower_is(value: &Expr, pattern: &Pattern, cx: &mut LowerCtx) -> Lowered {
             .get(&variant.name)
             .map(|d| d.body.clone())
     {
-        let recv = pre.absorb(cx.is_receiver_ref_forced(value));
+        let recv = match pre.absorb_node(cx.is_receiver_ref_forced(value)) {
+            LoweredExpr::Node(n) => n,
+            LoweredExpr::Text(t) => text_value(t),
+        };
         for p in refinement.iter().flat_map(|r| &r.predicates) {
             cx.note_predicate(&p.kind);
         }
-        return pre.finish_text(refined_check_as_bool(&recv, base, refinement.as_ref()));
+        return pre.finish(LoweredExpr::Node(refined_check_as_bool(
+            recv,
+            base,
+            refinement.as_ref(),
+        )));
     }
     let path = PatPath::from_lowered(pre.absorb_node(cx.is_receiver_ref(value)));
     let scrut_ty = cx.commons().expr_types.get(&value.id).map(|te| te.ty);
@@ -6114,51 +6267,50 @@ fn lower_is(value: &Expr, pattern: &Pattern, cx: &mut LowerCtx) -> Lowered {
 /// v0.13: render a refined type's predicates as a single boolean expression over
 /// `recv`, for `value is RefinedType`. Mirrors `emit_pred_check`'s per-predicate
 /// logic but as `&&`-joined terms instead of `Result`-returning statements.
-fn refined_check_as_bool(recv: &str, base: BaseType, refinement: Option<&Refinement>) -> String {
-    let mut terms: Vec<String> = Vec::new();
+fn refined_check_as_bool(
+    recv: bynk_ts::TsExpr,
+    base: BaseType,
+    refinement: Option<&Refinement>,
+) -> bynk_ts::TsExpr {
+    use bynk_ts::{TsBinaryOp, TsExpr};
+    let number_check = |name: &str| TsExpr::Call {
+        callee: Box::new(TsExpr::Member {
+            object: Box::new(member_node("globalThis", "Number")),
+            property: name.to_string(),
+        }),
+        args: vec![recv.clone()],
+    };
+    let mut terms: Vec<TsExpr> = Vec::new();
     if base == BaseType::Int {
         // #1657: an `Int` is a JS safe integer.
-        terms.push(format!("globalThis.Number.isSafeInteger({recv})"));
+        terms.push(number_check("isSafeInteger"));
     }
     // v0.21: validated `Float` values are finite (ADR 0040).
     if base == BaseType::Float {
-        terms.push(format!("globalThis.Number.isFinite({recv})"));
+        terms.push(number_check("isFinite"));
     }
     if let Some(r) = refinement {
         for p in bynk_syntax::ast::in_check_order(&r.predicates, |p| &p.kind) {
+            let (cond, _) = bynk_ts::pred_condition_and_message_over(&p.kind, &recv, Some(base));
+            // A range is one bracketed term; every other predicate stands bare.
             terms.push(match &p.kind {
-                PredKind::NonNegative if base == BaseType::Decimal => {
-                    format!("({recv}).coefficient >= 0n")
+                PredKind::InRange(..) | PredKind::InRangeF(..) if base != BaseType::Decimal => {
+                    TsExpr::Paren(Box::new(cond))
                 }
-                PredKind::Positive if base == BaseType::Decimal => {
-                    format!("({recv}).coefficient > 0n")
-                }
-                PredKind::InRangeD(a, b) => crate::emitter::decimal_range_condition(recv, a, b),
-                PredKind::NonNegative => format!("{recv} >= 0"),
-                PredKind::Positive => format!("{recv} > 0"),
-                PredKind::InRange(a, b) => {
-                    format!("({recv} >= {} && {recv} <= {})", a.value, b.value)
-                }
-                PredKind::InRangeF(a, b) => {
-                    format!("({recv} >= {} && {recv} <= {})", a.lexeme, b.lexeme)
-                }
-                PredKind::NonEmpty => format!("{recv}.length > 0"),
-                PredKind::IsoDate => format!("__bynkIsIsoDate({recv})"),
-                PredKind::MinLength(n) => format!("{recv}.length >= {n}"),
-                PredKind::MaxLength(n) => format!("{recv}.length <= {n}"),
-                PredKind::Length(n) => format!("{recv}.length === {n}"),
-                PredKind::Matches(pat) => {
-                    let escaped = escape_ts_string(pat);
-                    format!("new globalThis.RegExp(\"^(?:\" + \"{escaped}\" + \")$\").test({recv})")
-                }
+                _ => cond,
             });
         }
     }
-    if terms.is_empty() {
-        "true".to_string()
-    } else {
-        format!("({})", terms.join(" && "))
-    }
+    let mut terms = terms.into_iter();
+    let Some(first) = terms.next() else {
+        return bool_node(true);
+    };
+    let joined = terms.fold(first, |left, right| TsExpr::Binary {
+        op: TsBinaryOp::And,
+        left: Box::new(left),
+        right: Box::new(right),
+    });
+    TsExpr::Paren(Box::new(joined))
 }
 
 #[cfg(test)]
@@ -8105,17 +8257,18 @@ fn minus(x: Int) -> Int { 5 - - -x }
         );
     }
 
-    /// A variant binding reads its payload through the `Extract` cast, which has
-    /// no type node, so the whole IIFE keeps its text, byte for byte; the
-    /// antecedent stays in the hoisted form for narrowing (#1044).
+    /// A variant binding reads its payload through the `Extract` cast, now a node
+    /// (`typeof` under a generic type), so the IIFE is a node with no text exit and
+    /// prints as it did; the antecedent stays in the hoisted form for narrowing
+    /// (#1044).
     #[test]
-    fn a_variant_payload_binding_keeps_its_iife_text() {
+    fn a_variant_payload_binding_is_a_node_through_the_extract_cast() {
         let src = format!(
             "{IS_HDR}fn g(s: Shape, k: Int) -> Bool {{ s is Circle(r) && r > k }}\n\
              fn h(s: Shape, k: Int) -> Result[Bool, String] {{ Ok(s is Circle(r) && risky(r)? > k) }}\n"
         );
         let (exits, stmts, ts) = exits_and_stmts(&src);
-        assert!(exits > 0 && stmts > 0, "{ts}");
+        assert_eq!((exits, stmts), (0, 0), "{ts}");
         assert_eq!(
             returned(&ts, "g"),
             "((__c: boolean) => __c)(s.tag === \"Circle\") && ((() => { const r = (s as Extract<typeof s, { tag: \"Circle\" }>).r; return r > k; })())"
@@ -8606,5 +8759,63 @@ mod list_kernel_tests {
             "{ts}"
         );
         assert_eq!(ts.matches("import ").count(), 2, "{ts}");
+    }
+}
+
+#[cfg(test)]
+mod leaf_node_tests {
+    use super::*;
+    use bynk_ts::{TsExpr, print_expr, print_stmt};
+
+    fn ident(n: &str) -> TsExpr {
+        TsExpr::Ident(n.to_string())
+    }
+
+    /// `(recv as Extract<typeof recv, { tag: "V" }>)`: the variant a test already proved.
+    #[test]
+    fn a_variant_payload_cast_is_the_extract_of_the_receiver() {
+        assert_eq!(
+            print_expr(&variant_payload_node(&ident("s"), "Circle")),
+            "(s as Extract<typeof s, { tag: \"Circle\" }>)"
+        );
+        assert_eq!(
+            print_expr(&variant_payload_node(&member_node("a", "b"), "V")),
+            "(a.b as Extract<typeof a.b, { tag: \"V\" }>)"
+        );
+    }
+
+    /// The base-type terms of a refined check, over a node receiver.
+    #[test]
+    fn a_refined_check_is_the_base_terms_over_the_receiver() {
+        let check = |base| print_expr(&refined_check_as_bool(ident("n"), base, None));
+        assert_eq!(check(BaseType::Int), "(globalThis.Number.isSafeInteger(n))");
+        assert_eq!(check(BaseType::Float), "(globalThis.Number.isFinite(n))");
+        assert_eq!(check(BaseType::String), "true");
+    }
+
+    /// An or-pattern's dispatch is an `if`/`else if`/`else` chain assigning each shared name.
+    #[test]
+    fn an_or_dispatch_is_an_if_chain_over_nodes_and_none_over_text() {
+        let arm = |cond: Option<LoweredExpr>, to: &str| OrArm {
+            cond,
+            assigns: vec![("r".to_string(), LoweredExpr::Node(member_node("s", to)))],
+        };
+        let node = |t: &str| Some(LoweredExpr::Node(ident(t)));
+        let chain = or_dispatch_stmt(&[arm(node("a"), "x"), arm(node("b"), "y"), arm(None, "z")])
+            .expect("every test and path is a node");
+        assert_eq!(
+            print_stmt(&chain, 0),
+            "if (a) {\n  r = s.x;\n} else if (b) {\n  r = s.y;\n} else {\n  r = s.z;\n}\n"
+        );
+        // A text test has no node form: the caller writes the lines.
+        let text = [
+            arm(Some(LoweredExpr::Text("a && b".to_string())), "x"),
+            arm(None, "z"),
+        ];
+        assert!(or_dispatch_stmt(&text).is_none());
+        assert_eq!(
+            or_dispatch_lines(Vec::from(text)),
+            ["if (a && b) {", "  r = s.x;", "} else {", "  r = s.z;", "}"]
+        );
     }
 }

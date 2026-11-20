@@ -28,12 +28,18 @@ export function concatPairs(xs: readonly number[]): readonly number[] {
 
 export async function concatAllEff(xs: readonly number[]): globalThis.Promise<readonly number[]> {
   const none: readonly number[] = [];
-  return (async (__xs: readonly number[], __acc: readonly number[], __f: (acc: readonly number[], x: number) => globalThis.Promise<readonly number[]>) => { for (const __x of __xs) __acc = await __f(__acc, __x); return __acc; })(xs, none, async (acc: readonly number[], x: number) => globalThis.Promise.resolve([...acc, ...[x * 10]]));
+  return (async (__xs: readonly number[], __acc: readonly number[], __f: (acc: readonly number[], x: number) => globalThis.Promise<readonly number[]>) => {
+    for (const __x of __xs) __acc = await __f(__acc, __x);
+    return __acc;
+  })(xs, none, async (acc: readonly number[], x: number) => globalThis.Promise.resolve([...acc, ...[x * 10]]));
 }
 
 export async function appendAllEff(xs: readonly number[]): globalThis.Promise<readonly number[]> {
   const none: readonly number[] = [];
-  return (async (__xs: readonly number[], __acc: readonly number[], __f: (acc: readonly number[], x: number) => globalThis.Promise<readonly number[]>) => { for (const __x of __xs) __acc = await __f(__acc, __x); return __acc; })(xs, none, async (acc: readonly number[], x: number) => globalThis.Promise.resolve([...acc, x * 100]));
+  return (async (__xs: readonly number[], __acc: readonly number[], __f: (acc: readonly number[], x: number) => globalThis.Promise<readonly number[]>) => {
+    for (const __x of __xs) __acc = await __f(__acc, __x);
+    return __acc;
+  })(xs, none, async (acc: readonly number[], x: number) => globalThis.Promise.resolve([...acc, x * 100]));
 }
 
 export function appendToEmpty(): readonly number[] {

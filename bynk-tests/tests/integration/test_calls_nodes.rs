@@ -196,12 +196,12 @@ service api from http {
     );
 }
 
-/// A principal that is still text (a refined literal's brand cast) makes the call text, byte for
+/// A branded principal (a refined literal's brand cast) is a node and prints byte for
 /// byte as before.
 #[test]
-fn a_principal_that_is_still_text_falls_back_byte_for_byte() {
+fn a_branded_principal_is_a_node_and_prints_byte_for_byte() {
     let (exits, text) = emit("2020_test_actor_sum_principal", &[]);
-    assert!(exits > 0, "the brand cast is still text");
+    assert_eq!(exits, 0, "the brand cast is a node:\n{text}");
     for line in [
         r#"const r = await api.http_GET({ ...deps, who: { tag: "User", identity: ("ada" as any) } });"#,
         r#"const r = await api.http_GET_plain({ ...deps, identity: (("bo" as any) as any) });"#,

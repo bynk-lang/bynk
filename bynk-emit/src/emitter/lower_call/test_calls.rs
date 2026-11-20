@@ -618,7 +618,9 @@ pub(in crate::emitter) fn lower_system_http_call(
 /// `deps` shape against the emitted handler; only the route values, which the `TestConnection`
 /// holds as `unknown`, are cast, as production's dispatch casts `__att.args[i]`.
 ///
-/// 1A: needs typeof and indexed-access TsTypes: `bynk_ts` has neither, so these three IIFEs stay text.
+/// Built as nodes when the `TestConnection`, the route values and the `deps` are all nodes
+/// (`Parameters<typeof …>` is a `typeof` type under an indexed-access type, a number-literal
+/// index for the frame positions), else the same text.
 fn websocket_lifecycle_call(
     shape: &WsAddress,
     svc: &str,
@@ -627,64 +629,192 @@ fn websocket_lifecycle_call(
     deps: &LoweredExpr,
     cx: &mut LowerCtx,
     pre: &mut Pre,
-) -> String {
+) -> Built {
+    use bynk_ts::{TsBinaryOp, TsBindingName, TsLit, TsStmt, TsType};
     // An argument the checker's arity check guarantees: absent, a missing fact.
-    let missing = |cx: &LowerCtx, what: &str| bynk_ts::print_expr(&cx.missing_fact(at, what));
     let tc = match args.first() {
-        Some(a) => pre.lower(a, cx),
-        None => missing(
-            cx,
+        Some(a) => pre.lower_node(a, cx),
+        None => LoweredExpr::Node(cx.missing_fact(
+            at,
             "`TestConnection` argument of a websocket lifecycle call",
-        ),
+        )),
     };
-    let sig = |m: &str| format!("Parameters<typeof {svc}.{m}>");
+    let sig_text = |m: &str| format!("Parameters<typeof {svc}.{m}>");
+    let sig =
+        |m: &str| TsType::named_with_args("Parameters", vec![TsType::type_of(member(id(svc), m))]);
+    let num = |n: usize| TsExpr::Lit(TsLit::Num(n.to_string()));
+    let array = |items: Vec<TsExpr>| TsExpr::Array {
+        items,
+        multiline: false,
+    };
+    let const_ = |name: &str, ty: Option<TsType>, init: TsExpr| {
+        TsStmt::const_stmt(TsBindingName::Ident(name.to_string()), ty, init, None)
+    };
+    // `(async () => { <stmts> })()`.
+    let iife = |stmts: Vec<TsStmt>| {
+        call(
+            paren(TsExpr::Arrow {
+                params: Vec::new(),
+                is_async: true,
+                generics: Vec::new(),
+                return_type: None,
+                body: Box::new(bynk_ts::TsArrowBody::Block(stmts)),
+            }),
+            Vec::new(),
+        )
+    };
+    let spread_call = |m: &str| {
+        TsStmt::return_stmt(
+            Some(call(
+                member(id(svc), m),
+                vec![TsExpr::Spread(Box::new(id("__a")))],
+            )),
+            None,
+        )
+    };
+    // `__o.<field>[k] as <sig>[idx]`.
+    let opened_cast = |field: &str, k: usize, m: &str, idx: usize| TsExpr::As {
+        expr: Box::new(TsExpr::Index {
+            object: Box::new(member(id("__o"), field)),
+            index: Box::new(num(k)),
+        }),
+        ty: TsType::indexed(sig(m), TsType::number_literal(idx as u32)),
+    };
+    let deps_cast = |m: &str, idx: usize| TsExpr::As {
+        expr: Box::new(member(id("__o"), "deps")),
+        ty: TsType::indexed(sig(m), TsType::number_literal(idx as u32)),
+    };
     match shape {
         WsAddress::Open => {
-            let route: Vec<String> = args[1..].iter().map(|a| pre.lower(a, cx)).collect();
-            let mut parts = vec!["__c".to_string()];
-            parts.extend(route.iter().cloned());
-            parts.push(deps.clone().into_text());
-            format!(
-                "(async () => {{ const __c = {tc}; const __a: {} = [{}]; __c.remember([{}], __a[__a.length - 1]); return {svc}.open(...__a); }})()",
-                sig("open"),
-                parts.join(", "),
-                route.join(", ")
+            let route: Vec<LoweredExpr> = args[1..].iter().map(|a| pre.lower_node(a, cx)).collect();
+            let n = route.len();
+            let mut children = vec![tc];
+            children.extend(route);
+            children.push(deps.clone());
+            node_or_text(
+                children,
+                |mut c| {
+                    let tc = c.remove(0);
+                    let deps = c.pop().expect("the deps child is last");
+                    let mut parts = vec![id("__c")];
+                    parts.extend(c.iter().cloned());
+                    parts.push(deps);
+                    let last = TsExpr::Index {
+                        object: Box::new(id("__a")),
+                        index: Box::new(TsExpr::Binary {
+                            op: TsBinaryOp::Sub,
+                            left: Box::new(member(id("__a"), "length")),
+                            right: Box::new(num(1)),
+                        }),
+                    };
+                    iife(vec![
+                        const_("__c", None, tc),
+                        const_("__a", Some(sig("open")), array(parts)),
+                        TsStmt::expr_stmt(
+                            call(member(id("__c"), "remember"), vec![array(c), last]),
+                            None,
+                        ),
+                        spread_call("open"),
+                    ])
+                },
+                |mut t| {
+                    let tc = t.remove(0);
+                    let deps = t.pop().expect("the deps child is last");
+                    debug_assert_eq!(t.len(), n);
+                    let mut parts = vec!["__c".to_string()];
+                    parts.extend(t.iter().cloned());
+                    parts.push(deps);
+                    format!(
+                        "(async () => {{ const __c = {tc}; const __a: {} = [{}]; __c.remember([{}], __a[__a.length - 1]); return {svc}.open(...__a); }})()",
+                        sig_text("open"),
+                        parts.join(", "),
+                        t.join(", ")
+                    )
+                },
             )
         }
         WsAddress::Message { frame } => {
             let (frame_idx, n) = frame.map_or((0, 1), |f| (f.frame_index, f.params));
             let frame = match args.get(1) {
-                Some(a) => pre.lower(a, cx),
-                None => missing(cx, "frame argument of a websocket `message` call"),
+                Some(a) => pre.lower_node(a, cx),
+                None => LoweredExpr::Node(
+                    cx.missing_fact(at, "frame argument of a websocket `message` call"),
+                ),
             };
-            let p = sig("message");
-            let mut k = 0usize;
-            let mut parts = vec!["__c".to_string()];
-            for i in 0..n {
-                if i == frame_idx {
-                    parts.push(frame.clone());
-                } else {
-                    parts.push(format!("__o.route[{k}] as {p}[{}]", i + 1));
-                    k += 1;
-                }
-            }
-            parts.push(format!("__o.deps as {p}[{}]", n + 1));
-            format!(
-                "(async () => {{ const __c = {tc}; const __o = __c.opened(); const __a: {p} = [{}]; return {svc}.message(...__a); }})()",
-                parts.join(", ")
+            node_or_text(
+                vec![tc, frame],
+                |c| {
+                    let [tc, frame] = take(c);
+                    let mut parts = vec![id("__c")];
+                    let mut k = 0usize;
+                    for i in 0..n {
+                        if i == frame_idx {
+                            parts.push(frame.clone());
+                        } else {
+                            parts.push(opened_cast("route", k, "message", i + 1));
+                            k += 1;
+                        }
+                    }
+                    parts.push(deps_cast("message", n + 1));
+                    iife(vec![
+                        const_("__c", None, tc),
+                        const_("__o", None, call(member(id("__c"), "opened"), Vec::new())),
+                        const_("__a", Some(sig("message")), array(parts)),
+                        spread_call("message"),
+                    ])
+                },
+                |t| {
+                    let [tc, frame] = take(t);
+                    let p = sig_text("message");
+                    let mut k = 0usize;
+                    let mut parts = vec!["__c".to_string()];
+                    for i in 0..n {
+                        if i == frame_idx {
+                            parts.push(frame.clone());
+                        } else {
+                            parts.push(format!("__o.route[{k}] as {p}[{}]", i + 1));
+                            k += 1;
+                        }
+                    }
+                    parts.push(format!("__o.deps as {p}[{}]", n + 1));
+                    format!(
+                        "(async () => {{ const __c = {tc}; const __o = __c.opened(); const __a: {p} = [{}]; return {svc}.message(...__a); }})()",
+                        parts.join(", ")
+                    )
+                },
             )
         }
         WsAddress::Close { params } => {
             let n = params.unwrap_or(0);
-            let p = sig("close");
-            let mut parts = vec!["__c".to_string()];
-            for i in 0..n {
-                parts.push(format!("__o.route[{i}] as {p}[{}]", i + 1));
-            }
-            parts.push(format!("__o.deps as {p}[{}]", n + 1));
-            format!(
-                "(async () => {{ const __c = {tc}; const __o = __c.opened(); const __a: {p} = [{}]; return {svc}.close(...__a); }})()",
-                parts.join(", ")
+            node_or_text(
+                vec![tc],
+                |c| {
+                    let [tc] = take(c);
+                    let mut parts = vec![id("__c")];
+                    for i in 0..n {
+                        parts.push(opened_cast("route", i, "close", i + 1));
+                    }
+                    parts.push(deps_cast("close", n + 1));
+                    iife(vec![
+                        const_("__c", None, tc),
+                        const_("__o", None, call(member(id("__c"), "opened"), Vec::new())),
+                        const_("__a", Some(sig("close")), array(parts)),
+                        spread_call("close"),
+                    ])
+                },
+                |t| {
+                    let [tc] = take(t);
+                    let p = sig_text("close");
+                    let mut parts = vec!["__c".to_string()];
+                    for i in 0..n {
+                        parts.push(format!("__o.route[{i}] as {p}[{}]", i + 1));
+                    }
+                    parts.push(format!("__o.deps as {p}[{}]", n + 1));
+                    format!(
+                        "(async () => {{ const __c = {tc}; const __o = __c.opened(); const __a: {p} = [{}]; return {svc}.close(...__a); }})()",
+                        parts.join(", ")
+                    )
+                },
             )
         }
     }
@@ -742,8 +872,8 @@ pub(in crate::emitter) fn lower_test_service_call(
             return settle(address_call(&svc.name, &key, rest, deps));
         }
         if let Some(HandlerAddress::Ws(shape)) = &address {
-            let text = websocket_lifecycle_call(shape, &svc.name, args, e.span, &deps, cx, pre);
-            return settle(Err(text));
+            let built = websocket_lifecycle_call(shape, &svc.name, args, e.span, &deps, cx, pre);
+            return settle(built);
         }
         if matches!(address, Some(HandlerAddress::Message)) && facts.has_message {
             // A `from queue` service binds exactly one queue and declares one `on message`

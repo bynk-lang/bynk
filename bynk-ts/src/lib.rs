@@ -49,7 +49,7 @@ pub use name_closure::{
 };
 pub use predicate::{
     decimal_range_condition, decimal_signed_coef, escape_ts_literal, pred_condition_and_message,
-    pred_condition_and_message_for,
+    pred_condition_and_message_for, pred_condition_and_message_over,
 };
 pub use printer::{
     Printed, print, print_class_method, print_class_method_and_merge, print_expr,
