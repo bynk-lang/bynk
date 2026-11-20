@@ -3563,7 +3563,9 @@ fn emit_cross_context_namespace_imports(
         // consumed name suffices for the surface contract.)
         let target_paths = ctx.imported_decl_paths.get(q.as_str());
         let target = target_paths
-            .and_then(|m| m.values().next().cloned())
+            // #3807: the smallest path, so the output does not depend on hash order. Any
+            // single file is still wrong for a context whose declarations span several.
+            .and_then(|m| m.values().min().cloned())
             .unwrap_or_else(|| {
                 // No imported declaration pins the path (e.g. a capability-only
                 // consumed context, v0.15). Fall back to the unit's own module:
