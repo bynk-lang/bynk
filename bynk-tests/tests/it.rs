@@ -465,6 +465,8 @@ mod system {
     mod signed_cookie_loop_workerd;
     #[path = "snapshot_behaviour.rs"]
     mod snapshot_behaviour;
+    #[path = "stale_workers_output_behaviour.rs"]
+    mod stale_workers_output_behaviour;
     #[path = "store_behaviour.rs"]
     mod store_behaviour;
     #[path = "storefront_example.rs"]

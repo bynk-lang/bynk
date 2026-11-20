@@ -843,6 +843,16 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
     // the bundle output). The workers commons are a strict superset of the
     // bundle ones, so overwriting them is safe for the bundle code too.
     let mut workers_modules = None;
+    // #3748: every path this run writes, so what an earlier build left in the
+    // output root (a Workers build's `workers/` tree, say) can be pruned
+    // before `tsc` checks everything under it.
+    let mut written: std::collections::HashSet<PathBuf> = out
+        .artefacts
+        .docs
+        .keys()
+        .chain(out.artefacts.modules.keys())
+        .cloned()
+        .collect();
     if has_integration {
         // v0.115/slice 2: reuse `options` (not a fresh `project_options(&input)`)
         // so this second compile keeps `contracts(true)` and, under `--inspect`,
@@ -877,6 +887,15 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
                 return ExitCode::FAILURE;
             }
         }
+        written.extend(
+            workers_out
+                .artefacts
+                .docs
+                .keys()
+                .filter(|path| !path.to_string_lossy().starts_with("tests/"))
+                .chain(workers_out.artefacts.modules.keys())
+                .cloned(),
+        );
         workers_modules = Some(workers_out.artefacts.modules.clone());
     }
 
@@ -891,6 +910,13 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
             emsg!("{program} test: could not write a WebAssembly module: {e}");
             return ExitCode::FAILURE;
         }
+    }
+    if let Err(e) = crate::output::prune_output_except(&output_root, &written) {
+        emsg!(
+            "{program} test: could not remove stale output from `{}`: {e}",
+            output_root.display()
+        );
+        return ExitCode::FAILURE;
     }
 
     if !wrote_any_test {
