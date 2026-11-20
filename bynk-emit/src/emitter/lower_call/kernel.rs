@@ -175,8 +175,8 @@ fn lower_effect_kernel_call(
 /// hoisted statements the attempt produced stay in `pre`. The result is a
 /// [`Built`] (1A.20, Decision G): the `List` kernel returns a node when its
 /// operands are nodes (1A.18a), a delegated kernel's `Lowered` passes through
-/// `Pre::absorb_built` unprinted, and a family that is still text is `Err`
-/// (`// 1A:` at its arm below).
+/// `Pre::absorb_built` unprinted, and the one family that is still text, the
+/// `Stream` generators, is `Err` (`// 1A:` at its arm below).
 pub(in crate::emitter) fn lower_kernel_method_call(
     e: &Expr,
     receiver: &Expr,
@@ -207,9 +207,6 @@ pub(in crate::emitter) fn lower_kernel_method_call(
                 "receiver type matching the resolved kernel op {kop:?}"
             ))))
         };
-        // 1A: every arm below but `List` is text until its own family slice (the
-        // track's `1A.query`, `1A.stream`, `1A.map`, `1A.set`, `1A.option`,
-        // `1A.result`, `1A.string` and `1A.numeric` rows).
         match kop {
             KernelOp::List(op) => {
                 let Ty::List(elem) = &recv_ty else {
@@ -252,6 +249,7 @@ pub(in crate::emitter) fn lower_kernel_method_call(
             // v0.100: a chained op on a `Stream` — the receiver already *is* an
             // async iterable, so it is the source directly. Emitted inline as
             // async-generator IIFEs (builders) / an async drain (`collect`).
+            // 1A: the `Stream` generators stay text until a generator node exists.
             KernelOp::Stream(op) => {
                 let recv = pre.lower(receiver, cx);
                 let a: Vec<String> = args.iter().map(|x| pre.lower(x, cx)).collect();

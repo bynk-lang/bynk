@@ -391,24 +391,24 @@ async function test_a_multi_actor_raw_route_verifies_a_signer_over_the_octets__o
     __bynkClockNow = 0;
     const deps = __makeHarness();
     void (await (async (__d) => {
-        switch (__d.tag) {
-          case "Some": {
-            const payload = __d.value;
-            const a = await __sysdrive_uploads_http_POST_either(payload, undefined, "", "Sender");
-            const b = await __sysdrive_uploads_http_POST_either(payload, undefined, ("bob" as any), "User");
-            const forged = await __sysdrive_forged_uploads_http_POST_either(payload, undefined, "");
-            if (!(((__c: boolean) => __c)(a.tag === "Ok" && a.value === "sender gP8AAf7/"))) { throw __bynkExpectFailure("tests/uploads.bynk:53:12", 1747, 1773, "expect a is Ok(\"sender gP8AAf7/\")"); }
-            if (!(((__c: boolean) => __c)(b.tag === "Ok" && b.value === "bob gP8AAf7/"))) { throw __bynkExpectFailure("tests/uploads.bynk:54:12", 1785, 1808, "expect b is Ok(\"bob gP8AAf7/\")"); }
-            if (!(((__c: boolean) => __c)(forged.tag === "Rejected" && forged.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/uploads.bynk:55:12", 1820, 1852, "expect forged is Rejected(Unauthorized)"); }
-            return undefined;
-          }
-          case "None": {
-            if (!(false)) { throw __bynkExpectFailure("tests/uploads.bynk:58:12", 1882, 1887, "expect false"); }
-            return undefined;
-          }
+      switch (__d.tag) {
+        case "Some": {
+          const payload = __d.value;
+          const a = await __sysdrive_uploads_http_POST_either(payload, undefined, "", "Sender");
+          const b = await __sysdrive_uploads_http_POST_either(payload, undefined, ("bob" as any), "User");
+          const forged = await __sysdrive_forged_uploads_http_POST_either(payload, undefined, "");
+          if (!(((__c: boolean) => __c)(a.tag === "Ok" && a.value === "sender gP8AAf7/"))) { throw __bynkExpectFailure("tests/uploads.bynk:53:12", 1747, 1773, "expect a is Ok(\"sender gP8AAf7/\")"); }
+          if (!(((__c: boolean) => __c)(b.tag === "Ok" && b.value === "bob gP8AAf7/"))) { throw __bynkExpectFailure("tests/uploads.bynk:54:12", 1785, 1808, "expect b is Ok(\"bob gP8AAf7/\")"); }
+          if (!(((__c: boolean) => __c)(forged.tag === "Rejected" && forged.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/uploads.bynk:55:12", 1820, 1852, "expect forged is Rejected(Unauthorized)"); }
+          return undefined;
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(__bynkBytesFromBase64("gP8AAf7/")));
+        case "None": {
+          if (!(false)) { throw __bynkExpectFailure("tests/uploads.bynk:58:12", 1882, 1887, "expect false"); }
+          return undefined;
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(__bynkBytesFromBase64("gP8AAf7/")));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

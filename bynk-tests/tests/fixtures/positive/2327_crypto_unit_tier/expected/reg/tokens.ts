@@ -99,17 +99,17 @@ export const verifying = {
           case "Ok": {
             const key = imported.value;
             return ((__d) => {
-    switch (__d.tag) {
-      case "None": {
-        return globalThis.Promise.resolve(false);
-      }
-      case "Some": {
-        const sig = __d.value;
-        return deps.Crypto.verify(key, new globalThis.TextEncoder().encode(payload), sig);
-      }
-    }
-    throw new globalThis.Error("non-exhaustive match");
-  })(__bynkBytesFromHex(signatureHex));
+              switch (__d.tag) {
+                case "None": {
+                  return globalThis.Promise.resolve(false);
+                }
+                case "Some": {
+                  const sig = __d.value;
+                  return deps.Crypto.verify(key, new globalThis.TextEncoder().encode(payload), sig);
+                }
+              }
+              throw new globalThis.Error("non-exhaustive match");
+            })(__bynkBytesFromHex(signatureHex));
           }
         }
         throw new globalThis.Error("non-exhaustive match");

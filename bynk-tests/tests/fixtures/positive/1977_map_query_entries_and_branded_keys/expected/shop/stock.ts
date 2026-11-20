@@ -122,7 +122,10 @@ export class Box {
   async totalEff(deps: {}): globalThis.Promise<number> {
     const __state = await this.loadState();
     const all = await __bynkThen(((() => __bynkThen(__state.items.entries(), (__es) => __es.map(([__k, __v]) => ({ key: __k, value: __v })))))(), (__q) => __q);
-    return (async (__xs: readonly { readonly key: string; readonly value: number }[], __acc: number, __f: (acc: number, x: { readonly key: string; readonly value: number }) => globalThis.Promise<number>) => { for (const __x of __xs) __acc = await __f(__acc, __x); return __acc; })(all, 0, async (n: number, e: { readonly key: string; readonly value: number }) => globalThis.Promise.resolve(n + e.value));
+    return (async (__xs: readonly { readonly key: string; readonly value: number }[], __acc: number, __f: (acc: number, x: { readonly key: string; readonly value: number }) => globalThis.Promise<number>) => {
+      for (const __x of __xs) __acc = await __f(__acc, __x);
+      return __acc;
+    })(all, 0, async (n: number, e: { readonly key: string; readonly value: number }) => globalThis.Promise.resolve(n + e.value));
   }
 }
 

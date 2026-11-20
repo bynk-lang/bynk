@@ -82,7 +82,7 @@ pub fn pred_condition_and_message(pred: &PredKind, receiver: &str) -> (crate::Ts
 /// `{ coefficient, scale }` object (no runtime import). #2955: built as a real
 /// [`TsExpr`] like every other arm (#1471), not `format!`-ed text; the explicit
 /// [`TsExpr::Paren`]s reproduce the pre-#2955 text byte for byte.
-fn decimal_pred_condition(pred: &PredKind, recv: &str) -> Option<(TsExpr, String)> {
+fn decimal_pred_condition(pred: &PredKind, recv: &TsExpr) -> Option<(TsExpr, String)> {
     let coefficient = || decimal_member(recv, "coefficient");
     match pred {
         PredKind::NonNegative => Some((
@@ -130,9 +130,9 @@ fn bigint(digits: &str) -> TsExpr {
 }
 
 /// `(recv).property`.
-fn decimal_member(recv: &str, property: &str) -> TsExpr {
+fn decimal_member(recv: &TsExpr, property: &str) -> TsExpr {
     TsExpr::Member {
-        object: Box::new(paren(TsExpr::Ident(recv.to_string()))),
+        object: Box::new(paren(recv.clone())),
         property: property.to_string(),
     }
 }
@@ -152,7 +152,7 @@ fn pow10(exponent: TsExpr) -> TsExpr {
 /// `lo <= recv <= hi` over `Decimal` objects, comparing at a common scale with
 /// `bigint` arithmetic so the check needs no helper import.
 fn decimal_range_expr(
-    recv: &str,
+    recv: &TsExpr,
     lo: &bynk_syntax::ast::DecimalBound,
     hi: &bynk_syntax::ast::DecimalBound,
 ) -> TsExpr {
@@ -183,7 +183,11 @@ pub fn decimal_range_condition(
     lo: &bynk_syntax::ast::DecimalBound,
     hi: &bynk_syntax::ast::DecimalBound,
 ) -> String {
-    crate::print_expr(&decimal_range_expr(recv, lo, hi))
+    crate::print_expr(&decimal_range_expr(
+        &TsExpr::Ident(recv.to_string()),
+        lo,
+        hi,
+    ))
 }
 
 /// [`pred_condition_and_message`] knowing the receiver's base type: a
@@ -193,13 +197,23 @@ pub fn pred_condition_and_message_for(
     receiver: &str,
     base: Option<BaseType>,
 ) -> (crate::TsExpr, String) {
+    pred_condition_and_message_over(pred, &TsExpr::Ident(receiver.to_string()), base)
+}
+
+/// [`pred_condition_and_message_for`] over a receiver that is itself an expression
+/// (a field read, an indexed element, a temporary), not just a name.
+pub fn pred_condition_and_message_over(
+    pred: &PredKind,
+    receiver: &TsExpr,
+    base: Option<BaseType>,
+) -> (crate::TsExpr, String) {
     if (base == Some(BaseType::Decimal) || matches!(pred, PredKind::InRangeD(..)))
         && let Some((cond, msg)) = decimal_pred_condition(pred, receiver)
     {
         return (cond, msg);
     }
 
-    let recv = || TsExpr::Ident(receiver.to_string());
+    let recv = || receiver.clone();
     let recv_length = || TsExpr::Member {
         object: Box::new(recv()),
         property: "length".to_string(),
@@ -306,7 +320,10 @@ pub fn pred_condition_and_message_for(
 
 #[cfg(test)]
 mod tests {
-    use super::{decimal_range_condition, decimal_signed_coef, pred_condition_and_message_for};
+    use super::{
+        decimal_range_condition, decimal_signed_coef, pred_condition_and_message_for,
+        pred_condition_and_message_over,
+    };
     use bynk_syntax::ast::{BaseType, DecimalBound, PredKind};
     use bynk_syntax::span::Span;
 
@@ -379,5 +396,30 @@ mod tests {
         assert_eq!(decimal_signed_coef("-000"), "0");
         assert_eq!(decimal_signed_coef("-12"), "-12");
         assert_eq!(decimal_signed_coef("0"), "0");
+    }
+
+    /// A receiver that is itself an expression is used as it stands: a name, a member read
+    /// and a call all give the same condition as the text form over the same text.
+    #[test]
+    fn a_receiver_expression_gives_the_same_condition_as_its_text() {
+        use crate::{TsExpr, print_expr};
+        let member = TsExpr::Member {
+            object: Box::new(TsExpr::Ident("a".to_string())),
+            property: "b".to_string(),
+        };
+        for pred in [
+            PredKind::NonNegative,
+            PredKind::NonEmpty,
+            PredKind::MinLength(2),
+            PredKind::IsoDate,
+        ] {
+            let (over, over_msg) = pred_condition_and_message_over(&pred, &member, None);
+            let (text, text_msg) = pred_condition_and_message_for(&pred, "a.b", None);
+            assert_eq!(print_expr(&over), print_expr(&text), "{pred:?}");
+            assert_eq!(over_msg, text_msg);
+        }
+        let (decimal, _) =
+            pred_condition_and_message_over(&PredKind::Positive, &member, Some(BaseType::Decimal));
+        assert_eq!(print_expr(&decimal), "(a.b).coefficient > 0n");
     }
 }

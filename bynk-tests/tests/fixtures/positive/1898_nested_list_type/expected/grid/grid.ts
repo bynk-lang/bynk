@@ -191,7 +191,11 @@ export async function checkEach(rows: readonly (readonly number[])[]): globalThi
 }
 
 export async function visit(rows: readonly (readonly number[])[]): globalThis.Promise<void> {
-  return (async (__xs: readonly (readonly number[])[]) => { for (const __x of __xs) { await (async (r: readonly number[]) => globalThis.Promise.resolve(undefined))(__x); } })(rows);
+  return (async (__xs: readonly (readonly number[])[]) => {
+    for (const __x of __xs) {
+      await (async (r: readonly number[]) => globalThis.Promise.resolve(undefined))(__x);
+    }
+  })(rows);
 }
 
 export function demo(): number {

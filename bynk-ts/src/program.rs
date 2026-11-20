@@ -2180,6 +2180,8 @@ pub enum TsType {
     },
     /// A string literal type, `"k"`, escaped as a [`TsLit::Str`] is.
     StringLiteral(String),
+    /// A non-negative integer literal type, `0`, as a tuple index (`T[0]`).
+    NumberLiteral(u32),
 }
 
 /// The modifier on a [`TsType::Mapped`] type's `readonly`.
@@ -2284,6 +2286,11 @@ impl TsType {
     /// The string literal type `"text"`.
     pub fn string_literal(text: impl Into<String>) -> Self {
         TsType::StringLiteral(text.into())
+    }
+
+    /// The integer literal type `n` (a tuple index: `Parameters<F>[0]`).
+    pub fn number_literal(n: u32) -> Self {
+        TsType::NumberLiteral(n)
     }
 }
 

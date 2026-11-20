@@ -648,7 +648,7 @@ impl Walk {
                 self.ty(object);
                 self.ty(index);
             }
-            TsType::StringLiteral(_) => {}
+            TsType::StringLiteral(_) | TsType::NumberLiteral(_) => {}
         }
     }
 

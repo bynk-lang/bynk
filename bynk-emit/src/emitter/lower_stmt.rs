@@ -533,7 +533,7 @@ fn do_item(pre_nodes: bool, value: LoweredExpr) -> Item {
 
 /// `<target> = <value>;` as an item: an `Assign` node over a node value, else
 /// today's text. `target` is a genuine `Ident` or `Member`.
-fn assign_item(pre_nodes: bool, target: bynk_ts::TsExpr, value: LoweredExpr) -> Item {
+pub(super) fn assign_item(pre_nodes: bool, target: bynk_ts::TsExpr, value: LoweredExpr) -> Item {
     match value {
         LoweredExpr::Node(n) if pre_nodes => stmt_item(bynk_ts::TsStmt::assign(target, n, None)),
         // 1A: a text value or hoisted statement keeps the text.
@@ -1202,21 +1202,38 @@ fn statement(body: &mut Body, stmt: &Statement, cx: &mut LowerCtx) {
             let location = expect_location_raw(cx, span_start);
             let src = expect_source_text_raw(cx, a.value.span);
             let mut pre = Pre::new();
-            let json = json_encode(&mut pre, &a.value, cx, false)
-                .map(|j| LoweredExpr::from(j).into_text());
+            let json = json_encode(&mut pre, &a.value, cx, false);
+            let pre_nodes = pre.all_nodes();
             body.extend(pre.items());
             match json {
-                // 1A: the known-type arm stays text — the serialisers take a node
-                // (1A.21), but this block is one text line, and its node layout needs its
-                // own golden ruling (see the track's `1A.ser` row).
                 Some(json) => {
                     let name = bynk_project::json_string(&clause.name);
-                    let location = crate::emitter::escape_ts_string(&location);
-                    let src = crate::emitter::escape_ts_string(&src);
-                    let shown = crate::emitter::escape_ts_string(&clause.name);
-                    body.push(Item::Line(format!(
-                        "{{ const __d = __bynkSnapshotCheck({name}, {json}); if (__d !== undefined) {{ throw __bynkExpectFailure(\"{location}\", {span_start}, {span_end}, \"expect {src} matches snapshot \\\"{shown}\\\"\\n  \" + __d); }} }}",
-                    )));
+                    // The node form needs the name to print as the printer prints it.
+                    let name_node = (bynk_ts::print_expr(&str_node(&clause.name)) == name)
+                        .then(|| str_node(&clause.name));
+                    match (json, name_node) {
+                        (Ok(json), Some(name_node)) if pre_nodes => {
+                            body.push(stmt_item(snapshot_check(
+                                name_node,
+                                json,
+                                &location,
+                                (span_start, span_end),
+                                &src,
+                                &clause.name,
+                            )));
+                        }
+                        // 1A: a text encoding, a text hoisted statement, or a name the
+                        // printer would write differently keeps the one text line.
+                        (json, _) => {
+                            let json = LoweredExpr::from(json).into_text();
+                            let location = crate::emitter::escape_ts_string(&location);
+                            let src = crate::emitter::escape_ts_string(&src);
+                            let shown = crate::emitter::escape_ts_string(&clause.name);
+                            body.push(Item::Line(format!(
+                                "{{ const __d = __bynkSnapshotCheck({name}, {json}); if (__d !== undefined) {{ throw __bynkExpectFailure(\"{location}\", {span_start}, {span_end}, \"expect {src} matches snapshot \\\"{shown}\\\"\\n  \" + __d); }} }}",
+                            )));
+                        }
+                    }
                 }
                 // The checker typed the value; a missing type is drift, said at run time.
                 None => {
@@ -1460,6 +1477,56 @@ fn expect_item(
             ))
         }
     }
+}
+
+/// `{ const __d = __bynkSnapshotCheck(name, json); if (__d !== undefined) { throw
+/// __bynkExpectFailure(…); } }`: the `expect <value> matches snapshot` check over nodes.
+fn snapshot_check(
+    name: bynk_ts::TsExpr,
+    json: bynk_ts::TsExpr,
+    location: &str,
+    (start, end): (usize, usize),
+    src: &str,
+    snapshot: &str,
+) -> bynk_ts::TsStmt {
+    use bynk_ts::{TsBinaryOp, TsBindingName, TsExpr, TsStmt};
+    let ident = |n: &str| TsExpr::Ident(n.to_string());
+    let message = TsExpr::Binary {
+        op: TsBinaryOp::Add,
+        left: Box::new(str_node(format!(
+            "expect {src} matches snapshot \"{snapshot}\"\n  "
+        ))),
+        right: Box::new(ident("__d")),
+    };
+    TsStmt::inline_block(
+        vec![
+            TsStmt::const_stmt(
+                TsBindingName::Ident("__d".to_string()),
+                None,
+                TsExpr::Call {
+                    callee: Box::new(ident("__bynkSnapshotCheck")),
+                    args: vec![name, json],
+                },
+                None,
+            ),
+            TsStmt::if_stmt(
+                TsExpr::Binary {
+                    op: TsBinaryOp::StrictNotEq,
+                    left: Box::new(ident("__d")),
+                    right: Box::new(ident("undefined")),
+                },
+                TsStmt::inline_block(
+                    vec![TsStmt::throw_stmt(
+                        expect_failure_call(location, start, end, message),
+                        None,
+                    )],
+                    None,
+                ),
+                None,
+            ),
+        ],
+        None,
+    )
 }
 
 /// `if (!(<cond>)) { throw __bynkExpectFailure(…); }` over nodes.
@@ -2612,8 +2679,8 @@ mod stmt_node_tests {
 
     #[test]
     fn text_valued_statements_keep_their_text_byte_for_byte() {
-        // A `contains` over a plain `Set` `remove` and `Effect.pure(…)` still lower to text, so the
-        // statement that holds one is a `Line` with today's bytes.
+        // A `contains` over a plain `Set` `remove` still lowers to text, so the statement that
+        // holds one is a `Line` with today's bytes. `Effect.pure(…)` is a node (1A.35a).
         let src = "commons texty\n\n\
             fn f(a: Set[String], b: String) -> Bool {\n  let v = a.remove(b).contains(b)\n  let w: Bool = a.remove(b).contains(b)\n  a.remove(b).contains(b)\n}\n\n\
             fn g(x: Int) -> Effect[Int] {\n  let r <- Effect.pure(x)\n  let s: Int <- Effect.pure(r)\n  do Effect.pure(s)\n  Effect.pure(s)\n}\n";
@@ -2627,9 +2694,9 @@ mod stmt_node_tests {
             body_of(&ts, "g"),
             "  const r = await globalThis.Promise.resolve(x);\n  const s: number = await globalThis.Promise.resolve(r);\n  await globalThis.Promise.resolve(s);\n  return s;\n"
         );
-        // Six `Line`s: the two `let`s and the `&&` tail in `f`, and in `g` the two
-        // effect `let`s and the `do` (the tail `Effect.pure(s)` is a node).
-        assert_eq!(lines, 6, "{ts}");
+        // Three `Line`s: the two `let`s and the tail in `f`. `g`'s `Effect.pure` statements are
+        // all nodes.
+        assert_eq!(lines, 3, "{ts}");
     }
 
     #[test]
@@ -2685,13 +2752,13 @@ mod stmt_node_tests {
     }
 
     #[test]
-    fn an_if_tail_with_an_is_binding_keeps_its_text_lines() {
-        // The `is`-binding declaration is a text line, so the `if` stays text
-        // around bodies that are still nodes inside it.
+    fn an_if_tail_with_an_is_binding_is_a_node() {
+        // The `is`-binding declaration is a node (the variant payload is read through
+        // the `Extract` cast), so the `if` is a node too.
         let src = "commons isb\n\n\
             fn f(o: Option[Int]) -> Int {\n  if o is Some(v) {\n    let k = v + 1\n    k\n  } else {\n    0\n  }\n}\n";
         let (lines, ts) = emitted(src);
-        assert!(lines > 0, "{ts}");
+        assert_eq!(lines, 0, "{ts}");
         assert_eq!(
             body_of(&ts, "f"),
             "  if (((__c: boolean) => __c)(o.tag === \"Some\")) {\n    const v = (o as Extract<typeof o, { tag: \"Some\" }>).value;\n    const k = v + 1;\n    return k;\n  } else {\n    return 0;\n  }\n"
@@ -3300,5 +3367,27 @@ mod expect_item_tests {
             bynk_ts::print_expr(&bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(key.to_string()))),
             format!("{key:?}")
         );
+    }
+
+    /// The `expect … matches snapshot` check as a node prints the one text line it replaced.
+    #[test]
+    fn the_snapshot_check_node_prints_the_text_it_replaced() {
+        let (location, src, shown) = ("tests/a.bynk:3:5", "r.body", "body \"x\"");
+        let node = snapshot_check(
+            str_node("snap"),
+            bynk_ts::TsExpr::Ident("__json".to_string()),
+            location,
+            (10, 20),
+            src,
+            shown,
+        );
+        let esc = crate::emitter::escape_ts_string;
+        let want = format!(
+            "{{ const __d = __bynkSnapshotCheck(\"snap\", __json); if (__d !== undefined) {{ throw __bynkExpectFailure(\"{}\", 10, 20, \"expect {} matches snapshot \\\"{}\\\"\\n  \" + __d); }} }}\n",
+            esc(location),
+            esc(src),
+            esc(shown)
+        );
+        assert_eq!(bynk_ts::print_stmt(&node, 0), want);
     }
 }
