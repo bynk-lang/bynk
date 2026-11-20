@@ -2819,10 +2819,16 @@ mod stmt_node_tests {
     #[test]
     fn a_text_tail_slot_value_keeps_its_one_line_form() {
         let src = "commons slot2\n\n\
-            fn f(c: Bool, s: Set[String], u: String, r: Result[Bool, String]) -> Result[Bool, String] {\n  \
-            let n = if c { r? } else { s.remove(u).contains(u) }\n  Ok(n)\n}\n";
+            fn f(a: Option[Int], s: Set[String], u: String, r: Result[Int, String]) -> Result[Int, String] {\n  \
+            let n = if a is Some(v) { r? + v } else { s.remove(u).length() }\n  Ok(n)\n}\n";
+        let _text = crate::emitter::lower::force_text::arm("Set.remove");
         let (lines, ts) = emitted(src);
         assert!(lines >= 1, "{ts}");
+        // The text arm of `push_tail`: the assignment and the break stay on one line.
+        assert!(ts.contains("; break __r0_out;\n"), "{ts}");
+        // And the labelled block around it is still text, opened as one line.
+        assert!(ts.contains("__r0_out: {\n"), "{ts}");
+        assert!(!ts.contains("__r0_out: {\n      __r0 = "), "{ts}");
     }
 }
 
