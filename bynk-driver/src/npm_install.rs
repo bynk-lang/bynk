@@ -710,11 +710,11 @@ pub fn install_for_project(
         && !missing_npm_dependencies(build_dir).is_empty()
         && let Ok(found) = detect(&project, setting, &toolbox)
     {
-        eprintln!("{}", announce(&found, build_dir));
+        crate::colour::eprintln(&announce(&found, build_dir));
     }
     match ensure_installed(&install, build_dir, mode).map_err(|e| e.to_string())? {
         Outcome::WouldInstall(missing, found) => {
-            eprintln!("{}", dry_run_message(&missing, &found, build_dir));
+            crate::colour::eprintln(&dry_run_message(&missing, &found, build_dir));
             Ok(())
         }
         Outcome::Present | Outcome::Installed(_) => Ok(()),

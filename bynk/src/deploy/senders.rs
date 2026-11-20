@@ -20,6 +20,7 @@
 
 use super::*;
 use crate::migrate::live::{self, Credentials, Rest};
+use bynk_driver::emsg;
 
 /// The account's zones and their Email Sending subdomains, as far as the check
 /// needs them. A trait so the check is tested against a fake and the REST
@@ -226,7 +227,7 @@ pub(crate) fn check_senders_for_run(
     let account = match RestSendingDomains::from_env() {
         Ok(account) => account,
         Err(e) => {
-            eprintln!("bynk: {e}");
+            emsg!("bynk: {e}");
             return false;
         }
     };
@@ -234,7 +235,7 @@ pub(crate) fn check_senders_for_run(
         Ok(()) => true,
         Err(problems) => {
             for problem in problems {
-                eprintln!("bynk: {problem}");
+                emsg!("bynk: {problem}");
             }
             false
         }

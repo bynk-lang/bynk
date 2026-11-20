@@ -13,6 +13,7 @@
 //! is the whole mapped source line; the TS column stays in the attached note. An
 //! error that cannot be mapped is still reported, at the project level.
 
+use crate::emsg;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
@@ -355,7 +356,7 @@ pub fn check_emit(prog: &str, input: &Path, short: bool) -> bool {
     let options = match crate::try_project_options(input) {
         Ok(o) => o.target(crate::project::BuildTarget::Workers),
         Err(e) => {
-            eprintln!("{prog}: {e}");
+            emsg!("{prog}: {e}");
             return false;
         }
     };
@@ -371,7 +372,7 @@ pub fn check_emit(prog: &str, input: &Path, short: bool) -> bool {
     let tmp = match private_temp_dir() {
         Ok(t) => t,
         Err(e) => {
-            eprintln!("{prog}: could not create a temporary directory: {e}");
+            emsg!("{prog}: could not create a temporary directory: {e}");
             return false;
         }
     };
@@ -379,14 +380,14 @@ pub fn check_emit(prog: &str, input: &Path, short: bool) -> bool {
     let result = (|| {
         for (path, doc) in &out.artefacts.docs {
             if let Err(e) = crate::write_document(path, doc, &out.artefacts.docs, &root) {
-                eprintln!("{prog}: could not write {}: {e}", root.join(path).display());
+                emsg!("{prog}: could not write {}: {e}", root.join(path).display());
                 return false;
             }
         }
         match run_tsc(&root.join("tsconfig.json"), manager) {
             Ran::Passed => true,
             Ran::Unavailable(why) => {
-                eprintln!(
+                emsg!(
                     "{prog}: `check --emit` needs `tsc` (with Node.js) to type-check the generated TypeScript, and found none that runs."
                 );
                 for w in &why {
@@ -406,7 +407,7 @@ pub fn check_emit(prog: &str, input: &Path, short: bool) -> bool {
                     Some(f) if short => crate::print_project_failure_short(&f),
                     Some(f) => crate::print_project_failure(&f),
                     // No `error TS` record: a crash, not evidence of a compiler bug.
-                    None => eprintln!("{prog}: tsc failed on the generated TypeScript:\n{text}"),
+                    None => emsg!("{prog}: tsc failed on the generated TypeScript:\n{text}"),
                 }
                 false
             }

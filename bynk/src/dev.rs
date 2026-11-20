@@ -23,6 +23,8 @@
 //! selection rule ([`select_contexts`]) that replaced ADR 0096 D3's ambiguity
 //! error.
 
+use bynk_driver::colour;
+use bynk_driver::emsg;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -469,7 +471,7 @@ fn remote_env_conflict(opts: &DevOptions) -> bool {
     let Some(conflict) = crate::deploy::conflicting_env_passthrough(&opts.wrangler_args) else {
         return false;
     };
-    eprintln!(
+    emsg!(
         "bynk: `--env {}` conflicts with `{conflict}` after `--` — pass one or the other, not both",
         opts.environment
     );
@@ -492,7 +494,7 @@ fn groups_serving(project_root: &Path, requested: &[String]) -> Result<Vec<Strin
             else {
                 return name.clone();
             };
-            eprintln!(
+            emsg!(
                 "bynk: `{dotted}` is in the Worker group `{key}`, which runs as one Worker: serving the whole group"
             );
             key.clone()
@@ -509,7 +511,7 @@ fn selected_workers(
 ) -> Option<Vec<String>> {
     let chosen = groups_serving(project_root, requested)
         .and_then(|r| select_contexts(available, &r).map_err(|e| e.to_string()));
-    chosen.map_err(|e| eprintln!("bynk: {e}")).ok()
+    chosen.map_err(|e| emsg!("bynk: {e}")).ok()
 }
 
 /// Orchestrate a local dev session: pre-flight, compile, select the worker, and
@@ -526,7 +528,7 @@ pub fn run(
     }
 
     if opts.log_events && opts.format != DevFormat::Json {
-        eprintln!("bynk: `--log-events` writes events, so it needs `--format json`");
+        emsg!("bynk: `--log-events` writes events, so it needs `--format json`");
         return ExitCode::FAILURE;
     }
 
@@ -544,7 +546,7 @@ pub fn run(
     };
     let report = doctor::diagnose(tb, &ctx, &preflight_opts);
     if report.exit_nonzero(&preflight_opts) {
-        eprint!("{}", preflight_failure_message(&report));
+        colour::eprint(&preflight_failure_message(&report));
         return ExitCode::FAILURE;
     }
     // 2. Compile — in-process (slice 7: the driver links the pipeline instead of
@@ -554,7 +556,7 @@ pub fn run(
     //    §2.4 ambiguity check.
     let build_dir = project_root.join(".bynk").join("dev");
     if let Err(e) = prepare_build_dir(project_root, &build_dir) {
-        eprintln!("bynk: could not prepare build directory: {e}");
+        emsg!("bynk: could not prepare build directory: {e}");
         return ExitCode::FAILURE;
     }
     // #524: compile the SAME project shape as `bynk compile <project_root>`
@@ -589,7 +591,7 @@ pub fn run(
         assign_free_inspector(&mut serving, free_local_port());
     }
     if let Some(port) = inspector_port_in_use(&serving) {
-        eprintln!(
+        emsg!(
             "bynk: inspector port {port} is already in use — another `bynk dev` or debugger \
              holds it. Pass a different `--inspect-port`, or stop the process using it."
         );
@@ -601,7 +603,7 @@ pub fn run(
     let local = match LocalKeys::read(&workers_dir, &available, project_root) {
         Ok(keys) => keys,
         Err(e) => {
-            eprintln!("bynk: {e}");
+            emsg!("bynk: {e}");
             return ExitCode::FAILURE;
         }
     };
@@ -623,7 +625,7 @@ pub fn run(
         ),
     ] {
         if injected && passthrough_has(&opts.wrangler_args, flag) {
-            eprintln!(
+            emsg!(
                 "bynk: `{flag}` is allocated per context — pass `{owner}` to `bynk dev` instead of `-- {flag}`."
             );
             return ExitCode::FAILURE;
@@ -635,7 +637,7 @@ pub fn run(
     // 9229` over two contexts). Name it here rather than leave wrangler to die
     // with `Address already in use`.
     if let Some(port) = port_clash(&serving) {
-        eprintln!(
+        emsg!(
             "bynk: port {port} is allocated both to a context's server and to an inspector — \
              move `--base-port` or `--inspect-port` so the two ranges do not overlap."
         );
@@ -668,7 +670,7 @@ pub fn run(
         && (passthrough_has(&opts.wrangler_args, "-c")
             || passthrough_has(&opts.wrangler_args, "--config"))
     {
-        eprintln!(
+        emsg!(
             "bynk: `-c`/`--config` is the driver's when it runs stand-ins for foreign Workers — pass `--local-worker NAME` instead of a config after `--`."
         );
         return ExitCode::FAILURE;
@@ -677,12 +679,12 @@ pub fn run(
     let stand_in_configs = match write_stand_ins(&build_dir, &stand_in_plans) {
         Ok(configs) => configs,
         Err(e) => {
-            eprintln!("bynk: could not write the stand-ins for foreign Workers: {e}");
+            emsg!("bynk: could not write the stand-ins for foreign Workers: {e}");
             return ExitCode::FAILURE;
         }
     };
     if let Err(e) = point_at_stand_ins(&workers_dir, &stand_in_plans) {
-        eprintln!("bynk: could not bind the stand-ins for foreign Workers: {e}");
+        emsg!("bynk: could not bind the stand-ins for foreign Workers: {e}");
         return ExitCode::FAILURE;
     }
     // #3479: each `Vectorize` instance is bound to the index `[dev.vectorize-index]`
@@ -710,14 +712,14 @@ pub fn run(
     //    green path.
     let (manager, probe) = probe::detect_in_project(tb, "wrangler", project_root);
     if let Some(runner) = probe.provenance.runner_label() {
-        eprintln!("bynk: wrangler resolved via {runner} — it will download on first run.");
+        emsg!("bynk: wrangler resolved via {runner} — it will download on first run.");
     }
     if let Some(notice) = wrangler_age_notice(&probe, manager) {
-        eprintln!("{notice}");
+        colour::eprintln(&notice);
     }
     if matches!(probe.provenance, Provenance::Missing) {
         // The pre-flight gate should have caught this; defensive only.
-        eprintln!("bynk: wrangler not found (run `bynk doctor --only deploy`)");
+        emsg!("bynk: wrangler not found (run `bynk doctor --only deploy`)");
         return ExitCode::FAILURE;
     }
 
@@ -778,7 +780,7 @@ pub fn run(
     let mut pumps: Vec<std::thread::JoinHandle<()>> = Vec::new();
     for s in &serving {
         let Some(mut cmd) = wrangler_command(&probe.provenance, "dev") else {
-            eprintln!("bynk: wrangler not found (run `bynk doctor --only deploy`)");
+            emsg!("bynk: wrangler not found (run `bynk doctor --only deploy`)");
             terminate(&mut children, &workers_dir);
             return ExitCode::FAILURE;
         };
@@ -835,14 +837,14 @@ pub fn run(
                 children.push((s.worker.clone(), Served::new(child)));
             }
             Err(e) => {
-                eprintln!("bynk: could not run wrangler for `{}`: {e}", s.worker);
+                emsg!("bynk: could not run wrangler for `{}`: {e}", s.worker);
                 terminate(&mut children, &workers_dir);
                 return ExitCode::FAILURE;
             }
         }
     }
-    eprint!("{}", serving_report(&serving));
-    eprint!("{}", stand_in_report(&stand_in_plans));
+    colour::eprint(&serving_report(&serving));
+    colour::eprint(&stand_in_report(&stand_in_plans));
     let serving_now = serving_event(&serving, &opts.wrangler_args);
     emit(opts.format, &serving_now);
     let _session = crate::dev_inspect::SessionFile::write(
@@ -855,7 +857,7 @@ pub fn run(
     if opts.ready_json.is_some()
         && let Some(why) = crate::ready::unprobeable(&opts.wrangler_args)
     {
-        eprintln!(
+        emsg!(
             "bynk dev: warning: {why}, which the `--ready-json` probe (plain HTTP on localhost) can't reach, so the file may never be written."
         );
     }
@@ -879,25 +881,25 @@ pub fn run(
     // the watch and the last good build serving. std-only mtime polling
     // (500ms): no native watcher dependency, and an edit-loop latency well
     // under a keystroke-to-glance.
-    eprintln!("bynk dev: watching for source changes (edit `.bynk` files to rebuild)");
+    emsg!("bynk dev: watching for source changes (edit `.bynk` files to rebuild)");
     let mut fingerprint = watch_fingerprint(project_root);
     let code = supervise(&mut children, &workers_dir, || {
         if let Some(r) = readiness.as_mut() {
             if let Some(written) = r.poll(crate::ready::probe) {
                 match written {
-                    Ok(()) => eprintln!("bynk dev: every context answers — ready"),
+                    Ok(()) => emsg!("bynk dev: every context answers — ready"),
                     // Not retried: the session keeps serving, unsignalled.
                     Err(e) => eprintln!("bynk: could not write the `--ready-json` file: {e}"),
                 }
             }
             if let Some(note) = r.slow_note(std::time::Instant::now()) {
-                eprintln!("{note}");
+                colour::eprintln(&note);
             }
         }
         let now = watch_fingerprint(project_root);
         if now != fingerprint {
             fingerprint = now;
-            eprintln!("bynk dev: change detected — rebuilding…");
+            emsg!("bynk dev: change detected — rebuilding…");
             emit(opts.format, &DevEvent::Rebuilding);
             let rebuild = dev_build(opts);
             if crate::workers::compile_once_reporting(project_root, &build_dir, rebuild, None) {
@@ -906,7 +908,7 @@ pub fn run(
                 // rebuilt config. A binding added since start has no
                 // stand-in until `bynk dev` restarts.
                 if let Err(e) = point_at_stand_ins(&workers_dir, &stand_in_plans) {
-                    eprintln!("bynk: could not bind the stand-ins for foreign Workers: {e}");
+                    emsg!("bynk: could not bind the stand-ins for foreign Workers: {e}");
                 }
                 // The rebuilt configs name the derived indexes again.
                 bind_dev_vectorize(
@@ -917,7 +919,7 @@ pub fn run(
                     remote,
                     false,
                 );
-                eprintln!("bynk dev: rebuilt");
+                emsg!("bynk dev: rebuilt");
                 emit(opts.format, &DevEvent::RebuildOk);
             } else {
                 // The diagnostics are already rendered; keep serving the last
@@ -949,7 +951,7 @@ fn materialise_remote_state(
         if let Err(e) =
             crate::deploy::materialise_deploy_state(project_root, &s.worker, &config, environment)
         {
-            eprintln!("bynk: {e}");
+            emsg!("bynk: {e}");
             return false;
         }
     }
@@ -981,7 +983,7 @@ fn plan_stand_ins(
     }
     for local in &opts.local_workers {
         if !bound_foreign.contains(local) {
-            eprintln!(
+            emsg!(
                 "bynk: warning: `--local-worker {local}` names no Worker the served contexts bind with a `Service` instance."
             );
         }
@@ -1008,20 +1010,22 @@ fn bind_dev_vectorize(
     match crate::dev_vectorize::bind_for_dev(project_root, workers_dir, available, &names) {
         Ok(bound) => {
             if announce && let Some(note) = crate::dev_vectorize::report_note(&bound) {
-                eprintln!("{note}");
+                colour::eprintln(&note);
             }
             true
         }
         Err(e) => {
-            eprintln!("bynk: {e}");
+            emsg!("bynk: {e}");
             // A rebuild's configs name the deploy's indexes again: never serve
             // them. Unbound, a call to an instance faults until `bynk.toml` reads.
             if !announce {
                 match crate::dev_vectorize::unbind_all(workers_dir, &names) {
-                    Ok(()) => eprintln!(
+                    Ok(()) => emsg!(
                         "bynk dev: Vectorize instances are unbound until `bynk.toml` is fixed; calls to them fail"
                     ),
-                    Err(e) => eprintln!("bynk: could not unbind the Vectorize instances: {e}"),
+                    Err(e) => {
+                        emsg!("bynk: could not unbind the Vectorize instances: {e}")
+                    }
                 }
             }
             false
@@ -1046,12 +1050,12 @@ fn hyperdrive_local_env(
     match crate::dev_hyperdrive::local_connections(project_root, workers_dir, &workers, &lookup) {
         Ok((strings, warnings)) => {
             for warning in warnings {
-                eprintln!("bynk: {warning}");
+                emsg!("bynk: {warning}");
             }
             Some(strings)
         }
         Err(e) => {
-            eprintln!("bynk: {e}");
+            emsg!("bynk: {e}");
             None
         }
     }
@@ -1249,7 +1253,7 @@ fn supervise(
         // the children, so a Ctrl-C — which reaches the wranglers too — reads
         // as the stop it is rather than as a worker exiting.
         if let Some(sig) = crate::stop::received() {
-            eprintln!(
+            emsg!(
                 "bynk dev: received {} — stopping the contexts.",
                 crate::stop::name(sig)
             );
@@ -1264,7 +1268,7 @@ fn supervise(
             let status = match children[i].1.child.try_wait() {
                 Ok(status) => status,
                 Err(e) => {
-                    eprintln!("bynk: could not poll wrangler: {e}");
+                    emsg!("bynk: could not poll wrangler: {e}");
                     terminate(children, workers_dir);
                     return 1;
                 }
@@ -1274,7 +1278,7 @@ fn supervise(
                 // with it the `workerd`s the exited wrangler left running.
                 let (name, _) = children.remove(i);
                 if !children.is_empty() {
-                    eprintln!("bynk dev: `{name}` exited — stopping the other contexts.");
+                    emsg!("bynk dev: `{name}` exited — stopping the other contexts.");
                 }
                 terminate(children, workers_dir);
                 return exit_status_byte(&status);
@@ -1303,7 +1307,7 @@ impl Served {
             let job = match crate::job::Job::assign(&child) {
                 Ok(job) => Some(job),
                 Err(e) => {
-                    eprintln!(
+                    emsg!(
                         "bynk dev: could not put wrangler in a job object ({e}); \
                          stopping it may leave its workerd processes running."
                     );
@@ -1644,7 +1648,7 @@ fn apply_local_migrations(
         };
         for (binding, dir) in migrating_databases(&config) {
             let Some(mut cmd) = wrangler_command(provenance, "d1") else {
-                eprintln!("bynk: wrangler not found (run `bynk doctor --only deploy`)");
+                emsg!("bynk: wrangler not found (run `bynk doctor --only deploy`)");
                 return;
             };
             cmd.args(["migrations", "apply", &binding, "--local"])
@@ -1656,7 +1660,7 @@ fn apply_local_migrations(
                 // failed apply was never applied, so it gets no note.
                 Ok(out) if out.status.success() => {
                     for file in edited_migrations(&worker_dir.join(&dir), seen) {
-                        eprintln!(
+                        emsg!(
                             "bynk dev: note: `{file}` changed after it was applied; wrangler applies a migration once, by name, so add a new one to change the schema"
                         );
                     }
@@ -1668,13 +1672,13 @@ fn apply_local_migrations(
                     } else {
                         said
                     };
-                    eprintln!(
+                    emsg!(
                         "bynk dev: warning: could not apply `{}`'s D1 migrations for `{binding}`: {}",
                         s.worker,
                         said.trim()
                     );
                 }
-                Err(e) => eprintln!(
+                Err(e) => emsg!(
                     "bynk dev: warning: could not run wrangler to apply `{}`'s D1 migrations: {e}",
                     s.worker
                 ),
@@ -1694,14 +1698,14 @@ fn warm_up_wrangler(provenance: &Provenance, serving: usize) -> bool {
         return true;
     }
     let runner = provenance.runner_label().unwrap_or("npx");
-    eprintln!("bynk dev: installing wrangler via {runner} once before starting the contexts…");
+    emsg!("bynk dev: installing wrangler via {runner} once before starting the contexts…");
     let warmed = wrangler_command(provenance, "--version").map(|mut cmd| {
         cmd.stdout(std::process::Stdio::null())
             .status()
             .is_ok_and(|s| s.success())
     });
     if warmed != Some(true) {
-        eprintln!(
+        emsg!(
             "bynk: `{}` failed — wrangler could not be installed via {runner}.",
             wrangler_warm_up_command_line(provenance)
         );
@@ -2102,14 +2106,14 @@ fn bind_inspect_registry(workers_dir: &Path, serving: &[Serving]) {
         match bynk_emit::emitter::wrangler::enable_agent_inspection(&text, &entry) {
             Ok(out) if out != text => {
                 if let Err(e) = std::fs::write(dir.join("wrangler.toml"), out) {
-                    eprintln!(
+                    emsg!(
                         "bynk: could not bind `{}`'s inspect registry: {e}",
                         s.worker
                     );
                 }
             }
             Ok(_) => {}
-            Err(e) => eprintln!(
+            Err(e) => emsg!(
                 "bynk: could not bind `{}`'s inspect registry: {e}",
                 s.worker
             ),
@@ -2131,14 +2135,14 @@ fn proxy_ai_search(workers_dir: &Path, serving: &[Serving]) {
         match bynk_emit::emitter::wrangler::enable_remote_ai_search(&text) {
             Ok(out) if out != text => {
                 if let Err(e) = std::fs::write(&path, out) {
-                    eprintln!(
+                    emsg!(
                         "bynk: could not proxy `{}`'s AI Search bindings to the account: {e}",
                         s.worker
                     );
                 }
             }
             Ok(_) => {}
-            Err(e) => eprintln!(
+            Err(e) => emsg!(
                 "bynk: could not proxy `{}`'s AI Search bindings: {e}",
                 s.worker
             ),
@@ -2162,7 +2166,7 @@ fn proxy_mtls(project_root: &Path, workers_dir: &Path, serving: &[Serving], envi
         if let Err(e) =
             crate::deploy::materialise_mtls_for_dev(project_root, &s.worker, &path, environment)
         {
-            eprintln!("bynk: {e}");
+            emsg!("bynk: {e}");
         }
         let Ok(text) = std::fs::read_to_string(&path) else {
             continue;
@@ -2170,14 +2174,14 @@ fn proxy_mtls(project_root: &Path, workers_dir: &Path, serving: &[Serving], envi
         match bynk_emit::emitter::wrangler::enable_remote_mtls(&text) {
             Ok(out) if out != text => {
                 if let Err(e) = std::fs::write(&path, out) {
-                    eprintln!(
+                    emsg!(
                         "bynk: could not run `{}`'s mTLS bindings on the account: {e}",
                         s.worker
                     );
                 }
             }
             Ok(_) => {}
-            Err(e) => eprintln!("bynk: could not run `{}`'s mTLS bindings: {e}", s.worker),
+            Err(e) => emsg!("bynk: could not run `{}`'s mTLS bindings: {e}", s.worker),
         }
     }
 }
@@ -2196,14 +2200,14 @@ fn proxy_analytics_sql(workers_dir: &Path, serving: &[Serving]) {
         match bynk_emit::emitter::wrangler::enable_remote_analytics_sql(&text) {
             Ok(out) if out != text => {
                 if let Err(e) = std::fs::write(&path, out) {
-                    eprintln!(
+                    emsg!(
                         "bynk: could not run `{}`'s Analytics SQL binding on the account: {e}",
                         s.worker
                     );
                 }
             }
             Ok(_) => {}
-            Err(e) => eprintln!(
+            Err(e) => emsg!(
                 "bynk: could not run `{}`'s Analytics SQL binding: {e}",
                 s.worker
             ),
@@ -2242,7 +2246,7 @@ fn dev_vars_for(project_root: &Path) -> Option<Vec<String>> {
             Some(args)
         }
         Err(e) => {
-            eprintln!("bynk: {e}");
+            emsg!("bynk: {e}");
             None
         }
     }

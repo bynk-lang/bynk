@@ -19,6 +19,7 @@ use super::facts::{FACTS_VAR, Facts};
 use super::*;
 use crate::migrate::live::{Credentials, Rest};
 use crate::migrate::sweep::{Cloudflare as DoApi, SETTLING_MARGIN};
+use bynk_driver::emsg;
 
 /// One entry of a Worker's deployment list, newest first.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -736,18 +737,37 @@ pub(crate) struct RevertPlan {
 }
 
 impl RevertPlan {
+    /// The plan as `bynk revert` prints it, plain.
+    #[cfg(test)]
     pub(crate) fn render_short(&self) -> String {
+        self.render(false)
+    }
+
+    /// [`Self::render_short`], coloured when `colour` is on: each Worker's
+    /// heading bold, a check's `ok` green and `refused` red, a `warning:` amber
+    /// and a `note:` blue, and the verdict green or red.
+    pub(crate) fn render(&self, colour: bool) -> String {
+        use bynk_driver::colour::{Style, paint};
         let mut out = String::new();
         for w in &self.workers {
-            out.push_str(&format!(
-                "revert {} (env {}): {} -> {}\n",
+            let heading = format!(
+                "revert {} (env {}): {} -> {}",
                 w.worker, self.environment, w.live_version, w.target_version
-            ));
+            );
+            out.push_str(&format!("{}\n", paint(colour, Style::Bold, &heading)));
             for f in &w.checks {
-                let mark = if f.is_refusal() { "refused" } else { "ok" };
+                let mark = if f.is_refusal() {
+                    paint(colour, Style::Red, "refused")
+                } else {
+                    paint(colour, Style::Green, "ok")
+                };
+                let detail = match f.detail.strip_prefix("warning:") {
+                    Some(rest) => format!("{}{rest}", paint(colour, Style::Amber, "warning:")),
+                    None => f.detail.clone(),
+                };
                 out.push_str(&format!(
-                    "  {:<9} {:<14} {}: {}\n",
-                    f.check, f.subject, mark, f.detail
+                    "  {:<9} {:<14} {mark}: {detail}\n",
+                    f.check, f.subject
                 ));
             }
             if w.ok {
@@ -759,13 +779,14 @@ impl RevertPlan {
             }
         }
         for note in &self.notes {
-            out.push_str(&format!("note: {note}\n"));
+            out.push_str(&format!("{} {note}\n", paint(colour, Style::Blue, "note:")));
         }
-        out.push_str(if self.ok {
-            "Every check passed.\n"
+        out.push_str(&if self.ok {
+            paint(colour, Style::Green, "Every check passed.")
         } else {
-            "Refused: nothing was changed.\n"
+            paint(colour, Style::Red, "Refused: nothing was changed.")
         });
+        out.push('\n');
         out
     }
 }
@@ -1143,7 +1164,7 @@ pub fn revert(root: &Path, opts: &RevertOptions) -> ExitCode {
     match revert_run(root, opts) {
         Ok(code) => code,
         Err(message) => {
-            eprintln!("bynk: {message}");
+            emsg!("bynk: {message}");
             ExitCode::FAILURE
         }
     }
@@ -1240,7 +1261,7 @@ fn revert_run(root: &Path, opts: &RevertOptions) -> Result<ExitCode, String> {
             serde_json::to_string_pretty(&planned.plan).map_err(|e| e.to_string())?
         );
     } else {
-        print!("{}", planned.plan.render_short());
+        print!("{}", planned.plan.render(bynk_driver::colour::stdout()));
     }
     if !planned.plan.ok {
         return Ok(ExitCode::FAILURE);
@@ -1268,13 +1289,13 @@ fn revert_run(root: &Path, opts: &RevertOptions) -> Result<ExitCode, String> {
                 done.join(", ")
             );
             if toml::to_string(&lock).ok() != before {
-                eprintln!("bynk: bynk.deploy.lock changed; commit it");
+                emsg!("bynk: bynk.deploy.lock changed; commit it");
             }
             Ok(ExitCode::SUCCESS)
         }
         Err(stop) => {
             if !done.is_empty() {
-                eprintln!("bynk: already reverted: {}", done.join(", "));
+                emsg!("bynk: already reverted: {}", done.join(", "));
             }
             Err(match stop {
                 Stopped::Moved(script) => format!(
@@ -1309,7 +1330,7 @@ fn confirm_revert(yes: bool) -> bool {
         return true;
     }
     if !io::stdin().is_terminal() {
-        eprintln!("bynk: refusing to change Cloudflare in a non-interactive session without --yes");
+        emsg!("bynk: refusing to change Cloudflare in a non-interactive session without --yes");
         return false;
     }
     eprint!("Revert? [y/N] ");
@@ -1941,6 +1962,16 @@ mod tests {
         let plan = &planned.plan;
         assert!(plan.ok, "{}", plan.render_short());
         assert!(plan.workers[0].lock_changes, "the contract record differs");
+        // Coloured, the same plan: the heading bold, each check green, the
+        // verdict green; plain, no escapes.
+        let coloured = plan.render(true);
+        assert!(coloured.starts_with("\x1b[1mrevert shop "), "{coloured}");
+        assert!(coloured.contains(" \x1b[32mok\x1b[39m: "), "{coloured}");
+        assert!(
+            coloured.ends_with("\x1b[32mEvery check passed.\x1b[39m\n"),
+            "{coloured}"
+        );
+        assert!(!plan.render(false).contains('\x1b'));
         let dir = std::env::temp_dir().join(format!("bynk-revert-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("bynk.deploy.lock");
@@ -2307,6 +2338,15 @@ mod tests {
         )
         .unwrap();
         assert!(!refused.plan.ok);
+        let coloured = refused.plan.render(true);
+        assert!(
+            coloured.contains(" \x1b[31mrefused\x1b[39m: "),
+            "{coloured}"
+        );
+        assert!(
+            coloured.ends_with("\x1b[31mRefused: nothing was changed.\x1b[39m\n"),
+            "{coloured}"
+        );
     }
 
     /// #3562: a group goes back only to a version that held the same contexts.

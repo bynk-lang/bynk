@@ -9,6 +9,7 @@
 //! token into the organisation's own slot,
 //! `[registries.<name>.organisations.<org>] token` (R3.2, #2383).
 
+use bynk_driver::emsg;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
@@ -167,7 +168,7 @@ pub fn login(target: &Target) -> Result<(), FetchError> {
         path.display()
     );
     if std::env::var_os(override_variable(&registry)).is_some() {
-        eprintln!(
+        emsg!(
             "bynk: warning: `{}` is set, and is used instead of the saved session",
             override_variable(&registry)
         );
@@ -180,7 +181,7 @@ pub fn login(target: &Target) -> Result<(), FetchError> {
 pub fn logout(target: &Target) -> Result<(), FetchError> {
     let (client, registry) = open(target, None);
     let Some(session) = session(&registry) else {
-        eprintln!("bynk: you aren't signed in to registry `{registry}`");
+        emsg!("bynk: you aren't signed in to registry `{registry}`");
         return Ok(());
     };
     let mut api = Live {
@@ -199,9 +200,9 @@ pub fn logout(target: &Target) -> Result<(), FetchError> {
             write_doc(&path, &doc).map_err(|e| fail(ACCOUNT_REFUSED, e))?;
         }
     }
-    eprintln!("bynk: signed out of `{registry}`");
+    emsg!("bynk: signed out of `{registry}`");
     if session.from_env {
-        eprintln!(
+        emsg!(
             "bynk: note: `{}` still holds the token; unset it",
             override_variable(&registry)
         );
@@ -310,11 +311,11 @@ pub fn claim(
     let (status, answer) = api.call("POST", &orgs(&[org])?, Some(&body))?;
     let registry = &api.registry;
     match status {
-        201 => eprintln!(
+        201 => emsg!(
             "bynk: claimed `{org}` on `{registry}`{}",
             if block { " (blocked)" } else { "" }
         ),
-        200 => eprintln!("bynk: `{org}` on `{registry}` is already yours"),
+        200 => emsg!("bynk: `{org}` on `{registry}` is already yours"),
         _ => return Err(refused(registry, status, &answer)),
     }
     Ok(())
@@ -357,7 +358,7 @@ pub fn set_blocked(target: &Target, org: &str, blocked: bool) -> Result<(), Fetc
 pub fn member_add(target: &Target, org: &str, login: &str) -> Result<(), FetchError> {
     let mut api = signed_in(target, org)?;
     acknowledged(&mut api, "PUT", &orgs(&[org, "members", login])?, None)?;
-    eprintln!("bynk: added {login} to `{org}` on `{}`", api.registry);
+    emsg!("bynk: added {login} to `{org}` on `{}`", api.registry);
     Ok(())
 }
 
@@ -366,7 +367,7 @@ pub fn member_remove(target: &Target, org: &str, who: &str) -> Result<(), FetchE
     let mut api = signed_in(target, org)?;
     let id = member_id(&mut api, org, who)?;
     acknowledged(&mut api, "DELETE", &orgs(&[org, "members", &id])?, None)?;
-    eprintln!("bynk: removed {who} from `{org}` on `{}`", api.registry);
+    emsg!("bynk: removed {who} from `{org}` on `{}`", api.registry);
     Ok(())
 }
 
@@ -425,7 +426,7 @@ pub fn token_mint(target: &Target, org: &str, mint: &Mint) -> Result<(), FetchEr
         .and_then(Value::as_i64)
         .map(date)
         .unwrap_or_default();
-    eprintln!(
+    emsg!(
         "bynk: minted token {} for `{org}` on `{registry}` ({can}; until {until})",
         short_id(id)
     );
@@ -437,31 +438,31 @@ pub fn token_mint(target: &Target, org: &str, mint: &Mint) -> Result<(), FetchEr
                 .and_then(|()| write_doc(&path, &doc));
             if let Err(e) = saved {
                 // The token is live on the server: never lose it.
-                eprintln!(
+                emsg!(
                     "bynk: couldn't save it, so it is shown once, below; keep it somewhere safe, or revoke it with `bynk org token revoke {org} {}`",
                     short_id(id)
                 );
                 println!("{token}");
                 return Err(fail(ACCOUNT_REFUSED, e));
             }
-            eprintln!(
+            emsg!(
                 "bynk: saved as `[registries.{registry}.organisations.{org}] token` in {}",
                 path.display()
             );
             if registry_wide_token(&doc, &registry) {
-                eprintln!(
+                emsg!(
                     "bynk: `{org}` now uses its own token; `[registries.{registry}] token` still serves other organisations"
                 );
             }
             let var = bynk_project::manifest::registry_token_var(&registry);
             if std::env::var_os(&var).is_some() {
-                eprintln!(
+                emsg!(
                     "bynk: warning: `{var}` is set, and `bynk publish` uses it instead of any saved token"
                 );
             }
         }
         None => {
-            eprintln!("bynk: it is shown once, below; keep it somewhere safe");
+            emsg!("bynk: it is shown once, below; keep it somewhere safe");
             println!("{token}");
         }
     }

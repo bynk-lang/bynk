@@ -7,6 +7,7 @@
 //! (`bynk.requires.unapproved`, decision B); this command is how a project
 //! clears it. It rewrites only `approved` fields and never resolves.
 
+use bynk_driver::emsg;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::io::{BufRead, IsTerminal, Write};
 use std::path::{Path, PathBuf};
@@ -65,7 +66,7 @@ pub fn run(project: &Path, mode: &Mode) -> Result<(), String> {
         }
         Mode::Ask => {
             if pending.is_empty() {
-                eprintln!("bynk: no npm packages await approval");
+                emsg!("bynk: no npm packages await approval");
                 return Ok(());
             }
             if !std::io::stdin().is_terminal() {
@@ -111,17 +112,15 @@ pub fn after_write(project: &Path, pending: &[LockedNpm]) {
         );
         let chosen = ask(&lock, &rows);
         if let Err(e) = approve(&path, &mut lock, &chosen) {
-            eprintln!("bynk: {e}");
+            emsg!("bynk: {e}");
         }
         return;
     }
-    eprintln!("bynk: npm packages awaiting approval — a build reaching them fails until approved:");
+    emsg!("bynk: npm packages awaiting approval — a build reaching them fails until approved:");
     for &i in &rows {
         describe(&lock, &lock.npm[i]);
     }
-    eprintln!(
-        "bynk: review them, then run `bynk approve <package>` (or `bynk approve` on a terminal)"
-    );
+    emsg!("bynk: review them, then run `bynk approve <package>` (or `bynk approve` on a terminal)");
 }
 
 fn read(project: &Path) -> Result<(PathBuf, Lock), String> {
@@ -157,7 +156,7 @@ fn pending_rows(lock: &Lock) -> Vec<usize> {
 
 fn list(lock: &Lock, pending: &[usize]) {
     if lock.npm.is_empty() {
-        eprintln!("bynk: no dependency's adapter requires an npm package");
+        emsg!("bynk: no dependency's adapter requires an npm package");
         return;
     }
     for (i, row) in lock.npm.iter().enumerate() {
@@ -276,7 +275,7 @@ fn ask(lock: &Lock, rows: &[usize]) -> Vec<usize> {
 
 fn approve(path: &Path, lock: &mut Lock, rows: &[usize]) -> Result<(), String> {
     if rows.is_empty() {
-        eprintln!("bynk: nothing approved");
+        emsg!("bynk: nothing approved");
         return Ok(());
     }
     for &i in rows {

@@ -18,6 +18,7 @@
 //!   memory over the source texts; only files whose text changed are written,
 //!   in place, with no formatter pass.
 
+use crate::emsg;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 
@@ -388,14 +389,14 @@ pub(crate) fn fix_all(prog: &str, scope: &Scope, inputs: &[(&Path, String)]) -> 
         }
     }
     if refused {
-        eprintln!("{prog}: --fix: nothing was written");
+        emsg!("{prog}: --fix: nothing was written");
         return false;
     }
     let files = plans.iter().flat_map(|plan| &plan.files);
     // Fail before the first write, so a read-only file leaves the tree as it was.
     for file in files.clone() {
         if std::fs::metadata(&file.path).is_ok_and(|m| m.permissions().readonly()) {
-            eprintln!(
+            emsg!(
                 "{prog}: --fix: cannot write `{}`: file is read-only; nothing was written",
                 shown(&file.path)
             );
@@ -404,7 +405,7 @@ pub(crate) fn fix_all(prog: &str, scope: &Scope, inputs: &[(&Path, String)]) -> 
     }
     for file in files {
         if let Err(e) = atomic_write(&file.path, &file.fixed) {
-            eprintln!("{prog}: --fix: write `{}`: {e}", shown(&file.path));
+            emsg!("{prog}: --fix: write `{}`: {e}", shown(&file.path));
             return false;
         }
         eprintln!("fixed: {}: {}", shown(&file.path), codes_line(&file.codes));

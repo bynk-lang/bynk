@@ -3,6 +3,7 @@
 //! start a `bynk` process. Parameterised by the program name that prefixes
 //! messages, like [`crate::run_check`] and [`crate::run_fmt`].
 
+use crate::emsg;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
@@ -181,15 +182,13 @@ pub fn run_build(prog: &str, args: BuildArgs) -> ExitCode {
         profile,
     } = args;
     if !input.is_dir() {
-        eprintln!(
-            "{prog}: `build` takes a project directory; use `{prog} compile` for a single file"
-        );
+        emsg!("{prog}: `build` takes a project directory; use `{prog} compile` for a single file");
         return ExitCode::FAILURE;
     }
     let config = match bynk_project::try_read_build_config(&input) {
         Ok(c) => c,
         Err(e) => {
-            eprintln!("{prog}: {e}");
+            emsg!("{prog}: {e}");
             return ExitCode::FAILURE;
         }
     };
@@ -219,7 +218,7 @@ pub fn run_build(prog: &str, args: BuildArgs) -> ExitCode {
     let (target, platform, emit) = match resolved {
         Ok(r) => r,
         Err(e) => {
-            eprintln!("{prog}: {e}");
+            emsg!("{prog}: {e}");
             return ExitCode::FAILURE;
         }
     };
@@ -230,7 +229,7 @@ pub fn run_build(prog: &str, args: BuildArgs) -> ExitCode {
     let contracts = profile_contracts(&config.profiles, profile);
     let output = out.unwrap_or_else(|| input.join(config.out.as_deref().unwrap_or("out")));
     if let Err(e) = check_output_dir(&input, &output) {
-        eprintln!("{prog}: {e}");
+        emsg!("{prog}: {e}");
         return ExitCode::FAILURE;
     }
     let code = run_compile_reporting(
@@ -259,7 +258,7 @@ pub fn run_build(prog: &str, args: BuildArgs) -> ExitCode {
                 if c { "on" } else { "off" }
             ),
         };
-        eprintln!("{prog}: built {target}{profile} -> {}", output.display());
+        emsg!("{prog}: built {target}{profile} -> {}", output.display());
     }
     code
 }
@@ -367,7 +366,7 @@ fn run_compile_reporting(
         contracts,
     } = args;
     if sources_stdin && !input.is_dir() {
-        eprintln!("{prog}: --sources-stdin needs a project directory, not a single file");
+        emsg!("{prog}: --sources-stdin needs a project directory, not a single file");
         return ExitCode::FAILURE;
     }
     if input.is_dir() {
@@ -417,7 +416,7 @@ fn compile_dir(prog: &str, input: &Path, output: &Path, settings: DirSettings) -
         Ok(_) if sources_stdin => SchemaLock::Off,
         Ok(existing) => SchemaLock::On { existing },
         Err(e) => {
-            eprintln!(
+            emsg!(
                 "{prog}: could not read {}: {e}",
                 crate::schema_lock::lock_path(input).display()
             );
@@ -442,7 +441,7 @@ fn compile_dir(prog: &str, input: &Path, output: &Path, settings: DirSettings) -
         Err(e) => {
             // #3274: `compile` can't take `--each`, so its refusal of a
             // directory of projects doesn't advise it.
-            eprintln!("{prog}: {}", e.render(false));
+            emsg!("{prog}: {}", e.render(false));
             return ExitCode::FAILURE;
         }
     };
@@ -450,7 +449,7 @@ fn compile_dir(prog: &str, input: &Path, output: &Path, settings: DirSettings) -
         match overlay_from_stdin(options, input) {
             Ok(o) => o,
             Err(e) => {
-                eprintln!("{prog}: {e}");
+                emsg!("{prog}: {e}");
                 return ExitCode::FAILURE;
             }
         }
@@ -467,7 +466,7 @@ fn compile_dir(prog: &str, input: &Path, output: &Path, settings: DirSettings) -
             if let Some(content) = &out.schema_lock
                 && let Err(e) = crate::schema_lock::write(input, content)
             {
-                eprintln!(
+                emsg!(
                     "{prog}: could not write {}: {e}",
                     crate::schema_lock::lock_path(input).display()
                 );
@@ -482,7 +481,7 @@ fn compile_dir(prog: &str, input: &Path, output: &Path, settings: DirSettings) -
                 EmitFormat::Js => match crate::strip::strip_project_to_js(out) {
                     Ok(out) => out,
                     Err(e) => {
-                        eprintln!("{prog}: could not produce JavaScript output: {e}");
+                        emsg!("{prog}: could not produce JavaScript output: {e}");
                         return ExitCode::FAILURE;
                     }
                 },
@@ -494,7 +493,7 @@ fn compile_dir(prog: &str, input: &Path, output: &Path, settings: DirSettings) -
                     ExitCode::SUCCESS
                 }
                 Err(e) => {
-                    eprintln!(
+                    emsg!(
                         "{prog}: could not write output under `{}`: {e}",
                         output.display()
                     );
@@ -513,7 +512,7 @@ fn compile_file(prog: &str, input: &Path, output: &Path, emit: EmitFormat) -> Ex
     let source = match std::fs::read_to_string(input) {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("{prog}: could not read `{}`: {e}", input.display());
+            emsg!("{prog}: could not read `{}`: {e}", input.display());
             return ExitCode::FAILURE;
         }
     };
@@ -527,7 +526,7 @@ fn compile_file(prog: &str, input: &Path, output: &Path, emit: EmitFormat) -> Ex
                 EmitFormat::Js => match bynk_strip::strip_types(&compiled.ts, &filename) {
                     Ok(js) => js,
                     Err(e) => {
-                        eprintln!("{prog}: could not produce JavaScript output: {e}");
+                        emsg!("{prog}: could not produce JavaScript output: {e}");
                         return ExitCode::FAILURE;
                     }
                 },
@@ -536,7 +535,7 @@ fn compile_file(prog: &str, input: &Path, output: &Path, emit: EmitFormat) -> Ex
                 let _ = std::fs::create_dir_all(parent);
             }
             if let Err(e) = std::fs::write(output, body) {
-                eprintln!("{prog}: could not write `{}`: {e}", output.display());
+                emsg!("{prog}: could not write `{}`: {e}", output.display());
                 return ExitCode::FAILURE;
             }
             // ADR 0117: render non-failing warnings with source context.

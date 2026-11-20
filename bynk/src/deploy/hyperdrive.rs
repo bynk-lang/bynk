@@ -20,6 +20,7 @@
 
 use super::*;
 use crate::migrate::live::{self, Credentials, Rest};
+use bynk_driver::emsg;
 use bynk_project::hyperdrive::HyperdriveDeployConfig;
 
 /// A value that must never be printed: it has no `Display`, and its `Debug`
@@ -677,7 +678,7 @@ pub(crate) fn wants_for_run(
     let settings = match bynk_project::hyperdrive::try_read_hyperdrive_deploy(project_root) {
         Ok(settings) => settings,
         Err(e) => {
-            eprintln!("bynk: {e}");
+            emsg!("bynk: {e}");
             return None;
         }
     };
@@ -686,7 +687,7 @@ pub(crate) fn wants_for_run(
         Ok(wants) => Some(wants),
         Err(problems) => {
             for problem in problems {
-                eprintln!("bynk: {problem}");
+                emsg!("bynk: {problem}");
             }
             None
         }
@@ -706,7 +707,7 @@ pub(crate) fn refused_in_ci(
     else {
         return false;
     };
-    eprintln!(
+    emsg!(
         "bynk: the Hyperdrive config of `{binding}` of `{worker}` is unrecorded; deploy locally first and commit {LOCK_FILE}, or name an existing config with `config_id` in `[deploy.hyperdrive]`"
     );
     true
@@ -730,7 +731,7 @@ pub(crate) fn api_for_run(
         return Ok(None);
     }
     RestHyperdrive::from_env().map(Some).map_err(|e| {
-        eprintln!("bynk: {e}");
+        emsg!("bynk: {e}");
     })
 }
 

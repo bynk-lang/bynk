@@ -1,4 +1,5 @@
 use super::*;
+use bynk_driver::emsg;
 
 #[derive(Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub(crate) struct DeployLock {
@@ -2266,7 +2267,7 @@ pub fn materialise_deploy_state(
 pub(crate) fn confirm_prune(yes: bool, orphans: &Orphans, environment: &str) -> bool {
     for kv in &orphans.kv {
         match &kv.binding {
-            None => eprintln!("bynk: will delete KV namespace for `{}`", kv.worker),
+            None => emsg!("bynk: will delete KV namespace for `{}`", kv.worker),
             Some(binding) => eprintln!(
                 "bynk: will delete KV namespace `{}` for `{}`'s `{binding}`",
                 kv_title(&kv.worker, binding, environment),
@@ -2276,7 +2277,7 @@ pub(crate) fn confirm_prune(yes: bool, orphans: &Orphans, environment: &str) -> 
     }
     for queue in &orphans.queues {
         // The name `prune_orphans` deletes, not the ledger key (#2028).
-        eprintln!(
+        emsg!(
             "bynk: will delete queue `{}`",
             env_qualify(environment, queue)
         );
@@ -2312,7 +2313,7 @@ pub(crate) fn confirm_deletion_prompt(yes: bool, count: usize) -> bool {
         return true;
     }
     if !requires_interactive_confirmation(yes, io::stdin().is_terminal()) {
-        eprintln!("bynk: refusing to prune in a non-interactive session without --yes");
+        emsg!("bynk: refusing to prune in a non-interactive session without --yes");
         return false;
     }
     eprint!("Delete {count} resource(s)? [y/N] ");

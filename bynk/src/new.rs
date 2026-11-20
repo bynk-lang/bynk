@@ -13,6 +13,8 @@
 //! and asserts it compiles and is `bynk-fmt`-clean, so the scaffold can never
 //! rot into something that doesn't build.
 
+use bynk_driver::colour;
+use bynk_driver::emsg;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -60,30 +62,30 @@ pub fn run(opts: &NewOptions) -> ExitCode {
     let name = match opts.name.clone().or_else(|| derive_name(&opts.path)) {
         Some(name) => name,
         None => {
-            eprint!("{}", cannot_derive_message(&display(&opts.path)));
+            colour::eprint(&cannot_derive_message(&display(&opts.path)));
             return ExitCode::FAILURE;
         }
     };
 
     if !is_legal_name(&name) {
-        eprint!("{}", invalid_name_message(&name));
+        colour::eprint(&invalid_name_message(&name));
         return ExitCode::FAILURE;
     }
 
     match target_is_nonempty(&opts.path) {
         Ok(true) => {
-            eprint!("{}", clobber_message(&display(&opts.path)));
+            colour::eprint(&clobber_message(&display(&opts.path)));
             return ExitCode::FAILURE;
         }
         Ok(false) => {}
         Err(e) => {
-            eprintln!("bynk: cannot inspect `{}`: {e}", display(&opts.path));
+            emsg!("bynk: cannot inspect `{}`: {e}", display(&opts.path));
             return ExitCode::FAILURE;
         }
     }
 
     if let Err(e) = write_scaffold(&opts.path, &name) {
-        eprintln!("bynk: failed to write the scaffold: {e}");
+        emsg!("bynk: failed to write the scaffold: {e}");
         return ExitCode::FAILURE;
     }
 

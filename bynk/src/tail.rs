@@ -10,6 +10,7 @@
 //! exception's name and message without its stack, in which case the frames
 //! that can be mapped are those a handler's own `console.*` output carries.
 
+use bynk_driver::emsg;
 use std::path::Path;
 use std::process::{ExitCode, Stdio};
 use std::sync::{Arc, Mutex};
@@ -74,13 +75,13 @@ pub fn run(tb: &dyn Toolbox, project_root: &Path, opts: &TailOptions) -> ExitCod
         },
     );
     if matches!(probe.provenance, Provenance::Missing) {
-        eprintln!("bynk: wrangler not found (run `bynk doctor --only deploy`)");
+        emsg!("bynk: wrangler not found (run `bynk doctor --only deploy`)");
         return ExitCode::FAILURE;
     }
 
     let build_dir = project_root.join(".bynk").join("tail");
     if let Err(e) = workers::prepare_build_dir(project_root, &build_dir) {
-        eprintln!("bynk: could not prepare build directory: {e}");
+        emsg!("bynk: could not prepare build directory: {e}");
         return ExitCode::FAILURE;
     }
     // `schema_registry` off: tailing must not touch `bynk.schema.lock`.
@@ -92,14 +93,14 @@ pub fn run(tb: &dyn Toolbox, project_root: &Path, opts: &TailOptions) -> ExitCod
     let worker = match pick_worker(&available, opts.context.as_deref()) {
         Ok(w) => w,
         Err(e) => {
-            eprintln!("bynk: {e}");
+            emsg!("bynk: {e}");
             return ExitCode::FAILURE;
         }
     };
     let deployed = crate::deploy::deployed_worker_name(&opts.environment, &worker);
 
     let Some(mut cmd) = workers::wrangler_command(&probe.provenance, "tail") else {
-        eprintln!("bynk: wrangler not found (run `bynk doctor --only deploy`)");
+        emsg!("bynk: wrangler not found (run `bynk doctor --only deploy`)");
         return ExitCode::FAILURE;
     };
     cmd.current_dir(workers_dir.join(&worker))
@@ -112,11 +113,11 @@ pub fn run(tb: &dyn Toolbox, project_root: &Path, opts: &TailOptions) -> ExitCod
     let mut child = match cmd.spawn() {
         Ok(c) => c,
         Err(e) => {
-            eprintln!("bynk: could not run wrangler tail: {e}");
+            emsg!("bynk: could not run wrangler tail: {e}");
             return ExitCode::FAILURE;
         }
     };
-    eprintln!(
+    emsg!(
         "bynk tail: tailing `{deployed}` (frames are mapped to .bynk where the build has a map)."
     );
 
@@ -152,7 +153,7 @@ pub fn run(tb: &dyn Toolbox, project_root: &Path, opts: &TailOptions) -> ExitCod
             Ok(Some(status)) => break crate::shell::exit_status_byte(&status),
             Ok(None) => std::thread::sleep(Duration::from_millis(100)),
             Err(e) => {
-                eprintln!("bynk: could not poll wrangler: {e}");
+                emsg!("bynk: could not poll wrangler: {e}");
                 break 1;
             }
         }

@@ -254,7 +254,7 @@ fn note_skipped_nested_projects(root: &Path, nested: &[PathBuf]) {
             .get_or_insert_with(Default::default)
             .insert(project.clone());
         if first {
-            eprintln!(
+            crate::emsg!(
                 "bynk: note: skipped `{}`: it has its own bynk.toml, so it is a separate project; run the command inside it",
                 shown(project.strip_prefix(root).map_or(project.as_path(), |p| p))
             );
@@ -461,7 +461,7 @@ pub fn print_project_failure(failure: &project::ProjectFailure) {
             None => {
                 eprintln!("[{}] {}", ae.error.category, ae.error.message);
                 for note in &ae.error.notes {
-                    eprintln!("  note: {note}");
+                    crate::emsg!("  note: {note}");
                 }
                 // Finding #47: a label's text still surfaces even with no
                 // file to underline it against.
@@ -500,7 +500,7 @@ pub fn print_project_warnings(
                     .unwrap_or_default();
                 eprintln!("{where_}warning[{}]: {}", w.error.category, w.error.message);
                 for note in &w.error.notes {
-                    eprintln!("  note: {note}");
+                    crate::emsg!("  note: {note}");
                 }
                 for (_, label) in &w.error.labels {
                     eprintln!("  label: {label}");
@@ -718,7 +718,7 @@ pub fn print_project_check(check: &project::ProjectCheck) {
                     ae.error.message
                 );
                 for note in &ae.error.notes {
-                    eprintln!("  note: {note}");
+                    crate::emsg!("  note: {note}");
                 }
                 for (_, label) in &ae.error.labels {
                     eprintln!("  label: {label}");
@@ -980,13 +980,13 @@ impl ManifestCache {
 pub fn run_fmt(prog: &str, args: &FmtArgs) -> ExitCode {
     let check = args.check;
     if args.inputs.is_empty() {
-        eprintln!("{prog} fmt: no input files (pass file or directory paths, or `-` for stdin)");
+        crate::emsg!("{prog} fmt: no input files (pass file or directory paths, or `-` for stdin)");
         return ExitCode::FAILURE;
     }
     let inputs = match expand_fmt_inputs(&args.inputs) {
         Ok(inputs) => inputs,
         Err(e) => {
-            eprintln!("{prog} fmt: {e}");
+            crate::emsg!("{prog} fmt: {e}");
             return ExitCode::FAILURE;
         }
     };
@@ -1006,7 +1006,7 @@ pub fn run_fmt(prog: &str, args: &FmtArgs) -> ExitCode {
         {
             Ok(opts) => resolved.push(opts),
             Err(e) => {
-                eprintln!("{prog} fmt: {e}");
+                crate::emsg!("{prog} fmt: {e}");
                 return ExitCode::FAILURE;
             }
         }
@@ -1019,7 +1019,7 @@ pub fn run_fmt(prog: &str, args: &FmtArgs) -> ExitCode {
             use std::io::Read;
             let mut source = String::new();
             if let Err(e) = std::io::stdin().read_to_string(&mut source) {
-                eprintln!("{prog} fmt: read from stdin: {e}");
+                crate::emsg!("{prog} fmt: read from stdin: {e}");
                 return ExitCode::FAILURE;
             }
             // #1763: compared, and errors rendered, modulo line endings.
@@ -1033,7 +1033,7 @@ pub fn run_fmt(prog: &str, args: &FmtArgs) -> ExitCode {
                         // --check -` gate is otherwise dead, passing green on
                         // non-canonical input.
                         if formatted != source {
-                            eprintln!("{prog} fmt: <stdin> is not canonically formatted");
+                            crate::emsg!("{prog} fmt: <stdin> is not canonically formatted");
                             had_diff = true;
                         }
                     } else {
@@ -1055,7 +1055,7 @@ pub fn run_fmt(prog: &str, args: &FmtArgs) -> ExitCode {
         let raw = match std::fs::read_to_string(input) {
             Ok(s) => s,
             Err(e) => {
-                eprintln!("{prog} fmt: read `{}`: {e}", shown(input));
+                crate::emsg!("{prog} fmt: read `{}`: {e}", shown(input));
                 had_error = true;
                 continue;
             }
@@ -1070,13 +1070,13 @@ pub fn run_fmt(prog: &str, args: &FmtArgs) -> ExitCode {
             Ok(formatted) => {
                 if check {
                     if formatted != source {
-                        eprintln!("{prog} fmt: {} is not canonically formatted", filename);
+                        crate::emsg!("{prog} fmt: {} is not canonically formatted", filename);
                         had_diff = true;
                     }
                 } else if formatted != source
                     && let Err(e) = atomic_write(input, &formatted)
                 {
-                    eprintln!("{prog} fmt: write `{}`: {e}", filename);
+                    crate::emsg!("{prog} fmt: write `{}`: {e}", filename);
                     had_error = true;
                 }
             }
@@ -1249,7 +1249,7 @@ pub fn run_check(
     let scope = match fix.map(fix::Scope::codes).transpose() {
         Ok(scope) => scope,
         Err(message) => {
-            eprintln!("{prog}: --fix: {message}");
+            crate::emsg!("{prog}: --fix: {message}");
             return ExitCode::FAILURE;
         }
     };
@@ -1261,7 +1261,7 @@ pub fn run_check(
     let workspace = match workspace_at_each(input, each) {
         Ok(w) => w,
         Err(message) => {
-            eprintln!("{prog}: {message}");
+            crate::emsg!("{prog}: {message}");
             return ExitCode::FAILURE;
         }
     };
@@ -1269,7 +1269,7 @@ pub fn run_check(
         let workspace = match workspace {
             Ok(w) => w,
             Err(e) => {
-                eprintln!("{prog}: {}: {e}", shown(&input.join("bynk.toml")));
+                crate::emsg!("{prog}: {}: {e}", shown(&input.join("bynk.toml")));
                 return ExitCode::FAILURE;
             }
         };
@@ -1404,7 +1404,7 @@ fn note_skipped_manifestless(root: &Path, dir: &Path) {
         .get_or_insert_with(Default::default)
         .insert(key);
     if first {
-        eprintln!(
+        crate::emsg!(
             "bynk: note: skipped `{}`: it has no bynk.toml, so it is not a project",
             shown(dir)
         );
@@ -1441,7 +1441,7 @@ fn check_one(prog: &str, input: &Path, short: bool, member: Option<&Path>) -> bo
         let options = match try_project_options(input) {
             Ok(o) => o,
             Err(e) => {
-                eprintln!("{prog}: {e}");
+                crate::emsg!("{prog}: {e}");
                 return false;
             }
         };
@@ -1452,7 +1452,7 @@ fn check_one(prog: &str, input: &Path, short: bool, member: Option<&Path>) -> bo
         let options = match schema_lock::read_only(input) {
             Ok(lock) => options.schema_registry(lock),
             Err(e) => {
-                eprintln!("{prog}: {e}");
+                crate::emsg!("{prog}: {e}");
                 return false;
             }
         };
@@ -1468,7 +1468,7 @@ fn check_one(prog: &str, input: &Path, short: bool, member: Option<&Path>) -> bo
         let source = match std::fs::read_to_string(input) {
             Ok(s) => s,
             Err(e) => {
-                eprintln!("{prog}: could not read `{}`: {e}", shown(input));
+                crate::emsg!("{prog}: could not read `{}`: {e}", shown(input));
                 return false;
             }
         };

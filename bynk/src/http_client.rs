@@ -10,6 +10,8 @@
 //! never emitted wrong: a raw `RequestQuery` or `RequestCookies` view, and a route
 //! guarded by a request signature (the client holds no secret).
 
+use bynk_driver::colour;
+use bynk_driver::emsg;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
@@ -85,7 +87,7 @@ pub fn run(root: &Path, req: Request) -> ExitCode {
     let config = match bynk_project::try_read_build_config(root) {
         Ok(c) => c.client,
         Err(e) => {
-            eprintln!("bynk: {e}");
+            emsg!("bynk: {e}");
             return ExitCode::FAILURE;
         }
     };
@@ -103,7 +105,7 @@ pub fn run(root: &Path, req: Request) -> ExitCode {
         req.services.to_vec()
     };
     if let Err(e) = check_destination(out.as_deref(), layout, req.check) {
-        eprintln!("bynk: {e}");
+        emsg!("bynk: {e}");
         return ExitCode::FAILURE;
     }
     let names: Vec<&str> = services.iter().map(String::as_str).collect();
@@ -111,12 +113,12 @@ pub fn run(root: &Path, req: Request) -> ExitCode {
     let client = match generate(&analysis, &names, layout) {
         Ok(c) => c,
         Err(e) => {
-            eprintln!("bynk: {e}");
+            emsg!("bynk: {e}");
             return ExitCode::FAILURE;
         }
     };
     for s in &client.skipped {
-        eprintln!("bynk: skipped {s}");
+        emsg!("bynk: skipped {s}");
     }
     match (out, req.check) {
         (None, _) => {
@@ -127,7 +129,7 @@ pub fn run(root: &Path, req: Request) -> ExitCode {
         (Some(out), false) => match write(&client, &out, layout) {
             Ok(()) => ExitCode::SUCCESS,
             Err(e) => {
-                eprintln!("bynk: {e}");
+                emsg!("bynk: {e}");
                 ExitCode::FAILURE
             }
         },
@@ -153,7 +155,7 @@ fn note_extra_files(out: &Path, layout: Layout) {
         .collect();
     extra.sort();
     for name in extra {
-        eprintln!(
+        emsg!(
             "bynk: note: `{}` is not part of the client; a layout that was replaced may have left it",
             out.join(name).display()
         );
@@ -168,7 +170,7 @@ pub fn write_configured(root: &Path) -> ExitCode {
         Ok(c) if c.client.is_some() => {}
         Ok(_) => return ExitCode::SUCCESS,
         Err(e) => {
-            eprintln!("bynk: {e}");
+            emsg!("bynk: {e}");
             return ExitCode::FAILURE;
         }
     }
@@ -176,7 +178,7 @@ pub fn write_configured(root: &Path) -> ExitCode {
     if code == ExitCode::SUCCESS
         && let Ok(Some(c)) = bynk_project::try_read_build_config(root).map(|c| c.client)
     {
-        eprintln!("bynk: wrote the client -> {}", root.join(c.out).display());
+        emsg!("bynk: wrote the client -> {}", root.join(c.out).display());
     }
     code
 }
@@ -274,12 +276,12 @@ fn check(client: &Client, out: &Path, layout: Layout) -> ExitCode {
     } else {
         ""
     };
-    eprintln!(
+    emsg!(
         "bynk: client is stale: run `bynk client{dir} --out {}`",
         out.display()
     );
     for line in stale {
-        eprintln!("{line}");
+        colour::eprintln(&line);
     }
     ExitCode::FAILURE
 }

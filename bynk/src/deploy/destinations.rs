@@ -25,6 +25,7 @@
 
 use super::*;
 use crate::migrate::live::{self, Credentials, Rest};
+use bynk_driver::colour;
 use bynk_driver::project::EmailForward;
 
 /// The permission a token needs to list destination addresses.
@@ -328,7 +329,7 @@ pub(crate) fn print_plan_then_forward_warnings(
         let groups = super::plan::GroupNames::of(project_root);
         let dir_of = |context: &str| groups.dir(context);
         for warning in forward_warnings_for_run(&project_forwards(project_root), order, &dir_of) {
-            eprintln!("{warning}");
+            colour::eprintln(&warning);
         }
     }
 }

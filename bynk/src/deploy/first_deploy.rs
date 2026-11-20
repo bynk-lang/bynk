@@ -21,6 +21,7 @@
 //! account cannot be asked (no API token, an unreadable answer), nothing is
 //! forgiven and the failure stays as wrangler reported it.
 
+use bynk_driver::emsg;
 use std::cell::Cell;
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
@@ -142,7 +143,7 @@ impl Watch {
         if status.success() || !self.forgives(said) {
             return status;
         }
-        eprintln!(
+        emsg!(
             "bynk: wrangler could not look up `{}` after uploading it ([code: 10007], a race with the script's creation); the account shows the upload landed as the Worker's first version, so the deploy continues",
             self.script
         );

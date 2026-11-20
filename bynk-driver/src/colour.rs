@@ -7,8 +7,13 @@
 //! set (`allowed` has the exact rules). `always` and `never` override the
 //! terminal check and the environment alike.
 //!
-//! Machine-readable output (`--format json`, `ndjson`, `short`) is never
-//! coloured, whatever the choice: only the human renderings ask this module.
+//! The palette has one meaning per colour: blue for information, green for
+//! success, red for an error or a failure, amber for a warning, and bold for a
+//! heading.
+//!
+//! Machine-readable output (`--format json`, `ndjson`, and `bynk check`'s and
+//! `bynk doctor`'s `short`) is never coloured, whatever the choice: only the
+//! human renderings ask this module.
 
 use std::io::IsTerminal;
 use std::sync::atomic::{AtomicU8, Ordering};
@@ -155,14 +160,16 @@ pub(crate) fn allowed(is_terminal: bool, var: impl Fn(&str) -> Option<std::ffi::
     }
 }
 
-/// A style the driver paints text in.
+/// A style the driver paints text in: one meaning per colour.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Style {
-    /// A pass, a fully covered line count.
+    /// Information: a `note:`, a mutant that didn't compile.
+    Blue,
+    /// Success: a pass, a killed mutant, a check that passed.
     Green,
-    /// Partial coverage; a warning.
-    Yellow,
-    /// A failure.
+    /// A warning: partial coverage, a mutant no suite reaches.
+    Amber,
+    /// An error or a failure: a failing case, a surviving mutant, a refusal.
     Red,
     /// A heading.
     Bold,
@@ -173,8 +180,9 @@ pub enum Style {
 impl Style {
     fn codes(self) -> (&'static str, &'static str) {
         match self {
+            Style::Blue => ("\x1b[34m", "\x1b[39m"),
             Style::Green => ("\x1b[32m", "\x1b[39m"),
-            Style::Yellow => ("\x1b[33m", "\x1b[39m"),
+            Style::Amber => ("\x1b[33m", "\x1b[39m"),
             Style::Red => ("\x1b[31m", "\x1b[39m"),
             Style::Bold => ("\x1b[1m", "\x1b[22m"),
             Style::Dim => ("\x1b[2m", "\x1b[22m"),
@@ -215,7 +223,7 @@ impl TestLines {
         } else if body.starts_with("  \u{2717} ") {
             paint(true, Style::Red, body)
         } else if body.starts_with("    ! ") {
-            paint(true, Style::Yellow, body)
+            paint(true, Style::Amber, body)
         } else if let Some(tally) = tally(body) {
             tally
         } else if after_blank && !body.starts_with(' ') && body.ends_with(':') {
@@ -260,12 +268,104 @@ fn split_end(line: &str) -> (&str, &str) {
     }
 }
 
+/// A message for stderr (`bynk: warning: …`), with its `error:`, `warning:`
+/// or `note:` label red, amber or blue: the first such label on each line,
+/// whether it opens the line (after any indent or `= `) or follows the
+/// `bynk …:` or `<program> …:` that names who is speaking. Nothing else
+/// changes, so a line with no label is returned as it is.
+pub fn message(text: &str) -> String {
+    text.split_inclusive('\n').map(message_line).collect()
+}
+
+const LABELS: [(&str, Style); 3] = [
+    ("error:", Style::Red),
+    ("warning:", Style::Amber),
+    ("note:", Style::Blue),
+];
+
+fn message_line(line: &str) -> String {
+    // Where a label may start: after the indent and any `= `, and after each
+    // `<speaker>: ` that opens the line, such as `bynk dev: `.
+    let mut at = line.len() - line.trim_start().len();
+    if line[at..].starts_with("= ") {
+        at += 2;
+    }
+    let mut starts = vec![at];
+    while let Some(colon) = line[at..].find(": ") {
+        if !is_speaker(&line[at..at + colon]) {
+            break;
+        }
+        at += colon + 2;
+        starts.push(at);
+    }
+    for start in starts {
+        for (label, style) in LABELS {
+            if line[start..].starts_with(label) {
+                let end = start + label.len();
+                return format!(
+                    "{}{}{}",
+                    &line[..start],
+                    paint(true, style, label),
+                    &line[end..]
+                );
+            }
+        }
+    }
+    line.to_string()
+}
+
+/// A few plain words naming who speaks (`bynk`, `bynk dev`, `bynk test
+/// --coverage`), and never a label itself.
+fn is_speaker(text: &str) -> bool {
+    !text.is_empty()
+        && text.len() <= 40
+        && !LABELS.iter().any(|(l, _)| l.trim_end_matches(':') == text)
+        && text
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || " -_.".contains(c))
+}
+
+/// `text` for stderr: its labels coloured as [`message`] does when stderr is
+/// coloured, and unchanged when it isn't.
+pub fn stderr_message(text: &str) -> String {
+    if stderr() {
+        message(text)
+    } else {
+        text.to_string()
+    }
+}
+
+/// Print `text` and a newline to stderr, as [`stderr_message`] has it. What
+/// [`emsg!`](crate::emsg) expands to.
+pub fn eprint_message(text: &str) {
+    eprintln!("{}", stderr_message(text));
+}
+
+/// `eprint!("{text}")`, coloured as [`stderr_message`] has it.
+pub fn eprint(text: &str) {
+    eprint!("{}", stderr_message(text));
+}
+
+/// `eprintln!("{text}")`, coloured as [`stderr_message`] has it.
+pub fn eprintln(text: &str) {
+    eprint_message(text);
+}
+
+/// `eprintln!` for a message with an `error:`, `warning:` or `note:` label,
+/// coloured as [`colour::message`](crate::colour::message) does when stderr is.
+#[macro_export]
+macro_rules! emsg {
+    ($($arg:tt)*) => {
+        $crate::colour::eprint_message(&format!($($arg)*))
+    };
+}
+
 /// The style for a coverage percentage: green from 80%, yellow (amber) from
 /// 50%, red below.
 pub fn coverage_style(percent: u32) -> Style {
     match percent {
         80.. => Style::Green,
-        50.. => Style::Yellow,
+        50.. => Style::Amber,
         _ => Style::Red,
     }
 }
@@ -390,11 +490,51 @@ mod tests {
     }
 
     #[test]
+    fn a_message_label_is_coloured_where_it_stands() {
+        let red = |l: &str| format!("\x1b[31m{l}\x1b[39m");
+        let amber = |l: &str| format!("\x1b[33m{l}\x1b[39m");
+        let blue = |l: &str| format!("\x1b[34m{l}\x1b[39m");
+        assert_eq!(
+            message("bynk: warning: kept it"),
+            format!("bynk: {} kept it", amber("warning:"))
+        );
+        assert_eq!(
+            message("bynk test: error: no tests found in x"),
+            format!("bynk test: {} no tests found in x", red("error:"))
+        );
+        assert_eq!(
+            message("bynk dev: note: `a.sql` changed"),
+            format!("bynk dev: {} `a.sql` changed", blue("note:"))
+        );
+        assert_eq!(
+            message("first\n  = note: the token came from X\n  note: y\nwarning: z"),
+            format!(
+                "first\n  = {} the token came from X\n  {} y\n{} z",
+                blue("note:"),
+                blue("note:"),
+                amber("warning:")
+            )
+        );
+        // Only the first label, and only where a label can stand.
+        assert_eq!(
+            message("bynk: warning: x said error: y"),
+            format!("bynk: {} x said error: y", amber("warning:"))
+        );
+        for plain in [
+            "bynk: signed out of `acme`",
+            "bynk: could not read `a: b`: error: no",
+            "",
+        ] {
+            assert_eq!(message(plain), plain);
+        }
+    }
+
+    #[test]
     fn coverage_is_red_amber_green() {
         assert_eq!(coverage_style(100), Style::Green);
         assert_eq!(coverage_style(80), Style::Green);
-        assert_eq!(coverage_style(79), Style::Yellow);
-        assert_eq!(coverage_style(50), Style::Yellow);
+        assert_eq!(coverage_style(79), Style::Amber);
+        assert_eq!(coverage_style(50), Style::Amber);
         assert_eq!(coverage_style(49), Style::Red);
         assert_eq!(coverage_style(0), Style::Red);
     }

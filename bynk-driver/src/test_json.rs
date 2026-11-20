@@ -20,6 +20,7 @@
 //! Two more `error.kind`s are additive: `"timeout"` (a `--mutate` run killed at
 //! its deadline) and `"no_tests"` (`--require-tests` on a project with none).
 
+use crate::emsg;
 use serde::Serialize;
 
 /// The pinned `bynk test --format json` document.
@@ -528,7 +529,7 @@ impl Unmatched {
     /// usual output, so a consumer still reads the document.
     pub fn report(&self, program: &str) {
         for message in self.messages() {
-            eprintln!("{program} test: {message}");
+            emsg!("{program} test: {message}");
         }
     }
 }

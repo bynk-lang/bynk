@@ -5,6 +5,7 @@
 //! [`bynk_emit::compile_with_warnings`] — exactly `bynk check`'s two branches, so the
 //! output is identical. The body is [`bynk_driver::run_check`], shared with `bynk`.
 
+use bynk_driver::emsg;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
@@ -20,7 +21,7 @@ pub fn run(
 ) -> ExitCode {
     let short = format == CheckFormatArg::Short;
     if emit && !input.is_dir() {
-        eprintln!("bynk check: `--emit` takes a project directory, not a single file");
+        emsg!("bynk check: `--emit` takes a project directory, not a single file");
         return ExitCode::FAILURE;
     }
     let checked = bynk_driver::run_check("bynk", &input, short, fix.as_deref(), each);

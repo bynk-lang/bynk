@@ -18,6 +18,7 @@
 //! be understood fails the deploy and says so, and never reads as "matches".
 
 use super::*;
+use bynk_driver::emsg;
 
 use serde_json::Value;
 use std::time::{Duration, Instant};
@@ -250,7 +251,7 @@ fn wait_for_metadata_indexes(
         let pending: Vec<&String> = wanted.iter().filter(|w| !listed.contains(*w)).collect();
         if pending.is_empty() {
             if announced {
-                eprintln!(
+                emsg!(
                     "bynk: the metadata indexes on `{name}` are listed ({}s)",
                     start.elapsed().as_secs()
                 );
@@ -362,7 +363,7 @@ pub(crate) fn apply_vectorize_adoptions(
     }
     let settings =
         bynk_project::vectorize::try_read_vectorize_deploy(project_root).map_err(|e| {
-            eprintln!("bynk: {e}");
+            emsg!("bynk: {e}");
         })?;
     // An entry that names no declared capability would be silently ignored,
     // and the deploy would create a fresh, empty index beside the one the team
@@ -386,7 +387,7 @@ pub(crate) fn apply_vectorize_adoptions(
         let hint = bynk_project::paths::did_you_mean(&wanted, bindings.iter().copied())
             .map(|b| format!("; did you mean the capability whose binding is `{b}`?"))
             .unwrap_or_default();
-        eprintln!(
+        emsg!(
             "bynk: `[deploy.vectorize.{capability}]` in bynk.toml names no `Vectorize` capability in this project{hint}; an entry that matches nothing would have the deploy create a new, empty index instead of adopting yours"
         );
         return Err(());
@@ -394,7 +395,7 @@ pub(crate) fn apply_vectorize_adoptions(
     for (capability, entry) in &settings {
         if !entry.index.contains_key(environment) {
             let named: Vec<&str> = entry.index.keys().map(String::as_str).collect();
-            eprintln!(
+            emsg!(
                 "bynk: note: `[deploy.vectorize.{capability}]` adopts an index only for {}; under `{environment}` the deploy creates one",
                 named.join(", ")
             );
@@ -631,7 +632,7 @@ fn provision_vectorize_indexes_paced(
             .is_some_and(|r| r.adopted)
             || lock.is_deployed(environment, worker);
         if existed && may_hold_vectors && !missing.is_empty() {
-            eprintln!(
+            emsg!(
                 "bynk: warning: `{physical}` already existed, so vectors written before {} will not be filterable on {} until they are written again (upsert them)",
                 if missing.len() == 1 {
                     "its metadata index"
@@ -642,7 +643,7 @@ fn provision_vectorize_indexes_paced(
             );
         }
         if !removed.is_empty() {
-            eprintln!(
+            emsg!(
                 "bynk: note: `{physical}` has metadata indexes the source no longer lists ({}); they are left in place, and a query that filters on one still works",
                 removed.join(", ")
             );

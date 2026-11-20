@@ -8,6 +8,7 @@
 //! migrate sweep`'s wake is, so a Worker that was not built by `bynk dev` has no
 //! such route and answers `404`.
 
+use bynk_driver::emsg;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
@@ -85,7 +86,7 @@ impl SessionFile {
         let path = session_path(project_root);
         let text = serde_json::to_string_pretty(session).expect("a session serialises");
         if let Err(e) = std::fs::write(&path, text) {
-            eprintln!(
+            emsg!(
                 "bynk: could not write {}: {e}; `bynk dev inspect` will not find this session",
                 path.display()
             );
@@ -411,7 +412,7 @@ pub fn command(project_root: &Path, what: &Inspect) -> std::process::ExitCode {
     let text = match std::fs::read_to_string(session_path(project_root)) {
         Ok(t) => t,
         Err(_) => {
-            eprintln!(
+            emsg!(
                 "bynk: no running `bynk dev` session for this project (start one with `bynk dev`)"
             );
             return std::process::ExitCode::FAILURE;
@@ -420,7 +421,7 @@ pub fn command(project_root: &Path, what: &Inspect) -> std::process::ExitCode {
     let session: Session = match serde_json::from_str(&text) {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("bynk: unreadable session file: {e}");
+            emsg!("bynk: unreadable session file: {e}");
             return std::process::ExitCode::FAILURE;
         }
     };
@@ -430,7 +431,7 @@ pub fn command(project_root: &Path, what: &Inspect) -> std::process::ExitCode {
             std::process::ExitCode::SUCCESS
         }
         Err(e) => {
-            eprintln!("bynk: {e}");
+            emsg!("bynk: {e}");
             std::process::ExitCode::FAILURE
         }
     }

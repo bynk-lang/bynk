@@ -17,6 +17,7 @@
 //! build never silently returns nothing. The editor falls back to the hosted
 //! Book, ranked by a small TypeScript copy of [`search`].
 
+use bynk_driver::emsg;
 use std::io::Write;
 use std::process::ExitCode;
 
@@ -323,7 +324,7 @@ pub fn embedded() -> Option<Book> {
 /// when this build carries no Book.
 pub fn run(query: Option<&str>, format: Format) -> ExitCode {
     if BUNDLE.trim().is_empty() {
-        eprintln!(
+        emsg!(
             "error: no Book bundled in this build of `bynk`. Read it at \
              {BOOK_BASE_URL}/book/ (or {BOOK_BASE_URL}/llms-full.txt)."
         );

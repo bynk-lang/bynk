@@ -1,4 +1,6 @@
 use super::*;
+use bynk_driver::colour;
+use bynk_driver::emsg;
 
 /// #1662: the diagnostic code a contract skew is reported under — a literal so
 /// the registry test sees it, and `bynk explain` knows it.
@@ -544,13 +546,13 @@ fn confirm_address_removals(plan: &Plan<'_>, prune: bool, yes: bool) -> bool {
             .map(|(worker, address)| format!("`{address}` (`{worker}`)"))
             .collect::<Vec<_>>()
             .join(", ");
-        eprintln!(
+        emsg!(
             "bynk: this deploy would remove the Email Routing rule for {list}, and mail to it would bounce; nothing was pushed. Pass --prune to confirm the removal, or put the address back"
         );
         return false;
     }
     for (worker, address) in &removed {
-        eprintln!("bynk: will remove the Email Routing rule for `{address}` (`{worker}`)");
+        emsg!("bynk: will remove the Email Routing rule for `{address}` (`{worker}`)");
     }
     confirm_deletion_prompt(yes, removed.len())
 }
@@ -581,7 +583,7 @@ fn confirm_deletions(plan: &Plan<'_>, confirmed: &[String], lock: &DeployLock) -
                 lock.has_deleted_class(plan.environment, &context.replace('.', "-"), class)
             });
         if !deletions.contains(&name) && !applied {
-            eprintln!("bynk: --confirm-delete {name} names no class this plan deletes; refusing");
+            emsg!("bynk: --confirm-delete {name} names no class this plan deletes; refusing");
             return false;
         }
     }
@@ -593,7 +595,7 @@ fn confirm_deletions(plan: &Plan<'_>, confirmed: &[String], lock: &DeployLock) -
         return true;
     }
     if !io::stdin().is_terminal() {
-        eprintln!(
+        emsg!(
             "bynk: this deploy deletes stored agent data; confirm each class with {}",
             unconfirmed
                 .iter()
@@ -611,7 +613,7 @@ fn confirm_deletions(plan: &Plan<'_>, confirmed: &[String], lock: &DeployLock) -
         let _ = io::stderr().flush();
         let mut answer = String::new();
         if io::stdin().read_line(&mut answer).is_err() || answer.trim() != name.as_str() {
-            eprintln!("bynk: `{name}` not confirmed; nothing was deployed");
+            emsg!("bynk: `{name}` not confirmed; nothing was deployed");
             return false;
         }
     }
@@ -817,7 +819,7 @@ pub fn run(
     // before any other work, rather than pick a winner between two explicit,
     // conflicting inputs.
     if let Some(conflict) = conflicting_env_passthrough(&opts.wrangler_args) {
-        eprintln!(
+        emsg!(
             "bynk: `--env {}` conflicts with `{conflict}` after `--` — pass one or the other, not both",
             opts.environment
         );
@@ -826,7 +828,7 @@ pub fn run(
 
     // #3107: no contract checks in a deployment; #3562: no Worker groups yet.
     if let Err(e) = bynk_driver::refuse_undeployable_project(project_root) {
-        eprintln!("bynk: {e}");
+        emsg!("bynk: {e}");
         return ExitCode::FAILURE;
     }
 
@@ -844,13 +846,13 @@ pub fn run(
         &preflight_opts,
     );
     if report.exit_nonzero(&preflight_opts) {
-        eprint!("{}", preflight_failure_message(&report));
+        colour::eprint(&preflight_failure_message(&report));
         return ExitCode::FAILURE;
     }
 
     let build_dir = project_root.join(".bynk").join("deploy");
     if let Err(e) = workers::prepare_build_dir(project_root, &build_dir) {
-        eprintln!("bynk: could not prepare build directory: {e}");
+        emsg!("bynk: could not prepare build directory: {e}");
         return ExitCode::FAILURE;
     }
     if !workers::compile_once_reporting(
@@ -867,7 +869,7 @@ pub fn run(
     let selected = match select_workers(opts, project_root, &available) {
         Ok(selected) => selected,
         Err(e) => {
-            eprintln!("bynk: {e}");
+            emsg!("bynk: {e}");
             return ExitCode::FAILURE;
         }
     };
@@ -877,7 +879,7 @@ pub fn run(
     let mut resources = match project_resources_for(&workers_dir, &available, project_root) {
         Ok(resources) => resources,
         Err(e) => {
-            eprintln!("bynk: {e}");
+            emsg!("bynk: {e}");
             return ExitCode::FAILURE;
         }
     };
@@ -888,7 +890,7 @@ pub fn run(
     let secret_source = match SecretSource::read(opts) {
         Ok(source) => source,
         Err(e) => {
-            eprintln!("bynk: {e}");
+            emsg!("bynk: {e}");
             return ExitCode::FAILURE;
         }
     };
@@ -897,7 +899,7 @@ pub fn run(
     let mut lock = match read_lock(&lock_path) {
         Ok(lock) => lock,
         Err(e) => {
-            eprintln!("bynk: could not read {}: {e}", lock_path.display());
+            emsg!("bynk: could not read {}: {e}", lock_path.display());
             return ExitCode::FAILURE;
         }
     };
@@ -924,7 +926,7 @@ pub fn run(
         let mut manifest = match read_contracts_manifest(&workers_dir.join(worker)) {
             Ok(m) => m,
             Err(e) => {
-                eprintln!(
+                emsg!(
                     "bynk: could not read `{worker}`'s {}: {e}",
                     bynk_emit::emitter::contracts::CONTRACTS_MANIFEST
                 );
@@ -990,7 +992,7 @@ pub fn run(
                 match record_accepted(project_root, &wanted) {
                     Ok(()) => recorded = true,
                     Err(e) => {
-                        eprintln!(
+                        emsg!(
                             "bynk: could not record the older contracts in {}: {e}",
                             bynk_driver::contracts_lock::lock_path(project_root).display()
                         );
@@ -1000,7 +1002,7 @@ pub fn run(
                 // The build reads the lock, so the callee carries what was just
                 // recorded.
                 if !rebuild(project_root, &build_dir, opts) {
-                    eprintln!(
+                    emsg!(
                         "bynk: the older contracts were recorded in {}, but the rebuild failed; nothing was deployed. The entries are safe to keep (every build re-checks them), or revert the file.",
                         bynk_driver::contracts_lock::lock_path(project_root).display()
                     );
@@ -1009,7 +1011,7 @@ pub fn run(
                 manifest = match read_contracts_manifest(&workers_dir.join(worker)) {
                     Ok(m) => m,
                     Err(e) => {
-                        eprintln!(
+                        emsg!(
                             "bynk: could not read `{worker}`'s {}: {e}",
                             bynk_emit::emitter::contracts::CONTRACTS_MANIFEST
                         );
@@ -1067,7 +1069,7 @@ pub fn run(
             let dir_of = |context: &str| groups.dir(context);
             let unused = unused_accepted(&contracts, (worker, &dir_of), &lock, &opts.environment);
             if !unused.is_empty() {
-                eprint!("{}", unused_accepted_notice(&unused));
+                colour::eprint(&unused_accepted_notice(&unused));
             }
         }
         for caller in unrecorded_callers(worker, &graph, &lock, &opts.environment) {
@@ -1087,7 +1089,7 @@ pub fn run(
             .filter(|worker| selected.contains(worker))
             .collect::<Vec<_>>(),
         Err(e) => {
-            eprintln!("bynk: {e}");
+            emsg!("bynk: {e}");
             let OrderError::Cycle(path) = &e;
             let publishers = cycle_publishers(path, &resources);
             if !publishers.is_empty() {
@@ -1134,7 +1136,7 @@ pub fn run(
     let pins = match read_pins(project_root) {
         Ok(pins) => pins,
         Err(e) => {
-            eprintln!("bynk: {e}");
+            emsg!("bynk: {e}");
             return ExitCode::FAILURE;
         }
     };
@@ -1147,7 +1149,7 @@ pub fn run(
             }
             Ok(_) => {}
             Err(e) => {
-                eprintln!(
+                emsg!(
                     "bynk: could not read `{worker}`'s {}: {e}",
                     bynk_emit::emitter::contracts::CONTRACTS_MANIFEST
                 );
@@ -1158,11 +1160,11 @@ pub fn run(
     let in_run: BTreeSet<String> = order.iter().map(|w| context_of(w)).collect();
     let (broken, unpinned) = check_pins(&pins, &built_foreign, &in_run, opts.context.is_none());
     if !broken.is_empty() {
-        eprint!("{}", refusal_message(&broken));
+        colour::eprint(&refusal_message(&broken));
         return ExitCode::FAILURE;
     }
     if !unpinned.is_empty() {
-        eprint!("{}", unpinned_message(&unpinned));
+        colour::eprint(&unpinned_message(&unpinned));
     }
 
     // Review of #1974: names the account scopes (a namespace's title, a
@@ -1174,7 +1176,7 @@ pub fn run(
         return ExitCode::FAILURE;
     }
     if let Some(message) = account_name_problem(&resources, &lock, &opts.environment) {
-        eprintln!("bynk: {message}");
+        emsg!("bynk: {message}");
         return ExitCode::FAILURE;
     }
     // #2055: a first deploy hands `wrangler deploy` Bynk's own
@@ -1184,7 +1186,7 @@ pub fn run(
     if let Some(refusal) =
         secrets_file_passthrough_refusal(&opts.wrangler_args, &order, &lock, &opts.environment)
     {
-        eprint!("{refusal}");
+        colour::eprint(&refusal);
         return ExitCode::FAILURE;
     }
 
@@ -1214,7 +1216,7 @@ pub fn run(
     // P5 (#2323): a changed `@jurisdiction` is a new bucket beside the old,
     // whose objects do not move, so it is only made on an explicit `--yes`.
     if let Some(refusal) = recreate_refusal(&plan, opts.yes) {
-        eprintln!("bynk: {refusal}");
+        emsg!("bynk: {refusal}");
         return ExitCode::FAILURE;
     }
 
@@ -1230,11 +1232,11 @@ pub fn run(
     let (manager, probe) = probe::detect_in_project(tb, "wrangler", project_root);
     // #1796: before authenticating, so the refusal costs no network call.
     if let Some(refusal) = preflight_refusal(tb, &probe, manager, &order, &resources) {
-        eprintln!("{refusal}");
+        colour::eprintln(&refusal);
         return ExitCode::FAILURE;
     }
     if !whoami(&probe.provenance) {
-        eprintln!(
+        emsg!(
             "bynk: Cloudflare authentication is unavailable; run `wrangler login` or set CLOUDFLARE_API_TOKEN"
         );
         return ExitCode::FAILURE;
@@ -1246,7 +1248,7 @@ pub fn run(
     for warning in foreign_worker_warnings(&order, &resources, |name| {
         worker_presence(&probe.provenance, name, project_root)
     }) {
-        eprintln!("{warning}");
+        colour::eprintln(&warning);
     }
     // #3301: a stored secret is linked, never created, so a missing store or
     // secret stops the run here, before the confirmation and before anything
@@ -1339,7 +1341,7 @@ pub fn run(
         let names = match edge.keys() {
             Ok(names) => names,
             Err(e) => {
-                eprintln!("bynk: {e}");
+                emsg!("bynk: {e}");
                 return ExitCode::FAILURE;
             }
         };
@@ -1363,7 +1365,7 @@ pub fn run(
                 edge_keys.insert(edge.clone(), decision);
             }
             Err(e) => {
-                eprintln!("bynk: {e}");
+                emsg!("bynk: {e}");
                 return ExitCode::FAILURE;
             }
         }
@@ -1471,14 +1473,14 @@ pub fn run(
             // claims what it watched succeed.
             Ok(Pushed::Interrupted) => return ExitCode::SUCCESS,
             Err(f) => {
-                eprintln!("bynk: {}", f.message);
+                emsg!("bynk: {}", f.message);
                 // Stop rather than push on: everything left in the order either
                 // binds to what just failed or would be uploaded into a
                 // topology that is not what the plan described. `worker` itself
                 // is excluded — the line above already named it as the failure,
                 // and listing it here again as "not deployed" would double-count
                 // it against the number.
-                eprint!("{}", stopped_report(&opts.environment, &order[i + 1..]));
+                colour::eprint(&stopped_report(&opts.environment, &order[i + 1..]));
                 // #2004 review: a run that re-keyed an edge and stopped between
                 // its two ends leaves them refusing each other. The next plain
                 // run sees a key on each end and keeps both, so say how to
@@ -1486,7 +1488,7 @@ pub fn run(
                 if let Some(hint) =
                     interrupted_rotation_hint(&opts.environment, &edge_keys, &order[..i])
                 {
-                    eprint!("{hint}");
+                    colour::eprint(&hint);
                 }
                 // I3 (#1971): a secret minted for this context's foreign
                 // caller may already be set, and the next run would keep it
@@ -1529,7 +1531,7 @@ pub fn run(
             &opts.environment,
             &plan.orphans,
         ) {
-            eprintln!("bynk: {}", e.message);
+            emsg!("bynk: {}", e.message);
             return ExitCode::from(e.code);
         }
         // #3319: a Hyperdrive config holds no data, so one the deploy made is
@@ -1541,7 +1543,7 @@ pub fn run(
             &opts.environment,
             &plan.orphans,
         ) {
-            eprintln!("bynk: {}", e.message);
+            emsg!("bynk: {}", e.message);
             return ExitCode::from(e.code);
         }
     }
@@ -1553,7 +1555,7 @@ pub fn run(
 fn sweep_and_report_stale_uploads() {
     let stale_removed = sweep_stale_upload_dirs(&std::env::temp_dir());
     if stale_removed > 0 {
-        eprintln!(
+        emsg!(
             "bynk: removed {stale_removed} secrets file(s) an interrupted deploy left in the temp directory"
         );
     }
@@ -2685,7 +2687,7 @@ fn unrecordable_in_ci(
         return false;
     }
     if let Some((worker, binding)) = first_unrecorded_kv(order, resources, lock, environment) {
-        eprintln!(
+        emsg!(
             "bynk: {} is unrecorded; provision locally first and commit {LOCK_FILE}",
             kv_namespace_noun(worker, binding)
         );
@@ -2693,7 +2695,7 @@ fn unrecordable_in_ci(
     }
     if let Some((worker, binding)) = first_unrecorded_ratelimit(order, resources, lock, environment)
     {
-        eprintln!(
+        emsg!(
             "bynk: the rate limiter `{binding}` of `{worker}` is unrecorded; deploy locally first and commit {LOCK_FILE}"
         );
         return true;
@@ -3502,7 +3504,7 @@ fn confirm(yes: bool) -> bool {
         return true;
     }
     if !requires_interactive_confirmation(yes, io::stdin().is_terminal()) {
-        eprintln!("bynk: refusing to mutate in a non-interactive session without --yes");
+        emsg!("bynk: refusing to mutate in a non-interactive session without --yes");
         return false;
     }
     eprint!("Deploy to Cloudflare? [y/N] ");

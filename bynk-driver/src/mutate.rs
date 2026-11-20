@@ -22,6 +22,7 @@
 //! The first slice mutates comparison operators (`<`↔`<=`, `>`↔`>=`,
 //! `==`↔`!=`) and boolean connectives (`&&`↔`||`).
 
+use crate::emsg;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -770,6 +771,74 @@ impl Status {
             Status::NoSuite => "no_suite",
         }
     }
+
+    /// Its colour: a killed or timed-out mutant is a success, a survivor a
+    /// failure, one no suite reaches a warning, and one that didn't compile
+    /// only information.
+    fn style(self) -> crate::colour::Style {
+        use crate::colour::Style;
+        match self {
+            Status::Killed | Status::Timeout => Style::Green,
+            Status::Survived => Style::Red,
+            Status::NoSuite => Style::Amber,
+            Status::Invalid => Style::Blue,
+        }
+    }
+}
+
+/// A mutation run's counts, for its human report.
+struct Tally {
+    total: usize,
+    /// Killed or timed out.
+    killed: usize,
+    survived: usize,
+    no_suite: usize,
+    invalid: usize,
+    score: u32,
+}
+
+/// The human report of a mutation run: the tally, then each mutant that
+/// survived or that no suite reached. With `colour`, the counts and labels take
+/// their statuses' colours, a count of zero staying plain, and the score is red,
+/// amber or green as a coverage percentage is.
+fn human_report(t: &Tally, results: &[(Site, Status, Vec<String>)], colour: bool) -> String {
+    use crate::colour::{Style, coverage_style, paint};
+    let count = |n: usize, what: &str, status: Status| {
+        let text = format!("{n} {what}");
+        if n == 0 {
+            text
+        } else {
+            paint(colour, status.style(), &text)
+        }
+    };
+    let mut out = format!(
+        "{} {} mutants, {}, {}, {}, {} (score {})\n",
+        paint(colour, Style::Bold, "mutation:"),
+        t.total,
+        count(t.killed, "killed", Status::Killed),
+        count(t.survived, "survived", Status::Survived),
+        count(t.no_suite, "not covered by any suite", Status::NoSuite),
+        count(t.invalid, "invalid", Status::Invalid),
+        paint(colour, coverage_style(t.score), &format!("{}%", t.score)),
+    );
+    for (site, status, _) in results {
+        let label = match status {
+            Status::Survived => "SURVIVED",
+            Status::NoSuite => "NO SUITE",
+            _ => continue,
+        };
+        out.push_str(&format!(
+            "  {} {}:{}:{}  {}  `{}` → `{}`\n",
+            paint(colour, status.style(), &format!("{label:<9}")),
+            site.path,
+            site.line,
+            site.column,
+            site.qualified(),
+            site.from,
+            site.to
+        ));
+    }
+    out
 }
 
 /// Classify the document one mutant's run printed.
@@ -803,7 +872,7 @@ fn fail(program: &str, json: bool, message: String) -> ExitCode {
     if json {
         crate::test_stream::print_run(false, &TestRun::runtime_error(message, None));
     } else {
-        eprintln!("{program} test: {message}");
+        emsg!("{program} test: {message}");
     }
     ExitCode::FAILURE
 }
@@ -945,7 +1014,7 @@ pub fn run(program: &str, args: MutateArgs) -> ExitCode {
     // The unmutated project must pass: otherwise every mutant "fails" and is
     // killed by the baseline's own failure.
     if !json {
-        eprintln!("{program} test: running the unmutated suites first");
+        emsg!("{program} test: running the unmutated suites first");
     }
     let started = Instant::now();
     let (ok, text, doc) = run_once(base_args("out", suite.clone()));
@@ -956,7 +1025,7 @@ pub fn run(program: &str, args: MutateArgs) -> ExitCode {
         } else {
             eprintln!("{}", describe_failure(doc.as_ref(), &text));
         }
-        eprintln!(
+        emsg!(
             "{program} test: the unmutated project does not pass, so there is nothing to mutate — fix it first"
         );
         return ExitCode::FAILURE;
@@ -1028,7 +1097,11 @@ pub fn run(program: &str, args: MutateArgs) -> ExitCode {
                     site.column,
                     site.from,
                     site.to,
-                    status.word().replace('_', " ")
+                    crate::colour::paint(
+                        crate::colour::stderr(),
+                        status.style(),
+                        &status.word().replace('_', " ")
+                    )
                 );
             }
             let shown = if all_suites && status != Status::Invalid {
@@ -1108,26 +1181,18 @@ pub fn run(program: &str, args: MutateArgs) -> ExitCode {
             serde_json::to_string_pretty(&baseline).unwrap_or_default()
         );
     } else {
-        println!(
-            "mutation: {total} mutants, {} killed, {survived} survived, {no_suite} not covered by any suite, {invalid} invalid (score {score}%)",
-            killed + timed_out
+        let tally = Tally {
+            total,
+            killed: killed + timed_out,
+            survived,
+            no_suite,
+            invalid,
+            score,
+        };
+        print!(
+            "{}",
+            human_report(&tally, &results, crate::colour::stdout())
         );
-        for (site, status, _) in &results {
-            let label = match status {
-                Status::Survived => "SURVIVED",
-                Status::NoSuite => "NO SUITE",
-                _ => continue,
-            };
-            println!(
-                "  {label:<9} {}:{}:{}  {}  `{}` → `{}`",
-                site.path,
-                site.line,
-                site.column,
-                site.qualified(),
-                site.from,
-                site.to
-            );
-        }
         if ran == 0 && total > 0 {
             println!("no mutant reached a suite — nothing was scored");
         }
@@ -1143,13 +1208,13 @@ pub fn run(program: &str, args: MutateArgs) -> ExitCode {
             ExitCode::SUCCESS
         }
         Some(min) if ran == 0 => {
-            eprintln!(
+            emsg!(
                 "{program} test: no mutant reached a suite, so --mutate-fail-under {min} cannot be met"
             );
             ExitCode::FAILURE
         }
         Some(min) if score < min => {
-            eprintln!("{program} test: mutation score {score}% is below --mutate-fail-under {min}");
+            emsg!("{program} test: mutation score {score}% is below --mutate-fail-under {min}");
             ExitCode::FAILURE
         }
         _ => ExitCode::SUCCESS,
@@ -1158,6 +1223,58 @@ pub fn run(program: &str, args: MutateArgs) -> ExitCode {
 
 #[cfg(test)]
 mod tests {
+    /// The human report reads as it always has without colour, and with it
+    /// each count and label takes its status's colour and the score its band.
+    #[test]
+    fn the_human_report_colours_by_status() {
+        use super::{Site, Status, Tally, human_report};
+        let site = |line, from: &str, to: &str| Site {
+            key: "src/todos.bynk".into(),
+            path: "src/todos.bynk".into(),
+            start: 0,
+            end: 1,
+            line,
+            column: 3,
+            end_line: line,
+            end_column: 4,
+            unit: "todos".into(),
+            decl: "add".into(),
+            from: from.into(),
+            to: to.into(),
+        };
+        let results = vec![
+            (site(1, "+", "-"), Status::Killed, Vec::new()),
+            (site(2, "==", "!="), Status::Survived, Vec::new()),
+            (site(3, "<", "<="), Status::NoSuite, Vec::new()),
+        ];
+        let tally = Tally {
+            total: 3,
+            killed: 1,
+            survived: 1,
+            no_suite: 1,
+            invalid: 0,
+            score: 50,
+        };
+        assert_eq!(
+            human_report(&tally, &results, false),
+            "mutation: 3 mutants, 1 killed, 1 survived, 1 not covered by any suite, 0 invalid (score 50%)\n\
+             \x20 SURVIVED  src/todos.bynk:2:3  todos.add  `==` → `!=`\n\
+             \x20 NO SUITE  src/todos.bynk:3:3  todos.add  `<` → `<=`\n"
+        );
+        let coloured = human_report(&tally, &results, true);
+        for part in [
+            "\x1b[1mmutation:\x1b[22m 3 mutants, ",
+            "\x1b[32m1 killed\x1b[39m",
+            "\x1b[31m1 survived\x1b[39m",
+            "\x1b[33m1 not covered by any suite\x1b[39m",
+            ", 0 invalid (score \x1b[33m50%\x1b[39m)",
+            "  \x1b[31mSURVIVED \x1b[39m src/todos.bynk:2:3",
+            "  \x1b[33mNO SUITE \x1b[39m src/todos.bynk:3:3",
+        ] {
+            assert!(coloured.contains(part), "{part:?} in:\n{coloured}");
+        }
+    }
+
     use super::*;
 
     fn sources(files: &[(&str, &str)]) -> HashMap<PathBuf, String> {
