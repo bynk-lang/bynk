@@ -222,17 +222,29 @@ fn stream_claim() -> Vec<TsStmt> {
     ]
 }
 
+/// The `Symbol.for` key the runtime marks a consumed stream with (`runtime/http.ts`). It is a
+/// runtime symbol name, not a diagnostic code, so it is spelt in two pieces: the registry scan
+/// reads a `bynk.*.*` literal as a code. A macro, so the node form ([`STREAM_READ_SYMBOL`]) and
+/// the text form ([`STREAM_CLAIM`]) share the one spelling.
+macro_rules! stream_read_symbol {
+    () => {
+        concat!("bynk", ".stream.read")
+    };
+}
+
+/// The key as a string, for the node form of the claim.
+const STREAM_READ_SYMBOL: &str = stream_read_symbol!();
+
 /// K-streams (#2623): mark the stream `__s` as read, or fault if it already
 /// was. The mark lives on the stream object under a registered symbol, so it
 /// holds across modules, and the runtime's response bodies set the same one
 /// (`claimStream` in `bynk-emit/runtime/src/http.ts`). Inline, so a file that
 /// uses streams still needs no runtime import (ADR 0128 D6).
-/// The `Symbol.for` key the runtime marks a consumed stream with (`runtime/http.ts`). It is a
-/// runtime symbol name, not a diagnostic code, so it is spelt in two pieces: the registry scan
-/// reads a `bynk.*.*` literal as a code.
-const STREAM_READ_SYMBOL: &str = concat!("bynk", ".stream.read");
-
-const STREAM_CLAIM: &str = "const __m = __s as unknown as { [k: symbol]: boolean }; const __k = globalThis.Symbol.for(\"bynk.stream.read\"); if (__m[__k]) { throw new globalThis.Error(\"bynk: a stream can be read only once\"); } __m[__k] = true;";
+const STREAM_CLAIM: &str = concat!(
+    "const __m = __s as unknown as { [k: symbol]: boolean }; const __k = globalThis.Symbol.for(\"",
+    stream_read_symbol!(),
+    "\"); if (__m[__k]) { throw new globalThis.Error(\"bynk: a stream can be read only once\"); } __m[__k] = true;"
+);
 
 /// What `lower_query_method` needs to know about the receiver beyond its
 /// already-lowered arguments: the element types, and whether a key-based
