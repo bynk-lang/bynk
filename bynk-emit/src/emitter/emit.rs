@@ -2829,15 +2829,13 @@ pub(crate) fn emit_provider(
             },
         )))),
     };
+    let token = format!("__{}Token", p.capability.name);
     stmts.push(bynk_ts::TsStmt::decl(
         bynk_ts::TsDecl::Export(Box::new(bynk_ts::TsDecl::ConstDecl {
             name: format!("__{prov}Provider"),
             ty: None,
             init: bynk_ts::TsExpr::object(vec![
-                (
-                    "token".to_string(),
-                    bynk_ts::TsExpr::Ident(format!("__{}Token", p.capability.name)),
-                ),
+                ("token".to_string(), bynk_ts::TsExpr::Ident(token)),
                 ("factory".to_string(), factory),
             ]),
         })),
