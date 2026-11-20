@@ -4877,23 +4877,16 @@ fn with_open_sum_note(err: CompileError, handler: &TestHandler, ctx: &Ctx) -> Co
     }
 }
 
-/// #2135, #2864: whether `name` is a reserved bad-credential principal —
-/// `Forged` (a wrong secret), `Stale` (a timestamp past the tolerance) or
-/// `Expired` (a Bearer or `Oidc` token whose `exp` has passed), or (#3052)
-/// `WrongIssuer` / `WrongAudience` (an `Oidc` token for another issuer or
-/// audience), or (#3225) `WrongAlgorithm` / `NoSubject` (an `Oidc` token signed
-/// under a refused algorithm, or one with no usable `sub`).
-pub(crate) fn is_bad_signature_principal(name: &str) -> bool {
-    matches!(
-        name,
-        "Forged"
-            | "Stale"
-            | "Expired"
-            | "WrongIssuer"
-            | "WrongAudience"
-            | "WrongAlgorithm"
-            | "NoSubject"
-    )
+/// 1A.33: classify a call-site principal clause ([`CallSitePrincipal::of`], the one
+/// classification of the reserved names) and record it on the clause's own id, so the emitter
+/// and the later passes read what the checker decided. Idempotent.
+pub(crate) fn record_principal(
+    p: &bynk_syntax::ast::CallSiteActor,
+    ctx: &mut Ctx,
+) -> CallSitePrincipal {
+    let kind = CallSitePrincipal::of(&p.actor.name);
+    ctx.callees.insert(p.id, Callee::Principal(kind.clone()));
+    kind
 }
 
 /// #3052, #3225: what an `Oidc`-only failure principal is, for the diagnostic
@@ -4909,29 +4902,29 @@ struct OidcOnlyPrincipal {
 }
 
 /// The `Oidc`-only failure principals; `None` for every other name.
-fn oidc_only_principal(name: &str) -> Option<OidcOnlyPrincipal> {
-    let (code, sends, why_not_elsewhere) = match name {
-        "WrongIssuer" => (
+fn oidc_only_principal(bad: BadCredential) -> Option<OidcOnlyPrincipal> {
+    let (code, sends, why_not_elsewhere) = match bad {
+        BadCredential::WrongIssuer => (
             "bynk.test.wrong_issuer_needs_oidc_route",
             "a token for another issuer",
             "; a `Bearer` token has no issuer to check",
         ),
-        "WrongAudience" => (
+        BadCredential::WrongAudience => (
             "bynk.test.wrong_audience_needs_oidc_route",
             "a token for another audience",
             "; a `Bearer` token has no audience to check",
         ),
-        "WrongAlgorithm" => (
+        BadCredential::WrongAlgorithm => (
             "bynk.test.wrong_algorithm_needs_oidc_route",
             "tokens signed under a refused algorithm (`alg: none`, and `HS256` keyed with the public key)",
             "; only an `Oidc` seam is driven with these tokens",
         ),
-        "NoSubject" => (
+        BadCredential::NoSubject => (
             "bynk.test.no_subject_needs_oidc_route",
             "tokens with an empty and with a missing `sub`",
             "; only an `Oidc` seam is driven with these tokens",
         ),
-        _ => return None,
+        BadCredential::Forged | BadCredential::Stale | BadCredential::Expired => return None,
     };
     Some(OidcOnlyPrincipal {
         code,
@@ -5088,6 +5081,8 @@ pub(crate) fn check_effect_let_principal(
     ctx: &mut Ctx,
 ) {
     let tys = ctx.tys;
+    // 1A.33: classify the clause once; the rules below read the result.
+    let kind = principal.map(|p| record_principal(p, ctx));
     // #2380 (L5): a call-site principal's claims (`by W("id", claims)`) are a
     // `TokenClaims`, and only an `Oidc` actor's handler reads them.
     if let Some(p) = principal
@@ -5220,7 +5215,7 @@ pub(crate) fn check_effect_let_principal(
     // meaningless). The `system`-only tier rule is enforced at emit time, like
     // `Wire`'s (the checker has no tier).
     if let Some(p) = principal
-        && p.actor.name == "Nobody"
+        && kind == Some(CallSitePrincipal::Nobody)
     {
         // #710-style: `by Nobody` is only *implemented* for a Bearer- or
         // (#2135) Signature-secured route — the no-auth driver leaves out the
@@ -5264,7 +5259,7 @@ pub(crate) fn check_effect_let_principal(
     // take no identity. The `system`-only tier rule is enforced with the
     // case's tier (`bynk.test.forged_needs_system`).
     if let Some(p) = principal
-        && is_bad_signature_principal(&p.actor.name)
+        && let Some(CallSitePrincipal::BadCredential(bad)) = kind
     {
         let name = p.actor.name.as_str();
         let by = handler.by_clause.as_ref();
@@ -5274,8 +5269,8 @@ pub(crate) fn check_effect_let_principal(
             by.is_some_and(|by| crate::actors::route_refuses_bad_token(by, &ctx.test_actors));
         // #3052: an `Oidc` route's seam refuses a bad token too.
         let oidc = by.is_some_and(|by| crate::actors::by_clause_is_oidc(by, &ctx.test_actors));
-        match (name, sig_seam) {
-            ("Expired", _) if !bearer && !oidc => {
+        match (bad, sig_seam) {
+            (BadCredential::Expired, _) if !bearer && !oidc => {
                 let err = CompileError::new(
                     "bynk.test.expired_needs_bearer_route",
                     p.span,
@@ -5286,7 +5281,7 @@ pub(crate) fn check_effect_let_principal(
                 );
                 ctx.errors.push(with_open_sum_note(err, &handler, ctx));
             }
-            ("Expired", _) => {}
+            (BadCredential::Expired, _) => {}
             (n, _) if !oidc && oidc_only_principal(n).is_some() => {
                 let kind = oidc_only_principal(n).expect("matched above");
                 ctx.errors.push(
@@ -5305,11 +5300,13 @@ pub(crate) fn check_effect_let_principal(
                 );
             }
             (n, _) if oidc_only_principal(n).is_some() => {}
-            ("Forged" | "Stale", None) if !(name == "Forged" && (bearer || oidc)) => {
+            (BadCredential::Forged | BadCredential::Stale, None)
+                if !(bad == BadCredential::Forged && (bearer || oidc)) =>
+            {
                 let err = CompileError::new(
                     "bynk.test.forged_needs_signature_route",
                     p.span,
-                    if name == "Forged" {
+                    if bad == BadCredential::Forged {
                         "`by Forged` sends a bad credential to a `Signature`, `Bearer` or `Oidc` seam, but this handler's route has none of these seams to refuse one".to_string()
                     } else {
                         "`by Stale` sends a stale signature to a `Signature` seam, but this handler's route has no `Signature` seam that refuses one".to_string()
@@ -5320,7 +5317,7 @@ pub(crate) fn check_effect_let_principal(
                 );
                 ctx.errors.push(with_open_sum_note(err, &handler, ctx));
             }
-            ("Stale", Some(seam))
+            (BadCredential::Stale, Some(seam))
                 if seam.timestamp_header.is_none() || seam.tolerance_secs.is_none() =>
             {
                 ctx.errors.push(
@@ -5566,6 +5563,7 @@ fn handler_binds_caller(handler: &TestHandler, ctx: &Ctx) -> bool {
 fn report_principal_actor(p: &bynk_syntax::ast::CallSiteActor, ctx: &mut Ctx) {
     let tys = ctx.tys;
     let name = &p.actor.name;
+    let kind = record_principal(p, ctx);
     match resolve_actor_identity(name, ctx) {
         // A declared actor that resolves to nothing is a malformed refinement,
         // already reported at its declaration
@@ -5579,15 +5577,18 @@ fn report_principal_actor(p: &bynk_syntax::ast::CallSiteActor, ctx: &mut Ctx) {
         // #2135, #2864: a reserved bad-credential principal reaching no http
         // route (a `call`, an event, a cron or queue address) has no
         // `Signature` or `Bearer` seam to refuse it.
-        ActorIdentity::Unknown if is_bad_signature_principal(name) => {
-            let err = if name == "Expired" {
+        ActorIdentity::Unknown if matches!(kind, CallSitePrincipal::BadCredential(_)) => {
+            let CallSitePrincipal::BadCredential(bad) = kind else {
+                unreachable!("matched above")
+            };
+            let err = if bad == BadCredential::Expired {
                 CompileError::new(
                     "bynk.test.expired_needs_bearer_route",
                     p.span,
                     "`by Expired` sends an expired token to a `Bearer` or `Oidc` seam, but this address reaches no `Bearer`- or `Oidc`-secured http route",
                 )
                 .with_note("use `by Expired` on an http route guarded by a `Bearer` or `Oidc` actor")
-            } else if let Some(kind) = oidc_only_principal(name) {
+            } else if let Some(kind) = oidc_only_principal(bad) {
                 CompileError::new(
                     kind.code,
                     p.span,

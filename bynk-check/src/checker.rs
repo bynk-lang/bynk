@@ -17,6 +17,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 
+use crate::actors::{BadCredential, CallSitePrincipal};
 use crate::builtin_names::map_query;
 use crate::builtin_names::methods::*;
 use crate::builtin_names::types::*;
@@ -803,6 +804,11 @@ pub enum Callee {
     /// otherwise replace (one id, one entry), so the constant's SQL is still
     /// prepared.
     Const(String, Option<Box<d1::D1SqlSite>>),
+    /// 1A.33: what a call-site principal clause (`by Nobody`, `by Forged`, `by User("bob")`)
+    /// is, recorded under the clause's own [`CallSiteActor::id`]. Not call-shaped: it is the
+    /// one place the reserved principal names are classified, for the checker's own rules
+    /// and the emitter alike.
+    Principal(crate::actors::CallSitePrincipal),
 }
 
 impl Callee {
@@ -4511,9 +4517,10 @@ pub(super) fn check_effect_let(l: &LetStmt, check_context: bool, ctx: &mut Ctx) 
     // #1934: a test-service address driven `by Nobody` observes the
     // auth seam, so it yields an `HttpOutcome`. The principal is on
     // the statement, so the call alone cannot say so.
-    if l.principal.as_ref().is_some_and(|p| {
-        p.actor.name == "Nobody" || calls::is_bad_signature_principal(&p.actor.name)
-    }) && let Some(t) = rhs_ty
+    if l.principal
+        .as_ref()
+        .is_some_and(|p| calls::record_principal(p, ctx).is_reserved())
+        && let Some(t) = rhs_ty
     {
         let t = calls::nobody_outcome(&l.value, t, ctx);
         if let Some(te) = ctx.expr_types.get_mut(&l.value.id) {

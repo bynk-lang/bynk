@@ -827,3 +827,59 @@ fn run_id_records_the_test_run_intrinsic() {
         a.callees_in("shop.ledger")
     );
 }
+
+// ---- call-site principals ---------------------------------------------------
+
+/// Each principal clause is recorded under its own id: an ordinary actor as an actor, `Nobody`,
+/// and every bad credential. (The tier and route rules report errors for some of these; the
+/// classification is recorded regardless.)
+#[test]
+fn every_call_site_principal_is_recorded_once_and_an_actor_is_not_reserved() {
+    use crate::actors::{BadCredential, CallSitePrincipal};
+    let mut cases = String::new();
+    for who in [
+        "Visitor",
+        "Nobody",
+        "Forged",
+        "Stale",
+        "Expired",
+        "WrongIssuer",
+        "WrongAudience",
+        "WrongAlgorithm",
+        "NoSubject",
+    ] {
+        cases.push_str(&format!(
+            "  case \"{who}\" {{\n    let r <- api.GET(\"/count\") by {who}\n    expect true\n  }}\n"
+        ));
+    }
+    let a = analyse(&[
+        ("cr/jobs.bynk", JOBS),
+        (
+            "tests/jobs.bynk",
+            &format!("suite cr.jobs as integration {{\n{cases}}}\n"),
+        ),
+    ]);
+    let recorded: Vec<CallSitePrincipal> = a
+        .callees_in("cr.jobs")
+        .iter()
+        .filter_map(|c| match c {
+            Callee::Principal(p) => Some(p.clone()),
+            _ => None,
+        })
+        .collect();
+    assert!(
+        recorded.contains(&CallSitePrincipal::Actor("Visitor".to_string())),
+        "{recorded:?}"
+    );
+    assert!(
+        recorded.contains(&CallSitePrincipal::Nobody),
+        "{recorded:?}"
+    );
+    for bad in BadCredential::ALL {
+        assert!(
+            recorded.contains(&CallSitePrincipal::BadCredential(bad)),
+            "{bad:?} missing from {recorded:?}"
+        );
+    }
+    assert_eq!(recorded.iter().filter(|p| !p.is_reserved()).count(), 1);
+}

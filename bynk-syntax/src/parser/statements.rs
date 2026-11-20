@@ -930,10 +930,12 @@ impl<'a> Parser<'a> {
             (None, None, actor.span)
         };
         let span = by_kw.span.merge(end);
+        let id = self.alloc_expr_id();
         Ok(Some(CallSiteActor {
             actor,
             identity,
             claims,
+            id,
             span,
         }))
     }

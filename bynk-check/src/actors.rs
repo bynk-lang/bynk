@@ -1216,3 +1216,178 @@ mod claim_witness_tests {
         assert_eq!(claim_witness_js(&P::And(eq("r", "x"), eq("r", "y"))), None);
     }
 }
+
+// ---- call-site principals (1A.33) --------------------------------------------
+
+/// A reserved bad-credential principal (`by Forged`, …): it names no actor and takes no
+/// identity, and the `system` driver presents a credential the seam must refuse.
+///
+/// #2135, #2864: `Forged` (a wrong secret), `Stale` (a timestamp past the tolerance) and
+/// `Expired` (a Bearer or `Oidc` token whose `exp` has passed). #3052: `WrongIssuer` and
+/// `WrongAudience` (an `Oidc` token for another issuer or audience). #3225:
+/// `WrongAlgorithm` and `NoSubject` (an `Oidc` token under a refused algorithm, or with no
+/// usable `sub`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum BadCredential {
+    Forged,
+    Stale,
+    Expired,
+    WrongIssuer,
+    WrongAudience,
+    WrongAlgorithm,
+    NoSubject,
+}
+
+impl BadCredential {
+    /// Every bad-credential principal.
+    pub const ALL: [BadCredential; 7] = [
+        BadCredential::Forged,
+        BadCredential::Stale,
+        BadCredential::Expired,
+        BadCredential::WrongIssuer,
+        BadCredential::WrongAudience,
+        BadCredential::WrongAlgorithm,
+        BadCredential::NoSubject,
+    ];
+
+    /// The name written after `by`.
+    pub const fn name(self) -> &'static str {
+        match self {
+            BadCredential::Forged => "Forged",
+            BadCredential::Stale => "Stale",
+            BadCredential::Expired => "Expired",
+            BadCredential::WrongIssuer => "WrongIssuer",
+            BadCredential::WrongAudience => "WrongAudience",
+            BadCredential::WrongAlgorithm => "WrongAlgorithm",
+            BadCredential::NoSubject => "NoSubject",
+        }
+    }
+
+    /// The `system` test driver that presents this credential.
+    pub const fn driver(self) -> &'static str {
+        match self {
+            BadCredential::Forged => "forged",
+            BadCredential::Stale => "stale",
+            BadCredential::Expired => "expired",
+            BadCredential::WrongIssuer => "wrongissuer",
+            BadCredential::WrongAudience => "wrongaudience",
+            BadCredential::WrongAlgorithm => "wrongalgorithm",
+            BadCredential::NoSubject => "nosubject",
+        }
+    }
+
+    /// Whether only an `Oidc` seam can refuse this credential.
+    pub const fn oidc_only(self) -> bool {
+        matches!(
+            self,
+            BadCredential::WrongIssuer
+                | BadCredential::WrongAudience
+                | BadCredential::WrongAlgorithm
+                | BadCredential::NoSubject
+        )
+    }
+}
+
+/// What a call-site principal (`by <Name>[(<identity>)]`) is: an actor, the reserved
+/// no-credential principal `Nobody` (#706), or a reserved bad credential. The one
+/// classification of those reserved names; the checker records it on the clause
+/// ([`crate::checker::Callee::Principal`]) and every reader, checker and emitter, reads it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CallSitePrincipal {
+    /// An actor, by name (a declared actor of the target, or a prelude actor).
+    Actor(String),
+    /// `by Nobody`: no credential at all, so the auth seam answers `401`.
+    Nobody,
+    BadCredential(BadCredential),
+}
+
+impl CallSitePrincipal {
+    /// Classify the name written after `by`.
+    pub fn of(name: &str) -> CallSitePrincipal {
+        if name == "Nobody" {
+            return CallSitePrincipal::Nobody;
+        }
+        BadCredential::ALL
+            .into_iter()
+            .find(|b| b.name() == name)
+            .map_or_else(
+                || CallSitePrincipal::Actor(name.to_string()),
+                CallSitePrincipal::BadCredential,
+            )
+    }
+
+    /// Whether the principal drives the auth seam with no usable credential
+    /// (`Nobody` or a bad credential), which makes an address's outcome an `HttpOutcome`.
+    pub fn is_reserved(&self) -> bool {
+        !matches!(self, CallSitePrincipal::Actor(_))
+    }
+}
+
+#[cfg(test)]
+mod call_site_principal_tests {
+    use super::*;
+
+    #[test]
+    fn nobody_is_its_own_principal() {
+        assert_eq!(CallSitePrincipal::of("Nobody"), CallSitePrincipal::Nobody);
+        assert!(CallSitePrincipal::Nobody.is_reserved());
+    }
+
+    #[test]
+    fn each_bad_credential_classifies_and_names_its_driver() {
+        let drivers = [
+            ("Forged", "forged"),
+            ("Stale", "stale"),
+            ("Expired", "expired"),
+            ("WrongIssuer", "wrongissuer"),
+            ("WrongAudience", "wrongaudience"),
+            ("WrongAlgorithm", "wrongalgorithm"),
+            ("NoSubject", "nosubject"),
+        ];
+        assert_eq!(drivers.len(), BadCredential::ALL.len());
+        for (name, driver) in drivers {
+            let CallSitePrincipal::BadCredential(b) = CallSitePrincipal::of(name) else {
+                panic!("{name} is a bad credential")
+            };
+            assert_eq!((b.name(), b.driver()), (name, driver));
+            assert!(CallSitePrincipal::BadCredential(b).is_reserved());
+        }
+    }
+
+    #[test]
+    fn only_the_oidc_credentials_are_oidc_only() {
+        let oidc: Vec<_> = BadCredential::ALL
+            .into_iter()
+            .filter(|b| b.oidc_only())
+            .map(BadCredential::name)
+            .collect();
+        assert_eq!(
+            oidc,
+            [
+                "WrongIssuer",
+                "WrongAudience",
+                "WrongAlgorithm",
+                "NoSubject"
+            ]
+        );
+    }
+
+    /// An ordinary actor (declared or prelude, including one whose name merely contains a
+    /// reserved word) is an actor, not a reserved principal.
+    #[test]
+    fn an_ordinary_actor_is_not_reserved() {
+        for name in [
+            "Visitor",
+            "Caller",
+            "User",
+            "NobodyElse",
+            "forged",
+            "Stale2",
+            "",
+        ] {
+            let p = CallSitePrincipal::of(name);
+            assert_eq!(p, CallSitePrincipal::Actor(name.to_string()), "{name}");
+            assert!(!p.is_reserved());
+        }
+    }
+}

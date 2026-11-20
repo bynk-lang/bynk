@@ -6,6 +6,7 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
+use bynk_check::actors::CallSitePrincipal;
 use bynk_check::checker::{Callee, HandlerAddress, NamedKind, Ty, TyId, TypedCommons};
 use bynk_check::kernel_op::{IntrinsicNs, StaticOp};
 use bynk_syntax::ast::{
@@ -1851,21 +1852,15 @@ fn cap_op_param_names(cx: &LowerCtx, cap: &str, op: &str) -> Vec<String> {
 /// hoists is placed inside the `try`, not in the enclosing statement's
 /// prelude: a fault raised while evaluating the call's arguments is the call
 /// faulting too, and must not escape the claim.
-/// #2135, #2864: the driver name a reserved bad-credential principal drives:
-/// `by Forged` (a wrong secret), `by Stale` (a timestamp past the tolerance)
-/// or `by Expired` (a Bearer token whose `exp` has passed).
-pub(super) fn bad_signature_driver(actor: &str) -> Option<&'static str> {
-    match actor {
-        "Forged" => Some("forged"),
-        "Stale" => Some("stale"),
-        "Expired" => Some("expired"),
-        // #3052: an `Oidc` route's token for another issuer or audience.
-        "WrongIssuer" => Some("wrongissuer"),
-        "WrongAudience" => Some("wrongaudience"),
-        // #3225: a token under a refused algorithm, or with no usable `sub`.
-        "WrongAlgorithm" => Some("wrongalgorithm"),
-        "NoSubject" => Some("nosubject"),
-        _ => None,
+/// 1A.33: what the checker recorded for a call-site principal clause (`by Nobody`, a reserved
+/// bad credential driven by `BadCredential::driver`, or an actor).
+pub(super) fn call_site_principal(
+    cx: &LowerCtx,
+    principal: &bynk_syntax::ast::CallSiteActor,
+) -> CallSitePrincipal {
+    match cx.commons().callee(principal.id) {
+        Some(Callee::Principal(p)) => p.clone(),
+        _ => CallSitePrincipal::Actor(principal.actor.name.clone()),
     }
 }
 
@@ -1881,10 +1876,11 @@ fn lower_faults(faults: &FaultsExpr, cx: &mut LowerCtx) -> Built {
         // rejected before emit (`bynk.test.faults_needs_in_process`);
         // mirrored here so the claim lowers as the effect-let arm does
         // regardless.
-        if principal.actor.name == "Nobody" {
+        let kind = call_site_principal(cx, principal);
+        if kind == CallSitePrincipal::Nobody {
             cx.call_site_no_credential = true;
-        } else if let Some(variant) = bad_signature_driver(&principal.actor.name) {
-            cx.call_site_bad_signature = Some(variant);
+        } else if let CallSitePrincipal::BadCredential(bad) = kind {
+            cx.call_site_bad_signature = Some(bad.driver());
         } else {
             // 1A: a still-text principal makes the call text (`call_site_identity`).
             cx.call_site_identity = principal

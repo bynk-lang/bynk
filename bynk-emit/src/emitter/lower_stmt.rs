@@ -6,6 +6,7 @@
 
 use std::sync::Arc;
 
+use bynk_check::actors::CallSitePrincipal;
 use bynk_check::checker::{Callee, NamedKind, Ty, TyId};
 use bynk_check::kernel_op::{StaticOp, TokenClaimsStatic};
 use bynk_syntax::ast::{
@@ -17,8 +18,9 @@ use bynk_syntax::span::Span;
 use super::ctx::TailSlot;
 use super::lower::{
     CLAIM_SCOPE_DECLARATION, Lowered, LoweredExpr, LoweredStmt, PatPath, Pre, and_join,
-    build_value_bin_op, emit_pattern_bindings, expect_location_raw, expect_source_text_raw,
-    literal_label_node, member_node, num_lit, pattern_tests, str_node, ternary_built,
+    build_value_bin_op, call_site_principal, emit_pattern_bindings, expect_location_raw,
+    expect_source_text_raw, literal_label_node, member_node, num_lit, pattern_tests, str_node,
+    ternary_built,
 };
 use super::lower_call::codec_statics::json_encode;
 use super::lower_ctx::LowerCtx;
@@ -895,11 +897,12 @@ fn lower_effect_let_value(
         // identity — the *raw* lowered value (`"bob"`), which unit deps
         // folds with an `as any` brand cast and the system driver passes
         // as the JWT `sub` verbatim.
-        if principal.actor.name == "Nobody" {
+        let kind = call_site_principal(cx, principal);
+        if kind == CallSitePrincipal::Nobody {
             cx.call_site_no_credential = true;
-        } else if let Some(variant) = bad_signature_driver(&principal.actor.name) {
+        } else if let CallSitePrincipal::BadCredential(bad) = kind {
             // #2135: `by Forged` / `by Stale` name no identity either.
-            cx.call_site_bad_signature = Some(variant);
+            cx.call_site_bad_signature = Some(bad.driver());
         } else {
             // 1A: a still-text principal makes the call text (`call_site_identity`,
             // `call_site_claims`, `call_site_claim_lines`).

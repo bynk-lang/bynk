@@ -57,6 +57,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use crate::actors::CallSitePrincipal;
 use crate::checker::{self, Types};
 use crate::context_checks::{build_capability_op_info, ts_type_ref_display};
 use crate::hints::HintSink;
@@ -3420,12 +3421,12 @@ fn check_faults_tier(
         for p in faults_claims(&case.body)
             .into_iter()
             .filter_map(|f| f.principal.as_ref())
-            .filter(|p| p.actor.name == "Nobody" || is_bad_signature_name(&p.actor.name))
+            .filter(|p| CallSitePrincipal::of(&p.actor.name).is_reserved())
         {
             // #2135: `by Forged` / `by Stale` likewise drive only the
             // `system`-tier seam.
             let name = &p.actor.name;
-            let what = if name == "Nobody" {
+            let what = if CallSitePrincipal::of(name) == CallSitePrincipal::Nobody {
                 "the missing credential"
             } else {
                 "the bad credential"
@@ -3489,25 +3490,9 @@ fn block_uses_nobody(block: &Block) -> bool {
     blocks_deep(block).into_iter().any(|b| {
         flat_statements(b).into_iter().any(|s| {
             matches!(s, Statement::EffectLet(l)
-                if l.principal.as_ref().is_some_and(|p| p.actor.name == "Nobody"))
+                if l.principal.as_ref().is_some_and(|p| CallSitePrincipal::of(&p.actor.name) == CallSitePrincipal::Nobody))
         })
     })
-}
-
-/// #2135, #2864: whether `name` is a reserved bad-credential principal (`by
-/// Forged`, `by Stale`, `by Expired`, and the `Oidc`-only `by WrongIssuer`,
-/// `by WrongAudience`, `by WrongAlgorithm` and `by NoSubject`).
-fn is_bad_signature_name(name: &str) -> bool {
-    matches!(
-        name,
-        "Forged"
-            | "Stale"
-            | "Expired"
-            | "WrongIssuer"
-            | "WrongAudience"
-            | "WrongAlgorithm"
-            | "NoSubject"
-    )
 }
 
 /// #2135: `bynk.test.forged_needs_system` — a case below `system` that drives
@@ -3528,11 +3513,17 @@ fn check_bad_signature_tier(
         .into_iter()
         .flat_map(flat_statements)
         .filter_map(|s| match s {
-            Statement::EffectLet(l) => l
-                .principal
-                .as_ref()
-                .map(|p| p.actor.name.as_str())
-                .filter(|n| is_bad_signature_name(n)),
+            Statement::EffectLet(l) => {
+                l.principal
+                    .as_ref()
+                    .map(|p| p.actor.name.as_str())
+                    .filter(|n| {
+                        matches!(
+                            CallSitePrincipal::of(n),
+                            CallSitePrincipal::BadCredential(_)
+                        )
+                    })
+            }
             _ => None,
         })
         .collect();
