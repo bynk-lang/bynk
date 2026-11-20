@@ -10,9 +10,7 @@
 use bynk_check::kernel_op::{BytesOp, DecimalOp, DurationOp, FloatOp, InstantOp, IntOp, StringOp};
 use bynk_ts::{TsArrowBody, TsBinaryOp, TsExpr, TsType};
 
-use super::super::lower::{
-    Built, Lowered, LoweredExpr, Pre, built_of, node_or_text, paren, str_node,
-};
+use super::super::lower::{Built, Lowered, LoweredExpr, Pre, node_or_text, paren, str_node};
 use super::super::lower_ctx::LowerCtx;
 use super::super::lower_list::{arrow, call, id, member, param, spread, take, zero};
 use super::super::{Expr, ExprKind, rounding_mode};
@@ -34,8 +32,14 @@ fn finish(pre: Pre, built: Option<Built>) -> Option<Lowered> {
 /// path, which can never bind looser than its parent.
 pub(super) fn identity(pre: &mut Pre, operand: &Expr, cx: &mut LowerCtx) -> Built {
     match pre.lower_node(operand, cx) {
-        LoweredExpr::Text(t) if !is_simple_path(&t) => paren(LoweredExpr::from(Err(t))),
-        other => built_of(other),
+        LoweredExpr::Node(n) => Ok(n),
+        LoweredExpr::Text(t) => {
+            if is_simple_path(&t) {
+                Err(t)
+            } else {
+                paren(LoweredExpr::from(Err(t)))
+            }
+        }
     }
 }
 

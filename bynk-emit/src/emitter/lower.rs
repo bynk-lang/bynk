@@ -1144,14 +1144,6 @@ pub(super) fn paren(child: LoweredExpr) -> Built {
     )
 }
 
-/// A bridge value as a [`Built`]: the node, else its text.
-pub(super) fn built_of(expr: LoweredExpr) -> Built {
-    match expr {
-        LoweredExpr::Node(n) => Ok(n),
-        LoweredExpr::Text(t) => Err(t),
-    }
-}
-
 /// 1A: serialiser value is text. A still-text operand handed to a serialiser entry point (the
 /// entry points take a node since 1A.21, #3722, Decision B). The family that lowers the operand
 /// converts, and its call site passes the node instead.
