@@ -4,8 +4,9 @@
 // can jump between surfaces from any page. Reproduces the upstream layout verbatim
 // (so the responsive grid keeps working) and adds one nav group before the social
 // icons. GitHub stays the social icon already configured in astro.config.mjs.
-// The developer-docs surface is deferred to its own slice; the nav links the
-// surfaces that exist today: the Book, its reference, By Example, and the playground.
+// The blog (bynk-lang/blog, src/components/Header.astro) carries a copy of this
+// nav with absolute links back here; it is built on its own and served at /blog/
+// by a Worker on this domain. Keep the two lists in step.
 import config from "virtual:starlight/user-config";
 
 import LanguageSelect from "virtual:starlight/components/LanguageSelect";
@@ -22,8 +23,15 @@ const navLinks = [
   { label: "By Example", href: "/by-example/" },
   { label: "Reference", href: "/book/reference/" },
   { label: "Developer Docs", href: "/docs/" },
+  { label: "Blog", href: "/blog/" },
   { label: "Playground", href: "https://playground.bynk-lang.dev", external: true },
 ];
+
+// The surface being viewed: the link whose path is the longest prefix of this
+// page's, so a page under /book/reference/ marks Reference rather than Book.
+const current = navLinks
+  .filter((link) => !link.external && Astro.url.pathname.startsWith(link.href))
+  .reduce((best, link) => (!best || link.href.length > best.href.length ? link : best), undefined);
 ---
 
 <div class="header">
@@ -37,7 +45,11 @@ const navLinks = [
     <nav class="bynk-nav" aria-label="Surfaces">
       {
         navLinks.map((link) => (
-          <a href={link.href} {...(link.external ? { rel: "noopener", target: "_blank" } : {})}>
+          <a
+            href={link.href}
+            {...(link.external ? { rel: "noopener", target: "_blank" } : {})}
+            {...(link === current ? { "aria-current": "true" } : {})}
+          >
             {link.label}
           </a>
         ))
@@ -62,6 +74,9 @@ const navLinks = [
     text-decoration: none;
     font-size: var(--sl-text-sm);
     font-weight: 600;
+  }
+  .bynk-nav a[aria-current] {
+    color: var(--sl-color-white);
   }
   .bynk-nav a:hover {
     color: var(--sl-color-white);
