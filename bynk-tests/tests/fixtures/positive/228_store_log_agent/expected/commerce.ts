@@ -42,14 +42,23 @@ function __zeroOfInventoryState(): InventoryState { return { history: new __Stor
 const __entryFieldsOfInventory = [{ name: "history", kind: "log" }] as const;
 
 function __rehydrateInventoryState(s: InventoryState, stored: InventoryState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "history")) for (const __e of ((s as unknown as globalThis.Record<string, unknown>).history as ReadonlyArray<{ v: unknown }>)) { const __r = __deserialise_ReserveEvent((__e.v as unknown as __JsonValue), "history"); if (__r.tag === "Err") throw __rehydrationViolation("Inventory", __r.error); __e.v = __r.value; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "history")) {
+    for (const __e of ((s as unknown as globalThis.Record<string, unknown>).history as ReadonlyArray<{ v: unknown }>)) {
+      const __r = __deserialise_ReserveEvent((__e.v as unknown as __JsonValue), "history");
+      if (__r.tag === "Err") throw __rehydrationViolation("Inventory", __r.error);
+      __e.v = __r.value;
+    }
+  }
 }
 
 function __hydrateInventoryState(s: InventoryState, stored: InventoryState): void {
   const __z = __zeroOfInventoryState();
   const __w = s as { -readonly [K in keyof InventoryState]: InventoryState[K] };
   const __r = stored as unknown as globalThis.Record<string, unknown>;
-  if (globalThis.Object.hasOwn(__r, "history")) { __fillLog(__z.history, __r["history"] as never); __w.history = __z.history; }
+  if (globalThis.Object.hasOwn(__r, "history")) {
+    __fillLog(__z.history, __r["history"] as never);
+    __w.history = __z.history;
+  }
 }
 
 function __encodeInventoryState(s: InventoryState): globalThis.Record<string, unknown> {

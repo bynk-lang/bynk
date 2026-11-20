@@ -448,17 +448,39 @@ function __zeroOfBagState(): BagState { return { items: new __StoreMap<number>()
 const __entryFieldsOfBag = [{ name: "items", kind: "map" }, { name: "seen", kind: "set" }] as const;
 
 function __rehydrateBagState(s: BagState, stored: BagState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "items")) for (const __k of globalThis.Object.keys((s as unknown as globalThis.Record<string, unknown>).items as object)) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "items", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "items", expected: "safe integer", actual: String(__v) } as __BoundaryError))((((s as unknown as globalThis.Record<string, unknown>).items as globalThis.Record<string, unknown>)[__k] as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Bag", __r.error); ((s as unknown as globalThis.Record<string, unknown>).items as globalThis.Record<string, unknown>)[__k] = __r.value; }
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "items")) for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).items as never)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "items", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Bag", __r.error); }
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "seen")) for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).seen as never)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "seen", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Bag", __r.error); }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "items")) {
+    for (const __k of globalThis.Object.keys((s as unknown as globalThis.Record<string, unknown>).items as object)) {
+      const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "items", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "items", expected: "safe integer", actual: String(__v) } as __BoundaryError))((((s as unknown as globalThis.Record<string, unknown>).items as globalThis.Record<string, unknown>)[__k] as unknown as __JsonValue));
+      if (__r.tag === "Err") throw __rehydrationViolation("Bag", __r.error);
+      ((s as unknown as globalThis.Record<string, unknown>).items as globalThis.Record<string, unknown>)[__k] = __r.value;
+    }
+  }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "items")) {
+    for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).items as never)) {
+      const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "items", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue));
+      if (__r.tag === "Err") throw __rehydrationViolation("Bag", __r.error);
+    }
+  }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "seen")) {
+    for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).seen as never)) {
+      const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "seen", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue));
+      if (__r.tag === "Err") throw __rehydrationViolation("Bag", __r.error);
+    }
+  }
 }
 
 function __hydrateBagState(s: BagState, stored: BagState): void {
   const __z = __zeroOfBagState();
   const __w = s as { -readonly [K in keyof BagState]: BagState[K] };
   const __r = stored as unknown as globalThis.Record<string, unknown>;
-  if (globalThis.Object.hasOwn(__r, "items")) { __fillMap(__z.items, __r["items"] as never); __w.items = __z.items; }
-  if (globalThis.Object.hasOwn(__r, "seen")) { __fillSet(__z.seen, __r["seen"] as never); __w.seen = __z.seen; }
+  if (globalThis.Object.hasOwn(__r, "items")) {
+    __fillMap(__z.items, __r["items"] as never);
+    __w.items = __z.items;
+  }
+  if (globalThis.Object.hasOwn(__r, "seen")) {
+    __fillSet(__z.seen, __r["seen"] as never);
+    __w.seen = __z.seen;
+  }
 }
 
 function __encodeBagState(s: BagState): globalThis.Record<string, unknown> {

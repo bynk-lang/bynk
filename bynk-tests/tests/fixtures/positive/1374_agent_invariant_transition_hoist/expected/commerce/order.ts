@@ -55,7 +55,11 @@ function __zeroOfOrderState(): OrderState { return { status: OrderStatus.Pending
 const __entryFieldsOfOrder = [] as const;
 
 function __rehydrateOrderState(s: OrderState, stored: OrderState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "status")) { const __r = __deserialise_OrderStatus((s.status as unknown as __JsonValue), "status"); if (__r.tag === "Err") throw __rehydrationViolation("Order", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).status = __r.value as unknown as (typeof s)["status"]; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "status")) {
+    const __r = __deserialise_OrderStatus((s.status as unknown as __JsonValue), "status");
+    if (__r.tag === "Err") throw __rehydrationViolation("Order", __r.error);
+    (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).status = __r.value as unknown as (typeof s)["status"];
+  }
 }
 
 function __encodeOrderState(s: OrderState): globalThis.Record<string, unknown> {

@@ -42,7 +42,11 @@ function __zeroOfBoxState(): BoxState { return { placed: false }; }
 const __entryFieldsOfBox = [] as const;
 
 function __rehydrateBoxState(s: BoxState, stored: BoxState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "placed")) { const __r = ((__v) => typeof __v === "boolean" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "placed", expected: "boolean", actual: typeof __v } as __BoundaryError))((s.placed as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Box", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).placed = __r.value as unknown as (typeof s)["placed"]; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "placed")) {
+    const __r = ((__v) => typeof __v === "boolean" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "placed", expected: "boolean", actual: typeof __v } as __BoundaryError))((s.placed as unknown as __JsonValue));
+    if (__r.tag === "Err") throw __rehydrationViolation("Box", __r.error);
+    (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).placed = __r.value as unknown as (typeof s)["placed"];
+  }
 }
 
 function __encodeBoxState(s: BoxState): globalThis.Record<string, unknown> {

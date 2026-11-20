@@ -56,15 +56,29 @@ function __zeroOfBoardState(): BoardState { return { jobs: new __StoreMap<Job>()
 const __entryFieldsOfBoard = [{ name: "jobs", kind: "map" }] as const;
 
 function __rehydrateBoardState(s: BoardState, stored: BoardState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "jobs")) for (const __k of globalThis.Object.keys((s as unknown as globalThis.Record<string, unknown>).jobs as object)) { const __r = __deserialise_Job((((s as unknown as globalThis.Record<string, unknown>).jobs as globalThis.Record<string, unknown>)[__k] as unknown as __JsonValue), "jobs"); if (__r.tag === "Err") throw __rehydrationViolation("Board", __r.error); ((s as unknown as globalThis.Record<string, unknown>).jobs as globalThis.Record<string, unknown>)[__k] = __r.value; }
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "jobs")) for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).jobs as never)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "jobs", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Board", __r.error); }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "jobs")) {
+    for (const __k of globalThis.Object.keys((s as unknown as globalThis.Record<string, unknown>).jobs as object)) {
+      const __r = __deserialise_Job((((s as unknown as globalThis.Record<string, unknown>).jobs as globalThis.Record<string, unknown>)[__k] as unknown as __JsonValue), "jobs");
+      if (__r.tag === "Err") throw __rehydrationViolation("Board", __r.error);
+      ((s as unknown as globalThis.Record<string, unknown>).jobs as globalThis.Record<string, unknown>)[__k] = __r.value;
+    }
+  }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "jobs")) {
+    for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).jobs as never)) {
+      const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "jobs", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue));
+      if (__r.tag === "Err") throw __rehydrationViolation("Board", __r.error);
+    }
+  }
 }
 
 function __hydrateBoardState(s: BoardState, stored: BoardState): void {
   const __z = __zeroOfBoardState();
   const __w = s as { -readonly [K in keyof BoardState]: BoardState[K] };
   const __r = stored as unknown as globalThis.Record<string, unknown>;
-  if (globalThis.Object.hasOwn(__r, "jobs")) { __fillMap(__z.jobs, __r["jobs"] as never); __w.jobs = __z.jobs; }
+  if (globalThis.Object.hasOwn(__r, "jobs")) {
+    __fillMap(__z.jobs, __r["jobs"] as never);
+    __w.jobs = __z.jobs;
+  }
 }
 
 function __encodeBoardState(s: BoardState): globalThis.Record<string, unknown> {

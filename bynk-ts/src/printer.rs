@@ -216,8 +216,8 @@
 //! own node list grows: file by file, against real content.
 
 use crate::program::{
-    TsArrowBody, TsBinaryOp, TsBindingName, TsClassMethod, TsDecl, TsExpr, TsLit, TsObjectEntry,
-    TsParam, TsProgram, TsStmt, TsStmtKind, TsType, TsTypeMember, TsUnaryOp,
+    TsArrowBody, TsBinaryOp, TsBindingName, TsClassMethod, TsDecl, TsExpr, TsLit, TsMappedModifier,
+    TsObjectEntry, TsParam, TsProgram, TsStmt, TsStmtKind, TsType, TsTypeMember, TsUnaryOp,
 };
 use crate::source_map::SourceMapBuilder;
 use bynk_syntax::span::Span;
@@ -2290,6 +2290,85 @@ fn render_type(out: &mut String, ty: &TsType) {
                 render_type(out, m);
             }
         }
+        TsType::Mapped {
+            readonly,
+            key,
+            keys_of,
+            value,
+        } => render_mapped_type(out, *readonly, key, keys_of, value),
+        TsType::TypeOf(operand) => render_type_of(out, operand),
+        TsType::Indexed { object, index } => render_indexed_type(out, object, index),
+        TsType::StringLiteral(text) => render_lit(out, &TsLit::Str(text.clone())),
+    }
+}
+
+/// `{ -readonly [K in keyof T]: V }`. A `keyof` operand that is itself a union,
+/// an intersection or a function type is parenthesised, since `keyof` binds
+/// tighter than each of them.
+fn render_mapped_type(
+    out: &mut String,
+    readonly: Option<TsMappedModifier>,
+    key: &str,
+    keys_of: &TsType,
+    value: &TsType,
+) {
+    out.push_str("{ ");
+    match readonly {
+        Some(TsMappedModifier::Add) => out.push_str("+readonly "),
+        Some(TsMappedModifier::Remove) => out.push_str("-readonly "),
+        None => {}
+    }
+    out.push('[');
+    out.push_str(key);
+    out.push_str(" in keyof ");
+    render_type_parenthesised(
+        out,
+        keys_of,
+        matches!(
+            keys_of,
+            TsType::Union { .. } | TsType::Intersection(_) | TsType::Fn { .. }
+        ),
+    );
+    out.push_str("]: ");
+    render_type(out, value);
+    out.push_str(" }");
+}
+
+/// `typeof x`: the operand is a value expression, printed at depth 0 since an
+/// identifier or member chain has no layout.
+fn render_type_of(out: &mut String, operand: &TsExpr) {
+    out.push_str("typeof ");
+    render_expr(out, operand, 0, &mut None);
+}
+
+/// `T[K]`. An object that is a union, an intersection, a function type or a
+/// `typeof` is parenthesised (`(typeof s)["k"]`), since the bare postfix would
+/// bind to its last operand.
+fn render_indexed_type(out: &mut String, object: &TsType, index: &TsType) {
+    render_type_parenthesised(
+        out,
+        object,
+        matches!(
+            object,
+            TsType::Union { .. }
+                | TsType::Intersection(_)
+                | TsType::Fn { .. }
+                | TsType::TypeOf(_)
+                | TsType::Array { readonly: true, .. }
+        ),
+    );
+    out.push('[');
+    render_type(out, index);
+    out.push(']');
+}
+
+fn render_type_parenthesised(out: &mut String, ty: &TsType, parenthesise: bool) {
+    if parenthesise {
+        out.push('(');
+        render_type(out, ty);
+        out.push(')');
+    } else {
+        render_type(out, ty);
     }
 }
 
@@ -2698,9 +2777,14 @@ fn type_admits_undefined(ty: &TsType) -> bool {
     match ty {
         TsType::Named { name, type_args } => name == "undefined" && type_args.is_empty(),
         TsType::Union { members, .. } => members.iter().any(type_admits_undefined),
-        TsType::Array { .. } | TsType::Object(_) | TsType::Fn { .. } | TsType::Intersection(_) => {
-            false
-        }
+        TsType::Array { .. }
+        | TsType::Object(_)
+        | TsType::Fn { .. }
+        | TsType::Intersection(_)
+        | TsType::Mapped { .. }
+        | TsType::TypeOf(_)
+        | TsType::Indexed { .. }
+        | TsType::StringLiteral(_) => false,
     }
 }
 
@@ -4335,6 +4419,84 @@ mod tests {
                 TsType::named("Tagged"),
             ]))),
             "(Order & Tagged)[]"
+        );
+    }
+
+    /// The mapped type, with each of its three `readonly` forms.
+    #[test]
+    fn print_type_renders_a_mapped_type_with_each_readonly_modifier() {
+        let mapped = || {
+            TsType::mapped(
+                "K",
+                TsType::named("S"),
+                TsType::indexed(TsType::named("S"), TsType::named("K")),
+            )
+        };
+        assert_eq!(print_type(&mapped()), "{ [K in keyof S]: S[K] }");
+        assert_eq!(
+            print_type(&mapped().with_mapped_readonly(TsMappedModifier::Remove)),
+            "{ -readonly [K in keyof S]: S[K] }"
+        );
+        assert_eq!(
+            print_type(&mapped().with_mapped_readonly(TsMappedModifier::Add)),
+            "{ +readonly [K in keyof S]: S[K] }"
+        );
+    }
+
+    /// `keyof` binds tighter than a union, so a union operand is parenthesised.
+    #[test]
+    fn print_type_parenthesises_a_union_under_keyof() {
+        let ty = TsType::mapped(
+            "P",
+            TsType::union(vec![TsType::named("A"), TsType::named("B")]),
+            TsType::named("unknown"),
+        );
+        assert_eq!(print_type(&ty), "{ [P in keyof (A | B)]: unknown }");
+    }
+
+    /// `typeof x` in type position, bare under `keyof` and parenthesised before an
+    /// index: the shape the agent rehydration check writes through.
+    #[test]
+    fn print_type_renders_typeof_and_indexed_access() {
+        let of_s = || TsType::type_of(TsExpr::Ident("s".to_string()));
+        assert_eq!(print_type(&of_s()), "typeof s");
+        assert_eq!(
+            print_type(&TsType::indexed(of_s(), TsType::string_literal("n"))),
+            "(typeof s)[\"n\"]"
+        );
+        assert_eq!(
+            print_type(
+                &TsType::mapped("K", of_s(), TsType::indexed(of_s(), TsType::named("K")),)
+                    .with_mapped_readonly(TsMappedModifier::Remove)
+            ),
+            "{ -readonly [K in keyof typeof s]: (typeof s)[K] }"
+        );
+        assert_eq!(
+            print_type(&TsType::type_of(TsExpr::Member {
+                object: Box::new(TsExpr::Ident("a".to_string())),
+                property: "b".to_string(),
+            })),
+            "typeof a.b"
+        );
+    }
+
+    /// An indexed access on a named type is bare, and a string literal type escapes
+    /// as a string literal does.
+    #[test]
+    fn print_type_renders_an_indexed_access_on_a_named_type() {
+        assert_eq!(
+            print_type(&TsType::indexed(
+                TsType::named("S"),
+                TsType::string_literal("a\"b"),
+            )),
+            "S[\"a\\\"b\"]"
+        );
+        assert_eq!(
+            print_type(&TsType::indexed(
+                TsType::union(vec![TsType::named("A"), TsType::named("B")]),
+                TsType::named("K"),
+            )),
+            "(A | B)[K]"
         );
     }
 

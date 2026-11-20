@@ -5904,6 +5904,135 @@ struct AgentPersistFns {
     lazy_fields: Option<String>,
 }
 
+/// `globalThis.<path>`, a dotted path such as `Object.keys`, as member accesses.
+fn persist_global(path: &str) -> bynk_ts::TsExpr {
+    path.split('.')
+        .fold(hist_id("globalThis"), |object, property| {
+            hist_member(object, property)
+        })
+}
+
+/// `expr as ty`.
+fn persist_cast(expr: bynk_ts::TsExpr, ty: bynk_ts::TsType) -> bynk_ts::TsExpr {
+    bynk_ts::TsExpr::As {
+        expr: Box::new(expr),
+        ty,
+    }
+}
+
+/// `expr as unknown as ty`: the double cast that reinterprets a value at another type.
+fn persist_recast(expr: bynk_ts::TsExpr, ty: bynk_ts::TsType) -> bynk_ts::TsExpr {
+    persist_cast(persist_cast(expr, bynk_ts::TsType::named("unknown")), ty)
+}
+
+/// `globalThis.Record<string, unknown>`.
+fn persist_record_ty() -> bynk_ts::TsType {
+    bynk_ts::TsType::named_with_args(
+        "globalThis.Record",
+        vec![
+            bynk_ts::TsType::named("string"),
+            bynk_ts::TsType::named("unknown"),
+        ],
+    )
+}
+
+/// `{ v: unknown }`: the shape of a `Cache` or `Log` entry's value cell.
+fn persist_entry_ty() -> bynk_ts::TsType {
+    bynk_ts::TsType::Object(vec![bynk_ts::TsTypeMember::prop(
+        "v",
+        bynk_ts::TsType::named("unknown"),
+    )])
+}
+
+/// `{ -readonly [K in keyof source]: source[K] }`: `source` with its `readonly`
+/// modifiers removed, so a decode can write through it.
+fn persist_writable(source: bynk_ts::TsType) -> bynk_ts::TsType {
+    bynk_ts::TsType::mapped(
+        "K",
+        source.clone(),
+        bynk_ts::TsType::indexed(source, bynk_ts::TsType::named("K")),
+    )
+    .with_mapped_readonly(bynk_ts::TsMappedModifier::Remove)
+}
+
+/// `typeof s`.
+fn persist_typeof_s() -> bynk_ts::TsType {
+    bynk_ts::TsType::type_of(hist_id("s"))
+}
+
+/// `(s as unknown as globalThis.Record<string, unknown>)`: the loaded record seen as
+/// what it is at runtime, an untyped record. The collection fields are held as
+/// handles (#3254), but in the loaded record they are still the stored records and
+/// arrays.
+fn persist_record_view() -> bynk_ts::TsExpr {
+    bynk_ts::TsExpr::Paren(Box::new(persist_recast(hist_id("s"), persist_record_ty())))
+}
+
+/// `(<view>.<field> as ty)`: a collection field of the record view, cast.
+fn persist_field_as(field: &str, ty: bynk_ts::TsType) -> bynk_ts::TsExpr {
+    persist_cast(hist_member(persist_record_view(), field), ty)
+}
+
+/// `globalThis.Object.prototype.hasOwnProperty.call(stored, "name")`: whether the stored
+/// record carries the field.
+fn persist_present(name: &str) -> bynk_ts::TsExpr {
+    hist_call(
+        persist_global("Object.prototype.hasOwnProperty.call"),
+        vec![hist_id("stored"), hist_str(name)],
+    )
+}
+
+/// `<value> as unknown as __JsonValue`, in parentheses, printed as the text the
+/// boundary deserialiser takes for its input.
+fn persist_json_input(value: bynk_ts::TsExpr) -> String {
+    bynk_ts::print_expr(&bynk_ts::TsExpr::Paren(Box::new(persist_recast(
+        value,
+        bynk_ts::TsType::named("__JsonValue"),
+    ))))
+}
+
+/// The decode's first two statements: `const __r = <decoded>;` and the throw on an `Err`
+/// that disposes of a failure as an internal `RehydrationViolation` fault.
+fn persist_decode(decoded: bynk_ts::TsExpr, agent_name: &str) -> Vec<bynk_ts::TsStmt> {
+    let result = || hist_id("__r");
+    vec![
+        hist_const("__r", decoded),
+        bynk_ts::TsStmt::if_stmt(
+            hist_binary(
+                bynk_ts::TsBinaryOp::StrictEq,
+                hist_member(result(), "tag"),
+                hist_str("Err"),
+            ),
+            bynk_ts::TsStmt::throw_stmt(
+                hist_call(
+                    hist_id("__rehydrationViolation"),
+                    vec![hist_str(agent_name), hist_member(result(), "error")],
+                ),
+                None,
+            ),
+            None,
+        ),
+    ]
+}
+
+/// `if (<present>) { <then> }`, the guard every rehydration check sits behind.
+fn persist_when_present(name: &str, then: Vec<bynk_ts::TsStmt>) -> bynk_ts::TsStmt {
+    bynk_ts::TsStmt::if_stmt(
+        persist_present(name),
+        bynk_ts::TsStmt::block(then, None),
+        None,
+    )
+}
+
+/// `for (const <binding> of <iter>) { <body> }`.
+fn persist_for_each(
+    binding: &str,
+    iter: bynk_ts::TsExpr,
+    body: Vec<bynk_ts::TsStmt>,
+) -> bynk_ts::TsStmt {
+    bynk_ts::TsStmt::for_of(binding, iter, bynk_ts::TsStmt::block(body, None), None)
+}
+
 /// The function `loadState` calls to fill a record's collections into the zero state's handles
 /// (#3254): one fill per collection field, from the stored record.
 fn hydrate_fn_decl(
@@ -5917,16 +6046,52 @@ fn hydrate_fn_decl(
         .into_iter()
         .map(|(n, _)| n.name.as_str())
         .collect();
-    let mut fills = String::new();
+    let record_at = |key: &str| {
+        persist_cast(
+            bynk_ts::TsExpr::Index {
+                object: Box::new(hist_id("__r")),
+                index: Box::new(hist_str(key)),
+            },
+            bynk_ts::TsType::named("never"),
+        )
+    };
+    let mut body = vec![
+        hist_const("__z", hist_call(hist_id(zero_fn), Vec::new())),
+        hist_const(
+            "__w",
+            persist_cast(
+                hist_id("s"),
+                persist_writable(bynk_ts::TsType::named(state_ty.clone())),
+            ),
+        ),
+        hist_const(
+            "__r",
+            persist_recast(hist_id("stored"), persist_record_ty()),
+        ),
+    ];
     let mut fill = |name: &str, with: &str| {
+        let mut args = vec![hist_member(hist_id("__z"), name), record_at(name)];
         // A held map's insertion order is stored beside its record, as `<field>:order`.
-        let order = if with == "__fillHeld" {
-            format!(", __r[\"{name}:order\"] as never")
-        } else {
-            String::new()
-        };
-        fills.push_str(&format!(
-            "  if (globalThis.Object.hasOwn(__r, \"{name}\")) {{ {with}(__z.{name}, __r[\"{name}\"] as never{order}); __w.{name} = __z.{name}; }}\n"
+        if with == "__fillHeld" {
+            args.push(record_at(&format!("{name}:order")));
+        }
+        body.push(bynk_ts::TsStmt::if_stmt(
+            hist_call(
+                persist_global("Object.hasOwn"),
+                vec![hist_id("__r"), hist_str(name)],
+            ),
+            bynk_ts::TsStmt::block(
+                vec![
+                    bynk_ts::TsStmt::expr_stmt(hist_call(hist_id(with), args), None),
+                    bynk_ts::TsStmt::assign(
+                        hist_member(hist_id("__w"), name),
+                        hist_member(hist_id("__z"), name),
+                        None,
+                    ),
+                ],
+                None,
+            ),
+            None,
         ));
     };
     for (name, _) in &layout.store_map_fields {
@@ -5945,12 +6110,295 @@ fn hydrate_fn_decl(
     for (name, _, _) in &layout.store_log_fields {
         fill(&name.name, "__fillLog");
     }
-    bynk_ts::TsStmt::raw(
-        format!(
-            "function {hydrate_fn}(s: {state_ty}, stored: {state_ty}): void {{\n  const __z = {zero_fn}();\n  const __w = s as {{ -readonly [K in keyof {state_ty}]: {state_ty}[K] }};\n  const __r = stored as unknown as globalThis.Record<string, unknown>;\n{fills}}}\n"
-        ),
+    bynk_ts::TsStmt::decl(
+        bynk_ts::TsDecl::Function {
+            name: hydrate_fn.to_string(),
+            generics: Vec::new(),
+            params: vec![
+                bynk_ts::TsParam::new(
+                    "s".to_string(),
+                    Some(bynk_ts::TsType::named(state_ty.clone())),
+                ),
+                bynk_ts::TsParam::new("stored".to_string(), Some(bynk_ts::TsType::named(state_ty))),
+            ],
+            return_type: Some(bynk_ts::TsType::named("void")),
+            body,
+            is_async: false,
+            inline: false,
+        },
         None,
     )
+}
+
+/// The rehydration checks `loadState` runs on a stored record, and the entries the
+/// wire-format encoder writes beside `...s` (#1649, ADR 0124).
+fn agent_state_checks_and_entries(
+    a: &AgentDecl,
+    layout: &AgentStoreLayout,
+    commons: &TypedCommons,
+    ctx: &EmitProjectCtx,
+) -> (Vec<bynk_ts::TsStmt>, Vec<bynk_ts::TsObjectEntry>) {
+    let AgentStoreLayout {
+        effective_fields,
+        held_maps,
+        store_map_fields,
+        store_map_indexes,
+        store_set_fields,
+        store_cache_fields,
+        store_log_fields,
+        ..
+    } = layout;
+    let mut encode_entries: Vec<bynk_ts::TsObjectEntry> = Vec::new();
+    let agent_name = &a.name.name;
+    let mut rehydrate_checks: Vec<bynk_ts::TsStmt> = Vec::new();
+    // The loaded record is statically typed (its fields are the agent's types),
+    // but at runtime its bytes are untrusted, so each value is laundered to
+    // `JsonValue` before the boundary deserialiser decodes it.
+    let ser =
+        |ty: &TypeRef, value: &str| serialisation::serialise_text(ty, value, &ctx.runtime_use);
+    // 1A: `deserialise_expr` still takes its input as text (printed from a node by
+    // `persist_json_input`); the input moves onto `TsExpr` in 1A.38 (#3745).
+    let deser = |ty: &TypeRef, json: String, path: &str| {
+        serialisation::deserialise_expr(ty, &json, path, &ctx.runtime_use)
+    };
+    // `Cell[T]` — decode the field value as `T`.
+    for f in effective_fields {
+        let path = f.name.name.as_str();
+        // Only codec-able types have a deserialiser; a non-storable type never
+        // reaches a `store` position (the checker rejects it), but guard anyway.
+        if !is_codecable(&f.type_ref) {
+            continue;
+        }
+        let d = deser(
+            &f.type_ref,
+            persist_json_input(hist_member(hist_id("s"), path)),
+            path,
+        );
+        // The state interface's fields are `readonly`; the decode writes
+        // through a mutable view of the freshly merged record. The cast to
+        // the field's own type matters on the workers target, where the
+        // state interface re-declares a commons type locally and
+        // TypeScript's brands make the two nominally distinct, though
+        // they share one runtime shape.
+        let mut block = persist_decode(d, agent_name);
+        block.push(bynk_ts::TsStmt::assign(
+            hist_member(
+                bynk_ts::TsExpr::Paren(Box::new(persist_cast(
+                    hist_id("s"),
+                    persist_writable(persist_typeof_s()),
+                ))),
+                path,
+            ),
+            persist_recast(
+                hist_member(hist_id("__r"), "value"),
+                bynk_ts::TsType::indexed(persist_typeof_s(), bynk_ts::TsType::string_literal(path)),
+            ),
+            None,
+        ));
+        rehydrate_checks.push(persist_when_present(path, block));
+        encode_entries.push(bynk_ts::TsObjectEntry::prop(
+            path,
+            ser(&f.type_ref, &format!("s.{path}")),
+        ));
+    }
+    let held_decls_all = held_map_fields(a);
+    let held_names_all: HashSet<&str> = held_decls_all
+        .iter()
+        .map(|(n, _)| n.name.as_str())
+        .collect();
+    // A textual `K` key persists as a `String(k)` Record key, so each entry's key is
+    // validated: `for (const [__k] of __wireEntries(<view>.n as never)) { <decode> }`.
+    let key_check = |n: &str, k: &TypeRef| {
+        let d = deser(k, persist_json_input(hist_id("__k")), n);
+        persist_when_present(
+            n,
+            vec![persist_for_each(
+                "[__k]",
+                hist_call(
+                    hist_id("__wireEntries"),
+                    vec![persist_field_as(n, bynk_ts::TsType::named("never"))],
+                ),
+                persist_decode(d, agent_name),
+            )],
+        )
+    };
+    // `__wire<Kind>(s.n, ...)`.
+    let wire = |kind: &str, n: &str, extra: Option<bynk_ts::TsExpr>| {
+        let mut args = vec![hist_member(hist_id("s"), n)];
+        args.extend(extra);
+        bynk_ts::TsObjectEntry::prop(n, hist_call(hist_id(kind), args))
+    };
+    // `(<param>) => <body>`.
+    let arrow = |param: &str, body: bynk_ts::TsExpr| bynk_ts::TsExpr::Arrow {
+        params: vec![bynk_ts::TsParam::new(param.to_string(), None)],
+        is_async: false,
+        generics: Vec::new(),
+        return_type: None,
+        body: Box::new(bynk_ts::TsArrowBody::Expr(Box::new(body))),
+    };
+    // `Map[K, V]` — validate each entry value against `V`, and each key against
+    // `K` when `K` is textual (the key persists as a `String(k)` Record key).
+    for (name, v) in store_map_fields {
+        let n = &name.name;
+        let held = held_names_all.contains(n.as_str());
+        if is_codecable(v) {
+            let entry = bynk_ts::TsExpr::Index {
+                object: Box::new(bynk_ts::TsExpr::Paren(Box::new(persist_field_as(
+                    n,
+                    persist_record_ty(),
+                )))),
+                index: Box::new(hist_id("__k")),
+            };
+            let d = deser(v, persist_json_input(entry.clone()), n);
+            let mut body = persist_decode(d, agent_name);
+            body.push(bynk_ts::TsStmt::assign(
+                entry,
+                hist_member(hist_id("__r"), "value"),
+                None,
+            ));
+            rehydrate_checks.push(persist_when_present(
+                n,
+                vec![persist_for_each(
+                    "__k",
+                    hist_call(
+                        persist_global("Object.keys"),
+                        vec![persist_field_as(n, bynk_ts::TsType::named("object"))],
+                    ),
+                    body,
+                )],
+            ));
+        }
+        if let Some(k) = store_field_key_type(a, n)
+            && type_base_is_string(k, &commons.types)
+        {
+            rehydrate_checks.push(key_check(n, k));
+        }
+        if held {
+            encode_entries.push(wire("__wireHeld", n, None));
+            encode_entries.push(bynk_ts::TsObjectEntry::prop(
+                format!("\"{n}:order\""),
+                hist_call(
+                    hist_id("__wireHeldOrder"),
+                    vec![hist_member(hist_id("s"), n)],
+                ),
+            ));
+        } else if is_codecable(v) {
+            encode_entries.push(wire("__wireMap", n, Some(arrow("__v", ser(v, "__v")))));
+        } else {
+            encode_entries.push(wire("__wireMap", n, None));
+        }
+        // An `@indexed` map's posting lists ride in the wire record beside it (v0.93).
+        let mut index_fields: Vec<&String> = store_map_indexes
+            .get(n)
+            .map(|fs| fs.iter().collect())
+            .unwrap_or_default();
+        index_fields.sort();
+        for f in index_fields {
+            encode_entries.push(bynk_ts::TsObjectEntry::prop(
+                format!("{n}__idx_{f}"),
+                hist_call(
+                    hist_id("__wirePostings"),
+                    vec![hist_member(hist_id("s"), n), hist_str(f)],
+                ),
+            ));
+        }
+    }
+    // v0.105 (slice 3b-ii): a held `Map[K, Connection]` persists `K → connId`. The
+    // connId is an opaque platform string (no value check); validate each textual
+    // `K` key, as for a plain map.
+    for (name, _) in held_maps {
+        let n = &name.name;
+        if let Some(k) = store_field_key_type(a, n)
+            && type_base_is_string(k, &commons.types)
+        {
+            rehydrate_checks.push(key_check(n, k));
+        }
+        encode_entries.push(wire("__wireHeld", n, None));
+        encode_entries.push(bynk_ts::TsObjectEntry::prop(
+            format!("\"{n}:order\""),
+            hist_call(
+                hist_id("__wireHeldOrder"),
+                vec![hist_member(hist_id("s"), n)],
+            ),
+        ));
+    }
+    // `Set[T]` — the elements are the (textual) Record keys; validate when `T`
+    // is textual, else defer (structural string key).
+    for (name, t) in store_set_fields {
+        let n = &name.name;
+        if type_base_is_string(t, &commons.types) {
+            rehydrate_checks.push(key_check(n, t));
+        }
+        encode_entries.push(wire("__wireSet", n, None));
+    }
+    // `Cache[K, V]` — validate each entry's `.v` against `V`.
+    for (name, v, _) in store_cache_fields {
+        let n = &name.name;
+        if is_codecable(v) {
+            let entry_value = || hist_member(hist_id("__e"), "v");
+            let d = deser(v, persist_json_input(entry_value()), n);
+            let mut body = persist_decode(d, agent_name);
+            body.push(bynk_ts::TsStmt::assign(
+                entry_value(),
+                hist_member(hist_id("__r"), "value"),
+                None,
+            ));
+            let cells = persist_field_as(
+                n,
+                bynk_ts::TsType::named_with_args(
+                    "globalThis.Record",
+                    vec![bynk_ts::TsType::named("string"), persist_entry_ty()],
+                ),
+            );
+            rehydrate_checks.push(persist_when_present(
+                n,
+                vec![persist_for_each(
+                    "__e",
+                    hist_call(persist_global("Object.values"), vec![cells]),
+                    body,
+                )],
+            ));
+            encode_entries.push(wire(
+                "__wireMap",
+                n,
+                Some(arrow(
+                    "__e",
+                    bynk_ts::TsExpr::Paren(Box::new(bynk_ts::TsExpr::object_entries(vec![
+                        bynk_ts::TsObjectEntry::Spread(hist_id("__e")),
+                        bynk_ts::TsObjectEntry::prop("v", ser(v, "__e.v")),
+                    ]))),
+                )),
+            ));
+        } else {
+            encode_entries.push(wire("__wireMap", n, None));
+        }
+    }
+    // `Log[T]` — validate each entry's `.v` against `T`.
+    for (name, t, _) in store_log_fields {
+        let n = &name.name;
+        if is_codecable(t) {
+            let entry_value = || hist_member(hist_id("__e"), "v");
+            let d = deser(t, persist_json_input(entry_value()), n);
+            let mut body = persist_decode(d, agent_name);
+            body.push(bynk_ts::TsStmt::assign(
+                entry_value(),
+                hist_member(hist_id("__r"), "value"),
+                None,
+            ));
+            let cells = bynk_ts::TsExpr::Paren(Box::new(persist_field_as(
+                n,
+                bynk_ts::TsType::named_with_args("ReadonlyArray", vec![persist_entry_ty()]),
+            )));
+            rehydrate_checks.push(persist_when_present(
+                n,
+                vec![persist_for_each("__e", cells, body)],
+            ));
+            encode_entries.push(wire("__wireLog", n, Some(arrow("__v", ser(t, "__v")))));
+        } else {
+            encode_entries.push(wire("__wireLog", n, None));
+        }
+    }
+    (rehydrate_checks, encode_entries)
 }
 
 /// The functions that guard an agent's stored state across a deploy (#3167): the
@@ -5971,7 +6419,6 @@ fn emit_agent_state_persistence(
         effective_fields,
         held_maps,
         store_map_fields,
-        store_map_indexes,
         store_set_fields,
         store_cache_fields,
         store_log_fields,
@@ -6002,184 +6449,8 @@ fn emit_agent_state_persistence(
     // not decoded. An unknown stored key (a renamed or removed field) rides along
     // untouched and is written back, so #539's migrations still find it.
     let encode_fn = format!("__encode{}State", a.name.name);
-    let mut encode_entries: Vec<String> = Vec::new();
-    let agent_name = &a.name.name;
-    let mut rehydrate_checks: Vec<String> = Vec::new();
-    // The loaded record is statically typed (its fields are the agent's types),
-    // but at runtime its bytes are untrusted, so each value is laundered to
-    // `JsonValue` before the boundary deserialiser decodes it.
-    let present =
-        |name: &str| format!("globalThis.Object.prototype.hasOwnProperty.call(stored, \"{name}\")");
-    let ser = |ty: &TypeRef, value: &str| {
-        bynk_ts::print_expr(&serialisation::serialise_text(ty, value, &ctx.runtime_use))
-    };
-    let push_value_check = |checks: &mut Vec<String>,
-                            ty: &TypeRef,
-                            value_expr: &str,
-                            path: &str| {
-        // Only codec-able types have a deserialiser; a non-storable type never
-        // reaches a `store` position (the checker rejects it), but guard anyway.
-        if !is_codecable(ty) {
-            return;
-        }
-        let json = format!("({value_expr} as unknown as __JsonValue)");
-        // #1435 (Arc E slice 1): `deserialise_expr` now returns a real
-        // `bynk_ts::TsExpr` — this closure stays `format!`-based (splicing
-        // into one `TsStmt::Raw` check line below), so it prints at the
-        // boundary, the same "opaque consumer needs its own print"
-        // treatment `lower.rs`/`tests_emit.rs`'s own call sites use.
-        let d = bynk_ts::print_expr(&serialisation::deserialise_expr(
-            ty,
-            &json,
-            path,
-            &ctx.runtime_use,
-        ));
-        checks.push(format!(
-            // The state interface's fields are `readonly`; the decode writes
-            // through a mutable view of the freshly merged record. The cast to
-            // the field's own type matters on the workers target, where the
-            // state interface re-declares a commons type locally and
-            // TypeScript's brands make the two nominally distinct, though
-            // they share one runtime shape.
-            "  if ({p}) {{ const __r = {d}; if (__r.tag === \"Err\") throw __rehydrationViolation(\"{agent_name}\", __r.error); (s as {{ -readonly [K in keyof typeof s]: (typeof s)[K] }}).{path} = __r.value as unknown as (typeof s)[\"{path}\"]; }}",
-            p = present(path),
-        ));
-    };
-    // `Cell[T]` — decode the field value as `T`.
-    for f in effective_fields {
-        push_value_check(
-            &mut rehydrate_checks,
-            &f.type_ref,
-            &format!("s.{}", f.name.name),
-            &f.name.name,
-        );
-        if is_codecable(&f.type_ref) {
-            encode_entries.push(format!(
-                "{n}: {e}",
-                n = f.name.name,
-                e = ser(&f.type_ref, &format!("s.{}", f.name.name)),
-            ));
-        }
-    }
-    // The collection fields are held as handles (#3254); the checks below read the
-    // loaded record, where they are still the stored records and arrays, through this view.
-    let w = "(s as unknown as globalThis.Record<string, unknown>)";
-    let held_decls_all = held_map_fields(a);
-    let held_names_all: HashSet<&str> = held_decls_all
-        .iter()
-        .map(|(n, _)| n.name.as_str())
-        .collect();
-    // `Map[K, V]` — validate each entry value against `V`, and each key against
-    // `K` when `K` is textual (the key persists as a `String(k)` Record key).
-    for (name, v) in store_map_fields {
-        let n = &name.name;
-        let held = held_names_all.contains(n.as_str());
-        if is_codecable(v) {
-            rehydrate_checks.push(format!(
-                "  if ({p}) for (const __k of globalThis.Object.keys({w}.{n} as object)) {{ const __r = {d}; if (__r.tag === \"Err\") throw __rehydrationViolation(\"{agent_name}\", __r.error); ({w}.{n} as globalThis.Record<string, unknown>)[__k] = __r.value; }}",
-                p = present(n),
-                d = bynk_ts::print_expr(&serialisation::deserialise_expr(
-                    v,
-                    &format!("(({w}.{n} as globalThis.Record<string, unknown>)[__k] as unknown as __JsonValue)"),
-                    n,
-                    &ctx.runtime_use,
-                )),
-            ));
-        }
-        if let Some(k) = store_field_key_type(a, n)
-            && type_base_is_string(k, &commons.types)
-        {
-            rehydrate_checks.push(format!(
-                "  if ({p}) for (const [__k] of __wireEntries({w}.{n} as never)) {{ const __r = {d}; if (__r.tag === \"Err\") throw __rehydrationViolation(\"{agent_name}\", __r.error); }}",
-                p = present(n),
-                d = bynk_ts::print_expr(&serialisation::deserialise_expr(k, "(__k as unknown as __JsonValue)", n, &ctx.runtime_use)),
-            ));
-        }
-        if held {
-            encode_entries.push(format!("{n}: __wireHeld(s.{n})"));
-            encode_entries.push(format!("\"{n}:order\": __wireHeldOrder(s.{n})"));
-        } else if is_codecable(v) {
-            encode_entries.push(format!(
-                "{n}: __wireMap(s.{n}, (__v) => {e})",
-                e = ser(v, "__v"),
-            ));
-        } else {
-            encode_entries.push(format!("{n}: __wireMap(s.{n})"));
-        }
-        // An `@indexed` map's posting lists ride in the wire record beside it (v0.93).
-        let mut index_fields: Vec<&String> = store_map_indexes
-            .get(n)
-            .map(|fs| fs.iter().collect())
-            .unwrap_or_default();
-        index_fields.sort();
-        for f in index_fields {
-            encode_entries.push(format!("{n}__idx_{f}: __wirePostings(s.{n}, \"{f}\")"));
-        }
-    }
-    // v0.105 (slice 3b-ii): a held `Map[K, Connection]` persists `K → connId`. The
-    // connId is an opaque platform string (no value check); validate each textual
-    // `K` key, as for a plain map.
-    for (name, _) in held_maps {
-        let n = &name.name;
-        if let Some(k) = store_field_key_type(a, n)
-            && type_base_is_string(k, &commons.types)
-        {
-            rehydrate_checks.push(format!(
-                "  if ({p}) for (const [__k] of __wireEntries({w}.{n} as never)) {{ const __r = {d}; if (__r.tag === \"Err\") throw __rehydrationViolation(\"{agent_name}\", __r.error); }}",
-                p = present(n),
-                d = bynk_ts::print_expr(&serialisation::deserialise_expr(k, "(__k as unknown as __JsonValue)", n, &ctx.runtime_use)),
-            ));
-        }
-        encode_entries.push(format!("{n}: __wireHeld(s.{n})"));
-        encode_entries.push(format!("\"{n}:order\": __wireHeldOrder(s.{n})"));
-    }
-    // `Set[T]` — the elements are the (textual) Record keys; validate when `T`
-    // is textual, else defer (structural string key).
-    for (name, t) in store_set_fields {
-        let n = &name.name;
-        if type_base_is_string(t, &commons.types) {
-            rehydrate_checks.push(format!(
-                "  if ({p}) for (const [__k] of __wireEntries({w}.{n} as never)) {{ const __r = {d}; if (__r.tag === \"Err\") throw __rehydrationViolation(\"{agent_name}\", __r.error); }}",
-                p = present(n),
-                d = bynk_ts::print_expr(&serialisation::deserialise_expr(t, "(__k as unknown as __JsonValue)", n, &ctx.runtime_use)),
-            ));
-        }
-        encode_entries.push(format!("{n}: __wireSet(s.{n})"));
-    }
-    // `Cache[K, V]` — validate each entry's `.v` against `V`.
-    for (name, v, _) in store_cache_fields {
-        let n = &name.name;
-        if is_codecable(v) {
-            rehydrate_checks.push(format!(
-                "  if ({p}) for (const __e of globalThis.Object.values({w}.{n} as globalThis.Record<string, {{ v: unknown }}>)) {{ const __r = {d}; if (__r.tag === \"Err\") throw __rehydrationViolation(\"{agent_name}\", __r.error); __e.v = __r.value; }}",
-                p = present(n),
-                d = bynk_ts::print_expr(&serialisation::deserialise_expr(v, "(__e.v as unknown as __JsonValue)", n, &ctx.runtime_use)),
-            ));
-            encode_entries.push(format!(
-                "{n}: __wireMap(s.{n}, (__e) => ({{ ...__e, v: {e} }}))",
-                e = ser(v, "__e.v"),
-            ));
-        } else {
-            encode_entries.push(format!("{n}: __wireMap(s.{n})"));
-        }
-    }
-    // `Log[T]` — validate each entry's `.v` against `T`.
-    for (name, t, _) in store_log_fields {
-        let n = &name.name;
-        if is_codecable(t) {
-            rehydrate_checks.push(format!(
-                "  if ({p}) for (const __e of ({w}.{n} as ReadonlyArray<{{ v: unknown }}>)) {{ const __r = {d}; if (__r.tag === \"Err\") throw __rehydrationViolation(\"{agent_name}\", __r.error); __e.v = __r.value; }}",
-                p = present(n),
-                d = bynk_ts::print_expr(&serialisation::deserialise_expr(t, "(__e.v as unknown as __JsonValue)", n, &ctx.runtime_use)),
-            ));
-            encode_entries.push(format!(
-                "{n}: __wireLog(s.{n}, (__v) => {e})",
-                e = ser(t, "__v"),
-            ));
-        } else {
-            encode_entries.push(format!("{n}: __wireLog(s.{n})"));
-        }
-    }
+    let (rehydrate_checks, encode_entries) =
+        agent_state_checks_and_entries(a, layout, commons, ctx);
     // Whether the agent has any collection: its handles are encoded on every commit and
     // filled on every load, whether or not its values need the codec.
     let has_collections = !store_map_fields.is_empty()
@@ -6193,14 +6464,6 @@ fn emit_agent_state_persistence(
     // only when the build has the schema lock (Decision A).
     let agent_versions = ctx.agent_schema_versions.get(&a.name.name).cloned();
     if has_rehydrate {
-        // Each check is already-formed JS text (`serialisation::
-        // deserialise_expr`, a confirmed unaffected, `String`-returning
-        // sibling helper, out of this slice's scope) — carried as its own
-        // opaque `TsStmt::Raw`, not merged into one blob: each is already a
-        // real, independent statement, and `Raw` prints verbatim with no
-        // indent of its own, matching every check's own hardcoded two-space
-        // prefix exactly (correct because this decl is always printed at
-        // depth 0, giving the body depth 1).
         let rehydrate_fn_decl = bynk_ts::TsStmt::decl(
             bynk_ts::TsDecl::Function {
                 name: rehydrate_fn.clone(),
@@ -6218,10 +6481,7 @@ fn emit_agent_state_persistence(
                     ),
                 ],
                 return_type: Some(bynk_ts::TsType::named("void")),
-                body: rehydrate_checks
-                    .iter()
-                    .map(|c| bynk_ts::TsStmt::raw(format!("{c}\n"), None))
-                    .collect(),
+                body: rehydrate_checks,
                 is_async: false,
                 inline: false,
             },
@@ -6243,12 +6503,8 @@ fn emit_agent_state_persistence(
         // codec-able value position is serialised; the rest of the record (held
         // maps, `Set`s, `@indexed` posting lists, unknown stored keys) is
         // already wire-shaped and spreads through unchanged.
-        let mut encode_body = String::from("  return { ...s");
-        for e in &encode_entries {
-            encode_body.push_str(", ");
-            encode_body.push_str(e);
-        }
-        encode_body.push_str(" };\n");
+        let mut entries = vec![bynk_ts::TsObjectEntry::Spread(hist_id("s"))];
+        entries.extend(encode_entries);
         stmts.push(bynk_ts::TsStmt::decl(
             bynk_ts::TsDecl::Function {
                 name: encode_fn.clone(),
@@ -6257,8 +6513,11 @@ fn emit_agent_state_persistence(
                     "s".to_string(),
                     Some(bynk_ts::TsType::named(state_ty.clone())),
                 )],
-                return_type: Some(bynk_ts::TsType::named("globalThis.Record<string, unknown>")),
-                body: vec![bynk_ts::TsStmt::raw(encode_body, None)],
+                return_type: Some(persist_record_ty()),
+                body: vec![bynk_ts::TsStmt::return_stmt(
+                    Some(bynk_ts::TsExpr::object_entries(entries)),
+                    None,
+                )],
                 is_async: false,
                 inline: false,
             },

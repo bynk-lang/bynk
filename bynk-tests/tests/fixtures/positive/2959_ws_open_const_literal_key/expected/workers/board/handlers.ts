@@ -31,15 +31,27 @@ function __zeroOfBoardState(): BoardState { return { opened: None, conns: new __
 const __entryFieldsOfBoard = [] as const;
 
 function __rehydrateBoardState(s: BoardState, stored: BoardState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "opened")) { const __r = __deserialise_Option_String((s.opened as unknown as __JsonValue), "opened"); if (__r.tag === "Err") throw __rehydrationViolation("Board", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).opened = __r.value as unknown as (typeof s)["opened"]; }
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "conns")) for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).conns as never)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "conns", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Board", __r.error); }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "opened")) {
+    const __r = __deserialise_Option_String((s.opened as unknown as __JsonValue), "opened");
+    if (__r.tag === "Err") throw __rehydrationViolation("Board", __r.error);
+    (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).opened = __r.value as unknown as (typeof s)["opened"];
+  }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "conns")) {
+    for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).conns as never)) {
+      const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "conns", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue));
+      if (__r.tag === "Err") throw __rehydrationViolation("Board", __r.error);
+    }
+  }
 }
 
 function __hydrateBoardState(s: BoardState, stored: BoardState): void {
   const __z = __zeroOfBoardState();
   const __w = s as { -readonly [K in keyof BoardState]: BoardState[K] };
   const __r = stored as unknown as globalThis.Record<string, unknown>;
-  if (globalThis.Object.hasOwn(__r, "conns")) { __fillHeld(__z.conns, __r["conns"] as never, __r["conns:order"] as never); __w.conns = __z.conns; }
+  if (globalThis.Object.hasOwn(__r, "conns")) {
+    __fillHeld(__z.conns, __r["conns"] as never, __r["conns:order"] as never);
+    __w.conns = __z.conns;
+  }
 }
 
 function __encodeBoardState(s: BoardState): globalThis.Record<string, unknown> {

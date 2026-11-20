@@ -32,7 +32,11 @@ function __zeroOfWalletState(): WalletState { return { balance: 0 }; }
 const __entryFieldsOfWallet = [] as const;
 
 function __rehydrateWalletState(s: WalletState, stored: WalletState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "balance")) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "balance", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "balance", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.balance as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Wallet", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).balance = __r.value as unknown as (typeof s)["balance"]; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "balance")) {
+    const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "balance", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "balance", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.balance as unknown as __JsonValue));
+    if (__r.tag === "Err") throw __rehydrationViolation("Wallet", __r.error);
+    (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).balance = __r.value as unknown as (typeof s)["balance"];
+  }
 }
 
 function __encodeWalletState(s: WalletState): globalThis.Record<string, unknown> {

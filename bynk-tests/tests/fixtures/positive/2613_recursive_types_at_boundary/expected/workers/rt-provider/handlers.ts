@@ -90,7 +90,11 @@ function __zeroOfKeeperState(): KeeperState { return { tree: None }; }
 const __entryFieldsOfKeeper = [] as const;
 
 function __rehydrateKeeperState(s: KeeperState, stored: KeeperState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "tree")) { const __r = __deserialise_Option_Tree((s.tree as unknown as __JsonValue), "tree"); if (__r.tag === "Err") throw __rehydrationViolation("Keeper", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).tree = __r.value as unknown as (typeof s)["tree"]; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "tree")) {
+    const __r = __deserialise_Option_Tree((s.tree as unknown as __JsonValue), "tree");
+    if (__r.tag === "Err") throw __rehydrationViolation("Keeper", __r.error);
+    (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).tree = __r.value as unknown as (typeof s)["tree"];
+  }
 }
 
 function __encodeKeeperState(s: KeeperState): globalThis.Record<string, unknown> {

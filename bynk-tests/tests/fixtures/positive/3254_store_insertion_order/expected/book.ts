@@ -45,22 +45,67 @@ function __zeroOfBookState(): BookState { return { scores: new __StoreMap<number
 const __entryFieldsOfBook = [{ name: "scores", kind: "map" }, { name: "lines", kind: "map", indexes: [{ index: "order", recordField: "lines__idx_order" }] }, { name: "seen", kind: "set" }, { name: "hits", kind: "cache" }] as const;
 
 function __rehydrateBookState(s: BookState, stored: BookState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "scores")) for (const __k of globalThis.Object.keys((s as unknown as globalThis.Record<string, unknown>).scores as object)) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "scores", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "scores", expected: "safe integer", actual: String(__v) } as __BoundaryError))((((s as unknown as globalThis.Record<string, unknown>).scores as globalThis.Record<string, unknown>)[__k] as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Book", __r.error); ((s as unknown as globalThis.Record<string, unknown>).scores as globalThis.Record<string, unknown>)[__k] = __r.value; }
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "scores")) for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).scores as never)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "scores", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Book", __r.error); }
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "lines")) for (const __k of globalThis.Object.keys((s as unknown as globalThis.Record<string, unknown>).lines as object)) { const __r = __deserialise_Line((((s as unknown as globalThis.Record<string, unknown>).lines as globalThis.Record<string, unknown>)[__k] as unknown as __JsonValue), "lines"); if (__r.tag === "Err") throw __rehydrationViolation("Book", __r.error); ((s as unknown as globalThis.Record<string, unknown>).lines as globalThis.Record<string, unknown>)[__k] = __r.value; }
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "lines")) for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).lines as never)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "lines", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Book", __r.error); }
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "seen")) for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).seen as never)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "seen", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Book", __r.error); }
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "hits")) for (const __e of globalThis.Object.values((s as unknown as globalThis.Record<string, unknown>).hits as globalThis.Record<string, { v: unknown }>)) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "hits", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "hits", expected: "safe integer", actual: String(__v) } as __BoundaryError))((__e.v as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Book", __r.error); __e.v = __r.value; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "scores")) {
+    for (const __k of globalThis.Object.keys((s as unknown as globalThis.Record<string, unknown>).scores as object)) {
+      const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "scores", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "scores", expected: "safe integer", actual: String(__v) } as __BoundaryError))((((s as unknown as globalThis.Record<string, unknown>).scores as globalThis.Record<string, unknown>)[__k] as unknown as __JsonValue));
+      if (__r.tag === "Err") throw __rehydrationViolation("Book", __r.error);
+      ((s as unknown as globalThis.Record<string, unknown>).scores as globalThis.Record<string, unknown>)[__k] = __r.value;
+    }
+  }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "scores")) {
+    for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).scores as never)) {
+      const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "scores", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue));
+      if (__r.tag === "Err") throw __rehydrationViolation("Book", __r.error);
+    }
+  }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "lines")) {
+    for (const __k of globalThis.Object.keys((s as unknown as globalThis.Record<string, unknown>).lines as object)) {
+      const __r = __deserialise_Line((((s as unknown as globalThis.Record<string, unknown>).lines as globalThis.Record<string, unknown>)[__k] as unknown as __JsonValue), "lines");
+      if (__r.tag === "Err") throw __rehydrationViolation("Book", __r.error);
+      ((s as unknown as globalThis.Record<string, unknown>).lines as globalThis.Record<string, unknown>)[__k] = __r.value;
+    }
+  }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "lines")) {
+    for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).lines as never)) {
+      const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "lines", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue));
+      if (__r.tag === "Err") throw __rehydrationViolation("Book", __r.error);
+    }
+  }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "seen")) {
+    for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).seen as never)) {
+      const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "seen", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue));
+      if (__r.tag === "Err") throw __rehydrationViolation("Book", __r.error);
+    }
+  }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "hits")) {
+    for (const __e of globalThis.Object.values((s as unknown as globalThis.Record<string, unknown>).hits as globalThis.Record<string, { v: unknown }>)) {
+      const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "hits", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "hits", expected: "safe integer", actual: String(__v) } as __BoundaryError))((__e.v as unknown as __JsonValue));
+      if (__r.tag === "Err") throw __rehydrationViolation("Book", __r.error);
+      __e.v = __r.value;
+    }
+  }
 }
 
 function __hydrateBookState(s: BookState, stored: BookState): void {
   const __z = __zeroOfBookState();
   const __w = s as { -readonly [K in keyof BookState]: BookState[K] };
   const __r = stored as unknown as globalThis.Record<string, unknown>;
-  if (globalThis.Object.hasOwn(__r, "scores")) { __fillMap(__z.scores, __r["scores"] as never); __w.scores = __z.scores; }
-  if (globalThis.Object.hasOwn(__r, "lines")) { __fillMap(__z.lines, __r["lines"] as never); __w.lines = __z.lines; }
-  if (globalThis.Object.hasOwn(__r, "seen")) { __fillSet(__z.seen, __r["seen"] as never); __w.seen = __z.seen; }
-  if (globalThis.Object.hasOwn(__r, "hits")) { __fillMap(__z.hits, __r["hits"] as never); __w.hits = __z.hits; }
+  if (globalThis.Object.hasOwn(__r, "scores")) {
+    __fillMap(__z.scores, __r["scores"] as never);
+    __w.scores = __z.scores;
+  }
+  if (globalThis.Object.hasOwn(__r, "lines")) {
+    __fillMap(__z.lines, __r["lines"] as never);
+    __w.lines = __z.lines;
+  }
+  if (globalThis.Object.hasOwn(__r, "seen")) {
+    __fillSet(__z.seen, __r["seen"] as never);
+    __w.seen = __z.seen;
+  }
+  if (globalThis.Object.hasOwn(__r, "hits")) {
+    __fillMap(__z.hits, __r["hits"] as never);
+    __w.hits = __z.hits;
+  }
 }
 
 function __encodeBookState(s: BookState): globalThis.Record<string, unknown> {

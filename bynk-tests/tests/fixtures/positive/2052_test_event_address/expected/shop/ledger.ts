@@ -24,8 +24,16 @@ function __zeroOfBooksState(): BooksState { return { count: 0, publisher: "" }; 
 const __entryFieldsOfBooks = [] as const;
 
 function __rehydrateBooksState(s: BooksState, stored: BooksState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "count")) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "count", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "count", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.count as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Books", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).count = __r.value as unknown as (typeof s)["count"]; }
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "publisher")) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "publisher", expected: "string", actual: typeof __v } as __BoundaryError))((s.publisher as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Books", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).publisher = __r.value as unknown as (typeof s)["publisher"]; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "count")) {
+    const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "count", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "count", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.count as unknown as __JsonValue));
+    if (__r.tag === "Err") throw __rehydrationViolation("Books", __r.error);
+    (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).count = __r.value as unknown as (typeof s)["count"];
+  }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "publisher")) {
+    const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "publisher", expected: "string", actual: typeof __v } as __BoundaryError))((s.publisher as unknown as __JsonValue));
+    if (__r.tag === "Err") throw __rehydrationViolation("Books", __r.error);
+    (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).publisher = __r.value as unknown as (typeof s)["publisher"];
+  }
 }
 
 function __encodeBooksState(s: BooksState): globalThis.Record<string, unknown> {

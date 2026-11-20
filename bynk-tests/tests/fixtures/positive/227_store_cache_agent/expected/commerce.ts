@@ -34,14 +34,23 @@ function __zeroOfSessionsState(): SessionsState { return { live: new __StoreCach
 const __entryFieldsOfSessions = [{ name: "live", kind: "cache" }] as const;
 
 function __rehydrateSessionsState(s: SessionsState, stored: SessionsState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "live")) for (const __e of globalThis.Object.values((s as unknown as globalThis.Record<string, unknown>).live as globalThis.Record<string, { v: unknown }>)) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "live", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "live", expected: "safe integer", actual: String(__v) } as __BoundaryError))((__e.v as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Sessions", __r.error); __e.v = __r.value; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "live")) {
+    for (const __e of globalThis.Object.values((s as unknown as globalThis.Record<string, unknown>).live as globalThis.Record<string, { v: unknown }>)) {
+      const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "live", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "live", expected: "safe integer", actual: String(__v) } as __BoundaryError))((__e.v as unknown as __JsonValue));
+      if (__r.tag === "Err") throw __rehydrationViolation("Sessions", __r.error);
+      __e.v = __r.value;
+    }
+  }
 }
 
 function __hydrateSessionsState(s: SessionsState, stored: SessionsState): void {
   const __z = __zeroOfSessionsState();
   const __w = s as { -readonly [K in keyof SessionsState]: SessionsState[K] };
   const __r = stored as unknown as globalThis.Record<string, unknown>;
-  if (globalThis.Object.hasOwn(__r, "live")) { __fillMap(__z.live, __r["live"] as never); __w.live = __z.live; }
+  if (globalThis.Object.hasOwn(__r, "live")) {
+    __fillMap(__z.live, __r["live"] as never);
+    __w.live = __z.live;
+  }
 }
 
 function __encodeSessionsState(s: SessionsState): globalThis.Record<string, unknown> {

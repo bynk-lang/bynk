@@ -114,7 +114,11 @@ function __zeroOfBasketState(): BasketState { return { line: { sku: "widget", qt
 const __entryFieldsOfBasket = [] as const;
 
 function __rehydrateBasketState(s: BasketState, stored: BasketState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "line")) { const __r = __deserialise_Item((s.line as unknown as __JsonValue), "line"); if (__r.tag === "Err") throw __rehydrationViolation("Basket", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).line = __r.value as unknown as (typeof s)["line"]; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "line")) {
+    const __r = __deserialise_Item((s.line as unknown as __JsonValue), "line");
+    if (__r.tag === "Err") throw __rehydrationViolation("Basket", __r.error);
+    (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).line = __r.value as unknown as (typeof s)["line"];
+  }
 }
 
 function __encodeBasketState(s: BasketState): globalThis.Record<string, unknown> {

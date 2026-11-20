@@ -58,7 +58,11 @@ function __zeroOfMeterState(): MeterState {
 const __entryFieldsOfMeter = [] as const;
 
 function __rehydrateMeterState(s: MeterState, stored: MeterState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "active")) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "active", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "active", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.active as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Meter", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).active = __r.value as unknown as (typeof s)["active"]; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "active")) {
+    const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "active", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "active", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.active as unknown as __JsonValue));
+    if (__r.tag === "Err") throw __rehydrationViolation("Meter", __r.error);
+    (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).active = __r.value as unknown as (typeof s)["active"];
+  }
 }
 
 function __encodeMeterState(s: MeterState): globalThis.Record<string, unknown> {

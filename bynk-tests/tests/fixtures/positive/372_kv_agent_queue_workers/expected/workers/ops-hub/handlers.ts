@@ -40,7 +40,11 @@ function __zeroOfJobLedgerState(): JobLedgerState { return { seen: 0 }; }
 const __entryFieldsOfJobLedger = [] as const;
 
 function __rehydrateJobLedgerState(s: JobLedgerState, stored: JobLedgerState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "seen")) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "seen", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "seen", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.seen as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("JobLedger", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).seen = __r.value as unknown as (typeof s)["seen"]; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "seen")) {
+    const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "seen", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "seen", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.seen as unknown as __JsonValue));
+    if (__r.tag === "Err") throw __rehydrationViolation("JobLedger", __r.error);
+    (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).seen = __r.value as unknown as (typeof s)["seen"];
+  }
 }
 
 function __encodeJobLedgerState(s: JobLedgerState): globalThis.Record<string, unknown> {

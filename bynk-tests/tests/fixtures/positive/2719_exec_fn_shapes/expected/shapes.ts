@@ -115,7 +115,11 @@ function __zeroOfRollerState(): RollerState { return { rolls: 0 }; }
 const __entryFieldsOfRoller = [] as const;
 
 function __rehydrateRollerState(s: RollerState, stored: RollerState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "rolls")) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "rolls", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "rolls", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.rolls as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Roller", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).rolls = __r.value as unknown as (typeof s)["rolls"]; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "rolls")) {
+    const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "rolls", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "rolls", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.rolls as unknown as __JsonValue));
+    if (__r.tag === "Err") throw __rehydrationViolation("Roller", __r.error);
+    (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).rolls = __r.value as unknown as (typeof s)["rolls"];
+  }
 }
 
 function __encodeRollerState(s: RollerState): globalThis.Record<string, unknown> {

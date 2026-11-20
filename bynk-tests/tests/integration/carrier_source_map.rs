@@ -297,6 +297,10 @@ fn websocket_agent_map_is_unchanged() {
 // by 18 lines (the final rows, 39 entries to 57) when it became nodes: its `switch` cases,
 // `try`/`catch`, `if`/`else` and `for` body now print one statement per line. That is line growth from the ruled re-layout (1A.32b), not a
 // moved mapping.
+// 1A.32c-2: the agent state-persistence functions (`__hydrate*State`, `__rehydrate*State`)
+// now print one statement per line, so extra generated lines joined the snapshot. They are
+// the ruled re-layout, and each repeats an anchor that was already there: the decoded anchor
+// sequence is identical across all 3162 corpus maps, and no mapping moved.
 const WALLET_MAP: &str = "\
 - - - - - - - - 2 2 2 2 2 2 2 2
 2 2 2 2 7 7 7 7 7 7 7 7 15 15 15 15
@@ -304,22 +308,27 @@ const WALLET_MAP: &str = "\
 34 34 35 36 36 39 40 41 41 30 48 48 48 48 48 48
 48 48 48 48 48 48 48 48 48 48 48 48 48 48 48 48
 48 48 48 48 48 48 48 48 48 48 48 48 48 48 48 48
-58 58 58 58 58 58 59 59 59 59 59 59 59 59 62 62
-62 63 63 63 63 63 63 63 63 48 48 48 48 48 48 48
+48 48 48 48 58 58 58 58 58 58 59 59 59 59 59 59
+59 59 62 62 62 63 63 63 63 63 63 63 63 48 48 48
 48 48 48 48 48 48 48 48 48 48 48 48 48 48 48 48
 48 48 48 48 48 48 48 48 48 48 48 48 48 48 48 48
 48 48 48 48 48 48 48 48 48 48 48 48 48 48 48 48
-48 48 48 48 48 48 48 48 48
+48 48 48 48 48 48 48 48 48 48 48 48 48
 ";
 // Ten `33` entries joined the trailing run (256 entries to 266) in 1A.32c-1, when the WebSocket
 // frame decode's two `try`/`catch` and the close handler's `void code; void reason; void
 // wasClean;` became nodes and now print one statement per line. Each extra generated line
 // inherits the dispatch method's span. That is line growth from the ruled re-layout, not a
 // moved mapping: every other entry is unchanged.
+// 1A.32c-2: the agent state-persistence functions (`__hydrate*State`, `__rehydrate*State`)
+// now print one statement per line, so extra generated lines joined the snapshot. They are
+// the ruled re-layout, and each repeats an anchor that was already there: the decoded anchor
+// sequence is identical across all 3162 corpus maps, and no mapping moved.
 const CHAT_MAP: &str = "\
 - - - - - - - - - - - 2 2 2 2 2
 2 2 2 2 3 3 3 3 3 3 3 3 3 4 4 4
 4 4 5 5 5 5 5 12 12 12 12 12 33 33 33 33
+33 33 33 33 33 33 33 33 33 33 33 33 33 33 33 33
 33 33 33 33 33 33 33 33 33 33 33 33 33 33 33 33
 33 33 33 33 33 33 33 33 33 33 33 33 33 33 33 33
 33 33 33 33 33 33 33 33 33 33 38 38 38 39 39 39

@@ -76,7 +76,11 @@ function __zeroOfLampState(): LampState { return { light: Light.Red }; }
 const __entryFieldsOfLamp = [] as const;
 
 function __rehydrateLampState(s: LampState, stored: LampState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "light")) { const __r = __deserialise_Light((s.light as unknown as __JsonValue), "light"); if (__r.tag === "Err") throw __rehydrationViolation("Lamp", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).light = __r.value as unknown as (typeof s)["light"]; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "light")) {
+    const __r = __deserialise_Light((s.light as unknown as __JsonValue), "light");
+    if (__r.tag === "Err") throw __rehydrationViolation("Lamp", __r.error);
+    (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).light = __r.value as unknown as (typeof s)["light"];
+  }
 }
 
 function __encodeLampState(s: LampState): globalThis.Record<string, unknown> {
@@ -135,7 +139,11 @@ function __zeroOfReadingState(): ReadingState { return { n: None }; }
 const __entryFieldsOfReading = [] as const;
 
 function __rehydrateReadingState(s: ReadingState, stored: ReadingState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "n")) { const __r = __deserialise_Option_Int((s.n as unknown as __JsonValue), "n"); if (__r.tag === "Err") throw __rehydrationViolation("Reading", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).n = __r.value as unknown as (typeof s)["n"]; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "n")) {
+    const __r = __deserialise_Option_Int((s.n as unknown as __JsonValue), "n");
+    if (__r.tag === "Err") throw __rehydrationViolation("Reading", __r.error);
+    (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).n = __r.value as unknown as (typeof s)["n"];
+  }
 }
 
 function __encodeReadingState(s: ReadingState): globalThis.Record<string, unknown> {
@@ -194,7 +202,11 @@ function __zeroOfFigureState(): FigureState { return { shape: Shape.Square(1) };
 const __entryFieldsOfFigure = [] as const;
 
 function __rehydrateFigureState(s: FigureState, stored: FigureState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "shape")) { const __r = __deserialise_Shape((s.shape as unknown as __JsonValue), "shape"); if (__r.tag === "Err") throw __rehydrationViolation("Figure", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).shape = __r.value as unknown as (typeof s)["shape"]; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "shape")) {
+    const __r = __deserialise_Shape((s.shape as unknown as __JsonValue), "shape");
+    if (__r.tag === "Err") throw __rehydrationViolation("Figure", __r.error);
+    (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).shape = __r.value as unknown as (typeof s)["shape"];
+  }
 }
 
 function __encodeFigureState(s: FigureState): globalThis.Record<string, unknown> {
@@ -253,7 +265,11 @@ function __zeroOfOutcomeState(): OutcomeState { return { r: Err("unset") }; }
 const __entryFieldsOfOutcome = [] as const;
 
 function __rehydrateOutcomeState(s: OutcomeState, stored: OutcomeState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "r")) { const __r = __deserialise_Result_Int_String((s.r as unknown as __JsonValue), "r"); if (__r.tag === "Err") throw __rehydrationViolation("Outcome", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).r = __r.value as unknown as (typeof s)["r"]; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "r")) {
+    const __r = __deserialise_Result_Int_String((s.r as unknown as __JsonValue), "r");
+    if (__r.tag === "Err") throw __rehydrationViolation("Outcome", __r.error);
+    (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).r = __r.value as unknown as (typeof s)["r"];
+  }
 }
 
 function __encodeOutcomeState(s: OutcomeState): globalThis.Record<string, unknown> {
@@ -312,7 +328,11 @@ function __zeroOfNoteState(): NoteState { return { rec: { label: "zero", n: None
 const __entryFieldsOfNote = [] as const;
 
 function __rehydrateNoteState(s: NoteState, stored: NoteState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "rec")) { const __r = __deserialise_Labelled((s.rec as unknown as __JsonValue), "rec"); if (__r.tag === "Err") throw __rehydrationViolation("Note", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).rec = __r.value as unknown as (typeof s)["rec"]; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "rec")) {
+    const __r = __deserialise_Labelled((s.rec as unknown as __JsonValue), "rec");
+    if (__r.tag === "Err") throw __rehydrationViolation("Note", __r.error);
+    (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).rec = __r.value as unknown as (typeof s)["rec"];
+  }
 }
 
 function __encodeNoteState(s: NoteState): globalThis.Record<string, unknown> {
@@ -371,7 +391,11 @@ function __zeroOfStoreState(): StoreState { return { blob: { label: "zero", data
 const __entryFieldsOfStore = [] as const;
 
 function __rehydrateStoreState(s: StoreState, stored: StoreState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "blob")) { const __r = __deserialise_Blob((s.blob as unknown as __JsonValue), "blob"); if (__r.tag === "Err") throw __rehydrationViolation("Store", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).blob = __r.value as unknown as (typeof s)["blob"]; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "blob")) {
+    const __r = __deserialise_Blob((s.blob as unknown as __JsonValue), "blob");
+    if (__r.tag === "Err") throw __rehydrationViolation("Store", __r.error);
+    (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).blob = __r.value as unknown as (typeof s)["blob"];
+  }
 }
 
 function __encodeStoreState(s: StoreState): globalThis.Record<string, unknown> {
@@ -430,7 +454,11 @@ function __zeroOfLightsState(): LightsState { return { seq: [] }; }
 const __entryFieldsOfLights = [] as const;
 
 function __rehydrateLightsState(s: LightsState, stored: LightsState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "seq")) { const __r = __deserialise_List_Light((s.seq as unknown as __JsonValue), "seq"); if (__r.tag === "Err") throw __rehydrationViolation("Lights", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).seq = __r.value as unknown as (typeof s)["seq"]; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "seq")) {
+    const __r = __deserialise_List_Light((s.seq as unknown as __JsonValue), "seq");
+    if (__r.tag === "Err") throw __rehydrationViolation("Lights", __r.error);
+    (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).seq = __r.value as unknown as (typeof s)["seq"];
+  }
 }
 
 function __encodeLightsState(s: LightsState): globalThis.Record<string, unknown> {
@@ -489,15 +517,29 @@ function __zeroOfBoardState(): BoardState { return { lights: new __StoreMap<Ligh
 const __entryFieldsOfBoard = [{ name: "lights", kind: "map" }] as const;
 
 function __rehydrateBoardState(s: BoardState, stored: BoardState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "lights")) for (const __k of globalThis.Object.keys((s as unknown as globalThis.Record<string, unknown>).lights as object)) { const __r = __deserialise_Light((((s as unknown as globalThis.Record<string, unknown>).lights as globalThis.Record<string, unknown>)[__k] as unknown as __JsonValue), "lights"); if (__r.tag === "Err") throw __rehydrationViolation("Board", __r.error); ((s as unknown as globalThis.Record<string, unknown>).lights as globalThis.Record<string, unknown>)[__k] = __r.value; }
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "lights")) for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).lights as never)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "lights", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Board", __r.error); }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "lights")) {
+    for (const __k of globalThis.Object.keys((s as unknown as globalThis.Record<string, unknown>).lights as object)) {
+      const __r = __deserialise_Light((((s as unknown as globalThis.Record<string, unknown>).lights as globalThis.Record<string, unknown>)[__k] as unknown as __JsonValue), "lights");
+      if (__r.tag === "Err") throw __rehydrationViolation("Board", __r.error);
+      ((s as unknown as globalThis.Record<string, unknown>).lights as globalThis.Record<string, unknown>)[__k] = __r.value;
+    }
+  }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "lights")) {
+    for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).lights as never)) {
+      const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "lights", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue));
+      if (__r.tag === "Err") throw __rehydrationViolation("Board", __r.error);
+    }
+  }
 }
 
 function __hydrateBoardState(s: BoardState, stored: BoardState): void {
   const __z = __zeroOfBoardState();
   const __w = s as { -readonly [K in keyof BoardState]: BoardState[K] };
   const __r = stored as unknown as globalThis.Record<string, unknown>;
-  if (globalThis.Object.hasOwn(__r, "lights")) { __fillMap(__z.lights, __r["lights"] as never); __w.lights = __z.lights; }
+  if (globalThis.Object.hasOwn(__r, "lights")) {
+    __fillMap(__z.lights, __r["lights"] as never);
+    __w.lights = __z.lights;
+  }
 }
 
 function __encodeBoardState(s: BoardState): globalThis.Record<string, unknown> {
@@ -570,14 +612,23 @@ function __zeroOfMemoState(): MemoState { return { c: new __StoreCache<Option<nu
 const __entryFieldsOfMemo = [{ name: "c", kind: "cache" }] as const;
 
 function __rehydrateMemoState(s: MemoState, stored: MemoState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "c")) for (const __e of globalThis.Object.values((s as unknown as globalThis.Record<string, unknown>).c as globalThis.Record<string, { v: unknown }>)) { const __r = __deserialise_Option_Int((__e.v as unknown as __JsonValue), "c"); if (__r.tag === "Err") throw __rehydrationViolation("Memo", __r.error); __e.v = __r.value; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "c")) {
+    for (const __e of globalThis.Object.values((s as unknown as globalThis.Record<string, unknown>).c as globalThis.Record<string, { v: unknown }>)) {
+      const __r = __deserialise_Option_Int((__e.v as unknown as __JsonValue), "c");
+      if (__r.tag === "Err") throw __rehydrationViolation("Memo", __r.error);
+      __e.v = __r.value;
+    }
+  }
 }
 
 function __hydrateMemoState(s: MemoState, stored: MemoState): void {
   const __z = __zeroOfMemoState();
   const __w = s as { -readonly [K in keyof MemoState]: MemoState[K] };
   const __r = stored as unknown as globalThis.Record<string, unknown>;
-  if (globalThis.Object.hasOwn(__r, "c")) { __fillMap(__z.c, __r["c"] as never); __w.c = __z.c; }
+  if (globalThis.Object.hasOwn(__r, "c")) {
+    __fillMap(__z.c, __r["c"] as never);
+    __w.c = __z.c;
+  }
 }
 
 function __encodeMemoState(s: MemoState): globalThis.Record<string, unknown> {
@@ -652,14 +703,23 @@ function __zeroOfHistoryState(): HistoryState { return { l: new __StoreLog<Shape
 const __entryFieldsOfHistory = [{ name: "l", kind: "log" }] as const;
 
 function __rehydrateHistoryState(s: HistoryState, stored: HistoryState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "l")) for (const __e of ((s as unknown as globalThis.Record<string, unknown>).l as ReadonlyArray<{ v: unknown }>)) { const __r = __deserialise_Shape((__e.v as unknown as __JsonValue), "l"); if (__r.tag === "Err") throw __rehydrationViolation("History", __r.error); __e.v = __r.value; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "l")) {
+    for (const __e of ((s as unknown as globalThis.Record<string, unknown>).l as ReadonlyArray<{ v: unknown }>)) {
+      const __r = __deserialise_Shape((__e.v as unknown as __JsonValue), "l");
+      if (__r.tag === "Err") throw __rehydrationViolation("History", __r.error);
+      __e.v = __r.value;
+    }
+  }
 }
 
 function __hydrateHistoryState(s: HistoryState, stored: HistoryState): void {
   const __z = __zeroOfHistoryState();
   const __w = s as { -readonly [K in keyof HistoryState]: HistoryState[K] };
   const __r = stored as unknown as globalThis.Record<string, unknown>;
-  if (globalThis.Object.hasOwn(__r, "l")) { __fillLog(__z.l, __r["l"] as never); __w.l = __z.l; }
+  if (globalThis.Object.hasOwn(__r, "l")) {
+    __fillLog(__z.l, __r["l"] as never);
+    __w.l = __z.l;
+  }
 }
 
 function __encodeHistoryState(s: HistoryState): globalThis.Record<string, unknown> {
@@ -731,8 +791,16 @@ function __zeroOfPanelState(): PanelState { return { level: 0, light: Light.Red 
 const __entryFieldsOfPanel = [] as const;
 
 function __rehydratePanelState(s: PanelState, stored: PanelState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "level")) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "level", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "level", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.level as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Panel", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).level = __r.value as unknown as (typeof s)["level"]; }
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "light")) { const __r = __deserialise_Light((s.light as unknown as __JsonValue), "light"); if (__r.tag === "Err") throw __rehydrationViolation("Panel", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).light = __r.value as unknown as (typeof s)["light"]; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "level")) {
+    const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "level", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "level", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.level as unknown as __JsonValue));
+    if (__r.tag === "Err") throw __rehydrationViolation("Panel", __r.error);
+    (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).level = __r.value as unknown as (typeof s)["level"];
+  }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "light")) {
+    const __r = __deserialise_Light((s.light as unknown as __JsonValue), "light");
+    if (__r.tag === "Err") throw __rehydrationViolation("Panel", __r.error);
+    (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).light = __r.value as unknown as (typeof s)["light"];
+  }
 }
 
 function __encodePanelState(s: PanelState): globalThis.Record<string, unknown> {
@@ -791,7 +859,11 @@ function __zeroOfGateState(): GateState { return { light: Light.Red }; }
 const __entryFieldsOfGate = [] as const;
 
 function __rehydrateGateState(s: GateState, stored: GateState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "light")) { const __r = __deserialise_Light((s.light as unknown as __JsonValue), "light"); if (__r.tag === "Err") throw __rehydrationViolation("Gate", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).light = __r.value as unknown as (typeof s)["light"]; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "light")) {
+    const __r = __deserialise_Light((s.light as unknown as __JsonValue), "light");
+    if (__r.tag === "Err") throw __rehydrationViolation("Gate", __r.error);
+    (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).light = __r.value as unknown as (typeof s)["light"];
+  }
 }
 
 function __encodeGateState(s: GateState): globalThis.Record<string, unknown> {

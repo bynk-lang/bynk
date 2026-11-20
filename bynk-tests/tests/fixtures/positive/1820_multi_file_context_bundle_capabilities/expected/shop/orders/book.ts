@@ -26,7 +26,11 @@ function __zeroOfBookState(): BookState { return { total: 0 }; }
 const __entryFieldsOfBook = [] as const;
 
 function __rehydrateBookState(s: BookState, stored: BookState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "total")) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "total", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "total", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.total as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Book", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).total = __r.value as unknown as (typeof s)["total"]; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "total")) {
+    const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "total", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "total", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.total as unknown as __JsonValue));
+    if (__r.tag === "Err") throw __rehydrationViolation("Book", __r.error);
+    (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).total = __r.value as unknown as (typeof s)["total"];
+  }
 }
 
 function __encodeBookState(s: BookState): globalThis.Record<string, unknown> {

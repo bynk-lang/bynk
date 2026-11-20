@@ -61,16 +61,32 @@ function __zeroOfRoomState(): RoomState { return { conns: new __StoreMap<string>
 const __entryFieldsOfRoom = [{ name: "members", kind: "set" }] as const;
 
 function __rehydrateRoomState(s: RoomState, stored: RoomState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "conns")) for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).conns as never)) { const __r = __deserialise_UserId((__k as unknown as __JsonValue), "conns"); if (__r.tag === "Err") throw __rehydrationViolation("Room", __r.error); }
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "members")) for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).members as never)) { const __r = __deserialise_UserId((__k as unknown as __JsonValue), "members"); if (__r.tag === "Err") throw __rehydrationViolation("Room", __r.error); }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "conns")) {
+    for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).conns as never)) {
+      const __r = __deserialise_UserId((__k as unknown as __JsonValue), "conns");
+      if (__r.tag === "Err") throw __rehydrationViolation("Room", __r.error);
+    }
+  }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "members")) {
+    for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).members as never)) {
+      const __r = __deserialise_UserId((__k as unknown as __JsonValue), "members");
+      if (__r.tag === "Err") throw __rehydrationViolation("Room", __r.error);
+    }
+  }
 }
 
 function __hydrateRoomState(s: RoomState, stored: RoomState): void {
   const __z = __zeroOfRoomState();
   const __w = s as { -readonly [K in keyof RoomState]: RoomState[K] };
   const __r = stored as unknown as globalThis.Record<string, unknown>;
-  if (globalThis.Object.hasOwn(__r, "conns")) { __fillHeld(__z.conns, __r["conns"] as never, __r["conns:order"] as never); __w.conns = __z.conns; }
-  if (globalThis.Object.hasOwn(__r, "members")) { __fillSet(__z.members, __r["members"] as never); __w.members = __z.members; }
+  if (globalThis.Object.hasOwn(__r, "conns")) {
+    __fillHeld(__z.conns, __r["conns"] as never, __r["conns:order"] as never);
+    __w.conns = __z.conns;
+  }
+  if (globalThis.Object.hasOwn(__r, "members")) {
+    __fillSet(__z.members, __r["members"] as never);
+    __w.members = __z.members;
+  }
 }
 
 function __encodeRoomState(s: RoomState): globalThis.Record<string, unknown> {

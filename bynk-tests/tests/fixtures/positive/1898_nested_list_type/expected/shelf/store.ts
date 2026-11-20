@@ -37,18 +37,46 @@ function __zeroOfShelfState(): ShelfState { return { rows: new __StoreMap<readon
 const __entryFieldsOfShelf = [{ name: "rows", kind: "map" }, { name: "spare", kind: "map" }] as const;
 
 function __rehydrateShelfState(s: ShelfState, stored: ShelfState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "rows")) for (const __k of globalThis.Object.keys((s as unknown as globalThis.Record<string, unknown>).rows as object)) { const __r = __deserialise_List_Int((((s as unknown as globalThis.Record<string, unknown>).rows as globalThis.Record<string, unknown>)[__k] as unknown as __JsonValue), "rows"); if (__r.tag === "Err") throw __rehydrationViolation("Shelf", __r.error); ((s as unknown as globalThis.Record<string, unknown>).rows as globalThis.Record<string, unknown>)[__k] = __r.value; }
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "rows")) for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).rows as never)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "rows", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Shelf", __r.error); }
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "spare")) for (const __k of globalThis.Object.keys((s as unknown as globalThis.Record<string, unknown>).spare as object)) { const __r = __deserialise_List_Int((((s as unknown as globalThis.Record<string, unknown>).spare as globalThis.Record<string, unknown>)[__k] as unknown as __JsonValue), "spare"); if (__r.tag === "Err") throw __rehydrationViolation("Shelf", __r.error); ((s as unknown as globalThis.Record<string, unknown>).spare as globalThis.Record<string, unknown>)[__k] = __r.value; }
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "spare")) for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).spare as never)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "spare", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Shelf", __r.error); }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "rows")) {
+    for (const __k of globalThis.Object.keys((s as unknown as globalThis.Record<string, unknown>).rows as object)) {
+      const __r = __deserialise_List_Int((((s as unknown as globalThis.Record<string, unknown>).rows as globalThis.Record<string, unknown>)[__k] as unknown as __JsonValue), "rows");
+      if (__r.tag === "Err") throw __rehydrationViolation("Shelf", __r.error);
+      ((s as unknown as globalThis.Record<string, unknown>).rows as globalThis.Record<string, unknown>)[__k] = __r.value;
+    }
+  }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "rows")) {
+    for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).rows as never)) {
+      const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "rows", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue));
+      if (__r.tag === "Err") throw __rehydrationViolation("Shelf", __r.error);
+    }
+  }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "spare")) {
+    for (const __k of globalThis.Object.keys((s as unknown as globalThis.Record<string, unknown>).spare as object)) {
+      const __r = __deserialise_List_Int((((s as unknown as globalThis.Record<string, unknown>).spare as globalThis.Record<string, unknown>)[__k] as unknown as __JsonValue), "spare");
+      if (__r.tag === "Err") throw __rehydrationViolation("Shelf", __r.error);
+      ((s as unknown as globalThis.Record<string, unknown>).spare as globalThis.Record<string, unknown>)[__k] = __r.value;
+    }
+  }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "spare")) {
+    for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).spare as never)) {
+      const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "spare", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue));
+      if (__r.tag === "Err") throw __rehydrationViolation("Shelf", __r.error);
+    }
+  }
 }
 
 function __hydrateShelfState(s: ShelfState, stored: ShelfState): void {
   const __z = __zeroOfShelfState();
   const __w = s as { -readonly [K in keyof ShelfState]: ShelfState[K] };
   const __r = stored as unknown as globalThis.Record<string, unknown>;
-  if (globalThis.Object.hasOwn(__r, "rows")) { __fillMap(__z.rows, __r["rows"] as never); __w.rows = __z.rows; }
-  if (globalThis.Object.hasOwn(__r, "spare")) { __fillMap(__z.spare, __r["spare"] as never); __w.spare = __z.spare; }
+  if (globalThis.Object.hasOwn(__r, "rows")) {
+    __fillMap(__z.rows, __r["rows"] as never);
+    __w.rows = __z.rows;
+  }
+  if (globalThis.Object.hasOwn(__r, "spare")) {
+    __fillMap(__z.spare, __r["spare"] as never);
+    __w.spare = __z.spare;
+  }
 }
 
 function __encodeShelfState(s: ShelfState): globalThis.Record<string, unknown> {

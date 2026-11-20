@@ -48,17 +48,39 @@ function __zeroOfBoardState(): BoardState { return { owners: new __StoreMap<numb
 const __entryFieldsOfBoard = [{ name: "owners", kind: "map" }, { name: "tags", kind: "set" }] as const;
 
 function __rehydrateBoardState(s: BoardState, stored: BoardState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "owners")) for (const __k of globalThis.Object.keys((s as unknown as globalThis.Record<string, unknown>).owners as object)) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "owners", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "owners", expected: "safe integer", actual: String(__v) } as __BoundaryError))((((s as unknown as globalThis.Record<string, unknown>).owners as globalThis.Record<string, unknown>)[__k] as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Board", __r.error); ((s as unknown as globalThis.Record<string, unknown>).owners as globalThis.Record<string, unknown>)[__k] = __r.value; }
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "owners")) for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).owners as never)) { const __r = __deserialise_UserId((__k as unknown as __JsonValue), "owners"); if (__r.tag === "Err") throw __rehydrationViolation("Board", __r.error); }
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "tags")) for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).tags as never)) { const __r = __deserialise_Tag((__k as unknown as __JsonValue), "tags"); if (__r.tag === "Err") throw __rehydrationViolation("Board", __r.error); }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "owners")) {
+    for (const __k of globalThis.Object.keys((s as unknown as globalThis.Record<string, unknown>).owners as object)) {
+      const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "owners", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "owners", expected: "safe integer", actual: String(__v) } as __BoundaryError))((((s as unknown as globalThis.Record<string, unknown>).owners as globalThis.Record<string, unknown>)[__k] as unknown as __JsonValue));
+      if (__r.tag === "Err") throw __rehydrationViolation("Board", __r.error);
+      ((s as unknown as globalThis.Record<string, unknown>).owners as globalThis.Record<string, unknown>)[__k] = __r.value;
+    }
+  }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "owners")) {
+    for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).owners as never)) {
+      const __r = __deserialise_UserId((__k as unknown as __JsonValue), "owners");
+      if (__r.tag === "Err") throw __rehydrationViolation("Board", __r.error);
+    }
+  }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "tags")) {
+    for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).tags as never)) {
+      const __r = __deserialise_Tag((__k as unknown as __JsonValue), "tags");
+      if (__r.tag === "Err") throw __rehydrationViolation("Board", __r.error);
+    }
+  }
 }
 
 function __hydrateBoardState(s: BoardState, stored: BoardState): void {
   const __z = __zeroOfBoardState();
   const __w = s as { -readonly [K in keyof BoardState]: BoardState[K] };
   const __r = stored as unknown as globalThis.Record<string, unknown>;
-  if (globalThis.Object.hasOwn(__r, "owners")) { __fillMap(__z.owners, __r["owners"] as never); __w.owners = __z.owners; }
-  if (globalThis.Object.hasOwn(__r, "tags")) { __fillSet(__z.tags, __r["tags"] as never); __w.tags = __z.tags; }
+  if (globalThis.Object.hasOwn(__r, "owners")) {
+    __fillMap(__z.owners, __r["owners"] as never);
+    __w.owners = __z.owners;
+  }
+  if (globalThis.Object.hasOwn(__r, "tags")) {
+    __fillSet(__z.tags, __r["tags"] as never);
+    __w.tags = __z.tags;
+  }
 }
 
 function __encodeBoardState(s: BoardState): globalThis.Record<string, unknown> {

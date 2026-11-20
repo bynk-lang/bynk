@@ -40,7 +40,11 @@ function __zeroOfSlotState(): SlotState { return { value: None }; }
 const __entryFieldsOfSlot = [] as const;
 
 function __rehydrateSlotState(s: SlotState, stored: SlotState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "value")) { const __r = __deserialise_Option_Int((s.value as unknown as __JsonValue), "value"); if (__r.tag === "Err") throw __rehydrationViolation("Slot", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).value = __r.value as unknown as (typeof s)["value"]; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "value")) {
+    const __r = __deserialise_Option_Int((s.value as unknown as __JsonValue), "value");
+    if (__r.tag === "Err") throw __rehydrationViolation("Slot", __r.error);
+    (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).value = __r.value as unknown as (typeof s)["value"];
+  }
 }
 
 function __encodeSlotState(s: SlotState): globalThis.Record<string, unknown> {

@@ -37,7 +37,11 @@ function __zeroOfOrderState(): OrderState { return { seen: false }; }
 const __entryFieldsOfOrder = [] as const;
 
 function __rehydrateOrderState(s: OrderState, stored: OrderState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "seen")) { const __r = ((__v) => typeof __v === "boolean" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "seen", expected: "boolean", actual: typeof __v } as __BoundaryError))((s.seen as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Order", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).seen = __r.value as unknown as (typeof s)["seen"]; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "seen")) {
+    const __r = ((__v) => typeof __v === "boolean" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "seen", expected: "boolean", actual: typeof __v } as __BoundaryError))((s.seen as unknown as __JsonValue));
+    if (__r.tag === "Err") throw __rehydrationViolation("Order", __r.error);
+    (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).seen = __r.value as unknown as (typeof s)["seen"];
+  }
 }
 
 function __encodeOrderState(s: OrderState): globalThis.Record<string, unknown> {
@@ -105,7 +109,11 @@ function __zeroOfLabelState(): LabelState { return { seen: false }; }
 const __entryFieldsOfLabel = [] as const;
 
 function __rehydrateLabelState(s: LabelState, stored: LabelState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "seen")) { const __r = ((__v) => typeof __v === "boolean" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "seen", expected: "boolean", actual: typeof __v } as __BoundaryError))((s.seen as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Label", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).seen = __r.value as unknown as (typeof s)["seen"]; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "seen")) {
+    const __r = ((__v) => typeof __v === "boolean" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "seen", expected: "boolean", actual: typeof __v } as __BoundaryError))((s.seen as unknown as __JsonValue));
+    if (__r.tag === "Err") throw __rehydrationViolation("Label", __r.error);
+    (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).seen = __r.value as unknown as (typeof s)["seen"];
+  }
 }
 
 function __encodeLabelState(s: LabelState): globalThis.Record<string, unknown> {
@@ -173,7 +181,11 @@ function __zeroOfTallyState(): TallyState { return { hits: 0 }; }
 const __entryFieldsOfTally = [] as const;
 
 function __rehydrateTallyState(s: TallyState, stored: TallyState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "hits")) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "hits", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "hits", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.hits as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Tally", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).hits = __r.value as unknown as (typeof s)["hits"]; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "hits")) {
+    const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "hits", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "hits", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.hits as unknown as __JsonValue));
+    if (__r.tag === "Err") throw __rehydrationViolation("Tally", __r.error);
+    (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).hits = __r.value as unknown as (typeof s)["hits"];
+  }
 }
 
 function __encodeTallyState(s: TallyState): globalThis.Record<string, unknown> {
@@ -241,7 +253,11 @@ function __zeroOfGridState(): GridState { return { hits: 0 }; }
 const __entryFieldsOfGrid = [] as const;
 
 function __rehydrateGridState(s: GridState, stored: GridState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "hits")) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "hits", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "hits", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.hits as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Grid", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).hits = __r.value as unknown as (typeof s)["hits"]; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "hits")) {
+    const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "hits", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "hits", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.hits as unknown as __JsonValue));
+    if (__r.tag === "Err") throw __rehydrationViolation("Grid", __r.error);
+    (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).hits = __r.value as unknown as (typeof s)["hits"];
+  }
 }
 
 function __encodeGridState(s: GridState): globalThis.Record<string, unknown> {

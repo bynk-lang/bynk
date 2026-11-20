@@ -19,8 +19,16 @@ function __zeroOfTaskState(): TaskState { return { retries: 3, done: false }; }
 const __entryFieldsOfTask = [] as const;
 
 function __rehydrateTaskState(s: TaskState, stored: TaskState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "retries")) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "retries", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "retries", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.retries as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Task", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).retries = __r.value as unknown as (typeof s)["retries"]; }
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "done")) { const __r = ((__v) => typeof __v === "boolean" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "done", expected: "boolean", actual: typeof __v } as __BoundaryError))((s.done as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Task", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).done = __r.value as unknown as (typeof s)["done"]; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "retries")) {
+    const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "retries", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "retries", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.retries as unknown as __JsonValue));
+    if (__r.tag === "Err") throw __rehydrationViolation("Task", __r.error);
+    (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).retries = __r.value as unknown as (typeof s)["retries"];
+  }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "done")) {
+    const __r = ((__v) => typeof __v === "boolean" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "done", expected: "boolean", actual: typeof __v } as __BoundaryError))((s.done as unknown as __JsonValue));
+    if (__r.tag === "Err") throw __rehydrationViolation("Task", __r.error);
+    (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).done = __r.value as unknown as (typeof s)["done"];
+  }
 }
 
 function __encodeTaskState(s: TaskState): globalThis.Record<string, unknown> {

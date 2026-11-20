@@ -26,7 +26,11 @@ function __zeroOfOrderState(): OrderState { return { placed: false }; }
 const __entryFieldsOfOrder = [] as const;
 
 function __rehydrateOrderState(s: OrderState, stored: OrderState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "placed")) { const __r = ((__v) => typeof __v === "boolean" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "placed", expected: "boolean", actual: typeof __v } as __BoundaryError))((s.placed as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Order", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).placed = __r.value as unknown as (typeof s)["placed"]; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "placed")) {
+    const __r = ((__v) => typeof __v === "boolean" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "placed", expected: "boolean", actual: typeof __v } as __BoundaryError))((s.placed as unknown as __JsonValue));
+    if (__r.tag === "Err") throw __rehydrationViolation("Order", __r.error);
+    (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).placed = __r.value as unknown as (typeof s)["placed"];
+  }
 }
 
 function __encodeOrderState(s: OrderState): globalThis.Record<string, unknown> {

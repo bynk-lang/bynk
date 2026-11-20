@@ -52,7 +52,11 @@ function __zeroOfCounterState(): CounterState { return { total: 0 }; }
 const __entryFieldsOfCounter = [] as const;
 
 function __rehydrateCounterState(s: CounterState, stored: CounterState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "total")) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "total", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "total", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.total as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Counter", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).total = __r.value as unknown as (typeof s)["total"]; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "total")) {
+    const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "total", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "total", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.total as unknown as __JsonValue));
+    if (__r.tag === "Err") throw __rehydrationViolation("Counter", __r.error);
+    (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).total = __r.value as unknown as (typeof s)["total"];
+  }
 }
 
 function __encodeCounterState(s: CounterState): globalThis.Record<string, unknown> {
@@ -109,7 +113,11 @@ function __zeroOfLedgerState(): LedgerState { return { by: 0 }; }
 const __entryFieldsOfLedger = [] as const;
 
 function __rehydrateLedgerState(s: LedgerState, stored: LedgerState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "by")) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "by", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "by", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.by as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Ledger", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).by = __r.value as unknown as (typeof s)["by"]; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "by")) {
+    const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "by", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "by", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.by as unknown as __JsonValue));
+    if (__r.tag === "Err") throw __rehydrationViolation("Ledger", __r.error);
+    (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).by = __r.value as unknown as (typeof s)["by"];
+  }
 }
 
 function __encodeLedgerState(s: LedgerState): globalThis.Record<string, unknown> {

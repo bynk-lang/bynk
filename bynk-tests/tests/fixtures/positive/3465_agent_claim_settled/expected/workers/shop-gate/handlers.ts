@@ -29,7 +29,11 @@ function __zeroOfGateState(): GateState { return { taken: 0 }; }
 const __entryFieldsOfGate = [] as const;
 
 function __rehydrateGateState(s: GateState, stored: GateState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "taken")) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "taken", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "taken", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.taken as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Gate", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).taken = __r.value as unknown as (typeof s)["taken"]; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "taken")) {
+    const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "taken", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "taken", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.taken as unknown as __JsonValue));
+    if (__r.tag === "Err") throw __rehydrationViolation("Gate", __r.error);
+    (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).taken = __r.value as unknown as (typeof s)["taken"];
+  }
 }
 
 function __encodeGateState(s: GateState): globalThis.Record<string, unknown> {
