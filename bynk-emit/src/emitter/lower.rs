@@ -1136,20 +1136,12 @@ fn array(children: Vec<LoweredExpr>) -> Built {
 
 /// An explicit source `( … )`: `bynk_ts` has `TsExpr::Paren`, so the source's
 /// own parentheses are kept as a node.
-fn paren(child: LoweredExpr) -> Built {
+pub(super) fn paren(child: LoweredExpr) -> Built {
     node_or_text(
         vec![child],
         |c| bynk_ts::TsExpr::Paren(Box::new(one(c))),
         |c| format!("({})", one(c)),
     )
-}
-
-/// A bridge value as a [`Built`]: the node, else its text.
-pub(super) fn built_of(expr: LoweredExpr) -> Built {
-    match expr {
-        LoweredExpr::Node(n) => Ok(n),
-        LoweredExpr::Text(t) => Err(t),
-    }
 }
 
 /// 1A: serialiser value is text. A still-text operand handed to a serialiser entry point (the

@@ -1,0 +1,2 @@
+# #3770: the identity conversions bracket their operand.
+passed=7 failed=0

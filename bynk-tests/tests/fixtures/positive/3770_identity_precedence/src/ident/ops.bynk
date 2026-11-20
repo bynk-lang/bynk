@@ -1,0 +1,34 @@
+---
+#3770: `Duration.millis`, `toMillis`, `Instant.fromEpochMillis`, `toEpochMillis` and
+`Int.toFloat` are the identity at runtime. Each must still bracket a
+lower-precedence operand when the result is used inside a tighter operator.
+---
+commons ident.ops {
+  fn scaled(len: Int) -> Int {
+    Duration.millis(len + 1).toMillis() * 2
+  }
+
+  fn instantScaled(a: Int, b: Int) -> Int {
+    Instant.fromEpochMillis(a + b).toEpochMillis() * 2
+  }
+
+  fn negated(a: Int, b: Int) -> Int {
+    -Duration.millis(a + b).toMillis()
+  }
+
+  fn difference(x: Int, a: Int, b: Int) -> Int {
+    x - Duration.millis(a - b).toMillis()
+  }
+
+  fn floatedMethod(a: Int, b: Int) -> Float {
+    (a + b).toFloat() * 2.0
+  }
+
+  fn roundTrip(a: Int, b: Int) -> Int {
+    Instant.fromEpochMillis(a * b).toEpochMillis() - Instant.fromEpochMillis(a + b).toEpochMillis()
+  }
+
+  fn textOperand(p: String) -> Int {
+    Duration.millis(p.splitRegex(",").length() + 1).toMillis() * 2
+  }
+}

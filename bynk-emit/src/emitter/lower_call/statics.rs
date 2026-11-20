@@ -15,14 +15,15 @@ use bynk_ts::{
 };
 
 use super::super::lower::{
-    Built, LoweredExpr, Pre, built_of, call_built, ident_node, lower_http_variant_args,
-    member_node, node_or_text, runtime_ctor_call, settle_built,
+    Built, LoweredExpr, Pre, call_built, ident_node, lower_http_variant_args, member_node,
+    node_or_text, runtime_ctor_call, settle_built,
 };
 use super::super::lower_ctx::LowerCtx;
 use super::super::lower_list::key_is_plain;
 use super::super::ts_types::{ts_ty_to_ts_type, ts_type_ref_to_ts_type};
 use super::super::{Expr, ExprKind, Ident, TypeRef};
 use super::codec_statics::lower_json_codec_call;
+use super::kernel_scalar::identity;
 
 /// `a.b`.
 fn member(object: TsExpr, property: &str) -> TsExpr {
@@ -432,7 +433,7 @@ pub(in crate::emitter) fn lower_scalar_static_call(
         )
         && args.len() == 1
     {
-        return Some(built_of(pre.lower_node(&args[0], cx)));
+        return Some(identity(pre, &args[0], cx));
     }
     // K3 (#2592): `Instant.fromIso(s)`, a guarded RFC 3339 read.
     if let ExprKind::Ident(_) = &receiver.kind
@@ -461,7 +462,7 @@ pub(in crate::emitter) fn lower_scalar_static_call(
         )
         && args.len() == 1
     {
-        return Some(built_of(pre.lower_node(&args[0], cx)));
+        return Some(identity(pre, &args[0], cx));
     }
     None
 }
@@ -799,7 +800,7 @@ mod tests {
             ),
             (
                 "fn f(p: String) -> Duration { Duration.millis(p.splitRegex(\",\").length()) }",
-                format!("({}).length", split_text()),
+                format!("(({}).length)", split_text()),
             ),
         ] {
             let (n, ts) = exits(body);
