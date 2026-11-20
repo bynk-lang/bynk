@@ -170,7 +170,7 @@ pub fn compile_once_reporting(
     // committed lock changes when a real build does.
     if let Some(content) = &output.schema_lock
         && !build.dry_run
-        && let Err(e) = bynk_driver::schema_lock::write(project_root, content)
+        && let Err(e) = bynk_driver::schema_lock::write_reporting("bynk", project_root, content)
     {
         emsg!(
             "bynk: could not write {}: {e}",
