@@ -317,6 +317,7 @@ fn walk_expr<'a>(expr: &'a TsExpr, out: &mut Vec<(VerbatimOrigin, &'a str)>) {
         }
         TsExpr::Await(e) => walk_expr(e, out),
         TsExpr::As { expr, ty: _ } => walk_expr(expr, out),
+        TsExpr::AsConst(expr) => walk_expr(expr, out),
         TsExpr::Unary { op: _, expr } => walk_expr(expr, out),
         TsExpr::Binary { op: _, left, right } => {
             walk_expr(left, out);
@@ -1506,6 +1507,10 @@ pub enum TsExpr {
         expr: Box<TsExpr>,
         ty: TsType,
     },
+    /// `expr as const`: a const assertion, which keeps a literal's own type
+    /// (`{ tag: "Some" as const }`). It is not an `As` over a type named
+    /// `const`: `const` is a keyword here, not a type.
+    AsConst(Box<TsExpr>),
     Unary {
         op: TsUnaryOp,
         expr: Box<TsExpr>,

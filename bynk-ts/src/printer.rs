@@ -1143,6 +1143,7 @@ fn needs_parens_as_operand(expr: &TsExpr) -> bool {
         expr,
         TsExpr::Binary { .. }
             | TsExpr::As { .. }
+            | TsExpr::AsConst(_)
             | TsExpr::Arrow { .. }
             | TsExpr::Conditional { .. }
             | TsExpr::Assign { .. }
@@ -1170,6 +1171,7 @@ fn new_callee_needs_parens(callee: &TsExpr) -> bool {
         | TsExpr::TemplateLit { .. }
         | TsExpr::Await(_)
         | TsExpr::As { .. }
+        | TsExpr::AsConst(_)
         | TsExpr::Unary { .. }
         | TsExpr::Binary { .. }
         | TsExpr::Conditional { .. }
@@ -1270,6 +1272,7 @@ fn render_binary_operand(
         // finding 1, for `Arrow`; #1323 adds `Conditional` proactively, the
         // same class of gap).
         TsExpr::As { .. }
+        | TsExpr::AsConst(_)
         | TsExpr::Arrow { .. }
         | TsExpr::Conditional { .. }
         | TsExpr::Assign { .. }
@@ -1853,6 +1856,21 @@ fn render_expr(out: &mut String, expr: &TsExpr, depth: usize, m: &mut Option<Mer
             out.push_str(" as ");
             render_type(out, ty);
         }
+        // `<expr> as const`, bracketed exactly as `As` brackets its operand.
+        TsExpr::AsConst(expr) => {
+            let needs_parens = matches!(
+                **expr,
+                TsExpr::Binary { .. } | TsExpr::Arrow { .. } | TsExpr::Conditional { .. }
+            );
+            if needs_parens {
+                out.push('(');
+                render_expr(out, expr, depth, m);
+                out.push(')');
+            } else {
+                render_expr(out, expr, depth, m);
+            }
+            out.push_str(" as const");
+        }
         TsExpr::Unary { op, expr } => {
             out.push_str(match op {
                 TsUnaryOp::Not => "!",
@@ -2015,6 +2033,7 @@ fn starts_with_object(expr: &TsExpr) -> bool {
         | TsExpr::OptionalIndex { object, .. } => starts_with_object(object),
         TsExpr::Call { callee, .. } | TsExpr::TypeApp { callee, .. } => starts_with_object(callee),
         TsExpr::As { expr, .. } => starts_with_object(expr),
+        TsExpr::AsConst(expr) => starts_with_object(expr),
         TsExpr::DefaultIife { .. } => false,
         TsExpr::Binary { left, .. } => starts_with_object(left),
         TsExpr::Conditional { test, .. } => starts_with_object(test),
@@ -8543,6 +8562,64 @@ mod tests {
             print_expr(&TsExpr::Paren(Box::new(cast))),
             "(a as unknown as T)"
         );
+    }
+
+    /// 1A.31 (#3732, Decision B): `AsConst` prints `<expr> as const`, bare inside an object property.
+    #[test]
+    fn an_as_const_prints_inside_an_object_property() {
+        let tag = TsExpr::AsConst(Box::new(TsExpr::Lit(TsLit::Str("Some".to_string()))));
+        let obj = TsExpr::Object {
+            entries: vec![
+                TsObjectEntry::Prop("tag".to_string(), tag.clone()),
+                TsObjectEntry::Prop("value".to_string(), TsExpr::Ident("v".to_string())),
+            ],
+            multiline: false,
+        };
+        assert_eq!(print_expr(&tag), "\"Some\" as const");
+        assert_eq!(print_expr(&obj), "{ tag: \"Some\" as const, value: v }");
+    }
+
+    /// `AsConst` as an arrow body: an object body is bracketed by the arrow, the tag inside keeps its
+    /// `as const`, and a conditional under `AsConst` is bracketed like it is under `As`.
+    #[test]
+    fn an_as_const_prints_inside_an_arrow_body() {
+        let arrow = |body: TsExpr| TsExpr::Arrow {
+            params: vec![],
+            is_async: false,
+            generics: vec![],
+            return_type: None,
+            body: Box::new(TsArrowBody::Expr(Box::new(body))),
+        };
+        let tag = TsExpr::AsConst(Box::new(TsExpr::Lit(TsLit::Str("None".to_string()))));
+        assert_eq!(print_expr(&arrow(tag)), "() => \"None\" as const");
+        let obj = TsExpr::Object {
+            entries: vec![TsObjectEntry::Prop(
+                "tag".to_string(),
+                TsExpr::AsConst(Box::new(TsExpr::Lit(TsLit::Str("None".to_string())))),
+            )],
+            multiline: false,
+        };
+        assert_eq!(
+            print_expr(&arrow(obj)),
+            "() => ({ tag: \"None\" as const })"
+        );
+        let cond = TsExpr::AsConst(Box::new(TsExpr::Conditional {
+            test: Box::new(TsExpr::Ident("c".to_string())),
+            consequent: Box::new(TsExpr::Ident("a".to_string())),
+            alternate: Box::new(TsExpr::Ident("b".to_string())),
+        }));
+        assert_eq!(print_expr(&cond), "(c ? a : b) as const");
+    }
+
+    /// `AsConst` is byte-identical to the `As { ty: const }` it replaces.
+    #[test]
+    fn an_as_const_matches_the_as_over_a_type_named_const() {
+        let old = TsExpr::As {
+            expr: Box::new(TsExpr::Lit(TsLit::Str("x".to_string()))),
+            ty: TsType::named("const"),
+        };
+        let new = TsExpr::AsConst(Box::new(TsExpr::Lit(TsLit::Str("x".to_string()))));
+        assert_eq!(print_expr(&old), print_expr(&new));
     }
 
     /// A cast that is the operand of a tighter-binding position (a member object, a call callee, an

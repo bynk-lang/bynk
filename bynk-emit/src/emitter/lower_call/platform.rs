@@ -32,10 +32,7 @@ fn lit_num(digits: impl ToString) -> TsExpr {
 
 /// `"text" as const`: a string-literal tag that keeps its literal type.
 fn tag_const(text: &str) -> TsExpr {
-    TsExpr::As {
-        expr: Box::new(lit_str(text)),
-        ty: TsType::named("const"),
-    }
+    TsExpr::AsConst(Box::new(lit_str(text)))
 }
 
 /// An inline object literal of `key: value` entries.
