@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.639.54** | Lowering builds labelled loops and blocks, while loops, multi-declarator lets, sequence expressions, generators with yield, for-await, array-pattern parameters, the claim-scope declaration, the witness claims and the regex and stream helpers as typed nodes instead of text; the generated code is unchanged apart from layout (and one multi-declarator const split in two), and the source maps of the changed files gain finer statement anchors |
 | **v0.639.53** | Lowering builds the typeof and indexed-access casts, tail-call temporaries, or-pattern dispatch and several constructor and snapshot helpers as typed nodes instead of text; the generated code is unchanged apart from layout, and ten source maps gain finer statement anchors |
 | **v0.639.52** | The generated code now brackets the operand of `Duration.millis`, `toMillis`, `Instant.fromEpochMillis`, `toEpochMillis` and `Int.toFloat`, so `Duration.millis(s.length() + 1).toMillis() * 2`, unary minus and subtraction over them compute the right value instead of binding the operand's `+` or `-` to the surrounding operator |
 | **v0.639.51** | A checker fact the code generator needs and does not find is reported as an internal-error diagnostic, `bynk.internal.missing_checker_fact`, at the source span instead of being written as `any`, `undefined` or a panic; no program the checker accepts is affected and the generated TypeScript and source maps are unchanged |
