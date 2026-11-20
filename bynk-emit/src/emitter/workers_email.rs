@@ -59,16 +59,11 @@ pub(super) fn emit_email_handler(
     compose_args: &[TsExpr],
 ) -> TsObjectEntry {
     let mut params = vec![
-        TsParam {
-            name: "message".to_string(),
-            ty: Some(TsType::named("__InboundMessage")),
-            optional: false,
-        },
-        TsParam {
-            name: "env".to_string(),
-            ty: Some(TsType::named("Env")),
-            optional: false,
-        },
+        TsParam::new(
+            "message".to_string(),
+            Some(TsType::named("__InboundMessage")),
+        ),
+        TsParam::new("env".to_string(), Some(TsType::named("Env"))),
     ];
     params.extend(exec_params.iter().cloned());
     // The routes are built inside a thunk, so composing the surface is guarded

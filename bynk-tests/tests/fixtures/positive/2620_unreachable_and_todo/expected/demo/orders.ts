@@ -244,7 +244,6 @@ export class Ledger {
     const __state = await this.loadState();
     return __state.total;
   }
-
 }
 
 export function __makeLedger(key: string, env?: { LEDGER?: __DurableObjectNamespace }): Ledger {

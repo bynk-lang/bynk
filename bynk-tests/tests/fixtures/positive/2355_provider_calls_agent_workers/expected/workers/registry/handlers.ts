@@ -68,7 +68,6 @@ export class PackageIndex {
     }
     return new globalThis.Response("Not Found", { status: 404 });
   }
-
 }
 
 const __PackageIndexWire: __AgentWire = {

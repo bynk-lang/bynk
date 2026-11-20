@@ -74,7 +74,6 @@ export class Inventory {
     const __state = await this.loadState();
     return __bynkThen(((() => __bynkThen(__state.reservations.values(), (__q) => __q.filter((__x) => ((r: Reservation) => r.region === rg)(__x)))))(), (__q) => __q.length);
   }
-
 }
 
 export function __makeInventory(key: string, env?: { INVENTORY?: __DurableObjectNamespace }): Inventory {

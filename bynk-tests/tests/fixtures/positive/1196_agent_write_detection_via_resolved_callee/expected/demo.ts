@@ -75,7 +75,6 @@ export class Widget {
     const __r0 = await Box.put(items, x);
     return undefined;
   }
-
 }
 
 export function __makeWidget(key: string, env?: { WIDGET?: __DurableObjectNamespace }): Widget {

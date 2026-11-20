@@ -93,7 +93,6 @@ export class Counter {
     await this.commitState(__state);
     return __result;
   }
-
 }
 
 export function __makeCounter(key: string, env?: { COUNTER?: __DurableObjectNamespace }): Counter {
@@ -153,7 +152,6 @@ export class Ledger {
     const __state = await this.loadState();
     return __state.by;
   }
-
 }
 
 export function __makeLedger(key: string, env?: { LEDGER?: __DurableObjectNamespace }): Ledger {

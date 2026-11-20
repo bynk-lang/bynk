@@ -82,7 +82,6 @@ export class Cart {
     }
     throw new globalThis.Error("non-exhaustive match");
   }
-
 }
 
 export function __makeCart(key: string, env?: { CART?: __DurableObjectNamespace }): Cart {

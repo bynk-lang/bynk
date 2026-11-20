@@ -147,7 +147,6 @@ export class Basket {
     const __state = await this.loadState();
     return __state.line;
   }
-
 }
 
 export function __makeBasket(key: string, env?: { BASKET?: __DurableObjectNamespace }): Basket {

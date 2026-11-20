@@ -699,6 +699,10 @@ fn render_stmt_kind(
             out.push_str(&indent(depth));
             out.push_str("continue;\n");
         }
+        TsStmtKind::Break => {
+            out.push_str(&indent(depth));
+            out.push_str("break;\n");
+        }
         TsStmtKind::Assign { target, value } => {
             out.push_str(&indent(depth));
             render_expr(out, target, depth, &mut map);
@@ -856,6 +860,7 @@ fn render_branch(
         | TsStmtKind::For { .. }
         | TsStmtKind::TryCatch { .. }
         | TsStmtKind::Continue
+        | TsStmtKind::Break
         | TsStmtKind::Assign { .. }
         | TsStmtKind::Comment(_)
         | TsStmtKind::DocComment(_)
@@ -938,6 +943,7 @@ fn render_compact_stmts(out: &mut String, stmts: &[TsStmt], depth: usize) {
 fn render_inline_stmt(out: &mut String, stmt: &TsStmt, depth: usize) {
     match &stmt.kind {
         TsStmtKind::Continue => out.push_str("continue;\n"),
+        TsStmtKind::Break => out.push_str("break;\n"),
         TsStmtKind::Return(expr) => {
             out.push_str("return");
             if let Some(expr) = expr {
@@ -1962,14 +1968,14 @@ fn render_expr(out: &mut String, expr: &TsExpr, depth: usize, m: &mut Option<Mer
             render_expr(out, inner, depth, m);
             out.push(')');
         }
-        // A spread element is legal only as an array item, and `render_array_item`
-        // prints it there. Reaching it from any other position (an operand, an
-        // argument) would print `...a + b`, which reads as a different tree, so
+        // A spread element is legal only as an array item or a call argument, and
+        // `render_array_item` prints it there. Reaching it from any other position (an
+        // operand) would print `...a + b`, which reads as a different tree, so
         // it is a construction bug: fail loudly in a debug build.
         TsExpr::Spread(inner) => {
             debug_assert!(
                 false,
-                "TsExpr::Spread is legal only as an array item; it was rendered elsewhere"
+                "TsExpr::Spread is legal only as an array item or a call argument; it was rendered elsewhere"
             );
             render_spread(out, inner, depth, m);
         }
@@ -2007,8 +2013,8 @@ fn render_non_null(
     out.push('!');
 }
 
-/// An array item: a [`TsExpr::Spread`] prints `...` and its operand, anything
-/// else is an ordinary expression. The one place a spread is legal.
+/// An array item or call argument: a [`TsExpr::Spread`] prints `...` and its operand,
+/// anything else is an ordinary expression. The two places a spread is legal.
 fn render_array_item(
     out: &mut String,
     item: &TsExpr,
@@ -2111,6 +2117,8 @@ fn render_arrow_body(
     }
 }
 
+/// A call's arguments. A [`TsExpr::Spread`] is legal here as well as in an array
+/// (1A.32b), and prints `...` then its operand.
 fn render_expr_list(
     out: &mut String,
     exprs: &[TsExpr],
@@ -2121,7 +2129,7 @@ fn render_expr_list(
         if i > 0 {
             out.push_str(", ");
         }
-        render_expr(out, e, depth, m);
+        render_array_item(out, e, depth, m);
     }
 }
 
@@ -2562,6 +2570,7 @@ fn stmt_contains_raw(stmt: &TsStmt) -> bool {
         | TsStmtKind::Return(_)
         | TsStmtKind::Throw(_)
         | TsStmtKind::Continue
+        | TsStmtKind::Break
         | TsStmtKind::Assign { .. }
         | TsStmtKind::Comment(_)
         | TsStmtKind::DocComment(_)
@@ -2689,6 +2698,9 @@ fn render_params(out: &mut String, params: &[TsParam]) {
     for (i, p) in params.iter().enumerate() {
         if i > 0 {
             out.push_str(", ");
+        }
+        if p.rest {
+            out.push_str("...");
         }
         out.push_str(&p.name);
         if p.optional {
@@ -2847,6 +2859,9 @@ fn render_decl_body(
                     out.push_str("private ");
                 }
                 out.push_str(&f.name);
+                if f.definite {
+                    out.push('!');
+                }
                 out.push_str(": ");
                 render_type(out, &f.ty);
                 out.push_str(";\n");
@@ -3955,16 +3970,11 @@ mod tests {
     fn prints_events_fanout_dos_own_class_byte_identical_to_the_real_emitter() {
         let real_ctor = TsClassCtor {
             params: vec![
-                TsParam {
-                    name: "_state".to_string(),
-                    ty: Some(TsType::named("DurableObjectState")),
-                    optional: false,
-                },
-                TsParam {
-                    name: "env".to_string(),
-                    ty: Some(TsType::named("unknown")),
-                    optional: true,
-                },
+                TsParam::new(
+                    "_state".to_string(),
+                    Some(TsType::named("DurableObjectState")),
+                ),
+                TsParam::optional("env".to_string(), Some(TsType::named("unknown"))),
             ],
             body: vec![TsStmt::assign(
                 TsExpr::Member {
@@ -3990,11 +4000,10 @@ mod tests {
             name: "fetch".to_string(),
             private: false,
             is_async: true,
-            params: vec![TsParam {
-                name: "request".to_string(),
-                ty: Some(TsType::named("Request")),
-                optional: false,
-            }],
+            params: vec![TsParam::new(
+                "request".to_string(),
+                Some(TsType::named("Request")),
+            )],
             return_type: Some(TsType::named_with_args(
                 "Promise",
                 vec![TsType::named("Response")],
@@ -4212,14 +4221,16 @@ mod tests {
         let class = TsDecl::Export(Box::new(TsDecl::Class {
             name: "EventsFanoutDO".to_string(),
             implements: Vec::new(),
-            fields: vec![TsClassField {
-                name: "env".to_string(),
-                ty: TsType::named_with_args(
-                    "Record",
-                    vec![TsType::named("string"), TsType::named("ServiceBinding")],
-                ),
-                private: true,
-            }],
+            fields: vec![
+                TsClassField::new(
+                    "env",
+                    TsType::named_with_args(
+                        "Record",
+                        vec![TsType::named("string"), TsType::named("ServiceBinding")],
+                    ),
+                )
+                .private(),
+            ],
             constructor: Some(real_ctor),
             methods: vec![fetch],
             end_span: None,
@@ -4870,7 +4881,7 @@ mod tests {
     /// array item goes through its own renderer).
     #[cfg(debug_assertions)]
     #[test]
-    #[should_panic(expected = "Spread is legal only as an array item")]
+    #[should_panic(expected = "Spread is legal only as an array item or a call argument")]
     fn a_spread_outside_an_array_is_refused() {
         let id = |n: &str| TsExpr::Ident(n.to_string());
         let operand = TsExpr::Binary {
@@ -5156,11 +5167,7 @@ mod tests {
                     name: "foo".to_string(),
                     is_async: true,
                     generics: Vec::new(),
-                    params: vec![TsParam {
-                        name: "a".to_string(),
-                        ty: Some(TsType::named("string")),
-                        optional: false,
-                    }],
+                    params: vec![TsParam::new("a".to_string(), Some(TsType::named("string")))],
                     return_type: None,
                     doc: None,
                     inline: false,
@@ -5203,14 +5210,13 @@ mod tests {
         let mut program = TsProgram::new();
         program.push(TsStmt::expr_stmt(
             TsExpr::Arrow {
-                params: vec![TsParam {
-                    name: "events".to_string(),
-                    ty: Some(TsType::named_with_args(
+                params: vec![TsParam::new(
+                    "events".to_string(),
+                    Some(TsType::named_with_args(
                         "Array",
                         vec![TsType::named("Wire")],
                     )),
-                    optional: false,
-                }],
+                )],
                 is_async: false,
                 generics: Vec::new(),
                 return_type: None,
@@ -5232,14 +5238,13 @@ mod tests {
         let mut program = TsProgram::new();
         program.push(TsStmt::expr_stmt(
             TsExpr::Arrow {
-                params: vec![TsParam {
-                    name: "events".to_string(),
-                    ty: Some(TsType::named_with_args(
+                params: vec![TsParam::new(
+                    "events".to_string(),
+                    Some(TsType::named_with_args(
                         "Array",
                         vec![TsType::named("Wire")],
                     )),
-                    optional: false,
-                }],
+                )],
                 is_async: true,
                 generics: Vec::new(),
                 return_type: None,
@@ -5271,11 +5276,7 @@ mod tests {
         let mut program = TsProgram::new();
         let guard = TsExpr::Call {
             callee: Box::new(TsExpr::Arrow {
-                params: vec![TsParam {
-                    name: "v".to_string(),
-                    ty: Some(TsType::named("number")),
-                    optional: false,
-                }],
+                params: vec![TsParam::new("v".to_string(), Some(TsType::named("number")))],
                 is_async: false,
                 generics: Vec::new(),
                 return_type: None,
@@ -5334,11 +5335,7 @@ mod tests {
         program.push(TsStmt::expr_stmt(
             TsExpr::Call {
                 callee: Box::new(TsExpr::Arrow {
-                    params: vec![TsParam {
-                        name: "x".to_string(),
-                        ty: None,
-                        optional: false,
-                    }],
+                    params: vec![TsParam::new("x".to_string(), None)],
                     is_async: false,
                     generics: Vec::new(),
                     return_type: None,
@@ -5360,11 +5357,7 @@ mod tests {
                 op: TsBinaryOp::NullishCoalescing,
                 left: Box::new(TsExpr::Ident("a".to_string())),
                 right: Box::new(TsExpr::Arrow {
-                    params: vec![TsParam {
-                        name: "x".to_string(),
-                        ty: None,
-                        optional: false,
-                    }],
+                    params: vec![TsParam::new("x".to_string(), None)],
                     is_async: false,
                     generics: Vec::new(),
                     return_type: None,
@@ -5383,11 +5376,7 @@ mod tests {
         program.push(TsStmt::expr_stmt(
             TsExpr::As {
                 expr: Box::new(TsExpr::Arrow {
-                    params: vec![TsParam {
-                        name: "x".to_string(),
-                        ty: None,
-                        optional: false,
-                    }],
+                    params: vec![TsParam::new("x".to_string(), None)],
                     is_async: false,
                     generics: Vec::new(),
                     return_type: None,
@@ -5434,11 +5423,7 @@ mod tests {
             TsDecl::Export(Box::new(TsDecl::Function {
                 name: "compose".to_string(),
                 generics: Vec::new(),
-                params: vec![TsParam {
-                    name: "env".to_string(),
-                    ty: Some(TsType::named("Env")),
-                    optional: false,
-                }],
+                params: vec![TsParam::new("env".to_string(), Some(TsType::named("Env")))],
                 return_type: None,
                 body: vec![TsStmt::return_stmt(Some(TsExpr::Lit(TsLit::Null)), None)],
                 is_async: false,
@@ -5466,11 +5451,7 @@ mod tests {
             TsDecl::Export(Box::new(TsDecl::Function {
                 name: "identity".to_string(),
                 generics: vec!["A".to_string(), "B".to_string()],
-                params: vec![TsParam {
-                    name: "x".to_string(),
-                    ty: Some(TsType::named("A")),
-                    optional: false,
-                }],
+                params: vec![TsParam::new("x".to_string(), Some(TsType::named("A")))],
                 return_type: Some(TsType::named("A")),
                 body: vec![TsStmt::return_stmt(
                     Some(TsExpr::Ident("x".to_string())),
@@ -5926,14 +5907,13 @@ mod tests {
             TsTypeMember::method("ack", vec![], TsType::named("void")),
             TsTypeMember::method(
                 "waitUntil",
-                vec![TsParam {
-                    name: "promise".to_string(),
-                    ty: Some(TsType::named_with_args(
+                vec![TsParam::new(
+                    "promise".to_string(),
+                    Some(TsType::named_with_args(
                         "Promise",
                         vec![TsType::named("unknown")],
                     )),
-                    optional: false,
-                }],
+                )],
                 TsType::named("void"),
             ),
         ]);
@@ -7119,11 +7099,10 @@ mod tests {
                 name: "of".to_string(),
                 is_async: false,
                 generics: Vec::new(),
-                params: vec![TsParam {
-                    name: "value".to_string(),
-                    ty: Some(TsType::named("string")),
-                    optional: false,
-                }],
+                params: vec![TsParam::new(
+                    "value".to_string(),
+                    Some(TsType::named("string")),
+                )],
                 return_type: Some(TsType::named("Uuid")),
                 doc: None,
                 inline: false,
@@ -7155,16 +7134,8 @@ mod tests {
                 is_async: false,
                 generics: vec!["A".to_string(), "U".to_string()],
                 params: vec![
-                    TsParam {
-                        name: "self".to_string(),
-                        ty: Some(TsType::named("Box<A>")),
-                        optional: false,
-                    },
-                    TsParam {
-                        name: "f".to_string(),
-                        ty: Some(TsType::named("(a0: A) => U")),
-                        optional: false,
-                    },
+                    TsParam::new("self".to_string(), Some(TsType::named("Box<A>"))),
+                    TsParam::new("f".to_string(), Some(TsType::named("(a0: A) => U"))),
                 ],
                 return_type: Some(TsType::named("Box<U>")),
                 doc: None,
@@ -7227,11 +7198,10 @@ mod tests {
                 name: "diff".to_string(),
                 is_async: false,
                 generics: Vec::new(),
-                params: vec![TsParam {
-                    name: "self".to_string(),
-                    ty: Some(TsType::named("Timestamp")),
-                    optional: false,
-                }],
+                params: vec![TsParam::new(
+                    "self".to_string(),
+                    Some(TsType::named("Timestamp")),
+                )],
                 return_type: Some(TsType::named("Span")),
                 doc: Some("Compute the duration between two timestamps.".to_string()),
                 inline: false,
@@ -7266,16 +7236,8 @@ mod tests {
                 is_async: false,
                 generics: Vec::new(),
                 params: vec![
-                    TsParam {
-                        name: "self".to_string(),
-                        ty: Some(TsType::named("Cents")),
-                        optional: false,
-                    },
-                    TsParam {
-                        name: "other".to_string(),
-                        ty: Some(TsType::named("Cents")),
-                        optional: false,
-                    },
+                    TsParam::new("self".to_string(), Some(TsType::named("Cents"))),
+                    TsParam::new("other".to_string(), Some(TsType::named("Cents"))),
                 ],
                 return_type: Some(TsType::named("boolean")),
                 doc: None,
@@ -7332,11 +7294,10 @@ mod tests {
             name: "of".to_string(),
             is_async: false,
             generics: Vec::new(),
-            params: vec![TsParam {
-                name: "value".to_string(),
-                ty: Some(TsType::named("string")),
-                optional: false,
-            }],
+            params: vec![TsParam::new(
+                "value".to_string(),
+                Some(TsType::named("string")),
+            )],
             return_type: Some(TsType::named("Uuid")),
             doc: None,
             inline: false,
@@ -7487,11 +7448,7 @@ mod tests {
                 members: vec![TsTypeMember::Method {
                     name: "now".to_string(),
                     generics: vec!["T".to_string()],
-                    params: vec![TsParam {
-                        name: "unit".to_string(),
-                        ty: Some(TsType::named("T")),
-                        optional: false,
-                    }],
+                    params: vec![TsParam::new("unit".to_string(), Some(TsType::named("T")))],
                     ret: TsType::named("number"),
                     doc: Some("Returns the current time.".to_string()),
                 }],
@@ -7520,11 +7477,7 @@ mod tests {
             name: "double".to_string(),
             private: false,
             is_async: true,
-            params: vec![TsParam {
-                name: "n".to_string(),
-                ty: Some(TsType::named("number")),
-                optional: false,
-            }],
+            params: vec![TsParam::new("n".to_string(), Some(TsType::named("number")))],
             return_type: Some(TsType::named("number")),
             doc: None,
             body: vec![TsStmt::return_stmt(
@@ -7607,11 +7560,7 @@ mod tests {
         let mut program = TsProgram::new();
         program.push(TsStmt::expr_stmt(
             TsExpr::Arrow {
-                params: vec![TsParam {
-                    name: "value".to_string(),
-                    ty: Some(TsType::named("T")),
-                    optional: false,
-                }],
+                params: vec![TsParam::new("value".to_string(), Some(TsType::named("T")))],
                 is_async: false,
                 generics: vec!["T".to_string()],
                 return_type: Some(TsType::named_with_args("Sum", vec![TsType::named("T")])),
@@ -8074,11 +8023,7 @@ mod tests {
     #[test]
     fn an_object_literal_expression_body_is_bracketed() {
         let arrow = TsExpr::Arrow {
-            params: vec![TsParam {
-                name: "x".to_string(),
-                ty: None,
-                optional: false,
-            }],
+            params: vec![TsParam::new("x".to_string(), None)],
             is_async: false,
             generics: Vec::new(),
             return_type: None,
@@ -8139,11 +8084,7 @@ mod tests {
     #[test]
     fn a_multiline_arrow_as_an_argument_uses_the_statement_depth() {
         let lambda = TsExpr::Arrow {
-            params: vec![TsParam {
-                name: "x".to_string(),
-                ty: None,
-                optional: false,
-            }],
+            params: vec![TsParam::new("x".to_string(), None)],
             is_async: false,
             generics: Vec::new(),
             return_type: None,
@@ -8623,6 +8564,98 @@ mod tests {
         assert_eq!(
             class(vec![TsType::named("A"), TsType::named("B")]),
             "class C implements A, B {\n}\n"
+        );
+    }
+
+    /// A spread is a legal call argument as well as an array item (1A.32b), printing `...` and its
+    /// operand wherever it sits among the arguments.
+    #[test]
+    fn a_spread_prints_as_a_call_argument() {
+        let spread = |n: &str| TsExpr::Spread(Box::new(id(n)));
+        let call = |args: Vec<TsExpr>| TsExpr::Call {
+            callee: Box::new(id("f")),
+            args,
+        };
+        assert_eq!(print_expr(&call(vec![spread("a")])), "f(...a)");
+        assert_eq!(
+            print_expr(&call(vec![id("x"), spread("rest"), id("y")])),
+            "f(x, ...rest, y)"
+        );
+        let array = TsExpr::array(vec![id("x"), spread("rest")]);
+        assert_eq!(print_expr(&array), "[x, ...rest]");
+    }
+
+    /// `break;` ends a case body on its own line, and prints on one line inside an inline block
+    /// and a compact statement list (1A.32b).
+    #[test]
+    fn a_break_statement_prints_in_block_inline_and_compact_bodies() {
+        let case = |body: Vec<TsStmt>| TsSwitchCase {
+            labels: vec![TsExpr::Lit(TsLit::Num("0".to_string()))],
+            body,
+            default_braced: false,
+            case_braced: false,
+            span: None,
+        };
+        let call = || {
+            TsStmt::expr_stmt(
+                TsExpr::Call {
+                    callee: Box::new(id("f")),
+                    args: Vec::new(),
+                },
+                None,
+            )
+        };
+        let switch = TsStmt::switch_stmt(
+            id("x"),
+            vec![case(vec![call(), TsStmt::break_stmt(None)])],
+            None,
+        );
+        assert_eq!(
+            print_stmt(&switch, 0),
+            "switch (x) {\n  case 0:\n    f();\n    break;\n}\n"
+        );
+        let inline = TsStmt::inline_block(vec![call(), TsStmt::break_stmt(None)], None);
+        assert_eq!(print_stmt(&inline, 0), "{ f(); break; }\n");
+        let guarded = TsStmt::if_stmt(id("c"), TsStmt::break_stmt(None), None);
+        assert_eq!(print_stmt(&guarded, 0), "if (c) break;\n");
+        let block = TsStmt::block(vec![TsStmt::break_stmt(None)], None);
+        assert_eq!(print_stmt(&block, 0), "{\n  break;\n}\n");
+    }
+
+    /// A rest parameter prints `...name: T`, first or after others (1A.32b).
+    #[test]
+    fn a_rest_parameter_prints_its_spread() {
+        let params = vec![
+            TsParam::new("a", Some(TsType::named("number"))),
+            TsParam::new("rest", Some(TsType::array(TsType::named("unknown")))).rest(),
+        ];
+        let mut out = String::new();
+        render_params(&mut out, &params);
+        assert_eq!(out, "a: number, ...rest: unknown[]");
+        let mut only = String::new();
+        render_params(
+            &mut only,
+            &[TsParam::new("__a", Some(TsType::array(TsType::named("unknown")))).rest()],
+        );
+        assert_eq!(only, "...__a: unknown[]");
+    }
+
+    /// A definite-assignment field prints `name!: T;`, with or without `private`, beside a plain
+    /// one; the two are independent (1A.32b).
+    #[test]
+    fn a_class_field_prints_a_definite_assignment_assertion() {
+        let fields = vec![
+            TsClassField::new("state", TsType::named("S")),
+            TsClassField::new("__key", TsType::named("K")).definite(),
+            TsClassField::new("__env", TsType::named("unknown")).private(),
+            TsClassField::new("id", TsType::named("N"))
+                .private()
+                .definite(),
+        ];
+        let class = TsDecl::class("C", fields, None, Vec::new());
+        assert_eq!(
+            print_stmt(&TsStmt::decl(class, None), 0),
+            "class C {\n  state: S;\n  __key!: K;\n  private __env: unknown;\n  private id!: N;\n}\n"
         );
     }
 

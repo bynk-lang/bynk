@@ -1217,9 +1217,9 @@ pub fn emit_worker_entry(
     // execution context and threads it into `compose`, so a fire-and-forget send
     // can hand its promise to `waitUntil`. Otherwise the signatures are unchanged.
     let exec_params: Vec<TsParam> = if ctx_uses_send {
-        vec![TsParam {
-            name: "ctx".to_string(),
-            ty: Some(TsType::Object(vec![TsTypeMember::method(
+        vec![TsParam::new(
+            "ctx".to_string(),
+            Some(TsType::Object(vec![TsTypeMember::method(
                 "waitUntil",
                 vec![TsParam {
                     name: "promise".to_string(),
@@ -1228,11 +1228,11 @@ pub fn emit_worker_entry(
                         vec![TsType::named("unknown")],
                     )),
                     optional: false,
+                    rest: false,
                 }],
                 TsType::named("void"),
             )])),
-            optional: false,
-        }]
+        )]
     } else {
         Vec::new()
     };
@@ -1247,9 +1247,9 @@ pub fn emit_worker_entry(
     let fault_exec_params: Vec<TsParam> = if ctx_uses_send {
         exec_params.clone()
     } else {
-        vec![TsParam {
-            name: "ctx".to_string(),
-            ty: Some(TsType::Object(vec![TsTypeMember::method(
+        vec![TsParam::optional(
+            "ctx".to_string(),
+            Some(TsType::Object(vec![TsTypeMember::method(
                 "waitUntil",
                 vec![TsParam {
                     name: "promise".to_string(),
@@ -1258,11 +1258,11 @@ pub fn emit_worker_entry(
                         vec![TsType::named("unknown")],
                     )),
                     optional: false,
+                    rest: false,
                 }],
                 TsType::named("void"),
             )])),
-            optional: true,
-        }]
+        )]
     };
     // `fetch` alone has a `request` in scope; `scheduled`/`queue` never do.
     let fetch_compose_args: Vec<TsExpr> = match (needs_locale_request, compose_takes_exec) {
@@ -1629,16 +1629,11 @@ pub fn emit_worker_entry(
     header_decls.extend(inspect_registry_export(inspect.0));
 
     let mut fetch_params: Vec<TsParam> = vec![
-        TsParam {
-            name: "request".to_string(),
-            ty: Some(TsType::named("globalThis.Request")),
-            optional: false,
-        },
-        TsParam {
-            name: "env".to_string(),
-            ty: Some(TsType::named("Env")),
-            optional: false,
-        },
+        TsParam::new(
+            "request".to_string(),
+            Some(TsType::named("globalThis.Request")),
+        ),
+        TsParam::new("env".to_string(), Some(TsType::named("Env"))),
     ];
     fetch_params.extend(fault_exec_params.iter().cloned());
 
@@ -2277,19 +2272,14 @@ fn emit_scheduled_handler(
     compose_args: &[TsExpr],
     result_hook: bool,
 ) -> TsObjectEntry {
-    let mut params = vec![TsParam {
-        name: "event".to_string(),
-        ty: Some(TsType::Object(vec![
+    let mut params = vec![TsParam::new(
+        "event".to_string(),
+        Some(TsType::Object(vec![
             TsTypeMember::readonly_prop("cron", TsType::named("string")),
             TsTypeMember::readonly_prop("scheduledTime", TsType::named("number")),
         ])),
-        optional: false,
-    }];
-    params.push(TsParam {
-        name: "env".to_string(),
-        ty: Some(TsType::named("Env")),
-        optional: false,
-    });
+    )];
+    params.push(TsParam::new("env".to_string(), Some(TsType::named("Env"))));
     let result_member = TsTypeMember::optional_prop("__bynkResult", TsType::named("unknown"));
     if !result_hook {
         params.extend(exec_params.iter().cloned());
@@ -2301,11 +2291,10 @@ fn emit_scheduled_handler(
         }
         params.push(ctx);
     } else {
-        params.push(TsParam {
-            name: "ctx".to_string(),
-            ty: Some(TsType::Object(vec![result_member])),
-            optional: true,
-        });
+        params.push(TsParam::optional(
+            "ctx".to_string(),
+            Some(TsType::Object(vec![result_member])),
+        ));
     }
     let ctx_optional = exec_params.first().is_none_or(|p| p.optional);
 
@@ -2411,9 +2400,9 @@ fn emit_queue_handler(
     compose_args: &[TsExpr],
     ru: &RuntimeUse,
 ) -> TsObjectEntry {
-    let mut params = vec![TsParam {
-        name: "batch".to_string(),
-        ty: Some(TsType::Object(vec![
+    let mut params = vec![TsParam::new(
+        "batch".to_string(),
+        Some(TsType::Object(vec![
             TsTypeMember::readonly_prop("queue", TsType::named("string")),
             TsTypeMember::readonly_prop(
                 "messages",
@@ -2427,13 +2416,8 @@ fn emit_queue_handler(
                 ),
             ),
         ])),
-        optional: false,
-    }];
-    params.push(TsParam {
-        name: "env".to_string(),
-        ty: Some(TsType::named("Env")),
-        optional: false,
-    });
+    )];
+    params.push(TsParam::new("env".to_string(), Some(TsType::named("Env"))));
     params.extend(exec_params.iter().cloned());
 
     let mut body: Vec<TsStmt> = vec![const_(

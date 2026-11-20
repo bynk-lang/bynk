@@ -199,7 +199,6 @@ export class Bag {
     await this.commitState(__state);
     return __result;
   }
-
 }
 
 export function __makeBag(key: string, env?: { BAG?: __DurableObjectNamespace }): Bag {
@@ -280,7 +279,6 @@ export class Points {
     const r = await __state.pts.has(String(k));
     return r;
   }
-
 }
 
 export function __makePoints(key: string, env?: { POINTS?: __DurableObjectNamespace }): Points {
@@ -373,7 +371,6 @@ export class Tags {
     await this.commitState(__state);
     return __result;
   }
-
 }
 
 export function __makeTags(key: string, env?: { TAGS?: __DurableObjectNamespace }): Tags {
@@ -504,7 +501,6 @@ export class Memo {
     await this.commitState(__state);
     return __result;
   }
-
 }
 
 export function __makeMemo(key: string, env?: { MEMO?: __DurableObjectNamespace }): Memo {
@@ -609,7 +605,6 @@ export class Ledger {
     const __state = await this.loadState();
     return __bynkThen(((() => __state.entries.byIndex("tag", String(tag))))(), (__q) => __q.length);
   }
-
 }
 
 export function __makeLedger(key: string, env?: { LEDGER?: __DurableObjectNamespace }): Ledger {
@@ -730,7 +725,6 @@ export class Sales {
       });
     })))(), (__q) => __q.length);
   }
-
 }
 
 export function __makeSales(key: string, env?: { SALES?: __DurableObjectNamespace }): Sales {

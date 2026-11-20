@@ -239,7 +239,6 @@ export class Book {
     })();
     return r;
   }
-
 }
 
 export function __makeBook(key: string, env?: { BOOK?: __DurableObjectNamespace }): Book {

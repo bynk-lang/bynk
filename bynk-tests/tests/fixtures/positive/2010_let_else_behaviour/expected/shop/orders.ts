@@ -152,7 +152,6 @@ export class Order {
     const __state = await this.loadState();
     return __state.status;
   }
-
 }
 
 export function __makeOrder(key: string, env?: { ORDER?: __DurableObjectNamespace }): Order {
@@ -232,7 +231,6 @@ export class Stock {
     const __state = await this.loadState();
     return 5 - __state.held;
   }
-
 }
 
 export function __makeStock(key: string, env?: { STOCK?: __DurableObjectNamespace }): Stock {

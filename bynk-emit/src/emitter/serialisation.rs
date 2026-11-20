@@ -695,6 +695,7 @@ fn deserialise_path_param() -> TsParam {
         name: "path: string = \"$\"".to_string(),
         ty: None,
         optional: false,
+        rest: false,
     }
 }
 
@@ -743,6 +744,7 @@ fn depth_param() -> TsParam {
         name: "depth: number = 0".to_string(),
         ty: None,
         optional: false,
+        rest: false,
     }
 }
 
@@ -750,11 +752,7 @@ fn depth_param() -> TsParam {
 /// on a type cycle (#2656): the parameters of every generated decoder.
 fn deserialise_params(depth: Option<Depth<'_>>) -> Vec<TsParam> {
     let mut params = vec![
-        TsParam {
-            name: "json".to_string(),
-            ty: Some(TsType::named("__JsonValue")),
-            optional: false,
-        },
+        TsParam::new("json".to_string(), Some(TsType::named("__JsonValue"))),
         deserialise_path_param(),
     ];
     if depth.is_some() {
@@ -766,11 +764,7 @@ fn deserialise_params(depth: Option<Depth<'_>>) -> Vec<TsParam> {
 /// `value: <ty>`, plus [`depth_param`] for a codec on a type cycle (#2656):
 /// the parameters of every generated encoder.
 fn serialise_params(ty: TsType, depth: Option<Depth<'_>>) -> Vec<TsParam> {
-    let mut params = vec![TsParam {
-        name: "value".to_string(),
-        ty: Some(ty),
-        optional: false,
-    }];
+    let mut params = vec![TsParam::new("value".to_string(), Some(ty))];
     if depth.is_some() {
         params.push(depth_param());
     }
@@ -861,11 +855,10 @@ fn emit_bytes_named_codec(name: &str, qual: &Qual, ru: &RuntimeUse) -> Vec<TsDec
     let serialise = TsDecl::Export(Box::new(TsDecl::Function {
         name: format!("__serialise_{name}"),
         generics: Vec::new(),
-        params: vec![TsParam {
-            name: "value".to_string(),
-            ty: Some(TsType::named(ty.clone())),
-            optional: false,
-        }],
+        params: vec![TsParam::new(
+            "value".to_string(),
+            Some(TsType::named(ty.clone())),
+        )],
         return_type: Some(TsType::named("__JsonValue")),
         body: vec![return_(call(
             ident("__bynkBytesToBase64"),
@@ -882,11 +875,7 @@ fn emit_bytes_named_codec(name: &str, qual: &Qual, ru: &RuntimeUse) -> Vec<TsDec
         name: format!("__deserialise_{name}"),
         generics: Vec::new(),
         params: vec![
-            TsParam {
-                name: "json".to_string(),
-                ty: Some(TsType::named("__JsonValue")),
-                optional: false,
-            },
+            TsParam::new("json".to_string(), Some(TsType::named("__JsonValue"))),
             deserialise_path_param(),
         ],
         return_type: Some(TsType::named(format!("Result<{ty}, __BoundaryError>"))),
@@ -944,11 +933,10 @@ fn emit_decimal_named_codec(
     let serialise = TsDecl::Export(Box::new(TsDecl::Function {
         name: format!("__serialise_{name}"),
         generics: Vec::new(),
-        params: vec![TsParam {
-            name: "value".to_string(),
-            ty: Some(TsType::named(ty.clone())),
-            optional: false,
-        }],
+        params: vec![TsParam::new(
+            "value".to_string(),
+            Some(TsType::named(ty.clone())),
+        )],
         return_type: Some(TsType::named("__JsonValue")),
         body: vec![return_(as_expr(
             call(
@@ -1064,11 +1052,7 @@ fn emit_decimal_named_codec(
         name: format!("__deserialise_{name}"),
         generics: Vec::new(),
         params: vec![
-            TsParam {
-                name: "json".to_string(),
-                ty: Some(TsType::named("__JsonValue")),
-                optional: false,
-            },
+            TsParam::new("json".to_string(), Some(TsType::named("__JsonValue"))),
             deserialise_path_param(),
         ],
         return_type: Some(TsType::named(format!("Result<{ty}, __BoundaryError>"))),
@@ -1162,11 +1146,10 @@ fn emit_refined(
     let serialise = TsDecl::Export(Box::new(TsDecl::Function {
         name: format!("__serialise_{name}"),
         generics: Vec::new(),
-        params: vec![TsParam {
-            name: "value".to_string(),
-            ty: Some(TsType::named(ty.clone())),
-            optional: false,
-        }],
+        params: vec![TsParam::new(
+            "value".to_string(),
+            Some(TsType::named(ty.clone())),
+        )],
         return_type: Some(TsType::named("__JsonValue")),
         body: vec![return_(as_expr(
             as_expr(ident("value"), TsType::named("unknown")),
@@ -1281,11 +1264,7 @@ fn emit_refined(
         name: format!("__deserialise_{name}"),
         generics: Vec::new(),
         params: vec![
-            TsParam {
-                name: "json".to_string(),
-                ty: Some(TsType::named("__JsonValue")),
-                optional: false,
-            },
+            TsParam::new("json".to_string(), Some(TsType::named("__JsonValue"))),
             deserialise_path_param(),
         ],
         return_type: Some(TsType::named(format!("Result<{ty}, __BoundaryError>"))),
@@ -1589,11 +1568,10 @@ fn emit_record_codec(
 ) -> Vec<TsDecl> {
     // #2656: a record on a type cycle threads the nesting depth.
     let depth = depth_for(codecs, fn_suffix, true);
-    let mut serialise_params = vec![TsParam {
-        name: "value".to_string(),
-        ty: Some(TsType::named(ts_type)),
-        optional: false,
-    }];
+    let mut serialise_params = vec![TsParam::new(
+        "value".to_string(),
+        Some(TsType::named(ts_type)),
+    )];
     let mut serialise_body = Vec::new();
     if depth.is_some() {
         serialise_params.push(depth_param());
@@ -1904,11 +1882,10 @@ fn emit_sum_codec(
             }
         })
         .collect();
-    let mut serialise_params = vec![TsParam {
-        name: "value".to_string(),
-        ty: Some(TsType::named(ts_type)),
-        optional: false,
-    }];
+    let mut serialise_params = vec![TsParam::new(
+        "value".to_string(),
+        Some(TsType::named(ts_type)),
+    )];
     let mut serialise_body = Vec::new();
     if depth.is_some() {
         serialise_params.push(depth_param());
@@ -2554,11 +2531,7 @@ fn serialise_field_expr_via(t: &TypeRef, value: &TsExpr, ns: &str, ru: &RuntimeU
 fn guarded_number(value: &TsExpr, check: &str, message: &str) -> TsExpr {
     call(
         TsExpr::Arrow {
-            params: vec![TsParam {
-                name: "v".to_string(),
-                ty: Some(TsType::named("number")),
-                optional: false,
-            }],
+            params: vec![TsParam::new("v".to_string(), Some(TsType::named("number")))],
             is_async: false,
             generics: Vec::new(),
             return_type: None,
@@ -2771,11 +2744,10 @@ pub fn deserialise_ref_via(t: &TypeRef, ns: &str, ru: &RuntimeUse) -> TsExpr {
         | TypeRef::Map(..)
         | TypeRef::App { .. }) => ident(format!("{ns}__deserialise_{}", inner_ts_name(t))),
         other => TsExpr::Arrow {
-            params: vec![TsParam {
-                name: "__j".to_string(),
-                ty: Some(TsType::named("__JsonValue")),
-                optional: false,
-            }],
+            params: vec![TsParam::new(
+                "__j".to_string(),
+                Some(TsType::named("__JsonValue")),
+            )],
             is_async: false,
             generics: Vec::new(),
             return_type: None,
@@ -2802,11 +2774,10 @@ pub(crate) fn serialise_ref_via(t: &TypeRef, ns: &str, ru: &RuntimeUse) -> TsExp
         | TypeRef::Map(..)
         | TypeRef::App { .. }) => ident(format!("{ns}__serialise_{}", inner_ts_name(t))),
         other => TsExpr::Arrow {
-            params: vec![TsParam {
-                name: "__v".to_string(),
-                ty: Some(TsType::named(crate::emitter::ts_types::ts_type_ref(other))),
-                optional: false,
-            }],
+            params: vec![TsParam::new(
+                "__v".to_string(),
+                Some(TsType::named(crate::emitter::ts_types::ts_type_ref(other))),
+            )],
             is_async: false,
             generics: Vec::new(),
             return_type: None,
@@ -3075,11 +3046,7 @@ pub(crate) fn deserialise_expr_via(
             };
             call(
                 TsExpr::Arrow {
-                    params: vec![TsParam {
-                        name: "__v".to_string(),
-                        ty: None,
-                        optional: false,
-                    }],
+                    params: vec![TsParam::new("__v".to_string(), None)],
                     is_async: false,
                     generics: Vec::new(),
                     return_type: None,
@@ -3094,11 +3061,7 @@ pub(crate) fn deserialise_expr_via(
                         }),
                         consequent: Box::new(call(
                             TsExpr::Arrow {
-                                params: vec![TsParam {
-                                    name: "__b".to_string(),
-                                    ty: None,
-                                    optional: false,
-                                }],
+                                params: vec![TsParam::new("__b".to_string(), None)],
                                 is_async: false,
                                 generics: Vec::new(),
                                 return_type: None,
@@ -3176,11 +3139,7 @@ pub(crate) fn deserialise_expr_via(
             let Some(predicate) = predicate else {
                 return call(
                     TsExpr::Arrow {
-                        params: vec![TsParam {
-                            name: "__v".to_string(),
-                            ty: None,
-                            optional: false,
-                        }],
+                        params: vec![TsParam::new("__v".to_string(), None)],
                         is_async: false,
                         generics: Vec::new(),
                         return_type: None,
@@ -3216,11 +3175,7 @@ pub(crate) fn deserialise_expr_via(
             // exposure.
             call(
                 TsExpr::Arrow {
-                    params: vec![TsParam {
-                        name: "__v".to_string(),
-                        ty: None,
-                        optional: false,
-                    }],
+                    params: vec![TsParam::new("__v".to_string(), None)],
                     is_async: false,
                     generics: Vec::new(),
                     return_type: None,
@@ -3652,24 +3607,15 @@ fn option_value_decoder(
     let mut body = emit_field_deserialise("v", inner, "raw", "at", depth, ru);
     body.push(return_(call(ident("Ok"), vec![ident("__v")])));
     let mut params = vec![
-        TsParam {
-            name: "raw".to_string(),
-            ty: Some(TsType::named("__JsonValue")),
-            optional: false,
-        },
-        TsParam {
-            name: "at".to_string(),
-            ty: Some(TsType::named("string")),
-            optional: false,
-        },
+        TsParam::new("raw".to_string(), Some(TsType::named("__JsonValue"))),
+        TsParam::new("at".to_string(), Some(TsType::named("string"))),
     ];
     // #2656: on a type cycle, the `Option` decoder hands its depth through.
     if depth.is_some() {
-        params.push(TsParam {
-            name: "depth".to_string(),
-            ty: Some(TsType::named("number")),
-            optional: false,
-        });
+        params.push(TsParam::new(
+            "depth".to_string(),
+            Some(TsType::named("number")),
+        ));
     }
     TsDecl::Function {
         name,
@@ -3884,11 +3830,7 @@ pub(crate) fn emit_codec_factory(
         generics: params.clone(),
         params: params
             .iter()
-            .map(|p| TsParam {
-                name: format!("__codec_{p}"),
-                ty: Some(TsType::named(witness_ty(p))),
-                optional: false,
-            })
+            .map(|p| TsParam::new(format!("__codec_{p}"), Some(TsType::named(witness_ty(p)))))
             .collect(),
         return_type: Some(TsType::named(format!(
             "{{ encode: (v: {ts_type}) => __JsonValue; decode: (j: __JsonValue, path?: string) => Result<{ts_type}, __BoundaryError> }}"
@@ -4261,11 +4203,7 @@ pub fn emit_generic_helpers_qualified(
                     body: vec![return_(call(
                         member(ident("value"), "map"),
                         vec![TsExpr::Arrow {
-                            params: vec![TsParam {
-                                name: "v".to_string(),
-                                ty: None,
-                                optional: false,
-                            }],
+                            params: vec![TsParam::new("v".to_string(), None)],
                             is_async: false,
                             generics: Vec::new(),
                             return_type: None,
@@ -4362,11 +4300,7 @@ pub fn emit_generic_helpers_qualified(
                             "map",
                         ),
                         vec![TsExpr::Arrow {
-                            params: vec![TsParam {
-                                name: "v".to_string(),
-                                ty: None,
-                                optional: false,
-                            }],
+                            params: vec![TsParam::new("v".to_string(), None)],
                             is_async: false,
                             generics: Vec::new(),
                             return_type: None,

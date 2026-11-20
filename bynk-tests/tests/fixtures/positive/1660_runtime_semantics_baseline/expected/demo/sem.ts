@@ -125,7 +125,6 @@ export class Gauge {
     const __state = await this.loadState();
     return __state.level;
   }
-
 }
 
 export function __makeGauge(key: string, env?: { GAUGE?: __DurableObjectNamespace }): Gauge {
@@ -185,7 +184,6 @@ export class Lamp {
     const __state = await this.loadState();
     return ((__c: boolean) => __c)(__state.light.tag === "Green");
   }
-
 }
 
 export function __makeLamp(key: string, env?: { LAMP?: __DurableObjectNamespace }): Lamp {
@@ -254,7 +252,6 @@ export class Meter {
     }
     throw new globalThis.Error("non-exhaustive match");
   }
-
 }
 
 export function __makeMeter(key: string, env?: { METER?: __DurableObjectNamespace }): Meter {
@@ -316,7 +313,6 @@ export class Panel {
     const __state = await this.loadState();
     return __state.level;
   }
-
 }
 
 export function __makePanel(key: string, env?: { PANEL?: __DurableObjectNamespace }): Panel {
@@ -400,7 +396,6 @@ export class Bag {
     })();
     return (r.tag === "Some");
   }
-
 }
 
 export function __makeBag(key: string, env?: { BAG?: __DurableObjectNamespace }): Bag {

@@ -110,7 +110,6 @@ export class Ticket {
     await this.commitState(__state);
     return __result;
   }
-
 }
 
 export function __makeTicket(key: string, env?: { TICKET?: __DurableObjectNamespace }): Ticket {
@@ -180,7 +179,6 @@ export class Gate {
     await this.commitState(__state);
     return __result;
   }
-
 }
 
 export function __makeGate(key: string, env?: { GATE?: __DurableObjectNamespace }): Gate {

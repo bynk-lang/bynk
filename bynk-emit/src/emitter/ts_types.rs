@@ -209,11 +209,7 @@ pub(crate) fn request_headers_ts_type() -> TsType {
             )]),
         ])
     };
-    let name = bynk_ts::TsParam {
-        name: "name".to_string(),
-        ty: Some(TsType::named("string")),
-        optional: false,
-    };
+    let name = bynk_ts::TsParam::new("name".to_string(), Some(TsType::named("string")));
     TsType::Object(vec![
         bynk_ts::TsTypeMember::method("get", vec![name], opt()),
         bynk_ts::TsTypeMember::method("bearer", vec![], opt()),
@@ -227,11 +223,7 @@ pub(crate) fn request_headers_ts_type() -> TsType {
 /// `RequestHeaders`: `get`, `all` and `params`. The runtime's
 /// `requestQuery(request)` builds one.
 pub(crate) fn request_query_ts_type() -> TsType {
-    let name = || bynk_ts::TsParam {
-        name: "name".to_string(),
-        ty: Some(TsType::named("string")),
-        optional: false,
-    };
+    let name = || bynk_ts::TsParam::new("name".to_string(), Some(TsType::named("string")));
     let opt = TsType::union(vec![
         TsType::Object(vec![
             bynk_ts::TsTypeMember::readonly_prop("tag", TsType::named("\"Some\"")),
@@ -256,11 +248,7 @@ pub(crate) fn request_query_ts_type() -> TsType {
 /// #3277: `RequestCookies` as TypeScript — structural, like `RequestQuery`:
 /// `get`, `all` and `names`. The runtime's `requestCookies(request)` builds one.
 pub(crate) fn request_cookies_ts_type() -> TsType {
-    let name = || bynk_ts::TsParam {
-        name: "name".to_string(),
-        ty: Some(TsType::named("string")),
-        optional: false,
-    };
+    let name = || bynk_ts::TsParam::new("name".to_string(), Some(TsType::named("string")));
     let opt = TsType::union(vec![
         TsType::Object(vec![
             bynk_ts::TsTypeMember::readonly_prop("tag", TsType::named("\"Some\"")),
@@ -289,11 +277,7 @@ pub(crate) fn token_claims_ts_type() -> TsType {
             TsType::named("\"None\""),
         )]),
     ]);
-    let name = || bynk_ts::TsParam {
-        name: "name".to_string(),
-        ty: Some(TsType::named("string")),
-        optional: false,
-    };
+    let name = || bynk_ts::TsParam::new("name".to_string(), Some(TsType::named("string")));
     TsType::Object(vec![
         bynk_ts::TsTypeMember::method("get", vec![name()], opt),
         bynk_ts::TsTypeMember::method("has", vec![name()], TsType::named("boolean")),

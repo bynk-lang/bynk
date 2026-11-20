@@ -69,42 +69,55 @@ export class Counter {
     await this.commitState(__state);
     return __result;
   }
-
 }
 
 export function __makeCounter(key: string, env?: { COUNTER?: __DurableObjectNamespace }): Counter {
   return __makeAgent(__CounterRegistry, env?.COUNTER, key, (state) => new Counter(state));
 }
 
-export async function __bynkDriveHistory_Counter(seq: globalThis.Array<{ h: number, args: unknown[] }>, deps: any): globalThis.Promise<globalThis.Array<{ call: any, accepted: boolean, old: CounterState, new: CounterState, refusal?: unknown }>> {
+export async function __bynkDriveHistory_Counter(seq: globalThis.Array<{ h: number; args: unknown[] }>, deps: any): globalThis.Promise<globalThis.Array<{ call: any; accepted: boolean; old: CounterState; new: CounterState; refusal?: unknown }>> {
   __CounterRegistry.reset();
   const __inst = __makeCounter("") as any;
   const __load = async (): globalThis.Promise<CounterState> => { let __s = await __inst.state.storage.get("state"); if (__s === undefined) return __zeroOfCounterState(); __checkStoredLayout("Counter", __s); __s = await __readStored(__inst, __inst.state.storage, __s); const __m = { ...__zeroOfCounterState(), ...__s }; __rehydrateCounterState(__m, __s); return __m; };
   const __rej = (e: unknown) => !!e && (e as { invariantViolation?: unknown }).invariantViolation !== undefined;
-  const __steps: globalThis.Array<{ call: any, accepted: boolean, old: CounterState, new: CounterState, refusal?: unknown }> = [];
+  const __steps: globalThis.Array<{ call: any; accepted: boolean; old: CounterState; new: CounterState; refusal?: unknown }> = [];
   const __ce = globalThis.console.error;
   globalThis.console.error = (...__a: unknown[]) => { if (typeof __a[0] === "string" && __a[0].startsWith("InvariantViolation")) return; __ce(...__a); };
   try {
-  for (const __st of seq) {
-    const __old = await __load();
-    let __accepted = true;
-    let __refusal: unknown;
-    try {
-      switch (__st.h) {
-        case 0: await __inst.bump(deps); break;
+    for (const __st of seq) {
+      const __old = await __load();
+      let __accepted = true;
+      let __refusal: unknown;
+      try {
+        switch (__st.h) {
+          case 0:
+            await __inst.bump(deps);
+            break;
+        }
+      } catch (__e) {
+        if (__rej(__e)) {
+          __accepted = false;
+          __refusal = (__e as { invariantViolation?: unknown }).invariantViolation;
+        }
+        else {
+          throw __e;
+        }
       }
-    } catch (__e) { if (__rej(__e)) { __accepted = false; __refusal = (__e as { invariantViolation?: unknown }).invariantViolation; } else { throw __e; } }
-    const __new = __accepted ? await __load() : __old;
-    let __call: any;
-    switch (__st.h) {
-      case 0: __call = { tag: "Bump" }; break;
+      const __new = __accepted ? await __load() : __old;
+      let __call: any;
+      switch (__st.h) {
+        case 0:
+          __call = { tag: "Bump" };
+          break;
+      }
+      const __step: { call: any; accepted: boolean; old: CounterState; new: CounterState; refusal?: unknown } = { call: __call, accepted: __accepted, old: __old, new: __new };
+      if (__refusal !== undefined) globalThis.Object.defineProperty(__step, "refusal", { value: __refusal });
+      __steps.push(__step);
     }
-    const __step: { call: any, accepted: boolean, old: CounterState, new: CounterState, refusal?: unknown } = { call: __call, accepted: __accepted, old: __old, new: __new };
-    if (__refusal !== undefined) globalThis.Object.defineProperty(__step, "refusal", { value: __refusal });
-    __steps.push(__step);
+    return __steps;
+  } finally {
+    globalThis.console.error = __ce;
   }
-  return __steps;
-  } finally { globalThis.console.error = __ce; }
 }
 
 export const level = {

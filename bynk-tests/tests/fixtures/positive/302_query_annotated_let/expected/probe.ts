@@ -73,7 +73,6 @@ export class Inventory {
     const q: (() => readonly Reservation[] | globalThis.Promise<readonly Reservation[]>) = (() => __bynkThen(__state.reservations.values(), (__q) => __q.filter((__x) => ((r: Reservation) => r.qty > 0)(__x))));
     return __bynkThen((q)(), (__q) => __q);
   }
-
 }
 
 export function __makeInventory(key: string, env?: { INVENTORY?: __DurableObjectNamespace }): Inventory {

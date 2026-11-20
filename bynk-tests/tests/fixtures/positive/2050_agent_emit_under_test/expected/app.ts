@@ -79,7 +79,6 @@ export class Counter {
     if (__events.length > 0) { await deps.__eventsDispatch(__events); }
     return __result;
   }
-
 }
 
 export function __makeCounter(key: string, env?: { COUNTER?: __DurableObjectNamespace }): Counter {

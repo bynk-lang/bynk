@@ -89,7 +89,6 @@ export class Dial {
     await this.commitState(__state);
     return __result;
   }
-
 }
 
 export function __makeDial(key: string, env?: { DIAL?: __DurableObjectNamespace }): Dial {
@@ -154,7 +153,6 @@ export class Plant {
     await this.commitState(__state);
     return __result;
   }
-
 }
 
 export function __makePlant(key: string, env?: { PLANT?: __DurableObjectNamespace }): Plant {
@@ -221,7 +219,6 @@ export class Counter {
     await this.commitState(__state);
     return __result;
   }
-
 }
 
 export function __makeCounter(key: string, env?: { COUNTER?: __DurableObjectNamespace }): Counter {

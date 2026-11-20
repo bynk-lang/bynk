@@ -53,7 +53,6 @@ export class Task {
     const __state = await this.loadState();
     return Ok(undefined);
   }
-
 }
 
 export function __makeTask(key: string, env?: { TASK?: __DurableObjectNamespace }): Task {

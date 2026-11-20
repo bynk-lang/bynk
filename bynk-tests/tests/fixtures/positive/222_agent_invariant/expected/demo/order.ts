@@ -84,7 +84,6 @@ export class Order {
     await this.commitState(__state);
     return __result;
   }
-
 }
 
 export function __makeOrder(key: string, env?: { ORDER?: __DurableObjectNamespace }): Order {

@@ -68,7 +68,6 @@ export class Box {
     const __state = await this.loadState();
     return __state.n;
   }
-
 }
 
 export function __makeBox(key: Counter, env?: { BOX?: __DurableObjectNamespace }): Box {

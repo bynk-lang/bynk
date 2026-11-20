@@ -455,16 +455,15 @@ pub(super) fn emit_system_http_support(
                     method.as_str().to_string(),
                     format!("{path}{}", emitter::EXTRA_HEADERS_ROUTE_SUFFIX),
                 ));
-                TsParam {
-                    name: "__extraHeaders".to_string(),
-                    ty: Some(TsType::named(format!(
+                TsParam::new(
+                    "__extraHeaders".to_string(),
+                    Some(TsType::named(format!(
                         "{} | undefined",
                         bynk_emit::emitter::ts_types::ts_type_ref(
                             &bynk_syntax::ast::TypeRef::RequestHeaders(Default::default())
                         )
                     ))),
-                    optional: false,
-                }
+                )
             });
             // #2854: a `query` param (unless a `:query` path segment binds the
             // name) is neither: the drivers append it to the request's URL, as
@@ -860,28 +859,30 @@ pub(super) fn emit_system_http_support(
             let driver_params: Vec<TsParam> = h
                 .params
                 .iter()
-                .map(|p| TsParam {
-                    name: bynk_emit::emitter::ts_ident(&p.name.name),
-                    ty: Some(TsType::named(driver_param_ty(&p.type_ref, &ns))),
-                    optional: false,
+                .map(|p| {
+                    TsParam::new(
+                        bynk_emit::emitter::ts_ident(&p.name.name),
+                        Some(TsType::named(driver_param_ty(&p.type_ref, &ns))),
+                    )
                 })
                 .chain(extra_headers_param.clone())
                 .collect();
             let raw_params: Vec<TsParam> = h
                 .params
                 .iter()
-                .map(|p| TsParam {
-                    name: bynk_emit::emitter::ts_ident(&p.name.name),
-                    ty: Some(TsType::named(
-                        if is_headers(&p)
-                            || matches!(p.type_ref, bynk_syntax::ast::TypeRef::RequestQuery(_))
-                        {
-                            driver_param_ty(&p.type_ref, &ns)
-                        } else {
-                            "string".to_string()
-                        },
-                    )),
-                    optional: false,
+                .map(|p| {
+                    TsParam::new(
+                        bynk_emit::emitter::ts_ident(&p.name.name),
+                        Some(TsType::named(
+                            if is_headers(&p)
+                                || matches!(p.type_ref, bynk_syntax::ast::TypeRef::RequestQuery(_))
+                            {
+                                driver_param_ty(&p.type_ref, &ns)
+                            } else {
+                                "string".to_string()
+                            },
+                        )),
+                    )
                 })
                 .chain(extra_headers_param)
                 .collect();
@@ -1299,16 +1300,8 @@ pub(super) fn emit_system_http_support(
                 name: format!("__sysdrive_wrongmethod_{sname}"),
                 generics: Vec::new(),
                 params: vec![
-                    TsParam {
-                        name: "method".to_string(),
-                        ty: Some(TsType::named("string")),
-                        optional: false,
-                    },
-                    TsParam {
-                        name: "path".to_string(),
-                        ty: Some(TsType::named("string")),
-                        optional: false,
-                    },
+                    TsParam::new("method".to_string(), Some(TsType::named("string"))),
+                    TsParam::new("path".to_string(), Some(TsType::named("string"))),
                 ],
                 return_type: None,
                 body: vec![
@@ -1351,11 +1344,10 @@ pub(super) fn emit_system_http_support(
                             vec![
                                 ident("__res"),
                                 TsExpr::Arrow {
-                                    params: vec![TsParam {
-                                        name: "__j".to_string(),
-                                        ty: Some(TsType::named("__JsonValue")),
-                                        optional: false,
-                                    }],
+                                    params: vec![TsParam::new(
+                                        "__j".to_string(),
+                                        Some(TsType::named("__JsonValue")),
+                                    )],
                                     is_async: false,
                                     generics: Vec::new(),
                                     return_type: None,
@@ -1714,11 +1706,7 @@ pub(super) fn strip_effect_httpresult(
 /// binding wiring in [`emit_integration_harness`] build, differing only in
 /// which worker/env pair they close over.
 pub(super) fn service_binding_forward(worker_ident: &str, env_ident: &str, sends: bool) -> TsExpr {
-    let req_param = TsParam {
-        name: "req".to_string(),
-        ty: Some(TsType::named("globalThis.Request")),
-        optional: false,
-    };
+    let req_param = TsParam::new("req".to_string(), Some(TsType::named("globalThis.Request")));
     // #1994: a Worker whose handlers send with `detach` takes the execution
     // context as `fetch`'s third argument; the harness hands it a collecting
     // double and settles the sends before the response reaches the case.
@@ -1726,11 +1714,7 @@ pub(super) fn service_binding_forward(worker_ident: &str, env_ident: &str, sends
         call(
             ident("__bynkFetchSettled"),
             vec![TsExpr::Arrow {
-                params: vec![TsParam {
-                    name: "exec".to_string(),
-                    ty: None,
-                    optional: false,
-                }],
+                params: vec![TsParam::new("exec".to_string(), None)],
                 is_async: false,
                 generics: Vec::new(),
                 return_type: None,

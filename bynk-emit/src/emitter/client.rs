@@ -457,14 +457,10 @@ pub fn emit_client(
         TsDecl::Function {
             name: "connect".to_string(),
             generics: vec!["A extends ForeignCaller".to_string()],
-            params: vec![TsParam {
-                name: "options".to_string(),
-                ty: Some(TsType::named_with_args(
+            params: vec![TsParam::new("options".to_string(), Some(TsType::named_with_args(
                     "ConnectOptions",
                     vec![TsType::named("A")],
-                )),
-                optional: false,
-            }],
+                )))],
             return_type: Some(TsType::named_with_args("Client", vec![TsType::named("A")])),
             body: vec![
                 TsStmt::const_stmt(
@@ -583,11 +579,7 @@ fn service_params(
 ) -> Vec<TsParam> {
     svc.params
         .iter()
-        .map(|(name, t)| TsParam {
-            name: super::ts_ident(name),
-            ty: Some(ts_type(&renamed(t))),
-            optional: false,
-        })
+        .map(|(name, t)| TsParam::new(super::ts_ident(name), Some(ts_type(&renamed(t)))))
         .collect()
 }
 

@@ -103,7 +103,6 @@ export class Meter {
     const __state = await this.loadState();
     return Ok(__state.totals.hits);
   }
-
 }
 
 export function __makeMeter(key: MeterId, env?: { METER?: __DurableObjectNamespace }): Meter {

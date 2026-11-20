@@ -226,13 +226,14 @@ pub(super) fn emit_stub_class(
         let params: Vec<TsParam> = op
             .params
             .iter()
-            .map(|p| TsParam {
-                name: p.name.name.clone(),
-                ty: Some(ts_type_ref_qualified_multi_ts_type(
-                    &p.type_ref,
-                    &sig_type_ns,
-                )),
-                optional: false,
+            .map(|p| {
+                TsParam::new(
+                    p.name.name.clone(),
+                    Some(ts_type_ref_qualified_multi_ts_type(
+                        &p.type_ref,
+                        &sig_type_ns,
+                    )),
+                )
             })
             .collect();
         let return_ty = ts_type_ref_qualified_multi_ts_type(&op.return_type, &sig_type_ns);

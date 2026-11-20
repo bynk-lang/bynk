@@ -108,6 +108,7 @@ impl TsProgram {
                 | TsStmtKind::TryCatch { .. }
                 | TsStmtKind::Block(_)
                 | TsStmtKind::Continue
+                | TsStmtKind::Break
                 | TsStmtKind::Assign { .. }
                 | TsStmtKind::Comment(_)
                 | TsStmtKind::DocComment(_)
@@ -187,7 +188,7 @@ fn walk_stmt<'a>(stmt: &'a TsStmt, out: &mut Vec<(VerbatimOrigin, &'a str)>) {
                 walk_stmt(s, out);
             }
         }
-        TsStmtKind::Continue => {}
+        TsStmtKind::Continue | TsStmtKind::Break => {}
         TsStmtKind::Assign { target, value } => {
             walk_expr(target, out);
             walk_expr(value, out);
@@ -597,6 +598,9 @@ pub(crate) enum TsStmtKind {
     /// load-bearing loop control the accepted proposal's `TsStmt` list
     /// doesn't name. No label — nothing in the grounding file needs one.
     Continue,
+    /// A bare `break;`, ending a `switch` case (1A.32b: the history driver's
+    /// `case 0: …; break;`). No label, as for [`TsStmtKind::Continue`].
+    Break,
     /// `target = value;` — a third real gap, found in review of the
     /// implementing PR (#1313): `events_fanout.rs`'s own constructor body is
     /// exactly one statement, `this.env = (env ?? {}) as
@@ -1163,6 +1167,16 @@ impl TsStmt {
         }
     }
 
+    pub fn break_stmt(span: Option<Span>) -> Self {
+        Self {
+            kind: TsStmtKind::Break,
+            span,
+            nested_map: None,
+            no_blank_before: false,
+            nested_map_source_id: 0,
+        }
+    }
+
     pub fn continue_stmt(span: Option<Span>) -> Self {
         Self {
             kind: TsStmtKind::Continue,
@@ -1554,8 +1568,9 @@ pub enum TsExpr {
     /// real site in this file's own content still goes through the ordinary
     /// precedence machinery unchanged.
     Paren(Box<TsExpr>),
-    /// `...x`, an array spread element (1A.18a, #3719). Legal only as an item of
-    /// [`TsExpr::Array`], where it prints `...` then its operand with no brackets
+    /// `...x`, a spread element (1A.18a, #3719). Legal only as an item of
+    /// [`TsExpr::Array`] or an argument of [`TsExpr::Call`] (1A.32b), where it prints
+    /// `...` then its operand with no brackets
     /// of its own: a spread operand is an assignment expression, so anything but a
     /// comma expression (which `TsExpr` cannot build) stands there as it is. A new
     /// variant rather than an item type on `Array`, which every existing array
@@ -2285,6 +2300,37 @@ pub struct TsParam {
     /// parameter needs this; nothing in the grounding file needs a default
     /// value, so only optionality is represented, not defaults.
     pub optional: bool,
+    /// `...name: T` — a rest parameter (1A.32b: the history driver's console mute,
+    /// `(...__a: unknown[]) => …`). Prints before the name; `optional` and `rest`
+    /// do not combine.
+    pub rest: bool,
+}
+
+impl TsParam {
+    /// A required parameter, with its type if it has one.
+    pub fn new(name: impl Into<String>, ty: Option<TsType>) -> Self {
+        Self {
+            name: name.into(),
+            ty,
+            optional: false,
+            rest: false,
+        }
+    }
+
+    /// An optional parameter (`name?: T`).
+    pub fn optional(name: impl Into<String>, ty: Option<TsType>) -> Self {
+        Self {
+            optional: true,
+            ..Self::new(name, ty)
+        }
+    }
+
+    /// This parameter as a rest parameter (`...name: T`).
+    #[must_use]
+    pub fn rest(mut self) -> Self {
+        self.rest = true;
+        self
+    }
 }
 
 /// One `class` field.
@@ -2297,6 +2343,38 @@ pub struct TsClassField {
     /// property (R7.1 forbids both categorically — there is no variant
     /// shape here that could construct either).
     pub private: bool,
+    /// `name!: T;` — a definite-assignment assertion, for a field the
+    /// constructor does not set but whoever builds the object does (1A.32b: an
+    /// agent's `__key`, assigned by its factory or its dispatch before any
+    /// handler runs). Printed after the name, before the `:`.
+    pub definite: bool,
+}
+
+impl TsClassField {
+    /// A public, ordinarily-assigned field. Mark it with [`TsClassField::private`]
+    /// or [`TsClassField::definite`].
+    pub fn new(name: impl Into<String>, ty: TsType) -> Self {
+        Self {
+            name: name.into(),
+            ty,
+            private: false,
+            definite: false,
+        }
+    }
+
+    /// This field with the `private` modifier.
+    #[must_use]
+    pub fn private(mut self) -> Self {
+        self.private = true;
+        self
+    }
+
+    /// This field with a definite-assignment assertion (`name!: T;`).
+    #[must_use]
+    pub fn definite(mut self) -> Self {
+        self.definite = true;
+        self
+    }
 }
 
 /// A class's own constructor.

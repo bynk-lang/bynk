@@ -89,7 +89,6 @@ export class Order {
     const __state = await this.loadState();
     return __state.status;
   }
-
 }
 
 export function __makeOrder(key: string, env?: { ORDER?: __DurableObjectNamespace }): Order {

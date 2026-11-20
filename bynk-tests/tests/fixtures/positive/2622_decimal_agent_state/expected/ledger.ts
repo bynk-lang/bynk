@@ -147,7 +147,6 @@ export class Account {
     }
     throw new globalThis.Error("non-exhaustive match");
   }
-
 }
 
 export function __makeAccount(key: string, env?: { ACCOUNT?: __DurableObjectNamespace }): Account {

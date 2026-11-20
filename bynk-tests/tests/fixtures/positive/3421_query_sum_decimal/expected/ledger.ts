@@ -98,7 +98,6 @@ export class Basket {
     const t = await __bynkThen(((() => __bynkThen(__state.lines.values(), (__q) => __q.filter((__x) => ((l: Line) => __bynkCmpDecimal(l.price, floor) > 0)(__x)))))(), (__q) => __q.reduce((__s: { readonly coefficient: bigint; readonly scale: number }, __x) => __bynkDecimalAdd(__s, ((l: Line) => l.price)(__x)), { coefficient: 0n, scale: 0 }));
     return __bynkDecimalToString(t);
   }
-
 }
 
 export function __makeBasket(key: string, env?: { BASKET?: __DurableObjectNamespace }): Basket {

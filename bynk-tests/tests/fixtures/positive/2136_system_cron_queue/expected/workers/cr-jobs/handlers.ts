@@ -86,7 +86,6 @@ export class Counter {
     }
     return new globalThis.Response("Not Found", { status: 404 });
   }
-
 }
 
 const __CounterWire: __AgentWire = {
@@ -158,7 +157,6 @@ export class Ledger {
     }
     return new globalThis.Response("Not Found", { status: 404 });
   }
-
 }
 
 const __LedgerWire: __AgentWire = {

@@ -149,7 +149,6 @@ export class Roller {
     const r = await rolled({ n: 1 });
     return r;
   }
-
 }
 
 export function __makeRoller(key: string, env?: { ROLLER?: __DurableObjectNamespace }): Roller {

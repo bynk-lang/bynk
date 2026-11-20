@@ -56,7 +56,6 @@ export class Shelf {
     const __state = await this.loadState();
     return (p.items).length;
   }
-
 }
 
 export function __makeShelf(key: string, env?: { SHELF?: __DurableObjectNamespace }): Shelf {

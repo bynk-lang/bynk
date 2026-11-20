@@ -73,7 +73,6 @@ export class Calls {
     }
     return new globalThis.Response("Not Found", { status: 404 });
   }
-
 }
 
 const __CallsWire: __AgentWire = {
@@ -153,7 +152,6 @@ export class Acc {
     }
     return new globalThis.Response("Not Found", { status: 404 });
   }
-
 }
 
 const __AccWire: __AgentWire = {

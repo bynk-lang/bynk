@@ -155,7 +155,6 @@ export class Room {
     await this.commitState(__state);
     return __result;
   }
-
 }
 
 export function __makeRoom(key: RoomId, env?: { ROOM?: __DurableObjectNamespace }): Room {

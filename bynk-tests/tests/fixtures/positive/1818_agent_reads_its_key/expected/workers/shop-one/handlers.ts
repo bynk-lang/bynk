@@ -83,7 +83,6 @@ export class Order {
     }
     return new globalThis.Response("Not Found", { status: 404 });
   }
-
 }
 
 const __OrderWire: __AgentWire = {
@@ -152,7 +151,6 @@ export class Label {
     }
     return new globalThis.Response("Not Found", { status: 404 });
   }
-
 }
 
 const __LabelWire: __AgentWire = {
@@ -221,7 +219,6 @@ export class Tally {
     }
     return new globalThis.Response("Not Found", { status: 404 });
   }
-
 }
 
 const __TallyWire: __AgentWire = {
@@ -290,7 +287,6 @@ export class Grid {
     }
     return new globalThis.Response("Not Found", { status: 404 });
   }
-
 }
 
 const __GridWire: __AgentWire = {

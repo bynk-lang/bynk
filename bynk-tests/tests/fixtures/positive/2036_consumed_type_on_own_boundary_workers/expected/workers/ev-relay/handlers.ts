@@ -98,7 +98,6 @@ export class Shelf {
     }
     return new globalThis.Response("Not Found", { status: 404 });
   }
-
 }
 
 const __ShelfWire: __AgentWire = {

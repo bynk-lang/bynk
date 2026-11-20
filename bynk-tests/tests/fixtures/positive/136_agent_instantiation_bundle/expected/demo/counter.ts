@@ -86,7 +86,6 @@ export class Counter {
     const __state = await this.loadState();
     return Ok(__state.count);
   }
-
 }
 
 export function __makeCounter(key: CounterId, env?: { COUNTER?: __DurableObjectNamespace }): Counter {

@@ -174,7 +174,6 @@ export class Room {
     const env = this.__env as unknown as globalThis.Record<string, unknown>;
     await this.__wsClose_chat(connection, __att.args[0] as RoomKey, { identity: __att.identity as UserId, ...{ env: env as never } });
   }
-
 }
 
 const __RoomWire: __AgentWire = {

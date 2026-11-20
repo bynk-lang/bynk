@@ -145,7 +145,6 @@ export class Sales {
       });
     })))(), (__q) => __q);
   }
-
 }
 
 export function __makeSales(key: string, env?: { SALES?: __DurableObjectNamespace }): Sales {

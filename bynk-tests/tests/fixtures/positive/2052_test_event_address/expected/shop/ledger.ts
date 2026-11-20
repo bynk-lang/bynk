@@ -86,7 +86,6 @@ export class Books {
     const __state = await this.loadState();
     return __state.publisher;
   }
-
 }
 
 export function __makeBooks(key: string, env?: { BOOKS?: __DurableObjectNamespace }): Books {

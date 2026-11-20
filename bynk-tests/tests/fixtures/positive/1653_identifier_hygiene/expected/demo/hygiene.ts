@@ -521,7 +521,6 @@ export class Bag {
     const n = await __state.seen.size();
     return n;
   }
-
 }
 
 export function __makeBag(key: string, env?: { BAG?: __DurableObjectNamespace }): Bag {

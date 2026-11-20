@@ -138,7 +138,6 @@ export class Board {
       return __ka < __kb ? 1 : __ka > __kb ? -1 : 0;
     }))))(), (__q) => __q.slice(0, globalThis.Math.max(0, 2)))))(), (__q) => __q.map((__x) => ((j: Job) => j.name)(__x)))))(), (__q) => __q);
   }
-
 }
 
 export function __makeBoard(key: string, env?: { BOARD?: __DurableObjectNamespace }): Board {

@@ -2018,11 +2018,7 @@ fn trace_node(cx: &LowerCtx, cap: &str, op: &str) -> bynk_ts::TsExpr {
             property: "map".to_string(),
         }),
         args: vec![TsExpr::Arrow {
-            params: vec![TsParam {
-                name: "__c".to_string(),
-                ty: Some(call_args_type()),
-                optional: false,
-            }],
+            params: vec![TsParam::new("__c".to_string(), Some(call_args_type()))],
             is_async: false,
             generics: Vec::new(),
             return_type: None,
@@ -2153,11 +2149,10 @@ fn lower_observation(o: &ObservationExpr, cx: &mut LowerCtx) -> Built {
                                     property: "filter".to_string(),
                                 }),
                                 args: vec![TsExpr::Arrow {
-                                    params: vec![bynk_ts::TsParam {
-                                        name: "__c".to_string(),
-                                        ty: Some(call_args_type()),
-                                        optional: false,
-                                    }],
+                                    params: vec![bynk_ts::TsParam::new(
+                                        "__c".to_string(),
+                                        Some(call_args_type()),
+                                    )],
                                     is_async: false,
                                     generics: Vec::new(),
                                     return_type: None,
@@ -4593,11 +4588,7 @@ fn lower_field_access(e: &Expr, receiver: &Expr, field: &Ident, cx: &mut LowerCt
         let arrow = |params: Vec<&str>, body: bynk_ts::TsExpr| bynk_ts::TsExpr::Arrow {
             params: params
                 .into_iter()
-                .map(|p| bynk_ts::TsParam {
-                    name: p.to_string(),
-                    ty: None,
-                    optional: false,
-                })
+                .map(|p| bynk_ts::TsParam::new(p.to_string(), None))
                 .collect(),
             is_async: false,
             generics: vec![],
@@ -4975,6 +4966,7 @@ fn lower_lambda(e: &Expr, lambda: &LambdaExpr, cx: &mut LowerCtx) -> Built {
                 name: ts_ident(&p.name.name),
                 ty,
                 optional: false,
+                rest: false,
             })
         })
         .collect();
@@ -5184,11 +5176,7 @@ fn lower_match_as_iife(discriminant: &Expr, arms: &[MatchArm], cx: &mut LowerCtx
     if let Ok(disc) = &disc
         && let Some(stmts) = body.to_nodes()
     {
-        let params = vec![bynk_ts::TsParam {
-            name: "__d".to_string(),
-            ty: None,
-            optional: false,
-        }];
+        let params = vec![bynk_ts::TsParam::new("__d".to_string(), None)];
         return pre.finish(LoweredExpr::Node(arrow_call(
             params,
             vec![disc.clone()],
@@ -6020,11 +6008,10 @@ fn lower_is(value: &Expr, pattern: &Pattern, cx: &mut LowerCtx) -> Lowered {
             vec![tested],
             |c| bynk_ts::TsExpr::Call {
                 callee: Box::new(bynk_ts::TsExpr::Paren(Box::new(bynk_ts::TsExpr::Arrow {
-                    params: vec![bynk_ts::TsParam {
-                        name: "__c".to_string(),
-                        ty: Some(bynk_ts::TsType::named("boolean")),
-                        optional: false,
-                    }],
+                    params: vec![bynk_ts::TsParam::new(
+                        "__c".to_string(),
+                        Some(bynk_ts::TsType::named("boolean")),
+                    )],
                     is_async: false,
                     generics: Vec::new(),
                     return_type: None,

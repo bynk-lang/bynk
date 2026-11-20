@@ -292,6 +292,11 @@ fn websocket_agent_map_is_unchanged() {
     check(snapshot(&ts, &map), CHAT_MAP, "handlers.ts");
 }
 
+// The carrier part of this snapshot (provider, service, agent) is unchanged. The history
+// driver, the trailing run of `48`s (the agent's span, which every driver line inherits), grew
+// by 18 lines (the final rows, 39 entries to 57) when it became nodes: its `switch` cases,
+// `try`/`catch`, `if`/`else` and `for` body now print one statement per line. That is line growth from the ruled re-layout (1A.32b), not a
+// moved mapping.
 const WALLET_MAP: &str = "\
 - - - - - - - - 2 2 2 2 2 2 2 2
 2 2 2 2 7 7 7 7 7 7 7 7 15 15 15 15
@@ -303,7 +308,8 @@ const WALLET_MAP: &str = "\
 62 63 63 63 63 63 63 63 63 48 48 48 48 48 48 48
 48 48 48 48 48 48 48 48 48 48 48 48 48 48 48 48
 48 48 48 48 48 48 48 48 48 48 48 48 48 48 48 48
-48 48 48 48 48 48 48
+48 48 48 48 48 48 48 48 48 48 48 48 48 48 48 48
+48 48 48 48 48 48 48 48 48
 ";
 const CHAT_MAP: &str = "\
 - - - - - - - - - - - 2 2 2 2 2

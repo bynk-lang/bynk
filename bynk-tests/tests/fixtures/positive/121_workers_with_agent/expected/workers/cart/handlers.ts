@@ -73,7 +73,6 @@ export class CartEntity {
     }
     return new globalThis.Response("Not Found", { status: 404 });
   }
-
 }
 
 const __CartEntityWire: __AgentWire = {

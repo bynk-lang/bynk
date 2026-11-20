@@ -6,12 +6,11 @@
 //! `emitter.rs` (ADR 0060); the codec/reference/import/header helpers and the
 //! `ts_*`/`LowerCtx` core stay in the parent and are reached via `use super::*`.
 
-use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Write as _;
 use std::sync::Arc;
 
-use super::zero_value::render_zero_value;
+use super::zero_value::{render_zero_value, zero_expr as zero_value_expr};
 use crate::emit_model::EmitProjectCtx;
 use bynk_check::actors::ActorDecl;
 use bynk_check::checker::{TyId, TypedCommons, Types};
@@ -293,11 +292,10 @@ fn emit_refined_type(
         name: "of".to_string(),
         is_async: false,
         generics: Vec::new(),
-        params: vec![bynk_ts::TsParam {
-            name: "value".to_string(),
-            ty: Some(base_ty.clone()),
-            optional: false,
-        }],
+        params: vec![bynk_ts::TsParam::new(
+            "value".to_string(),
+            Some(base_ty.clone()),
+        )],
         return_type: Some(bynk_ts::TsType::named_with_args(
             "Result",
             vec![
@@ -328,11 +326,7 @@ fn emit_refined_type(
             name: "unsafe".to_string(),
             is_async: false,
             generics: Vec::new(),
-            params: vec![bynk_ts::TsParam {
-                name: "value".to_string(),
-                ty: Some(base_ty),
-                optional: false,
-            }],
+            params: vec![bynk_ts::TsParam::new("value".to_string(), Some(base_ty))],
             return_type: Some(bynk_ts::TsType::named(name.clone())),
             doc: None,
             inline: false,
@@ -658,10 +652,11 @@ fn emit_sum_type(
         } else {
             let ctor_params: Vec<bynk_ts::TsParam> = payload
                 .iter()
-                .map(|(field, ty)| bynk_ts::TsParam {
-                    name: ts_ident(&payload_prop(field)),
-                    ty: Some(ts_ty_to_ts_type(*ty, unit.render(commons))),
-                    optional: false,
+                .map(|(field, ty)| {
+                    bynk_ts::TsParam::new(
+                        ts_ident(&payload_prop(field)),
+                        Some(ts_ty_to_ts_type(*ty, unit.render(commons))),
+                    )
                 })
                 .collect();
             let mut obj_entries = vec![bynk_ts::TsObjectEntry::Prop(
@@ -800,20 +795,18 @@ pub(crate) fn emit_forwarded_methods(
         let mut params: Vec<bynk_ts::TsParam> = Vec::new();
         let mut args: Vec<bynk_ts::TsExpr> = Vec::new();
         if f.has_self {
-            params.push(bynk_ts::TsParam {
-                name: "self".to_string(),
-                ty: Some(bynk_ts::TsType::named(type_name)),
-                optional: false,
-            });
+            params.push(bynk_ts::TsParam::new(
+                "self".to_string(),
+                Some(bynk_ts::TsType::named(type_name)),
+            ));
             args.push(bynk_ts::TsExpr::Ident("self".to_string()));
         }
         for (name, ty) in &f.params {
             let ident = ts_ident(name);
-            params.push(bynk_ts::TsParam {
-                name: ident.clone(),
-                ty: Some(bynk_ts::TsType::named(ts_ty(*ty, tys))),
-                optional: false,
-            });
+            params.push(bynk_ts::TsParam::new(
+                ident.clone(),
+                Some(bynk_ts::TsType::named(ts_ty(*ty, tys))),
+            ));
             args.push(bynk_ts::TsExpr::Ident(ident));
         }
         let ret = ts_ty(f.return_ty, tys);
@@ -867,11 +860,13 @@ fn exec_param(name: &str) -> bynk_ts::TsParam {
                         vec![bynk_ts::TsType::named("unknown")],
                     )),
                     optional: false,
+                    rest: false,
                 }],
                 bynk_ts::TsType::named("void"),
             ),
         ])),
         optional: false,
+        rest: false,
     }
 }
 
@@ -936,18 +931,16 @@ fn emit_method(
         .collect();
     let mut params: Vec<bynk_ts::TsParam> = Vec::new();
     if f.has_self {
-        params.push(bynk_ts::TsParam {
-            name: "self".to_string(),
-            ty: Some(bynk_ts::TsType::named(format!("{type_name}{self_ty_args}"))),
-            optional: false,
-        });
+        params.push(bynk_ts::TsParam::new(
+            "self".to_string(),
+            Some(bynk_ts::TsType::named(format!("{type_name}{self_ty_args}"))),
+        ));
     }
     for p in &f.params {
-        params.push(bynk_ts::TsParam {
-            name: ts_ident(&p.name.name),
-            ty: Some(bynk_ts::TsType::named(ts_type_ref(&p.type_ref))),
-            optional: false,
-        });
+        params.push(bynk_ts::TsParam::new(
+            ts_ident(&p.name.name),
+            Some(bynk_ts::TsType::named(ts_type_ref(&p.type_ref))),
+        ));
     }
     let empty = bynk_check::resolver::CrossContextInfo::default();
     let mut cx = LowerCtx::new(
@@ -1105,10 +1098,11 @@ fn emit_free_fn_in(
     let mut params: Vec<bynk_ts::TsParam> = f
         .params
         .iter()
-        .map(|p| bynk_ts::TsParam {
-            name: ts_ident(&p.name.name),
-            ty: Some(ts_type_ref_to_ts_type(&p.type_ref, None)),
-            optional: false,
+        .map(|p| {
+            bynk_ts::TsParam::new(
+                ts_ident(&p.name.name),
+                Some(ts_type_ref_to_ts_type(&p.type_ref, None)),
+            )
         })
         .collect();
     let is_async = is_effectful_return(&f.return_type);
@@ -1155,9 +1149,9 @@ fn emit_free_fn_in(
     // parameter (before the execution context): exactly the declared ones, so
     // a caller hands over its own `deps`, which has them.
     if !given_ir.is_empty() {
-        params.push(bynk_ts::TsParam {
-            name: "deps".to_string(),
-            ty: Some(bynk_ts::TsType::Object(
+        params.push(bynk_ts::TsParam::new(
+            "deps".to_string(),
+            Some(bynk_ts::TsType::Object(
                 given_ir
                     .iter()
                     .map(|c| {
@@ -1165,8 +1159,7 @@ fn emit_free_fn_in(
                     })
                     .collect(),
             )),
-            optional: false,
-        });
+        ));
     }
     // #2719: the execution context, last.
     if commons.exec_plan.fn_needs(f) {
@@ -1872,17 +1865,16 @@ fn emit_message_entry_renderer(
         join_plus(parts)
     };
     bynk_ts::TsExpr::Arrow {
-        params: vec![bynk_ts::TsParam {
-            name: "params".to_string(),
-            ty: Some(bynk_ts::TsType::named_with_args(
+        params: vec![bynk_ts::TsParam::new(
+            "params".to_string(),
+            Some(bynk_ts::TsType::named_with_args(
                 "ReadonlyMap",
                 vec![
                     bynk_ts::TsType::named("string"),
                     bynk_ts::TsType::named("__bynkMessageArg"),
                 ],
             )),
-            optional: false,
-        }],
+        )],
         is_async: false,
         generics: Vec::new(),
         return_type: Some(bynk_ts::TsType::named("string")),
@@ -1940,11 +1932,7 @@ fn emit_icu_placeholder(
     };
     let iife = |arrow_body: bynk_ts::TsExpr| bynk_ts::TsExpr::Call {
         callee: Box::new(bynk_ts::TsExpr::Arrow {
-            params: vec![bynk_ts::TsParam {
-                name: "__arg".to_string(),
-                ty: None,
-                optional: false,
-            }],
+            params: vec![bynk_ts::TsParam::new("__arg".to_string(), None)],
             is_async: false,
             generics: Vec::new(),
             return_type: None,
@@ -2391,16 +2379,14 @@ pub(crate) fn emit_messages_bundle(
             name: "render".to_string(),
             generics: Vec::new(),
             params: vec![
-                bynk_ts::TsParam {
-                    name: "tag".to_string(),
-                    ty: Some(bynk_ts::TsType::named("__bynkLocaleTag")),
-                    optional: false,
-                },
-                bynk_ts::TsParam {
-                    name: "msg".to_string(),
-                    ty: Some(bynk_ts::TsType::named("__bynkMessage")),
-                    optional: false,
-                },
+                bynk_ts::TsParam::new(
+                    "tag".to_string(),
+                    Some(bynk_ts::TsType::named("__bynkLocaleTag")),
+                ),
+                bynk_ts::TsParam::new(
+                    "msg".to_string(),
+                    Some(bynk_ts::TsType::named("__bynkMessage")),
+                ),
             ],
             return_type: Some(bynk_ts::TsType::named("string")),
             body: vec![
@@ -2495,14 +2481,15 @@ pub(crate) fn emit_capability(
                 .params
                 .iter()
                 .zip(&encoded)
-                .map(|((name, ty), encoded)| bynk_ts::TsParam {
-                    name: ts_ident(name),
-                    ty: Some(if *encoded {
-                        bynk_ts::TsType::named("unknown")
-                    } else {
-                        ts_ty_to_ts_type(*ty, unit.render(commons))
-                    }),
-                    optional: false,
+                .map(|((name, ty), encoded)| {
+                    bynk_ts::TsParam::new(
+                        ts_ident(name),
+                        Some(if *encoded {
+                            bynk_ts::TsType::named("unknown")
+                        } else {
+                            ts_ty_to_ts_type(*ty, unit.render(commons))
+                        }),
+                    )
                 })
                 .collect();
             // #3458: a typed read's `Effect[P]` payload mentions a `Codable`
@@ -2780,11 +2767,7 @@ pub(crate) fn emit_provider(
         // and under ES2022 `useDefineForClassFields` the declaration defines
         // `this.deps` before the body assigns the real value; the end state is
         // correct and strips to `constructor(deps) { this.deps = deps; }`.
-        fields.push(bynk_ts::TsClassField {
-            name: "deps".to_string(),
-            ty: deps_ty.clone(),
-            private: true,
-        });
+        fields.push(bynk_ts::TsClassField::new("deps", deps_ty.clone()).private());
         *constructor = Some(bynk_ts::TsClassCtor {
             params: vec![deps_param(&deps_ty)],
             body: vec![bynk_ts::TsStmt::assign(
@@ -2850,6 +2833,7 @@ fn deps_param(deps_ty: &bynk_ts::TsType) -> bynk_ts::TsParam {
         name: "deps".to_string(),
         ty: Some(deps_ty.clone()),
         optional: false,
+        rest: false,
     }
 }
 
@@ -2867,10 +2851,11 @@ fn provider_op_method(
     let params: Vec<bynk_ts::TsParam> = op
         .params
         .iter()
-        .map(|p| bynk_ts::TsParam {
-            name: ts_ident(&p.name.name),
-            ty: Some(ts_type_ref_to_ts_type(&p.type_ref, None)),
-            optional: false,
+        .map(|p| {
+            bynk_ts::TsParam::new(
+                ts_ident(&p.name.name),
+                Some(ts_type_ref_to_ts_type(&p.type_ref, None)),
+            )
         })
         .collect();
     // P6.55 (design/tracks/the-ir.md §6b): computed once, not twice.
@@ -3067,10 +3052,8 @@ pub(crate) fn emit_service(
         // single-operation object literal.
         let mut params: Vec<bynk_ts::TsParam> = ir_params
             .iter()
-            .map(|(name, ty)| bynk_ts::TsParam {
-                name: ts_ident(name),
-                ty: Some(ts_ty_to_ts_type(*ty, tys)),
-                optional: false,
+            .map(|(name, ty)| {
+                bynk_ts::TsParam::new(ts_ident(name), Some(ts_ty_to_ts_type(*ty, tys)))
             })
             .collect();
         // v0.103/v0.106: a `from websocket` lifecycle handler receives the
@@ -3080,14 +3063,13 @@ pub(crate) fn emit_service(
         if is_ws_handler && let ProtocolIr::WebSocket { out_ty, .. } = protocol {
             params.insert(
                 0,
-                bynk_ts::TsParam {
-                    name: "connection".to_string(),
-                    ty: Some(bynk_ts::TsType::named_with_args(
+                bynk_ts::TsParam::new(
+                    "connection".to_string(),
+                    Some(bynk_ts::TsType::named_with_args(
                         "Connection",
                         vec![ts_ty_to_ts_type(*out_ty, tys)],
                     )),
-                    optional: false,
-                },
+                ),
             );
         }
         // Events track, slice 4 (spine #936): a `via schema(N)` guard needs
@@ -3110,11 +3092,10 @@ pub(crate) fn emit_service(
                 None => {
                     params.insert(
                         1,
-                        bynk_ts::TsParam {
-                            name: "__bynkSchemaEnv".to_string(),
-                            ty: Some(bynk_ts::TsType::named("EventEnvelope")),
-                            optional: false,
-                        },
+                        bynk_ts::TsParam::new(
+                            "__bynkSchemaEnv".to_string(),
+                            Some(bynk_ts::TsType::named("EventEnvelope")),
+                        ),
                     );
                     Some("__bynkSchemaEnv".to_string())
                 }
@@ -3328,14 +3309,13 @@ pub(crate) fn emit_service(
                 "__exec",
                 bynk_ts::TsType::Object(vec![bynk_ts::TsTypeMember::method(
                     "waitUntil",
-                    vec![bynk_ts::TsParam {
-                        name: "promise".to_string(),
-                        ty: Some(bynk_ts::TsType::named_with_args(
+                    vec![bynk_ts::TsParam::new(
+                        "promise".to_string(),
+                        Some(bynk_ts::TsType::named_with_args(
                             "globalThis.Promise",
                             vec![bynk_ts::TsType::named("unknown")],
                         )),
-                        optional: false,
-                    }],
+                    )],
                     bynk_ts::TsType::named("void"),
                 )]),
             );
@@ -3383,11 +3363,10 @@ pub(crate) fn emit_service(
         // #1361's own named residual ("deps's own type stays one opaque
         // `TsType::named` string... real, separate, much larger work than
         // this slice's own scope").
-        params.push(bynk_ts::TsParam {
-            name: "deps".to_string(),
-            ty: Some(bynk_ts::TsType::Object(deps_members)),
-            optional: false,
-        });
+        params.push(bynk_ts::TsParam::new(
+            "deps".to_string(),
+            Some(bynk_ts::TsType::Object(deps_members)),
+        ));
         // Events track, slice 0 (spine #936): release-at-commit (the retired
         // events track's §3.0, `design/archive/retired-tracks.md`) needs a
         // completion boundary services never had before — the
@@ -3991,14 +3970,13 @@ fn emit_context_deps_interface(
             "__exec",
             bynk_ts::TsType::Object(vec![bynk_ts::TsTypeMember::method(
                 "waitUntil",
-                vec![bynk_ts::TsParam {
-                    name: "promise".to_string(),
-                    ty: Some(bynk_ts::TsType::named_with_args(
+                vec![bynk_ts::TsParam::new(
+                    "promise".to_string(),
+                    Some(bynk_ts::TsType::named_with_args(
                         "globalThis.Promise",
                         vec![bynk_ts::TsType::named("unknown")],
                     )),
-                    optional: false,
-                }],
+                )],
                 bynk_ts::TsType::named("void"),
             )]),
         ));
@@ -4095,17 +4073,15 @@ pub(crate) fn emit_make_surface(
     let binds_caller =
         |h: &Handler| bynk_check::actors::caller_binder_for(h, &ctx.actors).is_some();
     let any_caller = any_service_binds_caller(services.iter().copied(), &ctx.actors);
-    let mut params = vec![bynk_ts::TsParam {
-        name: "deps".to_string(),
-        ty: Some(bynk_ts::TsType::named(deps_name)),
-        optional: false,
-    }];
+    let mut params = vec![bynk_ts::TsParam::new(
+        "deps".to_string(),
+        Some(bynk_ts::TsType::named(deps_name)),
+    )];
     if any_caller {
-        params.push(bynk_ts::TsParam {
-            name: "__caller".to_string(),
-            ty: Some(bynk_ts::TsType::named("string")),
-            optional: false,
-        });
+        params.push(bynk_ts::TsParam::new(
+            "__caller".to_string(),
+            Some(bynk_ts::TsType::named("string")),
+        ));
     }
     let mut entries: Vec<bynk_ts::TsObjectEntry> = Vec::new();
     for s in &services {
@@ -4134,10 +4110,11 @@ pub(crate) fn emit_make_surface(
         let method_params: Vec<bynk_ts::TsParam> = h
             .params
             .iter()
-            .map(|p| bynk_ts::TsParam {
-                name: surface_param(&p.name.name),
-                ty: Some(ts_type_ref_to_ts_type(&p.type_ref, None)),
-                optional: false,
+            .map(|p| {
+                bynk_ts::TsParam::new(
+                    surface_param(&p.name.name),
+                    Some(ts_type_ref_to_ts_type(&p.type_ref, None)),
+                )
             })
             .collect();
         let mut call_args: Vec<bynk_ts::TsExpr> = h
@@ -4648,20 +4625,6 @@ fn type_base_is_int(t: &TypeRef, types: &HashMap<String, Arc<TypeDecl>>) -> bool
             })
         ),
         _ => false,
-    }
-}
-
-/// v0.119 (ADR 0155): the TS expression for a driven handler argument. An
-/// `Int`-based value (bare or refined/opaque) is coerced to `number` — the
-/// property generator yields `bigint`, but handler bodies do `number` arithmetic
-/// (the same rule the contract attacker follows; the refinement brand is
-/// compile-time only, so `Number(...)` is a no-op at runtime). Everything else —
-/// `String`/refined-`String`, `Bool` — passes through.
-fn history_arg_ts(p: &Param, i: usize, types: &HashMap<String, Arc<TypeDecl>>) -> String {
-    if type_base_is_int(&p.type_ref, types) {
-        format!("globalThis.Number(__st.args[{i}])")
-    } else {
-        format!("__st.args[{i}]")
     }
 }
 
@@ -5227,7 +5190,7 @@ struct AgentLoadFns<'a> {
 /// are the agent's whole storage contract with the platform.
 #[allow(clippy::too_many_arguments)]
 fn emit_agent_load_commit_state(
-    out: &mut String,
+    methods: &mut Vec<bynk_ts::TsClassMethod>,
     a: &AgentDecl,
     effective_fields: &[RecordField],
     fns: &AgentLoadFns,
@@ -5472,11 +5435,7 @@ fn emit_agent_load_commit_state(
     )
     .private();
     let class_depth = 0;
-    out.push_str(&bynk_ts::print_class_method(
-        &load_state_method,
-        class_depth,
-    ));
-    writeln!(out).unwrap();
+    methods.push(load_state_method);
     // Arc C, slice 22 (#1373): closes step (9)'s own third sub-slice by
     // landing the deferred remainder, `commitState` (#1371's own `loadState`
     // landed the sub-slice's other half). `record_span` is a documented
@@ -5768,11 +5727,7 @@ fn emit_agent_load_commit_state(
         commit_state_body,
     )
     .private();
-    out.push_str(&bynk_ts::print_class_method(
-        &commit_state_method,
-        class_depth,
-    ));
-    writeln!(out).unwrap();
+    methods.push(commit_state_method);
 }
 
 /// `commitState`'s parameters and body. #3581: a `bynk dev` build's `commitState` also records the transition. It takes the
@@ -5787,11 +5742,10 @@ fn commit_state_params(
     ctx: &EmitProjectCtx,
     fields_const: &str,
 ) -> (Vec<bynk_ts::TsStmt>, Vec<bynk_ts::TsParam>) {
-    let mut params = vec![bynk_ts::TsParam {
-        name: "s".to_string(),
-        ty: Some(bynk_ts::TsType::named(state_ty.to_string())),
-        optional: false,
-    }];
+    let mut params = vec![bynk_ts::TsParam::new(
+        "s".to_string(),
+        Some(bynk_ts::TsType::named(state_ty.to_string())),
+    )];
     if !ctx.inspect_agents {
         return (body, params);
     }
@@ -5816,11 +5770,10 @@ fn commit_state_params(
         bynk_ts::TsStmt::expr_stmt(call("__historyRecord", &["__before", "__handler"]), None);
     body.insert(body.len().saturating_sub(1), before);
     body.push(after);
-    params.push(bynk_ts::TsParam {
-        name: "__handler".to_string(),
-        ty: Some(bynk_ts::TsType::named("string")),
-        optional: true,
-    });
+    params.push(bynk_ts::TsParam::optional(
+        "__handler".to_string(),
+        Some(bynk_ts::TsType::named("string")),
+    ));
     (body, params)
 }
 
@@ -6178,18 +6131,16 @@ fn emit_agent_state_persistence(
                 name: rehydrate_fn.clone(),
                 generics: Vec::new(),
                 params: vec![
-                    bynk_ts::TsParam {
-                        name: "s".to_string(),
-                        ty: Some(bynk_ts::TsType::named(state_ty.clone())),
-                        optional: false,
-                    },
+                    bynk_ts::TsParam::new(
+                        "s".to_string(),
+                        Some(bynk_ts::TsType::named(state_ty.clone())),
+                    ),
                     // #1649: the stored record, so a field absent from it keeps
                     // its in-memory zero instead of being decoded (ADR 0124 D4).
-                    bynk_ts::TsParam {
-                        name: "stored".to_string(),
-                        ty: Some(bynk_ts::TsType::named(state_ty.clone())),
-                        optional: false,
-                    },
+                    bynk_ts::TsParam::new(
+                        "stored".to_string(),
+                        Some(bynk_ts::TsType::named(state_ty.clone())),
+                    ),
                 ],
                 return_type: Some(bynk_ts::TsType::named("void")),
                 body: rehydrate_checks
@@ -6227,11 +6178,10 @@ fn emit_agent_state_persistence(
             bynk_ts::TsDecl::Function {
                 name: encode_fn.clone(),
                 generics: Vec::new(),
-                params: vec![bynk_ts::TsParam {
-                    name: "s".to_string(),
-                    ty: Some(bynk_ts::TsType::named(state_ty.clone())),
-                    optional: false,
-                }],
+                params: vec![bynk_ts::TsParam::new(
+                    "s".to_string(),
+                    Some(bynk_ts::TsType::named(state_ty.clone())),
+                )],
                 return_type: Some(bynk_ts::TsType::named("globalThis.Record<string, unknown>")),
                 body: vec![bynk_ts::TsStmt::raw(encode_body, None)],
                 is_async: false,
@@ -6484,15 +6434,13 @@ fn emit_agent_state_persistence(
 /// An agent class's handler methods (#3167): one per `on` handler, each lowered
 /// to a class method and written onto `out`, in declaration order.
 fn emit_agent_handlers(
-    out: &mut String,
+    methods: &mut Vec<bynk_ts::TsClassMethod>,
     a: &AgentDecl,
     layout: &AgentStoreLayout,
     commons: &TypedCommons,
     ctx: &EmitProjectCtx,
-    class_smb: &RefCell<SourceMapBuilder>,
 ) {
     let is_store_agent = true;
-    let class_depth = 0;
     let AgentStoreLayout {
         effective_fields,
         held_maps_ts,
@@ -6525,10 +6473,11 @@ fn emit_agent_handlers(
         let mut params: Vec<bynk_ts::TsParam> = h
             .params
             .iter()
-            .map(|p| bynk_ts::TsParam {
-                name: ts_ident(&p.name.name),
-                ty: Some(ts_type_ref_to_ts_type(&p.type_ref, None)),
-                optional: false,
+            .map(|p| {
+                bynk_ts::TsParam::new(
+                    ts_ident(&p.name.name),
+                    Some(ts_type_ref_to_ts_type(&p.type_ref, None)),
+                )
             })
             .collect();
         // Lower body into a buffer so we can detect cross-context usage and
@@ -6660,11 +6609,10 @@ fn emit_agent_handlers(
                 )),
             );
         }
-        params.push(bynk_ts::TsParam {
-            name: "deps".to_string(),
-            ty: Some(bynk_ts::TsType::Object(deps_members)),
-            optional: false,
-        });
+        params.push(bynk_ts::TsParam::new(
+            "deps".to_string(),
+            Some(bynk_ts::TsType::Object(deps_members)),
+        ));
         let ret = ts_type_ref_to_ts_type(&h.return_type, None);
         let method = h
             .method_name
@@ -6706,29 +6654,21 @@ fn emit_agent_handlers(
         if cx.claim_scope_used {
             body = claim_scoped(body, INDENT_STEP * 2);
         }
-        let handler_method = bynk_ts::TsClassMethod {
-            name: method,
-            private: false,
-            is_async: effectful,
-            params,
-            return_type: Some(ret),
-            doc: h.documentation.as_deref().map(str::to_owned),
-            body: body.into_stmts(INDENT_STEP * 2),
-            span: None,
-        };
         // #2270: anchor the method header and prologue to the handler's own
         // `on call` line. Without this they inherit the previous checkpoint,
         // so an uncalled handler's header leaked onto the preceding body's
         // last line in coverage.
-        class_smb.borrow_mut().record(out.len(), h.span);
-        bynk_ts::print_class_method_and_merge(
-            out,
-            &handler_method,
-            class_depth,
-            &mut class_smb.borrow_mut(),
-            0,
-        );
-        writeln!(out).unwrap();
+        methods.push(bynk_ts::TsClassMethod {
+            doc: h.documentation.as_deref().map(str::to_owned),
+            span: Some(h.span),
+            ..bynk_ts::TsClassMethod::new(
+                method,
+                effectful,
+                params,
+                Some(ret),
+                body.into_stmts(INDENT_STEP * 2),
+            )
+        });
     }
 }
 
@@ -6918,13 +6858,12 @@ struct AgentDispatchFacts<'a> {
 /// an RPC request into a method call, the dispatch for each `from websocket`
 /// `on open` host, and the class's closing brace. Written onto `out`.
 fn emit_agent_dispatch(
-    out: &mut String,
+    methods: &mut Vec<bynk_ts::TsClassMethod>,
     a: &AgentDecl,
     facts: &AgentDispatchFacts,
     ws_open_hosts: &[WsOpenHost<'_>],
     commons: &TypedCommons,
     ctx: &EmitProjectCtx,
-    class_smb: &RefCell<SourceMapBuilder>,
 ) {
     let tys = UnitFacts::of(ctx).render(commons);
     let AgentDispatchFacts {
@@ -6935,9 +6874,6 @@ fn emit_agent_dispatch(
         agent_reaches_env,
         agent_versions,
     } = *facts;
-    // #2280: the dispatch methods below belong to the agent, not to the last
-    // hosted lifecycle method's final body line.
-    class_smb.borrow_mut().record(out.len(), a.span);
     // v0.9.2: workers-mode DO dispatch. Method calls arrive as `fetch` requests
     // under `/_bynk/agent/<method>`; decode `{ args, deps }`, invoke the
     // handler with deps as the trailing argument, and serialise the result.
@@ -7056,10 +6992,14 @@ fn emit_agent_dispatch(
         // #1678: the wire arguments are decoded through this agent's table
         // before the handler sees them (`decodeAgentArgs` throws on a decode
         // failure, an internal fault), and the result is encoded on the way out.
-        let decoded_args = bynk_ts::TsExpr::Ident(format!(
-            "...__decodeAgentArgs({}, methodName, args)",
-            agent_wire_name(&a.name.name)
-        ));
+        let decoded_args = bynk_ts::TsExpr::Spread(Box::new(hist_call(
+            hist_id("__decodeAgentArgs"),
+            vec![
+                hist_id(&agent_wire_name(&a.name.name)),
+                hist_id("methodName"),
+                hist_id("args"),
+            ],
+        )));
         let result_expr = if rpc_rebuilds_env {
             // #527: the wire deps are JSON — any capability provider in them
             // is a dead plain object (its methods did not survive
@@ -7201,34 +7141,33 @@ fn emit_agent_dispatch(
             }),
             None,
         ));
+        // #2280: the dispatch methods belong to the agent, not to the last
+        // hosted lifecycle method's final body line.
         let fetch_method = bynk_ts::TsClassMethod::new(
             "fetch",
             true,
-            vec![bynk_ts::TsParam {
-                name: "request".to_string(),
-                ty: Some(bynk_ts::TsType::named("globalThis.Request")),
-                optional: false,
-            }],
+            vec![bynk_ts::TsParam::new(
+                "request".to_string(),
+                Some(bynk_ts::TsType::named("globalThis.Request")),
+            )],
             Some(bynk_ts::TsType::named_with_args(
                 "globalThis.Promise",
                 vec![bynk_ts::TsType::named("globalThis.Response")],
             )),
             fetch_stmts,
         );
-        out.push_str(&bynk_ts::print_class_method(&fetch_method, 0));
-        writeln!(out).unwrap();
+        methods.push(bynk_ts::TsClassMethod {
+            span: Some(a.span),
+            ..fetch_method
+        });
         // v0.106 (slice 3b-iii): the inbound/close dispatch — Cloudflare calls
         // `webSocketMessage`/`webSocketClose` on a hibernatable socket. Decode the
         // frame against `in:` (reject-and-close on failure), recover the sender
         // identity + route args from the socket attachment, and run the body.
         for host in ws_open_hosts {
-            emit_ws_dispatch_handlers(out, host, &ctx.runtime_use, &commons.types, tys);
+            emit_ws_dispatch_handlers(methods, host, &ctx.runtime_use, &commons.types, tys);
         }
     }
-    writeln!(out, "}}").unwrap();
-    // #1486: no trailing blank baked in here — the printer's automatic
-    // top-level spacing policy supplies the single blank before whatever
-    // statement follows.
 }
 
 /// #3581: `__noteAgentInstance(env?.__BYNK_INSPECT_REGISTRY, env?.<binding>,
@@ -7304,11 +7243,7 @@ fn emit_agent_factory(
         },
         bynk_ts::TsExpr::Ident("key".to_string()),
         bynk_ts::TsExpr::Arrow {
-            params: vec![bynk_ts::TsParam {
-                name: "state".to_string(),
-                ty: None,
-                optional: false,
-            }],
+            params: vec![bynk_ts::TsParam::new("state".to_string(), None)],
             is_async: false,
             generics: Vec::new(),
             return_type: None,
@@ -7364,16 +7299,11 @@ fn emit_agent_factory(
             name: agent_factory_name(&a.name.name),
             generics: Vec::new(),
             params: vec![
-                bynk_ts::TsParam {
-                    name: "key".to_string(),
-                    ty: Some(key_ts),
-                    optional: false,
-                },
-                bynk_ts::TsParam {
-                    name: "env".to_string(),
-                    ty: Some(bynk_ts::TsType::Object(env_props)),
-                    optional: true,
-                },
+                bynk_ts::TsParam::new("key".to_string(), Some(key_ts)),
+                bynk_ts::TsParam::optional(
+                    "env".to_string(),
+                    Some(bynk_ts::TsType::Object(env_props)),
+                ),
             ],
             return_type: Some(bynk_ts::TsType::named(a.name.name.clone())),
             body: vec![bynk_ts::TsStmt::return_stmt(Some(make_agent), None)],
@@ -7399,6 +7329,255 @@ fn emit_agent_history_driver(
     stmts: &mut Vec<bynk_ts::TsStmt>,
 ) {
     let state_ty = format!("{}State", a.name.name);
+    // v0.119 (testing track slice 7, ADR 0155): the history-property driver. Only
+    // agents a `for all run: History[Agent]` property targets get this exported
+    // test-support function (gated on `history_target_agents`), so every other
+    // agent's emission is byte-for-byte unchanged. It drives a generated call
+    // sequence through the *real* handlers from a fresh instance, recording each
+    // reached step — its call, whether it committed (an invariant/`transition`
+    // refusal throws `invariantViolation`, leaving state uncommitted), and the
+    // committed `old` → `new` pair — for the runner's predicate. Test-only, so it
+    // is stripped from deploy builds with the rest of the test surface.
+    if ctx.history_target_agents.contains(&a.name.name) {
+        let hs: Vec<&Handler> = a
+            .handlers
+            .iter()
+            .filter(|h| {
+                matches!(lower_handler_kind_ir(&h.kind), IrHandlerKind::Call)
+                    && h.method_name.is_some()
+            })
+            .collect();
+        let driver = format!("__bynkDriveHistory_{}", a.name.name);
+        // P7.2: `call`'s real shape is a discriminated union across `hs` (one
+        // variant per handler, built further down from `history_variant_tag` +
+        // each handler's own fields) and `deps` varies per handler too (each
+        // handler computes its own `deps_ty` from its own `given` set,
+        // `build_deps_object_ty_with_surface`'s own per-handler call elsewhere
+        // in this file) — a single driver-wide type for either needs the
+        // intersection/union across every handler this agent's history targets,
+        // not a same-line change. `seq`'s own `args` is safe to narrow:
+        // it's read back only through `history_arg_expr` call sites below,
+        // never given a fixed shape of its own.
+        let step_ty = history_step_ty(&state_ty);
+        let seq_ty = bynk_ts::TsType::named_with_args(
+            "globalThis.Array",
+            vec![bynk_ts::TsType::Object(vec![
+                bynk_ts::TsTypeMember::prop("h", bynk_ts::TsType::named("number")),
+                bynk_ts::TsTypeMember::prop(
+                    "args",
+                    bynk_ts::TsType::array(bynk_ts::TsType::named("unknown")),
+                ),
+            ])],
+        );
+        let mut body = vec![
+            bynk_ts::TsStmt::expr_stmt(
+                hist_call(hist_member(hist_id(registry), "reset"), vec![]),
+                None,
+            ),
+            history_inst_stmt(a, commons),
+            hist_const("__load", history_load_arrow(a, fns, &state_ty)),
+            hist_const("__rej", history_rejected_arrow()),
+            bynk_ts::TsStmt::const_stmt(
+                bynk_ts::TsBindingName::Ident("__steps".to_string()),
+                Some(history_steps_ty(&step_ty)),
+                bynk_ts::TsExpr::array(Vec::new()),
+                None,
+            ),
+            hist_const("__ce", hist_console_error()),
+        ];
+        body.push(bynk_ts::TsStmt::assign(
+            hist_console_error(),
+            history_console_mute_arrow(),
+            None,
+        ));
+        // A driven run deliberately provokes rejected steps (an invariant/
+        // `transition` refusal), each of which `console.error`s an
+        // `InvariantViolation` line from `commitState` before throwing. Mute just
+        // those lines for the duration of the drive so the run isn't drowned in
+        // expected noise; every other `console.error` still passes through, and the
+        // original is restored in `finally`.
+        body.push(bynk_ts::TsStmt::try_finally(
+            bynk_ts::TsStmt::block(
+                vec![
+                    history_drive_loop(&hs, &step_ty, commons),
+                    bynk_ts::TsStmt::return_stmt(Some(hist_id("__steps")), None),
+                ],
+                None,
+            ),
+            bynk_ts::TsStmt::block(
+                vec![bynk_ts::TsStmt::assign(
+                    hist_console_error(),
+                    hist_id("__ce"),
+                    None,
+                )],
+                None,
+            ),
+            None,
+        ));
+        stmts.push(bynk_ts::TsStmt::decl(
+            bynk_ts::TsDecl::Export(Box::new(bynk_ts::TsDecl::Function {
+                name: driver,
+                generics: Vec::new(),
+                params: vec![
+                    bynk_ts::TsParam::new("seq", Some(seq_ty)),
+                    bynk_ts::TsParam::new("deps", Some(history_any_ty())),
+                ],
+                return_type: Some(bynk_ts::TsType::named_with_args(
+                    "globalThis.Promise",
+                    vec![history_steps_ty(&step_ty)],
+                )),
+                body,
+                is_async: true,
+                inline: false,
+            })),
+            None,
+        ));
+        // #1486: no trailing blank baked in here — the printer's automatic
+        // top-level spacing policy supplies the single blank before whatever
+        // statement follows.
+    }
+}
+
+/// `any`, the one escape the history driver keeps (P7.2): `call` and `deps` take a different
+/// shape per handler, so a single driver-wide type would need a per-agent union.
+fn history_any_ty() -> bynk_ts::TsType {
+    bynk_ts::TsType::named("any")
+}
+
+fn hist_id(name: &str) -> bynk_ts::TsExpr {
+    bynk_ts::TsExpr::Ident(name.to_string())
+}
+
+fn hist_str(text: &str) -> bynk_ts::TsExpr {
+    bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(text.to_string()))
+}
+
+fn hist_num(n: impl ToString) -> bynk_ts::TsExpr {
+    bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Num(n.to_string()))
+}
+
+fn hist_member(object: bynk_ts::TsExpr, property: &str) -> bynk_ts::TsExpr {
+    bynk_ts::TsExpr::Member {
+        object: Box::new(object),
+        property: property.to_string(),
+    }
+}
+
+fn hist_call(callee: bynk_ts::TsExpr, args: Vec<bynk_ts::TsExpr>) -> bynk_ts::TsExpr {
+    bynk_ts::TsExpr::Call {
+        callee: Box::new(callee),
+        args,
+    }
+}
+
+fn hist_await(expr: bynk_ts::TsExpr) -> bynk_ts::TsExpr {
+    bynk_ts::TsExpr::Await(Box::new(expr))
+}
+
+fn hist_const(name: &str, init: bynk_ts::TsExpr) -> bynk_ts::TsStmt {
+    bynk_ts::TsStmt::const_stmt(
+        bynk_ts::TsBindingName::Ident(name.to_string()),
+        None,
+        init,
+        None,
+    )
+}
+
+fn hist_let(
+    name: &str,
+    ty: Option<bynk_ts::TsType>,
+    init: Option<bynk_ts::TsExpr>,
+) -> bynk_ts::TsStmt {
+    bynk_ts::TsStmt::let_stmt(
+        bynk_ts::TsBindingName::Ident(name.to_string()),
+        ty,
+        init,
+        None,
+    )
+}
+
+/// `globalThis.console.error`.
+fn hist_console_error() -> bynk_ts::TsExpr {
+    hist_member(hist_member(hist_id("globalThis"), "console"), "error")
+}
+
+fn hist_binary(
+    op: bynk_ts::TsBinaryOp,
+    left: bynk_ts::TsExpr,
+    right: bynk_ts::TsExpr,
+) -> bynk_ts::TsExpr {
+    bynk_ts::TsExpr::Binary {
+        op,
+        left: Box::new(left),
+        right: Box::new(right),
+    }
+}
+
+/// `{ call: any, accepted: boolean, old: S, new: S, refusal?: unknown }`: one reached step.
+fn history_step_ty(state_ty: &str) -> bynk_ts::TsType {
+    let state = || bynk_ts::TsType::named(state_ty.to_string());
+    bynk_ts::TsType::Object(vec![
+        bynk_ts::TsTypeMember::prop("call", history_any_ty()),
+        bynk_ts::TsTypeMember::prop("accepted", bynk_ts::TsType::named("boolean")),
+        bynk_ts::TsTypeMember::prop("old", state()),
+        bynk_ts::TsTypeMember::prop("new", state()),
+        bynk_ts::TsTypeMember::optional_prop("refusal", bynk_ts::TsType::named("unknown")),
+    ])
+}
+
+/// `globalThis.Array<step>`.
+fn history_steps_ty(step_ty: &bynk_ts::TsType) -> bynk_ts::TsType {
+    bynk_ts::TsType::named_with_args("globalThis.Array", vec![step_ty.clone()])
+}
+
+/// `{ invariantViolation?: unknown }`: the one field a caught throw is checked for.
+fn history_violation_ty() -> bynk_ts::TsType {
+    bynk_ts::TsType::Object(vec![bynk_ts::TsTypeMember::optional_prop(
+        "invariantViolation",
+        bynk_ts::TsType::named("unknown"),
+    )])
+}
+
+/// `(e as { invariantViolation?: unknown }).invariantViolation`.
+fn history_violation_of(caught: &str) -> bynk_ts::TsExpr {
+    hist_member(
+        bynk_ts::TsExpr::Paren(Box::new(bynk_ts::TsExpr::As {
+            expr: Box::new(hist_id(caught)),
+            ty: history_violation_ty(),
+        })),
+        "invariantViolation",
+    )
+}
+
+/// `const __inst = <factory>(<key zero>) as any;`. P7.2: deferred, not narrowed. A first
+/// attempt dropped this cast, reasoning the factory already declares its agent and `.state`/
+/// `.{method}` are real declared members — true, but it broke real `tsc --strict` fixtures
+/// (248/249): `history_arg_expr` produces unbranded plain values (`Number(__st.args[0])`),
+/// which don't structurally match a branded handler param type (`Amount`) once `__inst` is
+/// genuinely agent-typed instead of `any`. Branding `history_arg_expr`'s own output is the
+/// real fix, not a same-line change here.
+fn history_inst_stmt(a: &AgentDecl, commons: &TypedCommons) -> bynk_ts::TsStmt {
+    let key = bynk_check::checker::zero_value(&a.key_type, None, &commons.types)
+        .map(|z| zero_value_expr(&z))
+        .unwrap_or_else(|| bynk_ts::TsExpr::As {
+            expr: Box::new(hist_id("undefined")),
+            ty: bynk_ts::TsType::named("never"),
+        });
+    hist_const(
+        "__inst",
+        bynk_ts::TsExpr::As {
+            expr: Box::new(hist_call(
+                hist_id(&agent_factory_name(&a.name.name)),
+                vec![key],
+            )),
+            ty: history_any_ty(),
+        },
+    )
+}
+
+/// The `async` arrow that reads the instance's stored state the way `loadState` does (#1649,
+/// #2211, #2224, #3189): decoded, version-checked, joined and migrated into the state type.
+fn history_load_arrow(a: &AgentDecl, fns: &AgentLoadFns, state_ty: &str) -> bynk_ts::TsExpr {
     let AgentLoadFns {
         zero_fn,
         rehydrate_fn,
@@ -7410,215 +7589,368 @@ fn emit_agent_history_driver(
         agent_versions,
         ..
     } = *fns;
-    // v0.119 (testing track slice 7, ADR 0155): the history-property driver. Only
-    // agents a `for all run: History[Agent]` property targets get this exported
-    // test-support function (gated on `history_target_agents`), so every other
-    // agent's emission is byte-for-byte unchanged. It drives a generated call
-    // sequence through the *real* handlers from a fresh instance, recording each
-    // reached step — its call, whether it committed (an invariant/`transition`
-    // refusal throws `invariantViolation`, leaving state uncommitted), and the
-    // committed `old` → `new` pair — for the runner's predicate. Test-only, so it
-    // is stripped from deploy builds with the rest of the test surface.
-    if ctx.history_target_agents.contains(&a.name.name) {
-        // #1386/#1462: a second, separate permanent exclusion from this
-        // function's own top-level signature — genuinely raw hand-templated
-        // text throughout, zero `bynk_ts` nodes or `LowerCtx` involvement,
-        // not decomposed further. Local buffer, replacing this block's own
-        // former use of the function's `out` parameter.
-        let mut out = String::new();
-        let hs: Vec<&Handler> = a
-            .handlers
-            .iter()
-            .filter(|h| {
-                matches!(lower_handler_kind_ir(&h.kind), IrHandlerKind::Call)
-                    && h.method_name.is_some()
-            })
-            .collect();
-        let driver = format!("__bynkDriveHistory_{}", a.name.name);
-        let factory = agent_factory_name(&a.name.name);
-        let key_val = zero_value_ts(&a.key_type, None, &commons.types)
-            .unwrap_or_else(|| "undefined as never".to_string());
-        // P7.2: `call`'s real shape is a discriminated union across `hs` (one
-        // variant per handler, built further down from `history_variant_tag` +
-        // each handler's own fields) and `deps` varies per handler too (each
-        // handler computes its own `deps_ty` from its own `given` set,
-        // `build_deps_object_ty_with_surface`'s own per-handler call elsewhere
-        // in this file) — a single driver-wide type for either needs the
-        // intersection/union across every handler this agent's history targets,
-        // not a same-line text change. `seq`'s own `args` is safe to narrow:
-        // it's read back only through `history_arg_ts`-shaped call sites below,
-        // never given a fixed shape of its own.
-        let step_ty = format!(
-            "{{ call: any, accepted: boolean, old: {state_ty}, new: {state_ty}, refusal?: unknown }}"
-        );
-        writeln!(
-            out,
-            "export async function {driver}(seq: globalThis.Array<{{ h: number, args: unknown[] }}>, deps: any): globalThis.Promise<globalThis.Array<{step_ty}>> {{"
+    let stored = || {
+        hist_member(
+            hist_member(hist_member(hist_id("__inst"), "state"), "storage"),
+            "get",
         )
-        .unwrap();
-        writeln!(out, "  {registry}.reset();").unwrap();
-        // P7.2: deferred, not narrowed. A first attempt dropped this cast,
-        // reasoning `{factory}` already declares `): {agent}` and `.state`/
-        // `.{{method}}` are real declared members — true, but it broke real
-        // `tsc --strict` fixtures (248/249): `history_arg_ts` below produces
-        // unbranded plain values (`Number(__st.args[0])`), which don't
-        // structurally match a branded handler param type (`Amount`) once
-        // `__inst` is genuinely `{agent}`-typed instead of `any`. Narrowing
-        // `history_arg_ts`'s own output to brand its values correctly is the
-        // real fix, not a same-line change here.
-        writeln!(out, "  const __inst = {factory}({key_val}) as any;").unwrap();
-        // #1649: decode the stored (wire-shape) state exactly as `loadState` does.
-        let mut decode = if has_rehydrate {
-            format!(" {rehydrate_fn}(__m, __s);")
-        } else {
-            String::new()
-        };
-        if has_collections {
-            decode.push_str(&format!(" {hydrate_fn}(__m, __s);"));
+    };
+    let assign_s = |value: bynk_ts::TsExpr| bynk_ts::TsStmt::assign(hist_id("__s"), value, None);
+    let zero = || hist_call(hist_id(zero_fn), vec![]);
+    let mut body = vec![
+        // `let`: the stored record is replaced by its joined, wholesale-shaped form below
+        // (#3189).
+        hist_let(
+            "__s",
+            None,
+            Some(hist_await(hist_call(stored(), vec![hist_str("state")]))),
+        ),
+        bynk_ts::TsStmt::if_stmt(
+            hist_binary(
+                bynk_ts::TsBinaryOp::StrictEq,
+                hist_id("__s"),
+                hist_id("undefined"),
+            ),
+            bynk_ts::TsStmt::return_stmt(Some(zero()), None),
+            None,
+        ),
+        bynk_ts::TsStmt::expr_stmt(
+            hist_call(
+                hist_id("__checkStoredLayout"),
+                vec![hist_str(&a.name.name), hist_id("__s")],
+            ),
+            None,
+        ),
+    ];
+    // State-migrations S1 (#2211): the same `__v` check `loadState` runs.
+    if let Some(v) = agent_versions {
+        let mut args = vec![
+            hist_str(&a.name.name),
+            hist_id("__s"),
+            hist_num(v.version),
+            hist_num(v.oldest_readable),
+        ];
+        if !step_plans.is_empty() {
+            args.push(step_ranges_expr(step_plans));
         }
-        // State-migrations S1 (#2211): the same `__v` check `loadState` runs.
-        let version_check = agent_versions
-            .as_ref()
-            .map(|v| {
-                let steps = if step_plans.is_empty() {
-                    String::new()
-                } else {
-                    format!(
-                        ", [{}]",
-                        step_plans
-                            .iter()
-                            .map(|s| format!("[{}, {}]", s.lo, s.from))
-                            .collect::<Vec<_>>()
-                            .join(", ")
-                    )
-                };
-                format!(
-                    " __checkStoredSchemaVersion(\"{}\", __s, {}, {}{steps});",
-                    a.name.name, v.version, v.oldest_readable
-                )
-            })
-            .unwrap_or_default();
-        // State-migrations S2 (#2224): and the same step dispatch.
-        let migrate_call = if step_plans.is_empty() {
-            String::new()
-        } else {
-            format!(" __s = {migrate_fn}(__s);")
-        };
-        // `let`: the stored record is replaced by its joined, wholesale-shaped
-        // form below (#3189).
-        let s_decl = "let";
-        writeln!(
-            out,
-            "  const __load = async (): globalThis.Promise<{state_ty}> => {{ {s_decl} __s = await __inst.state.storage.get(\"state\"); if (__s === undefined) return {zero_fn}(); __checkStoredLayout(\"{agent_name}\", __s);{version_check} __s = await __readStored(__inst, __inst.state.storage, __s);{migrate_call} const __m = {{ ...{zero_fn}(), ...__s }};{decode} return __m; }};",
-            agent_name = a.name.name
-        )
-        .unwrap();
-        // P7.2: `e` is a caught throw of unknown shape by construction — a
-        // marker type stating exactly the one field this checks, not a blanket
-        // escape.
-        writeln!(
-            out,
-            "  const __rej = (e: unknown) => !!e && (e as {{ invariantViolation?: unknown }}).invariantViolation !== undefined;"
-        )
-        .unwrap();
-        writeln!(out, "  const __steps: globalThis.Array<{step_ty}> = [];").unwrap();
-        // A driven run deliberately provokes rejected steps (an invariant/
-        // `transition` refusal), each of which `console.error`s an
-        // `InvariantViolation` line from `commitState` before throwing. Mute just
-        // those lines for the duration of the drive so the run isn't drowned in
-        // expected noise; every other `console.error` still passes through, and the
-        // original is restored in `finally`.
-        // P7.2: `console.error`'s own real type, `(...data: unknown[]) => void`
-        // — `__ce` is already that type by inference, and the replacement
-        // matches it exactly, so neither cast was ever load-bearing.
-        writeln!(out, "  const __ce = globalThis.console.error;").unwrap();
-        writeln!(
-            out,
-            "  globalThis.console.error = (...__a: unknown[]) => {{ if (typeof __a[0] === \"string\" && __a[0].startsWith(\"InvariantViolation\")) return; __ce(...__a); }};"
-        )
-        .unwrap();
-        writeln!(out, "  try {{").unwrap();
-        writeln!(out, "  for (const __st of seq) {{").unwrap();
-        writeln!(out, "    const __old = await __load();").unwrap();
-        writeln!(out, "    let __accepted = true;").unwrap();
-        writeln!(out, "    let __refusal: unknown;").unwrap();
-        writeln!(out, "    try {{").unwrap();
-        writeln!(out, "      switch (__st.h) {{").unwrap();
-        for (i, h) in hs.iter().enumerate() {
-            let m = &h.method_name.as_ref().unwrap().name;
-            let mut call_args: Vec<String> = h
-                .params
-                .iter()
-                .enumerate()
-                .map(|(j, p)| history_arg_ts(p, j, &commons.types))
-                .collect();
-            call_args.push("deps".to_string());
-            writeln!(
-                out,
-                "        case {i}: await __inst.{m}({}); break;",
-                call_args.join(", ")
-            )
-            .unwrap();
-        }
-        writeln!(out, "      }}").unwrap();
-        writeln!(
-            out,
-            "    }} catch (__e) {{ if (__rej(__e)) {{ __accepted = false; __refusal = (__e as {{ invariantViolation?: unknown }}).invariantViolation; }} else {{ throw __e; }} }}"
-        )
-        .unwrap();
-        writeln!(
-            out,
-            "    const __new = __accepted ? await __load() : __old;"
-        )
-        .unwrap();
-        // P7.2: deferred, same reason as `step_ty`'s own `call` field above —
-        // a real type here is the same per-handler discriminated union.
-        writeln!(out, "    let __call: any;").unwrap();
-        writeln!(out, "    switch (__st.h) {{").unwrap();
-        for (i, h) in hs.iter().enumerate() {
-            let tag = history_variant_tag(&h.method_name.as_ref().unwrap().name);
-            let fields: Vec<String> = h
-                .params
-                .iter()
-                .enumerate()
-                .map(|(j, p)| {
-                    format!(
-                        "{}: {}",
-                        ts_ident(&p.name.name),
-                        history_arg_ts(p, j, &commons.types)
-                    )
-                })
-                .collect();
-            let obj = if fields.is_empty() {
-                format!("{{ tag: \"{tag}\" }}")
-            } else {
-                format!("{{ tag: \"{tag}\", {} }}", fields.join(", "))
-            };
-            writeln!(out, "      case {i}: __call = {obj}; break;").unwrap();
-        }
-        writeln!(out, "    }}").unwrap();
-        writeln!(
-            out,
-            "    const __step: {step_ty} = {{ call: __call, accepted: __accepted, old: __old, new: __new }};"
-        )
-        .unwrap();
-        // The refusal is the runner's, not part of the step's Bynk type, so it is
-        // defined non-enumerable: `==` and a rendered step never see it.
-        writeln!(
-            out,
-            "    if (__refusal !== undefined) globalThis.Object.defineProperty(__step, \"refusal\", {{ value: __refusal }});"
-        )
-        .unwrap();
-        writeln!(out, "    __steps.push(__step);").unwrap();
-        writeln!(out, "  }}").unwrap();
-        writeln!(out, "  return __steps;").unwrap();
-        writeln!(out, "  }} finally {{ globalThis.console.error = __ce; }}").unwrap();
-        writeln!(out, "}}").unwrap();
-        // #1486: no trailing blank baked in here — the printer's automatic
-        // top-level spacing policy supplies the single blank before whatever
-        // statement follows.
-        stmts.push(bynk_ts::TsStmt::raw(out, None));
+        body.push(bynk_ts::TsStmt::expr_stmt(
+            hist_call(hist_id("__checkStoredSchemaVersion"), args),
+            None,
+        ));
     }
+    body.push(assign_s(hist_await(hist_call(
+        hist_id("__readStored"),
+        vec![
+            hist_id("__inst"),
+            hist_member(hist_member(hist_id("__inst"), "state"), "storage"),
+            hist_id("__s"),
+        ],
+    ))));
+    // State-migrations S2 (#2224): and the same step dispatch.
+    if !step_plans.is_empty() {
+        body.push(assign_s(hist_call(
+            hist_id(migrate_fn),
+            vec![hist_id("__s")],
+        )));
+    }
+    body.push(hist_const(
+        "__m",
+        bynk_ts::TsExpr::object_entries(vec![
+            bynk_ts::TsObjectEntry::Spread(zero()),
+            bynk_ts::TsObjectEntry::Spread(hist_id("__s")),
+        ]),
+    ));
+    // #1649: decode the stored (wire-shape) state exactly as `loadState` does.
+    for (wanted, func) in [(has_rehydrate, rehydrate_fn), (has_collections, hydrate_fn)] {
+        if wanted {
+            body.push(bynk_ts::TsStmt::expr_stmt(
+                hist_call(hist_id(func), vec![hist_id("__m"), hist_id("__s")]),
+                None,
+            ));
+        }
+    }
+    body.push(bynk_ts::TsStmt::return_stmt(Some(hist_id("__m")), None));
+    bynk_ts::TsExpr::Arrow {
+        params: Vec::new(),
+        is_async: true,
+        generics: Vec::new(),
+        return_type: Some(bynk_ts::TsType::named_with_args(
+            "globalThis.Promise",
+            vec![bynk_ts::TsType::named(state_ty.to_string())],
+        )),
+        body: Box::new(bynk_ts::TsArrowBody::Block(body)),
+    }
+}
+
+/// `(e: unknown) => !!e && (e as { invariantViolation?: unknown }).invariantViolation !== undefined`.
+/// P7.2: `e` is a caught throw of unknown shape by construction — a marker type stating
+/// exactly the one field this checks, not a blanket escape.
+fn history_rejected_arrow() -> bynk_ts::TsExpr {
+    let not = |e| bynk_ts::TsExpr::Unary {
+        op: bynk_ts::TsUnaryOp::Not,
+        expr: Box::new(e),
+    };
+    bynk_ts::TsExpr::Arrow {
+        params: vec![bynk_ts::TsParam::new(
+            "e",
+            Some(bynk_ts::TsType::named("unknown")),
+        )],
+        is_async: false,
+        generics: Vec::new(),
+        return_type: None,
+        body: Box::new(bynk_ts::TsArrowBody::Expr(Box::new(hist_binary(
+            bynk_ts::TsBinaryOp::And,
+            not(not(hist_id("e"))),
+            hist_binary(
+                bynk_ts::TsBinaryOp::StrictNotEq,
+                history_violation_of("e"),
+                hist_id("undefined"),
+            ),
+        )))),
+    }
+}
+
+/// `(...__a: unknown[]) => { if (typeof __a[0] === "string" && __a[0].startsWith("InvariantViolation")) return; __ce(...__a); }`
+/// P7.2: `console.error`'s own real type is `(...data: unknown[]) => void` — `__ce` is already
+/// that type by inference, and the replacement matches it exactly, so no cast was ever
+/// load-bearing.
+fn history_console_mute_arrow() -> bynk_ts::TsExpr {
+    let first = || bynk_ts::TsExpr::Index {
+        object: Box::new(hist_id("__a")),
+        index: Box::new(hist_num(0)),
+    };
+    let is_violation = hist_binary(
+        bynk_ts::TsBinaryOp::And,
+        hist_binary(
+            bynk_ts::TsBinaryOp::StrictEq,
+            bynk_ts::TsExpr::Unary {
+                op: bynk_ts::TsUnaryOp::Typeof,
+                expr: Box::new(first()),
+            },
+            hist_str("string"),
+        ),
+        hist_call(
+            hist_member(first(), "startsWith"),
+            vec![hist_str("InvariantViolation")],
+        ),
+    );
+    bynk_ts::TsExpr::Arrow {
+        params: vec![
+            bynk_ts::TsParam::new(
+                "__a",
+                Some(bynk_ts::TsType::array(bynk_ts::TsType::named("unknown"))),
+            )
+            .rest(),
+        ],
+        is_async: false,
+        generics: Vec::new(),
+        return_type: None,
+        body: Box::new(bynk_ts::TsArrowBody::Block(vec![
+            bynk_ts::TsStmt::if_stmt(is_violation, bynk_ts::TsStmt::return_stmt(None, None), None),
+            bynk_ts::TsStmt::expr_stmt(
+                hist_call(
+                    hist_id("__ce"),
+                    vec![bynk_ts::TsExpr::Spread(Box::new(hist_id("__a")))],
+                ),
+                None,
+            ),
+        ])),
+    }
+}
+
+/// v0.119 (ADR 0155): the TS expression for a driven handler argument. An
+/// `Int`-based value (bare or refined/opaque) is coerced to `number` — the
+/// property generator yields `bigint`, but handler bodies do `number` arithmetic
+/// (the same rule the contract attacker follows; the refinement brand is
+/// compile-time only, so `Number(...)` is a no-op at runtime). Everything else —
+/// `String`/refined-`String`, `Bool` — passes through.
+fn history_arg_expr(
+    p: &Param,
+    i: usize,
+    types: &HashMap<String, Arc<TypeDecl>>,
+) -> bynk_ts::TsExpr {
+    let arg = bynk_ts::TsExpr::Index {
+        object: Box::new(hist_member(hist_id("__st"), "args")),
+        index: Box::new(hist_num(i)),
+    };
+    if type_base_is_int(&p.type_ref, types) {
+        hist_call(hist_member(hist_id("globalThis"), "Number"), vec![arg])
+    } else {
+        arg
+    }
+}
+
+/// `switch (__st.h) { case 0: <body>; break; … }`, one case per handler.
+fn history_switch(
+    hs: &[&Handler],
+    body: impl Fn(&Handler) -> Vec<bynk_ts::TsStmt>,
+) -> bynk_ts::TsStmt {
+    let cases = hs
+        .iter()
+        .enumerate()
+        .map(|(i, h)| {
+            let mut stmts = body(h);
+            stmts.push(bynk_ts::TsStmt::break_stmt(None));
+            bynk_ts::TsSwitchCase {
+                labels: vec![hist_num(i)],
+                body: stmts,
+                default_braced: false,
+                case_braced: false,
+                span: None,
+            }
+        })
+        .collect();
+    bynk_ts::TsStmt::switch_stmt(hist_member(hist_id("__st"), "h"), cases, None)
+}
+
+/// The driver's loop over the generated sequence: run the call, then record the step.
+fn history_drive_loop(
+    hs: &[&Handler],
+    step_ty: &bynk_ts::TsType,
+    commons: &TypedCommons,
+) -> bynk_ts::TsStmt {
+    let run = history_switch(hs, |h| {
+        let m = &h.method_name.as_ref().unwrap().name;
+        let mut args: Vec<bynk_ts::TsExpr> = h
+            .params
+            .iter()
+            .enumerate()
+            .map(|(j, p)| history_arg_expr(p, j, &commons.types))
+            .collect();
+        args.push(hist_id("deps"));
+        vec![bynk_ts::TsStmt::expr_stmt(
+            hist_await(hist_call(hist_member(hist_id("__inst"), m), args)),
+            None,
+        )]
+    });
+    // An invariant/`transition` refusal throws `invariantViolation`: the step is not accepted,
+    // and the refusal is the runner's own to read.
+    let rejected = bynk_ts::TsStmt::try_catch(
+        bynk_ts::TsStmt::block(vec![run], None),
+        Some("__e"),
+        bynk_ts::TsStmt::block(
+            vec![bynk_ts::TsStmt::if_else_stmt(
+                hist_call(hist_id("__rej"), vec![hist_id("__e")]),
+                bynk_ts::TsStmt::block(
+                    vec![
+                        bynk_ts::TsStmt::assign(
+                            hist_id("__accepted"),
+                            bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Bool(false)),
+                            None,
+                        ),
+                        bynk_ts::TsStmt::assign(
+                            hist_id("__refusal"),
+                            history_violation_of("__e"),
+                            None,
+                        ),
+                    ],
+                    None,
+                ),
+                bynk_ts::TsStmt::block(
+                    vec![bynk_ts::TsStmt::throw_stmt(hist_id("__e"), None)],
+                    None,
+                ),
+                None,
+            )],
+            None,
+        ),
+        None,
+    );
+    // P7.2: deferred, same reason as `step_ty`'s own `call` field — a real type here is the
+    // same per-handler discriminated union.
+    let record = history_switch(hs, |h| {
+        let tag = history_variant_tag(&h.method_name.as_ref().unwrap().name);
+        let mut entries = vec![bynk_ts::TsObjectEntry::Prop(
+            "tag".to_string(),
+            hist_str(&tag),
+        )];
+        for (j, p) in h.params.iter().enumerate() {
+            entries.push(bynk_ts::TsObjectEntry::Prop(
+                ts_ident(&p.name.name),
+                history_arg_expr(p, j, &commons.types),
+            ));
+        }
+        vec![bynk_ts::TsStmt::assign(
+            hist_id("__call"),
+            bynk_ts::TsExpr::object_entries(entries),
+            None,
+        )]
+    });
+    let new_state = bynk_ts::TsExpr::Conditional {
+        test: Box::new(hist_id("__accepted")),
+        consequent: Box::new(hist_await(hist_call(hist_id("__load"), vec![]))),
+        alternate: Box::new(hist_id("__old")),
+    };
+    let step = bynk_ts::TsStmt::const_stmt(
+        bynk_ts::TsBindingName::Ident("__step".to_string()),
+        Some(step_ty.clone()),
+        bynk_ts::TsExpr::object(
+            [
+                ("call", "__call"),
+                ("accepted", "__accepted"),
+                ("old", "__old"),
+                ("new", "__new"),
+            ]
+            .into_iter()
+            .map(|(k, v)| (k.to_string(), hist_id(v)))
+            .collect(),
+        ),
+        None,
+    );
+    // The refusal is the runner's, not part of the step's Bynk type, so it is
+    // defined non-enumerable: `==` and a rendered step never see it.
+    let define_refusal = bynk_ts::TsStmt::if_stmt(
+        hist_binary(
+            bynk_ts::TsBinaryOp::StrictNotEq,
+            hist_id("__refusal"),
+            hist_id("undefined"),
+        ),
+        bynk_ts::TsStmt::expr_stmt(
+            hist_call(
+                hist_member(
+                    hist_member(hist_id("globalThis"), "Object"),
+                    "defineProperty",
+                ),
+                vec![
+                    hist_id("__step"),
+                    hist_str("refusal"),
+                    bynk_ts::TsExpr::object(vec![("value".to_string(), hist_id("__refusal"))]),
+                ],
+            ),
+            None,
+        ),
+        None,
+    );
+    bynk_ts::TsStmt::for_of(
+        "__st",
+        hist_id("seq"),
+        bynk_ts::TsStmt::block(
+            vec![
+                hist_const("__old", hist_await(hist_call(hist_id("__load"), vec![]))),
+                hist_let(
+                    "__accepted",
+                    None,
+                    Some(bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Bool(true))),
+                ),
+                hist_let("__refusal", Some(bynk_ts::TsType::named("unknown")), None),
+                rejected,
+                hist_const("__new", new_state),
+                hist_let("__call", Some(history_any_ty()), None),
+                record,
+                step,
+                define_refusal,
+                bynk_ts::TsStmt::expr_stmt(
+                    hist_call(
+                        hist_member(hist_id("__steps"), "push"),
+                        vec![hist_id("__step")],
+                    ),
+                    None,
+                ),
+            ],
+            None,
+        ),
+        None,
+    )
 }
 
 /// The names of an agent's state registry and fresh-state factory.
@@ -8048,6 +8380,42 @@ fn emit_agent_state_record(
     }
 }
 
+/// The Durable Object constructor: `state` alone, or with the Worker's `env` when the agent
+/// rebuilds deps inside the object (#527), in which case the `private __env` field joins `fields`.
+fn agent_constructor(
+    needs_env_ctor: bool,
+    fields: &mut Vec<bynk_ts::TsClassField>,
+) -> bynk_ts::TsClassCtor {
+    let this_assign = |prop: &str, value: &str| {
+        bynk_ts::TsStmt::assign(
+            bynk_ts::TsExpr::Member {
+                object: Box::new(bynk_ts::TsExpr::Ident("this".to_string())),
+                property: prop.to_string(),
+            },
+            bynk_ts::TsExpr::Ident(value.to_string()),
+            None,
+        )
+    };
+    let state = bynk_ts::TsParam::new(
+        "state",
+        Some(bynk_ts::TsType::named("__DurableObjectState")),
+    );
+    if !needs_env_ctor {
+        return bynk_ts::TsClassCtor {
+            params: vec![state],
+            body: vec![this_assign("state", "state")],
+        };
+    }
+    fields.push(bynk_ts::TsClassField::new("__env", bynk_ts::TsType::named("unknown")).private());
+    bynk_ts::TsClassCtor {
+        params: vec![
+            state,
+            bynk_ts::TsParam::optional("env", Some(bynk_ts::TsType::named("unknown"))),
+        ],
+        body: vec![this_assign("state", "state"), this_assign("__env", "env")],
+    }
+}
+
 pub(crate) fn emit_agent(
     a: &AgentDecl,
     state: &[StoreFieldIr],
@@ -8078,29 +8446,20 @@ pub(crate) fn emit_agent(
         lazy_fields,
     } = emit_agent_state_persistence(a, &layout, &zero_fn, commons, ctx, &mut stmts);
     let is_workers = layout.is_workers;
-    // 2) Durable Object class.
-    //
-    // #1482: local buffer/map pair, replacing this function's own former
-    // `out`/`source_map` parameters for the rest of the class's own
-    // construction below (through its closing brace) — every internal
-    // print-and-splice call site inside the class (`loadState`/
-    // `commitState`/the per-handler loop/the WS-hosted DO methods/`fetch`)
-    // is unchanged, since each already just referenced these two names.
-    let mut out = String::new();
-    let class_smb = RefCell::new(SourceMapBuilder::new());
-    let source_map = Some(&class_smb);
-    writeln!(out, "export class {name} {{", name = a.name.name).unwrap();
-    writeln!(out, "  state: __DurableObjectState;").unwrap();
+    // 2) Durable Object class: fields, constructor and every method are nodes, so the
+    // printer alone records the source map (#1482 gave the carrier a map of its own).
     let reads_key = agent_reads_key(a);
+    let mut fields = vec![bynk_ts::TsClassField::new(
+        "state",
+        bynk_ts::TsType::named("__DurableObjectState"),
+    )];
     if reads_key {
         // #1818: set before any handler runs, by the bundle factory or the
         // workers `fetch` dispatch.
-        writeln!(
-            out,
-            "  __key!: {};",
-            crate::emitter::ts_types::ts_type_ref(&a.key_type)
-        )
-        .unwrap();
+        fields.push(
+            bynk_ts::TsClassField::new("__key", ts_type_ref_to_ts_type(&a.key_type, None))
+                .definite(),
+        );
     }
     // #527: an agent whose methods take `given` capabilities rebuilds those
     // deps *inside* the DO (providers cannot cross the JSON wire), and some
@@ -8139,24 +8498,10 @@ pub(crate) fn emit_agent(
     // hosts only widen the constructor (and the ws entry points).
     let rpc_rebuilds_env = given_deps_expr.is_some() || agent_uses_emit || agent_reaches_env;
     let needs_env_ctor = rpc_rebuilds_env || ws_hosts_reach_env;
-    if needs_env_ctor {
-        writeln!(out, "  private __env: unknown;").unwrap();
-        writeln!(
-            out,
-            "  constructor(state: __DurableObjectState, env?: unknown) {{"
-        )
-        .unwrap();
-        writeln!(out, "    this.state = state;").unwrap();
-        writeln!(out, "    this.__env = env;").unwrap();
-        writeln!(out, "  }}").unwrap();
-    } else {
-        writeln!(out, "  constructor(state: __DurableObjectState) {{").unwrap();
-        writeln!(out, "    this.state = state;").unwrap();
-        writeln!(out, "  }}").unwrap();
-    }
-    writeln!(out).unwrap();
+    let constructor = agent_constructor(needs_env_ctor, &mut fields);
+    let mut methods = Vec::new();
     emit_agent_load_commit_state(
-        &mut out,
+        &mut methods,
         a,
         &layout.effective_fields,
         &AgentLoadFns {
@@ -8177,11 +8522,7 @@ pub(crate) fn emit_agent(
         ctx,
         source_text,
     );
-    emit_agent_handlers(&mut out, a, &layout, commons, ctx, &class_smb);
-    // #2270: what follows the handlers (the rest of the class and the
-    // agent's module-level factory code) belongs to the agent, not to the last
-    // handler's final body line, which it would otherwise inherit.
-    class_smb.borrow_mut().record(out.len(), a.span);
+    emit_agent_handlers(&mut methods, a, &layout, commons, ctx);
     // v0.104 (real-time track slice 3b): the `from websocket` `on open` handlers
     // whose connection transfers to *this* agent are hosted in this Durable Object
     // (DECISION A) — the upgrade is authenticated at the edge then forwarded here,
@@ -8207,49 +8548,40 @@ pub(crate) fn emit_agent(
         };
     }
     for host in &ws_open_hosts {
-        // #2280: anchor each hosted lifecycle method's header and prologue to
-        // its own `on open`/`on message`/`on close` line, not to the previous
-        // method's last body line.
-        class_smb.borrow_mut().record(out.len(), host.handler.span);
         emit_ws_do_method(
-            &mut out,
+            &mut methods,
             a,
             host,
             host.handler,
             &ws_open_do_method_name(host.service),
             commons,
             ctx,
-            source_map,
         );
         if let Some(m) = host.message {
-            class_smb.borrow_mut().record(out.len(), m.span);
             emit_ws_do_method(
-                &mut out,
+                &mut methods,
                 a,
                 host,
                 m,
                 &ws_message_do_method_name(host.service),
                 commons,
                 ctx,
-                source_map,
             );
         }
         if let Some(c) = host.close {
-            class_smb.borrow_mut().record(out.len(), c.span);
             emit_ws_do_method(
-                &mut out,
+                &mut methods,
                 a,
                 host,
                 c,
                 &ws_close_do_method_name(host.service),
                 commons,
                 ctx,
-                source_map,
             );
         }
     }
     emit_agent_dispatch(
-        &mut out,
+        &mut methods,
         a,
         &AgentDispatchFacts {
             reads_key,
@@ -8262,11 +8594,15 @@ pub(crate) fn emit_agent(
         &ws_open_hosts,
         commons,
         ctx,
-        &class_smb,
     );
-    let mut class_stmt = bynk_ts::TsStmt::raw(out, None);
-    class_stmt.nested_map = Some(class_smb.into_inner());
-    stmts.push(class_stmt);
+    // #2270: what follows the last method belongs to the agent, not to that method's
+    // final body line.
+    let class = bynk_ts::TsDecl::class(a.name.name.as_str(), fields, Some(constructor), methods)
+        .ending_at(a.span);
+    stmts.push(bynk_ts::TsStmt::decl(
+        bynk_ts::TsDecl::Export(Box::new(class)),
+        None,
+    ));
     emit_agent_factory(a, ctx, reads_key, &registry, &mut stmts);
     emit_agent_history_driver(
         a,
@@ -8454,29 +8790,26 @@ fn ws_open_hosts_for<'a>(
 // `doc` — confirmed directly (review of #1379): this function has never
 // emitted one, no `doc` parameter, no local, no `emit_doc_block` call.
 fn emit_ws_do_method(
-    out: &mut String,
+    methods: &mut Vec<bynk_ts::TsClassMethod>,
     agent: &AgentDecl,
     host: &WsOpenHost<'_>,
     h: &Handler,
     method: &str,
     commons: &TypedCommons,
     ctx: &EmitProjectCtx,
-    source_map: Option<&RefCell<SourceMapBuilder>>,
 ) {
-    let mut params = vec![bynk_ts::TsParam {
-        name: "connection".to_string(),
-        ty: Some(bynk_ts::TsType::named(format!(
+    let mut params = vec![bynk_ts::TsParam::new(
+        "connection".to_string(),
+        Some(bynk_ts::TsType::named(format!(
             "Connection<{}>",
             ts_ty(host.out_ty, UnitFacts::of(ctx).render(commons))
         ))),
-        optional: false,
-    }];
+    )];
     for p in &h.params {
-        params.push(bynk_ts::TsParam {
-            name: ts_ident(&p.name.name),
-            ty: Some(ts_type_ref_to_ts_type(&p.type_ref, None)),
-            optional: false,
-        });
+        params.push(bynk_ts::TsParam::new(
+            ts_ident(&p.name.name),
+            Some(ts_type_ref_to_ts_type(&p.type_ref, None)),
+        ));
     }
     let mut module = ModuleCtx::for_unit(commons, ctx);
     module.note_unit(ctx);
@@ -8576,35 +8909,22 @@ fn emit_ws_do_method(
             )),
         );
     }
-    params.push(bynk_ts::TsParam {
-        name: "deps".to_string(),
-        ty: Some(bynk_ts::TsType::Object(deps_members)),
-        optional: false,
+    params.push(bynk_ts::TsParam::new(
+        "deps".to_string(),
+        Some(bynk_ts::TsType::Object(deps_members)),
+    ));
+    // #2280: anchored to the lifecycle handler's own `on open`/`on message`/
+    // `on close` line, not to the previous method's last body line.
+    methods.push(bynk_ts::TsClassMethod {
+        span: Some(h.span),
+        ..bynk_ts::TsClassMethod::new(
+            method,
+            async_tail,
+            params,
+            Some(ts_type_ref_to_ts_type(&h.return_type, None)),
+            body,
+        )
     });
-    let method_entry = bynk_ts::TsClassMethod {
-        name: method.to_string(),
-        private: false,
-        is_async: async_tail,
-        params,
-        return_type: Some(ts_type_ref_to_ts_type(&h.return_type, None)),
-        doc: None,
-        body,
-        span: None,
-    };
-    let class_depth = 0;
-    // The printer records each body statement's checkpoint at its own offset in
-    // `out`, which is the buffer `source_map`'s offsets are relative to.
-    match source_map {
-        Some(map) => bynk_ts::print_class_method_and_merge(
-            out,
-            &method_entry,
-            class_depth,
-            &mut map.borrow_mut(),
-            0,
-        ),
-        None => out.push_str(&bynk_ts::print_class_method(&method_entry, class_depth)),
-    }
-    writeln!(out).unwrap();
 }
 
 /// The `fetch` branches ahead of the method dispatch that need the agent's schema
@@ -8728,11 +9048,7 @@ fn migrate_wake_branch_stmt(version: i64) -> bynk_ts::TsStmt {
             bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Num(version.to_string())),
             arrow(Vec::new(), this_call("loadState", Vec::new())),
             arrow(
-                vec![bynk_ts::TsParam {
-                    name: "s".to_string(),
-                    ty: None,
-                    optional: false,
-                }],
+                vec![bynk_ts::TsParam::new("s".to_string(), None)],
                 this_call("commitState", vec![bynk_ts::TsExpr::Ident("s".to_string())]),
             ),
         ],
@@ -8767,16 +9083,15 @@ fn events_deps_const_stmt() -> bynk_ts::TsStmt {
         bynk_ts::TsExpr::object(vec![(
             "__eventsDispatch".to_string(),
             bynk_ts::TsExpr::Arrow {
-                params: vec![bynk_ts::TsParam {
-                    name: "events".to_string(),
-                    ty: Some(bynk_ts::TsType::named_with_args(
+                params: vec![bynk_ts::TsParam::new(
+                    "events".to_string(),
+                    Some(bynk_ts::TsType::named_with_args(
                         "globalThis.Array",
                         vec![bynk_ts::TsType::named(
                             crate::emitter::EVENTS_WIRE_EVENT_TS_TYPE,
                         )],
                     )),
-                    optional: false,
-                }],
+                )],
                 is_async: false,
                 generics: Vec::new(),
                 return_type: None,
@@ -9150,7 +9465,7 @@ fn ws_attachment_deps_arg(host: &WsOpenHost<'_>) -> String {
 /// why (`TryCatch`'s own renderer has no single-line form, and no
 /// `TsUnaryOp::Void` exists for a single real call site).
 fn emit_ws_dispatch_handlers(
-    out: &mut String,
+    methods: &mut Vec<bynk_ts::TsClassMethod>,
     host: &WsOpenHost<'_>,
     runtime_use: &RuntimeUse,
     types: &HashMap<String, Arc<TypeDecl>>,
@@ -9375,19 +9690,14 @@ fn emit_ws_dispatch_handlers(
             "webSocketMessage",
             true,
             vec![
-                bynk_ts::TsParam {
-                    name: "ws".to_string(),
-                    ty: Some(bynk_ts::TsType::named(ws_ty)),
-                    optional: false,
-                },
-                bynk_ts::TsParam {
-                    name: "message".to_string(),
-                    ty: Some(bynk_ts::TsType::union(vec![
+                bynk_ts::TsParam::new("ws".to_string(), Some(bynk_ts::TsType::named(ws_ty))),
+                bynk_ts::TsParam::new(
+                    "message".to_string(),
+                    Some(bynk_ts::TsType::union(vec![
                         bynk_ts::TsType::named("string"),
                         bynk_ts::TsType::named("globalThis.ArrayBuffer"),
                     ])),
-                    optional: false,
-                },
+                ),
             ],
             Some(bynk_ts::TsType::named_with_args(
                 "globalThis.Promise",
@@ -9395,8 +9705,7 @@ fn emit_ws_dispatch_handlers(
             )),
             stmts,
         );
-        out.push_str(&bynk_ts::print_class_method(&message_method, 0));
-        writeln!(out).unwrap();
+        methods.push(message_method);
     }
 
     if let Some(c) = host.close {
@@ -9426,26 +9735,13 @@ fn emit_ws_dispatch_handlers(
             "webSocketClose",
             true,
             vec![
-                bynk_ts::TsParam {
-                    name: "ws".to_string(),
-                    ty: Some(bynk_ts::TsType::named(ws_ty)),
-                    optional: false,
-                },
-                bynk_ts::TsParam {
-                    name: "code".to_string(),
-                    ty: Some(bynk_ts::TsType::named("number")),
-                    optional: false,
-                },
-                bynk_ts::TsParam {
-                    name: "reason".to_string(),
-                    ty: Some(bynk_ts::TsType::named("string")),
-                    optional: false,
-                },
-                bynk_ts::TsParam {
-                    name: "wasClean".to_string(),
-                    ty: Some(bynk_ts::TsType::named("boolean")),
-                    optional: false,
-                },
+                bynk_ts::TsParam::new("ws".to_string(), Some(bynk_ts::TsType::named(ws_ty))),
+                bynk_ts::TsParam::new("code".to_string(), Some(bynk_ts::TsType::named("number"))),
+                bynk_ts::TsParam::new("reason".to_string(), Some(bynk_ts::TsType::named("string"))),
+                bynk_ts::TsParam::new(
+                    "wasClean".to_string(),
+                    Some(bynk_ts::TsType::named("boolean")),
+                ),
             ],
             Some(bynk_ts::TsType::named_with_args(
                 "globalThis.Promise",
@@ -9453,8 +9749,7 @@ fn emit_ws_dispatch_handlers(
             )),
             stmts,
         );
-        out.push_str(&bynk_ts::print_class_method(&close_method, 0));
-        writeln!(out).unwrap();
+        methods.push(close_method);
     }
 }
 

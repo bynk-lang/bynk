@@ -130,7 +130,6 @@ export class Shelf {
       });
     })))(), (__q) => __q);
   }
-
 }
 
 export function __makeShelf(key: string, env?: { SHELF?: __DurableObjectNamespace }): Shelf {

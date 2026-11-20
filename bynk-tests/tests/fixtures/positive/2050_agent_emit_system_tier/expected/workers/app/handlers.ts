@@ -92,7 +92,6 @@ export class Counter {
     }
     return new globalThis.Response("Not Found", { status: 404 });
   }
-
 }
 
 const __CounterWire: __AgentWire = {

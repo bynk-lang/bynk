@@ -227,24 +227,16 @@ impl<'a> LowerCtx<'a> {
                     WitnessKind::Cmp => {
                         let ident = cmp::witness_ident(&p);
                         self.cmp_scope.insert(p.clone(), ident.clone());
-                        bynk_ts::TsParam {
-                            name: ident,
-                            ty: Some(bynk_ts::TsType::named(format!(
+                        bynk_ts::TsParam::new(ident, Some(bynk_ts::TsType::named(format!(
                                 "(a: {p}, b: {p}) => number"
-                            ))),
-                            optional: false,
-                        }
+                            ))))
                     }
                     WitnessKind::Codec => {
                         let ident = codec::witness_ident(&p);
                         self.codec_scope.insert(p.clone(), ident.clone());
-                        bynk_ts::TsParam {
-                            name: ident,
-                            ty: Some(bynk_ts::TsType::named(format!(
+                        bynk_ts::TsParam::new(ident, Some(bynk_ts::TsType::named(format!(
                                 "{{ encode: (v: {p}) => __JsonValue; decode: (j: __JsonValue, path: string) => Result<{p}, __BoundaryError> }}"
-                            ))),
-                            optional: false,
-                        }
+                            ))))
                     }
                 }
             })

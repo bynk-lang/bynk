@@ -271,11 +271,7 @@ fn fanout_events(context: &str, layout: &bynk_project::worker_layout::WorkerLayo
         return ident("events");
     }
     let tagged = TsExpr::Arrow {
-        params: vec![TsParam {
-            name: "e".to_string(),
-            ty: None,
-            optional: false,
-        }],
+        params: vec![TsParam::new("e".to_string(), None)],
         is_async: false,
         generics: Vec::new(),
         return_type: None,
@@ -670,14 +666,13 @@ pub fn emit_worker_compose(
     if uses_emit {
         let bind = events_fanout_binding().name;
         let arrow = TsExpr::Arrow {
-            params: vec![TsParam {
-                name: "events".to_string(),
-                ty: Some(TsType::named_with_args(
+            params: vec![TsParam::new(
+                "events".to_string(),
+                Some(TsType::named_with_args(
                     "globalThis.Array",
                     vec![TsType::named(crate::emitter::EVENTS_WIRE_EVENT_TS_TYPE)],
                 )),
-                optional: false,
-            }],
+            )],
             is_async: false,
             generics: Vec::new(),
             return_type: None,
@@ -952,33 +947,27 @@ pub fn emit_worker_compose(
     }
     append_missing_bindings(&mut runtime_imports, &runtime_use.cmp_imports());
 
-    let mut compose_params = vec![TsParam {
-        name: "env".to_string(),
-        ty: Some(TsType::named("Env")),
-        optional: false,
-    }];
+    let mut compose_params = vec![TsParam::new("env".to_string(), Some(TsType::named("Env")))];
     // Locale capability track, slice 2 (#882): `request` is threaded
     // independently of `exec` — the two-way independence matters because
     // `scheduled`/`queue` (which never have a `request`) may still use
     // `detach` (`exec`), and a `fetch`-only Worker with no message bundle needs
     // neither.
     if needs_request {
-        compose_params.push(TsParam {
-            name: "request".to_string(),
-            ty: Some(TsType::named("globalThis.Request")),
-            optional: true,
-        });
+        compose_params.push(TsParam::optional(
+            "request".to_string(),
+            Some(TsType::named("globalThis.Request")),
+        ));
     }
     // L7 (#2414, Decision E): an `EdgeCache` instance is built from the
     // entry's `ctx` (`new WorkersEdgeCache(exec)`), so compose takes it even
     // when nothing sends; optional then, as the entry's own `ctx` is.
     let edge_cache = table.derived.values().any(|d| d.is_edge_cache());
     if edge_cache && !ctx_uses_send {
-        compose_params.push(TsParam {
-            name: "exec".to_string(),
-            ty: Some(TsType::named("unknown")),
-            optional: true,
-        });
+        compose_params.push(TsParam::optional(
+            "exec".to_string(),
+            Some(TsType::named("unknown")),
+        ));
     }
     if ctx_uses_send {
         compose_params.push(TsParam {
@@ -993,6 +982,7 @@ pub fn emit_worker_compose(
                 "{ waitUntil(promise: globalThis.Promise<unknown>): void }",
             )),
             optional: false,
+            rest: false,
         });
     }
 
@@ -1236,14 +1226,15 @@ fn emit_call_wrapper(
     let mut params: Vec<TsParam> = h
         .params
         .iter()
-        .map(|p| TsParam {
-            name: wire_ident(&p.name.name),
-            ty: Some(crate::emitter::ts_types::ts_type_ref_qualified_ts_type(
-                &p.type_ref,
-                &scope,
-                "handlers",
-            )),
-            optional: false,
+        .map(|p| {
+            TsParam::new(
+                wire_ident(&p.name.name),
+                Some(crate::emitter::ts_types::ts_type_ref_qualified_ts_type(
+                    &p.type_ref,
+                    &scope,
+                    "handlers",
+                )),
+            )
         })
         .collect();
     let param_args: Vec<TsExpr> = h
@@ -1261,21 +1252,16 @@ fn emit_call_wrapper(
     let deps_expr = if let Some(members) = &call_sum {
         params.insert(
             0,
-            TsParam {
-                name: "__who".to_string(),
-                ty: Some(crate::emitter::emit::call_sum_ts_type(members)),
-                optional: false,
-            },
+            TsParam::new(
+                "__who".to_string(),
+                Some(crate::emitter::emit::call_sum_ts_type(members)),
+            ),
         );
         deps_spread_with("who", ident("__who"))
     } else if bynk_check::actors::caller_binder_for(h, actors).is_some() {
         params.insert(
             0,
-            TsParam {
-                name: "__caller".to_string(),
-                ty: Some(TsType::named("string")),
-                optional: false,
-            },
+            TsParam::new("__caller".to_string(), Some(TsType::named("string"))),
         );
         deps_spread_with("identity", ident("__caller"))
     } else {
@@ -1325,13 +1311,12 @@ fn emit_rejected_wrapper(sname: &str) -> TsObjectEntry {
         name: format!("rejected_{sname}"),
         is_async: true,
         generics: Vec::new(),
-        params: vec![TsParam {
-            name: "why".to_string(),
-            ty: Some(TsType::named(
+        params: vec![TsParam::new(
+            "why".to_string(),
+            Some(TsType::named(
                 "{ readonly tag: string; readonly detail: string }",
             )),
-            optional: false,
-        }],
+        )],
         return_type: None,
         doc: None,
         inline: false,
@@ -1371,16 +1356,8 @@ fn emit_event_wrapper(sname: &str, h: &Handler, protocol: &ServiceProtocol) -> T
         is_async: true,
         generics: Vec::new(),
         params: vec![
-            TsParam {
-                name: "payload".to_string(),
-                ty: Some(TsType::named("unknown")),
-                optional: false,
-            },
-            TsParam {
-                name: "envelope".to_string(),
-                ty: Some(TsType::named("unknown")),
-                optional: false,
-            },
+            TsParam::new("payload".to_string(), Some(TsType::named("unknown"))),
+            TsParam::new("envelope".to_string(), Some(TsType::named("unknown"))),
         ],
         return_type: None,
         doc: None,
@@ -1403,10 +1380,11 @@ fn emit_cron_wrapper(sname: &str, cron_idx: usize, h: &Handler) -> TsObjectEntry
     let params: Vec<TsParam> = h
         .params
         .iter()
-        .map(|p| TsParam {
-            name: wire_ident(&p.name.name),
-            ty: Some(qualified_ts_type_ref(&p.type_ref)),
-            optional: false,
+        .map(|p| {
+            TsParam::new(
+                wire_ident(&p.name.name),
+                Some(qualified_ts_type_ref(&p.type_ref)),
+            )
         })
         .collect();
     let mut call_args: Vec<TsExpr> = h
@@ -1493,10 +1471,11 @@ fn emit_queue_wrapper(
     let mut params: Vec<TsParam> = h
         .params
         .iter()
-        .map(|p| TsParam {
-            name: wire_ident(&p.name.name),
-            ty: Some(qualified_ts_type_ref(&p.type_ref)),
-            optional: false,
+        .map(|p| {
+            TsParam::new(
+                wire_ident(&p.name.name),
+                Some(qualified_ts_type_ref(&p.type_ref)),
+            )
         })
         .collect();
     let mut call_args: Vec<TsExpr> = h
@@ -1506,11 +1485,10 @@ fn emit_queue_wrapper(
         .collect();
     match email {
         Some(actors) => {
-            params.push(TsParam {
-                name: "__sender".to_string(),
-                ty: Some(TsType::named("__SenderIdentity")),
-                optional: false,
-            });
+            params.push(TsParam::new(
+                "__sender".to_string(),
+                Some(TsType::named("__SenderIdentity")),
+            ));
             if bynk_check::actors::sender_binder_for(h, actors).is_some() {
                 call_args.push(deps_spread_with("identity", ident("__sender")));
             } else {
@@ -1571,16 +1549,15 @@ fn emit_websocket_upgrade(
     // entry before this wrapper is called), just not yet refined/branded.
     // `unknown` was one step too vague for `.of`'s own `string`-typed
     // constructor parameter.
-    let mut params: Vec<TsParam> = vec![TsParam {
-        name: "request".to_string(),
-        ty: Some(TsType::named("globalThis.Request")),
-        optional: false,
-    }];
-    params.extend(h.params.iter().map(|p| TsParam {
-        name: wire_ident(&p.name.name),
-        ty: Some(TsType::named("string")),
-        optional: false,
-    }));
+    let mut params: Vec<TsParam> = vec![TsParam::new(
+        "request".to_string(),
+        Some(TsType::named("globalThis.Request")),
+    )];
+    params.extend(
+        h.params
+            .iter()
+            .map(|p| TsParam::new(wire_ident(&p.name.name), Some(TsType::named("string")))),
+    );
     let method_name = format!("ws_{sname}_open");
 
     let mut stmts: Vec<TsStmt> = Vec::new();
@@ -2089,15 +2066,15 @@ fn emit_http_wrapper(
         // (a `Named` type via `.of(...)`, a bare `String` trivially) before
         // ever calling into this wrapper, so the real type is what's actually
         // known here.
-        let mut params: Vec<TsParam> = vec![TsParam {
-            name: "request".to_string(),
-            ty: Some(TsType::named("globalThis.Request")),
-            optional: false,
-        }];
-        params.extend(h.params.iter().map(|p| TsParam {
-            name: wire_ident(&p.name.name),
-            ty: Some(qualified_ts_type_ref(&p.type_ref)),
-            optional: false,
+        let mut params: Vec<TsParam> = vec![TsParam::new(
+            "request".to_string(),
+            Some(TsType::named("globalThis.Request")),
+        )];
+        params.extend(h.params.iter().map(|p| {
+            TsParam::new(
+                wire_ident(&p.name.name),
+                Some(qualified_ts_type_ref(&p.type_ref)),
+            )
         }));
         let secret = crate::emitter::escape_ts_string(&seam.secret);
         let mut stmts: Vec<TsStmt> = Vec::new();
@@ -2202,10 +2179,11 @@ fn emit_http_wrapper(
     let params: Vec<TsParam> = h
         .params
         .iter()
-        .map(|p| TsParam {
-            name: wire_ident(&p.name.name),
-            ty: Some(qualified_ts_type_ref(&p.type_ref)),
-            optional: false,
+        .map(|p| {
+            TsParam::new(
+                wire_ident(&p.name.name),
+                Some(qualified_ts_type_ref(&p.type_ref)),
+            )
         })
         .collect();
     let mut call_args = param_args;
@@ -2252,15 +2230,15 @@ fn emit_http_oidc_wrapper(
     let jwks = crate::emitter::escape_ts_string(&seam.jwks);
 
     // P7.2: real declared types — same correction as `emit_http_wrapper`'s own.
-    let mut params: Vec<TsParam> = vec![TsParam {
-        name: "request".to_string(),
-        ty: Some(TsType::named("globalThis.Request")),
-        optional: false,
-    }];
-    params.extend(h.params.iter().map(|p| TsParam {
-        name: wire_ident(&p.name.name),
-        ty: Some(qualified_ts_type_ref(&p.type_ref)),
-        optional: false,
+    let mut params: Vec<TsParam> = vec![TsParam::new(
+        "request".to_string(),
+        Some(TsType::named("globalThis.Request")),
+    )];
+    params.extend(h.params.iter().map(|p| {
+        TsParam::new(
+            wire_ident(&p.name.name),
+            Some(qualified_ts_type_ref(&p.type_ref)),
+        )
     }));
     let mut stmts: Vec<TsStmt> = Vec::new();
     stmts.push(const_(
@@ -2483,15 +2461,15 @@ fn emit_http_signed_cookie_wrapper(
         .iter()
         .map(|p| ident(wire_ident(&p.name.name)))
         .collect();
-    let mut params: Vec<TsParam> = vec![TsParam {
-        name: "request".to_string(),
-        ty: Some(TsType::named("globalThis.Request")),
-        optional: false,
-    }];
-    params.extend(h.params.iter().map(|p| TsParam {
-        name: wire_ident(&p.name.name),
-        ty: Some(qualified_ts_type_ref(&p.type_ref)),
-        optional: false,
+    let mut params: Vec<TsParam> = vec![TsParam::new(
+        "request".to_string(),
+        Some(TsType::named("globalThis.Request")),
+    )];
+    params.extend(h.params.iter().map(|p| {
+        TsParam::new(
+            wire_ident(&p.name.name),
+            Some(qualified_ts_type_ref(&p.type_ref)),
+        )
     }));
     let mut stmts: Vec<TsStmt> = Vec::new();
     if !matches!(method, bynk_model::IrHttpMethod::Get) {
@@ -2630,16 +2608,15 @@ fn emit_http_sum_wrapper(
         .filter(|p| p.name.name != "body")
         .map(|p| (wire_ident(&p.name.name), p.type_ref.clone()))
         .collect();
-    let mut params: Vec<TsParam> = vec![TsParam {
-        name: "request".to_string(),
-        ty: Some(TsType::named("globalThis.Request")),
-        optional: false,
-    }];
-    params.extend(path_params.iter().map(|(n, ty)| TsParam {
-        name: n.clone(),
-        ty: Some(qualified_ts_type_ref(ty)),
-        optional: false,
-    }));
+    let mut params: Vec<TsParam> = vec![TsParam::new(
+        "request".to_string(),
+        Some(TsType::named("globalThis.Request")),
+    )];
+    params.extend(
+        path_params
+            .iter()
+            .map(|(n, ty)| TsParam::new(n.clone(), Some(qualified_ts_type_ref(ty)))),
+    );
     let mut stmts: Vec<TsStmt> = Vec::new();
 
     // Read the raw body once if a member verifies over it (Signature) or the

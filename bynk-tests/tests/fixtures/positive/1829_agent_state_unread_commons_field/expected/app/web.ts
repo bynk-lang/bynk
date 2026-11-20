@@ -93,7 +93,6 @@ export class Shelf {
     await this.commitState(__state);
     return __result;
   }
-
 }
 
 export function __makeShelf(key: string, env?: { SHELF?: __DurableObjectNamespace }): Shelf {

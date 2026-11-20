@@ -98,7 +98,6 @@ export class Cart {
     const __state = await this.loadState();
     return __bynkThen(((() => __state.items.values()))(), (__q) => __q.length);
   }
-
 }
 
 export function __makeCart(key: UserId, env?: { CART?: __DurableObjectNamespace }): Cart {
