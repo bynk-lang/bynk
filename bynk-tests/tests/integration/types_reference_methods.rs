@@ -16,27 +16,45 @@ fn types_reference() -> String {
     fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()))
 }
 
+/// The part of `page` from the `heading` line to the next heading of the same level.
+fn section<'a>(page: &'a str, heading: &str) -> &'a str {
+    let start = page
+        .find(&format!("\n{heading}\n"))
+        .unwrap_or_else(|| panic!("reference/types.md has no `{heading}` heading"));
+    let body = &page[start + 1..];
+    let level = heading.split(' ').next().unwrap();
+    let end = body[1..]
+        .find(&format!("\n{level} "))
+        .map_or(body.len(), |i| i + 1);
+    &body[..end]
+}
+
 #[test]
 fn the_types_reference_lists_every_kernel_method() {
     let page = types_reference();
-    let kernels: [(&str, &[KernelMethod]); 6] = [
-        ("String", StringOp::TABLE),
-        ("List", ListOp::TABLE),
-        ("Map", MapOp::TABLE),
-        ("Set", SetOp::TABLE),
-        ("Option", OptionOp::TABLE),
-        ("Result", ResultOp::TABLE),
+    // Each receiver is checked only where its own methods are written, so a
+    // method that several receivers share (`map`, `length`, `get`) is found on
+    // the right row rather than on another receiver's. The tables write a
+    // method on a named receiver (`s.trim()`, `xs.map(f)`); `Set` lists its
+    // kernel in its own section as `insert(x)`.
+    let set = section(&page, "## Set");
+    let kernels: [(&str, &[KernelMethod], &[&str], &str); 6] = [
+        ("String", StringOp::TABLE, &["`s."], &page),
+        ("List", ListOp::TABLE, &["`xs.", "`rs."], &page),
+        ("Map", MapOp::TABLE, &["`m."], &page),
+        ("Set", SetOp::TABLE, &["`"], set),
+        ("Option", OptionOp::TABLE, &["`o."], &page),
+        ("Result", ResultOp::TABLE, &["`r."], &page),
     ];
     let missing: Vec<String> = kernels
         .iter()
-        .flat_map(|(receiver, table)| {
+        .flat_map(|(receiver, table, prefixes, text)| {
             table
                 .iter()
-                // A method appears as code: `x.name(…)` in a table, or `name(…)`
-                // in a list of them.
                 .filter(|m| {
-                    !page.contains(&format!(".{}(", m.name))
-                        && !page.contains(&format!("`{}(", m.name))
+                    !prefixes
+                        .iter()
+                        .any(|p| text.contains(&format!("{p}{}(", m.name)))
                 })
                 .map(move |m| format!("{receiver}.{}", m.name))
         })
