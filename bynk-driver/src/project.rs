@@ -30,6 +30,7 @@ use bynk_check::checker;
 use bynk_check::checker::{ExprId, TyId, Types};
 use bynk_check::d1_migrations::pglite_on;
 use bynk_check::expr_types::ExprTypeSink;
+use bynk_check::firstparty::FirstPartyCap;
 use bynk_check::firstparty::{self, Platform};
 use bynk_check::hints::HintSink;
 use bynk_check::index::RefSink;
@@ -2368,11 +2369,16 @@ fn check_unit_files(
         unit_callees.extend(program.program().callees.iter().filter_map(|(id, c)| {
             let keep = match c {
                 bynk_check::checker::Callee::Cross { .. } => true,
-                bynk_check::checker::Callee::Capability { cap, op, .. } => {
-                    (cap == "Events" && op == "emit") || cap == "Idempotency"
+                bynk_check::checker::Callee::Capability {
+                    op, first_party, ..
+                } => {
+                    (*first_party == Some(FirstPartyCap::Events) && op == "emit")
+                        || *first_party == Some(FirstPartyCap::Idempotency)
                 }
                 // W30 (#2840): an `Idempotency` call through a consumed context's qualified name.
-                bynk_check::checker::Callee::CrossCap { cap, .. } => cap == "Idempotency",
+                bynk_check::checker::Callee::CrossCap { first_party, .. } => {
+                    *first_party == Some(FirstPartyCap::Idempotency)
+                }
                 _ => false,
             };
             keep.then(|| (*id, c.clone()))
@@ -3944,11 +3950,7 @@ impl WorkersEmit<'_> {
             needs_kv,
             worker_bindings::singletons_of(context_singletons, ctx_name),
             ctx_uses_emit,
-            unit_table_uses_idempotency(
-                table,
-                unit_callees.get(ctx_name),
-                unit_flattened.get(ctx_name),
-            ),
+            unit_table_uses_idempotency(table, unit_callees.get(ctx_name)),
         );
         // #3477: a container's image is built from a directory of the
         // project, which `wrangler` reaches from the Worker's output

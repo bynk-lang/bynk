@@ -54,14 +54,11 @@ pub(crate) struct ModuleCtx<'a> {
     /// #2887: a consumed type this module renames, alias → the name its
     /// context declares and exports.
     pub(super) consumed_type_declared: HashMap<String, String>,
-    /// #934: true when the unit being emitted is the reserved first-party
-    /// `bynk` adapter itself. `bynk` is a reserved namespace, so a capability
-    /// literally named `Idempotency` declared *in this unit* is unambiguously
-    /// the real one — used alongside `CrossContextInfo::flattened_caps` (the
-    /// consumed-from-elsewhere case) to confirm a flattened `Idempotency`
-    /// call is genuinely first-party before scoping its key, not a same-named
-    /// capability some other adapter or context happens to declare.
-    pub(super) in_bynk_unit: bool,
+    /// The name of the unit being emitted. `bynk` is a reserved namespace, so a capability
+    /// declared *in the `bynk` unit* is bynk's own: read, alongside
+    /// `CrossContextInfo::flattened_caps` (the consumed-from-elsewhere case), by
+    /// [`bynk_check::firstparty::resolve`] (#934, 1A.33).
+    pub(super) unit_name: String,
     /// #1961: [`crate::emit_model::EmitProjectCtx::agent_called_contexts`].
     pub(super) agent_called_contexts: Vec<String>,
     /// #2045: [`crate::emit_model::EmitProjectCtx::consumed_context_types`]. A
@@ -115,7 +112,7 @@ impl<'a> ModuleCtx<'a> {
     /// What the unit being emitted tells every body it lowers: whether it is the
     /// reserved `bynk` adapter, and (#3580) where a traced build names call sites.
     pub(super) fn note_unit(&mut self, ctx: &EmitProjectCtx) {
-        self.in_bynk_unit = ctx.commons_name == "bynk";
+        self.unit_name = ctx.commons_name.clone();
         self.trace = ctx.trace.clone();
     }
 
@@ -157,7 +154,7 @@ impl<'a> ModuleCtx<'a> {
             event_schema_versions: HashMap::new(),
             consumed_type_ns: HashMap::new(),
             consumed_type_declared: HashMap::new(),
-            in_bynk_unit: false,
+            unit_name: String::new(),
             agent_called_contexts: Vec::new(),
             consumed_context_types: HashSet::new(),
             trace: None,
@@ -285,6 +282,11 @@ pub(crate) struct AgentStoreState {
     /// general query vocabulary — mirrors `held_maps`'s own construction
     /// exactly, just for the non-held case.
     pub(super) map_values: HashMap<String, bynk_ts::TsType>,
+    /// 1A.33: the plain `store Map` fields whose resolved value type is a `Connection`
+    /// (from the checker's `StoreKindIr::Map`), so a `put` that displaces one and a `remove`
+    /// that drops one close it (#3261, #3224). Decided on the model type, not on the text of
+    /// the rendered value type.
+    pub(super) connection_maps: HashSet<String>,
     /// Review of #1460: a `store Log[T]` field's own element type `T` (name →
     /// its rendered TS type), for the identical reason `map_values` exists —
     /// a Log's value scan is also lifted into the general query vocabulary.

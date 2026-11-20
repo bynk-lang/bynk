@@ -359,7 +359,7 @@ pub(super) fn all_context_bindings(
                 needs_kv(&context_native, ctx),
                 singletons_of(&context_singletons, ctx),
                 unit_table_uses_emit(table, unit_callees.get(ctx)),
-                unit_table_uses_idempotency(table, unit_callees.get(ctx), unit_flattened.get(ctx)),
+                unit_table_uses_idempotency(table, unit_callees.get(ctx)),
             ),
         );
     }

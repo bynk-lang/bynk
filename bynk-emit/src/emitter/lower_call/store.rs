@@ -355,8 +355,7 @@ fn lower_store_held_map_call(
 /// Whether a plain `store Map`'s value type is a `Connection`: such a map closes the
 /// connection a `put` displaces and a `remove` drops (#3261, #3224).
 fn map_holds_connections(cx: &LowerCtx, field: &str) -> bool {
-    cx.agent_store_map_value_ts(field)
-        .is_some_and(|v| matches!(v, TsType::Named { name, .. } if name == "Connection"))
+    cx.agent_store_map_holds_connections(field)
 }
 
 /// Lower a persisted `store Map[K, V]` operation, including the `@indexed` posting-list maintenance, or `None` when the receiver is not that kind of store

@@ -6,6 +6,7 @@ use super::lower_call::test_calls::debug_str;
 use super::lower_list::{call, id};
 use super::ts_types::ts_ty;
 use super::*;
+use bynk_check::firstparty::FirstPartyCap;
 
 /// Per-body lowering context: what module we are emitting into ([`ModuleCtx`]),
 /// what kind of body we are lowering ([`BodyMode`]), and the scratch state the
@@ -86,11 +87,6 @@ pub(crate) struct LowerCtx<'a> {
     /// narrowing to a binding read elsewhere, so `emit_is_test_bindings` reads
     /// those bindings through a cast to the variant the checker proved.
     pub(crate) unnarrowed_is_tests: HashSet<bynk_syntax::span::Span>,
-    /// Variable bindings that point at agent instances. Updated by the
-    /// statement emitter when it sees `let x = AgentName(key)`. Used by
-    /// the method-call lowering so `x.method(args)` resolves through
-    /// the agent's class rather than via the receiver-namespace lookup.
-    pub local_agent_vars: HashMap<String, String>,
     /// v0.182 (#664): while lowering an `EffectLet` whose value addresses a
     /// service handler, the call-site principal's identity expression (already
     /// lowered), if the statement carries `by <Actor>(<identity>)`. The
@@ -190,7 +186,6 @@ impl<'a> LowerCtx<'a> {
             is_receiver_temps: HashMap::new(),
             is_temp_hoist: None,
             unnarrowed_is_tests: HashSet::new(),
-            local_agent_vars: HashMap::new(),
             call_site_identity: None,
             call_site_claims: None,
             call_site_claim_lines: None,
@@ -361,9 +356,22 @@ impl<'a> LowerCtx<'a> {
         matches!(self.mode, BodyMode::ServiceHandler { .. })
     }
 
-    /// #934: true when the unit being emitted is the first-party `bynk` adapter.
-    pub(crate) fn in_bynk_unit(&self) -> bool {
-        self.module.in_bynk_unit
+    /// 1A.33: whether the capability `cap` is bynk's own as this unit sees it: declared here
+    /// (this unit *is* `bynk`) or flattened in from it. The same rule the checker records on
+    /// each call ([`bynk_check::firstparty::resolve`]); a same-named capability from any other
+    /// adapter or context is not it (#934). For a unit-level decision with no call to read.
+    pub(crate) fn is_first_party(&self, cap: FirstPartyCap) -> bool {
+        self.first_party_cap(cap.name()) == Some(cap)
+    }
+
+    /// 1A.33: which first-party capability the name `cap` is in this unit, if any
+    /// ([`bynk_check::firstparty::resolve`]).
+    pub(crate) fn first_party_cap(&self, cap: &str) -> Option<FirstPartyCap> {
+        bynk_check::firstparty::resolve(
+            cap,
+            &self.module.unit_name,
+            &self.cross_context().flattened_caps,
+        )
     }
 
     // ---- capability-bearing (`HandlerShared`) state ------------------------
@@ -703,6 +711,13 @@ impl<'a> LowerCtx<'a> {
             .is_some_and(|s| s.held_maps.contains_key(name))
     }
 
+    /// 1A.33: whether the plain `store Map` field `name` holds `Connection` values, by its
+    /// resolved model type.
+    pub(crate) fn agent_store_map_holds_connections(&self, name: &str) -> bool {
+        self.agent_store()
+            .is_some_and(|s| s.connection_maps.contains(name))
+    }
+
     /// Review of #1460: the value type `V` of the plain `store Map[K, V]`
     /// field `name`, if it is one (`None` for a held map — see
     /// [`Self::agent_held_map_frame`] instead).
@@ -1005,27 +1020,6 @@ impl<'a> LowerCtx<'a> {
             }),
             _ => None,
         }
-    }
-
-    /// Events track, slice 0 (spine #936): true when a bare `Events`
-    /// receiver in this unit is genuinely the first-party `bynk.Events`
-    /// capability — declared here because this unit *is* `bynk`, or
-    /// flattened in from it (`consumes bynk { Events }`) — not some other,
-    /// unrelated capability that merely happens to share the name. Mirrors
-    /// #934's `Idempotency` distinction (`is_first_party` at the
-    /// `Idempotency.dedup`/`remember` lowering site). Both the call-site
-    /// interception (`lower.rs`) and the `__events` buffer declaration
-    /// (`block_uses_emit`'s gate in `emit.rs`) must agree on this, or a
-    /// custom same-named `Events` capability's calls get silently rewritten
-    /// into a buffer nothing constructs a provider for.
-    pub(crate) fn is_first_party_events(&self) -> bool {
-        self.in_bynk_unit()
-            || self
-                .cross_context()
-                .flattened_caps
-                .get("Events")
-                .map(String::as_str)
-                == Some("bynk")
     }
 
     /// #2058: the type names a consumed context declares, each with the

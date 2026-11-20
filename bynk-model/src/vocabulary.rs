@@ -532,6 +532,20 @@ impl IrHttpMethod {
     }
 }
 
+impl From<bynk_syntax::ast::HttpMethod> for IrHttpMethod {
+    /// The method the checker resolved (a typed `HandlerAddress`, say), without a spelling in between.
+    fn from(m: bynk_syntax::ast::HttpMethod) -> IrHttpMethod {
+        use bynk_syntax::ast::HttpMethod;
+        match m {
+            HttpMethod::Get => IrHttpMethod::Get,
+            HttpMethod::Post => IrHttpMethod::Post,
+            HttpMethod::Put => IrHttpMethod::Put,
+            HttpMethod::Patch => IrHttpMethod::Patch,
+            HttpMethod::Delete => IrHttpMethod::Delete,
+        }
+    }
+}
+
 /// Events track, slice 0 (spine #936): does this block contain a real
 /// `Events.emit[...]` call anywhere — including nested branches, match arms,
 /// lambdas, and any other expression position (a `Paren`, an `Ok`/`Err`
@@ -568,8 +582,11 @@ pub fn block_uses_emit(b: &Block, callees: &HashMap<ExprId, bynk_check::checker:
         if !found
             && matches!(
                 callees.get(&e.id),
-                Some(bynk_check::checker::Callee::Capability { cap, op, .. })
-                    if cap == "Events" && op == "emit"
+                Some(bynk_check::checker::Callee::Capability {
+                    op,
+                    first_party: Some(bynk_check::firstparty::FirstPartyCap::Events),
+                    ..
+                }) if op == "emit"
             )
         {
             found = true;

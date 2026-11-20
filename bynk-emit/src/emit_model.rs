@@ -14,6 +14,7 @@ use std::path::{Path, PathBuf};
 use crate::emitter;
 use bynk_check::actors::ActorDecl;
 use bynk_check::checker::ExprId;
+use bynk_check::firstparty::FirstPartyCap;
 use bynk_check::project_model::BuildTarget;
 use bynk_check::project_model::{AdapterBinding, Visibility, resolve_consume_prefix};
 use bynk_check::resolver::{self};
@@ -767,8 +768,7 @@ pub fn instantiate_provider_ts_expr(
     // provider's construction is unaffected since every other call site
     // passes `None`.
     if provider.external
-        && provider_ctx == bynk_check::firstparty::BYNK_UNIT
-        && provider.provider_name.name == "LocaleProvider"
+        && first_party_of(cap, provider_ctx) == Some(FirstPartyCap::Locale)
         && let Some(loc) = locale_negotiation
     {
         args.push(bynk_ts::TsExpr::Ident(loc.request_expr.clone()));
@@ -789,8 +789,7 @@ pub fn instantiate_provider_ts_expr(
             },
             Some(env),
         ) = (namespaces, env_ident)
-            && provider_ctx == bynk_check::firstparty::BYNK_UNIT
-            && cap == "Clock"
+            && first_party_of(cap, provider_ctx) == Some(FirstPartyCap::Clock)
         {
             return harness_clock_or(env, &format!("{ns}__binding.{class}"), built);
         }
@@ -879,16 +878,22 @@ pub fn unit_table_uses_emit(
     bynk_check::project_model::unit_table_uses_emit(table, callees)
 }
 
+/// Whether `cap`, a capability declared by the unit `provider_ctx` (a provider's own unit),
+/// is bynk's own, and which one (1A.33: [`bynk_check::firstparty::resolve`]). A provider's
+/// capability is declared in its own unit, so nothing is flattened into it.
+fn first_party_of(cap: &str, provider_ctx: &str) -> Option<FirstPartyCap> {
+    bynk_check::firstparty::resolve(cap, provider_ctx, &HashMap::new())
+}
+
 /// W30 (#2840): does any body in this unit call the first-party `Idempotency`
 /// (`claim`, `dedup` or `remember`)? A Worker that does declares the implicit
-/// database that holds its claims and remembered values. `flattened` is the unit's flattened-consume map
-/// (`consumes bynk { Idempotency }` makes `Idempotency` a local name for the
+/// database that holds its claims and remembered values. The checker resolved each call's
+/// first-party identity (`consumes bynk { Idempotency }` makes `Idempotency` a local name for the
 /// `bynk` capability), so a same-named capability from another unit does not
 /// count, as for the key scoping in `scope_idempotency_key`.
 pub fn unit_table_uses_idempotency(
     table: &UnitTable,
     callees: Option<&HashMap<ExprId, bynk_check::checker::Callee>>,
-    flattened: Option<&HashMap<String, String>>,
 ) -> bool {
     let Some(callees) = callees else {
         return false;
@@ -898,16 +903,18 @@ pub fn unit_table_uses_idempotency(
         use bynk_check::checker::Callee;
         if !found {
             found = match callees.get(&e.id) {
-                Some(Callee::Capability { cap, op, .. }) => {
-                    cap == "Idempotency"
-                        && matches!(op.as_str(), "claim" | "dedup" | "remember")
-                        && flattened.and_then(|f| f.get(cap)).map(String::as_str) == Some("bynk")
-                }
-                Some(Callee::CrossCap { unit, cap, op, .. }) => {
-                    unit == "bynk"
-                        && cap == "Idempotency"
-                        && matches!(op.as_str(), "claim" | "dedup" | "remember")
-                }
+                Some(
+                    Callee::Capability {
+                        op,
+                        first_party: Some(FirstPartyCap::Idempotency),
+                        ..
+                    }
+                    | Callee::CrossCap {
+                        op,
+                        first_party: Some(FirstPartyCap::Idempotency),
+                        ..
+                    },
+                ) => matches!(op.as_str(), "claim" | "dedup" | "remember"),
                 _ => false,
             };
         }

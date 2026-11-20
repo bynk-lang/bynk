@@ -6,7 +6,8 @@
 
 use std::sync::Arc;
 
-use bynk_check::checker::{NamedKind, Ty, TyId};
+use bynk_check::checker::{Callee, NamedKind, Ty, TyId};
+use bynk_check::kernel_op::{StaticOp, TokenClaimsStatic};
 use bynk_syntax::ast::{
     BaseType, BinOp, Block, Expr, ExprKind, MatchArm, Pattern, PatternBindingKind, Statement,
     TypeBody,
@@ -909,15 +910,19 @@ fn lower_effect_let_value(
             // and never builds the in-process `TokenClaims` value, so the
             // lines are lowered once and in place of it.
             let literal_lines = match principal.claims.as_deref().map(|c| &c.kind) {
-                Some(ExprKind::MethodCall {
-                    receiver,
-                    method,
-                    args,
-                    ..
-                }) if cx.is_system_oidc_body()
-                    && method.name == "of"
-                    && args.len() == 1
-                    && matches!(&receiver.kind, ExprKind::Ident(id) if id.name == "TokenClaims") =>
+                Some(ExprKind::MethodCall { args, .. })
+                    if cx.is_system_oidc_body()
+                        && args.len() == 1
+                        && matches!(
+                            principal
+                                .claims
+                                .as_deref()
+                                .and_then(|c| cx.commons().callee(c.id)),
+                            Some(Callee::Intrinsic {
+                                op_t: StaticOp::TokenClaims(TokenClaimsStatic::Of),
+                                ..
+                            })
+                        ) =>
                 {
                     Some(&args[0])
                 }
@@ -1149,20 +1154,6 @@ fn statement(body: &mut Body, stmt: &Statement, cx: &mut LowerCtx) {
     body.push(Item::Mark(stmt.span()));
     match stmt {
         Statement::Let(l) => {
-            // Track `let x = AgentName(key)` so subsequent `x.method(args)`
-            // calls can dispatch through the agent class.
-            if l.name.name != "_"
-                && let ExprKind::Call {
-                    name,
-                    args: ctor_args,
-                    ..
-                } = &l.value.kind
-                && cx.local_agents.contains(&name.name)
-                && ctor_args.len() == 1
-            {
-                cx.local_agent_vars
-                    .insert(l.name.name.clone(), name.name.clone());
-            }
             let mut pre = Pre::new();
             let value = pre.lower_node(&l.value, cx);
             body.extend(pre.items());

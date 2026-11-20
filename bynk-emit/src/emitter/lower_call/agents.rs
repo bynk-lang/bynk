@@ -109,22 +109,20 @@ pub(in crate::emitter) fn lower_let_bound_agent_call(
     //
     // P6.21 (partial, continued): reads `Callee::Agent` instead of
     // `cx.local_agent_vars.contains_key(&id.name)` — see the inline
-    // agent-invocation branch above. `cx.local_agent_vars` stays: it still
-    // answers "which agent does this bind name refer to" (needed for
-    // `record_agent_call`'s own bookkeeping and the #908 rename-resolution
-    // below), a different question from "is this receiver really an agent
-    // instance at all," which `Callee` now settles.
+    // agent-invocation branch above. 1A.33: the agent the binding refers to is the callee's
+    // own `agent` (the checker resolved it from the receiver's type), so `record_agent_call`
+    // and the trace target read it from there and the statement emitter no longer records
+    // `let x = Agent(key)` by name. The #908 rename below is lowering state
+    // (`resolved_local_name`): it answers what the JavaScript binding is called.
     if let ExprKind::Ident(id_) = &receiver.kind
-        && matches!(cx.commons().callee(e.id), Some(Callee::Agent { .. }))
+        && let Some(Callee::Agent { agent, .. }) = cx.commons().callee(e.id)
     {
-        if let Some(agent) = cx.local_agent_vars.get(&id_.name).cloned() {
-            cx.record_agent_call(&agent, &method.name);
-        }
+        let agent = agent.clone();
+        cx.record_agent_call(&agent, &method.name);
         let mut children: Vec<LoweredExpr> = args.iter().map(|a| pre.lower_node(a, cx)).collect();
         children.push(LoweredExpr::Node(cx.cap_deps_node()));
-        // #908: `local_agent_vars` is keyed by the bynk source name, which a
-        // re-`let` may have renamed — resolve to the actual JS binding rather
-        // than assuming the source name is still it.
+        // #908: the bynk source name may have been renamed by a re-`let` — resolve to the
+        // actual JS binding rather than assuming the source name is still it.
         let recv = cx
             .resolved_local_name(&id_.name)
             .unwrap_or_else(|| id_.name.clone());
@@ -133,10 +131,7 @@ pub(in crate::emitter) fn lower_let_bound_agent_call(
             |nodes| call(member(id(&recv), &method.name), nodes),
             |texts| format!("{}.{}({})", recv, method.name, texts.join(", ")),
         );
-        let target = match cx.local_agent_vars.get(&id_.name) {
-            Some(agent) => format!("{agent}.{}", method.name),
-            None => method.name.clone(),
-        };
+        let target = format!("{agent}.{}", method.name);
         return Some(trace_built(cx, &target, e.span.start, built));
     }
     None

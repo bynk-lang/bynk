@@ -6,7 +6,8 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use bynk_check::checker::{Callee, NamedKind, Ty, TyId, TypedCommons};
+use bynk_check::checker::{Callee, HandlerAddress, NamedKind, Ty, TyId, TypedCommons};
+use bynk_check::kernel_op::{IntrinsicNs, StaticOp};
 use bynk_syntax::ast::{
     BaseType, BinOp, Block, Expr, ExprKind, FaultsExpr, FieldInit, Ident, InterpPart, LambdaExpr,
     LiteralValue, MatchArm, ObservationExpr, ObservationMatcher, Pattern, PatternBindingKind,
@@ -345,9 +346,12 @@ fn settle_kind(
     // position is pure; called with `<-` it isn't a safe address, so it ends
     // the segment below.
     let safety = |e: &bynk_syntax::ast::Expr| match callees.get(&e.id) {
-        Some(Callee::TestService { address, .. }) => Some(matches!(
-            address.split(' ').next().unwrap_or_default(),
-            "GET" | "HEAD" | "OPTIONS"
+        Some(Callee::TestService { address_t, .. }) => Some(matches!(
+            address_t,
+            HandlerAddress::Http {
+                verb: bynk_syntax::ast::HttpMethod::Get,
+                ..
+            }
         )),
         Some(Callee::TestAssetFetch { .. }) => Some(true),
         Some(
@@ -1687,8 +1691,10 @@ pub(crate) fn lower_expr(e: &Expr, cx: &mut LowerCtx) -> Lowered {
         ExprKind::FieldAccess { .. }
             if matches!(
                 cx.commons().callees.get(&e.id),
-                Some(bynk_check::checker::Callee::Intrinsic { ns, .. })
-                    if *ns == bynk_check::checker::RUN_ID_NS
+                Some(bynk_check::checker::Callee::Intrinsic {
+                    ns_t: IntrinsicNs::TestRun,
+                    ..
+                })
             ) =>
         {
             // #2138: `run.id` — the module's `__bynkRunId`.
@@ -2506,7 +2512,7 @@ fn lower_method_call(e: &Expr, cx: &mut LowerCtx) -> Lowered {
     if let Some(built) = lower_scalar_static_call(e, receiver, method, args, cx, &mut pre) {
         return pre.finish_built(built);
     }
-    if let Some(built) = lower_runtime_value_static_call(e, receiver, method, args, cx, &mut pre) {
+    if let Some(built) = lower_runtime_value_static_call(e, receiver, args, cx, &mut pre) {
         return pre.finish_built(built);
     }
     // Capability, cross-context, events and static-type calls (#3167).
@@ -2541,10 +2547,10 @@ fn lower_method_call(e: &Expr, cx: &mut LowerCtx) -> Lowered {
     if let Some(built) = lower_test_asset_fetch_call(e, receiver, args, cx, &mut pre) {
         return pre.finish_built(built);
     }
-    if let Some(built) = lower_system_schedule_call(receiver, method, args, cx, &mut pre) {
+    if let Some(built) = lower_system_schedule_call(e, receiver, args, cx, &mut pre) {
         return pre.finish_built(built);
     }
-    if let Some(built) = lower_system_http_call(e, receiver, method, args, cx, &mut pre) {
+    if let Some(built) = lower_system_http_call(e, receiver, args, cx, &mut pre) {
         return pre.finish_built(built);
     }
     if let Some(built) = lower_test_service_call(e, receiver, method, args, cx, &mut pre) {
@@ -3529,7 +3535,10 @@ fn lower_ident(e: &Expr, id: &Ident, cx: &mut LowerCtx) -> Built {
     // name-matching (a shadowing local never types as `Ty::HttpResult`).
     if matches!(
         cx.commons().callee(e.id),
-        Some(Callee::Intrinsic { ns, .. }) if *ns == HTTP_RESULT
+        Some(Callee::Intrinsic {
+            ns_t: IntrinsicNs::HttpResult,
+            ..
+        })
     ) {
         cx.note_http_result();
         return Ok(member_node("HttpResult", &id.name));
@@ -3537,7 +3546,10 @@ fn lower_ident(e: &Expr, id: &Ident, cx: &mut LowerCtx) -> Built {
     // v0.44: a nullary QueueResult variant (`Ack`) constructs `QueueResult.Ack`.
     if matches!(
         cx.commons().callee(e.id),
-        Some(Callee::Intrinsic { ns, .. }) if *ns == QUEUE_RESULT
+        Some(Callee::Intrinsic {
+            ns_t: IntrinsicNs::QueueResult,
+            ..
+        })
     ) {
         cx.note_queue_result();
         return Ok(member_node("QueueResult", &id.name));
@@ -3621,15 +3633,23 @@ fn consumed_variant_literal(
 /// is an `ErrorStatus` name the checker resolved, so it lowers to its number
 /// (`Forbidden` → `403`), not to the `HttpResult` value of that name.
 pub(super) fn lower_http_variant_args(
-    variant: &str,
+    e: &Expr,
     args: &[Expr],
     pre: &mut Pre,
     cx: &mut LowerCtx,
 ) -> Vec<LoweredExpr> {
+    // 1A.33: the variant is the one the checker resolved, not the call's spelling.
+    let raw_error = matches!(
+        cx.commons().callee(e.id),
+        Some(Callee::Intrinsic {
+            op_t: StaticOp::HttpResult(v),
+            ..
+        }) if v.payload == bynk_syntax::ast::HttpVariantPayload::RawError
+    );
     args.iter()
         .enumerate()
         .map(|(i, a)| {
-            if variant == "RawError"
+            if raw_error
                 && i == 0
                 && let Some(status) = bynk_syntax::ast::raw_error_status(a)
             {
@@ -3683,7 +3703,7 @@ pub(super) fn settle_with(helper: Option<&'static str>, call: Built) -> Built {
 fn lower_call(e: &Expr, name: &Ident, args: &[Expr], cx: &mut LowerCtx) -> Lowered {
     let mut pre = Pre::new();
     // Bare variant constructor with payload → qualify.
-    let mut args_lowered = lower_http_variant_args(&name.name, args, &mut pre, cx);
+    let mut args_lowered = lower_http_variant_args(e, args, &mut pre, cx);
     // #2620: `unreachable(msg)` / `todo(msg)` lower to a call of the runtime's
     // `never`-returning `__fault`, which throws — valid in any expression
     // position, and inside an async body it rejects the effect.
@@ -3703,7 +3723,7 @@ fn lower_call(e: &Expr, name: &Ident, args: &[Expr], cx: &mut LowerCtx) -> Lower
     // #3051: `TestConnection[F]()` — a case's recording handle for a websocket
     // connection.
     if let Some(Callee::Intrinsic {
-        ns: "TestConnection",
+        ns_t: IntrinsicNs::TestConnection,
         ..
     }) = cx.commons().callee(e.id)
     {
@@ -3731,7 +3751,10 @@ fn lower_call(e: &Expr, name: &Ident, args: &[Expr], cx: &mut LowerCtx) -> Lower
     // `lower_ident`, not a new defect closure.
     if matches!(
         cx.commons().callee(e.id),
-        Some(Callee::Intrinsic { ns, .. }) if *ns == HTTP_RESULT
+        Some(Callee::Intrinsic {
+            ns_t: IntrinsicNs::HttpResult,
+            ..
+        })
     ) {
         cx.note_http_result();
         let callee = bynk_ts::TsExpr::Member {
@@ -3743,7 +3766,10 @@ fn lower_call(e: &Expr, name: &Ident, args: &[Expr], cx: &mut LowerCtx) -> Lower
     // v0.44: a QueueResult variant call (`Retry(reason)`) → `QueueResult.Retry(...)`.
     if matches!(
         cx.commons().callee(e.id),
-        Some(Callee::Intrinsic { ns, .. }) if *ns == QUEUE_RESULT
+        Some(Callee::Intrinsic {
+            ns_t: IntrinsicNs::QueueResult,
+            ..
+        })
     ) {
         cx.note_queue_result();
         let callee = bynk_ts::TsExpr::Member {
@@ -4640,7 +4666,10 @@ fn lower_field_access(e: &Expr, receiver: &Expr, field: &Ident, cx: &mut LowerCt
     if let ExprKind::Ident(_) = &receiver.kind
         && matches!(
             cx.commons().callee(e.id),
-            Some(Callee::Intrinsic { ns, .. }) if *ns == HTTP_RESULT
+            Some(Callee::Intrinsic {
+                ns_t: IntrinsicNs::HttpResult,
+                ..
+            })
         )
     {
         cx.note_http_result();

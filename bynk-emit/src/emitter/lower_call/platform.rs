@@ -5,6 +5,7 @@
 
 use bynk_check::checker::codable::CapEncoding;
 use bynk_check::checker::{Callee, Ty};
+use bynk_check::firstparty::FirstPartyCap;
 use bynk_ts::{TsExpr, TsLit, TsStmt, TsType};
 
 use super::super::emit::flatten_emit_ident_chain;
@@ -678,17 +679,14 @@ pub(in crate::emitter) fn lower_events_emit_call(
     // instance of R6.5's name-matched-receiver defect class, the same one
     // every other branch in this module already closed. `unit_table_uses_
     // emit` (`project.rs`) already reads this exact `Callee` for the
-    // identical classification, project-wide. `cx.is_first_party_events()`
-    // stays: it answers a different question (is *this unit's* `Events`
-    // capability actually the first-party runtime implementation, not
-    // which provider/target the emitted TS should call at all) than the
-    // one `Callee` settles.
+    // identical classification, project-wide. 1A.33: whether this `Events` is
+    // bynk's own is the callee's `first_party`, resolved once by the checker.
     if let ExprKind::Ident(_) = &receiver.kind
         && matches!(
             cx.commons().callee(e.id),
-            Some(Callee::Capability { cap, op, .. }) if cap == "Events" && op == "emit"
+            Some(Callee::Capability { op, first_party: Some(FirstPartyCap::Events), .. })
+                if op == "emit"
         )
-        && cx.is_first_party_events()
     {
         let event_name = type_args
             .first()
@@ -833,20 +831,18 @@ pub(in crate::emitter) fn lower_capability_call(
         && cx.has_capability(&recv.name)
     {
         let mut args_lowered = lower_args(args, cx, pre);
-        // #934: a flattened `consumes bynk { Idempotency }` local name is
-        // first-party only if it's actually `bynk`'s own capability — either
-        // declared right here (this unit *is* `bynk`) or flattened in from it
-        // (`flattened_caps`). A same-named capability from any other adapter
-        // or context (e.g. the #926/#931 generic-op test fixtures' own
-        // illustrative `capability Idempotency`) must not be scoped.
-        let is_first_party = recv.name == "Idempotency"
-            && (cx.in_bynk_unit()
-                || cx
-                    .cross_context()
-                    .flattened_caps
-                    .get(&recv.name)
-                    .map(String::as_str)
-                    == Some("bynk"));
+        // #934: a flattened `consumes bynk { Idempotency }` local name is first-party only if
+        // it's actually `bynk`'s own capability. The checker resolved that for this call
+        // (`firstparty::resolve`), so a same-named capability from any other adapter or context
+        // (e.g. the #926/#931 generic-op test fixtures' own illustrative `capability
+        // Idempotency`) is not scoped.
+        let is_first_party = matches!(
+            cx.commons().callee(e.id),
+            Some(Callee::Capability {
+                first_party: Some(FirstPartyCap::Idempotency),
+                ..
+            })
+        );
         scope_idempotency_key(is_first_party, &method.name, &mut args_lowered, cx);
         if is_first_party && method.name == "claim" && cx.tracks_claims() {
             let cap_expr = format!("{}.{}", cx.cap_deps_expr(), recv.name);
@@ -889,9 +885,15 @@ pub(in crate::emitter) fn lower_cross_capability_call(
     pre: &mut Pre,
 ) -> Option<Built> {
     let chain = flatten_emit_ident_chain(receiver)?;
-    let (consumed, cap) = cx.cross_context().resolve_cross_capability(&chain)?;
+    let (_, cap) = cx.cross_context().resolve_cross_capability(&chain)?;
     let mut args_lowered = lower_args(args, cx, pre);
-    let first_party = cap == "Idempotency" && consumed == "bynk";
+    let first_party = matches!(
+        cx.commons().callee(e.id),
+        Some(Callee::CrossCap {
+            first_party: Some(FirstPartyCap::Idempotency),
+            ..
+        })
+    );
     scope_idempotency_key(first_party, &method.name, &mut args_lowered, cx);
     if first_party && method.name == "claim" && cx.tracks_claims() {
         let cap_expr = format!("{}.{}", cx.cap_deps_expr(), cap);

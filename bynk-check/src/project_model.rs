@@ -5634,7 +5634,14 @@ pub type UnitCallees = HashMap<String, HashMap<ExprId, checker::Callee>>;
 /// [`unit_table_uses_emit`] looks for. `Events.emit[...]` dispatches through
 /// the ordinary capability-call path (`checker/calls.rs`).
 pub fn is_events_emit(callee: &checker::Callee) -> bool {
-    matches!(callee, checker::Callee::Capability { cap, op, .. } if cap == "Events" && op == "emit")
+    matches!(
+        callee,
+        checker::Callee::Capability {
+            op,
+            first_party: Some(firstparty::FirstPartyCap::Events),
+            ..
+        } if op == "emit"
+    )
 }
 
 /// Events track, slice 0 (spine #936): does any handler or provider op in

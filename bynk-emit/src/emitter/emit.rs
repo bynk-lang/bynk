@@ -14,6 +14,7 @@ use super::zero_value::{render_zero_value, zero_expr as zero_value_expr};
 use crate::emit_model::EmitProjectCtx;
 use bynk_check::actors::ActorDecl;
 use bynk_check::checker::{TyId, TypedCommons, Types};
+use bynk_check::firstparty::FirstPartyCap;
 use bynk_syntax::ast::{
     AgentDecl, BaseType, CapabilityDecl, CommonsItem, ConstDecl, Expr, ExprKind, FnDecl, FnName,
     Handler, Ident, MessageEntry, MessagesDecl, Param, PredKind, ProviderDecl, RecordField,
@@ -3328,7 +3329,7 @@ pub(crate) fn emit_service(
         // capabilities up to the caller (`effective_given`, just below);
         // `Events` rides the same path since it's declared as an ordinary
         // `given Events` on the agent handler.
-        let needs_events_dispatch = cx.is_first_party_events()
+        let needs_events_dispatch = cx.is_first_party(FirstPartyCap::Events)
             && (bynk_model::block_uses_emit(&handler.body, &commons.callees)
                 || cx
                     .agent_given_caps_used()
@@ -3497,9 +3498,9 @@ pub(crate) fn cross_context_caps_used(
             // — unlike every other capability, there is no
             // `EventsProvider` for compose to build, so the first-party
             // `Events` must not appear in any context's deps interface.
-            let is_first_party_events = c.name == "Events"
-                && info.flattened_caps.get(&c.name).map(String::as_str) == Some("bynk");
-            if is_first_party_events {
+            if bynk_check::firstparty::resolve(&c.name, &ctx.commons_name, &info.flattened_caps)
+                == Some(FirstPartyCap::Events)
+            {
                 continue;
             }
             if let Some(prefix) = &c.context {
@@ -3636,16 +3637,7 @@ fn effective_given(
     // `deps` at all, or compose would need to construct a provider that
     // doesn't exist. Filtered the same way #934 distinguishes a genuine
     // first-party `Events` from an unrelated same-named capability.
-    out.retain(|c| {
-        c.name != "Events"
-            || !(cx.in_bynk_unit()
-                || cx
-                    .cross_context()
-                    .flattened_caps
-                    .get(&c.name)
-                    .map(String::as_str)
-                    == Some("bynk"))
-    });
+    out.retain(|c| cx.first_party_cap(&c.name) != Some(FirstPartyCap::Events));
     out
 }
 
@@ -3930,13 +3922,11 @@ fn emit_context_deps_interface(
     // matching field) — otherwise `svc.call(args, deps)` inside `__makeSurface`
     // fails to typecheck, since `deps`'s static type there is this interface,
     // not whatever compose actually constructs.
-    let is_first_party_events = ctx.commons_name == "bynk"
-        || ctx
-            .cross_context
-            .flattened_caps
-            .get("Events")
-            .map(String::as_str)
-            == Some("bynk");
+    let is_first_party_events = bynk_check::firstparty::resolve(
+        FirstPartyCap::Events.name(),
+        &ctx.commons_name,
+        &ctx.cross_context.flattened_caps,
+    ) == Some(FirstPartyCap::Events);
     if is_first_party_events && commons_uses_emit(commons) {
         members.push(bynk_ts::TsTypeMember::readonly_prop(
             "__eventsDispatch",
@@ -4234,32 +4224,55 @@ fn is_codecable(t: &TypeRef) -> bool {
     )
 }
 
+/// An agent's `store` fields with the checker's resolved kind (1A.33): the kind is read from
+/// the [`StoreFieldIr`], and the declaration's own type references stay the AST ones the
+/// codec and key checks below take. `state` is built from `a.store_fields` in order
+/// (`agent_state_ir`), so the two zip one to one.
+fn store_kinds<'a, 'b>(
+    a: &'a AgentDecl,
+    state: &'b [StoreFieldIr],
+) -> impl Iterator<Item = (&'a StoreField, &'b StoreKindIr)> {
+    debug_assert_eq!(a.store_fields.len(), state.len());
+    a.store_fields.iter().zip(state.iter().map(|ir| &ir.kind))
+}
+
+/// The checker's resolved `store` fields of an agent, in declaration order.
+pub(crate) fn agent_state_ir(a: &AgentDecl, program: &CheckedProgram) -> Vec<StoreFieldIr> {
+    a.store_fields
+        .iter()
+        .map(|f| lower_store_field_shape_ir(f, program))
+        .collect()
+}
+
 /// Whether an agent emits a rehydration gate (and so imports `rehydrationViolation`).
 /// Mirrors the per-field validation the gate builds, so the header import and the
 /// emitted gate agree exactly (a mismatch is an unused / undefined import).
-pub(crate) fn agent_needs_rehydrate(a: &AgentDecl, types: &HashMap<String, Arc<TypeDecl>>) -> bool {
+pub(crate) fn agent_needs_rehydrate(
+    a: &AgentDecl,
+    state: &[StoreFieldIr],
+    types: &HashMap<String, Arc<TypeDecl>>,
+) -> bool {
     // v0.105 (slice 3b-ii): a held `Map[K, Connection]` persists `K → connId` and
     // is rehydrated like any map — no value check (the connId is opaque) but the
     // textual `K` key is validated. The `Map` arm already counts that via the key,
     // so held maps need no special handling here.
-    a.store_fields
-        .iter()
-        .any(|f| match f.kind.head.name.as_str() {
-            "Cell" | "Log" => f.kind.args.first().is_some_and(is_codecable),
-            "Map" | "Cache" => {
-                f.kind.args.get(1).is_some_and(is_codecable)
-                    || f.kind
-                        .args
-                        .first()
-                        .is_some_and(|k| type_base_is_string(k, types))
-            }
-            "Set" => f
-                .kind
-                .args
-                .first()
-                .is_some_and(|t| type_base_is_string(t, types)),
-            _ => false,
-        })
+    store_kinds(a, state).any(|(f, kind)| match kind {
+        StoreKindIr::Cell(_) | StoreKindIr::Log(..) => {
+            f.kind.args.first().is_some_and(is_codecable)
+        }
+        StoreKindIr::Map(..) | StoreKindIr::Cache(..) => {
+            f.kind.args.get(1).is_some_and(is_codecable)
+                || f.kind
+                    .args
+                    .first()
+                    .is_some_and(|k| type_base_is_string(k, types))
+        }
+        StoreKindIr::Set(_) => f
+            .kind
+            .args
+            .first()
+            .is_some_and(|t| type_base_is_string(t, types)),
+    })
 }
 
 /// The runtime names an agent's state wiring references (#3254): the handle classes its
@@ -4267,15 +4280,17 @@ pub(crate) fn agent_needs_rehydrate(a: &AgentDecl, types: &HashMap<String, Arc<T
 /// Mirrors what `emit_agent_state_record`/`emit_agent_state_persistence` emit.
 pub(crate) fn agent_state_runtime_names(
     a: &AgentDecl,
+    state: &[StoreFieldIr],
+    tys: &Types,
     types: &HashMap<String, Arc<TypeDecl>>,
 ) -> Vec<&'static str> {
-    let held = held_map_fields(a);
+    let held = held_map_fields(a, state, tys);
     let is_held = |f: &StoreField| held.iter().any(|(n, _)| n.name == f.name.name);
     let mut names: Vec<&'static str> = Vec::new();
     let mut textual_key = false;
-    for f in &a.store_fields {
-        match f.kind.head.name.as_str() {
-            "Map" => {
+    for (f, kind) in store_kinds(a, state) {
+        match kind {
+            StoreKindIr::Map(..) => {
                 names.push("__StoreMap");
                 if is_held(f) {
                     names.extend(["__wireHeld", "__wireHeldOrder", "__fillHeld"]);
@@ -4291,17 +4306,17 @@ pub(crate) fn agent_state_runtime_names(
                     .first()
                     .is_some_and(|k| type_base_is_string(k, types));
             }
-            "Set" => {
+            StoreKindIr::Set(_) => {
                 names.extend(["__StoreSet", "__wireSet", "__fillSet"]);
                 textual_key |= f
                     .kind
                     .args
                     .first()
-                    .is_some_and(|k| type_base_is_string(k, types));
+                    .is_some_and(|t| type_base_is_string(t, types));
             }
-            "Cache" => names.extend(["__StoreCache", "__wireMap", "__fillMap"]),
-            "Log" => names.extend(["__StoreLog", "__wireLog", "__fillLog"]),
-            _ => {}
+            StoreKindIr::Cache(..) => names.extend(["__StoreCache", "__wireMap", "__fillMap"]),
+            StoreKindIr::Log(..) => names.extend(["__StoreLog", "__wireLog", "__fillLog"]),
+            StoreKindIr::Cell(_) => {}
         }
     }
     if textual_key {
@@ -4311,7 +4326,7 @@ pub(crate) fn agent_state_runtime_names(
     if !names.is_empty() {
         names.push("__bynkThen");
     }
-    if agent_reads_lazily(a) {
+    if agent_reads_lazily(state, tys, a) {
         names.extend(["__attachLazy", "__readsLazily"]);
     }
     names
@@ -4320,11 +4335,11 @@ pub(crate) fn agent_state_runtime_names(
 /// Whether an agent's collections can be read lazily (#3189): it has a `Map`, `Set`, `Cache` or
 /// `Log` field and none is a held `Map` (a held map keeps live connections inline in the record).
 /// `loadState` still reads a wholesale record, or one a migration step covers, whole.
-fn agent_reads_lazily(a: &AgentDecl) -> bool {
-    held_map_fields(a).is_empty()
-        && a.store_fields
+fn agent_reads_lazily(state: &[StoreFieldIr], tys: &Types, a: &AgentDecl) -> bool {
+    held_map_fields(a, state, tys).is_empty()
+        && state
             .iter()
-            .any(|f| matches!(f.kind.head.name.as_str(), "Map" | "Set" | "Cache" | "Log"))
+            .any(|f| !matches!(f.kind, StoreKindIr::Cell(_)))
 }
 
 /// The `[lo, from]` schema-version ranges the migration steps cover, as the runtime's
@@ -4356,7 +4371,7 @@ fn emit_lazy_field_spec(
     ctx: &EmitProjectCtx,
     stmts: &mut Vec<bynk_ts::TsStmt>,
 ) -> Option<String> {
-    if !agent_reads_lazily(a) {
+    if !agent_reads_lazily(layout.state, commons.tys(), a) {
         return None;
     }
     let agent_name = &a.name.name;
@@ -4451,26 +4466,27 @@ fn emit_lazy_field_spec(
 /// realisation in `emit_agent`. (Bundle keeps held maps in the in-memory test
 /// state record of `TestConnection`s — its tested behaviour — so this is
 /// Workers-only.)
-pub(crate) fn agent_has_held_storage(a: &AgentDecl) -> bool {
-    !held_map_fields(a).is_empty()
-}
-
-/// True if a `store` field is a `Map[K, V]` whose value `V` is a held
-/// `Connection` — the held maps split out of persistence on Workers.
-fn is_held_map_field(f: &StoreField) -> bool {
-    f.kind.head.name == "Map"
-        && f.kind.args.len() == 2
-        && bynk_check::context_checks::type_ref_is_held(&f.kind.args[1])
+pub(crate) fn agent_has_held_storage(a: &AgentDecl, state: &[StoreFieldIr], tys: &Types) -> bool {
+    !held_map_fields(a, state, tys).is_empty()
 }
 
 /// The agent's `store Map[K, V]` fields whose value is a held `Connection`, as
 /// `(name, value-type)`. The value type is the held `Connection[F]` itself (so
 /// its TS rendering is `Connection<F>`).
-pub(crate) fn held_map_fields(a: &AgentDecl) -> Vec<(&Ident, &TypeRef)> {
-    a.store_fields
-        .iter()
-        .filter(|f| is_held_map_field(f))
-        .map(|f| (&f.name, &f.kind.args[1]))
+pub(crate) fn held_map_fields<'a>(
+    a: &'a AgentDecl,
+    state: &[StoreFieldIr],
+    tys: &Types,
+) -> Vec<(&'a Ident, &'a TypeRef)> {
+    // 1A.33: a held map is a `Map` whose resolved value type is a held `Connection` (looking
+    // through `Option`/`Effect`, as the checker's held rule does), not an AST head-name test.
+    store_kinds(a, state)
+        .filter_map(|(f, kind)| match kind {
+            StoreKindIr::Map(_, v) if held_frame_ty(*v, tys).is_some() => {
+                Some((&f.name, &f.kind.args[1]))
+            }
+            _ => None,
+        })
         .collect()
 }
 
@@ -4813,6 +4829,11 @@ fn declaration_location(
 /// secondary indexes) the state record, its load/commit and the handler
 /// lowering each need. Computed once so those steps share one classification.
 pub(crate) struct AgentStoreLayout<'a> {
+    /// The checker's resolved `store` fields, in declaration order (1A.33).
+    pub(crate) state: &'a [StoreFieldIr],
+    /// Every `store Map` whose value is a held `Connection`, on any target. `held_maps` is
+    /// this on Workers and empty elsewhere, where a held map is not persisted by connection id.
+    pub(crate) all_held_maps: Vec<(&'a Ident, &'a TypeRef)>,
     pub(crate) store_field_ty: HashMap<&'a str, &'a StoreKindIr>,
     pub(crate) effective_fields: Vec<RecordField>,
     pub(crate) is_workers: bool,
@@ -4899,8 +4920,9 @@ fn classify_agent_store<'a>(
     // state record of `TestConnection`s — its tested behaviour — so the connId
     // representation is Workers-only.)
     let is_workers = matches!(ctx.target, BuildTarget::Workers);
+    let all_held_maps = held_map_fields(a, state, commons.tys());
     let held_maps: Vec<(&Ident, &TypeRef)> = if is_workers {
-        held_map_fields(a)
+        all_held_maps.clone()
     } else {
         Vec::new()
     };
@@ -5061,7 +5083,6 @@ fn classify_agent_store<'a>(
     let store_cache_fields: Vec<(&Ident, &TypeRef, i64)> = if is_store_agent {
         a.store_fields
             .iter()
-            .filter(|f| f.kind.head.name == "Cache" && f.kind.args.len() == 2)
             .filter_map(|f| {
                 let StoreKindIr::Cache(_, _, ttl) = store_field_ty.get(f.name.name.as_str())?
                 else {
@@ -5090,15 +5111,11 @@ fn classify_agent_store<'a>(
     let store_log_fields: Vec<(&Ident, &TypeRef, Option<i64>)> = if is_store_agent {
         a.store_fields
             .iter()
-            .filter(|f| f.kind.head.name == "Log" && f.kind.args.len() == 1)
-            .map(|f| {
-                let retain = store_field_ty
-                    .get(f.name.name.as_str())
-                    .and_then(|kind| match kind {
-                        StoreKindIr::Log(_, retain) => *retain,
-                        _ => None,
-                    });
-                (&f.name, &f.kind.args[0], retain)
+            .filter_map(|f| {
+                let StoreKindIr::Log(_, retain) = store_field_ty.get(f.name.name.as_str())? else {
+                    return None;
+                };
+                Some((&f.name, &f.kind.args[0], *retain))
             })
             .collect()
     } else {
@@ -5124,6 +5141,8 @@ fn classify_agent_store<'a>(
         })
         .collect();
     AgentStoreLayout {
+        state,
+        all_held_maps,
         store_field_ty,
         effective_fields,
         is_workers,
@@ -6042,8 +6061,9 @@ fn hydrate_fn_decl(
     zero_fn: &str,
 ) -> bynk_ts::TsStmt {
     let state_ty = format!("{}State", a.name.name);
-    let held_names_all: HashSet<&str> = held_map_fields(a)
-        .into_iter()
+    let held_names_all: HashSet<&str> = layout
+        .all_held_maps
+        .iter()
         .map(|(n, _)| n.name.as_str())
         .collect();
     let record_at = |key: &str| {
@@ -6201,7 +6221,7 @@ fn agent_state_checks_and_entries(
             ser(&f.type_ref, &format!("s.{path}")),
         ));
     }
-    let held_decls_all = held_map_fields(a);
+    let held_decls_all = &layout.all_held_maps;
     let held_names_all: HashSet<&str> = held_decls_all
         .iter()
         .map(|(n, _)| n.name.as_str())
@@ -6458,7 +6478,7 @@ fn emit_agent_state_persistence(
         || !store_set_fields.is_empty()
         || !store_cache_fields.is_empty()
         || !store_log_fields.is_empty();
-    let has_rehydrate = agent_needs_rehydrate(a, &commons.types);
+    let has_rehydrate = agent_needs_rehydrate(a, layout.state, &commons.types);
     let has_encode = has_rehydrate || has_collections;
     // State-migrations S1 (#2211): this class's lock version facts, present
     // only when the build has the schema lock (Decision A).
@@ -6833,6 +6853,17 @@ fn emit_agent_handlers(
                 indexes: store_map_indexes.clone(),
                 held_maps: held_maps_ts.clone(),
                 map_values: map_value_ts.clone(),
+                connection_maps: layout
+                    .state
+                    .iter()
+                    .filter(|f| match &f.kind {
+                        StoreKindIr::Map(_, v) => {
+                            matches!(*commons.tys().get(*v), Ty::Connection(_))
+                        }
+                        _ => false,
+                    })
+                    .map(|f| f.field.clone())
+                    .collect(),
                 log_values: log_value_ts.clone(),
             })
         });
@@ -6914,7 +6945,7 @@ fn emit_agent_handlers(
         // service path (`emit_service`) — an agent handler that emits, or
         // that calls another local agent method which itself emits, gets
         // the same compose-supplied `__eventsDispatch` callback.
-        let needs_events_dispatch = cx.is_first_party_events()
+        let needs_events_dispatch = cx.is_first_party(FirstPartyCap::Events)
             && (bynk_model::block_uses_emit(&h.body, &commons.callees)
                 || cx
                     .agent_given_caps_used()
@@ -8647,7 +8678,7 @@ fn emit_agent_state_record(
     // A held `Map[K, Connection]` keeps its connection ids inline in the state record:
     // its values are live connections, not stored data, so it is not a per-entry field.
     // (On the bundle target `held_maps` is empty, so ask the declaration.)
-    let held_decls = held_map_fields(a);
+    let held_decls = &layout.all_held_maps;
     let held_names: HashSet<&str> = held_decls.iter().map(|(n, _)| n.name.as_str()).collect();
     for (name, _) in store_map_fields
         .iter()
@@ -9313,7 +9344,7 @@ fn emit_ws_do_method(
     // #3045: the body hands its `deps` on to an agent handler that emits (or emits
     // itself), so `deps` must carry `__eventsDispatch` as an HTTP handler's does.
     // The entry points above spread `__eventsDeps` into it from the DO's `env`.
-    if cx.is_first_party_events()
+    if cx.is_first_party(FirstPartyCap::Events)
         && (bynk_model::block_uses_emit(&h.body, &commons.callees)
             || cx
                 .agent_given_caps_used()

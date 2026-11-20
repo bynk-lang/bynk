@@ -4,8 +4,8 @@
 //! Moved out of `lower.rs` (back-half paydown 1A.21, #3722, Decision E) before they convert to
 //! nodes.
 
-use bynk_check::builtin_names::types::*;
 use bynk_check::checker::{Callee, Ty};
+use bynk_check::kernel_op::{FormStatic, JsonStatic, StaticOp, YamlStatic};
 use bynk_ts::{
     TsArrowBody, TsBinaryOp, TsBindingName, TsExpr, TsLit, TsParam, TsStmt, TsType, TsTypeMember,
     TsUnaryOp,
@@ -16,7 +16,7 @@ use super::super::lower::{
 };
 use super::super::lower_ctx::LowerCtx;
 use super::super::ts_types::ts_ty_to_ts_type;
-use super::super::{BaseType, Expr, Ident, TypeBody, TypeRef, ty_to_type_ref};
+use super::super::{BaseType, Expr, TypeBody, TypeRef, ty_to_type_ref};
 
 /// v0.22b: the typed JSON codec (ADR 0045). `encode` dispatches to the
 /// module-local `serialise_*` helpers + `JSON.stringify`; `decode[T]` to
@@ -44,96 +44,102 @@ pub(in super::super) fn lower_json_codec_call(
     // kept in the signature for uniformity with this dispatcher's sibling
     // `lower_*_call` functions, which all share this exact parameter list.
     _receiver: &Expr,
-    method: &Ident,
     args: &[Expr],
     cx: &mut LowerCtx,
     pre: &mut Pre,
 ) -> Option<Built> {
-    // #3214: `Yaml.decode[T](text)` is `Json.decode[T]` with the YAML parser in
-    // place of `JSON.parse`; the typed decode and its errors are the same.
-    if matches!(
-        cx.commons().callees.get(&e.id),
-        Some(Callee::Intrinsic { ns, .. }) if *ns == YAML
-    ) && args.len() == 1
-        && method.name == "decode"
-        && let Some(Ty::Result(t, _)) = cx.commons().expr_ty(e.id).as_deref().cloned()
-        && let Some(decoder) = json_decoder_fn(t, DecodeSource::Yaml, cx)
-    {
-        let arg = pre.lower_node(&args[0], cx);
-        return Some(apply_decoder(decoder, arg));
+    // The codec operation the checker resolved for this call (1A.33). Every form below takes
+    // exactly one argument.
+    let Some(Callee::Intrinsic { op_t, .. }) = cx.commons().callees.get(&e.id) else {
+        return None;
+    };
+    let op = *op_t;
+    if args.len() != 1 {
+        return None;
     }
-    // #3276 (decision G): `Form.decode[T](text)` reads the text as the router reads
-    // a `@form` body, then decodes through `T`'s codec; `Form.encode(v)` writes the
-    // form text such a route reads.
-    if matches!(
-        cx.commons().callees.get(&e.id),
-        Some(Callee::Intrinsic { ns, .. }) if *ns == FORM
-    ) && args.len() == 1
-    {
-        if method.name == "decode"
-            && let Some(Ty::Result(t, _)) = cx.commons().expr_ty(e.id).as_deref().cloned()
-            && let Some(decoder) = json_decoder_fn(t, DecodeSource::Form, cx)
-        {
-            let arg = pre.lower_node(&args[0], cx);
-            return Some(apply_decoder(decoder, arg));
+    match op {
+        // #3214: `Yaml.decode[T](text)` is `Json.decode[T]` with the YAML parser in
+        // place of `JSON.parse`; the typed decode and its errors are the same.
+        StaticOp::Yaml(YamlStatic::Decode) => {
+            if let Some(Ty::Result(t, _)) = cx.commons().expr_ty(e.id).as_deref().cloned()
+                && let Some(decoder) = json_decoder_fn(t, DecodeSource::Yaml, cx)
+            {
+                let arg = pre.lower_node(&args[0], cx);
+                return Some(apply_decoder(decoder, arg));
+            }
         }
-        if method.name == "encode" {
-            cx.runtime_use().note_form_codec();
-            // The checker admits only a concrete record of form fields, so the wire
-            // value is always available; a miss is a compiler fault, not a user error.
-            let wire = form_encode_wire(pre, &args[0], cx)
-                .expect("`Form.encode` checked a concrete record of form fields");
-            // #3343: a field renamed by `@name` is written under its wire key.
-            let table = cx
-                .commons()
-                .expr_types
-                .get(&args[0].id)
-                .map(|te| te.ty)
-                .and_then(|ty| ty_to_type_ref(ty, cx.commons().tys()))
-                .and_then(|tref| {
-                    super::super::workers_entry::renamed_specs_source(&tref, &cx.commons().types)
-                })
-                .map(|t| format!(", {t}"));
-            // 1A: field-spec table is workers_entry source text
-            return Some(match table {
-                None => match wire {
-                    Ok(wire) => Ok(call(ident_node("__formString"), vec![wire])),
-                    Err(text) => Err(format!("__formString({text})")),
-                },
-                Some(table) => Err(format!(
-                    "__formString({}{table})",
-                    LoweredExpr::from(wire).into_text()
-                )),
-            });
+        // #3276 (decision G): `Form.decode[T](text)` reads the text as the router reads
+        // a `@form` body, then decodes through `T`'s codec.
+        StaticOp::Form(FormStatic::Decode) => {
+            if let Some(Ty::Result(t, _)) = cx.commons().expr_ty(e.id).as_deref().cloned()
+                && let Some(decoder) = json_decoder_fn(t, DecodeSource::Form, cx)
+            {
+                let arg = pre.lower_node(&args[0], cx);
+                return Some(apply_decoder(decoder, arg));
+            }
         }
-    }
-    if matches!(
-        cx.commons().callees.get(&e.id),
-        Some(Callee::Intrinsic { ns, .. }) if *ns == JSON
-    ) && args.len() == 1
-    {
-        if matches!(method.name.as_str(), "encode" | "encodePlain")
-            && let Some(encoded) = json_encode(pre, &args[0], cx, method.name == "encodePlain")
-        {
-            return Some(encoded);
-        }
-        if matches!(method.name.as_str(), "decode" | "decodeSql")
-            && let Some(Ty::Result(t, _)) = cx.commons().expr_ty(e.id).as_deref().cloned()
-            && let Some(decoder) = json_decoder_fn(
-                t,
-                if method.name == "decodeSql" {
-                    DecodeSource::Sql
-                } else {
-                    DecodeSource::Json
-                },
+        // `Form.encode(v)` writes the form text such a route reads.
+        StaticOp::Form(FormStatic::Encode) => return Some(lower_form_encode(&args[0], cx, pre)),
+        StaticOp::Json(JsonStatic::Encode | JsonStatic::EncodePlain) => {
+            if let Some(encoded) = json_encode(
+                pre,
+                &args[0],
                 cx,
-            )
-        {
-            let arg = pre.lower_node(&args[0], cx);
-            return Some(apply_decoder(decoder, arg));
+                op == StaticOp::Json(JsonStatic::EncodePlain),
+            ) {
+                return Some(encoded);
+            }
         }
+        StaticOp::Json(JsonStatic::Decode | JsonStatic::DecodeSql) => {
+            if let Some(Ty::Result(t, _)) = cx.commons().expr_ty(e.id).as_deref().cloned()
+                && let Some(decoder) = json_decoder_fn(
+                    t,
+                    if op == StaticOp::Json(JsonStatic::DecodeSql) {
+                        DecodeSource::Sql
+                    } else {
+                        DecodeSource::Json
+                    },
+                    cx,
+                )
+            {
+                let arg = pre.lower_node(&args[0], cx);
+                return Some(apply_decoder(decoder, arg));
+            }
+        }
+        _ => {}
     }
     None
+}
+
+/// `Form.encode(v)`: the form text a `@form` route reads.
+fn lower_form_encode(arg: &Expr, cx: &mut LowerCtx, pre: &mut Pre) -> Built {
+    cx.runtime_use().note_form_codec();
+    // The checker admits only a concrete record of form fields, so the wire
+    // value is always available; a miss is a compiler fault, not a user error.
+    let wire = form_encode_wire(pre, arg, cx)
+        .expect("`Form.encode` checked a concrete record of form fields");
+    // #3343: a field renamed by `@name` is written under its wire key.
+    let table = cx
+        .commons()
+        .expr_types
+        .get(&arg.id)
+        .map(|te| te.ty)
+        .and_then(|ty| ty_to_type_ref(ty, cx.commons().tys()))
+        .and_then(|tref| {
+            super::super::workers_entry::renamed_specs_source(&tref, &cx.commons().types)
+        })
+        .map(|t| format!(", {t}"));
+    // 1A: field-spec table is workers_entry source text
+    match table {
+        None => match wire {
+            Ok(wire) => Ok(call(ident_node("__formString"), vec![wire])),
+            Err(text) => Err(format!("__formString({text})")),
+        },
+        Some(table) => Err(format!(
+            "__formString({}{table})",
+            LoweredExpr::from(wire).into_text()
+        )),
+    }
 }
 
 /// Which text front end feeds a typed decode.
