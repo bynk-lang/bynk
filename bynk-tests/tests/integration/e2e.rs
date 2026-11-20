@@ -1006,3 +1006,49 @@ fn no_codec_witness_in_a_capability_interface() {
         offenders.join("\n")
     );
 }
+
+/// #3815: building the same source twice emits the same bytes. A context that
+/// publishes two events gets an `__eventsDispatch` switch (Bundle) and a
+/// fan-out object (Workers) with a case per event; walking the unit table's
+/// `HashMap` of events put those cases in a different order from one build to
+/// the next. Each build here seeds its maps afresh, so with two events a
+/// nondeterministic walk shows up within a few builds.
+#[test]
+fn a_build_emits_the_same_bytes_every_time() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/positive/1959_system_kv_and_event_delivery");
+    for target in [
+        bynk_driver::project::BuildTarget::Bundle,
+        bynk_driver::project::BuildTarget::Workers,
+    ] {
+        let build = || -> std::collections::BTreeMap<PathBuf, String> {
+            let out = compile_fixture(&dir, target).unwrap_or_else(|errors| {
+                panic!(
+                    "{}",
+                    bynk_driver::render::render_project_errors(&errors.flatten())
+                )
+            });
+            out.artefacts
+                .docs
+                .iter()
+                .map(|(path, doc)| (path.clone(), doc.text()))
+                .collect()
+        };
+        let first = build();
+        for run in 1..16 {
+            let again = build();
+            assert_eq!(
+                first.keys().collect::<Vec<_>>(),
+                again.keys().collect::<Vec<_>>(),
+                "{target:?}: build {run} emitted a different set of files"
+            );
+            for (path, text) in &first {
+                assert!(
+                    &again[path] == text,
+                    "{target:?}: build {run} emitted different bytes for {}",
+                    path.display()
+                );
+            }
+        }
+    }
+}

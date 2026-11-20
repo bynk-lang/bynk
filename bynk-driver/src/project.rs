@@ -5576,7 +5576,12 @@ fn emit_composition_root(
         // just with an empty switch.
         if unit_table_uses_emit(table, unit_callees.get(ctx_name)) {
             let mut cases = String::new();
-            for name in table.events.keys() {
+            // #3815: `table.events` is a `HashMap`; walk it in name order, as
+            // the Workers fan-out's `BTreeMap` does, so the cases come out the
+            // same on every build.
+            let mut event_names: Vec<&String> = table.events.keys().collect();
+            event_names.sort();
+            for name in event_names {
                 let Some(subs) = event_subscribers.get(&(ctx_name.clone(), name.clone())) else {
                     continue;
                 };
