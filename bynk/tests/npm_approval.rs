@@ -497,6 +497,20 @@ fn an_unapproved_adapters_npm_package_is_never_installed() {
     );
     assert!(!ran.exists(), "a dry run ran a package manager");
 
+    // #3796: once a real deploy has installed it in `.bynk/deploy`, a dry run
+    // (which builds elsewhere) reports nothing missing.
+    write(
+        &app.join(".bynk/deploy/node_modules/jose/package.json"),
+        "{\"name\": \"jose\"}\n",
+    );
+    let (_, out) = bynk_with_fake_tools(&app, &root, &bin, &["deploy", "--dry-run", "--yes"]);
+    assert!(
+        !out.contains("npm packages that are not installed"),
+        "an installed package is reported missing:\n{out}"
+    );
+    assert!(!ran.exists(), "a dry run ran a package manager");
+    std::fs::remove_dir_all(app.join(".bynk")).unwrap();
+
     // `--no-install` (and `BYNK_NO_INSTALL`) restore the preflight stop, naming
     // the detected command rather than always `npm install`.
     for (args, env) in [

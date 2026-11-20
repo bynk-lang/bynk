@@ -418,6 +418,14 @@ fn from_user_agent(project: &dyn Project) -> Option<Detection> {
 /// toolchain's own, ADR 0799 C) that `node_modules` beside it does not hold,
 /// sorted.
 pub fn missing_npm_dependencies(build_dir: &Path) -> Vec<String> {
+    missing_npm_dependencies_in(build_dir, build_dir)
+}
+
+/// [`missing_npm_dependencies`], reading `package.json` from `build_dir` and
+/// looking for the packages under `modules_root`'s `node_modules`. #3796: a
+/// deploy dry run builds in a scratch directory, but the packages a real deploy
+/// installed are in `.bynk/deploy`.
+fn missing_npm_dependencies_in(build_dir: &Path, modules_root: &Path) -> Vec<String> {
     let Ok(text) = std::fs::read_to_string(build_dir.join("package.json")) else {
         return Vec::new();
     };
@@ -430,7 +438,7 @@ pub fn missing_npm_dependencies(build_dir: &Path) -> Vec<String> {
         .flatten()
         .map(|(name, _)| name.clone())
         .filter(|name| {
-            !build_dir
+            !modules_root
                 .join("node_modules")
                 .join(name)
                 .join("package.json")
@@ -594,7 +602,18 @@ pub fn ensure_installed(
     build_dir: &Path,
     mode: Mode,
 ) -> Result<Outcome, InstallError> {
-    let missing = missing_npm_dependencies(build_dir);
+    ensure_installed_in(install, build_dir, build_dir, mode)
+}
+
+/// [`ensure_installed`], with the installed packages looked for under
+/// `modules_root` ([`missing_npm_dependencies_in`]).
+fn ensure_installed_in(
+    install: &Install<'_>,
+    build_dir: &Path,
+    modules_root: &Path,
+    mode: Mode,
+) -> Result<Outcome, InstallError> {
+    let missing = missing_npm_dependencies_in(build_dir, modules_root);
     if missing.is_empty() {
         return Ok(Outcome::Present);
     }
@@ -725,7 +744,14 @@ pub fn install_for_project_shown_as(
     {
         crate::colour::eprintln(&announce(&found, build_dir));
     }
-    match ensure_installed(&install, build_dir, mode).map_err(|e| e.to_string())? {
+    // A dry run installs nothing, so what is missing is judged where a real run
+    // would install: `shown_dir`.
+    let modules_root = if mode == Mode::DryRun {
+        shown_dir
+    } else {
+        build_dir
+    };
+    match ensure_installed_in(&install, build_dir, modules_root, mode).map_err(|e| e.to_string())? {
         Outcome::WouldInstall(missing, found) => {
             crate::colour::eprintln(&dry_run_message(&missing, &found, shown_dir));
             Ok(())
