@@ -46,7 +46,25 @@ mod par;
 
 /// `(source, target, module, unbound names, issue)`. `source` is a fixture
 /// directory name or a [`repros`] name.
-const KNOWN: &[(&str, &str, &str, &[&str], u32)] = &[];
+const KNOWN: &[(&str, &str, &str, &[&str], u32)] = &[
+    // Pre-existing, and visible to `name_closure` since 1A.32a made the service
+    // objects nodes: a boundary cast in a handler body names a namespace the module
+    // never imports, or a member the imported module does not export.
+    (
+        "2704_recursive_cycle_across_files",
+        "bundle",
+        "cyc/client.ts",
+        &["./graph/entries.js::Dir", "./graph/entries.js::Expr"],
+        3807,
+    ),
+    (
+        "2901_alias_caller_plain",
+        "bundle",
+        "edge.ts",
+        &["lib"],
+        3807,
+    ),
+];
 
 /// Minimal projects for open defects no positive fixture exhibits:
 /// `(name, [(path, source)])`, compiled for bundle.
