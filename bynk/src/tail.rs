@@ -106,11 +106,8 @@ pub fn run(tb: &dyn Toolbox, project_root: &Path, opts: &TailOptions) -> ExitCod
         .args(tail_args(&deployed, &opts.wrangler_args))
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
-    if std::io::IsTerminal::is_terminal(&std::io::stderr())
-        && std::env::var_os("NO_COLOR").is_none_or(|v| v.is_empty())
-    {
-        cmd.env("FORCE_COLOR", "1");
-    }
+    // Piped, wrangler can't see our terminal: it colours as `--color` says.
+    bynk_driver::colour::apply_to_child(&mut cmd, true);
     crate::stop::install();
     let mut child = match cmd.spawn() {
         Ok(c) => c,

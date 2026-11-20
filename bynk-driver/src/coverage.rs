@@ -613,9 +613,12 @@ fn vlq_decode(seg: &str) -> Vec<i64> {
 /// Render the human coverage summary — a per-file bar, percentage, covered/total
 /// line count, and the uncovered-line ranges — plus a total row. Trailing
 /// newline. An empty report renders a single "no coverage attributed" note.
-pub fn render_rich(report: &CoverageReport) -> String {
+/// With `colour`, each bar and percentage is red, amber or green by
+/// [`crate::colour::coverage_style`], and the uncovered ranges red.
+pub fn render_rich(report: &CoverageReport, colour: bool) -> String {
+    use crate::colour::{Style, coverage_style, paint};
     let mut out = String::new();
-    out.push_str("\nCoverage\n");
+    out.push_str(&format!("\n{}\n", paint(colour, Style::Bold, "Coverage")));
     if report.is_empty() {
         out.push_str("  (no executable `.bynk` lines were attributed)\n");
         return out;
@@ -627,28 +630,41 @@ pub fn render_rich(report: &CoverageReport) -> String {
         .max()
         .unwrap_or(0)
         .max(5);
+    // The bar and the right-aligned percentage, painted as one.
+    let gauge = |covered: u32, total: u32, pct: u32| {
+        paint(
+            colour,
+            coverage_style(pct),
+            &format!("{}  {:>3}%", bar(covered, total), pct),
+        )
+    };
     for f in &report.files {
         let pct = percent(f.covered, f.total);
         out.push_str(&format!(
-            "  {:<name_w$}  {}  {:>3}%   ({}/{} lines)",
+            "  {:<name_w$}  {}   ({}/{} lines)",
             f.path,
-            bar(f.covered, f.total),
-            pct,
+            gauge(f.covered, f.total, pct),
             f.covered,
             f.total,
         ));
         if !f.uncovered.is_empty() {
-            out.push_str(&format!("  uncovered: {}", format_ranges(&f.uncovered)));
+            out.push_str(&format!(
+                "  uncovered: {}",
+                paint(colour, Style::Red, &format_ranges(&f.uncovered))
+            ));
         }
         out.push('\n');
     }
     let dashes = "─".repeat(name_w + 24);
-    out.push_str(&format!("  {dashes}\n"));
+    out.push_str(&format!("  {}\n", paint(colour, Style::Dim, &dashes)));
     out.push_str(&format!(
-        "  {:<name_w$}  {}  {:>3}%   ({}/{} lines)\n",
-        "total",
-        bar(report.total_covered(), report.total_lines()),
-        report.total_percent(),
+        "  {}  {}   ({}/{} lines)\n",
+        paint(colour, Style::Bold, &format!("{:<name_w$}", "total")),
+        gauge(
+            report.total_covered(),
+            report.total_lines(),
+            report.total_percent()
+        ),
         report.total_covered(),
         report.total_lines(),
     ));
@@ -698,6 +714,55 @@ pub fn format_ranges(lines: &[u32]) -> String {
 
 #[cfg(test)]
 mod tests {
+    /// The rich table is plain without colour, and with it each gauge is red,
+    /// amber or green by its percentage, and the uncovered lines red.
+    #[test]
+    fn render_rich_colours_by_percentage() {
+        use super::{CoverageReport, FileCoverage, render_rich};
+        let file = |path: &str, covered: u32, total: u32| FileCoverage {
+            path: path.to_string(),
+            covered,
+            total,
+            uncovered: (covered + 1..=total).collect(),
+            covered_lines: (1..=covered).collect(),
+        };
+        let report = CoverageReport {
+            files: vec![
+                file("src/a.bynk", 9, 10),
+                file("src/b.bynk", 6, 10),
+                file("src/c.bynk", 1, 10),
+            ],
+        };
+        let plain = render_rich(&report, false);
+        assert!(!plain.contains('\x1b'), "{plain}");
+        assert!(
+            plain.contains("  src/a.bynk  ▓▓▓▓▓▓▓·   90%   (9/10 lines)  uncovered: 10\n"),
+            "{plain}"
+        );
+        let coloured = render_rich(&report, true);
+        assert!(
+            coloured.contains("\x1b[32m▓▓▓▓▓▓▓·   90%\x1b[39m"),
+            "{coloured}"
+        );
+        assert!(
+            coloured.contains("\x1b[33m▓▓▓▓····   60%\x1b[39m"),
+            "{coloured}"
+        );
+        assert!(
+            coloured.contains("\x1b[31m········   10%\x1b[39m"),
+            "{coloured}"
+        );
+        assert!(
+            coloured.contains("uncovered: \x1b[31m10\x1b[39m"),
+            "{coloured}"
+        );
+        // The total is 16/30, 53%: amber.
+        assert!(
+            coloured.contains("\x1b[33m▓▓▓▓····   53%\x1b[39m"),
+            "{coloured}"
+        );
+    }
+
     /// #3068: `resolve` reads ADR 0103's "enclosing statement" rule backwards: an
     /// error on an unmapped generated line (a closing brace) takes the nearest
     /// mapped line at or before it.

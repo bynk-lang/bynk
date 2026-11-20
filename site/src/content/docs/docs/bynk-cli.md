@@ -30,6 +30,26 @@ log sees the same output as before. `bynk dev` reports its first build only: a
 rebuild while watching stays quiet. `bynk check` and `bynk compile` print no
 progress.
 
+## Colour
+
+`--color WHEN` (or `--colour WHEN`, accepted before or after the command) says
+when `bynk` colours its output:
+
+| `WHEN` | Colour |
+| ------ | ------ |
+| `auto` (default) | When the stream is a terminal and `NO_COLOR` is unset or empty. `FORCE_COLOR` or `CLICOLOR_FORCE`, set to anything but empty or `0`, colours it without a terminal (for `less -R` or a CI log that renders ANSI); `NO_COLOR` wins over both. |
+| `always` | Always, into a pipe or a file too, whatever the environment says. |
+| `never` | Never, whatever the environment says. |
+
+What is coloured: `bynk test`'s ✓ (green), ✗ (red), suite headings and closing
+tally; the `--coverage` table, each file's bar and percentage green from 80%,
+amber from 50% and red below, with its uncovered lines red; `bynk doctor`'s
+marks; rich diagnostics; the [build progress](#build-progress) lines; and
+`--help`. Machine-readable output (`--format json`, `ndjson` and `short`) is
+never coloured. The choice is passed on to the `wrangler` that `bynk dev` and
+`bynk tail` start, as `NO_COLOR=1` under `never` and `FORCE_COLOR=1` under
+`always`.
+
 ## Installing npm packages
 
 A generated build can depend on npm packages: `postal-mime` for inbound email,
@@ -328,8 +348,8 @@ and interactive hotkeys keep working; pass `--rewrite-frames` to rewrite there
 too. Everywhere else (an editor task, CI, a redirect, either stream not a
 terminal) and under `--log-events`, the output passes through `bynk`, which
 wrangler sees as a pipe and so turns its colour and hotkeys off. `bynk dev` asks
-for colour back with `FORCE_COLOR=1` when its own stderr is a terminal (and
-`NO_COLOR` is unset).
+for colour back with `FORCE_COLOR=1` when it would colour its own stderr (see
+[Colour](#colour)).
 
 With `--format json --log-events`, each line is also a `log` event (see
 [Lifecycle events](#lifecycle-events)), classified by wrangler's own tags: a
@@ -678,7 +698,7 @@ bynk check [INPUT] [--format rich|short] [--fix[=CODE,…]] [--emit] [--each] [-
 | Argument | Default | Meaning |
 |---|---|---|
 | `INPUT` | `.` | A `.bynk` file, or a project root directory (a `bynk.toml` or `src/` subdir selects project mode; otherwise the directory is itself the source tree). |
-| `--format` | `rich` | `rich` is the source-context rendering; `short` emits one terse `path:line:col: severity[category]: message` line per diagnostic, for the VS Code problem-matcher, CI, and scripts. In both, `path` is the file as you'd type it from the working directory (the input you passed, joined with the file's place in it), the same path `fmt` reports. `rich` is coloured only when stderr is a terminal and `NO_COLOR` is unset or empty; `FORCE_COLOR` or `CLICOLOR_FORCE` set to anything but empty or `0` colours it without a terminal (for `less -R` or a CI log); `0` doesn't turn colour off on a terminal, `NO_COLOR` does, and it wins over both. `rich` cuts a source line longer than 400 bytes to a window around its labels, marked `…`. |
+| `--format` | `rich` | `rich` is the source-context rendering; `short` emits one terse `path:line:col: severity[category]: message` line per diagnostic, for the VS Code problem-matcher, CI, and scripts. In both, `path` is the file as you'd type it from the working directory (the input you passed, joined with the file's place in it), the same path `fmt` reports. `rich` is coloured as [`--color`](#colour) says: by default only when stderr is a terminal and `NO_COLOR` is unset or empty; `FORCE_COLOR` or `CLICOLOR_FORCE` set to anything but empty or `0` colours it without a terminal (for `less -R` or a CI log); `0` doesn't turn colour off on a terminal, `NO_COLOR` does, and it wins over both. `rich` cuts a source line longer than 400 bytes to a window around its labels, marked `…`. |
 
 | `--fix[=CODE,…]` | off | Apply the machine-applicable fix suggestions to the sources, in place, before checking. With `=CODE` (comma-separated, or repeated), only those diagnostic codes' fixes. See [Applying fixes](#applying-fixes). |
 | `--emit` | off | After a passing check, generate the Workers TypeScript into a temporary directory and type-check it with `tsc`. See [Type-checking the generated code](#type-checking-the-generated-code). Needs a project directory, and `tsc` (with Node.js). |

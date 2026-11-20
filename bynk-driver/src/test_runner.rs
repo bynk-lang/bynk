@@ -1329,8 +1329,14 @@ fn discovery_suites(out: &ProjectOutput) -> Vec<Suite> {
 /// Execute the built runner command and produce its exit code. In JSON mode the
 /// runner's stdout (NDJSON) and stderr are captured, folded into the pinned
 /// document, and printed; in NDJSON mode each event is forwarded as the runner
-/// writes it ([`crate::test_stream`]); otherwise stdio is inherited so the human
-/// ✓ / ✗ output flows straight through. Either way the **exit code follows the runner's own
+/// writes it ([`crate::test_stream`]); otherwise the human ✓ / ✗ output goes
+/// to the terminal: inherited straight through when nothing needs changing,
+/// and forwarded line by line ([`run_aliased`]) when a doc test's name needs
+/// rewriting, a snapshot report needs taking out, or `--color` colours it.
+/// Forwarded, the runner's stdout is a pipe, so it is given `FORCE_COLOR=1`
+/// to keep Node's own colour, and its stdout and stderr are forwarded
+/// separately, so a test's own `console.error` may land a line early or late
+/// among the ✓ / ✗ lines. Either way the **exit code follows the runner's own
 /// process status**, so a mid-run crash (a complete NDJSON prefix but no
 /// `run-end`) is never reported as success.
 #[allow(clippy::too_many_arguments)]
@@ -1459,7 +1465,7 @@ fn finish_runner(
             return Ok(ExitCode::FAILURE);
         }
         Ok(exit_from(out.status.success()))
-    } else if aliases.is_empty() && snapshots.is_none() {
+    } else if aliases.is_empty() && snapshots.is_none() && !crate::colour::stdout() {
         let status = cmd
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit())
@@ -1469,7 +1475,8 @@ fn finish_runner(
         // #2461: a doc test's output names the real file, not the synthetic
         // one it was compiled from, so the lines are rewritten on the way.
         // #2842: and the snapshot report line is taken out of the output.
-        let (status, report) = run_aliased(cmd, aliases)?;
+        // And with colour on, the runner's plain lines are coloured.
+        let (status, report) = run_aliased(cmd, aliases, crate::colour::stdout())?;
         if let Some(run) = snapshots {
             let counts = match run.report_for(report.as_ref()) {
                 Some(report) => match run.settle(&report) {
@@ -1581,6 +1588,7 @@ fn output_within(
 fn run_aliased(
     mut cmd: ProcCommand,
     aliases: &[(String, String)],
+    colour: bool,
 ) -> std::io::Result<(std::process::ExitStatus, Option<crate::snapshots::Report>)> {
     use std::io::{BufRead, BufReader, Write};
     // Reads raw bytes a line at a time (as `test_stream::forward` does), so a
@@ -1592,8 +1600,10 @@ fn run_aliased(
         aliases: &[(String, String)],
         mut out: impl Write,
         report: Option<&mut Option<crate::snapshots::Report>>,
+        colour: bool,
     ) {
         let mut report = report;
+        let mut lines = crate::colour::TestLines::default();
         let mut reader = BufReader::new(pipe);
         let mut buffer = Vec::new();
         loop {
@@ -1611,21 +1621,37 @@ fn run_aliased(
                 continue;
             }
             let line = crate::doc_examples::apply_aliases(&line, aliases);
+            let line = if colour {
+                lines.paint(&line)
+            } else {
+                line.into_owned()
+            };
             let _ = out.write_all(line.as_bytes());
             let _ = out.flush();
         }
+    }
+    // Piped, Node can't see the terminal: when we colour, it may too (its
+    // `console.log` of an object, say), as it would have, inherited.
+    if colour {
+        cmd.env_remove("NO_COLOR").env("FORCE_COLOR", "1");
     }
     let mut child = cmd.stdout(Stdio::piped()).stderr(Stdio::piped()).spawn()?;
     let stderr_pipe = child.stderr.take();
     let err_aliases = aliases.to_vec();
     let errors = std::thread::spawn(move || {
         if let Some(pipe) = stderr_pipe {
-            forward(pipe, &err_aliases, std::io::stderr().lock(), None);
+            forward(pipe, &err_aliases, std::io::stderr().lock(), None, false);
         }
     });
     let mut report = None;
     if let Some(pipe) = child.stdout.take() {
-        forward(pipe, aliases, std::io::stdout().lock(), Some(&mut report));
+        forward(
+            pipe,
+            aliases,
+            std::io::stdout().lock(),
+            Some(&mut report),
+            colour,
+        );
     }
     let status = child.wait()?;
     let _ = errors.join();
@@ -1721,10 +1747,14 @@ fn run_with_coverage(
         unmatched.report(program);
         exit_from(out.status.success())
     } else {
-        let status = cmd
-            .stdout(Stdio::inherit())
-            .stderr(Stdio::inherit())
-            .status();
+        let colour = crate::colour::stdout();
+        let status = if colour {
+            run_aliased(cmd, &[], true).map(|(status, _)| status)
+        } else {
+            cmd.stdout(Stdio::inherit())
+                .stderr(Stdio::inherit())
+                .status()
+        };
         let status = match status {
             Ok(s) => s,
             Err(e) => {
@@ -1734,7 +1764,7 @@ fn run_with_coverage(
             }
         };
         let report = collect();
-        print!("{}", crate::coverage::render_rich(&report));
+        print!("{}", crate::coverage::render_rich(&report, colour));
         exit_from(status.success())
     };
     let _ = std::fs::remove_dir_all(&cov_dir);

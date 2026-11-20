@@ -17,6 +17,18 @@ pub struct Cli {
     /// Don't print per-context progress from `build`, `dev` and `deploy`.
     #[arg(short, long, global = true)]
     pub quiet: bool,
+    /// When to colour output: `auto` colours a terminal unless `NO_COLOR` is
+    /// set, `always` colours a pipe or file too, and `never` doesn't colour.
+    /// Machine-readable formats are never coloured.
+    #[arg(
+        long = "color",
+        visible_alias = "colour",
+        value_name = "WHEN",
+        value_enum,
+        default_value_t,
+        global = true
+    )]
+    pub color: bynk_driver::colour::ColourChoice,
     #[command(subcommand)]
     pub command: Command,
 }
