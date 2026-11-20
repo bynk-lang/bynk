@@ -9,27 +9,63 @@
 use bynk_check::wire_default::DefaultValue;
 use bynk_ts::{TsExpr, TsLit, TsObjectEntry, TsType, TsTypeMember};
 
-/// The node for a default value going into a position of TS type `slot`.
-///
-/// #3759: a refined value is its base value cast to the type of its own position, `(5 as
-/// Review["rating"])`, so it is branded without naming the refined type, which the module that
-/// builds the record may not import. Each position's type is indexed from `slot`: a field by its
-/// key, a list element by `number`, a variant's payload through `Extract<…, { tag: "V" }>`. A slot
-/// of `any` (test scaffolding, where a declared type is not nameable) stays `any` all the way down.
-/// `None` leaves a refined value unbranded (a value with none needs no slot).
-pub(super) fn default_value_node(value: &DefaultValue, slot: Option<&TsType>) -> TsExpr {
-    let entries = |fields: &[(String, DefaultValue)], within: Option<TsType>| {
+/// Where a default value goes, for a refined value in it (#3759).
+#[derive(Clone)]
+pub(super) enum Slot {
+    /// A position of this TS type: a refined value is cast to it, `(5 as Review["rating"])`, so
+    /// it is branded without naming the refined type, which the module that builds the record may
+    /// not import. Each part's type is indexed from it: a field by its key, a list element by
+    /// `number`, a variant's payload through `Extract<…, { tag: "V" }>`.
+    Typed(TsType),
+    /// Test scaffolding, where a declared type is not nameable: a refined value is branded as
+    /// `unchecked_construct_test_node` brands a refined literal there.
+    Scaffold,
+    /// No brand (a value with no refined part needs none).
+    Unbranded,
+}
+
+impl Slot {
+    /// The slot of a part of this one: `T[K]`.
+    fn index(&self, key: TsType) -> Slot {
+        match self {
+            Slot::Typed(ty) => Slot::Typed(TsType::Indexed {
+                object: Box::new(ty.clone()),
+                index: Box::new(key),
+            }),
+            other => other.clone(),
+        }
+    }
+
+    /// The slot of a field `key` of this one.
+    fn field(&self, key: &str) -> Slot {
+        self.index(TsType::StringLiteral(key.to_string()))
+    }
+
+    /// The slot of the `variant` member of this tagged union: `Extract<T, { tag: "<variant>" }>`.
+    fn variant(&self, variant: &str) -> Slot {
+        match self {
+            Slot::Typed(ty) => {
+                let tag = TsType::Object(vec![TsTypeMember::prop(
+                    "tag",
+                    TsType::StringLiteral(variant.to_string()),
+                )]);
+                Slot::Typed(TsType::named_with_args("Extract", vec![ty.clone(), tag]))
+            }
+            other => other.clone(),
+        }
+    }
+}
+
+/// The node for a default value going into `slot`.
+pub(super) fn default_value_node(value: &DefaultValue, slot: &Slot) -> TsExpr {
+    let entries = |fields: &[(String, DefaultValue)], within: &Slot| {
         fields
             .iter()
             .map(|(key, v)| {
-                let at = within
-                    .as_ref()
-                    .map(|t| index(t, TsType::StringLiteral(key.clone())));
-                TsObjectEntry::prop(key.clone(), default_value_node(v, at.as_ref()))
+                TsObjectEntry::prop(key.clone(), default_value_node(v, &within.field(key)))
             })
             .collect()
     };
-    let variant = |tag: &str| slot.map(|t| extract(t, tag));
     match value {
         DefaultValue::Num(digits) => TsExpr::Lit(TsLit::Num(digits.clone())),
         DefaultValue::Str(text) => TsExpr::Lit(TsLit::Str(text.clone())),
@@ -38,63 +74,35 @@ pub(super) fn default_value_node(value: &DefaultValue, slot: Option<&TsType>) ->
         DefaultValue::Decimal { coefficient, scale } => {
             super::lower::decimal_lit(coefficient, *scale)
         }
-        DefaultValue::Refined { value, .. } => {
-            let base = default_value_node(value, None);
+        DefaultValue::Refined { name, value } => {
+            let base = default_value_node(value, &Slot::Unbranded);
             match slot {
-                Some(ty) => TsExpr::Paren(Box::new(TsExpr::As {
+                Slot::Typed(ty) => TsExpr::Paren(Box::new(TsExpr::As {
                     expr: Box::new(base),
                     ty: ty.clone(),
                 })),
-                None => base,
+                Slot::Scaffold => super::ts_types::unchecked_construct_test_node(name, base, false),
+                Slot::Unbranded => base,
             }
         }
-        DefaultValue::Record(fields) => object(entries(fields, slot.cloned())),
-        DefaultValue::Sum { variant: v, fields } => tagged(v, entries(fields, variant(v))),
-        DefaultValue::Some(v) => payload("Some", "value", v, variant("Some")),
+        DefaultValue::Record(fields) => object(entries(fields, slot)),
+        DefaultValue::Sum { variant, fields } => {
+            tagged(variant, entries(fields, &slot.variant(variant)))
+        }
+        DefaultValue::Some(v) => payload("Some", "value", v, slot),
         DefaultValue::None => tagged("None", vec![]),
-        DefaultValue::Ok(v) => payload("Ok", "value", v, variant("Ok")),
-        DefaultValue::Err(v) => payload("Err", "error", v, variant("Err")),
+        DefaultValue::Ok(v) => payload("Ok", "value", v, slot),
+        DefaultValue::Err(v) => payload("Err", "error", v, slot),
         DefaultValue::List(items) => {
-            let at = slot.map(|t| index(t, TsType::named("number")));
+            let at = slot.index(TsType::named("number"));
             TsExpr::Array {
-                items: items
-                    .iter()
-                    .map(|v| default_value_node(v, at.as_ref()))
-                    .collect(),
+                items: items.iter().map(|v| default_value_node(v, &at)).collect(),
                 multiline: false,
             }
         }
         DefaultValue::EmptyMap => empty_collection("Map"),
         DefaultValue::EmptySet => empty_collection("Set"),
     }
-}
-
-/// Whether `ty` is `any`, whose every part is `any` again.
-fn is_any(ty: &TsType) -> bool {
-    matches!(ty, TsType::Named { name, type_args } if name == "any" && type_args.is_empty())
-}
-
-/// `T[K]`.
-fn index(ty: &TsType, key: TsType) -> TsType {
-    if is_any(ty) {
-        return ty.clone();
-    }
-    TsType::Indexed {
-        object: Box::new(ty.clone()),
-        index: Box::new(key),
-    }
-}
-
-/// `Extract<T, { tag: "<variant>" }>`: the member of a tagged union that is `variant`.
-fn extract(ty: &TsType, variant: &str) -> TsType {
-    if is_any(ty) {
-        return ty.clone();
-    }
-    let tag = TsType::Object(vec![TsTypeMember::prop(
-        "tag",
-        TsType::StringLiteral(variant.to_string()),
-    )]);
-    TsType::named_with_args("Extract", vec![ty.clone(), tag])
 }
 
 /// A one-line object literal.
@@ -110,14 +118,14 @@ fn tagged(variant: &str, rest: Vec<TsObjectEntry>) -> TsExpr {
     object(entries)
 }
 
-/// `{ tag: "<variant>" as const, <key>: <value> }`, the value going into `within[key]`.
-fn payload(variant: &str, key: &str, value: &DefaultValue, within: Option<TsType>) -> TsExpr {
-    let at = within.map(|t| index(&t, TsType::StringLiteral(key.to_string())));
+/// `{ tag: "<variant>" as const, <key>: <value> }`, the value going into the variant's `key`.
+fn payload(variant: &str, key: &str, value: &DefaultValue, slot: &Slot) -> TsExpr {
+    let at = slot.variant(variant).field(key);
     tagged(
         variant,
         vec![TsObjectEntry::prop(
             key.to_string(),
-            default_value_node(value, at.as_ref()),
+            default_value_node(value, &at),
         )],
     )
 }
@@ -161,7 +169,7 @@ mod tests {
         }
     }
     fn print(value: &DefaultValue) -> String {
-        print_expr(&default_value_node(value, None))
+        print_expr(&default_value_node(value, &Slot::Unbranded))
     }
 
     /// Every case: the tree, and the text the deleted `lower_field_default_value` printed for it
@@ -278,16 +286,19 @@ mod tests {
                 "{ s: (4 as Review[\"f\"][\"s\"]), n: 1 }",
             ),
         ] {
-            assert_eq!(print_expr(&default_value_node(&value, Some(&slot))), want);
+            assert_eq!(
+                print_expr(&default_value_node(&value, &Slot::Typed(slot.clone()))),
+                want
+            );
         }
     }
 
-    /// #3759: in test scaffolding the slot is `any`, and every part of `any` is `any`.
+    /// #3759: in test scaffolding each refined leaf is branded as a refined literal is there.
     #[test]
-    fn an_any_slot_stays_any() {
+    fn a_scaffold_slot_brands_each_leaf_as_a_test_literal() {
         let value = DefaultValue::List(vec![some(refined("Rating", num("3")))]);
         assert_eq!(
-            print_expr(&default_value_node(&value, Some(&TsType::named("any")))),
+            print_expr(&default_value_node(&value, &Slot::Scaffold)),
             "[{ tag: \"Some\" as const, value: (3 as any) }]"
         );
     }

@@ -19,7 +19,7 @@ use bynk_model::is_effectful_return;
 use bynk_model::{ConstVal, EventPatternIr, EventPatternValueIr};
 
 use super::ctx::{BodyMode, ModuleCtx, TestShared};
-use super::default_value::default_value_node;
+use super::default_value::{Slot, default_value_node};
 use super::internal_fault::{FaultSite, undefined_node, unnameable_receiver_type_arg};
 use super::lower_call::agents::{
     lower_agent_init, lower_inline_agent_call, lower_let_bound_agent_call,
@@ -4613,24 +4613,24 @@ fn object_built(has_spread: bool, slots: Vec<FieldSlot>, children: Vec<LoweredEx
     )
 }
 
-/// #3759: the TS type of `record[field]`, the slot a defaulted field's value fills, so a refined
-/// value in it is cast to its position's type (`default_value_node`). Indexed from the record's
-/// type as the checker typed this construction: the refined type may not be nameable here (the
-/// record can come from a unit this one imports without its field types), but the record is,
-/// since this literal names it. In test scaffolding a declared type is not nameable, so the slot
-/// is `any`, as `unchecked_construct_test_node` brands a refined literal there.
-fn default_slot(e: &Expr, type_name: &Ident, field: &str, cx: &LowerCtx) -> bynk_ts::TsType {
+/// #3759: the slot a defaulted field's value fills, `record[field]`, so a refined value in it is
+/// cast to its position's type (`default_value_node`). Indexed from the record's type as the
+/// checker typed this construction: the refined type may not be nameable here (the record can
+/// come from a unit this one imports without its field types), but the record is, since this
+/// literal names it. Test scaffolding names no declared type, so it brands as it brands a refined
+/// literal.
+fn default_slot(e: &Expr, type_name: &Ident, field: &str, cx: &LowerCtx) -> Slot {
     if cx.in_test_scaffold() {
-        return bynk_ts::TsType::named("any");
+        return Slot::Scaffold;
     }
     let record = match cx.commons().expr_types.get(&e.id) {
         Some(te) => ts_ty_to_ts_type(te.ty, cx.ty_render()),
         None => bynk_ts::TsType::named(cx.consumed_type_name(&type_name.name)),
     };
-    bynk_ts::TsType::Indexed {
+    Slot::Typed(bynk_ts::TsType::Indexed {
         object: Box::new(record),
         index: Box::new(bynk_ts::TsType::StringLiteral(field.to_string())),
-    }
+    })
 }
 
 fn lower_record_construction(
@@ -4661,10 +4661,11 @@ fn lower_record_construction(
                 Ok(v) => {
                     slots.push(FieldSlot::Prop(declared.name.name.clone()));
                     // #3759: a refined value in it is cast to its position's type.
-                    let slot = v
-                        .holds_refined()
-                        .then(|| default_slot(e, type_name, &declared.name.name, cx));
-                    let node: Built = Ok(default_value_node(&v, slot.as_ref()));
+                    let slot = match v.holds_refined() {
+                        true => default_slot(e, type_name, &declared.name.name, cx),
+                        false => Slot::Unbranded,
+                    };
+                    let node: Built = Ok(default_value_node(&v, &slot));
                     children.push(node.into());
                 }
                 // The checker rejected any default that has no value: a missing
