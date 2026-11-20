@@ -5394,6 +5394,16 @@ fn process_exec_import() -> Vec<TsStmt> {
     )
 }
 
+/// #3815: a unit's event names in name order. `table.events` is a `HashMap`,
+/// so walking it directly put the Bundle `__eventsDispatch` cases in a
+/// different order from one build to the next; the Workers fan-out walks a
+/// `BTreeMap`, so the two targets now agree.
+fn event_names_in_order(table: &UnitTable) -> Vec<&String> {
+    let mut names: Vec<&String> = table.events.keys().collect();
+    names.sort();
+    names
+}
+
 #[allow(clippy::too_many_arguments)]
 fn emit_composition_root(
     groups: &BTreeMap<String, Vec<usize>>,
@@ -5576,12 +5586,7 @@ fn emit_composition_root(
         // just with an empty switch.
         if unit_table_uses_emit(table, unit_callees.get(ctx_name)) {
             let mut cases = String::new();
-            // #3815: `table.events` is a `HashMap`; walk it in name order, as
-            // the Workers fan-out's `BTreeMap` does, so the cases come out the
-            // same on every build.
-            let mut event_names: Vec<&String> = table.events.keys().collect();
-            event_names.sort();
-            for name in event_names {
+            for name in event_names_in_order(table) {
                 let Some(subs) = event_subscribers.get(&(ctx_name.clone(), name.clone())) else {
                     continue;
                 };
