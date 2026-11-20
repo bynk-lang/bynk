@@ -1846,18 +1846,21 @@ jobs:
     timeout-minutes: 5
     steps:
       # Same "a skipped job is a pass" semantics as `ci-green`: the path filters
-      # make skipping the normal case on a scoped PR, so only a real failure or
-      # a cancellation may go red. No checkout — unlike `ci-green` this job
-      # reads no files.
+      # make skipping the normal case on a scoped PR, so `success` and `skipped`
+      # pass and every other result goes red (see `ci-green` for why this is
+      # an allow-list). No checkout — unlike `ci-green` this job reads no files.
       - name: Verify no fast gate failed
         run: |
           results="${{ join(needs.*.result, ' ') }}"
           echo "Upstream results: $results"
           for r in $results; do
-            if [ "$r" = "failure" ] || [ "$r" = "cancelled" ]; then
-              echo "::error::A fast gate reported '$r'."
-              exit 1
-            fi
+            case "$r" in
+              success|skipped) ;;
+              *)
+                echo "::error::A fast gate reported '$r'."
+                exit 1
+                ;;
+            esac
           done
           echo "Fast gates passed. The test legs may still be running — merging still waits on CI green."
 
@@ -2033,8 +2036,9 @@ jobs:
     # Single required status check. Branch protection requires THIS job and
     # nothing else, so the path-gated jobs above can skip freely and renaming
     # one no longer desyncs the ruleset. `if: always()` makes it report even
-    # when upstreams are skipped or fail; it goes red only if a needed job
-    # actually failed or was cancelled (a skipped job is a pass).
+    # when upstreams are skipped or fail; it goes green only if every needed
+    # job succeeded or was skipped (any other result, `abandoned` included,
+    # is red).
     name: CI green
     if: always()
     needs:
@@ -2100,15 +2104,25 @@ jobs:
             exit 1
           fi
           echo "All jobs are gated or exempt."
+      # An allow-list, not a deny-list: only `success` and `skipped` pass.
+      # GitHub reports more results than `failure` and `cancelled`. A matrix
+      # job with a leg that never got a runner (queued 15 min, then dropped by
+      # GitHub) reports `abandoned`, and the old deny-list let that through:
+      # the nightlies of 19 and 20 November 2026 lost their macOS test leg that
+      # way, `CI green` passed, and `nightly-report` never fired (#3758). On a
+      # PR the same hole would merge without the macOS or Windows leg.
       - name: Verify no upstream job failed
         run: |
           results="${{ join(needs.*.result, ' ') }}"
           echo "Upstream results: $results"
           for r in $results; do
-            if [ "$r" = "failure" ] || [ "$r" = "cancelled" ]; then
-              echo "::error::An upstream job reported '$r'."
-              exit 1
-            fi
+            case "$r" in
+              success|skipped) ;;
+              *)
+                echo "::error::An upstream job reported '$r'. Only success and skipped pass. A leg GitHub never gave a runner reports 'abandoned' or 'cancelled'; re-run the failed jobs."
+                exit 1
+                ;;
+            esac
           done
           echo "All upstream jobs succeeded or were skipped."
       # A draft-only run must not leave a passing `CI green` on the head SHA:
