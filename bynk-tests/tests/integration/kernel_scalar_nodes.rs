@@ -82,15 +82,15 @@ fn stamp(i: Instant) -> String { i.toIso() }
     );
 }
 
-/// The identity arms behind #3770 stay text (so a golden does not gain brackets in a paydown
-/// slice): the call is still a text exit and prints today's (wrong) bytes. The #3770 fix flips this.
+/// The identity arms behind #3770 are nodes: the call is no text exit and the operand keeps its
+/// brackets under the tighter `*`.
 #[test]
-fn the_3770_identity_arms_stay_text() {
+fn the_3770_identity_arms_bracket_their_operand() {
     let src = r#"context ops.jobs
 
 fn f(a: Int, b: Int) -> Int { Duration.millis(a + b).toMillis() * 2 }
 "#;
     let (exits, text) = mem(src);
-    assert!(exits > 0, "the identity arm is a text exit:\n{text}");
-    assert_line(&text, "return a + b * 2;");
+    assert_eq!(exits, 0, "the identity arm is a node:\n{text}");
+    assert_line(&text, "return (a + b) * 2;");
 }
