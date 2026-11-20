@@ -155,16 +155,26 @@ export class Room {
     const connection = new __WorkersConnection<Frame>(ws, __att.connId);
     const env = this.__env as unknown as globalThis.Record<string, unknown>;
     let __raw: string;
-    try { __raw = typeof message === "string" ? message : new globalThis.TextDecoder().decode(message); } catch { ws.close(1003, "unreadable frame"); return; }
+    try {
+      __raw = typeof message === "string" ? message : new globalThis.TextDecoder().decode(message);
+    } catch {
+      ws.close(1003, "unreadable frame"); return;
+    }
     let __json: __JsonValue;
-    try { __json = globalThis.JSON.parse(__raw) as __JsonValue; } catch { ws.close(1003, "malformed frame"); return; }
+    try {
+      __json = globalThis.JSON.parse(__raw) as __JsonValue;
+    } catch {
+      ws.close(1003, "malformed frame"); return;
+    }
     const __dec = __deserialise_Frame(__json, "frame");
     if (__dec.tag === "Err") { ws.close(1008, "invalid frame"); return; }
     await this.__wsMessage_chat(connection, __att.args[0] as RoomKey, __dec.value, { identity: __att.identity as UserId, ...{ env: env as never } });
   }
 
   async webSocketClose(ws: { deserializeAttachment(): unknown; send(data: string): void; close(code?: number, reason?: string): void }, code: number, reason: string, wasClean: boolean): globalThis.Promise<void> {
-    void code; void reason; void wasClean;
+    void code;
+    void reason;
+    void wasClean;
     const __att = ws.deserializeAttachment() as { connId: string; identity: string; args: unknown[] } | null;
     if (__att === null) { ws.close(1011, "no session"); return; }
     const connection = new __WorkersConnection<Frame>(ws, __att.connId);
@@ -223,7 +233,11 @@ export class Audit {
     __reportUnknownStoredKeys("Audit", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateAuditState(__merged, __wholesale);
-    if (__readsLazily(this)) { __attachLazy(this.state.storage, __merged, __lazyFieldsOfAudit); } else { __hydrateAuditState(__merged, __wholesale) }
+    if (__readsLazily(this)) {
+      __attachLazy(this.state.storage, __merged, __lazyFieldsOfAudit);
+    } else {
+      __hydrateAuditState(__merged, __wholesale);
+    }
     return __merged;
   }
 

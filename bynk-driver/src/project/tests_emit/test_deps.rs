@@ -303,7 +303,7 @@ pub(super) fn emit_test_deps(
     entries.extend(session_keys_entry(target_name, target_kind, unit_tables));
     let mut entries: Vec<TsObjectEntry> = entries
         .into_iter()
-        .map(|(k, v)| TsObjectEntry::Prop(k, v))
+        .map(|(k, v)| TsObjectEntry::prop(k, v))
         .collect();
     // #2050: the release-at-commit flush of an emitting handler — a service's,
     // or an agent's, which runs on its caller's `deps` — calls

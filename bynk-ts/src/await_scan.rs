@@ -34,7 +34,9 @@ pub fn expr_contains_await(expr: &TsExpr) -> bool {
             expr_contains_await(callee) || args.iter().any(expr_contains_await)
         }
         TsExpr::Object { entries, .. } => entries.iter().any(|e| match e {
-            TsObjectEntry::Prop(_, v) | TsObjectEntry::Spread(v) => expr_contains_await(v),
+            TsObjectEntry::Prop { value: v, .. } | TsObjectEntry::Spread(v) => {
+                expr_contains_await(v)
+            }
             TsObjectEntry::Shorthand(_) => false,
             TsObjectEntry::Method { body, .. } => body.iter().any(stmt_contains_await),
         }),

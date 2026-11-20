@@ -62,7 +62,11 @@ export class Basket {
     __reportUnknownStoredKeys("Basket", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateBasketState(__merged, __wholesale);
-    if (__readsLazily(this)) { __attachLazy(this.state.storage, __merged, __lazyFieldsOfBasket); } else { __hydrateBasketState(__merged, __wholesale) }
+    if (__readsLazily(this)) {
+      __attachLazy(this.state.storage, __merged, __lazyFieldsOfBasket);
+    } else {
+      __hydrateBasketState(__merged, __wholesale);
+    }
     return __merged;
   }
 

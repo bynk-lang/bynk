@@ -743,7 +743,7 @@ pub fn instantiate_provider_ts_expr(
             // Every Workers composer has the Worker's `env` in scope; leaving it
             // out would fault at `this.deps.env` at runtime instead.
             let env = env_ident.expect("a Workers composer passes its `env`");
-            entries.push(bynk_ts::TsObjectEntry::Prop(
+            entries.push(bynk_ts::TsObjectEntry::prop(
                 "env".to_string(),
                 bynk_ts::TsExpr::Ident(env.to_string()),
             ));

@@ -201,7 +201,7 @@ impl<'a> CmpGen<'a> {
                         .map(|p| (p.name.name.clone(), &p.type_ref))
                         .collect();
                     // The key prints verbatim, so it carries its own quotes.
-                    payloads.push(TsObjectEntry::Prop(
+                    payloads.push(TsObjectEntry::prop(
                         format!("\"{}\"", v.name.name),
                         self.fields(&fields, &env, stack),
                     ));

@@ -291,10 +291,10 @@ fn err_structural_mismatch_top(expected: &str, actual: TsExpr) -> TsExpr {
         // the *other* convenience constructor, which takes `(String,
         // TsExpr)` pairs and can't represent `Shorthand`.
         vec![TsExpr::object_entries(vec![
-            TsObjectEntry::Prop("kind".to_string(), str_lit("StructuralMismatch")),
+            TsObjectEntry::prop("kind".to_string(), str_lit("StructuralMismatch")),
             TsObjectEntry::Shorthand("path".to_string()),
-            TsObjectEntry::Prop("expected".to_string(), str_lit(expected)),
-            TsObjectEntry::Prop("actual".to_string(), actual),
+            TsObjectEntry::prop("expected".to_string(), str_lit(expected)),
+            TsObjectEntry::prop("actual".to_string(), actual),
         ])],
     )
 }
@@ -996,9 +996,9 @@ fn emit_decimal_named_codec(
             block(vec![return_(call(
                 ident("Err"),
                 vec![TsExpr::object_entries(vec![
-                    TsObjectEntry::Prop("kind".to_string(), str_lit("RefinementViolation")),
+                    TsObjectEntry::prop("kind".to_string(), str_lit("RefinementViolation")),
                     TsObjectEntry::Shorthand("path".to_string()),
-                    TsObjectEntry::Prop(
+                    TsObjectEntry::prop(
                         "violation".to_string(),
                         member(ident("validated"), "error"),
                     ),
@@ -1028,9 +1028,9 @@ fn emit_decimal_named_codec(
                 block(vec![return_(call(
                     ident("Err"),
                     vec![TsExpr::object_entries(vec![
-                        TsObjectEntry::Prop("kind".to_string(), str_lit("RefinementViolation")),
+                        TsObjectEntry::prop("kind".to_string(), str_lit("RefinementViolation")),
                         TsObjectEntry::Shorthand("path".to_string()),
-                        TsObjectEntry::Prop(
+                        TsObjectEntry::prop(
                             "violation".to_string(),
                             TsExpr::object(vec![
                                 ("field".to_string(), str_lit(field)),
@@ -1238,9 +1238,9 @@ fn emit_refined(
                 block(vec![return_(call(
                     ident("Err"),
                     vec![TsExpr::object_entries(vec![
-                        TsObjectEntry::Prop("kind".to_string(), str_lit("RefinementViolation")),
+                        TsObjectEntry::prop("kind".to_string(), str_lit("RefinementViolation")),
                         TsObjectEntry::Shorthand("path".to_string()),
-                        TsObjectEntry::Prop(
+                        TsObjectEntry::prop(
                             "violation".to_string(),
                             member(ident("validated"), "error"),
                         ),
@@ -1317,9 +1317,9 @@ fn emit_inline_refinement_checks(
         return_(call(
             ident("Err"),
             vec![TsExpr::object_entries(vec![
-                TsObjectEntry::Prop("kind".to_string(), str_lit("RefinementViolation")),
+                TsObjectEntry::prop("kind".to_string(), str_lit("RefinementViolation")),
                 TsObjectEntry::Shorthand("path".to_string()),
-                TsObjectEntry::Prop(
+                TsObjectEntry::prop(
                     "violation".to_string(),
                     TsExpr::object(vec![
                         ("field".to_string(), str_lit(name)),
@@ -3576,7 +3576,7 @@ fn lenient_option_decode_body(
                 ident("Err"),
                 vec![TsExpr::object_entries(vec![
                     TsObjectEntry::Spread(bare_error.clone()),
-                    TsObjectEntry::Prop(
+                    TsObjectEntry::prop(
                         "expected".to_string(),
                         binary(
                             TsBinaryOp::Add,

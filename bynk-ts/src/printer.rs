@@ -1489,7 +1489,14 @@ fn render_multiline_object_entry(
         );
     }
     match entry {
-        TsObjectEntry::Prop(k, v) => {
+        TsObjectEntry::Prop {
+            key: k,
+            value: v,
+            doc,
+        } => {
+            if let Some(text) = doc {
+                render_doc_comment(out, text, depth + 1);
+            }
             out.push_str(&indent(depth + 1));
             out.push_str(k);
             out.push_str(": ");
@@ -1627,7 +1634,16 @@ fn render_object_entry_inline(
     m: &mut Option<MergeTarget<'_>>,
 ) {
     match entry {
-        TsObjectEntry::Prop(k, v) => {
+        TsObjectEntry::Prop {
+            key: k,
+            value: v,
+            doc,
+        } => {
+            // As for a `Method`: a JSDoc block has no single-line form.
+            debug_assert!(
+                doc.is_none(),
+                "render_object_entry_inline: a Prop entry's own doc comment has no single-line form"
+            );
             out.push_str(k);
             out.push_str(": ");
             render_expr(out, v, depth, m);
@@ -1896,6 +1912,7 @@ fn render_expr(out: &mut String, expr: &TsExpr, depth: usize, m: &mut Option<Mer
                 TsUnaryOp::Not => "!",
                 TsUnaryOp::Typeof => "typeof ",
                 TsUnaryOp::Neg => "-",
+                TsUnaryOp::Void => "void ",
             });
             // `- -x` must not print as the decrement `--x`.
             let nested_neg = *op == TsUnaryOp::Neg
@@ -2524,26 +2541,6 @@ pub fn print_object_entry(entry: &TsObjectEntry, depth: usize) -> String {
     out
 }
 
-/// [`print_object_entry`]'s own sibling (#1477), the `TsObjectEntry::Method`
-/// counterpart to [`print_class_method_and_merge`]/[`print_stmt_and_merge`]:
-/// identical rendering, but merges a `Method` entry's own body `nested_map`
-/// into `map` as it prints, at the real print-time offset. Kept separate
-/// from `print_object_entry` itself so every existing caller's own call
-/// sites are untouched.
-///
-/// Appends to the caller's own `out`, the same "must be the real buffer,
-/// not a throwaway local one" reasoning [`print_stmt_and_merge`]'s own doc
-/// explains in full. `source_id`: see this crate's own private `MergeTarget`'s own doc.
-pub fn print_object_entry_and_merge(
-    out: &mut String,
-    entry: &TsObjectEntry,
-    depth: usize,
-    map: &mut SourceMapBuilder,
-    source_id: usize,
-) {
-    render_multiline_object_entry(out, entry, depth, Some(MergeTarget { map, source_id }));
-}
-
 /// Whether `stmts`, or any block/branch/case nested inside them at any
 /// depth, contains a [`TsStmtKind::Raw`] — the recursive check
 /// [`render_class_method`]'s and [`render_multiline_object_entry`]'s own
@@ -2694,11 +2691,29 @@ fn render_class_method(
     out.push('\n');
 }
 
+/// Whether `ty` is `undefined` or a union with an `undefined` member: the
+/// shape of an optional field, which a definite-assignment assertion
+/// contradicts.
+fn type_admits_undefined(ty: &TsType) -> bool {
+    match ty {
+        TsType::Named { name, type_args } => name == "undefined" && type_args.is_empty(),
+        TsType::Union { members, .. } => members.iter().any(type_admits_undefined),
+        TsType::Array { .. } | TsType::Object(_) | TsType::Fn { .. } | TsType::Intersection(_) => {
+            false
+        }
+    }
+}
+
 fn render_params(out: &mut String, params: &[TsParam]) {
     for (i, p) in params.iter().enumerate() {
         if i > 0 {
             out.push_str(", ");
         }
+        debug_assert!(
+            !(p.rest && p.optional),
+            "render_params: a rest parameter cannot be optional (`...{}?` is not valid TypeScript)",
+            p.name
+        );
         if p.rest {
             out.push_str("...");
         }
@@ -2854,6 +2869,12 @@ fn render_decl_body(
             }
             out.push_str(" {\n");
             for f in fields {
+                debug_assert!(
+                    !(f.definite && type_admits_undefined(&f.ty)),
+                    "render_decl_body: field `{}` is definite (`!`) yet its type admits `undefined`; \
+                     an optional-shaped field needs no assertion",
+                    f.name
+                );
                 out.push_str(&indent(depth + 1));
                 if f.private {
                     out.push_str("private ");
@@ -3265,47 +3286,6 @@ mod tests {
         let mut expected = SourceMapBuilder::new();
         expected.add_source("x.bynk", source);
         expected.record(base, commit_span);
-        assert_eq!(map.to_v3(&out, "x.ts"), expected.to_v3(&out, "x.ts"));
-    }
-
-    /// `print_object_entry_and_merge` — the `TsObjectEntry::Method` shape
-    /// (`emit_service`'s own real per-handler site): identical mechanism,
-    /// exercised through its own, third public entry point.
-    #[test]
-    fn print_object_entry_and_merge_merges_a_methods_own_nested_checkpoint() {
-        let source = "on call h() { reply }\n";
-        let reply_off = source.find("reply").unwrap();
-        let reply_span = Span::new(reply_off, reply_off + 5);
-
-        let body_text = "    return reply();\n";
-        let mut nested = SourceMapBuilder::new();
-        nested.record(0, reply_span);
-
-        let mut raw = TsStmt::raw(body_text, None);
-        raw.nested_map = Some(nested);
-
-        let entry = TsObjectEntry::Method {
-            name: "h".to_string(),
-            is_async: false,
-            generics: Vec::new(),
-            params: Vec::new(),
-            return_type: None,
-            doc: None,
-            inline: false,
-            body: vec![raw],
-            span: None,
-        };
-
-        let mut out = String::from("export const svc = {\n");
-        let mut map = SourceMapBuilder::new();
-        map.add_source("x.bynk", source);
-
-        print_object_entry_and_merge(&mut out, &entry, 0, &mut map, 0);
-
-        let base = out.find(body_text).unwrap();
-        let mut expected = SourceMapBuilder::new();
-        expected.add_source("x.bynk", source);
-        expected.record(base, reply_span);
         assert_eq!(map.to_v3(&out, "x.ts"), expected.to_v3(&out, "x.ts"));
     }
 
@@ -4892,6 +4872,15 @@ mod tests {
         let _ = print_expr(&operand);
     }
 
+    /// 1A.32c-1 review: only a `Prop` carries a doc; `with_doc` on any other
+    /// entry is refused in debug builds rather than silently dropped.
+    #[cfg(debug_assertions)]
+    #[test]
+    #[should_panic(expected = "with_doc: only a `Prop` entry carries a doc")]
+    fn a_doc_on_a_non_prop_entry_is_refused() {
+        let _ = TsObjectEntry::Spread(TsExpr::Ident("rest".to_string())).with_doc("why");
+    }
+
     /// 1A.18b: a spread is legal as an item of a multi-line array too.
     #[test]
     fn a_spread_prints_in_a_lines_array() {
@@ -5194,7 +5183,7 @@ mod tests {
             TsExpr::object_entries(vec![
                 TsObjectEntry::Spread(TsExpr::Ident("deps".to_string())),
                 TsObjectEntry::Shorthand("cap1".to_string()),
-                TsObjectEntry::Prop(
+                TsObjectEntry::prop(
                     "identity".to_string(),
                     TsExpr::Ident("__caller".to_string()),
                 ),
@@ -5795,14 +5784,14 @@ mod tests {
         program.push(TsStmt::const_stmt(
             TsBindingName::Ident("byLocale".to_string()),
             None,
-            TsExpr::multiline_object_entries(vec![TsObjectEntry::Prop(
+            TsExpr::multiline_object_entries(vec![TsObjectEntry::prop(
                 "\"en\"".to_string(),
                 TsExpr::multiline_object_entries(vec![
-                    TsObjectEntry::Prop(
+                    TsObjectEntry::prop(
                         "\"greeting\"".to_string(),
                         TsExpr::Ident("renderGreeting".to_string()),
                     ),
-                    TsObjectEntry::Prop(
+                    TsObjectEntry::prop(
                         "\"farewell\"".to_string(),
                         TsExpr::Ident("renderFarewell".to_string()),
                     ),
@@ -5828,7 +5817,7 @@ mod tests {
         program.push(TsStmt::const_stmt(
             TsBindingName::Ident("byGroup".to_string()),
             None,
-            TsExpr::multiline_object_entries(vec![TsObjectEntry::Prop(
+            TsExpr::multiline_object_entries(vec![TsObjectEntry::prop(
                 "\"a\"".to_string(),
                 TsExpr::multiline_array(vec![
                     TsExpr::Ident("one".to_string()),
@@ -7566,7 +7555,7 @@ mod tests {
                 return_type: Some(TsType::named_with_args("Sum", vec![TsType::named("T")])),
                 body: Box::new(TsArrowBody::Expr(Box::new(TsExpr::Paren(Box::new(
                     TsExpr::object_entries(vec![
-                        TsObjectEntry::Prop(
+                        TsObjectEntry::prop(
                             "tag".to_string(),
                             TsExpr::Lit(TsLit::Str("some".to_string())),
                         ),
@@ -8622,6 +8611,53 @@ mod tests {
         assert_eq!(print_stmt(&block, 0), "{\n  break;\n}\n");
     }
 
+    /// `TsUnaryOp::Void` (1A.32c-1): `void x`, a bracketed binary operand, and a negated operand
+    /// beside it.
+    #[test]
+    fn a_void_expression_prints_with_its_operand_bracketed() {
+        let void = |e: TsExpr| TsExpr::Unary {
+            op: TsUnaryOp::Void,
+            expr: Box::new(e),
+        };
+        let id = |n: &str| TsExpr::Ident(n.to_string());
+        assert_eq!(print_expr(&void(id("code"))), "void code");
+        assert_eq!(
+            print_expr(&void(TsExpr::Binary {
+                op: TsBinaryOp::Add,
+                left: Box::new(id("a")),
+                right: Box::new(id("b")),
+            })),
+            "void (a + b)"
+        );
+        assert_eq!(
+            print_stmt(&TsStmt::expr_stmt(void(id("wasClean")), None), 1),
+            "  void wasClean;\n"
+        );
+    }
+
+    /// An object `Prop` with a `doc` prints its JSDoc block at the entry's own indent, escaping a
+    /// `*/` as a statement doc comment does; an undocumented one is unchanged (1A.32c-1).
+    #[test]
+    fn a_documented_object_prop_prints_its_doc_before_the_entry() {
+        let obj = TsExpr::multiline_object_entries(vec![
+            TsObjectEntry::prop("\"en\"", TsExpr::Lit(TsLit::Num("1".to_string())))
+                .with_doc("English\n\nterms */ here"),
+            TsObjectEntry::prop("\"fr\"", TsExpr::Lit(TsLit::Num("2".to_string()))),
+        ]);
+        let decl = TsStmt::decl(
+            TsDecl::ConstDecl {
+                name: "t".to_string(),
+                ty: None,
+                init: obj,
+            },
+            None,
+        );
+        assert_eq!(
+            print_stmt(&decl, 0),
+            "const t = {\n  /**\n   * English\n   *\n   * terms *\\/ here\n   */\n  \"en\": 1,\n  \"fr\": 2,\n};\n"
+        );
+    }
+
     /// A rest parameter prints `...name: T`, first or after others (1A.32b).
     #[test]
     fn a_rest_parameter_prints_its_spread() {
@@ -8638,6 +8674,31 @@ mod tests {
             &[TsParam::new("__a", Some(TsType::array(TsType::named("unknown")))).rest()],
         );
         assert_eq!(only, "...__a: unknown[]");
+    }
+
+    /// A rest parameter that is also optional is invalid TypeScript, so the printer refuses it
+    /// loudly rather than printing `...x?`.
+    #[test]
+    #[should_panic(expected = "a rest parameter cannot be optional")]
+    fn a_rest_optional_parameter_is_refused() {
+        let mut p = TsParam::new("xs", Some(TsType::array(TsType::named("unknown")))).rest();
+        p.optional = true;
+        let mut out = String::new();
+        render_params(&mut out, &[p]);
+    }
+
+    /// A definite-assignment assertion on a field whose type admits `undefined` is refused.
+    #[test]
+    #[should_panic(expected = "definite")]
+    fn a_definite_optional_shaped_field_is_refused() {
+        let ty = TsType::union(vec![TsType::named("K"), TsType::named("undefined")]);
+        let class = TsDecl::class(
+            "C",
+            vec![TsClassField::new("__key", ty).definite()],
+            None,
+            Vec::new(),
+        );
+        let _ = print_stmt(&TsStmt::decl(class, None), 0);
     }
 
     /// A definite-assignment field prints `name!: T;`, with or without `private`, beside a plain
@@ -8819,8 +8880,8 @@ mod tests {
         let tag = TsExpr::AsConst(Box::new(TsExpr::Lit(TsLit::Str("Some".to_string()))));
         let obj = TsExpr::Object {
             entries: vec![
-                TsObjectEntry::Prop("tag".to_string(), tag.clone()),
-                TsObjectEntry::Prop("value".to_string(), TsExpr::Ident("v".to_string())),
+                TsObjectEntry::prop("tag".to_string(), tag.clone()),
+                TsObjectEntry::prop("value".to_string(), TsExpr::Ident("v".to_string())),
             ],
             multiline: false,
             end_span: None,
@@ -8843,7 +8904,7 @@ mod tests {
         let tag = TsExpr::AsConst(Box::new(TsExpr::Lit(TsLit::Str("None".to_string()))));
         assert_eq!(print_expr(&arrow(tag)), "() => \"None\" as const");
         let obj = TsExpr::Object {
-            entries: vec![TsObjectEntry::Prop(
+            entries: vec![TsObjectEntry::prop(
                 "tag".to_string(),
                 TsExpr::AsConst(Box::new(TsExpr::Lit(TsLit::Str("None".to_string())))),
             )],

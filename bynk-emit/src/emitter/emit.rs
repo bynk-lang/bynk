@@ -169,32 +169,6 @@ fn schema_version_test(env_binder: &str, version: SchemaVersionIr) -> Option<Str
     }
 }
 
-/// Emit a doc block as a JSDoc-style comment at the given indent. Each line
-/// of the doc body is prefixed with ` * `; empty lines become ` *`.
-///
-/// Doc-block bodies are copied verbatim from source, so a stray `*/` would
-/// otherwise close the JSDoc comment early and let the trailing text land as
-/// executable top-level TypeScript (issue #720). Escape it to `*\/`, which
-/// renders identically but can no longer terminate the comment.
-///
-/// #1333 (R7.1): builds a real [`bynk_ts::TsStmt`] (`TsStmtKind::DocComment`)
-/// and prints it through [`bynk_ts::print_stmt`], instead of `writeln!`-ing
-/// the JSDoc text by hand — the escaping/blank-line rules above now live on
-/// that variant's own doc and its printer arm; this function's own signature
-/// and every one of its 14 real callers are unchanged, the same P7.9 pattern
-/// `ts_type_ref`/`ts_ty` already used (`indent` is always an exact multiple
-/// of `INDENT_STEP` in every real call, so `indent / INDENT_STEP` is a
-/// lossless conversion to the printer's own 2-space-per-depth unit).
-pub(crate) fn emit_doc_block(out: &mut String, doc: Option<&str>, indent: usize) {
-    let Some(doc) = doc else { return };
-    debug_assert!(
-        indent.is_multiple_of(INDENT_STEP),
-        "emit_doc_block: indent {indent} is not a multiple of INDENT_STEP"
-    );
-    let stmt = bynk_ts::TsStmt::doc_comment(doc, None);
-    out.push_str(&bynk_ts::print_stmt(&stmt, indent / INDENT_STEP));
-}
-
 /// The parts of a refined-or-opaque `TypeBody` that its lowering reads.
 ///
 /// Honest about what this is: `emit_refined_type` reached eight arguments when it
@@ -271,9 +245,8 @@ fn emit_refined_type(
     );
     let mut stmts = vec![type_alias];
 
-    let checks_text = {
-        let mut checks = String::new();
-        emit_refined_checks(&mut checks, t, base, refinement);
+    let checks = {
+        let checks = emit_refined_checks(t, base, refinement);
         // #2622: a `Decimal` violation reports its canonical text, since the
         // `bigint` coefficient cannot be JSON-stringified.
         if base == BaseType::Decimal && refinement.is_some() {
@@ -288,6 +261,14 @@ fn emit_refined_type(
         expr: Box::new(bynk_ts::TsExpr::Ident("value".to_string())),
         ty: bynk_ts::TsType::named(name.clone()),
     };
+    let mut of_body = checks;
+    of_body.push(bynk_ts::TsStmt::return_stmt(
+        Some(bynk_ts::TsExpr::Call {
+            callee: Box::new(bynk_ts::TsExpr::Ident("Ok".to_string())),
+            args: vec![cast_to_name.clone()],
+        }),
+        None,
+    ));
     let mut entries: Vec<bynk_ts::TsObjectEntry> = vec![bynk_ts::TsObjectEntry::Method {
         name: "of".to_string(),
         is_async: false,
@@ -305,16 +286,7 @@ fn emit_refined_type(
         )),
         doc: None,
         inline: false,
-        body: vec![
-            bynk_ts::TsStmt::raw(checks_text, None),
-            bynk_ts::TsStmt::return_stmt(
-                Some(bynk_ts::TsExpr::Call {
-                    callee: Box::new(bynk_ts::TsExpr::Ident("Ok".to_string())),
-                    args: vec![cast_to_name.clone()],
-                }),
-                None,
-            ),
-        ],
+        body: of_body,
         span: None,
     }];
     // ADR 0182: only opaque types expose a public `unsafe` constructor. A refined
@@ -354,20 +326,18 @@ fn emit_refined_type(
 }
 
 /// #1335 (R7.1): each guard is a real [`bynk_ts::TsStmt::If`] wrapping a
-/// [`bynk_ts::TsStmt::Return`], printed at depth 2 (`out`'s own 4-space
-/// convention here) through [`bynk_ts::print_stmt`], instead of hand-rolled
-/// `writeln!`s — `emit_refined_checks` and `emit_pred_check`'s own exact
-/// signatures are unchanged, the same P7.9/step-1 (#1333) pattern.
+/// [`bynk_ts::TsStmt::Return`]. Since 1A.32c-1 the guards are returned as
+/// nodes and sit directly in `of`'s body, so the printer lays them out.
 fn emit_refined_checks(
-    out: &mut String,
     t: &TypeDecl,
     base: BaseType,
     refinement: Option<&Refinement>,
-) {
+) -> Vec<bynk_ts::TsStmt> {
     let name = &t.name.name;
+    let mut out = Vec::new();
     if base == BaseType::Int {
         // #1657: an `Int` is a JS safe integer.
-        out.push_str(&print_numeric_guard_stmt(
+        out.push(numeric_guard_stmt(
             name,
             "isSafeInteger",
             "must be a safe integer",
@@ -376,7 +346,7 @@ fn emit_refined_checks(
     // v0.21: validated `Float` values are finite — `.of` and the boundary
     // codec agree (ADR 0040); only in-language arithmetic is host-defined.
     if base == BaseType::Float {
-        out.push_str(&print_numeric_guard_stmt(
+        out.push(numeric_guard_stmt(
             name,
             "isFinite",
             "must be a finite number",
@@ -384,9 +354,10 @@ fn emit_refined_checks(
     }
     if let Some(r) = refinement {
         for pred in bynk_syntax::ast::in_check_order(&r.predicates, |p| &p.kind) {
-            emit_pred_check(out, name, &pred.kind, base);
+            out.push(pred_check_stmt(name, &pred.kind, base));
         }
     }
+    out
 }
 
 /// `if (!Number.{method}(value)) { return Err({ field: "{name}", message:
@@ -394,7 +365,7 @@ fn emit_refined_checks(
 /// both `emit_refined_checks` call sites, `field`/`message` both real
 /// string literals with nothing to escape (a Bynk type name; a fixed,
 /// hand-written English message).
-fn print_numeric_guard_stmt(name: &str, method: &str, message: &str) -> String {
+fn numeric_guard_stmt(name: &str, method: &str, message: &str) -> bynk_ts::TsStmt {
     let cond = bynk_ts::TsExpr::Unary {
         op: bynk_ts::TsUnaryOp::Not,
         expr: Box::new(bynk_ts::TsExpr::Call {
@@ -405,7 +376,7 @@ fn print_numeric_guard_stmt(name: &str, method: &str, message: &str) -> String {
             args: vec![bynk_ts::TsExpr::Ident("value".to_string())],
         }),
     };
-    print_guard_if_stmt(
+    guard_if_stmt(
         cond,
         bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(name.to_string())),
         bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(message.to_string())),
@@ -414,16 +385,16 @@ fn print_numeric_guard_stmt(name: &str, method: &str, message: &str) -> String {
 }
 
 /// `if (<cond>) { return Err({ field: <field>, message: <message>, value
-/// }); }` at depth 2 — the one real shape both `print_numeric_guard_stmt`
-/// and `emit_pred_check` build, differing only in `cond`/`field`/`message`.
-fn print_guard_if_stmt(
+/// }); }` — the one real shape both `numeric_guard_stmt` and
+/// `pred_check_stmt` build, differing only in `cond`/`field`/`message`.
+fn guard_if_stmt(
     cond: bynk_ts::TsExpr,
     field: bynk_ts::TsExpr,
     message: bynk_ts::TsExpr,
     decimal: bool,
-) -> String {
+) -> bynk_ts::TsStmt {
     let value_entry = if decimal {
-        bynk_ts::TsObjectEntry::Prop(
+        bynk_ts::TsObjectEntry::prop(
             "value".to_string(),
             bynk_ts::TsExpr::Ident("__bynkDecimalToString(value)".to_string()),
         )
@@ -431,8 +402,8 @@ fn print_guard_if_stmt(
         bynk_ts::TsObjectEntry::Shorthand("value".to_string())
     };
     let err_obj = bynk_ts::TsExpr::object_entries(vec![
-        bynk_ts::TsObjectEntry::Prop("field".to_string(), field),
-        bynk_ts::TsObjectEntry::Prop("message".to_string(), message),
+        bynk_ts::TsObjectEntry::prop("field".to_string(), field),
+        bynk_ts::TsObjectEntry::prop("message".to_string(), message),
         value_entry,
     ]);
     let return_stmt = bynk_ts::TsStmt::return_stmt(
@@ -442,12 +413,10 @@ fn print_guard_if_stmt(
         }),
         None,
     );
-    let if_stmt =
-        bynk_ts::TsStmt::if_stmt(cond, bynk_ts::TsStmt::block(vec![return_stmt], None), None);
-    bynk_ts::print_stmt(&if_stmt, 2)
+    bynk_ts::TsStmt::if_stmt(cond, bynk_ts::TsStmt::block(vec![return_stmt], None), None)
 }
 
-fn emit_pred_check(out: &mut String, type_name: &str, pred: &PredKind, base: BaseType) {
+fn pred_check_stmt(type_name: &str, pred: &PredKind, base: BaseType) -> bynk_ts::TsStmt {
     let (cond, msg) = crate::emitter::pred_condition_and_message_for(pred, "value", Some(base));
     // #1471: `cond` is now a real `TsExpr` (a `Binary`/`Call` node, not
     // opaque text) — the explicit `Paren` stays regardless, matching this
@@ -468,12 +437,12 @@ fn emit_pred_check(out: &mut String, type_name: &str, pred: &PredKind, base: Bas
         op: bynk_ts::TsUnaryOp::Not,
         expr: Box::new(bynk_ts::TsExpr::Paren(Box::new(cond))),
     };
-    out.push_str(&print_guard_if_stmt(
+    guard_if_stmt(
         cond_expr,
         bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(type_name.to_string())),
         bynk_ts::TsExpr::VerbatimExpr(format!("\"{msg}\""), bynk_ts::VerbatimOrigin::Emit),
         base == BaseType::Decimal,
-    ));
+    )
 }
 
 /// v0.157 (ADR 0183): the erased TS type-parameter list for a generic
@@ -638,11 +607,11 @@ fn emit_sum_type(
     let mut entries: Vec<bynk_ts::TsObjectEntry> = Vec::new();
     for (tag, payload) in variants {
         if payload.is_empty() {
-            let tag_obj = bynk_ts::TsExpr::object_entries(vec![bynk_ts::TsObjectEntry::Prop(
+            let tag_obj = bynk_ts::TsExpr::object_entries(vec![bynk_ts::TsObjectEntry::prop(
                 "tag".to_string(),
                 bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(tag.clone())),
             )]);
-            entries.push(bynk_ts::TsObjectEntry::Prop(
+            entries.push(bynk_ts::TsObjectEntry::prop(
                 tag.clone(),
                 bynk_ts::TsExpr::As {
                     expr: Box::new(tag_obj),
@@ -659,7 +628,7 @@ fn emit_sum_type(
                     )
                 })
                 .collect();
-            let mut obj_entries = vec![bynk_ts::TsObjectEntry::Prop(
+            let mut obj_entries = vec![bynk_ts::TsObjectEntry::prop(
                 "tag".to_string(),
                 bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(tag.clone())),
             )];
@@ -672,12 +641,12 @@ fn emit_sum_type(
                 if param == prop {
                     bynk_ts::TsObjectEntry::Shorthand(prop)
                 } else {
-                    bynk_ts::TsObjectEntry::Prop(prop, bynk_ts::TsExpr::Ident(param))
+                    bynk_ts::TsObjectEntry::prop(prop, bynk_ts::TsExpr::Ident(param))
                 }
             }));
             let ctor_body =
                 bynk_ts::TsExpr::Paren(Box::new(bynk_ts::TsExpr::object_entries(obj_entries)));
-            entries.push(bynk_ts::TsObjectEntry::Prop(
+            entries.push(bynk_ts::TsObjectEntry::prop(
                 tag.clone(),
                 bynk_ts::TsExpr::Arrow {
                     params: ctor_params,
@@ -1373,7 +1342,7 @@ fn requires_guards(body: &mut Body, f: &FnDecl, cx: &mut LowerCtx) {
 /// trailing `return result;` is a real [`bynk_ts::TsStmt::return_stmt`].
 ///
 /// `pred` (`Pre::lower`'s own return) and each hoisted `pre.stmts()` line
-/// stay opaque — carried the same way #1335's own `emit_pred_check` used to
+/// stay opaque — carried the same way #1335's own `pred_check_stmt` used to
 /// carry `pred_condition_and_message`'s `cond` (an `Ident` wrapped in this
 /// crate's real `Unary::Not`/`Paren`) before #1471 converted it to a real
 /// `TsExpr`, but for a DIFFERENT, stronger, and still-standing reason: `Pre`
@@ -2221,32 +2190,54 @@ pub(crate) fn emit_messages_bundle(
     // __messages_<tag>` binding: a locale tag can be `"pt-BR"`, which is not a
     // valid TS identifier, so a named binding would be a syntax error — the
     // object is keyed by the tag *string* and needs no binding of its own.
-    let mut table = String::new();
-    writeln!(
-        table,
-        "const __messagesByLocale: globalThis.Record<string, globalThis.Record<string, (params: ReadonlyMap<string, __bynkMessageArg>) => string>> = {{"
-    )
-    .unwrap();
-    for m in blocks {
-        emit_doc_block(&mut table, m.documentation.as_deref(), INDENT_STEP);
-        let code_entries: Vec<bynk_ts::TsObjectEntry> = m
-            .entries
-            .iter()
-            .map(|entry| {
-                bynk_ts::TsObjectEntry::Prop(
-                    format!("\"{}\"", escape_ts_string(&entry.code)),
-                    emit_message_entry_renderer(entry, &m.tag, runtime_use),
-                )
-            })
-            .collect();
-        let locale_entry = bynk_ts::TsObjectEntry::Prop(
-            format!("\"{}\"", escape_ts_string(&m.tag)),
-            bynk_ts::TsExpr::multiline_object_entries(code_entries),
-        );
-        table.push_str(&bynk_ts::print_object_entry(&locale_entry, 0));
-    }
-    writeln!(table, "}};").unwrap();
-    stmts.push(bynk_ts::TsStmt::raw(table, None));
+    let record = |value: bynk_ts::TsType| {
+        bynk_ts::TsType::named_with_args(
+            "globalThis.Record",
+            vec![bynk_ts::TsType::named("string"), value],
+        )
+    };
+    let renderer_ty = bynk_ts::TsType::Fn {
+        params: vec![bynk_ts::TsType::named_with_args(
+            "ReadonlyMap",
+            vec![
+                bynk_ts::TsType::named("string"),
+                bynk_ts::TsType::named("__bynkMessageArg"),
+            ],
+        )],
+        names: vec!["params".to_string()],
+        ret: Box::new(bynk_ts::TsType::named("string")),
+    };
+    let locale_entries: Vec<bynk_ts::TsObjectEntry> = blocks
+        .iter()
+        .map(|m| {
+            let code_entries: Vec<bynk_ts::TsObjectEntry> = m
+                .entries
+                .iter()
+                .map(|entry| {
+                    bynk_ts::TsObjectEntry::prop(
+                        format!("\"{}\"", escape_ts_string(&entry.code)),
+                        emit_message_entry_renderer(entry, &m.tag, runtime_use),
+                    )
+                })
+                .collect();
+            let locale_entry = bynk_ts::TsObjectEntry::prop(
+                format!("\"{}\"", escape_ts_string(&m.tag)),
+                bynk_ts::TsExpr::multiline_object_entries(code_entries),
+            );
+            match m.documentation.as_deref() {
+                Some(doc) => locale_entry.with_doc(doc),
+                None => locale_entry,
+            }
+        })
+        .collect();
+    stmts.push(bynk_ts::TsStmt::decl(
+        bynk_ts::TsDecl::ConstDecl {
+            name: "__messagesByLocale".to_string(),
+            ty: Some(record(record(renderer_ty))),
+            init: bynk_ts::TsExpr::multiline_object_entries(locale_entries),
+        },
+        None,
+    ));
 
     // `("tag" as string) as LocaleTag` — the inner `as` is wrapped in an
     // explicit `Paren`: `as` is left-associative, so the un-parenthesised
@@ -3868,9 +3859,9 @@ pub fn context_pascal(name: &str) -> String {
 /// Arc F slice 3 (#1453): builds a real `bynk_ts::TsDecl::Interface`, the
 /// same `readonly`-member shape `emit_agent`'s own state interface already
 /// establishes (`emit_agent.rs:4436-4444`) — return contract stays
-/// `-> String` (just the interface's own name, used as a plain
-/// `TsType::named(deps_name)` type reference by `emit_make_surface`, its one
-/// caller), only the declaration's own construction/printing changed.
+/// the interface's own name too (used as a plain `TsType::named(deps_name)`
+/// type reference by `emit_make_surface`, its one caller); since 1A.32c-1 it
+/// returns the declaration as a node, not printed text.
 ///
 /// Two fields stay opaque `TsType::named(...)` text, deliberately, not
 /// guessed: `surface`'s type comes from `surface_ty`, itself still
@@ -3884,10 +3875,9 @@ pub fn context_pascal(name: &str) -> String {
 /// resolved by pre-rendering and wrapping as opaque `Named` text rather than
 /// widening `TsType::Fn` for one call site.
 fn emit_context_deps_interface(
-    out: &mut String,
     commons: &TypedCommons,
     ctx: &EmitProjectCtx,
-) -> String {
+) -> (bynk_ts::TsStmt, String) {
     let deps_name = format!("__{}Deps", context_pascal(&commons.commons.name.joined()));
     let mut members: Vec<bynk_ts::TsTypeMember> = commons
         .commons
@@ -3989,11 +3979,10 @@ fn emit_context_deps_interface(
         })),
         None,
     );
-    out.push_str(&bynk_ts::print_stmt(&interface_decl, 0));
     // #1486: no trailing blank baked in here — the printer's automatic
     // top-level spacing policy supplies the single blank before whatever
-    // follows this interface once `emit_make_surface` wraps it as `Raw`.
-    deps_name
+    // follows this interface.
+    (interface_decl, deps_name)
 }
 
 /// v0.54 (#655): whether any of `services` declares an `on call … by c: Caller`
@@ -4038,11 +4027,8 @@ pub fn any_service_binds_caller<'a>(
 /// reference), but the interface declaration itself is a real
 /// `bynk_ts::TsDecl::Interface` now, not `writeln!`-built text.
 /// #1478: returns real [`bynk_ts::TsStmt`]s (was `out: &mut String`).
-/// `emit_context_deps_interface` stays `out`-writing (unconverted, out of
-/// scope — see its own call site's doc above), so its output is captured
-/// into a local buffer and carried as one [`bynk_ts::TsStmtKind::Raw`]
-/// statement, the same carrier `emit_messages_bundle`'s own conversion
-/// (#1478) just used for the same reason.
+/// `emit_context_deps_interface` returns the interface declaration as a node
+/// (1A.32c-1), so it is the surface's first statement.
 pub(crate) fn emit_make_surface(
     commons: &TypedCommons,
     ctx: &EmitProjectCtx,
@@ -4059,9 +4045,8 @@ pub(crate) fn emit_make_surface(
     if services.is_empty() {
         return Vec::new();
     }
-    let mut deps_block = String::new();
-    let deps_name = emit_context_deps_interface(&mut deps_block, commons, ctx);
-    let mut stmts = vec![bynk_ts::TsStmt::raw(deps_block, None)];
+    let (deps_decl, deps_name) = emit_context_deps_interface(commons, ctx);
+    let mut stmts = vec![deps_decl];
     // v0.54 (#655): an `on call … by c: Caller` handler reads a live `CallerId`
     // (the calling context's qualified name) threaded through `deps.identity`.
     // In bundle mode the compose root supplies that name to `__makeSurface` as a
@@ -4155,7 +4140,7 @@ pub(crate) fn emit_make_surface(
         let deps_arg = if admission.is_some_and(|a| a.sum.is_some()) {
             bynk_ts::TsExpr::object_entries(vec![
                 bynk_ts::TsObjectEntry::Spread(bynk_ts::TsExpr::Ident("deps".to_string())),
-                bynk_ts::TsObjectEntry::Prop(
+                bynk_ts::TsObjectEntry::prop(
                     "who".to_string(),
                     bynk_ts::TsExpr::object(vec![
                         (
@@ -4172,7 +4157,7 @@ pub(crate) fn emit_make_surface(
         } else if binds_caller(h) {
             bynk_ts::TsExpr::object_entries(vec![
                 bynk_ts::TsObjectEntry::Spread(bynk_ts::TsExpr::Ident("deps".to_string())),
-                bynk_ts::TsObjectEntry::Prop(
+                bynk_ts::TsObjectEntry::prop(
                     "identity".to_string(),
                     bynk_ts::TsExpr::Ident("__caller".to_string()),
                 ),
@@ -5694,7 +5679,7 @@ fn emit_agent_load_commit_state(
                         match &agent_versions {
                             Some(v) => bynk_ts::TsExpr::object_entries(vec![
                                 bynk_ts::TsObjectEntry::Spread(payload),
-                                bynk_ts::TsObjectEntry::Prop(
+                                bynk_ts::TsObjectEntry::prop(
                                     "__v".to_string(),
                                     bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Num(
                                         v.version.to_string(),
@@ -5777,6 +5762,88 @@ fn commit_state_params(
     (body, params)
 }
 
+/// `globalThis.Record<string, unknown>`: the wire shape a migration step reads and returns.
+fn wire_record_ty() -> bynk_ts::TsType {
+    bynk_ts::TsType::named_with_args(
+        "globalThis.Record",
+        vec![
+            bynk_ts::TsType::named("string"),
+            bynk_ts::TsType::named("unknown"),
+        ],
+    )
+}
+
+/// `if (__v >= <lo> && __v <= <from>) return <step_fn>(stored);`: one arm of an agent's
+/// migration dispatcher.
+fn migrate_step_dispatch(lo: i64, from: i64, step_fn: &str) -> bynk_ts::TsStmt {
+    let ident = |name: &str| bynk_ts::TsExpr::Ident(name.to_string());
+    let bound = |op: bynk_ts::TsBinaryOp, n: i64| bynk_ts::TsExpr::Binary {
+        op,
+        left: Box::new(ident("__v")),
+        right: Box::new(bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Num(n.to_string()))),
+    };
+    bynk_ts::TsStmt::if_stmt(
+        bynk_ts::TsExpr::Binary {
+            op: bynk_ts::TsBinaryOp::And,
+            left: Box::new(bound(bynk_ts::TsBinaryOp::GreaterThanEq, lo)),
+            right: Box::new(bound(bynk_ts::TsBinaryOp::LessThanEq, from)),
+        },
+        bynk_ts::TsStmt::return_stmt(
+            Some(bynk_ts::TsExpr::Call {
+                callee: Box::new(ident(step_fn)),
+                args: vec![ident("stored")],
+            }),
+            None,
+        ),
+        None,
+    )
+}
+
+/// `function <migrate_fn>(stored): Record<string, unknown>`: reads the stored version (1 when
+/// absent), runs the nearest step covering it, else returns the record as it is.
+fn migrate_dispatcher_decl(migrate_fn: &str, dispatch: Vec<bynk_ts::TsStmt>) -> bynk_ts::TsStmt {
+    let stored = || bynk_ts::TsExpr::Ident("stored".to_string());
+    let version = || bynk_ts::TsExpr::Index {
+        object: Box::new(stored()),
+        index: Box::new(bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str("__v".to_string()))),
+    };
+    let read_version = bynk_ts::TsStmt::const_stmt(
+        bynk_ts::TsBindingName::Ident("__v".to_string()),
+        None,
+        bynk_ts::TsExpr::Conditional {
+            test: Box::new(bynk_ts::TsExpr::Binary {
+                op: bynk_ts::TsBinaryOp::StrictEq,
+                left: Box::new(version()),
+                right: Box::new(bynk_ts::TsExpr::Ident("undefined".to_string())),
+            }),
+            consequent: Box::new(bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Num("1".to_string()))),
+            alternate: Box::new(bynk_ts::TsExpr::As {
+                expr: Box::new(version()),
+                ty: bynk_ts::TsType::named("number"),
+            }),
+        },
+        None,
+    );
+    let mut body = vec![read_version];
+    body.extend(dispatch);
+    body.push(bynk_ts::TsStmt::return_stmt(Some(stored()), None));
+    bynk_ts::TsStmt::decl(
+        bynk_ts::TsDecl::Function {
+            name: migrate_fn.to_string(),
+            generics: Vec::new(),
+            params: vec![bynk_ts::TsParam::new(
+                "stored".to_string(),
+                Some(wire_record_ty()),
+            )],
+            return_type: Some(wire_record_ty()),
+            body,
+            is_async: false,
+            inline: false,
+        },
+        None,
+    )
+}
+
 /// What `loadState` does with the merged state's collections: fill the in-memory handles from the
 /// record, or, for a lazily read record (#3189), attach storage-backed ones in their place.
 fn hydrate_or_attach_stmt(
@@ -5794,11 +5861,19 @@ fn hydrate_or_attach_stmt(
     let Some(spec) = lazy_fields else {
         return bynk_ts::TsStmt::expr_stmt(hydrate, None);
     };
-    bynk_ts::TsStmt::raw(
-        format!(
-            "    if (__readsLazily(this)) {{ __attachLazy(this.state.storage, __merged, {spec}); }} else {{ {} }}\n",
-            bynk_ts::print_expr(&hydrate)
-        ),
+    let ident = |name: &str| bynk_ts::TsExpr::Ident(name.to_string());
+    let attach = bynk_ts::TsExpr::Call {
+        callee: Box::new(ident("__attachLazy")),
+        args: vec![ident("this.state.storage"), ident("__merged"), ident(spec)],
+    };
+    let reads_lazily = bynk_ts::TsExpr::Call {
+        callee: Box::new(ident("__readsLazily")),
+        args: vec![ident("this")],
+    };
+    bynk_ts::TsStmt::if_else_same_line_stmt(
+        reads_lazily,
+        bynk_ts::TsStmt::block(vec![bynk_ts::TsStmt::expr_stmt(attach, None)], None),
+        bynk_ts::TsStmt::block(vec![bynk_ts::TsStmt::expr_stmt(hydrate, None)], None),
         None,
     )
 }
@@ -6223,7 +6298,7 @@ fn emit_agent_state_persistence(
                 .collect::<Vec<_>>()
                 .join(", ")
         };
-        let mut dispatch = String::new();
+        let mut dispatch: Vec<bynk_ts::TsStmt> = Vec::new();
         for plan in &step_plans {
             let Some(step) = a.migrations.iter().find(|m| m.from == plan.from) else {
                 continue;
@@ -6399,22 +6474,11 @@ fn emit_agent_state_persistence(
                 ),
                 None,
             ));
-            writeln!(
-                dispatch,
-                "  if (__v >= {lo} && __v <= {from}) return {step_fn}(stored);",
-                lo = plan.lo,
-                from = plan.from
-            )
-            .unwrap();
+            dispatch.push(migrate_step_dispatch(plan.lo, plan.from, &step_fn));
         }
         // The nearest step covering the stored version runs; a version no step
         // covers reads by zero-merge (it passed `__checkStoredSchemaVersion`).
-        stmts.push(bynk_ts::TsStmt::raw(
-            format!(
-                "function {migrate_fn}(stored: globalThis.Record<string, unknown>): globalThis.Record<string, unknown> {{\n  const __v = stored[\"__v\"] === undefined ? 1 : stored[\"__v\"] as number;\n{dispatch}  return stored;\n}}\n"
-            ),
-            None,
-        ));
+        stmts.push(migrate_dispatcher_decl(&migrate_fn, dispatch));
     }
     let lazy_fields = emit_lazy_field_spec(a, layout, commons, ctx, stmts);
     AgentPersistFns {
@@ -7860,12 +7924,12 @@ fn history_drive_loop(
     // same per-handler discriminated union.
     let record = history_switch(hs, |h| {
         let tag = history_variant_tag(&h.method_name.as_ref().unwrap().name);
-        let mut entries = vec![bynk_ts::TsObjectEntry::Prop(
+        let mut entries = vec![bynk_ts::TsObjectEntry::prop(
             "tag".to_string(),
             hist_str(&tag),
         )];
         for (j, p) in h.params.iter().enumerate() {
-            entries.push(bynk_ts::TsObjectEntry::Prop(
+            entries.push(bynk_ts::TsObjectEntry::prop(
                 ts_ident(&p.name.name),
                 history_arg_expr(p, j, &commons.types),
             ));
@@ -8205,7 +8269,7 @@ fn emit_agent_state_record(
         if val.contains('\n') {
             zero_record_has_multiline_value = true;
         }
-        zero_entries.push(bynk_ts::TsObjectEntry::Prop(
+        zero_entries.push(bynk_ts::TsObjectEntry::prop(
             f.name.name.clone(),
             bynk_ts::TsExpr::Ident(val),
         ));
@@ -8239,20 +8303,20 @@ fn emit_agent_state_record(
         } else {
             format!("[{indexers}]")
         };
-        zero_entries.push(bynk_ts::TsObjectEntry::Prop(
+        zero_entries.push(bynk_ts::TsObjectEntry::prop(
             name.name.clone(),
             bynk_ts::TsExpr::Ident(format!("new __StoreMap<{v_ts}>({args})")),
         ));
     }
     // A fresh held `Map[K, Connection]` (a `K → connId` handle) is empty too.
     for (name, _) in held_maps {
-        zero_entries.push(bynk_ts::TsObjectEntry::Prop(
+        zero_entries.push(bynk_ts::TsObjectEntry::prop(
             name.name.clone(),
             bynk_ts::TsExpr::Ident("new __StoreMap<string>()".to_string()),
         ));
     }
     for name in set_field_names {
-        zero_entries.push(bynk_ts::TsObjectEntry::Prop(
+        zero_entries.push(bynk_ts::TsObjectEntry::prop(
             name.to_string(),
             bynk_ts::TsExpr::Ident("new __StoreSet()".to_string()),
         ));
@@ -8267,7 +8331,7 @@ fn emit_agent_state_record(
             ),
         };
         let v_ts = bynk_ts::print_type(&ts_ty_to_ts_type(value_ty, tys));
-        zero_entries.push(bynk_ts::TsObjectEntry::Prop(
+        zero_entries.push(bynk_ts::TsObjectEntry::prop(
             name.name.clone(),
             bynk_ts::TsExpr::Ident(format!("new __StoreCache<{v_ts}>()")),
         ));
@@ -8282,7 +8346,7 @@ fn emit_agent_state_record(
             ),
         };
         let e_ts = bynk_ts::print_type(&ts_ty_to_ts_type(elem_ty, tys));
-        zero_entries.push(bynk_ts::TsObjectEntry::Prop(
+        zero_entries.push(bynk_ts::TsObjectEntry::prop(
             name.name.clone(),
             bynk_ts::TsExpr::Ident(format!("new __StoreLog<{e_ts}>()")),
         ));
@@ -8766,6 +8830,102 @@ fn ws_open_hosts_for<'a>(
     hosts
 }
 
+/// `typeof message === "string" ? message : new globalThis.TextDecoder().decode(message)`: an
+/// incoming frame as text, whichever form the platform delivered.
+fn ws_frame_text_expr() -> bynk_ts::TsExpr {
+    bynk_ts::TsExpr::Conditional {
+        test: Box::new(bynk_ts::TsExpr::Binary {
+            op: bynk_ts::TsBinaryOp::StrictEq,
+            left: Box::new(bynk_ts::TsExpr::Unary {
+                op: bynk_ts::TsUnaryOp::Typeof,
+                expr: Box::new(bynk_ts::TsExpr::Ident("message".to_string())),
+            }),
+            right: Box::new(bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(
+                "string".to_string(),
+            ))),
+        }),
+        consequent: Box::new(bynk_ts::TsExpr::Ident("message".to_string())),
+        alternate: Box::new(bynk_ts::TsExpr::Call {
+            callee: Box::new(bynk_ts::TsExpr::Member {
+                object: Box::new(bynk_ts::TsExpr::New {
+                    callee: Box::new(bynk_ts::TsExpr::Member {
+                        object: Box::new(bynk_ts::TsExpr::Ident("globalThis".to_string())),
+                        property: "TextDecoder".to_string(),
+                    }),
+                    args: Vec::new(),
+                }),
+                property: "decode".to_string(),
+            }),
+            args: vec![bynk_ts::TsExpr::Ident("message".to_string())],
+        }),
+    }
+}
+
+/// `globalThis.JSON.parse(__raw) as __JsonValue`: the frame text parsed, before the codec decodes it.
+fn ws_frame_json_expr() -> bynk_ts::TsExpr {
+    bynk_ts::TsExpr::As {
+        expr: Box::new(bynk_ts::TsExpr::Call {
+            callee: Box::new(bynk_ts::TsExpr::Member {
+                object: Box::new(bynk_ts::TsExpr::Member {
+                    object: Box::new(bynk_ts::TsExpr::Ident("globalThis".to_string())),
+                    property: "JSON".to_string(),
+                }),
+                property: "parse".to_string(),
+            }),
+            args: vec![bynk_ts::TsExpr::Ident("__raw".to_string())],
+        }),
+        ty: bynk_ts::TsType::named("__JsonValue"),
+    }
+}
+
+/// `void code; void reason; void wasClean;`: the close handler's parameters, marked used.
+fn ws_close_unused_params() -> Vec<bynk_ts::TsStmt> {
+    ["code", "reason", "wasClean"]
+        .into_iter()
+        .map(|name| {
+            bynk_ts::TsStmt::expr_stmt(
+                bynk_ts::TsExpr::Unary {
+                    op: bynk_ts::TsUnaryOp::Void,
+                    expr: Box::new(bynk_ts::TsExpr::Ident(name.to_string())),
+                },
+                None,
+            )
+        })
+        .collect()
+}
+
+/// `try { <target> = <value>; } catch { ws.close(1003, "<reason>"); return; }`:
+/// one step of decoding an incoming WebSocket frame, closing the socket and
+/// returning when it fails.
+fn ws_decode_attempt(target: &str, value: bynk_ts::TsExpr, reason: &str) -> bynk_ts::TsStmt {
+    let close = bynk_ts::TsStmt::expr_stmt(
+        bynk_ts::TsExpr::Call {
+            callee: Box::new(bynk_ts::TsExpr::Member {
+                object: Box::new(bynk_ts::TsExpr::Ident("ws".to_string())),
+                property: "close".to_string(),
+            }),
+            args: vec![
+                bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Num("1003".to_string())),
+                bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(reason.to_string())),
+            ],
+        },
+        None,
+    );
+    bynk_ts::TsStmt::try_catch(
+        bynk_ts::TsStmt::inline_block(
+            vec![bynk_ts::TsStmt::assign(
+                bynk_ts::TsExpr::Ident(target.to_string()),
+                value,
+                None,
+            )],
+            None,
+        ),
+        None::<String>,
+        bynk_ts::TsStmt::inline_block(vec![close, bynk_ts::TsStmt::return_stmt(None, None)], None),
+        None,
+    )
+}
+
 /// Emit the DO method that runs a hosted `from websocket` lifecycle body (`on
 /// open`/`on message`/`on close`). The synthetic `connection` arrives as the first
 /// parameter (the fresh socket for `on open`, the firing socket for `on message`/
@@ -9163,32 +9323,40 @@ impl WsDepsRebuild {
         stmts
     }
 
-    fn spreads(&self) -> Vec<&'static str> {
+    fn spreads(&self) -> Vec<bynk_ts::TsObjectEntry> {
         let mut v = Vec::new();
         if self.given.is_some() {
-            v.push("...__givenDeps");
+            v.push(bynk_ts::TsObjectEntry::Spread(bynk_ts::TsExpr::Ident(
+                "__givenDeps".to_string(),
+            )));
         }
         if self.uses_emit {
-            v.push("...__eventsDeps");
+            v.push(bynk_ts::TsObjectEntry::Spread(bynk_ts::TsExpr::Ident(
+                "__eventsDeps".to_string(),
+            )));
         }
         if self.reaches_env {
             // A spread, not a shorthand `env`: exempt from excess-property
             // checks for a lifecycle body whose own deps type omits `env`. The
             // `never` cast satisfies the body's precise binding-shape type.
-            v.push("...{ env: env as never }");
+            v.push(bynk_ts::TsObjectEntry::Spread(
+                bynk_ts::TsExpr::object_entries(vec![bynk_ts::TsObjectEntry::prop(
+                    "env",
+                    bynk_ts::TsExpr::As {
+                        expr: Box::new(bynk_ts::TsExpr::Ident("env".to_string())),
+                        ty: bynk_ts::TsType::named("never"),
+                    },
+                )]),
+            ));
         }
         v
     }
 
     /// `{ <principal>, ...rebuilt }`, or `{}` when both are empty.
-    fn deps_object(&self, principal: Option<String>) -> String {
-        let mut fields: Vec<String> = principal.into_iter().collect();
-        fields.extend(self.spreads().into_iter().map(String::from));
-        if fields.is_empty() {
-            "{}".to_string()
-        } else {
-            format!("{{ {} }}", fields.join(", "))
-        }
+    fn deps_object(&self, principal: Option<bynk_ts::TsObjectEntry>) -> bynk_ts::TsExpr {
+        let mut entries: Vec<bynk_ts::TsObjectEntry> = principal.into_iter().collect();
+        entries.extend(self.spreads());
+        bynk_ts::TsExpr::object_entries(entries)
     }
 }
 
@@ -9369,24 +9537,26 @@ fn ws_open_fetch_branch_stmt(host: &WsOpenHost<'_>, tys: TyRender<'_>) -> bynk_t
     // `/_bynk/agent/` branch does, and let them lead the deps object.
     stmts.extend(host.rebuild.stmts());
     let principal = if let Some(members) = &host.sum {
-        Some(format!(
-            "who: __payload.who as {}",
-            actor_sum_ts_union(members)
+        Some(principal_entry(
+            "who",
+            "__payload",
+            bynk_ts::TsType::named(actor_sum_ts_union(members)),
         ))
     } else {
         host.seam
             .as_ref()
             .filter(|s| s.binder.is_some())
-            .map(|seam| format!("identity: __payload.identity as {}", seam.identity_type))
+            .map(|seam| {
+                principal_entry(
+                    "identity",
+                    "__payload",
+                    bynk_ts::TsType::named(seam.identity_type.clone()),
+                )
+            })
     };
     // Rebuilt providers last, as in the `/_bynk/agent/` branch: they win.
     let deps_arg = host.rebuild.deps_object(principal);
-    // An object-literal expression — tagged `VerbatimExpr`, not `Ident`
-    // (#1539).
-    call_args.push(bynk_ts::TsExpr::VerbatimExpr(
-        deps_arg,
-        bynk_ts::VerbatimOrigin::Emit,
-    ));
+    call_args.push(deps_arg);
     let call_expr = bynk_ts::TsExpr::Call {
         callee: Box::new(bynk_ts::TsExpr::Member {
             object: Box::new(bynk_ts::TsExpr::Ident("this".to_string())),
@@ -9431,16 +9601,42 @@ fn ws_open_fetch_branch_stmt(host: &WsOpenHost<'_>, tys: TyRender<'_>) -> bynk_t
 /// v0.106 (slice 3b-iii): the deps argument a hosted `on message`/`on close` body
 /// receives — the verified identity recovered from the socket attachment, when the
 /// actor binds one (else `{}`).
-fn ws_attachment_deps_arg(host: &WsOpenHost<'_>) -> String {
+fn ws_attachment_deps_arg(host: &WsOpenHost<'_>) -> bynk_ts::TsExpr {
     let principal = if let Some(members) = &host.sum {
-        Some(format!("who: __att.who as {}", actor_sum_ts_union(members)))
+        Some(principal_entry(
+            "who",
+            "__att",
+            bynk_ts::TsType::named(actor_sum_ts_union(members)),
+        ))
     } else {
         host.seam
             .as_ref()
             .filter(|s| s.binder.is_some())
-            .map(|seam| format!("identity: __att.identity as {}", seam.identity_type))
+            .map(|seam| {
+                principal_entry(
+                    "identity",
+                    "__att",
+                    bynk_ts::TsType::named(seam.identity_type.clone()),
+                )
+            })
     };
     host.rebuild.deps_object(principal)
+}
+
+/// `<field>: <holder>.<field> as <ty>`: the verified principal a hosted body's
+/// deps object leads with, read back from the upgrade payload or the socket
+/// attachment.
+fn principal_entry(field: &str, holder: &str, ty: bynk_ts::TsType) -> bynk_ts::TsObjectEntry {
+    bynk_ts::TsObjectEntry::prop(
+        field,
+        bynk_ts::TsExpr::As {
+            expr: Box::new(bynk_ts::TsExpr::Member {
+                object: Box::new(bynk_ts::TsExpr::Ident(holder.to_string())),
+                property: field.to_string(),
+            }),
+            ty,
+        },
+    )
 }
 
 /// v0.106 (slice 3b-iii): emit the hibernatable-WebSocket dispatch handlers
@@ -9596,9 +9792,10 @@ fn emit_ws_dispatch_handlers(
             None,
             None,
         ));
-        stmts.push(bynk_ts::TsStmt::raw(
-            "    try { __raw = typeof message === \"string\" ? message : new globalThis.TextDecoder().decode(message); } catch { ws.close(1003, \"unreadable frame\"); return; }\n",
-            None,
+        stmts.push(ws_decode_attempt(
+            "__raw",
+            ws_frame_text_expr(),
+            "unreadable frame",
         ));
         stmts.push(bynk_ts::TsStmt::let_stmt(
             bynk_ts::TsBindingName::Ident("__json".to_string()),
@@ -9606,9 +9803,10 @@ fn emit_ws_dispatch_handlers(
             None,
             None,
         ));
-        stmts.push(bynk_ts::TsStmt::raw(
-            "    try { __json = globalThis.JSON.parse(__raw) as __JsonValue; } catch { ws.close(1003, \"malformed frame\"); return; }\n",
-            None,
+        stmts.push(ws_decode_attempt(
+            "__json",
+            ws_frame_json_expr(),
+            "malformed frame",
         ));
         stmts.push(bynk_ts::TsStmt::const_stmt(
             bynk_ts::TsBindingName::Ident("__dec".to_string()),
@@ -9675,14 +9873,17 @@ fn emit_ws_dispatch_handlers(
                 route_idx += 1;
             }
         }
-        call_args.push(deps_arg.clone());
         stmts.push(bynk_ts::TsStmt::expr_stmt(
             bynk_ts::TsExpr::Await(Box::new(bynk_ts::TsExpr::Call {
                 callee: Box::new(bynk_ts::TsExpr::Member {
                     object: Box::new(bynk_ts::TsExpr::Ident("this".to_string())),
                     property: method,
                 }),
-                args: call_args.into_iter().map(bynk_ts::TsExpr::Ident).collect(),
+                args: call_args
+                    .into_iter()
+                    .map(bynk_ts::TsExpr::Ident)
+                    .chain([deps_arg.clone()])
+                    .collect(),
             })),
             None,
         ));
@@ -9710,24 +9911,24 @@ fn emit_ws_dispatch_handlers(
 
     if let Some(c) = host.close {
         let method = ws_close_do_method_name(host.service);
-        let mut stmts = vec![bynk_ts::TsStmt::raw(
-            "    void code; void reason; void wasClean;\n",
-            None,
-        )];
+        let mut stmts = ws_close_unused_params();
         att_guard(&mut stmts);
         stmts.extend(host.rebuild.stmts());
         let mut call_args = vec!["connection".to_string()];
         for (i, p) in c.params.iter().enumerate() {
             call_args.push(format!("__att.args[{i}] as {}", ts_type_ref(&p.type_ref)));
         }
-        call_args.push(deps_arg);
         stmts.push(bynk_ts::TsStmt::expr_stmt(
             bynk_ts::TsExpr::Await(Box::new(bynk_ts::TsExpr::Call {
                 callee: Box::new(bynk_ts::TsExpr::Member {
                     object: Box::new(bynk_ts::TsExpr::Ident("this".to_string())),
                     property: method,
                 }),
-                args: call_args.into_iter().map(bynk_ts::TsExpr::Ident).collect(),
+                args: call_args
+                    .into_iter()
+                    .map(bynk_ts::TsExpr::Ident)
+                    .chain([deps_arg])
+                    .collect(),
             })),
             None,
         ));
@@ -9755,7 +9956,15 @@ fn emit_ws_dispatch_handlers(
 
 #[cfg(test)]
 mod doc_block_tests {
-    use super::emit_doc_block;
+    use super::INDENT_STEP;
+
+    /// A doc block printed as a JSDoc comment at `indent` columns, the way the
+    /// printer lays out a `DocComment` statement.
+    fn emit_doc_block(out: &mut String, doc: Option<&str>, indent: usize) {
+        let Some(doc) = doc else { return };
+        let stmt = bynk_ts::TsStmt::doc_comment(doc, None);
+        out.push_str(&bynk_ts::print_stmt(&stmt, indent / INDENT_STEP));
+    }
 
     /// A `*/` in a doc body must not close the JSDoc comment early — otherwise
     /// the trailing text lands as executable top-level TypeScript (issue #720).
@@ -9874,29 +10083,34 @@ mod ts_type_params_tests {
 
 #[cfg(test)]
 mod refined_checks_tests {
-    use super::{emit_pred_check, print_numeric_guard_stmt};
+    use super::{numeric_guard_stmt, pred_check_stmt};
     use bynk_syntax::ast::{BaseType, PredKind};
 
-    /// #1335: the real, converted `print_numeric_guard_stmt` matches
+    /// #1335: the real, converted `numeric_guard_stmt` matches
     /// `254_multi_file_commons_workers_codec`'s own real `Cents.of`
     /// `Int`-base guard byte-for-byte.
     #[test]
     fn numeric_guard_matches_the_real_fixtures_own_int_guard_byte_for_byte() {
         assert_eq!(
-            print_numeric_guard_stmt("Cents", "isInteger", "must be an integer"),
+            bynk_ts::print_stmt(
+                &numeric_guard_stmt("Cents", "isInteger", "must be an integer"),
+                2
+            ),
             "    if (!globalThis.Number.isInteger(value)) {\n      \
              return Err({ field: \"Cents\", message: \"must be an integer\", value });\n    \
              }\n"
         );
     }
 
-    /// #1335: the real, converted `emit_pred_check` matches
+    /// #1335: the real, converted `pred_check_stmt` matches
     /// `254_multi_file_commons_workers_codec`'s own real `Cents.of`
     /// `NonNegative` predicate check byte-for-byte.
     #[test]
     fn pred_check_matches_the_real_fixtures_own_non_negative_check_byte_for_byte() {
-        let mut out = String::new();
-        emit_pred_check(&mut out, "Cents", &PredKind::NonNegative, BaseType::Int);
+        let out = bynk_ts::print_stmt(
+            &pred_check_stmt("Cents", &PredKind::NonNegative, BaseType::Int),
+            2,
+        );
         assert_eq!(
             out,
             "    if (!(value >= 0)) {\n      \
@@ -9925,12 +10139,13 @@ mod refined_checks_tests {
     /// class stays closed.
     #[test]
     fn pred_check_does_not_double_escape_a_matches_patterns_own_backslash() {
-        let mut out = String::new();
-        emit_pred_check(
-            &mut out,
-            "Code",
-            &PredKind::Matches(r"\d+".to_string()),
-            BaseType::String,
+        let out = bynk_ts::print_stmt(
+            &pred_check_stmt(
+                "Code",
+                &PredKind::Matches(r"\d+".to_string()),
+                BaseType::String,
+            ),
+            2,
         );
         // `escape_ts_string` doubles the pattern's one real backslash to two
         // backslash *characters* — the correctly-escaped form, not a bug.
@@ -10597,4 +10812,26 @@ pub fn emit_suite_late_codecs(
         .lines()
         .map(|l| format!("{}\n", l.strip_prefix("export ").unwrap_or(l)))
         .collect()
+}
+
+/// 1A.32c-1 review: no golden fixture reaches an agent's `migrate from N`
+/// dispatcher, so this pins the node form against the text the old `writeln!`
+/// built (`format!("function {migrate_fn}(stored: ...) {{\n  const __v = ...;\n{dispatch}  return stored;\n}}\n")`),
+/// byte for byte, for a dispatcher with two steps.
+#[cfg(test)]
+mod migrate_dispatcher_tests {
+    use super::{migrate_dispatcher_decl, migrate_step_dispatch};
+
+    #[test]
+    fn the_migration_dispatcher_prints_as_the_old_text_did() {
+        let decl = migrate_dispatcher_decl(
+            "__migrateCounterState",
+            vec![
+                migrate_step_dispatch(1, 1, "__migrateCounterFrom1"),
+                migrate_step_dispatch(2, 3, "__migrateCounterFrom2"),
+            ],
+        );
+        let old = "function __migrateCounterState(stored: globalThis.Record<string, unknown>): globalThis.Record<string, unknown> {\n  const __v = stored[\"__v\"] === undefined ? 1 : stored[\"__v\"] as number;\n  if (__v >= 1 && __v <= 1) return __migrateCounterFrom1(stored);\n  if (__v >= 2 && __v <= 3) return __migrateCounterFrom2(stored);\n  return stored;\n}\n";
+        assert_eq!(bynk_ts::print_stmt(&decl, 0), old);
+    }
 }

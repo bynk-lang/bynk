@@ -945,7 +945,9 @@ impl Walk {
             TsExpr::Object { entries, .. } => {
                 for e in entries {
                     match e {
-                        TsObjectEntry::Prop(_, v) | TsObjectEntry::Spread(v) => self.expr(v),
+                        TsObjectEntry::Prop { value: v, .. } | TsObjectEntry::Spread(v) => {
+                            self.expr(v)
+                        }
                         TsObjectEntry::Shorthand(name) => self.use_value(name),
                         TsObjectEntry::Method {
                             generics,

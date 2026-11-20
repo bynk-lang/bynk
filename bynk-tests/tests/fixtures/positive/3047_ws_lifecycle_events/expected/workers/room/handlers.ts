@@ -174,9 +174,17 @@ export class Room {
     const env = this.__env as unknown as globalThis.Record<string, unknown>;
     const __eventsDeps = { __eventsDispatch: (events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number } }>) => __dispatchToEventsFanout(env.___EVENTS_FANOUT as __DurableObjectNamespace, events) };
     let __raw: string;
-    try { __raw = typeof message === "string" ? message : new globalThis.TextDecoder().decode(message); } catch { ws.close(1003, "unreadable frame"); return; }
+    try {
+      __raw = typeof message === "string" ? message : new globalThis.TextDecoder().decode(message);
+    } catch {
+      ws.close(1003, "unreadable frame"); return;
+    }
     let __json: __JsonValue;
-    try { __json = globalThis.JSON.parse(__raw) as __JsonValue; } catch { ws.close(1003, "malformed frame"); return; }
+    try {
+      __json = globalThis.JSON.parse(__raw) as __JsonValue;
+    } catch {
+      ws.close(1003, "malformed frame"); return;
+    }
     const __dec = __deserialise_Frame(__json, "frame");
     if (__dec.tag === "Err") { ws.close(1008, "invalid frame"); return; }
     await this.__wsMessage_chat(connection, __att.args[0] as RoomKey, __dec.value, { identity: __att.identity as UserId, ...__eventsDeps, ...{ env: env as never } });
