@@ -43,9 +43,13 @@ async function listAll<T>(overlay: EntryOverlay, options: DurableObjectListOptio
     const all = await overlay.list<T>(options);
     return [...all];
   }
+  // Storage rejects `start` with `startAfter` (#3747): the first page keeps the range's own lower
+  // bound, and each later page replaces it with the cursor, which already lies beyond it.
+  const { start, ...rest } = options;
   let after: string | undefined;
   for (;;) {
-    const page = await overlay.list<T>({ ...options, limit: SCAN_PAGE, ...(after === undefined ? {} : { startAfter: after }) });
+    const bound = after === undefined ? (start === undefined ? {} : { start }) : { startAfter: after };
+    const page = await overlay.list<T>({ ...rest, ...bound, limit: SCAN_PAGE });
     for (const [k, v] of page) out.push([k, v]);
     if (page.size < SCAN_PAGE) return out;
     after = out[out.length - 1]![0];
