@@ -103,7 +103,8 @@ fn a_dry_run_writes_neither_the_schema_lock_nor_a_build() {
     let recorded = std::fs::read_to_string(&lock).expect("`bynk build` records the schema");
     std::fs::write(
         dir.join("src/shop/counter.bynk"),
-        COUNTER.replace("Map[String, Int]", "Map[String, String]")
+        COUNTER
+            .replace("Map[String, Int]", "Map[String, String]")
             .replace("hits.put(name, 1)", "hits.put(name, \"1\")"),
     )
     .unwrap();
