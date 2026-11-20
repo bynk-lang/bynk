@@ -103,6 +103,7 @@ mod default_value;
 mod lower;
 #[cfg(feature = "text-exit-counters")]
 pub use lower::text_counters;
+mod internal_fault;
 mod lower_call;
 mod lower_ctx;
 mod lower_list;
@@ -111,6 +112,7 @@ pub(crate) mod runtime_use;
 mod tco;
 pub mod ts_types;
 mod zero_value;
+pub use internal_fault::{InternalFault, MISSING_CHECKER_FACT};
 pub use lower::*;
 pub use runtime_use::RuntimeUse;
 pub mod emit;
@@ -245,7 +247,10 @@ pub fn extend_printed_at(out: &mut String, stmts: Vec<bynk_ts::TsStmt>, depth: u
 /// the only way to obtain one is [`bynk_check::checker::certify`], so this
 /// function can no longer be called with an unchecked or partially-checked
 /// program by construction.
-pub(crate) fn emit(program: &CheckedProgram) -> String {
+///
+/// 1A.34: a checker fact the emitter needed and did not find is an
+/// [`InternalFault`] (see [`emit_project`]); the text built alongside is then unused.
+pub(crate) fn emit(program: &CheckedProgram) -> Result<String, Vec<InternalFault>> {
     let commons = program.program();
     // Emit the body first so the header can decide which runtime helpers to
     // import from what the body actually referenced (v0.110: the `__bynkBytes*`
@@ -311,7 +316,12 @@ pub(crate) fn emit(program: &CheckedProgram) -> String {
         uses_queue,
     );
     out.push_str(&body);
-    out
+    let faults = dummy_ctx.runtime_use.take_faults();
+    if faults.is_empty() {
+        Ok(out)
+    } else {
+        Err(faults)
+    }
 }
 
 /// `t`'s already-lowered `TypeShape` (`bynk-emit::ir`, P6.6/#1188) — reuses the
@@ -414,12 +424,17 @@ fn extend_with_span(
 /// each recorded span to a `(line, col)` and embed `sourcesContent`. Returns the
 /// generated TS and the serialised source-map v3 JSON (`None` when nothing
 /// mapped — e.g. a unit whose items all came from sibling files).
+///
+/// 1A.34: a checker fact the emitter needed and did not find is an
+/// [`InternalFault`], not an `any`, an `undefined` or a panic. Lowering carries
+/// on past each, so the `Err` holds every fault of the unit; the program built
+/// alongside is then never used.
 pub fn emit_project(
     program: &CheckedProgram,
     ctx: &EmitProjectCtx,
     source_text: &str,
     source_name: &str,
-) -> (bynk_ts::TsProgram, Option<String>) {
+) -> Result<(bynk_ts::TsProgram, Option<String>), Vec<InternalFault>> {
     let commons = program.program();
     // #1486: no more `RefCell<SourceMapBuilder>` — every top-level item's
     // own checkpoint is `stmt.span` on the first statement its own emitter
@@ -827,7 +842,12 @@ pub fn emit_project(
         .map(|s| format!("{}.ts", s.to_string_lossy()))
         .unwrap_or_else(|| "module.ts".to_string());
     let printed = bynk_ts::print(&program, source_name, source_text, &generated_file);
-    (program, printed.source_map)
+    let faults = ctx.runtime_use.take_faults();
+    if faults.is_empty() {
+        Ok((program, printed.source_map))
+    } else {
+        Err(faults)
+    }
 }
 
 /// Whether a service's `on call` handler hands work to the execution context

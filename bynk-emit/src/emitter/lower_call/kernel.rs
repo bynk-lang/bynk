@@ -199,9 +199,13 @@ pub(in crate::emitter) fn lower_kernel_method_call(
     {
         let recv_ty = (*tys.get(kernel_recv)).clone();
         // The receiver's checked type disagrees with the resolved op only if
-        // the checker and the emitter have drifted.
-        let mismatch = |kop: KernelOp| -> ! {
-            panic!("bynk internal error (#3164): kernel op {kop:?} on a mismatched receiver type")
+        // the checker and the emitter have drifted: a missing fact (1A.34),
+        // reported at the call, with no text fallback.
+        let site = cx.fault_site(e.span);
+        let mismatch = move |kop: KernelOp| -> Option<Built> {
+            Some(Ok(site.missing_fact(format_args!(
+                "receiver type matching the resolved kernel op {kop:?}"
+            ))))
         };
         // 1A: every arm below but `List` is text until its own family slice (the
         // track's `1A.query`, `1A.stream`, `1A.map`, `1A.set`, `1A.option`,
@@ -209,7 +213,7 @@ pub(in crate::emitter) fn lower_kernel_method_call(
         match kop {
             KernelOp::List(op) => {
                 let Ty::List(elem) = &recv_ty else {
-                    mismatch(kop)
+                    return mismatch(kop);
                 };
                 if let Some(built) = lower_list_kernel(e, receiver, op, args, *elem, cx, pre) {
                     return Some(built);
@@ -219,7 +223,7 @@ pub(in crate::emitter) fn lower_kernel_method_call(
             // the receiver thunk, invoked (`(recv)()`).
             KernelOp::Query(op) => {
                 let Ty::Query(elem) = &recv_ty else {
-                    mismatch(kop)
+                    return mismatch(kop);
                 };
                 let elem_node = ts_ty_to_ts_type(*elem, tys);
                 let recv = pre.lower_node(receiver, cx);
@@ -238,6 +242,7 @@ pub(in crate::emitter) fn lower_kernel_method_call(
                         keyed: query_keyed(e, method, args, cx),
                         key_cmp: query_key_cmp(method, args, cx),
                         runtime_use: cx.runtime_use(),
+                        span: e.span,
                     },
                     tys,
                 ) {
@@ -267,7 +272,7 @@ pub(in crate::emitter) fn lower_kernel_method_call(
             }
             KernelOp::Map(op) => {
                 let Ty::Map(key, val) = &recv_ty else {
-                    mismatch(kop)
+                    return mismatch(kop);
                 };
                 if let Some(built) =
                     pre.absorb_built(lower_map_kernel(receiver, op, args, *key, *val, cx))
@@ -278,7 +283,7 @@ pub(in crate::emitter) fn lower_kernel_method_call(
             // K6a (#2596): the `Set` kernel.
             KernelOp::Set(op) => {
                 let Ty::Set(elem) = &recv_ty else {
-                    mismatch(kop)
+                    return mismatch(kop);
                 };
                 if let Some(built) =
                     pre.absorb_built(lower_set_kernel(receiver, op, args, *elem, cx))
@@ -358,7 +363,7 @@ pub(in crate::emitter) fn lower_kernel_method_call(
             // v0.22a: Option/Result combinators (ADR 0048).
             KernelOp::Option(op) => {
                 let Ty::Option(inner) = &recv_ty else {
-                    mismatch(kop)
+                    return mismatch(kop);
                 };
                 if let Some(built) =
                     pre.absorb_built(lower_option_kernel(e, receiver, op, args, *inner, cx))
@@ -368,7 +373,7 @@ pub(in crate::emitter) fn lower_kernel_method_call(
             }
             KernelOp::Result(op) => {
                 let Ty::Result(ok, err) = &recv_ty else {
-                    mismatch(kop)
+                    return mismatch(kop);
                 };
                 if let Some(built) =
                     pre.absorb_built(lower_result_kernel(e, receiver, op, args, *ok, *err, cx))
@@ -389,7 +394,7 @@ pub(in crate::emitter) fn lower_kernel_method_call(
             // receiver `Promise<Result<…>>` and rebuilds the transformed Result.
             KernelOp::EffectResult(op) => {
                 let Ty::Effect(inner) = &recv_ty else {
-                    mismatch(kop)
+                    return mismatch(kop);
                 };
                 if let Ty::Result(ok, err) = &*tys.get(*inner)
                     && let Some(built) =
@@ -426,27 +431,29 @@ fn lower_effect_result_kernel(
     let et = ts_ty_to_ts_type(err, tys);
     // The call's checked type is `Effect[Result[a, b]]`; peel `(a, b)` for the
     // transformed parameter's TS type.
-    let (a_ts, b_ts, a_text, b_text) = match cx.commons().expr_ty(e.id).as_deref() {
+    let peeled = match cx.commons().expr_ty(e.id).as_deref() {
         Some(Ty::Effect(inner)) => match &*tys.get(*inner) {
-            Ty::Result(a, b) => (
-                ts_ty_to_ts_type(*a, tys),
-                ts_ty_to_ts_type(*b, tys),
-                ts_ty(*a, tys),
-                ts_ty(*b, tys),
-            ),
-            other => panic!(
-                "bynk internal error (finding #28): emitter expected `Effect[Result[_, _]]` \
-                 recorded for an effectful `Result` combinator call at {:?}, but found \
-                 `Effect[{other:?}]` — the checker should already have typed it",
-                e.span
-            ),
+            Ty::Result(a, b) => Some((*a, *b)),
+            _ => None,
         },
-        other => panic!(
-            "bynk internal error (finding #28): emitter expected `Effect[Result[_, _]]` \
-             recorded for an effectful `Result` combinator call at {:?}, but found {other:?} \
-             — the checker should already have typed it",
-            e.span
+        _ => None,
+    };
+    let (a_ts, b_ts, a_text, b_text) = match peeled {
+        Some((a, b)) => (
+            ts_ty_to_ts_type(a, tys),
+            ts_ty_to_ts_type(b, tys),
+            ts_ty(a, tys),
+            ts_ty(b, tys),
         ),
+        // A missing fact (1A.34); the placeholder keeps lowering going.
+        None => {
+            let missing = cx.missing_fact_ty(
+                e.span,
+                "`Effect[Result[_, _]]` type for an effectful `Result` combinator call",
+            );
+            let text = bynk_ts::print_type(&missing);
+            (missing.clone(), missing, text.clone(), text)
+        }
     };
     let [f] = args else {
         return None;
@@ -856,12 +863,10 @@ mod tests {
     }
 
     /// A kernel op on a receiver whose checked type is not the op's own receiver kind is checker and
-    /// emitter drift: the dispatcher panics (#3164), with no fallback.
+    /// emitter drift (#3164): the dispatcher records a missing fact at the call (1A.34), with no
+    /// fallback, and lowering continues.
     #[test]
-    #[should_panic(
-        expected = "bynk internal error (#3164): kernel op EffectResult(MapOk) on a mismatched receiver type"
-    )]
-    fn a_mismatched_receiver_type_panics_with_the_3164_message() {
+    fn a_mismatched_receiver_type_is_a_missing_fact() {
         let mut commons = TypedCommons::empty();
         let int = commons.tys().intern(Ty::Base(BaseType::Int));
         commons.callees.insert(
@@ -882,16 +887,18 @@ mod tests {
             span: Span::new(0, 0),
         };
         let (e, recv) = (expr(1), expr(2));
-        let _ = lower_kernel_method_call(&e, &recv, &method, &[], &mut cx, &mut Pre::new());
+        let built = lower_kernel_method_call(&e, &recv, &method, &[], &mut cx, &mut Pre::new());
+        assert!(built.is_some(), "lowering continues past the fault");
+        let faults = ru.take_faults();
+        assert_eq!(faults.len(), 1, "{faults:?}");
+        assert_eq!(faults[0].span, e.span);
+        assert!(faults[0].what.contains("EffectResult(MapOk)"), "{faults:?}");
     }
 
     /// An `Effect[Result]` combinator call the checker recorded no `Effect[Result[_, _]]` type for
-    /// panics with the finding #28 message, naming the found type.
+    /// is a missing type fact (1A.34), and lowering continues.
     #[test]
-    #[should_panic(
-        expected = "bynk internal error (finding #28): emitter expected `Effect[Result[_, _]]`"
-    )]
-    fn an_untyped_effect_result_call_panics_with_the_finding_28_message() {
+    fn an_untyped_effect_result_call_is_a_missing_type_fact() {
         let mut commons = TypedCommons::empty();
         let int = commons.tys().intern(Ty::Base(BaseType::Int));
         let cross = bynk_check::resolver::CrossContextInfo::default();
@@ -918,6 +925,13 @@ mod tests {
             int,
             &mut cx,
             &mut Pre::new(),
+        );
+        let faults = ru.take_faults();
+        assert_eq!(faults.len(), 1, "{faults:?}");
+        assert_eq!(faults[0].span, e.span);
+        assert!(
+            faults[0].what.contains("`Effect[Result[_, _]]` type"),
+            "{faults:?}"
         );
     }
 }

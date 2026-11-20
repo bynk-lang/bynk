@@ -142,6 +142,7 @@ fn query_op(
             keyed: query_keyed(e, method, args, cx),
             key_cmp: query_key_cmp(method, args, cx),
             runtime_use: cx.runtime_use(),
+            span: e.span,
         },
         tys,
     )
@@ -624,16 +625,18 @@ fn lower_store_map_call(
             // map into a scan over its values (`Object.values`).
             //
             // Review of #1460: `elem_ts` is this map's own value type `V`
-            // (`agent_store_map_value_ts`) — falls back to `unknown` only for an
-            // already-diagnosed program the checker recorded no type for, not a
-            // real case on a certified one: this arm is only reached when
+            // (`agent_store_map_value_ts`) — absent only for a fact the checker
+            // did not record, which is a missing fact (1A.34), not a real case on a
+            // certified program: this arm is only reached when
             // `cx.is_agent_store_map` already matched, so `map_values` always
             // has an entry for `id.name` here.
             _ => {
                 let elem = cx
                     .agent_store_map_value_ts(&id_.name)
                     .cloned()
-                    .unwrap_or_else(|| TsType::named("unknown"));
+                    .unwrap_or_else(|| {
+                        cx.missing_fact_ty(e.span, "value type of an agent `Map` store field")
+                    });
                 query_op(
                     "Map",
                     LoweredExpr::Node(path_values_source(m.node.clone())),
@@ -1046,13 +1049,15 @@ fn lower_store_log_call(
             // The general query vocabulary over the entry values.
             //
             // Review of #1460: `elem_ts` is this log's own element type `T`
-            // (`agent_store_log_value_ts`) — same construction and fallback
+            // (`agent_store_log_value_ts`) — same construction and missing-fact
             // posture as the plain-Map scan above.
             _ => {
                 let elem = cx
                     .agent_store_log_value_ts(&id_.name)
                     .cloned()
-                    .unwrap_or_else(|| TsType::named("unknown"));
+                    .unwrap_or_else(|| {
+                        cx.missing_fact_ty(e.span, "element type of an agent `Log` store field")
+                    });
                 query_op(
                     "Log",
                     LoweredExpr::Node(path_values_source(g.node.clone())),

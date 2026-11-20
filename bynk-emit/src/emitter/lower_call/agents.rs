@@ -147,20 +147,21 @@ fn trace_built(cx: &LowerCtx, target: &str, offset: usize, built: Built) -> Buil
 }
 
 /// `AgentName(key)` (the `Callee::AgentInit` branch of `lower_call`): the factory call over
-/// the first lowered argument. Panics (ADR 0334) when there is none.
+/// the first lowered argument. No argument is a missing fact (ADR 0334, 1A.34): every
+/// `AgentDecl` declares exactly one key field, which the checker's arity check enforces.
 pub(in crate::emitter) fn lower_agent_init(
     name: &Ident,
     args_lowered: Vec<LoweredExpr>,
     cx: &mut LowerCtx,
 ) -> Built {
-    let arg_count = args_lowered.len();
     let key = args_lowered.into_iter().next().unwrap_or_else(|| {
-        panic!(
-            "bynk internal error (ADR 0334): Callee::AgentInit records agent \
-             construction `{}(...)` with {arg_count} args, but every AgentDecl \
-             declares exactly one key field — the checker already accepted this call",
-            name.name,
-        )
+        LoweredExpr::Node(cx.missing_fact(
+            name.span,
+            format_args!(
+                "key argument of the agent construction `{}(...)`",
+                name.name
+            ),
+        ))
     });
     cx.agent_construct_node(&name.name, key)
 }
@@ -242,14 +243,10 @@ mod tests {
         }
     }
 
-    /// A malformed init (no key argument) panics with the ADR 0334 message, unchanged.
+    /// A malformed init (no key argument) is a missing argument-arity fact (ADR 0334, 1A.34),
+    /// recorded at the agent's name, and lowering continues with the placeholder.
     #[test]
-    #[should_panic(
-        expected = "bynk internal error (ADR 0334): Callee::AgentInit records agent \
-                               construction `Room(...)` with 0 args, but every AgentDecl \
-                               declares exactly one key field"
-    )]
-    fn a_malformed_init_panics_with_the_adr_0334_message() {
+    fn a_malformed_init_is_a_missing_arity_fact() {
         let commons = TypedCommons::empty();
         let cross = bynk_check::resolver::CrossContextInfo::default();
         let ru = RuntimeUse::default();
@@ -257,8 +254,18 @@ mod tests {
         let mut cx = LowerCtx::new(module, BodyMode::Method);
         let name = Ident {
             name: "Room".to_string(),
-            span: bynk_syntax::span::Span::default(),
+            span: bynk_syntax::span::Span::new(5, 9),
         };
-        let _ = lower_agent_init(&name, vec![], &mut cx);
+        let built = lower_agent_init(&name, vec![], &mut cx);
+        assert!(built.is_ok(), "lowering continues past the fault");
+        let faults = ru.take_faults();
+        assert_eq!(faults.len(), 1, "{faults:?}");
+        assert_eq!(faults[0].span, name.span);
+        assert!(
+            faults[0]
+                .what
+                .contains("key argument of the agent construction `Room(...)`"),
+            "{faults:?}"
+        );
     }
 }

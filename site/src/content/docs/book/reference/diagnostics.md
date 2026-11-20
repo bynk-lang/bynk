@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **895** codes in total.
+There are **896** codes in total.
 
 ## Agents
 
@@ -283,6 +283,12 @@ There are **895** codes in total.
 | [`bynk.http.stream_body_signature`](/book/reference/http/#streamed-request-bodies) | A route with a streamed `body` has a `Signature` actor, which verifies an HMAC over the whole body first. |  | — |
 | [`bynk.http.unbound_path_param`](/book/reference/http/#handler-form) | A `:name` route segment has no matching handler parameter. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
 | [`bynk.http.unknown_handler_annotation`](/book/reference/http/#handler-form) | A handler carries an annotation outside the closed set (`@cache`/`@limit`). |  | — |
+
+## Internal errors
+
+| Code | Summary | Construct | Severity |
+|---|---|---|---|
+| [`bynk.internal.missing_checker_fact`](/book/reference/diagnostics/#internal-errors) | A compiler fault, not a mistake in the program: the code generator needed a fact the checker should have recorded (a type, a callee, an argument count, a field default) and found none. The diagnostic points at the construct being compiled; report it at https://github.com/bynk-lang/bynk/issues. |  | — |
 
 ## Lexer
 

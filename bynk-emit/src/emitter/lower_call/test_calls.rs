@@ -12,6 +12,7 @@ use bynk_check::checker::{Callee, HandlerAddress, Ty, WsAddress};
 use bynk_model::IrHttpMethod;
 use bynk_ts::{TsExpr, TsObjectEntry};
 
+use super::super::internal_fault::undefined_node;
 use super::super::lower::{
     Built, LoweredExpr, Pre, node_or_text, settle_helper, settle_with, str_node, text_value,
 };
@@ -577,12 +578,19 @@ pub(in crate::emitter) fn lower_system_http_call(
                 ..
             })
         );
-        let undefined = || LoweredExpr::Node(id("undefined"));
-        let slot = if sends_extra {
-            all.pop().unwrap_or_else(undefined)
+        // The slot is the call's trailing argument when the checker accepted one,
+        // else the legitimate default: no extra headers, `undefined`.
+        let extra_arg = if sends_extra {
+            Some(all.pop().unwrap_or_else(|| {
+                LoweredExpr::Node(cx.missing_fact(
+                    e.span,
+                    "trailing `RequestHeaders` argument of a system call",
+                ))
+            }))
         } else {
-            undefined()
+            None
         };
+        let slot = extra_arg.unwrap_or_else(|| LoweredExpr::Node(undefined_node()));
         all.push(slot);
     }
     all.push(sub);
@@ -615,14 +623,20 @@ fn websocket_lifecycle_call(
     shape: &WsAddress,
     svc: &str,
     args: &[Expr],
+    at: bynk_syntax::span::Span,
     deps: &LoweredExpr,
     cx: &mut LowerCtx,
     pre: &mut Pre,
 ) -> String {
-    let tc = args
-        .first()
-        .map(|a| pre.lower(a, cx))
-        .unwrap_or_else(|| "undefined".to_string());
+    // An argument the checker's arity check guarantees: absent, a missing fact.
+    let missing = |cx: &LowerCtx, what: &str| bynk_ts::print_expr(&cx.missing_fact(at, what));
+    let tc = match args.first() {
+        Some(a) => pre.lower(a, cx),
+        None => missing(
+            cx,
+            "`TestConnection` argument of a websocket lifecycle call",
+        ),
+    };
     let sig = |m: &str| format!("Parameters<typeof {svc}.{m}>");
     match shape {
         WsAddress::Open => {
@@ -639,10 +653,10 @@ fn websocket_lifecycle_call(
         }
         WsAddress::Message { frame } => {
             let (frame_idx, n) = frame.map_or((0, 1), |f| (f.frame_index, f.params));
-            let frame = args
-                .get(1)
-                .map(|a| pre.lower(a, cx))
-                .unwrap_or_else(|| "undefined".to_string());
+            let frame = match args.get(1) {
+                Some(a) => pre.lower(a, cx),
+                None => missing(cx, "frame argument of a websocket `message` call"),
+            };
             let p = sig("message");
             let mut k = 0usize;
             let mut parts = vec!["__c".to_string()];
@@ -728,7 +742,7 @@ pub(in crate::emitter) fn lower_test_service_call(
             return settle(address_call(&svc.name, &key, rest, deps));
         }
         if let Some(HandlerAddress::Ws(shape)) = &address {
-            let text = websocket_lifecycle_call(shape, &svc.name, args, &deps, cx, pre);
+            let text = websocket_lifecycle_call(shape, &svc.name, args, e.span, &deps, cx, pre);
             return settle(Err(text));
         }
         if matches!(address, Some(HandlerAddress::Message)) && facts.has_message {
@@ -748,15 +762,17 @@ pub(in crate::emitter) fn lower_test_service_call(
         // `via schema(N)` guard as every real delivery does. An omitted envelope is `undefined`.
         if matches!(address, Some(HandlerAddress::Event)) && facts.has_event {
             cx.runtime_use().note_test_event_service(&svc.name);
-            let undefined = || LoweredExpr::Node(id("undefined"));
-            let payload = args
-                .first()
-                .map(|a| pre.lower_node(a, cx))
-                .unwrap_or_else(undefined);
+            let payload = match args.first() {
+                Some(a) => pre.lower_node(a, cx),
+                None => LoweredExpr::Node(
+                    cx.missing_fact(e.span, "event argument of a `svc.event` call"),
+                ),
+            };
+            // The legitimate default: an omitted envelope is `undefined`.
             let envelope = args
                 .get(1)
                 .map(|a| pre.lower_node(a, cx))
-                .unwrap_or_else(undefined);
+                .unwrap_or_else(|| LoweredExpr::Node(undefined_node()));
             let helper_name = event_helper_name(&svc.name);
             return settle(node_or_text(
                 vec![payload, envelope, deps],

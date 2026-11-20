@@ -224,21 +224,21 @@ __bynkThen(src, (__q) => (async () => {
 __bynkThen(src, (__q) => (async () => { await __bynkSettleAll(__q.map((__x) => () => (f)(__x))); })())
 === TraverseAll keyed=false cmp=plain
 __bynkThen(src, (__q) => (async () => {
-  const __out: any[] = [];
+  const __out: number[] = [];
   for (const __x of __q) {
     __out.push(await (f)(__x));
   }
   return __out;
 })())
 --- text
-__bynkThen(src, (__q) => (async () => { const __out: any[] = []; for (const __x of __q) { __out.push(await (f)(__x)); } return __out; })())
+__bynkThen(src, (__q) => (async () => { const __out: number[] = []; for (const __x of __q) { __out.push(await (f)(__x)); } return __out; })())
 === ParTraverseAll keyed=false cmp=plain
 __bynkThen(src, (__q) => (async () => await __bynkSettleAll(__q.map((__x) => () => (f)(__x))))())
 --- text
 __bynkThen(src, (__q) => (async () => await __bynkSettleAll(__q.map((__x) => () => (f)(__x))))())
 === TraverseTry keyed=false cmp=plain
 __bynkThen(src, (__q) => (async () => {
-  const __out: any[] = [];
+  const __out: number[] = [];
   for (const __x of __q) {
     const __r = await (f)(__x);
     if (__r.tag === "Err") {
@@ -249,11 +249,11 @@ __bynkThen(src, (__q) => (async () => {
   return Ok(__out);
 })())
 --- text
-__bynkThen(src, (__q) => (async () => { const __out: any[] = []; for (const __x of __q) { const __r = await (f)(__x); if (__r.tag === "Err") { return Err(__r.error); } __out.push(__r.value); } return Ok(__out); })())
+__bynkThen(src, (__q) => (async () => { const __out: number[] = []; for (const __x of __q) { const __r = await (f)(__x); if (__r.tag === "Err") { return Err(__r.error); } __out.push(__r.value); } return Ok(__out); })())
 === ParTraverseTry keyed=false cmp=plain
 __bynkThen(src, (__q) => (async () => {
   const __rs = await __bynkSettleAll(__q.map((__x) => () => (f)(__x)));
-  const __out: any[] = [];
+  const __out: number[] = [];
   for (const __r of __rs) {
     if (__r.tag === "Err") {
       return Err(__r.error);
@@ -263,7 +263,7 @@ __bynkThen(src, (__q) => (async () => {
   return Ok(__out);
 })())
 --- text
-__bynkThen(src, (__q) => (async () => { const __rs = await __bynkSettleAll(__q.map((__x) => () => (f)(__x))); const __out: any[] = []; for (const __r of __rs) { if (__r.tag === "Err") { return Err(__r.error); } __out.push(__r.value); } return Ok(__out); })())
+__bynkThen(src, (__q) => (async () => { const __rs = await __bynkSettleAll(__q.map((__x) => () => (f)(__x))); const __out: number[] = []; for (const __r of __rs) { if (__r.tag === "Err") { return Err(__r.error); } __out.push(__r.value); } return Ok(__out); })())
 === SortBy keyed=false cmp=bare
 (() => __bynkThen(src, (__q) => [...__q].sort((__a, __b) => __bynkCmpFloat((key)(__a), (key)(__b)))))
 --- text

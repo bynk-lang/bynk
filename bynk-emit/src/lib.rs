@@ -51,10 +51,15 @@ pub fn compile(source: &str, filename: &str) -> Result<String, Vec<CompileError>
 /// The warning-preserving single-file compile behind [`compile`]. See [`Compiled`].
 pub fn compile_with_warnings(source: &str, _filename: &str) -> Result<Compiled, Vec<CompileError>> {
     let (program, warnings) = check_single_file(source, SingleFileMode::Build)?;
-    Ok(Compiled {
-        ts: emitter::emit(&program),
-        warnings,
-    })
+    // 1A.34: a missing checker fact is reported as a `bynk.internal.missing_checker_fact`
+    // diagnostic, never as output.
+    let ts = emitter::emit(&program).map_err(|faults| {
+        faults
+            .into_iter()
+            .map(emitter::InternalFault::into_compile_error)
+            .collect::<Vec<_>>()
+    })?;
+    Ok(Compiled { ts, warnings })
 }
 
 /// Check a single-file commons without building it: the same diagnostics as
@@ -86,6 +91,23 @@ fn check_single_file(
     source: &str,
     mode: SingleFileMode,
 ) -> Result<(checker::CheckedProgram, Vec<CompileError>), Vec<CompileError>> {
+    let (typed, warnings) = check_single_typed(source, mode)?;
+    // T3.7 (R3.10): `check` already gated on error-severity diagnostics, so
+    // `typed.warnings` — the only diagnostics left riding along with it — can
+    // never contain one; `certify` re-asserts that structurally rather than
+    // trusting the caller not to skip it.
+    let program = checker::certify(typed, warnings.clone()).unwrap_or_else(|_| {
+        panic!("bynk internal error: check() already gated on error-severity diagnostics")
+    });
+    Ok((program, warnings))
+}
+
+/// [`check_single_file`] up to, and not including, `certify`: the checked commons and its
+/// warnings. Split out so a test can take one checker fact away before certifying it.
+fn check_single_typed(
+    source: &str,
+    mode: SingleFileMode,
+) -> Result<(checker::TypedCommons, Vec<CompileError>), Vec<CompileError>> {
     // #2807: a lexical error is reported with the rest of the file's, but the
     // file is still refused.
     let (tokens, lex_errors) = lexer::tokenize_recovering(source);
@@ -159,14 +181,7 @@ fn check_single_file(
         }
     };
     warnings.extend(typed.warnings.clone());
-    // T3.7 (R3.10): `check` already gated on error-severity diagnostics, so
-    // `typed.warnings` — the only diagnostics left riding along with it — can
-    // never contain one; `certify` re-asserts that structurally rather than
-    // trusting the caller not to skip it.
-    let program = checker::certify(typed, warnings.clone()).unwrap_or_else(|_| {
-        panic!("bynk internal error: check() already gated on error-severity diagnostics")
-    });
-    Ok((program, warnings))
+    Ok((typed, warnings))
 }
 
 /// Minimum supported Node.js **major** version for the `node` platform binding

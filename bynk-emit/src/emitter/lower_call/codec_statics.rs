@@ -132,9 +132,11 @@ pub(in super::super) fn lower_json_codec_call(
 fn lower_form_encode(arg: &Expr, cx: &mut LowerCtx, pre: &mut Pre) -> Built {
     cx.runtime_use().note_form_codec();
     // The checker admits only a concrete record of form fields, so the wire
-    // value is always available; a miss is a compiler fault, not a user error.
-    let wire = form_encode_wire(pre, arg, cx)
-        .expect("`Form.encode` checked a concrete record of form fields");
+    // value is always available; a miss is a compiler fault, not a user error
+    // (1A.34: a missing checker fact, reported at the argument).
+    let wire = form_encode_wire(pre, arg, cx).unwrap_or_else(|| {
+        Ok(cx.missing_fact(arg.span, "wire value for a `Form.encode` argument"))
+    });
     // #3343: a field renamed by `@name` is written under its wire key.
     let table = cx
         .commons()

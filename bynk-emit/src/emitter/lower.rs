@@ -20,6 +20,7 @@ use bynk_model::{ConstVal, EventPatternIr, EventPatternValueIr};
 
 use super::ctx::{BodyMode, ModuleCtx, TestShared};
 use super::default_value::default_value_node;
+use super::internal_fault::{FaultSite, undefined_node, unnameable_receiver_type_arg};
 use super::lower_call::agents::{
     lower_agent_init, lower_inline_agent_call, lower_let_bound_agent_call,
 };
@@ -40,7 +41,6 @@ use super::lower_call::test_calls::{
     lower_test_service_call,
 };
 use super::lower_ctx::LowerCtx;
-use super::lower_list::any_ty;
 use super::lower_stmt::{
     Body, Item, arms_contain_question, block_body, block_body_into, block_contains_question,
     emit_block_as_function_body_with_return, emit_statement, hoist_if_as_statement,
@@ -2396,22 +2396,46 @@ fn base_default_ts(base: BaseType) -> bynk_ts::TsExpr {
 /// slice 2), as a node (1A.17, Decision D). Recurses through sum payloads and
 /// record fields; refined types use `refined_default`, opaque types wrap a base
 /// default, bare bases use 0/""/true.
-fn mock_value(ty: TyId, cx: &LowerCtx, depth: u32) -> bynk_ts::TsExpr {
-    let undefined = || ident_node("undefined");
+///
+/// A shape with no mock value renders as the `undefined` identifier here and
+/// nowhere else (1A.34): [`mock_value_of`] says `None` for it, and this is the
+/// one place that renders it. `at` is the `Val[T]` call, where a checker fact
+/// the recursion needs and does not find is reported.
+fn mock_value(ty: TyId, cx: &LowerCtx, depth: u32, at: bynk_syntax::span::Span) -> bynk_ts::TsExpr {
+    mock_value_of(ty, cx, depth, at).unwrap_or_else(undefined_node)
+}
+
+/// [`mock_value`], with the legitimate absence of a value as `None`: the
+/// recursion bound, a type no mock builds (`Option`, `List`, `Unit`, ...), a
+/// compiler-known type with no declaration, and a sum with no variant.
+fn mock_value_of(
+    ty: TyId,
+    cx: &LowerCtx,
+    depth: u32,
+    at: bynk_syntax::span::Span,
+) -> Option<bynk_ts::TsExpr> {
     let tys = cx.ty_render();
     if depth == 0 {
-        return undefined();
+        return None;
     }
-    match &*tys.get(ty) {
+    // A declared field or payload type the checker resolved when it checked the
+    // declaration: it not resolving here is a missing fact.
+    let field_value = |type_ref: &TypeRef| match bynk_check::checker::resolve_type_ref(
+        type_ref,
+        &cx.commons().types,
+        tys.types(),
+    ) {
+        Some(t) => mock_value(t, cx, depth - 1, at),
+        None => cx.missing_fact(at, "resolved type for a mocked field"),
+    };
+    Some(match &*tys.get(ty) {
         Ty::Base(BaseType::Int) => num_lit("0".to_string()),
         Ty::Base(BaseType::String) => str_node(""),
         Ty::Base(BaseType::Bool) => bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Bool(true)),
         Ty::Base(BaseType::Float) => num_lit("0".to_string()),
         Ty::Base(BaseType::Decimal) => decimal_lit("0", 0),
         Ty::Named { name, .. } => {
-            let Some(decl) = cx.commons().types.get(name.as_str()) else {
-                return undefined();
-            };
+            let decl = cx.commons().types.get(name.as_str())?;
             match &decl.body {
                 TypeBody::Refined { .. } => {
                     let d = refined_default(decl).unwrap_or_else(|| num_lit("0".to_string()));
@@ -2420,23 +2444,10 @@ fn mock_value(ty: TyId, cx: &LowerCtx, depth: u32) -> bynk_ts::TsExpr {
                 TypeBody::Opaque { base, .. } => {
                     unchecked_construct_test_node(name, base_default_ts(*base), true)
                 }
-                TypeBody::Sum(s) => match s.variants.first() {
-                    None => undefined(),
-                    Some(v) if v.payload.is_empty() => member_node(name, &v.name.name),
-                    Some(v) => {
-                        let args = v
-                            .payload
-                            .iter()
-                            .map(|f| {
-                                bynk_check::checker::resolve_type_ref(
-                                    &f.type_ref,
-                                    &cx.commons().types,
-                                    tys.types(),
-                                )
-                                .map(|t| mock_value(t, cx, depth - 1))
-                                .unwrap_or_else(undefined)
-                            })
-                            .collect();
+                TypeBody::Sum(s) => match s.variants.first()? {
+                    v if v.payload.is_empty() => member_node(name, &v.name.name),
+                    v => {
+                        let args = v.payload.iter().map(|f| field_value(&f.type_ref)).collect();
                         bynk_ts::TsExpr::Call {
                             callee: Box::new(member_node(name, &v.name.name)),
                             args,
@@ -2456,23 +2467,15 @@ fn mock_value(ty: TyId, cx: &LowerCtx, depth: u32) -> bynk_ts::TsExpr {
                                 }
                                 _ => None,
                             };
-                            let fv = inline.unwrap_or_else(|| {
-                                bynk_check::checker::resolve_type_ref(
-                                    &f.type_ref,
-                                    &cx.commons().types,
-                                    tys.types(),
-                                )
-                                .map(|t| mock_value(t, cx, depth - 1))
-                                .unwrap_or_else(undefined)
-                            });
+                            let fv = inline.unwrap_or_else(|| field_value(&f.type_ref));
                             (f.name.name.clone(), fv)
                         })
                         .collect(),
                 ),
             }
         }
-        _ => undefined(),
-    }
+        _ => return None,
+    })
 }
 
 /// W30 (#2840): the statement that opens a service handler's claim scope, which
@@ -2655,9 +2658,9 @@ fn lower_ufcs_method_call(
     // with no argument of type `U` still types as written. The method's own
     // arguments are what the author wrote; a receiver argument is spelled only
     // when it is a base or built-in type, which is in scope everywhere, and is
-    // `any` otherwise (a type the calling module may never import, or a type
-    // variable that may not be this function's). The checker has already typed
-    // the call, so `any` in a receiver slot loses nothing.
+    // the named widening `unnameable_receiver_type_arg` otherwise (a type the
+    // calling module may never import, or a type variable that may not be this
+    // function's).
     let explicit: Vec<bynk_ts::TsType> = if type_args.is_empty() {
         Vec::new()
     } else {
@@ -2676,9 +2679,14 @@ fn lower_ufcs_method_call(
                     if ts_spelling_in_scope_everywhere(*a, tys.types()) {
                         ty_to_type_ref(*a, tys.types())
                             .map(|r| ts_type_ref_to_ts_type(&r, None))
-                            .unwrap_or_else(any_ty)
+                            .unwrap_or_else(|| {
+                                cx.missing_fact_ty(
+                                    receiver.span,
+                                    "codec shape for a receiver type argument",
+                                )
+                            })
                     } else {
-                        any_ty()
+                        unnameable_receiver_type_arg()
                     }
                 })
                 .chain(type_args.iter().map(|t| ts_type_ref_to_ts_type(t, None)))
@@ -2757,9 +2765,13 @@ fn lower_val(type_ref: &TypeRef, args: &[Expr], cx: &mut LowerCtx) -> Lowered {
     let ty = match bynk_check::checker::resolve_type_ref(type_ref, &cx.commons().types, tys.types())
     {
         Some(t) => t,
-        // 1A: text, not a node: the comment is part of the output, and an
-        // `Ident` carrying it is the escape the rule forbids.
-        None => return pre.finish_text("undefined /* mock: unresolved type */".to_string()),
+        // A `Val[T]` whose `T` the checker resolved when it checked the call:
+        // it not resolving here is a missing fact (1A.34).
+        None => {
+            return pre.finish(LoweredExpr::Node(
+                cx.missing_fact(type_ref.span(), "resolved type for a `Val` call"),
+            ));
+        }
     };
     // Refined literal pin. This `Val[T](lit)` path is test-only scaffolding, where
     // the branded type is an `any` value binding, not a type (ADR 0182) — so brand
@@ -2787,7 +2799,12 @@ fn lower_val(type_ref: &TypeRef, args: &[Expr], cx: &mut LowerCtx) -> Lowered {
         return pre.finish_built(built);
     }
     // Bare mock (refined / opaque / sum / record).
-    pre.finish(LoweredExpr::Node(mock_value(ty, cx, MOCK_DEPTH)))
+    pre.finish(LoweredExpr::Node(mock_value(
+        ty,
+        cx,
+        MOCK_DEPTH,
+        type_ref.span(),
+    )))
 }
 
 /// When we encounter `lhs && rhs`, see if lhs is an `is` (possibly wrapped
@@ -3740,7 +3757,10 @@ fn lower_call(e: &Expr, name: &Ident, args: &[Expr], cx: &mut LowerCtx) -> Lower
             Some(Ty::TestConnection(f)) => {
                 crate::emitter::ts_types::ts_ty_to_ts_type(*f, cx.ty_render())
             }
-            _ => bynk_ts::TsType::named("unknown"),
+            _ => cx.missing_fact_ty(
+                e.span,
+                "`TestConnection[_]` type for a `TestConnection()` call",
+            ),
         };
         // `new TestConnection<F>()`: a `New` over a `TypeApp` (1A.20, #3721).
         return pre.finish_built(Ok(bynk_ts::TsExpr::New {
@@ -4569,10 +4589,16 @@ fn lower_record_construction(
                     let node: Built = Ok(default_value_node(&v));
                     children.push(node.into());
                 }
-                Err(reason) => unreachable!(
-                    "field `{}`'s default passed the checker but has no value: {reason}",
-                    declared.name.name
-                ),
+                // The checker rejected any default that has no value: a missing
+                // fact (1A.34), reported at the construction.
+                Err(_) => {
+                    slots.push(FieldSlot::Prop(declared.name.name.clone()));
+                    let node: Built = Ok(cx.missing_fact(
+                        type_name.span,
+                        format_args!("default value for field `{}`", declared.name.name),
+                    ));
+                    children.push(node.into());
+                }
             }
         }
     }
@@ -4609,7 +4635,14 @@ fn lower_field_access(e: &Expr, receiver: &Expr, field: &Ident, cx: &mut LowerCt
         )
     {
         let m = member_node(cx.agent_store_var(), &id.name);
-        let key = |cx: &LowerCtx| decode_map_key(map_key_ty(e, cx), ident_node("__k"), tys);
+        let key = |cx: &LowerCtx| {
+            decode_map_key(
+                map_key_ty(e, cx),
+                ident_node("__k"),
+                tys,
+                cx.fault_site(e.span),
+            )
+        };
         let is_identity =
             |k: &bynk_ts::TsExpr| matches!(k, bynk_ts::TsExpr::Ident(n) if n == "__k");
         let values = |call: &str| bynk_ts::TsExpr::Call {
@@ -4792,15 +4825,16 @@ fn map_key_ty(e: &Expr, cx: &LowerCtx) -> Option<TyId> {
 /// `number`, so it is parsed with `Number(...)`, while a `String`-based key is
 /// already correct and passes through unchanged. A refined or opaque key is
 /// then asserted back to its branded type (#1982).
-fn decode_map_key(k: Option<TyId>, raw: bynk_ts::TsExpr, tys: TyRender<'_>) -> bynk_ts::TsExpr {
-    // The key type is always recorded for a well-typed `.entries`/`.keys` — a
-    // `None` means the checker failed to stamp it, and the identity fallback
-    // below would silently emit a string for an `Int` key. Pin the invariant in
-    // debug builds so it can never become load-bearing by accident.
-    debug_assert!(
-        k.is_some(),
-        "map key type unrecorded — `.entries`/`.keys` key decode would fall back to identity",
-    );
+///
+/// A key type the checker did not record, or one that is not value-keyable, is a
+/// missing fact (1A.34): the identity pass-through that used to stand in would
+/// silently emit a string for an `Int` key.
+fn decode_map_key(
+    k: Option<TyId>,
+    raw: bynk_ts::TsExpr,
+    tys: TyRender<'_>,
+    at: FaultSite<'_>,
+) -> bynk_ts::TsExpr {
     let (base, branded) = match k.map(|t| tys.get(t)).as_deref() {
         Some(Ty::Base(b)) => (Some(*b), false),
         Some(Ty::Named {
@@ -4834,11 +4868,11 @@ fn decode_map_key(k: Option<TyId>, raw: bynk_ts::TsExpr, tys: TyRender<'_>) -> b
         // type's wire shape, silently falling through to bare `raw` would
         // *miscompile* rather than reject — e.g. a `Bool` key needs
         // `raw === "true"`, not the raw string. Fail loudly instead.
-        Some(other) => unreachable!(
-            "map key base type {other:?} is not value-keyable (ADR 0110 D5) — \
-             decode_map_key has no wire-decode case for it"
-        ),
-        None => raw,
+        // Fail loudly instead (1A.34: report it).
+        Some(other) => at.missing_fact(format_args!(
+            "value-keyable map key type: {other:?} is not (ADR 0110 D5)"
+        )),
+        None => at.missing_fact("value-keyable map key type for `.entries`/`.keys`"),
     }
 }
 
@@ -4852,12 +4886,20 @@ mod decode_map_key_tests {
     static TYS: std::sync::LazyLock<Arc<Types>> =
         std::sync::LazyLock::new(|| Arc::new(Types::new()));
 
+    fn decoded(k: Option<TyId>) -> (String, Vec<crate::emitter::InternalFault>) {
+        let ru = RuntimeUse::default();
+        let at = FaultSite {
+            sink: &ru,
+            span: bynk_syntax::span::Span::new(3, 9),
+        };
+        let node = decode_map_key(k, ident_node("k"), TyRender::new(&TYS, no_spellings()), at);
+        (bynk_ts::print_expr(&node), ru.take_faults())
+    }
+
     fn print_decoded(k: Option<TyId>) -> String {
-        bynk_ts::print_expr(&decode_map_key(
-            k,
-            ident_node("k"),
-            TyRender::new(&TYS, no_spellings()),
-        ))
+        let (text, faults) = decoded(k);
+        assert!(faults.is_empty(), "{faults:?}");
+        text
     }
 
     #[test]
@@ -4898,13 +4940,28 @@ mod decode_map_key_tests {
 
     // #70/#71 review: a non-`String`/`Int` base reaching here means the
     // value-keyable set widened elsewhere (`resolver.rs`/`validate.rs`)
-    // without teaching this decode the new type's wire shape — it must fail
-    // loudly, not silently emit a wrong pass-through.
+    // without teaching this decode the new type's wire shape — it must be
+    // reported, not silently emit a wrong pass-through (1A.34).
     #[test]
-    #[should_panic(expected = "is not value-keyable")]
-    fn a_widened_non_string_int_base_panics_instead_of_silently_passing_through() {
+    fn a_widened_non_string_int_base_is_reported_instead_of_silently_passing_through() {
         let b = TYS.intern(Ty::Base(BaseType::Bool));
-        print_decoded(Some(b));
+        let (text, faults) = decoded(Some(b));
+        assert_eq!(text, "undefined");
+        assert_eq!(faults.len(), 1, "{faults:?}");
+        assert!(
+            faults[0].what.contains("is not (ADR 0110 D5)"),
+            "{faults:?}"
+        );
+    }
+
+    /// The key type is always recorded for a well-typed `.entries`/`.keys`; one that is not is a
+    /// missing fact at the call's span, and no identity decode stands in for it.
+    #[test]
+    fn an_unrecorded_key_type_is_reported_at_the_call() {
+        let (text, faults) = decoded(None);
+        assert_eq!(text, "undefined");
+        assert_eq!(faults.len(), 1, "{faults:?}");
+        assert_eq!(faults[0].span, bynk_syntax::span::Span::new(3, 9));
     }
 }
 

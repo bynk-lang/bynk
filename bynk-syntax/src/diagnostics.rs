@@ -3363,6 +3363,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "storage-annotations",
     },
     Explain {
+        code: "bynk.internal.missing_checker_fact",
+        blurb: "This is a compiler fault, not a mistake in your program. The code generator needs a fact the checker should have recorded about a construct (its type, the callee it resolves to, how many arguments it takes, a field's default value) and did not find one. Every program the checker accepts carries these facts, so no source you write can cause this on purpose. The diagnostic points at the construct being compiled when the fact was missing. Please report it at https://github.com/bynk-lang/bynk/issues with the source around that location, which is all that is needed to reproduce it. The compiler stops before it writes any output for the unit, rather than emit a program that might mean something other than what you wrote.",
+        example: "// bynk internal error: the checker recorded no type for a `fold` call, which the code generator needs here.\n// This is a compiler fault, not a problem in your program; please report it at https://github.com/bynk-lang/bynk/issues\n//\n// There is no program to fix: the report is the fix.",
+        page: "/book/reference/diagnostics",
+        anchor: "internal-errors",
+    },
+    Explain {
         code: "bynk.invariant.cross_agent_reference",
         blurb: "An invariant is checked inside one agent's commit, against that agent's own state. Reading another agent would mean a call out to it, whose value could change before the commit lands, so the claim could not be held. A property that spans agents belongs in a saga or a scenario. Keep the invariant to this agent's fields. The mirror rule for steps is `bynk.transition.cross_agent_reference`.",
         example: "invariant within_total: count <= Total(\"all\").get()   // ✗ reads another agent\n\ninvariant non_negative: count >= 0                    // ✓ this agent's own state",
@@ -9854,6 +9861,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A declared `@indexed(by: k)` is never used by an equality filter (a hygiene warning).",
     )),
     d(
+        "bynk.internal.missing_checker_fact",
+        "A compiler fault, not a mistake in the program: the code generator needed a fact the checker should have recorded (a type, a callee, an argument count, a field default) and found none. The diagnostic points at the construct being compiled; report it at https://github.com/bynk-lang/bynk/issues.",
+    ),
+    d(
         "bynk.invariant.cross_agent_reference",
         "An invariant predicate references another agent; invariants are per-agent.",
     ),
@@ -12258,6 +12269,7 @@ fn category_title(cat: &str) -> &'static str {
         "exports" => "Exports",
         "given" => "Given capabilities",
         "http" => "HTTP",
+        "internal" => "Internal errors",
         "lex" => "Lexer",
         "messages" => "Message bundles",
         "mock" => "Mocks (collaborators)",

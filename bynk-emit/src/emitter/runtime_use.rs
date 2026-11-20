@@ -83,6 +83,8 @@ use std::collections::HashMap;
 
 use bynk_check::checker::TyId;
 
+use super::internal_fault::InternalFault;
+
 /// Per-module accumulator of conditional runtime-helper references.
 ///
 /// One instance per emitted module (it lives on that module's emission context),
@@ -198,6 +200,9 @@ pub struct RuntimeUse {
     /// one `__bynkEvent_<svc>` delivery helper for each, once every body has
     /// lowered, so a module that delivers none is unchanged.
     test_event_services: RefCell<std::collections::BTreeSet<String>>,
+    /// 1A.34: the checker facts lowering needed and did not find, in the order
+    /// they were met ([`super::internal_fault`]).
+    faults: RefCell<Vec<InternalFault>>,
 }
 
 impl RuntimeUse {
@@ -556,6 +561,17 @@ impl RuntimeUse {
             .get(mark..)
             .unwrap_or_default()
             .to_vec()
+    }
+
+    /// 1A.34: record a checker fact lowering needed and did not find.
+    pub fn note_internal_fault(&self, span: bynk_syntax::span::Span, what: String) {
+        self.faults.borrow_mut().push(InternalFault { span, what });
+    }
+
+    /// 1A.34: drain the recorded faults, once the unit has been lowered. Empty
+    /// for every program the checker passed.
+    pub fn take_faults(&self) -> Vec<InternalFault> {
+        std::mem::take(&mut *self.faults.borrow_mut())
     }
 
     /// Drain the accumulated `Json` codec roots — called once, after every

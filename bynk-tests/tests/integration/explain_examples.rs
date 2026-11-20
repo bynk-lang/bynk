@@ -194,6 +194,10 @@ const NOT_BYNK_SOURCE: &[(&str, &str)] = &[
         "bynk.requires.unapproved",
         "the example is a `bynk.lock` table before and after `bynk approve`",
     ),
+    (
+        "bynk.internal.missing_checker_fact",
+        "a compiler fault no program provokes (the checker passed it): the example is the report the compiler prints, and there is no Bynk program to compile",
+    ),
 ];
 
 fn fixtures_root() -> PathBuf {

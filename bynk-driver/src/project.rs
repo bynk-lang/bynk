@@ -1862,6 +1862,66 @@ pub(crate) fn project_mentions_encode_plain(parsed: &[ParsedFile]) -> bool {
     parsed.iter().any(|p| p.source().contains("encodePlain"))
 }
 
+/// #1927: a `uses`-imported type this unit hides behind its own value is spelled as an inline
+/// import type while the module is emitted (`EmitProjectCtx::type_spellings`).
+fn hidden_type_spellings(
+    name: &str,
+    unit_info: &BTreeMap<String, UnitInfo>,
+    unit_ctx: &EmitUnitCtx,
+    source_path: &Path,
+    import_ext: ImportExt,
+) -> HashMap<String, String> {
+    bynk_check::project_model::shadowed_imports(name, unit_info)
+        .into_iter()
+        .filter(|(_, s)| s.imported == "type")
+        .map(|(type_name, s)| {
+            let path = unit_ctx
+                .imported_decl_paths_emit
+                .get(&s.unit)
+                .and_then(|m| m.get(&type_name))
+                .cloned()
+                .unwrap_or_else(|| EmitProjectCtx::commons_path(&s.unit));
+            let spec =
+                emitter::cross_commons_import_specifier_for_path(source_path, &path, import_ext);
+            let spelling = format!("import(\"{spec}\").{type_name}");
+            (type_name, spelling)
+        })
+        .collect()
+}
+
+/// 1A.34: emit the unit's module. A checker fact the emitter needed and did not find is a
+/// compiler fault, reported as a `bynk.internal.missing_checker_fact` diagnostic at the `.bynk`
+/// span of each (see [`report_internal_faults`]), and the unit's output is dropped (`None`).
+fn emit_unit_program(
+    program: &checker::CheckedProgram,
+    emit_ctx: &EmitProjectCtx,
+    pf: &ParsedFile,
+    source_name: &str,
+    errors: &mut ErrorSink,
+) -> Option<(bynk_ts::TsProgram, Option<String>)> {
+    match emitter::emit_project(program, emit_ctx, pf.source(), source_name) {
+        Ok(emitted) => Some(emitted),
+        Err(faults) => {
+            report_internal_faults(errors, &pf.identity_path(), faults);
+            None
+        }
+    }
+}
+
+/// 1A.34: turn the checker facts the emitter needed and did not find into
+/// `bynk.internal.missing_checker_fact` diagnostics, one per fault, each at the
+/// `.bynk` span of the construct being lowered and attributed to `file`.
+fn report_internal_faults(
+    errors: &mut ErrorSink,
+    file: &Path,
+    faults: Vec<emitter::InternalFault>,
+) {
+    errors.extend_for(
+        Some(file),
+        faults.into_iter().map(|f| f.into_compile_error()),
+    );
+}
+
 #[allow(clippy::too_many_arguments)]
 fn emit_unit(
     name: &str,
@@ -1884,6 +1944,7 @@ fn emit_unit(
     inspect_agents: bool,
     agent_deps_plan: Option<&AgentDepsPlan>,
     compiled: &mut Vec<StagedFile>,
+    errors: &mut ErrorSink,
     schema_effective_versions: &SchemaVersions,
     plain_encode_in_project: bool,
 ) {
@@ -2115,32 +2176,13 @@ fn emit_unit(
     // at the write boundary via `Document::text`) plus the source map
     // `bynk_ts::print` already computed while building it — no more
     // `Verbatim`-wrapping a pre-rendered string.
-    // #1927: a `uses`-imported type this unit hides behind its own value is
-    // spelled as an inline import type while the module is emitted
-    // (`EmitProjectCtx::type_spellings`).
-    let hidden_type_spellings: HashMap<String, String> =
-        bynk_check::project_model::shadowed_imports(name, unit_info)
-            .into_iter()
-            .filter(|(_, s)| s.imported == "type")
-            .map(|(type_name, s)| {
-                let path = unit_ctx
-                    .imported_decl_paths_emit
-                    .get(&s.unit)
-                    .and_then(|m| m.get(&type_name))
-                    .cloned()
-                    .unwrap_or_else(|| EmitProjectCtx::commons_path(&s.unit));
-                let spec = emitter::cross_commons_import_specifier_for_path(
-                    &emit_ctx.source_path,
-                    &path,
-                    import_ext,
-                );
-                let spelling = format!("import(\"{spec}\").{type_name}");
-                (type_name, spelling)
-            })
-            .collect();
-    emit_ctx.type_spellings = hidden_type_spellings;
-    let (program, source_map) =
-        emitter::emit_project(program, &emit_ctx, pf.source(), &source_name);
+    emit_ctx.type_spellings =
+        hidden_type_spellings(name, unit_info, unit_ctx, &emit_ctx.source_path, import_ext);
+    let Some((program, source_map)) =
+        emit_unit_program(program, &emit_ctx, pf, &source_name, errors)
+    else {
+        return;
+    };
     // Slice 3: the handler-label sidecar for this unit (ADR 0105) — names stack
     // frames by their Bynk operation. `None` for units with no handlers.
     let debug_metadata = emitter::collect_handler_labels(typed);
@@ -2413,6 +2455,7 @@ fn check_unit_files(
             inspect_agents,
             agent_deps_plan,
             compiled,
+            errors,
             schema_effective_versions,
             project_mentions_encode_plain(parsed),
         );
@@ -5809,6 +5852,70 @@ fn _ensure_components_used(_p: &Path) {
 mod tests {
     use super::*;
     use std::fs;
+
+    /// 1A.34: a checker fact the emitter did not find reaches the user as a coded diagnostic
+    /// at the `.bynk` span of the construct, attributed to its file, naming where to report it,
+    /// and never as output or a panic. Every fault of the unit is reported, not only the first.
+    #[test]
+    fn an_internal_fault_reaches_the_user_as_a_coded_diagnostic_with_a_span() {
+        let source = "context shop\n\nfn total(xs: List[Int]) -> Int { xs.fold(0, add) }\n";
+        let fold = source.find("xs.fold").unwrap();
+        let faults = vec![
+            emitter::InternalFault {
+                span: bynk_syntax::span::Span::new(fold, fold + "xs.fold(0, add)".len()),
+                what: "type for a `fold` call".to_string(),
+            },
+            emitter::InternalFault {
+                span: bynk_syntax::span::Span::new(0, 7),
+                what: "default value for field `n`".to_string(),
+            },
+        ];
+        let mut errors = ErrorSink::new();
+        report_internal_faults(&mut errors, Path::new("src/shop.bynk"), faults);
+        let all = errors.into_all();
+        assert_eq!(all.len(), 2, "every fault is reported");
+        for attributed in &all {
+            assert_eq!(attributed.error.category, emitter::MISSING_CHECKER_FACT);
+            assert_eq!(
+                attributed.source_path.as_deref(),
+                Some(Path::new("src/shop.bynk"))
+            );
+        }
+        assert_eq!(
+            (all[0].error.span.start, all[0].error.span.end),
+            (fold, fold + "xs.fold(0, add)".len())
+        );
+        assert!(
+            bynk_syntax::diagnostics::REGISTRY
+                .iter()
+                .any(|d| d.code == emitter::MISSING_CHECKER_FACT),
+            "the code is registered"
+        );
+        let mut rendered = Vec::new();
+        all[0]
+            .error
+            .report_plain_for("src/shop.bynk", source)
+            .write(
+                ("src/shop.bynk", ariadne::Source::from(source)),
+                &mut rendered,
+            )
+            .unwrap();
+        let rendered = String::from_utf8(rendered).unwrap();
+        assert!(
+            rendered.contains(emitter::MISSING_CHECKER_FACT),
+            "{rendered}"
+        );
+        assert!(rendered.contains("bynk internal error"), "{rendered}");
+        assert!(rendered.contains("type for a `fold` call"), "{rendered}");
+        assert!(
+            rendered.contains("github.com/bynk-lang/bynk/issues"),
+            "{rendered}"
+        );
+        assert!(
+            rendered.contains("xs.fold(0, add)"),
+            "the source at the span is shown: {rendered}"
+        );
+    }
 
     /// #3562: a member of a group names its D1 database from the Worker (the
     /// group's key), and the migrations staged for it sit where `wrangler.toml`
