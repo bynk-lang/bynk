@@ -1329,8 +1329,14 @@ fn discovery_suites(out: &ProjectOutput) -> Vec<Suite> {
 /// Execute the built runner command and produce its exit code. In JSON mode the
 /// runner's stdout (NDJSON) and stderr are captured, folded into the pinned
 /// document, and printed; in NDJSON mode each event is forwarded as the runner
-/// writes it ([`crate::test_stream`]); otherwise stdio is inherited so the human
-/// ✓ / ✗ output flows straight through. Either way the **exit code follows the runner's own
+/// writes it ([`crate::test_stream`]); otherwise the human ✓ / ✗ output goes
+/// to the terminal: inherited straight through when nothing needs changing,
+/// and forwarded line by line ([`run_aliased`]) when a doc test's name needs
+/// rewriting, a snapshot report needs taking out, or `--color` colours it.
+/// Forwarded, the runner's stdout is a pipe, so it is given `FORCE_COLOR=1`
+/// to keep Node's own colour, and its stdout and stderr are forwarded
+/// separately, so a test's own `console.error` may land a line early or late
+/// among the ✓ / ✗ lines. Either way the **exit code follows the runner's own
 /// process status**, so a mid-run crash (a complete NDJSON prefix but no
 /// `run-end`) is never reported as success.
 #[allow(clippy::too_many_arguments)]
@@ -1597,6 +1603,7 @@ fn run_aliased(
         colour: bool,
     ) {
         let mut report = report;
+        let mut lines = crate::colour::TestLines::default();
         let mut reader = BufReader::new(pipe);
         let mut buffer = Vec::new();
         loop {
@@ -1615,13 +1622,18 @@ fn run_aliased(
             }
             let line = crate::doc_examples::apply_aliases(&line, aliases);
             let line = if colour {
-                crate::colour::test_line(&line)
+                lines.paint(&line)
             } else {
                 line.into_owned()
             };
             let _ = out.write_all(line.as_bytes());
             let _ = out.flush();
         }
+    }
+    // Piped, Node can't see the terminal: when we colour, it may too (its
+    // `console.log` of an object, say), as it would have, inherited.
+    if colour {
+        cmd.env_remove("NO_COLOR").env("FORCE_COLOR", "1");
     }
     let mut child = cmd.stdout(Stdio::piped()).stderr(Stdio::piped()).spawn()?;
     let stderr_pipe = child.stderr.take();

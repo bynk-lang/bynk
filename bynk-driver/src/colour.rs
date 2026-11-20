@@ -192,27 +192,39 @@ pub fn paint(on: bool, style: Style, text: &str) -> String {
     }
 }
 
-/// One line of `bynk test`'s human output (the runner's, as it is forwarded),
-/// coloured: a passing case's `✓` green, a failing case red, a suite heading
-/// bold, a detached effect's report yellow, and the closing tally's counts
-/// green and, when any failed, red. Any other line is returned as it is. The
-/// line's own end (`\n`, `\r\n` or none) is kept.
-pub fn test_line(line: &str) -> String {
-    let (body, end) = split_end(line);
-    let styled = if let Some(name) = body.strip_prefix("  \u{2713} ") {
-        format!("  {} {name}", paint(true, Style::Green, "\u{2713}"))
-    } else if body.starts_with("  \u{2717} ") {
-        paint(true, Style::Red, body)
-    } else if body.starts_with("    ! ") {
-        paint(true, Style::Yellow, body)
-    } else if let Some(tally) = tally(body) {
-        tally
-    } else if !body.starts_with(' ') && body.ends_with(':') {
-        paint(true, Style::Bold, body)
-    } else {
-        return line.to_string();
-    };
-    format!("{styled}{end}")
+/// `bynk test`'s human output (the runner's, as it is forwarded), coloured a
+/// line at a time: a passing case's `✓` green, a failing case red, a suite
+/// heading bold, a detached effect's report yellow, and the closing tally's
+/// counts green and, when any failed, red. Any other line passes through as
+/// it is. A heading is a line the runner starts after a blank one (each
+/// suite's results end with one, and `Running tests...` with two), so a
+/// test's own `console.log("Response:")` mid-suite is not taken for one.
+#[derive(Debug, Default)]
+pub struct TestLines {
+    /// The line before was blank (or this is the first line).
+    after_blank: bool,
+}
+
+impl TestLines {
+    /// `line` coloured, its own end (`\n`, `\r\n` or none) kept.
+    pub fn paint(&mut self, line: &str) -> String {
+        let (body, end) = split_end(line);
+        let after_blank = std::mem::replace(&mut self.after_blank, body.is_empty());
+        let styled = if let Some(name) = body.strip_prefix("  \u{2713} ") {
+            format!("  {} {name}", paint(true, Style::Green, "\u{2713}"))
+        } else if body.starts_with("  \u{2717} ") {
+            paint(true, Style::Red, body)
+        } else if body.starts_with("    ! ") {
+            paint(true, Style::Yellow, body)
+        } else if let Some(tally) = tally(body) {
+            tally
+        } else if after_blank && !body.starts_with(' ') && body.ends_with(':') {
+            paint(true, Style::Bold, body)
+        } else {
+            return line.to_string();
+        };
+        format!("{styled}{end}")
+    }
 }
 
 /// The runner's closing `<n> passed, <m> failed.`, coloured.
@@ -320,6 +332,31 @@ mod tests {
         assert_eq!(find(&["bynk", "dev", "--", "--color=never"]), None);
         assert_eq!(find(&["bynk", "--color=sometimes"]), None);
         assert_eq!(find(&["bynk", "--color"]), None);
+    }
+
+    /// Each line as the runner would print it, after a blank one.
+    fn test_line(line: &str) -> String {
+        TestLines { after_blank: true }.paint(line)
+    }
+
+    #[test]
+    fn a_heading_follows_a_blank_line() {
+        let mut lines = TestLines::default();
+        let out: Vec<String> = [
+            "Running tests...\n",
+            "\n",
+            "orders:\n",
+            "Response:\n",
+            "  \u{2713} adds\n",
+            "\n",
+            "billing:\n",
+        ]
+        .iter()
+        .map(|l| lines.paint(l))
+        .collect();
+        assert_eq!(out[2], "\x1b[1morders:\x1b[22m\n");
+        assert_eq!(out[3], "Response:\n", "a test's own output is left alone");
+        assert_eq!(out[6], "\x1b[1mbilling:\x1b[22m\n");
     }
 
     #[test]
