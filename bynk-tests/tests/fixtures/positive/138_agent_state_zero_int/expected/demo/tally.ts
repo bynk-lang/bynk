@@ -73,7 +73,6 @@ export class Tally {
     const __state = await this.loadState();
     return Ok(__state.count);
   }
-
 }
 
 export function __makeTally(key: TallyId, env?: { TALLY?: __DurableObjectNamespace }): Tally {

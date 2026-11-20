@@ -74,7 +74,6 @@ export class Counter {
     await this.commitState(__state);
     return __result;
   }
-
 }
 
 export function __makeCounter(key: Id, env?: { COUNTER?: __DurableObjectNamespace }): Counter {

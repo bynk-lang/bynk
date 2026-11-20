@@ -69,7 +69,6 @@ export class Vault {
     await this.commitState(__state);
     return __result;
   }
-
 }
 
 export function __makeVault(key: string, env?: { VAULT?: __DurableObjectNamespace }): Vault {

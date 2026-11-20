@@ -67,7 +67,6 @@ export class Hits {
     const __state = await this.loadState();
     return __state.n;
   }
-
 }
 
 export function __makeHits(key: string, env?: { HITS?: __DurableObjectNamespace }): Hits {
@@ -190,7 +189,6 @@ export class Tally {
     })();
     return ((__o: Option<number>, __d: number) => __o.tag === "Some" ? __o.value : __d)(o, -1);
   }
-
 }
 
 export function __makeTally(key: string, env?: { TALLY?: __DurableObjectNamespace }): Tally {

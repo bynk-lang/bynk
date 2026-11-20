@@ -106,7 +106,6 @@ export class Box {
     const all = await __bynkThen(((() => __bynkThen(__state.items.entries(), (__es) => __es.map(([__k, __v]) => ({ key: __k, value: __v })))))(), (__q) => __q);
     return (async (__xs: readonly { readonly key: string; readonly value: number }[], __acc: number, __f: (acc: number, x: { readonly key: string; readonly value: number }) => globalThis.Promise<number>) => { for (const __x of __xs) __acc = await __f(__acc, __x); return __acc; })(all, 0, async (n: number, e: { readonly key: string; readonly value: number }) => globalThis.Promise.resolve(n + e.value));
   }
-
 }
 
 export function __makeBox(key: string, env?: { BOX?: __DurableObjectNamespace }): Box {
@@ -206,7 +205,6 @@ export class ByKey {
       return __bynkThen(__state.items.has(__k), (__h) => __h ? __bynkThen(__state.items.get(__k), (__v) => Some(__v!)) : None);
     })();
   }
-
 }
 
 export function __makeByKey(key: string, env?: { BY_KEY?: __DurableObjectNamespace }): ByKey {
@@ -301,7 +299,6 @@ export class Ledger {
       return __acc;
     })(all, 0, (n: number, e: { readonly key: Acct; readonly value: number }) => n + e.key + e.value);
   }
-
 }
 
 export function __makeLedger(key: string, env?: { LEDGER?: __DurableObjectNamespace }): Ledger {

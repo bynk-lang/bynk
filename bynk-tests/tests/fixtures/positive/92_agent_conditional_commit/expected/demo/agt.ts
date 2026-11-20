@@ -78,7 +78,6 @@ export class Toggle {
     await this.commitState(__state);
     return __result;
   }
-
 }
 
 export function __makeToggle(key: Id, env?: { TOGGLE?: __DurableObjectNamespace }): Toggle {

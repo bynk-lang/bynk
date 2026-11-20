@@ -65,7 +65,6 @@ export class Turnstile {
     await this.commitState(__state);
     return __result;
   }
-
 }
 
 export function __makeTurnstile(key: string, env?: { TURNSTILE?: __DurableObjectNamespace }): Turnstile {

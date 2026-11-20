@@ -76,7 +76,6 @@ export class Wallet {
     await this.commitState(__state);
     return __result;
   }
-
 }
 
 export function __makeWallet(key: Id, env?: { WALLET?: __DurableObjectNamespace }): Wallet {

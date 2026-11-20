@@ -159,7 +159,6 @@ export class Shelf {
     const __state = await this.loadState();
     return __bynkThen(((() => __bynkThen(__state.conns.values(), (__q) => ((__c) => [...__q].sort((__a, __b) => __c(((c: Connection<Frame>) => Some(0))(__a), ((c: Connection<Frame>) => Some(0))(__b))))(__bynkCmpOption(__bynkCmpInt)))))(), (__q) => __q.length);
   }
-
 }
 
 export function __makeShelf(key: string, env?: { SHELF?: __DurableObjectNamespace }): Shelf {

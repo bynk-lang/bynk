@@ -131,7 +131,6 @@ export class Room {
     }
     return new globalThis.Response("Not Found", { status: 404 });
   }
-
 }
 
 const __RoomWire: __AgentWire = {

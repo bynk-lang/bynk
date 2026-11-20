@@ -83,7 +83,6 @@ export class Orders {
     await this.commitState(__state);
     return __result;
   }
-
 }
 
 export function __makeOrders(key: string, env?: { ORDERS?: __DurableObjectNamespace }): Orders {

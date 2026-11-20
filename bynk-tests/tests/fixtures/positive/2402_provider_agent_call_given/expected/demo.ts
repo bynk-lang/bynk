@@ -65,7 +65,6 @@ export class Index {
     const __state = await this.loadState();
     return deps.Files.write(version);
   }
-
 }
 
 export function __makeIndex(key: string, env?: { INDEX?: __DurableObjectNamespace }): Index {
@@ -117,7 +116,6 @@ export class Front {
     const index = __makeIndex(this.__key);
     return index.withdraw(version, deps);
   }
-
 }
 
 export function __makeFront(key: string, env?: { FRONT?: __DurableObjectNamespace }): Front {

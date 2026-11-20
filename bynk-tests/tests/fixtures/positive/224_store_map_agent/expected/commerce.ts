@@ -113,7 +113,6 @@ export class Cart {
     const n = await __state.items.size();
     return n;
   }
-
 }
 
 export function __makeCart(key: string, env?: { CART?: __DurableObjectNamespace }): Cart {

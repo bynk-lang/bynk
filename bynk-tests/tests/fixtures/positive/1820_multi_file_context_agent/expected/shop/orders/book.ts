@@ -70,7 +70,6 @@ export class Book {
     await this.commitState(__state);
     return __result;
   }
-
 }
 
 export function __makeBook(key: OrderId, env?: { BOOK?: __DurableObjectNamespace }): Book {

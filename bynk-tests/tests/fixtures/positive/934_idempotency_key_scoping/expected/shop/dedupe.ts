@@ -73,7 +73,6 @@ export class Ledger {
     await this.commitState(__state);
     return __result;
   }
-
 }
 
 export function __makeLedger(key: string, env?: { LEDGER?: __DurableObjectNamespace }): Ledger {

@@ -65,7 +65,6 @@ export class Gauge {
     const __state = await this.loadState();
     return Ok(undefined);
   }
-
 }
 
 export function __makeGauge(key: string, env?: { GAUGE?: __DurableObjectNamespace }): Gauge {

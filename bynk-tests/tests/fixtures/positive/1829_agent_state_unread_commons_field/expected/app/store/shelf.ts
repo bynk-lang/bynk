@@ -74,7 +74,6 @@ export class Bin {
     await this.commitState(__state);
     return __result;
   }
-
 }
 
 export function __makeBin(key: string, env?: { BIN?: __DurableObjectNamespace }): Bin {

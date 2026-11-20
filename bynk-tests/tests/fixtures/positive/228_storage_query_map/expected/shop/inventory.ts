@@ -135,7 +135,6 @@ export class Inventory {
       return __a.length > 0 ? __a[0] : ({ id: "none", qty: 0 });
     })());
   }
-
 }
 
 export function __makeInventory(key: string, env?: { INVENTORY?: __DurableObjectNamespace }): Inventory {

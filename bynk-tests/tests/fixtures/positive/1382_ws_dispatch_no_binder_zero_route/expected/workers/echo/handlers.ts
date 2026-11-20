@@ -154,7 +154,6 @@ export class Room {
     if (__dec.tag === "Err") { ws.close(1008, "invalid frame"); return; }
     await this.__wsMessage_Echo(connection, __dec.value, { ...{ env: env as never } });
   }
-
 }
 
 const __RoomWire: __AgentWire = {

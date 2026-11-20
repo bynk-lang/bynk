@@ -96,7 +96,6 @@ export class Till {
     await this.commitState(__state);
     return __result;
   }
-
 }
 
 export function __makeTill(key: string, env?: { TILL?: __DurableObjectNamespace }): Till {

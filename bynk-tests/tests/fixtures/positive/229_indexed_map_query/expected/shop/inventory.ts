@@ -127,7 +127,6 @@ export class Inventory {
     const __state = await this.loadState();
     return __bynkThen(((() => __state.reservations.byIndex("id", String(rid))))(), (__q) => __q.length);
   }
-
 }
 
 export function __makeInventory(key: string, env?: { INVENTORY?: __DurableObjectNamespace }): Inventory {

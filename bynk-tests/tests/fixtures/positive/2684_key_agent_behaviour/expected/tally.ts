@@ -87,7 +87,6 @@ export class Registry {
     const cur = __state.totals;
     return cur;
   }
-
 }
 
 export function __makeRegistry(key: string, env?: { REGISTRY?: __DurableObjectNamespace }): Registry {

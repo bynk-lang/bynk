@@ -97,7 +97,6 @@ export class Cart {
     const __r0 = await deps.Sessions.put("cart", "1");
     return deps.Sessions.get("cart");
   }
-
 }
 
 export function __makeCart(key: string, env?: { CART?: __DurableObjectNamespace }): Cart {

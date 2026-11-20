@@ -135,7 +135,6 @@ export class Memo {
     await this.commitState(__state);
     return __result;
   }
-
 }
 
 export function __makeMemo(key: string, env?: { MEMO?: __DurableObjectNamespace }): Memo {

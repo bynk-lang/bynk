@@ -109,7 +109,6 @@ export class Inventory {
     const q = (() => __bynkThen(__state.items.entries(), (__es) => __es.map(([__k, __v]) => ({ key: __k, value: __v }))));
     return __bynkThen(((() => __bynkThen(((() => __bynkThen((q)(), (__q) => __q.filter((__x) => ((e: { readonly key: string; readonly value: Item }) => e.value.qty > 0)(__x)))))(), (__q) => __q.map((__x) => ((e: { readonly key: string; readonly value: Item }) => ({ sku: e.key, qty: e.value.qty }))(__x)))))(), (__q) => __q);
   }
-
 }
 
 export function __makeInventory(key: string, env?: { INVENTORY?: __DurableObjectNamespace }): Inventory {
@@ -178,7 +177,6 @@ export class Ledger {
     const __state = await this.loadState();
     return __bynkThen(((() => __bynkThen(__state.balances.entries(), (__es) => __es.map(([__k, __v]) => ({ key: globalThis.Number(__k), value: __v })))))(), (__q) => (() => { const __a = __q; if (__a.length === 0) return None; let __m = ((e: { readonly key: number; readonly value: Item }) => e.key)(__a[0]); for (const __x of __a) { const __k = ((e: { readonly key: number; readonly value: Item }) => e.key)(__x); if (__k > __m) __m = __k; } return Some(__m); })());
   }
-
 }
 
 export function __makeLedger(key: string, env?: { LEDGER?: __DurableObjectNamespace }): Ledger {

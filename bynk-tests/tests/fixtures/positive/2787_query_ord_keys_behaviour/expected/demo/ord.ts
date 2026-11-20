@@ -156,7 +156,6 @@ export class Board {
     const __state = await this.loadState();
     return __bynkThen(((() => __bynkThen(((() => __bynkThen(((() => __bynkThen(((() => __bynkThen(__state.jobs.values(), (__q) => ((__c) => [...__q].sort((__a, __b) => __c(((j: Job) => j.priority)(__a), ((j: Job) => j.priority)(__b))))(__bynkCmpSum(["Low", "Medium", "High"], {})))))(), (__q) => __q.slice(globalThis.Math.max(0, 1)))))(), (__q) => __q.slice(0, globalThis.Math.max(0, 2)))))(), (__q) => __q.map((__x) => ((j: Job) => j.name)(__x)))))(), (__q) => __q);
   }
-
 }
 
 export function __makeBoard(key: string, env?: { BOARD?: __DurableObjectNamespace }): Board {

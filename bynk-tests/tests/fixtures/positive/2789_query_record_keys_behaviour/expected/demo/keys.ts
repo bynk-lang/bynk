@@ -230,7 +230,6 @@ export class Log {
     const __state = await this.loadState();
     return __bynkThen(((() => __bynkThen(((() => __state.trail.recent(10)))(), (__q) => __bynkDistinctBy(__q, (s: Site) => s))))(), (__q) => __q.length);
   }
-
 }
 
 export function __makeLog(key: string, env?: { LOG?: __DurableObjectNamespace }): Log {

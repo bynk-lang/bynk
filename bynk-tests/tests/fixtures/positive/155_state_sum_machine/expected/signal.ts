@@ -76,7 +76,6 @@ export class Signal {
     const __state = await this.loadState();
     return __bynkEq(__state.colour, Light.Green);
   }
-
 }
 
 export function __makeSignal(key: string, env?: { SIGNAL?: __DurableObjectNamespace }): Signal {

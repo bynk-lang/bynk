@@ -92,7 +92,6 @@ export class Slot {
     }
     throw new globalThis.Error("non-exhaustive match");
   }
-
 }
 
 export function __makeSlot(key: Label, env?: { SLOT?: __DurableObjectNamespace }): Slot {

@@ -192,7 +192,6 @@ export class Room {
     const __givenDeps = { Clock: new bynk__binding.ClockProvider() };
     await this.__wsClose_chat(connection, __att.args[0] as RoomKey, { identity: __att.identity as UserId, ...__givenDeps, ...{ env: env as never } });
   }
-
 }
 
 const __RoomWire: __AgentWire = {

@@ -189,7 +189,6 @@ export class Room {
     if (__dec.tag === "Err") { ws.close(1008, "invalid frame"); return; }
     await this.__wsMessage_chat(connection, __att.args[0] as RoomKey, __dec.value, { who: __att.who as { tag: "User", identity: UserId } | { tag: "Visitor" }, ...{ env: env as never } });
   }
-
 }
 
 const __RoomWire: __AgentWire = {

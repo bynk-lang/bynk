@@ -119,7 +119,6 @@ export class Lamp {
     const __state = await this.loadState();
     return __state.light;
   }
-
 }
 
 export function __makeLamp(key: string, env?: { LAMP?: __DurableObjectNamespace }): Lamp {
@@ -179,7 +178,6 @@ export class Reading {
     const __state = await this.loadState();
     return __state.n;
   }
-
 }
 
 export function __makeReading(key: string, env?: { READING?: __DurableObjectNamespace }): Reading {
@@ -239,7 +237,6 @@ export class Figure {
     const __state = await this.loadState();
     return __state.shape;
   }
-
 }
 
 export function __makeFigure(key: string, env?: { FIGURE?: __DurableObjectNamespace }): Figure {
@@ -299,7 +296,6 @@ export class Outcome {
     const __state = await this.loadState();
     return __state.r;
   }
-
 }
 
 export function __makeOutcome(key: string, env?: { OUTCOME?: __DurableObjectNamespace }): Outcome {
@@ -359,7 +355,6 @@ export class Note {
     const __state = await this.loadState();
     return __state.rec;
   }
-
 }
 
 export function __makeNote(key: string, env?: { NOTE?: __DurableObjectNamespace }): Note {
@@ -419,7 +414,6 @@ export class Store {
     const __state = await this.loadState();
     return __state.blob;
   }
-
 }
 
 export function __makeStore(key: string, env?: { STORE?: __DurableObjectNamespace }): Store {
@@ -479,7 +473,6 @@ export class Lights {
     const __state = await this.loadState();
     return __state.seq;
   }
-
 }
 
 export function __makeLights(key: string, env?: { LIGHTS?: __DurableObjectNamespace }): Lights {
@@ -557,7 +550,6 @@ export class Board {
     })();
     return l;
   }
-
 }
 
 export function __makeBoard(key: string, env?: { BOARD?: __DurableObjectNamespace }): Board {
@@ -636,7 +628,6 @@ export class Memo {
     })();
     return v;
   }
-
 }
 
 export function __makeMemo(key: string, env?: { MEMO?: __DurableObjectNamespace }): Memo {
@@ -711,7 +702,6 @@ export class History {
     const __state = await this.loadState();
     return __bynkThen(((() => __state.l.recent(5)))(), (__q) => __q.length);
   }
-
 }
 
 export function __makeHistory(key: string, env?: { HISTORY?: __DurableObjectNamespace }): History {
@@ -773,7 +763,6 @@ export class Panel {
     const __state = await this.loadState();
     return __state.level;
   }
-
 }
 
 export function __makePanel(key: string, env?: { PANEL?: __DurableObjectNamespace }): Panel {
@@ -843,7 +832,6 @@ export class Gate {
     const __state = await this.loadState();
     return __state.light;
   }
-
 }
 
 export function __makeGate(key: string, env?: { GATE?: __DurableObjectNamespace }): Gate {

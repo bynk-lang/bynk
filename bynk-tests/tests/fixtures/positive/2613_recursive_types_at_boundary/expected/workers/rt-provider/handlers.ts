@@ -139,7 +139,6 @@ export class Keeper {
     }
     return new globalThis.Response("Not Found", { status: 404 });
   }
-
 }
 
 const __KeeperWire: __AgentWire = {

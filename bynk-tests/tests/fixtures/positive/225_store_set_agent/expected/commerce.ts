@@ -96,7 +96,6 @@ export class Audience {
     const n = await __state.members.size();
     return n;
   }
-
 }
 
 export function __makeAudience(key: string, env?: { AUDIENCE?: __DurableObjectNamespace }): Audience {

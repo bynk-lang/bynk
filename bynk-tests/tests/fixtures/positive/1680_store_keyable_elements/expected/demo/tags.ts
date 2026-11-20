@@ -130,7 +130,6 @@ export class Board {
     })();
     return ((__o: Option<number>, __d: number) => __o.tag === "Some" ? __o.value : __d)(r, 0);
   }
-
 }
 
 export function __makeBoard(key: string, env?: { BOARD?: __DurableObjectNamespace }): Board {

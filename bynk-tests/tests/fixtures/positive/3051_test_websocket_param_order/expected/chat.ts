@@ -154,7 +154,6 @@ export class Room {
     })());
     return undefined;
   }
-
 }
 
 export function __makeRoom(key: RoomId, env?: { ROOM?: __DurableObjectNamespace }): Room {

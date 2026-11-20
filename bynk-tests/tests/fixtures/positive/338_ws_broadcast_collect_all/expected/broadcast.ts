@@ -110,7 +110,6 @@ export class Room {
       return r;
     })(__x))))());
   }
-
 }
 
 export function __makeRoom(key: RoomId, env?: { ROOM?: __DurableObjectNamespace }): Room {

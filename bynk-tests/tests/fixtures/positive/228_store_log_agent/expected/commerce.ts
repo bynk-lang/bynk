@@ -105,7 +105,6 @@ export class Inventory {
     const __state = await this.loadState();
     return __bynkThen(((() => __state.history.since(t)))(), (__q) => __q.length);
   }
-
 }
 
 export function __makeInventory(key: string, env?: { INVENTORY?: __DurableObjectNamespace }): Inventory {

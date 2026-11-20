@@ -84,7 +84,6 @@ export class Box {
     await this.commitState(__state);
     return __result;
   }
-
 }
 
 export function __makeBox(key: Counter, env?: { BOX?: __DurableObjectNamespace }): Box {

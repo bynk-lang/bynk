@@ -59,7 +59,6 @@ export class Tally {
     await this.commitState(__state);
     return __result;
   }
-
 }
 
 export function __makeTally(key: string, env?: { TALLY?: __DurableObjectNamespace }): Tally {

@@ -74,7 +74,6 @@ export class Board {
     await this.commitState(__state);
     return __result;
   }
-
 }
 
 export function __makeBoard(key: string, env?: { BOARD?: __DurableObjectNamespace }): Board {
