@@ -10813,3 +10813,25 @@ pub fn emit_suite_late_codecs(
         .map(|l| format!("{}\n", l.strip_prefix("export ").unwrap_or(l)))
         .collect()
 }
+
+/// 1A.32c-1 review: no golden fixture reaches an agent's `migrate from N`
+/// dispatcher, so this pins the node form against the text the old `writeln!`
+/// built (`format!("function {migrate_fn}(stored: ...) {{\n  const __v = ...;\n{dispatch}  return stored;\n}}\n")`),
+/// byte for byte, for a dispatcher with two steps.
+#[cfg(test)]
+mod migrate_dispatcher_tests {
+    use super::{migrate_dispatcher_decl, migrate_step_dispatch};
+
+    #[test]
+    fn the_migration_dispatcher_prints_as_the_old_text_did() {
+        let decl = migrate_dispatcher_decl(
+            "__migrateCounterState",
+            vec![
+                migrate_step_dispatch(1, 1, "__migrateCounterFrom1"),
+                migrate_step_dispatch(2, 3, "__migrateCounterFrom2"),
+            ],
+        );
+        let old = "function __migrateCounterState(stored: globalThis.Record<string, unknown>): globalThis.Record<string, unknown> {\n  const __v = stored[\"__v\"] === undefined ? 1 : stored[\"__v\"] as number;\n  if (__v >= 1 && __v <= 1) return __migrateCounterFrom1(stored);\n  if (__v >= 2 && __v <= 3) return __migrateCounterFrom2(stored);\n  return stored;\n}\n";
+        assert_eq!(bynk_ts::print_stmt(&decl, 0), old);
+    }
+}

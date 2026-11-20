@@ -4872,6 +4872,15 @@ mod tests {
         let _ = print_expr(&operand);
     }
 
+    /// 1A.32c-1 review: only a `Prop` carries a doc; `with_doc` on any other
+    /// entry is refused in debug builds rather than silently dropped.
+    #[cfg(debug_assertions)]
+    #[test]
+    #[should_panic(expected = "with_doc: only a `Prop` entry carries a doc")]
+    fn a_doc_on_a_non_prop_entry_is_refused() {
+        let _ = TsObjectEntry::Spread(TsExpr::Ident("rest".to_string())).with_doc("why");
+    }
+
     /// 1A.18b: a spread is legal as an item of a multi-line array too.
     #[test]
     fn a_spread_prints_in_a_lines_array() {

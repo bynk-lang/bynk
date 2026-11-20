@@ -1839,10 +1839,15 @@ impl TsObjectEntry {
         }
     }
 
-    /// This entry with a JSDoc block before it (a no-op for an entry that is
-    /// not a `Prop`). See `doc` on [`TsObjectEntry::Prop`].
+    /// This entry with a JSDoc block before it. Only a `Prop` carries one: a
+    /// doc on any other entry is a caller bug, caught in debug builds (in
+    /// release it is ignored). See `doc` on [`TsObjectEntry::Prop`].
     #[must_use]
     pub fn with_doc(mut self, text: impl Into<String>) -> Self {
+        debug_assert!(
+            matches!(self, TsObjectEntry::Prop { .. }),
+            "with_doc: only a `Prop` entry carries a doc"
+        );
         if let TsObjectEntry::Prop { doc, .. } = &mut self {
             *doc = Some(text.into());
         }
