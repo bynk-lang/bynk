@@ -1934,7 +1934,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["an empty index returns no matches", "a write returns deterministic mutation ids and is queryable at once", "topK limits the matches", "a vector of the wrong length is a DimensionMismatch", "upsert replaces a vector in full and insert keeps the first", "deleteByIds removes vectors", "namespaces partition the index", "a filter selects by an indexed property", "returnMetadata Indexed returns only the indexed properties", "a filter on a property that is not indexed faults, naming the difference", "a filter the platform refuses is an InvalidInput value", "a limit is an InvalidInput value", "describe reports the dimensions and no metric, as a real index does", "a stub still replaces an operation", "upsertValue encodes typed metadata as upsert would, and a filter finds it"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("an empty index returns no matches")) {
     const started = __bynkCaseNow();

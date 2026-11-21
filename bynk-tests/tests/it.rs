@@ -175,6 +175,8 @@ mod integration {
     mod text_exit_counters;
     #[path = "trace_requests.rs"]
     mod trace_requests;
+    #[path = "types_reference_methods.rs"]
+    mod types_reference_methods;
     #[path = "unit_context_facts.rs"]
     mod unit_context_facts;
     #[path = "wire_shape_drift.rs"]
@@ -413,6 +415,8 @@ mod system {
     mod json_codec_behaviour;
     #[path = "kv_behaviour.rs"]
     mod kv_behaviour;
+    #[path = "large_suite_behaviour.rs"]
+    mod large_suite_behaviour;
     #[path = "let_else_staircase.rs"]
     mod let_else_staircase;
     #[path = "malformed_project_config_behaviour.rs"]
@@ -459,12 +463,16 @@ mod system {
     mod runtime_helpers;
     #[path = "schema_lock_check_and_test_cli.rs"]
     mod schema_lock_check_and_test_cli;
+    #[path = "schema_lock_paths_note_behaviour.rs"]
+    mod schema_lock_paths_note_behaviour;
     #[path = "signature_auth.rs"]
     mod signature_auth;
     #[path = "signed_cookie_loop_workerd.rs"]
     mod signed_cookie_loop_workerd;
     #[path = "snapshot_behaviour.rs"]
     mod snapshot_behaviour;
+    #[path = "stale_workers_output_behaviour.rs"]
+    mod stale_workers_output_behaviour;
     #[path = "store_behaviour.rs"]
     mod store_behaviour;
     #[path = "storefront_example.rs"]

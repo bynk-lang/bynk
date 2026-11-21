@@ -108,7 +108,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a given fn logs and counts through the target's capabilities", "a case calls a given fn directly, with the target's capabilities"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a given fn logs and counts through the target's capabilities")) {
     const started = __bynkCaseNow();

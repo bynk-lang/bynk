@@ -62,15 +62,32 @@ directly.
 
 ```toml
 [dependencies]
+bynk-driver = "0.639"
 bynk-emit = "0.639"
 ```
 
 ```rust
-use bynk_driver::project::{compile_project, CompileOptions, BuildTarget};
+use std::collections::HashMap;
+use std::path::PathBuf;
 
-// `sources` maps every `.bynk` file under `root` (by canonical path) to its text.
-let options = CompileOptions::single(root).sources(sources).target(BuildTarget::Workers);
-let output = compile_project(&options)?; // in-memory TypeScript tree — bynk-emit never touches disk
+use bynk_driver::project::{
+    BuildTarget, CompileOptions, ProjectFailure, ProjectOutput, compile_project,
+};
+
+// `sources` maps every `.bynk` file under `root` to its text. bynk-emit never
+// touches disk: without `.sources(...)` there is nothing to compile.
+fn build(root: PathBuf, sources: HashMap<PathBuf, String>) -> Result<ProjectOutput, ProjectFailure> {
+    let options = CompileOptions::single(root).sources(sources).target(BuildTarget::Workers);
+    compile_project(&options) // an in-memory TypeScript tree
+}
+
+let root = PathBuf::from("src");
+let sources = HashMap::from([(
+    root.join("commerce/orders.bynk"),
+    "context commerce.orders {}".to_string(),
+)]);
+let output = build(root, sources).map_err(ProjectFailure::flatten).unwrap();
+assert!(!output.artefacts.docs.is_empty());
 ```
 
 Sources are supplied in memory because this crate never reads them from disk;

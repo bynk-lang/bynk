@@ -248,7 +248,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["an enum orders by variant declaration", "a record orders by its fields in order", "urgent keeps the high priority tasks in order", "a generic record is Ord at an instantiation", "Option orders None first", "List orders lexicographically", "Bytes order is unsigned lexicographic", "a bounded generic uses the operators on its parameter"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("an enum orders by variant declaration")) {
     const started = __bynkCaseNow();

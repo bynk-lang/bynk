@@ -1,0 +1,24 @@
+commons demo.shop
+
+uses demo.review
+
+---
+#3759: a record literal that leaves out refined fields takes their defaults as
+values of the refined type. This unit imports `Review` but not `Rating`, so the
+defaults must be branded without naming `Rating`.
+---
+fn plain() -> Review {
+  Review { text: "Good" }
+}
+
+fn total(r: Review) -> Int {
+  let best = match r.best {
+    Some(b) => b + 0,
+    None => 0,
+  }
+  let stars = match r.stars {
+    Rated(s) => s + 0,
+    Unrated => 0,
+  }
+  r.rating + r.scores.length() + best + stars + r.detail.score
+}

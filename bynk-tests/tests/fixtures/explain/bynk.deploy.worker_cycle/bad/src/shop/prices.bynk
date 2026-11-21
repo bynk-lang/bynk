@@ -1,0 +1,7 @@
+context shop.prices
+
+service price {
+  on call(n: Int) -> Effect[Int] {
+    Effect.pure(n * 2)
+  }
+}

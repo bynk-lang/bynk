@@ -1,0 +1,7 @@
+context shop.orders
+
+service lookup {
+  on call(n: Int) -> Effect[Int] {
+    Effect.pure(n)
+  }
+}

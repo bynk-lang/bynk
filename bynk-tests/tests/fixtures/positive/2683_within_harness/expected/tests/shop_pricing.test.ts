@@ -929,7 +929,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a stub slower than the deadline times out", "a stub faster than the deadline is Ok", "a tie goes to the effect", "a stub that never finishes times out", "a stub with no latency resolves at once", "the abandoned call is observed once the case settles", "the abandoned effect still ran: the clock reached its completion", "a fast effect still gives the Ok branch", "a lambda in the handler bounds each call alone", "advance Clock fires nothing when no timer is due", "in a par block each within bounds its own effect", "a real provider call under within is not timed out", "a latency stub drives the same timeout at integration", "a latency stub that wins at integration is Ok"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a stub slower than the deadline times out")) {
     const started = __bynkCaseNow();

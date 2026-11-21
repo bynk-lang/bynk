@@ -186,7 +186,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a stubbed locale is what the capability reports", "render is unaffected by the stub in slice 1 (tag is unused)"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a stubbed locale is what the capability reports")) {
     const started = __bynkCaseNow();

@@ -160,7 +160,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["male arm", "female arm", "undeclared key falls back to other", "a prototype-name key falls back to other, not off the prototype chain", "a __proto__ key falls back to other"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("male arm")) {
     const started = __bynkCaseNow();

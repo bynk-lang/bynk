@@ -6,6 +6,25 @@ use bynk_driver::emsg;
 /// the registry test sees it, and `bynk explain` knows it.
 const CONTRACT_SKEW: &str = "bynk.deploy.contract_skew";
 
+/// Where a deploy builds, ready to write into. A real deploy keeps its build
+/// under `.bynk/deploy`; a dry run builds in a scratch directory, removed when
+/// the returned guard is dropped, so it writes nothing to the project (#3796).
+/// `None` once the failure has been reported.
+fn build_dir_for(
+    project_root: &Path,
+    dry_run: bool,
+) -> Option<(std::path::PathBuf, Option<workers::ScratchBuildDir>)> {
+    let prepared = if dry_run {
+        workers::ScratchBuildDir::new().map(|s| (s.path().to_path_buf(), Some(s)))
+    } else {
+        let build_dir = project_root.join(".bynk").join("deploy");
+        workers::prepare_build_dir(project_root, &build_dir).map(|()| (build_dir, None))
+    };
+    prepared
+        .map_err(|e| emsg!("bynk: error: could not prepare build directory: {e}"))
+        .ok()
+}
+
 /// The rebuild after recording older contracts: the same build as the first,
 /// so `--no-install` and `--dry-run` apply to it as well (#3350).
 fn rebuild(project_root: &Path, build_dir: &Path, opts: &DeployOptions) -> bool {
@@ -852,11 +871,10 @@ pub fn run(
         return ExitCode::FAILURE;
     }
 
-    let build_dir = project_root.join(".bynk").join("deploy");
-    if let Err(e) = workers::prepare_build_dir(project_root, &build_dir) {
-        emsg!("bynk: error: could not prepare build directory: {e}");
+    // `_scratch` removes a dry run's build when the run ends (#3796).
+    let Some((build_dir, _scratch)) = build_dir_for(project_root, opts.dry_run) else {
         return ExitCode::FAILURE;
-    }
+    };
     if !workers::compile_once_reporting(
         project_root,
         &build_dir,

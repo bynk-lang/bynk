@@ -179,7 +179,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a service reaches a sibling file's agent and its provider", "a service that needs no capability", "a stub replaces a sibling file's provider", "a commons record two files share"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a service reaches a sibling file's agent and its provider")) {
     const started = __bynkCaseNow();

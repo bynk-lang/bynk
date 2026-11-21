@@ -384,7 +384,7 @@ pub(super) fn emit_system_http_support(
                 let pred =
                     bynk_check::actors::parse_claim_predicate(&decl.refinement.as_ref()?.predicate)
                         .ok()?;
-                Some((name.clone(), bynk_check::actors::claim_witness_js(&pred)?))
+                Some((name.clone(), bynk_check::actors::claim_witness(&pred)?))
             })
             .collect(),
     };

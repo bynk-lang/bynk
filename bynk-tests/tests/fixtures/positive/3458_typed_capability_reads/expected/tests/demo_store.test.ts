@@ -140,7 +140,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a value written as a Receipt reads back as one", "a missing key is a miss", "a value stored as another type is a miss, and the next write overwrites it", "a value stored as another type faults a read that declares no miss"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a value written as a Receipt reads back as one")) {
     const started = __bynkCaseNow();

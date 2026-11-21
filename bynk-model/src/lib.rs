@@ -27,6 +27,13 @@
 //! M-4 no new AST embedding) and what the model is not: not an expression IR,
 //! not the emit ABI, and not a second checker.
 
+// The README's `rust` examples are compiled (and, unless marked `no_run`, run)
+// as doctests, so they cannot rot (#1645). `cfg(doctest)` keeps this item out of
+// every build and out of the docs.rs front page, which the `//!` docs above own.
+#[cfg(doctest)]
+#[doc = include_str!("../README.md")]
+struct ReadmeDoctests;
+
 pub mod entry;
 pub mod lower;
 pub mod vocabulary;

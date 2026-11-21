@@ -696,6 +696,7 @@ fn deserialise_path_param() -> TsParam {
         ty: None,
         optional: false,
         rest: false,
+        array_pattern: None,
     }
 }
 
@@ -745,6 +746,7 @@ fn depth_param() -> TsParam {
         ty: None,
         optional: false,
         rest: false,
+        array_pattern: None,
     }
 }
 

@@ -957,7 +957,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["an unstubbed query faults", "a stubbed result is read", "a retryable error is matched", "a rejected query is matched", "the query reads the environment's own dataset"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("an unstubbed query faults")) {
     const started = __bynkCaseNow();

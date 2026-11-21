@@ -9,6 +9,7 @@ import * as __ns_boundary_consumer from "../workers/boundary-consumer/handlers.j
 import worker___ns_boundary_consumer from "../workers/boundary-consumer/index.js";
 import * as __ns_boundary_provider from "../workers/boundary-provider/handlers.js";
 import worker___ns_boundary_provider from "../workers/boundary-provider/index.js";
+import * as __ns_lib_money from "./../lib/money.js";
 
 class ExpectationError extends Error {
   location: string;
@@ -71,6 +72,8 @@ async function test_price_crosses_back() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
+    const { Cents } = __ns_lib_money;
+    type Cents = __ns_lib_money.Cents;
     const r = await __callService(deps.env.BOUNDARY_CONSUMER, "askPrice", ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(1), __ns_boundary_consumer.__deserialise_Result_Cents_Int, "integration", "e673a306edd722c3", deps.env, "boundary.consumer");
     if (!(((__c: boolean) => __c)(r.tag === "Err"))) { throw __bynkExpectFailure("tests/consumer_system.test.bynk:10:12", 442, 453, "expect r is Err(_)"); }
     return { pass: true };
@@ -99,7 +102,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["price crosses back"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("price crosses back")) {
     const started = __bynkCaseNow();

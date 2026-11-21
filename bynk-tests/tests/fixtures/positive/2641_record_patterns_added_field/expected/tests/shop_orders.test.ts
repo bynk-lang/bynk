@@ -152,7 +152,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a literal field, a shorthand binding and a guard", "a record nested in a variant payload", "a record pattern after is", "a generic record takes its type arguments from the scrutinee", "a destructuring let survives an added field"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a literal field, a shorthand binding and a guard")) {
     const started = __bynkCaseNow();

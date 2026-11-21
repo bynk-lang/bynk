@@ -100,7 +100,11 @@ export class Inventory {
 
   async bigRows(deps: {}): globalThis.Promise<readonly Row[]> {
     const __state = await this.loadState();
-    return __bynkThen(((() => __bynkThen(((() => __bynkThen(((() => __bynkThen(((() => __bynkThen(__state.items.entries(), (__es) => __es.map(([__k, __v]) => ({ key: __k, value: __v })))))(), (__q) => __q.filter((__x) => ((e: { readonly key: string; readonly value: Item }) => e.value.qty > 0)(__x)))))(), (__q) => [...__q].sort((__a, __b) => { const __ka = ((e: { readonly key: string; readonly value: Item }) => e.key)(__a), __kb = ((e: { readonly key: string; readonly value: Item }) => e.key)(__b); return __ka < __kb ? -1 : __ka > __kb ? 1 : 0; }))))(), (__q) => __q.map((__x) => ((e: { readonly key: string; readonly value: Item }) => ({ sku: e.key, qty: e.value.qty }))(__x)))))(), (__q) => __q);
+    return __bynkThen(((() => __bynkThen(((() => __bynkThen(((() => __bynkThen(((() => __bynkThen(__state.items.entries(), (__es) => __es.map(([__k, __v]) => ({ key: __k, value: __v })))))(), (__q) => __q.filter((__x) => ((e: { readonly key: string; readonly value: Item }) => e.value.qty > 0)(__x)))))(), (__q) => [...__q].sort((__a, __b) => {
+      const __ka = ((e: { readonly key: string; readonly value: Item }) => e.key)(__a);
+      const __kb = ((e: { readonly key: string; readonly value: Item }) => e.key)(__b);
+      return __ka < __kb ? -1 : __ka > __kb ? 1 : 0;
+    }))))(), (__q) => __q.map((__x) => ((e: { readonly key: string; readonly value: Item }) => ({ sku: e.key, qty: e.value.qty }))(__x)))))(), (__q) => __q);
   }
 
   async skus(deps: {}): globalThis.Promise<readonly string[]> {
@@ -206,7 +210,16 @@ export class Ledger {
 
   async maxAccount(deps: {}): globalThis.Promise<Option<number>> {
     const __state = await this.loadState();
-    return __bynkThen(((() => __bynkThen(__state.balances.entries(), (__es) => __es.map(([__k, __v]) => ({ key: globalThis.Number(__k), value: __v })))))(), (__q) => (() => { const __a = __q; if (__a.length === 0) return None; let __m = ((e: { readonly key: number; readonly value: Item }) => e.key)(__a[0]); for (const __x of __a) { const __k = ((e: { readonly key: number; readonly value: Item }) => e.key)(__x); if (__k > __m) __m = __k; } return Some(__m); })());
+    return __bynkThen(((() => __bynkThen(__state.balances.entries(), (__es) => __es.map(([__k, __v]) => ({ key: globalThis.Number(__k), value: __v })))))(), (__q) => (() => {
+      const __a = __q;
+      if (__a.length === 0) return None;
+      let __m = ((e: { readonly key: number; readonly value: Item }) => e.key)(__a[0]);
+      for (const __x of __a) {
+        const __k = ((e: { readonly key: number; readonly value: Item }) => e.key)(__x);
+        if (__k > __m) __m = __k;
+      }
+      return Some(__m);
+    })());
   }
 }
 

@@ -2084,7 +2084,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a stub value names a suite type and constant", "a stub argument pattern and value name suite constants", "a suite type round-trips through Result", "a suite type round-trips through a nested generic", "a suite type round-trips through Result at the integration tier", "a stub value reaches a suite type under Result through a helper and directly", "a suite type round-trips through Result in a property"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a stub value names a suite type and constant")) {
     const started = __bynkCaseNow();

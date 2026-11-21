@@ -306,7 +306,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a __Host- cookie is read into its field", "the field's own name is not the cookie's key", "a typed cookies record is written under its wire name", "a renamed query key is read, and its refinement is still checked", "a renamed form key is read", "a typed form is written under its wire names", "a renamed multipart part is read by its wire name", "a typed multipart body is written under its wire names", "Form.encode and Form.decode agree at the system tier"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a __Host- cookie is read into its field")) {
     const started = __bynkCaseNow();

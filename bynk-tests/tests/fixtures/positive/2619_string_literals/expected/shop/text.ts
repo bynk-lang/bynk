@@ -61,5 +61,27 @@ export function isVersionEscaped(text: string): boolean {
 }
 
 export function splitLines(text: string): readonly string[] {
-  return ((__s: string, __r: globalThis.RegExp): readonly string[] => { if (__s.length === 0) { return __r.exec(__s) === null ? [""] : []; } const __out: string[] = []; let __p = 0; let __q = 0; while (__q < __s.length) { __r.lastIndex = __q; const __hit = __r.exec(__s); const __e = __r.lastIndex; if (__hit === null || __e === __p) { __q++; } else { __out.push(__s.slice(__p, __q)); __p = __e; __q = __p; } } __out.push(__s.slice(__p)); return __out; })(text, new globalThis.RegExp("\\r?\\n", "y"));
+  return ((__s: string, __r: globalThis.RegExp): readonly string[] => {
+    if (__s.length === 0) {
+      return __r.exec(__s) === null ? [""] : [];
+    }
+    const __out: string[] = [];
+    let __p = 0;
+    let __q = 0;
+    while (__q < __s.length) {
+      __r.lastIndex = __q;
+      const __hit = __r.exec(__s);
+      const __e = __r.lastIndex;
+      if (__hit === null || __e === __p) {
+        __q++;
+      }
+      else {
+        __out.push(__s.slice(__p, __q));
+        __p = __e;
+        __q = __p;
+      }
+    }
+    __out.push(__s.slice(__p));
+    return __out;
+  })(text, new globalThis.RegExp("\\r?\\n", "y"));
 }

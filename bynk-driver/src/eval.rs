@@ -906,6 +906,52 @@ let res <- Fetch.send(Request { method: Get, url: \"https://example.com\", conte
         }
     }
 
+    const MAILER_UNIT: &str = "\
+context demo
+
+capability Mailer {
+  fn send(to: String) -> Effect[Bool]
+}
+
+service api from http {
+  on POST(\"/todos\") (body: String) -> Effect[HttpResult[String]] by v: Visitor given Mailer {
+    let sent <- Mailer.send(\"bob\")
+    if sent { Created(body) } else { BadRequest(\"no mail\") }
+  }
+}
+";
+
+    /// #3699: a `trace(Cap.op)` list, and one of its call records, have the
+    /// wire shape of a record of the operation's parameters. The module's codec
+    /// closure once held the list's codec but not the record's, so the
+    /// generated TypeScript did not type-check.
+    #[test]
+    fn a_trace_of_call_records_reports_its_value() {
+        let root = project_with("trace_records", MAILER_UNIT);
+        let run =
+            "stub Mailer.send(_) returns true\nlet r <- api.POST(\"/todos\", \"x\") by Visitor\n";
+        let (v, ty) = value(eval(&root, &format!("{run}trace(Mailer.send)")));
+        assert_eq!(
+            (v, ty.as_str()),
+            (
+                serde_json::json!([{"to": "bob"}]),
+                "List[__Mailer_send_Call]"
+            )
+        );
+        let (v, _) = value(eval(&root, &format!("{run}trace(Mailer.send).get(0)")));
+        assert_eq!(
+            v,
+            serde_json::json!({"kind": "Some", "value": {"to": "bob"}})
+        );
+        let (v, _) = value(eval(
+            &root,
+            &format!(
+                "{run}match trace(Mailer.send).get(0) {{ Some(c) => Json.encode(c), None => \"\" }}"
+            ),
+        ));
+        assert_eq!(v, serde_json::json!("{\"to\":\"bob\"}"));
+    }
+
     const STUBBING_SUITE: &str = "\
 suite demo {
   consumes bynk { Fetch, Request, Method, Response }

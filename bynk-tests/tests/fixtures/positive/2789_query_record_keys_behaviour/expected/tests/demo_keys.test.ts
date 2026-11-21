@@ -231,7 +231,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["distinct by a record element", "distinct over an enum element", "distinctBy a record key keeps first seen", "groupBy a record key merges equal keys", "joinOn a record key matches by value", "leftJoin matches a record key by value", "distinctBy over a Log"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("distinct by a record element")) {
     const started = __bynkCaseNow();

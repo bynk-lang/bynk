@@ -129,7 +129,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["o == None and None == o", "r == Ok(…) and r != Err(…)", "a suite compares against a bare constructor", "either order, and a literal against a refined value"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("o == None and None == o")) {
     const started = __bynkCaseNow();

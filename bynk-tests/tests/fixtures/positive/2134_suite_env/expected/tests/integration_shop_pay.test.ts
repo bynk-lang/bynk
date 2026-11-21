@@ -195,7 +195,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["system: the Worker reads the suite env", "system: a case env overrides the suite's on the Worker", "system: a token signed with the env secret is admitted", "system: a later case sees the suite value again"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("system: the Worker reads the suite env")) {
     const started = __bynkCaseNow();

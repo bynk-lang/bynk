@@ -24,6 +24,43 @@ decimal only (`" 7 "`, `"0x10"` and, for `Int`, `"1e3"` are `None`). An `Int`
 is a JS safe integer at every entry point: a larger literal, a wire value, a
 parse result or a conversion is rejected, and `Int` division by zero faults.
 
+### String {#string}
+
+A `String` has no direct character access; its operations are methods. Lengths
+and indices count **UTF-16 code units**, except `chars`, which splits by code
+point, and the two percent-encoding methods, which work on the UTF-8 bytes.
+
+| Method | Returns | |
+|---|---|---|
+| `s.length()` | `Int` | the code-unit count |
+| `s.concat(t: String)` | `String` | `s`, then `t` (the same as `"\(s)\(t)"`) |
+| `s.trim()` | `String` | without leading and trailing whitespace |
+| `s.toUpper()` | `String` | upper-cased (locale-independent) |
+| `s.toLower()` | `String` | lower-cased (locale-independent) |
+| `s.contains(sub: String)` | `Bool` | `sub` occurs somewhere in `s` |
+| `s.startsWith(sub: String)` | `Bool` | `s` begins with `sub` |
+| `s.endsWith(sub: String)` | `Bool` | `s` ends with `sub` |
+| `s.indexOf(sub: String)` | `Option[Int]` | where `sub` first occurs; `None` when it does not, never `-1` |
+| `s.slice(start: Int, end: Int)` | `String` | the code units from `start` up to `end`; a negative index is `0`, with no wrap-around |
+| `s.replace(from: String, to: String)` | `String` | **every** occurrence of `from` replaced by `to`, inserted literally (no `$1` or `$&`) |
+| `s.split(sep: String)` | `List[String]` | the pieces between each `sep` |
+| `s.chars()` | `List[String]` | one string per **code point**, so an astral character is one element |
+| `s.percentEncode()` | `String` | RFC 3986 percent-encoding of the UTF-8 bytes: every byte outside `A–Z a–z 0–9 - . _ ~` becomes `%XX` |
+| `s.percentDecode()` | `Option[String]` | reverses `percentEncode`; `None` for a `%` not followed by two hex digits, or bytes that are not UTF-8. `+` stays `+` |
+| `s.matchesRegex(pattern)` | `Bool` | the whole string matches; see [Regular expressions](#regular-expressions) |
+| `s.containsRegex(pattern)` | `Bool` | a match occurs anywhere |
+| `s.findRegex(pattern)` | `Option[List[Option[String]]]` | the first match and its groups |
+| `s.findAllRegex(pattern)` | `List[List[Option[String]]]` | every match and its groups |
+| `s.replaceRegex(pattern, with: String)` | `String` | every match replaced; `with` reads `$1`, `$<name>`, `$&` and `$$` |
+| `s.splitRegex(pattern)` | `List[String]` | the pieces between each match |
+
+`Int.parse(s)` and `Float.parse(s)` turn a string into a number (see above), and
+`toString()` on `Int`, `Float`, `Decimal`, `Duration` and `Instant` goes the other
+way. More string functions are in the `bynk.string` commons, and URLs and query
+strings in `bynk.url`, written over `percentEncode` and `percentDecode` (see
+[Related first-party modules](/book/reference/bynk-capabilities/#related-first-party-modules)).
+A method not in this table is `bynk.types.method_not_found`.
+
 ### Decimal
 
 `Decimal` is an **exact base-10 number**: an arbitrary-precision integer
@@ -341,6 +378,27 @@ a boundary type: it cannot be stored, sent or returned. See
 | `Query[T]` | — | a lazy read over `store` storage (see [Query](#query)) |
 | `Set[T]` | — | an immutable set of [`Key`](#keys) elements (see [Set](#set)) |
 
+### `Option` and `Result` methods {#option-and-result-methods}
+
+| Method | Returns | |
+|---|---|---|
+| `o.map(f: T -> U)` | `Option[U]` | `f` applied to the value, if there is one |
+| `o.andThen(f: T -> Option[U])` | `Option[U]` | chain a step that may itself be absent |
+| `o.filter(p: T -> Bool)` | `Option[T]` | the value only when `p` holds |
+| `o.getOrElse(default: T)` | `T` | the value, or `default` |
+| `o.orElse(f: () -> Option[T])` | `Option[T]` | `o` if present, else `f()` (run only on `None`) |
+| `o.isSome()` / `o.isNone()` | `Bool` | whether there is a value |
+| `o.okOr(err: E)` | `Result[T, E]` | `Ok` of the value, or `Err(err)` |
+| `r.map(f: T -> U)` | `Result[U, E]` | `f` applied to the `Ok` value |
+| `r.mapErr(f: E -> F)` | `Result[T, F]` | `f` applied to the `Err` value |
+| `r.andThen(f: T -> Result[U, E])` | `Result[U, E]` | chain a step that may itself fail |
+| `r.getOrElse(default: T)` | `T` | the `Ok` value, or `default` |
+| `r.isOk()` / `r.isErr()` | `Bool` | which outcome it is |
+| `r.ok()` | `Option[T]` | the `Ok` value, dropping the error |
+
+The [Result and Option guide](/book/guides/type-system/result-and-optionals/#methods)
+shows them in use.
+
 `ValidationError` is the error type returned by refined-type `.of` constructors.
 
 A `ValidationError` has two `String` fields:
@@ -482,6 +540,50 @@ combinator vocabulary as kernel methods, so a chain reads
 `xs.filter((x) => x > 2).map((x) => x * 2)` (the same names the lazy
 [`Query`](#query) carries over storage; the receiver decides eager vs lazy).
 
+| Method | Returns | |
+|---|---|---|
+| `xs.length()` | `Int` | the element count |
+| `xs.get(index: Int)` | `Option[T]` | the element at `index` (from `0`); `None` when out of range |
+| `xs.first()` | `Option[T]` | the first element; `None` when empty |
+| `xs.firstOrElse(default: T)` | `T` | the first element, or `default` when empty |
+| `xs.prepend(item: T)` | `List[T]` | `item`, then `xs` |
+| `xs.append(item: T)` | `List[T]` | `xs`, then `item` |
+| `xs.concat(other: List[T])` | `List[T]` | `xs`, then `other` |
+| `xs.map(f: T -> U)` | `List[U]` | `f` applied to each element |
+| `xs.filter(p: T -> Bool)` | `List[T]` | the elements for which `p` holds |
+| `xs.flatMap(f: T -> List[U])` | `List[U]` | each element's list, joined in order |
+| `xs.sortBy(key: T -> K)` | `List[T]` | smallest key first; stable |
+| `xs.sortByDescending(key: T -> K)` | `List[T]` | largest key first; stable |
+| `xs.take(n: Int)` | `List[T]` | the first `n` elements (all of them when there are fewer) |
+| `xs.skip(n: Int)` | `List[T]` | all but the first `n` |
+| `xs.distinct()` | `List[T]` | repeats dropped, each element at its first position |
+| `xs.distinctBy(key: T -> K)` | `List[T]` | the first element for each key |
+| `xs.fold(init: U, step: (U, T) -> U)` | `U` | `step` applied from `init` across the list, in order |
+| `xs.count()` | `Int` | the element count (the same as `length()`) |
+| `xs.any(p: T -> Bool)` | `Bool` | `p` holds for at least one element; `false` when empty |
+| `xs.all(p: T -> Bool)` | `Bool` | `p` holds for every element; `true` when empty |
+| `xs.sum(key: T -> K)` | `K` | the total of the keys; the zero when empty |
+| `xs.min(key: T -> K)` | `Option[K]` | the smallest key; `None` when empty |
+| `xs.max(key: T -> K)` | `Option[K]` | the largest key; `None` when empty |
+| `xs.average(key: T -> K)` | `Option[Float]` | the mean of the keys (`Option[Duration]` for a `Duration` key); `None` when empty |
+| `xs.joinOn(other, left, right, into)` | `List[V]` | equi-join; see [Joins and grouping](#joins-and-grouping) |
+| `xs.leftJoin(other, left, right, into)` | `List[V]` | left outer join |
+| `xs.join(other, on, into)` | `List[V]` | predicate join |
+| `xs.groupBy(key, into)` | `List[V]` | one result per key, in first-seen key order |
+| `rs.sequenceAll()` | `Result[List[T], List[E]]` | for a `List[Result[T, E]]`: every value, or every error |
+| `rs.sequenceTry()` | `Result[List[T], E]` | for a `List[Result[T, E]]`: every value, or the first error |
+| `xs.foldEff(init: U, step: (U, T) -> Effect[U])` | `Effect[U]` | `fold` with an effectful step |
+| `xs.forEach(f: T -> Effect[()])` | `Effect[()]` | run `f` for each element, in order |
+| `xs.parTraverse(f: T -> Effect[()])` | `Effect[()]` | run `f` for every element concurrently |
+| `xs.traverseAll(f: T -> Effect[Result[U, E]])` | `Effect[List[Result[U, E]]]` | run `f` for each element in order, keeping every outcome |
+| `xs.parTraverseAll(f: T -> Effect[Result[U, E]])` | `Effect[List[Result[U, E]]]` | the same, concurrently |
+| `xs.traverseTry(f: T -> Effect[Result[U, E]])` | `Effect[Result[List[U], E]]` | run `f` for each element in order, stopping at the first `Err` |
+| `xs.parTraverseTry(f: T -> Effect[Result[U, E]])` | `Effect[Result[List[U], E]]` | the same, concurrently |
+
+The methods returning an `Effect` can only be called where effects are allowed.
+A method not in this table is `bynk.types.method_not_found`. The rest of this
+section groups them and gives the rules.
+
 **Builders** (return a `List`): `map`, `filter`, `flatMap`, `sortBy`, `sortByDescending`,
 `take`, `skip`, `distinct`, `distinctBy`.
 
@@ -529,6 +631,23 @@ their input order, which `reverse(xs.sortBy(k))` does not. It behaves the same f
 `sum` the zero. The first-party `bynk.list` free functions are the deprecated
 predecessors of these methods (see [Operators & built-ins](/book/reference/operators/) and
 [First-party `bynk` capabilities](/book/reference/bynk-capabilities/)).
+
+## Map methods {#map-methods}
+
+`Map[K, V]` is a built-in immutable map with [`Key`](#keys) keys. It keeps
+insertion order. `Map.empty()` takes its types from context.
+
+| Method | Returns | |
+|---|---|---|
+| `m.length()` | `Int` | the entry count |
+| `m.get(key: K)` | `Option[V]` | the value at `key`; `None` when absent |
+| `m.insert(key: K, value: V)` | `Map[K, V]` | a new map with `key` set to `value`; `m` is unchanged |
+| `m.keys()` | `List[K]` | the keys |
+| `m.values()` | `List[V]` | the values |
+
+More combinators are in the `bynk.map` commons (`uses bynk.map`). A
+`store … : Map[K, V]` field is a different thing: an agent's storage map, read
+through [Query](#query) and the [map key accessors](#map-key-accessors).
 
 ## Set
 
@@ -1355,7 +1474,8 @@ A base type plus a predicate. See the [refined-type reference](/book/reference/r
 ## Regular expressions
 
 A refined `String where Matches("…")` checks a whole string against a pattern.
-Six `String` methods use the same patterns to look inside one:
+Six `String` methods use the same patterns to look inside one (the full set of
+`String` methods is in [String](#string)):
 
 ```bynk,fragment
 let ok = sku.matchesRegex("[A-Z]{3}-[0-9]{4}")         // the whole string

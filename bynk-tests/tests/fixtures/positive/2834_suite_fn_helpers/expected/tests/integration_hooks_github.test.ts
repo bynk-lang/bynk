@@ -256,7 +256,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a helper-built request reaches the handler over the wire", "a forged request is refused", "a helper names a participant type"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a helper-built request reaches the handler over the wire")) {
     const started = __bynkCaseNow();

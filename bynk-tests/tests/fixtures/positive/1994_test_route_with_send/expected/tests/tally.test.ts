@@ -203,7 +203,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a route that sends answers", "the send has run before the expectations", "the route answers at the integration tier"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a route that sends answers")) {
     const started = __bynkCaseNow();

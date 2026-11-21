@@ -11,6 +11,7 @@ import * as __ns_shop_orders from "../workers/shop-orders/handlers.js";
 import worker___ns_shop_orders from "../workers/shop-orders/index.js";
 import * as __ns_shop_payment from "../workers/shop-payment/handlers.js";
 import worker___ns_shop_payment from "../workers/shop-payment/index.js";
+import * as __ns_shop_values from "./../shop/values.js";
 
 class ExpectationError extends Error {
   location: string;
@@ -74,6 +75,8 @@ async function test_placing_crosses_the_payment_edge() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
+    const { Cents } = __ns_shop_values;
+    type Cents = __ns_shop_values.Cents;
     const ok = await __callService(deps.env.SHOP_ORDERS, "place", {}, (__j: __JsonValue) => ((__v) => typeof __v === "boolean" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "boolean", actual: typeof __v } as __BoundaryError))(__j), "integration", "3a1dda0cc2000672", deps.env, "shop.orders");
     if (!(ok)) { throw __bynkExpectFailure("tests/place.bynk:8:12", 236, 238, "expect ok"); }
     return { pass: true };
@@ -102,7 +105,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["placing crosses the payment edge"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("placing crosses the payment edge")) {
     const started = __bynkCaseNow();

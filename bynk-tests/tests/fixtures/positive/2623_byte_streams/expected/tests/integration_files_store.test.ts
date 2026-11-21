@@ -7,6 +7,7 @@ import { __callService, type __JsonValue, type __BoundaryError, type __ServiceBi
 import { __responseToHttpResult, __responseToHttpOutcome, __responseToUnauthOutcome, __requestHeaderPairs } from "../__bynk_runtime/http.js";
 import * as __ns_files_store from "../workers/files-store/handlers.js";
 import worker___ns_files_store from "../workers/files-store/index.js";
+import * as __ns_files_model from "./../files/model.js";
 
 class ExpectationError extends Error {
   location: string;
@@ -103,6 +104,8 @@ async function test_a_RawStreamed_body_arrives_over_HTTP__read_back_as_Raw() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
+    const { Receipt } = __ns_files_model;
+    type Receipt = __ns_files_model.Receipt;
     const r = await __sysdrive_api_http_GET_files_Param_key("wire", undefined, "");
     if (!(((__c: boolean) => __c)(r.tag === "Raw"))) { throw __bynkExpectFailure("tests/store.bynk:41:10", 1104, 1118, "expect r is Raw(_, _)"); }
     return { pass: true };
@@ -119,6 +122,8 @@ async function test_a_nested_stream_carrying_record_streams_too() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
+    const { Receipt } = __ns_files_model;
+    type Receipt = __ns_files_model.Receipt;
     const r = await __sysdrive_api_http_GET_shelves_Param_name("kept", undefined, "");
     if (!(((__c: boolean) => __c)(r.tag === "Raw"))) { throw __bynkExpectFailure("tests/store.bynk:46:10", 1242, 1256, "expect r is Raw(_, _)"); }
     return { pass: true };
@@ -147,7 +152,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a RawStreamed body arrives over HTTP, read back as Raw", "a nested stream-carrying record streams too"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a RawStreamed body arrives over HTTP, read back as Raw")) {
     const started = __bynkCaseNow();

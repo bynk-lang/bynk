@@ -19,6 +19,13 @@
 //! the `bynk.toml` read below) never register, not because the probe walks
 //! only production code.
 
+// The README's `rust` examples are compiled (and, unless marked `no_run`, run)
+// as doctests, so they cannot rot (#1645). `cfg(doctest)` keeps this item out of
+// every build and out of the docs.rs front page, which the `//!` docs above own.
+#[cfg(doctest)]
+#[doc = include_str!("../README.md")]
+struct ReadmeDoctests;
+
 use std::collections::HashMap;
 use std::path::PathBuf;
 

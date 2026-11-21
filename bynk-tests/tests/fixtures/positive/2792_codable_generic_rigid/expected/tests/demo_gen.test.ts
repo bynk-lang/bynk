@@ -790,7 +790,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a record round-trips and encodes as the concrete codec does", "decoding agrees at the same error paths", "two parameters", "a generic sum", "containers of the parameter inside the generic type", "nested generic types and a generic type inside a container", "a generic field at the parameter beside a concrete instantiation"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a record round-trips and encodes as the concrete codec does")) {
     const started = __bynkCaseNow();

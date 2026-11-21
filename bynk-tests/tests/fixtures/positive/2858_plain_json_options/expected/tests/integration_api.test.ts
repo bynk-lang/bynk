@@ -203,7 +203,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a plain route round-trips through the lenient decoder", "a plain top-level None round-trips", "a tagged route still round-trips", "a route override on an unmarked service round-trips"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a plain route round-trips through the lenient decoder")) {
     const started = __bynkCaseNow();

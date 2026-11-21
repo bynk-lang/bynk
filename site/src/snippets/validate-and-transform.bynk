@@ -1,4 +1,4 @@
-commons demo
+context demo
 
 ---
 `Reps.of(n)` validates an `Int` against the refinement and returns a `Result`.
@@ -10,4 +10,17 @@ type Reps = Int where InRange(1, 100)
 fn doubled(n: Int) -> Result[Int, ValidationError] {
   let r = Reps.of(n)?
   Ok(r * 2)
+}
+
+---
+Run calls `service playground`: `21` passes the check and is doubled, and `500`
+stops at `?` with the `ValidationError`.
+---
+service playground {
+  on call() -> Effect[List[String]] {
+    [21, 500].map((n) => match doubled(n) {
+      Ok(d) => "\(n) doubled is \(d)"
+      Err(e) => "\(n): \(e.message)"
+    })
+  }
 }

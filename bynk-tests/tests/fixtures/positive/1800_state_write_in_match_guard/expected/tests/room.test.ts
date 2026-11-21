@@ -112,7 +112,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a write in a match guard is committed", "a guard that does not write leaves the state alone", "a write in a guard that then fails is committed"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a write in a match guard is committed")) {
     const started = __bynkCaseNow();

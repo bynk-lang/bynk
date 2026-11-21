@@ -190,7 +190,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["sortBy an Option key puts None first", "max over Float keys holding a NaN", "min over Float keys with the NaN first", "sortBy an opaque Ord key", "a T: Ord generic key through its witness", "a held-connection source sorts by a non-base key"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("sortBy an Option key puts None first")) {
     const started = __bynkCaseNow();

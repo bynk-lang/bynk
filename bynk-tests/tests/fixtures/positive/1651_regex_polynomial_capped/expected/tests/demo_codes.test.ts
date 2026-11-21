@@ -104,7 +104,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a value within the bound and the pattern is accepted", "a value outside the pattern is rejected", "a value over the length bound is rejected"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a value within the bound and the pattern is accepted")) {
     const started = __bynkCaseNow();

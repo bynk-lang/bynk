@@ -466,7 +466,7 @@ fn compile_dir(prog: &str, input: &Path, output: &Path, settings: DirSettings) -
             // (`schema_registry::write`'s own eprintln) when the write
             // lived inside `compile_project` itself.
             if let Some(content) = &out.schema_lock
-                && let Err(e) = crate::schema_lock::write(input, content)
+                && let Err(e) = crate::schema_lock::write_reporting(prog, input, content)
             {
                 emsg!(
                     "{prog}: warning: could not write {}: {e}",

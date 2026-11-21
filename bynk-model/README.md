@@ -78,15 +78,22 @@ that count may only rise.
 ```toml
 [dependencies]
 bynk-model = "0.639"
+bynk-syntax = "0.639"
 ```
 
-```rust,ignore
+```rust
 use bynk_model::{IrHandlerKind, lower_handler_kind_ir};
+use bynk_syntax::ast::{HandlerKind, HttpMethod};
 
-match lower_handler_kind_ir(&handler.kind) {
-    IrHandlerKind::Http { method, path } => println!("{} {path}", method.as_str()),
-    _ => {}
+fn route(kind: &HandlerKind) -> Option<String> {
+    match lower_handler_kind_ir(kind) {
+        IrHandlerKind::Http { method, path } => Some(format!("{} {path}", method.as_str())),
+        _ => None,
+    }
 }
+
+let kind = HandlerKind::Http { method: HttpMethod::Get, path: "/orders".to_string() };
+assert_eq!(route(&kind).as_deref(), Some("GET /orders"));
 ```
 
 See the [API docs](https://docs.rs/bynk-model) for the full surface.

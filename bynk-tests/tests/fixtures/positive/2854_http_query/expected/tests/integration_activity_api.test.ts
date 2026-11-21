@@ -411,7 +411,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a typed query round-trips through the router", "absent keys take None and their defaults", "unknown keys are ignored", "repeated keys fill a list", "a limit out of range is refused before the handler", "a malformed day is refused before the handler", "a non-numeric limit is a structural mismatch", "a repeated key on a single-valued field is refused", "an unknown enum variant is refused", "a path parameter meets the query", "the raw view over the wire", "a cached route answers each query on its path separately", "a decimal field reads canonical text", "a malformed decimal is refused", "an optional enum is not fooled by the name None", "an optional enum takes a variant"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a typed query round-trips through the router")) {
     const started = __bynkCaseNow();

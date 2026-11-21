@@ -538,7 +538,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a token is hashed with SHA-256", "equal digests match and different ones do not", "an HMAC matches RFC 4231 test case 2", "a webhook MAC verifies, and a wrong one does not", "random bytes are deterministic under test", "an Ed25519 signature matches RFC 8032 test 1", "that signature verifies, and fails for other data", "a bad key is an error value, not a fault", "a stubbed digest is observed"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a token is hashed with SHA-256")) {
     const started = __bynkCaseNow();

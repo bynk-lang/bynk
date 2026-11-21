@@ -293,7 +293,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a chain at the bound round-trips", "a tree at the bound round-trips", "an index through a Map at the bound round-trips", "mutually recursive sums 255 levels deep round-trip", "a hand-written chain at the bound decodes", "a chain one level past the bound is a StructuralMismatch", "encoding a chain one level past the bound faults", "encoding a tree one level past the bound faults", "encoding an index one level past the bound faults", "encoding mutually recursive sums past the bound faults"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a chain at the bound round-trips")) {
     const started = __bynkCaseNow();

@@ -91,7 +91,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["bare sum mock takes the first declared variant", "bare record mock fills every field, including an opaque one"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("bare sum mock takes the first declared variant")) {
     const started = __bynkCaseNow();

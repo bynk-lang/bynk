@@ -19,7 +19,7 @@ use bynk_model::is_effectful_return;
 use bynk_model::{ConstVal, EventPatternIr, EventPatternValueIr};
 
 use super::ctx::{BodyMode, ModuleCtx, TestShared};
-use super::default_value::default_value_node;
+use super::default_value::{Slot, default_value_node};
 use super::internal_fault::{FaultSite, undefined_node, unnameable_receiver_type_arg};
 use super::lower_call::agents::{
     lower_agent_init, lower_inline_agent_call, lower_let_bound_agent_call,
@@ -517,10 +517,7 @@ fn hoist_if_value(
         });
     if all_nodes {
         let slot = cx.fresh();
-        let ty = cx
-            .commons()
-            .expr_ty(e.id)
-            .map(|_| ts_ty_to_ts_type(cx.commons().expr_types[&e.id].ty, cx.ty_render()));
+        let ty = checked_ty_node(e, cx);
         hoisted_if_nodes(pre, &slot, ty, cond, then_tail, else_tail);
         slot
     } else {
@@ -580,6 +577,13 @@ pub(super) fn checked_ty_ts(e: &Expr, cx: &LowerCtx) -> Option<String> {
     cx.commons()
         .expr_ty(e.id)
         .map(|_| ts_ty(cx.commons().expr_types[&e.id].ty, cx.ty_render()))
+}
+
+/// [`checked_ty_ts`] as a type node: the same type, which prints as that text.
+pub(super) fn checked_ty_node(e: &Expr, cx: &LowerCtx) -> Option<bynk_ts::TsType> {
+    cx.commons()
+        .expr_ty(e.id)
+        .map(|_| ts_ty_to_ts_type(cx.commons().expr_types[&e.id].ty, cx.ty_render()))
 }
 
 /// How a `?` leaves the function when its operand is the failing side. One
@@ -1382,6 +1386,13 @@ pub mod text_counters {
     pub fn stmts() -> usize {
         super::TEXT_STMTS.with(|c| c.get())
     }
+
+    /// Make the lowering arm `arm` (`"splitRegex"`, `"Set.remove"`) take its operands as text on
+    /// this thread until the returned guard drops, so a test of the text fallback has a text
+    /// source now that those arms are nodes (see `force_text`).
+    pub fn force_text(arm: &'static str) -> impl Drop {
+        super::force_text::arm(arm)
+    }
 }
 
 #[cfg(any(test, feature = "text-exit-counters"))]
@@ -1393,6 +1404,59 @@ thread_local! {
     /// Test-only: how many statements were hoisted into a [`Pre`] as text
     /// (1A.8's "now hoists nodes" tests read it).
     static TEXT_STMTS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// Test-only (1A.35a part B): `String.splitRegex` and the plain `Set.remove` used to be the two
+/// arms nothing could express, so the tests of the text fallback (a node-built parent over a
+/// still-text child) read their text child from them. They are nodes now; a test that still
+/// wants its child as text asks for it by arm name, and the arm then sees its operands as text.
+/// Deleted with the bridge in 1A.35b, along with the tests that need it.
+#[cfg(any(test, feature = "text-exit-counters"))]
+pub(crate) mod force_text {
+    use std::cell::RefCell;
+    use std::collections::HashSet;
+
+    #[cfg(any(test, feature = "text-exit-counters"))]
+    thread_local! {
+        static ARMS: RefCell<HashSet<&'static str>> = RefCell::new(HashSet::new());
+    }
+
+    /// The forced arm, until dropped.
+    pub(crate) struct Guard(&'static str);
+
+    /// Make `arm` take its operands as text, until the guard drops.
+    pub(crate) fn arm(arm: &'static str) -> Guard {
+        ARMS.with(|a| a.borrow_mut().insert(arm));
+        Guard(arm)
+    }
+
+    impl Drop for Guard {
+        fn drop(&mut self) {
+            ARMS.with(|a| a.borrow_mut().remove(self.0));
+        }
+    }
+
+    pub(crate) fn is_forced(arm: &str) -> bool {
+        ARMS.with(|a| a.borrow().contains(arm))
+    }
+}
+
+/// `kids`, as text when a test forced `arm` to (see [`force_text`]); `kids` otherwise, always, in
+/// a production build.
+#[cfg(any(test, feature = "text-exit-counters"))]
+pub(super) fn text_if_forced(arm: &'static str, kids: Vec<LoweredExpr>) -> Vec<LoweredExpr> {
+    if !force_text::is_forced(arm) {
+        return kids;
+    }
+    kids.into_iter()
+        .map(|k| LoweredExpr::from(Built::Err(k.into_text())))
+        .collect()
+}
+
+#[cfg(not(any(test, feature = "text-exit-counters")))]
+#[inline(always)]
+pub(super) fn text_if_forced(_arm: &'static str, kids: Vec<LoweredExpr>) -> Vec<LoweredExpr> {
+    kids
 }
 
 impl Pre {
@@ -1675,7 +1739,7 @@ pub(crate) fn lower_expr(e: &Expr, cx: &mut LowerCtx) -> Lowered {
         ExprKind::Question(inner) => return lower_question(e, inner, cx),
         ExprKind::RecordConstruction {
             type_name, fields, ..
-        } => lowered_or_text!(pre, lower_record_construction(type_name, fields, cx)),
+        } => lowered_or_text!(pre, lower_record_construction(e, type_name, fields, cx)),
         ExprKind::FieldAccess { .. }
             if matches!(
                 cx.commons().callees.get(&e.id),
@@ -2486,7 +2550,114 @@ fn mock_value_of(
 /// window and never settles it. A thrown fault releases the claims; a
 /// returned `Err` or a 5xx `HttpResult` does too; any other outcome confirms
 /// them.
+/// The text the scope declaration was written as, kept to check [`claim_scope_declaration`]
+/// prints exactly it.
+#[cfg(test)]
 pub(crate) const CLAIM_SCOPE_DECLARATION: &str = "const __claims = (deps.Idempotency as unknown as { __track?: () => { note<C>(k: string, c: C, t: number): C; lease(t: number): number; settle(r: unknown, threw: boolean): globalThis.Promise<void> } }).__track?.() ?? { note: <C>(_k: string, c: C, _t: number) => c, lease: (t: number) => t, settle: async (_r: unknown, _threw: boolean) => {} };";
+
+/// [`CLAIM_SCOPE_DECLARATION`] as a node (1A.35a part B): `const __claims = (deps.Idempotency
+/// as unknown as { __track?: () => { note<C>(…): C; lease(…): number; settle(…): … } })
+/// .__track?.() ?? { note: …, lease: …, settle: … };`.
+pub(crate) fn claim_scope_declaration() -> bynk_ts::TsStmt {
+    use bynk_ts::{
+        TsArrowBody, TsBinaryOp, TsBindingName, TsExpr, TsObjectEntry, TsParam, TsStmt, TsType,
+        TsTypeMember,
+    };
+    let named = |name: &str| TsType::named(name);
+    let param = |name: &str, ty: &str| TsParam::new(name, Some(named(ty)));
+    // The provider's scope: `{ note<C>(k, c, t): C; lease(t): number; settle(r, threw): Promise<void> }`.
+    let scope_ty = TsType::Object(vec![
+        TsTypeMember::Method {
+            name: "note".to_string(),
+            generics: vec!["C".to_string()],
+            params: vec![param("k", "string"), param("c", "C"), param("t", "number")],
+            ret: named("C"),
+            doc: None,
+        },
+        TsTypeMember::method("lease", vec![param("t", "number")], named("number")),
+        TsTypeMember::method(
+            "settle",
+            vec![param("r", "unknown"), param("threw", "boolean")],
+            TsType::named_with_args("globalThis.Promise", vec![named("void")]),
+        ),
+    ]);
+    let track_ty = TsType::Object(vec![TsTypeMember::optional_prop(
+        "__track",
+        TsType::Fn {
+            params: Vec::new(),
+            names: Vec::new(),
+            ret: Box::new(scope_ty),
+        },
+    )]);
+    let provider = TsExpr::Paren(Box::new(TsExpr::As {
+        expr: Box::new(TsExpr::As {
+            expr: Box::new(member_node("deps", "Idempotency")),
+            ty: named("unknown"),
+        }),
+        ty: track_ty,
+    }));
+    let tracked = TsExpr::OptionalCall {
+        callee: Box::new(TsExpr::Member {
+            object: Box::new(provider),
+            property: "__track".to_string(),
+        }),
+        args: Vec::new(),
+    };
+    // The no-op scope: takes every claim for its full window and never settles.
+    let arrow = |generics: &[&str], params: Vec<TsParam>, is_async: bool, body: TsArrowBody| {
+        TsExpr::Arrow {
+            params,
+            is_async,
+            generics: generics.iter().map(ToString::to_string).collect(),
+            return_type: None,
+            body: Box::new(body),
+        }
+    };
+    let ident = |n: &str| TsExpr::Ident(n.to_string());
+    let noop = TsExpr::object_entries(vec![
+        TsObjectEntry::prop(
+            "note",
+            arrow(
+                &["C"],
+                vec![
+                    param("_k", "string"),
+                    param("c", "C"),
+                    param("_t", "number"),
+                ],
+                false,
+                TsArrowBody::Expr(Box::new(ident("c"))),
+            ),
+        ),
+        TsObjectEntry::prop(
+            "lease",
+            arrow(
+                &[],
+                vec![param("t", "number")],
+                false,
+                TsArrowBody::Expr(Box::new(ident("t"))),
+            ),
+        ),
+        TsObjectEntry::prop(
+            "settle",
+            arrow(
+                &[],
+                vec![param("_r", "unknown"), param("_threw", "boolean")],
+                true,
+                TsArrowBody::Block(Vec::new()),
+            ),
+        ),
+    ]);
+    TsStmt::const_stmt(
+        TsBindingName::Ident("__claims".to_string()),
+        None,
+        TsExpr::Binary {
+            op: TsBinaryOp::NullishCoalescing,
+            left: Box::new(tracked),
+            right: Box::new(noop),
+        },
+        None,
+    )
+}
 
 /// Lower an `ExprKind::MethodCall`. This is a dispatcher: a sequence of
 /// independent guard-and-`return` branches, tried in order (the order is
@@ -2822,7 +2993,7 @@ struct AndWithIs {
     rhs_returns: bool,
     /// #1654: declarations of the `is` receiver temps the right operand
     /// introduced, for the caller to emit before the whole condition.
-    hoisted: Vec<String>,
+    hoisted: Vec<bynk_ts::TsStmt>,
 }
 
 fn lower_and_with_is(lhs: &Expr, rhs: &Expr, cx: &mut LowerCtx) -> Option<AndWithIs> {
@@ -3082,7 +3253,7 @@ fn emit_is_test_bindings(
                 .iter()
                 .map(|id| cx.bind_local_name(&id.name))
                 .collect();
-            out.push(LoweredStmt::Text(format!("let {};", decl.join(", "))));
+            out.push(LoweredStmt::Node(Box::new(or_pattern_decl(decl))));
             let last = alts.len() - 1;
             let mut arms = Vec::with_capacity(alts.len());
             for (i, alt) in alts.iter().enumerate() {
@@ -4099,7 +4270,9 @@ fn lower_bin_op(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut LowerCtx) -> Lowered
             hoisted,
         }) = lower_and_with_is(lhs, rhs, cx)
     {
-        pre.extend_text(hoisted);
+        for decl in hoisted {
+            pre.push_node(decl);
+        }
         let lhs_expr = pre.absorb_node(lhs_lowered);
         if bindings.is_empty() {
             return pre.finish_built(short_circuit(op, lhs_expr, rhs_expr));
@@ -4190,7 +4363,9 @@ fn lower_bin_op(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut LowerCtx) -> Lowered
         }
         let r = lower_expr(rhs, cx);
         if outermost {
-            pre.extend_text(cx.is_temp_hoist.take().unwrap_or_default());
+            for decl in cx.is_temp_hoist.take().unwrap_or_default() {
+                pre.push_node(decl);
+            }
         }
         let rhs_returns = cx.emitted_early_return;
         cx.emitted_early_return = saved_early_return || rhs_returns;
@@ -4613,7 +4788,28 @@ fn object_built(has_spread: bool, slots: Vec<FieldSlot>, children: Vec<LoweredEx
     )
 }
 
+/// #3759: the slot a defaulted field's value fills, `record[field]`, so a refined value in it is
+/// cast to its position's type (`default_value_node`). Indexed from the record's type as the
+/// checker typed this construction: the refined type may not be nameable here (the record can
+/// come from a unit this one imports without its field types), but the record is, since this
+/// literal names it. Test scaffolding names no declared type, so it brands as it brands a refined
+/// literal.
+fn default_slot(e: &Expr, type_name: &Ident, field: &str, cx: &LowerCtx) -> Slot {
+    if cx.in_test_scaffold() {
+        return Slot::Scaffold;
+    }
+    let record = match cx.commons().expr_types.get(&e.id) {
+        Some(te) => ts_ty_to_ts_type(te.ty, cx.ty_render()),
+        None => bynk_ts::TsType::named(cx.consumed_type_name(&type_name.name)),
+    };
+    Slot::Typed(bynk_ts::TsType::Indexed {
+        object: Box::new(record),
+        index: Box::new(bynk_ts::TsType::StringLiteral(field.to_string())),
+    })
+}
+
 fn lower_record_construction(
+    e: &Expr,
     type_name: &Ident,
     fields: &[FieldInit],
     cx: &mut LowerCtx,
@@ -4639,7 +4835,12 @@ fn lower_record_construction(
             match bynk_check::wire_default::field_default_value(init, &declared.type_ref, types) {
                 Ok(v) => {
                     slots.push(FieldSlot::Prop(declared.name.name.clone()));
-                    let node: Built = Ok(default_value_node(&v));
+                    // #3759: a refined value in it is cast to its position's type.
+                    let slot = match v.holds_refined() {
+                        true => default_slot(e, type_name, &declared.name.name, cx),
+                        false => Slot::Unbranded,
+                    };
+                    let node: Built = Ok(default_value_node(&v, &slot));
                     children.push(node.into());
                 }
                 // The checker rejected any default that has no value: a missing
@@ -4739,14 +4940,37 @@ fn lower_field_access(e: &Expr, receiver: &Expr, field: &Ident, cx: &mut LowerCt
                     )))
                 }
             }
-            // entries
+            // entries: each `[__k, __v]` pair zipped into a `{ key, value }` record.
             _ => {
-                let decoded = bynk_ts::print_expr(&key(cx));
-                let m = bynk_ts::print_expr(&m);
-                // 1A: the `[__k, __v]` destructuring parameter has no `bynk_ts` node
-                Err(format!(
-                    "(() => __bynkThen({m}.entries(), (__es) => __es.map(([__k, __v]) => ({{ key: {decoded}, value: __v }}))))"
-                ))
+                let record = bynk_ts::TsExpr::Object {
+                    entries: vec![
+                        bynk_ts::TsObjectEntry::prop("key", key(cx)),
+                        bynk_ts::TsObjectEntry::prop("value", ident_node("__v")),
+                    ],
+                    multiline: false,
+                    end_span: None,
+                };
+                let pair = bynk_ts::TsExpr::Arrow {
+                    params: vec![bynk_ts::TsParam::array_pattern(
+                        vec!["__k".to_string(), "__v".to_string()],
+                        None,
+                    )],
+                    is_async: false,
+                    generics: vec![],
+                    return_type: None,
+                    body: Box::new(bynk_ts::TsArrowBody::Expr(Box::new(record))),
+                };
+                let zipped = bynk_ts::TsExpr::Call {
+                    callee: Box::new(bynk_ts::TsExpr::Member {
+                        object: Box::new(ident_node("__es")),
+                        property: "map".to_string(),
+                    }),
+                    args: vec![pair],
+                };
+                Ok(store_thunk(call(
+                    "__bynkThen",
+                    vec![values("entries"), arrow(vec!["__es"], zipped)],
+                )))
             }
         };
         return built_or_text_lowered(pre, built);
@@ -5124,6 +5348,7 @@ fn lower_lambda(e: &Expr, lambda: &LambdaExpr, cx: &mut LowerCtx) -> Built {
                 ty,
                 optional: false,
                 rest: false,
+                array_pattern: None,
             })
         })
         .collect();
@@ -5951,7 +6176,7 @@ pub(super) fn emit_pattern_bindings(
                 .iter()
                 .map(|id| cx.bind_local_name(&id.name))
                 .collect();
-            body.push(Item::Line(format!("let {};", decl.join(", "))));
+            body.push(Item::Node(Box::new(or_pattern_decl(decl))));
             let last = alts.len() - 1;
             let mut arms = Vec::with_capacity(alts.len());
             for (i, alt) in alts.iter().enumerate() {
@@ -5985,6 +6210,14 @@ pub(super) fn emit_pattern_bindings(
             }
         }
     }
+}
+
+/// `let a, b;`: an or-pattern's shared names, declared once before its dispatch assigns them.
+fn or_pattern_decl(names: Vec<String>) -> bynk_ts::TsStmt {
+    bynk_ts::TsStmt::let_list(
+        names.into_iter().map(bynk_ts::TsDeclarator::new).collect(),
+        None,
+    )
 }
 
 /// One alternative of an or-pattern's dispatch: its test (none for the last, the bare
@@ -6416,6 +6649,16 @@ mod idempotency_scoping_tests {
         assert_eq!(args[1].clone().into_text(), "3600000");
     }
 
+    /// The declaration node prints the very text it replaced (1A.35a part B), token for token
+    /// and in its one-line layout.
+    #[test]
+    fn the_claim_scope_declaration_node_prints_its_old_text() {
+        assert_eq!(
+            bynk_ts::print_stmt(&claim_scope_declaration(), 0),
+            format!("{CLAIM_SCOPE_DECLARATION}\n")
+        );
+    }
+
     /// A provider with no `__track` gets a scope that takes a claim for its
     /// whole window, so nothing is cut to the lease with no settle to extend it.
     #[test]
@@ -6718,12 +6961,42 @@ mod settle_tests {
 mod bridge_tests {
     use super::*;
 
-    /// A plain `Set.remove`: its body is a comma expression `bynk_ts` cannot build, so it is
-    /// still text (1A.30). `contains` over it is text too, in the bracketed form.
+    /// A plain `Set.remove` forced to text (`force_text`; its body is a comma expression node
+    /// since 1A.35a part B). `contains` over it is text too, in the bracketed form.
     fn removed(set: &str, key: &str) -> String {
         format!(
             "((__s: globalThis.Set<string>) => (__s.delete({key}), __s as ReadonlySet<string>))(new globalThis.Set<string>({set}))"
         )
+    }
+
+    /// A `contains` over a plain `Set` `remove` is a node (a comma expression, 1A.35a part B): a
+    /// call, a ternary, the short-circuit forms and a hoisted `if` over it leave no text exit, and
+    /// print the call as a member's object with no brackets of its own.
+    #[test]
+    fn a_set_remove_is_a_node_in_every_parent() {
+        let src = "commons rmnode\n\
+            fn risky(n: Int) -> Result[Int, String] { Ok(n) }\n\
+            fn g(b: Bool) -> Bool { b }\n\
+            fn call(a: Set[String], c: String) -> Bool { g(a.remove(c).contains(c)) }\n\
+            fn tern(c: Bool, x: Set[String], y: String) -> Bool { if c { x.remove(y).contains(y) } else { false } }\n\
+            fn and(s: Set[String], u: String, k: Bool) -> Bool { k && s.remove(u).contains(u) }\n\
+            fn hoist(c: Bool, x: Set[String], y: String, r: Result[Bool, String]) -> Result[Bool, String] {\n\
+              let v = if c { r? } else { x.remove(y).contains(y) }\n\
+              Ok(v)\n\
+            }\n";
+        let (exits, stmts, ts) = exits_and_stmts(src);
+        assert_eq!((exits, stmts), (0, 0), "{ts}");
+        let has = |set: &str, key: &str| format!("{}.has({key})", removed(set, key));
+        assert_eq!(returned(&ts, "call"), format!("g({})", has("a", "c")));
+        assert_eq!(
+            returned(&ts, "tern"),
+            format!("(c ? {} : false)", has("x", "y"))
+        );
+        assert_eq!(returned(&ts, "and"), format!("k && {}", has("s", "u")));
+        assert!(
+            ts.contains(&format!("    __r1 = {};\n", has("x", "y"))),
+            "{ts}"
+        );
     }
 
     fn lit_text(l: Lowered) -> String {
@@ -7491,8 +7764,9 @@ fn minus(x: Int) -> Int { 5 - - -x }
 
     #[test]
     fn short_circuit_operators_over_a_text_operand_keep_their_text() {
-        // A plain `Set` `remove` is still text (a comma expression), so the
-        // operator over a `contains` of it is text, byte for byte.
+        // A `Set` `remove` forced to text (see `force_text`), so the operator over a `contains`
+        // of it is text, byte for byte.
+        let _text = force_text::arm("Set.remove");
         let src = "commons shortt\n\
                    fn a(s: Set[String], t: String, y: Bool) -> Bool { s.remove(t).contains(t) && y }\n\
                    fn b(s: Set[String], t: String, y: Bool) -> Bool { y || s.remove(t).contains(t) }\n\
@@ -7615,8 +7889,9 @@ fn minus(x: Int) -> Int { 5 - - -x }
 
     #[test]
     fn a_call_with_a_text_argument_falls_back_to_today_s_text() {
-        // A `contains` over a plain `Set` `remove` is still text (a comma
-        // expression), so each call over it is text, byte for byte.
+        // A `contains` over a plain `Set` `remove` forced to text (see `force_text`), so each
+        // call over it is text, byte for byte.
+        let _text = force_text::arm("Set.remove");
         let src = "commons calltext\n\
             type S = | A(f: Bool) | B\n\
             type Box2 = { v: Int }\n\
@@ -7713,8 +7988,9 @@ fn minus(x: Int) -> Int { 5 - - -x }
 
     #[test]
     fn a_data_literal_with_a_text_child_falls_back_byte_for_byte() {
-        // An explicit-type-argument method call is still text, so a record /
-        // string around one stays text, printed exactly as before.
+        // A string around a `Set` `remove` forced to text (see `force_text`) stays text, printed
+        // exactly as before.
+        let _text = force_text::arm("Set.remove");
         let src = "commons textchild\n\
             type P = { name: String, age: Option[Int] }\n\
             type Box2[A] = { v: A }\n\
@@ -7782,8 +8058,9 @@ fn minus(x: Int) -> Int { 5 - - -x }
 
     #[test]
     fn a_defaulted_record_with_a_text_child_still_falls_back_byte_for_byte() {
-        // The plain `Set.remove` is a comma expression with no node, so it is still text; the
-        // record around it, default and all, prints today's bytes.
+        // The plain `Set.remove`, forced to text (see `force_text`); the record around it,
+        // default and all, prints today's bytes.
+        let _text = force_text::arm("Set.remove");
         let src = "commons deftext\n\
             type P = { n: Int, label: String = \"d\" }\n\
             fn rec(a: Set[String], c: String) -> P { P { n: a.remove(c).length() } }\n";
@@ -8028,6 +8305,7 @@ fn minus(x: Int) -> Int { 5 - - -x }
 
     #[test]
     fn a_ternary_over_a_text_branch_falls_back_to_text() {
+        let _text = force_text::arm("Set.remove");
         let src = "commons ternt\n\
             fn f(c: Bool, x: Set[String], y: String) -> Bool { if c { x.remove(y).contains(y) } else { false } }\n";
         let (exits, _, ts) = exits_and_stmts(src);
@@ -8144,8 +8422,10 @@ fn minus(x: Int) -> Int { 5 - - -x }
 
     #[test]
     fn a_hoisted_if_with_a_text_branch_keeps_its_text_lines() {
-        // A branch tail that is still text (a `contains` over a `Set` `remove`) keeps the whole
-        // hoist as text lines, byte for byte, with `assign_branch`'s padding.
+        // A branch tail that is still text (a `contains` over a `Set` `remove`, forced to text:
+        // see `force_text`) keeps the whole hoist as text lines, byte for byte, with
+        // `assign_branch`'s padding.
+        let _text = force_text::arm("Set.remove");
         let src = "commons iftext\n\
             fn f(c: Bool, x: Set[String], y: String, r: Result[Bool, String]) -> Result[Bool, String] {\n\
               let v = if c { r? } else { x.remove(y).contains(y) }\n\
@@ -8208,8 +8488,9 @@ fn minus(x: Int) -> Int { 5 - - -x }
              fn b(s: Shape, k: Int) -> Bool {{ k > 0 && mk(s) is Dot }}\n"
         );
         let (exits, stmts, ts) = exits_and_stmts(&src);
-        // The hoisted `let __r0!: Shape;` declaration is the one text statement.
-        assert_eq!((exits, stmts), (0, 1), "{ts}");
+        // The hoisted `let __r0!: Shape;` declaration is a definite-assignment `let` node
+        // (1A.35a part B), so no statement is text.
+        assert_eq!((exits, stmts), (0, 0), "{ts}");
         assert_eq!(
             func(&ts, "a"),
             "export function a(s: Shape, k: number): boolean {\n  const __r0 = mk(s);\n  return ((__c: boolean) => __c)(__r0.tag === \"Dot\") && k > 0;\n}\n"
@@ -8322,10 +8603,12 @@ fn minus(x: Int) -> Int { 5 - - -x }
         );
     }
 
-    /// A text operand or hoisted statement (a `contains` over a `Set` `remove`) keeps the text
-    /// forms byte for byte: the binding arrow, the hoisted `if`, the plain arrow.
+    /// A text operand or hoisted statement (a `contains` over a `Set` `remove`, forced to text: see
+    /// `force_text`) keeps the text forms byte for byte: the binding arrow, the hoisted `if`, the
+    /// plain arrow.
     #[test]
     fn short_circuit_text_fallbacks_keep_their_text() {
+        let _text = force_text::arm("Set.remove");
         let src = "commons sct\n\
              fn risky(n: Int) -> Result[Int, String] { Ok(n) }\n\
              fn a(s: Set[String], u: String, k: Bool) -> Bool { k && s.remove(u).contains(u) }\n\
@@ -8350,6 +8633,8 @@ mod list_kernel_tests {
 
     /// `(text exits, emitted TypeScript)` for a one-function commons.
     fn exits(body: &str) -> (usize, String) {
+        // The text receivers read `String.splitRegex` as text (see `force_text`).
+        let _text = super::force_text::arm("splitRegex");
         super::TEXT_EXITS.with(|c| c.set(0));
         let ts = emit_source(&format!("commons lk\n{body}\n"));
         (super::TEXT_EXITS.with(|c| c.get()), ts)

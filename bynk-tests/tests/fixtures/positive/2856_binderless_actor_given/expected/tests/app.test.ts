@@ -168,7 +168,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a binder-less Bearer route that takes a capability", "a binding Bearer route that takes a capability", "a binder-less Bearer route without a capability"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a binder-less Bearer route that takes a capability")) {
     const started = __bynkCaseNow();

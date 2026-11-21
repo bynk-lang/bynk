@@ -18,5 +18,6 @@ mod generated_site_json;
 mod grammar_coverage;
 mod grammar_reference;
 mod keywords_reference;
+mod readme_doctests;
 mod readme_layering;
 mod textmate_keywords;

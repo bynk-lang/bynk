@@ -1,0 +1,19 @@
+commons demo.priced
+
+---
+#3801: a record literal that leaves out a `Decimal` field takes its default in
+the in-memory form, so arithmetic on the field works.
+---
+type Priced = {
+  name: String,
+  price: Decimal = 1.50d,
+  discount: Decimal = -0.25d,
+}
+
+fn mk(n: String) -> Priced {
+  Priced { name: n }
+}
+
+fn total(p: Priced) -> Decimal {
+  p.price + p.discount + 1.00d
+}

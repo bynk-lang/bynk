@@ -69,6 +69,7 @@ fn assert_node(src: &str) -> String {
 
 #[test]
 fn the_counter_is_live_on_this_path() {
+    let _text = text_counters::force_text("splitRegex");
     let (exits, text) = emit("fn c() -> Bool { \"a\".splitRegex(\",\").length() > 0 }");
     assert!(exits > 0, "a text exit is counted:\n{text}");
 }
@@ -195,6 +196,7 @@ fn json_encode_is_a_stringify_over_the_serialiser() {
 
 #[test]
 fn json_encode_of_a_text_argument_keeps_the_text_around_the_serialiser() {
+    let _text = text_counters::force_text("splitRegex");
     // `"a".splitRegex(",").firstOrElse("b")` is a `List` kernel call over a text receiver (the regex
     // arm is a statement block), which is still text.
     let (exits, text) =

@@ -17,6 +17,13 @@
 //! crate and re-exports its modules so its public API (`compile_project`,
 //! `ProjectOutput`, …) and the binary are untouched.
 
+// The README's `rust` examples are compiled (and, unless marked `no_run`, run)
+// as doctests, so they cannot rot (#1645). `cfg(doctest)` keeps this item out of
+// every build and out of the docs.rs front page, which the `//!` docs above own.
+#[cfg(doctest)]
+#[doc = include_str!("../README.md")]
+struct ReadmeDoctests;
+
 pub mod emit_model;
 pub mod emitter;
 

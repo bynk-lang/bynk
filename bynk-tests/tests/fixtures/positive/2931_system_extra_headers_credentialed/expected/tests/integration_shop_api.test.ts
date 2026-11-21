@@ -311,7 +311,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a Bearer route is sent extra headers", "an actor-sum route is sent extra headers after its body", "a signed member of an actor-sum route is sent extra headers", "a typed-query route is sent extra headers after its query", "a let-bound Authorization header does not displace the actor"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a Bearer route is sent extra headers")) {
     const started = __bynkCaseNow();

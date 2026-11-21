@@ -127,7 +127,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a bare consumed variant in a record literal", "a bare consumed variant in a comparison", "a bare consumed variant as a value and a pattern"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a bare consumed variant in a record literal")) {
     const started = __bynkCaseNow();

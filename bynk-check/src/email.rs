@@ -142,6 +142,7 @@ pub(crate) fn check_service_protocols_and_email(
     tys: &std::sync::Arc<crate::checker::Types>,
 ) {
     crate::context_checks::check_service_protocols(table, types, errors, tys);
+    crate::context_checks::check_one_call_handler(table, errors);
     check_email_services(table, errors);
     check_sender_only_on_email(table, errors);
 }

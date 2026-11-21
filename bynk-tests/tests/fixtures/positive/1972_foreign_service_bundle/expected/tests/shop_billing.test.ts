@@ -690,7 +690,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a stubbed instance answers", "a failing call is the instance's error", "an instance is stubbed under its own name at integration"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a stubbed instance answers")) {
     const started = __bynkCaseNow();

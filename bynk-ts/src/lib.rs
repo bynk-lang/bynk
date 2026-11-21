@@ -33,6 +33,13 @@
 //! "carve prospectively, at the moment the dependency appears" precedent
 //! (`bynk-strip`'s own carve is the control case cited for this).
 
+// The README's `rust` examples are compiled (and, unless marked `no_run`, run)
+// as doctests, so they cannot rot (#1645). `cfg(doctest)` keeps this item out of
+// every build and out of the docs.rs front page, which the `//!` docs above own.
+#[cfg(doctest)]
+#[doc = include_str!("../README.md")]
+struct ReadmeDoctests;
+
 mod await_scan;
 mod lint;
 mod name_closure;
@@ -58,7 +65,7 @@ pub use printer::{
 };
 pub use program::{
     ExportedName, TsArrowBody, TsBinaryOp, TsBindingName, TsClassCtor, TsClassField, TsClassMethod,
-    TsDecl, TsExpr, TsLit, TsMappedModifier, TsObjectEntry, TsParam, TsProgram, TsStmt,
-    TsSwitchCase, TsType, TsTypeMember, TsUnaryOp, VerbatimOrigin,
+    TsDecl, TsDeclarator, TsExpr, TsLit, TsMappedModifier, TsObjectEntry, TsParam, TsProgram,
+    TsStmt, TsSwitchCase, TsType, TsTypeMember, TsUnaryOp, VerbatimOrigin,
 };
 pub use source_map::SourceMapBuilder;

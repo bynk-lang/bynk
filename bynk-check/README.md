@@ -74,13 +74,22 @@ directly.
 ```toml
 [dependencies]
 bynk-check = "0.639"
+bynk-syntax = "0.639"
 ```
 
 ```rust
 use bynk_check::{checker, resolver};
+use bynk_syntax::{CompileError, lexer, parser};
 
-let resolved = resolver::resolve(commons)?;
-let typed = checker::check(resolved)?;
+fn check(source: &str) -> Result<checker::TypedCommons, Vec<CompileError>> {
+    let tokens = lexer::tokenize(source).map_err(|e| vec![e])?;
+    let commons = parser::parse(&tokens, source)?;
+    let resolved = resolver::resolve(commons)?;
+    checker::check(resolved)
+}
+
+assert!(check("commons demo { type Id = Int }").is_ok());
+assert!(check("commons demo { type Id = Missing }").is_err());
 ```
 
 See the [API docs](https://docs.rs/bynk-check) for the full surface.

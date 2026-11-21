@@ -140,7 +140,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a method with a receiver-parameter bound", "a method on an enum-typed receiver", "a bound declared on the receiver type holds in its methods", "a method's own type parameter takes a comparator"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a method with a receiver-parameter bound")) {
     const started = __bynkCaseNow();

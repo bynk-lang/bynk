@@ -147,7 +147,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["$& is not the matched text", "$1 and $<name> are not group references", "$$ is not an escaped dollar", "$` and $' are not the surrounding text", "a computed replacement is literal too", "replace still replaces every occurrence"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("$& is not the matched text")) {
     const started = __bynkCaseNow();

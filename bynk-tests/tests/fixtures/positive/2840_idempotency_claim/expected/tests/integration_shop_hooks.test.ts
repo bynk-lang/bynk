@@ -239,7 +239,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a claim is taken in the participant's database, once", "a failed handler releases its claim over the wire", "a remembered value is stored in the participant's database and read back", "a stored value that does not decode reads as a miss over the wire"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a claim is taken in the participant's database, once")) {
     const started = __bynkCaseNow();

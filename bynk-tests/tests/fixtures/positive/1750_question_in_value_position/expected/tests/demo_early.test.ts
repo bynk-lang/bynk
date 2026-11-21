@@ -188,7 +188,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["binding if propagates Err", "statement if propagates Err", "match arms propagate Err", "nested propagates Err", "a nested guard propagates Err", "a lambda's own result stays the lambda's", "an embedding converts"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("binding if propagates Err")) {
     const started = __bynkCaseNow();

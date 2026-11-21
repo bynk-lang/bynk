@@ -888,7 +888,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["an instance is in-memory", "instances are separate", "a stubbed instance answers", "instances are separate at integration"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("an instance is in-memory")) {
     const started = __bynkCaseNow();

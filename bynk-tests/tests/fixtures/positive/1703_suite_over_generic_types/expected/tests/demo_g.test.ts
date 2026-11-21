@@ -138,7 +138,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a case that never mentions a generic type", "a generic type the target declares", "a generic type built in the case body", "a generic type reached through uses"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a case that never mentions a generic type")) {
     const started = __bynkCaseNow();

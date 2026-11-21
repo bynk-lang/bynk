@@ -195,7 +195,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["largest key first", "ties keep input order, unlike reverse of sortBy", "a String key sorts descending", "NaN is first in a descending Float key", "a derives Ord record key: fields in order, reversed, NaN first", "a type-parameter key reverses its witness", "a generic helper sorts exactly like the inlined call, NaN first"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("largest key first")) {
     const started = __bynkCaseNow();

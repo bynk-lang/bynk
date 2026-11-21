@@ -1,4 +1,4 @@
-commons demo
+context demo
 
 ---
 A sum type: a `Status` is exactly one of these shapes, and the variants that
@@ -18,5 +18,15 @@ fn describe(s: Status) -> String {
     Pending => "awaiting shipment"
     Shipped(tracking: t) => t
     Cancelled(reason: r) => r
+  }
+}
+
+---
+Run calls `service playground`, which describes one value of each variant.
+---
+service playground {
+  on call() -> Effect[List[String]] {
+    let all: List[Status] = [Pending, Shipped("1Z999"), Cancelled("out of stock")]
+    all.map((s) => describe(s))
   }
 }

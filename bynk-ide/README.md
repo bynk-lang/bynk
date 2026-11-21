@@ -67,14 +67,21 @@ playground's `bynk-wasm` module uses it too, for completion.
 bynk-ide = "0.639"
 ```
 
-```rust
+```rust,no_run
 use std::collections::HashMap;
+use std::path::Path;
 
-let single = bynk_ide::diagnose(source);                 // Vec<Diagnostic>
-let project = bynk_ide::diagnose_project(root, &HashMap::new());
-for file in &project.files {
-    // file.source_path, file.diagnostics, …
+// `no_run`: `diagnose_project` walks `root` on disk.
+fn report(source: &str, root: &Path) {
+    let single = bynk_ide::diagnose(source); // Vec<Diagnostic>
+    println!("{} diagnostics in the buffer", single.len());
+    let project = bynk_ide::diagnose_project(root, &HashMap::new());
+    for file in &project.files {
+        println!("{}: {} diagnostics", file.source_path.display(), file.diagnostics.len());
+    }
 }
+
+report("commons demo { type Id = Int }", Path::new("src"));
 ```
 
 Most users get these diagnostics through an editor (via

@@ -25,6 +25,13 @@
 //! shared pipeline needs it, and duplicating it into a second copy is exactly
 //! what this crate's extraction discipline exists to avoid.
 
+// The README's `rust` examples are compiled (and, unless marked `no_run`, run)
+// as doctests, so they cannot rot (#1645). `cfg(doctest)` keeps this item out of
+// every build and out of the docs.rs front page, which the `//!` docs above own.
+#[cfg(doctest)]
+#[doc = include_str!("../README.md")]
+struct ReadmeDoctests;
+
 pub mod actors;
 pub mod agent_state;
 pub mod analysis;

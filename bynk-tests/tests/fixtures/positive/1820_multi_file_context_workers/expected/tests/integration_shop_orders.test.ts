@@ -13,6 +13,7 @@ import * as __ns_shop_fees from "../workers/shop-fees/handlers.js";
 import worker___ns_shop_fees from "../workers/shop-fees/index.js";
 import * as __ns_shop_payment from "../workers/shop-payment/handlers.js";
 import worker___ns_shop_payment from "../workers/shop-payment/index.js";
+import * as __ns_shop_values from "./../shop/values.js";
 
 class ExpectationError extends Error {
   location: string;
@@ -82,6 +83,8 @@ async function test_a_call_crosses_every_file_of_the_context() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
+    const { Note } = __ns_shop_values;
+    type Note = __ns_shop_values.Note;
     const n = await __callService(deps.env.SHOP_ORDERS, "place", __ns_shop_orders.__serialise_Line(({ sku: "o1", qty: 2 } as unknown as __ns_shop_orders.Line)), (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j), "integration", "79c966765bfd2c72", deps.env, "shop.orders");
     if (!(n === 113)) { throw __bynkExpectFailure("tests/orders.bynk:4:12", 152, 160, "expect n == 113\n  expected: n == 113\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((113))); }
     return { pass: true };
@@ -110,7 +113,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a call crosses every file of the context"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a call crosses every file of the context")) {
     const started = __bynkCaseNow();

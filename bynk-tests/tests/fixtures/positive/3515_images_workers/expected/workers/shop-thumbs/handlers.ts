@@ -104,7 +104,11 @@ export const safe = {
 
 export const streams = {
   async http_POST_resize(body: globalThis.Uint8Array, deps: { Images: bynk_cloudflare.Images }): globalThis.Promise<HttpResult<void>> {
-    const r = await deps.Images.transformStream((async function* () { for (const __e of [body]) { yield __e; } })(), { width: Some(128), height: { tag: "None" as const }, fit: { tag: "None" as const }, rotate: { tag: "None" as const }, blur: { tag: "None" as const }, overlays: [] }, { format: ImageFormat.Avif, quality: { tag: "None" as const } });
+    const r = await deps.Images.transformStream((async function* () {
+      for (const __e of [body]) {
+        yield __e;
+      }
+    })(), { width: Some(128), height: { tag: "None" as const }, fit: { tag: "None" as const }, rotate: { tag: "None" as const }, blur: { tag: "None" as const }, overlays: [] }, { format: ImageFormat.Avif, quality: { tag: "None" as const } });
     if (r.tag === "Ok") {
       const img = r.value;
       return HttpResult.RawStreamed(img.body, img.contentType);

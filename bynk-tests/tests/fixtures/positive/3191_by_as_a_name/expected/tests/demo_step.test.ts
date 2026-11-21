@@ -147,7 +147,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["an agent operation takes a parameter named by", "a store field named by", "a function takes a parameter named by", "a binding and record shorthand named by", "a lambda parameter named by"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("an agent operation takes a parameter named by")) {
     const started = __bynkCaseNow();

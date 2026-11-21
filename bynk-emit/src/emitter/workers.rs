@@ -984,6 +984,7 @@ pub fn emit_worker_compose(
             )),
             optional: false,
             rest: false,
+            array_pattern: None,
         });
     }
 

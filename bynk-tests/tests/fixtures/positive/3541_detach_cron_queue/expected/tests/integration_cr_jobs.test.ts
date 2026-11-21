@@ -233,7 +233,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a detached Err in a cron handler is reported", "a detached fault in a cron handler is reported", "a detached Err in a queue consumer is reported"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a detached Err in a cron handler is reported")) {
     const started = __bynkCaseNow();

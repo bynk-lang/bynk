@@ -3,14 +3,15 @@
 //! for byte, then converted to nodes: each arm builds a node when its receiver and
 //! arguments are nodes and prints today's text otherwise (`node_or_text`).
 //!
-//! The arms that stay text are marked `// 1A:`: the one regex arm whose body is a statement
-//! block `bynk_ts` cannot yet express in an expression position. The identity kernels return
-//! their operand's node, so the printer brackets it (#3770).
+//! The identity kernels return their operand's node, so the printer brackets it (#3770).
+//! `splitRegex`'s body is a `while` over a sticky scan, built as nodes (1A.35a part B).
 
 use bynk_check::kernel_op::{BytesOp, DecimalOp, DurationOp, FloatOp, InstantOp, IntOp, StringOp};
 use bynk_ts::{TsArrowBody, TsBinaryOp, TsExpr, TsType};
 
-use super::super::lower::{Built, Lowered, LoweredExpr, Pre, node_or_text, paren, str_node};
+use super::super::lower::{
+    Built, Lowered, LoweredExpr, Pre, node_or_text, paren, str_node, text_if_forced,
+};
 use super::super::lower_ctx::LowerCtx;
 use super::super::lower_list::{arrow, call, id, member, param, spread, take, zero};
 use super::super::{Expr, ExprKind, rounding_mode};
@@ -480,6 +481,116 @@ fn regex_node(literal: &str, extra: &str, anchored: bool) -> TsExpr {
     }
 }
 
+/// The `splitRegex` function (1A.35a part B): `(__s: string, __r: RegExp): readonly string[] =>
+/// { … }`, a sticky scan of `__s` for `__r` with a `while`. It is called with the receiver and
+/// the sticky regex, so its body is built once for every literal.
+fn split_regex_arrow() -> TsExpr {
+    use bynk_ts::{TsBindingName, TsLit, TsStmt};
+    let num = |n: &str| TsExpr::Lit(TsLit::Num(n.to_string()));
+    let bin = |op, l: TsExpr, r: TsExpr| TsExpr::Binary {
+        op,
+        left: Box::new(l),
+        right: Box::new(r),
+    };
+    let let_num = |name: &str, init: TsExpr| {
+        TsStmt::let_stmt(
+            TsBindingName::Ident(name.to_string()),
+            None,
+            Some(init),
+            None,
+        )
+    };
+    let const_of = |name: &str, ty: Option<TsType>, init: TsExpr| {
+        TsStmt::const_stmt(TsBindingName::Ident(name.to_string()), ty, init, None)
+    };
+    let assign = |target: TsExpr, value: TsExpr| TsStmt::assign(target, value, None);
+    let exec = || call(member(id("__r"), "exec"), vec![id("__s")]);
+    let last_index = || member(id("__r"), "lastIndex");
+    let slice_to = |from: &str, to: Option<&str>| {
+        let mut args = vec![id(from)];
+        args.extend(to.map(id));
+        call(member(id("__s"), "slice"), args)
+    };
+    // An empty input has no characters to scan: no match gives `[""]`, a match gives `[]`.
+    let empty = TsStmt::if_stmt(
+        bin(TsBinaryOp::StrictEq, member(id("__s"), "length"), num("0")),
+        TsStmt::block(
+            vec![TsStmt::return_stmt(
+                Some(TsExpr::Conditional {
+                    test: Box::new(bin(TsBinaryOp::StrictEq, exec(), TsExpr::Lit(TsLit::Null))),
+                    consequent: Box::new(TsExpr::array(vec![str_node("")])),
+                    alternate: Box::new(TsExpr::array(vec![])),
+                }),
+                None,
+            )],
+            None,
+        ),
+        None,
+    );
+    // A miss, or an empty match at the last split point, advances one code unit; a hit cuts.
+    let advance = TsStmt::if_else_stmt(
+        bin(
+            TsBinaryOp::Or,
+            bin(TsBinaryOp::StrictEq, id("__hit"), TsExpr::Lit(TsLit::Null)),
+            bin(TsBinaryOp::StrictEq, id("__e"), id("__p")),
+        ),
+        TsStmt::block(vec![TsStmt::increment(id("__q"), None)], None),
+        TsStmt::block(
+            vec![
+                TsStmt::expr_stmt(
+                    call(
+                        member(id("__out"), "push"),
+                        vec![slice_to("__p", Some("__q"))],
+                    ),
+                    None,
+                ),
+                assign(id("__p"), id("__e")),
+                assign(id("__q"), id("__p")),
+            ],
+            None,
+        ),
+        None,
+    );
+    let scan = TsStmt::while_stmt(
+        bin(TsBinaryOp::LessThan, id("__q"), member(id("__s"), "length")),
+        TsStmt::block(
+            vec![
+                assign(last_index(), id("__q")),
+                const_of("__hit", None, exec()),
+                const_of("__e", None, last_index()),
+                advance,
+            ],
+            None,
+        ),
+        None,
+    );
+    TsExpr::Arrow {
+        params: vec![
+            param("__s", Some(ts_named("string"))),
+            param("__r", Some(ts_named("globalThis.RegExp"))),
+        ],
+        is_async: false,
+        generics: Vec::new(),
+        return_type: Some(TsType::readonly_array(ts_named("string"))),
+        body: Box::new(TsArrowBody::Multiline(vec![
+            empty,
+            const_of(
+                "__out",
+                Some(TsType::array(ts_named("string"))),
+                TsExpr::array(vec![]),
+            ),
+            let_num("__p", num("0")),
+            let_num("__q", num("0")),
+            scan,
+            TsStmt::expr_stmt(
+                call(member(id("__out"), "push"), vec![slice_to("__p", None)]),
+                None,
+            ),
+            TsStmt::return_stmt(Some(id("__out")), None),
+        ])),
+    }
+}
+
 fn ts_named(name: &str) -> TsType {
     TsType::named(name)
 }
@@ -638,24 +749,30 @@ fn regex_arm(op: StringOp, literal: &str, kids: Vec<LoweredExpr>) -> Option<Buil
         // JS `split` with a regex, minus the captured groups it splices in:
         // its own algorithm over a sticky scan, an empty match at the last
         // split point advancing by one code unit.
-        //
-        // 1A: the body is a statement block (a `while` over a sticky scan), which `bynk_ts`
-        // cannot print inline in the one-line layout this arm has today; it stays text.
-        StringOp::SplitRegex => Err(format!(
-            "((__s: string, __r: globalThis.RegExp): readonly string[] => {{ \
-             if (__s.length === 0) {{ return __r.exec(__s) === null ? [\"\"] : []; }} \
-             const __out: string[] = []; let __p = 0; let __q = 0; \
-             while (__q < __s.length) {{ __r.lastIndex = __q; const __hit = __r.exec(__s); \
-             const __e = __r.lastIndex; \
-             if (__hit === null || __e === __p) {{ __q++; }} \
-             else {{ __out.push(__s.slice(__p, __q)); __p = __e; __q = __p; }} }} \
-             __out.push(__s.slice(__p)); return __out; }})({}, {})",
-            kids.into_iter()
-                .next()
-                .map(LoweredExpr::into_text)
-                .unwrap_or_default(),
-            regex_construction(literal, "y", false)
-        )),
+        StringOp::SplitRegex => node_or_text(
+            text_if_forced("splitRegex", kids),
+            |n| {
+                let [recv] = take::<1, _>(n);
+                call(
+                    split_regex_arrow(),
+                    vec![recv, regex_node(literal, "y", false)],
+                )
+            },
+            |t| {
+                format!(
+                    "((__s: string, __r: globalThis.RegExp): readonly string[] => {{ \
+                     if (__s.length === 0) {{ return __r.exec(__s) === null ? [\"\"] : []; }} \
+                     const __out: string[] = []; let __p = 0; let __q = 0; \
+                     while (__q < __s.length) {{ __r.lastIndex = __q; const __hit = __r.exec(__s); \
+                     const __e = __r.lastIndex; \
+                     if (__hit === null || __e === __p) {{ __q++; }} \
+                     else {{ __out.push(__s.slice(__p, __q)); __p = __e; __q = __p; }} }} \
+                     __out.push(__s.slice(__p)); return __out; }})({}, {})",
+                    t[0],
+                    regex_construction(literal, "y", false)
+                )
+            },
+        ),
         _ => return None,
     })
 }
@@ -1309,7 +1426,9 @@ mod tests {
     /// today's text byte for byte, with the text form's own bracketing.
     #[test]
     fn a_text_operand_falls_back_to_todays_text() {
-        // `String.splitRegex`'s arm is a statement block, so a `List` kernel over it is text.
+        // `String.splitRegex` forced to text (see `force_text`), so a `List` kernel over it is
+        // text.
+        let _text = crate::emitter::lower::force_text::arm("splitRegex");
         let text_of = |ty: &str, y: &str| {
             let (n, ts) = exits(
                 &format!("p: String, c: {ty}"),
@@ -1430,15 +1549,33 @@ mod tests {
         }
     }
 
-    /// `splitRegex` keeps its text (marked `// 1A:`): its body is a statement block.
+    /// `splitRegex` is nodes (1A.35a part B): the sticky scan is a `while` in the arrow's block
+    /// body, called with the receiver and the sticky regex. Every token of the one-line text it
+    /// replaced is still there, in the same order.
     #[test]
-    fn split_regex_stays_text() {
+    fn split_regex_is_a_while_over_a_sticky_scan() {
         let (n, ts) = exits("s: String", "List[String] { s.splitRegex(\",\") }");
-        assert!(n > 0, "{ts}");
-        assert!(
-            returned(&ts).ends_with("(s, new globalThis.RegExp(\",\", \"y\"))"),
+        assert_eq!(n, 0, "{ts}");
+        let at = ts.find("return ((__s: string").expect("the arrow") + "return ".len();
+        let end = ts[at..].find("})(s, ").expect("the call") + at;
+        let squashed: String = ts[at..end].split_whitespace().collect::<Vec<_>>().join(" ");
+        assert_eq!(
+            squashed,
+            "((__s: string, __r: globalThis.RegExp): readonly string[] => { \
+             if (__s.length === 0) { return __r.exec(__s) === null ? [\"\"] : []; } \
+             const __out: string[] = []; let __p = 0; let __q = 0; \
+             while (__q < __s.length) { __r.lastIndex = __q; const __hit = __r.exec(__s); \
+             const __e = __r.lastIndex; \
+             if (__hit === null || __e === __p) { __q++; } \
+             else { __out.push(__s.slice(__p, __q)); __p = __e; __q = __p; } } \
+             __out.push(__s.slice(__p)); return __out;",
             "{ts}"
         );
+        assert!(
+            ts[end..].starts_with("})(s, new globalThis.RegExp(\",\", \"y\"))"),
+            "{ts}"
+        );
+        assert!(ts.contains("\n    while (__q < __s.length) {\n"), "{ts}");
     }
 
     /// Decision B's escaper check: the `Str` node the regex arm builds prints the very bytes the

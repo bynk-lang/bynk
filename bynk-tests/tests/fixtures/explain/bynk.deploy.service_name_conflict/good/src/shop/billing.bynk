@@ -1,0 +1,7 @@
+context shop.billing
+
+service invoice {
+  on call(n: Int) -> Effect[Int] {
+    Effect.pure(n + 1)
+  }
+}

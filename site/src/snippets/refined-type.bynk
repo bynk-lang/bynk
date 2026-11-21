@@ -1,4 +1,4 @@
-commons demo
+context demo
 
 ---
 Who we are greeting — non-empty, at most 40 characters.
@@ -10,4 +10,17 @@ type Subject = String where NonEmpty && MaxLength(40)
 
 fn greeting(subject: Subject) -> String {
   "Hello, \(subject)!"
+}
+
+---
+Run calls `service playground`. `Subject.of` checks each raw string, and only the
+one that passes reaches `greeting`.
+---
+service playground {
+  on call() -> Effect[List[String]] {
+    ["World", ""].map((raw) => match Subject.of(raw) {
+      Ok(subject) => greeting(subject)
+      Err(e) => "\(e.field): \(e.message)"
+    })
+  }
 }

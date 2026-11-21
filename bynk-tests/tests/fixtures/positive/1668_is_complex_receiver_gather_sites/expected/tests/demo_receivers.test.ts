@@ -171,7 +171,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a negated || binds both tests in its else-branch", "a negated || of three binds all three", "a right-nested || binds all three", "a plain && and implies bind the right operand", "a lambda's temp stays in the lambda", "the other gather sites still read their temps"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a negated || binds both tests in its else-branch")) {
     const started = __bynkCaseNow();
