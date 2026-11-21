@@ -1,0 +1,4 @@
+# The second and the third `on call` (lines 10 and 14), never the first (line 6).
+# exact
+bynk.service.duplicate_call_handler	demo.bynk:10:3
+bynk.service.duplicate_call_handler	demo.bynk:14:3

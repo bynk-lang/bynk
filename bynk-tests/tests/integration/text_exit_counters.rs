@@ -39,15 +39,31 @@ fn queue_service(body: &str) -> String {
     )
 }
 
-/// The counter is live on this path: an expression that stays text (a string
-/// `contains`, a method-call family) is counted. Without this, the `==` below could pass
-/// because nothing is counted at all.
+/// Nothing in lowering builds text any more (1A.35a part C), so a value that reaches lowering as
+/// text is a compiler fault, reported as a `bynk.internal.missing_checker_fact` diagnostic and
+/// never emitted. Only the text-fallback hook can make one; this pins that the report reaches the
+/// driver's caller.
 #[test]
-fn the_counter_counts_on_the_driver_path() {
+fn a_value_that_reaches_lowering_as_text_is_a_reported_fault() {
     let _text = text_counters::force_text("splitRegex");
     let src = "context ops.jobs\n\nservice inbox from queue(\"jobs\") {\n\ton message(n: Int) -> Effect[QueueResult] {\n\t\tlet ok = \"a\".splitRegex(\",\").length() > 0\n\t\tAck\n\t}\n}\n";
-    let (exits, _, text) = workers_counts(src);
-    assert!(exits > 0, "no text exit counted:\n{text}");
+    let failure = match bynk_driver::project::compile_files_in_memory(
+        &[("ops/jobs.bynk", src)],
+        BuildTarget::Workers,
+        Default::default(),
+        true,
+    ) {
+        Ok(_) => panic!("a text value is a fault, not an emission"),
+        Err(failure) => failure,
+    };
+    assert!(
+        failure
+            .flatten()
+            .iter()
+            .any(|e| e.category == "bynk.internal.missing_checker_fact"
+                && e.message.contains("reached lowering as text")),
+        "the fault is reported"
+    );
 }
 
 /// `Retry("x")` instead of `Ack` adds no text exit and prints as the

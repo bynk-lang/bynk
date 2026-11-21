@@ -90,6 +90,7 @@ pub(crate) fn build_facts(
     manifest: &ContractsManifest,
     lock: &DeployLock,
     agent_versions: &BTreeMap<String, i64>,
+    layout: &bynk_project::worker_layout::WorkerLayout,
 ) -> Facts {
     let mut ids = BTreeMap::new();
     for binding in kv_bindings(declared) {
@@ -123,7 +124,7 @@ pub(crate) fn build_facts(
             .collect(),
         agents: agent_versions
             .iter()
-            .filter(|(class, _)| crate::migrate::worker_of(class) == worker)
+            .filter(|(class, _)| crate::migrate::worker_of(layout, class) == worker)
             .map(|(c, v)| (c.clone(), *v))
             .collect(),
         layout: (bynk_emit::STORAGE_LAYOUT > 1).then_some(bynk_emit::STORAGE_LAYOUT),
@@ -246,10 +247,41 @@ mod tests {
             &ContractsManifest::default(),
             &lock,
             &versions,
+            &bynk_project::worker_layout::WorkerLayout::identity(),
         );
         assert_eq!(f.ids.get("KV").map(String::as_str), Some("kv-1"));
         assert_eq!(f.migrations["D1_ORDERS"], ["0001_init.sql"]);
         assert_eq!(f.agents, BTreeMap::from([("shop.Cart".to_string(), 3)]));
         assert_eq!(f.classes, ["Cart"]);
+    }
+
+    /// #3686: a group's Worker carries its members' agent versions, which the
+    /// ledger and `bynk migrate` key by the group's directory.
+    #[test]
+    fn a_group_workers_facts_carry_its_members_agent_versions() {
+        let groups = bynk_project::worker_groups::WorkerGroups::from([(
+            "store".to_string(),
+            bynk_project::worker_groups::WorkerGroup {
+                contexts: vec!["shop.cart".to_string()],
+                ..Default::default()
+            },
+        )]);
+        let versions = BTreeMap::from([
+            ("shop.cart.Cart".to_string(), 3),
+            ("other.Thing".to_string(), 9),
+        ]);
+        let f = build_facts(
+            "store",
+            "default",
+            &Resources::default(),
+            &ContractsManifest::default(),
+            &DeployLock::default(),
+            &versions,
+            &bynk_project::worker_layout::WorkerLayout::from_groups(&groups),
+        );
+        assert_eq!(
+            f.agents,
+            BTreeMap::from([("shop.cart.Cart".to_string(), 3)])
+        );
     }
 }

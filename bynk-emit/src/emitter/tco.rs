@@ -345,7 +345,6 @@ pub(super) fn emit_continue(body: &mut Body, e: &Expr, cx: &mut LowerCtx) -> boo
     };
     let mut pre = Pre::new();
     let vals: Vec<LoweredExpr> = args.iter().map(|a| pre.lower_node(a, cx)).collect();
-    let pre_nodes = pre.all_nodes();
     body.extend(pre.items());
     // Every slot is assigned, even where the argument looks like the parameter's
     // own name: a binder in the body can share a parameter's name, and the
@@ -354,13 +353,13 @@ pub(super) fn emit_continue(body: &mut Body, e: &Expr, cx: &mut LowerCtx) -> boo
     // `f(b, a)` swaps and `f(n - 1, acc + n)` reads the old `n`.
     let temps: Vec<String> = vals.iter().map(|_| cx.fresh()).collect();
     for (v, t) in vals.into_iter().zip(&temps) {
-        body.push(const_item(pre_nodes, t, None, v, false));
+        body.push(const_item(t, None, v, false, cx.fault_site(e.span)));
     }
     for (s, t) in plan.slots.iter().zip(&temps) {
         body.push(assign_item(
-            true,
             bynk_ts::TsExpr::Ident(s.var.clone()),
             LoweredExpr::Node(bynk_ts::TsExpr::Ident(t.clone())),
+            cx.fault_site(e.span),
         ));
     }
     body.push(Item::Node(Box::new(bynk_ts::TsStmt::continue_label_stmt(

@@ -61,6 +61,31 @@ pub(crate) fn wrangler_outcome(
     }
 }
 
+/// #3073: the `--var` that sets the facts this version carries about itself,
+/// for `bynk revert`.
+fn facts_args(
+    project_root: &Path,
+    worker_dir: &Path,
+    worker: &str,
+    environment: &str,
+    declared: &Resources,
+    lock: &DeployLock,
+) -> Vec<String> {
+    facts::var_args(&facts::build_facts(
+        worker,
+        environment,
+        declared,
+        &read_contracts_manifest(worker_dir).unwrap_or_default(),
+        lock,
+        &schema_agent_versions(project_root),
+        // #3686: a group's Worker carries its members' agent versions.
+        &bynk_project::worker_layout::WorkerLayout::for_project(
+            project_root,
+            &std::collections::HashMap::new(),
+        ),
+    ))
+}
+
 /// Provision and push exactly one context. Slice 0's body, lifted so the
 /// multi-context loop and `--context` share one path.
 ///
@@ -360,15 +385,14 @@ pub(crate) fn deploy_one(
         environment,
     )?;
     let deployed = deployed_worker_name(environment, worker);
-    // #3073: the facts this version carries about itself, for `bynk revert`.
-    let facts_args = facts::var_args(&facts::build_facts(
+    let facts_args = facts_args(
+        project_root,
+        &worker_dir,
         worker,
         environment,
         declared,
-        &read_contracts_manifest(&worker_dir).unwrap_or_default(),
         lock,
-        &schema_agent_versions(project_root),
-    ));
+    );
     let wrangler_args: Vec<String> = wrangler_args.iter().cloned().chain(facts_args).collect();
     let wrangler_args = wrangler_args.as_slice();
     if !first_deploy {

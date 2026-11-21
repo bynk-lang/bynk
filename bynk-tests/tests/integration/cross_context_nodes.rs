@@ -82,27 +82,6 @@ fn assert_line(text: &str, line: &str) {
     assert_block(text, &[line]);
 }
 
-const PAYMENT_BOOL: &str = "context commerce.payment
-
-service authorise {
-  on call(ok: Bool) -> Effect[Result[Int, Int]] {
-    Ok(1)
-  }
-}
-";
-
-const ORDERS_TEXT_ARG: &str = "context commerce.orders
-
-consumes commerce.payment
-
-service placeOrder {
-  on call(total: Int) -> Effect[Result[Int, Int]] {
-    let _ <- commerce.payment.authorise(\"a\".splitRegex(\",\").length() > 0)
-    Ok(total)
-  }
-}
-";
-
 /// A bundle call with no argument, one argument and one cast argument: a node, with no text exit.
 #[test]
 fn a_bundle_call_is_a_node_with_zero_one_and_a_cast_argument() {
@@ -278,32 +257,5 @@ fn a_traced_and_an_untraced_call_are_both_nodes() {
             );
             assert!(!ts.contains("__traceStep"));
         }
-    }
-}
-
-/// An argument that is still text keeps its text, byte for byte, in the cast and the call, on
-/// both targets.
-#[test]
-fn a_text_argument_falls_back_byte_for_byte() {
-    let _text = text_counters::force_text("splitRegex");
-    for (fixture, call) in [
-        (
-            "97_simple_cross_context_call",
-            "await deps.surface.payment.authorise((((__s: string, __r: globalThis.RegExp): readonly string[] => { if (__s.length === 0) { return __r.exec(__s) === null ? [\"\"] : []; } const __out: string[] = []; let __p = 0; let __q = 0; while (__q < __s.length) { __r.lastIndex = __q; const __hit = __r.exec(__s); const __e = __r.lastIndex; if (__hit === null || __e === __p) { __q++; } else { __out.push(__s.slice(__p, __q)); __p = __e; __q = __p; } } __out.push(__s.slice(__p)); return __out; })(\"a\", new globalThis.RegExp(\",\", \"y\"))).length > 0)",
-        ),
-        (
-            "118_workers_target_with_consume",
-            "__callService(deps.env.COMMERCE_PAYMENT, \"authorise\", ",
-        ),
-    ] {
-        let (exits, ts) = emit(
-            fixture,
-            &[
-                ("src/commerce/payment.bynk", PAYMENT_BOOL),
-                ("src/commerce/orders.bynk", ORDERS_TEXT_ARG),
-            ],
-        );
-        assert!(ts.contains(call), "{fixture}: {ts}");
-        assert!(exits > 0, "{fixture}: the text argument is a text exit");
     }
 }

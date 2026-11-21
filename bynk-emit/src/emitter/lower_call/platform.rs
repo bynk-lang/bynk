@@ -388,10 +388,10 @@ pub(in crate::emitter) fn lower_d1_select_call(
     };
     // The decoder is a node, except a `Form.decode`'s (`workers_entry` source text).
     // A checked row type has a JSON decoder; one that has none is a missing fact (1A.34).
-    let decoder =
-        LoweredExpr::from(json_decoder_fn(target, source, cx).unwrap_or_else(|| {
-            Ok(cx.missing_fact(e.span, "JSON decoder for a `select` row type"))
-        }));
+    let decoder = LoweredExpr::Node(
+        json_decoder_fn(target, source, cx)
+            .unwrap_or_else(|| cx.missing_fact(e.span, "JSON decoder for a `select` row type")),
+    );
     let params = pre.lower_node(params, cx);
     let in_test = cx.in_test_case() || cap.starts_with(bynk_check::checker::peek::LOCAL_PREFIX);
     let (deps_node, deps_text) = deps_receiver(in_test, cx);

@@ -8,12 +8,10 @@ use bynk_check::checker::{Callee, Ty};
 use bynk_check::kernel_op::{FormStatic, JsonStatic, StaticOp, YamlStatic};
 use bynk_ts::{
     TsArrowBody, TsBinaryOp, TsBindingName, TsExpr, TsLit, TsParam, TsStmt, TsType, TsTypeMember,
-    TsUnaryOp,
+    TsUnaryOp, VerbatimOrigin,
 };
 
-use super::super::lower::{
-    Built, LoweredExpr, Pre, ident_node, member_node, node_or_text, str_node, text_value,
-};
+use super::super::lower::{Built, Pre, ident_node, member_node, str_node};
 use super::super::lower_ctx::LowerCtx;
 use super::super::ts_types::ts_ty_to_ts_type;
 use super::super::{BaseType, Expr, TypeBody, TypeRef, ty_to_type_ref};
@@ -64,8 +62,8 @@ pub(in super::super) fn lower_json_codec_call(
             if let Some(Ty::Result(t, _)) = cx.commons().expr_ty(e.id).as_deref().cloned()
                 && let Some(decoder) = json_decoder_fn(t, DecodeSource::Yaml, cx)
             {
-                let arg = pre.lower_node(&args[0], cx);
-                return Some(apply_decoder(decoder, arg));
+                let arg = pre.lower_ts(&args[0], cx);
+                return Some(Ok(apply_decoder(decoder, arg)));
             }
         }
         // #3276 (decision G): `Form.decode[T](text)` reads the text as the router reads
@@ -74,12 +72,14 @@ pub(in super::super) fn lower_json_codec_call(
             if let Some(Ty::Result(t, _)) = cx.commons().expr_ty(e.id).as_deref().cloned()
                 && let Some(decoder) = json_decoder_fn(t, DecodeSource::Form, cx)
             {
-                let arg = pre.lower_node(&args[0], cx);
-                return Some(apply_decoder(decoder, arg));
+                let arg = pre.lower_ts(&args[0], cx);
+                return Some(Ok(apply_decoder(decoder, arg)));
             }
         }
         // `Form.encode(v)` writes the form text such a route reads.
-        StaticOp::Form(FormStatic::Encode) => return Some(lower_form_encode(&args[0], cx, pre)),
+        StaticOp::Form(FormStatic::Encode) => {
+            return Some(Ok(lower_form_encode(&args[0], cx, pre)));
+        }
         StaticOp::Json(JsonStatic::Encode | JsonStatic::EncodePlain) => {
             if let Some(encoded) = json_encode(
                 pre,
@@ -87,7 +87,7 @@ pub(in super::super) fn lower_json_codec_call(
                 cx,
                 op == StaticOp::Json(JsonStatic::EncodePlain),
             ) {
-                return Some(encoded);
+                return Some(Ok(encoded));
             }
         }
         StaticOp::Json(JsonStatic::Decode | JsonStatic::DecodeSql) => {
@@ -102,8 +102,8 @@ pub(in super::super) fn lower_json_codec_call(
                     cx,
                 )
             {
-                let arg = pre.lower_node(&args[0], cx);
-                return Some(apply_decoder(decoder, arg));
+                let arg = pre.lower_ts(&args[0], cx);
+                return Some(Ok(apply_decoder(decoder, arg)));
             }
         }
         StaticOp::List(_)
@@ -129,14 +129,13 @@ pub(in super::super) fn lower_json_codec_call(
 }
 
 /// `Form.encode(v)`: the form text a `@form` route reads.
-fn lower_form_encode(arg: &Expr, cx: &mut LowerCtx, pre: &mut Pre) -> Built {
+fn lower_form_encode(arg: &Expr, cx: &mut LowerCtx, pre: &mut Pre) -> TsExpr {
     cx.runtime_use().note_form_codec();
     // The checker admits only a concrete record of form fields, so the wire
     // value is always available; a miss is a compiler fault, not a user error
     // (1A.34: a missing checker fact, reported at the argument).
-    let wire = form_encode_wire(pre, arg, cx).unwrap_or_else(|| {
-        Ok(cx.missing_fact(arg.span, "wire value for a `Form.encode` argument"))
-    });
+    let wire = form_encode_wire(pre, arg, cx)
+        .unwrap_or_else(|| cx.missing_fact(arg.span, "wire value for a `Form.encode` argument"));
     // #3343: a field renamed by `@name` is written under its wire key.
     let table = cx
         .commons()
@@ -147,18 +146,10 @@ fn lower_form_encode(arg: &Expr, cx: &mut LowerCtx, pre: &mut Pre) -> Built {
         .and_then(|tref| {
             super::super::workers_entry::renamed_specs_source(&tref, &cx.commons().types)
         })
-        .map(|t| format!(", {t}"));
-    // 1A: field-spec table is workers_entry source text
-    match table {
-        None => match wire {
-            Ok(wire) => Ok(call(ident_node("__formString"), vec![wire])),
-            Err(text) => Err(format!("__formString({text})")),
-        },
-        Some(table) => Err(format!(
-            "__formString({}{table})",
-            LoweredExpr::from(wire).into_text()
-        )),
-    }
+        .map(form_field_specs);
+    let mut args = vec![wire];
+    args.extend(table);
+    call(ident_node("__formString"), args)
 }
 
 /// Which text front end feeds a typed decode.
@@ -265,33 +256,21 @@ fn if_err(test: TsExpr, value: TsExpr) -> TsStmt {
     TsStmt::if_stmt(test, return_err(value), None)
 }
 
-/// Apply a decoder to the text it reads: `(decoder)(arg)`. A decoder that stayed text (a
-/// `Form.decode`, whose field table is text) gives text, and so does a text argument.
-fn apply_decoder(decoder: Built, arg: LoweredExpr) -> Built {
-    match decoder {
-        Ok(node) => {
-            let printed = bynk_ts::print_expr(&node);
-            node_or_text(
-                vec![arg],
-                |c| call(TsExpr::Paren(Box::new(node)), c),
-                |c| format!("({printed})({})", c.join(", ")),
-            )
-        }
-        Err(text) => Err(format!("({text})({})", arg.into_text())),
-    }
+/// Apply a decoder to the text it reads: `(decoder)(arg)`.
+fn apply_decoder(decoder: TsExpr, arg: TsExpr) -> TsExpr {
+    call(TsExpr::Paren(Box::new(decoder)), vec![arg])
 }
 
 /// The typed decode arrow:
 /// `((__s: string): Result<T, DecodeError> => { … })`, for `Json.decode` /
 /// `Json.decodeSql` / `Yaml.decode` (`source`) and for the typed `D1` reads
-/// (#2865), which apply it to the rows `all`/`first` return. A node, except for a
-/// `Form.decode`, whose field-spec table is `workers_entry` source text, so its
-/// decoder stays text (`Err`). `None` when `t` has no TS rendering.
+/// (#2865), which apply it to the rows `all`/`first` return. `None` when `t` has no TS
+/// rendering. A `Form.decode`'s field-spec table is the one carrier ([`form_field_specs`]).
 pub(in super::super) fn json_decoder_fn(
     t: bynk_check::checker::TyId,
     source: DecodeSource,
     cx: &mut LowerCtx,
-) -> Option<Built> {
+) -> Option<TsExpr> {
     let sql = source == DecodeSource::Sql;
     let tys = cx.ty_render();
     let rigid = super::super::codec::has_var(t, cx.commons());
@@ -341,8 +320,7 @@ pub(in super::super) fn json_decoder_fn(
     let parse = if source == DecodeSource::Form {
         cx.runtime_use().note_form_codec();
         let specs = form_specs_literal(t, cx)?;
-        // 1A: field-spec table is workers_entry source text
-        return Some(Err(form_decoder_text(&ts, &specs, &des)));
+        form_parse_step(specs)
     } else if source == DecodeSource::Yaml {
         cx.runtime_use().note_yaml();
         yaml_parse_step()
@@ -353,13 +331,13 @@ pub(in super::super) fn json_decoder_fn(
     body.extend(row_pass);
     body.push(const_("__r", None, des));
     body.extend(decode_tail(&ts));
-    Some(Ok(TsExpr::Arrow {
+    Some(TsExpr::Arrow {
         params: vec![param("__s", TsType::named("string"))],
         is_async: false,
         generics: Vec::new(),
         return_type: Some(decoder_result_ty(&ts)),
         body: Box::new(TsArrowBody::Multiline(body)),
-    }))
+    })
 }
 
 /// `Result<T, DecodeError>`.
@@ -425,6 +403,14 @@ fn yaml_parse_step() -> Vec<TsStmt> {
     parsed_result_step(call(ident_node("__bynkYamlParse"), vec![ident_node("__s")]))
 }
 
+/// #3276: `Form.decode`'s parse step: `__formDecode(__s, <field table>)`.
+fn form_parse_step(specs: TsExpr) -> Vec<TsStmt> {
+    parsed_result_step(call(
+        ident_node("__formDecode"),
+        vec![ident_node("__s"), specs],
+    ))
+}
+
 /// What the decoder does with the codec's result: read `Ok`, else map the `BoundaryError` to the
 /// uniform `kind`/`path`/`message` record (ADR 0047).
 fn decode_tail(ts: &TsType) -> Vec<TsStmt> {
@@ -483,29 +469,10 @@ fn decode_tail(ts: &TsType) -> Vec<TsStmt> {
     ]
 }
 
-/// A `Form.decode`'s decoder, as text: its field-spec table is `workers_entry` source text, which
-/// no node can hold (1A: field-spec table is workers_entry source text).
-fn form_decoder_text(ts: &TsType, specs: &str, des: &TsExpr) -> String {
-    let ts = bynk_ts::print_type(ts);
-    let des = bynk_ts::print_expr(des);
-    format!(
-        "(__s: string): Result<{ts}, DecodeError> => {{ \
-         const __p = __formDecode(__s, {specs}); \
-         if (__p.tag === \"Err\") return Err(__p.error); \
-         const __j: __JsonValue = __p.value; \
-         const __r = {des}; \
-         if (__r.tag === \"Ok\") return Ok(__r.value as {ts}); \
-         const __be = __r.error; \
-         return Err({{ kind: __be.kind, \
-         path: (__be.kind === \"StructuralMismatch\" || __be.kind === \"RefinementViolation\") ? __be.path : \"$\", \
-         message: __be.kind === \"StructuralMismatch\" ? `expected ${{__be.expected}}, got ${{String(__be.actual)}}` : __be.kind === \"RefinementViolation\" ? __be.violation.message : __be.details }}); }}"
-    )
-}
-
 /// #3276: the field table `Form.decode[T]` hands the form reader, as the TS array
 /// literal of `{ name, kind, list, option }` the router's `@form` path builds. `None`
 /// when `t` is not a record of the module's types.
-fn form_specs_literal(t: bynk_check::checker::TyId, cx: &LowerCtx) -> Option<String> {
+fn form_specs_literal(t: bynk_check::checker::TyId, cx: &LowerCtx) -> Option<TsExpr> {
     let tys = cx.ty_render();
     let Ty::Named { name, .. } = &*tys.get(t) else {
         return None;
@@ -519,44 +486,39 @@ fn form_specs_literal(t: bynk_check::checker::TyId, cx: &LowerCtx) -> Option<Str
         .iter()
         .map(super::super::workers_entry::field_spec_source)
         .collect();
-    Some(format!("[{}]", items.join(", ")))
+    Some(form_field_specs(format!("[{}]", items.join(", "))))
+}
+
+/// The field-spec table of `Form.decode` and `Form.encode` as one expression leaf (1A.35a part C,
+/// #3736 Decision E). `workers_entry::field_spec_source` returns the router's own spelling of the
+/// table as TypeScript source text and shares it with the entry point, so it is foreign text by
+/// reason: a [`VerbatimOrigin::FormFieldSpecs`] carrier, built here and nowhere else.
+fn form_field_specs(source: String) -> TsExpr {
+    TsExpr::VerbatimExpr(source, VerbatimOrigin::FormFieldSpecs)
 }
 
 /// #3276: the wire value `Form.encode(arg)` writes flat: `arg` serialised exactly as
 /// `Json.encode` serialises it, before the JSON text step. `None` only for a type
 /// the lowering cannot render, which the checker has already refused for `Form`.
-fn form_encode_wire(pre: &mut Pre, arg: &Expr, cx: &mut LowerCtx) -> Option<Built> {
+fn form_encode_wire(pre: &mut Pre, arg: &Expr, cx: &mut LowerCtx) -> Option<TsExpr> {
     let tys = cx.ty_render();
     let arg_ty = cx.commons().expr_types.get(&arg.id).map(|te| te.ty)?;
     let tref = ty_to_type_ref(arg_ty, tys.types())?;
     if cx.records_codec_roots() {
         cx.runtime_use().note_json_codec_root(arg_ty);
     }
-    let v = pre.lower_node(arg, cx);
-    Some(serialise_value(&tref, v, cx))
+    let v = pre.lower_ts(arg, cx);
+    Some(serialise_value(&tref, &v, cx))
 }
 
-/// `value` serialised under `tref`: a node over a node value. A value that is still text keeps
-/// the serialiser's text, built over it (1A: serialiser value is text).
-fn serialise_value(tref: &TypeRef, value: LoweredExpr, cx: &LowerCtx) -> Built {
-    match value {
-        LoweredExpr::Node(node) => Ok(super::super::serialisation::serialise_expr(
-            tref,
-            &node,
-            cx.runtime_use(),
-        )),
-        LoweredExpr::Text(text) => Err(bynk_ts::print_expr(
-            &super::super::serialisation::serialise_expr(tref, &text_value(text), cx.runtime_use()),
-        )),
-    }
+/// `value` serialised under `tref`.
+fn serialise_value(tref: &TypeRef, value: &TsExpr, cx: &LowerCtx) -> TsExpr {
+    super::super::serialisation::serialise_expr(tref, value, cx.runtime_use())
 }
 
-/// `globalThis.JSON.stringify(<value>)`: a node over a node, else its text.
-fn json_stringify(value: Built) -> Built {
-    match value {
-        Ok(node) => Ok(call(member(global("JSON"), "stringify"), vec![node])),
-        Err(text) => Err(format!("globalThis.JSON.stringify({text})")),
-    }
+/// `globalThis.JSON.stringify(<value>)`.
+fn json_stringify(value: TsExpr) -> TsExpr {
+    call(member(global("JSON"), "stringify"), vec![value])
 }
 
 /// A literal printed exactly as given: one of the fixed pieces of the `bynk eval` line.
@@ -604,16 +566,6 @@ pub(in super::super) fn eval_value_line(
     // value's type needs a closure of codecs of its own.
     cx.runtime_use().note_json_codec();
     cx.runtime_use().note_boundary_codec();
-    let json = match json {
-        Ok(node) => node,
-        // 1A: the value is text, so the line is too.
-        Err(text) => {
-            let head = bynk_ts::print_expr(&head);
-            return Some(format!(
-                "globalThis.console.log({head} + ',\"value\":' + {text} + '}}');"
-            ));
-        }
-    };
     Some(log(add(
         add(add(head, raw("',\"value\":'")), json),
         raw("'}'"),
@@ -630,7 +582,7 @@ pub(in super::super) fn json_encode(
     arg: &Expr,
     cx: &mut LowerCtx,
     plain: bool,
-) -> Option<Built> {
+) -> Option<TsExpr> {
     let tys = cx.ty_render();
     // Constrained generics slice 3: a value whose type mentions a type
     // parameter encodes through the codec witness of that type.
@@ -640,14 +592,9 @@ pub(in super::super) fn json_encode(
             note_ground_roots(arg_ty, cx);
         }
         let codec = cx.codec(arg_ty);
-        let v = pre.lower_node(arg, cx);
+        let v = pre.lower_ts(arg, cx);
         // `plain` never reaches a generic argument: the checker refused it.
-        return Some(json_stringify(match v {
-            LoweredExpr::Node(node) => Ok(call(member(codec, "encode"), vec![node])),
-            LoweredExpr::Text(text) => {
-                Err(format!("{}.encode({text})", bynk_ts::print_expr(&codec)))
-            }
-        }));
+        return Some(json_stringify(call(member(codec, "encode"), vec![v])));
     }
     let tref = ty_to_type_ref(arg_ty, tys.types())?;
     // #917: a test-scaffold module's target/`uses` types export no codec
@@ -660,11 +607,11 @@ pub(in super::super) fn json_encode(
     if cx.records_codec_roots() {
         cx.runtime_use().note_json_codec_root(arg_ty);
     }
-    let v = pre.lower_node(arg, cx);
+    let v = pre.lower_ts(arg, cx);
     if plain {
         return Some(encode_plain(pre, arg, &tref, v, cx));
     }
-    Some(json_stringify(serialise_value(&tref, v, cx)))
+    Some(json_stringify(serialise_value(&tref, &v, cx)))
 }
 
 /// #2991: `Json.encodePlain`. The one `Option` encoder reads `__bynkPlainJson`, so raise it
@@ -676,36 +623,11 @@ pub(in super::super) fn json_encode(
 /// The argument must be evaluated *before* the flag is raised, or a tagged `Json.encode` (or a
 /// function that calls one) inside it would come out plain. An argument that awaits is hoisted to
 /// a temporary; any other is the default of the arrow's one parameter, which JS evaluates at call
-/// time, before the body raises the flag (its type is inferred). A text argument keeps the
-/// default-parameter form it always had.
-fn encode_plain(pre: &mut Pre, arg: &Expr, tref: &TypeRef, v: LoweredExpr, cx: &LowerCtx) -> Built {
-    let value = match v {
-        LoweredExpr::Node(node) => node,
-        // 1A: the argument is text, so the IIFE is too.
-        LoweredExpr::Text(text) => {
-            let param = if text.contains("await") {
-                let tmp = format!("__pj{}", arg.id.0);
-                pre.push_text(format!("const {tmp} = {text};"));
-                format!("__pv = {tmp}")
-            } else {
-                format!("__pv = {text}")
-            };
-            let ser = bynk_ts::print_expr(&super::super::serialisation::serialise_expr(
-                tref,
-                &ident_node("__pv"),
-                cx.runtime_use(),
-            ));
-            return Err(format!(
-                "(({param}): string => {{ const __g = globalThis as {{ __bynkPlainJson?: boolean }}; \
-                 const __was = __g.__bynkPlainJson; __g.__bynkPlainJson = true; \
-                 try {{ return globalThis.JSON.stringify({ser}); }} \
-                 finally {{ __g.__bynkPlainJson = __was; }} }})()"
-            ));
-        }
-    };
+/// time, before the body raises the flag (its type is inferred).
+fn encode_plain(pre: &mut Pre, arg: &Expr, tref: &TypeRef, value: TsExpr, cx: &LowerCtx) -> TsExpr {
     let ser =
         super::super::serialisation::serialise_expr(tref, &ident_node("__pv"), cx.runtime_use());
-    Ok(plain_iife(pre, arg.id.0, value, ser))
+    plain_iife(pre, arg.id.0, value, ser)
 }
 
 /// The `encodePlain` arrow over an argument node `value` and the serialiser `ser` of `__pv`: an

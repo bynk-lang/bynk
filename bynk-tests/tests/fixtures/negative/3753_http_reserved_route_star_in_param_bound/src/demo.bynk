@@ -1,0 +1,8 @@
+context demo
+
+// #3753: a reserved route refuses once, even with the parameter it meant to bind.
+service api from http {
+  on GET("/files/:key*") (key: String) -> Effect[HttpResult[String]] by Visitor {
+    Ok(key)
+  }
+}

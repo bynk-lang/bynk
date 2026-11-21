@@ -277,15 +277,17 @@ run it inside a member.
    name fails and lists the available contexts.
 5. Run **one `wrangler dev` per context**, each from inside its own worker
    directory, in local mode (Miniflare) — **no namespace provisioning is
-   needed** and `wrangler.toml` is served untouched. The processes discover each
+   needed**. Each is served from `wrangler.dev.toml`, a copy of its generated
+   `wrangler.toml` with the development bindings applied, replaced whole after
+   each build so it never carries the deploy's names. The processes discover each
    other through wrangler's dev registry and wire the generated `[[services]]`
    bindings between themselves, so a cross-context call resolves locally.
    A context that binds a Worker outside the project (a `Service` instance)
    gets a local stand-in for it in its own `wrangler dev`, passed as a second
    `-c` config and written under `.bynk/dev/stand-ins/`. It runs as
    `bynk-stand-in-<context>-<worker>`, so it never answers another local
-   session's binding to the real Worker, and the context is served from
-   `wrangler.dev.toml`, a copy of its `wrangler.toml` bound to the stand-in. It
+   session's binding to the real Worker, and the context's `wrangler.dev.toml`
+   binds the stand-in in place of the real Worker. It
    answers every request with `503` and a body naming itself, and is listed on
    start.
    `--local-worker NAME` drops it, so the dev registry connects the binding to

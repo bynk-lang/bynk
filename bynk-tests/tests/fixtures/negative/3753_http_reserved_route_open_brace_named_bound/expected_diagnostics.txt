@@ -1,0 +1,3 @@
+# #3753: refused once; the parameter it meant to bind is not also reported.
+# exact
+bynk.http.reserved_route_syntax	demo.bynk:5:3

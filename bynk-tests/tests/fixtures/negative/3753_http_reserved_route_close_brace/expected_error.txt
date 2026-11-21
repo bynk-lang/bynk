@@ -1,0 +1,2 @@
+bynk.http.reserved_route_syntax
+`}` in the route `/files/key}` is reserved for a future route form

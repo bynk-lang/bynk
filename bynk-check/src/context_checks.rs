@@ -5353,6 +5353,35 @@ fn check_rejected_handlers(table: &UnitTable, errors: &mut Vec<CompileError>) {
     }
 }
 
+/// #3753: `*`, `{` and `}` are reserved in a route segment, literal or
+/// `:name`, so a rest-segment form (#3752) can be added later without changing
+/// what an existing route means. Reports the segment's first reserved
+/// character, once, and returns whether it found one, so the caller skips the
+/// segment rather than also reporting a parameter named `key*`.
+fn reserved_route_char(
+    seg: &str,
+    path: &str,
+    handler: &Handler,
+    errors: &mut Vec<CompileError>,
+) -> bool {
+    let Some(ch) = seg.chars().find(|c| matches!(c, '*' | '{' | '}')) else {
+        return false;
+    };
+    errors.push(
+        CompileError::new(
+            "bynk.http.reserved_route_syntax",
+            handler.span,
+            format!("`{ch}` in the route `{path}` is reserved for a future route form"),
+        )
+        .with_note(if seg.starts_with(':') {
+            format!("drop `{ch}` from the parameter's name: a `:name` segment already takes any value, so check it in the handler")
+        } else {
+            format!("to match a literal `{ch}`, take the segment as a `:name` parameter and check it in the handler")
+        }),
+    );
+    true
+}
+
 /// Validate an `on http METHOD "path"` handler (v0.9 §4.1):
 ///
 /// - Path must start with `/`, must not be `/_bynk/...` (reserved).
@@ -5404,7 +5433,14 @@ fn validate_http_handler(
     }
     // Parse segments and collect path-parameter names.
     let mut path_param_names: Vec<&str> = Vec::new();
+    // #3753: a refused route has no reliable parameter list, so its handler
+    // parameters are not also reported as unbound (`extra_param`).
+    let mut refused = false;
     for seg in path.split('/').filter(|s| !s.is_empty()) {
+        if reserved_route_char(seg, path, handler, errors) {
+            refused = true;
+            continue;
+        }
         if let Some(rest) = seg.strip_prefix(':') {
             if rest.is_empty() {
                 errors.push(CompileError::new(
@@ -5518,7 +5554,7 @@ fn validate_http_handler(
                 ),
             );
         }
-        if !is_path && !is_body && !is_headers && !is_query && !is_cookies && !is_cf {
+        if !refused && !is_path && !is_body && !is_headers && !is_query && !is_cookies && !is_cf {
             errors.push(
                 CompileError::new(
                     "bynk.http.extra_param",

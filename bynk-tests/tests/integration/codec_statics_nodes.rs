@@ -68,13 +68,6 @@ fn assert_node(src: &str) -> String {
 }
 
 #[test]
-fn the_counter_is_live_on_this_path() {
-    let _text = text_counters::force_text("splitRegex");
-    let (exits, text) = emit("fn c() -> Bool { \"a\".splitRegex(\",\").length() > 0 }");
-    assert!(exits > 0, "a text exit is counted:\n{text}");
-}
-
-#[test]
 fn json_decode_over_a_record_a_list_an_option_and_a_refined_type() {
     for (f, ty, des) in [
         ("Row", "Row", "__deserialise_Row(__j, \"$\")"),
@@ -162,20 +155,18 @@ fn yaml_decode_reads_the_text_with_the_yaml_parser() {
     assert!(text.contains("__bynkYamlParse"), "{text}");
 }
 
+/// `Form.decode`'s field table is the one foreign leaf: `workers_entry`'s own source text, carried
+/// as a single expression (`VerbatimOrigin::FormFieldSpecs`). Everything around it, the decoder
+/// arrow, its parse step and the codec call, is nodes.
 #[test]
-fn form_decode_keeps_its_decoder_as_text_for_its_field_table() {
-    let (exits, text) =
-        emit("fn f(s: String) -> Result[Signup, DecodeError] { Form.decode[Signup](s) }");
-    // 1A: field-spec table is workers_entry source text.
-    assert!(
-        exits > 0,
-        "the field table is text, so the decoder is:\n{text}"
-    );
-    assert!(
-        function(&text, "f").contains(
-            "const __p = __formDecode(__s, [{ name: \"email\", kind: \"string\", list: false, option: false }, { name: \"plan\", kind: \"enum\", list: false, option: false }]);"
-        ),
-        "{text}"
+fn form_decode_is_a_node_decoder_around_the_field_table_carrier() {
+    let text =
+        assert_node("fn f(s: String) -> Result[Signup, DecodeError] { Form.decode[Signup](s) }");
+    assert_eq!(
+        function(&text, "f"),
+        "export function f(s: string): Result<Signup, DecodeError> {\n  return ((__s: string): Result<Signup, DecodeError> => {\n    const __p = __formDecode(__s, [{ name: \"email\", kind: \"string\", list: false, option: false }, { name: \"plan\", kind: \"enum\", list: false, option: false }]);\n    if (__p.tag === \"Err\") return Err(__p.error);\n    const __j: __JsonValue = __p.value;\n    const __r = __deserialise_Signup(__j, \"$\");\n    if (__r.tag === \"Ok\") return Ok(__r.value as Signup);\n"
+            .to_string()
+            + TAIL
     );
 }
 
@@ -191,20 +182,6 @@ fn json_encode_is_a_stringify_over_the_serialiser() {
     assert_eq!(
         function(&text, "q"),
         "export function q(r: Qty): string {\n  return globalThis.JSON.stringify(__serialise_Qty(r));\n}"
-    );
-}
-
-#[test]
-fn json_encode_of_a_text_argument_keeps_the_text_around_the_serialiser() {
-    let _text = text_counters::force_text("splitRegex");
-    // `"a".splitRegex(",").firstOrElse("b")` is a `List` kernel call over a text receiver (the regex
-    // arm is a statement block), which is still text.
-    let (exits, text) =
-        emit("fn e() -> String { Json.encode(\"a\".splitRegex(\",\").firstOrElse(\"b\")) }");
-    assert!(exits > 0, "the argument is text:\n{text}");
-    assert!(
-        function(&text, "e").contains("globalThis.JSON.stringify("),
-        "{text}"
     );
 }
 
@@ -245,9 +222,8 @@ fn form_encode_writes_the_serialised_record_and_a_renamed_field_its_table() {
         "export function g(s: Signup): string {\n  return __formString(__serialise_Signup(s));\n}"
     );
     // #3343: a field renamed by `@name` is written under its wire key; the table is
-    // `workers_entry` source text, so this call is text.
-    let (exits, text) = emit("fn r(s: Renamed) -> String { Form.encode(s) }");
-    assert!(exits > 0, "the table is text:\n{text}");
+    // `workers_entry` source text, carried as the one `FormFieldSpecs` leaf.
+    let text = assert_node("fn r(s: Renamed) -> String { Form.encode(s) }");
     assert!(
         function(&text, "r").contains("__formString(__serialise_Renamed(s), "),
         "{text}"

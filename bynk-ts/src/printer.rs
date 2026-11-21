@@ -9731,4 +9731,19 @@ mod tests {
             vec![(text.find("  return").unwrap(), Span::new(7, 8))]
         );
     }
+
+    /// A `FormFieldSpecs` carrier prints its source text exactly, in argument position (1A.35a
+    /// part C): `__formDecode(__s, [{ name: "a", kind: "string", list: false, option: false }])`.
+    #[test]
+    fn a_form_field_specs_carrier_prints_its_text_verbatim_as_an_argument() {
+        let specs = "[{ name: \"a\", kind: \"string\", list: false, option: false }]";
+        let call = TsExpr::Call {
+            callee: Box::new(id("__formDecode")),
+            args: vec![
+                id("__s"),
+                TsExpr::VerbatimExpr(specs.to_string(), VerbatimOrigin::FormFieldSpecs),
+            ],
+        };
+        assert_eq!(print_expr(&call), format!("__formDecode(__s, {specs})"));
+    }
 }

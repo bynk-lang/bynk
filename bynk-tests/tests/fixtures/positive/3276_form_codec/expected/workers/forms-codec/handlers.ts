@@ -70,7 +70,15 @@ export function describe(s: Signup): string {
 
 export const readForm = {
   async call(text: string, deps: {}): globalThis.Promise<string> {
-    const __r0 = ((__s: string): Result<Signup, DecodeError> => { const __p = __formDecode(__s, [{ name: "email", kind: "string", list: false, option: false }, { name: "age", kind: "int", list: false, option: true }, { name: "plan", kind: "enum", list: false, option: false }, { name: "tags", kind: "string", list: true, option: false }, { name: "remember", kind: "bool", list: false, option: false }]); if (__p.tag === "Err") return Err(__p.error); const __j: __JsonValue = __p.value; const __r = __deserialise_Signup(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as Signup); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(text);
+    const __r0 = ((__s: string): Result<Signup, DecodeError> => {
+      const __p = __formDecode(__s, [{ name: "email", kind: "string", list: false, option: false }, { name: "age", kind: "int", list: false, option: true }, { name: "plan", kind: "enum", list: false, option: false }, { name: "tags", kind: "string", list: true, option: false }, { name: "remember", kind: "bool", list: false, option: false }]);
+      if (__p.tag === "Err") return Err(__p.error);
+      const __j: __JsonValue = __p.value;
+      const __r = __deserialise_Signup(__j, "$");
+      if (__r.tag === "Ok") return Ok(__r.value as Signup);
+      const __be = __r.error;
+      return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+    })(text);
     switch (__r0.tag) {
       case "Ok": {
         const s = __r0.value;
@@ -93,22 +101,38 @@ export const writeForm = {
 
 export const roundTrip = {
   async call(text: string, deps: {}): globalThis.Promise<boolean> {
-    const __r0 = ((__s: string): Result<Signup, DecodeError> => { const __p = __formDecode(__s, [{ name: "email", kind: "string", list: false, option: false }, { name: "age", kind: "int", list: false, option: true }, { name: "plan", kind: "enum", list: false, option: false }, { name: "tags", kind: "string", list: true, option: false }, { name: "remember", kind: "bool", list: false, option: false }]); if (__p.tag === "Err") return Err(__p.error); const __j: __JsonValue = __p.value; const __r = __deserialise_Signup(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as Signup); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(text);
+    const __r0 = ((__s: string): Result<Signup, DecodeError> => {
+      const __p = __formDecode(__s, [{ name: "email", kind: "string", list: false, option: false }, { name: "age", kind: "int", list: false, option: true }, { name: "plan", kind: "enum", list: false, option: false }, { name: "tags", kind: "string", list: true, option: false }, { name: "remember", kind: "bool", list: false, option: false }]);
+      if (__p.tag === "Err") return Err(__p.error);
+      const __j: __JsonValue = __p.value;
+      const __r = __deserialise_Signup(__j, "$");
+      if (__r.tag === "Ok") return Ok(__r.value as Signup);
+      const __be = __r.error;
+      return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+    })(text);
     switch (__r0.tag) {
       case "Ok": {
         const s = __r0.value;
         return ((__d) => {
-    switch (__d.tag) {
-      case "Ok": {
-        const again = __d.value;
-        return globalThis.Promise.resolve(__bynkEq(again, s));
-      }
-      case "Err": {
-        return globalThis.Promise.resolve(false);
-      }
-    }
-    throw new globalThis.Error("non-exhaustive match");
-  })(((__s: string): Result<Signup, DecodeError> => { const __p = __formDecode(__s, [{ name: "email", kind: "string", list: false, option: false }, { name: "age", kind: "int", list: false, option: true }, { name: "plan", kind: "enum", list: false, option: false }, { name: "tags", kind: "string", list: true, option: false }, { name: "remember", kind: "bool", list: false, option: false }]); if (__p.tag === "Err") return Err(__p.error); const __j: __JsonValue = __p.value; const __r = __deserialise_Signup(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as Signup); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(__formString(__serialise_Signup(s))));
+          switch (__d.tag) {
+            case "Ok": {
+              const again = __d.value;
+              return globalThis.Promise.resolve(__bynkEq(again, s));
+            }
+            case "Err": {
+              return globalThis.Promise.resolve(false);
+            }
+          }
+          throw new globalThis.Error("non-exhaustive match");
+        })(((__s: string): Result<Signup, DecodeError> => {
+          const __p = __formDecode(__s, [{ name: "email", kind: "string", list: false, option: false }, { name: "age", kind: "int", list: false, option: true }, { name: "plan", kind: "enum", list: false, option: false }, { name: "tags", kind: "string", list: true, option: false }, { name: "remember", kind: "bool", list: false, option: false }]);
+          if (__p.tag === "Err") return Err(__p.error);
+          const __j: __JsonValue = __p.value;
+          const __r = __deserialise_Signup(__j, "$");
+          if (__r.tag === "Ok") return Ok(__r.value as Signup);
+          const __be = __r.error;
+          return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+        })(__formString(__serialise_Signup(s))));
       }
       case "Err": {
         return false;

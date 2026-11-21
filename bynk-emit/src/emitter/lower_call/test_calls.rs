@@ -14,7 +14,7 @@ use bynk_ts::{TsExpr, TsObjectEntry};
 
 use super::super::internal_fault::undefined_node;
 use super::super::lower::{
-    Built, LoweredExpr, Pre, node_or_text, settle_helper, settle_with, str_node, text_value,
+    Built, LoweredExpr, Pre, node_or_text, settle_helper, settle_with, str_node,
 };
 use super::super::lower_ctx::LowerCtx;
 use super::super::lower_list::{any_ty, arrow, call, id, member, param, paren, take};
@@ -447,25 +447,24 @@ impl RawSlots {
             && *at == i
         {
             cx.note_cookie_string();
-            return serialised(lowered, ty, Wire::Cookie, cx);
+            return serialised(lowered, ty, Wire::Cookie, cx, a.span);
         }
         // #2854: a typed `query` record becomes the query string the raw driver appends to the URL.
         if let Some((at, ty)) = &self.query
             && *at == i
         {
             cx.note_query_string();
-            return serialised(lowered, ty, Wire::Query, cx);
+            return serialised(lowered, ty, Wire::Query, cx, a.span);
         }
         match &self.body {
             Some((at, ty)) if *at == i && self.form => {
                 cx.note_query_string();
-                serialised(lowered, ty, Wire::Form, cx)
+                serialised(lowered, ty, Wire::Form, cx, a.span)
             }
-            Some((at, ty)) if *at == i => serialised(lowered, ty, Wire::Json, cx),
-            _ => bridge(node_or_text(
-                vec![lowered],
-                |c| call(id("String"), c),
-                |t| format!("String({})", t.join(", ")),
+            Some((at, ty)) if *at == i => serialised(lowered, ty, Wire::Json, cx, a.span),
+            _ => LoweredExpr::Node(call(
+                id("String"),
+                vec![lowered.into_node(cx.fault_site(a.span))],
             )),
         }
     }
@@ -476,44 +475,28 @@ impl RawSlots {
 /// handler's declared type), so the value is cast through `any` for `serialise_<Name>`, which
 /// expects the branded shape. P7.2: deferred, not narrowed; a bare `as unknown as {ty}` broke a
 /// real `tsc --strict` fixture (385, "Cannot find name").
-fn serialised(lowered: LoweredExpr, ty: &TypeRef, wire: Wire, cx: &LowerCtx) -> LoweredExpr {
+fn serialised(
+    lowered: LoweredExpr,
+    ty: &TypeRef,
+    wire: Wire,
+    cx: &LowerCtx,
+    at: bynk_syntax::span::Span,
+) -> LoweredExpr {
     let (ns, ru) = (cx.system_http_type_ns(), cx.runtime_use());
-    bridge(node_or_text(
-        vec![lowered],
-        |c| {
-            let [value] = take(c);
-            let ser =
-                crate::emitter::serialisation::serialise_expr_via(ty, &paren_as_any(value), ns, ru);
-            match wire {
-                Wire::Cookie => call(id("__cookieString"), vec![ser]),
-                Wire::Query => call(id("__queryString"), vec![ser]),
-                Wire::Form => call(
-                    member(call(id("__queryString"), vec![ser]), "slice"),
-                    vec![TsExpr::Lit(bynk_ts::TsLit::Num("1".to_string()))],
-                ),
-                Wire::Json => call(
-                    member(member(id("globalThis"), "JSON"), "stringify"),
-                    vec![ser],
-                ),
-            }
-        },
-        |t| {
-            let [value] = take(t);
-            // 1A: a still-text value reaches the serialiser as text.
-            let ser = bynk_ts::print_expr(&crate::emitter::serialisation::serialise_expr_via(
-                ty,
-                &text_value(format!("({value} as any)")),
-                ns,
-                ru,
-            ));
-            match wire {
-                Wire::Cookie => format!("__cookieString({ser})"),
-                Wire::Query => format!("__queryString({ser})"),
-                Wire::Form => format!("__queryString({ser}).slice(1)"),
-                Wire::Json => format!("globalThis.JSON.stringify({ser})"),
-            }
-        },
-    ))
+    let value = lowered.into_node(cx.fault_site(at));
+    let ser = crate::emitter::serialisation::serialise_expr_via(ty, &paren_as_any(value), ns, ru);
+    LoweredExpr::Node(match wire {
+        Wire::Cookie => call(id("__cookieString"), vec![ser]),
+        Wire::Query => call(id("__queryString"), vec![ser]),
+        Wire::Form => call(
+            member(call(id("__queryString"), vec![ser]), "slice"),
+            vec![TsExpr::Lit(bynk_ts::TsLit::Num("1".to_string()))],
+        ),
+        Wire::Json => call(
+            member(member(id("globalThis"), "JSON"), "stringify"),
+            vec![ser],
+        ),
+    })
 }
 
 /// Lower a `system`-tier http address, driven through a real `worker.fetch`, or `None` when the
