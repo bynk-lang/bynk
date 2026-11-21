@@ -1192,7 +1192,10 @@ const NESTED_IF_TS_BODY: &str = r#"export function pick(a: boolean, b: boolean, 
   }
 }
 "#;
-const NESTED_IF_MAPPINGS: &str = ";;;;;;AACE;AACE;AACE;AAAA;AAAA;AACA;AACE;AAAA;AAAA;AACA;AAAA;AAEA;AAAA;AAAA;AACA;AAAA;AAAA;AAGF;AAAA;AAAA;AACA;AAAA;AAAA;AAAA";
+// 1A.36b-1: one `;` fewer than it was pinned with. The module no longer imports `ValidationError`
+// (it uses none), so every statement sits one generated line higher; each still maps to the same
+// source position.
+const NESTED_IF_MAPPINGS: &str = ";;;;;AACE;AACE;AACE;AAAA;AAAA;AACA;AACE;AAAA;AAAA;AACA;AAAA;AAEA;AAAA;AAAA;AACA;AAAA;AAAA;AAGF;AAAA;AAAA;AACA;AAAA;AAAA;AAAA";
 
 #[test]
 fn a_nested_if_tail_maps_as_it_did_when_it_was_text() {

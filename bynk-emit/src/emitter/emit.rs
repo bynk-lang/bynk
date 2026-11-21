@@ -1761,11 +1761,7 @@ fn join_plus(mut parts: Vec<bynk_ts::TsExpr>) -> bynk_ts::TsExpr {
 /// of writing text — the caller (`emit_messages_bundle`, #1355) drops its
 /// own opaque `TsExpr::Ident(renderer_text)` wrap and uses this value
 /// directly as the object entry's own value.
-fn emit_message_entry_renderer(
-    entry: &MessageEntry,
-    locale_tag: &str,
-    runtime_use: &RuntimeUse,
-) -> bynk_ts::TsExpr {
+fn emit_message_entry_renderer(entry: &MessageEntry, locale_tag: &str) -> bynk_ts::TsExpr {
     let segments = split_template(&entry.template);
     let parts: Vec<bynk_ts::TsExpr> = segments
         .iter()
@@ -1808,7 +1804,7 @@ fn emit_message_entry_renderer(
                     }))
                 }
                 Some(_) => match icu::parse_icu_placeholder(inner) {
-                    Ok(p) => emit_icu_placeholder(&p, locale_tag, runtime_use),
+                    Ok(p) => emit_icu_placeholder(&p, locale_tag),
                     Err(_) => {
                         let name = inner.split(',').next().unwrap_or(inner).trim();
                         bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(format!("{{{name}}}")))
@@ -1863,16 +1859,7 @@ fn emit_message_entry_renderer(
 /// (`TsArrowBody::Block`) for a different real site; this `Select` arm was
 /// not reconverted along with it (out of that slice's own scope) and stays
 /// exactly as it was.
-fn emit_icu_placeholder(
-    p: &icu::IcuPlaceholder<'_>,
-    locale_tag: &str,
-    runtime_use: &RuntimeUse,
-) -> bynk_ts::TsExpr {
-    // Recorded per-arm, not once up front: a `select` placeholder emits
-    // `Object.hasOwn` over an arm table and no formatter at all, so noting here
-    // would import the three helpers into a select-only bundle that never calls
-    // them. The three are imported as a group, so one note per helper-emitting
-    // arm is enough.
+fn emit_icu_placeholder(p: &icu::IcuPlaceholder<'_>, locale_tag: &str) -> bynk_ts::TsExpr {
     let tag_lit_str = || bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(locale_tag.to_string()));
     let fallback = || bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(format!("{{{}}}", p.name)));
     let arg_expr = || bynk_ts::TsExpr::Call {
@@ -1900,13 +1887,12 @@ fn emit_icu_placeholder(
     };
     match &p.kind {
         icu::PlaceholderKind::Plural { arms } => {
-            runtime_use.note_icu();
             let arms_obj: Vec<(String, bynk_ts::TsExpr)> = arms
                 .iter()
                 .map(|(cat, segs)| {
                     (
                         format!("\"{}\"", cat.as_str()),
-                        emit_sub_message(segs, locale_tag, runtime_use),
+                        emit_sub_message(segs, locale_tag),
                     )
                 })
                 .collect();
@@ -1962,7 +1948,7 @@ fn emit_icu_placeholder(
                     format!(
                         "\"{}\": {}",
                         escape_ts_string(k),
-                        bynk_ts::print_expr(&emit_sub_message(segs, locale_tag, runtime_use))
+                        bynk_ts::print_expr(&emit_sub_message(segs, locale_tag))
                     )
                 })
                 .collect();
@@ -1992,7 +1978,6 @@ fn emit_icu_placeholder(
             )
         }
         icu::PlaceholderKind::Number { style } => {
-            runtime_use.note_icu();
             let mut args = vec![tag_lit_str(), arg_tag("value")];
             if let Some(s) = style {
                 args.push(bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(
@@ -2033,7 +2018,6 @@ fn emit_icu_placeholder(
             })
         }
         icu::PlaceholderKind::Date { style } => {
-            runtime_use.note_icu();
             let mut args = vec![tag_lit_str(), arg_tag("value")];
             if let Some(s) = style {
                 args.push(bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(
@@ -2078,11 +2062,7 @@ fn emit_icu_placeholder(
 /// the RAW locale tag, not pre-quoted/pre-escaped text, since `TsLit::Str`'s
 /// own renderer applies the identical escaping itself (documented
 /// byte-for-byte match with `escape_ts_string`).
-fn emit_sub_message(
-    segs: &[icu::SubSegment],
-    locale_tag: &str,
-    runtime_use: &RuntimeUse,
-) -> bynk_ts::TsExpr {
+fn emit_sub_message(segs: &[icu::SubSegment], locale_tag: &str) -> bynk_ts::TsExpr {
     if segs.is_empty() {
         return bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(String::new()));
     }
@@ -2094,19 +2074,16 @@ fn emit_sub_message(
             // though the only arm that can contain one is `plural` (see this
             // function's doc), which records for itself: the note belongs with
             // the emission, so this stays correct if that invariant ever moves.
-            icu::SubSegment::Hash => {
-                runtime_use.note_icu();
-                bynk_ts::TsExpr::Call {
-                    callee: Box::new(bynk_ts::TsExpr::Ident("__formatIcuNumber".to_string())),
-                    args: vec![
-                        bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(locale_tag.to_string())),
-                        bynk_ts::TsExpr::Member {
-                            object: Box::new(bynk_ts::TsExpr::Ident("__arg".to_string())),
-                            property: "value".to_string(),
-                        },
-                    ],
-                }
-            }
+            icu::SubSegment::Hash => bynk_ts::TsExpr::Call {
+                callee: Box::new(bynk_ts::TsExpr::Ident("__formatIcuNumber".to_string())),
+                args: vec![
+                    bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(locale_tag.to_string())),
+                    bynk_ts::TsExpr::Member {
+                        object: Box::new(bynk_ts::TsExpr::Ident("__arg".to_string())),
+                        property: "value".to_string(),
+                    },
+                ],
+            },
         })
         .collect();
     join_plus(parts)
@@ -2170,7 +2147,6 @@ fn emit_sub_message(
 pub(crate) fn emit_messages_bundle(
     blocks: &[&MessagesDecl],
     reference: &MessagesDecl,
-    runtime_use: &RuntimeUse,
 ) -> Vec<bynk_ts::TsStmt> {
     let mut stmts = Vec::new();
 
@@ -2205,7 +2181,7 @@ pub(crate) fn emit_messages_bundle(
                 .map(|entry| {
                     bynk_ts::TsObjectEntry::prop(
                         format!("\"{}\"", escape_ts_string(&entry.code)),
-                        emit_message_entry_renderer(entry, &m.tag, runtime_use),
+                        emit_message_entry_renderer(entry, &m.tag),
                     )
                 })
                 .collect();
@@ -4225,10 +4201,10 @@ pub(crate) fn agent_state_ir(a: &AgentDecl, program: &CheckedProgram) -> Vec<Sto
         .collect()
 }
 
-/// Whether an agent emits a rehydration gate (and so imports `rehydrationViolation`).
-/// Mirrors the per-field validation the gate builds, so the header import and the
-/// emitted gate agree exactly (a mismatch is an unused / undefined import).
-pub(crate) fn agent_needs_rehydrate(
+/// Whether an agent emits a rehydration gate, and so the `commitState` that encodes through it.
+/// Mirrors the per-field validation the gate builds. The `rehydrationViolation` import follows
+/// from the tree (1A.36b-1), not from this.
+pub(crate) fn agent_gates_rehydration(
     a: &AgentDecl,
     state: &[StoreFieldIr],
     types: &HashMap<String, Arc<TypeDecl>>,
@@ -4254,106 +4230,6 @@ pub(crate) fn agent_needs_rehydrate(
             .first()
             .is_some_and(|t| type_base_is_string(t, types)),
     })
-}
-
-/// The agents a unit declares.
-fn commons_agents(commons: &TypedCommons) -> impl Iterator<Item = &AgentDecl> {
-    commons.commons.items.iter().filter_map(|i| {
-        if let CommonsItem::Agent(a) = i {
-            Some(a)
-        } else {
-            None
-        }
-    })
-}
-
-/// Whether any agent of the unit emits a rehydration gate.
-pub(crate) fn commons_need_rehydrate(commons: &TypedCommons, program: &CheckedProgram) -> bool {
-    commons_agents(commons)
-        .any(|a| agent_needs_rehydrate(a, &agent_state_ir(a, program), &commons.types))
-}
-
-/// The runtime names every agent of the unit's state wiring references, sorted and unique.
-pub(crate) fn commons_state_runtime_names(
-    commons: &TypedCommons,
-    program: &CheckedProgram,
-) -> Vec<&'static str> {
-    let mut names: Vec<&'static str> = commons_agents(commons)
-        .flat_map(|a| {
-            agent_state_runtime_names(
-                a,
-                &agent_state_ir(a, program),
-                commons.tys(),
-                &commons.types,
-            )
-        })
-        .collect();
-    names.sort_unstable();
-    names.dedup();
-    names
-}
-
-/// Whether any agent of the unit has a held `Map[K, Connection]`.
-pub(crate) fn commons_have_held_storage(commons: &TypedCommons, program: &CheckedProgram) -> bool {
-    commons_agents(commons)
-        .any(|a| agent_has_held_storage(a, &agent_state_ir(a, program), commons.tys()))
-}
-
-/// The runtime names an agent's state wiring references (#3254): the handle classes its
-/// state is made of, and the helpers that put them into wire form and fill them back.
-/// Mirrors what `emit_agent_state_record`/`emit_agent_state_persistence` emit.
-pub(crate) fn agent_state_runtime_names(
-    a: &AgentDecl,
-    state: &[StoreFieldIr],
-    tys: &Types,
-    types: &HashMap<String, Arc<TypeDecl>>,
-) -> Vec<&'static str> {
-    let held = held_map_fields(a, state, tys);
-    let is_held = |f: &StoreField| held.iter().any(|(n, _)| n.name == f.name.name);
-    let mut names: Vec<&'static str> = Vec::new();
-    let mut textual_key = false;
-    for (f, kind) in store_kinds(a, state) {
-        match kind {
-            StoreKindIr::Map(..) => {
-                names.push("__StoreMap");
-                if is_held(f) {
-                    names.extend(["__wireHeld", "__wireHeldOrder", "__fillHeld"]);
-                } else {
-                    names.extend(["__wireMap", "__fillMap"]);
-                }
-                if f.annotations.iter().any(|an| an.name.name == "indexed") {
-                    names.push("__wirePostings");
-                }
-                textual_key |= f
-                    .kind
-                    .args
-                    .first()
-                    .is_some_and(|k| type_base_is_string(k, types));
-            }
-            StoreKindIr::Set(_) => {
-                names.extend(["__StoreSet", "__wireSet", "__fillSet"]);
-                textual_key |= f
-                    .kind
-                    .args
-                    .first()
-                    .is_some_and(|t| type_base_is_string(t, types));
-            }
-            StoreKindIr::Cache(..) => names.extend(["__StoreCache", "__wireMap", "__fillMap"]),
-            StoreKindIr::Log(..) => names.extend(["__StoreLog", "__wireLog", "__fillLog"]),
-            StoreKindIr::Cell(_) => {}
-        }
-    }
-    if textual_key {
-        names.push("__wireEntries");
-    }
-    // Store queries chain through it (#3189); an agent with no collection has none.
-    if !names.is_empty() {
-        names.push("__bynkThen");
-    }
-    if agent_reads_lazily(state, tys, a) {
-        names.extend(["__attachLazy", "__readsLazily"]);
-    }
-    names
 }
 
 /// Whether an agent's collections can be read lazily (#3189): it has a `Map`, `Set`, `Cache` or
@@ -4479,19 +4355,6 @@ fn emit_lazy_field_spec(
         None,
     ));
     Some(name)
-}
-
-/// v0.104/v0.105 (real-time track slice 3b): an agent has at least one `store
-/// Map[K, V]` whose value `V` is a held resource (a `Connection`). On Workers a
-/// live socket cannot serialise, so the durable record persists the **connection
-/// id** (`Record<K, connId>`) and each `Connection` is re-resolved from its connId
-/// via the hibernatable-socket API — so a stored connection survives DO eviction
-/// (§2.9.6). Drives the `resolveConnection`/`connIdOf` imports and the held-map
-/// realisation in `emit_agent`. (Bundle keeps held maps in the in-memory test
-/// state record of `TestConnection`s — its tested behaviour — so this is
-/// Workers-only.)
-pub(crate) fn agent_has_held_storage(a: &AgentDecl, state: &[StoreFieldIr], tys: &Types) -> bool {
-    !held_map_fields(a, state, tys).is_empty()
 }
 
 /// The agent's `store Map[K, V]` fields whose value is a held `Connection`, as
@@ -6888,7 +6751,7 @@ fn emit_agent_state_persistence(
         || !store_set_fields.is_empty()
         || !store_cache_fields.is_empty()
         || !store_log_fields.is_empty();
-    let has_rehydrate = agent_needs_rehydrate(a, layout.state, &commons.types);
+    let has_rehydrate = agent_gates_rehydration(a, layout.state, &commons.types);
     let has_encode = has_rehydrate || has_collections;
     // State-migrations S1 (#2211): this class's lock version facts, present
     // only when the build has the schema lock (Decision A).

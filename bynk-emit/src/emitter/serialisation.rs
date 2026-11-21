@@ -2243,11 +2243,8 @@ fn emit_field_deserialise_wire(
         // #1319: closes the `ts_any` residual for the four runtime-owned
         // error types — each now casts through its own real, exported
         // runtime type (`bynk-emit/runtime/src/errors.ts`/`queue.ts`/
-        // `http.ts`), gated into the module's own import list the same way
-        // `DecodeError`/`HttpResult` already were (`write_header`'s
-        // `file_mentions_json_error`/`file_mentions_http_result`, now joined
-        // by `file_mentions_queue_result`; `ValidationError` is imported
-        // unconditionally). `Effect` stays `any`: a stray field-position
+        // `http.ts`), and imported because the module's tree names it (the
+        // header derives its imports from the tree, 1A.36b-1). `Effect` stays `any`: a stray field-position
         // `Effect[T]` genuinely has no shape to derive one from (this
         // function's own doc explains why it reaches here at all), and
         // narrowing it is not part of this residual — `unknown` would

@@ -567,7 +567,6 @@ impl<'a> LowerCtx<'a> {
         let Some(loc) = self.module.trace.as_ref() else {
             return call;
         };
-        self.runtime_use().note_trace_step();
         let (line, col) = bynk_syntax::span::line_col(&loc.source, offset);
         let path = loc.rel_path.replace('\\', "/");
         let lit = |s: &str| bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(s.to_string()));
@@ -594,7 +593,6 @@ impl<'a> LowerCtx<'a> {
         if self.module.trace.is_none() {
             return binding;
         }
-        self.runtime_use().note_trace_binding();
         bynk_ts::TsExpr::Call {
             callee: Box::new(bynk_ts::TsExpr::Ident("__traceBinding".to_string())),
             args: vec![binding],
@@ -1116,11 +1114,6 @@ impl<'a> LowerCtx<'a> {
     /// the module imports `__requestHeaders`.
     pub(super) fn note_request_headers(&self) {
         self.runtime_use().note_request_headers();
-    }
-
-    /// Record that this lowering issued or deleted a session cookie (#3386).
-    pub(super) fn note_session_cookie(&self) {
-        self.runtime_use().note_session_cookie();
     }
 
     /// Record that this lowering built a `RequestCookies` value (#3277).

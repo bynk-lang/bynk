@@ -147,6 +147,8 @@ struct Shadow {
     in_text: Vec<String>,
     /// For each `in_text` name, the first printed body line that spells it.
     spelled: Vec<String>,
+    /// The names the module imports from the runtime (`__bynk_runtime/…`).
+    from_runtime: BTreeSet<String>,
 }
 
 fn compare(program: &TsProgram) -> Shadow {
@@ -166,6 +168,7 @@ fn compare(program: &TsProgram) -> Shadow {
     let in_body = words(&printed);
     let mut shadow = Shadow {
         under: tree.difference(&imported).cloned().collect(),
+        from_runtime: program.names_imported_from(|from| from.contains("__bynk_runtime/")),
         ..Shadow::default()
     };
     for name in imported.difference(&tree) {
@@ -304,6 +307,26 @@ fn the_tree_derived_imports_are_a_subset_of_the_predicted_ones() {
         known_gone.join("\n"),
     );
 
+    // 1A.36b-1: a module whose header the emitter derives from its tree imports no
+    // runtime name it does not use. What still over-imports is predicted elsewhere: the
+    // driver's `tests/*.test.ts` modules (1B.2) and the Workers' `index.ts` and
+    // `compose.ts`, which `workers_entry.rs` and `workers.rs` build.
+    let over_imported: Vec<String> = found
+        .iter()
+        .filter(|((_, _, m), _)| !predicts_its_runtime_imports(m))
+        .flat_map(|((s, t, m), sh)| {
+            sh.plainly_unused
+                .iter()
+                .filter(|n| sh.from_runtime.contains(*n))
+                .map(move |n| format!("  {s} [{t}] {m}: {n}"))
+        })
+        .collect();
+    assert!(
+        over_imported.is_empty(),
+        "a module with a derived header imports a runtime name its tree does not use:\n{}",
+        over_imported.join("\n"),
+    );
+
     let report = report(modules, &found);
     eprintln!("{report}");
     if let Ok(path) = std::env::var("BYNK_IMPORT_SHADOW_REPORT") {
@@ -315,6 +338,17 @@ fn the_tree_derived_imports_are_a_subset_of_the_predicted_ones() {
 /// (`tests/<unit>.test.ts`): opaque test text, whose imports stay predicted until 1B.2.
 fn is_driver_test_module(module: &str) -> bool {
     module.starts_with("tests/") && module.ends_with(".test.ts")
+}
+
+/// Whether a module's runtime import is still predicted rather than derived: the driver's test
+/// modules, and the Worker entry (`index.ts`) and composition root (`compose.ts`), whose import
+/// lists `workers_entry.rs` and `workers.rs` assemble from `RuntimeUse`.
+fn predicts_its_runtime_imports(module: &str) -> bool {
+    is_driver_test_module(module)
+        || module
+            .rsplit('/')
+            .next()
+            .is_some_and(|f| f == "index.ts" || f == "compose.ts")
 }
 
 /// The over-import findings, grouped by name.
