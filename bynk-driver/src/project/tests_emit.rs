@@ -1018,16 +1018,12 @@ mod tests {
         let mut errors = Vec::new();
         assert!(drain_internal_faults(&mut errors, &faulted_use()));
         assert_eq!(errors.len(), 1);
-        assert_eq!(errors[0].category, "bynk.internal.missing_checker_fact");
+        assert_eq!(errors[0].category, bynk_emit::emitter::MISSING_CHECKER_FACT);
     }
 
     #[test]
     fn a_fault_in_a_project_that_already_has_errors_is_drained_not_reported() {
-        let mut errors = vec![CompileError::new(
-            "bynk.tier.mixed_system_suite",
-            Span::new(0, 1),
-            "x",
-        )];
+        let mut errors = vec![CompileError::new("test.other", Span::new(0, 1), "x")];
         let ru = faulted_use();
         assert!(
             drain_internal_faults(&mut errors, &ru),
