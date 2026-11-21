@@ -1,7 +1,7 @@
 context demo
 
-// #3766: two `on call` handlers in one service; the second would silently
-// shadow the first, so a service has exactly one.
+// #3766: three `on call` handlers in one service; a service has exactly
+// one, and each handler past the first is reported on its own.
 service playground {
   on call() -> Effect[String] {
     Effect.pure("first")
@@ -9,5 +9,9 @@ service playground {
 
   on call() -> Effect[String] {
     Effect.pure("second")
+  }
+
+  on call() -> Effect[String] {
+    Effect.pure("third")
   }
 }
