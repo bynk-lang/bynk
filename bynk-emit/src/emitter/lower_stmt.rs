@@ -46,18 +46,10 @@ pub(super) enum Item {
     Node(Box<bynk_ts::TsStmt>),
     /// A source-map checkpoint at the offset where the next item starts.
     Mark(Span),
-    /// A nested body, rendered at `indent + INDENT_STEP`.
+    /// A nested body, rendered at `indent + INDENT_STEP`. No producer builds one since 1A.ws (the
+    /// handler wrappers are arrows now); only the tests do. Deleted with `Line` in 1A.35b.
+    #[cfg_attr(not(test), allow(dead_code))]
     Indent(Body),
-}
-
-impl Item {
-    /// A line of text, for the wrappers around a lowered body that are text
-    /// because `bynk_ts` has no node for them (the self-tail-call `while` loop,
-    /// the contract-guard closure, the claim-scope wrapper until it becomes
-    /// nodes). The one place such a line is made.
-    pub(super) fn line(text: impl Into<String>) -> Item {
-        Item::Line(text.into())
-    }
 }
 
 impl Body {
