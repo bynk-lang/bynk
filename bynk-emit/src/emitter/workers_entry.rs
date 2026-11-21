@@ -2248,8 +2248,10 @@ pub fn emit_worker_entry(
         program.push(decl);
     }
     if member_mode {
+        // 1A.38: fixed authored snippet, no interpolation
         program.push(TsStmt::raw(MISS_HELPER, None));
     }
+    // 1A.38: fixed authored snippet, no interpolation
     program.push(TsStmt::raw(REPORT_FAULT_HELPER, None));
     program.push(TsStmt::decl(
         TsDecl::ExportDefault(TsExpr::multiline_object_entries(default_entries)),
