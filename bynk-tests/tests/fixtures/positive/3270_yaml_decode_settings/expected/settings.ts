@@ -252,11 +252,11 @@ export function __deserialise_List_Triage(json: __JsonValue, path: string = "$")
   }
   const out: Triage[] = [];
   for (let i = 0; i < json.length; i++) {
-  const item = json[i];
-  const __r_el = __deserialise_Triage(item, `${path}[${i}]`);
-  if (__r_el.tag === "Err") return __r_el;
-  const __el = __r_el.value;
-  out.push(__el as Triage);
+    const item = json[i];
+    const __r_el = __deserialise_Triage(item, `${path}[${i}]`);
+    if (__r_el.tag === "Err") return __r_el;
+    const __el = __r_el.value;
+    out.push(__el as Triage);
   }
   return Ok(out);
 }
@@ -311,12 +311,12 @@ export function __deserialise_List_String(json: __JsonValue, path: string = "$")
   }
   const out: string[] = [];
   for (let i = 0; i < json.length; i++) {
-  const item = json[i];
-  if (typeof item !== "string") {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "string", actual: typeof item });
-  }
-  const __el = item;
-  out.push(__el as string);
+    const item = json[i];
+    if (typeof item !== "string") {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "string", actual: typeof item });
+    }
+    const __el = item;
+    out.push(__el as string);
   }
   return Ok(out);
 }

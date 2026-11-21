@@ -33,15 +33,15 @@ export function __deserialise_Result_String_MySqlError(json: __JsonValue, path: 
   }
   const obj = json as { [k: string]: __JsonValue };
   if (obj["kind"] === "Ok") {
-  if (typeof obj["value"] !== "string") {
-    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "string", actual: typeof obj["value"] });
-  }
-  const __v = obj["value"];
+    if (typeof obj["value"] !== "string") {
+      return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "string", actual: typeof obj["value"] });
+    }
+    const __v = obj["value"];
     return Ok(Ok(__v) as Result<string, MySqlError>);
   } else if (obj["kind"] === "Err") {
-  const __r_e = __deserialise_MySqlError(obj["error"], `${path}.error`);
-  if (__r_e.tag === "Err") return __r_e;
-  const __e = __r_e.value;
+    const __r_e = __deserialise_MySqlError(obj["error"], `${path}.error`);
+    if (__r_e.tag === "Err") return __r_e;
+    const __e = __r_e.value;
     return Ok(Err(__e) as Result<string, MySqlError>);
   }
   return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });

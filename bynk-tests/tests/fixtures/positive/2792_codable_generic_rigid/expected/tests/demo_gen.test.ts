@@ -580,13 +580,13 @@ export function __deserialise_Maybe_Int(json: __JsonValue, path: string = "$"): 
     case "Nothing":
       return Ok({ tag: "Nothing" } as __ns_demo_gen.Maybe<number>);
     case "Just": {
-  if (typeof obj["value"] !== "number") {
-    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
-  }
-  if (!globalThis.Number.isSafeInteger(obj["value"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(obj["value"]) });
-  }
-  const __value = obj["value"];
+      if (typeof obj["value"] !== "number") {
+        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
+      }
+      if (!globalThis.Number.isSafeInteger(obj["value"])) {
+        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(obj["value"]) });
+      }
+      const __value = obj["value"];
       return Ok({ tag: "Just", value: __value } as __ns_demo_gen.Maybe<number>);
     }
     default:
@@ -625,15 +625,15 @@ export function __deserialise_List_Int(json: __JsonValue, path: string = "$"): R
   }
   const out: number[] = [];
   for (let i = 0; i < json.length; i++) {
-  const item = json[i];
-  if (typeof item !== "number") {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "number", actual: typeof item });
-  }
-  if (!globalThis.Number.isSafeInteger(item)) {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "safe integer", actual: String(item) });
-  }
-  const __el = item;
-  out.push(__el as number);
+    const item = json[i];
+    if (typeof item !== "number") {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "number", actual: typeof item });
+    }
+    if (!globalThis.Number.isSafeInteger(item)) {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "safe integer", actual: String(item) });
+    }
+    const __el = item;
+    out.push(__el as number);
   }
   return Ok(out);
 }
@@ -743,11 +743,11 @@ export function __deserialise_List_Box_Int(json: __JsonValue, path: string = "$"
   }
   const out: __ns_demo_gen.Box<number>[] = [];
   for (let i = 0; i < json.length; i++) {
-  const item = json[i];
-  const __r_el = __deserialise_Box_Int(item, `${path}[${i}]`);
-  if (__r_el.tag === "Err") return __r_el;
-  const __el = __r_el.value;
-  out.push(__el as __ns_demo_gen.Box<number>);
+    const item = json[i];
+    const __r_el = __deserialise_Box_Int(item, `${path}[${i}]`);
+    if (__r_el.tag === "Err") return __r_el;
+    const __el = __r_el.value;
+    out.push(__el as __ns_demo_gen.Box<number>);
   }
   return Ok(out);
 }

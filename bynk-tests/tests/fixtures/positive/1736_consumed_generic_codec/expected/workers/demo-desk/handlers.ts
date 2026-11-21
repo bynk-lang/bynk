@@ -102,11 +102,11 @@ export function __deserialise_List_Envelope_Int(json: __JsonValue, path: string 
   }
   const out: demo_vault.Envelope<number>[] = [];
   for (let i = 0; i < json.length; i++) {
-  const item = json[i];
-  const __r_el = __deserialise_Envelope_Int(item, `${path}[${i}]`);
-  if (__r_el.tag === "Err") return __r_el;
-  const __el = __r_el.value;
-  out.push(__el as demo_vault.Envelope<number>);
+    const item = json[i];
+    const __r_el = __deserialise_Envelope_Int(item, `${path}[${i}]`);
+    if (__r_el.tag === "Err") return __r_el;
+    const __el = __r_el.value;
+    out.push(__el as demo_vault.Envelope<number>);
   }
   return Ok(out);
 }
@@ -179,20 +179,20 @@ export function __deserialise_Outcome_Int(json: __JsonValue, path: string = "$")
   const kind = obj["kind"];
   switch (kind) {
     case "Done": {
-  if (typeof obj["value"] !== "number") {
-    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
-  }
-  if (!globalThis.Number.isSafeInteger(obj["value"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(obj["value"]) });
-  }
-  const __value = obj["value"];
+      if (typeof obj["value"] !== "number") {
+        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
+      }
+      if (!globalThis.Number.isSafeInteger(obj["value"])) {
+        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(obj["value"]) });
+      }
+      const __value = obj["value"];
       return Ok({ tag: "Done", value: __value } as demo_vault.Outcome<number>);
     }
     case "Pending": {
-  if (typeof obj["reason"] !== "string") {
-    return Err({ kind: "StructuralMismatch", path: `${path}.reason`, expected: "string", actual: typeof obj["reason"] });
-  }
-  const __reason = obj["reason"];
+      if (typeof obj["reason"] !== "string") {
+        return Err({ kind: "StructuralMismatch", path: `${path}.reason`, expected: "string", actual: typeof obj["reason"] });
+      }
+      const __reason = obj["reason"];
       return Ok({ tag: "Pending", reason: __reason } as demo_vault.Outcome<number>);
     }
     default:

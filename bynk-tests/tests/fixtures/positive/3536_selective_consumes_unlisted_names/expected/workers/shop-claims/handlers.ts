@@ -39,20 +39,20 @@ export function __deserialise_Outcome(json: __JsonValue, path: string = "$"): Re
   const kind = obj["kind"];
   switch (kind) {
     case "Done": {
-  if (typeof obj["n"] !== "number") {
-    return Err({ kind: "StructuralMismatch", path: `${path}.n`, expected: "number", actual: typeof obj["n"] });
-  }
-  if (!globalThis.Number.isSafeInteger(obj["n"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.n`, expected: "safe integer", actual: String(obj["n"]) });
-  }
-  const __n = obj["n"];
+      if (typeof obj["n"] !== "number") {
+        return Err({ kind: "StructuralMismatch", path: `${path}.n`, expected: "number", actual: typeof obj["n"] });
+      }
+      if (!globalThis.Number.isSafeInteger(obj["n"])) {
+        return Err({ kind: "StructuralMismatch", path: `${path}.n`, expected: "safe integer", actual: String(obj["n"]) });
+      }
+      const __n = obj["n"];
       return Ok({ tag: "Done", n: __n } as Outcome);
     }
     case "Unavailable": {
-  if (typeof obj["reason"] !== "string") {
-    return Err({ kind: "StructuralMismatch", path: `${path}.reason`, expected: "string", actual: typeof obj["reason"] });
-  }
-  const __reason = obj["reason"];
+      if (typeof obj["reason"] !== "string") {
+        return Err({ kind: "StructuralMismatch", path: `${path}.reason`, expected: "string", actual: typeof obj["reason"] });
+      }
+      const __reason = obj["reason"];
       return Ok({ tag: "Unavailable", reason: __reason } as Outcome);
     }
     default:

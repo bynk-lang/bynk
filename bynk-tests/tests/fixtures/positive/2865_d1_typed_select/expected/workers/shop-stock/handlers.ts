@@ -298,14 +298,14 @@ export function __deserialise_Result_List_Item_SqlReadError(json: __JsonValue, p
   }
   const obj = json as { [k: string]: __JsonValue };
   if (obj["kind"] === "Ok") {
-  const __r_v = __deserialise_List_Item(obj["value"], `${path}.value`);
-  if (__r_v.tag === "Err") return __r_v;
-  const __v = __r_v.value;
+    const __r_v = __deserialise_List_Item(obj["value"], `${path}.value`);
+    if (__r_v.tag === "Err") return __r_v;
+    const __v = __r_v.value;
     return Ok(Ok(__v) as Result<readonly Item[], SqlReadError>);
   } else if (obj["kind"] === "Err") {
-  const __r_e = __deserialise_SqlReadError(obj["error"], `${path}.error`);
-  if (__r_e.tag === "Err") return __r_e;
-  const __e = __r_e.value;
+    const __r_e = __deserialise_SqlReadError(obj["error"], `${path}.error`);
+    if (__r_e.tag === "Err") return __r_e;
+    const __e = __r_e.value;
     return Ok(Err(__e) as Result<readonly Item[], SqlReadError>);
   }
   return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
@@ -321,11 +321,11 @@ export function __deserialise_List_Item(json: __JsonValue, path: string = "$"): 
   }
   const out: Item[] = [];
   for (let i = 0; i < json.length; i++) {
-  const item = json[i];
-  const __r_el = __deserialise_Item(item, `${path}[${i}]`);
-  if (__r_el.tag === "Err") return __r_el;
-  const __el = __r_el.value;
-  out.push(__el as Item);
+    const item = json[i];
+    const __r_el = __deserialise_Item(item, `${path}[${i}]`);
+    if (__r_el.tag === "Err") return __r_el;
+    const __el = __r_el.value;
+    out.push(__el as Item);
   }
   return Ok(out);
 }
@@ -341,14 +341,14 @@ export function __deserialise_Result_Option_Item_SqlReadError(json: __JsonValue,
   }
   const obj = json as { [k: string]: __JsonValue };
   if (obj["kind"] === "Ok") {
-  const __r_v = __deserialise_Option_Item(obj["value"], `${path}.value`);
-  if (__r_v.tag === "Err") return __r_v;
-  const __v = __r_v.value;
+    const __r_v = __deserialise_Option_Item(obj["value"], `${path}.value`);
+    if (__r_v.tag === "Err") return __r_v;
+    const __v = __r_v.value;
     return Ok(Ok(__v) as Result<Option<Item>, SqlReadError>);
   } else if (obj["kind"] === "Err") {
-  const __r_e = __deserialise_SqlReadError(obj["error"], `${path}.error`);
-  if (__r_e.tag === "Err") return __r_e;
-  const __e = __r_e.value;
+    const __r_e = __deserialise_SqlReadError(obj["error"], `${path}.error`);
+    if (__r_e.tag === "Err") return __r_e;
+    const __e = __r_e.value;
     return Ok(Err(__e) as Result<Option<Item>, SqlReadError>);
   }
   return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
@@ -495,11 +495,11 @@ export function __deserialise_List_Loose(json: __JsonValue, path: string = "$"):
   }
   const out: Loose[] = [];
   for (let i = 0; i < json.length; i++) {
-  const item = json[i];
-  const __r_el = __deserialise_Loose(item, `${path}[${i}]`);
-  if (__r_el.tag === "Err") return __r_el;
-  const __el = __r_el.value;
-  out.push(__el as Loose);
+    const item = json[i];
+    const __r_el = __deserialise_Loose(item, `${path}[${i}]`);
+    if (__r_el.tag === "Err") return __r_el;
+    const __el = __r_el.value;
+    out.push(__el as Loose);
   }
   return Ok(out);
 }
@@ -514,11 +514,11 @@ export function __deserialise_List_Gone(json: __JsonValue, path: string = "$"): 
   }
   const out: Gone[] = [];
   for (let i = 0; i < json.length; i++) {
-  const item = json[i];
-  const __r_el = __deserialise_Gone(item, `${path}[${i}]`);
-  if (__r_el.tag === "Err") return __r_el;
-  const __el = __r_el.value;
-  out.push(__el as Gone);
+    const item = json[i];
+    const __r_el = __deserialise_Gone(item, `${path}[${i}]`);
+    if (__r_el.tag === "Err") return __r_el;
+    const __el = __r_el.value;
+    out.push(__el as Gone);
   }
   return Ok(out);
 }

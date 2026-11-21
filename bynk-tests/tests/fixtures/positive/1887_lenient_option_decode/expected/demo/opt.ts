@@ -415,13 +415,13 @@ export function __deserialise_Wrapped(json: __JsonValue, path: string = "$"): Re
   const kind = obj["kind"];
   switch (kind) {
     case "Wrap": {
-  if (typeof obj["value"] !== "number") {
-    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
-  }
-  if (!globalThis.Number.isSafeInteger(obj["value"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(obj["value"]) });
-  }
-  const __value = obj["value"];
+      if (typeof obj["value"] !== "number") {
+        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
+      }
+      if (!globalThis.Number.isSafeInteger(obj["value"])) {
+        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(obj["value"]) });
+      }
+      const __value = obj["value"];
       return Ok({ tag: "Wrap", value: __value } as Wrapped);
     }
     case "Empty":

@@ -30,23 +30,23 @@ export function __deserialise_Result_Decimal_Int(json: __JsonValue, path: string
   }
   const obj = json as { [k: string]: __JsonValue };
   if (obj["kind"] === "Ok") {
-  if (typeof obj["value"] !== "string") {
-    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "decimal string", actual: typeof obj["value"] });
-  }
-  const __b_v = __bynkDecimalParseWire(obj["value"]);
-  if (__b_v.tag === "None") {
-    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "decimal string", actual: "invalid decimal" });
-  }
-  const __v = __b_v.value;
+    if (typeof obj["value"] !== "string") {
+      return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "decimal string", actual: typeof obj["value"] });
+    }
+    const __b_v = __bynkDecimalParseWire(obj["value"]);
+    if (__b_v.tag === "None") {
+      return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "decimal string", actual: "invalid decimal" });
+    }
+    const __v = __b_v.value;
     return Ok(Ok(__v) as Result<{ readonly coefficient: bigint; readonly scale: number }, number>);
   } else if (obj["kind"] === "Err") {
-  if (typeof obj["error"] !== "number") {
-    return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "number", actual: typeof obj["error"] });
-  }
-  if (!globalThis.Number.isSafeInteger(obj["error"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "safe integer", actual: String(obj["error"]) });
-  }
-  const __e = obj["error"];
+    if (typeof obj["error"] !== "number") {
+      return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "number", actual: typeof obj["error"] });
+    }
+    if (!globalThis.Number.isSafeInteger(obj["error"])) {
+      return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "safe integer", actual: String(obj["error"]) });
+    }
+    const __e = obj["error"];
     return Ok(Err(__e) as Result<{ readonly coefficient: bigint; readonly scale: number }, number>);
   }
   return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });

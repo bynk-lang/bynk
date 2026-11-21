@@ -38,19 +38,19 @@ export function __deserialise_Tree(json: __JsonValue, path: string = "$", depth:
     case "Leaf":
       return Ok({ tag: "Leaf" } as Tree);
     case "Node": {
-  const __r_left = __deserialise_Tree(obj["left"], `${path}.left`, depth + 1);
-  if (__r_left.tag === "Err") return __r_left;
-  const __left = __r_left.value;
-  if (typeof obj["value"] !== "number") {
-    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
-  }
-  if (!globalThis.Number.isSafeInteger(obj["value"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(obj["value"]) });
-  }
-  const __value = obj["value"];
-  const __r_right = __deserialise_Tree(obj["right"], `${path}.right`, depth + 1);
-  if (__r_right.tag === "Err") return __r_right;
-  const __right = __r_right.value;
+      const __r_left = __deserialise_Tree(obj["left"], `${path}.left`, depth + 1);
+      if (__r_left.tag === "Err") return __r_left;
+      const __left = __r_left.value;
+      if (typeof obj["value"] !== "number") {
+        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
+      }
+      if (!globalThis.Number.isSafeInteger(obj["value"])) {
+        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(obj["value"]) });
+      }
+      const __value = obj["value"];
+      const __r_right = __deserialise_Tree(obj["right"], `${path}.right`, depth + 1);
+      if (__r_right.tag === "Err") return __r_right;
+      const __right = __r_right.value;
       return Ok({ tag: "Node", left: __left, value: __value, right: __right } as Tree);
     }
     default:

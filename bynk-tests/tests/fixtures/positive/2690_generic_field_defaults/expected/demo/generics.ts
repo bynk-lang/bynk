@@ -236,15 +236,15 @@ export function __deserialise_List_Int(json: __JsonValue, path: string = "$"): R
   }
   const out: number[] = [];
   for (let i = 0; i < json.length; i++) {
-  const item = json[i];
-  if (typeof item !== "number") {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "number", actual: typeof item });
-  }
-  if (!globalThis.Number.isSafeInteger(item)) {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "safe integer", actual: String(item) });
-  }
-  const __el = item;
-  out.push(__el as number);
+    const item = json[i];
+    if (typeof item !== "number") {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "number", actual: typeof item });
+    }
+    if (!globalThis.Number.isSafeInteger(item)) {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "safe integer", actual: String(item) });
+    }
+    const __el = item;
+    out.push(__el as number);
   }
   return Ok(out);
 }
@@ -309,20 +309,20 @@ export function __deserialise_Outcome_Int(json: __JsonValue, path: string = "$")
   const kind = obj["kind"];
   switch (kind) {
     case "Done": {
-  if (typeof obj["value"] !== "number") {
-    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
-  }
-  if (!globalThis.Number.isSafeInteger(obj["value"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(obj["value"]) });
-  }
-  const __value = obj["value"];
+      if (typeof obj["value"] !== "number") {
+        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
+      }
+      if (!globalThis.Number.isSafeInteger(obj["value"])) {
+        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(obj["value"]) });
+      }
+      const __value = obj["value"];
       return Ok({ tag: "Done", value: __value } as Outcome<number>);
     }
     case "Pending": {
-  if (typeof obj["reason"] !== "string") {
-    return Err({ kind: "StructuralMismatch", path: `${path}.reason`, expected: "string", actual: typeof obj["reason"] });
-  }
-  const __reason = obj["reason"];
+      if (typeof obj["reason"] !== "string") {
+        return Err({ kind: "StructuralMismatch", path: `${path}.reason`, expected: "string", actual: typeof obj["reason"] });
+      }
+      const __reason = obj["reason"];
       return Ok({ tag: "Pending", reason: __reason } as Outcome<number>);
     }
     default:
@@ -363,12 +363,12 @@ export function __deserialise_List_String(json: __JsonValue, path: string = "$")
   }
   const out: string[] = [];
   for (let i = 0; i < json.length; i++) {
-  const item = json[i];
-  if (typeof item !== "string") {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "string", actual: typeof item });
-  }
-  const __el = item;
-  out.push(__el as string);
+    const item = json[i];
+    if (typeof item !== "string") {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "string", actual: typeof item });
+    }
+    const __el = item;
+    out.push(__el as string);
   }
   return Ok(out);
 }
@@ -432,11 +432,11 @@ function __codecOf_Cache<__P_T>(__codec___P_T: { encode: (v: __P_T) => __JsonVal
     }
     const out: __P_T[] = [];
     for (let i = 0; i < json.length; i++) {
-  const item = json[i];
-  const __r_el = __deserialise___P_T(item, `${path}[${i}]`);
-  if (__r_el.tag === "Err") return __r_el;
-  const __el = __r_el.value;
-  out.push(__el as __P_T);
+      const item = json[i];
+      const __r_el = __deserialise___P_T(item, `${path}[${i}]`);
+      if (__r_el.tag === "Err") return __r_el;
+      const __el = __r_el.value;
+      out.push(__el as __P_T);
     }
     return Ok(out);
   }
@@ -458,16 +458,16 @@ function __codecOf_Cache<__P_T>(__codec___P_T: { encode: (v: __P_T) => __JsonVal
     const kind = obj["kind"];
     switch (kind) {
       case "Done": {
-  const __r_value = __deserialise___P_T(obj["value"], `${path}.value`);
-  if (__r_value.tag === "Err") return __r_value;
-  const __value = __r_value.value;
+        const __r_value = __deserialise___P_T(obj["value"], `${path}.value`);
+        if (__r_value.tag === "Err") return __r_value;
+        const __value = __r_value.value;
         return Ok({ tag: "Done", value: __value } as Outcome<__P_T>);
       }
       case "Pending": {
-  if (typeof obj["reason"] !== "string") {
-    return Err({ kind: "StructuralMismatch", path: `${path}.reason`, expected: "string", actual: typeof obj["reason"] });
-  }
-  const __reason = obj["reason"];
+        if (typeof obj["reason"] !== "string") {
+          return Err({ kind: "StructuralMismatch", path: `${path}.reason`, expected: "string", actual: typeof obj["reason"] });
+        }
+        const __reason = obj["reason"];
         return Ok({ tag: "Pending", reason: __reason } as Outcome<__P_T>);
       }
       default:

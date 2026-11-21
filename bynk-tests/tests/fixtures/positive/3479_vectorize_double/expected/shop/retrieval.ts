@@ -130,11 +130,11 @@ export function __deserialise_List_VectorOf_Meta(json: __JsonValue, path: string
   }
   const out: VectorOf<Meta>[] = [];
   for (let i = 0; i < json.length; i++) {
-  const item = json[i];
-  const __r_el = __deserialise_VectorOf_Meta(item, `${path}[${i}]`);
-  if (__r_el.tag === "Err") return __r_el;
-  const __el = __r_el.value;
-  out.push(__el as VectorOf<Meta>);
+    const item = json[i];
+    const __r_el = __deserialise_VectorOf_Meta(item, `${path}[${i}]`);
+    if (__r_el.tag === "Err") return __r_el;
+    const __el = __r_el.value;
+    out.push(__el as VectorOf<Meta>);
   }
   return Ok(out);
 }
@@ -181,15 +181,15 @@ export function __deserialise_List_Float(json: __JsonValue, path: string = "$"):
   }
   const out: number[] = [];
   for (let i = 0; i < json.length; i++) {
-  const item = json[i];
-  if (typeof item !== "number") {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "number", actual: typeof item });
-  }
-  if (!globalThis.Number.isFinite(item)) {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "finite number", actual: String(item) });
-  }
-  const __el = item;
-  out.push(__el as number);
+    const item = json[i];
+    if (typeof item !== "number") {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "number", actual: typeof item });
+    }
+    if (!globalThis.Number.isFinite(item)) {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "finite number", actual: String(item) });
+    }
+    const __el = item;
+    out.push(__el as number);
   }
   return Ok(out);
 }

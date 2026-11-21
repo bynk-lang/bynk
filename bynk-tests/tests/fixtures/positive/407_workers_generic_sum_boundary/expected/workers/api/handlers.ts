@@ -74,16 +74,16 @@ export function __deserialise_ApiResult_User(json: __JsonValue, path: string = "
   const kind = obj["kind"];
   switch (kind) {
     case "Loaded": {
-  const __r_value = __deserialise_User(obj["value"], `${path}.value`);
-  if (__r_value.tag === "Err") return __r_value;
-  const __value = __r_value.value;
+      const __r_value = __deserialise_User(obj["value"], `${path}.value`);
+      if (__r_value.tag === "Err") return __r_value;
+      const __value = __r_value.value;
       return Ok({ tag: "Loaded", value: __value } as ApiResult<User>);
     }
     case "Failed": {
-  if (typeof obj["message"] !== "string") {
-    return Err({ kind: "StructuralMismatch", path: `${path}.message`, expected: "string", actual: typeof obj["message"] });
-  }
-  const __message = obj["message"];
+      if (typeof obj["message"] !== "string") {
+        return Err({ kind: "StructuralMismatch", path: `${path}.message`, expected: "string", actual: typeof obj["message"] });
+      }
+      const __message = obj["message"];
       return Ok({ tag: "Failed", message: __message } as ApiResult<User>);
     }
     default:
@@ -102,12 +102,12 @@ export function __deserialise_Result_ApiResult_User_Unit(json: __JsonValue, path
   }
   const obj = json as { [k: string]: __JsonValue };
   if (obj["kind"] === "Ok") {
-  const __r_v = __deserialise_ApiResult_User(obj["value"], `${path}.value`);
-  if (__r_v.tag === "Err") return __r_v;
-  const __v = __r_v.value;
+    const __r_v = __deserialise_ApiResult_User(obj["value"], `${path}.value`);
+    if (__r_v.tag === "Err") return __r_v;
+    const __v = __r_v.value;
     return Ok(Ok(__v) as Result<ApiResult<User>, void>);
   } else if (obj["kind"] === "Err") {
-  const __e = undefined;
+    const __e = undefined;
     return Ok(Err(__e) as Result<ApiResult<User>, void>);
   }
   return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });

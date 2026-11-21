@@ -51,12 +51,12 @@ export function __deserialise_Result_Unit_ReaperError(json: __JsonValue, path: s
   }
   const obj = json as { [k: string]: __JsonValue };
   if (obj["kind"] === "Ok") {
-  const __v = undefined;
+    const __v = undefined;
     return Ok(Ok(__v) as Result<void, ReaperError>);
   } else if (obj["kind"] === "Err") {
-  const __r_e = __deserialise_ReaperError(obj["error"], `${path}.error`);
-  if (__r_e.tag === "Err") return __r_e;
-  const __e = __r_e.value;
+    const __r_e = __deserialise_ReaperError(obj["error"], `${path}.error`);
+    if (__r_e.tag === "Err") return __r_e;
+    const __e = __r_e.value;
     return Ok(Err(__e) as Result<void, ReaperError>);
   }
   return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });

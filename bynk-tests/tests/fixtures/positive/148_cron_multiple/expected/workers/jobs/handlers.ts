@@ -25,13 +25,13 @@ export function __deserialise_Result_Unit_String(json: __JsonValue, path: string
   }
   const obj = json as { [k: string]: __JsonValue };
   if (obj["kind"] === "Ok") {
-  const __v = undefined;
+    const __v = undefined;
     return Ok(Ok(__v) as Result<void, string>);
   } else if (obj["kind"] === "Err") {
-  if (typeof obj["error"] !== "string") {
-    return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "string", actual: typeof obj["error"] });
-  }
-  const __e = obj["error"];
+    if (typeof obj["error"] !== "string") {
+      return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "string", actual: typeof obj["error"] });
+    }
+    const __e = obj["error"];
     return Ok(Err(__e) as Result<void, string>);
   }
   return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });

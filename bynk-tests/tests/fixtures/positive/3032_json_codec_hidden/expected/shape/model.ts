@@ -110,9 +110,9 @@ export function __deserialise_Shape(json: __JsonValue, path: string = "$"): Resu
   const kind = obj["kind"];
   switch (kind) {
     case "Circle": {
-  const __r_radius = __deserialise_Option_Int(obj["radius"], `${path}.radius`);
-  if (__r_radius.tag === "Err") return __r_radius;
-  const __radius = __r_radius.value;
+      const __r_radius = __deserialise_Option_Int(obj["radius"], `${path}.radius`);
+      if (__r_radius.tag === "Err") return __r_radius;
+      const __radius = __r_radius.value;
       return Ok({ tag: "Circle", radius: __radius } as Shape);
     }
     case "Dot":
@@ -215,12 +215,12 @@ export function __deserialise_List_String(json: __JsonValue, path: string = "$")
   }
   const out: string[] = [];
   for (let i = 0; i < json.length; i++) {
-  const item = json[i];
-  if (typeof item !== "string") {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "string", actual: typeof item });
-  }
-  const __el = item;
-  out.push(__el as string);
+    const item = json[i];
+    if (typeof item !== "string") {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "string", actual: typeof item });
+    }
+    const __el = item;
+    out.push(__el as string);
   }
   return Ok(out);
 }

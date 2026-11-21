@@ -40,19 +40,19 @@ export function __deserialise_Expr(json: __JsonValue, path: string = "$", depth:
   const kind = obj["kind"];
   switch (kind) {
     case "Lit": {
-  if (typeof obj["value"] !== "number") {
-    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
-  }
-  if (!globalThis.Number.isSafeInteger(obj["value"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(obj["value"]) });
-  }
-  const __value = obj["value"];
+      if (typeof obj["value"] !== "number") {
+        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
+      }
+      if (!globalThis.Number.isSafeInteger(obj["value"])) {
+        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(obj["value"]) });
+      }
+      const __value = obj["value"];
       return Ok({ tag: "Lit", value: __value } as Expr);
     }
     case "Block": {
-  const __r_stmts = __deserialise_List_Stmt(obj["stmts"], `${path}.stmts`, depth + 1);
-  if (__r_stmts.tag === "Err") return __r_stmts;
-  const __stmts = __r_stmts.value;
+      const __r_stmts = __deserialise_List_Stmt(obj["stmts"], `${path}.stmts`, depth + 1);
+      if (__r_stmts.tag === "Err") return __r_stmts;
+      const __stmts = __r_stmts.value;
       return Ok({ tag: "Block", stmts: __stmts } as Expr);
     }
     default:
@@ -71,11 +71,11 @@ export function __deserialise_List_Stmt(json: __JsonValue, path: string = "$", d
   }
   const out: Stmt[] = [];
   for (let i = 0; i < json.length; i++) {
-  const item = json[i];
-  const __r_el = __deserialise_Stmt(item, `${path}[${i}]`, depth);
-  if (__r_el.tag === "Err") return __r_el;
-  const __el = __r_el.value;
-  out.push(__el as Stmt);
+    const item = json[i];
+    const __r_el = __deserialise_Stmt(item, `${path}[${i}]`, depth);
+    if (__r_el.tag === "Err") return __r_el;
+    const __el = __r_el.value;
+    out.push(__el as Stmt);
   }
   return Ok(out);
 }

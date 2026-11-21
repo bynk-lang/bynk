@@ -683,20 +683,20 @@ export function __deserialise_Tagged(json: __JsonValue, path: string = "$"): Res
   const kind = obj["kind"];
   switch (kind) {
     case "Num": {
-  if (typeof obj["n"] !== "number") {
-    return Err({ kind: "StructuralMismatch", path: `${path}.n`, expected: "number", actual: typeof obj["n"] });
-  }
-  if (!globalThis.Number.isSafeInteger(obj["n"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.n`, expected: "safe integer", actual: String(obj["n"]) });
-  }
-  const __n = obj["n"];
+      if (typeof obj["n"] !== "number") {
+        return Err({ kind: "StructuralMismatch", path: `${path}.n`, expected: "number", actual: typeof obj["n"] });
+      }
+      if (!globalThis.Number.isSafeInteger(obj["n"])) {
+        return Err({ kind: "StructuralMismatch", path: `${path}.n`, expected: "safe integer", actual: String(obj["n"]) });
+      }
+      const __n = obj["n"];
       return Ok({ tag: "Num", n: __n } as __ns_demo_gen.Tagged);
     }
     case "Str": {
-  if (typeof obj["s"] !== "string") {
-    return Err({ kind: "StructuralMismatch", path: `${path}.s`, expected: "string", actual: typeof obj["s"] });
-  }
-  const __s = obj["s"];
+      if (typeof obj["s"] !== "string") {
+        return Err({ kind: "StructuralMismatch", path: `${path}.s`, expected: "string", actual: typeof obj["s"] });
+      }
+      const __s = obj["s"];
       return Ok({ tag: "Str", s: __s } as __ns_demo_gen.Tagged);
     }
     default:
@@ -715,11 +715,11 @@ export function __deserialise_List_P(json: __JsonValue, path: string = "$"): Res
   }
   const out: __ns_demo_gen.P[] = [];
   for (let i = 0; i < json.length; i++) {
-  const item = json[i];
-  const __r_el = __deserialise_P(item, `${path}[${i}]`);
-  if (__r_el.tag === "Err") return __r_el;
-  const __el = __r_el.value;
-  out.push(__el as __ns_demo_gen.P);
+    const item = json[i];
+    const __r_el = __deserialise_P(item, `${path}[${i}]`);
+    if (__r_el.tag === "Err") return __r_el;
+    const __el = __r_el.value;
+    out.push(__el as __ns_demo_gen.P);
   }
   return Ok(out);
 }
@@ -734,15 +734,15 @@ export function __deserialise_List_Int(json: __JsonValue, path: string = "$"): R
   }
   const out: number[] = [];
   for (let i = 0; i < json.length; i++) {
-  const item = json[i];
-  if (typeof item !== "number") {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "number", actual: typeof item });
-  }
-  if (!globalThis.Number.isSafeInteger(item)) {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "safe integer", actual: String(item) });
-  }
-  const __el = item;
-  out.push(__el as number);
+    const item = json[i];
+    if (typeof item !== "number") {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "number", actual: typeof item });
+    }
+    if (!globalThis.Number.isSafeInteger(item)) {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "safe integer", actual: String(item) });
+    }
+    const __el = item;
+    out.push(__el as number);
   }
   return Ok(out);
 }
@@ -842,15 +842,15 @@ export function __deserialise_Result_P_String(json: __JsonValue, path: string = 
   }
   const obj = json as { [k: string]: __JsonValue };
   if (obj["kind"] === "Ok") {
-  const __r_v = __deserialise_P(obj["value"], `${path}.value`);
-  if (__r_v.tag === "Err") return __r_v;
-  const __v = __r_v.value;
+    const __r_v = __deserialise_P(obj["value"], `${path}.value`);
+    if (__r_v.tag === "Err") return __r_v;
+    const __v = __r_v.value;
     return Ok(Ok(__v) as Result<__ns_demo_gen.P, string>);
   } else if (obj["kind"] === "Err") {
-  if (typeof obj["error"] !== "string") {
-    return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "string", actual: typeof obj["error"] });
-  }
-  const __e = obj["error"];
+    if (typeof obj["error"] !== "string") {
+      return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "string", actual: typeof obj["error"] });
+    }
+    const __e = obj["error"];
     return Ok(Err(__e) as Result<__ns_demo_gen.P, string>);
   }
   return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
@@ -866,14 +866,14 @@ export function __deserialise_Set_P(json: __JsonValue, path: string = "$"): Resu
   }
   const out = new __BynkKeySet<__ns_demo_gen.P>();
   for (let i = 0; i < json.length; i++) {
-  const item = json[i];
-  const __r_el = __deserialise_P(item, `${path}[${i}]`);
-  if (__r_el.tag === "Err") return __r_el;
-  const __el = __r_el.value;
-  if (out.has(__el as __ns_demo_gen.P)) {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "a distinct set element", actual: "a duplicate" });
-  }
-  out.add(__el as __ns_demo_gen.P);
+    const item = json[i];
+    const __r_el = __deserialise_P(item, `${path}[${i}]`);
+    if (__r_el.tag === "Err") return __r_el;
+    const __el = __r_el.value;
+    if (out.has(__el as __ns_demo_gen.P)) {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "a distinct set element", actual: "a duplicate" });
+    }
+    out.add(__el as __ns_demo_gen.P);
   }
   return Ok(out);
 }
@@ -888,18 +888,18 @@ export function __deserialise_Set_Int(json: __JsonValue, path: string = "$"): Re
   }
   const out = new globalThis.Set<number>();
   for (let i = 0; i < json.length; i++) {
-  const item = json[i];
-  if (typeof item !== "number") {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "number", actual: typeof item });
-  }
-  if (!globalThis.Number.isSafeInteger(item)) {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "safe integer", actual: String(item) });
-  }
-  const __el = item;
-  if (out.has(__el as number)) {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "a distinct set element", actual: "a duplicate" });
-  }
-  out.add(__el as number);
+    const item = json[i];
+    if (typeof item !== "number") {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "number", actual: typeof item });
+    }
+    if (!globalThis.Number.isSafeInteger(item)) {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "safe integer", actual: String(item) });
+    }
+    const __el = item;
+    if (out.has(__el as number)) {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "a distinct set element", actual: "a duplicate" });
+    }
+    out.add(__el as number);
   }
   return Ok(out);
 }
@@ -914,14 +914,14 @@ export function __deserialise_Set_Tagged(json: __JsonValue, path: string = "$"):
   }
   const out = new __BynkKeySet<__ns_demo_gen.Tagged>();
   for (let i = 0; i < json.length; i++) {
-  const item = json[i];
-  const __r_el = __deserialise_Tagged(item, `${path}[${i}]`);
-  if (__r_el.tag === "Err") return __r_el;
-  const __el = __r_el.value;
-  if (out.has(__el as __ns_demo_gen.Tagged)) {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "a distinct set element", actual: "a duplicate" });
-  }
-  out.add(__el as __ns_demo_gen.Tagged);
+    const item = json[i];
+    const __r_el = __deserialise_Tagged(item, `${path}[${i}]`);
+    if (__r_el.tag === "Err") return __r_el;
+    const __el = __r_el.value;
+    if (out.has(__el as __ns_demo_gen.Tagged)) {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "a distinct set element", actual: "a duplicate" });
+    }
+    out.add(__el as __ns_demo_gen.Tagged);
   }
   return Ok(out);
 }
@@ -940,26 +940,26 @@ export function __deserialise_Map_P_Int(json: __JsonValue, path: string = "$"): 
   }
   const out = new __BynkKeyMap<__ns_demo_gen.P, number>();
   for (let i = 0; i < json.length; i++) {
-  const entry = json[i];
-  if (!globalThis.Array.isArray(entry) || entry.length !== 2) {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "[key, value] entry", actual: typeof entry });
-  }
-  const entryK = entry[0];
-  const entryV = entry[1];
-  const __r_k = __deserialise_P(entryK, `${path}[${i}][0]`);
-  if (__r_k.tag === "Err") return __r_k;
-  const __k = __r_k.value;
-  if (out.has(__k as __ns_demo_gen.P)) {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "a distinct map key", actual: "a duplicate" });
-  }
-  if (typeof entryV !== "number") {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}][1]`, expected: "number", actual: typeof entryV });
-  }
-  if (!globalThis.Number.isSafeInteger(entryV)) {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}][1]`, expected: "safe integer", actual: String(entryV) });
-  }
-  const __v = entryV;
-  out.set(__k as __ns_demo_gen.P, __v as number);
+    const entry = json[i];
+    if (!globalThis.Array.isArray(entry) || entry.length !== 2) {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "[key, value] entry", actual: typeof entry });
+    }
+    const entryK = entry[0];
+    const entryV = entry[1];
+    const __r_k = __deserialise_P(entryK, `${path}[${i}][0]`);
+    if (__r_k.tag === "Err") return __r_k;
+    const __k = __r_k.value;
+    if (out.has(__k as __ns_demo_gen.P)) {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "a distinct map key", actual: "a duplicate" });
+    }
+    if (typeof entryV !== "number") {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}][1]`, expected: "number", actual: typeof entryV });
+    }
+    if (!globalThis.Number.isSafeInteger(entryV)) {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}][1]`, expected: "safe integer", actual: String(entryV) });
+    }
+    const __v = entryV;
+    out.set(__k as __ns_demo_gen.P, __v as number);
   }
   return Ok(out);
 }
@@ -978,27 +978,27 @@ export function __deserialise_Map_String_Int(json: __JsonValue, path: string = "
   }
   const out = new globalThis.Map<string, number>();
   for (let i = 0; i < json.length; i++) {
-  const entry = json[i];
-  if (!globalThis.Array.isArray(entry) || entry.length !== 2) {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "[key, value] entry", actual: typeof entry });
-  }
-  const entryK = entry[0];
-  const entryV = entry[1];
-  if (typeof entryK !== "string") {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "string", actual: typeof entryK });
-  }
-  const __k = entryK;
-  if (out.has(__k as string)) {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "a distinct map key", actual: "a duplicate" });
-  }
-  if (typeof entryV !== "number") {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}][1]`, expected: "number", actual: typeof entryV });
-  }
-  if (!globalThis.Number.isSafeInteger(entryV)) {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}][1]`, expected: "safe integer", actual: String(entryV) });
-  }
-  const __v = entryV;
-  out.set(__k as string, __v as number);
+    const entry = json[i];
+    if (!globalThis.Array.isArray(entry) || entry.length !== 2) {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "[key, value] entry", actual: typeof entry });
+    }
+    const entryK = entry[0];
+    const entryV = entry[1];
+    if (typeof entryK !== "string") {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "string", actual: typeof entryK });
+    }
+    const __k = entryK;
+    if (out.has(__k as string)) {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "a distinct map key", actual: "a duplicate" });
+    }
+    if (typeof entryV !== "number") {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}][1]`, expected: "number", actual: typeof entryV });
+    }
+    if (!globalThis.Number.isSafeInteger(entryV)) {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}][1]`, expected: "safe integer", actual: String(entryV) });
+    }
+    const __v = entryV;
+    out.set(__k as string, __v as number);
   }
   return Ok(out);
 }

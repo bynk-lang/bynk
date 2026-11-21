@@ -105,11 +105,11 @@ export function __deserialise_List_Order(json: __JsonValue, path: string = "$"):
   }
   const out: Order[] = [];
   for (let i = 0; i < json.length; i++) {
-  const item = json[i];
-  const __r_el = __deserialise_Order(item, `${path}[${i}]`);
-  if (__r_el.tag === "Err") return __r_el;
-  const __el = __r_el.value;
-  out.push(__el as Order);
+    const item = json[i];
+    const __r_el = __deserialise_Order(item, `${path}[${i}]`);
+    if (__r_el.tag === "Err") return __r_el;
+    const __el = __r_el.value;
+    out.push(__el as Order);
   }
   return Ok(out);
 }
@@ -128,26 +128,26 @@ export function __deserialise_Map_Order_Int(json: __JsonValue, path: string = "$
   }
   const out = new __BynkKeyMap<Order, number>();
   for (let i = 0; i < json.length; i++) {
-  const entry = json[i];
-  if (!globalThis.Array.isArray(entry) || entry.length !== 2) {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "[key, value] entry", actual: typeof entry });
-  }
-  const entryK = entry[0];
-  const entryV = entry[1];
-  const __r_k = __deserialise_Order(entryK, `${path}[${i}][0]`);
-  if (__r_k.tag === "Err") return __r_k;
-  const __k = __r_k.value;
-  if (out.has(__k as Order)) {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "a distinct map key", actual: "a duplicate" });
-  }
-  if (typeof entryV !== "number") {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}][1]`, expected: "number", actual: typeof entryV });
-  }
-  if (!globalThis.Number.isSafeInteger(entryV)) {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}][1]`, expected: "safe integer", actual: String(entryV) });
-  }
-  const __v = entryV;
-  out.set(__k as Order, __v as number);
+    const entry = json[i];
+    if (!globalThis.Array.isArray(entry) || entry.length !== 2) {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "[key, value] entry", actual: typeof entry });
+    }
+    const entryK = entry[0];
+    const entryV = entry[1];
+    const __r_k = __deserialise_Order(entryK, `${path}[${i}][0]`);
+    if (__r_k.tag === "Err") return __r_k;
+    const __k = __r_k.value;
+    if (out.has(__k as Order)) {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "a distinct map key", actual: "a duplicate" });
+    }
+    if (typeof entryV !== "number") {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}][1]`, expected: "number", actual: typeof entryV });
+    }
+    if (!globalThis.Number.isSafeInteger(entryV)) {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}][1]`, expected: "safe integer", actual: String(entryV) });
+    }
+    const __v = entryV;
+    out.set(__k as Order, __v as number);
   }
   return Ok(out);
 }

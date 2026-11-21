@@ -143,17 +143,17 @@ export function __deserialise_CryptoError(json: __JsonValue, path: string = "$")
   const kind = obj["kind"];
   switch (kind) {
     case "InvalidKey": {
-  if (typeof obj["reason"] !== "string") {
-    return Err({ kind: "StructuralMismatch", path: `${path}.reason`, expected: "string", actual: typeof obj["reason"] });
-  }
-  const __reason = obj["reason"];
+      if (typeof obj["reason"] !== "string") {
+        return Err({ kind: "StructuralMismatch", path: `${path}.reason`, expected: "string", actual: typeof obj["reason"] });
+      }
+      const __reason = obj["reason"];
       return Ok({ tag: "InvalidKey", reason: __reason } as CryptoError);
     }
     case "UnsupportedAlgorithm": {
-  if (typeof obj["name"] !== "string") {
-    return Err({ kind: "StructuralMismatch", path: `${path}.name`, expected: "string", actual: typeof obj["name"] });
-  }
-  const __name = obj["name"];
+      if (typeof obj["name"] !== "string") {
+        return Err({ kind: "StructuralMismatch", path: `${path}.name`, expected: "string", actual: typeof obj["name"] });
+      }
+      const __name = obj["name"];
       return Ok({ tag: "UnsupportedAlgorithm", name: __name } as CryptoError);
     }
     default:

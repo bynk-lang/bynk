@@ -167,26 +167,26 @@ export function __deserialise_Map_OrderId_Int(json: __JsonValue, path: string = 
   }
   const out = new __BynkKeyMap<OrderId, number>();
   for (let i = 0; i < json.length; i++) {
-  const entry = json[i];
-  if (!globalThis.Array.isArray(entry) || entry.length !== 2) {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "[key, value] entry", actual: typeof entry });
-  }
-  const entryK = entry[0];
-  const entryV = entry[1];
-  const __r_k = __deserialise_OrderId(entryK, `${path}[${i}][0]`);
-  if (__r_k.tag === "Err") return __r_k;
-  const __k = __r_k.value;
-  if (out.has(__k as OrderId)) {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "a distinct map key", actual: "a duplicate" });
-  }
-  if (typeof entryV !== "number") {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}][1]`, expected: "number", actual: typeof entryV });
-  }
-  if (!globalThis.Number.isSafeInteger(entryV)) {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}][1]`, expected: "safe integer", actual: String(entryV) });
-  }
-  const __v = entryV;
-  out.set(__k as OrderId, __v as number);
+    const entry = json[i];
+    if (!globalThis.Array.isArray(entry) || entry.length !== 2) {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "[key, value] entry", actual: typeof entry });
+    }
+    const entryK = entry[0];
+    const entryV = entry[1];
+    const __r_k = __deserialise_OrderId(entryK, `${path}[${i}][0]`);
+    if (__r_k.tag === "Err") return __r_k;
+    const __k = __r_k.value;
+    if (out.has(__k as OrderId)) {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "a distinct map key", actual: "a duplicate" });
+    }
+    if (typeof entryV !== "number") {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}][1]`, expected: "number", actual: typeof entryV });
+    }
+    if (!globalThis.Number.isSafeInteger(entryV)) {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}][1]`, expected: "safe integer", actual: String(entryV) });
+    }
+    const __v = entryV;
+    out.set(__k as OrderId, __v as number);
   }
   return Ok(out);
 }
@@ -201,14 +201,14 @@ export function __deserialise_Set_Status(json: __JsonValue, path: string = "$"):
   }
   const out = new __BynkKeySet<Status>();
   for (let i = 0; i < json.length; i++) {
-  const item = json[i];
-  const __r_el = __deserialise_Status(item, `${path}[${i}]`);
-  if (__r_el.tag === "Err") return __r_el;
-  const __el = __r_el.value;
-  if (out.has(__el as Status)) {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "a distinct set element", actual: "a duplicate" });
-  }
-  out.add(__el as Status);
+    const item = json[i];
+    const __r_el = __deserialise_Status(item, `${path}[${i}]`);
+    if (__r_el.tag === "Err") return __r_el;
+    const __el = __r_el.value;
+    if (out.has(__el as Status)) {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "a distinct set element", actual: "a duplicate" });
+    }
+    out.add(__el as Status);
   }
   return Ok(out);
 }

@@ -1030,23 +1030,23 @@ export function __deserialise_Shape(json: __JsonValue, path: string = "$"): Resu
   const kind = obj["kind"];
   switch (kind) {
     case "Circle": {
-  if (typeof obj["r"] !== "number") {
-    return Err({ kind: "StructuralMismatch", path: `${path}.r`, expected: "number", actual: typeof obj["r"] });
-  }
-  if (!globalThis.Number.isSafeInteger(obj["r"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.r`, expected: "safe integer", actual: String(obj["r"]) });
-  }
-  const __r = obj["r"];
+      if (typeof obj["r"] !== "number") {
+        return Err({ kind: "StructuralMismatch", path: `${path}.r`, expected: "number", actual: typeof obj["r"] });
+      }
+      if (!globalThis.Number.isSafeInteger(obj["r"])) {
+        return Err({ kind: "StructuralMismatch", path: `${path}.r`, expected: "safe integer", actual: String(obj["r"]) });
+      }
+      const __r = obj["r"];
       return Ok({ tag: "Circle", r: __r } as Shape);
     }
     case "Square": {
-  if (typeof obj["side"] !== "number") {
-    return Err({ kind: "StructuralMismatch", path: `${path}.side`, expected: "number", actual: typeof obj["side"] });
-  }
-  if (!globalThis.Number.isSafeInteger(obj["side"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.side`, expected: "safe integer", actual: String(obj["side"]) });
-  }
-  const __side = obj["side"];
+      if (typeof obj["side"] !== "number") {
+        return Err({ kind: "StructuralMismatch", path: `${path}.side`, expected: "number", actual: typeof obj["side"] });
+      }
+      if (!globalThis.Number.isSafeInteger(obj["side"])) {
+        return Err({ kind: "StructuralMismatch", path: `${path}.side`, expected: "safe integer", actual: String(obj["side"]) });
+      }
+      const __side = obj["side"];
       return Ok({ tag: "Square", side: __side } as Shape);
     }
     default:
@@ -1065,11 +1065,11 @@ export function __deserialise_List_Light(json: __JsonValue, path: string = "$"):
   }
   const out: Light[] = [];
   for (let i = 0; i < json.length; i++) {
-  const item = json[i];
-  const __r_el = __deserialise_Light(item, `${path}[${i}]`);
-  if (__r_el.tag === "Err") return __r_el;
-  const __el = __r_el.value;
-  out.push(__el as Light);
+    const item = json[i];
+    const __r_el = __deserialise_Light(item, `${path}[${i}]`);
+    if (__r_el.tag === "Err") return __r_el;
+    const __el = __r_el.value;
+    out.push(__el as Light);
   }
   return Ok(out);
 }
@@ -1129,19 +1129,19 @@ export function __deserialise_Result_Int_String(json: __JsonValue, path: string 
   }
   const obj = json as { [k: string]: __JsonValue };
   if (obj["kind"] === "Ok") {
-  if (typeof obj["value"] !== "number") {
-    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
-  }
-  if (!globalThis.Number.isSafeInteger(obj["value"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(obj["value"]) });
-  }
-  const __v = obj["value"];
+    if (typeof obj["value"] !== "number") {
+      return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
+    }
+    if (!globalThis.Number.isSafeInteger(obj["value"])) {
+      return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(obj["value"]) });
+    }
+    const __v = obj["value"];
     return Ok(Ok(__v) as Result<number, string>);
   } else if (obj["kind"] === "Err") {
-  if (typeof obj["error"] !== "string") {
-    return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "string", actual: typeof obj["error"] });
-  }
-  const __e = obj["error"];
+    if (typeof obj["error"] !== "string") {
+      return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "string", actual: typeof obj["error"] });
+    }
+    const __e = obj["error"];
     return Ok(Err(__e) as Result<number, string>);
   }
   return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });

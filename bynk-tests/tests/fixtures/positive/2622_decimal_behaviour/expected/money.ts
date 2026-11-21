@@ -445,18 +445,18 @@ export function __deserialise_Receipt(json: __JsonValue, path: string = "$"): Re
   const kind = obj["kind"];
   switch (kind) {
     case "Paid": {
-  const __r_amount = __deserialise_Price(obj["amount"], `${path}.amount`);
-  if (__r_amount.tag === "Err") return __r_amount;
-  const __amount = __r_amount.value;
+      const __r_amount = __deserialise_Price(obj["amount"], `${path}.amount`);
+      if (__r_amount.tag === "Err") return __r_amount;
+      const __amount = __r_amount.value;
       return Ok({ tag: "Paid", amount: __amount } as Receipt);
     }
     case "Pending":
       return Ok({ tag: "Pending" } as Receipt);
     case "Waived": {
-  if (typeof obj["note"] !== "string") {
-    return Err({ kind: "StructuralMismatch", path: `${path}.note`, expected: "string", actual: typeof obj["note"] });
-  }
-  const __note = obj["note"];
+      if (typeof obj["note"] !== "string") {
+        return Err({ kind: "StructuralMismatch", path: `${path}.note`, expected: "string", actual: typeof obj["note"] });
+      }
+      const __note = obj["note"];
       return Ok({ tag: "Waived", note: __note } as Receipt);
     }
     default:

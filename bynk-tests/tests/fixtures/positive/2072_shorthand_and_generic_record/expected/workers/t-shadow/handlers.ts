@@ -91,11 +91,11 @@ export function __deserialise_List_t_pay__Cents(json: __JsonValue, path: string 
   }
   const out: t_pay.Cents[] = [];
   for (let i = 0; i < json.length; i++) {
-  const item = json[i];
-  const __r_el = __deserialise_t_pay__Cents(item, `${path}[${i}]`);
-  if (__r_el.tag === "Err") return __r_el;
-  const __el = __r_el.value;
-  out.push(__el as t_pay.Cents);
+    const item = json[i];
+    const __r_el = __deserialise_t_pay__Cents(item, `${path}[${i}]`);
+    if (__r_el.tag === "Err") return __r_el;
+    const __el = __r_el.value;
+    out.push(__el as t_pay.Cents);
   }
   return Ok(out);
 }

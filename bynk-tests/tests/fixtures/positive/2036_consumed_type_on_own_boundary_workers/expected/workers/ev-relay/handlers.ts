@@ -132,11 +132,11 @@ export function __deserialise_List_Batch(json: __JsonValue, path: string = "$"):
   }
   const out: Batch[] = [];
   for (let i = 0; i < json.length; i++) {
-  const item = json[i];
-  const __r_el = __deserialise_Batch(item, `${path}[${i}]`);
-  if (__r_el.tag === "Err") return __r_el;
-  const __el = __r_el.value;
-  out.push(__el as Batch);
+    const item = json[i];
+    const __r_el = __deserialise_Batch(item, `${path}[${i}]`);
+    if (__r_el.tag === "Err") return __r_el;
+    const __el = __r_el.value;
+    out.push(__el as Batch);
   }
   return Ok(out);
 }

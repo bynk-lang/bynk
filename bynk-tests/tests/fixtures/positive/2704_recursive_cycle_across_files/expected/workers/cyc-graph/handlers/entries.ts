@@ -71,16 +71,16 @@ export function __deserialise_Entry(json: __JsonValue, path: string = "$", depth
   const kind = obj["kind"];
   switch (kind) {
     case "File": {
-  if (typeof obj["name"] !== "string") {
-    return Err({ kind: "StructuralMismatch", path: `${path}.name`, expected: "string", actual: typeof obj["name"] });
-  }
-  const __name = obj["name"];
+      if (typeof obj["name"] !== "string") {
+        return Err({ kind: "StructuralMismatch", path: `${path}.name`, expected: "string", actual: typeof obj["name"] });
+      }
+      const __name = obj["name"];
       return Ok({ tag: "File", name: __name } as Entry);
     }
     case "Sub": {
-  const __r_dir = __deserialise_Dir(obj["dir"], `${path}.dir`, depth + 1);
-  if (__r_dir.tag === "Err") return __r_dir;
-  const __dir = __r_dir.value;
+      const __r_dir = __deserialise_Dir(obj["dir"], `${path}.dir`, depth + 1);
+      if (__r_dir.tag === "Err") return __r_dir;
+      const __dir = __r_dir.value;
       return Ok({ tag: "Sub", dir: __dir } as Entry);
     }
     default:
@@ -99,11 +99,11 @@ export function __deserialise_List_Entry(json: __JsonValue, path: string = "$", 
   }
   const out: Entry[] = [];
   for (let i = 0; i < json.length; i++) {
-  const item = json[i];
-  const __r_el = __deserialise_Entry(item, `${path}[${i}]`, depth);
-  if (__r_el.tag === "Err") return __r_el;
-  const __el = __r_el.value;
-  out.push(__el as Entry);
+    const item = json[i];
+    const __r_el = __deserialise_Entry(item, `${path}[${i}]`, depth);
+    if (__r_el.tag === "Err") return __r_el;
+    const __el = __r_el.value;
+    out.push(__el as Entry);
   }
   return Ok(out);
 }

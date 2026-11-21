@@ -139,11 +139,11 @@ export function __deserialise_List_User(json: __JsonValue, path: string = "$"): 
   }
   const out: User[] = [];
   for (let i = 0; i < json.length; i++) {
-  const item = json[i];
-  const __r_el = __deserialise_User(item, `${path}[${i}]`);
-  if (__r_el.tag === "Err") return __r_el;
-  const __el = __r_el.value;
-  out.push(__el as User);
+    const item = json[i];
+    const __r_el = __deserialise_User(item, `${path}[${i}]`);
+    if (__r_el.tag === "Err") return __r_el;
+    const __el = __r_el.value;
+    out.push(__el as User);
   }
   return Ok(out);
 }
