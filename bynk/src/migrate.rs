@@ -14,6 +14,7 @@ use std::process::ExitCode;
 
 use bynk_driver::project::AgentVersions;
 use bynk_project::schema_registry::SchemaRegistry;
+use bynk_project::worker_layout::WorkerLayout;
 use serde::Serialize;
 
 pub(crate) mod live;
@@ -53,11 +54,22 @@ pub struct StepStatus {
     pub covers_from: i64,
 }
 
-/// The Worker directory holding agent class `class` (`<unit>.<Agent>`): the
-/// unit's qualified name with `.` replaced by `-`.
-pub(crate) fn worker_of(class: &str) -> String {
-    let unit = class.rsplit_once('.').map_or(class, |(unit, _)| unit);
-    unit.replace('.', "-")
+/// The unit (`<context>`) of agent class `class` (`<unit>.<Agent>`).
+fn unit_of(class: &str) -> &str {
+    class.rsplit_once('.').map_or(class, |(unit, _)| unit)
+}
+
+/// The Worker directory holding agent class `class` (`<unit>.<Agent>`), as
+/// `bynk deploy` lays the project out and keys the ledger (#3686): its
+/// `[deploy.workers]` group's, or the unit's qualified name dasherised.
+pub(crate) fn worker_of(layout: &WorkerLayout, class: &str) -> String {
+    layout.dir(unit_of(class))
+}
+
+/// The name agent class `class`'s Worker has on Cloudflare, before an
+/// environment qualifies it: its group's `name` or key, or the Worker's own.
+pub(crate) fn script_of(layout: &WorkerLayout, class: &str) -> String {
+    layout.script_name(unit_of(class))
 }
 
 /// Every recorded agent class's status, in key order. `versions` is the
@@ -67,6 +79,7 @@ pub fn class_statuses(
     lock: &SchemaRegistry,
     versions: &std::collections::HashMap<String, AgentVersions>,
     deployed: &BTreeMap<String, Vec<String>>,
+    layout: &WorkerLayout,
 ) -> Vec<ClassStatus> {
     lock.agents()
         .map(|(class, entry)| {
@@ -100,7 +113,10 @@ pub fn class_statuses(
                 oldest_readable,
                 steps,
                 without_path,
-                deployed_to: deployed.get(&worker_of(class)).cloned().unwrap_or_default(),
+                deployed_to: deployed
+                    .get(&worker_of(layout, class))
+                    .cloned()
+                    .unwrap_or_default(),
             }
         })
         .collect()
@@ -203,15 +219,25 @@ fn status_report(root: &Path) -> Result<Vec<ClassStatus>, String> {
         bynk_driver::print_project_check_short(&check);
         return Err("the project has errors; fix them first (`bynk check`)".to_string());
     }
-    let workers: Vec<String> = lock.agents().map(|(class, _)| worker_of(class)).collect();
+    let layout = WorkerLayout::for_project(root, &std::collections::HashMap::new());
+    let workers: Vec<String> = lock
+        .agents()
+        .map(|(class, _)| worker_of(&layout, class))
+        .collect();
     let deployed = crate::deploy::deployed_environments(root, &workers)?;
-    Ok(class_statuses(&lock, &check.agent_versions, &deployed))
+    Ok(class_statuses(
+        &lock,
+        &check.agent_versions,
+        &deployed,
+        &layout,
+    ))
 }
 
 /// `bynk migrate sweep`'s options.
 #[derive(Debug, Clone, Default)]
 pub struct SweepOptions {
-    /// Only this context's classes (its qualified name or Worker directory).
+    /// Only this context's classes (its qualified name, dashed or not, or its
+    /// Worker directory, a group's key included).
     pub context: Option<String>,
     /// Only these environments; every recorded one when empty. A narrowed
     /// run migrates but never raises a floor.
@@ -249,11 +275,16 @@ fn sweep_run(root: &Path, opts: &SweepOptions) -> Result<bool, String> {
     }
     let existing = bynk_driver::schema_lock::read(root).map_err(|e| e.to_string())?;
     let lock = bynk_project::schema_registry::parse(existing.as_deref(), root)?;
-    let workers: Vec<String> = lock.agents().map(|(class, _)| worker_of(class)).collect();
+    let layout = WorkerLayout::for_project(root, &std::collections::HashMap::new());
+    let workers: Vec<String> = lock
+        .agents()
+        .map(|(class, _)| worker_of(&layout, class))
+        .collect();
     let deployed = crate::deploy::deployed_environments(root, &workers)?;
     let selection = sweep::select(
         &lock,
         &deployed,
+        &layout,
         opts.context.as_deref(),
         &opts.environments,
     )?;
@@ -415,8 +446,9 @@ mod tests {
 
     #[test]
     fn worker_of_dasherises_the_unit() {
-        assert_eq!(worker_of("shop.Cart"), "shop");
-        assert_eq!(worker_of("acme.shop.Cart"), "acme-shop");
+        let identity = WorkerLayout::identity();
+        assert_eq!(worker_of(&identity, "shop.Cart"), "shop");
+        assert_eq!(worker_of(&identity, "acme.shop.Cart"), "acme-shop");
     }
 
     #[test]
@@ -439,7 +471,7 @@ mod tests {
             "shop".to_string(),
             vec!["default".to_string(), "staging".to_string()],
         )]);
-        let classes = class_statuses(&lock, &versions, &deployed);
+        let classes = class_statuses(&lock, &versions, &deployed, &WorkerLayout::identity());
         assert_eq!(
             classes,
             vec![ClassStatus {
@@ -465,11 +497,44 @@ mod tests {
         );
     }
 
+    /// #3686: a context in a `[deploy.workers]` group deploys as part of the
+    /// group's Worker, and the ledger records it under the group's directory.
+    #[test]
+    fn a_group_members_class_reports_the_groups_environments() {
+        let groups = bynk_project::worker_groups::WorkerGroups::from([(
+            "store".to_string(),
+            bynk_project::worker_groups::WorkerGroup {
+                contexts: vec!["shop.cart".to_string(), "shop.orders".to_string()],
+                name: Some("storefront".to_string()),
+                ..Default::default()
+            },
+        )]);
+        let layout = WorkerLayout::from_groups(&groups);
+        assert_eq!(worker_of(&layout, "shop.cart.Cart"), "store");
+        assert_eq!(worker_of(&layout, "billing.Ledger"), "billing");
+        let mut lock = SchemaRegistry::new();
+        lock.insert_agent("shop.cart.Cart".to_string(), entry(1, 1, &[false]));
+        let deployed = BTreeMap::from([(
+            "store".to_string(),
+            vec!["default".to_string(), "staging".to_string()],
+        )]);
+        let classes = class_statuses(&lock, &std::collections::HashMap::new(), &deployed, &layout);
+        assert_eq!(
+            classes[0].deployed_to,
+            vec!["default".to_string(), "staging".to_string()]
+        );
+    }
+
     #[test]
     fn a_class_gone_from_source_reads_from_its_entry() {
         let mut lock = SchemaRegistry::new();
         lock.insert_agent("shop.Old".to_string(), entry(2, 1, &[false, true]));
-        let classes = class_statuses(&lock, &std::collections::HashMap::new(), &BTreeMap::new());
+        let classes = class_statuses(
+            &lock,
+            &std::collections::HashMap::new(),
+            &BTreeMap::new(),
+            &WorkerLayout::identity(),
+        );
         assert_eq!(classes[0].oldest_readable, 1);
         assert!(classes[0].without_path.is_empty());
         assert!(render_short(&classes).contains("nothing recorded in bynk.deploy.lock"));

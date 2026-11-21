@@ -368,6 +368,10 @@ pub(crate) fn deploy_one(
         &read_contracts_manifest(&worker_dir).unwrap_or_default(),
         lock,
         &schema_agent_versions(project_root),
+        &bynk_project::worker_layout::WorkerLayout::for_project(
+            project_root,
+            &std::collections::HashMap::new(),
+        ),
     ));
     let wrangler_args: Vec<String> = wrangler_args.iter().cloned().chain(facts_args).collect();
     let wrangler_args = wrangler_args.as_slice();

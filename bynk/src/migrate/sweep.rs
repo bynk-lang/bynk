@@ -18,6 +18,7 @@ use std::io::Write;
 
 use bynk_emit::wire_format as wf;
 use bynk_project::schema_registry::SchemaRegistry;
+use bynk_project::worker_layout::WorkerLayout;
 use sha2::{Digest, Sha256};
 
 /// One Durable Object namespace on the account.
@@ -65,7 +66,8 @@ pub(crate) struct Target {
     /// `<context>.<Agent>`, the lock's key.
     pub class: String,
     pub agent: String,
-    /// The Worker directory (`<context>` dasherised).
+    /// The Worker directory: its `[deploy.workers]` group's, or `<context>`
+    /// dasherised.
     pub worker: String,
     pub environment: String,
     /// The deployed Worker's name.
@@ -84,12 +86,13 @@ pub(crate) struct Selection {
     pub never_deployed: Vec<String>,
 }
 
-/// The classes `lock` records, narrowed to `context` (its qualified name or
-/// its Worker directory) and to `environments` (all recorded ones when
+/// The classes `lock` records, narrowed to `context` (its qualified name, dashed
+/// or not, or its Worker directory) and to `environments` (all recorded ones when
 /// empty).
 pub(crate) fn select(
     lock: &SchemaRegistry,
     deployed: &BTreeMap<String, Vec<String>>,
+    layout: &WorkerLayout,
     context: Option<&str>,
     environments: &[String],
 ) -> Result<Selection, String> {
@@ -99,9 +102,10 @@ pub(crate) fn select(
     let mut matched = false;
     for (class, _) in lock.agents() {
         let (unit, agent) = class.rsplit_once('.').unwrap_or(("", class.as_str()));
-        let worker = super::worker_of(class);
+        let worker = super::worker_of(layout, class);
         if let Some(c) = context
             && c != unit
+            && c != unit.replace('.', "-")
             && c != worker
         {
             continue;
@@ -124,7 +128,7 @@ pub(crate) fn select(
                 agent: agent.to_string(),
                 worker: worker.clone(),
                 environment: env.clone(),
-                script: crate::deploy::deployed_worker_name(env, &worker),
+                script: crate::deploy::deployed_worker_name(env, &super::script_of(layout, class)),
             });
         }
     }
@@ -830,7 +834,7 @@ mod tests {
     fn selection_covers_every_recorded_environment_unless_narrowed() {
         let lock = lock_with(&[("shop.Cart", 2, 1), ("billing.Ledger", 1, 1)]);
         let deployed = deployed(&[("shop", &["default", "staging"])]);
-        let all = select(&lock, &deployed, None, &[]).unwrap();
+        let all = select(&lock, &deployed, &WorkerLayout::identity(), None, &[]).unwrap();
         assert_eq!(
             all.targets
                 .iter()
@@ -841,12 +845,69 @@ mod tests {
         assert!(all.covers_all["shop.Cart"]);
         assert_eq!(all.never_deployed, vec!["billing.Ledger".to_string()]);
 
-        let narrowed = select(&lock, &deployed, Some("shop"), &["staging".to_string()]).unwrap();
+        let narrowed = select(
+            &lock,
+            &deployed,
+            &WorkerLayout::identity(),
+            Some("shop"),
+            &["staging".to_string()],
+        )
+        .unwrap();
         assert_eq!(narrowed.targets.len(), 1);
         assert!(!narrowed.covers_all["shop.Cart"]);
 
-        assert!(select(&lock, &deployed, Some("nope"), &[]).is_err());
-        assert!(select(&lock, &deployed, None, &["prod".to_string()]).is_err());
+        assert!(
+            select(
+                &lock,
+                &deployed,
+                &WorkerLayout::identity(),
+                Some("nope"),
+                &[]
+            )
+            .is_err()
+        );
+        assert!(
+            select(
+                &lock,
+                &deployed,
+                &WorkerLayout::identity(),
+                None,
+                &["prod".to_string()]
+            )
+            .is_err()
+        );
+    }
+
+    /// #3686: a group member's classes sweep against the group's Worker, under
+    /// the script name the group deploys as (its `name`, when it has one).
+    #[test]
+    fn a_group_members_class_sweeps_the_groups_script() {
+        let groups = bynk_project::worker_groups::WorkerGroups::from([(
+            "store".to_string(),
+            bynk_project::worker_groups::WorkerGroup {
+                contexts: vec!["shop.cart".to_string(), "shop.orders".to_string()],
+                name: Some("storefront".to_string()),
+                ..Default::default()
+            },
+        )]);
+        let layout = WorkerLayout::from_groups(&groups);
+        let lock = lock_with(&[("shop.cart.Cart", 2, 1)]);
+        let deployed = deployed(&[("store", &["default", "staging"])]);
+        let all = select(&lock, &deployed, &layout, None, &[]).unwrap();
+        assert!(all.never_deployed.is_empty(), "{:?}", all.never_deployed);
+        assert_eq!(
+            all.targets
+                .iter()
+                .map(|t| (t.worker.as_str(), t.script.as_str()))
+                .collect::<Vec<_>>(),
+            vec![("store", "storefront"), ("store", "storefront-staging")]
+        );
+        assert!(all.covers_all["shop.cart.Cart"]);
+        // `--context` still takes the member's own name, dotted or dashed.
+        for context in ["shop.cart", "shop-cart", "store"] {
+            let one = select(&lock, &deployed, &layout, Some(context), &[]).unwrap();
+            assert_eq!(one.targets.len(), 2, "--context {context}");
+        }
     }
 
     struct FakeCloudflare;
@@ -888,6 +949,7 @@ mod tests {
         let sel = select(
             &lock,
             &deployed(&[("shop", &["default", "staging"])]),
+            &WorkerLayout::identity(),
             None,
             &[],
         )
@@ -1259,6 +1321,7 @@ mod tests {
         let both = select(
             &lock,
             &deployed(&[("shop", &["default", "staging"])]),
+            &WorkerLayout::identity(),
             None,
             &[],
         )
@@ -1286,6 +1349,7 @@ mod tests {
         let one = select(
             &lock,
             &deployed(&[("shop", &["default", "staging"])]),
+            &WorkerLayout::identity(),
             None,
             &["default".to_string()],
         )
@@ -1311,6 +1375,7 @@ mod tests {
         let both = select(
             &lock,
             &deployed(&[("shop", &["default", "staging"])]),
+            &WorkerLayout::identity(),
             None,
             &[],
         )
@@ -1387,6 +1452,7 @@ mod tests {
         let sel = select(
             &lock,
             &deployed(&[("shop", &["default", "staging"])]),
+            &WorkerLayout::identity(),
             None,
             &[],
         )
