@@ -1,6 +1,6 @@
 ---
 level: patch
-changelog: The state-migration step functions the compiler writes into an agent's module are built as trees, not text, so each statement of a step prints on its own line and its `catch` is braced; their tokens, and the output of every other construct, are unchanged
+changelog: The state-migration step functions the compiler writes into an agent's module are built as trees, not text, so each statement of a step prints on its own line and its `catch` is braced; their tokens are unchanged; a foreign client whose decoders return a consumed type now imports `Result` and `__BoundaryError`, which it used without importing
 probes: ts_writes, ts_raw_sites_emit, emit_print_calls
 ---
 refactor(emit): the migration step function and the codec round trips become nodes (1A.38c)
