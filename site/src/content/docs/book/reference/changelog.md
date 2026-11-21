@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.639.61** | `bynk explain` explains 20 more error codes, among them the `[deploy.workers]` group rules, `[package] exports`, `[unstable] allow` and D1 migration file names |
 | **v0.639.60** | A test suite of 500 or more cases now type-checks, instead of failing `bynk test` with `bynk.codegen.tsc_failed` (TS2563) because the generated runner was too large for `tsc` to analyse; and a `trace(Cap.op)` list or call record can be encoded, by `Json.encode` or as a `bynk eval` value, instead of failing with `bynk.codegen.tsc_failed` |
 | **v0.639.59** | The `rust` examples in the crate READMEs are self-contained, and CI compiles and runs them as doctests so they cannot fall out of date |
 | **v0.639.58** | Completion and hover show `joinOn` and `leftJoin` with their `left` and `right` key functions, as the checker checks them, instead of an `on` predicate |
