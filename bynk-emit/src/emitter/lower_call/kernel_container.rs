@@ -95,15 +95,13 @@ fn cast(expr: TsExpr, ty: TsType) -> TsExpr {
 /// `(recv.tag === "<tag>")`: the brackets stay, as the text wrote them, so the test still reads as
 /// one operand inside an unconverted text parent.
 fn is_tag(recv: bynk_ts::TsExpr, tag: &'static str) -> bynk_ts::TsExpr {
-    {
-        let n = vec![recv];
-        let [recv] = take::<1, _>(n);
-        paren(binary(
-            TsBinaryOp::StrictEq,
-            member(receiver_object(recv), "tag"),
-            str_node(tag),
-        ))
-    }
+    let n = vec![recv];
+    let [recv] = take::<1, _>(n);
+    paren(binary(
+        TsBinaryOp::StrictEq,
+        member(receiver_object(recv), "tag"),
+        str_node(tag),
+    ))
 }
 
 /// The `Option[B]` or `Result[_, _]` a combinator call was checked at, peeled with `peel`. A
@@ -433,32 +431,25 @@ pub(in crate::emitter) fn lower_result_kernel(
 
 /// `recv.size` / `(recv).size`-style member of a container receiver.
 fn member_of(recv: bynk_ts::TsExpr, prop: &'static str) -> bynk_ts::TsExpr {
-    {
-        let n = vec![recv];
-        let [recv] = take::<1, _>(n);
-        member(receiver_object(recv), prop)
-    }
+    let n = vec![recv];
+    let [recv] = take::<1, _>(n);
+    member(receiver_object(recv), prop)
 }
 
-/// `recv.method(args)`; the first child is the receiver. The text fallback keeps
-/// `(recv).method(args)`.
+/// `recv.method(args)`; the first child is the receiver.
 fn method_of(kids: Vec<bynk_ts::TsExpr>, method: &'static str) -> bynk_ts::TsExpr {
-    {
-        let mut n = kids;
-        let recv = receiver_object(n.remove(0));
-        call(member(recv, method), n)
-    }
+    let mut n = kids;
+    let recv = receiver_object(n.remove(0));
+    call(member(recv, method), n)
 }
 
 /// `[...recv.<method>()]`: the iterator of a `Map` spread into an array.
 fn spread_iter(recv: bynk_ts::TsExpr, method: &'static str) -> bynk_ts::TsExpr {
-    {
-        let n = vec![recv];
-        let [recv] = take::<1, _>(n);
-        TsExpr::Array {
-            items: vec![spread(call(member(receiver_object(recv), method), vec![]))],
-            multiline: false,
-        }
+    let n = vec![recv];
+    let [recv] = take::<1, _>(n);
+    TsExpr::Array {
+        items: vec![spread(call(member(receiver_object(recv), method), vec![]))],
+        multiline: false,
     }
 }
 
@@ -468,10 +459,8 @@ fn keyed_helper(
     type_args: Vec<TsType>,
     kids: Vec<bynk_ts::TsExpr>,
 ) -> bynk_ts::TsExpr {
-    {
-        let n = kids;
-        call(type_app(id(name), type_args.clone()), n)
-    }
+    let n = kids;
+    call(type_app(id(name), type_args.clone()), n)
 }
 
 /// v0.20b: lower a built-in `Map` kernel method. `insert` copies — the

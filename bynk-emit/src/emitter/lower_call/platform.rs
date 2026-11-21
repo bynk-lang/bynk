@@ -781,19 +781,17 @@ fn capability_op_call(
     type_args: Vec<TsType>,
     args: Vec<bynk_ts::TsExpr>,
 ) -> bynk_ts::TsExpr {
-    {
-        let nodes = args;
-        let callee = chain(deps, &[cap, op]);
-        let callee = if type_args.is_empty() {
-            callee
-        } else {
-            TsExpr::TypeApp {
-                callee: Box::new(callee),
-                type_args,
-            }
-        };
-        call(callee, nodes)
-    }
+    let nodes = args;
+    let callee = chain(deps, &[cap, op]);
+    let callee = if type_args.is_empty() {
+        callee
+    } else {
+        TsExpr::TypeApp {
+            callee: Box::new(callee),
+            type_args,
+        }
+    };
+    call(callee, nodes)
 }
 
 #[cfg(test)]

@@ -12,8 +12,7 @@ use super::super::lower_list::{call, id, member};
 use super::super::*;
 
 /// Lower an inline agent invocation, `Agent(<key>).method(args)`, or `None` when the call is not one. A node
-/// (`Call(Member(<construction>, method), args)`, wrapped in the trace step on a traced build) when the key and
-/// arguments are nodes, else the text form.
+/// (`Call(Member(<construction>, method), args)`, wrapped in the trace step on a traced build).
 pub(in crate::emitter) fn lower_inline_agent_call(
     e: &Expr,
     receiver: &Expr,
@@ -88,8 +87,7 @@ pub(in crate::emitter) fn lower_inline_agent_call(
 }
 
 /// Lower a method call on a let-bound agent instance, or `None` when the call is not one. A node
-/// (`Call(Member(<binding>, method), args)`, wrapped in the trace step on a traced build) when the arguments are
-/// nodes, else the text form.
+/// (`Call(Member(<binding>, method), args)`, wrapped in the trace step on a traced build).
 pub(in crate::emitter) fn lower_let_bound_agent_call(
     e: &Expr,
     receiver: &Expr,
@@ -133,8 +131,7 @@ pub(in crate::emitter) fn lower_let_bound_agent_call(
     None
 }
 
-/// The trace wrapper over a built agent call (1A.24's `trace_step_node` when it is a node, the
-/// string wrapper when an argument is still text).
+/// The trace wrapper over a built agent call (1A.24's `trace_step_node`).
 fn trace_built(
     cx: &LowerCtx,
     target: &str,

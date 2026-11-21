@@ -6,7 +6,7 @@
 //! is one and falls back to the same text otherwise.
 //!
 //! The call-site principal (`by Alice(...)`) reaches these as nodes (`LowerCtx::call_site_identity`
-//! and friends, Decision B); a principal that is still text makes the call text.
+//! and friends, Decision B).
 
 use bynk_check::checker::{Callee, HandlerAddress, Ty, WsAddress};
 use bynk_model::IrHttpMethod;
@@ -211,28 +211,26 @@ fn handler_facts(cx: &LowerCtx, service: &str) -> Option<HandlerFacts> {
 /// reads the envelope sender with no DMARC verdict (`DmarcNone`) unless the case names a principal:
 /// `((__m: any) => svc.key(__m, { ...deps, identity: { ... } }))(mail)`.
 fn inbound_email_call(service: &str, key: &str, mail: bynk_ts::TsExpr) -> bynk_ts::TsExpr {
-    {
-        let c = vec![mail];
-        let [mail] = take(c);
-        let sender = TsExpr::object(vec![
-            ("address".to_string(), member(id("__m"), "from")),
-            (
-                "dmarc".to_string(),
-                TsExpr::object(vec![("tag".to_string(), str_node("DmarcNone"))]),
-            ),
-        ]);
-        let handler = call(
-            member(id(service), key),
-            vec![
-                id("__m"),
-                deps_with(vec![TsObjectEntry::prop("identity".to_string(), sender)]),
-            ],
-        );
-        call(
-            paren(arrow(vec![param("__m", Some(any_ty()))], handler)),
-            vec![mail],
-        )
-    }
+    let c = vec![mail];
+    let [mail] = take(c);
+    let sender = TsExpr::object(vec![
+        ("address".to_string(), member(id("__m"), "from")),
+        (
+            "dmarc".to_string(),
+            TsExpr::object(vec![("tag".to_string(), str_node("DmarcNone"))]),
+        ),
+    ]);
+    let handler = call(
+        member(id(service), key),
+        vec![
+            id("__m"),
+            deps_with(vec![TsObjectEntry::prop("identity".to_string(), sender)]),
+        ],
+    );
+    call(
+        paren(arrow(vec![param("__m", Some(any_ty()))], handler)),
+        vec![mail],
+    )
 }
 
 /// `svc.GET(asset)` in a case (#1883, slice 3, [DECISION F]): the checker classified it

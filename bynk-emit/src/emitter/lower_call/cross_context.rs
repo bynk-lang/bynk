@@ -23,7 +23,7 @@ use super::super::{TypeBody, TypeDecl, UnaryOp, *};
 /// `callService(deps.env.<BINDING>, "<method>", serialise...(args), deserialise_<R>)`.
 /// Returns `None` when the receiver is not a consumed-context prefix.
 ///
-/// 1A.25 (#3726): a node when every lowered argument is one, else today's text.
+/// 1A.25 (#3726): a node.
 pub(in crate::emitter) fn lower_cross_context_service_call(
     receiver: &Expr,
     method: &Ident,

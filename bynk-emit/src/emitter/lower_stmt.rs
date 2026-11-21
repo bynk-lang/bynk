@@ -30,9 +30,8 @@ use super::*;
 /// The statement emitter builds a [`Body`] — a list of [`Item`]s — instead of
 /// appending text to a caller's buffer; [`render`] is the one adapter that
 /// turns it back into text and records the source-map checkpoints (back-half
-/// paydown 1A.10, S1 of the statement-emitter design note #3708). The producers
-/// below nest with [`Item::Indent`] (always `+ INDENT_STEP`) rather than by
-/// threading an `indent` through every call; the entry points keep their
+/// paydown 1A.10, S1 of the statement-emitter design note #3708). A body holds
+/// statement nodes and source-map marks only (1A.35b); the entry points keep their
 /// `(out, …, indent)` signatures as build-then-render wrappers.
 pub(super) struct Body(Vec<Item>);
 

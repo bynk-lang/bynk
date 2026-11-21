@@ -556,7 +556,7 @@ impl<'a> LowerCtx<'a> {
 
     /// [`Self::trace_step`] over a call node (1A.24, #3725, Decision C): the same wrapper, built
     /// as `__traceStep("kind", "target", { file, line, col })(call)`. A deploy build returns
-    /// `call` unchanged. The string form stays for the callers that are still text.
+    /// `call` unchanged.
     pub(crate) fn trace_step_node(
         &self,
         kind: &str,
@@ -1202,8 +1202,7 @@ impl<'a> LowerCtx<'a> {
     /// `deps.env` so the factory can reach the agent's DO namespace — #2355:
     /// `this.deps.env` in a provider body, whose composer supplies it.
     ///
-    /// 1A.27 (#3728): `<factory>(key)` or `<factory>(key, <deps>.env)` as a `Call` node when
-    /// the key is one, else today's text. The factory is a naming function's result, so the
+    /// 1A.27 (#3728): `<factory>(key)` or `<factory>(key, <deps>.env)` as a `Call` node. The factory is a naming function's result, so the
     /// callee is an `Ident` over it.
     pub(super) fn agent_construct_node(
         &mut self,

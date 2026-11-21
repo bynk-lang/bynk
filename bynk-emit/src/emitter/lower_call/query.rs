@@ -45,8 +45,7 @@ pub(in crate::emitter) fn note_par_fan_out(cx: &LowerCtx, method: &Ident) {
 /// pulled, so building is free and draining claims; `collect` when it runs.
 ///
 /// The generators are nodes (1A.35a part B): an `async function*` expression with a `yield`
-/// and a `for await`, built when the source and every argument are nodes, and today's text
-/// otherwise.
+/// and a `for await`.
 pub(in crate::emitter) fn lower_stream_method(
     source: bynk_ts::TsExpr,
     op: StreamOp,
@@ -214,7 +213,7 @@ const STREAM_READ_SYMBOL: &str = stream_read_symbol!();
 /// that is not a JS primitive and so goes through the keyed helpers (#2789).
 ///
 /// The element types are nodes (1A.22, #3723, Decision A): the printer owns the bracketing
-/// of `T[]`, and the text fallbacks print the same node.
+/// of `T[]`.
 pub(in crate::emitter) struct QueryShape<'a> {
     /// The receiver's own element type.
     pub(in crate::emitter) elem: &'a TsType,

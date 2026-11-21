@@ -719,7 +719,7 @@ pub(super) fn expect_location_raw(cx: &LowerCtx, offset: usize) -> String {
 
 /// v0.112: the trimmed source text of an `expect` predicate, embedded in the
 /// structural failure report (`expect <src>`), unescaped: it goes into a `Str`
-/// node (the printer escapes it) or through `escape_ts_string` for the text form.
+/// node (the printer escapes it).
 /// Empty when no test-body source is in scope (defensive — `expect`s only appear
 /// in test bodies).
 pub(super) fn expect_source_text_raw(cx: &LowerCtx, span: bynk_syntax::span::Span) -> String {
@@ -934,22 +934,18 @@ fn unary_op(op: UnaryOp, child: bynk_ts::TsExpr) -> bynk_ts::TsExpr {
 
 /// `[a, b, …]`: an `Array` node, or today's `[a, b]` text.
 fn array(children: Vec<bynk_ts::TsExpr>) -> bynk_ts::TsExpr {
-    {
-        let items = children;
-        bynk_ts::TsExpr::Array {
-            items,
-            multiline: false,
-        }
+    let items = children;
+    bynk_ts::TsExpr::Array {
+        items,
+        multiline: false,
     }
 }
 
 /// An explicit source `( … )`: `bynk_ts` has `TsExpr::Paren`, so the source's
 /// own parentheses are kept as a node.
 pub(super) fn paren(child: bynk_ts::TsExpr) -> bynk_ts::TsExpr {
-    {
-        let c = vec![child];
-        bynk_ts::TsExpr::Paren(Box::new(one(c)))
-    }
+    let c = vec![child];
+    bynk_ts::TsExpr::Paren(Box::new(one(c)))
 }
 
 /// A genuine identifier node. Never built from expression text.
@@ -965,17 +961,15 @@ pub(super) fn ternary_built(
     consequent: bynk_ts::TsExpr,
     alternate: bynk_ts::TsExpr,
 ) -> bynk_ts::TsExpr {
-    {
-        let c = vec![test, consequent, alternate];
-        let [test, consequent, alternate]: [bynk_ts::TsExpr; 3] = c
-            .try_into()
-            .unwrap_or_else(|_| unreachable!("a ternary has three children"));
-        bynk_ts::TsExpr::Paren(Box::new(bynk_ts::TsExpr::Conditional {
-            test: Box::new(test),
-            consequent: Box::new(consequent),
-            alternate: Box::new(alternate),
-        }))
-    }
+    let c = vec![test, consequent, alternate];
+    let [test, consequent, alternate]: [bynk_ts::TsExpr; 3] = c
+        .try_into()
+        .unwrap_or_else(|_| unreachable!("a ternary has three children"));
+    bynk_ts::TsExpr::Paren(Box::new(bynk_ts::TsExpr::Conditional {
+        test: Box::new(test),
+        consequent: Box::new(consequent),
+        alternate: Box::new(alternate),
+    }))
 }
 
 /// `object.property` over a genuine identifier `object`.
@@ -988,25 +982,23 @@ pub(super) fn member_node(object: &str, property: &str) -> bynk_ts::TsExpr {
 
 /// A runtime-constructor call with one argument — `Ok(x)`, `Some(x)`,
 /// `__bynkDecimalNeg(x)`, or `HttpResult.Ok(x)` when `object` is given — as a
-/// call node over genuine identifiers, or today's text if the argument is text.
+/// call node over genuine identifiers.
 pub(super) fn runtime_ctor_call(
     object: Option<&'static str>,
     name: &'static str,
     arg: bynk_ts::TsExpr,
 ) -> bynk_ts::TsExpr {
-    {
-        let c = vec![arg];
-        let callee = match object {
-            Some(o) => bynk_ts::TsExpr::Member {
-                object: Box::new(bynk_ts::TsExpr::Ident(o.to_string())),
-                property: name.to_string(),
-            },
-            None => bynk_ts::TsExpr::Ident(name.to_string()),
-        };
-        bynk_ts::TsExpr::Call {
-            callee: Box::new(callee),
-            args: vec![one(c)],
-        }
+    let c = vec![arg];
+    let callee = match object {
+        Some(o) => bynk_ts::TsExpr::Member {
+            object: Box::new(bynk_ts::TsExpr::Ident(o.to_string())),
+            property: name.to_string(),
+        },
+        None => bynk_ts::TsExpr::Ident(name.to_string()),
+    };
+    bynk_ts::TsExpr::Call {
+        callee: Box::new(callee),
+        args: vec![one(c)],
     }
 }
 
@@ -3243,8 +3235,7 @@ pub(super) fn settle_helper(cx: &LowerCtx) -> Option<&'static str> {
     }
 }
 
-/// [`settle_helper`] over a built call: `helper(deps, call)` as a node when the
-/// call is one, else today's text.
+/// [`settle_helper`] over a built call: `helper(deps, call)`.
 pub(super) fn settle_built(call: bynk_ts::TsExpr, cx: &LowerCtx) -> bynk_ts::TsExpr {
     settle_with(settle_helper(cx), call)
 }
@@ -3407,19 +3398,16 @@ fn bool_node(value: bool) -> bynk_ts::TsExpr {
 /// `!(l)`: a `Unary(Not)` over an explicit `Paren` (Decision C of #3715: the
 /// printer's own brackets would give `!x`), or today's `!({l})` text.
 fn negated_paren(l: bynk_ts::TsExpr) -> bynk_ts::TsExpr {
-    {
-        let c = vec![l];
-        bynk_ts::TsExpr::Unary {
-            op: bynk_ts::TsUnaryOp::Not,
-            expr: Box::new(bynk_ts::TsExpr::Paren(Box::new(one(c)))),
-        }
+    let c = vec![l];
+    bynk_ts::TsExpr::Unary {
+        op: bynk_ts::TsUnaryOp::Not,
+        expr: Box::new(bynk_ts::TsExpr::Paren(Box::new(one(c)))),
     }
 }
 
 /// The short-circuit operators over two operands: `l && r`, `l || r`, and
-/// `P implies Q` as `(!(P) || Q)` with its explicit brackets kept. A node when
-/// both operands are nodes (the printer brackets `&&`/`||` by precedence, as
-/// the text's own spelling already did), else today's text. The left operand is
+/// `P implies Q` as `(!(P) || Q)` with its explicit brackets kept. The printer
+/// brackets `&&`/`||` by precedence. The left operand is
 /// one value used once, so it stays textually present for `tsc`'s narrowing
 /// (#1044).
 fn short_circuit(op: BinOp, l: bynk_ts::TsExpr, r: bynk_ts::TsExpr) -> bynk_ts::TsExpr {
@@ -3721,7 +3709,7 @@ pub(super) fn build_value_bin_op(
 }
 
 /// The `TsBinaryOp` for a value operator (the short-circuit operators are
-/// lowered as text above and never reach a node).
+/// lowered by their own arms and never reach this function).
 fn value_binary_op(op: BinOp) -> bynk_ts::TsBinaryOp {
     use bynk_ts::TsBinaryOp as T;
     match op {
@@ -3744,26 +3732,22 @@ fn value_binary_op(op: BinOp) -> bynk_ts::TsBinaryOp {
 /// `l <op> r`: a `Binary` node (the printer decides the brackets), or today's
 /// `{l} {op} {r}` text.
 fn plain_binary(op: BinOp, children: Vec<bynk_ts::TsExpr>) -> bynk_ts::TsExpr {
-    {
-        let c = children;
-        let (l, r) = two(c);
-        bynk_ts::TsExpr::Binary {
-            op: value_binary_op(op),
-            left: Box::new(l),
-            right: Box::new(r),
-        }
+    let c = children;
+    let (l, r) = two(c);
+    bynk_ts::TsExpr::Binary {
+        op: value_binary_op(op),
+        left: Box::new(l),
+        right: Box::new(r),
     }
 }
 
 /// `helper(l, r)` over a runtime helper's genuine identifier.
 fn helper_call(helper: &'static str, children: Vec<bynk_ts::TsExpr>) -> bynk_ts::TsExpr {
-    {
-        let c = children;
-        let (l, r) = two(c);
-        bynk_ts::TsExpr::Call {
-            callee: Box::new(ident_node(helper)),
-            args: vec![l, r],
-        }
+    let c = children;
+    let (l, r) = two(c);
+    bynk_ts::TsExpr::Call {
+        callee: Box::new(ident_node(helper)),
+        args: vec![l, r],
     }
 }
 
@@ -3783,17 +3767,15 @@ fn ordered_comparison(
     cmp: bynk_ts::TsExpr,
     children: Vec<bynk_ts::TsExpr>,
 ) -> bynk_ts::TsExpr {
-    {
-        let c = children;
-        let (l, r) = two(c);
-        bynk_ts::TsExpr::Binary {
-            op: value_binary_op(op),
-            left: Box::new(bynk_ts::TsExpr::Call {
-                callee: Box::new(cmp),
-                args: vec![l, r],
-            }),
-            right: Box::new(num_lit("0".to_string())),
-        }
+    let c = children;
+    let (l, r) = two(c);
+    bynk_ts::TsExpr::Binary {
+        op: value_binary_op(op),
+        left: Box::new(bynk_ts::TsExpr::Call {
+            callee: Box::new(cmp),
+            args: vec![l, r],
+        }),
+        right: Box::new(num_lit("0".to_string())),
     }
 }
 
@@ -3957,32 +3939,30 @@ fn field_inits(
     (slots, children)
 }
 
-/// `{ k: v, … }` (or, with `spread`, `{ ...base, k: v, … }`): an `Object` node,
-/// or today's text. `children` holds the spread base first (when present), then
+/// `{ k: v, … }` (or, with `spread`, `{ ...base, k: v, … }`): an `Object` node.
+/// `children` holds the spread base first (when present), then
 /// one child per [`FieldSlot::Prop`], in order.
 fn object_built(
     has_spread: bool,
     slots: Vec<FieldSlot>,
     children: Vec<bynk_ts::TsExpr>,
 ) -> bynk_ts::TsExpr {
-    {
-        let nodes = children;
-        let mut nodes = nodes.into_iter();
-        let mut entries = Vec::new();
-        if has_spread && let Some(base) = nodes.next() {
-            entries.push(bynk_ts::TsObjectEntry::Spread(base));
-        }
-        for slot in &slots {
-            entries.push(match slot {
-                FieldSlot::Prop(key) => match nodes.next() {
-                    Some(v) => bynk_ts::TsObjectEntry::prop(key.clone(), v),
-                    None => unreachable!("one child per `Prop` slot"),
-                },
-                FieldSlot::Shorthand(key) => bynk_ts::TsObjectEntry::Shorthand(key.clone()),
-            });
-        }
-        bynk_ts::TsExpr::object_entries(entries)
+    let nodes = children;
+    let mut nodes = nodes.into_iter();
+    let mut entries = Vec::new();
+    if has_spread && let Some(base) = nodes.next() {
+        entries.push(bynk_ts::TsObjectEntry::Spread(base));
     }
+    for slot in &slots {
+        entries.push(match slot {
+            FieldSlot::Prop(key) => match nodes.next() {
+                Some(v) => bynk_ts::TsObjectEntry::prop(key.clone(), v),
+                None => unreachable!("one child per `Prop` slot"),
+            },
+            FieldSlot::Shorthand(key) => bynk_ts::TsObjectEntry::Shorthand(key.clone()),
+        });
+    }
+    bynk_ts::TsExpr::object_entries(entries)
 }
 
 /// #3759: the slot a defaulted field's value fills, `record[field]`, so a refined value in it is
@@ -4694,8 +4674,7 @@ impl PatPath {
         }
     }
 
-    /// The path a lowered scrutinee is read at. A value that is not a node is a compiler fault,
-    /// reported at `site` (see [`bynk_ts::TsExpr::into_node`]).
+    /// The path a lowered scrutinee is read at.
     pub(super) fn from_lowered(value: bynk_ts::TsExpr) -> Self {
         PatPath { node: value }
     }

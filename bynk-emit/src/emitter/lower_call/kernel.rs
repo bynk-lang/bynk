@@ -146,8 +146,7 @@ fn lower_effect_kernel_call(
 /// hoisted statements the attempt produced stay in `pre`. The result is a
 /// [`bynk_ts::TsExpr`] (1A.20, Decision G): the `List` kernel returns a node when its
 /// operands are nodes (1A.18a), a delegated kernel's `Lowered` passes through
-/// `Pre::absorb_built` unprinted, and the one family that is still text, the
-/// `Stream` generators, is a node too (1A.35a part B).
+/// `Pre::absorb_built`, and the `Stream` generators are nodes too (1A.35a part B).
 pub(in crate::emitter) fn lower_kernel_method_call(
     e: &Expr,
     receiver: &Expr,
@@ -505,8 +504,7 @@ pub(super) fn receiver_object(recv: TsExpr) -> TsExpr {
 }
 
 /// `recv.method(args)` for a runtime object that has the method (`Connection.send`, the request
-/// views): the receiver is bracketed only where precedence needs it. The text fallback keeps
-/// `(recv).method(args)`.
+/// views): the receiver is bracketed only where precedence needs it.
 fn lower_receiver_call(
     method: &str,
     receiver: &Expr,
@@ -525,15 +523,13 @@ fn lower_receiver_call(
 
 /// A case's recording `TestConnection[F]`: `[...recv.sent]`, `recv.closed`, `recv.mint()`.
 fn lower_test_connection(op: TestConnectionOp, recv: bynk_ts::TsExpr) -> bynk_ts::TsExpr {
-    {
-        let n = vec![recv];
-        let [recv] = take::<1, _>(n);
-        let recv = receiver_object(recv);
-        match op {
-            TestConnectionOp::Sent => TsExpr::array(vec![spread(member(recv, "sent"))]),
-            TestConnectionOp::Closed => member(recv, "closed"),
-            TestConnectionOp::Connection => call(member(recv, "mint"), vec![]),
-        }
+    let n = vec![recv];
+    let [recv] = take::<1, _>(n);
+    let recv = receiver_object(recv);
+    match op {
+        TestConnectionOp::Sent => TsExpr::array(vec![spread(member(recv, "sent"))]),
+        TestConnectionOp::Closed => member(recv, "closed"),
+        TestConnectionOp::Connection => call(member(recv, "mint"), vec![]),
     }
 }
 

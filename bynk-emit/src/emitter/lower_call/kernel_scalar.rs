@@ -36,50 +36,38 @@ fn global_math(name: &str) -> TsExpr {
 
 /// `globalThis.Math.<name>(…)` over the lowered operands.
 fn math_call(name: &str, kids: Vec<bynk_ts::TsExpr>) -> bynk_ts::TsExpr {
-    {
-        let n = kids;
-        call(global_math(name), n)
-    }
+    let n = kids;
+    call(global_math(name), n)
 }
 
 /// `globalThis.Math.min(globalThis.Math.max(recv, lo), hi)`.
 fn clamp(kids: Vec<bynk_ts::TsExpr>) -> bynk_ts::TsExpr {
-    {
-        let n = kids;
-        let [recv, lo, hi] = take::<3, _>(n);
-        call(
-            global_math("min"),
-            vec![call(global_math("max"), vec![recv, lo]), hi],
-        )
-    }
+    let n = kids;
+    let [recv, lo, hi] = take::<3, _>(n);
+    call(
+        global_math("min"),
+        vec![call(global_math("max"), vec![recv, lo]), hi],
+    )
 }
 
 /// `name(…)` for a runtime helper or a global function (`String`).
 fn plain_call(name: &str, kids: Vec<bynk_ts::TsExpr>) -> bynk_ts::TsExpr {
-    {
-        let n = kids;
-        call(id(name), n)
-    }
+    let n = kids;
+    call(id(name), n)
 }
 
-/// `recv.prop`. `bracketed` is the text fallback's spelling (`(recv).prop`); the node form
-/// is bracketed only where precedence needs it.
+/// `recv.prop`, bracketed only where precedence needs it.
 fn member_of(recv: bynk_ts::TsExpr, prop: &str) -> bynk_ts::TsExpr {
-    {
-        let n = vec![recv];
-        let [recv] = take::<1, _>(n);
-        member(receiver_object(recv), prop)
-    }
+    let n = vec![recv];
+    let [recv] = take::<1, _>(n);
+    member(receiver_object(recv), prop)
 }
 
-/// `recv.method(args)`; the first child is the receiver. `bracketed` is the text fallback's
-/// spelling (`(recv).method(args)`).
+/// `recv.method(args)`; the first child is the receiver.
 fn method_of(kids: Vec<bynk_ts::TsExpr>, method: &str) -> bynk_ts::TsExpr {
-    {
-        let mut n = kids;
-        let recv = receiver_object(n.remove(0));
-        call(member(recv, method), n)
-    }
+    let mut n = kids;
+    let recv = receiver_object(n.remove(0));
+    call(member(recv, method), n)
 }
 
 /// `lo` and `hi` clamped at zero as `String.slice` does: `globalThis.Math.max(0, x)`.
@@ -355,16 +343,14 @@ pub(in crate::emitter) fn lower_bytes_kernel(
 }
 
 /// `recv.slice(globalThis.Math.max(0, lo), globalThis.Math.max(0, hi))`, the `Bytes` and
-/// `String` slice (`bracketed` is the text fallback's receiver spelling).
+/// `String` slice.
 fn slice_clamped(kids: Vec<bynk_ts::TsExpr>) -> bynk_ts::TsExpr {
-    {
-        let n = kids;
-        let [recv, lo, hi] = take::<3, _>(n);
-        call(
-            member(receiver_object(recv), "slice"),
-            vec![at_least_zero(lo), at_least_zero(hi)],
-        )
-    }
+    let n = kids;
+    let [recv, lo, hi] = take::<3, _>(n);
+    call(
+        member(receiver_object(recv), "slice"),
+        vec![at_least_zero(lo), at_least_zero(hi)],
+    )
 }
 
 /// The `RegExp` source and flags [`regex_construction`] writes.
