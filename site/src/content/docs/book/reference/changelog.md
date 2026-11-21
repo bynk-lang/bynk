@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.639**.
+written against **v0.640**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.640.0** | `*`, `{` and `}` are reserved in an HTTP route, in a literal segment or inside a `:name`, and refused with `bynk.http.reserved_route_syntax`, so a rest-segment form can be added later without changing what an existing route means |
 | **v0.639.62** | `bynk dev` serves each Worker from a copy of its config that is replaced only once the development bindings are in it, so a rebuild never briefly binds the deploy's Vectorize index, and a Worker with stand-ins gets its development index too; `bynk migrate status` and `bynk migrate sweep` find the agent classes of a context in a `[deploy.workers]` group in the group's Worker |
 | **v0.639.61** | `bynk explain` explains 20 more error codes, among them the `[deploy.workers]` group rules, `[package] exports`, `[unstable] allow` and D1 migration file names |
 | **v0.639.60** | A test suite of 500 or more cases now type-checks, instead of failing `bynk test` with `bynk.codegen.tsc_failed` (TS2563) because the generated runner was too large for `tsc` to analyse; and a `trace(Cap.op)` list or call record can be encoded, by `Json.encode` or as a `bynk eval` value, instead of failing with `bynk.codegen.tsc_failed` |

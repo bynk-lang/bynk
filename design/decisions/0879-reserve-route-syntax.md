@@ -1,13 +1,6 @@
----
-level: minor
-changelog: `*`, `{` and `}` are reserved in an HTTP route, in a literal segment or inside a `:name`, and refused with `bynk.http.reserved_route_syntax`, so a rest-segment form can be added later without changing what an existing route means
-probes: emit_diagnostics, diagnostic_coverage, explained_codes
-breaking: A route containing `*`, `{` or `}`, such as `on GET("/files/*key")`, used to match those characters literally and is now refused with `bynk.http.reserved_route_syntax`. To match one literally, take the segment as a `:name` parameter and check its value in the handler.
----
+# 0879 — `*`, `{` and `}` are reserved in route segments before 1.0
 
-## ADR: reserve-route-syntax
-title: `*`, `{` and `}` are reserved in route segments before 1.0
-summary: A route segment may not contain `*`, `{` or `}`, so a rest segment can be added without changing a route's meaning
+- **Status:** Accepted (v0.640)
 
 **Context.** A route segment that is not `:name` was matched as a literal,
 whatever it contained, so `on GET("/files/*key")` compiled and answered only

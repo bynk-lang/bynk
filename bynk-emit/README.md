@@ -62,8 +62,8 @@ directly.
 
 ```toml
 [dependencies]
-bynk-driver = "0.639"
-bynk-emit = "0.639"
+bynk-driver = "0.640"
+bynk-emit = "0.640"
 ```
 
 ```rust
