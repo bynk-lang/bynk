@@ -192,13 +192,19 @@ The load-bearing commitment.
 - **R2. Redirects live in `site/public/_redirects`** (Cloudflare Pages), using
   splat rules where a whole tree moves (`/book/reference/* /reference/:splat 301`)
   and single rules otherwise. Astro's `redirects` option stays for the one
-  existing entry and is not grown.
+  existing entry and is not grown. Pages caps `_redirects` at 2,000 static and
+  100 dynamic (splat or placeholder) rules, and R1 never removes one, so a tree
+  move must use a splat, and a slice that would add more than a few dozen
+  single rules finds a splat or a naming scheme instead. If the cap is ever
+  reached, the fallback is Cloudflare Bulk Redirects on the zone, not a Worker.
 - **R3. A moved page's links are rewritten at source in the same slice**:
   `diagnostics.rs`, `keywords.rs`, `first_party_docs.rs`, `xtask`, tests, CI path
   filters and `llms.txt`. The redirect covers old compilers, not this one.
 - **R4. A redirect test**: a committed list of every URL published before the
-  move, checked in CI to resolve (directly or by one redirect) in the built
-  site.
+  move, checked in CI to resolve in the built site directly or by exactly one
+  redirect. Chains are not allowed: a redirect's target must be a final URL,
+  so a later move rewrites the targets of earlier rules that point into the
+  tree it moves (for example, slice 5 rewrites slice 3's changelog rule).
 - **R5. Guides keep their URLs.** Regrouping happens in `SUMMARY.md` only.
   Whether Concepts pages move to `/book/concepts/` is open (§14).
 
@@ -247,9 +253,19 @@ page.
 
 Slices land in an order where the site is whole after each one. Structure-only
 slices (1–2) move no URL. The Reference move (slice 5) is the single large
-mechanical slice, and its redirects land in the same PR. The theme slices (6–8)
-are independent of the Book slices and can run in parallel. The tutorial
-chapters (9–12) are independent of each other once slice 2 has landed.
+mechanical slice, and its redirects land in the same PR. The theme slices (6–7)
+are independent of the Book slices and can run in parallel. The site shell
+(slice 8) waits for slice 5, because its header, footer and home page link to
+the `/reference/` URLs that slice 5 creates. The tutorial
+chapters (9–11) are independent of each other once slice 2 has landed.
+
+**Chapter files carry no number.** A new chapter's file is named by its
+subject (`tutorials/failure-and-result.md`, `tutorials/capabilities.md`,
+`tutorials/contexts.md`, `tutorials/deploy.md`), and its place in the order
+comes from `SUMMARY.md` alone, so slices 9–11 move no URL and collide with no
+existing file. Slice 12 renames the six existing numbered files
+(`01-first-program.md` and so on) to unnumbered names, with one redirect each,
+so a chapter's URL never changes when chapters are added again.
 
 The back-half feature freeze (`bynk` features, from v0.639.1) does not block
 this track: no slice changes language or compiler behaviour. Slices that touch
@@ -279,10 +295,10 @@ and release tooling.
 | 6 | Theme package from the design system tokens; docs site adopts it | No | 0 |
 | 7 | Blog adopts the theme; cross-site search | No | 6 |
 | 8 | Site shell: header, footer and home page per the mockups | No | 5, 6 |
-| 9 | Learn Bynk 5: Handle failure with `Result` | No | 2 |
-| 10 | Learn Bynk 6: Reach out with capabilities | No | 2 |
-| 11 | Learn Bynk 8: Split into contexts | No | 2 |
-| 12 | Learn Bynk 10: Deploy it; renumber chapters 5–9 | Yes (renumbered chapter files) | 9–11 |
+| 9 | Learn Bynk 5: Handle failure with `Result` (`tutorials/failure-and-result.md`) | No | 2 |
+| 10 | Learn Bynk 6: Reach out with capabilities (`tutorials/capabilities.md`) | No | 2 |
+| 11 | Learn Bynk 8: Split into contexts (`tutorials/contexts.md`) | No | 2 |
+| 12 | Learn Bynk 10: Deploy it (`tutorials/deploy.md`); rename the six numbered chapter files to unnumbered names, with a redirect each (§10) | Yes (six renamed chapter files) | 9–11 |
 | 13 | Retirement: Project pages for contributing and roadmap; close the spine | Yes | all |
 
 ## 13. Decisions (ADRs to land up front)
@@ -305,11 +321,10 @@ pages generated from the registry (slice 4); per-minor release pages
 2. **The running project for Learn Bynk.** Extend chapter 2's service through
    all ten chapters, or choose a project from `examples/` that already has
    contexts, an agent and a deploy story?
-3. **Releases granularity.** Per minor version (about 640 pages so far) or
-   grouped by release tag per the release discipline?
-4. **Does the Specification keep `/book/spec/` under a redirect, or move to
-   `/reference/spec/`?** Recommendation: move, for one Reference surface.
-5. **Where the theme package is published** (npm or GitHub Packages), and how
+3. **How the Releases index is grouped.** One page per minor version means
+   about 640 pages so far, so the index needs grouping: by release tag (per
+   the release discipline), by hundred minor versions, or by year?
+4. **Where the theme package is published** (npm or GitHub Packages), and how
    the blog is told about a new version.
-6. **Light theme default.** The design system makes dark the default; reading
+5. **Light theme default.** The design system makes dark the default; reading
    pages may suit light better. Follow the reader's system setting?
