@@ -3064,6 +3064,14 @@ pub enum VerbatimOrigin {
     /// the first `VerbatimOrigin` a `TsExpr` carries, not a `TsStmt`), but
     /// named the same file-by-file way.
     Emit,
+    /// The `__formDecode` / `__formString` field-spec table (1A.35a part C, #3736 Decision E): the
+    /// array literal of `{ name, kind, list, option }` records the router's `@form` path reads a
+    /// body by, which `workers_entry::field_spec_source` returns as TypeScript *source text*. The
+    /// text is foreign (it is the router's own spelling, shared with the entry point), so a
+    /// `Form.decode[T]` or `Form.encode` call carries it as one expression leaf rather than
+    /// re-spelling it as nodes. Built at the one site `form_field_specs`
+    /// (`bynk-emit/src/emitter/lower_call/codec_statics.rs`).
+    FormFieldSpecs,
 }
 
 #[cfg(test)]
