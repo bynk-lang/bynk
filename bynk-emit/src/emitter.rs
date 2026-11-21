@@ -100,10 +100,8 @@ mod cmp;
 mod codec;
 pub mod ctx;
 mod default_value;
-mod lower;
-#[cfg(feature = "text-exit-counters")]
-pub use lower::text_counters;
 mod internal_fault;
+mod lower;
 mod lower_call;
 mod lower_ctx;
 mod lower_list;

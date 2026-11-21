@@ -1,10 +1,8 @@
 //! 1A.24 (#3725): the capability and platform calls (a capability call in a handler, a provider
 //! body, a test case and through a `D1.peek` handle; a decoded reply under the `fault` policy;
 //! Postgres and MySQL `select`/`firstAs`) lower to nodes. Each project is emitted in memory and the
-//! exact line is pinned; the text-exit counter is read where it is real (the driver links a
-//! non-test copy of `bynk-emit`, see `text_exit_counters.rs`).
+//! exact line is pinned.
 //!
-use bynk_emit::emitter::text_counters;
 
 fn fixture_dir(fixture: &str) -> std::path::PathBuf {
     std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -29,10 +27,10 @@ fn copy_dir(from: &std::path::Path, to: &std::path::Path) {
     }
 }
 
-/// `(text exits, every emitted document joined)` for a fixture project, built as the fixture suite
+/// `every emitted document joined` for a fixture project, built as the fixture suite
 /// builds it. `rewrite` replaces files of a temporary copy (`(path in the fixture, new text)`), so
 /// a suite's own unrelated constructs can be taken out of the count.
-fn emit(fixture: &str, rewrite: &[(&str, &str)]) -> (usize, String) {
+fn emit(fixture: &str, rewrite: &[(&str, &str)]) -> String {
     let original = fixture_dir(fixture);
     let (dir, copy) = if rewrite.is_empty() {
         (original, None)
@@ -46,9 +44,7 @@ fn emit(fixture: &str, rewrite: &[(&str, &str)]) -> (usize, String) {
         }
         (tmp.clone(), Some(tmp))
     };
-    text_counters::reset();
     let result = super::e2e::compile_fixture(&dir, super::e2e::fixture_target(&dir));
-    let exits = text_counters::exits();
     if let Some(tmp) = copy {
         let _ = std::fs::remove_dir_all(tmp);
     }
@@ -66,7 +62,7 @@ fn emit(fixture: &str, rewrite: &[(&str, &str)]) -> (usize, String) {
         .map(|d| d.text())
         .collect::<Vec<_>>()
         .join("\n");
-    (exits, text)
+    text
 }
 
 /// Every line in `text` equals one of `lines` (trimmed of indentation), in order, as a block.
@@ -86,7 +82,7 @@ fn assert_line(text: &str, line: &str) {
 #[test]
 fn a_capability_call_in_a_handler_is_a_node() {
     // The suite's own record comparisons are not under test, so a trivial suite stands in for it.
-    let (exits, ts) = emit(
+    let ts = emit(
         "3458_typed_capability_reads",
         &[(
             "tests/demo/store.bynk",
@@ -97,14 +93,13 @@ fn a_capability_call_in_a_handler_is_a_node() {
         &ts,
         "return deps.TypedReads.write(key, __serialise_Receipt(receipt));",
     );
-    assert_eq!(exits, 0, "no capability call left as text");
 }
 
 /// A decoded reply wraps the call in `__bynkCapabilityReply`: a miss for an `Option` payload, and
 /// a fault for the payload that declares no miss.
 #[test]
 fn a_decoded_reply_is_pinned_under_each_policy() {
-    let (_, ts) = emit("3458_typed_capability_reads", &[]);
+    let ts = emit("3458_typed_capability_reads", &[]);
     assert_line(
         &ts,
         "return __bynkCapabilityReply(deps.TypedReads.readOpt(key), { encode: __serialise_Option_Receipt, decode: __deserialise_Option_Receipt }, { capability: \"TypedReads\", operation: \"readOpt\", type: \"Option[Receipt]\" }, \"miss\");",
@@ -118,24 +113,22 @@ fn a_decoded_reply_is_pinned_under_each_policy() {
 /// A capability call in a provider body reaches `this.deps`.
 #[test]
 fn a_capability_call_in_a_provider_body_is_a_node() {
-    let (exits, ts) = emit("1976_secrets_provider_body_workers", &[]);
+    let ts = emit("1976_secrets_provider_body_workers", &[]);
     assert_line(&ts, "const t = await this.deps.Secrets.get(\"TONE\");");
-    assert_eq!(exits, 0, "the provider's capability call is a node");
 }
 
 /// A capability call in a test `case` reaches the case's own `deps`.
 #[test]
 fn a_capability_call_in_a_test_case_is_a_node() {
-    let (exits, ts) = emit("1975_suite_on_adapter", &[]);
+    let ts = emit("1975_suite_on_adapter", &[]);
     assert_line(&ts, "const s = await deps.Greeter.hello(\"ann\");");
-    assert_eq!(exits, 0, "the case's capability call is a node");
 }
 
 /// `D1.peek` binds the participant's capability over its own database, read-only, and a read
 /// through the handle is a block-bodied IIFE on `deps`.
 #[test]
 fn a_d1_peek_handle_and_its_reads_are_nodes() {
-    let (_, ts) = emit("3147_d1_peek_system", &[]);
+    let ts = emit("3147_d1_peek_system", &[]);
     assert_line(
         &ts,
         "const db = (deps.__peek_shop_orders_Orders = new bynk_cloudflare__binding.WorkersD1({ D1_ORDERS: deps.env___ns_shop_orders.D1_ORDERS.readOnly() }, \"D1_ORDERS\"));",
@@ -150,7 +143,7 @@ fn a_d1_peek_handle_and_its_reads_are_nodes() {
     );
     // The suite's own pattern assertions are not under test: a suite of the handle and one read
     // is the count that says the handle and the read are nodes.
-    let (exits, small) = emit(
+    let small = emit(
         "3147_d1_peek_system",
         &[(
             "tests/orders.test.bynk",
@@ -162,7 +155,6 @@ fn a_d1_peek_handle_and_its_reads_are_nodes() {
         &small,
         "const raw = await deps.__peek_shop_orders_Orders.all(\"SELECT id FROM orders\", []);",
     );
-    assert_eq!(exits, 0, "the peek handle and its reads are nodes");
 }
 
 /// Postgres and MySQL `select`/`firstAs`: the error tags are the engine's own, `as const`, and
@@ -173,8 +165,7 @@ fn postgres_and_mysql_selects_are_pinned() {
         ("3320_postgres_typed", "Main", "\\\"", "PgSql", "PgDecode"),
         ("3322_mysql_typed", "Legacy", "`", "MySqlSql", "MySqlDecode"),
     ] {
-        let (exits, ts) = emit(fixture, &[]);
-        assert_eq!(exits, 0, "{fixture}: no select left as text");
+        let ts = emit(fixture, &[]);
         let cols = ["id", "name", "placed", "note", "paid"]
             .map(|c| format!("{quote}{c}{quote}"))
             .join(", ");

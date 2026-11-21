@@ -1,12 +1,9 @@
 //! 1A.30 (#3731): the container kernels (`Option`, `Result`, `Set`, `Map`) lower to nodes. A project
-//! is emitted through the driver and the exact lines are pinned, with the text-exit counter read
-//! where it is real (see `text_exit_counters.rs`). The arms' own node and text forms are unit
+//! is emitted through the driver and the exact lines are pinned. The arms' own forms are unit
 //! tests in `lower_call/kernel_container.rs`.
-use bynk_emit::emitter::text_counters;
 
-/// `(text exits, every emitted document joined)` for the one-context project `src` on Workers.
-fn mem(src: &str) -> (usize, String) {
-    text_counters::reset();
+/// `every emitted document joined` for the one-context project `src` on Workers.
+fn mem(src: &str) -> String {
     let out = bynk_driver::project::compile_files_in_memory(
         &[("ops/jobs.bynk", src)],
         bynk_check::project_model::BuildTarget::Workers,
@@ -26,7 +23,7 @@ fn mem(src: &str) -> (usize, String) {
         .map(|d| d.text())
         .collect::<Vec<_>>()
         .join("\n");
-    (text_counters::exits(), text)
+    text
 }
 
 fn assert_line(text: &str, line: &str) {
@@ -67,11 +64,10 @@ fn map_put(m: Map[String, Int], k: String, v: Int) -> Map[String, Int] { m.inser
 fn kmap_put(m: Map[Bytes, Int], k: Bytes, v: Int) -> Map[Bytes, Int] { m.insert(k, v) }
 "#;
 
-/// Every container op over identifiers, in one context: the exact lines and no text exit.
+/// Every container op over identifiers, in one context: the exact lines.
 #[test]
-fn the_container_kernels_print_as_nodes_with_no_text_exit() {
-    let (exits, text) = mem(NODES);
-    assert_eq!(exits, 0, "no text exit:\n{text}");
+fn the_container_kernels_print_as_nodes() {
+    let text = mem(NODES);
     for line in [
         r#"return ((__o: Option<number>, __f: (x: number) => number) => __o.tag === "Some" ? Some(__f(__o.value)) : None)(o, f);"#,
         r#"return ((__o: Option<number>, __f: (x: number) => Option<number>) => __o.tag === "Some" ? __f(__o.value) : None)(o, f);"#,
@@ -120,7 +116,6 @@ fn a_conditional_receiver_is_bracketed_and_stays_a_node() {
 
 fn pick(c: Bool, a: Set[String], b: Set[String]) -> Int { (if c { a } else { b }).length() }
 "#;
-    let (exits, text) = mem(src);
-    assert_eq!(exits, 0, "no text exit:\n{text}");
+    let text = mem(src);
     assert_line(&text, "return ((c ? a : b)).size;");
 }

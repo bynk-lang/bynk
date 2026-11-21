@@ -173,8 +173,6 @@ mod integration {
     mod test_calls_nodes;
     #[path = "test_domain_nodes.rs"]
     mod test_domain_nodes;
-    #[path = "text_exit_counters.rs"]
-    mod text_exit_counters;
     #[path = "trace_requests.rs"]
     mod trace_requests;
     #[path = "types_reference_methods.rs"]

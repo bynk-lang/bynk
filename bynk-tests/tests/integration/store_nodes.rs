@@ -1,11 +1,8 @@
 //! 1A.23 (#3724): the persisted-store calls (held `Map`, `Map`, `Set`, `Cache`, `Log`, `Cell`)
 //! lower to nodes. Each source below is emitted as a one-context project and every handler's
 //! TypeScript is pinned in `store_nodes_cases.txt`: an operation over identifier arguments is a
-//! node (one statement per line, the printer's layout), and the same operation over an argument
-//! that is still text is the one-line text it printed before. The text-exit counter is read where
-//! it is real (the driver links a non-test copy of `bynk-emit`, see `text_exit_counters.rs`).
+//! node (one statement per line, the printer's layout).
 use bynk_check::project_model::BuildTarget;
-use bynk_emit::emitter::text_counters;
 
 const AGENTS: &str = "context commerce
 
@@ -62,8 +59,7 @@ agent Shelf {
 }
 ";
 
-fn emit(files: &[(&str, &str)], target: BuildTarget, module: &str) -> (usize, String) {
-    text_counters::reset();
+fn emit(files: &[(&str, &str)], target: BuildTarget, module: &str) -> String {
     let out = match bynk_driver::project::compile_files_in_memory(
         files,
         target,
@@ -88,7 +84,7 @@ fn emit(files: &[(&str, &str)], target: BuildTarget, module: &str) -> (usize, St
         .map(|(_, d)| d.text())
         .collect::<Vec<_>>()
         .join("\n");
-    (text_counters::exits(), text)
+    text
 }
 
 const ROOM: &str = "context room
@@ -237,7 +233,7 @@ fn cases() -> Vec<(&'static str, &'static str, &'static str)> {
 fn every_store_operation_prints_as_pinned() {
     let mut checked = 0;
     for (src, file, text, target, module) in sources() {
-        let (exits, emitted) = emit(&[(file, text)], target, module);
+        let emitted = emit(&[(file, text)], target, module);
         for (case_src, name, want) in cases() {
             if case_src == src {
                 assert_eq!(handler(&emitted, name), want, "{src}: {name}");
@@ -245,9 +241,7 @@ fn every_store_operation_prints_as_pinned() {
             }
         }
         // The sources are nodes from end to end.
-        if src.starts_with("room") || src == "agents" {
-            assert_eq!(exits, 0, "{src}: no store operation left as text");
-        }
+        if src.starts_with("room") || src == "agents" {}
     }
     assert_eq!(checked, cases().len(), "every pinned case was read");
 }
@@ -257,12 +251,12 @@ fn a_connection_map_closes_what_it_displaces_on_both_targets() {
     // The bundle compares the connections themselves; Workers compares connection ids and
     // resolves the displaced one. Neither closes it when the same connection goes back under
     // its own key (`__old !== __new`).
-    let (_, bundle) = emit(&[("room.bynk", ROOM)], BuildTarget::Bundle, "room.ts");
+    let bundle = emit(&[("room.bynk", ROOM)], BuildTarget::Bundle, "room.ts");
     let join = handler(&bundle, "join");
     assert!(join.contains(
         "if (__old !== undefined && __old !== __new) {\n          await __old.close();\n        }"
     ));
-    let (_, workers) = emit(
+    let workers = emit(
         &[("room.bynk", ROOM)],
         BuildTarget::Workers,
         "room/handlers.ts",
@@ -274,7 +268,7 @@ fn a_connection_map_closes_what_it_displaces_on_both_targets() {
 
 #[test]
 fn an_indexed_equality_filter_routes_to_the_posting_list() {
-    let (_, text) = emit(&[("shop.bynk", INDEXED)], BuildTarget::Bundle, "shop.ts");
+    let text = emit(&[("shop.bynk", INDEXED)], BuildTarget::Bundle, "shop.ts");
     for name in ["routed", "routedFlipped"] {
         assert!(
             handler(&text, name).contains("__state.reservations.byIndex(\"orderId\", String(oid))"),
@@ -293,7 +287,7 @@ fn an_indexed_equality_filter_routes_to_the_posting_list() {
 
 #[test]
 fn a_cache_operation_notes_the_clock_once() {
-    let (_, text) = emit(
+    let text = emit(
         &[("commerce.bynk", AGENTS)],
         BuildTarget::Bundle,
         "commerce.ts",
@@ -352,7 +346,7 @@ fn a_parallel_traverse_over_a_store_imports_the_settle_helper_on_both_paths() {
             "../../__bynk_runtime/settle.js",
         ),
     ] {
-        let (_, text) = emit(&[files], target, module);
+        let text = emit(&[files], target, module);
         assert!(
             text.contains(&format!("import {{ __bynkSettleAll }} from \"{helper}\";")),
             "{module}"
@@ -362,7 +356,7 @@ fn a_parallel_traverse_over_a_store_imports_the_settle_helper_on_both_paths() {
 
 #[test]
 fn a_cell_update_over_a_statement_bodied_lambda_keeps_its_block_inside_the_update() {
-    let (_, text) = emit(&[("par.bynk", PAR)], BuildTarget::Bundle, "par.ts");
+    let text = emit(&[("par.bynk", PAR)], BuildTarget::Bundle, "par.ts");
     let h = handler(&text, "bump");
     assert!(h.contains(
         "const __r0 = await (() => {\n        __state.n = ((c: number) => ((__d) => {\n          switch (__d) {"

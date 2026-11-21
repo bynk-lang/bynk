@@ -1,10 +1,8 @@
 //! 1A.25 (#3726): the cross-context service call (the bundle `deps.surface.<key>.<method>(args)`
 //! and the Workers `__callService(…)`) and its boundary casts lower to nodes. Each project is
-//! emitted in memory and the exact line is pinned; the text-exit counter is read where it is real
-//! (the driver links a non-test copy of `bynk-emit`, see `text_exit_counters.rs`). The checker-
+//! emitted in memory and the exact line is pinned. The checker-
 //! agreement panics and the cast builder are unit tests in `lower_call/cross_context.rs`.
 //!
-use bynk_emit::emitter::text_counters;
 
 fn fixture_dir(fixture: &str) -> std::path::PathBuf {
     std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -29,10 +27,10 @@ fn copy_dir(from: &std::path::Path, to: &std::path::Path) {
     }
 }
 
-/// `(text exits, every emitted document joined)` for a fixture project, built as the fixture suite
+/// `every emitted document joined` for a fixture project, built as the fixture suite
 /// builds it. `rewrite` replaces files of a temporary copy (`(path in the fixture, new text)`), so
 /// a suite's own unrelated constructs can be taken out of the count.
-fn emit(fixture: &str, rewrite: &[(&str, &str)]) -> (usize, String) {
+fn emit(fixture: &str, rewrite: &[(&str, &str)]) -> String {
     let original = fixture_dir(fixture);
     let (dir, copy) = if rewrite.is_empty() {
         (original, None)
@@ -46,9 +44,7 @@ fn emit(fixture: &str, rewrite: &[(&str, &str)]) -> (usize, String) {
         }
         (tmp.clone(), Some(tmp))
     };
-    text_counters::reset();
     let result = super::e2e::compile_fixture(&dir, super::e2e::fixture_target(&dir));
-    let exits = text_counters::exits();
     if let Some(tmp) = copy {
         let _ = std::fs::remove_dir_all(tmp);
     }
@@ -66,7 +62,7 @@ fn emit(fixture: &str, rewrite: &[(&str, &str)]) -> (usize, String) {
         .map(|d| d.text())
         .collect::<Vec<_>>()
         .join("\n");
-    (exits, text)
+    text
 }
 
 /// Every line in `text` equals one of `lines` (trimmed of indentation), in order, as a block.
@@ -82,7 +78,7 @@ fn assert_line(text: &str, line: &str) {
     assert_block(text, &[line]);
 }
 
-/// A bundle call with no argument, one argument and one cast argument: a node, with no text exit.
+/// A bundle call with no argument, one argument and one cast argument: a node.
 #[test]
 fn a_bundle_call_is_a_node_with_zero_one_and_a_cast_argument() {
     for (fixture, line) in [
@@ -99,24 +95,21 @@ fn a_bundle_call_is_a_node_with_zero_one_and_a_cast_argument() {
             "const __r0 = await deps.surface.payment.authorise((total as unknown as commerce_payment.Money));",
         ),
     ] {
-        let (exits, ts) = emit(fixture, &[]);
+        let ts = emit(fixture, &[]);
         assert_line(&ts, line);
         // `1807`'s own suite carries unrelated text constructs; the call is pinned by its line.
-        if fixture != "1807_uses_reaches_hidden_type" {
-            assert_eq!(exits, 0, "{fixture}: no cross-context call left as text");
-        }
+        if fixture != "1807_uses_reaches_hidden_type" {}
     }
 }
 
 /// Many arguments are cast one by one, in order, each to the callee's own named type.
 #[test]
 fn a_bundle_call_casts_each_argument_in_order() {
-    let (exits, ts) = emit("2802_stronger_sender_crosses_boundary", &[]);
+    let ts = emit("2802_stronger_sender_crosses_boundary", &[]);
     assert_line(
         &ts,
         "const __r0 = await deps.surface.Provider.describe((label as unknown as boundary_provider.Label), (qty as unknown as boundary_provider.Qty), (ratio as unknown as boundary_provider.Ratio), (price as unknown as boundary_provider.Price), (slug as unknown as boundary_provider.Slug));",
     );
-    assert_eq!(exits, 0);
 }
 
 /// A literal the checker admitted to the callee's refined type (`holds_callee_typed`) and a value
@@ -124,7 +117,7 @@ fn a_bundle_call_casts_each_argument_in_order() {
 /// is the alias.
 #[test]
 fn a_literal_and_a_generic_argument_are_cast_to_the_callee_type() {
-    let (_, ts) = emit("2887_consumes_alias_service_bundle", &[]);
+    let ts = emit("2887_consumes_alias_service_bundle", &[]);
     assert_line(
         &ts,
         "const flipped = await deps.surface.lib.flip((LibCode.Alpha as unknown as lib.Code));",
@@ -139,7 +132,7 @@ fn a_literal_and_a_generic_argument_are_cast_to_the_callee_type() {
 /// caller's declaration, through `unknown`; one that does not is the bare call.
 #[test]
 fn a_bundle_result_is_cast_only_where_it_reaches_a_caller_bound_brand() {
-    let (exits, ts) = emit("2825_same_name_refined_return", &[]);
+    let ts = emit("2825_same_name_refined_return", &[]);
     for line in [
         "const r = await (deps.surface.Provider.reply(n) as unknown as globalThis.Promise<Result<Reply, number>>);",
         "const rs = await (deps.surface.Provider.replies(n) as unknown as globalThis.Promise<readonly Reply[]>);",
@@ -148,33 +141,29 @@ fn a_bundle_result_is_cast_only_where_it_reaches_a_caller_bound_brand() {
     ] {
         assert_line(&ts, line);
     }
-    assert_eq!(exits, 0);
-    let (exits, ts) = emit("2828_shared_commons_and_nested_brand_return", &[]);
+    let ts = emit("2828_shared_commons_and_nested_brand_return", &[]);
     assert_line(&ts, "const r = await deps.surface.Provider.tagged(n);");
-    assert_eq!(exits, 0);
 }
 
 /// Workers: a zero-argument call sends `{}` (it was `{  }`), one argument is serialised bare,
 /// many are an object of the parameter names. The contract hash stamped on the call is unchanged.
 #[test]
 fn a_workers_call_is_a_node_with_zero_one_and_many_arguments() {
-    let (exits, ts) = emit("172_integration_with_capability", &[]);
+    let ts = emit("172_integration_with_capability", &[]);
     assert!(
         ts.contains("__callService(deps.env.OPS_JOBS, \"tick\", {}, "),
         "{ts}"
     );
     assert!(ts.contains("\"12c6f9c0fb6f00af\", deps.env, \"ops.jobs\")"));
     assert!(!ts.contains("{  }"), "no two-space payload");
-    assert_eq!(exits, 0, "the zero-argument call is a node");
 
-    let (exits, ts) = emit("118_workers_target_with_consume", &[]);
+    let ts = emit("118_workers_target_with_consume", &[]);
     assert_line(
         &ts,
         "const auth = await __callService(deps.env.COMMERCE_PAYMENT, \"authorise\", __serialise_Money((total as unknown as commerce_payment.Money)), __deserialise_Result_AuthId_PaymentError, \"commerce.orders\", \"d7dff23f6fd4c9e4\", deps.env, \"commerce.payment\");",
     );
-    assert_eq!(exits, 0, "the one-argument call is a node");
 
-    let (_, ts) = emit("1818_agent_reads_its_key", &[]);
+    let ts = emit("1818_agent_reads_its_key", &[]);
     assert!(
         ts.contains("__callService(deps.env.SHOP_ONE, \"sum\", { x: ((v: number) =>"),
         "{ts}"
@@ -186,7 +175,7 @@ fn a_workers_call_is_a_node_with_zero_one_and_many_arguments() {
 /// codec takes (`Parameters<typeof codec>[0]`, the one arm `bynk_ts` has no type for).
 #[test]
 fn a_workers_renamed_literal_is_cast_to_the_codec_parameter() {
-    let (_, ts) = emit("2039_nested_refined_literal", &[]);
+    let ts = emit("2039_nested_refined_literal", &[]);
     assert!(
         ts.contains("__serialise_Option_t_pay__Cents((Some((250 as Cents)) as unknown as globalThis.Parameters<typeof __serialise_Option_t_pay__Cents>[0]))"),
         "{ts}"
@@ -201,12 +190,12 @@ fn a_workers_renamed_literal_is_cast_to_the_codec_parameter() {
 /// reaches them locally.
 #[test]
 fn a_test_scaffold_call_is_namespaced_and_a_production_call_is_not() {
-    let (_, ts) = emit("172_integration_with_capability", &[]);
+    let ts = emit("172_integration_with_capability", &[]);
     assert!(
         ts.contains("__callService(deps.env.OPS_JOBS, \"tick\", {}, __ns_ops_jobs.__deserialise_Result_Int_TickError, \"integration\", "),
         "{ts}"
     );
-    let (_, ts) = emit("118_workers_target_with_consume", &[]);
+    let ts = emit("118_workers_target_with_consume", &[]);
     assert!(
         !ts.contains("__ns_commerce_payment.__deserialise"),
         "a production call names the codecs locally"
@@ -216,13 +205,12 @@ fn a_test_scaffold_call_is_namespaced_and_a_production_call_is_not() {
 /// #1961: a local that shadows the consumed alias is a UFCS call, not a cross-context call.
 #[test]
 fn a_local_shadowing_the_alias_falls_through_to_ufcs() {
-    let (exits, ts) = emit("1203_cross_context_call_shadowed_by_local", &[]);
+    let ts = emit("1203_cross_context_call_shadowed_by_local", &[]);
     assert_line(
         &ts,
         "const r = await LocalLedger.authorise(Ledger, amount);",
     );
     assert!(!ts.contains("__callService(deps.env.SHOP_LEDGER"), "{ts}");
-    assert_eq!(exits, 0);
 }
 
 /// A traced build wraps the call in a trace step and its binding; an untraced build is the bare

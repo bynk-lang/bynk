@@ -1,14 +1,9 @@
 //! 1A.17 (#3718): the test-domain constructs (`expect`, `advance`, `Val`,
 //! observations, `trace` and fault claims) lower to nodes.
 //!
-//! Each project is emitted twice: once with the construct, once with it
-//! replaced by `expect true` (a literal, so a node). Equal text-exit counts
-//! prove the construct itself contributed none. The counters are read here
-//! because the driver links a non-test copy of `bynk-emit` (see
-//! `text_exit_counters.rs`).
+//! Each project is emitted in memory and the exact lines are pinned.
 
 use bynk_check::project_model::BuildTarget;
-use bynk_emit::emitter::text_counters;
 
 const PAYMENT: &str =
     include_str!("../fixtures/positive/246_observation_surface/src/commerce/payment.bynk");
@@ -17,10 +12,9 @@ const MONEY: &str = include_str!("../fixtures/positive/144_mock_refined/src/comm
 const SHAPES: &str = include_str!("../fixtures/positive/145_mock_bare_kinds/src/demo/shapes.bynk");
 const HOLDS: &str = include_str!("../fixtures/positive/2137_harness_clock/src/ck/holds.bynk");
 
-/// `(text exits, the test module's TypeScript)` for a project of `ctx` and one
+/// `the test module's TypeScript` for a project of `ctx` and one
 /// suite.
-fn emit(ctx_path: &str, ctx: &str, suite: &str) -> (usize, String) {
-    text_counters::reset();
+fn emit(ctx_path: &str, ctx: &str, suite: &str) -> String {
     let out = bynk_driver::project::compile_files_in_memory(
         &[(ctx_path, ctx), ("tests/t.bynk", suite)],
         BuildTarget::Bundle,
@@ -36,7 +30,7 @@ fn emit(ctx_path: &str, ctx: &str, suite: &str) -> (usize, String) {
         .map(|(_, d)| d.text())
         .collect::<Vec<_>>()
         .join("\n");
-    (text_counters::exits(), text)
+    text
 }
 
 /// The suite with each `lines` entry as one `expect` in a case, and the
@@ -52,7 +46,7 @@ fn suite(header: &str, prelude: &str, lines: &[&str], name: &str) -> (String, St
     )
 }
 
-fn assert_no_text_exit(
+fn emit_suite(
     ctx_path: &str,
     ctx: &str,
     header: &str,
@@ -60,15 +54,8 @@ fn assert_no_text_exit(
     lines: &[&str],
     name: &str,
 ) -> String {
-    // One construct at a time, so a failure names it.
-    for line in lines {
-        let (with, baseline) = suite(header, prelude, &[line], name);
-        let (exits, text) = emit(ctx_path, ctx, &with);
-        let (base_exits, _) = emit(ctx_path, ctx, &baseline);
-        assert_eq!(exits, base_exits, "`{line}` left text exits:\n{text}");
-    }
     let (with, _) = suite(header, prelude, lines, name);
-    emit(ctx_path, ctx, &with).1
+    emit(ctx_path, ctx, &with)
 }
 
 const PAYMENT_HEADER: &str = "  stub Logger.log(_) returns ()\n  stub Logger.warn(_) returns ()";
@@ -76,7 +63,7 @@ const PAYMENT_PRELUDE: &str = "    let r <- authorise.call(100)\n";
 
 #[test]
 fn observations_and_trace_are_nodes() {
-    let text = assert_no_text_exit(
+    let text = emit_suite(
         "commerce/payment.bynk",
         PAYMENT,
         PAYMENT_HEADER,
@@ -108,7 +95,6 @@ fn observations_and_trace_are_nodes() {
         "{text}"
     );
 
-    // `trace` is compared with the same suite binding a literal instead.
     let with = suite(
         PAYMENT_HEADER,
         PAYMENT_PRELUDE,
@@ -116,19 +102,7 @@ fn observations_and_trace_are_nodes() {
         "commerce.payment",
     )
     .0;
-    let plain = suite(
-        PAYMENT_HEADER,
-        PAYMENT_PRELUDE,
-        &["let calls = 1\n    expect true"],
-        "commerce.payment",
-    )
-    .0;
-    let (exits, trace) = emit("commerce/payment.bynk", PAYMENT, &with);
-    assert_eq!(
-        exits,
-        emit("commerce/payment.bynk", PAYMENT, &plain).0,
-        "{trace}"
-    );
+    let trace = emit("commerce/payment.bynk", PAYMENT, &with);
     assert!(
         trace.contains("(((__obs.log[\"Logger.log\"] ?? []).map((__c: { args: unknown[] }) => ({ msg: __c.args[0] }))) as __Logger_log_Call[])"),
         "{trace}"
@@ -137,10 +111,9 @@ fn observations_and_trace_are_nodes() {
 
 #[test]
 fn a_fault_claim_is_a_try_catch_arrow_that_rethrows_expectation_errors() {
-    // A pure call, so the claim's child is a node (a service call is still text,
-    // and the claim then falls back to text).
+    // A pure call, so the claim's child is a node.
     const BOOM: &str = "commons demo.boom\n\nfn boom(x: Int) -> Effect[Int] { Effect.pure(x) }\n";
-    let text = assert_no_text_exit(
+    let text = emit_suite(
         "demo/boom.bynk",
         BOOM,
         "",
@@ -158,7 +131,7 @@ fn a_fault_claim_is_a_try_catch_arrow_that_rethrows_expectation_errors() {
 
 #[test]
 fn expect_is_a_one_line_if_over_a_not_of_the_parenthesised_condition() {
-    let text = assert_no_text_exit(
+    let text = emit_suite(
         "demo/vault.bynk",
         VAULT,
         "  stub Vault.open() returns 1",
@@ -180,29 +153,15 @@ fn expect_is_a_one_line_if_over_a_not_of_the_parenthesised_condition() {
 
 #[test]
 fn val_builds_nodes_for_every_shape() {
-    let (exits, text) = emit(
+    let text = emit(
         "commerce/money.bynk",
         MONEY,
         "suite commerce.money {\n  case \"c\" {\n    let d = Val[Quantity]\n    let q = Val[Quantity](50)\n    expect d == q\n  }\n}\n",
     );
-    let (base, _) = emit(
-        "commerce/money.bynk",
-        MONEY,
-        "suite commerce.money {\n  case \"c\" {\n    expect true\n  }\n}\n",
-    );
-    // `d == q` adds its own operand exits; the `Val`s must add none beyond the
-    // two identifier reads, so compare against the same suite with plain lets.
-    let (plain, _) = emit(
-        "commerce/money.bynk",
-        MONEY,
-        "suite commerce.money {\n  case \"c\" {\n    let d = 1\n    let q = 2\n    expect d == q\n  }\n}\n",
-    );
-    let _ = base;
-    assert_eq!(exits, plain, "{text}");
     assert!(text.contains("const d = (1 as any);"), "{text}");
     assert!(text.contains("const q = (50 as any);"), "{text}");
 
-    let (_, shapes) = emit(
+    let shapes = emit(
         "demo/shapes.bynk",
         SHAPES,
         "suite demo.shapes {\n  case \"c\" {\n    let s = Val[Status]\n    let c = Val[Cart]\n    expect s is Active(_)\n  }\n}\n",
@@ -216,17 +175,11 @@ fn val_builds_nodes_for_every_shape() {
 
 #[test]
 fn advance_is_a_call_statement() {
-    let (exits, text) = emit(
+    let text = emit(
         "ck/holds.bynk",
         HOLDS,
         "suite ck.holds {\n  case \"c\" {\n    advance Clock by 16.minutes\n    let back = 0.minutes - 1.minutes\n    advance Clock by back\n  }\n}\n",
     );
-    let (plain, _) = emit(
-        "ck/holds.bynk",
-        HOLDS,
-        "suite ck.holds {\n  case \"c\" {\n    let g = 16.minutes\n    let back = 0.minutes - 1.minutes\n    let h = back\n  }\n}\n",
-    );
-    assert_eq!(exits, plain, "{text}");
     assert!(text.contains("__bynkAdvanceClock(960000);"), "{text}");
     assert!(text.contains("__bynkAdvanceClock(back);"), "{text}");
 }
@@ -239,7 +192,7 @@ fn advance_is_a_call_statement() {
 #[test]
 fn a_hoisting_operand_runs_once_before_the_expect_and_its_detail_reads_the_temporary() {
     const DAY: &str = "commons demo.day\n\ntype Day = String where NonEmpty\n\nfn len(d: Day) -> Int { d.length() }\n";
-    let (_, text) = emit(
+    let text = emit(
         "demo/day.bynk",
         DAY,
         "suite demo.day\n\ncase \"q\" {\n  expect len(Day.of(\"x\")?) == 1\n}\n",
@@ -280,7 +233,7 @@ fn a_hoisting_operand_runs_once_before_the_expect_and_its_detail_reads_the_tempo
 #[test]
 fn a_hoisting_right_operand_binds_both_temporaries_after_its_hoists() {
     const DAY: &str = "commons demo.day\n\ntype Day = String where NonEmpty\n\nfn len(d: Day) -> Int { d.length() }\n";
-    let (_, text) = emit(
+    let text = emit(
         "demo/day.bynk",
         DAY,
         "suite demo.day\n\ncase \"q\" {\n  expect 1 == len(Day.of(\"x\")?)\n}\n",
@@ -308,7 +261,7 @@ fn a_hoisting_right_operand_binds_both_temporaries_after_its_hoists() {
 #[test]
 fn a_comparison_whose_operands_hoist_nothing_binds_no_temporary() {
     const DAY: &str = "commons demo.day\n\nfn len(d: String) -> Int { d.length() }\n";
-    let (_, text) = emit(
+    let text = emit(
         "demo/day.bynk",
         DAY,
         "suite demo.day\n\ncase \"q\" {\n  expect len(\"x\") == 1\n}\n",

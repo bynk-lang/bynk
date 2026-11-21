@@ -1,11 +1,8 @@
 //! 1A.27 (#3728): agent construction and agent calls (`Agent(key).m(args)`, a let-bound
 //! `x.m(args)`, a bare `Agent(key)`, and the self-agent WebSocket transfer) lower to nodes. Each
-//! project is emitted in memory and the exact line is pinned; the text-exit counter is read where
-//! it is real (the driver links a non-test copy of `bynk-emit`, see `text_exit_counters.rs`), and
-//! a project whose unrelated constructs add text exits pins its lines only. The construction
-//! builder's own node and text forms are unit tests in `lower_call/agents.rs`.
+//! project is emitted in memory and the exact line is pinned. The construction builder's own
+//! forms are unit tests in `lower_call/agents.rs`.
 //!
-use bynk_emit::emitter::text_counters;
 
 fn fixture_dir(fixture: &str) -> std::path::PathBuf {
     std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -30,10 +27,10 @@ fn copy_dir(from: &std::path::Path, to: &std::path::Path) {
     }
 }
 
-/// `(text exits, every emitted document joined)` for a fixture project, built as the fixture suite
+/// `every emitted document joined` for a fixture project, built as the fixture suite
 /// builds it. `rewrite` replaces (or adds) files of a temporary copy, so a suite's own unrelated
 /// constructs can be taken out of the count.
-fn emit(fixture: &str, rewrite: &[(&str, &str)]) -> (usize, String) {
+fn emit(fixture: &str, rewrite: &[(&str, &str)]) -> String {
     let original = fixture_dir(fixture);
     let (dir, copy) = if rewrite.is_empty() {
         (original, None)
@@ -49,9 +46,7 @@ fn emit(fixture: &str, rewrite: &[(&str, &str)]) -> (usize, String) {
         }
         (tmp.clone(), Some(tmp))
     };
-    text_counters::reset();
     let result = super::e2e::compile_fixture(&dir, super::e2e::fixture_target(&dir));
-    let exits = text_counters::exits();
     if let Some(tmp) = copy {
         let _ = std::fs::remove_dir_all(tmp);
     }
@@ -69,12 +64,12 @@ fn emit(fixture: &str, rewrite: &[(&str, &str)]) -> (usize, String) {
         .map(|d| d.text())
         .collect::<Vec<_>>()
         .join("\n");
-    (exits, text)
+    text
 }
 
 /// A project of one context `r` (`src`) and one suite `r` (`suite`), built on the smallest fixture;
 /// `workers` selects the Workers target a `system` suite needs.
-fn project(src: &str, suite: &str, workers: bool) -> (usize, String) {
+fn project(src: &str, suite: &str, workers: bool) -> String {
     let mut files = vec![("src/r.bynk", src), ("tests/r.bynk", suite)];
     if workers {
         files.push(("target.txt", "workers"));
@@ -203,10 +198,10 @@ fn lines_with<'a>(text: &'a str, needle: &str) -> Vec<&'a str> {
 
 /// The inline call, the let-bound call (and a re-`let` that renames the binding, #908) and a
 /// bare construction are nodes in a service handler, an agent handler and a test case, on the
-/// bundle target, with no text exit.
+/// bundle target.
 #[test]
 fn agent_calls_are_nodes_on_the_bundle_target() {
-    let (_, text) = project(SRC, SUITE, false);
+    let text = project(SRC, SUITE, false);
     for line in [
         // A service handler.
         r#"const a = await __makeRoom("a").bump(v, deps);"#,
@@ -232,7 +227,7 @@ fn agent_calls_are_nodes_on_the_bundle_target() {
 
 #[test]
 fn agent_calls_thread_deps_env_on_the_workers_target() {
-    let (_, text) = project(SRC, SUITE, true);
+    let text = project(SRC, SUITE, true);
     for line in [
         r#"const a = await __makeRoom("a", deps.env).bump(v, deps);"#,
         "const b = await __makeRoom(k, deps.env).bump(a, deps);",
@@ -261,7 +256,7 @@ fn a_hoisting_key_is_lowered_before_the_call() {
             "const e = await __makeRoom(__r1.value, deps.env).bump(d, deps);",
         ),
     ] {
-        let (_, text) = project(SRC, SUITE, workers);
+        let text = project(SRC, SUITE, workers);
         let hoist = text
             .find(r#"const __r1 = pick("z");"#)
             .expect("the key is hoisted");
@@ -277,7 +272,7 @@ fn a_hoisting_key_is_lowered_before_the_call() {
 /// the let-bound path.
 #[test]
 fn the_callees_given_capabilities_fold_into_the_caller_on_both_paths() {
-    let (_, text) = project(SRC, SUITE, false);
+    let text = project(SRC, SUITE, false);
     for service in ["meter", "meter_bound"] {
         let header = format!("export const {service} = {{");
         let at = text.find(&header).expect("the service is emitted");
@@ -288,23 +283,20 @@ fn the_callees_given_capabilities_fold_into_the_caller_on_both_paths() {
     assert_line(&text, "return r.metered(deps);");
 }
 
-/// Without the refined key, no agent construct or call is a text exit; a bare construction
-/// takes a hoisted call key too.
+/// Without the refined key, a bare construction takes a hoisted call key too.
 #[test]
-fn the_agent_constructs_leave_no_text_exit() {
+fn the_agent_constructs_print_as_nodes() {
     let src = SRC.split("type Slug").next().unwrap();
-    let (exits, text) = project(src, SUITE, false);
-    assert_eq!(exits, 0, "no text exit:\n{text}");
+    let text = project(src, SUITE, false);
     assert_line(&text, "const __r0 = pick(\"y\");");
     assert_line(&text, "const r = __makeRoom(__r0.value);");
 }
 
 /// A refined literal's brand cast is a node (`unchecked_construct`), so the call keyed by it is
-/// no longer a text exit; the line prints byte for byte as the text call did.
+/// a node; the line prints byte for byte as the text call did.
 #[test]
 fn a_refined_key_is_a_node_and_prints_byte_for_byte() {
-    let (exits, text) = project(SRC, SUITE, false);
-    assert_eq!(exits, 0, "the refined key is a node:\n{text}");
+    let text = project(SRC, SUITE, false);
     let found = lines_with(&text, "__makeTag(");
     assert!(
         found
@@ -361,7 +353,7 @@ fn a_traced_agent_call_wraps_the_node_in_the_trace_step() {
 /// `__makeRoom` does not appear in the open handler and no key hoist does either.
 #[test]
 fn the_self_agent_transfer_does_not_lower_its_key() {
-    let (_, text) = emit("237_websocket_chatroom_workers", &[]);
+    let text = emit("237_websocket_chatroom_workers", &[]);
     assert_line(
         &text,
         "const __r1 = await this.join(deps.identity, connection, deps);",

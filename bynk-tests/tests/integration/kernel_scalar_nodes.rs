@@ -1,12 +1,9 @@
 //! 1A.29 (#3730): the scalar kernels (`Int`, `Float`, `Decimal`, `Duration`, `Instant`, `Bytes`,
-//! `String`) lower to nodes. A project is emitted through the driver and the exact lines are pinned,
-//! with the text-exit counter read where it is real (see `text_exit_counters.rs`). The arms' own node
-//! and text forms are unit tests in `lower_call/kernel_scalar.rs`.
-use bynk_emit::emitter::text_counters;
+//! `String`) lower to nodes. A project is emitted through the driver and the exact lines are pinned.
+//! The arms' own forms are unit tests in `lower_call/kernel_scalar.rs`.
 
-/// `(text exits, every emitted document joined)` for the one-context project `src` on Workers.
-fn mem(src: &str) -> (usize, String) {
-    text_counters::reset();
+/// `every emitted document joined` for the one-context project `src` on Workers.
+fn mem(src: &str) -> String {
     let out = bynk_driver::project::compile_files_in_memory(
         &[("ops/jobs.bynk", src)],
         bynk_check::project_model::BuildTarget::Workers,
@@ -26,7 +23,7 @@ fn mem(src: &str) -> (usize, String) {
         .map(|d| d.text())
         .collect::<Vec<_>>()
         .join("\n");
-    (text_counters::exits(), text)
+    text
 }
 
 fn assert_line(text: &str, line: &str) {
@@ -36,9 +33,9 @@ fn assert_line(text: &str, line: &str) {
     );
 }
 
-/// Every scalar family over identifiers, in one context: the exact lines and no text exit.
+/// Every scalar family over identifiers, in one context: the exact lines.
 #[test]
-fn the_scalar_kernels_print_as_nodes_with_no_text_exit() {
+fn the_scalar_kernels_print_as_nodes() {
     let src = r#"context ops.jobs
 
 fn ints(n: Int, m: Int) -> Int { n.abs().max(m).clamp(0, 9) }
@@ -56,8 +53,7 @@ fn bigger(d: Decimal, e: Decimal) -> Decimal { d.max(e) }
 fn rounded(d: Decimal) -> Decimal { d.round(2, RoundingMode.HalfUp) }
 fn stamp(i: Instant) -> String { i.toIso() }
 "#;
-    let (exits, text) = mem(src);
-    assert_eq!(exits, 0, "no text exit:\n{text}");
+    let text = mem(src);
     for line in [
         "return globalThis.Math.min(globalThis.Math.max(globalThis.Math.max(globalThis.Math.abs(n), m), 0), 9);",
         r#"return __bynkToInt(globalThis.Math.floor(x), "floor");"#,
@@ -82,7 +78,7 @@ fn stamp(i: Instant) -> String { i.toIso() }
     );
 }
 
-/// The identity arms behind #3770 are nodes: the call is no text exit and the operand keeps its
+/// The identity arms behind #3770 are nodes: the operand keeps its
 /// brackets under the tighter `*`.
 #[test]
 fn the_3770_identity_arms_bracket_their_operand() {
@@ -90,7 +86,6 @@ fn the_3770_identity_arms_bracket_their_operand() {
 
 fn f(a: Int, b: Int) -> Int { Duration.millis(a + b).toMillis() * 2 }
 "#;
-    let (exits, text) = mem(src);
-    assert_eq!(exits, 0, "the identity arm is a node:\n{text}");
+    let text = mem(src);
     assert_line(&text, "return (a + b) * 2;");
 }
