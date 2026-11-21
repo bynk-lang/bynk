@@ -137,7 +137,7 @@ fn stmt_contains_await(stmt: &TsStmt) -> bool {
                         || c.body.iter().any(stmt_contains_await)
                 })
         }
-        TsStmtKind::Verbatim { text, .. } | TsStmtKind::Raw(text) => text.contains("await"),
+        TsStmtKind::Verbatim { text, .. } | TsStmtKind::Raw(text, _) => text.contains("await"),
         TsStmtKind::Decl(_)
         | TsStmtKind::Continue(_)
         | TsStmtKind::Break(_)

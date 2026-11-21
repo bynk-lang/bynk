@@ -71,6 +71,21 @@ const FILE_TYPE: &str = "export interface __Wire_File {\n  readonly filename: Op
 /// A file part's codec, which only the stand-in a multipart check passes reaches.
 const FILE_CODEC: &str = "export function __serialise_File(value: __Wire_File): __JsonValue {\n  return {\n    filename: value.filename.tag === \"Some\" ? { kind: \"Some\", value: value.filename.value } : { kind: \"None\" },\n    contentType: value.contentType,\n    bytes: __bynkBytesToBase64(value.bytes),\n  };\n}\n\nexport function __deserialise_File(json: __JsonValue, path: string = \"$\"): Result<__Wire_File, __BoundaryError> {\n  if (typeof json !== \"object\" || json === null || globalThis.Array.isArray(json)) {\n    return Err({ kind: \"StructuralMismatch\", path, expected: \"object\", actual: typeof json });\n  }\n  return Ok(json as unknown as __Wire_File);\n}\n";
 
+/// The names [`FILE_TYPE`] uses without declaring (1A.36a, Decision D).
+const FILE_TYPE_USES: &[&str] = &["Option"];
+
+/// The names [`FILE_CODEC`] uses without declaring: the wire type [`FILE_TYPE`]
+/// declares, the codec runtime and the result vocabulary.
+const FILE_CODEC_USES: &[&str] = &[
+    "__Wire_File",
+    "__JsonValue",
+    "__bynkBytesToBase64",
+    "__BoundaryError",
+    "Result",
+    "Ok",
+    "Err",
+];
+
 /// The prefix of a boundary type's wire declaration, the shape its codec makes.
 const WIRE_PREFIX: &str = "__Wire_";
 
@@ -962,9 +977,9 @@ impl Gen {
         // accepts, and the part itself goes into the `FormData`.
         if self.sc.names.iter().any(|n| self.is_file(n)) {
             // 1A.38: fixed authored snippet, no interpolation
-            stmts.push(TsStmt::raw(FILE_TYPE.to_string(), None));
+            stmts.push(TsStmt::raw_using(FILE_TYPE, FILE_TYPE_USES));
             // 1A.38: fixed authored snippet, no interpolation
-            codecs.push(TsStmt::raw(FILE_CODEC.to_string(), None));
+            codecs.push(TsStmt::raw_using(FILE_CODEC, FILE_CODEC_USES));
         }
         let types = self.sc.types.clone();
         codecs.extend(serialisation::decls_as_stmts(

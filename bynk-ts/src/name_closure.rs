@@ -15,10 +15,13 @@
 //! #1778, #1815, #1818, #1823 and #1829: the emitter names a type, or calls a
 //! codec, that the module never imports.
 //!
-//! **Scope is module-wide, not lexical.** A parameter, local or generic
-//! parameter declared anywhere in the module counts as bound everywhere in
-//! it, and a destructuring pattern binds every identifier in it. Each
-//! approximation can only hide a defect, never invent one.
+//! **Scope is module-wide for values, node-local for type parameters.** A
+//! parameter or local declared anywhere in the module counts as bound
+//! everywhere in it, and a destructuring pattern binds every identifier in it.
+//! A type parameter (of a function, arrow, method, interface or alias) and a
+//! mapped type's key are bound only inside their own node (1A.36a): the same
+//! name used outside it is a use of something else. Each approximation can
+//! only hide a defect, never invent one.
 //!
 //! **Opaque text is mostly a blind spot.** `Raw` and `Verbatim` statements
 //! and `VerbatimExpr` expressions are pre-rendered TypeScript. A name they
@@ -26,7 +29,8 @@
 //! `type`, `interface`, `class`, `enum`, `function`, `const`, `let` or `var`).
 //! Of the names they *use*, only a generic type application (`Name<…>`) is
 //! checked (#1977: a kernel helper's parameter types are opaque text); any
-//! other use is not. Measured over the positive corpus at #1831, opaque text was 0% of
+//! other use is not; a `TsStmt::raw_using` statement also declares the names its
+//! fixed text uses (1A.36a), and those are counted as uses. Measured over the positive corpus at #1831, opaque text was 0% of
 //! `index.ts`/`compose.ts`, about 14% of unit modules and about 26% of
 //! `handlers.ts` and test modules: chiefly service handler bodies, which
 //! `bynk-emit` still renders to text. That part of a module stays `tsc`'s
@@ -189,7 +193,14 @@ pub fn unbound_names(program: &TsProgram) -> Vec<String> {
         .used_values
         .iter()
         .filter(|n| !w.bound.contains(*n) && !GLOBAL_VALUES.contains(&n.as_str()));
-    let all: BTreeSet<String> = types.chain(values).cloned().collect();
+    // 1A.36a (Decision D): a name a `Raw` statement declares it uses may be a
+    // type or a value, so it is judged against both global tables.
+    let declared = w.used_declared.iter().filter(|n| {
+        !w.bound.contains(*n)
+            && !GLOBAL_TYPES.contains(&n.as_str())
+            && !GLOBAL_VALUES.contains(&n.as_str())
+    });
+    let all: BTreeSet<String> = types.chain(values).chain(declared).cloned().collect();
     all.into_iter().collect()
 }
 
@@ -293,7 +304,7 @@ pub fn module_exports(program: &TsProgram) -> ModuleExports {
                 out.names
                     .extend(stmt.exported_names().iter().map(|e| e.name.to_string()));
             }
-            TsStmtKind::Raw(text) | TsStmtKind::Verbatim { text, .. } => {
+            TsStmtKind::Raw(text, _) | TsStmtKind::Verbatim { text, .. } => {
                 opaque_exports(text, &mut out.names)
             }
             TsStmtKind::Const { .. }
@@ -374,6 +385,13 @@ struct Walk {
     bound: BTreeSet<String>,
     used_types: BTreeSet<String>,
     used_values: BTreeSet<String>,
+    /// 1A.36a (Decision D): names a `TsStmt::raw_using` statement declares its
+    /// fixed text uses, in either position.
+    used_declared: BTreeSet<String>,
+    /// 1A.36a: type parameters and mapped-type keys currently in scope. Each is
+    /// bound only inside its own node (see [`Walk::scoped`]), so a use of the
+    /// name outside it is still a use of something else.
+    scope: Vec<String>,
     /// #2036: each namespace import's alias and specifier.
     namespaces: BTreeMap<String, String>,
     /// #2036: every `head.member` named in type or value position.
@@ -454,15 +472,28 @@ impl Walk {
         // initialiser) uses the constructor, not the `new` keyword.
         let text = text.trim_start();
         let text = text.strip_prefix("new ").unwrap_or(text);
-        if let Some(ident) = leading_ident(text) {
+        if let Some(ident) = leading_ident(text).filter(|i| !self.in_scope(i)) {
             self.used_values.insert(ident.to_string());
         }
     }
 
-    fn bind_all(&mut self, names: &[String]) {
+    /// Whether `name` is a type parameter or mapped key of an enclosing node.
+    fn in_scope(&self, name: &str) -> bool {
+        self.scope.iter().any(|n| n == name)
+    }
+
+    /// Run `f` with `names` (type parameters, a mapped key) bound for the
+    /// duration of one node only. They never reach the flat `bound` and
+    /// `value_bound` sets, so they bind nothing outside the node.
+    fn scoped(&mut self, names: &[String], f: impl FnOnce(&mut Self)) {
+        let depth = self.scope.len();
         for n in names {
-            self.bind(n);
+            if let Some(ident) = leading_ident(n) {
+                self.scope.push(ident.to_string());
+            }
         }
+        f(self);
+        self.scope.truncate(depth);
     }
 
     /// An import specifier: `X`, `type X`, `X as Y` or `type X as Y` binds
@@ -583,7 +614,11 @@ impl Walk {
                         i += 1;
                     }
                     let after_dot = start > 0 && bytes[start - 1] == b'.';
-                    if !after_dot && b.is_ascii_uppercase() && bytes.get(i) == Some(&b'<') {
+                    if !after_dot
+                        && b.is_ascii_uppercase()
+                        && bytes.get(i) == Some(&b'<')
+                        && !self.in_scope(&text[start..i])
+                    {
                         self.used_types.insert(text[start..i].to_string());
                     }
                 }
@@ -609,6 +644,7 @@ impl Walk {
                     && head
                         .chars()
                         .all(|c| c.is_alphanumeric() || c == '_' || c == '$')
+                    && !self.in_scope(head)
                 {
                     self.used_types.insert(head.to_string());
                 }
@@ -641,9 +677,8 @@ impl Walk {
                 value,
                 ..
             } => {
-                self.bind(key);
                 self.ty(keys_of);
-                self.ty(value);
+                self.scoped(std::slice::from_ref(key), |w| w.ty(value));
             }
             // `typeof x` uses the value `x`.
             TsType::TypeOf(operand) => self.expr(operand),
@@ -666,9 +701,10 @@ impl Walk {
                     ret,
                     ..
                 } => {
-                    self.bind_all(generics);
-                    self.params(params);
-                    self.ty(ret);
+                    self.scoped(generics, |w| {
+                        w.params(params);
+                        w.ty(ret);
+                    });
                 }
                 TsTypeMember::Index {
                     key_ty, value_ty, ..
@@ -713,7 +749,15 @@ impl Walk {
 
     fn stmt(&mut self, stmt: &TsStmt) {
         match &stmt.kind {
-            TsStmtKind::Verbatim { text, .. } | TsStmtKind::Raw(text) => self.opaque(text),
+            TsStmtKind::Verbatim { text, .. } => self.opaque(text),
+            TsStmtKind::Raw(text, uses) => {
+                self.opaque(text);
+                for n in uses {
+                    if !self.in_scope(n) {
+                        self.used_declared.insert(n.clone());
+                    }
+                }
+            }
             TsStmtKind::Decl(decl) => self.decl(decl),
             TsStmtKind::Const { name, ty, init } => {
                 self.binding(name);
@@ -860,7 +904,7 @@ impl Walk {
                     let n = n.trim();
                     match n.strip_prefix("type ") {
                         Some(t) => {
-                            if let Some(ident) = leading_ident(t) {
+                            if let Some(ident) = leading_ident(t).filter(|i| !self.in_scope(i)) {
                                 self.used_types.insert(ident.to_string());
                             }
                         }
@@ -875,8 +919,7 @@ impl Walk {
                 members,
             } => {
                 self.bind(name);
-                self.bind_all(type_params);
-                self.members(members);
+                self.scoped(type_params, |w| w.members(members));
             }
             TsDecl::TypeAlias {
                 name,
@@ -884,8 +927,7 @@ impl Walk {
                 ty,
             } => {
                 self.bind(name);
-                self.bind_all(type_params);
-                self.ty(ty);
+                self.scoped(type_params, |w| w.ty(ty));
             }
             TsDecl::ConstDecl { name, ty, init } => {
                 self.bind(name);
@@ -930,10 +972,11 @@ impl Walk {
                 ..
             } => {
                 self.bind(name);
-                self.bind_all(generics);
-                self.params(params);
-                self.opt_ty(return_type);
-                self.stmts(body);
+                self.scoped(generics, |w| {
+                    w.params(params);
+                    w.opt_ty(return_type);
+                    w.stmts(body);
+                });
             }
             TsDecl::ExportDefault(e) => self.expr(e),
         }
@@ -961,13 +1004,14 @@ impl Walk {
                 body,
                 ..
             } => {
-                self.bind_all(generics);
-                self.params(params);
-                self.opt_ty(return_type);
-                match body.as_ref() {
-                    TsArrowBody::Expr(e) => self.expr(e),
-                    TsArrowBody::Block(stmts) | TsArrowBody::Multiline(stmts) => self.stmts(stmts),
-                }
+                self.scoped(generics, |w| {
+                    w.params(params);
+                    w.opt_ty(return_type);
+                    match body.as_ref() {
+                        TsArrowBody::Expr(e) => w.expr(e),
+                        TsArrowBody::Block(stmts) | TsArrowBody::Multiline(stmts) => w.stmts(stmts),
+                    }
+                });
             }
             // 1A.21: the default is read in the enclosing scope; the parameter is bound for the body.
             TsExpr::DefaultIife {
@@ -1004,12 +1048,15 @@ impl Walk {
                         TsObjectEntry::Method {
                             generics,
                             params,
+                            return_type,
                             body,
                             ..
                         } => {
-                            self.bind_all(generics);
-                            self.params(params);
-                            self.stmts(body);
+                            self.scoped(generics, |w| {
+                                w.params(params);
+                                w.opt_ty(return_type);
+                                w.stmts(body);
+                            });
                         }
                     }
                 }
@@ -1188,6 +1235,140 @@ mod tests {
             function_over(mapped("Shape")),
         ]);
         assert!(unbound_names(&p).is_empty(), "{:?}", unbound_names(&p));
+    }
+
+    /// `type <name><params> = <ty>;`, exported nowhere: a declaration that binds only its own name.
+    fn alias(name: &str, type_params: &[&str], ty: TsType) -> TsStmt {
+        TsStmt::decl(
+            TsDecl::TypeAlias {
+                name: name.to_string(),
+                type_params: type_params.iter().map(|p| p.to_string()).collect(),
+                ty,
+            },
+            None,
+        )
+    }
+
+    /// 1A.36a: a mapped key is bound inside its own type and nowhere else. It used to enter
+    /// the flat bound sets, so one mapped `K` made every `K` in the module, type or value,
+    /// look bound.
+    #[test]
+    fn a_mapped_key_binds_only_inside_its_own_type() {
+        let mapped = TsType::mapped(
+            "K",
+            TsType::named("Shape"),
+            TsType::indexed(TsType::named("Shape"), TsType::named("K")),
+        );
+        let program_with = |outside: TsStmt| {
+            program(vec![
+                import(&["type Shape"]),
+                alias("Mapped", &[], mapped.clone()),
+                outside,
+            ])
+        };
+        // Alone, the mapped type is closed.
+        let p = program(vec![
+            import(&["type Shape"]),
+            alias("Mapped", &[], mapped.clone()),
+        ]);
+        assert!(unbound_names(&p).is_empty(), "{:?}", unbound_names(&p));
+        // A type named `K` outside it is not the key.
+        let p = program_with(alias("Other", &[], TsType::named("K")));
+        assert_eq!(unbound_names(&p), ["K"]);
+        // Nor is a value named `K`.
+        let p = program_with(TsStmt::expr_stmt(TsExpr::Ident("K".to_string()), None));
+        assert_eq!(unbound_names(&p), ["K"]);
+        // The key is not in scope for the `keyof` operand: `[K in keyof K]` uses a `K` from outside.
+        let p = program(vec![alias(
+            "Self",
+            &[],
+            TsType::mapped("K", TsType::named("K"), TsType::named("string")),
+        )]);
+        assert_eq!(unbound_names(&p), ["K"]);
+    }
+
+    /// 1A.36a: a type parameter is bound inside its own declaration, function, arrow or method
+    /// and nowhere else.
+    #[test]
+    fn a_type_parameter_binds_only_inside_its_own_node() {
+        let generic_fn = |generics: &[&str]| {
+            TsStmt::decl(
+                TsDecl::Function {
+                    name: "id".to_string(),
+                    generics: generics.iter().map(|g| g.to_string()).collect(),
+                    params: vec![TsParam::new("x".to_string(), Some(TsType::named("T")))],
+                    return_type: Some(TsType::named("T")),
+                    body: vec![],
+                    is_async: false,
+                    inline: false,
+                },
+                None,
+            )
+        };
+        let p = program(vec![generic_fn(&["T"])]);
+        assert!(unbound_names(&p).is_empty(), "{:?}", unbound_names(&p));
+        // Without the parameter, `T` is a use of an unbound name.
+        let p = program(vec![generic_fn(&[])]);
+        assert_eq!(unbound_names(&p), ["T"]);
+        // The parameter of one function does not bind `T` in the next declaration.
+        let p = program(vec![
+            generic_fn(&["T"]),
+            alias("Later", &[], TsType::named("T")),
+        ]);
+        assert_eq!(unbound_names(&p), ["T"]);
+        // Nor does an alias's own parameter, or an arrow's, bind it outside.
+        let p = program(vec![
+            alias("Box", &["T"], TsType::named("T")),
+            alias("Later", &[], TsType::named("T")),
+        ]);
+        assert_eq!(unbound_names(&p), ["T"]);
+        let arrow = TsExpr::Arrow {
+            params: vec![TsParam::new("x".to_string(), Some(TsType::named("T")))],
+            return_type: None,
+            generics: vec!["T".to_string()],
+            body: Box::new(TsArrowBody::Expr(Box::new(TsExpr::Ident("x".to_string())))),
+            is_async: false,
+        };
+        let p = program(vec![
+            TsStmt::expr_stmt(arrow, None),
+            alias("Later", &[], TsType::named("T")),
+        ]);
+        assert_eq!(unbound_names(&p), ["T"]);
+        // A constraint (`T extends Shape`) binds `T`, not the whole text.
+        let p = program(vec![
+            import(&["type Shape"]),
+            alias("Box", &["T extends Shape"], TsType::named("T")),
+        ]);
+        assert!(unbound_names(&p).is_empty(), "{:?}", unbound_names(&p));
+    }
+
+    /// 1A.36a (Decision D): a `raw_using` statement's names are uses, in either position, and
+    /// what the text declares is still bound. A plain `raw` carries no names.
+    #[test]
+    fn raw_using_counts_the_names_it_declares_as_uses() {
+        let raw = |names: &[&str]| TsStmt::raw_using("export function f(): void {}\n", names);
+        // A type and a value the module never binds are both unbound.
+        let p = program(vec![raw(&["Option", "__bynkBytesToBase64"])]);
+        assert_eq!(unbound_names(&p), ["Option", "__bynkBytesToBase64"]);
+        // Imported, they are bound.
+        let p = program(vec![
+            import(&["type Option", "__bynkBytesToBase64"]),
+            raw(&["Option", "__bynkBytesToBase64"]),
+        ]);
+        assert!(unbound_names(&p).is_empty(), "{:?}", unbound_names(&p));
+        // A global of either table is not reported; a name the text declares is bound.
+        let p = program(vec![TsStmt::raw_using(
+            "interface Local {}\n",
+            &["Local", "Record", "JSON"],
+        )]);
+        assert!(unbound_names(&p).is_empty(), "{:?}", unbound_names(&p));
+        // No names: the text is a blind spot, as before.
+        let p = program(vec![TsStmt::raw("const x = Missing;\n", None), raw(&[])]);
+        assert!(unbound_names(&p).is_empty(), "{:?}", unbound_names(&p));
+        // The names change nothing about printing.
+        let with = raw(&["Option"]);
+        let without = TsStmt::raw("export function f(): void {}\n", None);
+        assert_eq!(crate::print_stmt(&with, 0), crate::print_stmt(&without, 0));
     }
 
     #[test]

@@ -84,6 +84,73 @@ impl TsProgram {
         out
     }
 
+    /// This program without its top-level import declarations (named, namespace
+    /// and default): the body an import list is derived from (1A.36a, #3737).
+    /// [`crate::unbound_names`] over it is the set the module must import.
+    pub fn without_imports(&self) -> TsProgram {
+        TsProgram {
+            stmts: self
+                .stmts
+                .iter()
+                .filter(|s| {
+                    !matches!(
+                        &s.kind,
+                        TsStmtKind::Decl(
+                            TsDecl::Import { .. }
+                                | TsDecl::ImportNamespace { .. }
+                                | TsDecl::ImportDefault { .. }
+                        )
+                    )
+                })
+                .cloned()
+                .collect(),
+        }
+    }
+
+    /// Every local name the top-level import declarations bind: each entry of a
+    /// named import (`X`, `type X`, `X as Y` bind `X`, `X`, `Y`), a namespace
+    /// alias, and a default import's alias and named entries. Imports written
+    /// inside opaque text are not reported.
+    pub fn imported_names(&self) -> std::collections::BTreeSet<String> {
+        fn local(spec: &str) -> String {
+            let spec = spec.trim();
+            let spec = spec.strip_prefix("type ").unwrap_or(spec).trim();
+            spec.rsplit(" as ")
+                .next()
+                .unwrap_or(spec)
+                .trim()
+                .to_string()
+        }
+        let mut out = std::collections::BTreeSet::new();
+        for stmt in &self.stmts {
+            let TsStmtKind::Decl(decl) = &stmt.kind else {
+                continue;
+            };
+            match decl {
+                TsDecl::Import { names, .. } => out.extend(names.iter().map(|n| local(n))),
+                TsDecl::ImportNamespace { alias, .. } => {
+                    out.insert(alias.clone());
+                }
+                TsDecl::ImportDefault { alias, named, .. } => {
+                    out.insert(alias.clone());
+                    out.extend(named.iter().map(|n| local(n)));
+                }
+                TsDecl::ReExport { .. }
+                | TsDecl::ExportNames { .. }
+                | TsDecl::ReExportAll { .. }
+                | TsDecl::Export(_)
+                | TsDecl::Interface { .. }
+                | TsDecl::ConstDecl { .. }
+                | TsDecl::Class { .. }
+                | TsDecl::Function { .. }
+                | TsDecl::TypeAlias { .. }
+                | TsDecl::ExportDefault(_)
+                | TsDecl::DeclareConst { .. } => {}
+            }
+        }
+        out
+    }
+
     /// The module specifier of every top-level import declaration (named,
     /// namespace or default), in statement order.
     pub fn import_specifiers(&self) -> Vec<&str> {
@@ -119,7 +186,7 @@ impl TsProgram {
                 | TsStmtKind::Switch { .. }
                 | TsStmtKind::InlineBlock(_)
                 | TsStmtKind::Increment(_)
-                | TsStmtKind::Raw(_) => None,
+                | TsStmtKind::Raw(..) => None,
             })
             .collect()
     }
@@ -225,7 +292,7 @@ fn walk_stmt<'a>(stmt: &'a TsStmt, out: &mut Vec<(VerbatimOrigin, &'a str)>) {
             }
         }
         TsStmtKind::Increment(e) => walk_expr(e, out),
-        TsStmtKind::Raw(_) => {}
+        TsStmtKind::Raw(..) => {}
     }
 }
 
@@ -829,7 +896,11 @@ pub(crate) enum TsStmtKind {
     /// without changing scope or bytes it isn't the one authorised to
     /// change* — not whether the reason is permanent, temporary, or a
     /// preserved historical quirk.
-    Raw(String),
+    ///
+    /// The second field (1A.36a, Decision D) lists the names the fixed text
+    /// uses, declared where the text is written; empty for a plain
+    /// [`TsStmt::raw`]. `name_closure` counts them as uses.
+    Raw(String, Vec<String>),
 }
 
 /// One declarator of a `TsStmtKind::LetList`: `name`, `name!: T`, `name: T` or
@@ -1442,8 +1513,27 @@ impl TsStmt {
     /// why this is a distinct kind from `Verbatim`, not a reuse of it).
     pub fn raw(text: impl Into<String>, span: Option<Span>) -> Self {
         Self {
-            kind: TsStmtKind::Raw(text.into()),
+            kind: TsStmtKind::Raw(text.into(), Vec::new()),
             span,
+            nested_map: None,
+            no_blank_before: false,
+            nested_map_source_id: 0,
+        }
+    }
+
+    /// 1A.36a (Decision D): a `Raw` statement that also declares the names its
+    /// fixed text uses. `text` prints exactly as [`TsStmt::raw`]'s does; `names`
+    /// are the identifiers (types or values) the text refers to without
+    /// declaring, which `name_closure` counts as uses. The names are written
+    /// where the text is, never scanned out of it: a scan over-matches on
+    /// string literals and comments and under-matches on formatting.
+    pub fn raw_using(text: impl Into<String>, names: &[&str]) -> Self {
+        Self {
+            kind: TsStmtKind::Raw(
+                text.into(),
+                names.iter().map(|n| (*n).to_string()).collect(),
+            ),
+            span: None,
             nested_map: None,
             no_blank_before: false,
             nested_map_source_id: 0,
