@@ -227,13 +227,15 @@ fn a_value_that_selects_nothing_fails_the_run_after_its_output() {
         r.stderr
     );
 
-    // The same in the rich format.
+    // The same in the rich format. Here the emitted test runner prints the
+    // line itself, without the driver's `error:` label (#3814 left the runner
+    // unchanged; labelling it is a follow-up).
     let r = run("sf-typo-rich", &["--case", "one", "--case", "typo"]);
     assert!(!r.success);
     assert!(r.stdout.contains("1 passed, 0 failed."), "{}", r.stdout);
     assert!(
         r.stderr
-            .contains("bynk test: error: no case matched --case \"typo\""),
+            .contains("bynk test: no case matched --case \"typo\""),
         "{}",
         r.stderr
     );

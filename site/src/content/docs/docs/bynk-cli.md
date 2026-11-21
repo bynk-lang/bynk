@@ -1172,7 +1172,7 @@ bynk test --suite commerce.money --case "accepts positive"   # that case, only i
 - **A value that selects nothing fails the run.** Each value is judged on its
   own, so `--case a --case typo` fails although `a` matches. The run prints its
   usual output first, then names each unmatched value on stderr
-  (`bynk test: error: no case matched --case "typo"`, `no suite named --suite "x"`) and
+  (`bynk test: no case matched --case "typo"`, `no suite named --suite "x"`) and
   exits non-zero. Before this, a filter that matched nothing passed with
   `0 passed, 0 failed`.
 - `--inspect`, `--coverage` and `--against` (`--against dev` included) honour the
