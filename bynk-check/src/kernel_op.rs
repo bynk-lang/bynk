@@ -109,8 +109,8 @@ kernel_ops! {
         Average = "average", "average(key: T -> K) -> Option[Float]";
         // v0.94 (ADR 0116/0120): joins & grouping, combiner form (eager — mirrors
         // QUERY_METHODS' lazy `Query[V]` forms below, but returns `List[V]`).
-        JoinOn = "joinOn", "joinOn(other: List[U], on: (T, U) -> Bool, into: (T, U) -> V) -> List[V]";
-        LeftJoin = "leftJoin", "leftJoin(other: List[U], on: (T, U) -> Bool, into: (T, Option[U]) -> V) -> List[V]";
+        JoinOn = "joinOn", "joinOn(other: List[U], left: T -> K, right: U -> K, into: (T, U) -> V) -> List[V]";
+        LeftJoin = "leftJoin", "leftJoin(other: List[U], left: T -> K, right: U -> K, into: (T, Option[U]) -> V) -> List[V]";
         Join = "join", "join(other: List[U], on: (T, U) -> Bool, into: (T, U) -> V) -> List[V]";
         GroupBy = "groupBy", "groupBy(key: T -> K, into: (K, List[T]) -> V) -> List[V]";
         @hidden
@@ -153,8 +153,8 @@ kernel_ops! {
         Skip = "skip", "skip(n: Int) -> Query[T]";
         Distinct = "distinct", "distinct() -> Query[T]";
         DistinctBy = "distinctBy", "distinctBy(key: T -> K) -> Query[T]";
-        JoinOn = "joinOn", "joinOn(other: Query[U], on: (T, U) -> Bool, into: (T, U) -> V) -> Query[V]";
-        LeftJoin = "leftJoin", "leftJoin(other: Query[U], on: (T, U) -> Bool, into: (T, Option[U]) -> V) -> Query[V]";
+        JoinOn = "joinOn", "joinOn(other: Query[U], left: T -> K, right: U -> K, into: (T, U) -> V) -> Query[V]";
+        LeftJoin = "leftJoin", "leftJoin(other: Query[U], left: T -> K, right: U -> K, into: (T, Option[U]) -> V) -> Query[V]";
         Join = "join", "join(other: Query[U], on: (T, U) -> Bool, into: (T, U) -> V) -> Query[V]";
         GroupBy = "groupBy", "groupBy(key: T -> K, into: (K, Query[T]) -> V) -> Query[V]";
         Collect = "collect", "collect() -> Effect[List[T]]";
@@ -930,6 +930,37 @@ mod tests {
             LogStoreOp,
             LogWindowOp,
         );
+    }
+
+    /// The display signature of `name` in a completion/hover table.
+    fn signature(table: &[KernelMethod], name: &str) -> &'static str {
+        table
+            .iter()
+            .find(|m| m.name == name)
+            .unwrap_or_else(|| panic!("no `{name}` in the table"))
+            .signature
+    }
+
+    #[test]
+    fn equi_joins_display_their_two_key_functions() {
+        // `joinOn`/`leftJoin` are equi-joins checked with a left and a right
+        // key function (`check_equi_join`), not a predicate; only `join` takes
+        // `on: (T, U) -> Bool`.
+        for (table, kind) in [(ListOp::TABLE, "List"), (QueryOp::TABLE, "Query")] {
+            assert_eq!(
+                signature(table, "joinOn"),
+                format!(
+                    "joinOn(other: {kind}[U], left: T -> K, right: U -> K, into: (T, U) -> V) -> {kind}[V]"
+                ),
+            );
+            assert_eq!(
+                signature(table, "leftJoin"),
+                format!(
+                    "leftJoin(other: {kind}[U], left: T -> K, right: U -> K, into: (T, Option[U]) -> V) -> {kind}[V]"
+                ),
+            );
+            assert!(signature(table, "join").contains("on: (T, U) -> Bool"));
+        }
     }
 
     #[test]
