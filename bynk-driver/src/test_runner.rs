@@ -877,20 +877,11 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
                 return ExitCode::FAILURE;
             }
         }
-        workers_modules = Some(workers_out.artefacts.modules.clone());
+        workers_modules = Some(workers_out.artefacts);
     }
 
-    // #2321: the WebAssembly modules adapter bindings include, with the Node form
-    // of each loader (after every document write, which restores the Workers
-    // form).
-    for modules in [Some(&out.artefacts.modules), workers_modules.as_ref()]
-        .into_iter()
-        .flatten()
-    {
-        if let Err(e) = crate::write_modules_for_node(modules, &output_root) {
-            emsg!("{program} test: could not write a WebAssembly module: {e}");
-            return ExitCode::FAILURE;
-        }
+    if let Err(code) = finish_output(program, &output_root, &out, workers_modules.as_ref()) {
+        return code;
     }
 
     if !wrote_any_test {
@@ -1162,6 +1153,58 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
         );
     }
     ExitCode::FAILURE
+}
+
+/// The last writes of a test run's output, once its documents are on disk:
+/// the WebAssembly modules, then the pruning of what this run did not write.
+///
+/// #2321: the WebAssembly modules adapter bindings include, with the Node form
+/// of each loader (after every document write, which restores the Workers
+/// form). `workers` is the integration run's Workers compile, whose `tests/`
+/// tree was not written.
+///
+/// #3748: what an earlier build left in the output root (a Workers build's
+/// `workers/` tree, say) is pruned, as `bynk build` prunes, before `tsc`
+/// checks every `.ts` under it against this run's modules.
+fn finish_output(
+    program: &str,
+    output_root: &Path,
+    out: &ProjectOutput,
+    workers: Option<&bynk_emit::emit_model::Artefacts>,
+) -> Result<(), ExitCode> {
+    let mut written: std::collections::HashSet<PathBuf> = out
+        .artefacts
+        .docs
+        .keys()
+        .chain(out.artefacts.modules.keys())
+        .cloned()
+        .collect();
+    for modules in [Some(&out.artefacts.modules), workers.map(|w| &w.modules)]
+        .into_iter()
+        .flatten()
+    {
+        if let Err(e) = crate::write_modules_for_node(modules, output_root) {
+            emsg!("{program} test: could not write a WebAssembly module: {e}");
+            return Err(ExitCode::FAILURE);
+        }
+    }
+    if let Some(workers) = workers {
+        written.extend(
+            workers
+                .docs
+                .keys()
+                .filter(|path| !path.to_string_lossy().starts_with("tests/"))
+                .chain(workers.modules.keys())
+                .cloned(),
+        );
+    }
+    crate::output::prune_output_except(output_root, &written).map_err(|e| {
+        emsg!(
+            "{program} test: could not remove stale output from `{}`: {e}",
+            output_root.display()
+        );
+        ExitCode::FAILURE
+    })
 }
 
 /// #3087: the project declares no tests. By default a warning and exit 0 (a

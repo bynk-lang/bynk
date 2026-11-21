@@ -1430,6 +1430,43 @@ fn check_provider_agent_calls(
     }
 }
 
+/// #3766: an `on call` service has exactly one `on call` handler. Both were
+/// emitted as members of one object literal, so the last silently shadowed
+/// the first and its body was dead code. Reported on each handler past the
+/// first (services name-sorted for a deterministic order), in the shape of
+/// `bynk.event.duplicate_handler` and `bynk.email.duplicate_handler`.
+pub(crate) fn check_one_call_handler(table: &UnitTable, errors: &mut Vec<CompileError>) {
+    let mut services: Vec<&ServiceDecl> = table
+        .services
+        .values()
+        .filter(|s| matches!(s.protocol, ServiceProtocol::Call))
+        .collect();
+    services.sort_by(|a, b| a.name.name.cmp(&b.name.name));
+    for service in services {
+        let calls: Vec<_> = service
+            .handlers
+            .iter()
+            .filter(|h| h.kind == HandlerKind::Call)
+            .collect();
+        for extra in calls.iter().skip(1) {
+            errors.push(
+                CompileError::new(
+                    "bynk.service.duplicate_call_handler",
+                    extra.span,
+                    format!(
+                        "the service `{}` has more than one `on call` handler — it needs exactly one",
+                        service.name.name
+                    ),
+                )
+                .with_label(calls[0].span, "the service's `on call` handler")
+                .with_note(
+                    "a service is called by its name, so it has one entry; to offer a second operation, declare a second service",
+                ),
+            );
+        }
+    }
+}
+
 /// Check service handlers across all services in this context: HTTP/cron/queue
 /// handler shape and per-kind duplicate detection (route/schedule/consumer),
 /// then each handler's `given` clause and body. The duplicate-detection passes
@@ -7641,26 +7678,27 @@ service Api {
         // Review of #1170: every fixture above declares exactly one handler,
         // so none of them can tell "keyed per handler" apart from "keyed per
         // service" (or from an over-broad insert) — a single span in play
-        // reads the same either way. Three handlers, only two with a `by`
+        // reads the same either way. Three handlers, only two with a
         // binder, pins both: each binder lands on its own handler's own
         // span, and the binder-less handler contributes no entry at all.
+        // #3766: a service has one `on call`, so the three are http routes.
         let program = checked_context_program(
             r#"
 context demo
 
 type UserId = String
 
-actor Buyer { auth = Internal, identity = UserId }
+actor Buyer { auth = Bearer(secret = "AUTH_JWT_SECRET"), identity = UserId }
 
-service Api {
-  on call(ping: String) -> Effect[String] by u: Buyer {
-    Effect.pure(ping)
+service Api from http {
+  on GET("/a") () -> Effect[HttpResult[String]] by u: Buyer {
+    Ok("a")
   }
-  on call(ping: String) -> Effect[String] by v: Buyer {
-    Effect.pure(ping)
+  on GET("/b") () -> Effect[HttpResult[String]] by v: Buyer {
+    Ok("b")
   }
-  on call(ping: String) -> Effect[String] {
-    Effect.pure(ping)
+  on GET("/c") () -> Effect[HttpResult[String]] by Visitor {
+    Ok("c")
   }
 }
 "#,
@@ -7684,7 +7722,7 @@ service Api {
         assert_eq!(binder, "v");
         assert!(
             program.program().actor_binding(third.span).is_none(),
-            "the third handler declares no `by` clause at all"
+            "the third handler binds no actor (`by Visitor`, no binder)"
         );
         assert_eq!(
             program.program().actor_bindings.len(),

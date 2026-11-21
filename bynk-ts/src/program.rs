@@ -107,8 +107,11 @@ impl TsProgram {
                 | TsStmtKind::For { .. }
                 | TsStmtKind::TryCatch { .. }
                 | TsStmtKind::Block(_)
-                | TsStmtKind::Continue
-                | TsStmtKind::Break
+                | TsStmtKind::Continue(_)
+                | TsStmtKind::Break(_)
+                | TsStmtKind::While { .. }
+                | TsStmtKind::Labelled { .. }
+                | TsStmtKind::LetList(_)
                 | TsStmtKind::Assign { .. }
                 | TsStmtKind::Comment(_)
                 | TsStmtKind::DocComment(_)
@@ -155,9 +158,22 @@ fn walk_stmt<'a>(stmt: &'a TsStmt, out: &mut Vec<(VerbatimOrigin, &'a str)>) {
             binding: _,
             iter,
             body,
+            is_await: _,
         } => {
             walk_expr(iter, out);
             walk_stmt(body, out);
+        }
+        TsStmtKind::While { cond, body } => {
+            walk_expr(cond, out);
+            walk_stmt(body, out);
+        }
+        TsStmtKind::Labelled { label: _, body } => walk_stmt(body, out),
+        TsStmtKind::LetList(decls) => {
+            for d in decls {
+                if let Some(e) = &d.init {
+                    walk_expr(e, out);
+                }
+            }
         }
         TsStmtKind::For {
             name: _,
@@ -188,7 +204,7 @@ fn walk_stmt<'a>(stmt: &'a TsStmt, out: &mut Vec<(VerbatimOrigin, &'a str)>) {
                 walk_stmt(s, out);
             }
         }
-        TsStmtKind::Continue | TsStmtKind::Break => {}
+        TsStmtKind::Continue(_) | TsStmtKind::Break(_) => {}
         TsStmtKind::Assign { target, value } => {
             walk_expr(target, out);
             walk_expr(value, out);
@@ -332,10 +348,28 @@ fn walk_expr<'a>(expr: &'a TsExpr, out: &mut Vec<(VerbatimOrigin, &'a str)>) {
             walk_expr(consequent, out);
             walk_expr(alternate, out);
         }
-        TsExpr::Paren(e) | TsExpr::Spread(e) | TsExpr::NonNull(e) => walk_expr(e, out),
+        TsExpr::Paren(e) | TsExpr::Spread(e) | TsExpr::NonNull(e) | TsExpr::Yield(e) => {
+            walk_expr(e, out)
+        }
         TsExpr::Assign { target, value } | TsExpr::AddAssign { target, value } => {
             walk_expr(target, out);
             walk_expr(value, out);
+        }
+        TsExpr::Sequence(items) => {
+            for i in items {
+                walk_expr(i, out);
+            }
+        }
+        TsExpr::OptionalCall { callee, args } => {
+            walk_expr(callee, out);
+            for a in args {
+                walk_expr(a, out);
+            }
+        }
+        TsExpr::Function { body, .. } => {
+            for s in body {
+                walk_stmt(s, out);
+            }
         }
         TsExpr::Lit(_) => {}
     }
@@ -524,7 +558,27 @@ pub(crate) enum TsStmtKind {
         binding: String,
         iter: TsExpr,
         body: Box<TsStmt>,
+        /// `for await (const <binding> of <iter>)` (1A.35a part B: the `Stream`
+        /// generators drain an async iterable).
+        is_await: bool,
     },
+    /// `while (<cond>) <body>` (1A.35a part B). `body` renders as `If`'s and
+    /// `ForOf`'s do: braced when it is a [`TsStmtKind::Block`], inline otherwise.
+    While {
+        cond: TsExpr,
+        body: Box<TsStmt>,
+    },
+    /// `<label>: <body>` (1A.35a part B): a labelled statement, the target of a
+    /// labelled [`TsStmtKind::Continue`] or [`TsStmtKind::Break`]. `body` is
+    /// usually a loop or a [`TsStmtKind::Block`]; any statement is valid.
+    Labelled {
+        label: String,
+        body: Box<TsStmt>,
+    },
+    /// `let a, b: T, c = e;` (1A.35a part B): one `let` with several
+    /// declarators, each optionally typed, definitely assigned or initialised.
+    /// [`TsStmtKind::Let`] stays the form for a destructuring pattern.
+    LetList(Vec<TsDeclarator>),
     /// `for (let <name> = <init>; <test>; <name>++) <body>` — a C-style
     /// indexed loop, `ForOf`'s counterpart for index-based iteration (as
     /// opposed to `for...of`'s element-based iteration over an existing
@@ -597,10 +651,14 @@ pub(crate) enum TsStmtKind {
     /// (`if (!Array.isArray(subs)) continue;` / `if (!binding) continue;`),
     /// load-bearing loop control the accepted proposal's `TsStmt` list
     /// doesn't name. No label — nothing in the grounding file needs one.
-    Continue,
-    /// A bare `break;`, ending a `switch` case (1A.32b: the history driver's
-    /// `case 0: …; break;`). No label, as for [`TsStmtKind::Continue`].
-    Break,
+    ///
+    /// 1A.35a part B: `continue <label>;` when it carries a label, which must
+    /// name an enclosing [`TsStmtKind::Labelled`] loop.
+    Continue(Option<String>),
+    /// A `break;`, ending a `switch` case (1A.32b: the history driver's
+    /// `case 0: …; break;`), or `break <label>;` out of a
+    /// [`TsStmtKind::Labelled`] statement (1A.35a part B).
+    Break(Option<String>),
     /// `target = value;` — a third real gap, found in review of the
     /// implementing PR (#1313): `events_fanout.rs`'s own constructor body is
     /// exactly one statement, `this.env = (env ?? {}) as
@@ -767,6 +825,52 @@ pub(crate) enum TsStmtKind {
     /// change* — not whether the reason is permanent, temporary, or a
     /// preserved historical quirk.
     Raw(String),
+}
+
+/// One declarator of a `TsStmtKind::LetList`: `name`, `name!: T`, `name: T` or
+/// `name: T = init` (1A.35a part B). `definite` prints the `!` assertion, which
+/// TypeScript allows only with a type and no initialiser.
+#[derive(Debug, Clone)]
+pub struct TsDeclarator {
+    pub name: String,
+    pub definite: bool,
+    pub ty: Option<TsType>,
+    pub init: Option<TsExpr>,
+}
+
+impl TsDeclarator {
+    /// `name`, declared and not yet assigned.
+    pub fn new(name: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            definite: false,
+            ty: None,
+            init: None,
+        }
+    }
+
+    /// `name: ty`.
+    #[must_use]
+    pub fn typed(mut self, ty: TsType) -> Self {
+        self.ty = Some(ty);
+        self
+    }
+
+    /// `name!: ty`: a definite-assignment assertion, for a variable assigned
+    /// where the compiler cannot see it.
+    #[must_use]
+    pub fn definite(mut self, ty: TsType) -> Self {
+        self.definite = true;
+        self.ty = Some(ty);
+        self
+    }
+
+    /// `name = init`.
+    #[must_use]
+    pub fn init(mut self, init: TsExpr) -> Self {
+        self.init = Some(init);
+        self
+    }
 }
 
 /// One `case`/`default` arm of a `TsStmtKind::Switch`. empty `labels` is the
@@ -1066,6 +1170,7 @@ impl TsStmt {
                 binding: binding.into(),
                 iter,
                 body: Box::new(body),
+                is_await: false,
             },
             span,
             nested_map: None,
@@ -1169,7 +1274,7 @@ impl TsStmt {
 
     pub fn break_stmt(span: Option<Span>) -> Self {
         Self {
-            kind: TsStmtKind::Break,
+            kind: TsStmtKind::Break(None),
             span,
             nested_map: None,
             no_blank_before: false,
@@ -1179,7 +1284,74 @@ impl TsStmt {
 
     pub fn continue_stmt(span: Option<Span>) -> Self {
         Self {
-            kind: TsStmtKind::Continue,
+            kind: TsStmtKind::Continue(None),
+            span,
+            nested_map: None,
+            no_blank_before: false,
+            nested_map_source_id: 0,
+        }
+    }
+
+    /// `break <label>;`.
+    pub fn break_label_stmt(label: impl Into<String>, span: Option<Span>) -> Self {
+        Self::plain(TsStmtKind::Break(Some(label.into())), span)
+    }
+
+    /// `continue <label>;`.
+    pub fn continue_label_stmt(label: impl Into<String>, span: Option<Span>) -> Self {
+        Self::plain(TsStmtKind::Continue(Some(label.into())), span)
+    }
+
+    /// `while (<cond>) <body>`.
+    pub fn while_stmt(cond: TsExpr, body: TsStmt, span: Option<Span>) -> Self {
+        Self::plain(
+            TsStmtKind::While {
+                cond,
+                body: Box::new(body),
+            },
+            span,
+        )
+    }
+
+    /// `<label>: <body>`.
+    pub fn labelled(label: impl Into<String>, body: TsStmt, span: Option<Span>) -> Self {
+        Self::plain(
+            TsStmtKind::Labelled {
+                label: label.into(),
+                body: Box::new(body),
+            },
+            span,
+        )
+    }
+
+    /// `let a, b: T, c = e;`.
+    pub fn let_list(decls: Vec<TsDeclarator>, span: Option<Span>) -> Self {
+        debug_assert!(!decls.is_empty(), "TsStmt::let_list needs a declarator");
+        Self::plain(TsStmtKind::LetList(decls), span)
+    }
+
+    /// `for await (const <binding> of <iter>) <body>`.
+    pub fn for_await_of(
+        binding: impl Into<String>,
+        iter: TsExpr,
+        body: TsStmt,
+        span: Option<Span>,
+    ) -> Self {
+        Self::plain(
+            TsStmtKind::ForOf {
+                binding: binding.into(),
+                iter,
+                body: Box::new(body),
+                is_await: true,
+            },
+            span,
+        )
+    }
+
+    /// A statement of `kind` with no source-map extras.
+    fn plain(kind: TsStmtKind, span: Option<Span>) -> Self {
+        Self {
+            kind,
             span,
             nested_map: None,
             no_blank_before: false,
@@ -1598,6 +1770,31 @@ pub enum TsExpr {
         value: Box<TsExpr>,
     },
     Lit(TsLit),
+    /// `(a, b, c)` (1A.35a part B): a comma expression, which evaluates each
+    /// item in order and yields the last. It prints with its own brackets, so it
+    /// is safe in any operand or argument position. Needs at least two items.
+    Sequence(Vec<TsExpr>),
+    /// `callee?.(args)` (1A.35a part B): an optional call, which yields
+    /// `undefined` without calling when `callee` is nullish.
+    OptionalCall {
+        callee: Box<TsExpr>,
+        args: Vec<TsExpr>,
+    },
+    /// A function expression with a statement body (1A.35a part B), the form
+    /// that can be a generator: `async function* (params) { body }`. An arrow
+    /// cannot `yield`, so the `Stream` generators need this. It prints as an
+    /// operand bracketed, so an immediately invoked one reads
+    /// `(function () { … })()`.
+    Function {
+        is_async: bool,
+        is_generator: bool,
+        params: Vec<TsParam>,
+        return_type: Option<TsType>,
+        body: Vec<TsStmt>,
+    },
+    /// `yield <expr>` (1A.35a part B), legal in a generator [`TsExpr::Function`]'s
+    /// body. It binds looser than any operator, so it is bracketed as an operand.
+    Yield(Box<TsExpr>),
 }
 
 /// [`TsExpr::Arrow`]'s own `body` shape (#1435, Arc E slice 1) — see that
@@ -1904,6 +2101,8 @@ pub enum TsUnaryOp {
     /// idiom for marking a parameter used. Printed with its operand
     /// bracketed by the same rule as `!` and `typeof`.
     Void,
+    /// `++x` (1A.35a part B): the prefix increment, which yields the new value.
+    PreIncrement,
 }
 
 /// `??` (`events_fanout.rs`'s `env ?? {}`), plus three more real operators
@@ -2418,6 +2617,10 @@ pub struct TsParam {
     /// `(...__a: unknown[]) => …`). Prints before the name; `optional` and `rest`
     /// do not combine.
     pub rest: bool,
+    /// `[a, b]` (1A.35a part B): the parameter destructures an array, and these
+    /// are its element names (an empty name is a hole). It prints in place of
+    /// `name`, which is then unused. Build it with [`TsParam::array_pattern`].
+    pub array_pattern: Option<Vec<String>>,
 }
 
 impl TsParam {
@@ -2428,6 +2631,15 @@ impl TsParam {
             ty,
             optional: false,
             rest: false,
+            array_pattern: None,
+        }
+    }
+
+    /// A parameter that destructures an array: `([a, b]) => …`.
+    pub fn array_pattern(names: Vec<String>, ty: Option<TsType>) -> Self {
+        Self {
+            array_pattern: Some(names),
+            ..Self::new(String::new(), ty)
         }
     }
 

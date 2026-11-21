@@ -3,15 +3,17 @@
 //! builds a node when its receiver and arguments are nodes and prints today's text otherwise
 //! (`node_or_text`).
 //!
-//! The arms that stay text are marked `// 1A:`: the plain `Set.remove`, whose body is a comma
-//! expression `bynk_ts` has no node for. Every `note_key` fires before the receiver is lowered,
+//! The plain `Set.remove`'s body is a comma expression, built as a `Sequence` node (1A.35a
+//! part B). Every `note_key` fires before the receiver is lowered,
 //! as it did, and the finding #28 panics are unchanged.
 
 use bynk_check::checker::{Ty, TyId};
 use bynk_check::kernel_op::{MapOp, OptionOp, ResultOp, SetOp};
 use bynk_ts::{TsBinaryOp, TsExpr, TsParam, TsType, print_type};
 
-use super::super::lower::{Built, Lowered, LoweredExpr, Pre, node_or_text, str_node};
+use super::super::lower::{
+    Built, Lowered, LoweredExpr, Pre, node_or_text, str_node, text_if_forced,
+};
 use super::super::lower_ctx::LowerCtx;
 use super::super::lower_list::{
     arrow, binary, call, fn_type, id, key_is_plain, member, param, paren, spread, take,
@@ -637,13 +639,40 @@ pub(in crate::emitter) fn lower_set_kernel(
                 },
             ))
         }
-        // 1A: comma expression has no bynk_ts node
+        // Delete from a copy and return it: `(__s) => (__s.delete(x), __s as ReadonlySet<T>)`
+        // applied to `new Set<T>(recv)`, the body a comma expression (1A.35a part B).
         (SetOp::Remove, [x]) => {
-            let recv = pre.lower(receiver, cx);
-            let x = pre.lower(x, cx);
-            Some(Err(format!(
-                "((__s: globalThis.Set<{elem_ts}>) => (__s.delete({x}), __s as ReadonlySet<{elem_ts}>))(new globalThis.Set<{elem_ts}>({recv}))"
-            )))
+            let kids = operands(&mut pre, cx, &[receiver, x]);
+            Some(node_or_text(
+                text_if_forced("Set.remove", kids),
+                |n| {
+                    let [recv, x] = take::<2, _>(n);
+                    let set_ty = TsType::named_with_args("globalThis.Set", vec![elem_t.clone()]);
+                    let remove = arrow(
+                        vec![param("__s", Some(set_ty))],
+                        TsExpr::Sequence(vec![
+                            call(member(id("__s"), "delete"), vec![x]),
+                            cast(
+                                id("__s"),
+                                TsType::named_with_args("ReadonlySet", vec![elem_t.clone()]),
+                            ),
+                        ]),
+                    );
+                    call(
+                        remove,
+                        vec![new(
+                            type_app(global("Set"), vec![elem_t.clone()]),
+                            vec![recv],
+                        )],
+                    )
+                },
+                |t| {
+                    format!(
+                        "((__s: globalThis.Set<{elem_ts}>) => (__s.delete({}), __s as ReadonlySet<{elem_ts}>))(new globalThis.Set<{elem_ts}>({}))",
+                        t[1], t[0]
+                    )
+                },
+            ))
         }
         (SetOp::ToList, []) => {
             let kids = operands(&mut pre, cx, &[receiver]);
@@ -914,11 +943,12 @@ mod tests {
         }
     }
 
-    /// The plain `Set.remove` is the comma-expression arm: still text, today's bytes.
+    /// The plain `Set.remove` is the comma-expression arm: a `Sequence` node (1A.35a part B),
+    /// which prints today's bytes.
     #[test]
-    fn the_comma_expression_arm_stays_text() {
+    fn the_comma_expression_arm_is_a_sequence_node() {
         let (n, ts) = exits("(s: Set[String], x: String)", "Set[String] { s.remove(x) }");
-        assert!(n > 0, "{ts}");
+        assert_eq!(n, 0, "{ts}");
         assert_eq!(
             returned(&ts),
             "((__s: globalThis.Set<string>) => (__s.delete(x), __s as ReadonlySet<string>))(new globalThis.Set<string>(s))"
@@ -929,6 +959,8 @@ mod tests {
     /// bracketing.
     #[test]
     fn a_text_operand_falls_back_to_todays_text() {
+        // The plain `Set.remove` forced to text (see `force_text`).
+        let _text = crate::emitter::lower::force_text::arm("Set.remove");
         let removed = "((__s: globalThis.Set<string>) => (__s.delete(x), __s as ReadonlySet<string>))(new globalThis.Set<string>(s))";
         for (body, want) in [
             ("Int { s.remove(x).length() }", format!("({removed}).size")),

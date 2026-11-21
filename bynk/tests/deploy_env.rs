@@ -60,6 +60,27 @@ fn scratch(name: &str) -> PathBuf {
     dir
 }
 
+/// A Worker's contract manifest as the project builds now. A dry run leaves no
+/// build behind (#3796), so this builds the Workers into `out/` itself.
+fn built_manifest(dir: &Path, worker: &str) -> String {
+    let out = Command::new(env!("CARGO_BIN_EXE_bynk"))
+        .args(["build", "--target", "workers"])
+        .current_dir(dir)
+        .output()
+        .expect("run bynk build");
+    assert!(
+        out.status.success(),
+        "the Workers build:\n{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    std::fs::read_to_string(
+        dir.join("out/workers")
+            .join(worker)
+            .join("bynk-contracts.json"),
+    )
+    .expect("the Worker records its contracts")
+}
+
 fn on_path(name: &str) -> bool {
     let finder = if cfg!(windows) { "where" } else { "which" };
     Command::new(finder)
@@ -227,11 +248,8 @@ fn a_callee_push_that_breaks_a_live_caller_is_refused() {
     assert!(text.is_empty(), "refused before the plan:\n{text}");
 
     // The hash this build provides, from its manifest.
-    let manifest: serde_json::Value = serde_json::from_str(
-        &std::fs::read_to_string(dir.join(".bynk/deploy/workers/shop-payment/bynk-contracts.json"))
-            .expect("payment provides a contract"),
-    )
-    .unwrap();
+    let manifest: serde_json::Value =
+        serde_json::from_str(&built_manifest(&dir, "shop-payment")).unwrap();
     let provided = manifest["provides"]["authorise"]
         .as_str()
         .expect("payment provides `authorise`")

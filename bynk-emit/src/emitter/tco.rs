@@ -276,9 +276,9 @@ impl TcoPlan {
 /// `requires` (re-checked every iteration, so each recursive call's arguments
 /// are still checked), then the ordinary body lowering, whose tail self calls
 /// [`emit_continue`] turns into `continue`. The statements of a typed function
-/// body (1A.15): the loop itself is text, with everything inside it one step
-/// deeper, so [`Body::into_stmts`] carries the nested nodes as `raw` text with
-/// their checkpoints. `guards` builds the `requires` checks, inside the loop.
+/// body (1A.15): the loop is a labelled `while` node (1A.35a part B) whose block holds the
+/// body's statements, built one step deeper ([`Body::into_stmts`]). `guards` builds the
+/// `requires` checks, inside the loop.
 pub(crate) fn loop_body_stmts(
     f: &FnDecl,
     plan: &Rc<TcoPlan>,
@@ -287,14 +287,14 @@ pub(crate) fn loop_body_stmts(
     base: usize,
     guards: impl FnOnce(&mut LowerCtx) -> Body,
 ) -> Vec<bynk_ts::TsStmt> {
-    let init: Vec<String> = plan
-        .slots
-        .iter()
-        .map(|s| format!("{} = {}", s.var, s.binder))
-        .collect();
     let mut inner = Body::new();
     for s in &plan.slots {
-        inner.push(Item::line(format!("const {} = {};", s.binder, s.var)));
+        inner.push(Item::Node(Box::new(bynk_ts::TsStmt::const_stmt(
+            bynk_ts::TsBindingName::Ident(s.binder.clone()),
+            None,
+            bynk_ts::TsExpr::Ident(s.var.clone()),
+            None,
+        ))));
     }
     inner.append(guards(cx));
     let prev = cx.tco.replace(Rc::clone(plan));
@@ -306,12 +306,24 @@ pub(crate) fn loop_body_stmts(
         Some(&f.return_type),
     ));
     cx.tco = prev;
-    let mut body = Body::new();
-    body.push(Item::line(format!("let {};", init.join(", "))));
-    body.push(Item::line(format!("{LABEL}: while (true) {{")));
-    body.push(Item::Indent(inner));
-    body.push(Item::line("}"));
-    body.into_stmts(base)
+    // `let __tcoN = <binder>, …;` then `__tco: while (true) { … }`, as nodes: the loop body is
+    // one step deeper, so its statements are built at that column.
+    let vars = plan
+        .slots
+        .iter()
+        .map(|s| {
+            bynk_ts::TsDeclarator::new(s.var.clone()).init(bynk_ts::TsExpr::Ident(s.binder.clone()))
+        })
+        .collect();
+    let looped = bynk_ts::TsStmt::while_stmt(
+        bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Bool(true)),
+        bynk_ts::TsStmt::block(inner.into_stmts(base + INDENT_STEP), None),
+        None,
+    );
+    vec![
+        bynk_ts::TsStmt::let_list(vars, None),
+        bynk_ts::TsStmt::labelled(LABEL, looped, None),
+    ]
 }
 
 /// Emit the tail self call `e` as a reassignment and `continue`. Returns
@@ -351,7 +363,8 @@ pub(super) fn emit_continue(body: &mut Body, e: &Expr, cx: &mut LowerCtx) -> boo
             LoweredExpr::Node(bynk_ts::TsExpr::Ident(t.clone())),
         ));
     }
-    // 1A: `continue LABEL;` waits for a labelled `continue` node.
-    body.push(Item::Line(format!("continue {LABEL};")));
+    body.push(Item::Node(Box::new(bynk_ts::TsStmt::continue_label_stmt(
+        LABEL, None,
+    ))));
     true
 }

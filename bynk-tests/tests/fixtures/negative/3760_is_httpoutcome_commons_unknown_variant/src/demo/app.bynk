@@ -1,0 +1,9 @@
+context demo.app
+
+uses demo.notes
+
+service api from http {
+	on POST("/notes") (body: Note) -> Effect[HttpResult[Note]] by Visitor {
+		Created(body)
+	}
+}

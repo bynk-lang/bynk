@@ -1,0 +1,6 @@
+commons demo.rating
+
+---
+#3759: the refined type, declared apart from the record that uses it.
+---
+type Rating = Int where InRange(1, 5)

@@ -30,9 +30,13 @@ pub fn expr_contains_await(expr: &TsExpr) -> bool {
                 stmts.iter().any(stmt_contains_await)
             }
         },
-        TsExpr::Call { callee, args } | TsExpr::New { callee, args } => {
+        TsExpr::Call { callee, args }
+        | TsExpr::New { callee, args }
+        | TsExpr::OptionalCall { callee, args } => {
             expr_contains_await(callee) || args.iter().any(expr_contains_await)
         }
+        TsExpr::Sequence(items) => items.iter().any(expr_contains_await),
+        TsExpr::Function { body, .. } => body.iter().any(stmt_contains_await),
         TsExpr::Object { entries, .. } => entries.iter().any(|e| match e {
             TsObjectEntry::Prop { value: v, .. } | TsObjectEntry::Spread(v) => {
                 expr_contains_await(v)
@@ -45,9 +49,11 @@ pub fn expr_contains_await(expr: &TsExpr) -> bool {
         }
         TsExpr::TemplateLit { exprs, .. } => exprs.iter().any(expr_contains_await),
         TsExpr::As { expr, .. } | TsExpr::Unary { expr, .. } => expr_contains_await(expr),
-        TsExpr::Paren(e) | TsExpr::Spread(e) | TsExpr::NonNull(e) | TsExpr::AsConst(e) => {
-            expr_contains_await(e)
-        }
+        TsExpr::Paren(e)
+        | TsExpr::Spread(e)
+        | TsExpr::NonNull(e)
+        | TsExpr::AsConst(e)
+        | TsExpr::Yield(e) => expr_contains_await(e),
         TsExpr::Binary { left, right, .. } => {
             expr_contains_await(left) || expr_contains_await(right)
         }
@@ -85,9 +91,18 @@ fn stmt_contains_await(stmt: &TsStmt) -> bool {
                 || stmt_contains_await(then_branch)
                 || else_branch.as_deref().is_some_and(stmt_contains_await)
         }
-        TsStmtKind::ForOf { iter, body, .. } => {
-            expr_contains_await(iter) || stmt_contains_await(body)
-        }
+        // A `for await` awaits each step, whatever its body does.
+        TsStmtKind::ForOf {
+            iter,
+            body,
+            is_await,
+            ..
+        } => *is_await || expr_contains_await(iter) || stmt_contains_await(body),
+        TsStmtKind::While { cond, body } => expr_contains_await(cond) || stmt_contains_await(body),
+        TsStmtKind::Labelled { body, .. } => stmt_contains_await(body),
+        TsStmtKind::LetList(decls) => decls
+            .iter()
+            .any(|d| d.init.as_ref().is_some_and(expr_contains_await)),
         TsStmtKind::For {
             init, test, body, ..
         } => expr_contains_await(init) || expr_contains_await(test) || stmt_contains_await(body),
@@ -119,8 +134,8 @@ fn stmt_contains_await(stmt: &TsStmt) -> bool {
         }
         TsStmtKind::Verbatim { text, .. } | TsStmtKind::Raw(text) => text.contains("await"),
         TsStmtKind::Decl(_)
-        | TsStmtKind::Continue
-        | TsStmtKind::Break
+        | TsStmtKind::Continue(_)
+        | TsStmtKind::Break(_)
         | TsStmtKind::Comment(_)
         | TsStmtKind::DocComment(_)
         | TsStmtKind::Blank => false,

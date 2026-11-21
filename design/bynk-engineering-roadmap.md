@@ -32,8 +32,9 @@ for what it touched; a single `ci-green` aggregator is the one required check:
   (bynkc's suite reads `site/src/content/docs/book/**`), `docs` also runs on `rust` (the book
   renders through the Rust mdBook preprocessors), and `extension-tests` also runs
   on `rust` (it builds `bynk-lsp` from source).
-- `ci-green` — `needs:` every job, `if: always()`; red only if a needed job
-  *failed* or was *cancelled* (a skipped job is a pass). Branch protection
+- `ci-green` — `needs:` every job, `if: always()`; green only if every needed
+  job *succeeded* or was *skipped* (a failed, cancelled or abandoned job is
+  red). Branch protection
   requires this one check, which makes the path-gating safe and decouples the
   ruleset from individual job names.
 - `fmt`, `clippy` — gated on `rust`.

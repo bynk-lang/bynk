@@ -1,0 +1,13 @@
+context shop
+
+service greet {
+  on call(name: String) -> Effect[String] {
+    Effect.pure("hello, \(name)")
+  }
+}
+
+service farewell {
+  on call(name: String) -> Effect[String] {
+    Effect.pure("goodbye, \(name)")
+  }
+}

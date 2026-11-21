@@ -285,6 +285,7 @@ fn a_traced_and_an_untraced_call_are_both_nodes() {
 /// both targets.
 #[test]
 fn a_text_argument_falls_back_byte_for_byte() {
+    let _text = text_counters::force_text("splitRegex");
     for (fixture, call) in [
         (
             "97_simple_cross_context_call",

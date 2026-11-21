@@ -868,6 +868,7 @@ There are **897** codes in total.
 
 | Code | Summary | Construct | Severity |
 |---|---|---|---|
+| [`bynk.service.duplicate_call_handler`](/book/spec/static-semantics/#57-handlers) | A service declares more than one `on call` handler; it has exactly one. | [`service_decl`](/book/reference/grammar/#rule-service_decl) | — |
 | [`bynk.service.missing_from`](/book/reference/grammar/#rule-service_protocol) | A `from`-less service has a handler other than `on call`. | [`service_decl`](/book/reference/grammar/#rule-service_decl) | — |
 | [`bynk.service.mixed_protocols`](/book/reference/grammar/#rule-service_protocol) | A service mixes handler forms that do not match its `from <protocol>`. | [`service_decl`](/book/reference/grammar/#rule-service_decl) | — |
 | [`bynk.service.outside_context`](/book/reference/grammar/#rule-service_decl) | A `service` was declared outside a context. | [`service_decl`](/book/reference/grammar/#rule-service_decl) | — |

@@ -845,12 +845,14 @@ fn exec_param(name: &str) -> bynk_ts::TsParam {
                     )),
                     optional: false,
                     rest: false,
+                    array_pattern: None,
                 }],
                 bynk_ts::TsType::named("void"),
             ),
         ])),
         optional: false,
         rest: false,
+        array_pattern: None,
     }
 }
 
@@ -2840,6 +2842,7 @@ fn deps_param(deps_ty: &bynk_ts::TsType) -> bynk_ts::TsParam {
         ty: Some(deps_ty.clone()),
         optional: false,
         rest: false,
+        array_pattern: None,
     }
 }
 

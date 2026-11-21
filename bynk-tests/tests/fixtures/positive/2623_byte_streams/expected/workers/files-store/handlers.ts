@@ -31,15 +31,35 @@ export const __BlobsToken: symbol = globalThis.Symbol("Blobs");
 
 export class MemoryBlobs implements Blobs {
   async read(key: string): globalThis.Promise<Download> {
-    return { contentType: "text/plain", body: (async function* () { for (const __e of [new globalThis.TextEncoder().encode("hello, "), new globalThis.TextEncoder().encode(key)]) { yield __e; } })() };
+    return { contentType: "text/plain", body: (async function* () {
+      for (const __e of [new globalThis.TextEncoder().encode("hello, "), new globalThis.TextEncoder().encode(key)]) {
+        yield __e;
+      }
+    })() };
   }
 
   async shelf(name: string): globalThis.Promise<Shelf> {
-    return { name: name, latest: { contentType: "text/plain", body: (async function* () { for (const __e of [new globalThis.TextEncoder().encode(name)]) { yield __e; } })() } };
+    return { name: name, latest: { contentType: "text/plain", body: (async function* () {
+      for (const __e of [new globalThis.TextEncoder().encode(name)]) {
+        yield __e;
+      }
+    })() } };
   }
 
   async write(key: string, body: AsyncIterable<globalThis.Uint8Array>): globalThis.Promise<Receipt> {
-    const parts = await (async (__s) => { const __m = __s as unknown as { [k: symbol]: boolean }; const __k = globalThis.Symbol.for("bynk.stream.read"); if (__m[__k]) { throw new globalThis.Error("bynk: a stream can be read only once"); } __m[__k] = true; const __r = []; for await (const __e of __s) { __r.push(__e); } return __r; })(body);
+    const parts = await (async (__s) => {
+      const __m = __s as unknown as { [k: symbol]: boolean };
+      const __k = globalThis.Symbol.for("bynk.stream.read");
+      if (__m[__k]) {
+        throw new globalThis.Error("bynk: a stream can be read only once");
+      }
+      __m[__k] = true;
+      const __r = [];
+      for await (const __e of __s) {
+        __r.push(__e);
+      }
+      return __r;
+    })(body);
     return { key: key, parts: (parts).length };
   }
 }
@@ -49,22 +69,62 @@ export const __MemoryBlobsProvider = { token: __BlobsToken, factory: () => new M
 export const reading = {
   async call(key: string, deps: { Blobs: Blobs }): globalThis.Promise<Option<string>> {
     const d = await deps.Blobs.read(key);
-    const parts = await (async (__s) => { const __m = __s as unknown as { [k: symbol]: boolean }; const __k = globalThis.Symbol.for("bynk.stream.read"); if (__m[__k]) { throw new globalThis.Error("bynk: a stream can be read only once"); } __m[__k] = true; const __r = []; for await (const __e of __s) { __r.push(__e); } return __r; })(d.body);
+    const parts = await (async (__s) => {
+      const __m = __s as unknown as { [k: symbol]: boolean };
+      const __k = globalThis.Symbol.for("bynk.stream.read");
+      if (__m[__k]) {
+        throw new globalThis.Error("bynk: a stream can be read only once");
+      }
+      __m[__k] = true;
+      const __r = [];
+      for await (const __e of __s) {
+        __r.push(__e);
+      }
+      return __r;
+    })(d.body);
     return __bynkBytesDecodeUtf8(join(parts));
   },
 };
 
 export const upload = {
   async call(key: string, deps: { Blobs: Blobs }): globalThis.Promise<Receipt> {
-    return deps.Blobs.write(key, (async function* () { for (const __e of [new globalThis.TextEncoder().encode("a"), new globalThis.TextEncoder().encode("b"), new globalThis.TextEncoder().encode("c")]) { yield __e; } })());
+    return deps.Blobs.write(key, (async function* () {
+      for (const __e of [new globalThis.TextEncoder().encode("a"), new globalThis.TextEncoder().encode("b"), new globalThis.TextEncoder().encode("c")]) {
+        yield __e;
+      }
+    })());
   },
 };
 
 export const twice = {
   async call(key: string, deps: { Blobs: Blobs }): globalThis.Promise<number> {
     const d = await deps.Blobs.read(key);
-    const first = await (async (__s) => { const __m = __s as unknown as { [k: symbol]: boolean }; const __k = globalThis.Symbol.for("bynk.stream.read"); if (__m[__k]) { throw new globalThis.Error("bynk: a stream can be read only once"); } __m[__k] = true; const __r = []; for await (const __e of __s) { __r.push(__e); } return __r; })(d.body);
-    const second = await (async (__s) => { const __m = __s as unknown as { [k: symbol]: boolean }; const __k = globalThis.Symbol.for("bynk.stream.read"); if (__m[__k]) { throw new globalThis.Error("bynk: a stream can be read only once"); } __m[__k] = true; const __r = []; for await (const __e of __s) { __r.push(__e); } return __r; })(d.body);
+    const first = await (async (__s) => {
+      const __m = __s as unknown as { [k: symbol]: boolean };
+      const __k = globalThis.Symbol.for("bynk.stream.read");
+      if (__m[__k]) {
+        throw new globalThis.Error("bynk: a stream can be read only once");
+      }
+      __m[__k] = true;
+      const __r = [];
+      for await (const __e of __s) {
+        __r.push(__e);
+      }
+      return __r;
+    })(d.body);
+    const second = await (async (__s) => {
+      const __m = __s as unknown as { [k: symbol]: boolean };
+      const __k = globalThis.Symbol.for("bynk.stream.read");
+      if (__m[__k]) {
+        throw new globalThis.Error("bynk: a stream can be read only once");
+      }
+      __m[__k] = true;
+      const __r = [];
+      for await (const __e of __s) {
+        __r.push(__e);
+      }
+      return __r;
+    })(d.body);
     return (first).length + (second).length;
   },
 };
@@ -76,7 +136,17 @@ export const api = {
   },
   async http_GET_shelves_Param_name(name: string, deps: { Blobs: Blobs }): globalThis.Promise<HttpResult<void>> {
     const s = await deps.Blobs.shelf(name);
-    return (name === "empty" ? HttpResult.NotFound : HttpResult.RawStreamed((async function* (__s) { const __m = __s as unknown as { [k: symbol]: boolean }; const __k = globalThis.Symbol.for("bynk.stream.read"); if (__m[__k]) { throw new globalThis.Error("bynk: a stream can be read only once"); } __m[__k] = true; for await (const __e of __s) { yield ((b: globalThis.Uint8Array) => b)(__e); } })(s.latest.body), s.latest.contentType));
+    return (name === "empty" ? HttpResult.NotFound : HttpResult.RawStreamed((async function* (__s) {
+      const __m = __s as unknown as { [k: symbol]: boolean };
+      const __k = globalThis.Symbol.for("bynk.stream.read");
+      if (__m[__k]) {
+        throw new globalThis.Error("bynk: a stream can be read only once");
+      }
+      __m[__k] = true;
+      for await (const __e of __s) {
+        yield ((b: globalThis.Uint8Array) => b)(__e);
+      }
+    })(s.latest.body), s.latest.contentType));
   },
 };
 

@@ -308,7 +308,9 @@ WebAssembly) for diagnostics, hover and completion across each project; see
   (`#base64url(deflate-raw(utf8))`, the format By Example's links use), which a
   browser never sends to a server. A snippet whose link would pass 16,384
   characters is refused with a message, never truncated. The link is made only
-  when you run the command.
+  when you run the command. The link opens the code; the playground's **Run**
+  calls only the `on call` handler of a `service playground`, so a snippet
+  without one opens and type-checks but has nothing to run.
 - **Review pending npm requirements**: when a `check`, `dev` or deploy-plan run
   reports `bynk.requires.unapproved`, the extension reads
   [`bynk approve --list --format json`](/docs/bynk-cli/#bynk-approve) (it never

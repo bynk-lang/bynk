@@ -1,0 +1,16 @@
+suite demo.shop {
+  // #3759: the omitted refined defaults are `Rating` values, not bare numbers.
+
+  case "the default rating is used" {
+    expect plain().rating == 5
+  }
+
+  case "every nested default is used as a Rating" {
+    expect total(plain()) == 18
+  }
+
+  case "a record built in a test body takes the defaults" {
+    let r = Review { text: "x" }
+    expect total(r) == 18
+  }
+}

@@ -110,10 +110,11 @@ fn the_container_kernels_print_as_nodes_with_no_text_exit() {
     );
 }
 
-/// The plain `Set.remove` is a comma expression `bynk_ts` has no node for (marked `// 1A:`): it is
-/// still a text exit and prints today's bytes, while a keyed element type takes the helper node.
+/// The plain `Set.remove` is a comma-expression node now; forced to text (`force_text`), it is
+/// a text exit and prints today's bytes, while a keyed element type takes the helper node.
 #[test]
 fn the_plain_set_remove_stays_text() {
+    let _text = text_counters::force_text("Set.remove");
     let src = r#"context ops.jobs
 
 fn drop_(s: Set[String], x: String) -> Set[String] { s.remove(x) }
@@ -133,6 +134,7 @@ fn drop_(s: Set[String], x: String) -> Set[String] { s.remove(x) }
 /// receiver's own brackets, and the combinator's evaluation order is receiver then argument.
 #[test]
 fn a_text_receiver_falls_back_to_todays_text() {
+    let _text = text_counters::force_text("Set.remove");
     let src = r#"context ops.jobs
 
 fn size_(s: Set[String], x: String) -> Int { s.remove(x).length() }
