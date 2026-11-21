@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.640.8** | The state-migration step functions the compiler writes into an agent's module are built as trees, not text, so each statement of a step prints on its own line and its `catch` is braced; their tokens are unchanged; a foreign client whose decoders return a consumed type now imports `Result` and `__BoundaryError`, which it used without importing |
 | **v0.640.7** | The generated TypeScript client's conversions, route constants, contract table and `createClient` are built as trees, not text, so the client's layout is regular (one blank line between declarations, each route function on one line after its parameters); its tokens and source maps are unchanged apart from the one-line doc comment on `Client` becoming a block, and the contract table of a foreign-caller client (`bynk-client.ts`) gaining its trailing comma |
 | **v0.640.6** | The serialisation codecs, the Worker group entry, the email handler and the extra imports are built as trees, not text, and the codec guards that sat one level shallow now sit at their true depth; only indentation in the generated code changes, and its source maps are unchanged |
 | **v0.640.5** | The code generator's lowering returns trees only: the text bridge, its constructors, its counters and the string type renderer are deleted, and the generated code and its source maps are byte for byte unchanged |
