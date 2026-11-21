@@ -707,7 +707,7 @@ fn render_stmt_kind(
         // as given, no `indent(depth)` prefix, no added punctuation (see
         // `TsStmtKind::Raw`'s own doc for why this is a distinct kind, not
         // a reuse of `Verbatim`).
-        TsStmtKind::Raw(text) => out.push_str(text),
+        TsStmtKind::Raw(text, _) => out.push_str(text),
     }
 }
 
@@ -1027,7 +1027,7 @@ fn render_branch(
         | TsStmtKind::Blank
         | TsStmtKind::Switch { .. }
         | TsStmtKind::Increment(_)
-        | TsStmtKind::Raw(_) => {
+        | TsStmtKind::Raw(..) => {
             out.push(' ');
             note_span(out.len(), branch, map.as_mut());
             render_inline_stmt(out, branch, depth);
@@ -1232,7 +1232,7 @@ fn render_inline_stmt(out: &mut String, stmt: &TsStmt, depth: usize) {
         // `inline: false` specifically to avoid exercising this arm.
         // Listed by name, not folded into a wildcard, for the same reason
         // as every other arm in this group.
-        | TsStmtKind::Raw(_) => render_stmt(out, stmt, 0, None),
+        | TsStmtKind::Raw(..) => render_stmt(out, stmt, 0, None),
     }
 }
 
@@ -2879,7 +2879,7 @@ pub fn print_expr(expr: &TsExpr) -> String {
 /// a depth-using wrapper (like this `Switch` case) is the real hazard.
 pub fn print_stmt(stmt: &TsStmt, depth: usize) -> String {
     debug_assert!(
-        depth == 0 || matches!(stmt.kind, TsStmtKind::Raw(_)) || !stmt_contains_raw(stmt),
+        depth == 0 || matches!(stmt.kind, TsStmtKind::Raw(..)) || !stmt_contains_raw(stmt),
         "print_stmt: a Raw-bearing statement's own baked-in indent only matches depth 0"
     );
     let mut out = String::new();
@@ -2916,7 +2916,7 @@ pub fn print_stmt_and_merge(
     source_id: usize,
 ) {
     debug_assert!(
-        depth == 0 || matches!(stmt.kind, TsStmtKind::Raw(_)) || !stmt_contains_raw(stmt),
+        depth == 0 || matches!(stmt.kind, TsStmtKind::Raw(..)) || !stmt_contains_raw(stmt),
         "print_stmt_and_merge: a Raw-bearing statement's own baked-in indent only matches depth 0"
     );
     render_stmt(out, stmt, depth, Some(MergeTarget { map, source_id }));
@@ -2955,7 +2955,7 @@ fn note_span_at(offset: usize, span: Span, map: Option<&mut MergeTarget<'_>>) {
 /// adjusted offsets, which is what a nested checkpoint needs.
 pub fn print_stmt_with_spans(stmt: &TsStmt, depth: usize) -> (String, Vec<(usize, Span)>) {
     debug_assert!(
-        depth == 0 || matches!(stmt.kind, TsStmtKind::Raw(_)) || !stmt_contains_raw(stmt),
+        depth == 0 || matches!(stmt.kind, TsStmtKind::Raw(..)) || !stmt_contains_raw(stmt),
         "print_stmt_with_spans: a Raw-bearing statement's own baked-in indent only matches depth 0"
     );
     let mut map = SourceMapBuilder::new();
@@ -3021,7 +3021,7 @@ fn contains_raw(stmts: &[TsStmt]) -> bool {
 
 fn stmt_contains_raw(stmt: &TsStmt) -> bool {
     match &stmt.kind {
-        TsStmtKind::Raw(_) => true,
+        TsStmtKind::Raw(..) => true,
         TsStmtKind::Verbatim { .. }
         | TsStmtKind::Decl(_)
         | TsStmtKind::Const { .. }
