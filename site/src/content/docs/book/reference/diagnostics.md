@@ -411,7 +411,7 @@ There are **897** codes in total.
 | [`bynk.container.build_path`](/book/reference/capabilities/#derived-capabilities) | A `Container`'s `@build` is not a directory inside the project: it is empty, absolute, uses `\`, or leaves the project with `..`. |  | — |
 | [`bynk.container.output_outside_project`](/book/reference/capabilities/#derived-capabilities) | A build with a `Container` is written to an output directory outside the project, so `wrangler` cannot reach the container's Dockerfile from the Worker's output directory by a relative path inside the project. |  | — |
 | `bynk.d1.migration_invalid` | A `D1` migration does not apply to an empty in-memory SQLite, so the binding's literal SQL is not checked against its schema (warning). |  | Warning |
-| `bynk.d1.migration_name` | A file in the project's `migrations/` folder isn't `migrations/<database>/NNNN_<name>.sql`, or shares its number with another migration of the same database. |  | — |
+| [`bynk.d1.migration_name`](/book/reference/bynk-capabilities/#schema-migrations) | A file in the project's `migrations/` folder isn't `migrations/<database>/NNNN_<name>.sql`, or shares its number with another migration of the same database. |  | — |
 | `bynk.d1.migration_unreadable` | A `D1` migration in the project's `migrations/` folder can't be read, or isn't UTF-8 text. |  | — |
 | `bynk.d1.migrations_unused` | A directory in the project's `migrations/` folder matches no `D1` instance's database name, so its migrations are never applied, usually because the capability was renamed (warning). |  | Warning |
 | [`bynk.d1.select_field_missing`](/book/reference/bynk-capabilities/#sql-checked-against-the-migrations) | A record read from a literal D1 statement has a field with no column of that name. For a `select[T]` / `firstAs[T]` row type, the column list the compiler writes from `T` does not prepare against the schema the binding's migrations build; for a `Json.decodeSql[T]` of the rows of a literal `all` / `first`, a required (non-`Option`) field of `T` has no result column. |  | — |
@@ -419,20 +419,20 @@ There are **897** codes in total.
 | [`bynk.d1.sql_param_count`](/book/reference/bynk-capabilities/#sql-checked-against-the-migrations) | A literal D1 statement uses a different number of bound parameters (`?N`) than the list literal passed with it holds. |  | — |
 | [`bynk.dependency.path_outside_root`](/book/guides/projects-build-and-deployment/share-code-between-projects/#what-the-checks-catch) | A path dependency declared by a dependency resolves outside the workspace; a dependency's own path dependencies are honoured only between members of one workspace. |  | — |
 | `bynk.deploy.agent_move_refused` | `bynk deploy` refused to put a context that hosts agents on a different Worker script than it was last deployed to (into or out of a `[deploy.workers.<key>]` group, between groups, or after a group is renamed or re-keyed): an agent's state belongs to its script, so it would start empty and the old data would stay behind. Start it fresh deliberately with `--accept-fresh-agent <context>`, which a move out of a group that stays cannot use. |  | — |
-| `bynk.deploy.asset_path_conflict` | Two members of one `[deploy.workers.<key>]` group serve a fixed asset path (`at "/…"`) from different files, or one that would be a folder of the other; a group has one assets directory, so each fixed path names one file. |  | — |
-| `bynk.deploy.binding_collision` | Two members of one `[deploy.workers.<key>]` group declare different bindings under the same name; members share one `wrangler.toml`, so identical declarations share a binding and differing ones are refused. |  | — |
-| `bynk.deploy.context_in_two_groups` | A context is listed in two `[deploy.workers.<key>]` groups; a context is deployed in one Worker only. |  | — |
+| [`bynk.deploy.asset_path_conflict`](/docs/manifest/#worker-groups) | Two members of one `[deploy.workers.<key>]` group serve a fixed asset path (`at "/…"`) from different files, or one that would be a folder of the other; a group has one assets directory, so each fixed path names one file. |  | — |
+| [`bynk.deploy.binding_collision`](/docs/manifest/#worker-groups) | Two members of one `[deploy.workers.<key>]` group declare different bindings under the same name; members share one `wrangler.toml`, so identical declarations share a binding and differing ones are refused. |  | — |
+| [`bynk.deploy.context_in_two_groups`](/docs/manifest/#worker-groups) | A context is listed in two `[deploy.workers.<key>]` groups; a context is deployed in one Worker only. |  | — |
 | `bynk.deploy.contract_skew` | A worker was compiled against a contract its live dependencies no longer provide, or no longer provides the contract its live callers were compiled against, so `bynk deploy --context` refuses to ship it. |  | — |
-| `bynk.deploy.duplicate_hostname` | A route or custom domain is claimed twice across `[deploy.workers.<key>]` groups. |  | — |
-| `bynk.deploy.empty_group` | A `[deploy.workers.<key>]` group lists no context. |  | — |
+| [`bynk.deploy.duplicate_hostname`](/docs/manifest/#worker-groups) | A route or custom domain is claimed twice across `[deploy.workers.<key>]` groups. |  | — |
+| [`bynk.deploy.empty_group`](/docs/manifest/#worker-groups) | A `[deploy.workers.<key>]` group lists no context. |  | — |
 | `bynk.deploy.foreign_contract_skew` | A build breaks the contract a declared foreign caller's client was generated at, as pinned in `bynk.foreign.toml`, so `bynk deploy` refuses to ship it. |  | — |
-| `bynk.deploy.group_name_conflict` | A `[deploy.workers.<key>]` group's key or script name is another group's, or is the Worker of a context in no group. |  | — |
-| `bynk.deploy.multiple_websocket_members` | More than one member of a `[deploy.workers.<key>]` group declares a `from websocket` service; an upgrade request names no path or service a group could route it by, so a group has at most one such member, which takes every upgrade request whatever the path. |  | — |
-| `bynk.deploy.not_a_context` | A `[deploy.workers.<key>]` group lists a unit that is not a `context`; only contexts are deployed as Workers. |  | — |
-| `bynk.deploy.route_conflict` | Two members of one `[deploy.workers.<key>]` group declare the same HTTP method and path; a Worker answers a route with one handler. |  | — |
-| `bynk.deploy.service_name_conflict` | Two members of one `[deploy.workers.<key>]` group declare a service of the same name; a Worker answers its members' services by name. |  | — |
-| `bynk.deploy.unknown_context` | A `[deploy.workers.<key>]` group lists a context the project does not declare. |  | — |
-| `bynk.deploy.worker_cycle` | Workers bind to each other in a cycle that involves a `[deploy.workers.<key>]` group: a group folds its members into one Worker, which can close a cycle among contexts that are themselves acyclic. A Worker is uploaded after the Workers it binds to, so the cycle cannot be deployed. |  | — |
+| [`bynk.deploy.group_name_conflict`](/docs/manifest/#worker-groups) | A `[deploy.workers.<key>]` group's key or script name is another group's, or is the Worker of a context in no group. |  | — |
+| [`bynk.deploy.multiple_websocket_members`](/docs/manifest/#worker-groups) | More than one member of a `[deploy.workers.<key>]` group declares a `from websocket` service; an upgrade request names no path or service a group could route it by, so a group has at most one such member, which takes every upgrade request whatever the path. |  | — |
+| [`bynk.deploy.not_a_context`](/docs/manifest/#worker-groups) | A `[deploy.workers.<key>]` group lists a unit that is not a `context`; only contexts are deployed as Workers. |  | — |
+| [`bynk.deploy.route_conflict`](/docs/manifest/#worker-groups) | Two members of one `[deploy.workers.<key>]` group declare the same HTTP method and path; a Worker answers a route with one handler. |  | — |
+| [`bynk.deploy.service_name_conflict`](/docs/manifest/#worker-groups) | Two members of one `[deploy.workers.<key>]` group declare a service of the same name; a Worker answers its members' services by name. |  | — |
+| [`bynk.deploy.unknown_context`](/docs/manifest/#worker-groups) | A `[deploy.workers.<key>]` group lists a context the project does not declare. |  | — |
+| [`bynk.deploy.worker_cycle`](/docs/manifest/#worker-groups) | Workers bind to each other in a cycle that involves a `[deploy.workers.<key>]` group: a group folds its members into one Worker, which can close a cycle among contexts that are themselves acyclic. A Worker is uploaded after the Workers it binds to, so the cycle cannot be deployed. |  | — |
 | `bynk.deploy.workers_ignored_on_bundle` | `bynk.toml` declares `[deploy.workers]` groups, which only a `workers` build uses; this build is a `bundle`, which has every context in one program and ignores them (warning). |  | Warning |
 | [`bynk.detach.in_agent_handler`](/book/reference/capabilities/#detach) | A `detach` was used in an agent handler, which has no execution context to keep a detached effect alive. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
 | [`bynk.detach.in_pure_context`](/book/reference/capabilities/#detach) | A `detach` was used in a pure (non-effectful) context. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
@@ -525,7 +525,7 @@ There are **897** codes in total.
 | [`bynk.namespace.reserved`](/book/spec/static-semantics/) | A user unit is named `bynk` or `bynk.*`; the `bynk` root is reserved for the toolchain. |  | — |
 | [`bynk.package.alias_shadows_unit`](/book/guides/projects-build-and-deployment/share-code-between-projects/#what-the-checks-catch) | A dependency alias in `[dependencies]` is also the first segment of one of the project's own units, so `<alias>.…` would be ambiguous. |  | — |
 | `bynk.package.checksum_mismatch` | A git dependency's store entry, or a freshly fetched commit, doesn't hash to the checksum `bynk.lock` records; `bynk` refuses to build it. |  | — |
-| `bynk.package.dependency_cycle` | The package graph has a cycle: a dependency depends, directly or not, on itself or on the project. |  | — |
+| [`bynk.package.dependency_cycle`](/book/guides/projects-build-and-deployment/share-code-between-projects/#what-the-checks-catch) | The package graph has a cycle: a dependency depends, directly or not, on itself or on the project. |  | — |
 | [`bynk.package.dependency_not_found`](/book/guides/projects-build-and-deployment/share-code-between-projects/#depend-on-it) | A path dependency's directory has no readable `bynk.toml`, its `bynk.toml` is invalid, or it has no `[package]`. |  | — |
 | [`bynk.package.dev_dependency_in_source`](/book/guides/projects-build-and-deployment/share-code-between-projects/#dependencies-only-tests-use) | A commons, context or adapter reaches a `[dev-dependencies]` alias, which only a suite may use. |  | — |
 | [`bynk.package.duplicate_source`](/book/guides/projects-build-and-deployment/share-code-between-projects/#what-the-checks-catch) | One package is reached from two different directories; a build holds one copy of each package. |  | — |
@@ -594,7 +594,7 @@ There are **897** codes in total.
 | [`bynk.stub.not_a_seam`](/book/reference/testing/#stub) | A test `stub` overrides a capability the unit under test does not consume. |  | — |
 | [`bynk.stub.rhs_type`](/book/reference/testing/#stub) | A test `stub … returns <value>` right-hand side does not match the operation's return type. |  | — |
 | [`bynk.stub.unknown_op`](/book/reference/testing/#stub) | A test `stub` names an operation the capability does not declare. |  | — |
-| `bynk.target.browser_bundle_only` | The `browser` platform builds only the in-process `Bundle` topology; `--target workers` is not a browser build. |  | — |
+| [`bynk.target.browser_bundle_only`](/docs/bynk-cli/#bynk-build) | The `browser` platform builds only the in-process `Bundle` topology; `--target workers` is not a browser build. |  | — |
 | `bynk.target.vendor_conflict` | One deployment unit's in-process closure uses platform-native capabilities from two mutually-exclusive platforms. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
 | `bynk.target.vendor_required` | A deployment unit uses a platform-native capability but the build selects another `--platform`. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
 | [`bynk.test.actor_identity_required`](/book/reference/testing/#call-site-by) | A test omits the identity an identity-carrying actor requires: a bare call-site `by <Actor>`, or no `by` at all on a handler that binds its `Caller`. | [`case`](/book/reference/grammar/#rule-case) | — |
@@ -760,22 +760,22 @@ There are **897** codes in total.
 | `bynk.project.duplicate_compatibility_flag` | `bynk.toml`'s `[workers] compatibility_flags` lists a flag twice, or one every Bynk Worker already has; the duplicate is dropped (warning). |  | Warning |
 | [`bynk.project.duplicate_module_doc`](/book/guides/program-structure/document-your-code/#one-module-doc-per-unit) | More than one file of a multi-file unit carries a module doc. |  | — |
 | [`bynk.project.export_context`](/book/guides/projects-build-and-deployment/share-code-between-projects/#make-a-package) | `bynk.toml`'s `[package] exports` lists a context: a package shares commons and adapters, never a context, which belongs to the project that deploys it. |  | — |
-| `bynk.project.export_unknown` | `bynk.toml`'s `[package] exports` lists a name that isn't a commons or adapter the project declares. |  | — |
-| `bynk.project.file_and_directory` | A unit exists as both a file and a directory. |  | — |
+| [`bynk.project.export_unknown`](/book/guides/projects-build-and-deployment/share-code-between-projects/#make-a-package) | `bynk.toml`'s `[package] exports` lists a name that isn't a commons or adapter the project declares. |  | — |
+| [`bynk.project.file_and_directory`](/book/guides/projects-build-and-deployment/layout/#path-identity) | A unit exists as both a file and a directory. |  | — |
 | [`bynk.project.inconsistent_commons_name`](/book/guides/projects-build-and-deployment/layout/#path-identity) | A source file's path does not match its declared name. |  | — |
 | [`bynk.project.kind_conflict`](/book/spec/compilation-model/#83-source-layout-and-test-ness) | A name is declared as both a commons and a context. |  | — |
 | `bynk.project.no_root` | No project root could be determined. |  | — |
-| `bynk.project.no_sources` | The project contains no source files. |  | — |
+| [`bynk.project.no_sources`](/book/guides/projects-build-and-deployment/layout/#the-manifest) | The project contains no source files. |  | — |
 | `bynk.project.read_failed` | A source file could not be read. |  | — |
 | `bynk.project.schema_registry_corrupt` | `bynk.schema.lock` (the schema registry for events and agent state) is missing its version field, empty, truncated, or otherwise unparseable — restore it from version control rather than deleting it, since deleting it would silently re-baseline every event's and agent's history. |  | — |
 | `bynk.project.unstable_not_experimental` | `bynk.toml`'s `[unstable] allow` lists an item that nothing experimental lies in or under: it is stable now, so the entry can go (warning). |  | Warning |
-| `bynk.project.unstable_unknown_item` | `bynk.toml`'s `[unstable] allow` lists a path that names no standard-library unit, exported item or operation. |  | — |
+| [`bynk.project.unstable_unknown_item`](/docs/manifest/#unstable) | `bynk.toml`'s `[unstable] allow` lists a path that names no standard-library unit, exported item or operation. |  | — |
 
 ## Properties (generative tests)
 
 | Code | Summary | Construct | Severity |
 |---|---|---|---|
-| `bynk.property.restates_refinement` | A `property` merely re-checks a refinement its type already guarantees. | [`for_all`](/book/reference/grammar/#rule-for_all) | — |
+| [`bynk.property.restates_refinement`](/book/reference/testing/#properties) | A `property` merely re-checks a refinement its type already guarantees. | [`for_all`](/book/reference/grammar/#rule-for_all) | — |
 | [`bynk.property.where_not_bool`](/book/reference/testing/#properties) | A `for all ... where` filter does not type to `Bool`. | [`for_all`](/book/reference/grammar/#rule-for_all) | — |
 
 ## Providers
@@ -831,7 +831,7 @@ There are **897** codes in total.
 | [`bynk.resolve.duplicate_const`](/book/reference/constants/#declaring-a-constant) | Two constants share a name. | [`const_decl`](/book/reference/grammar/#rule-const_decl) | — |
 | [`bynk.resolve.duplicate_field`](/book/reference/types/#record-types) | A record, or one variant's payload, declares a field twice. | [`record_type`](/book/reference/grammar/#rule-record_type) | — |
 | [`bynk.resolve.duplicate_field_init`](/book/reference/types/#record-types) | A record construction initialises a field twice. | [`record_construction`](/book/reference/grammar/#rule-record_construction) | — |
-| `bynk.resolve.duplicate_fn` | Two functions share a name. | [`fn_decl`](/book/reference/grammar/#rule-fn_decl) | — |
+| [`bynk.resolve.duplicate_fn`](/book/spec/static-semantics/) | Two functions share a name. | [`fn_decl`](/book/reference/grammar/#rule-fn_decl) | — |
 | [`bynk.resolve.duplicate_message_code`](/book/guides/localisation/declare-a-message-bundle/#the-smallest-bundle) | A message bundle declares the same code twice in one block. |  | — |
 | [`bynk.resolve.duplicate_message_locale`](/book/guides/localisation/declare-a-message-bundle/#adding-a-locale) | Two `messages` blocks in one bundle declare the same locale tag. |  | — |
 | [`bynk.resolve.duplicate_method`](/book/spec/static-semantics/) | Two methods share a name. | [`fn_decl`](/book/reference/grammar/#rule-fn_decl) | — |

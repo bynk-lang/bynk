@@ -1,0 +1,7 @@
+context shop.stock
+
+service level {
+  on call(n: Int) -> Effect[Int] {
+    Effect.pure(n)
+  }
+}

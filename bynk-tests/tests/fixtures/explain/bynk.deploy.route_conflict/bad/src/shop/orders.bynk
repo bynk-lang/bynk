@@ -1,0 +1,7 @@
+context shop.orders
+
+service orders from http {
+  on GET("/status") () -> Effect[HttpResult[String]] by who: Visitor {
+    Ok("orders")
+  }
+}

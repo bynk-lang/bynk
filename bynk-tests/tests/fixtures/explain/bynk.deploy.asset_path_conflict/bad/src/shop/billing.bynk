@@ -1,0 +1,9 @@
+context shop.billing
+
+asset terms = "assets/billing-terms.txt" at "/terms.txt"
+
+service billing_probe {
+  on call() -> Effect[Int] {
+    Effect.pure(2)
+  }
+}

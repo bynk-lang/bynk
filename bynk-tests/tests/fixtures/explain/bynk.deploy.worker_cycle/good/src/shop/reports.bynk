@@ -1,0 +1,10 @@
+context shop.reports
+
+consumes shop.prices
+
+service report {
+  on call(n: Int) -> Effect[Int] {
+    let r <- shop.prices.price(n)
+    Effect.pure(r)
+  }
+}

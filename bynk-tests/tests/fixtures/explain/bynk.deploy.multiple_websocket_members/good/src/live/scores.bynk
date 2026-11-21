@@ -1,0 +1,20 @@
+context live.scores
+
+type Frame = { text: String }
+
+agent Board {
+  key id: String
+  store conns: Map[String, Connection[Frame]]
+
+  on call join(conn: Connection[Frame]) -> Effect[()] {
+    let _ <- conns.put("one", conn)
+    ()
+  }
+}
+
+service scores from websocket(in: Frame, out: Frame) {
+  on open () -> Effect[()] by v: Visitor {
+    let _ <- Board("lobby").join(connection)
+    ()
+  }
+}
