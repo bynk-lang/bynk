@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.639.59** | The `rust` examples in the crate READMEs are self-contained, and CI compiles and runs them as doctests so they cannot fall out of date |
 | **v0.639.58** | Completion and hover show `joinOn` and `leftJoin` with their `left` and `right` key functions, as the checker checks them, instead of an `on` predicate |
 | **v0.639.57** | A `system` case's `is` test on a handler result whose type comes from a commons is checked again, so a wrong variant such as `r is Created(_)` on an `HttpOutcome[Note]` is `bynk.types.is_unknown_variant` instead of a failure in `tsc`; and a service with two `on call` handlers, where the second silently replaced the first, is now `bynk.service.duplicate_call_handler` |
 | **v0.639.56** | A record literal that leaves out a field now fills in its default correctly when the field is a refined type (the value is a value of that type) or a `Decimal` (the value is a decimal number, not its text), so such programs type-check and `Decimal` arithmetic on the field no longer crashes (#3759, #3801) |
