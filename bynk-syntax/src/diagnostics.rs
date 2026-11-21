@@ -1817,6 +1817,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "handler-form",
     },
     Explain {
+        code: "bynk.d1.migration_name",
+        blurb: "A `D1` database's migrations are the SQL files in `migrations/<database>/`, applied in number order, each once. So a file's name must give its place in that order: `NNNN_<name>.sql`, four digits, an underscore, then letters, digits, `_` or `-`, directly in its database's directory. A file named any other way, one in a nested folder, or one whose number another migration of the same database already has could not be put in order, so the build refuses it rather than skip it. Rename the file, or give it the next free number.",
+        example: "migrations/shop-orders/1_create_orders.sql      // ✗ not four digits\nmigrations/shop-orders/0002_add_note.sql\nmigrations/shop-orders/0002_add_total.sql     // ✗ `0002` is taken\n\nmigrations/shop-orders/0001_create_orders.sql   // ✓\nmigrations/shop-orders/0002_add_note.sql\nmigrations/shop-orders/0003_add_total.sql       // ✓ the next free number",
+        page: "/book/reference/bynk-capabilities",
+        anchor: "schema-migrations",
+    },
+    Explain {
         code: "bynk.d1.select_field_missing",
         blurb: "`select[T]` and `firstAs[T]` read each row into the record `T`, matching columns to \
                 fields by name, so every field needs a column of that name. `Json.decodeSql` reads \
@@ -1854,6 +1861,90 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "# lib/bynk.toml, a dependency of the project\n[dependencies]\ncore = { package = \"acme/core\", path = \"../../outside\" }   // ✗ outside the workspace\n\ncore = { package = \"acme/core\", path = \"../core\" }         // ✓ a workspace member",
         page: "/book/guides/projects-build-and-deployment/share-code-between-projects",
         anchor: "what-the-checks-catch",
+    },
+    Explain {
+        code: "bynk.deploy.asset_path_conflict",
+        blurb: "A `[deploy.workers.<key>]` group folds its members into one Worker, and a Worker has one assets directory. So a fixed asset path (`at \"/…\"`) names one file across the whole group: two members serving different files at one path would leave the Worker unable to say which to send. A path that would be a folder of another member's file is refused for the same reason. Give one of the assets another path, or put the contexts in different groups.",
+        example: "// bynk.toml\n[deploy.workers.core]\ncontexts = [\"shop.orders\", \"shop.billing\"]\n\n// shop/orders.bynk\nasset terms = \"assets/orders-terms.txt\" at \"/terms.txt\"\n\n// shop/billing.bynk\nasset terms = \"assets/billing-terms.txt\" at \"/terms.txt\"           // ✗ `shop.orders` serves `/terms.txt`\nasset terms = \"assets/billing-terms.txt\" at \"/billing/terms.txt\"   // ✓",
+        page: "/docs/manifest",
+        anchor: "worker-groups",
+    },
+    Explain {
+        code: "bynk.deploy.binding_collision",
+        blurb: "A `[deploy.workers.<key>]` group folds its members into one Worker, and a Worker has one `wrangler.toml`, so its members share one set of binding names. Two members that declare a binding the same way share it. Two that declare different bindings under one name are refused, because one name cannot bind two things. An agent is the usual case: each agent class is a Durable Object binding named after the class, and a class belongs to the context that declares it, so two members cannot each declare an agent of the same name. Rename one, or put the contexts in different groups.",
+        example: "// bynk.toml\n[deploy.workers.core]\ncontexts = [\"shop.orders\", \"shop.billing\"]\n\n// shop/orders.bynk\nagent Cart { … }\n\n// shop/billing.bynk\nagent Cart { … }     // ✗ `shop.orders` already binds `Cart`\nagent Ledger { … }   // ✓",
+        page: "/docs/manifest",
+        anchor: "worker-groups",
+    },
+    Explain {
+        code: "bynk.deploy.context_in_two_groups",
+        blurb: "Each `[deploy.workers.<key>]` group becomes one Worker, and a context is deployed in exactly one Worker: its routes, its services and its agents' state belong to one script. A context listed in two groups would be deployed twice, as two copies that share nothing. List it in one group. A context in no group stays its own Worker.",
+        example: "[deploy.workers.core]\ncontexts = [\"shop.orders\", \"shop.billing\"]\n\n[deploy.workers.edge]\ncontexts = [\"shop.orders\"]     // ✗ already in `core`\n\ncontexts = [\"shop.gateway\"]    // ✓",
+        page: "/docs/manifest",
+        anchor: "worker-groups",
+    },
+    Explain {
+        code: "bynk.deploy.duplicate_hostname",
+        blurb: "A route or custom domain sends the requests that match it to one Worker. If two `[deploy.workers.<key>]` groups claimed the same one, only one Worker could have it, and which would depend on the order they were deployed in. So each route and each custom domain is claimed once across all the groups. Hosts are compared without regard to case, and the same host with a different path is a different route. Remove the repeat, or give one group another route.",
+        example: "[deploy.workers.core]\ncontexts = [\"shop.orders\"]\nroutes = [\"shop.example.com/*\"]\n\n[deploy.workers.edge]\ncontexts = [\"shop.billing\"]\nroutes = [\"shop.example.com/*\"]           // ✗ `core` claims it\n\nroutes = [\"shop.example.com/billing/*\"]   // ✓ another path, another route",
+        page: "/docs/manifest",
+        anchor: "worker-groups",
+    },
+    Explain {
+        code: "bynk.deploy.empty_group",
+        blurb: "A `[deploy.workers.<key>]` group is a Worker made of the contexts it lists. A group that lists none would be a Worker with nothing to run, and its key would still claim a Worker name and a deploy record. That is almost always a mistake: contexts left out, or a group that should have been deleted. List the group's contexts, or remove the table.",
+        example: "[deploy.workers.core]\ncontexts = []                                  // ✗ no context\n\ncontexts = [\"shop.orders\", \"shop.billing\"]   // ✓",
+        page: "/docs/manifest",
+        anchor: "worker-groups",
+    },
+    Explain {
+        code: "bynk.deploy.group_name_conflict",
+        blurb: "Each Worker on Cloudflare is one script with one name. A group's Worker is named by its `name`, or by its key when it has none, and a context in no group is a Worker of its own, named after the context with each `.` as `-` (`shop.billing` is `shop-billing`). Two Workers with one name would overwrite each other on deploy. So a group's key or `name` may not be another group's Worker name, nor the Worker of a context in no group. Choose another key or `name`, or put that context in the group.",
+        example: "[deploy.workers.core]\ncontexts = [\"shop.orders\"]\n\n[deploy.workers.edge]\ncontexts = [\"shop.billing\"]\nname = \"core\"         // ✗ `core` is already a Worker's name\n\nname = \"shop-edge\"    // ✓",
+        page: "/docs/manifest",
+        anchor: "worker-groups",
+    },
+    Explain {
+        code: "bynk.deploy.multiple_websocket_members",
+        blurb: "A WebSocket upgrade request names no service, and a `from websocket` service has no path of its own, so a Worker hands every upgrade to its one WebSocket service. A `[deploy.workers.<key>]` group folds its members into one Worker, so at most one member may declare a `from websocket` service, and that one takes every upgrade, whatever its path. Put the contexts in different groups, or leave one in no group so that it is a Worker of its own. Within one context, a second WebSocket service is `bynk.service.websocket_multiple`.",
+        example: "// bynk.toml\n[deploy.workers.live]\ncontexts = [\"live.chat\", \"live.scores\"]\n\n// live/chat.bynk\nservice chat from websocket(in: Frame, out: Frame) { … }\n\n// live/scores.bynk\ncontext live.scores   // ✗ the second member of `live` with a WebSocket service\nservice scores from websocket(in: Frame, out: Frame) { … }\n\n// bynk.toml\ncontexts = [\"live.chat\"]   // ✓ `live.scores` is a Worker of its own",
+        page: "/docs/manifest",
+        anchor: "worker-groups",
+    },
+    Explain {
+        code: "bynk.deploy.not_a_context",
+        blurb: "A `[deploy.workers.<key>]` group lists the contexts to deploy together as one Worker, and only a context is deployed. A `commons` is compiled into each context that uses it, and an adapter into each context that consumes it, so neither has a Worker of its own to share. Remove the entry: the contexts that use the commons carry it with them.",
+        example: "[deploy.workers.core]\ncontexts = [\"shop.orders\", \"money\"]   // ✗ `money` is a commons\n\ncontexts = [\"shop.orders\"]            // ✓",
+        page: "/docs/manifest",
+        anchor: "worker-groups",
+    },
+    Explain {
+        code: "bynk.deploy.route_conflict",
+        blurb: "A `[deploy.workers.<key>]` group folds its members into one Worker, which answers each HTTP method and path with one handler. Two members that declare the same method and path would give the Worker two handlers for one request, so the later one is refused. Change one of the routes, often by giving each context a path prefix of its own, or put the contexts in different groups. Within one context the same clash is `bynk.http.duplicate_route`.",
+        example: "// bynk.toml\n[deploy.workers.core]\ncontexts = [\"shop.orders\", \"shop.billing\"]\n\n// shop/orders.bynk\non GET(\"/status\") () -> Effect[HttpResult[String]] by who: Visitor { … }\n\n// shop/billing.bynk\non GET(\"/status\") () -> Effect[HttpResult[String]] by who: Visitor { … }           // ✗ `shop.orders` answers `GET /status`\non GET(\"/billing/status\") () -> Effect[HttpResult[String]] by who: Visitor { … }   // ✓",
+        page: "/docs/manifest",
+        anchor: "worker-groups",
+    },
+    Explain {
+        code: "bynk.deploy.service_name_conflict",
+        blurb: "A service is called by its name alone: a call from another context goes to `/_bynk/call/<service>`, and the address names no context. A `[deploy.workers.<key>]` group folds its members into one Worker, which answers all their services, so two members with a service of the same name would leave it unable to tell the calls apart. Rename one of the services, or put the contexts in different groups.",
+        example: "// bynk.toml\n[deploy.workers.core]\ncontexts = [\"shop.orders\", \"shop.billing\"]\n\n// shop/orders.bynk\nservice lookup { … }\n\n// shop/billing.bynk\nservice lookup { … }    // ✗ `shop.orders` has a `lookup`\nservice invoice { … }   // ✓",
+        page: "/docs/manifest",
+        anchor: "worker-groups",
+    },
+    Explain {
+        code: "bynk.deploy.unknown_context",
+        blurb: "A `[deploy.workers.<key>]` group names its members by their qualified context names, and each must be a context the project declares. A name that matches none is usually a typo, or a context that has since been renamed, and a group cannot deploy a context that does not exist. The note suggests the nearest name. Correct the entry, or remove it.",
+        example: "[deploy.workers.core]\ncontexts = [\"shop.ordres\"]   // ✗ no such context\n\ncontexts = [\"shop.orders\"]   // ✓",
+        page: "/docs/manifest",
+        anchor: "worker-groups",
+    },
+    Explain {
+        code: "bynk.deploy.worker_cycle",
+        blurb: "`bynk deploy` uploads each Worker after the Workers it binds to, since a Service Binding must name a script that already exists. So the Workers' bindings must run one way: a cycle has no order to deploy in. Contexts cannot consume each other in a cycle (that is `bynk.context.consumes_cycle`), but a `[deploy.workers.<key>]` group folds its members into one Worker, and that can close a cycle among contexts that have none: if a member of `front` calls a member of `back`, and another member of `back` calls a member of `front`, the two Workers bind to each other. Move a context out of its group, or into the other, so the calls between Workers run one way. A publisher's Worker also binds to its subscribers, so a subscriber that calls its publisher can close a cycle too.",
+        example: "// bynk.toml\n[deploy.workers.front]\ncontexts = [\"shop.web\", \"shop.prices\"]\n\n[deploy.workers.back]\ncontexts = [\"shop.stock\", \"shop.reports\"]\n\n// shop/web.bynk\nconsumes shop.stock\n\n// shop/reports.bynk\ncontext shop.reports   // ✗ `back` binds to `front`, and `front` to `back`\nconsumes shop.prices\n\n// bynk.toml\n[deploy.workers.front]\ncontexts = [\"shop.web\"]                                    // ✓\n\n[deploy.workers.back]\ncontexts = [\"shop.stock\", \"shop.reports\", \"shop.prices\"]   // ✓ calls run from `front` to `back` only",
+        page: "/docs/manifest",
+        anchor: "worker-groups",
     },
     Explain {
         code: "bynk.detach.in_agent_handler",
@@ -3780,6 +3871,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "what-the-checks-catch",
     },
     Explain {
+        code: "bynk.package.dependency_cycle",
+        blurb: "A package's units are resolved against the packages it depends on, so the package graph needs an order: no package may depend, directly or through others, on itself or on the project. A cycle usually means two packages each want something of the other. Move what both need into a third package that each of them depends on, or merge the two.",
+        example: "# packages/money/bynk.toml\n[dependencies]\ntax = { package = \"acme/tax\", path = \"../tax\" }\n\n# packages/tax/bynk.toml\n[dependencies]\nmoney = { package = \"acme/money\", path = \"../money\" }   // ✗ `acme/money` depends on `acme/tax`\n\ncore = { package = \"acme/core\", path = \"../core\" }      // ✓ what both need, in a package of its own",
+        page: "/book/guides/projects-build-and-deployment/share-code-between-projects",
+        anchor: "what-the-checks-catch",
+    },
+    Explain {
         code: "bynk.package.dependency_not_found",
         blurb: "A path dependency points at a directory that is a package: it has its own `bynk.toml` with a `[package]` table. The path is read from the manifest that names it. The entry is refused when there is no readable `bynk.toml` there, when it is not valid, or when it has no `[package]`. Correct the path, or add the manifest to the package.",
         example: "[dependencies]\nlib = { package = \"acme/lib\", path = \"pkg/libs\" }   // ✗ no `bynk.toml` at `pkg/libs`\n\nlib = { package = \"acme/lib\", path = \"pkg/lib\" }    // ✓ the package's directory",
@@ -4762,6 +4860,20 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "make-a-package",
     },
     Explain {
+        code: "bynk.project.export_unknown",
+        blurb: "A package's `[package] exports` lists the units it shares, by their qualified names, and each must be a `commons` or an adapter the package declares. A name that matches none is usually a typo, or a unit that has since been renamed or moved, and a consumer's `uses` of it would fail far from the cause. Correct the name, or remove the entry. Listing a context is `bynk.project.export_context`.",
+        example: "[package]\nname = \"acme/shop\"\nexports = [\"mony\"]    // ✗ no unit `mony`\n\nexports = [\"money\"]   // ✓ the package's `commons money`",
+        page: "/book/guides/projects-build-and-deployment/share-code-between-projects",
+        anchor: "make-a-package",
+    },
+    Explain {
+        code: "bynk.project.file_and_directory",
+        blurb: "A unit's name comes from its path: `commons money` lives in `money.bynk`, or in the files of a directory `money/`. With both, the path no longer says where `money` lives, or which unit the directory's files belong to, so the project is refused. Keep one: move the file into the directory, or fold the directory into the file.",
+        example: "src/money.bynk           // ✗ `money/` is a directory too\nsrc/money/rates.bynk\n\nsrc/money/core.bynk      // ✓ one directory, both files `commons money`\nsrc/money/rates.bynk",
+        page: "/book/guides/projects-build-and-deployment/layout",
+        anchor: "path-identity",
+    },
+    Explain {
         code: "bynk.project.inconsistent_commons_name",
         blurb: "A source file's path is its unit's identity: `context \
                 commerce.orders` lives at `commerce/orders.bynk`, or in a file \
@@ -4791,6 +4903,20 @@ pub const EXPLANATIONS: &[Explain] = &[
                   context shop",
         page: "/book/spec/compilation-model",
         anchor: "83-source-layout-and-test-ness",
+    },
+    Explain {
+        code: "bynk.project.no_sources",
+        blurb: "A project compiles the `.bynk` files under its include roots: `src/` (and `tests/`) by default, or the trees that `[paths] include` names. Finding none means there is nothing to build, which almost always means the sources are somewhere the project does not look, or the command was pointed at the wrong directory. Hidden directories, `out/` and `node_modules/` are never searched. Point `[paths] include` at the sources, or run the command from the project's root.",
+        example: "# the sources are in lib/, and src/ is empty\n[project]\nname = \"shop\"           // ✗ nothing under src/\n\n[paths]\ninclude = [\"lib\"]       // ✓",
+        page: "/book/guides/projects-build-and-deployment/layout",
+        anchor: "the-manifest",
+    },
+    Explain {
+        code: "bynk.project.unstable_unknown_item",
+        blurb: "`[unstable] allow` opts in to experimental standard-library items by path: a unit (`bynk.cloudflare`), an item it exports (`bynk.cloudflare.RateLimit`) or a capability operation (`bynk.cloudflare.Kv.list`). An entry that names nothing in the standard library allows nothing, and is usually a typo, which would leave the `bynk.stability.experimental` error it was meant to clear. Correct the path, or remove the entry. An entry for a real item that is no longer experimental is only a warning.",
+        example: "[unstable]\nallow = [\"bynk.cloudflare.RateLimt\"]    // ✗ no such item\n\nallow = [\"bynk.cloudflare.RateLimit\"]   // ✓",
+        page: "/docs/manifest",
+        anchor: "unstable",
     },
     Explain {
         code: "bynk.property.where_not_bool",
@@ -5118,6 +5244,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "type Point = { x: Int, y: Int }\n\nfn origin() -> Point { Point { x: 0, y: 0, y: 1 } }   // ✗ `y` set twice\n\nfn origin() -> Point { Point { x: 0, y: 0 } }         // ✓ each field once",
         page: "/book/reference/types",
         anchor: "record-types",
+    },
+    Explain {
+        code: "bynk.resolve.duplicate_fn",
+        blurb: "A function is called by its name, and Bynk has no overloading: two functions of one name in a unit, even with different parameters, would leave a call unable to say which it means. So a unit declares each function name once. Rename one of them. A suite's helpers repeat as `bynk.suite.duplicate_fn`, and a type's methods as `bynk.resolve.duplicate_method`.",
+        example: "fn total(a: Int, b: Int) -> Int { … }\nfn total(a: Int, b: Int, c: Int) -> Int { … }    // ✗ `total` is already declared\n\nfn total3(a: Int, b: Int, c: Int) -> Int { … }   // ✓",
+        page: "/book/spec/static-semantics",
+        anchor: "",
     },
     Explain {
         code: "bynk.resolve.duplicate_message_code",
@@ -5906,6 +6039,13 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
                   suite demo.ledger { … }    // ✓",
         page: "/book/reference/testing",
         anchor: "suite-blocks",
+    },
+    Explain {
+        code: "bynk.target.browser_bundle_only",
+        blurb: "The `browser` platform builds a module that runs in a web page: one in-process bundle, with nothing to deploy. The `workers` target lays a project out as one Cloudflare Worker per context, joined by Service Bindings, which a browser cannot run. So the two do not combine. Build for the browser with the `bundle` target, which is the default, or build Workers for the `cloudflare` platform.",
+        example: "bynk build --target workers --platform browser   // ✗ Workers are not a browser build\n\nbynk build --target bundle --platform browser    // ✓",
+        page: "/docs/bynk-cli",
+        anchor: "bynk-build",
     },
     Explain {
         code: "bynk.test.actor_identity_required",

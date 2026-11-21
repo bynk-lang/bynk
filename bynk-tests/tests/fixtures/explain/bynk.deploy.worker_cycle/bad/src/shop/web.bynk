@@ -1,0 +1,10 @@
+context shop.web
+
+consumes shop.stock
+
+service storefront {
+  on call(n: Int) -> Effect[Int] {
+    let r <- shop.stock.level(n)
+    Effect.pure(r)
+  }
+}

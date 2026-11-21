@@ -195,6 +195,58 @@ const NOT_BYNK_SOURCE: &[(&str, &str)] = &[
         "the example is a `bynk.lock` table before and after `bynk approve`",
     ),
     (
+        "bynk.d1.migration_name",
+        "the example is the file names in `migrations/`, and the diagnostic is attributed to the migration file, which has no Bynk line to check",
+    ),
+    (
+        "bynk.deploy.context_in_two_groups",
+        "the example is a `[deploy.workers]` table in `bynk.toml`, and the diagnostic is attributed to the manifest, which has no line to check",
+    ),
+    (
+        "bynk.deploy.duplicate_hostname",
+        "the example is a `[deploy.workers]` table in `bynk.toml`, and the diagnostic is attributed to the manifest, which has no line to check",
+    ),
+    (
+        "bynk.deploy.empty_group",
+        "the example is a `[deploy.workers]` table in `bynk.toml`, and the diagnostic is attributed to the manifest, which has no line to check",
+    ),
+    (
+        "bynk.deploy.group_name_conflict",
+        "the example is a `[deploy.workers]` table in `bynk.toml`, and the diagnostic is attributed to the manifest, which has no line to check",
+    ),
+    (
+        "bynk.deploy.not_a_context",
+        "the example is a `[deploy.workers]` table in `bynk.toml`, and the diagnostic is attributed to the manifest, which has no line to check",
+    ),
+    (
+        "bynk.deploy.unknown_context",
+        "the example is a `[deploy.workers]` table in `bynk.toml`, and the diagnostic is attributed to the manifest, which has no line to check",
+    ),
+    (
+        "bynk.package.dependency_cycle",
+        "the example is the `[dependencies]` of two packages' `bynk.toml`, and the diagnostic is attributed to no file, so there is no line to check",
+    ),
+    (
+        "bynk.project.export_unknown",
+        "the example is a `[package] exports` entry in `bynk.toml`, and the diagnostic is attributed to the manifest, which has no line to check",
+    ),
+    (
+        "bynk.project.unstable_unknown_item",
+        "the example is an `[unstable] allow` entry in `bynk.toml`, and the diagnostic is attributed to the manifest, which has no line to check",
+    ),
+    (
+        "bynk.project.file_and_directory",
+        "the example is a directory layout, and the diagnostic has no source position",
+    ),
+    (
+        "bynk.project.no_sources",
+        "the example is a project with no sources where it looks for them, and the diagnostic has no source file",
+    ),
+    (
+        "bynk.target.browser_bundle_only",
+        "a build-option refusal with no source position, shown as a command line; there is no Bynk program to compile",
+    ),
+    (
         "bynk.internal.missing_checker_fact",
         "a compiler fault no program provokes (the checker passed it): the example is the report the compiler prints, and there is no Bynk program to compile",
     ),

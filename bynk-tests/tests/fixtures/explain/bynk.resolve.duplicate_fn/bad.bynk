@@ -1,0 +1,9 @@
+commons pricing
+
+fn total(a: Int, b: Int) -> Int {
+  a + b
+}
+
+fn total(a: Int, b: Int, c: Int) -> Int {
+  a + b + c
+}

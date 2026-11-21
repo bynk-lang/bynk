@@ -1,0 +1,7 @@
+context shop.billing
+
+service billing from http {
+  on GET("/status") () -> Effect[HttpResult[String]] by who: Visitor {
+    Ok("billing")
+  }
+}
