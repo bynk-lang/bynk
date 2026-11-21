@@ -294,19 +294,19 @@ export function __deserialise_Expr(json: __JsonValue, path: string = "$", depth:
   const kind = obj["kind"];
   switch (kind) {
     case "Lit": {
-  if (typeof obj["value"] !== "number") {
-    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
-  }
-  if (!globalThis.Number.isSafeInteger(obj["value"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(obj["value"]) });
-  }
-  const __value = obj["value"];
+      if (typeof obj["value"] !== "number") {
+        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
+      }
+      if (!globalThis.Number.isSafeInteger(obj["value"])) {
+        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(obj["value"]) });
+      }
+      const __value = obj["value"];
       return Ok({ tag: "Lit", value: __value } as Expr);
     }
     case "Block": {
-  const __r_stmts = __deserialise_List_Stmt(obj["stmts"], `${path}.stmts`, depth + 1);
-  if (__r_stmts.tag === "Err") return __r_stmts;
-  const __stmts = __r_stmts.value;
+      const __r_stmts = __deserialise_List_Stmt(obj["stmts"], `${path}.stmts`, depth + 1);
+      if (__r_stmts.tag === "Err") return __r_stmts;
+      const __stmts = __r_stmts.value;
       return Ok({ tag: "Block", stmts: __stmts } as Expr);
     }
     default:
@@ -355,9 +355,9 @@ export function __deserialise_Stmt(json: __JsonValue, path: string = "$", depth:
   const kind = obj["kind"];
   switch (kind) {
     case "Eval": {
-  const __r_expr = __deserialise_Expr(obj["expr"], `${path}.expr`, depth + 1);
-  if (__r_expr.tag === "Err") return __r_expr;
-  const __expr = __r_expr.value;
+      const __r_expr = __deserialise_Expr(obj["expr"], `${path}.expr`, depth + 1);
+      if (__r_expr.tag === "Err") return __r_expr;
+      const __expr = __r_expr.value;
       return Ok({ tag: "Eval", expr: __expr } as Stmt);
     }
     default:
@@ -389,19 +389,19 @@ export function __deserialise_Tree(json: __JsonValue, path: string = "$", depth:
     case "Leaf":
       return Ok({ tag: "Leaf" } as Tree);
     case "Node": {
-  const __r_left = __deserialise_Tree(obj["left"], `${path}.left`, depth + 1);
-  if (__r_left.tag === "Err") return __r_left;
-  const __left = __r_left.value;
-  if (typeof obj["value"] !== "number") {
-    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
-  }
-  if (!globalThis.Number.isSafeInteger(obj["value"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(obj["value"]) });
-  }
-  const __value = obj["value"];
-  const __r_right = __deserialise_Tree(obj["right"], `${path}.right`, depth + 1);
-  if (__r_right.tag === "Err") return __r_right;
-  const __right = __r_right.value;
+      const __r_left = __deserialise_Tree(obj["left"], `${path}.left`, depth + 1);
+      if (__r_left.tag === "Err") return __r_left;
+      const __left = __r_left.value;
+      if (typeof obj["value"] !== "number") {
+        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
+      }
+      if (!globalThis.Number.isSafeInteger(obj["value"])) {
+        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(obj["value"]) });
+      }
+      const __value = obj["value"];
+      const __r_right = __deserialise_Tree(obj["right"], `${path}.right`, depth + 1);
+      if (__r_right.tag === "Err") return __r_right;
+      const __right = __r_right.value;
       return Ok({ tag: "Node", left: __left, value: __value, right: __right } as Tree);
     }
     default:
@@ -460,11 +460,11 @@ export function __deserialise_List_Stmt(json: __JsonValue, path: string = "$", d
   }
   const out: Stmt[] = [];
   for (let i = 0; i < json.length; i++) {
-  const item = json[i];
-  const __r_el = __deserialise_Stmt(item, `${path}[${i}]`, depth);
-  if (__r_el.tag === "Err") return __r_el;
-  const __el = __r_el.value;
-  out.push(__el as Stmt);
+    const item = json[i];
+    const __r_el = __deserialise_Stmt(item, `${path}[${i}]`, depth);
+    if (__r_el.tag === "Err") return __r_el;
+    const __el = __r_el.value;
+    out.push(__el as Stmt);
   }
   return Ok(out);
 }
@@ -483,23 +483,23 @@ export function __deserialise_Map_String_Index(json: __JsonValue, path: string =
   }
   const out = new globalThis.Map<string, Index>();
   for (let i = 0; i < json.length; i++) {
-  const entry = json[i];
-  if (!globalThis.Array.isArray(entry) || entry.length !== 2) {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "[key, value] entry", actual: typeof entry });
-  }
-  const entryK = entry[0];
-  const entryV = entry[1];
-  if (typeof entryK !== "string") {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "string", actual: typeof entryK });
-  }
-  const __k = entryK;
-  if (out.has(__k as string)) {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "a distinct map key", actual: "a duplicate" });
-  }
-  const __r_v = __deserialise_Index(entryV, `${path}[${i}][1]`, depth);
-  if (__r_v.tag === "Err") return __r_v;
-  const __v = __r_v.value;
-  out.set(__k as string, __v as Index);
+    const entry = json[i];
+    if (!globalThis.Array.isArray(entry) || entry.length !== 2) {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "[key, value] entry", actual: typeof entry });
+    }
+    const entryK = entry[0];
+    const entryV = entry[1];
+    if (typeof entryK !== "string") {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "string", actual: typeof entryK });
+    }
+    const __k = entryK;
+    if (out.has(__k as string)) {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "a distinct map key", actual: "a duplicate" });
+    }
+    const __r_v = __deserialise_Index(entryV, `${path}[${i}][1]`, depth);
+    if (__r_v.tag === "Err") return __r_v;
+    const __v = __r_v.value;
+    out.set(__k as string, __v as Index);
   }
   return Ok(out);
 }

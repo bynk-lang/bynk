@@ -328,11 +328,11 @@ export function __deserialise_List_QueryParam(json: __JsonValue, path: string = 
   }
   const out: QueryParam[] = [];
   for (let i = 0; i < json.length; i++) {
-  const item = json[i];
-  const __r_el = __deserialise_QueryParam(item, `${path}[${i}]`);
-  if (__r_el.tag === "Err") return __r_el;
-  const __el = __r_el.value;
-  out.push(__el as QueryParam);
+    const item = json[i];
+    const __r_el = __deserialise_QueryParam(item, `${path}[${i}]`);
+    if (__r_el.tag === "Err") return __r_el;
+    const __el = __r_el.value;
+    out.push(__el as QueryParam);
   }
   return Ok(out);
 }

@@ -483,9 +483,9 @@ export function __deserialise_Shape(json: __JsonValue, path: string = "$"): Resu
   const kind = obj["kind"];
   switch (kind) {
     case "Circle": {
-  const __r_radius = __deserialise_Option_Int(obj["radius"], `${path}.radius`);
-  if (__r_radius.tag === "Err") return __r_radius;
-  const __radius = __r_radius.value;
+      const __r_radius = __deserialise_Option_Int(obj["radius"], `${path}.radius`);
+      if (__r_radius.tag === "Err") return __r_radius;
+      const __radius = __r_radius.value;
       return Ok({ tag: "Circle", radius: __radius } as __ns_demo_plain.Shape);
     }
     case "Dot":
@@ -591,11 +591,11 @@ export function __deserialise_List_Option_Int(json: __JsonValue, path: string = 
   }
   const out: Option<number>[] = [];
   for (let i = 0; i < json.length; i++) {
-  const item = json[i];
-  const __r_el = __deserialise_Option_Int(item, `${path}[${i}]`);
-  if (__r_el.tag === "Err") return __r_el;
-  const __el = __r_el.value;
-  out.push(__el as Option<number>);
+    const item = json[i];
+    const __r_el = __deserialise_Option_Int(item, `${path}[${i}]`);
+    if (__r_el.tag === "Err") return __r_el;
+    const __el = __r_el.value;
+    out.push(__el as Option<number>);
   }
   return Ok(out);
 }
@@ -651,11 +651,11 @@ export function __deserialise_List_Option_String(json: __JsonValue, path: string
   }
   const out: Option<string>[] = [];
   for (let i = 0; i < json.length; i++) {
-  const item = json[i];
-  const __r_el = __deserialise_Option_String(item, `${path}[${i}]`);
-  if (__r_el.tag === "Err") return __r_el;
-  const __el = __r_el.value;
-  out.push(__el as Option<string>);
+    const item = json[i];
+    const __r_el = __deserialise_Option_String(item, `${path}[${i}]`);
+    if (__r_el.tag === "Err") return __r_el;
+    const __el = __r_el.value;
+    out.push(__el as Option<string>);
   }
   return Ok(out);
 }

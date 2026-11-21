@@ -926,18 +926,18 @@ export function __deserialise_Shape(json: __JsonValue, path: string = "$"): Resu
   const kind = obj["kind"];
   switch (kind) {
     case "Circle": {
-  const __r_radius = __deserialise_Weight(obj["radius"], `${path}.radius`);
-  if (__r_radius.tag === "Err") return __r_radius;
-  const __radius = __r_radius.value;
+      const __r_radius = __deserialise_Weight(obj["radius"], `${path}.radius`);
+      if (__r_radius.tag === "Err") return __r_radius;
+      const __radius = __r_radius.value;
       return Ok({ tag: "Circle", radius: __radius } as __Wire_Shape);
     }
     case "Rect": {
-  const __r_width = __deserialise_Quantity(obj["width"], `${path}.width`);
-  if (__r_width.tag === "Err") return __r_width;
-  const __width = __r_width.value;
-  const __r_height = __deserialise_Quantity(obj["height"], `${path}.height`);
-  if (__r_height.tag === "Err") return __r_height;
-  const __height = __r_height.value;
+      const __r_width = __deserialise_Quantity(obj["width"], `${path}.width`);
+      if (__r_width.tag === "Err") return __r_width;
+      const __width = __r_width.value;
+      const __r_height = __deserialise_Quantity(obj["height"], `${path}.height`);
+      if (__r_height.tag === "Err") return __r_height;
+      const __height = __r_height.value;
       return Ok({ tag: "Rect", width: __width, height: __height } as __Wire_Shape);
     }
     default:
@@ -1030,11 +1030,11 @@ export function __deserialise_List_Handle(json: __JsonValue, path: string = "$")
   }
   const out: __Wire_Handle[] = [];
   for (let i = 0; i < json.length; i++) {
-  const item = json[i];
-  const __r_el = __deserialise_Handle(item, `${path}[${i}]`);
-  if (__r_el.tag === "Err") return __r_el;
-  const __el = __r_el.value;
-  out.push(__el as __Wire_Handle);
+    const item = json[i];
+    const __r_el = __deserialise_Handle(item, `${path}[${i}]`);
+    if (__r_el.tag === "Err") return __r_el;
+    const __el = __r_el.value;
+    out.push(__el as __Wire_Handle);
   }
   return Ok(out);
 }

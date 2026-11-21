@@ -24,7 +24,10 @@
 //! known one answers `401` would let an unsigned caller list a group's services.
 
 use bynk_check::wire_format as wf;
-use bynk_ts::{TsProgram, TsStmt};
+use bynk_ts::{
+    TsArrowBody, TsBinaryOp, TsBindingName, TsDecl, TsExpr, TsLit, TsObjectEntry, TsParam,
+    TsProgram, TsStmt, TsSwitchCase, TsType, TsTypeMember, TsUnaryOp,
+};
 
 /// What the group's entry needs to know of one member.
 pub struct GroupMember {
@@ -63,71 +66,403 @@ pub struct GroupEntry<'a> {
     pub has_inspect: bool,
 }
 
+// The node builders of this file. Each is a one-line wrapper over a `bynk_ts`
+// constructor, so the entry below reads as the TypeScript it emits.
+
+fn id(name: &str) -> TsExpr {
+    TsExpr::Ident(name.to_string())
+}
+
+fn lit(text: &str) -> TsExpr {
+    TsExpr::Lit(TsLit::Str(text.to_string()))
+}
+
+fn num(n: u32) -> TsExpr {
+    TsExpr::Lit(TsLit::Num(n.to_string()))
+}
+
+fn member(object: TsExpr, property: &str) -> TsExpr {
+    TsExpr::Member {
+        object: Box::new(object),
+        property: property.to_string(),
+    }
+}
+
+/// `globalThis.<name>`.
+fn global(name: &str) -> TsExpr {
+    member(id("globalThis"), name)
+}
+
+fn call(callee: TsExpr, args: Vec<TsExpr>) -> TsExpr {
+    TsExpr::Call {
+        callee: Box::new(callee),
+        args,
+    }
+}
+
+/// `object.method(args)`.
+fn method_call(object: TsExpr, method: &str, args: Vec<TsExpr>) -> TsExpr {
+    call(member(object, method), args)
+}
+
+fn new_(callee: TsExpr, args: Vec<TsExpr>) -> TsExpr {
+    TsExpr::New {
+        callee: Box::new(callee),
+        args,
+    }
+}
+
+fn as_never(expr: TsExpr) -> TsExpr {
+    TsExpr::As {
+        expr: Box::new(expr),
+        ty: ty("never"),
+    }
+}
+
+fn binary(op: TsBinaryOp, left: TsExpr, right: TsExpr) -> TsExpr {
+    TsExpr::Binary {
+        op,
+        left: Box::new(left),
+        right: Box::new(right),
+    }
+}
+
+fn paren(expr: TsExpr) -> TsExpr {
+    TsExpr::Paren(Box::new(expr))
+}
+
+fn index(object: TsExpr, idx: TsExpr) -> TsExpr {
+    TsExpr::Index {
+        object: Box::new(object),
+        index: Box::new(idx),
+    }
+}
+
+fn arrow(params: Vec<TsParam>, is_async: bool, body: TsArrowBody) -> TsExpr {
+    TsExpr::Arrow {
+        params,
+        is_async,
+        generics: Vec::new(),
+        return_type: None,
+        body: Box::new(body),
+    }
+}
+
+/// `(p) => body`, an expression-bodied arrow over untyped parameters.
+fn lambda(params: &[&str], body: TsExpr) -> TsExpr {
+    arrow(
+        params.iter().map(|p| TsParam::new(*p, None)).collect(),
+        false,
+        TsArrowBody::Expr(Box::new(body)),
+    )
+}
+
+fn ty(name: &str) -> TsType {
+    TsType::named(name)
+}
+
+/// `Promise<T>`, as the handlers write it.
+fn promise(inner: TsType) -> TsType {
+    TsType::named_with_args("Promise", vec![inner])
+}
+
+fn response_ty() -> TsType {
+    ty("globalThis.Response")
+}
+
+fn param(name: &str, ty: TsType) -> TsParam {
+    TsParam::new(name, Some(ty))
+}
+
+fn const_(name: &str, ty: Option<TsType>, init: TsExpr) -> TsStmt {
+    TsStmt::const_stmt(TsBindingName::Ident(name.to_string()), ty, init, None)
+}
+
+fn ret(expr: TsExpr) -> TsStmt {
+    TsStmt::return_stmt(Some(expr), None)
+}
+
+fn expr_stmt(expr: TsExpr) -> TsStmt {
+    TsStmt::expr_stmt(expr, None)
+}
+
+/// `stmt`, with no blank line before it: this entry keeps its re-exports, its handler
+/// types and its member constants in tight runs, as it always wrote them.
+fn tight(mut stmt: TsStmt) -> TsStmt {
+    stmt.no_blank_before = true;
+    stmt
+}
+
+/// `if (cond) { body }` on one line: the braced form of the one-line guards
+/// this entry used to write without braces.
+fn guard(cond: TsExpr, body: TsStmt) -> TsStmt {
+    TsStmt::if_stmt(cond, TsStmt::inline_block(vec![body], None), None)
+}
+
+fn block(stmts: Vec<TsStmt>) -> TsStmt {
+    TsStmt::block(stmts, None)
+}
+
+/// `new globalThis.Response(body, init)`.
+fn new_response(body: TsExpr, init: TsExpr) -> TsExpr {
+    new_(global("Response"), vec![body, init])
+}
+
+/// `{ status: <n> }`.
+fn status(n: u32) -> TsExpr {
+    TsExpr::object(vec![("status".to_string(), num(n))])
+}
+
+fn function(
+    name: &str,
+    is_async: bool,
+    params: Vec<TsParam>,
+    return_type: TsType,
+    body: Vec<TsStmt>,
+) -> TsStmt {
+    TsStmt::decl(
+        TsDecl::Function {
+            name: name.to_string(),
+            generics: Vec::new(),
+            params,
+            return_type: Some(return_type),
+            body,
+            is_async,
+            inline: false,
+        },
+        None,
+    )
+}
+
 /// `["a", "b"]`, as a TypeScript array literal of strings.
-fn array(items: &[String]) -> String {
-    let items: Vec<String> = items.iter().map(|i| format!("{i:?}")).collect();
-    format!("[{}]", items.join(", "))
+fn array(items: &[String]) -> TsExpr {
+    TsExpr::array(items.iter().map(|i| lit(i)).collect())
+}
+
+/// `await __verifyCall(request, env, "")`.
+fn verify_call() -> TsExpr {
+    TsExpr::Await(Box::new(call(
+        id("__verifyCall"),
+        vec![id("request"), id("env"), lit("")],
+    )))
+}
+
+/// `if (request.method !== <method>) return new Response(<body>, { status: <n>,
+/// <headers> });`, the method gate every internal prefix starts with.
+fn method_gate(method: &str, body: TsExpr, status_code: u32, headers: Option<TsExpr>) -> TsStmt {
+    let mut init = vec![("status".to_string(), num(status_code))];
+    if let Some(headers) = headers {
+        init.push(("headers".to_string(), headers));
+    }
+    guard(
+        binary(
+            TsBinaryOp::StrictNotEq,
+            member(id("request"), "method"),
+            lit(method),
+        ),
+        ret(new_response(body, TsExpr::object(init))),
+    )
+}
+
+/// `if (path.startsWith(<prefix>)) { <body> }`.
+fn prefix_branch(prefix: &str, mut body: Vec<TsStmt>) -> TsStmt {
+    body.push(ret(call(id("__refused"), vec![verify_call()])));
+    TsStmt::if_stmt(
+        method_call(id("path"), "startsWith", vec![lit(prefix)]),
+        block(body),
+        None,
+    )
 }
 
 /// The unclaimed-request fallback: what a standalone Worker answers to an
 /// unauthenticated request for an internal prefix (see the module doc).
-fn unclaimed(entry: &GroupEntry<'_>) -> String {
-    let mut text = String::from(
-        "async function __unclaimed(request: globalThis.Request, env: unknown): Promise<globalThis.Response> {\n  const path = new globalThis.URL(request.url).pathname;\n",
-    );
+fn unclaimed(entry: &GroupEntry<'_>) -> TsStmt {
+    let allow = |method: &str| TsExpr::object(vec![("allow".to_string(), lit(method))]);
+    let mut body = vec![const_(
+        "path",
+        None,
+        member(
+            new_(global("URL"), vec![member(id("request"), "url")]),
+            "pathname",
+        ),
+    )];
     // Every Worker answers `/_bynk/call/`.
-    text.push_str(&format!(
-        "  if (path.startsWith({:?})) {{\n    if (request.method !== {:?}) return new globalThis.Response(null, {{ status: 405, headers: {{ allow: {:?} }} }});\n    return __refused(await __verifyCall(request, env, \"\"));\n  }}\n",
+    body.push(prefix_branch(
         wf::CALL_PATH_PREFIX,
-        wf::CALL_METHOD,
-        wf::CALL_METHOD,
+        vec![method_gate(
+            wf::CALL_METHOD,
+            TsExpr::Lit(TsLit::Null),
+            405,
+            Some(allow(wf::CALL_METHOD)),
+        )],
     ));
     if entry.has_events {
-        text.push_str("  if (path.startsWith(\"/_bynk/event/\")) return __refused(await __verifyCall(request, env, \"\"));\n");
+        body.push(guard(
+            method_call(id("path"), "startsWith", vec![lit("/_bynk/event/")]),
+            ret(call(id("__refused"), vec![verify_call()])),
+        ));
     }
+    let caller_gate = |caller: &str, body: &str| {
+        guard(
+            binary(
+                TsBinaryOp::StrictNotEq,
+                method_call(
+                    member(id("request"), "headers"),
+                    "get",
+                    vec![lit(wf::CALLER_HEADER)],
+                ),
+                lit(caller),
+            ),
+            ret(new_response(lit(body), status(401))),
+        )
+    };
     if entry.has_migrate {
-        text.push_str(&format!(
-            "  if (path.startsWith({prefix:?})) {{\n    if (typeof (env as unknown as globalThis.Record<string, unknown>)[{key:?}] !== \"string\") return new globalThis.Response(\"Not found\", {{ status: 404 }});\n    if (request.method !== {method:?}) return new globalThis.Response(null, {{ status: 405, headers: {{ allow: {method:?} }} }});\n    if (request.headers.get({caller_header:?}) !== {caller:?}) return new globalThis.Response(\"Unauthorized\", {{ status: 401 }});\n    return __refused(await __verifyCall(request, env, \"\"));\n  }}\n",
-            prefix = wf::MIGRATE_PATH_PREFIX,
-            key = wf::MIGRATE_KEY,
-            method = wf::CALL_METHOD,
-            caller_header = wf::CALLER_HEADER,
-            caller = wf::MIGRATE_CALLER,
+        let key_missing = binary(
+            TsBinaryOp::StrictNotEq,
+            TsExpr::Unary {
+                op: TsUnaryOp::Typeof,
+                expr: Box::new(index(
+                    paren(TsExpr::As {
+                        expr: Box::new(TsExpr::As {
+                            expr: Box::new(id("env")),
+                            ty: ty("unknown"),
+                        }),
+                        ty: TsType::named_with_args(
+                            "globalThis.Record",
+                            vec![ty("string"), ty("unknown")],
+                        ),
+                    }),
+                    lit(wf::MIGRATE_KEY),
+                )),
+            },
+            lit("string"),
+        );
+        body.push(prefix_branch(
+            wf::MIGRATE_PATH_PREFIX,
+            vec![
+                guard(
+                    key_missing,
+                    ret(new_response(lit("Not found"), status(404))),
+                ),
+                method_gate(
+                    wf::CALL_METHOD,
+                    TsExpr::Lit(TsLit::Null),
+                    405,
+                    Some(allow(wf::CALL_METHOD)),
+                ),
+                caller_gate(wf::MIGRATE_CALLER, "Unauthorized"),
+            ],
         ));
     }
     if entry.has_inspect {
-        text.push_str(&format!(
-            "  if (path.startsWith({prefix:?})) {{\n    if (request.method !== \"POST\") return new globalThis.Response(\"Method Not Allowed\", {{ status: 405 }});\n    if (request.headers.get({caller_header:?}) !== \"bynk.dev\") return new globalThis.Response(\"Unauthorized\", {{ status: 401 }});\n    return __refused(await __verifyCall(request, env, \"\"));\n  }}\n",
-            prefix = super::workers_entry::INSPECT_PREFIX,
-            caller_header = wf::CALLER_HEADER,
+        body.push(prefix_branch(
+            super::workers_entry::INSPECT_PREFIX,
+            vec![
+                method_gate("POST", lit("Method Not Allowed"), 405, None),
+                caller_gate("bynk.dev", "Unauthorized"),
+            ],
         ));
     }
-    text.push_str("  return new globalThis.Response(\"Not Found\", { status: 404 });\n}\n");
-    text
+    body.push(ret(new_response(lit("Not Found"), status(404))));
+    function(
+        "__unclaimed",
+        true,
+        vec![
+            param("request", ty("globalThis.Request")),
+            param("env", ty("unknown")),
+        ],
+        promise(response_ty()),
+        body,
+    )
 }
 
 /// `fetch`: the members in order (see the module doc). Every marked response
 /// that is not a `404` is kept, so that if no member owns the request the answer
 /// lists the methods the whole Worker serves on the path, not one member's.
-const FETCH: &str = "  async fetch(request: globalThis.Request, env: unknown, ctx: __Ctx): Promise<globalThis.Response> {
-    return __fetch(request, __loopback(env, ctx), ctx);
-  },
-";
+fn fetch_method() -> TsObjectEntry {
+    TsObjectEntry::method(
+        "fetch",
+        true,
+        vec![
+            param("request", ty("globalThis.Request")),
+            param("env", ty("unknown")),
+            param("ctx", ty("__Ctx")),
+        ],
+        Some(promise(response_ty())),
+        vec![ret(call(
+            id("__fetch"),
+            vec![
+                id("request"),
+                call(id("__loopback"), vec![id("env"), id("ctx")]),
+                id("ctx"),
+            ],
+        ))],
+    )
+}
 
 /// The dispatcher: members in manifest order, the first answer that is not a
 /// router's own miss wins. `env` already answers a call to a member in process
 /// ([`loopback`]).
-const DISPATCH: &str = "async function __fetch(request: globalThis.Request, env: unknown, ctx: __Ctx): Promise<globalThis.Response> {
-  const held: globalThis.Response[] = [];
-  for (const member of __members) {
-    const response = await member.entry.fetch(request, env as never, ctx);
-    if (!member.isMiss(response)) return response;
-    if (response.status !== 404) held.push(response);
-  }
-  return held.length === 0 ? await __unclaimed(request, env) : __withAllowed(held);
+fn dispatch() -> TsStmt {
+    let held_empty = binary(TsBinaryOp::StrictEq, member(id("held"), "length"), num(0));
+    let each_member = TsStmt::for_of(
+        "member",
+        id("__members"),
+        block(vec![
+            const_(
+                "response",
+                None,
+                TsExpr::Await(Box::new(method_call(
+                    member(id("member"), "entry"),
+                    "fetch",
+                    vec![id("request"), as_never(id("env")), id("ctx")],
+                ))),
+            ),
+            guard(
+                TsExpr::Unary {
+                    op: TsUnaryOp::Not,
+                    expr: Box::new(method_call(id("member"), "isMiss", vec![id("response")])),
+                },
+                ret(id("response")),
+            ),
+            guard(
+                binary(
+                    TsBinaryOp::StrictNotEq,
+                    member(id("response"), "status"),
+                    num(404),
+                ),
+                expr_stmt(method_call(id("held"), "push", vec![id("response")])),
+            ),
+        ]),
+        None,
+    );
+    function(
+        "__fetch",
+        true,
+        vec![
+            param("request", ty("globalThis.Request")),
+            param("env", ty("unknown")),
+            param("ctx", ty("__Ctx")),
+        ],
+        promise(response_ty()),
+        vec![
+            const_(
+                "held",
+                Some(TsType::array(response_ty())),
+                TsExpr::array(vec![]),
+            ),
+            each_member,
+            ret(TsExpr::Conditional {
+                test: Box::new(held_empty),
+                consequent: Box::new(TsExpr::Await(Box::new(call(
+                    id("__unclaimed"),
+                    vec![id("request"), id("env")],
+                )))),
+                alternate: Box::new(call(id("__withAllowed"), vec![id("held")])),
+            }),
+        ],
+    )
 }
-
-";
 
 /// A call from one member to another is a call from the Worker to itself, so it
 /// need not leave the Worker (#3562, G3-2): the binding a member names the other by
@@ -139,89 +474,509 @@ const DISPATCH: &str = "async function __fetch(request: globalThis.Request, env:
 /// Binding would hand the caller (which maps it to `Transport`), never the callee's
 /// own exception. (The events fan-out's Durable Object runs elsewhere and keeps
 /// the Service Binding.)
-fn loopback(entry: &GroupEntry<'_>) -> String {
+fn loopback(entry: &GroupEntry<'_>) -> Vec<TsStmt> {
     if entry.members.len() < 2 {
-        return "function __loopback(env: unknown, _ctx: __Ctx): unknown {\n  return env;\n}\n\n"
-            .to_string();
+        return vec![function(
+            "__loopback",
+            false,
+            vec![param("env", ty("unknown")), param("_ctx", ty("__Ctx"))],
+            ty("unknown"),
+            vec![ret(id("env"))],
+        )];
     }
     let names: Vec<String> = entry
         .members
         .iter()
         .map(|m| crate::emitter::wrangler::service_binding(&m.context).name)
         .collect();
-    format!(
-        "const __memberBindings: readonly string[] = {};\n\nfunction __loopback(env: unknown, ctx: __Ctx): unknown {{\n  const inner: globalThis.Record<string, unknown> = {{ ...(env as globalThis.Record<string, unknown>) }};\n  for (const name of __memberBindings) {{\n    inner[name] = {{ fetch: async (request: globalThis.Request) => {{\n      try {{\n        return await __fetch(request, inner, ctx);\n      }} catch {{\n        return new globalThis.Response(\"Internal Server Error\", {{ status: 500 }});\n      }}\n    }} }};\n  }}\n  return inner;\n}}\n\n",
-        array(&names)
+    let record = || TsType::named_with_args("globalThis.Record", vec![ty("string"), ty("unknown")]);
+    let answers_in_process = arrow(
+        vec![param("request", ty("globalThis.Request"))],
+        true,
+        TsArrowBody::Multiline(vec![TsStmt::try_catch(
+            block(vec![ret(TsExpr::Await(Box::new(call(
+                id("__fetch"),
+                vec![id("request"), id("inner"), id("ctx")],
+            ))))]),
+            None::<String>,
+            block(vec![ret(new_response(
+                lit("Internal Server Error"),
+                status(500),
+            ))]),
+            None,
+        )]),
+    );
+    vec![
+        const_(
+            "__memberBindings",
+            Some(TsType::readonly_array(ty("string"))),
+            array(&names),
+        ),
+        function(
+            "__loopback",
+            false,
+            vec![param("env", ty("unknown")), param("ctx", ty("__Ctx"))],
+            ty("unknown"),
+            vec![
+                const_(
+                    "inner",
+                    Some(record()),
+                    TsExpr::object_entries(vec![TsObjectEntry::Spread(paren(TsExpr::As {
+                        expr: Box::new(id("env")),
+                        ty: record(),
+                    }))]),
+                ),
+                TsStmt::for_of(
+                    "name",
+                    id("__memberBindings"),
+                    block(vec![TsStmt::assign(
+                        index(id("inner"), id("name")),
+                        TsExpr::object(vec![("fetch".to_string(), answers_in_process)]),
+                        None,
+                    )]),
+                    None,
+                ),
+                ret(id("inner")),
+            ],
+        ),
+    ]
+}
+
+/// `__refused`: a verification failure becomes the `401`, a response stays.
+fn refused() -> TsStmt {
+    function(
+        "__refused",
+        false,
+        vec![param(
+            "verified",
+            TsType::union(vec![ty("string"), response_ty()]),
+        )],
+        response_ty(),
+        vec![ret(TsExpr::Conditional {
+            test: Box::new(binary(
+                TsBinaryOp::StrictEq,
+                TsExpr::Unary {
+                    op: TsUnaryOp::Typeof,
+                    expr: Box::new(id("verified")),
+                },
+                lit("string"),
+            )),
+            consequent: Box::new(new_response(lit("Unauthorized"), status(401))),
+            alternate: Box::new(id("verified")),
+        })],
     )
 }
 
 /// The first held `405`/`204`, answering with the union of every member's
 /// `Allow` (RFC 9110 §10.2.1: the methods the target resource supports).
-const WITH_ALLOWED: &str = "function __withAllowed(held: readonly globalThis.Response[]): globalThis.Response {
-  const first = held[0];
-  if (held.length === 1) return first;
-  const methods = held.flatMap((r) => (r.headers.get(\"allow\") ?? \"\").split(\",\").map((m) => m.trim()).filter((m) => m !== \"\"));
-  const merged = new globalThis.Response(first.body, first);
-  merged.headers.set(\"allow\", [...new globalThis.Set(methods)].sort().join(\", \"));
-  return merged;
+fn with_allowed() -> TsStmt {
+    let trimmed = method_call(
+        method_call(
+            paren(binary(
+                TsBinaryOp::NullishCoalescing,
+                method_call(member(id("r"), "headers"), "get", vec![lit("allow")]),
+                lit(""),
+            )),
+            "split",
+            vec![lit(",")],
+        ),
+        "map",
+        vec![lambda(&["m"], method_call(id("m"), "trim", vec![]))],
+    );
+    let methods = method_call(
+        id("held"),
+        "flatMap",
+        vec![lambda(
+            &["r"],
+            method_call(
+                trimmed,
+                "filter",
+                vec![lambda(
+                    &["m"],
+                    binary(TsBinaryOp::StrictNotEq, id("m"), lit("")),
+                )],
+            ),
+        )],
+    );
+    let unique_sorted = method_call(
+        method_call(
+            TsExpr::array(vec![TsExpr::Spread(Box::new(new_(
+                global("Set"),
+                vec![id("methods")],
+            )))]),
+            "sort",
+            vec![],
+        ),
+        "join",
+        vec![lit(", ")],
+    );
+    function(
+        "__withAllowed",
+        false,
+        vec![param("held", TsType::readonly_array(response_ty()))],
+        response_ty(),
+        vec![
+            const_("first", None, index(id("held"), num(0))),
+            guard(
+                binary(TsBinaryOp::StrictEq, member(id("held"), "length"), num(1)),
+                ret(id("first")),
+            ),
+            const_("methods", None, methods),
+            const_(
+                "merged",
+                None,
+                new_response(member(id("first"), "body"), id("first")),
+            ),
+            expr_stmt(method_call(
+                member(id("merged"), "headers"),
+                "set",
+                vec![lit("allow"), unique_sorted],
+            )),
+            ret(id("merged")),
+        ],
+    )
 }
 
-";
-
-fn scheduled(members: &[(usize, &GroupMember)]) -> String {
-    let mut text = String::from(
-        "  async scheduled(event: { readonly cron: string }, env: unknown, ctx: __Ctx): Promise<void> {\n    await globalThis.Promise.all([\n",
-    );
-    for (i, m) in members.iter().filter(|(_, m)| !m.crons.is_empty()) {
-        text.push_str(&format!(
-            "      ...({}.includes(event.cron) ? [__m{i}.scheduled(event as never, __loopback(env, ctx) as never, ctx)] : []),\n",
-            array(&m.crons)
-        ));
-    }
-    text.push_str("    ]);\n  },\n");
-    text
+/// `{ readonly <name>: string }`.
+fn readonly_string(name: &str) -> TsType {
+    TsType::Object(vec![TsTypeMember::readonly_prop(name, ty("string"))])
 }
 
-fn queue(members: &[(usize, &GroupMember)]) -> String {
-    let mut text = String::from(
-        "  async queue(batch: { readonly queue: string }, env: unknown, ctx: __Ctx): Promise<void> {\n    switch (batch.queue) {\n",
-    );
-    for (i, m) in members.iter().filter(|(_, m)| !m.queues.is_empty()) {
-        for q in &m.queues {
-            text.push_str(&format!("      case {q:?}:\n"));
-        }
-        text.push_str(&format!(
-            "        return __m{i}.queue(batch as never, __loopback(env, ctx) as never, ctx);\n"
-        ));
-    }
-    text.push_str("      default:\n        return;\n    }\n  },\n");
-    text
+/// `<m>.<handler>(<arg> as never, __loopback(env, ctx) as never, ctx)`: a member's
+/// handler, run on the loopback env.
+fn run_member(member_index: usize, handler: &str, arg: &str) -> TsExpr {
+    method_call(
+        id(&format!("__m{member_index}")),
+        handler,
+        vec![
+            as_never(id(arg)),
+            as_never(call(id("__loopback"), vec![id("env"), id("ctx")])),
+            id("ctx"),
+        ],
+    )
+}
+
+/// `scheduled`: every member whose cron matches runs.
+fn scheduled(members: &[(usize, &GroupMember)]) -> TsObjectEntry {
+    let runs: Vec<TsExpr> = members
+        .iter()
+        .filter(|(_, m)| !m.crons.is_empty())
+        .map(|(i, m)| {
+            TsExpr::Spread(Box::new(paren(TsExpr::Conditional {
+                test: Box::new(method_call(
+                    array(&m.crons),
+                    "includes",
+                    vec![member(id("event"), "cron")],
+                )),
+                consequent: Box::new(TsExpr::array(vec![run_member(*i, "scheduled", "event")])),
+                alternate: Box::new(TsExpr::array(vec![])),
+            })))
+        })
+        .collect();
+    TsObjectEntry::method(
+        "scheduled",
+        true,
+        vec![
+            param("event", readonly_string("cron")),
+            param("env", ty("unknown")),
+            param("ctx", ty("__Ctx")),
+        ],
+        Some(promise(ty("void"))),
+        vec![expr_stmt(TsExpr::Await(Box::new(method_call(
+            global("Promise"),
+            "all",
+            vec![TsExpr::multiline_array(runs)],
+        ))))],
+    )
+}
+
+/// `queue`: the member consuming `batch.queue`.
+fn queue(members: &[(usize, &GroupMember)]) -> TsObjectEntry {
+    let mut cases: Vec<TsSwitchCase> = members
+        .iter()
+        .filter(|(_, m)| !m.queues.is_empty())
+        .map(|(i, m)| TsSwitchCase {
+            labels: m.queues.iter().map(|q| lit(q)).collect(),
+            body: vec![ret(run_member(*i, "queue", "batch"))],
+            default_braced: false,
+            case_braced: false,
+            span: None,
+        })
+        .collect();
+    cases.push(TsSwitchCase {
+        labels: Vec::new(),
+        body: vec![TsStmt::return_stmt(None, None)],
+        default_braced: false,
+        case_braced: true,
+        span: None,
+    });
+    TsObjectEntry::method(
+        "queue",
+        true,
+        vec![
+            param("batch", readonly_string("queue")),
+            param("env", ty("unknown")),
+            param("ctx", ty("__Ctx")),
+        ],
+        Some(promise(ty("void"))),
+        vec![TsStmt::switch_stmt(
+            member(id("batch"), "queue"),
+            cases,
+            None,
+        )],
+    )
 }
 
 /// `email`: the member claiming the recipient, by the runtime's own rule (an
 /// exact address, case-insensitively, before a `*@domain` catch-all). With no
 /// claimant the first email member gets it, and its runtime rejects an unknown
 /// recipient.
-fn email(members: &[(usize, &GroupMember)]) -> String {
-    let mut text = String::from(
-        "  async email(message: { readonly to: string }, env: unknown, ctx: __Ctx): Promise<void> {\n    const to = message.to.toLowerCase();\n    const domain = to.slice(to.lastIndexOf(\"@\") + 1);\n    const routes: readonly { readonly address: string; readonly member: __Email }[] = [\n",
-    );
-    for (i, m) in members.iter().filter(|(_, m)| !m.addresses.is_empty()) {
-        for a in &m.addresses {
-            text.push_str(&format!(
-                "      {{ address: {:?}, member: __m{i} }},\n",
-                a.to_lowercase()
-            ));
-        }
-    }
+fn email(members: &[(usize, &GroupMember)]) -> TsObjectEntry {
+    let routes: Vec<TsExpr> = members
+        .iter()
+        .filter(|(_, m)| !m.addresses.is_empty())
+        .flat_map(|(i, m)| {
+            m.addresses.iter().map(move |a| {
+                TsExpr::object(vec![
+                    ("address".to_string(), lit(&a.to_lowercase())),
+                    ("member".to_string(), id(&format!("__m{i}"))),
+                ])
+            })
+        })
+        .collect();
     let first = members
         .iter()
         .find(|(_, m)| !m.addresses.is_empty())
         .map_or(0, |(i, _)| *i);
-    text.push_str(&format!(
-        "    ];\n    const claimant = routes.find((r) => r.address === to) ?? routes.find((r) => r.address === `*@${{domain}}`);\n    await (claimant?.member ?? __m{first}).email(message as never, __loopback(env, ctx) as never, ctx);\n  }},\n"
+    let routes_ty = TsType::readonly_array(TsType::Object(vec![
+        TsTypeMember::readonly_prop("address", ty("string")),
+        TsTypeMember::readonly_prop("member", ty("__Email")),
+    ]));
+    let by_address = |address: TsExpr| {
+        method_call(
+            id("routes"),
+            "find",
+            vec![lambda(
+                &["r"],
+                binary(TsBinaryOp::StrictEq, member(id("r"), "address"), address),
+            )],
+        )
+    };
+    let claimant = binary(
+        TsBinaryOp::NullishCoalescing,
+        by_address(id("to")),
+        by_address(TsExpr::template_lit(
+            vec!["*@".to_string(), String::new()],
+            vec![id("domain")],
+        )),
+    );
+    let claiming = paren(binary(
+        TsBinaryOp::NullishCoalescing,
+        TsExpr::OptionalMember {
+            object: Box::new(id("claimant")),
+            property: "member".to_string(),
+        },
+        id(&format!("__m{first}")),
     ));
-    text
+    TsObjectEntry::method(
+        "email",
+        true,
+        vec![
+            param("message", readonly_string("to")),
+            param("env", ty("unknown")),
+            param("ctx", ty("__Ctx")),
+        ],
+        Some(promise(ty("void"))),
+        vec![
+            const_(
+                "to",
+                None,
+                method_call(member(id("message"), "to"), "toLowerCase", vec![]),
+            ),
+            const_(
+                "domain",
+                None,
+                method_call(
+                    id("to"),
+                    "slice",
+                    vec![binary(
+                        TsBinaryOp::Add,
+                        method_call(id("to"), "lastIndexOf", vec![lit("@")]),
+                        num(1),
+                    )],
+                ),
+            ),
+            const_("routes", Some(routes_ty), TsExpr::multiline_array(routes)),
+            const_("claimant", None, claimant),
+            expr_stmt(TsExpr::Await(Box::new(method_call(
+                claiming,
+                "email",
+                vec![
+                    as_never(id("message")),
+                    as_never(call(id("__loopback"), vec![id("env"), id("ctx")])),
+                    id("ctx"),
+                ],
+            )))),
+        ],
+    )
+}
+
+/// `type <name> = { <method>(<arg>: never, env: never, ctx: __Ctx): Promise<<ret>> };`:
+/// the slice of a member's default export the group calls.
+fn handler_type(name: &str, method: &str, arg: &str, ret_ty: TsType) -> TsStmt {
+    tight(TsStmt::decl(
+        TsDecl::TypeAlias {
+            name: name.to_string(),
+            type_params: Vec::new(),
+            ty: TsType::Object(vec![TsTypeMember::method(
+                method,
+                vec![
+                    param(arg, ty("never")),
+                    param("env", ty("never")),
+                    param("ctx", ty("__Ctx")),
+                ],
+                promise(ret_ty),
+            )]),
+        },
+        None,
+    ))
+}
+
+/// The member imports and the class re-exports.
+fn imports_and_exports(entry: &GroupEntry<'_>, members: &[(usize, &GroupMember)]) -> Vec<TsStmt> {
+    let mut stmts = Vec::new();
+    for (i, m) in members {
+        stmts.push(TsStmt::decl(
+            TsDecl::ImportDefault {
+                alias: format!("__entry{i}"),
+                named: vec![format!("isMiss as __miss{i}")],
+                from: m.specifier.clone(),
+            },
+            None,
+        ));
+    }
+    let re_export = |names: Vec<String>, from: &str| {
+        tight(TsStmt::decl(
+            TsDecl::ReExport {
+                names,
+                from: from.to_string(),
+            },
+            None,
+        ))
+    };
+    for (_, m) in members {
+        if !m.classes.is_empty() {
+            stmts.push(re_export(m.classes.clone(), &m.specifier));
+        }
+    }
+    if entry.has_fanout {
+        stmts.push(re_export(
+            vec![crate::emitter::wrangler::EVENTS_FANOUT_CLASS_NAME.to_string()],
+            "./events_fanout.js",
+        ));
+    }
+    if !entry.container_classes.is_empty() {
+        stmts.push(re_export(
+            entry.container_classes.to_vec(),
+            "./containers.js",
+        ));
+    }
+    stmts
+}
+
+/// The handler types, each member's typed view of its entry, and the member table.
+fn member_table(members: &[(usize, &GroupMember)]) -> Vec<TsStmt> {
+    let has = |f: &dyn Fn(&GroupMember) -> bool| members.iter().any(|(_, m)| f(m));
+    let mut stmts = vec![
+        TsStmt::decl(
+            TsDecl::TypeAlias {
+                name: "__Ctx".to_string(),
+                type_params: Vec::new(),
+                ty: TsType::Object(vec![TsTypeMember::method(
+                    "waitUntil",
+                    vec![param(
+                        "promise",
+                        TsType::named_with_args("globalThis.Promise", vec![ty("unknown")]),
+                    )],
+                    ty("void"),
+                )]),
+            },
+            None,
+        ),
+        tight(TsStmt::decl(
+            TsDecl::TypeAlias {
+                name: "__Fetch".to_string(),
+                type_params: Vec::new(),
+                ty: TsType::Object(vec![TsTypeMember::method(
+                    "fetch",
+                    vec![
+                        param("request", ty("globalThis.Request")),
+                        param("env", ty("never")),
+                        param("ctx", ty("__Ctx")),
+                    ],
+                    promise(response_ty()),
+                )]),
+            },
+            None,
+        )),
+    ];
+    if has(&|m| !m.crons.is_empty()) {
+        stmts.push(handler_type(
+            "__Scheduled",
+            "scheduled",
+            "event",
+            ty("void"),
+        ));
+    }
+    if has(&|m| !m.queues.is_empty()) {
+        stmts.push(handler_type("__Queue", "queue", "batch", ty("void")));
+    }
+    if has(&|m| !m.addresses.is_empty()) {
+        stmts.push(handler_type("__Email", "email", "message", ty("void")));
+    }
+    for (i, m) in members {
+        let mut handlers = vec![ty("__Fetch")];
+        if !m.crons.is_empty() {
+            handlers.push(ty("__Scheduled"));
+        }
+        if !m.queues.is_empty() {
+            handlers.push(ty("__Queue"));
+        }
+        if !m.addresses.is_empty() {
+            handlers.push(ty("__Email"));
+        }
+        stmts.push(tight(const_(
+            &format!("__m{i}"),
+            Some(TsType::intersection(handlers)),
+            id(&format!("__entry{i}")),
+        )));
+    }
+    let row_ty = TsType::readonly_array(TsType::Object(vec![
+        TsTypeMember::readonly_prop("entry", ty("__Fetch")),
+        TsTypeMember::readonly_prop(
+            "isMiss",
+            TsType::Fn {
+                params: vec![response_ty()],
+                names: vec!["response".to_string()],
+                ret: Box::new(ty("boolean")),
+            },
+        ),
+    ]));
+    let rows = members
+        .iter()
+        .map(|(i, _)| {
+            TsExpr::object(vec![
+                ("entry".to_string(), id(&format!("__m{i}"))),
+                ("isMiss".to_string(), id(&format!("__miss{i}"))),
+            ])
+        })
+        .collect();
+    stmts.push(const_(
+        "__members",
+        Some(row_ty),
+        TsExpr::multiline_array(rows),
+    ));
+    stmts
 }
 
 /// The group's `index.ts`.
@@ -256,87 +1011,33 @@ pub fn emit_group_entry(entry: &GroupEntry<'_>) -> TsProgram {
     ) {
         program.push(stmt);
     }
-    let mut text = String::new();
-    for (i, m) in &members {
-        text.push_str(&format!(
-            "import __entry{i}, {{ isMiss as __miss{i} }} from {:?};\n",
-            m.specifier
-        ));
+    for stmt in imports_and_exports(entry, &members) {
+        program.push(stmt);
     }
-    for (_, m) in &members {
-        if !m.classes.is_empty() {
-            text.push_str(&format!(
-                "export {{ {} }} from {:?};\n",
-                m.classes.join(", "),
-                m.specifier
-            ));
-        }
+    for stmt in member_table(&members) {
+        program.push(stmt);
     }
-    if entry.has_fanout {
-        text.push_str(&format!(
-            "export {{ {} }} from \"./events_fanout.js\";\n",
-            crate::emitter::wrangler::EVENTS_FANOUT_CLASS_NAME
-        ));
+    program.push(refused());
+    program.push(with_allowed());
+    program.push(unclaimed(entry));
+    program.push(dispatch());
+    for stmt in loopback(entry) {
+        program.push(stmt);
     }
-    if !entry.container_classes.is_empty() {
-        text.push_str(&format!(
-            "export {{ {} }} from \"./containers.js\";\n",
-            entry.container_classes.join(", ")
-        ));
-    }
-    text.push_str("\ntype __Ctx = { waitUntil(promise: globalThis.Promise<unknown>): void };\n");
-    text.push_str("type __Fetch = { fetch(request: globalThis.Request, env: never, ctx: __Ctx): Promise<globalThis.Response> };\n");
+    let mut handlers = vec![fetch_method()];
     if has_cron {
-        text.push_str("type __Scheduled = { scheduled(event: never, env: never, ctx: __Ctx): Promise<void> };\n");
+        handlers.push(scheduled(&members));
     }
     if has_queue {
-        text.push_str(
-            "type __Queue = { queue(batch: never, env: never, ctx: __Ctx): Promise<void> };\n",
-        );
+        handlers.push(queue(&members));
     }
     if has_email {
-        text.push_str(
-            "type __Email = { email(message: never, env: never, ctx: __Ctx): Promise<void> };\n",
-        );
+        handlers.push(email(&members));
     }
-    for (i, m) in &members {
-        let mut ty = vec!["__Fetch"];
-        if !m.crons.is_empty() {
-            ty.push("__Scheduled");
-        }
-        if !m.queues.is_empty() {
-            ty.push("__Queue");
-        }
-        if !m.addresses.is_empty() {
-            ty.push("__Email");
-        }
-        text.push_str(&format!("const __m{i}: {} = __entry{i};\n", ty.join(" & ")));
-    }
-    text.push_str("\nconst __members: readonly { readonly entry: __Fetch; readonly isMiss: (response: globalThis.Response) => boolean }[] = [\n");
-    for (i, _) in &members {
-        text.push_str(&format!("  {{ entry: __m{i}, isMiss: __miss{i} }},\n"));
-    }
-    text.push_str("];\n\n");
-    text.push_str(
-        "function __refused(verified: string | globalThis.Response): globalThis.Response {\n  return typeof verified === \"string\" ? new globalThis.Response(\"Unauthorized\", { status: 401 }) : verified;\n}\n\n",
-    );
-    text.push_str(WITH_ALLOWED);
-    text.push_str(&unclaimed(entry));
-    text.push_str(DISPATCH);
-    text.push_str(&loopback(entry));
-    text.push_str("export default {\n");
-    text.push_str(FETCH);
-    if has_cron {
-        text.push_str(&scheduled(&members));
-    }
-    if has_queue {
-        text.push_str(&queue(&members));
-    }
-    if has_email {
-        text.push_str(&email(&members));
-    }
-    text.push_str("};\n");
-    program.push(TsStmt::raw(text, None));
+    program.push(TsStmt::decl(
+        TsDecl::ExportDefault(TsExpr::multiline_object_entries(handlers)),
+        None,
+    ));
     program
 }
 
@@ -355,24 +1056,40 @@ mod tests {
         }
     }
 
+    fn printed(entry: &GroupEntry<'_>) -> String {
+        bynk_ts::print(&emit_group_entry(entry), "x.bynk", "", "index.ts").text
+    }
+
+    fn entry_of(members: &[GroupMember]) -> GroupEntry<'_> {
+        GroupEntry {
+            key: "core",
+            members,
+            container_classes: &[],
+            has_fanout: false,
+            has_events: false,
+            has_migrate: false,
+            has_inspect: false,
+        }
+    }
+
     /// #3562, G3-2: a handler of one member reaching another goes in process, so
     /// each of `scheduled`, `queue` and `email` runs its member on the loopback env.
     #[test]
     fn every_handler_runs_its_member_on_the_loopback_env() {
         let members = [member("app.a"), member("app.b")];
-        let numbered: Vec<(usize, &GroupMember)> = members.iter().enumerate().collect();
-        for (name, text) in [
-            ("scheduled", scheduled(&numbered)),
-            ("queue", queue(&numbered)),
-            ("email", email(&numbered)),
-        ] {
+        let text = printed(&entry_of(&members));
+        for handler in ["scheduled", "queue", "email"] {
+            let at = text
+                .find(&format!("async {handler}("))
+                .unwrap_or_else(|| panic!("no {handler} handler:\n{text}"));
+            let body = &text[at..];
             assert!(
-                text.contains("__loopback(env, ctx) as never"),
-                "{name} does not pass the loopback env:\n{text}"
+                body.contains("__loopback(env, ctx) as never"),
+                "{handler} does not pass the loopback env:\n{text}"
             );
             assert!(
-                !text.contains("(env as never"),
-                "{name} passes the raw env:\n{text}"
+                !body.contains("(env as never"),
+                "{handler} passes the raw env:\n{text}"
             );
         }
     }
@@ -381,17 +1098,101 @@ mod tests {
     /// a Service Binding, not the callee's exception.
     #[test]
     fn a_callee_that_throws_is_a_plain_500() {
-        let entry = GroupEntry {
-            key: "core",
-            members: &[member("app.a"), member("app.b")],
-            container_classes: &[],
-            has_fanout: false,
-            has_events: false,
-            has_migrate: false,
-            has_inspect: false,
-        };
-        let text = loopback(&entry);
-        assert!(text.contains("catch {"), "{text}");
+        let members = [member("app.a"), member("app.b")];
+        let text = printed(&entry_of(&members));
+        assert!(text.contains("} catch {"), "{text}");
         assert!(text.contains("status: 500"), "{text}");
+    }
+
+    /// A single-member group has nothing to loop back to: `__loopback` is the identity,
+    /// and no member-binding table is built.
+    #[test]
+    fn a_lone_member_has_an_identity_loopback() {
+        let members = [member("app.a")];
+        let text = printed(&entry_of(&members));
+        assert!(
+            text.contains(
+                "function __loopback(env: unknown, _ctx: __Ctx): unknown {\n  return env;\n}"
+            ),
+            "{text}"
+        );
+        assert!(!text.contains("__memberBindings"), "{text}");
+    }
+
+    /// The member imports bind the default export and `isMiss` together, and every
+    /// string the entry writes (specifiers, crons, queues, addresses) is escaped as
+    /// a TypeScript string literal.
+    #[test]
+    fn member_imports_pair_the_entry_with_its_miss_marker() {
+        let members = [member("app.a"), member("app.b")];
+        let text = printed(&entry_of(&members));
+        assert!(
+            text.contains("import __entry0, { isMiss as __miss0 } from \"./app.a.index.js\";"),
+            "{text}"
+        );
+        assert!(
+            text.contains("import __entry1, { isMiss as __miss1 } from \"./app.b.index.js\";"),
+            "{text}"
+        );
+        assert!(text.contains("{ entry: __m1, isMiss: __miss1 },"), "{text}");
+    }
+
+    /// Queues that share a member stack their `case` labels over one body, and the
+    /// catch-all `default` follows.
+    #[test]
+    fn a_members_queues_share_one_case_body() {
+        let mut a = member("app.a");
+        a.queues = vec!["jobs".into(), "mail".into()];
+        let members = [a];
+        let text = printed(&entry_of(&members));
+        assert!(
+            text.contains(
+                "      case \"jobs\":\n      case \"mail\":\n        return __m0.queue(batch as never, __loopback(env, ctx) as never, ctx);\n      default:\n        return;"
+            ),
+            "{text}"
+        );
+    }
+
+    /// The internal prefixes a group answers unauthenticated depend on what its
+    /// members host: `/_bynk/migrate/` and `/_bynk/inspect/` only when asked for.
+    #[test]
+    fn the_unclaimed_fallback_answers_only_the_prefixes_the_group_serves() {
+        let members = [member("app.a")];
+        let plain = printed(&entry_of(&members));
+        assert!(plain.contains("async function __unclaimed("), "{plain}");
+        assert!(!plain.contains("/_bynk/migrate/"), "{plain}");
+        assert!(!plain.contains("/_bynk/inspect/"), "{plain}");
+        let mut entry = entry_of(&members);
+        entry.has_migrate = true;
+        entry.has_inspect = true;
+        let full = printed(&entry);
+        assert!(full.contains("/_bynk/migrate/"), "{full}");
+        assert!(full.contains("/_bynk/inspect/"), "{full}");
+    }
+
+    /// The entry binds every name it uses: the member imports, the handler types
+    /// and the runtime's `__verifyCall` account for all of them, in every shape of
+    /// group (a lone member, several; fan-out, events, migrate, inspect).
+    #[test]
+    fn the_entry_binds_every_name_it_uses() {
+        let sets = [
+            vec![member("app.a")],
+            vec![member("app.a"), member("app.b"), member("app.c")],
+        ];
+        for members in &sets {
+            for bits in 0..16u32 {
+                let mut entry = entry_of(members);
+                entry.has_fanout = bits & 1 != 0;
+                entry.has_events = bits & 2 != 0;
+                entry.has_migrate = bits & 4 != 0;
+                entry.has_inspect = bits & 8 != 0;
+                let unbound = bynk_ts::unbound_names(&emit_group_entry(&entry));
+                assert!(
+                    unbound.is_empty(),
+                    "{} members, {bits:#06b}: {unbound:?}",
+                    members.len()
+                );
+            }
+        }
     }
 }

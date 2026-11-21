@@ -47,7 +47,7 @@ use bynk_ts::{
     pred_condition_and_message_for,
 };
 
-use crate::emit_model::{EmitProjectCtx, ImportExt};
+use crate::emit_model::{EmitProjectCtx, ExtraImport, ImportExt};
 use bynk_check::builtin_names::map_query;
 use bynk_check::builtin_names::methods::RAW;
 use bynk_check::builtin_names::types::*;
@@ -378,7 +378,7 @@ fn single_file_ctx() -> EmitProjectCtx {
         target: BuildTarget::Bundle,
         local_agents: HashSet::new(),
         agent_given_deps: HashMap::new(),
-        extra_import_lines: Vec::new(),
+        extra_imports: Vec::new(),
         agent_method_givens: HashMap::new(),
         agent_called_contexts: Vec::new(),
         actors: HashMap::new(),
@@ -749,11 +749,9 @@ pub fn emit_project(
     // either side's real `TsStmtKind`, which the printer's automatic
     // "no blank between adjacent imports" exemption cannot see through:
     // `emit_project_imports`'s own last statement is not always a real
-    // import decl (its own `extra_import_lines` tail is pre-formatted `Raw`
-    // text that *reads* as an import but isn't classified as one —
-    // `328_agent_given_workers`'s own real fixture output: a `Raw`
-    // adapter-binding import directly followed by a real `ImportNamespace`,
-    // no blank between them despite neither side of the exemption matching).
+    // import decl, and the printer's "no blank between adjacent imports"
+    // exemption only applies when both sides are. (Its `extra_imports` tail was
+    // pre-formatted `Raw` text until 1A.38a; it is import nodes now.)
     if !cross_context_imports.is_empty() {
         if references.is_empty() {
             // Force the "no blank" default explicitly — the automatic
@@ -3802,22 +3800,34 @@ fn emit_project_imports(
         }
     }
     // #527: imports the DO-side agent-deps expressions need (binding modules,
-    // other Workers' handlers). Precomputed by the project driver — already
-    // formed statement text, stays opaque `TsStmt::raw`, the established
-    // "pre-formatted pass-through" pattern.
-    for line in &ctx.extra_import_lines {
-        stmts.push(bynk_ts::TsStmt::raw(format!("{line}\n"), None));
+    // other Workers' handlers, the locale `render`). The project driver decides
+    // which; each is an import node here.
+    for import in &ctx.extra_imports {
+        let decl = match import {
+            ExtraImport::Namespace { alias, from } => bynk_ts::TsDecl::ImportNamespace {
+                type_only: false,
+                alias: alias.clone(),
+                from: from.clone(),
+            },
+            ExtraImport::Named {
+                names,
+                from,
+                type_only,
+            } => bynk_ts::TsDecl::Import {
+                type_only: *type_only,
+                names: names.clone(),
+                from: from.clone(),
+            },
+        };
+        stmts.push(bynk_ts::TsStmt::decl(decl, None));
     }
     // #1486: every statement in this function's own return, whatever
     // section it came from (sibling imports, cross-unit imports, the
-    // rebrand-aliasing pair, `extra_import_lines`' own pre-formatted `Raw`
-    // text), sits directly under its predecessor with no blank between
-    // them — this function never inserted one under the pre-#1486
-    // flat-print regime (confirmed: no explicit blank `TsStmt` anywhere in
-    // its own body), so every internal adjacency needs forcing regardless
-    // of `TsStmtKind` (a `Raw` import line next to a real `ImportNamespace`
-    // is exactly the case the printer's own kind-based "both imports"
-    // exemption can't see). The very first statement is left alone — its
+    // rebrand-aliasing pair, `extra_imports`), sits directly under its
+    // predecessor with no blank between them — this function never inserted
+    // one under the pre-#1486 flat-print regime (confirmed: no explicit blank
+    // `TsStmt` anywhere in its own body), so every internal adjacency is forced
+    // regardless of `TsStmtKind`. The very first statement is left alone — its
     // own blank-or-not relative to whatever precedes this function's call
     // site is `emit_project`'s own call-site decision (the header/`emit_
     // project_imports` boundary, and the project/cross-context import

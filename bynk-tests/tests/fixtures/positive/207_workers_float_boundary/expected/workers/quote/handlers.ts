@@ -66,12 +66,12 @@ export function __deserialise_Result_Quote_Unit(json: __JsonValue, path: string 
   }
   const obj = json as { [k: string]: __JsonValue };
   if (obj["kind"] === "Ok") {
-  const __r_v = __deserialise_Quote(obj["value"], `${path}.value`);
-  if (__r_v.tag === "Err") return __r_v;
-  const __v = __r_v.value;
+    const __r_v = __deserialise_Quote(obj["value"], `${path}.value`);
+    if (__r_v.tag === "Err") return __r_v;
+    const __v = __r_v.value;
     return Ok(Ok(__v) as Result<Quote, void>);
   } else if (obj["kind"] === "Err") {
-  const __e = undefined;
+    const __e = undefined;
     return Ok(Err(__e) as Result<Quote, void>);
   }
   return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });

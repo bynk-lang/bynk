@@ -121,14 +121,14 @@ export function __deserialise_Result_StockItem_StockError(json: __JsonValue, pat
   }
   const obj = json as { [k: string]: __JsonValue };
   if (obj["kind"] === "Ok") {
-  const __r_v = __deserialise_StockItem(obj["value"], `${path}.value`);
-  if (__r_v.tag === "Err") return __r_v;
-  const __v = __r_v.value;
+    const __r_v = __deserialise_StockItem(obj["value"], `${path}.value`);
+    if (__r_v.tag === "Err") return __r_v;
+    const __v = __r_v.value;
     return Ok(Ok(__v) as Result<StockItem, StockError>);
   } else if (obj["kind"] === "Err") {
-  const __r_e = __deserialise_StockError(obj["error"], `${path}.error`);
-  if (__r_e.tag === "Err") return __r_e;
-  const __e = __r_e.value;
+    const __r_e = __deserialise_StockError(obj["error"], `${path}.error`);
+    if (__r_e.tag === "Err") return __r_e;
+    const __e = __r_e.value;
     return Ok(Err(__e) as Result<StockItem, StockError>);
   }
   return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });

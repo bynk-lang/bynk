@@ -150,10 +150,10 @@ export function __deserialise_Status(json: __JsonValue, path: string = "$"): Res
     case "Active":
       return Ok({ tag: "Active" } as ev_store.Status);
     case "Held": {
-  if (typeof obj["reason"] !== "string") {
-    return Err({ kind: "StructuralMismatch", path: `${path}.reason`, expected: "string", actual: typeof obj["reason"] });
-  }
-  const __reason = obj["reason"];
+      if (typeof obj["reason"] !== "string") {
+        return Err({ kind: "StructuralMismatch", path: `${path}.reason`, expected: "string", actual: typeof obj["reason"] });
+      }
+      const __reason = obj["reason"];
       return Ok({ tag: "Held", reason: __reason } as ev_store.Status);
     }
     default:

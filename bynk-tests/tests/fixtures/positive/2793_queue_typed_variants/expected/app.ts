@@ -82,11 +82,11 @@ export function __deserialise_List_Placed(json: __JsonValue, path: string = "$")
   }
   const out: Placed[] = [];
   for (let i = 0; i < json.length; i++) {
-  const item = json[i];
-  const __r_el = __deserialise_Placed(item, `${path}[${i}]`);
-  if (__r_el.tag === "Err") return __r_el;
-  const __el = __r_el.value;
-  out.push(__el as Placed);
+    const item = json[i];
+    const __r_el = __deserialise_Placed(item, `${path}[${i}]`);
+    if (__r_el.tag === "Err") return __r_el;
+    const __el = __r_el.value;
+    out.push(__el as Placed);
   }
   return Ok(out);
 }

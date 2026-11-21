@@ -841,7 +841,12 @@ impl Walk {
                     self.bind(alias)
                 }
             }
-            TsDecl::ImportDefault { alias, .. } => self.bind(alias),
+            TsDecl::ImportDefault { alias, named, .. } => {
+                self.bind(alias);
+                for n in named {
+                    self.bind_specifier(n, false);
+                }
+            }
             TsDecl::ReExport { .. } | TsDecl::ReExportAll { .. } => {}
             // `export { a, b };` exports names this module binds (#1852),
             // so each is a use: one never imported or declared is unbound.
@@ -1056,6 +1061,11 @@ impl Walk {
                 self.expr(right);
             }
             TsExpr::Conditional {
+                test,
+                consequent,
+                alternate,
+            }
+            | TsExpr::MultilineConditional {
                 test,
                 consequent,
                 alternate,
@@ -1635,5 +1645,50 @@ mod tests {
         let p = program(vec![TsStmt::expr_stmt(generator, None)]);
         // `a`, `b`, `k`, `v` and `e` are bound inside; `src` and the type `Missing` are not.
         assert_eq!(unbound_names(&p), ["Missing", "src"]);
+    }
+
+    /// 1A.38a: a default import with named imports binds the default alias and each
+    /// named local, so a use of either is bound; a name it does not bring is not.
+    #[test]
+    fn a_default_import_with_named_imports_binds_all_of_them() {
+        let imports = TsStmt::decl(
+            TsDecl::ImportDefault {
+                alias: "__entry0".to_string(),
+                named: vec!["isMiss as __miss0".to_string()],
+                from: "./a.js".to_string(),
+            },
+            None,
+        );
+        let uses = |names: &[&str]| {
+            TsStmt::expr_stmt(
+                TsExpr::array(names.iter().map(|n| TsExpr::Ident(n.to_string())).collect()),
+                None,
+            )
+        };
+        let p = program(vec![imports.clone(), uses(&["__entry0", "__miss0"])]);
+        assert!(unbound_names(&p).is_empty(), "{:?}", unbound_names(&p));
+        // The imported name is `isMiss`; only its local alias is bound here.
+        let p = program(vec![imports, uses(&["isMiss"])]);
+        assert_eq!(unbound_names(&p), ["isMiss"]);
+    }
+
+    /// 1A.38a: `MultilineConditional` is walked like `Conditional`: a name in its
+    /// test, consequent or alternate is a use.
+    #[test]
+    fn a_multiline_conditional_uses_the_names_in_all_three_arms() {
+        let id = |n: &str| TsExpr::Ident(n.to_string());
+        let p = program(vec![TsStmt::expr_stmt(
+            TsExpr::multiline_conditional(id("t"), id("c"), id("a")),
+            None,
+        )]);
+        assert_eq!(unbound_names(&p), ["a", "c", "t"]);
+        let p = program(vec![
+            import(&["t", "c", "a"]),
+            TsStmt::expr_stmt(
+                TsExpr::multiline_conditional(id("t"), id("c"), id("a")),
+                None,
+            ),
+        ]);
+        assert!(unbound_names(&p).is_empty(), "{:?}", unbound_names(&p));
     }
 }

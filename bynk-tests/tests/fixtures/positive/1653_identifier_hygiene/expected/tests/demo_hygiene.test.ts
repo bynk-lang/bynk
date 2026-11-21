@@ -504,27 +504,27 @@ export function __deserialise_Keyword(json: __JsonValue, path: string = "$"): Re
   const kind = obj["kind"];
   switch (kind) {
     case "Kw": {
-  if (typeof obj["class"] !== "number") {
-    return Err({ kind: "StructuralMismatch", path: `${path}.class`, expected: "number", actual: typeof obj["class"] });
-  }
-  if (!globalThis.Number.isSafeInteger(obj["class"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.class`, expected: "safe integer", actual: String(obj["class"]) });
-  }
-  const __class = obj["class"];
-  if (typeof obj["arguments"] !== "number") {
-    return Err({ kind: "StructuralMismatch", path: `${path}.arguments`, expected: "number", actual: typeof obj["arguments"] });
-  }
-  if (!globalThis.Number.isSafeInteger(obj["arguments"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.arguments`, expected: "safe integer", actual: String(obj["arguments"]) });
-  }
-  const __arguments = obj["arguments"];
-  if (typeof obj["deps"] !== "number") {
-    return Err({ kind: "StructuralMismatch", path: `${path}.deps`, expected: "number", actual: typeof obj["deps"] });
-  }
-  if (!globalThis.Number.isSafeInteger(obj["deps"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.deps`, expected: "safe integer", actual: String(obj["deps"]) });
-  }
-  const __deps = obj["deps"];
+      if (typeof obj["class"] !== "number") {
+        return Err({ kind: "StructuralMismatch", path: `${path}.class`, expected: "number", actual: typeof obj["class"] });
+      }
+      if (!globalThis.Number.isSafeInteger(obj["class"])) {
+        return Err({ kind: "StructuralMismatch", path: `${path}.class`, expected: "safe integer", actual: String(obj["class"]) });
+      }
+      const __class = obj["class"];
+      if (typeof obj["arguments"] !== "number") {
+        return Err({ kind: "StructuralMismatch", path: `${path}.arguments`, expected: "number", actual: typeof obj["arguments"] });
+      }
+      if (!globalThis.Number.isSafeInteger(obj["arguments"])) {
+        return Err({ kind: "StructuralMismatch", path: `${path}.arguments`, expected: "safe integer", actual: String(obj["arguments"]) });
+      }
+      const __arguments = obj["arguments"];
+      if (typeof obj["deps"] !== "number") {
+        return Err({ kind: "StructuralMismatch", path: `${path}.deps`, expected: "number", actual: typeof obj["deps"] });
+      }
+      if (!globalThis.Number.isSafeInteger(obj["deps"])) {
+        return Err({ kind: "StructuralMismatch", path: `${path}.deps`, expected: "safe integer", actual: String(obj["deps"]) });
+      }
+      const __deps = obj["deps"];
       return Ok({ tag: "Kw", class: __class, arguments: __arguments, deps: __deps } as __ns_demo_hygiene.Keyword);
     }
     case "Bare":

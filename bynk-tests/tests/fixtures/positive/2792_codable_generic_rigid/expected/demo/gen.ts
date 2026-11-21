@@ -314,9 +314,9 @@ function __codecOf_Maybe<__P_T>(__codec___P_T: { encode: (v: __P_T) => __JsonVal
       case "Nothing":
         return Ok({ tag: "Nothing" } as Maybe<__P_T>);
       case "Just": {
-  const __r_value = __deserialise___P_T(obj["value"], `${path}.value`);
-  if (__r_value.tag === "Err") return __r_value;
-  const __value = __r_value.value;
+        const __r_value = __deserialise___P_T(obj["value"], `${path}.value`);
+        if (__r_value.tag === "Err") return __r_value;
+        const __value = __r_value.value;
         return Ok({ tag: "Just", value: __value } as Maybe<__P_T>);
       }
       default:
@@ -357,11 +357,11 @@ function __codecOf_Wrapped<__P_T>(__codec___P_T: { encode: (v: __P_T) => __JsonV
     }
     const out: __P_T[] = [];
     for (let i = 0; i < json.length; i++) {
-  const item = json[i];
-  const __r_el = __deserialise___P_T(item, `${path}[${i}]`);
-  if (__r_el.tag === "Err") return __r_el;
-  const __el = __r_el.value;
-  out.push(__el as __P_T);
+      const item = json[i];
+      const __r_el = __deserialise___P_T(item, `${path}[${i}]`);
+      if (__r_el.tag === "Err") return __r_el;
+      const __el = __r_el.value;
+      out.push(__el as __P_T);
     }
     return Ok(out);
   }

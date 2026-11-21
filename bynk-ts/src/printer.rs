@@ -593,54 +593,15 @@ fn render_stmt_kind(
             same_line_else,
         } => {
             out.push_str(&indent(depth));
-            out.push_str("if (");
-            render_expr(out, cond, depth, &mut map);
-            out.push(')');
-            // `} else {` on one line — #1325's own real gap, all three of
-            // `emit_test_main`'s own real `if`/`else` sites (one `Block`,
-            // one `InlineBlock`). Only reachable when `then_branch` is
-            // itself braced (`Block` or `InlineBlock` — every real
-            // `same_line_else` site is one or the other); a brace-free
-            // `then_branch` has no closing `}` for `else` to sit against,
-            // so this falls back to the ordinary fresh-line rendering
-            // rather than producing `<inline-stmt> else {`, which nothing
-            // real needs. Review of #1326, finding 2: the two-variant
-            // check needs no `Option<()>`/re-match/`unreachable!()` — a
-            // plain `matches!` guard plus one `if let ... else` dispatch
-            // says the same thing with no wildcard arm.
-            let then_is_braced = matches!(
-                &then_branch.kind,
-                TsStmtKind::Block(_) | TsStmtKind::InlineBlock(_)
+            render_if_tail(
+                out,
+                cond,
+                then_branch,
+                else_branch,
+                *same_line_else,
+                depth,
+                map,
             );
-            if *same_line_else
-                && then_is_braced
-                && let Some(else_branch) = else_branch
-            {
-                // `render_inline_block`'s own `{ stmts }` shape, minus its
-                // own trailing `\n` and leading space (added here instead,
-                // matching `render_branch`'s own InlineBlock arm) so
-                // `else` continues on the same physical line;
-                // `render_block_body`'s own `{ stmts }` (no trailing
-                // newline, the exact shape `TryCatch`'s own `} catch (e) {`
-                // continuation already reuses) for the `Block` case,
-                // guaranteed by `then_is_braced` above.
-                if let TsStmtKind::InlineBlock(stmts) = &then_branch.kind {
-                    out.push_str(" { ");
-                    render_compact_stmts(out, stmts, depth);
-                    out.push_str(" }");
-                } else {
-                    render_block_body(out, then_branch, depth, map.as_mut().map(|t| t.reborrow()));
-                }
-                out.push_str(" else");
-                render_branch(out, else_branch, depth, map.as_mut().map(|t| t.reborrow()));
-            } else {
-                render_branch(out, then_branch, depth, map.as_mut().map(|t| t.reborrow()));
-                if let Some(else_branch) = else_branch {
-                    out.push_str(&indent(depth));
-                    out.push_str("else");
-                    render_branch(out, else_branch, depth, map.as_mut().map(|t| t.reborrow()));
-                }
-            }
         }
         TsStmtKind::ForOf {
             binding,
@@ -917,6 +878,99 @@ fn render_let_list(
         }
     }
     out.push_str(";\n");
+}
+
+/// An `if` from its keyword on, the caller having written the indentation (or, for an
+/// `else if`, the `else `): the condition, the branches and any `else`.
+fn render_if_tail(
+    out: &mut String,
+    cond: &TsExpr,
+    then_branch: &TsStmt,
+    else_branch: &Option<Box<TsStmt>>,
+    same_line_else: bool,
+    depth: usize,
+    mut map: Option<MergeTarget<'_>>,
+) {
+    out.push_str("if (");
+    render_expr(out, cond, depth, &mut map);
+    out.push(')');
+    // `} else {` on one line — #1325's own real gap, all three of
+    // `emit_test_main`'s own real `if`/`else` sites (one `Block`,
+    // one `InlineBlock`). Only reachable when `then_branch` is
+    // itself braced (`Block` or `InlineBlock` — every real
+    // `same_line_else` site is one or the other); a brace-free
+    // `then_branch` has no closing `}` for `else` to sit against,
+    // so this falls back to the ordinary fresh-line rendering
+    // rather than producing `<inline-stmt> else {`, which nothing
+    // real needs. Review of #1326, finding 2: the two-variant
+    // check needs no `Option<()>`/re-match/`unreachable!()` — a
+    // plain `matches!` guard plus one `if let ... else` dispatch
+    // says the same thing with no wildcard arm.
+    let then_is_braced = matches!(
+        &then_branch.kind,
+        TsStmtKind::Block(_) | TsStmtKind::InlineBlock(_)
+    );
+    if same_line_else
+        && then_is_braced
+        && let Some(else_branch) = else_branch
+    {
+        // `render_inline_block`'s own `{ stmts }` shape, minus its
+        // own trailing `\n` and leading space (added here instead,
+        // matching `render_branch`'s own InlineBlock arm) so
+        // `else` continues on the same physical line;
+        // `render_block_body`'s own `{ stmts }` (no trailing
+        // newline, the exact shape `TryCatch`'s own `} catch (e) {`
+        // continuation already reuses) for the `Block` case,
+        // guaranteed by `then_is_braced` above.
+        if let TsStmtKind::InlineBlock(stmts) = &then_branch.kind {
+            out.push_str(" { ");
+            render_compact_stmts(out, stmts, depth);
+            out.push_str(" }");
+        } else {
+            render_block_body(out, then_branch, depth, map.as_mut().map(|t| t.reborrow()));
+        }
+        out.push_str(" else");
+        render_else_branch(out, else_branch, depth, map.as_mut().map(|t| t.reborrow()));
+    } else {
+        render_branch(out, then_branch, depth, map.as_mut().map(|t| t.reborrow()));
+        if let Some(else_branch) = else_branch {
+            out.push_str(&indent(depth));
+            out.push_str("else");
+            render_else_branch(out, else_branch, depth, map.as_mut().map(|t| t.reborrow()));
+        }
+    }
+}
+
+/// An `else` branch. An `else if` continues the chain at the same `depth`, so its
+/// blocks nest where the first `if`'s do (1A.38a); any other branch is rendered as
+/// [`render_branch`] renders one.
+fn render_else_branch(
+    out: &mut String,
+    branch: &TsStmt,
+    depth: usize,
+    mut map: Option<MergeTarget<'_>>,
+) {
+    if let TsStmtKind::If {
+        cond,
+        then_branch,
+        else_branch,
+        same_line_else,
+    } = &branch.kind
+    {
+        out.push(' ');
+        note_span(out.len(), branch, map.as_mut());
+        render_if_tail(
+            out,
+            cond,
+            then_branch,
+            else_branch,
+            *same_line_else,
+            depth,
+            map,
+        );
+    } else {
+        render_branch(out, branch, depth, map);
+    }
 }
 
 /// `if`/`for...of`'s own body: braces (and a nested block) when `branch` is
@@ -1273,6 +1327,7 @@ fn needs_parens_as_operand(expr: &TsExpr) -> bool {
             | TsExpr::AsConst(_)
             | TsExpr::Arrow { .. }
             | TsExpr::Conditional { .. }
+            | TsExpr::MultilineConditional { .. }
             | TsExpr::Assign { .. }
             | TsExpr::AddAssign { .. }
             | TsExpr::Function { .. }
@@ -1307,6 +1362,7 @@ fn new_callee_needs_parens(callee: &TsExpr) -> bool {
         | TsExpr::Unary { .. }
         | TsExpr::Binary { .. }
         | TsExpr::Conditional { .. }
+        | TsExpr::MultilineConditional { .. }
         | TsExpr::Paren(_)
         | TsExpr::Spread(_)
         | TsExpr::NonNull(_)
@@ -1410,6 +1466,7 @@ fn render_binary_operand(
         | TsExpr::AsConst(_)
         | TsExpr::Arrow { .. }
         | TsExpr::Conditional { .. }
+        | TsExpr::MultilineConditional { .. }
         | TsExpr::Assign { .. }
         | TsExpr::AddAssign { .. }
         | TsExpr::Yield(_) => true,
@@ -1849,6 +1906,7 @@ fn render_cast_operand(
         TsExpr::Binary { .. }
             | TsExpr::Arrow { .. }
             | TsExpr::Conditional { .. }
+            | TsExpr::MultilineConditional { .. }
             | TsExpr::Yield(_)
     );
     if needs_parens {
@@ -1912,7 +1970,10 @@ fn render_conditional(
     // machinery the way `test` does.
     let test_needs_parens = matches!(
         test,
-        TsExpr::Arrow { .. } | TsExpr::Conditional { .. } | TsExpr::Yield(_)
+        TsExpr::Arrow { .. }
+            | TsExpr::Conditional { .. }
+            | TsExpr::MultilineConditional { .. }
+            | TsExpr::Yield(_)
     );
     if test_needs_parens {
         out.push('(');
@@ -1925,6 +1986,43 @@ fn render_conditional(
     render_expr(out, consequent, depth, m);
     out.push_str(" : ");
     render_expr(out, alternate, depth, m);
+}
+
+/// [`TsExpr::MultilineConditional`]: the test on the current line, then
+/// `? consequent` and `: alternate` on lines of their own, one indent level (two
+/// spaces) deeper than `depth`. The test, the consequent and the alternate take
+/// the same parenthesisation as [`render_conditional`]'s.
+fn render_multiline_conditional(
+    out: &mut String,
+    test: &TsExpr,
+    consequent: &TsExpr,
+    alternate: &TsExpr,
+    depth: usize,
+    m: &mut Option<MergeTarget<'_>>,
+) {
+    let test_needs_parens = matches!(
+        test,
+        TsExpr::Arrow { .. }
+            | TsExpr::Conditional { .. }
+            | TsExpr::MultilineConditional { .. }
+            | TsExpr::Yield(_)
+    );
+    if test_needs_parens {
+        out.push('(');
+        render_expr(out, test, depth, m);
+        out.push(')');
+    } else {
+        render_expr(out, test, depth, m);
+    }
+    let indent = "  ".repeat(depth + 1);
+    out.push('\n');
+    out.push_str(&indent);
+    out.push_str("? ");
+    render_expr(out, consequent, depth + 1, m);
+    out.push('\n');
+    out.push_str(&indent);
+    out.push_str(": ");
+    render_expr(out, alternate, depth + 1, m);
 }
 
 fn render_expr(out: &mut String, expr: &TsExpr, depth: usize, m: &mut Option<MergeTarget<'_>>) {
@@ -2145,6 +2243,11 @@ fn render_expr(out: &mut String, expr: &TsExpr, depth: usize, m: &mut Option<Mer
             consequent,
             alternate,
         } => render_conditional(out, test, consequent, alternate, depth, m),
+        TsExpr::MultilineConditional {
+            test,
+            consequent,
+            alternate,
+        } => render_multiline_conditional(out, test, consequent, alternate, depth, m),
         TsExpr::Paren(inner) => {
             out.push('(');
             render_expr(out, inner, depth, m);
@@ -2316,7 +2419,9 @@ fn starts_with_object(expr: &TsExpr) -> bool {
         TsExpr::AsConst(expr) => starts_with_object(expr),
         TsExpr::DefaultIife { .. } => false,
         TsExpr::Binary { left, .. } => starts_with_object(left),
-        TsExpr::Conditional { test, .. } => starts_with_object(test),
+        TsExpr::Conditional { test, .. } | TsExpr::MultilineConditional { test, .. } => {
+            starts_with_object(test)
+        }
         TsExpr::Ident(_)
         | TsExpr::VerbatimExpr(..)
         | TsExpr::Arrow { .. }
@@ -3130,9 +3235,14 @@ fn render_decl_body(
             out.push_str(from);
             out.push_str("\";\n");
         }
-        TsDecl::ImportDefault { alias, from } => {
+        TsDecl::ImportDefault { alias, named, from } => {
             out.push_str("import ");
             out.push_str(alias);
+            if !named.is_empty() {
+                out.push_str(", { ");
+                out.push_str(&named.join(", "));
+                out.push_str(" }");
+            }
             out.push_str(" from \"");
             out.push_str(from);
             out.push_str("\";\n");
@@ -5971,6 +6081,7 @@ mod tests {
         program.push(TsStmt::decl(
             TsDecl::ImportDefault {
                 alias: "worker_shop_api".to_string(),
+                named: Vec::new(),
                 from: "../workers/shop-api/index.js".to_string(),
             },
             None,
@@ -9745,5 +9856,144 @@ mod tests {
             ],
         };
         assert_eq!(print_expr(&call), format!("__formDecode(__s, {specs})"));
+    }
+
+    /// 1A.38a: a default import that also names braced imports, the Worker group's
+    /// member import. The names keep `TsDecl::Import`'s `a as b` spelling.
+    #[test]
+    fn prints_a_default_import_with_named_imports() {
+        let mut program = TsProgram::new();
+        program.push(TsStmt::decl(
+            TsDecl::ImportDefault {
+                alias: "__entry0".to_string(),
+                named: vec!["isMiss as __miss0".to_string(), "type T".to_string()],
+                from: "./shop.index.js".to_string(),
+            },
+            None,
+        ));
+        let printed = print(&program, "x.bynk", "", "x.ts");
+        assert_eq!(
+            printed.text,
+            "import __entry0, { isMiss as __miss0, type T } from \"./shop.index.js\";\n"
+        );
+    }
+
+    /// 1A.38a: the multiline `Conditional` is the test, then `? a` and `: b` one level
+    /// deeper than the statement holding it, here a depth-1 `const` in a function
+    /// body. Its three sub-expressions print as they do in a one-line `Conditional`.
+    #[test]
+    fn prints_a_multiline_conditional_one_level_deeper_than_its_statement() {
+        let cond = TsExpr::multiline_conditional(
+            TsExpr::Paren(Box::new(TsExpr::Binary {
+                op: TsBinaryOp::StrictEq,
+                left: Box::new(id("a")),
+                right: Box::new(id("b")),
+            })),
+            TsExpr::Call {
+                callee: Box::new(id("f")),
+                args: vec![id("x")],
+            },
+            id("y"),
+        );
+        let decl = TsDecl::Function {
+            name: "g".to_string(),
+            generics: vec![],
+            params: vec![],
+            return_type: None,
+            body: vec![TsStmt::const_stmt(
+                TsBindingName::Ident("v".to_string()),
+                None,
+                cond,
+                None,
+            )],
+            is_async: false,
+            inline: false,
+        };
+        let mut program = TsProgram::new();
+        program.push(TsStmt::decl(decl, None));
+        let printed = print(&program, "x.bynk", "", "x.ts");
+        assert_eq!(
+            printed.text,
+            "function g() {\n  const v = (a === b)\n    ? f(x)\n    : y;\n}\n"
+        );
+    }
+
+    /// 1A.38a: a `MultilineConditional` takes `Conditional`'s precedence rules: it is
+    /// bracketed as a binary operand, as a call callee, and as another conditional's
+    /// test.
+    #[test]
+    fn a_multiline_conditional_is_bracketed_wherever_a_conditional_is() {
+        let cond = || TsExpr::multiline_conditional(id("t"), id("c"), id("a"));
+        let one_line = || TsExpr::Conditional {
+            test: Box::new(id("t")),
+            consequent: Box::new(id("c")),
+            alternate: Box::new(id("a")),
+        };
+        let wrapped = |e: TsExpr| TsExpr::Binary {
+            op: TsBinaryOp::Add,
+            left: Box::new(e),
+            right: Box::new(id("z")),
+        };
+        assert_eq!(
+            print_expr(&wrapped(cond())),
+            "(t\n  ? c\n  : a) + z".to_string()
+        );
+        assert_eq!(
+            print_expr(&TsExpr::Call {
+                callee: Box::new(cond()),
+                args: vec![]
+            }),
+            "(t\n  ? c\n  : a)()"
+        );
+        assert_eq!(
+            print_expr(&TsExpr::multiline_conditional(one_line(), id("c"), id("a"))),
+            "(t ? c : a)\n  ? c\n  : a"
+        );
+        assert_eq!(
+            print_expr(&TsExpr::multiline_conditional(cond(), id("c"), id("a"))),
+            "(t\n  ? c\n  : a)\n  ? c\n  : a"
+        );
+    }
+
+    /// 1A.38a: an `else if` continues the chain at the depth of the first `if`, so the
+    /// blocks of every link nest where the first one's do, however deep the chain sits.
+    #[test]
+    fn an_else_if_chain_nests_each_link_at_the_chains_own_depth() {
+        let guard = |name: &str| {
+            TsStmt::if_stmt(
+                id(name),
+                TsStmt::block(vec![TsStmt::return_stmt(Some(id("x")), None)], None),
+                None,
+            )
+        };
+        let link = |name: &str, then: TsStmt, rest: TsStmt| {
+            TsStmt::if_else_same_line_stmt(
+                id(name),
+                TsStmt::block(vec![then, TsStmt::return_stmt(Some(id("y")), None)], None),
+                rest,
+                None,
+            )
+        };
+        let chain = link(
+            "a",
+            guard("g"),
+            TsStmt::if_stmt(id("b"), TsStmt::block(vec![guard("h")], None), None),
+        );
+        let decl = TsDecl::Function {
+            name: "f".to_string(),
+            generics: vec![],
+            params: vec![],
+            return_type: None,
+            body: vec![chain],
+            is_async: false,
+            inline: false,
+        };
+        let mut program = TsProgram::new();
+        program.push(TsStmt::decl(decl, None));
+        let printed = print(&program, "x.bynk", "", "x.ts");
+        assert_eq!(
+            printed.text,
+            "function f() {\n  if (a) {\n    if (g) {\n      return x;\n    }\n    return y;\n  } else if (b) {\n    if (h) {\n      return x;\n    }\n  }\n}\n"
+        );
     }
 }

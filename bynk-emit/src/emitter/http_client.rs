@@ -911,7 +911,9 @@ impl Gen {
         // are not the client's to encode, so its wire form is a stand-in the decoder
         // accepts, and the part itself goes into the `FormData`.
         if self.sc.names.iter().any(|n| self.is_file(n)) {
+            // 1A.38: fixed authored snippet, no interpolation
             stmts.push(TsStmt::raw(FILE_TYPE.to_string(), None));
+            // 1A.38: fixed authored snippet, no interpolation
             codecs.push(TsStmt::raw(FILE_CODEC.to_string(), None));
         }
         let types = self.sc.types.clone();

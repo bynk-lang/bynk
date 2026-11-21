@@ -104,12 +104,12 @@ export function __deserialise_Result_Unit_OrderError(json: __JsonValue, path: st
   }
   const obj = json as { [k: string]: __JsonValue };
   if (obj["kind"] === "Ok") {
-  const __v = undefined;
+    const __v = undefined;
     return Ok(Ok(__v) as Result<void, OrderError>);
   } else if (obj["kind"] === "Err") {
-  const __r_e = __deserialise_OrderError(obj["error"], `${path}.error`);
-  if (__r_e.tag === "Err") return __r_e;
-  const __e = __r_e.value;
+    const __r_e = __deserialise_OrderError(obj["error"], `${path}.error`);
+    if (__r_e.tag === "Err") return __r_e;
+    const __e = __r_e.value;
     return Ok(Err(__e) as Result<void, OrderError>);
   }
   return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
@@ -167,14 +167,14 @@ export function __deserialise_Result_AuthId_PaymentError(json: __JsonValue, path
   }
   const obj = json as { [k: string]: __JsonValue };
   if (obj["kind"] === "Ok") {
-  const __r_v = __deserialise_AuthId(obj["value"], `${path}.value`);
-  if (__r_v.tag === "Err") return __r_v;
-  const __v = __r_v.value;
+    const __r_v = __deserialise_AuthId(obj["value"], `${path}.value`);
+    if (__r_v.tag === "Err") return __r_v;
+    const __v = __r_v.value;
     return Ok(Ok(__v) as Result<commerce_payment.AuthId, commerce_payment.PaymentError>);
   } else if (obj["kind"] === "Err") {
-  const __r_e = __deserialise_PaymentError(obj["error"], `${path}.error`);
-  if (__r_e.tag === "Err") return __r_e;
-  const __e = __r_e.value;
+    const __r_e = __deserialise_PaymentError(obj["error"], `${path}.error`);
+    if (__r_e.tag === "Err") return __r_e;
+    const __e = __r_e.value;
     return Ok(Err(__e) as Result<commerce_payment.AuthId, commerce_payment.PaymentError>);
   }
   return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });

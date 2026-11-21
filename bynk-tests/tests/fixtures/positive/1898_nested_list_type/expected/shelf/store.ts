@@ -182,15 +182,15 @@ export function __deserialise_List_Int(json: __JsonValue, path: string = "$"): R
   }
   const out: number[] = [];
   for (let i = 0; i < json.length; i++) {
-  const item = json[i];
-  if (typeof item !== "number") {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "number", actual: typeof item });
-  }
-  if (!globalThis.Number.isSafeInteger(item)) {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "safe integer", actual: String(item) });
-  }
-  const __el = item;
-  out.push(__el as number);
+    const item = json[i];
+    if (typeof item !== "number") {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "number", actual: typeof item });
+    }
+    if (!globalThis.Number.isSafeInteger(item)) {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "safe integer", actual: String(item) });
+    }
+    const __el = item;
+    out.push(__el as number);
   }
   return Ok(out);
 }

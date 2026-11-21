@@ -489,14 +489,14 @@ export function __deserialise_Set_Status(json: __JsonValue, path: string = "$"):
   }
   const out = new __BynkKeySet<__ns_demo_wire.Status>();
   for (let i = 0; i < json.length; i++) {
-  const item = json[i];
-  const __r_el = __deserialise_Status(item, `${path}[${i}]`);
-  if (__r_el.tag === "Err") return __r_el;
-  const __el = __r_el.value;
-  if (out.has(__el as __ns_demo_wire.Status)) {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "a distinct set element", actual: "a duplicate" });
-  }
-  out.add(__el as __ns_demo_wire.Status);
+    const item = json[i];
+    const __r_el = __deserialise_Status(item, `${path}[${i}]`);
+    if (__r_el.tag === "Err") return __r_el;
+    const __el = __r_el.value;
+    if (out.has(__el as __ns_demo_wire.Status)) {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "a distinct set element", actual: "a duplicate" });
+    }
+    out.add(__el as __ns_demo_wire.Status);
   }
   return Ok(out);
 }
@@ -511,11 +511,11 @@ export function __deserialise_List_Status(json: __JsonValue, path: string = "$")
   }
   const out: __ns_demo_wire.Status[] = [];
   for (let i = 0; i < json.length; i++) {
-  const item = json[i];
-  const __r_el = __deserialise_Status(item, `${path}[${i}]`);
-  if (__r_el.tag === "Err") return __r_el;
-  const __el = __r_el.value;
-  out.push(__el as __ns_demo_wire.Status);
+    const item = json[i];
+    const __r_el = __deserialise_Status(item, `${path}[${i}]`);
+    if (__r_el.tag === "Err") return __r_el;
+    const __el = __r_el.value;
+    out.push(__el as __ns_demo_wire.Status);
   }
   return Ok(out);
 }
@@ -534,27 +534,27 @@ export function __deserialise_Map_String_Int(json: __JsonValue, path: string = "
   }
   const out = new globalThis.Map<string, number>();
   for (let i = 0; i < json.length; i++) {
-  const entry = json[i];
-  if (!globalThis.Array.isArray(entry) || entry.length !== 2) {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "[key, value] entry", actual: typeof entry });
-  }
-  const entryK = entry[0];
-  const entryV = entry[1];
-  if (typeof entryK !== "string") {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "string", actual: typeof entryK });
-  }
-  const __k = entryK;
-  if (out.has(__k as string)) {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "a distinct map key", actual: "a duplicate" });
-  }
-  if (typeof entryV !== "number") {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}][1]`, expected: "number", actual: typeof entryV });
-  }
-  if (!globalThis.Number.isSafeInteger(entryV)) {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}][1]`, expected: "safe integer", actual: String(entryV) });
-  }
-  const __v = entryV;
-  out.set(__k as string, __v as number);
+    const entry = json[i];
+    if (!globalThis.Array.isArray(entry) || entry.length !== 2) {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "[key, value] entry", actual: typeof entry });
+    }
+    const entryK = entry[0];
+    const entryV = entry[1];
+    if (typeof entryK !== "string") {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "string", actual: typeof entryK });
+    }
+    const __k = entryK;
+    if (out.has(__k as string)) {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "a distinct map key", actual: "a duplicate" });
+    }
+    if (typeof entryV !== "number") {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}][1]`, expected: "number", actual: typeof entryV });
+    }
+    if (!globalThis.Number.isSafeInteger(entryV)) {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}][1]`, expected: "safe integer", actual: String(entryV) });
+    }
+    const __v = entryV;
+    out.set(__k as string, __v as number);
   }
   return Ok(out);
 }
@@ -573,30 +573,30 @@ export function __deserialise_Map_Int_Int(json: __JsonValue, path: string = "$")
   }
   const out = new globalThis.Map<number, number>();
   for (let i = 0; i < json.length; i++) {
-  const entry = json[i];
-  if (!globalThis.Array.isArray(entry) || entry.length !== 2) {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "[key, value] entry", actual: typeof entry });
-  }
-  const entryK = entry[0];
-  const entryV = entry[1];
-  if (typeof entryK !== "number") {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "number", actual: typeof entryK });
-  }
-  if (!globalThis.Number.isSafeInteger(entryK)) {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "safe integer", actual: String(entryK) });
-  }
-  const __k = entryK;
-  if (out.has(__k as number)) {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "a distinct map key", actual: "a duplicate" });
-  }
-  if (typeof entryV !== "number") {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}][1]`, expected: "number", actual: typeof entryV });
-  }
-  if (!globalThis.Number.isSafeInteger(entryV)) {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}][1]`, expected: "safe integer", actual: String(entryV) });
-  }
-  const __v = entryV;
-  out.set(__k as number, __v as number);
+    const entry = json[i];
+    if (!globalThis.Array.isArray(entry) || entry.length !== 2) {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "[key, value] entry", actual: typeof entry });
+    }
+    const entryK = entry[0];
+    const entryV = entry[1];
+    if (typeof entryK !== "number") {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "number", actual: typeof entryK });
+    }
+    if (!globalThis.Number.isSafeInteger(entryK)) {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "safe integer", actual: String(entryK) });
+    }
+    const __k = entryK;
+    if (out.has(__k as number)) {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "a distinct map key", actual: "a duplicate" });
+    }
+    if (typeof entryV !== "number") {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}][1]`, expected: "number", actual: typeof entryV });
+    }
+    if (!globalThis.Number.isSafeInteger(entryV)) {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}][1]`, expected: "safe integer", actual: String(entryV) });
+    }
+    const __v = entryV;
+    out.set(__k as number, __v as number);
   }
   return Ok(out);
 }
@@ -615,26 +615,26 @@ export function __deserialise_Map_OrderId_Int(json: __JsonValue, path: string = 
   }
   const out = new __BynkKeyMap<__ns_demo_wire.OrderId, number>();
   for (let i = 0; i < json.length; i++) {
-  const entry = json[i];
-  if (!globalThis.Array.isArray(entry) || entry.length !== 2) {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "[key, value] entry", actual: typeof entry });
-  }
-  const entryK = entry[0];
-  const entryV = entry[1];
-  const __r_k = __deserialise_OrderId(entryK, `${path}[${i}][0]`);
-  if (__r_k.tag === "Err") return __r_k;
-  const __k = __r_k.value;
-  if (out.has(__k as __ns_demo_wire.OrderId)) {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "a distinct map key", actual: "a duplicate" });
-  }
-  if (typeof entryV !== "number") {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}][1]`, expected: "number", actual: typeof entryV });
-  }
-  if (!globalThis.Number.isSafeInteger(entryV)) {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}][1]`, expected: "safe integer", actual: String(entryV) });
-  }
-  const __v = entryV;
-  out.set(__k as __ns_demo_wire.OrderId, __v as number);
+    const entry = json[i];
+    if (!globalThis.Array.isArray(entry) || entry.length !== 2) {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "[key, value] entry", actual: typeof entry });
+    }
+    const entryK = entry[0];
+    const entryV = entry[1];
+    const __r_k = __deserialise_OrderId(entryK, `${path}[${i}][0]`);
+    if (__r_k.tag === "Err") return __r_k;
+    const __k = __r_k.value;
+    if (out.has(__k as __ns_demo_wire.OrderId)) {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "a distinct map key", actual: "a duplicate" });
+    }
+    if (typeof entryV !== "number") {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}][1]`, expected: "number", actual: typeof entryV });
+    }
+    if (!globalThis.Number.isSafeInteger(entryV)) {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}][1]`, expected: "safe integer", actual: String(entryV) });
+    }
+    const __v = entryV;
+    out.set(__k as __ns_demo_wire.OrderId, __v as number);
   }
   return Ok(out);
 }
@@ -653,31 +653,31 @@ export function __deserialise_Map_Decimal_Int(json: __JsonValue, path: string = 
   }
   const out = new __BynkKeyMap<{ readonly coefficient: bigint; readonly scale: number }, number>();
   for (let i = 0; i < json.length; i++) {
-  const entry = json[i];
-  if (!globalThis.Array.isArray(entry) || entry.length !== 2) {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "[key, value] entry", actual: typeof entry });
-  }
-  const entryK = entry[0];
-  const entryV = entry[1];
-  if (typeof entryK !== "string") {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "decimal string", actual: typeof entryK });
-  }
-  const __b_k = __bynkDecimalParseWire(entryK);
-  if (__b_k.tag === "None") {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "decimal string", actual: "invalid decimal" });
-  }
-  const __k = __b_k.value;
-  if (out.has(__k as { readonly coefficient: bigint; readonly scale: number })) {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "a distinct map key", actual: "a duplicate" });
-  }
-  if (typeof entryV !== "number") {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}][1]`, expected: "number", actual: typeof entryV });
-  }
-  if (!globalThis.Number.isSafeInteger(entryV)) {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}][1]`, expected: "safe integer", actual: String(entryV) });
-  }
-  const __v = entryV;
-  out.set(__k as { readonly coefficient: bigint; readonly scale: number }, __v as number);
+    const entry = json[i];
+    if (!globalThis.Array.isArray(entry) || entry.length !== 2) {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "[key, value] entry", actual: typeof entry });
+    }
+    const entryK = entry[0];
+    const entryV = entry[1];
+    if (typeof entryK !== "string") {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "decimal string", actual: typeof entryK });
+    }
+    const __b_k = __bynkDecimalParseWire(entryK);
+    if (__b_k.tag === "None") {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "decimal string", actual: "invalid decimal" });
+    }
+    const __k = __b_k.value;
+    if (out.has(__k as { readonly coefficient: bigint; readonly scale: number })) {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "a distinct map key", actual: "a duplicate" });
+    }
+    if (typeof entryV !== "number") {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}][1]`, expected: "number", actual: typeof entryV });
+    }
+    if (!globalThis.Number.isSafeInteger(entryV)) {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}][1]`, expected: "safe integer", actual: String(entryV) });
+    }
+    const __v = entryV;
+    out.set(__k as { readonly coefficient: bigint; readonly scale: number }, __v as number);
   }
   return Ok(out);
 }

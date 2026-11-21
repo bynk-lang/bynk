@@ -256,13 +256,13 @@ export function __deserialise_Retry(json: __JsonValue, path: string = "$"): Resu
     case "Never":
       return Ok({ tag: "Never" } as Retry);
     case "Times": {
-  if (typeof obj["n"] !== "number") {
-    return Err({ kind: "StructuralMismatch", path: `${path}.n`, expected: "number", actual: typeof obj["n"] });
-  }
-  if (!globalThis.Number.isSafeInteger(obj["n"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.n`, expected: "safe integer", actual: String(obj["n"]) });
-  }
-  const __n = obj["n"];
+      if (typeof obj["n"] !== "number") {
+        return Err({ kind: "StructuralMismatch", path: `${path}.n`, expected: "number", actual: typeof obj["n"] });
+      }
+      if (!globalThis.Number.isSafeInteger(obj["n"])) {
+        return Err({ kind: "StructuralMismatch", path: `${path}.n`, expected: "safe integer", actual: String(obj["n"]) });
+      }
+      const __n = obj["n"];
       return Ok({ tag: "Times", n: __n } as Retry);
     }
     default:
@@ -310,15 +310,15 @@ export function __deserialise_List_Int(json: __JsonValue, path: string = "$"): R
   }
   const out: number[] = [];
   for (let i = 0; i < json.length; i++) {
-  const item = json[i];
-  if (typeof item !== "number") {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "number", actual: typeof item });
-  }
-  if (!globalThis.Number.isSafeInteger(item)) {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "safe integer", actual: String(item) });
-  }
-  const __el = item;
-  out.push(__el as number);
+    const item = json[i];
+    if (typeof item !== "number") {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "number", actual: typeof item });
+    }
+    if (!globalThis.Number.isSafeInteger(item)) {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "safe integer", actual: String(item) });
+    }
+    const __el = item;
+    out.push(__el as number);
   }
   return Ok(out);
 }
@@ -462,12 +462,12 @@ export function __deserialise_List_String(json: __JsonValue, path: string = "$")
   }
   const out: string[] = [];
   for (let i = 0; i < json.length; i++) {
-  const item = json[i];
-  if (typeof item !== "string") {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "string", actual: typeof item });
-  }
-  const __el = item;
-  out.push(__el as string);
+    const item = json[i];
+    if (typeof item !== "string") {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "string", actual: typeof item });
+    }
+    const __el = item;
+    out.push(__el as string);
   }
   return Ok(out);
 }
@@ -486,24 +486,24 @@ export function __deserialise_Map_String_String(json: __JsonValue, path: string 
   }
   const out = new globalThis.Map<string, string>();
   for (let i = 0; i < json.length; i++) {
-  const entry = json[i];
-  if (!globalThis.Array.isArray(entry) || entry.length !== 2) {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "[key, value] entry", actual: typeof entry });
-  }
-  const entryK = entry[0];
-  const entryV = entry[1];
-  if (typeof entryK !== "string") {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "string", actual: typeof entryK });
-  }
-  const __k = entryK;
-  if (out.has(__k as string)) {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "a distinct map key", actual: "a duplicate" });
-  }
-  if (typeof entryV !== "string") {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}][1]`, expected: "string", actual: typeof entryV });
-  }
-  const __v = entryV;
-  out.set(__k as string, __v as string);
+    const entry = json[i];
+    if (!globalThis.Array.isArray(entry) || entry.length !== 2) {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "[key, value] entry", actual: typeof entry });
+    }
+    const entryK = entry[0];
+    const entryV = entry[1];
+    if (typeof entryK !== "string") {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "string", actual: typeof entryK });
+    }
+    const __k = entryK;
+    if (out.has(__k as string)) {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "a distinct map key", actual: "a duplicate" });
+    }
+    if (typeof entryV !== "string") {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}][1]`, expected: "string", actual: typeof entryV });
+    }
+    const __v = entryV;
+    out.set(__k as string, __v as string);
   }
   return Ok(out);
 }
@@ -518,18 +518,18 @@ export function __deserialise_Set_Int(json: __JsonValue, path: string = "$"): Re
   }
   const out = new globalThis.Set<number>();
   for (let i = 0; i < json.length; i++) {
-  const item = json[i];
-  if (typeof item !== "number") {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "number", actual: typeof item });
-  }
-  if (!globalThis.Number.isSafeInteger(item)) {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "safe integer", actual: String(item) });
-  }
-  const __el = item;
-  if (out.has(__el as number)) {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "a distinct set element", actual: "a duplicate" });
-  }
-  out.add(__el as number);
+    const item = json[i];
+    if (typeof item !== "number") {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "number", actual: typeof item });
+    }
+    if (!globalThis.Number.isSafeInteger(item)) {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "safe integer", actual: String(item) });
+    }
+    const __el = item;
+    if (out.has(__el as number)) {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "a distinct set element", actual: "a duplicate" });
+    }
+    out.add(__el as number);
   }
   return Ok(out);
 }

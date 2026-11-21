@@ -61,6 +61,11 @@ pub fn expr_contains_await(expr: &TsExpr) -> bool {
             test,
             consequent,
             alternate,
+        }
+        | TsExpr::MultilineConditional {
+            test,
+            consequent,
+            alternate,
         } => {
             expr_contains_await(test)
                 || expr_contains_await(consequent)

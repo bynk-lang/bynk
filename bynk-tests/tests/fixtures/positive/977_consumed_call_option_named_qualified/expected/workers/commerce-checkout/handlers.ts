@@ -28,18 +28,18 @@ export function __deserialise_Result_Receipt_Int(json: __JsonValue, path: string
   }
   const obj = json as { [k: string]: __JsonValue };
   if (obj["kind"] === "Ok") {
-  const __r_v = __deserialise_Receipt(obj["value"], `${path}.value`);
-  if (__r_v.tag === "Err") return __r_v;
-  const __v = __r_v.value;
+    const __r_v = __deserialise_Receipt(obj["value"], `${path}.value`);
+    if (__r_v.tag === "Err") return __r_v;
+    const __v = __r_v.value;
     return Ok(Ok(__v) as Result<Receipt, number>);
   } else if (obj["kind"] === "Err") {
-  if (typeof obj["error"] !== "number") {
-    return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "number", actual: typeof obj["error"] });
-  }
-  if (!globalThis.Number.isSafeInteger(obj["error"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "safe integer", actual: String(obj["error"]) });
-  }
-  const __e = obj["error"];
+    if (typeof obj["error"] !== "number") {
+      return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "number", actual: typeof obj["error"] });
+    }
+    if (!globalThis.Number.isSafeInteger(obj["error"])) {
+      return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "safe integer", actual: String(obj["error"]) });
+    }
+    const __e = obj["error"];
     return Ok(Err(__e) as Result<Receipt, number>);
   }
   return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });

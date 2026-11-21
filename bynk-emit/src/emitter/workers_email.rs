@@ -12,7 +12,7 @@
 //! ceiling.
 
 use bynk_syntax::ast::ServiceProtocol;
-use bynk_ts::{TsExpr, TsParam, TsStmt, TsType};
+use bynk_ts::{TsArrowBody, TsBindingName, TsExpr, TsLit, TsParam, TsStmt, TsType};
 
 use bynk_check::symbols::UnitTable;
 use bynk_ts::TsObjectEntry;
@@ -68,19 +68,55 @@ pub(super) fn emit_email_handler(
     params.extend(exec_params.iter().cloned());
     // The routes are built inside a thunk, so composing the surface is guarded
     // with everything else: nothing escapes `email()` as a throw.
-    let args: Vec<String> = compose_args.iter().map(bynk_ts::print_expr).collect();
-    let mut text = format!(
-        "    await __handleEmail(message, () => {{\n      const surface = compose({});\n      return [\n",
-        args.join(", ")
-    );
-    for r in routes {
+    let ident = |n: &str| TsExpr::Ident(n.to_string());
+    let route = |r: &EmailRoute| {
         let method = crate::emitter::queue_handler_method_name(&r.service, 0);
-        text.push_str(&format!(
-            "        {{ address: {:?}, handle: (mail, sender) => surface.{method}(mail, sender) }},\n",
-            r.address
-        ));
-    }
-    text.push_str("      ];\n    });\n");
+        let handle = TsExpr::Arrow {
+            params: vec![TsParam::new("mail", None), TsParam::new("sender", None)],
+            is_async: false,
+            generics: Vec::new(),
+            return_type: None,
+            body: Box::new(TsArrowBody::Expr(Box::new(TsExpr::Call {
+                callee: Box::new(TsExpr::Member {
+                    object: Box::new(ident("surface")),
+                    property: method,
+                }),
+                args: vec![ident("mail"), ident("sender")],
+            }))),
+        };
+        TsExpr::object(vec![
+            (
+                "address".to_string(),
+                TsExpr::Lit(TsLit::Str(r.address.clone())),
+            ),
+            ("handle".to_string(), handle),
+        ])
+    };
+    let thunk = TsExpr::Arrow {
+        params: Vec::new(),
+        is_async: false,
+        generics: Vec::new(),
+        return_type: None,
+        body: Box::new(TsArrowBody::Multiline(vec![
+            TsStmt::const_stmt(
+                TsBindingName::Ident("surface".to_string()),
+                None,
+                TsExpr::Call {
+                    callee: Box::new(ident("compose")),
+                    args: compose_args.to_vec(),
+                },
+                None,
+            ),
+            TsStmt::return_stmt(
+                Some(TsExpr::multiline_array(routes.iter().map(route).collect())),
+                None,
+            ),
+        ])),
+    };
+    let handled = TsExpr::Await(Box::new(TsExpr::Call {
+        callee: Box::new(ident("__handleEmail")),
+        args: vec![ident("message"), thunk],
+    }));
     TsObjectEntry::Method {
         name: "email".to_string(),
         is_async: true,
@@ -92,7 +128,7 @@ pub(super) fn emit_email_handler(
         )),
         doc: None,
         inline: false,
-        body: vec![TsStmt::raw(text, None)],
+        body: vec![TsStmt::expr_stmt(handled, None)],
         span: None,
     }
 }

@@ -113,16 +113,16 @@ export function __deserialise_Result_String_String(json: __JsonValue, path: stri
   }
   const obj = json as { [k: string]: __JsonValue };
   if (obj["kind"] === "Ok") {
-  if (typeof obj["value"] !== "string") {
-    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "string", actual: typeof obj["value"] });
-  }
-  const __v = obj["value"];
+    if (typeof obj["value"] !== "string") {
+      return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "string", actual: typeof obj["value"] });
+    }
+    const __v = obj["value"];
     return Ok(Ok(__v) as Result<string, string>);
   } else if (obj["kind"] === "Err") {
-  if (typeof obj["error"] !== "string") {
-    return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "string", actual: typeof obj["error"] });
-  }
-  const __e = obj["error"];
+    if (typeof obj["error"] !== "string") {
+      return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "string", actual: typeof obj["error"] });
+    }
+    const __e = obj["error"];
     return Ok(Err(__e) as Result<string, string>);
   }
   return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });

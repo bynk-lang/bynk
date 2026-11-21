@@ -208,11 +208,11 @@ class __Stub_Clock {
         }
         const out: Pair[] = [];
         for (let i = 0; i < json.length; i++) {
-        const item = json[i];
-        const __r_el = __deserialise_Pair(item, `${path}[${i}]`);
-        if (__r_el.tag === "Err") return __r_el;
-        const __el = __r_el.value;
-        out.push(__el as Pair);
+          const item = json[i];
+          const __r_el = __deserialise_Pair(item, `${path}[${i}]`);
+          if (__r_el.tag === "Err") return __r_el;
+          const __el = __r_el.value;
+          out.push(__el as Pair);
         }
         return Ok(out);
       }
@@ -269,15 +269,15 @@ class __Stub_Clock {
             }
             const obj = json as { [k: string]: __JsonValue };
             if (obj["kind"] === "Ok") {
-            const __r_v = __deserialise_Pair(obj["value"], `${path}.value`);
-            if (__r_v.tag === "Err") return __r_v;
-            const __v = __r_v.value;
+              const __r_v = __deserialise_Pair(obj["value"], `${path}.value`);
+              if (__r_v.tag === "Err") return __r_v;
+              const __v = __r_v.value;
               return Ok(Ok(__v) as Result<Pair, string>);
             } else if (obj["kind"] === "Err") {
-            if (typeof obj["error"] !== "string") {
-              return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "string", actual: typeof obj["error"] });
-            }
-            const __e = obj["error"];
+              if (typeof obj["error"] !== "string") {
+                return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "string", actual: typeof obj["error"] });
+              }
+              const __e = obj["error"];
               return Ok(Err(__e) as Result<Pair, string>);
             }
             return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
@@ -323,11 +323,11 @@ class __Stub_Clock {
         }
         const out: Pair[] = [];
         for (let i = 0; i < json.length; i++) {
-        const item = json[i];
-        const __r_el = __deserialise_Pair(item, `${path}[${i}]`);
-        if (__r_el.tag === "Err") return __r_el;
-        const __el = __r_el.value;
-        out.push(__el as Pair);
+          const item = json[i];
+          const __r_el = __deserialise_Pair(item, `${path}[${i}]`);
+          if (__r_el.tag === "Err") return __r_el;
+          const __el = __r_el.value;
+          out.push(__el as Pair);
         }
         return Ok(out);
       }
@@ -384,15 +384,15 @@ class __Stub_Clock {
             }
             const obj = json as { [k: string]: __JsonValue };
             if (obj["kind"] === "Ok") {
-            const __r_v = __deserialise_Pair(obj["value"], `${path}.value`);
-            if (__r_v.tag === "Err") return __r_v;
-            const __v = __r_v.value;
+              const __r_v = __deserialise_Pair(obj["value"], `${path}.value`);
+              if (__r_v.tag === "Err") return __r_v;
+              const __v = __r_v.value;
               return Ok(Ok(__v) as Result<Pair, string>);
             } else if (obj["kind"] === "Err") {
-            if (typeof obj["error"] !== "string") {
-              return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "string", actual: typeof obj["error"] });
-            }
-            const __e = obj["error"];
+              if (typeof obj["error"] !== "string") {
+                return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "string", actual: typeof obj["error"] });
+              }
+              const __e = obj["error"];
               return Ok(Err(__e) as Result<Pair, string>);
             }
             return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
@@ -438,11 +438,11 @@ class __Stub_Clock {
         }
         const out: Pair[] = [];
         for (let i = 0; i < json.length; i++) {
-        const item = json[i];
-        const __r_el = __deserialise_Pair(item, `${path}[${i}]`);
-        if (__r_el.tag === "Err") return __r_el;
-        const __el = __r_el.value;
-        out.push(__el as Pair);
+          const item = json[i];
+          const __r_el = __deserialise_Pair(item, `${path}[${i}]`);
+          if (__r_el.tag === "Err") return __r_el;
+          const __el = __r_el.value;
+          out.push(__el as Pair);
         }
         return Ok(out);
       }
@@ -499,15 +499,15 @@ class __Stub_Clock {
             }
             const obj = json as { [k: string]: __JsonValue };
             if (obj["kind"] === "Ok") {
-            const __r_v = __deserialise_Pair(obj["value"], `${path}.value`);
-            if (__r_v.tag === "Err") return __r_v;
-            const __v = __r_v.value;
+              const __r_v = __deserialise_Pair(obj["value"], `${path}.value`);
+              if (__r_v.tag === "Err") return __r_v;
+              const __v = __r_v.value;
               return Ok(Ok(__v) as Result<Pair, string>);
             } else if (obj["kind"] === "Err") {
-            if (typeof obj["error"] !== "string") {
-              return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "string", actual: typeof obj["error"] });
-            }
-            const __e = obj["error"];
+              if (typeof obj["error"] !== "string") {
+                return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "string", actual: typeof obj["error"] });
+              }
+              const __e = obj["error"];
               return Ok(Err(__e) as Result<Pair, string>);
             }
             return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
@@ -553,11 +553,11 @@ class __Stub_Clock {
         }
         const out: Pair[] = [];
         for (let i = 0; i < json.length; i++) {
-        const item = json[i];
-        const __r_el = __deserialise_Pair(item, `${path}[${i}]`);
-        if (__r_el.tag === "Err") return __r_el;
-        const __el = __r_el.value;
-        out.push(__el as Pair);
+          const item = json[i];
+          const __r_el = __deserialise_Pair(item, `${path}[${i}]`);
+          if (__r_el.tag === "Err") return __r_el;
+          const __el = __r_el.value;
+          out.push(__el as Pair);
         }
         return Ok(out);
       }
@@ -614,15 +614,15 @@ class __Stub_Clock {
             }
             const obj = json as { [k: string]: __JsonValue };
             if (obj["kind"] === "Ok") {
-            const __r_v = __deserialise_Pair(obj["value"], `${path}.value`);
-            if (__r_v.tag === "Err") return __r_v;
-            const __v = __r_v.value;
+              const __r_v = __deserialise_Pair(obj["value"], `${path}.value`);
+              if (__r_v.tag === "Err") return __r_v;
+              const __v = __r_v.value;
               return Ok(Ok(__v) as Result<Pair, string>);
             } else if (obj["kind"] === "Err") {
-            if (typeof obj["error"] !== "string") {
-              return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "string", actual: typeof obj["error"] });
-            }
-            const __e = obj["error"];
+              if (typeof obj["error"] !== "string") {
+                return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "string", actual: typeof obj["error"] });
+              }
+              const __e = obj["error"];
               return Ok(Err(__e) as Result<Pair, string>);
             }
             return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
@@ -668,11 +668,11 @@ class __Stub_Clock {
         }
         const out: Pair[] = [];
         for (let i = 0; i < json.length; i++) {
-        const item = json[i];
-        const __r_el = __deserialise_Pair(item, `${path}[${i}]`);
-        if (__r_el.tag === "Err") return __r_el;
-        const __el = __r_el.value;
-        out.push(__el as Pair);
+          const item = json[i];
+          const __r_el = __deserialise_Pair(item, `${path}[${i}]`);
+          if (__r_el.tag === "Err") return __r_el;
+          const __el = __r_el.value;
+          out.push(__el as Pair);
         }
         return Ok(out);
       }
@@ -729,15 +729,15 @@ class __Stub_Clock {
             }
             const obj = json as { [k: string]: __JsonValue };
             if (obj["kind"] === "Ok") {
-            const __r_v = __deserialise_Pair(obj["value"], `${path}.value`);
-            if (__r_v.tag === "Err") return __r_v;
-            const __v = __r_v.value;
+              const __r_v = __deserialise_Pair(obj["value"], `${path}.value`);
+              if (__r_v.tag === "Err") return __r_v;
+              const __v = __r_v.value;
               return Ok(Ok(__v) as Result<Pair, string>);
             } else if (obj["kind"] === "Err") {
-            if (typeof obj["error"] !== "string") {
-              return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "string", actual: typeof obj["error"] });
-            }
-            const __e = obj["error"];
+              if (typeof obj["error"] !== "string") {
+                return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "string", actual: typeof obj["error"] });
+              }
+              const __e = obj["error"];
               return Ok(Err(__e) as Result<Pair, string>);
             }
             return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
@@ -783,11 +783,11 @@ class __Stub_Clock {
         }
         const out: Pair[] = [];
         for (let i = 0; i < json.length; i++) {
-        const item = json[i];
-        const __r_el = __deserialise_Pair(item, `${path}[${i}]`);
-        if (__r_el.tag === "Err") return __r_el;
-        const __el = __r_el.value;
-        out.push(__el as Pair);
+          const item = json[i];
+          const __r_el = __deserialise_Pair(item, `${path}[${i}]`);
+          if (__r_el.tag === "Err") return __r_el;
+          const __el = __r_el.value;
+          out.push(__el as Pair);
         }
         return Ok(out);
       }
@@ -844,15 +844,15 @@ class __Stub_Clock {
             }
             const obj = json as { [k: string]: __JsonValue };
             if (obj["kind"] === "Ok") {
-            const __r_v = __deserialise_Pair(obj["value"], `${path}.value`);
-            if (__r_v.tag === "Err") return __r_v;
-            const __v = __r_v.value;
+              const __r_v = __deserialise_Pair(obj["value"], `${path}.value`);
+              if (__r_v.tag === "Err") return __r_v;
+              const __v = __r_v.value;
               return Ok(Ok(__v) as Result<Pair, string>);
             } else if (obj["kind"] === "Err") {
-            if (typeof obj["error"] !== "string") {
-              return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "string", actual: typeof obj["error"] });
-            }
-            const __e = obj["error"];
+              if (typeof obj["error"] !== "string") {
+                return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "string", actual: typeof obj["error"] });
+              }
+              const __e = obj["error"];
               return Ok(Err(__e) as Result<Pair, string>);
             }
             return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
@@ -921,11 +921,11 @@ class __Stub_Clock {
         }
         const out: Pair[] = [];
         for (let i = 0; i < json.length; i++) {
-        const item = json[i];
-        const __r_el = __deserialise_Pair(item, `${path}[${i}]`);
-        if (__r_el.tag === "Err") return __r_el;
-        const __el = __r_el.value;
-        out.push(__el as Pair);
+          const item = json[i];
+          const __r_el = __deserialise_Pair(item, `${path}[${i}]`);
+          if (__r_el.tag === "Err") return __r_el;
+          const __el = __r_el.value;
+          out.push(__el as Pair);
         }
         return Ok(out);
       }
@@ -982,15 +982,15 @@ class __Stub_Clock {
             }
             const obj = json as { [k: string]: __JsonValue };
             if (obj["kind"] === "Ok") {
-            const __r_v = __deserialise_Pair(obj["value"], `${path}.value`);
-            if (__r_v.tag === "Err") return __r_v;
-            const __v = __r_v.value;
+              const __r_v = __deserialise_Pair(obj["value"], `${path}.value`);
+              if (__r_v.tag === "Err") return __r_v;
+              const __v = __r_v.value;
               return Ok(Ok(__v) as Result<Pair, string>);
             } else if (obj["kind"] === "Err") {
-            if (typeof obj["error"] !== "string") {
-              return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "string", actual: typeof obj["error"] });
-            }
-            const __e = obj["error"];
+              if (typeof obj["error"] !== "string") {
+                return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "string", actual: typeof obj["error"] });
+              }
+              const __e = obj["error"];
               return Ok(Err(__e) as Result<Pair, string>);
             }
             return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
@@ -1068,11 +1068,11 @@ async function test_a_stub_value_names_a_suite_type_and_constant() {
       }
       const out: Pair[] = [];
       for (let i = 0; i < json.length; i++) {
-      const item = json[i];
-      const __r_el = __deserialise_Pair(item, `${path}[${i}]`);
-      if (__r_el.tag === "Err") return __r_el;
-      const __el = __r_el.value;
-      out.push(__el as Pair);
+        const item = json[i];
+        const __r_el = __deserialise_Pair(item, `${path}[${i}]`);
+        if (__r_el.tag === "Err") return __r_el;
+        const __el = __r_el.value;
+        out.push(__el as Pair);
       }
       return Ok(out);
     }
@@ -1133,15 +1133,15 @@ async function test_a_stub_value_names_a_suite_type_and_constant() {
       }
       const obj = json as { [k: string]: __JsonValue };
       if (obj["kind"] === "Ok") {
-      const __r_v = __deserialise_Pair(obj["value"], `${path}.value`);
-      if (__r_v.tag === "Err") return __r_v;
-      const __v = __r_v.value;
+        const __r_v = __deserialise_Pair(obj["value"], `${path}.value`);
+        if (__r_v.tag === "Err") return __r_v;
+        const __v = __r_v.value;
         return Ok(Ok(__v) as Result<Pair, string>);
       } else if (obj["kind"] === "Err") {
-      if (typeof obj["error"] !== "string") {
-        return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "string", actual: typeof obj["error"] });
-      }
-      const __e = obj["error"];
+        if (typeof obj["error"] !== "string") {
+          return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "string", actual: typeof obj["error"] });
+        }
+        const __e = obj["error"];
         return Ok(Err(__e) as Result<Pair, string>);
       }
       return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
@@ -1196,11 +1196,11 @@ async function test_a_stub_argument_pattern_and_value_name_suite_constants() {
       }
       const out: Pair[] = [];
       for (let i = 0; i < json.length; i++) {
-      const item = json[i];
-      const __r_el = __deserialise_Pair(item, `${path}[${i}]`);
-      if (__r_el.tag === "Err") return __r_el;
-      const __el = __r_el.value;
-      out.push(__el as Pair);
+        const item = json[i];
+        const __r_el = __deserialise_Pair(item, `${path}[${i}]`);
+        if (__r_el.tag === "Err") return __r_el;
+        const __el = __r_el.value;
+        out.push(__el as Pair);
       }
       return Ok(out);
     }
@@ -1261,15 +1261,15 @@ async function test_a_stub_argument_pattern_and_value_name_suite_constants() {
       }
       const obj = json as { [k: string]: __JsonValue };
       if (obj["kind"] === "Ok") {
-      const __r_v = __deserialise_Pair(obj["value"], `${path}.value`);
-      if (__r_v.tag === "Err") return __r_v;
-      const __v = __r_v.value;
+        const __r_v = __deserialise_Pair(obj["value"], `${path}.value`);
+        if (__r_v.tag === "Err") return __r_v;
+        const __v = __r_v.value;
         return Ok(Ok(__v) as Result<Pair, string>);
       } else if (obj["kind"] === "Err") {
-      if (typeof obj["error"] !== "string") {
-        return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "string", actual: typeof obj["error"] });
-      }
-      const __e = obj["error"];
+        if (typeof obj["error"] !== "string") {
+          return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "string", actual: typeof obj["error"] });
+        }
+        const __e = obj["error"];
         return Ok(Err(__e) as Result<Pair, string>);
       }
       return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
@@ -1324,11 +1324,11 @@ async function test_a_suite_type_round_trips_through_Result() {
       }
       const out: Pair[] = [];
       for (let i = 0; i < json.length; i++) {
-      const item = json[i];
-      const __r_el = __deserialise_Pair(item, `${path}[${i}]`);
-      if (__r_el.tag === "Err") return __r_el;
-      const __el = __r_el.value;
-      out.push(__el as Pair);
+        const item = json[i];
+        const __r_el = __deserialise_Pair(item, `${path}[${i}]`);
+        if (__r_el.tag === "Err") return __r_el;
+        const __el = __r_el.value;
+        out.push(__el as Pair);
       }
       return Ok(out);
     }
@@ -1389,15 +1389,15 @@ async function test_a_suite_type_round_trips_through_Result() {
       }
       const obj = json as { [k: string]: __JsonValue };
       if (obj["kind"] === "Ok") {
-      const __r_v = __deserialise_Pair(obj["value"], `${path}.value`);
-      if (__r_v.tag === "Err") return __r_v;
-      const __v = __r_v.value;
+        const __r_v = __deserialise_Pair(obj["value"], `${path}.value`);
+        if (__r_v.tag === "Err") return __r_v;
+        const __v = __r_v.value;
         return Ok(Ok(__v) as Result<Pair, string>);
       } else if (obj["kind"] === "Err") {
-      if (typeof obj["error"] !== "string") {
-        return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "string", actual: typeof obj["error"] });
-      }
-      const __e = obj["error"];
+        if (typeof obj["error"] !== "string") {
+          return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "string", actual: typeof obj["error"] });
+        }
+        const __e = obj["error"];
         return Ok(Err(__e) as Result<Pair, string>);
       }
       return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
@@ -1476,11 +1476,11 @@ async function test_a_suite_type_round_trips_through_a_nested_generic() {
       }
       const out: Pair[] = [];
       for (let i = 0; i < json.length; i++) {
-      const item = json[i];
-      const __r_el = __deserialise_Pair(item, `${path}[${i}]`);
-      if (__r_el.tag === "Err") return __r_el;
-      const __el = __r_el.value;
-      out.push(__el as Pair);
+        const item = json[i];
+        const __r_el = __deserialise_Pair(item, `${path}[${i}]`);
+        if (__r_el.tag === "Err") return __r_el;
+        const __el = __r_el.value;
+        out.push(__el as Pair);
       }
       return Ok(out);
     }
@@ -1541,15 +1541,15 @@ async function test_a_suite_type_round_trips_through_a_nested_generic() {
       }
       const obj = json as { [k: string]: __JsonValue };
       if (obj["kind"] === "Ok") {
-      const __r_v = __deserialise_Pair(obj["value"], `${path}.value`);
-      if (__r_v.tag === "Err") return __r_v;
-      const __v = __r_v.value;
+        const __r_v = __deserialise_Pair(obj["value"], `${path}.value`);
+        if (__r_v.tag === "Err") return __r_v;
+        const __v = __r_v.value;
         return Ok(Ok(__v) as Result<Pair, string>);
       } else if (obj["kind"] === "Err") {
-      if (typeof obj["error"] !== "string") {
-        return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "string", actual: typeof obj["error"] });
-      }
-      const __e = obj["error"];
+        if (typeof obj["error"] !== "string") {
+          return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "string", actual: typeof obj["error"] });
+        }
+        const __e = obj["error"];
         return Ok(Err(__e) as Result<Pair, string>);
       }
       return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
@@ -1563,11 +1563,11 @@ async function test_a_suite_type_round_trips_through_a_nested_generic() {
       }
       const out: Result<Pair, string>[] = [];
       for (let i = 0; i < json.length; i++) {
-      const item = json[i];
-      const __r_el = __deserialise_Result_Pair_String(item, `${path}[${i}]`);
-      if (__r_el.tag === "Err") return __r_el;
-      const __el = __r_el.value;
-      out.push(__el as Result<Pair, string>);
+        const item = json[i];
+        const __r_el = __deserialise_Result_Pair_String(item, `${path}[${i}]`);
+        if (__r_el.tag === "Err") return __r_el;
+        const __el = __r_el.value;
+        out.push(__el as Result<Pair, string>);
       }
       return Ok(out);
     }
@@ -1645,11 +1645,11 @@ async function test_a_suite_type_round_trips_through_Result_at_the_integration_t
       }
       const out: Pair[] = [];
       for (let i = 0; i < json.length; i++) {
-      const item = json[i];
-      const __r_el = __deserialise_Pair(item, `${path}[${i}]`);
-      if (__r_el.tag === "Err") return __r_el;
-      const __el = __r_el.value;
-      out.push(__el as Pair);
+        const item = json[i];
+        const __r_el = __deserialise_Pair(item, `${path}[${i}]`);
+        if (__r_el.tag === "Err") return __r_el;
+        const __el = __r_el.value;
+        out.push(__el as Pair);
       }
       return Ok(out);
     }
@@ -1710,15 +1710,15 @@ async function test_a_suite_type_round_trips_through_Result_at_the_integration_t
       }
       const obj = json as { [k: string]: __JsonValue };
       if (obj["kind"] === "Ok") {
-      const __r_v = __deserialise_Pair(obj["value"], `${path}.value`);
-      if (__r_v.tag === "Err") return __r_v;
-      const __v = __r_v.value;
+        const __r_v = __deserialise_Pair(obj["value"], `${path}.value`);
+        if (__r_v.tag === "Err") return __r_v;
+        const __v = __r_v.value;
         return Ok(Ok(__v) as Result<Pair, string>);
       } else if (obj["kind"] === "Err") {
-      if (typeof obj["error"] !== "string") {
-        return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "string", actual: typeof obj["error"] });
-      }
-      const __e = obj["error"];
+        if (typeof obj["error"] !== "string") {
+          return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "string", actual: typeof obj["error"] });
+        }
+        const __e = obj["error"];
         return Ok(Err(__e) as Result<Pair, string>);
       }
       return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
@@ -1799,11 +1799,11 @@ async function test_a_stub_value_reaches_a_suite_type_under_Result_through_a_hel
       }
       const out: Pair[] = [];
       for (let i = 0; i < json.length; i++) {
-      const item = json[i];
-      const __r_el = __deserialise_Pair(item, `${path}[${i}]`);
-      if (__r_el.tag === "Err") return __r_el;
-      const __el = __r_el.value;
-      out.push(__el as Pair);
+        const item = json[i];
+        const __r_el = __deserialise_Pair(item, `${path}[${i}]`);
+        if (__r_el.tag === "Err") return __r_el;
+        const __el = __r_el.value;
+        out.push(__el as Pair);
       }
       return Ok(out);
     }
@@ -1864,15 +1864,15 @@ async function test_a_stub_value_reaches_a_suite_type_under_Result_through_a_hel
       }
       const obj = json as { [k: string]: __JsonValue };
       if (obj["kind"] === "Ok") {
-      const __r_v = __deserialise_Pair(obj["value"], `${path}.value`);
-      if (__r_v.tag === "Err") return __r_v;
-      const __v = __r_v.value;
+        const __r_v = __deserialise_Pair(obj["value"], `${path}.value`);
+        if (__r_v.tag === "Err") return __r_v;
+        const __v = __r_v.value;
         return Ok(Ok(__v) as Result<Pair, string>);
       } else if (obj["kind"] === "Err") {
-      if (typeof obj["error"] !== "string") {
-        return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "string", actual: typeof obj["error"] });
-      }
-      const __e = obj["error"];
+        if (typeof obj["error"] !== "string") {
+          return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "string", actual: typeof obj["error"] });
+        }
+        const __e = obj["error"];
         return Ok(Err(__e) as Result<Pair, string>);
       }
       return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
@@ -1930,11 +1930,11 @@ async function __prop_test_a_suite_type_round_trips_through_Result_in_a_property
       }
       const out: Pair[] = [];
       for (let i = 0; i < json.length; i++) {
-      const item = json[i];
-      const __r_el = __deserialise_Pair(item, `${path}[${i}]`);
-      if (__r_el.tag === "Err") return __r_el;
-      const __el = __r_el.value;
-      out.push(__el as Pair);
+        const item = json[i];
+        const __r_el = __deserialise_Pair(item, `${path}[${i}]`);
+        if (__r_el.tag === "Err") return __r_el;
+        const __el = __r_el.value;
+        out.push(__el as Pair);
       }
       return Ok(out);
     }
@@ -1996,15 +1996,15 @@ async function __prop_test_a_suite_type_round_trips_through_Result_in_a_property
       }
       const obj = json as { [k: string]: __JsonValue };
       if (obj["kind"] === "Ok") {
-      const __r_v = __deserialise_Pair(obj["value"], `${path}.value`);
-      if (__r_v.tag === "Err") return __r_v;
-      const __v = __r_v.value;
+        const __r_v = __deserialise_Pair(obj["value"], `${path}.value`);
+        if (__r_v.tag === "Err") return __r_v;
+        const __v = __r_v.value;
         return Ok(Ok(__v) as Result<Pair, string>);
       } else if (obj["kind"] === "Err") {
-      if (typeof obj["error"] !== "string") {
-        return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "string", actual: typeof obj["error"] });
-      }
-      const __e = obj["error"];
+        if (typeof obj["error"] !== "string") {
+          return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "string", actual: typeof obj["error"] });
+        }
+        const __e = obj["error"];
         return Ok(Err(__e) as Result<Pair, string>);
       }
       return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
@@ -2019,18 +2019,18 @@ async function __prop_test_a_suite_type_round_trips_through_Result_in_a_property
       }
       const obj = json as { [k: string]: __JsonValue };
       if (obj["kind"] === "Ok") {
-      const __r_v = __deserialise_Pair(obj["value"], `${path}.value`);
-      if (__r_v.tag === "Err") return __r_v;
-      const __v = __r_v.value;
+        const __r_v = __deserialise_Pair(obj["value"], `${path}.value`);
+        if (__r_v.tag === "Err") return __r_v;
+        const __v = __r_v.value;
         return Ok(Ok(__v) as Result<Pair, number>);
       } else if (obj["kind"] === "Err") {
-      if (typeof obj["error"] !== "number") {
-        return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "number", actual: typeof obj["error"] });
-      }
-      if (!globalThis.Number.isSafeInteger(obj["error"])) {
-        return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "safe integer", actual: String(obj["error"]) });
-      }
-      const __e = obj["error"];
+        if (typeof obj["error"] !== "number") {
+          return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "number", actual: typeof obj["error"] });
+        }
+        if (!globalThis.Number.isSafeInteger(obj["error"])) {
+          return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "safe integer", actual: String(obj["error"]) });
+        }
+        const __e = obj["error"];
         return Ok(Err(__e) as Result<Pair, number>);
       }
       return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });

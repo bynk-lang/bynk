@@ -208,11 +208,11 @@ export function __deserialise_List_Payload(json: __JsonValue, path: string = "$"
   }
   const out: __ns_demo_types.Payload[] = [];
   for (let i = 0; i < json.length; i++) {
-  const item = json[i];
-  const __r_el = __deserialise_Payload(item, `${path}[${i}]`);
-  if (__r_el.tag === "Err") return __r_el;
-  const __el = __r_el.value;
-  out.push(__el as __ns_demo_types.Payload);
+    const item = json[i];
+    const __r_el = __deserialise_Payload(item, `${path}[${i}]`);
+    if (__r_el.tag === "Err") return __r_el;
+    const __el = __r_el.value;
+    out.push(__el as __ns_demo_types.Payload);
   }
   return Ok(out);
 }

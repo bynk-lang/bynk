@@ -170,12 +170,12 @@ export function __deserialise_List_String(json: __JsonValue, path: string = "$")
   }
   const out: string[] = [];
   for (let i = 0; i < json.length; i++) {
-  const item = json[i];
-  if (typeof item !== "string") {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "string", actual: typeof item });
-  }
-  const __el = item;
-  out.push(__el as string);
+    const item = json[i];
+    if (typeof item !== "string") {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "string", actual: typeof item });
+    }
+    const __el = item;
+    out.push(__el as string);
   }
   return Ok(out);
 }

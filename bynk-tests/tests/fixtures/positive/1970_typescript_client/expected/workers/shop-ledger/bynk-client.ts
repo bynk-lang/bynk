@@ -236,10 +236,10 @@ export function __deserialise_LedgerError(json: __JsonValue, path: string = "$")
     case "NotFound":
       return Ok({ tag: "NotFound" } as LedgerError);
     case "Rejected": {
-  if (typeof obj["reason"] !== "string") {
-    return Err({ kind: "StructuralMismatch", path: `${path}.reason`, expected: "string", actual: typeof obj["reason"] });
-  }
-  const __reason = obj["reason"];
+      if (typeof obj["reason"] !== "string") {
+        return Err({ kind: "StructuralMismatch", path: `${path}.reason`, expected: "string", actual: typeof obj["reason"] });
+      }
+      const __reason = obj["reason"];
       return Ok({ tag: "Rejected", reason: __reason } as LedgerError);
     }
     default:
@@ -286,14 +286,14 @@ export function __deserialise_Result_Entry_LedgerError(json: __JsonValue, path: 
   }
   const obj = json as { [k: string]: __JsonValue };
   if (obj["kind"] === "Ok") {
-  const __r_v = __deserialise_Entry(obj["value"], `${path}.value`);
-  if (__r_v.tag === "Err") return __r_v;
-  const __v = __r_v.value;
+    const __r_v = __deserialise_Entry(obj["value"], `${path}.value`);
+    if (__r_v.tag === "Err") return __r_v;
+    const __v = __r_v.value;
     return Ok(Ok(__v) as Result<Entry, LedgerError>);
   } else if (obj["kind"] === "Err") {
-  const __r_e = __deserialise_LedgerError(obj["error"], `${path}.error`);
-  if (__r_e.tag === "Err") return __r_e;
-  const __e = __r_e.value;
+    const __r_e = __deserialise_LedgerError(obj["error"], `${path}.error`);
+    if (__r_e.tag === "Err") return __r_e;
+    const __e = __r_e.value;
     return Ok(Err(__e) as Result<Entry, LedgerError>);
   }
   return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
@@ -351,14 +351,14 @@ export function __deserialise_Result_EntryId_LedgerError(json: __JsonValue, path
   }
   const obj = json as { [k: string]: __JsonValue };
   if (obj["kind"] === "Ok") {
-  const __r_v = __deserialise_EntryId(obj["value"], `${path}.value`);
-  if (__r_v.tag === "Err") return __r_v;
-  const __v = __r_v.value;
+    const __r_v = __deserialise_EntryId(obj["value"], `${path}.value`);
+    if (__r_v.tag === "Err") return __r_v;
+    const __v = __r_v.value;
     return Ok(Ok(__v) as Result<EntryId, LedgerError>);
   } else if (obj["kind"] === "Err") {
-  const __r_e = __deserialise_LedgerError(obj["error"], `${path}.error`);
-  if (__r_e.tag === "Err") return __r_e;
-  const __e = __r_e.value;
+    const __r_e = __deserialise_LedgerError(obj["error"], `${path}.error`);
+    if (__r_e.tag === "Err") return __r_e;
+    const __e = __r_e.value;
     return Ok(Err(__e) as Result<EntryId, LedgerError>);
   }
   return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
@@ -395,11 +395,11 @@ export function __deserialise_List_Entry(json: __JsonValue, path: string = "$"):
   }
   const out: Entry[] = [];
   for (let i = 0; i < json.length; i++) {
-  const item = json[i];
-  const __r_el = __deserialise_Entry(item, `${path}[${i}]`);
-  if (__r_el.tag === "Err") return __r_el;
-  const __el = __r_el.value;
-  out.push(__el as Entry);
+    const item = json[i];
+    const __r_el = __deserialise_Entry(item, `${path}[${i}]`);
+    if (__r_el.tag === "Err") return __r_el;
+    const __el = __r_el.value;
+    out.push(__el as Entry);
   }
   return Ok(out);
 }
@@ -458,12 +458,12 @@ export function __deserialise_List_String(json: __JsonValue, path: string = "$")
   }
   const out: string[] = [];
   for (let i = 0; i < json.length; i++) {
-  const item = json[i];
-  if (typeof item !== "string") {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "string", actual: typeof item });
-  }
-  const __el = item;
-  out.push(__el as string);
+    const item = json[i];
+    if (typeof item !== "string") {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "string", actual: typeof item });
+    }
+    const __el = item;
+    out.push(__el as string);
   }
   return Ok(out);
 }

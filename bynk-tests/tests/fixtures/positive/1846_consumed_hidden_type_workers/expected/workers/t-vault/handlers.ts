@@ -195,9 +195,9 @@ export function __deserialise_Choice_Code(json: __JsonValue, path: string = "$")
   const kind = obj["kind"];
   switch (kind) {
     case "Has": {
-  const __r_v = __deserialise_Code(obj["v"], `${path}.v`);
-  if (__r_v.tag === "Err") return __r_v;
-  const __v = __r_v.value;
+      const __r_v = __deserialise_Code(obj["v"], `${path}.v`);
+      if (__r_v.tag === "Err") return __r_v;
+      const __v = __r_v.value;
       return Ok({ tag: "Has", v: __v } as Choice<Code>);
     }
     case "Nope":

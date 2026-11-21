@@ -120,40 +120,40 @@ export function __deserialise_MessageArg(json: __JsonValue, path: string = "$"):
   const kind = obj["kind"];
   switch (kind) {
     case "Text": {
-  if (typeof obj["value"] !== "string") {
-    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "string", actual: typeof obj["value"] });
-  }
-  const __value = obj["value"];
+      if (typeof obj["value"] !== "string") {
+        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "string", actual: typeof obj["value"] });
+      }
+      const __value = obj["value"];
       return Ok({ tag: "Text", value: __value } as MessageArg);
     }
     case "Whole": {
-  if (typeof obj["value"] !== "number") {
-    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
-  }
-  if (!globalThis.Number.isSafeInteger(obj["value"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(obj["value"]) });
-  }
-  const __value = obj["value"];
+      if (typeof obj["value"] !== "number") {
+        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
+      }
+      if (!globalThis.Number.isSafeInteger(obj["value"])) {
+        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(obj["value"]) });
+      }
+      const __value = obj["value"];
       return Ok({ tag: "Whole", value: __value } as MessageArg);
     }
     case "Num": {
-  if (typeof obj["value"] !== "number") {
-    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
-  }
-  if (!globalThis.Number.isFinite(obj["value"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "finite number", actual: String(obj["value"]) });
-  }
-  const __value = obj["value"];
+      if (typeof obj["value"] !== "number") {
+        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
+      }
+      if (!globalThis.Number.isFinite(obj["value"])) {
+        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "finite number", actual: String(obj["value"]) });
+      }
+      const __value = obj["value"];
       return Ok({ tag: "Num", value: __value } as MessageArg);
     }
     case "Moment": {
-  if (typeof obj["value"] !== "number") {
-    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
-  }
-  if (!globalThis.Number.isSafeInteger(obj["value"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(obj["value"]) });
-  }
-  const __value = obj["value"];
+      if (typeof obj["value"] !== "number") {
+        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
+      }
+      if (!globalThis.Number.isSafeInteger(obj["value"])) {
+        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(obj["value"]) });
+      }
+      const __value = obj["value"];
       return Ok({ tag: "Moment", value: __value } as MessageArg);
     }
     default:
@@ -176,23 +176,23 @@ export function __deserialise_Map_String_MessageArg(json: __JsonValue, path: str
   }
   const out = new globalThis.Map<string, MessageArg>();
   for (let i = 0; i < json.length; i++) {
-  const entry = json[i];
-  if (!globalThis.Array.isArray(entry) || entry.length !== 2) {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "[key, value] entry", actual: typeof entry });
-  }
-  const entryK = entry[0];
-  const entryV = entry[1];
-  if (typeof entryK !== "string") {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "string", actual: typeof entryK });
-  }
-  const __k = entryK;
-  if (out.has(__k as string)) {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "a distinct map key", actual: "a duplicate" });
-  }
-  const __r_v = __deserialise_MessageArg(entryV, `${path}[${i}][1]`);
-  if (__r_v.tag === "Err") return __r_v;
-  const __v = __r_v.value;
-  out.set(__k as string, __v as MessageArg);
+    const entry = json[i];
+    if (!globalThis.Array.isArray(entry) || entry.length !== 2) {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "[key, value] entry", actual: typeof entry });
+    }
+    const entryK = entry[0];
+    const entryV = entry[1];
+    if (typeof entryK !== "string") {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "string", actual: typeof entryK });
+    }
+    const __k = entryK;
+    if (out.has(__k as string)) {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "a distinct map key", actual: "a duplicate" });
+    }
+    const __r_v = __deserialise_MessageArg(entryV, `${path}[${i}][1]`);
+    if (__r_v.tag === "Err") return __r_v;
+    const __v = __r_v.value;
+    out.set(__k as string, __v as MessageArg);
   }
   return Ok(out);
 }

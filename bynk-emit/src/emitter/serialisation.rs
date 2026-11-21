@@ -203,39 +203,6 @@ fn default_case(body: Vec<TsStmt>) -> TsSwitchCase {
     }
 }
 
-/// A real `Vec<bynk_ts::TsStmt>`, pre-rendered into ONE `TsStmt::Raw` blob
-/// at the same depth-1 indent [`splice_stmts`] has always used for these
-/// exact statements. [`emit_sum_codec`]'s deserialise-side payload-carrying
-/// case needs `emit_field_deserialise_wire`'s own field guards spliced in
-/// at a depth that does NOT match where they structurally sit (inside a
-/// `TsStmt::Switch` case's own body, which `bynk-ts`'s printer would
-/// otherwise render two levels deeper, at depth 3/6-space indent) — a real,
-/// currently-shipped indentation quirk, not a hypothetical: confirmed
-/// byte-for-byte against `212_json_codec/expected.ts`'s own
-/// `deserialise_Status` (`if (typeof obj["tracking"] !== "string")` sits at
-/// 2-space indent, one level, directly inside `case "Shipped": {`'s own
-/// 6-space-indented block) and `407_workers_generic_sum_boundary`'s own
-/// `deserialise_ApiResult_User` (identical shape for a generic-sum
-/// instantiation). This slice's own zero-diff mandate rules out simply
-/// letting the switch case render these at their structurally-correct
-/// depth instead — that would be a real, deliberate formatting change with
-/// no fixture-corpus backing either way, unlike the `(value as any)`
-/// investigation this same issue explicitly authorises (see
-/// `emit_sum_codec`'s own doc). `TsStmtKind::Raw`'s own doc
-/// (`bynk-ts/src/program.rs`) names exactly this shape as a legitimate
-/// third reason to use it, alongside its two existing ones (`lower.rs`'s
-/// permanent exclusion; `emit_refined_type`'s own already-tree-sourced
-/// splice): real, already-tree-native statement text this call site cannot
-/// restructure into a properly-nested `Vec<TsStmt>` without changing bytes
-/// this slice is not the one authorised to change.
-fn raw_stmts_at_depth_one(stmts: Vec<TsStmt>) -> TsStmt {
-    let mut text = String::new();
-    for stmt in &stmts {
-        text.push_str(&bynk_ts::print_stmt(stmt, 1));
-    }
-    TsStmt::raw(text, None)
-}
-
 /// `Err({ kind: "StructuralMismatch", path: <path_expr>, expected:
 /// <expected>, actual: <actual> })` — the one wire-guard failure shape
 /// every real arm of [`emit_field_deserialise_wire`] returns. Distinct from
@@ -297,37 +264,6 @@ fn err_structural_mismatch_top(expected: &str, actual: TsExpr) -> TsExpr {
             TsObjectEntry::prop("actual".to_string(), actual),
         ])],
     )
-}
-
-/// Boundary-print — splices a real `Vec<bynk_ts::TsStmt>` into a still-
-/// `write!`-based caller's own `out: &mut String` accumulator, one
-/// `bynk_ts::print_stmt(&stmt, 1)` per statement. `depth: 1` is the
-/// one-level indent (`"  "`) every real call site's own pre-conversion
-/// `writeln!` calls used — confirmed against a real fixture's
-/// before/after diff (#1439), not assumed, the same "verify, don't
-/// assume" discipline #1437's own qualifier-prefix convention needed.
-/// All 6 remaining real call sites (`emit_generic_helpers_qualified`'s own
-/// still-`String`-based `ResultInst`/`OptionInst`/etc. arms) sit at exactly
-/// this depth: a generated function's own top-level statement list. #1443
-/// (Arc E slice 5): `emit_record_codec` no longer calls this — it builds a
-/// real `Vec<TsStmt>` body directly now, so its own internal
-/// `emit_field_deserialise_wire` calls `extend` straight in (no print/
-/// re-parse round trip), dropping the count from 8 to 7. #1445 (Arc E
-/// slice 6): `emit_sum_codec` no longer calls this either — its own
-/// deserialise-side payload case needs the exact same depth-1 splice, but
-/// pre-renders it into one `TsStmt::Raw` via [`raw_stmts_at_depth_one`]
-/// instead (that function's own doc explains why: the surrounding function
-/// body is itself a real `Vec<TsStmt>` now, not a `String`, so there is no
-/// `out` here to push into) — dropping the count from 7 to 6.
-fn splice_stmts(out: &mut String, stmts: Vec<TsStmt>) {
-    // Review of #1440: every other boundary-print site in `bynk-emit`
-    // spells this `push_str`, not `write!` — matches that convention (an
-    // infallible append needs no `.unwrap()`, and doesn't itself add a
-    // `write!`-family line to the very `ts_writes` probe this slice drives
-    // down).
-    for stmt in &stmts {
-        out.push_str(&bynk_ts::print_stmt(stmt, 1));
-    }
 }
 
 /// #661: a *type qualifier* — maps a callee-owned type name to the type-only
@@ -987,12 +923,7 @@ fn emit_decimal_named_codec(
         body.push(cast_ok());
     } else if owned {
         // The owner's own `.of` applies the refinement.
-        body.push(TsStmt::raw(
-            format!(
-                "  const validated = (typeof ({name} as unknown as {{ of?: (json: unknown) => Result<unknown, ValidationError> }}).of === \"function\")\n    ? ({name} as unknown as {{ of: (json: unknown) => Result<unknown, ValidationError> }}).of(__d.value)\n    : (Ok(__d.value as unknown as {name}) as Result<unknown, ValidationError>);\n"
-            ),
-            None,
-        ));
+        body.push(of_probe(name, member(ident("__d"), "value")));
         body.push(if_(
             strict_eq(member(ident("validated"), "tag"), str_lit("Err")),
             block(vec![return_(call(
@@ -1066,6 +997,65 @@ fn emit_decimal_named_codec(
     vec![serialise, deserialise]
 }
 
+/// The runtime `.of` probe of a refined type's owner module:
+///
+/// ```text
+/// const validated = (typeof (T as unknown as { of?: (json: unknown) => Result<unknown, ValidationError> }).of === "function")
+///   ? (T as unknown as { of: (json: unknown) => Result<unknown, ValidationError> }).of(ARG)
+///   : (Ok(ARG as unknown as T) as Result<unknown, ValidationError>);
+/// ```
+///
+/// `T`'s declared type does not know about a conditional `.of` constructor (that is
+/// why this probes at runtime), so the marker type states exactly the shape the
+/// code depends on. `.error` is a `ValidationError` (a runtime interface), not
+/// `unknown`, so the `RefinementViolation` built from it type-checks; the `else`
+/// branch is annotated to match, so both arms unify to one `Result`.
+fn of_probe(name: &str, arg: TsExpr) -> TsStmt {
+    let result_ty = || {
+        TsType::named_with_args(
+            "Result",
+            vec![TsType::named("unknown"), TsType::named("ValidationError")],
+        )
+    };
+    let of_ty = |optional: bool| {
+        let f = TsType::Fn {
+            params: vec![TsType::named("unknown")],
+            names: vec!["json".to_string()],
+            ret: Box::new(result_ty()),
+        };
+        TsType::Object(vec![if optional {
+            TsTypeMember::optional_prop("of", f)
+        } else {
+            TsTypeMember::prop("of", f)
+        }])
+    };
+    let cast = |optional: bool| {
+        TsExpr::Paren(Box::new(as_expr(
+            as_expr(ident(name), TsType::named("unknown")),
+            of_ty(optional),
+        )))
+    };
+    let test = TsExpr::Paren(Box::new(strict_eq(
+        typeof_expr(member(cast(true), "of")),
+        str_lit("function"),
+    )));
+    let present = call(member(cast(false), "of"), vec![arg.clone()]);
+    let absent = TsExpr::Paren(Box::new(as_expr(
+        call(
+            ident("Ok"),
+            vec![as_expr(
+                as_expr(arg, TsType::named("unknown")),
+                TsType::named(name),
+            )],
+        ),
+        result_ty(),
+    )));
+    const_(
+        "validated",
+        TsExpr::multiline_conditional(test, present, absent),
+    )
+}
+
 /// #855 (Phase 2 step 5): which of the four TS shapes a named scalar's codec
 /// takes — owner `.of`, consumed-opaque structural cast, consumed-transparent
 /// inline re-check, or the dedicated `Bytes` base64 codec — is now read off a
@@ -1082,23 +1072,10 @@ fn emit_decimal_named_codec(
 /// real `bynk_ts::TsDecl` nodes — see [`emit_bytes_named_codec`]'s own doc
 /// for why `Vec<TsDecl>`, not a `(TsDecl, TsDecl)` pair, and why the two
 /// share one return shape. The `Revalidation::ViaConstructor` arm's runtime
-/// `.of` probe (below) stays one opaque [`TsStmt::raw`] block: its inline
-/// object type (`{ of?: (json: unknown) => Result<unknown,
-/// ValidationError> }`) needs a *named* function-type parameter (`json`),
-/// but [`bynk_ts::TsType::Fn`]'s own doc is explicit that it only ever
-/// numbers parameters positionally (`a0`, `a1`, …) — real TS grammar
-/// requires *some* name, but not this exact one, so building it as a real
-/// `TsType::Fn` would print `(a0: unknown) => ...` and break zero-diff. The
-/// ternary itself is multi-line (`bynk_ts::TsExpr::Conditional`'s own
-/// printer always renders `test ? consequent : alternate` on one line, no
-/// multiline form). Both are real, checked gaps in the existing algebra —
-/// not a default to opaque without checking — and closing either is
-/// disproportionate to this one call site, so the whole `const validated =
-/// …;` assignment stays hand-formatted text, the same "genuinely out of
-/// scope" precedent `workers.rs`'s own `claim_predicate_to_js` call already
-/// set (#1321). The `if (validated.tag === "Err") { … }
-/// return Ok(validated.value as {name});` tail that follows has no such
-/// gap, so it builds real nodes like everything else in this function.
+/// `.of` probe (below) is [`of_probe`], real nodes: its inline object type
+/// (`{ of?: (json: unknown) => Result<unknown, ValidationError> }`) is a
+/// [`TsType::Fn`] with named parameters (1A.18b), and its three-line ternary a
+/// [`TsExpr::multiline_conditional`] (1A.38a).
 fn emit_refined(
     name: &str,
     decl: &TypeDecl,
@@ -1209,32 +1186,9 @@ fn emit_refined(
             // (`.of`), which applies the refinement. If the type has no
             // refinement, `.of` doesn't exist for refined-base types; fall back
             // to a direct cast.
-            // P7.2: `name`'s declared type doesn't statically know about a
-            // conditional `.of` constructor (that's the whole reason this probes
-            // for it at runtime) — a marker type stating exactly the shape this
-            // code actually depends on, not a blanket escape. `.error`'s real
-            // type is `ValidationError` (a real, exported runtime interface,
-            // `runtime/src/errors.ts`, already referenced by name elsewhere in
-            // this file) — a first attempt typed it `unknown` and broke real
-            // `tsc --strict` fixtures against this function's own declared
-            // `violation: ValidationError` return shape. The `else` branch is
-            // annotated to match the same `Result<{name}, ValidationError>`
-            // union so both ternary arms unify to one type instead of one
-            // arm's `Ok(...)` inferring a narrower `Result<{name}, never>`.
-            //
-            // This whole statement stays one opaque `TsStmt::raw` block — see
-            // this function's own doc for why (a real, checked gap in both
-            // `TsType::Fn`'s named-parameter support and
-            // `TsExpr::Conditional`'s single-line-only printer, not a default
-            // to opaque). Baked-in indent matches this body's own one-level
-            // depth exactly, the same contract `print_stmt`'s own doc holds
-            // every `Raw` statement to.
-            body.push(TsStmt::raw(
-                format!(
-                    "  const validated = (typeof ({name} as unknown as {{ of?: (json: unknown) => Result<unknown, ValidationError> }}).of === \"function\")\n    ? ({name} as unknown as {{ of: (json: unknown) => Result<unknown, ValidationError> }}).of(json)\n    : (Ok(json as unknown as {name}) as Result<unknown, ValidationError>);\n"
-                ),
-                None,
-            ));
+            // The `.of` probe, [`of_probe`]: `name`'s declared type does not know of a
+            // conditional `.of`, which is why it probes at runtime.
+            body.push(of_probe(name, ident("json")));
             body.push(if_(
                 strict_eq(member(ident("validated"), "tag"), str_lit("Err")),
                 block(vec![return_(call(
@@ -1959,18 +1913,14 @@ fn emit_sum_codec(
                 for field in &variant.payload {
                     let access = format!("obj[\"{}\"]", field.name);
                     let sub_path = format!("`${{path}}.{}`", field.path_segment);
-                    // `raw_stmts_at_depth_one` (this file, above): preserves
-                    // the pre-existing depth-1 splice quirk byte-for-byte —
-                    // see its own doc for why this is a real, currently-
-                    // shipped shape, not something this slice restructures.
-                    stmts.push(raw_stmts_at_depth_one(emit_field_deserialise_wire(
+                    stmts.extend(emit_field_deserialise_wire(
                         &field.name,
                         &field.shape,
                         &access,
                         &sub_path,
                         depth,
                         ru,
-                    )));
+                    ));
                 }
                 let mut entries = vec![(tag.to_string(), str_lit(vname.clone()))];
                 for field in &variant.payload {
@@ -2080,7 +2030,7 @@ mod emit_sum_codec_tests {
         let decls = emit_sum_codec("Parcel", "Parcel", &sum, &DepthCodecs::new(), &ru);
         assert_eq!(
             render_decls(decls),
-            "export function __serialise_Parcel(value: Parcel): __JsonValue {\n  switch (value.tag) {\n    case \"Pending\":\n      return { kind: \"Pending\" };\n    case \"Shipped\": {\n      return { kind: \"Shipped\", tracking: value.tracking as __JsonValue, weight: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error(\"Int outside the safe-integer range at boundary\"); return v as __JsonValue; })(value.weight) };\n    }\n  }\n}\n\nexport function __deserialise_Parcel(json: __JsonValue, path: string = \"$\"): Result<Parcel, __BoundaryError> {\n  if (typeof json !== \"object\" || json === null || globalThis.Array.isArray(json)) {\n    return Err({ kind: \"StructuralMismatch\", path, expected: \"object\", actual: typeof json });\n  }\n  const obj = json as { [k: string]: __JsonValue };\n  const kind = obj[\"kind\"];\n  switch (kind) {\n    case \"Pending\":\n      return Ok({ tag: \"Pending\" } as Parcel);\n    case \"Shipped\": {\n  if (typeof obj[\"tracking\"] !== \"string\") {\n    return Err({ kind: \"StructuralMismatch\", path: `${path}.tracking`, expected: \"string\", actual: typeof obj[\"tracking\"] });\n  }\n  const __tracking = obj[\"tracking\"];\n  if (typeof obj[\"weight\"] !== \"number\") {\n    return Err({ kind: \"StructuralMismatch\", path: `${path}.weight`, expected: \"number\", actual: typeof obj[\"weight\"] });\n  }\n  if (!globalThis.Number.isSafeInteger(obj[\"weight\"])) {\n    return Err({ kind: \"StructuralMismatch\", path: `${path}.weight`, expected: \"safe integer\", actual: String(obj[\"weight\"]) });\n  }\n  const __weight = obj[\"weight\"];\n      return Ok({ tag: \"Shipped\", tracking: __tracking, weight: __weight } as Parcel);\n    }\n    default:\n      return Err({ kind: \"StructuralMismatch\", path, expected: \"sum variant kind\", actual: String(kind) });\n  }\n}\n"
+            "export function __serialise_Parcel(value: Parcel): __JsonValue {\n  switch (value.tag) {\n    case \"Pending\":\n      return { kind: \"Pending\" };\n    case \"Shipped\": {\n      return { kind: \"Shipped\", tracking: value.tracking as __JsonValue, weight: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error(\"Int outside the safe-integer range at boundary\"); return v as __JsonValue; })(value.weight) };\n    }\n  }\n}\n\nexport function __deserialise_Parcel(json: __JsonValue, path: string = \"$\"): Result<Parcel, __BoundaryError> {\n  if (typeof json !== \"object\" || json === null || globalThis.Array.isArray(json)) {\n    return Err({ kind: \"StructuralMismatch\", path, expected: \"object\", actual: typeof json });\n  }\n  const obj = json as { [k: string]: __JsonValue };\n  const kind = obj[\"kind\"];\n  switch (kind) {\n    case \"Pending\":\n      return Ok({ tag: \"Pending\" } as Parcel);\n    case \"Shipped\": {\n      if (typeof obj[\"tracking\"] !== \"string\") {\n        return Err({ kind: \"StructuralMismatch\", path: `${path}.tracking`, expected: \"string\", actual: typeof obj[\"tracking\"] });\n      }\n      const __tracking = obj[\"tracking\"];\n      if (typeof obj[\"weight\"] !== \"number\") {\n        return Err({ kind: \"StructuralMismatch\", path: `${path}.weight`, expected: \"number\", actual: typeof obj[\"weight\"] });\n      }\n      if (!globalThis.Number.isSafeInteger(obj[\"weight\"])) {\n        return Err({ kind: \"StructuralMismatch\", path: `${path}.weight`, expected: \"safe integer\", actual: String(obj[\"weight\"]) });\n      }\n      const __weight = obj[\"weight\"];\n      return Ok({ tag: \"Shipped\", tracking: __tracking, weight: __weight } as Parcel);\n    }\n    default:\n      return Err({ kind: \"StructuralMismatch\", path, expected: \"sum variant kind\", actual: String(kind) });\n  }\n}\n"
         );
     }
 }
@@ -2128,7 +2078,7 @@ fn emit_field_deserialise(
 /// conversions (#1436/#1438) — hence `Vec`, not a single node. Of this
 /// function's 8 real call sites, 7 (`emit_sum_codec`,
 /// `emit_generic_helpers_qualified`) are still `write!`-based, so each
-/// splices the result back in via [`splice_stmts`] at the same one-level
+/// splices the result back in via `splice_stmts` (since removed, 1A.38a) at the same one-level
 /// indent the original `writeln!` calls always used, confirmed
 /// byte-identical against the fixture corpus. The 8th, `emit_record_codec`,
 /// became tree-native itself (#1443, Arc E slice 5) and now `extend`s the
@@ -3329,48 +3279,16 @@ fn array_shape_guard() -> TsStmt {
     )
 }
 
-/// `if (obj["kind"] === "<key_a>") { <guard_a><return_a> } else if
-/// (obj["kind"] === "<key_b>") { <guard_b><return_b> }` — `ResultInst`'s
-/// (`"Ok"`/`"Err"`) own two-armed wire-kind dispatch (Arc E slice 7, #1447).
-/// `OptionInst` used it for `"Some"`/`"None"` until #1887, whose lenient
-/// decoder ([`lenient_option_decode_body`]) needs no else-if cascade and is
-/// built from real `if` nodes instead.
+/// The `Ok`/`Err` (or `Some`/`None`) cascade of a generic sum's wire decoder:
 ///
-/// `bynk_ts::TsStmt` has no real "else if" continuation shape: the only way
-/// to nest a second `If` as this shape's own `else_branch` is
-/// [`TsStmt::if_else_same_line_stmt`], whose `} else <branch>` rendering
-/// falls to `render_inline_stmt`'s own fallback for a bare, non-`Block`
-/// `If` — which always renders at depth 0 (correct only for the genuinely
-/// brace-free, single-line bodies that fallback was built for; nothing in
-/// `events_fanout.rs`'s own grounding ever nested a multi-line block that
-/// way). The real call site here needs `body_a`/`body_b` at depth 2
-/// (4-space, correctly nested one level inside this cascade's own `if`),
-/// which that depth-0 fallback cannot produce without mis-indenting them two
-/// spaces shallow. Building the whole two-branch cascade as one
-/// `TsStmt::Raw` sidesteps the gap entirely — the same "real,
-/// already-tree-native content the algebra can't yet nest correctly at this
-/// exact spot; print it and splice" move [`raw_stmts_at_depth_one`] already
-/// established for `emit_sum_codec`'s own switch-case content (#1445).
-/// `guard_a`/`guard_b`/`return_a`/`return_b` are still real
-/// `Vec<TsStmt>`/`TsStmt` nodes built by this function's own real callers
-/// (`emit_field_deserialise` and this arm's own `return_`/`call`/`as_expr`
-/// composition) — only the surrounding "if (...) { } else if (...) { }"
-/// skeleton itself is hand-assembled text, and even that skeleton's own two
-/// conditions are real `TsExpr` nodes (`strict_eq`/[`index`]), rendered via
-/// `bynk_ts::print_expr` rather than spelled out by hand.
+/// ```text
+/// if (obj["kind"] === "A") { <guard_a> <return_a> } else if (obj["kind"] === "B") { <guard_b> <return_b> }
+/// ```
 ///
-/// `guard_a`/`guard_b` render at depth 1 (2-space) — one level shallower
-/// than their true nesting, the same pre-existing indentation quirk
-/// [`raw_stmts_at_depth_one`]'s own doc names for `emit_sum_codec`'s payload
-/// guards (first confirmed byte-for-byte against the pre-#1887
-/// `deserialise_Option_Int`, whose `if (obj["kind"] === "Some") {` was
-/// immediately followed by a 2-space-indented `if (typeof obj["value"] !==
-/// "number")`, not the 4-space a correctly-nested `if`-inside-an-`if` would
-/// get).
-/// `return_a`/`return_b` render at depth 2 (4-space) — the correctly-nested
-/// depth for content one level inside the cascade, itself one level inside
-/// the enclosing function's own top-level body (depth 1).
-fn wire_kind_dispatch_raw(
+/// One `If` with `same_line_else` whose else branch is the second `If`, so each
+/// branch's guards sit at their true depth (1A.38a; they used to be spliced one
+/// level shallow, as text).
+fn wire_kind_dispatch(
     key_a: &str,
     guard_a: Vec<TsStmt>,
     return_a: TsStmt,
@@ -3379,20 +3297,16 @@ fn wire_kind_dispatch_raw(
     return_b: TsStmt,
 ) -> TsStmt {
     let wire_kind_eq = |key: &str| strict_eq(index(ident("obj"), str_lit("kind")), str_lit(key));
-
-    let mut text = String::new();
-    text.push_str("  if (");
-    text.push_str(&bynk_ts::print_expr(&wire_kind_eq(key_a)));
-    text.push_str(") {\n");
-    splice_stmts(&mut text, guard_a);
-    text.push_str(&bynk_ts::print_stmt(&return_a, 2));
-    text.push_str("  } else if (");
-    text.push_str(&bynk_ts::print_expr(&wire_kind_eq(key_b)));
-    text.push_str(") {\n");
-    splice_stmts(&mut text, guard_b);
-    text.push_str(&bynk_ts::print_stmt(&return_b, 2));
-    text.push_str("  }\n");
-    TsStmt::raw(text, None)
+    let branch = |mut guard: Vec<TsStmt>, ret: TsStmt| {
+        guard.push(ret);
+        block(guard)
+    };
+    TsStmt::if_else_same_line_stmt(
+        wire_kind_eq(key_a),
+        branch(guard_a, return_a),
+        if_(wire_kind_eq(key_b), branch(guard_b, return_b)),
+        None,
+    )
 }
 
 /// The text appended to a bare value's `StructuralMismatch.expected` when it
@@ -3798,12 +3712,32 @@ pub(crate) fn emit_codec_factory(
         .collect();
     let mut body: Vec<TsStmt> = Vec::new();
     for p in &params {
-        body.push(TsStmt::raw(
-            format!(
-                "  const __serialise_{p} = (v: {p}) => {w}.encode(v);\n  const __deserialise_{p} = (j: __JsonValue, path: string = \"$\") => {w}.decode(j, path);\n",
-                w = format!("__codec_{p}"),
+        let witness = |method: &str, args: Vec<TsExpr>| {
+            call(member(ident(format!("__codec_{p}")), method), args)
+        };
+        let arrow = |params: Vec<TsParam>, body: TsExpr| TsExpr::Arrow {
+            params,
+            is_async: false,
+            generics: Vec::new(),
+            return_type: None,
+            body: Box::new(TsArrowBody::Expr(Box::new(body))),
+        };
+        body.push(const_(
+            format!("__serialise_{p}"),
+            arrow(
+                vec![TsParam::new("v", Some(TsType::named(p.clone())))],
+                witness("encode", vec![ident("v")]),
             ),
-            None,
+        ));
+        body.push(const_(
+            format!("__deserialise_{p}"),
+            arrow(
+                vec![
+                    TsParam::new("j", Some(TsType::named("__JsonValue"))),
+                    deserialise_path_param(),
+                ],
+                witness("decode", vec![ident("j"), ident("path")]),
+            ),
         ));
     }
     for d in emit_generic_helpers(&nested, types, ru) {
@@ -4071,7 +4005,7 @@ pub fn emit_generic_helpers_qualified(
                 }));
 
                 let mut body = object_shape_guard();
-                body.push(wire_kind_dispatch_raw(
+                body.push(wire_kind_dispatch(
                     "Ok",
                     emit_field_deserialise("v", ok, "obj[\"value\"]", "`${path}.value`", depth, ru),
                     return_(call(
@@ -4261,7 +4195,7 @@ pub fn emit_generic_helpers_qualified(
                             "i",
                             TsExpr::Lit(TsLit::Num("0".to_string())),
                             less_than(ident("i"), member(ident("json"), "length")),
-                            block(vec![raw_stmts_at_depth_one(loop_body)]),
+                            block(loop_body),
                             None,
                         ),
                         return_(call(ident("Ok"), vec![ident("out")])),
@@ -4364,7 +4298,7 @@ pub fn emit_generic_helpers_qualified(
                             "i",
                             TsExpr::Lit(TsLit::Num("0".to_string())),
                             less_than(ident("i"), member(ident("json"), "length")),
-                            block(vec![raw_stmts_at_depth_one(loop_body)]),
+                            block(loop_body),
                             None,
                         ),
                         return_(call(ident("Ok"), vec![ident("out")])),
@@ -4532,7 +4466,7 @@ pub fn emit_generic_helpers_qualified(
                             "i",
                             TsExpr::Lit(TsLit::Num("0".to_string())),
                             less_than(ident("i"), member(ident("json"), "length")),
-                            block(vec![raw_stmts_at_depth_one(loop_body)]),
+                            block(loop_body),
                             None,
                         ),
                         return_(call(ident("Ok"), vec![ident("out")])),
@@ -5044,5 +4978,56 @@ mod serialiser_corpus_tests {
         for (g, w) in got.lines().zip(want.lines()) {
             assert_eq!(g, w);
         }
+    }
+}
+
+/// 1A.38a: the codec sites that were `TsStmt::raw` text, pinned as the text they emit.
+#[cfg(test)]
+mod converted_site_tests {
+    use super::*;
+
+    /// The refined-type `.of` probe prints as the three-line ternary it always was,
+    /// at the depth-1 indent of a codec body.
+    #[test]
+    fn the_of_probe_prints_as_its_three_line_ternary() {
+        let stmt = of_probe("Percent", ident("json"));
+        assert_eq!(
+            bynk_ts::print_stmt(&stmt, 1),
+            "  const validated = (typeof (Percent as unknown as { of?: (json: unknown) => Result<unknown, ValidationError> }).of === \"function\")\n    ? (Percent as unknown as { of: (json: unknown) => Result<unknown, ValidationError> }).of(json)\n    : (Ok(json as unknown as Percent) as Result<unknown, ValidationError>);\n"
+        );
+    }
+
+    /// The Decimal codec's probe takes the parsed value, not `json`, in both of the
+    /// places the argument appears.
+    #[test]
+    fn the_of_probe_threads_its_argument() {
+        let stmt = of_probe("Money", member(ident("__d"), "value"));
+        let text = bynk_ts::print_stmt(&stmt, 1);
+        assert!(text.contains(".of(__d.value)\n"), "{text}");
+        assert!(text.contains("Ok(__d.value as unknown as Money)"), "{text}");
+    }
+
+    /// A wire-kind cascade nests each branch's guards at their true depth: inside the
+    /// `if`, one level deeper than the `if` itself.
+    #[test]
+    fn the_wire_kind_cascade_nests_its_guards_at_their_true_depth() {
+        let guard = |n: &str| {
+            if_(
+                strict_eq(ident(n), str_lit("x")),
+                block(vec![return_(ident("fail"))]),
+            )
+        };
+        let stmt = wire_kind_dispatch(
+            "Ok",
+            vec![guard("a")],
+            return_(ident("ra")),
+            "Err",
+            vec![guard("b")],
+            return_(ident("rb")),
+        );
+        assert_eq!(
+            bynk_ts::print_stmt(&stmt, 1),
+            "  if (obj[\"kind\"] === \"Ok\") {\n    if (a === \"x\") {\n      return fail;\n    }\n    return ra;\n  } else if (obj[\"kind\"] === \"Err\") {\n    if (b === \"x\") {\n      return fail;\n    }\n    return rb;\n  }\n"
+        );
     }
 }

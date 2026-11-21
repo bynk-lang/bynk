@@ -975,24 +975,24 @@ export function __deserialise_Map_String_String(json: __JsonValue, path: string 
   }
   const out = new globalThis.Map<string, string>();
   for (let i = 0; i < json.length; i++) {
-  const entry = json[i];
-  if (!globalThis.Array.isArray(entry) || entry.length !== 2) {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "[key, value] entry", actual: typeof entry });
-  }
-  const entryK = entry[0];
-  const entryV = entry[1];
-  if (typeof entryK !== "string") {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "string", actual: typeof entryK });
-  }
-  const __k = entryK;
-  if (out.has(__k as string)) {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "a distinct map key", actual: "a duplicate" });
-  }
-  if (typeof entryV !== "string") {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}][1]`, expected: "string", actual: typeof entryV });
-  }
-  const __v = entryV;
-  out.set(__k as string, __v as string);
+    const entry = json[i];
+    if (!globalThis.Array.isArray(entry) || entry.length !== 2) {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "[key, value] entry", actual: typeof entry });
+    }
+    const entryK = entry[0];
+    const entryV = entry[1];
+    if (typeof entryK !== "string") {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "string", actual: typeof entryK });
+    }
+    const __k = entryK;
+    if (out.has(__k as string)) {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "a distinct map key", actual: "a duplicate" });
+    }
+    if (typeof entryV !== "string") {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}][1]`, expected: "string", actual: typeof entryV });
+    }
+    const __v = entryV;
+    out.set(__k as string, __v as string);
   }
   return Ok(out);
 }

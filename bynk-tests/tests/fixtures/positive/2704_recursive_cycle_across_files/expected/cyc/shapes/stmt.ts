@@ -41,9 +41,9 @@ export function __deserialise_Stmt(json: __JsonValue, path: string = "$", depth:
     case "Skip":
       return Ok({ tag: "Skip" } as Stmt);
     case "Eval": {
-  const __r_expr = __deserialise_Expr(obj["expr"], `${path}.expr`, depth + 1);
-  if (__r_expr.tag === "Err") return __r_expr;
-  const __expr = __r_expr.value;
+      const __r_expr = __deserialise_Expr(obj["expr"], `${path}.expr`, depth + 1);
+      if (__r_expr.tag === "Err") return __r_expr;
+      const __expr = __r_expr.value;
       return Ok({ tag: "Eval", expr: __expr } as Stmt);
     }
     default:

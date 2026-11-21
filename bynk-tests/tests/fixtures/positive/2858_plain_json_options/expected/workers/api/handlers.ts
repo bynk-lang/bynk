@@ -152,9 +152,9 @@ export function __deserialise_Event(json: __JsonValue, path: string = "$"): Resu
   const kind = obj["kind"];
   switch (kind) {
     case "Opened": {
-  const __r_actor = __deserialise_Option_String(obj["actor"], `${path}.actor`);
-  if (__r_actor.tag === "Err") return __r_actor;
-  const __actor = __r_actor.value;
+      const __r_actor = __deserialise_Option_String(obj["actor"], `${path}.actor`);
+      if (__r_actor.tag === "Err") return __r_actor;
+      const __actor = __r_actor.value;
       return Ok({ tag: "Opened", actor: __actor } as Event);
     }
     case "Closed":
@@ -277,11 +277,11 @@ export function __deserialise_List_Option_String(json: __JsonValue, path: string
   }
   const out: Option<string>[] = [];
   for (let i = 0; i < json.length; i++) {
-  const item = json[i];
-  const __r_el = __deserialise_Option_String(item, `${path}[${i}]`);
-  if (__r_el.tag === "Err") return __r_el;
-  const __el = __r_el.value;
-  out.push(__el as Option<string>);
+    const item = json[i];
+    const __r_el = __deserialise_Option_String(item, `${path}[${i}]`);
+    if (__r_el.tag === "Err") return __r_el;
+    const __el = __r_el.value;
+    out.push(__el as Option<string>);
   }
   return Ok(out);
 }
@@ -300,23 +300,23 @@ export function __deserialise_Map_String_Option_Int(json: __JsonValue, path: str
   }
   const out = new globalThis.Map<string, Option<number>>();
   for (let i = 0; i < json.length; i++) {
-  const entry = json[i];
-  if (!globalThis.Array.isArray(entry) || entry.length !== 2) {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "[key, value] entry", actual: typeof entry });
-  }
-  const entryK = entry[0];
-  const entryV = entry[1];
-  if (typeof entryK !== "string") {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "string", actual: typeof entryK });
-  }
-  const __k = entryK;
-  if (out.has(__k as string)) {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "a distinct map key", actual: "a duplicate" });
-  }
-  const __r_v = __deserialise_Option_Int(entryV, `${path}[${i}][1]`);
-  if (__r_v.tag === "Err") return __r_v;
-  const __v = __r_v.value;
-  out.set(__k as string, __v as Option<number>);
+    const entry = json[i];
+    if (!globalThis.Array.isArray(entry) || entry.length !== 2) {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "[key, value] entry", actual: typeof entry });
+    }
+    const entryK = entry[0];
+    const entryV = entry[1];
+    if (typeof entryK !== "string") {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "string", actual: typeof entryK });
+    }
+    const __k = entryK;
+    if (out.has(__k as string)) {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "a distinct map key", actual: "a duplicate" });
+    }
+    const __r_v = __deserialise_Option_Int(entryV, `${path}[${i}][1]`);
+    if (__r_v.tag === "Err") return __r_v;
+    const __v = __r_v.value;
+    out.set(__k as string, __v as Option<number>);
   }
   return Ok(out);
 }

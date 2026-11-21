@@ -169,10 +169,7 @@ pub(super) fn emit_integration_module(
             ));
         }
         stmts.push(TsStmt::decl(
-            TsDecl::ImportDefault {
-                alias: format!("worker_{ns}"),
-                from: format!("../workers/{dir}/index.js"),
-            },
+            TsDecl::import_default(format!("worker_{ns}"), format!("../workers/{dir}/index.js")),
             None,
         ));
         if bindings_of(p)
