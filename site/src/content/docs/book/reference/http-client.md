@@ -65,7 +65,7 @@ it with what is at `--out`, and exits non-zero when a file differs or is missing
 naming the first differing line:
 
 ```text
-bynk: client is stale: run `bynk client --out web/src/lib/api.ts`
+bynk: error: client is stale: run `bynk client --out web/src/lib/api.ts`
   web/src/lib/api.ts differs at line 142 (3 lines in all):
     - found:    readonly qty: number;
     + expected: readonly qty: Qty;

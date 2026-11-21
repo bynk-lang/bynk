@@ -79,13 +79,13 @@ pub fn run(opts: &NewOptions) -> ExitCode {
         }
         Ok(false) => {}
         Err(e) => {
-            emsg!("bynk: cannot inspect `{}`: {e}", display(&opts.path));
+            emsg!("bynk: error: cannot inspect `{}`: {e}", display(&opts.path));
             return ExitCode::FAILURE;
         }
     }
 
     if let Err(e) = write_scaffold(&opts.path, &name) {
-        emsg!("bynk: failed to write the scaffold: {e}");
+        emsg!("bynk: error: failed to write the scaffold: {e}");
         return ExitCode::FAILURE;
     }
 
@@ -188,7 +188,7 @@ pub fn next_steps_message(dir: &str) -> String {
 /// The failure message for a name that isn't a legal Bynk identifier.
 pub fn invalid_name_message(name: &str) -> String {
     format!(
-        "bynk: `{name}` isn't a valid Bynk name.\n      \
+        "bynk: error: `{name}` isn't a valid Bynk name.\n      \
          A name must be a single identifier — a letter followed by letters, \
          digits, or underscores (no dashes or dots).\n      \
          Pass `--name <ident>` to choose the project's identifier.\n"
@@ -198,7 +198,7 @@ pub fn invalid_name_message(name: &str) -> String {
 /// The failure message when a name can't be derived from the path.
 pub fn cannot_derive_message(path: &str) -> String {
     format!(
-        "bynk: couldn't derive a project name from `{path}`.\n      \
+        "bynk: error: couldn't derive a project name from `{path}`.\n      \
          Pass `--name <ident>` to name the project.\n"
     )
 }
@@ -206,7 +206,7 @@ pub fn cannot_derive_message(path: &str) -> String {
 /// The failure message when the target exists and isn't empty (D5).
 pub fn clobber_message(dir: &str) -> String {
     format!(
-        "bynk: `{dir}` already exists and isn't empty — refusing to overwrite.\n      \
+        "bynk: error: `{dir}` already exists and isn't empty — refusing to overwrite.\n      \
          Choose a different path, or empty that directory first.\n"
     )
 }

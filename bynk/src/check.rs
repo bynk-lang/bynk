@@ -21,7 +21,7 @@ pub fn run(
 ) -> ExitCode {
     let short = format == CheckFormatArg::Short;
     if emit && !input.is_dir() {
-        emsg!("bynk check: `--emit` takes a project directory, not a single file");
+        emsg!("bynk check: error: `--emit` takes a project directory, not a single file");
         return ExitCode::FAILURE;
     }
     let checked = bynk_driver::run_check("bynk", &input, short, fix.as_deref(), each);

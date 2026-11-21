@@ -363,7 +363,7 @@ pub(crate) fn apply_vectorize_adoptions(
     }
     let settings =
         bynk_project::vectorize::try_read_vectorize_deploy(project_root).map_err(|e| {
-            emsg!("bynk: {e}");
+            emsg!("bynk: error: {e}");
         })?;
     // An entry that names no declared capability would be silently ignored,
     // and the deploy would create a fresh, empty index beside the one the team
@@ -388,7 +388,7 @@ pub(crate) fn apply_vectorize_adoptions(
             .map(|b| format!("; did you mean the capability whose binding is `{b}`?"))
             .unwrap_or_default();
         emsg!(
-            "bynk: `[deploy.vectorize.{capability}]` in bynk.toml names no `Vectorize` capability in this project{hint}; an entry that matches nothing would have the deploy create a new, empty index instead of adopting yours"
+            "bynk: error: `[deploy.vectorize.{capability}]` in bynk.toml names no `Vectorize` capability in this project{hint}; an entry that matches nothing would have the deploy create a new, empty index instead of adopting yours"
         );
         return Err(());
     }

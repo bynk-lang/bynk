@@ -72,7 +72,7 @@ pub fn run(program: &str, args: &DevRunArgs) -> ExitCode {
         if args.json {
             crate::test_stream::print_run(args.stream, &TestRun::runtime_error(message, None));
         } else {
-            emsg!("{program} test: {message}");
+            emsg!("{program} test: error: {message}");
         }
         ExitCode::FAILURE
     };
@@ -95,7 +95,7 @@ pub fn run(program: &str, args: &DevRunArgs) -> ExitCode {
                 &TestRun::empty().with_remote(format!("remote:{DEV}"), &[]),
             );
         } else {
-            emsg!("{program} test: no `system` suites to run against `bynk dev`");
+            emsg!("{program} test: warning: no `system` suites to run against `bynk dev`");
         }
         return ExitCode::SUCCESS;
     }

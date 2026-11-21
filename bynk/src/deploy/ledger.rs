@@ -2313,7 +2313,7 @@ pub(crate) fn confirm_deletion_prompt(yes: bool, count: usize) -> bool {
         return true;
     }
     if !requires_interactive_confirmation(yes, io::stdin().is_terminal()) {
-        emsg!("bynk: refusing to prune in a non-interactive session without --yes");
+        emsg!("bynk: error: refusing to prune in a non-interactive session without --yes");
         return false;
     }
     eprint!("Delete {count} resource(s)? [y/N] ");

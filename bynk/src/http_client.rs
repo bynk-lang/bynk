@@ -87,7 +87,7 @@ pub fn run(root: &Path, req: Request) -> ExitCode {
     let config = match bynk_project::try_read_build_config(root) {
         Ok(c) => c.client,
         Err(e) => {
-            emsg!("bynk: {e}");
+            emsg!("bynk: error: {e}");
             return ExitCode::FAILURE;
         }
     };
@@ -105,7 +105,7 @@ pub fn run(root: &Path, req: Request) -> ExitCode {
         req.services.to_vec()
     };
     if let Err(e) = check_destination(out.as_deref(), layout, req.check) {
-        emsg!("bynk: {e}");
+        emsg!("bynk: error: {e}");
         return ExitCode::FAILURE;
     }
     let names: Vec<&str> = services.iter().map(String::as_str).collect();
@@ -113,12 +113,12 @@ pub fn run(root: &Path, req: Request) -> ExitCode {
     let client = match generate(&analysis, &names, layout) {
         Ok(c) => c,
         Err(e) => {
-            emsg!("bynk: {e}");
+            emsg!("bynk: error: {e}");
             return ExitCode::FAILURE;
         }
     };
     for s in &client.skipped {
-        emsg!("bynk: skipped {s}");
+        emsg!("bynk: warning: skipped {s}");
     }
     match (out, req.check) {
         (None, _) => {
@@ -129,7 +129,7 @@ pub fn run(root: &Path, req: Request) -> ExitCode {
         (Some(out), false) => match write(&client, &out, layout) {
             Ok(()) => ExitCode::SUCCESS,
             Err(e) => {
-                emsg!("bynk: {e}");
+                emsg!("bynk: error: {e}");
                 ExitCode::FAILURE
             }
         },
@@ -170,7 +170,7 @@ pub fn write_configured(root: &Path) -> ExitCode {
         Ok(c) if c.client.is_some() => {}
         Ok(_) => return ExitCode::SUCCESS,
         Err(e) => {
-            emsg!("bynk: {e}");
+            emsg!("bynk: error: {e}");
             return ExitCode::FAILURE;
         }
     }
@@ -277,7 +277,7 @@ fn check(client: &Client, out: &Path, layout: Layout) -> ExitCode {
         ""
     };
     emsg!(
-        "bynk: client is stale: run `bynk client{dir} --out {}`",
+        "bynk: error: client is stale: run `bynk client{dir} --out {}`",
         out.display()
     );
     for line in stale {

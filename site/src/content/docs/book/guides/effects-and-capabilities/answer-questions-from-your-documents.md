@@ -48,7 +48,7 @@ pushed it looks the instance up by name, records it in `bynk.deploy.lock`, and
 fails, naming it, when it is missing:
 
 ```
-bynk: `AI_SEARCH_KB` of `shop-support` queries AI Search instance `support-docs`, which does not exist on this account. `bynk deploy` links to an instance and never creates one: create `support-docs` in the Cloudflare dashboard, with `wrangler` or with the REST API, or name the instance the account has
+bynk: error: `AI_SEARCH_KB` of `shop-support` queries AI Search instance `support-docs`, which does not exist on this account. `bynk deploy` links to an instance and never creates one: create `support-docs` in the Cloudflare dashboard, with `wrangler` or with the REST API, or name the instance the account has
 ```
 
 A paused or disabled instance is a warning, not a failure: it still answers. The

@@ -439,7 +439,7 @@ pub fn token_mint(target: &Target, org: &str, mint: &Mint) -> Result<(), FetchEr
             if let Err(e) = saved {
                 // The token is live on the server: never lose it.
                 emsg!(
-                    "bynk: couldn't save it, so it is shown once, below; keep it somewhere safe, or revoke it with `bynk org token revoke {org} {}`",
+                    "bynk: note: couldn't save it, so it is shown once, below; keep it somewhere safe, or revoke it with `bynk org token revoke {org} {}`",
                     short_id(id)
                 );
                 println!("{token}");
@@ -462,7 +462,7 @@ pub fn token_mint(target: &Target, org: &str, mint: &Mint) -> Result<(), FetchEr
             }
         }
         None => {
-            emsg!("bynk: it is shown once, below; keep it somewhere safe");
+            emsg!("bynk: note: it is shown once, below; keep it somewhere safe");
             println!("{token}");
         }
     }

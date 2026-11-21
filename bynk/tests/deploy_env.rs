@@ -173,7 +173,7 @@ fn a_context_refusal_names_the_deployed_workers() {
     assert!(!ok, "a never-deployed target refuses:\n{text}{err}");
     assert!(
         err.contains(
-            "bynk: `shop-orders-staging` binds to `shop-payment-staging`, which has never been deployed"
+            "bynk: error: `shop-orders-staging` binds to `shop-payment-staging`, which has never been deployed"
         ),
         "{err}"
     );
@@ -186,7 +186,9 @@ fn a_context_refusal_names_the_deployed_workers() {
     let (ok, text, err) = dry_run(&dir, &["--context", "shop.orders"]);
     assert!(!ok, "a never-deployed target refuses:\n{text}{err}");
     assert!(
-        err.contains("bynk: `shop-orders` binds to `shop-payment`, which has never been deployed"),
+        err.contains(
+            "bynk: error: `shop-orders` binds to `shop-payment`, which has never been deployed"
+        ),
         "{err}"
     );
 }
@@ -235,7 +237,7 @@ fn a_callee_push_that_breaks_a_live_caller_is_refused() {
     assert!(!ok, "a callee skew refuses:\n{text}{err}");
     assert!(
         err.contains(
-            "bynk: `shop-payment` no longer provides the contract its live callers were compiled against (bynk.deploy.contract_skew):"
+            "bynk: error: `shop-payment` no longer provides the contract its live callers were compiled against (bynk.deploy.contract_skew):"
         ),
         "{err}"
     );

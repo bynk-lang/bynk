@@ -529,7 +529,7 @@ impl Unmatched {
     /// usual output, so a consumer still reads the document.
     pub fn report(&self, program: &str) {
         for message in self.messages() {
-            emsg!("{program} test: {message}");
+            emsg!("{program} test: error: {message}");
         }
     }
 }

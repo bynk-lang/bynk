@@ -343,7 +343,7 @@ pub(crate) fn link_ai_search_for_run(
     let search = match RestAiSearch::from_env() {
         Ok(search) => search,
         Err(e) => {
-            emsg!("bynk: {e}");
+            emsg!("bynk: error: {e}");
             return false;
         }
     };
@@ -352,7 +352,7 @@ pub(crate) fn link_ai_search_for_run(
         colour::eprintln(warning);
     }
     for problem in &problems {
-        emsg!("bynk: {problem}");
+        emsg!("bynk: error: {problem}");
     }
     problems.is_empty()
 }
@@ -570,7 +570,7 @@ pub(crate) fn link_mtls_for_run(
     let client = match RestMtls::from_env() {
         Ok(client) => client,
         Err(e) => {
-            emsg!("bynk: {e}");
+            emsg!("bynk: error: {e}");
             return None;
         }
     };
@@ -579,7 +579,7 @@ pub(crate) fn link_mtls_for_run(
         colour::eprintln(warning);
     }
     for problem in &links.problems {
-        emsg!("bynk: {problem}");
+        emsg!("bynk: error: {problem}");
     }
     links.problems.is_empty().then_some(links.linked)
 }
@@ -650,7 +650,7 @@ fn link_stored_secrets_for_run(
     let stores = match RestStores::from_env() {
         Ok(stores) => stores,
         Err(e) => {
-            emsg!("bynk: {e}");
+            emsg!("bynk: error: {e}");
             return None;
         }
     };
@@ -658,7 +658,7 @@ fn link_stored_secrets_for_run(
         Ok(linked) => Some(linked),
         Err(problems) => {
             for problem in problems {
-                emsg!("bynk: {problem}");
+                emsg!("bynk: error: {problem}");
             }
             None
         }

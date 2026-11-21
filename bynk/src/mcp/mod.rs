@@ -55,7 +55,7 @@ pub fn run(path: &Path) -> ExitCode {
     let workspace = match Workspace::new(path) {
         Ok(w) => w,
         Err(e) => {
-            emsg!("bynk mcp: {e}");
+            emsg!("bynk mcp: error: {e}");
             return ExitCode::FAILURE;
         }
     };

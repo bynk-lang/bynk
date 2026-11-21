@@ -87,7 +87,7 @@ impl SessionFile {
         let text = serde_json::to_string_pretty(session).expect("a session serialises");
         if let Err(e) = std::fs::write(&path, text) {
             emsg!(
-                "bynk: could not write {}: {e}; `bynk dev inspect` will not find this session",
+                "bynk: warning: could not write {}: {e}; `bynk dev inspect` will not find this session",
                 path.display()
             );
         }
@@ -413,7 +413,7 @@ pub fn command(project_root: &Path, what: &Inspect) -> std::process::ExitCode {
         Ok(t) => t,
         Err(_) => {
             emsg!(
-                "bynk: no running `bynk dev` session for this project (start one with `bynk dev`)"
+                "bynk: error: no running `bynk dev` session for this project (start one with `bynk dev`)"
             );
             return std::process::ExitCode::FAILURE;
         }
@@ -421,7 +421,7 @@ pub fn command(project_root: &Path, what: &Inspect) -> std::process::ExitCode {
     let session: Session = match serde_json::from_str(&text) {
         Ok(s) => s,
         Err(e) => {
-            emsg!("bynk: unreadable session file: {e}");
+            emsg!("bynk: error: unreadable session file: {e}");
             return std::process::ExitCode::FAILURE;
         }
     };
@@ -431,7 +431,7 @@ pub fn command(project_root: &Path, what: &Inspect) -> std::process::ExitCode {
             std::process::ExitCode::SUCCESS
         }
         Err(e) => {
-            emsg!("bynk: {e}");
+            emsg!("bynk: error: {e}");
             std::process::ExitCode::FAILURE
         }
     }

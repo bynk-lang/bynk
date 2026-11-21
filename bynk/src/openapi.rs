@@ -122,7 +122,7 @@ pub fn run(
     let doc = match document(&manifest_info(root), &analysis, service) {
         Ok(d) => d,
         Err(e) => {
-            emsg!("bynk: {e}");
+            emsg!("bynk: error: {e}");
             return ExitCode::FAILURE;
         }
     };
@@ -146,7 +146,7 @@ pub fn run(
         Some(path) => match std::fs::write(path, text) {
             Ok(()) => ExitCode::SUCCESS,
             Err(e) => {
-                emsg!("bynk: cannot write {}: {e}", path.display());
+                emsg!("bynk: error: cannot write {}: {e}", path.display());
                 ExitCode::FAILURE
             }
         },

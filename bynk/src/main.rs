@@ -34,7 +34,7 @@ fn main() -> ExitCode {
         // A panic has already printed its message.
         Ok(Err(_)) => ExitCode::FAILURE,
         Err(e) => {
-            emsg!("bynk: could not start: {e}");
+            emsg!("bynk: error: could not start: {e}");
             ExitCode::FAILURE
         }
     }
@@ -215,7 +215,7 @@ fn run() -> ExitCode {
             }
             let Some(root) = find_project_root(&input) else {
                 emsg!(
-                    "bynk: no `bynk.toml` found in `{}` or above; run from a project",
+                    "bynk: error: no `bynk.toml` found in `{}` or above; run from a project",
                     input.display()
                 );
                 return ExitCode::FAILURE;
@@ -353,7 +353,7 @@ fn run() -> ExitCode {
         } => {
             let Some(root) = find_project_root(&path) else {
                 emsg!(
-                    "bynk: not inside a Bynk project (no bynk.toml found from `{}`)",
+                    "bynk: error: not inside a Bynk project (no bynk.toml found from `{}`)",
                     path.display()
                 );
                 return ExitCode::FAILURE;
@@ -378,7 +378,7 @@ fn run() -> ExitCode {
                     }
                 }
                 Err(e) => {
-                    emsg!("bynk: {e}");
+                    emsg!("bynk: error: {e}");
                     ExitCode::FAILURE
                 }
             }
@@ -410,7 +410,7 @@ fn run() -> ExitCode {
                 ExitCode::SUCCESS
             }
             Err(e) => {
-                emsg!("bynk: {e}");
+                emsg!("bynk: error: {e}");
                 ExitCode::FAILURE
             }
         },
@@ -435,7 +435,7 @@ fn run() -> ExitCode {
                     ExitCode::SUCCESS
                 }
                 Err(e) => {
-                    emsg!("bynk: {e}");
+                    emsg!("bynk: error: {e}");
                     ExitCode::FAILURE
                 }
             }
@@ -449,7 +449,7 @@ fn run() -> ExitCode {
         } => {
             let Some(root) = find_project_root(&path) else {
                 emsg!(
-                    "bynk: not inside a Bynk project (no bynk.toml found from `{}`)",
+                    "bynk: error: not inside a Bynk project (no bynk.toml found from `{}`)",
                     path.display()
                 );
                 return ExitCode::FAILURE;
@@ -461,7 +461,7 @@ fn run() -> ExitCode {
             if run_check(root.clone(), CheckFormatArg::Short, None, false, false)
                 != ExitCode::SUCCESS
             {
-                emsg!("bynk: not published: the package doesn't check");
+                emsg!("bynk: error: not published: the package doesn't check");
                 return ExitCode::FAILURE;
             }
             let json = matches!(format, bynk::cli::DeployFormatArg::Json);
@@ -534,7 +534,7 @@ fn run() -> ExitCode {
             match bynk::approve::run(&root, &mode) {
                 Ok(()) => ExitCode::SUCCESS,
                 Err(e) => {
-                    emsg!("bynk: {e}");
+                    emsg!("bynk: error: {e}");
                     ExitCode::FAILURE
                 }
             }
@@ -617,7 +617,7 @@ fn project_root(input: &Path, lock: bynk::fetch::FetchOptions) -> Option<PathBuf
     let root = find_project_root(input);
     if root.is_none() {
         emsg!(
-            "bynk: no `bynk.toml` found in `{}` or above; run from a project",
+            "bynk: error: no `bynk.toml` found in `{}` or above; run from a project",
             input.display()
         );
     }
@@ -964,7 +964,7 @@ fn run_registry(command: bynk::cli::RegistryCommand) -> ExitCode {
     match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
-            emsg!("bynk: {e}");
+            emsg!("bynk: error: {e}");
             ExitCode::FAILURE
         }
     }
@@ -1001,7 +1001,7 @@ fn run_conformance(opts: bynk::registry::conformance::Options, json: bool) -> Ex
                 c.spec
             );
         }
-        emsg!("bynk: {summary}");
+        emsg!("bynk: error: {summary}");
         ExitCode::FAILURE
     } else {
         emsg!("bynk: {summary}");
@@ -1067,7 +1067,7 @@ fn run_dev_sub(sub: bynk::cli::DevSub) -> ExitCode {
     };
     let Some(project_root) = find_project_root(&path) else {
         emsg!(
-            "bynk: not inside a Bynk project (no bynk.toml found from `{}`)",
+            "bynk: error: not inside a Bynk project (no bynk.toml found from `{}`)",
             path.display()
         );
         return ExitCode::FAILURE;
@@ -1080,7 +1080,7 @@ fn run_dev(path: PathBuf, opts: DevOptions) -> ExitCode {
 
     let Some(project_root) = find_project_root(&path) else {
         emsg!(
-            "bynk: not inside a Bynk project (no bynk.toml found from `{}`)",
+            "bynk: error: not inside a Bynk project (no bynk.toml found from `{}`)",
             path.display()
         );
         return ExitCode::FAILURE;
@@ -1117,7 +1117,7 @@ fn run_tail(path: PathBuf, opts: bynk::tail::TailOptions) -> ExitCode {
     let tb = SystemToolbox;
     let Some(project_root) = find_project_root(&path) else {
         emsg!(
-            "bynk: not inside a Bynk project (no bynk.toml found from `{}`)",
+            "bynk: error: not inside a Bynk project (no bynk.toml found from `{}`)",
             path.display()
         );
         return ExitCode::FAILURE;
@@ -1132,7 +1132,7 @@ fn run_deploy(path: PathBuf, opts: DeployOptions) -> ExitCode {
     let tb = SystemToolbox;
     let Some(project_root) = find_project_root(&path) else {
         emsg!(
-            "bynk: not inside a Bynk project (no bynk.toml found from `{}`)",
+            "bynk: error: not inside a Bynk project (no bynk.toml found from `{}`)",
             path.display()
         );
         return ExitCode::FAILURE;
@@ -1171,7 +1171,7 @@ fn refuse_workspace_root(command: &str, root: &Path) -> bool {
         return false;
     }
     emsg!(
-        "bynk {command}: `{}` is a workspace root, not a project — run `bynk {command}` inside a member",
+        "bynk {command}: error: `{}` is a workspace root, not a project — run `bynk {command}` inside a member",
         root.display()
     );
     true

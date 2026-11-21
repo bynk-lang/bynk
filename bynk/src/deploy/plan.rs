@@ -21,7 +21,7 @@ fn build_dir_for(
         workers::prepare_build_dir(project_root, &build_dir).map(|()| (build_dir, None))
     };
     prepared
-        .map_err(|e| emsg!("bynk: could not prepare build directory: {e}"))
+        .map_err(|e| emsg!("bynk: error: could not prepare build directory: {e}"))
         .ok()
 }
 
@@ -566,7 +566,7 @@ fn confirm_address_removals(plan: &Plan<'_>, prune: bool, yes: bool) -> bool {
             .collect::<Vec<_>>()
             .join(", ");
         emsg!(
-            "bynk: this deploy would remove the Email Routing rule for {list}, and mail to it would bounce; nothing was pushed. Pass --prune to confirm the removal, or put the address back"
+            "bynk: error: this deploy would remove the Email Routing rule for {list}, and mail to it would bounce; nothing was pushed. Pass --prune to confirm the removal, or put the address back"
         );
         return false;
     }
@@ -602,7 +602,9 @@ fn confirm_deletions(plan: &Plan<'_>, confirmed: &[String], lock: &DeployLock) -
                 lock.has_deleted_class(plan.environment, &context.replace('.', "-"), class)
             });
         if !deletions.contains(&name) && !applied {
-            emsg!("bynk: --confirm-delete {name} names no class this plan deletes; refusing");
+            emsg!(
+                "bynk: error: --confirm-delete {name} names no class this plan deletes; refusing"
+            );
             return false;
         }
     }
@@ -615,7 +617,7 @@ fn confirm_deletions(plan: &Plan<'_>, confirmed: &[String], lock: &DeployLock) -
     }
     if !io::stdin().is_terminal() {
         emsg!(
-            "bynk: this deploy deletes stored agent data; confirm each class with {}",
+            "bynk: error: this deploy deletes stored agent data; confirm each class with {}",
             unconfirmed
                 .iter()
                 .map(|d| format!("--confirm-delete {d}"))
@@ -632,7 +634,7 @@ fn confirm_deletions(plan: &Plan<'_>, confirmed: &[String], lock: &DeployLock) -
         let _ = io::stderr().flush();
         let mut answer = String::new();
         if io::stdin().read_line(&mut answer).is_err() || answer.trim() != name.as_str() {
-            emsg!("bynk: `{name}` not confirmed; nothing was deployed");
+            emsg!("bynk: error: `{name}` not confirmed; nothing was deployed");
             return false;
         }
     }
@@ -688,7 +690,7 @@ pub(crate) fn secrets_file_passthrough_refusal(
         return None;
     }
     Some(format!(
-        "bynk: `{arg}` after `--` conflicts with the secrets file `bynk deploy` uploads with a new Worker's first version ({}).\n  \
+        "bynk: error: `{arg}` after `--` conflicts with the secrets file `bynk deploy` uploads with a new Worker's first version ({}).\n  \
          Pass it to bynk instead, before `--`: `bynk deploy --secrets-file <file>`.\n",
         first.join(", ")
     ))
@@ -799,7 +801,7 @@ impl ManagedKeys<'_> {
                 let d = decide_session_key(supplied.clone(), presence, opts.force, &mut mint)
                     .map_err(|e| {
                         format!(
-                            "bynk: the session key `{binding}` of the `SignedCookie` actor `{actor}` on `{worker}`: {e}\n"
+                            "bynk: error: the session key `{binding}` of the `SignedCookie` actor `{actor}` on `{worker}`: {e}\n"
                         )
                     })?;
                 decisions.push(((*worker).clone(), d));
@@ -811,7 +813,7 @@ impl ManagedKeys<'_> {
             if all.len() > 1 && fresh && (kept || in_run.len() < all.len()) {
                 let names: Vec<&str> = all.iter().map(|(w, _)| w.as_str()).collect();
                 return Err(format!(
-                    "bynk: the session key `{binding}` is shared by {}, but this run would leave them with different values (one already holds a key, or not all of them are in this run) and Cloudflare never returns a secret's value.\n  Supply the same value for every one of them: set `{binding}` in the environment or `--secrets-file` (a base64url value of at least 32 bytes), then deploy again.\n",
+                    "bynk: error: the session key `{binding}` is shared by {}, but this run would leave them with different values (one already holds a key, or not all of them are in this run) and Cloudflare never returns a secret's value.\n  Supply the same value for every one of them: set `{binding}` in the environment or `--secrets-file` (a base64url value of at least 32 bytes), then deploy again.\n",
                     names.join(", ")
                 ));
             }
@@ -839,7 +841,7 @@ pub fn run(
     // conflicting inputs.
     if let Some(conflict) = conflicting_env_passthrough(&opts.wrangler_args) {
         emsg!(
-            "bynk: `--env {}` conflicts with `{conflict}` after `--` — pass one or the other, not both",
+            "bynk: error: `--env {}` conflicts with `{conflict}` after `--` — pass one or the other, not both",
             opts.environment
         );
         return ExitCode::FAILURE;
@@ -847,7 +849,7 @@ pub fn run(
 
     // #3107: no contract checks in a deployment; #3562: no Worker groups yet.
     if let Err(e) = bynk_driver::refuse_undeployable_project(project_root) {
-        emsg!("bynk: {e}");
+        emsg!("bynk: error: {e}");
         return ExitCode::FAILURE;
     }
 
@@ -887,7 +889,7 @@ pub fn run(
     let selected = match select_workers(opts, project_root, &available) {
         Ok(selected) => selected,
         Err(e) => {
-            emsg!("bynk: {e}");
+            emsg!("bynk: error: {e}");
             return ExitCode::FAILURE;
         }
     };
@@ -897,7 +899,7 @@ pub fn run(
     let mut resources = match project_resources_for(&workers_dir, &available, project_root) {
         Ok(resources) => resources,
         Err(e) => {
-            emsg!("bynk: {e}");
+            emsg!("bynk: error: {e}");
             return ExitCode::FAILURE;
         }
     };
@@ -908,7 +910,7 @@ pub fn run(
     let secret_source = match SecretSource::read(opts) {
         Ok(source) => source,
         Err(e) => {
-            emsg!("bynk: {e}");
+            emsg!("bynk: error: {e}");
             return ExitCode::FAILURE;
         }
     };
@@ -917,7 +919,7 @@ pub fn run(
     let mut lock = match read_lock(&lock_path) {
         Ok(lock) => lock,
         Err(e) => {
-            emsg!("bynk: could not read {}: {e}", lock_path.display());
+            emsg!("bynk: error: could not read {}: {e}", lock_path.display());
             return ExitCode::FAILURE;
         }
     };
@@ -925,15 +927,13 @@ pub fn run(
     // (D4) `--context` does not deploy a dependency closure. A binding to a
     // Worker that has never been pushed fails at upload, so say which one
     // rather than letting Cloudflare's own error carry it.
+    let env = opts.environment.as_str();
     if opts.context.is_some()
         && let [worker] = selected.as_slice()
     {
         let absent = absent_dependencies(worker, &graph, &lock, &opts.environment);
         if !absent.is_empty() {
-            eprint!(
-                "{}",
-                absent_dependencies_refusal(&opts.environment, worker, &absent)
-            );
+            colour::eprint(&absent_dependencies_refusal(env, worker, &absent));
             return ExitCode::FAILURE;
         }
 
@@ -945,7 +945,7 @@ pub fn run(
             Ok(m) => m,
             Err(e) => {
                 emsg!(
-                    "bynk: could not read `{worker}`'s {}: {e}",
+                    "bynk: error: could not read `{worker}`'s {}: {e}",
                     bynk_emit::emitter::contracts::CONTRACTS_MANIFEST
                 );
                 return ExitCode::FAILURE;
@@ -965,10 +965,7 @@ pub fn run(
             &opts.environment,
         );
         if !skews.is_empty() {
-            eprint!(
-                "{}",
-                contract_skew_refusal(&opts.environment, worker, &skews)
-            );
+            colour::eprint(&contract_skew_refusal(&opts.environment, worker, &skews));
             return ExitCode::FAILURE;
         }
 
@@ -1011,7 +1008,7 @@ pub fn run(
                     Ok(()) => recorded = true,
                     Err(e) => {
                         emsg!(
-                            "bynk: could not record the older contracts in {}: {e}",
+                            "bynk: error: could not record the older contracts in {}: {e}",
                             bynk_driver::contracts_lock::lock_path(project_root).display()
                         );
                         return ExitCode::FAILURE;
@@ -1021,7 +1018,7 @@ pub fn run(
                 // recorded.
                 if !rebuild(project_root, &build_dir, opts) {
                     emsg!(
-                        "bynk: the older contracts were recorded in {}, but the rebuild failed; nothing was deployed. The entries are safe to keep (every build re-checks them), or revert the file.",
+                        "bynk: error: the older contracts were recorded in {}, but the rebuild failed; nothing was deployed. The entries are safe to keep (every build re-checks them), or revert the file.",
                         bynk_driver::contracts_lock::lock_path(project_root).display()
                     );
                     return ExitCode::FAILURE;
@@ -1030,7 +1027,7 @@ pub fn run(
                     Ok(m) => m,
                     Err(e) => {
                         emsg!(
-                            "bynk: could not read `{worker}`'s {}: {e}",
+                            "bynk: error: could not read `{worker}`'s {}: {e}",
                             bynk_emit::emitter::contracts::CONTRACTS_MANIFEST
                         );
                         return ExitCode::FAILURE;
@@ -1091,10 +1088,7 @@ pub fn run(
             }
         }
         for caller in unrecorded_callers(worker, &graph, &lock, &opts.environment) {
-            eprint!(
-                "{}",
-                unrecorded_caller_warning(&opts.environment, worker, &caller)
-            );
+            colour::eprint(&unrecorded_caller_warning(env, worker, &caller));
         }
     }
 
@@ -1107,7 +1101,7 @@ pub fn run(
             .filter(|worker| selected.contains(worker))
             .collect::<Vec<_>>(),
         Err(e) => {
-            emsg!("bynk: {e}");
+            emsg!("bynk: error: {e}");
             let OrderError::Cycle(path) = &e;
             let publishers = cycle_publishers(path, &resources);
             if !publishers.is_empty() {
@@ -1154,7 +1148,7 @@ pub fn run(
     let pins = match read_pins(project_root) {
         Ok(pins) => pins,
         Err(e) => {
-            emsg!("bynk: {e}");
+            emsg!("bynk: error: {e}");
             return ExitCode::FAILURE;
         }
     };
@@ -1168,7 +1162,7 @@ pub fn run(
             Ok(_) => {}
             Err(e) => {
                 emsg!(
-                    "bynk: could not read `{worker}`'s {}: {e}",
+                    "bynk: error: could not read `{worker}`'s {}: {e}",
                     bynk_emit::emitter::contracts::CONTRACTS_MANIFEST
                 );
                 return ExitCode::FAILURE;
@@ -1194,7 +1188,7 @@ pub fn run(
         return ExitCode::FAILURE;
     }
     if let Some(message) = account_name_problem(&resources, &lock, &opts.environment) {
-        emsg!("bynk: {message}");
+        emsg!("bynk: error: {message}");
         return ExitCode::FAILURE;
     }
     // #2055: a first deploy hands `wrangler deploy` Bynk's own
@@ -1234,7 +1228,7 @@ pub fn run(
     // P5 (#2323): a changed `@jurisdiction` is a new bucket beside the old,
     // whose objects do not move, so it is only made on an explicit `--yes`.
     if let Some(refusal) = recreate_refusal(&plan, opts.yes) {
-        emsg!("bynk: {refusal}");
+        emsg!("bynk: error: {refusal}");
         return ExitCode::FAILURE;
     }
 
@@ -1255,7 +1249,7 @@ pub fn run(
     }
     if !whoami(&probe.provenance) {
         emsg!(
-            "bynk: Cloudflare authentication is unavailable; run `wrangler login` or set CLOUDFLARE_API_TOKEN"
+            "bynk: error: Cloudflare authentication is unavailable; run `wrangler login` or set CLOUDFLARE_API_TOKEN"
         );
         return ExitCode::FAILURE;
     }
@@ -1359,7 +1353,7 @@ pub fn run(
         let names = match edge.keys() {
             Ok(names) => names,
             Err(e) => {
-                emsg!("bynk: {e}");
+                emsg!("bynk: error: {e}");
                 return ExitCode::FAILURE;
             }
         };
@@ -1383,7 +1377,7 @@ pub fn run(
                 edge_keys.insert(edge.clone(), decision);
             }
             Err(e) => {
-                emsg!("bynk: {e}");
+                emsg!("bynk: error: {e}");
                 return ExitCode::FAILURE;
             }
         }
@@ -1400,7 +1394,7 @@ pub fn run(
     let foreign_keys = match managed.decide(&lock, opts, &secret_source) {
         Ok(keys) => keys,
         Err(e) => {
-            eprint!("{e}");
+            colour::eprint(&e);
             return ExitCode::FAILURE;
         }
     };
@@ -1464,23 +1458,17 @@ pub fn run(
                         minted: true,
                     }) = foreign_keys.get(&(worker.clone(), caller.binding.clone()))
                     {
-                        eprint!(
-                            "{}",
-                            foreign_hand_off(&opts.environment, worker, caller, value, runner)
-                        );
+                        colour::eprint(&foreign_hand_off(env, worker, caller, value, runner));
                     }
                 }
                 record_fresh_moves(&mut lock, opts, worker, &moves);
                 if let Err(e) = write_lock(&lock_path, &lock) {
-                    eprint!(
-                        "{}",
-                        unrecorded_deploy_failure(
-                            &opts.environment,
-                            worker,
-                            &lock_path.display().to_string(),
-                            &e.to_string()
-                        )
-                    );
+                    colour::eprint(&unrecorded_deploy_failure(
+                        &opts.environment,
+                        worker,
+                        &lock_path.display().to_string(),
+                        &e.to_string(),
+                    ));
                     return ExitCode::FAILURE;
                 }
             }
@@ -1491,7 +1479,7 @@ pub fn run(
             // claims what it watched succeed.
             Ok(Pushed::Interrupted) => return ExitCode::SUCCESS,
             Err(f) => {
-                emsg!("bynk: {}", f.message);
+                emsg!("bynk: error: {}", f.message);
                 // Stop rather than push on: everything left in the order either
                 // binds to what just failed or would be uploaded into a
                 // topology that is not what the plan described. `worker` itself
@@ -1517,14 +1505,8 @@ pub fn run(
                         minted: true,
                     }) = foreign_keys.get(&(worker.clone(), caller.binding.clone()))
                     {
-                        eprint!(
-                            "{}",
-                            foreign_binding_maybe_set_notice(&opts.environment, worker, caller)
-                        );
-                        eprint!(
-                            "{}",
-                            foreign_hand_off(&opts.environment, worker, caller, value, runner)
-                        );
+                        colour::eprint(&foreign_binding_maybe_set_notice(env, worker, caller));
+                        colour::eprint(&foreign_hand_off(env, worker, caller, value, runner));
                     }
                 }
                 // Wrangler's own code, not a flat 1 (slice 0's contract).
@@ -1549,7 +1531,7 @@ pub fn run(
             &opts.environment,
             &plan.orphans,
         ) {
-            emsg!("bynk: {}", e.message);
+            emsg!("bynk: error: {}", e.message);
             return ExitCode::from(e.code);
         }
         // #3319: a Hyperdrive config holds no data, so one the deploy made is
@@ -1561,7 +1543,7 @@ pub fn run(
             &opts.environment,
             &plan.orphans,
         ) {
-            emsg!("bynk: {}", e.message);
+            emsg!("bynk: error: {}", e.message);
             return ExitCode::from(e.code);
         }
     }
@@ -1642,7 +1624,7 @@ pub(crate) fn interrupted_rotation_hint(
         return None;
     }
     Some(format!(
-        "bynk: this run was setting new keys on {} and stopped before both ends of each were deployed, so each end may hold a different key and calls along it are refused.\n  \
+        "bynk: note: this run was setting new keys on {} and stopped before both ends of each were deployed, so each end may hold a different key and calls along it are refused.\n  \
          Rerun `{} --force` (the whole project) to set one key on both ends; a plain rerun would keep both.\n",
         split.join(", "),
         deploy_command(environment)
@@ -1802,17 +1784,16 @@ fn report_callee_skews(
 ) {
     let (built, orphaned) = split_orphaned_callers(skews, graph);
     if !built.is_empty() {
-        eprint!(
-            "{}",
-            callee_contract_skew_refusal(environment, worker, &built)
-        );
+        colour::eprint(&callee_contract_skew_refusal(environment, worker, &built));
     }
     if !orphaned.is_empty() {
         let script_of = |c: &str| lock.script_of(environment, c);
-        eprint!(
-            "{}",
-            orphaned_caller_skew_refusal(environment, worker, &orphaned, (runner, &script_of))
-        );
+        colour::eprint(&orphaned_caller_skew_refusal(
+            environment,
+            worker,
+            &orphaned,
+            (runner, &script_of),
+        ));
     }
 }
 
@@ -1945,7 +1926,7 @@ pub(crate) fn unused_accepted(
 /// #2554: tell the author which accepted contracts nothing live needs.
 pub(crate) fn unused_accepted_notice(unused: &[(String, String, String)]) -> String {
     let mut out = format!(
-        "bynk: bynk.contracts.lock accepts {} older contract{} that no live caller was compiled against:\n",
+        "bynk: note: bynk.contracts.lock accepts {} older contract{} that no live caller was compiled against:\n",
         unused.len(),
         if unused.len() == 1 { "" } else { "s" }
     );
@@ -2004,7 +1985,7 @@ pub(crate) fn contract_skew_refusal(
     skews: &[ContractSkew],
 ) -> String {
     let mut out = format!(
-        "bynk: `{}` was compiled against a contract its live dependencies no longer provide ({CONTRACT_SKEW}):\n",
+        "bynk: error: `{}` was compiled against a contract its live dependencies no longer provide ({CONTRACT_SKEW}):\n",
         deployed_worker_name(environment, worker)
     );
     for s in skews {
@@ -2062,10 +2043,12 @@ fn end_presence(
         .map(|(key, _)| key.as_str())
         .collect();
     if !unknown.is_empty() {
-        eprint!(
-            "{}",
-            unknown_edge_key_notice(environment, worker, &unknown.join(", "), edge)
-        );
+        colour::eprint(&unknown_edge_key_notice(
+            environment,
+            worker,
+            &unknown.join(", "),
+            edge,
+        ));
     }
     combine_presence(held.iter().map(|(_, p)| *p))
 }
@@ -2093,7 +2076,7 @@ pub(crate) fn unknown_edge_key_notice(
     edge: &Edge,
 ) -> String {
     format!(
-        "bynk: could not ask Cloudflare whether `{}` holds {key}; assuming it does. If it does not, the edge {} refuses every call — `{} --force` sets a fresh key on every edge.\n",
+        "bynk: warning: could not ask Cloudflare whether `{}` holds {key}; assuming it does. If it does not, the edge {} refuses every call — `{} --force` sets a fresh key on every edge.\n",
         deployed_worker_name(environment, worker),
         edge.describe(environment),
         deploy_command(environment)
@@ -2118,7 +2101,7 @@ pub(crate) fn unrecorded_deploy_failure(
     error: &str,
 ) -> String {
     format!(
-        "bynk: deployed `{}` but could not record it in {lock_path}: {error}\n",
+        "bynk: error: deployed `{}` but could not record it in {lock_path}: {error}\n",
         deployed_worker_name(environment, worker)
     )
 }
@@ -2133,7 +2116,7 @@ pub(crate) fn foreign_binding_refusal(
     reason: &str,
 ) -> String {
     format!(
-        "bynk: `{}` (the foreign caller `{}` of `{}`): {reason}\n",
+        "bynk: error: `{}` (the foreign caller `{}` of `{}`): {reason}\n",
         caller.binding,
         caller.actor,
         deployed_worker_name(environment, worker)
@@ -2150,7 +2133,7 @@ pub(crate) fn foreign_binding_maybe_set_notice(
 ) -> String {
     let worker = deployed_worker_name(environment, worker);
     format!(
-        "bynk: `{worker}` may already hold the {} minted for its foreign caller `{}`. If `wrangler secret list --name {worker}` shows it, hand this off; if not, the next deploy mints another.\n",
+        "bynk: note: `{worker}` may already hold the {} minted for its foreign caller `{}`. If `wrangler secret list --name {worker}` shows it, hand this off; if not, the next deploy mints another.\n",
         caller.binding, caller.actor
     )
 }
@@ -2196,7 +2179,7 @@ pub(crate) fn wrangler_floor_refusal(
         .iter()
         .find(|worker| !resources[*worker].durable_objects.is_empty())?;
     Some(format!(
-        "bynk: wrangler {version} is older than {}, the oldest this Bynk release supports \
+        "bynk: error: wrangler {version} is older than {}, the oldest this Bynk release supports \
          (`{worker}` declares Durable Object `exports`, which wrangler reads from 4.107.0, and an \
          older wrangler is untested against the generated configuration); the push is not \
          attempted. Upgrade with `{}`.",
@@ -2207,7 +2190,7 @@ pub(crate) fn wrangler_floor_refusal(
 
 pub fn preflight_failure_message(report: &Report) -> String {
     format!(
-        "bynk: environment not ready for `deploy` — see below.\n\n{}",
+        "bynk: error: environment not ready for `deploy` — see below.\n\n{}",
         report::render(report, Format::Human)
     )
 }
@@ -2225,7 +2208,7 @@ pub(crate) fn absent_dependencies_refusal(
     absent: &[String],
 ) -> String {
     format!(
-        "bynk: `{}` binds to {}, which {} never been deployed — a Service Binding to a Worker that does not exist fails at upload.\n  Deploy the whole project once (`{}`) to bring the topology up.\n",
+        "bynk: error: `{}` binds to {}, which {} never been deployed — a Service Binding to a Worker that does not exist fails at upload.\n  Deploy the whole project once (`{}`) to bring the topology up.\n",
         deployed_worker_name(environment, worker),
         absent
             .iter()
@@ -2249,7 +2232,7 @@ pub(crate) fn callee_contract_skew_refusal(
     skews: &[CalleeSkew],
 ) -> String {
     let mut out = format!(
-        "bynk: `{}` no longer provides the contract its live callers were compiled against ({CONTRACT_SKEW}):\n",
+        "bynk: error: `{}` no longer provides the contract its live callers were compiled against ({CONTRACT_SKEW}):\n",
         deployed_worker_name(environment, worker)
     );
     for s in skews {
@@ -2294,7 +2277,7 @@ pub(crate) fn orphaned_caller_skew_refusal(
     (runner, script_of): (&str, &dyn Fn(&str) -> String),
 ) -> String {
     let mut out = format!(
-        "bynk: `{}` no longer provides the contract a live Worker this project no longer builds was compiled against ({CONTRACT_SKEW}):\n",
+        "bynk: error: `{}` no longer provides the contract a live Worker this project no longer builds was compiled against ({CONTRACT_SKEW}):\n",
         deployed_worker_name(environment, worker)
     );
     for s in skews {
@@ -2364,7 +2347,7 @@ pub(crate) fn stopped_report(environment: &str, rest: &[String]) -> String {
         return String::new();
     }
     format!(
-        "bynk: stopping — {} not deployed: {}. Re-run `{}` to resume; what already landed is kept.\n",
+        "bynk: note: stopping — {} not deployed: {}. Re-run `{}` to resume; what already landed is kept.\n",
         if rest.len() == 1 {
             "1 more context was".to_string()
         } else {
@@ -2706,7 +2689,7 @@ fn unrecordable_in_ci(
     }
     if let Some((worker, binding)) = first_unrecorded_kv(order, resources, lock, environment) {
         emsg!(
-            "bynk: {} is unrecorded; provision locally first and commit {LOCK_FILE}",
+            "bynk: error: {} is unrecorded; provision locally first and commit {LOCK_FILE}",
             kv_namespace_noun(worker, binding)
         );
         return true;
@@ -2714,7 +2697,7 @@ fn unrecordable_in_ci(
     if let Some((worker, binding)) = first_unrecorded_ratelimit(order, resources, lock, environment)
     {
         emsg!(
-            "bynk: the rate limiter `{binding}` of `{worker}` is unrecorded; deploy locally first and commit {LOCK_FILE}"
+            "bynk: error: the rate limiter `{binding}` of `{worker}` is unrecorded; deploy locally first and commit {LOCK_FILE}"
         );
         return true;
     }
@@ -3522,7 +3505,7 @@ fn confirm(yes: bool) -> bool {
         return true;
     }
     if !requires_interactive_confirmation(yes, io::stdin().is_terminal()) {
-        emsg!("bynk: refusing to mutate in a non-interactive session without --yes");
+        emsg!("bynk: error: refusing to mutate in a non-interactive session without --yes");
         return false;
     }
     eprint!("Deploy to Cloudflare? [y/N] ");
@@ -4671,7 +4654,7 @@ pub(crate) mod tests {
             )
             .as_deref(),
             Some(
-                "bynk: `--secrets-file` after `--` conflicts with the secrets file `bynk deploy` uploads with a new Worker's first version (`web-staging`).\n  \
+                "bynk: error: `--secrets-file` after `--` conflicts with the secrets file `bynk deploy` uploads with a new Worker's first version (`web-staging`).\n  \
                  Pass it to bynk instead, before `--`: `bynk deploy --secrets-file <file>`.\n"
             )
         );

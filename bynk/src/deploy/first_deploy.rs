@@ -144,7 +144,7 @@ impl Watch {
             return status;
         }
         emsg!(
-            "bynk: wrangler could not look up `{}` after uploading it ([code: 10007], a race with the script's creation); the account shows the upload landed as the Worker's first version, so the deploy continues",
+            "bynk: warning: wrangler could not look up `{}` after uploading it ([code: 10007], a race with the script's creation); the account shows the upload landed as the Worker's first version, so the deploy continues",
             self.script
         );
         self.forgave.set(true);

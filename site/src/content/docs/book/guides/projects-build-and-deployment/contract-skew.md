@@ -91,7 +91,7 @@ it compares `orders`'s expectations against what its dependencies actually have
 live, and stops:
 
 ```
-bynk: `shop-orders` was compiled against a contract its live dependencies no
+bynk: error: `shop-orders` was compiled against a contract its live dependencies no
       longer provide (bynk.deploy.contract_skew):
   shop.payment.authorise — compiled against 317bdd3de84d2176, live is 9f2c41ab73e05d18
   Deploying this would ship a caller its callee rejects (409 ContractMismatch) on every call.
@@ -110,7 +110,7 @@ live Worker was compiled against, and stops before shipping a callee that would
 refuse its live callers:
 
 ```
-bynk: `shop-payment` no longer provides the contract its live callers were
+bynk: error: `shop-payment` no longer provides the contract its live callers were
       compiled against (bynk.deploy.contract_skew):
   `shop-orders` calls shop.payment.authorise — compiled against 317bdd3de84d2176, this build provides 9f2c41ab73e05d18
   Deploying this would ship a callee that rejects its live callers (409 ContractMismatch) on every call.
@@ -145,7 +145,7 @@ says whether the change is **compatible**, meaning the caller would still work i
 the hashes agreed, or **breaking**, with the reasons:
 
 ```
-bynk: `shop-payment` no longer provides the contract its live callers were
+bynk: error: `shop-payment` no longer provides the contract its live callers were
       compiled against (bynk.deploy.contract_skew):
   `shop-orders` calls shop.payment.authorise — compiled against 317bdd3de84d2176, this build provides 9f2c41ab73e05d18
       breaking response.refunded: the caller requires the field `refunded`, which the callee does not send (only an `Option` or a field with a default may be absent)

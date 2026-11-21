@@ -23,7 +23,7 @@ pub fn run(args: TestArgs) -> ExitCode {
     let workspace = match bynk_driver::workspace_at_each(&args.input, args.each) {
         Ok(w) => w,
         Err(message) => {
-            emsg!("bynk test: {message}");
+            emsg!("bynk test: error: {message}");
             return ExitCode::FAILURE;
         }
     };
@@ -32,14 +32,14 @@ pub fn run(args: TestArgs) -> ExitCode {
             Ok(w) => w,
             Err(e) => {
                 emsg!(
-                    "bynk test: {}: {e}",
+                    "bynk test: error: {}: {e}",
                     bynk_driver::display_path(Path::new(""), &args.input.join("bynk.toml"))
                 );
                 return ExitCode::FAILURE;
             }
         };
         if let Some(refusal) = workspace_refusal(&args) {
-            emsg!("bynk test: {refusal}");
+            emsg!("bynk test: error: {refusal}");
             return ExitCode::FAILURE;
         }
         let members: Vec<PathBuf> = workspace
@@ -109,7 +109,9 @@ fn run_one(mut args: TestArgs) -> ExitCode {
         match std::env::current_exe() {
             Ok(path) => args.dev_command = Some(path),
             Err(e) => {
-                emsg!("bynk test: could not find this `bynk` binary to start `bynk dev`: {e}");
+                emsg!(
+                    "bynk test: error: could not find this `bynk` binary to start `bynk dev`: {e}"
+                );
                 return ExitCode::FAILURE;
             }
         }
@@ -134,7 +136,7 @@ fn run_one(mut args: TestArgs) -> ExitCode {
         Some(Ok(path)) => args.declared_statuses = Some(path),
         Some(Err(e)) => {
             emsg!(
-                "bynk test: could not write the smoke table, so undeclared statuses are not checked: {e}"
+                "bynk test: warning: could not write the smoke table, so undeclared statuses are not checked: {e}"
             );
         }
         None => {}

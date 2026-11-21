@@ -99,7 +99,7 @@ fn report_survivors(why: &str, pids: &[u32]) {
         .collect::<Vec<_>>()
         .join(" ");
     emsg!(
-        "bynk dev: could not stop leftover processes ({why}): {pids}. They may hold \
+        "bynk dev: warning: could not stop leftover processes ({why}): {pids}. They may hold \
          ports the next `bynk dev` needs; stop them by hand."
     );
 }

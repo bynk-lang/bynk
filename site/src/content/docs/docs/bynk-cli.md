@@ -56,7 +56,11 @@ heading. What is coloured:
 - `bynk revert`: each Worker's heading bold, each check's `ok` green or
   `refused` red, and the verdict.
 - The `error:`, `warning:` and `note:` label of a message on stderr, such as
-  `bynk test: warning: no tests found`.
+  `bynk test: warning: no tests found`, and its coded form, `error[…]:`. Each
+  message of the driver's own carries one after the name of who is speaking:
+  `error:` when the command then fails (`bynk: error: not inside a Bynk
+  project …`), `warning:` when it carries on in a degraded state, and `note:`
+  when the message asks you to act. Progress and information carry none.
 - `bynk doctor`'s marks, rich diagnostics, the
   [build progress](#build-progress) lines, and `--help`.
 

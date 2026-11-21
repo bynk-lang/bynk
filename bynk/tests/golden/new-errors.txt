@@ -1,7 +1,7 @@
-bynk: `my-app` isn't a valid Bynk name.
+bynk: error: `my-app` isn't a valid Bynk name.
       A name must be a single identifier — a letter followed by letters, digits, or underscores (no dashes or dots).
       Pass `--name <ident>` to choose the project's identifier.
-bynk: `hello` already exists and isn't empty — refusing to overwrite.
+bynk: error: `hello` already exists and isn't empty — refusing to overwrite.
       Choose a different path, or empty that directory first.
-bynk: couldn't derive a project name from `.`.
+bynk: error: couldn't derive a project name from `.`.
       Pass `--name <ident>` to name the project.

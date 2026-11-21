@@ -389,7 +389,7 @@ pub(crate) fn fix_all(prog: &str, scope: &Scope, inputs: &[(&Path, String)]) -> 
         }
     }
     if refused {
-        emsg!("{prog}: --fix: nothing was written");
+        emsg!("{prog}: error: --fix: nothing was written");
         return false;
     }
     let files = plans.iter().flat_map(|plan| &plan.files);
@@ -397,7 +397,7 @@ pub(crate) fn fix_all(prog: &str, scope: &Scope, inputs: &[(&Path, String)]) -> 
     for file in files.clone() {
         if std::fs::metadata(&file.path).is_ok_and(|m| m.permissions().readonly()) {
             emsg!(
-                "{prog}: --fix: cannot write `{}`: file is read-only; nothing was written",
+                "{prog}: error: --fix: cannot write `{}`: file is read-only; nothing was written",
                 shown(&file.path)
             );
             return false;
@@ -405,7 +405,7 @@ pub(crate) fn fix_all(prog: &str, scope: &Scope, inputs: &[(&Path, String)]) -> 
     }
     for file in files {
         if let Err(e) = atomic_write(&file.path, &file.fixed) {
-            emsg!("{prog}: --fix: write `{}`: {e}", shown(&file.path));
+            emsg!("{prog}: error: --fix: write `{}`: {e}", shown(&file.path));
             return false;
         }
         eprintln!("fixed: {}: {}", shown(&file.path), codes_line(&file.codes));

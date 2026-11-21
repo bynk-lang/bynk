@@ -167,7 +167,7 @@ pub(crate) fn report_note(bound: &Bound) -> Option<String> {
     }
     for capability in &bound.unbound {
         lines.push(format!(
-            "bynk dev: `{capability}` has no development index, so calls to it fail until you set `[dev.vectorize-index] {capability} = \"<index-name>\"` in bynk.toml"
+            "bynk dev: warning: `{capability}` has no development index, so calls to it fail until you set `[dev.vectorize-index] {capability} = \"<index-name>\"` in bynk.toml"
         ));
     }
     (!lines.is_empty()).then(|| lines.join("\n"))

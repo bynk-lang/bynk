@@ -1,4 +1,4 @@
-bynk: environment not ready for `dev` — see below.
+bynk: error: environment not ready for `dev` — see below.
 
 bynk doctor — environment report
 driver: bynk 9.9.9

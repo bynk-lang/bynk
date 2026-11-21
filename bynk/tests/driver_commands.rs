@@ -841,7 +841,7 @@ fn reported(err: &str) -> Vec<PathBuf> {
     let mut files: Vec<PathBuf> = err
         .lines()
         .filter_map(|l| l.strip_suffix(" is not canonically formatted"))
-        .filter_map(|l| l.split_once("fmt: ").map(|(_, p)| p))
+        .filter_map(|l| l.split_once("fmt: error: ").map(|(_, p)| p))
         .map(|p| {
             let p = Path::new(p);
             p.strip_prefix(".").unwrap_or(p).to_path_buf()

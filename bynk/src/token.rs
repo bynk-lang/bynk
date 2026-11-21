@@ -57,7 +57,7 @@ pub fn run(root: &Path, req: &Request) -> ExitCode {
             ExitCode::SUCCESS
         }
         Err(e) => {
-            emsg!("bynk: {e}");
+            emsg!("bynk: error: {e}");
             ExitCode::FAILURE
         }
     }

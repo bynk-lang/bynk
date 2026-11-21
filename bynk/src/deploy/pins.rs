@@ -212,7 +212,7 @@ pub(crate) fn check_pins(
 /// The refusal: each broken pin, then what to do.
 pub(crate) fn refusal_message(broken: &[BrokenPin]) -> String {
     let mut out = format!(
-        "bynk: this build breaks the contract a foreign caller's client was generated at ({FOREIGN_SKEW}):\n"
+        "bynk: error: this build breaks the contract a foreign caller's client was generated at ({FOREIGN_SKEW}):\n"
     );
     for b in broken {
         let what = match &b.built {
@@ -244,7 +244,7 @@ pub(crate) fn unpinned_message(unpinned: &[Unpinned]) -> String {
         groups.entry((&u.context, &u.actor)).or_default().push(u);
     }
     let mut out = format!(
-        "bynk: {} foreign caller{} {} no pin in {PIN_FILE}, so a contract change that breaks {} client would not be refused. To pin, add:\n",
+        "bynk: warning: {} foreign caller{} {} no pin in {PIN_FILE}, so a contract change that breaks {} client would not be refused. To pin, add:\n",
         groups.len(),
         if groups.len() == 1 { "" } else { "s" },
         if groups.len() == 1 { "has" } else { "have" },
