@@ -23,7 +23,7 @@ use std::rc::Rc;
 use bynk_check::checker::{Callee, TypedCommons};
 use bynk_syntax::ast::{Block, Expr, ExprId, ExprKind, FnDecl, FnName, MatchBody};
 
-use super::lower::{LoweredExpr, Pre};
+use super::lower::Pre;
 use super::lower_ctx::LowerCtx;
 use super::lower_stmt::{Body, Item, assign_item, block_body_with_return, const_item};
 use super::ts_types::{ts_ty, ts_type_ref};
@@ -317,7 +317,7 @@ pub(crate) fn loop_body_stmts(
         .collect();
     let looped = bynk_ts::TsStmt::while_stmt(
         bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Bool(true)),
-        bynk_ts::TsStmt::block(inner.into_stmts(base + INDENT_STEP), None),
+        bynk_ts::TsStmt::block(inner.into_stmts(), None),
         None,
     );
     vec![
@@ -344,7 +344,7 @@ pub(super) fn emit_continue(body: &mut Body, e: &Expr, cx: &mut LowerCtx) -> boo
         return false;
     };
     let mut pre = Pre::new();
-    let vals: Vec<LoweredExpr> = args.iter().map(|a| pre.lower_node(a, cx)).collect();
+    let vals: Vec<bynk_ts::TsExpr> = args.iter().map(|a| pre.lower_node(a, cx)).collect();
     body.extend(pre.items());
     // Every slot is assigned, even where the argument looks like the parameter's
     // own name: a binder in the body can share a parameter's name, and the
@@ -358,7 +358,7 @@ pub(super) fn emit_continue(body: &mut Body, e: &Expr, cx: &mut LowerCtx) -> boo
     for (s, t) in plan.slots.iter().zip(&temps) {
         body.push(assign_item(
             bynk_ts::TsExpr::Ident(s.var.clone()),
-            LoweredExpr::Node(bynk_ts::TsExpr::Ident(t.clone())),
+            bynk_ts::TsExpr::Ident(t.clone()),
             cx.fault_site(e.span),
         ));
     }

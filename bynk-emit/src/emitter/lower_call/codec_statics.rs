@@ -11,7 +11,7 @@ use bynk_ts::{
     TsUnaryOp, VerbatimOrigin,
 };
 
-use super::super::lower::{Built, Pre, ident_node, member_node, str_node};
+use super::super::lower::{Pre, ident_node, member_node, str_node};
 use super::super::lower_ctx::LowerCtx;
 use super::super::ts_types::ts_ty_to_ts_type;
 use super::super::{BaseType, Expr, TypeBody, TypeRef, ty_to_type_ref};
@@ -45,7 +45,7 @@ pub(in super::super) fn lower_json_codec_call(
     args: &[Expr],
     cx: &mut LowerCtx,
     pre: &mut Pre,
-) -> Option<Built> {
+) -> Option<bynk_ts::TsExpr> {
     // The codec operation the checker resolved for this call (1A.33). Every form below takes
     // exactly one argument.
     let Some(Callee::Intrinsic { op, .. }) = cx.commons().callees.get(&e.id) else {
@@ -62,8 +62,8 @@ pub(in super::super) fn lower_json_codec_call(
             if let Some(Ty::Result(t, _)) = cx.commons().expr_ty(e.id).as_deref().cloned()
                 && let Some(decoder) = json_decoder_fn(t, DecodeSource::Yaml, cx)
             {
-                let arg = pre.lower_ts(&args[0], cx);
-                return Some(Ok(apply_decoder(decoder, arg)));
+                let arg = pre.lower_node(&args[0], cx);
+                return Some(apply_decoder(decoder, arg));
             }
         }
         // #3276 (decision G): `Form.decode[T](text)` reads the text as the router reads
@@ -72,13 +72,13 @@ pub(in super::super) fn lower_json_codec_call(
             if let Some(Ty::Result(t, _)) = cx.commons().expr_ty(e.id).as_deref().cloned()
                 && let Some(decoder) = json_decoder_fn(t, DecodeSource::Form, cx)
             {
-                let arg = pre.lower_ts(&args[0], cx);
-                return Some(Ok(apply_decoder(decoder, arg)));
+                let arg = pre.lower_node(&args[0], cx);
+                return Some(apply_decoder(decoder, arg));
             }
         }
         // `Form.encode(v)` writes the form text such a route reads.
         StaticOp::Form(FormStatic::Encode) => {
-            return Some(Ok(lower_form_encode(&args[0], cx, pre)));
+            return Some(lower_form_encode(&args[0], cx, pre));
         }
         StaticOp::Json(JsonStatic::Encode | JsonStatic::EncodePlain) => {
             if let Some(encoded) = json_encode(
@@ -87,7 +87,7 @@ pub(in super::super) fn lower_json_codec_call(
                 cx,
                 op == StaticOp::Json(JsonStatic::EncodePlain),
             ) {
-                return Some(Ok(encoded));
+                return Some(encoded);
             }
         }
         StaticOp::Json(JsonStatic::Decode | JsonStatic::DecodeSql) => {
@@ -102,8 +102,8 @@ pub(in super::super) fn lower_json_codec_call(
                     cx,
                 )
             {
-                let arg = pre.lower_ts(&args[0], cx);
-                return Some(Ok(apply_decoder(decoder, arg)));
+                let arg = pre.lower_node(&args[0], cx);
+                return Some(apply_decoder(decoder, arg));
             }
         }
         StaticOp::List(_)
@@ -507,7 +507,7 @@ fn form_encode_wire(pre: &mut Pre, arg: &Expr, cx: &mut LowerCtx) -> Option<TsEx
     if cx.records_codec_roots() {
         cx.runtime_use().note_json_codec_root(arg_ty);
     }
-    let v = pre.lower_ts(arg, cx);
+    let v = pre.lower_node(arg, cx);
     Some(serialise_value(&tref, &v, cx))
 }
 
@@ -592,7 +592,7 @@ pub(in super::super) fn json_encode(
             note_ground_roots(arg_ty, cx);
         }
         let codec = cx.codec(arg_ty);
-        let v = pre.lower_ts(arg, cx);
+        let v = pre.lower_node(arg, cx);
         // `plain` never reaches a generic argument: the checker refused it.
         return Some(json_stringify(call(member(codec, "encode"), vec![v])));
     }
@@ -607,7 +607,7 @@ pub(in super::super) fn json_encode(
     if cx.records_codec_roots() {
         cx.runtime_use().note_json_codec_root(arg_ty);
     }
-    let v = pre.lower_ts(arg, cx);
+    let v = pre.lower_node(arg, cx);
     if plain {
         return Some(encode_plain(pre, arg, &tref, v, cx));
     }

@@ -15,8 +15,8 @@ use bynk_ts::{
 };
 
 use super::super::lower::{
-    Built, LoweredExpr, Pre, call_built, ident_node, lower_http_variant_args, member_node,
-    node_or_text, runtime_ctor_call, settle_built,
+    Pre, call_built, ident_node, lower_http_variant_args, member_node, runtime_ctor_call,
+    settle_built,
 };
 use super::super::lower_ctx::LowerCtx;
 use super::super::lower_list::{id, key_is_plain, take};
@@ -82,7 +82,7 @@ pub(in crate::emitter) fn lower_type_static_call(
     args: &[Expr],
     cx: &mut LowerCtx,
     pre: &mut Pre,
-) -> Option<Built> {
+) -> Option<bynk_ts::TsExpr> {
     // Static call: receiver is a bare ident naming a declared type — unless
     // the checker resolved it as a test-service address, which a target's
     // service named like a `uses`-imported type it hides is (#1927).
@@ -96,19 +96,15 @@ pub(in crate::emitter) fn lower_type_static_call(
             )
         )
     {
-        let mut all: Vec<LoweredExpr> = args.iter().map(|a| pre.lower_node(a, cx)).collect();
+        let mut all: Vec<bynk_ts::TsExpr> = args.iter().map(|a| pre.lower_node(a, cx)).collect();
         // #2719: a static method in the needs-context set takes the context last.
         let mut needs_exec = false;
         if let Some(Callee::Static(decl, witnesses)) = cx.commons().callees.get(&e.id) {
             // Constrained generics slice 4: the call's witnesses follow the
             // ordinary arguments, as for an instance method.
-            all.extend(
-                cx.witness_args(decl, witnesses)
-                    .into_iter()
-                    .map(LoweredExpr::Node),
-            );
+            all.extend(cx.witness_args(decl, witnesses));
             if cx.commons().exec_plan.fn_needs(decl) {
-                all.push(LoweredExpr::Node(cx.exec_node()));
+                all.push(cx.exec_node());
                 needs_exec = true;
             }
         }
@@ -143,7 +139,7 @@ const FLOAT_GRAMMAR: &str = "/^[+-]?([0-9]+(\\.[0-9]*)?|\\.[0-9]+)([eE][+-]?[0-9
 /// The one place a 1A slice puts literal text in a node: the grammar is a regular
 /// expression literal, which `bynk_ts` has no node for, so it is a `TsLit::Raw`.
 /// It is one of two fixed constants, never program text (#3721, Decision C).
-fn parse_iife(is_int: bool, s: LoweredExpr) -> Built {
+fn parse_iife(is_int: bool, s: bynk_ts::TsExpr) -> bynk_ts::TsExpr {
     let (grammar, value, guard_fn) = if is_int {
         (
             INT_GRAMMAR,
@@ -167,98 +163,69 @@ fn parse_iife(is_int: bool, s: LoweredExpr) -> Built {
             "isFinite",
         )
     };
-    node_or_text(
-        vec![s],
-        |c| {
-            let s = c.into_iter().next().expect("one child");
-            let matches = TsExpr::Call {
-                callee: Box::new(member(TsExpr::Lit(TsLit::Raw(grammar.to_string())), "test")),
-                args: vec![ident_node("__s")],
-            };
-            let guard = TsExpr::Call {
-                callee: Box::new(member(member_node("globalThis", "Number"), guard_fn)),
-                args: vec![ident_node("__n")],
-            };
-            let body = vec![
-                TsStmt::if_stmt(
-                    TsExpr::Unary {
-                        op: TsUnaryOp::Not,
-                        expr: Box::new(matches),
-                    },
-                    TsStmt::return_stmt(Some(ident_node("None")), None),
-                    None,
-                ),
-                TsStmt::const_stmt(TsBindingName::Ident("__n".to_string()), None, value, None),
-                TsStmt::return_stmt(
-                    Some(TsExpr::Conditional {
-                        test: Box::new(guard),
-                        consequent: Box::new(call("Some", vec![ident_node("__n")])),
-                        alternate: Box::new(ident_node("None")),
-                    }),
-                    None,
-                ),
-            ];
-            let arrow = TsExpr::Arrow {
-                params: vec![TsParam::new(
-                    "__s".to_string(),
-                    Some(TsType::named("string")),
-                )],
-                is_async: false,
-                generics: vec![],
-                return_type: None,
-                body: Box::new(TsArrowBody::Block(body)),
-            };
-            TsExpr::Call {
-                callee: Box::new(TsExpr::Paren(Box::new(arrow))),
-                args: vec![s],
-            }
-        },
-        |c| {
-            let s = c.into_iter().next().expect("one child");
-            let value = if is_int {
-                "globalThis.Number(__s) + 0"
-            } else {
-                "globalThis.Number(__s)"
-            };
-            let guard = if is_int {
-                "globalThis.Number.isSafeInteger(__n)"
-            } else {
-                "globalThis.Number.isFinite(__n)"
-            };
-            format!(
-                "((__s: string) => {{ if (!{grammar}.test(__s)) return None; const __n = {value}; return {guard} ? Some(__n) : None; }})({s})"
-            )
-        },
-    )
+    {
+        let c = vec![s];
+        let s = c.into_iter().next().expect("one child");
+        let matches = TsExpr::Call {
+            callee: Box::new(member(TsExpr::Lit(TsLit::Raw(grammar.to_string())), "test")),
+            args: vec![ident_node("__s")],
+        };
+        let guard = TsExpr::Call {
+            callee: Box::new(member(member_node("globalThis", "Number"), guard_fn)),
+            args: vec![ident_node("__n")],
+        };
+        let body = vec![
+            TsStmt::if_stmt(
+                TsExpr::Unary {
+                    op: TsUnaryOp::Not,
+                    expr: Box::new(matches),
+                },
+                TsStmt::return_stmt(Some(ident_node("None")), None),
+                None,
+            ),
+            TsStmt::const_stmt(TsBindingName::Ident("__n".to_string()), None, value, None),
+            TsStmt::return_stmt(
+                Some(TsExpr::Conditional {
+                    test: Box::new(guard),
+                    consequent: Box::new(call("Some", vec![ident_node("__n")])),
+                    alternate: Box::new(ident_node("None")),
+                }),
+                None,
+            ),
+        ];
+        let arrow = TsExpr::Arrow {
+            params: vec![TsParam::new(
+                "__s".to_string(),
+                Some(TsType::named("string")),
+            )],
+            is_async: false,
+            generics: vec![],
+            return_type: None,
+            body: Box::new(TsArrowBody::Block(body)),
+        };
+        TsExpr::Call {
+            callee: Box::new(TsExpr::Paren(Box::new(arrow))),
+            args: vec![s],
+        }
+    }
 }
 
 /// `Set.of(xs)` over a plain key is `new globalThis.Set<T>(xs)`; over a keyed one
 /// the runtime's `__bynkSetOf<T>(xs)`.
-fn set_of(plain: bool, elem: TsType, xs: LoweredExpr) -> Built {
+fn set_of(plain: bool, elem: TsType, xs: bynk_ts::TsExpr) -> bynk_ts::TsExpr {
     let one = |c: Vec<TsExpr>| c.into_iter().next().expect("one child");
     let text_ty = bynk_ts::print_type(&elem);
     let node_elem = elem.clone();
-    node_or_text(
-        vec![xs],
-        move |c| {
-            if plain {
-                new(type_app(global("Set"), vec![node_elem]), vec![one(c)])
-            } else {
-                TsExpr::Call {
-                    callee: Box::new(type_app(ident_node("__bynkSetOf"), vec![node_elem])),
-                    args: vec![one(c)],
-                }
+    (move |c| {
+        if plain {
+            new(type_app(global("Set"), vec![node_elem]), vec![one(c)])
+        } else {
+            TsExpr::Call {
+                callee: Box::new(type_app(ident_node("__bynkSetOf"), vec![node_elem])),
+                args: vec![one(c)],
             }
-        },
-        move |c| {
-            let xs = c.into_iter().next().expect("one child");
-            if plain {
-                format!("new globalThis.Set<{text_ty}>({xs})")
-            } else {
-                format!("__bynkSetOf<{text_ty}>({xs})")
-            }
-        },
-    )
+        }
+    })(vec![xs])
 }
 
 /// Lower the built-in scalar and collection statics (`HttpResult.*`, `List.empty`, `Map.empty`, `Set.empty`/`of`, the JSON codec, `Float.pi`/`e`, the numeric parses, `Duration.millis`, `Instant.from*`), or `None` when the call is none of them. Moved out of
@@ -270,7 +237,7 @@ pub(in crate::emitter) fn lower_scalar_static_call(
     args: &[Expr],
     cx: &mut LowerCtx,
     pre: &mut Pre,
-) -> Option<Built> {
+) -> Option<bynk_ts::TsExpr> {
     let tys = cx.ty_render();
     // v0.9: explicit `HttpResult.Variant(args)` construction. The
     // checker has already recorded the expression's type — emit it
@@ -330,26 +297,26 @@ pub(in crate::emitter) fn lower_scalar_static_call(
         match cx.commons().expr_ty(e.id).as_deref() {
             // K6a (#2596).
             Some(Ty::Set(t)) => {
-                return Some(Ok(new(
+                return Some(new(
                     type_app(global("Set"), vec![ts_ty_to_ts_type(*t, tys)]),
                     vec![],
-                )));
+                ));
             }
             Some(Ty::List(t)) => {
                 // `([] as readonly T[])`: the bracket keeps the cast one operand.
-                return Some(Ok(TsExpr::Paren(Box::new(TsExpr::As {
+                return Some(TsExpr::Paren(Box::new(TsExpr::As {
                     expr: Box::new(TsExpr::array(vec![])),
                     ty: TsType::readonly_array(ts_ty_to_ts_type(*t, tys)),
-                }))));
+                })));
             }
             Some(Ty::Map(k, v)) => {
-                return Some(Ok(new(
+                return Some(new(
                     type_app(
                         global("Map"),
                         vec![ts_ty_to_ts_type(*k, tys), ts_ty_to_ts_type(*v, tys)],
                     ),
                     vec![],
-                )));
+                ));
             }
             _ => {}
         }
@@ -394,7 +361,7 @@ pub(in crate::emitter) fn lower_scalar_static_call(
         } else {
             "E"
         };
-        return Some(Ok(member(member_node("globalThis", "Math"), constant)));
+        return Some(member(member_node("globalThis", "Math"), constant));
     }
     // v0.22a: the numeric parse statics — `Int.parse(s)` / `Float.parse(s)`
     // (ADR 0048; the grammar is on [`parse_iife`]).
@@ -476,7 +443,7 @@ pub(in crate::emitter) fn lower_runtime_value_static_call(
     args: &[Expr],
     cx: &mut LowerCtx,
     pre: &mut Pre,
-) -> Option<Built> {
+) -> Option<bynk_ts::TsExpr> {
     // The operation the checker resolved for this call (1A.33): one match over the
     // closed `StaticOp`, not a name comparison per family. The arity stays checked here, as the
     // checker only reports a mismatch.
@@ -494,14 +461,13 @@ pub(in crate::emitter) fn lower_runtime_value_static_call(
         // zero octet sequence.
         (StaticOp::Bytes(BytesStatic::FromUtf8), 1) => {
             let s = pre.lower_node(&args[0], cx);
-            Some(node_or_text(
-                vec![s],
-                |c| TsExpr::Call {
+            Some({
+                let c = vec![s];
+                TsExpr::Call {
                     callee: Box::new(member(new(global("TextEncoder"), vec![]), "encode")),
                     args: c,
-                },
-                |c| format!("new globalThis.TextEncoder().encode({})", c.join(", ")),
-            ))
+                }
+            })
         }
         (StaticOp::Bytes(BytesStatic::FromBase64), 1) => {
             let s = pre.lower_node(&args[0], cx);
@@ -519,7 +485,7 @@ pub(in crate::emitter) fn lower_runtime_value_static_call(
             cx.note_bytes_ops();
             Some(runtime_ctor_call(None, "__bynkBytesFromBase64Url", s))
         }
-        (StaticOp::Bytes(BytesStatic::Empty), 0) => Some(Ok(new(global("Uint8Array"), vec![]))),
+        (StaticOp::Bytes(BytesStatic::Empty), 0) => Some(new(global("Uint8Array"), vec![])),
         // #2622: `Decimal.parse(s)` and `Decimal.fromInt(n)`.
         (StaticOp::Decimal(DecimalStatic::Parse), 1) => {
             let s = pre.lower_node(&args[0], cx);
@@ -546,7 +512,7 @@ pub(in crate::emitter) fn lower_runtime_value_static_call(
         }
         (StaticOp::RequestHeaders(RequestHeadersStatic::Empty), 0) => {
             cx.note_request_headers();
-            Some(Ok(call("__requestHeaders", vec![TsExpr::array(vec![])])))
+            Some(call("__requestHeaders", vec![TsExpr::array(vec![])]))
         }
         // #2854: `RequestQuery.of(pairs)` / `RequestQuery.empty()` build the
         // runtime's query view from `"name=value"` pairs.
@@ -557,7 +523,7 @@ pub(in crate::emitter) fn lower_runtime_value_static_call(
         }
         (StaticOp::RequestQuery(RequestQueryStatic::Empty), 0) => {
             cx.note_request_query();
-            Some(Ok(call("__requestQuery", vec![TsExpr::array(vec![])])))
+            Some(call("__requestQuery", vec![TsExpr::array(vec![])]))
         }
         // #3277: `RequestCookies.of(pairs)` / `RequestCookies.empty()` build the
         // runtime's cookies view from `"name=value"` pairs.
@@ -568,36 +534,28 @@ pub(in crate::emitter) fn lower_runtime_value_static_call(
         }
         (StaticOp::RequestCookies(RequestCookiesStatic::Empty), 0) => {
             cx.note_request_cookies();
-            Some(Ok(call("__requestCookies", vec![TsExpr::array(vec![])])))
+            Some(call("__requestCookies", vec![TsExpr::array(vec![])]))
         }
         // v0.100: `Stream.of(xs)` — the deterministic in-memory source. A `Stream`
         // lowers to a host async iterable; `of` wraps a list as an async generator.
         // Emitted inline (no runtime import), like the collection kernels.
         (StaticOp::Stream(StreamStatic::Of), 1) => {
             let xs = pre.lower_node(&args[0], cx);
-            Some(node_or_text(
-                vec![xs],
-                |n| {
-                    let [xs] = take::<1, _>(n);
-                    // `(async function* () { for (const __e of xs) { yield __e; } })()`
-                    let each = TsStmt::for_of(
-                        "__e",
-                        xs,
-                        TsStmt::block(
-                            vec![TsStmt::expr_stmt(TsExpr::Yield(Box::new(id("__e"))), None)],
-                            None,
-                        ),
+            Some({
+                let n = vec![xs];
+                let [xs] = take::<1, _>(n);
+                // `(async function* () { for (const __e of xs) { yield __e; } })()`
+                let each = TsStmt::for_of(
+                    "__e",
+                    xs,
+                    TsStmt::block(
+                        vec![TsStmt::expr_stmt(TsExpr::Yield(Box::new(id("__e"))), None)],
                         None,
-                    );
-                    stream_generator(None, vec![each])
-                },
-                |t| {
-                    format!(
-                        "(async function* () {{ for (const __e of {}) {{ yield __e; }} }})()",
-                        t[0]
-                    )
-                },
-            ))
+                    ),
+                    None,
+                );
+                stream_generator(None, vec![each])
+            })
         }
         _ => None,
     }

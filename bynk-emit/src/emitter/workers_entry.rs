@@ -3658,7 +3658,7 @@ fn emit_http_route_dispatch(
         && let Some(body_param) = h.params.iter().find(|p| p.name.name == "body")
     {
         // v0.188 (#659): the body-read rejections are stamped with the service
-        // policy just like the handled `200`. Built here, at their use site, to
+        // policy just like the handled `200`. bynk_ts::TsExpr here, at their use site, to
         // match the local style (the `413`, `body_reject`, and path-param
         // rejections are all built lazily too) — a bodyless `GET` never allocates
         // them. `malformed_400` is reached from both the signature and plain body

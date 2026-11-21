@@ -1,7 +1,6 @@
 //! `LowerCtx`: the per-body lowering context and its `impl`.
 
 use super::ctx::*;
-use super::lower::{Built, LoweredExpr, node_or_text};
 use super::lower_call::test_calls::debug_str;
 use super::lower_list::{call, id};
 use super::ts_types::ts_ty_to_ts_type;
@@ -92,14 +91,14 @@ pub(crate) struct LowerCtx<'a> {
     /// lowered), if the statement carries `by <Actor>(<identity>)`. The
     /// address-call lowering reads it to build the handler's `deps.identity`.
     /// `None` for a unit-identity actor or a non-principal statement.
-    pub call_site_identity: Option<LoweredExpr>,
+    pub call_site_identity: Option<bynk_ts::TsExpr>,
     /// #2380 (L5): the call-site principal's claims (already lowered), for an
     /// `Oidc` handler's `deps.claims`.
-    pub call_site_claims: Option<LoweredExpr>,
+    pub call_site_claims: Option<bynk_ts::TsExpr>,
     /// #3052: the lowered `"name: value"` lines of the call-site principal's
     /// literal `TokenClaims.of(lines)`, which a `system` call mints an `Oidc`
     /// token's claims from.
-    pub call_site_claim_lines: Option<LoweredExpr>,
+    pub call_site_claim_lines: Option<bynk_ts::TsExpr>,
     /// I3 (#1971): the call-site principal's actor name, beside
     /// [`Self::call_site_identity`], for a `call` sum's `deps.who`.
     pub call_site_actor: Option<String>,
@@ -992,7 +991,7 @@ impl<'a> LowerCtx<'a> {
     pub(crate) fn system_http_claims_arg(
         &self,
         route: &(String, String, String),
-    ) -> Option<LoweredExpr> {
+    ) -> Option<bynk_ts::TsExpr> {
         match &self.mode {
             BodyMode::IntegrationCase {
                 system_http_claims, ..
@@ -1000,13 +999,12 @@ impl<'a> LowerCtx<'a> {
                 let lines = self
                     .call_site_claim_lines
                     .clone()
-                    .unwrap_or_else(|| LoweredExpr::Node(bynk_ts::TsExpr::array(vec![])));
+                    .unwrap_or_else(|| bynk_ts::TsExpr::array(vec![]));
                 Some(
-                    node_or_text(
-                        vec![lines],
-                        |c| call(id("__bynkOidcClaims"), c),
-                        |t| format!("__bynkOidcClaims({})", t.join(", ")),
-                    )
+                    {
+                        let c = vec![lines];
+                        call(id("__bynkOidcClaims"), c)
+                    }
                     .into(),
                 )
             }
@@ -1019,8 +1017,8 @@ impl<'a> LowerCtx<'a> {
                     .and_then(|a| system_http_claims.actors.get(a))
                 {
                     // The actor's witness claims, as `{ "name": value, … }`.
-                    Some(witness) => LoweredExpr::Node(witness_claims_node(witness)),
-                    None => LoweredExpr::Node(bynk_ts::TsExpr::object(vec![])),
+                    Some(witness) => witness_claims_node(witness),
+                    None => bynk_ts::TsExpr::object(vec![]),
                 },
             ),
             _ => None,
@@ -1043,7 +1041,7 @@ impl<'a> LowerCtx<'a> {
     pub(crate) fn system_http_sum_actor_arg(
         &self,
         route: &(String, String, String),
-    ) -> Option<LoweredExpr> {
+    ) -> Option<bynk_ts::TsExpr> {
         match &self.mode {
             BodyMode::IntegrationCase {
                 system_http_claims, ..
@@ -1254,7 +1252,11 @@ impl<'a> LowerCtx<'a> {
     /// 1A.27 (#3728): `<factory>(key)` or `<factory>(key, <deps>.env)` as a `Call` node when
     /// the key is one, else today's text. The factory is a naming function's result, so the
     /// callee is an `Ident` over it.
-    pub(super) fn agent_construct_node(&mut self, agent: &str, key: LoweredExpr) -> Built {
+    pub(super) fn agent_construct_node(
+        &mut self,
+        agent: &str,
+        key: bynk_ts::TsExpr,
+    ) -> bynk_ts::TsExpr {
         if let Some(h) = self.handler_mut() {
             h.agents_instantiated = true;
         }
@@ -1272,21 +1274,12 @@ impl<'a> LowerCtx<'a> {
         } else {
             (String::new(), None)
         };
-        node_or_text(
-            vec![key],
-            |k| {
-                let mut args = k;
-                args.extend(deps_env);
-                call(id(&factory), args)
-            },
-            |k| {
-                if workers {
-                    format!("{factory}({}, {deps_text}.env)", k[0])
-                } else {
-                    format!("{factory}({})", k[0])
-                }
-            },
-        )
+        {
+            let k = vec![key];
+            let mut args = k;
+            args.extend(deps_env);
+            call(id(&factory), args)
+        }
     }
 
     /// #527: note that the body calls `agent.method`, folding the method's
@@ -1404,7 +1397,7 @@ impl<'a> LowerCtx<'a> {
         let tmp = self.fresh();
         self.declare_is_temp(value, &tmp, lowered, &mut pre);
         self.is_receiver_temps.insert(value.span, tmp.clone());
-        pre.finish(LoweredExpr::Node(super::lower::ident_node(&tmp)))
+        pre.finish(super::lower::ident_node(&tmp))
     }
 
     /// Declare an `is` receiver temp holding `lowered`: a `const` in place, or,
@@ -1418,7 +1411,7 @@ impl<'a> LowerCtx<'a> {
         &mut self,
         value: &Expr,
         tmp: &str,
-        lowered: LoweredExpr,
+        lowered: bynk_ts::TsExpr,
         pre: &mut Pre,
     ) {
         let ty = self
@@ -1437,7 +1430,7 @@ impl<'a> LowerCtx<'a> {
             }
             _ => false,
         };
-        let n = lowered.into_node(self.fault_site(value.span));
+        let n = lowered;
         if hoisting {
             pre.push_node(bynk_ts::TsStmt::assign(
                 super::lower::ident_node(tmp),
@@ -1468,7 +1461,7 @@ impl<'a> LowerCtx<'a> {
         let tmp = self.fresh();
         self.declare_is_temp(value, &tmp, lowered, &mut pre);
         self.is_receiver_temps.insert(value.span, tmp.clone());
-        pre.finish(LoweredExpr::Node(super::lower::ident_node(&tmp)))
+        pre.finish(super::lower::ident_node(&tmp))
     }
 
     /// v0.13: true when `value is Name` is a *refinement* check — the value is a
@@ -1532,7 +1525,7 @@ impl<'a> LowerCtx<'a> {
         }
     }
     /// Resolve the payload field name for the i-th positional binding of
-    /// a variant. Built-ins are recognised by name; user variants are
+    /// a variant. bynk_ts::TsExpr-ins are recognised by name; user variants are
     /// looked up via the type tables.
     ///
     /// P6.56 (design/tracks/the-ir.md §6b): see `sum_owner_of_variant`'s own

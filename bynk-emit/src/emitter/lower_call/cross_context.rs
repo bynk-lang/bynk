@@ -11,7 +11,7 @@ use bynk_check::kernel_op::{ListStatic, MapStatic, StaticOp};
 use bynk_ts::{TsExpr, TsType};
 
 use super::super::emit::{flatten_emit_ident_chain, test_scaffold_ns};
-use super::super::lower::{Built, Pre};
+use super::super::lower::Pre;
 use super::super::lower_ctx::LowerCtx;
 use super::super::lower_list::{call, id, member, paren};
 use super::super::{TypeBody, TypeDecl, UnaryOp, *};
@@ -30,7 +30,7 @@ pub(in crate::emitter) fn lower_cross_context_service_call(
     args: &[Expr],
     cx: &mut LowerCtx,
     pre: &mut Pre,
-) -> Option<Built> {
+) -> Option<bynk_ts::TsExpr> {
     let (consumed, key) = cross_context_lowering_prefix(receiver, cx)?;
     cx.note_cross_context_used(&consumed);
     Some(match cx.target() {
@@ -39,7 +39,7 @@ pub(in crate::emitter) fn lower_cross_context_service_call(
                 .iter()
                 .enumerate()
                 .map(|(i, a)| {
-                    let lowered = pre.lower_ts(a, cx);
+                    let lowered = pre.lower_node(a, cx);
                     // #2042: every argument at a generic parameter
                     // that names a user type is cast, not only one
                     // holding a callee-typed part (#2039): a value the
@@ -159,7 +159,7 @@ pub(crate) fn lower_workers_cross_context_call(
     call_start: usize,
     cx: &mut LowerCtx<'_>,
     pre: &mut Pre,
-) -> Built {
+) -> bynk_ts::TsExpr {
     use crate::emitter::serialisation::{deserialise_ref_via, serialise_expr_via};
 
     let info = cx.cross_context();
@@ -178,10 +178,10 @@ pub(crate) fn lower_workers_cross_context_call(
         .get(consumed)
         .and_then(|map| map.get(&method.name))
     else {
-        return Ok(cx.missing_fact(
+        return cx.missing_fact(
             method.span,
             format_args!("service signature for `{consumed}.{}`", method.name),
-        ));
+        );
     };
 
     // #661 (ADR 0199 Decision G discharged): a context's own handlers generate
@@ -211,7 +211,7 @@ pub(crate) fn lower_workers_cross_context_call(
     // a missing one silently emitted `null` into the args object — quietly sending
     // a wrong payload for exactly the fault the other direction refused to ship.)
     if args.len() != svc.params.len() {
-        return Ok(cx.missing_fact(
+        return cx.missing_fact(
             method.span,
             format_args!(
                 "argument count for `{consumed}.{}`: its signature takes {} but the call has {}",
@@ -219,7 +219,7 @@ pub(crate) fn lower_workers_cross_context_call(
                 svc.params.len(),
                 args.len()
             ),
-        ));
+        );
     }
 
     // #1932: a type of the callee's this consumer neither imports nor names
@@ -236,7 +236,7 @@ pub(crate) fn lower_workers_cross_context_call(
     };
     let mut args_serialised: Vec<TsExpr> = Vec::new();
     for (i, a) in args.iter().enumerate() {
-        let mut lowered = pre.lower_ts(a, cx);
+        let mut lowered = pre.lower_node(a, cx);
         let (_, param_ty) = &svc.params[i];
         let wire_ty = renamed(param_ty);
         // #2025, #2039: a literal in a cross-context argument (directly, or
@@ -410,7 +410,7 @@ pub(crate) fn lower_workers_cross_context_call(
         ],
     };
     let target = format!("{consumed}.{}", method.name);
-    Ok(cx.trace_step_node("call", &target, call_start, call_expr))
+    cx.trace_step_node("call", &target, call_start, call_expr)
 }
 
 /// If `receiver` is a dotted chain or single ident that matches one of the
@@ -630,20 +630,20 @@ pub(crate) fn return_cast(
     method: &Ident,
     call: TsExpr,
     in_test_scaffold: bool,
-) -> Built {
+) -> bynk_ts::TsExpr {
     let Some(service) = info
         .consumed_services
         .get(consumed)
         .and_then(|svcs| svcs.get(&method.name))
     else {
-        return Ok(call);
+        return call;
     };
     let return_type = unalias_type_ref(info, consumed, &service.return_type);
     let consumed_type_ns = &consumed_type_ns_unaliased(info, consumed, consumed_type_ns);
     let mut names = HashSet::new();
     type_ref_names(&return_type, &mut names);
     if !reaches_brand(&names, caller_types, consumed_type_ns) {
-        return Ok(call);
+        return call;
     }
     let ns_of = |owner: &str| {
         if in_test_scaffold {
@@ -669,7 +669,7 @@ pub(crate) fn return_cast(
         })
         .collect();
     let ty = crate::emitter::ts_types::ts_type_ref_qualified_multi_ts_type(&return_type, &type_ns);
-    Ok(cast_through_unknown(call, ty))
+    cast_through_unknown(call, ty)
 }
 
 /// #2828: whether any of `names`, or a type their caller-bound declarations
@@ -789,7 +789,7 @@ mod tests {
     fn lower_workers(
         info: &CrossContextInfo,
         args: &[Expr],
-    ) -> (Built, Vec<crate::emitter::InternalFault>) {
+    ) -> (bynk_ts::TsExpr, Vec<crate::emitter::InternalFault>) {
         let commons = TypedCommons::empty();
         let ru = RuntimeUse::default();
         let module = ModuleCtx::new(&commons, info, &ru, UnitFacts::detached());

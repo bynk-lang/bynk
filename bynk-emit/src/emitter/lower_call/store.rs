@@ -9,7 +9,7 @@
 use bynk_check::checker::Callee;
 use bynk_ts::{TsBinaryOp, TsExpr, TsLit, TsStmt, TsType, TsUnaryOp, print_type};
 
-use super::super::lower::{Built, Lowered, LoweredExpr, Pre, member_node, node_or_text};
+use super::super::lower::{Lowered, Pre, member_node};
 use super::super::lower_ctx::LowerCtx;
 use super::super::lower_list::{
     arrow, binary, block, block_arrow, call, const_, expr_stmt, id, iife_block, member,
@@ -105,7 +105,7 @@ fn key_text(x: &str) -> String {
 }
 
 /// The operation's arguments as bridge values, lowered in order.
-fn lower_args(args: &[Expr], cx: &mut LowerCtx, pre: &mut Pre) -> Vec<LoweredExpr> {
+fn lower_args(args: &[Expr], cx: &mut LowerCtx, pre: &mut Pre) -> Vec<bynk_ts::TsExpr> {
     args.iter().map(|x| pre.lower_node(x, cx)).collect()
 }
 
@@ -121,12 +121,12 @@ struct Site<'a> {
 /// vocabulary does not know.
 fn query_op(
     what: &str,
-    source: LoweredExpr,
+    source: bynk_ts::TsExpr,
     site: Site<'_>,
-    a: Vec<LoweredExpr>,
+    a: Vec<bynk_ts::TsExpr>,
     elem: &TsType,
     cx: &mut LowerCtx,
-) -> Built {
+) -> bynk_ts::TsExpr {
     let Site { e, method, args } = site;
     note_par_fan_out(cx, method);
     let tys = cx.ty_render();
@@ -149,10 +149,10 @@ fn query_op(
     // The checker admits only the operations of the store's kind, so a miss is a compiler
     // fault (1A.34): a missing checker fact, reported at the call.
     .unwrap_or_else(|| {
-        Ok(cx.missing_fact(
+        cx.missing_fact(
             e.span,
             format_args!("supported `{what}` operation (`{}`)", method.name),
-        ))
+        )
     })
 }
 
@@ -166,7 +166,7 @@ pub(in crate::emitter) fn lower_store_method_call(
     args: &[Expr],
     cx: &mut LowerCtx,
     pre: &mut Pre,
-) -> Option<Built> {
+) -> Option<bynk_ts::TsExpr> {
     lower_store_held_map_call(e, receiver, method, args, cx, pre)
         .or_else(|| lower_store_map_call(e, receiver, method, args, cx, pre))
         .or_else(|| lower_store_set_call(e, receiver, method, args, cx, pre))
@@ -210,7 +210,7 @@ fn lower_store_held_map_call(
     args: &[Expr],
     cx: &mut LowerCtx,
     pre: &mut Pre,
-) -> Option<Built> {
+) -> Option<bynk_ts::TsExpr> {
     // v0.104/v0.105 (real-time track slice 3b): a held-`Map` operation —
     // `<map>.<op>(…)` on a `store Map[K, Connection]` field on Workers. The live
     // socket cannot be persisted, so the durable record stores the **connection id**
@@ -242,108 +242,80 @@ fn lower_store_held_map_call(
             // displaced one first, as `remove` does, so a held connection cannot
             // be dropped unclosed. Re-putting the same connection under its own
             // key (the same connection id) leaves it open.
-            "put" => node_or_text(
-                a,
-                |c| {
-                    let [k, v] = take(c);
-                    async_iife(vec![
-                        const_("__k", None, string_of(k)),
-                        const_("__new", None, call(id("__connIdOf"), vec![v])),
-                        const_(
-                            "__old",
-                            None,
-                            TsExpr::Await(Box::new(op(&m.node, "get", vec![id("__k")]))),
+            "put" => {
+                let c = a;
+                let [k, v] = take(c);
+                async_iife(vec![
+                    const_("__k", None, string_of(k)),
+                    const_("__new", None, call(id("__connIdOf"), vec![v])),
+                    const_(
+                        "__old",
+                        None,
+                        TsExpr::Await(Box::new(op(&m.node, "get", vec![id("__k")]))),
+                    ),
+                    if_then(
+                        binary(
+                            TsBinaryOp::And,
+                            ne(id("__old"), undefined()),
+                            ne(id("__old"), id("__new")),
                         ),
-                        if_then(
-                            binary(
-                                TsBinaryOp::And,
-                                ne(id("__old"), undefined()),
-                                ne(id("__old"), id("__new")),
-                            ),
-                            vec![
-                                const_("__c", None, resolve_connection(&f_node, id("__old"))),
-                                close_if_some(),
-                            ],
-                        ),
-                        awaited(op(&m.node, "put", vec![id("__k"), id("__new")])),
-                        done(),
-                    ])
-                },
-                |c| {
-                    format!(
-                        "(async () => {{ const __k = String({0}); const __new = __connIdOf({1}); const __old = await {2}.get(__k); if (__old !== undefined && __old !== __new) {{ const __c = __resolveConnection<{f_ts}>(this.state, __old); if (__c.tag === \"Some\") {{ await __c.value.close(); }} }} await {2}.put(__k, __new); return undefined; }})()",
-                        c[0], c[1], m.text
-                    )
-                },
-            ),
-            "remove" => node_or_text(
-                a,
-                |c| {
-                    let [k] = take(c);
-                    async_iife(vec![
-                        const_("__k", None, string_of(k)),
-                        const_(
-                            "__cid",
-                            None,
-                            TsExpr::Await(Box::new(op(&m.node, "get", vec![id("__k")]))),
-                        ),
-                        if_then(
-                            ne(id("__cid"), undefined()),
-                            vec![
-                                const_("__c", None, resolve_connection(&f_node, id("__cid"))),
-                                close_if_some(),
-                                awaited(op(&m.node, "remove", vec![id("__k")])),
-                            ],
-                        ),
-                        done(),
-                    ])
-                },
-                |c| {
-                    format!(
-                        "(async () => {{ const __k = String({0}); const __cid = await {1}.get(__k); if (__cid !== undefined) {{ const __c = __resolveConnection<{f_ts}>(this.state, __cid); if (__c.tag === \"Some\") {{ await __c.value.close(); }} await {1}.remove(__k); }} return undefined; }})()",
-                        c[0], m.text
-                    )
-                },
-            ),
-            "contains" => node_or_text(
-                a,
-                |c| {
-                    let [k] = take(c);
-                    op(&m.node, "has", vec![string_of(k)])
-                },
-                |c| format!("{}.has(String({}))", m.text, c[0]),
-            ),
-            "size" => node_or_text(
-                a,
-                |_| op(&m.node, "size", vec![]),
-                |_| format!("{}.size()", m.text),
-            ),
-            "get" => node_or_text(
-                a,
-                |c| {
-                    let [k] = take(c);
-                    sync_iife(vec![
-                        const_("__cid", None, op(&m.node, "get", vec![string_of(k)])),
-                        ret(TsExpr::Conditional {
-                            test: Box::new(ne(id("__cid"), undefined())),
-                            consequent: Box::new(resolve_connection(&f_node, id("__cid"))),
-                            alternate: Box::new(id("None")),
-                        }),
-                    ])
-                },
-                |c| {
-                    format!(
-                        "(() => {{ const __cid = {1}.get(String({0})); return __cid !== undefined ? __resolveConnection<{f_ts}>(this.state, __cid) : None; }})()",
-                        c[0], m.text
-                    )
-                },
-            ),
+                        vec![
+                            const_("__c", None, resolve_connection(&f_node, id("__old"))),
+                            close_if_some(),
+                        ],
+                    ),
+                    awaited(op(&m.node, "put", vec![id("__k"), id("__new")])),
+                    done(),
+                ])
+            }
+            "remove" => {
+                let c = a;
+                let [k] = take(c);
+                async_iife(vec![
+                    const_("__k", None, string_of(k)),
+                    const_(
+                        "__cid",
+                        None,
+                        TsExpr::Await(Box::new(op(&m.node, "get", vec![id("__k")]))),
+                    ),
+                    if_then(
+                        ne(id("__cid"), undefined()),
+                        vec![
+                            const_("__c", None, resolve_connection(&f_node, id("__cid"))),
+                            close_if_some(),
+                            awaited(op(&m.node, "remove", vec![id("__k")])),
+                        ],
+                    ),
+                    done(),
+                ])
+            }
+            "contains" => {
+                let c = a;
+                let [k] = take(c);
+                op(&m.node, "has", vec![string_of(k)])
+            }
+            "size" => {
+                let _ = a;
+                op(&m.node, "size", vec![])
+            }
+            "get" => {
+                let c = a;
+                let [k] = take(c);
+                sync_iife(vec![
+                    const_("__cid", None, op(&m.node, "get", vec![string_of(k)])),
+                    ret(TsExpr::Conditional {
+                        test: Box::new(ne(id("__cid"), undefined())),
+                        consequent: Box::new(resolve_connection(&f_node, id("__cid"))),
+                        alternate: Box::new(id("None")),
+                    }),
+                ])
+            }
             // Any non-entry op is a lazy query lifting the map into a scan over its
             // **resolved** connections (the present ones — a connId whose socket has
             // closed drops out).
             _ => query_op(
                 "held Map",
-                LoweredExpr::Node(held_values_source(m.node.clone(), &f_node)),
+                held_values_source(m.node.clone(), &f_node),
                 Site { e, method, args },
                 a,
                 &f_node,
@@ -369,7 +341,7 @@ fn lower_store_map_call(
     args: &[Expr],
     cx: &mut LowerCtx,
     pre: &mut Pre,
-) -> Option<Built> {
+) -> Option<bynk_ts::TsExpr> {
     // v0.82 (ADR 0110): a storage-`Map` operation — `<map>.<op>(…)` on a `store
     // Map[K, V]` field. Lowers to an entry op over `__state.<map>` (an
     // insertion-ordered handle): mutating the working record (`put`/`remove`/`update`/
@@ -414,214 +386,142 @@ fn lower_store_map_call(
             // closes the displaced `TestConnection` first, as `remove` does and as the
             // Workers build does; re-putting the same connection under its own key leaves
             // it open (compared by identity).
-            "put" if holds_connections => node_or_text(
-                a,
-                |c| {
-                    let [k, v] = take(c);
-                    async_iife(vec![
-                        const_("__k", None, string_of(k)),
-                        const_("__new", None, v),
-                        const_(
-                            "__old",
-                            None,
-                            TsExpr::Await(Box::new(op(&m.node, "get", vec![id("__k")]))),
+            "put" if holds_connections => {
+                let c = a;
+                let [k, v] = take(c);
+                async_iife(vec![
+                    const_("__k", None, string_of(k)),
+                    const_("__new", None, v),
+                    const_(
+                        "__old",
+                        None,
+                        TsExpr::Await(Box::new(op(&m.node, "get", vec![id("__k")]))),
+                    ),
+                    if_then(
+                        binary(
+                            TsBinaryOp::And,
+                            ne(id("__old"), undefined()),
+                            ne(id("__old"), id("__new")),
                         ),
-                        if_then(
-                            binary(
-                                TsBinaryOp::And,
-                                ne(id("__old"), undefined()),
-                                ne(id("__old"), id("__new")),
-                            ),
-                            vec![awaited(call(member(id("__old"), "close"), vec![]))],
-                        ),
-                        awaited(op(&m.node, "put", vec![id("__k"), id("__new")])),
-                        done(),
-                    ])
-                },
-                |c| {
-                    format!(
-                        "(async () => {{ const __k = {0}; const __new = {1}; const __old = await {2}.get(__k); if (__old !== undefined && __old !== __new) {{ await __old.close(); }} await {2}.put(__k, __new); return undefined; }})()",
-                        key_text(&c[0]),
-                        c[1],
-                        m.text
-                    )
-                },
-            ),
+                        vec![awaited(call(member(id("__old"), "close"), vec![]))],
+                    ),
+                    awaited(op(&m.node, "put", vec![id("__k"), id("__new")])),
+                    done(),
+                ])
+            }
             // #3189: every handle call is awaited, so a handle backed by storage serves the
             // same lowering as the in-memory one (which returns its values at once).
-            "put" => node_or_text(
-                a,
-                |c| {
-                    let [k, v] = take(c);
-                    async_iife(vec![
-                        awaited(op(&m.node, "put", vec![string_of(k), v])),
-                        done(),
-                    ])
-                },
-                |c| {
-                    format!(
-                        "(async () => {{ await {}.put({}, {}); return undefined; }})()",
-                        m.text,
-                        key_text(&c[0]),
-                        c[1]
-                    )
-                },
-            ),
+            "put" => {
+                let c = a;
+                let [k, v] = take(c);
+                async_iife(vec![
+                    awaited(op(&m.node, "put", vec![string_of(k), v])),
+                    done(),
+                ])
+            }
             // #3224: on the bundle target a held `store Map[K, Connection]` is an
             // ordinary in-memory map of `TestConnection`s (the Workers build
             // persists connection ids instead and takes `lower_store_held_map_call`), so
             // `remove` must still honour the §2.9 contract that it removes *and closes*:
             // close the connection the entry holds, then delete it, as the Workers lowering
             // does.
-            "remove" if holds_connections => node_or_text(
-                a,
-                |c| {
-                    let [k] = take(c);
-                    async_iife(vec![
-                        const_("__k", None, string_of(k)),
-                        const_(
-                            "__o",
-                            None,
-                            TsExpr::Await(Box::new(op(&m.node, "get", vec![id("__k")]))),
-                        ),
-                        if_then(
-                            ne(id("__o"), undefined()),
-                            vec![
-                                awaited(call(member(id("__o"), "close"), vec![])),
-                                awaited(op(&m.node, "remove", vec![id("__k")])),
-                            ],
-                        ),
-                        done(),
-                    ])
-                },
-                |c| {
-                    format!(
-                        "(async () => {{ const __k = {0}; const __o = await {1}.get(__k); if (__o !== undefined) {{ await __o.close(); await {1}.remove(__k); }} return undefined; }})()",
-                        key_text(&c[0]),
-                        m.text
-                    )
-                },
-            ),
-            "remove" => node_or_text(
-                a,
-                |c| {
-                    let [k] = take(c);
-                    async_iife(vec![
-                        awaited(op(&m.node, "remove", vec![string_of(k)])),
-                        done(),
-                    ])
-                },
-                |c| {
-                    format!(
-                        "(async () => {{ await {}.remove({}); return undefined; }})()",
-                        m.text,
-                        key_text(&c[0])
-                    )
-                },
-            ),
-            "contains" => node_or_text(
-                a,
-                |c| {
-                    let [k] = take(c);
-                    op(&m.node, "has", vec![string_of(k)])
-                },
-                |c| format!("{}.has({})", m.text, key_text(&c[0])),
-            ),
-            "size" => node_or_text(
-                a,
-                |_| op(&m.node, "size", vec![]),
-                |_| format!("{}.size()", m.text),
-            ),
-            "get" => node_or_text(
-                a,
-                |c| {
-                    let [k] = take(c);
-                    let present = op(&m.node, "get", vec![id("__k")]);
-                    let some = arrow(
-                        vec![param("__v", None)],
-                        call(id("Some"), vec![TsExpr::NonNull(Box::new(id("__v")))]),
-                    );
-                    let then_get = call(id("__bynkThen"), vec![present, some]);
-                    let branch = TsExpr::Conditional {
-                        test: Box::new(id("__h")),
-                        consequent: Box::new(then_get),
-                        alternate: Box::new(id("None")),
-                    };
-                    async_iife(vec![
-                        const_("__k", None, string_of(k)),
-                        ret(call(
-                            id("__bynkThen"),
-                            vec![
-                                op(&m.node, "has", vec![id("__k")]),
-                                arrow(vec![param("__h", None)], branch),
-                            ],
-                        )),
-                    ])
-                },
-                |c| {
-                    format!(
-                        "(async () => {{ const __k = {0}; return __bynkThen({1}.has(__k), (__h) => __h ? __bynkThen({1}.get(__k), (__v) => Some(__v!)) : None); }})()",
-                        key_text(&c[0]),
-                        m.text
-                    )
-                },
-            ),
-            "update" => node_or_text(
-                a,
-                |c| {
-                    let [k, f] = take(c);
-                    let modify = block_arrow_of(
-                        vec![param("__c", None), param("__p", None)],
+            "remove" if holds_connections => {
+                let c = a;
+                let [k] = take(c);
+                async_iife(vec![
+                    const_("__k", None, string_of(k)),
+                    const_(
+                        "__o",
+                        None,
+                        TsExpr::Await(Box::new(op(&m.node, "get", vec![id("__k")]))),
+                    ),
+                    if_then(
+                        ne(id("__o"), undefined()),
                         vec![
-                            if_then(
-                                TsExpr::Unary {
-                                    op: TsUnaryOp::Not,
-                                    expr: Box::new(id("__p")),
-                                },
-                                vec![throw_error("Map.update: key absent")],
-                            ),
-                            ret(apply(f, TsExpr::NonNull(Box::new(id("__c"))))),
+                            awaited(call(member(id("__o"), "close"), vec![])),
+                            awaited(op(&m.node, "remove", vec![id("__k")])),
                         ],
-                    );
-                    async_iife(vec![
-                        awaited(op(&m.node, "modify", vec![string_of(k), modify])),
-                        done(),
-                    ])
-                },
-                |c| {
-                    format!(
-                        "(async () => {{ await {2}.modify({0}, (__c, __p) => {{ if (!__p) {{ throw new globalThis.Error(\"Map.update: key absent\"); }} return ({1})(__c!); }}); return undefined; }})()",
-                        key_text(&c[0]),
-                        c[1],
-                        m.text
-                    )
-                },
-            ),
-            "upsert" => node_or_text(
-                a,
-                |c| {
-                    let [k, default, f] = take(c);
-                    let cur = TsExpr::Conditional {
-                        test: Box::new(id("__p")),
-                        consequent: Box::new(TsExpr::NonNull(Box::new(id("__c")))),
-                        alternate: Box::new(paren(default)),
-                    };
-                    let modify = arrow(vec![param("__c", None), param("__p", None)], apply(f, cur));
-                    async_iife(vec![
-                        awaited(op(&m.node, "modify", vec![string_of(k), modify])),
-                        done(),
-                    ])
-                },
-                |c| {
-                    format!(
-                        "(async () => {{ await {3}.modify({0}, (__c, __p) => ({2})(__p ? __c! : ({1}))); return undefined; }})()",
-                        key_text(&c[0]),
-                        c[1],
-                        c[2],
-                        m.text
-                    )
-                },
-            ),
+                    ),
+                    done(),
+                ])
+            }
+            "remove" => {
+                let c = a;
+                let [k] = take(c);
+                async_iife(vec![
+                    awaited(op(&m.node, "remove", vec![string_of(k)])),
+                    done(),
+                ])
+            }
+            "contains" => {
+                let c = a;
+                let [k] = take(c);
+                op(&m.node, "has", vec![string_of(k)])
+            }
+            "size" => {
+                let _ = a;
+                op(&m.node, "size", vec![])
+            }
+            "get" => {
+                let c = a;
+                let [k] = take(c);
+                let present = op(&m.node, "get", vec![id("__k")]);
+                let some = arrow(
+                    vec![param("__v", None)],
+                    call(id("Some"), vec![TsExpr::NonNull(Box::new(id("__v")))]),
+                );
+                let then_get = call(id("__bynkThen"), vec![present, some]);
+                let branch = TsExpr::Conditional {
+                    test: Box::new(id("__h")),
+                    consequent: Box::new(then_get),
+                    alternate: Box::new(id("None")),
+                };
+                async_iife(vec![
+                    const_("__k", None, string_of(k)),
+                    ret(call(
+                        id("__bynkThen"),
+                        vec![
+                            op(&m.node, "has", vec![id("__k")]),
+                            arrow(vec![param("__h", None)], branch),
+                        ],
+                    )),
+                ])
+            }
+            "update" => {
+                let c = a;
+                let [k, f] = take(c);
+                let modify = block_arrow_of(
+                    vec![param("__c", None), param("__p", None)],
+                    vec![
+                        if_then(
+                            TsExpr::Unary {
+                                op: TsUnaryOp::Not,
+                                expr: Box::new(id("__p")),
+                            },
+                            vec![throw_error("Map.update: key absent")],
+                        ),
+                        ret(apply(f, TsExpr::NonNull(Box::new(id("__c"))))),
+                    ],
+                );
+                async_iife(vec![
+                    awaited(op(&m.node, "modify", vec![string_of(k), modify])),
+                    done(),
+                ])
+            }
+            "upsert" => {
+                let c = a;
+                let [k, default, f] = take(c);
+                let cur = TsExpr::Conditional {
+                    test: Box::new(id("__p")),
+                    consequent: Box::new(TsExpr::NonNull(Box::new(id("__c")))),
+                    alternate: Box::new(paren(default)),
+                };
+                let modify = arrow(vec![param("__c", None), param("__p", None)], apply(f, cur));
+                async_iife(vec![
+                    awaited(op(&m.node, "modify", vec![string_of(k), modify])),
+                    done(),
+                ])
+            }
             // v0.91 (ADR 0119): any non-entry op is a lazy query that lifts the
             // map into a scan over its values (`Object.values`).
             //
@@ -640,7 +540,7 @@ fn lower_store_map_call(
                     });
                 query_op(
                     "Map",
-                    LoweredExpr::Node(path_values_source(m.node.clone())),
+                    path_values_source(m.node.clone()),
                     Site { e, method, args },
                     a,
                     &elem,
@@ -661,7 +561,7 @@ fn lower_store_set_call(
     args: &[Expr],
     cx: &mut LowerCtx,
     pre: &mut Pre,
-) -> Option<Built> {
+) -> Option<bynk_ts::TsExpr> {
     // v0.83: a storage-`Set` operation — `<set>.<op>(…)` on a `store Set[T]` field.
     // Lowers to an entry op over `__state.<set>`: `add`/`remove` mutate the working
     // record, `contains`/`size` read it.
@@ -679,43 +579,30 @@ fn lower_store_set_call(
         return Some(match method.name.as_str() {
             "add" | "remove" => {
                 let which = method.name.as_str();
-                node_or_text(
-                    a,
-                    |c| {
-                        let [k] = take(c);
-                        async_iife(vec![
-                            awaited(op(&s.node, which, vec![string_of(k)])),
-                            done(),
-                        ])
-                    },
-                    |c| {
-                        format!(
-                            "(async () => {{ await {}.{which}({}); return undefined; }})()",
-                            s.text,
-                            key_text(&c[0])
-                        )
-                    },
-                )
-            }
-            "contains" => node_or_text(
-                a,
-                |c| {
+                {
+                    let c = a;
                     let [k] = take(c);
-                    op(&s.node, "has", vec![string_of(k)])
-                },
-                |c| format!("{}.has({})", s.text, key_text(&c[0])),
-            ),
-            "size" => node_or_text(
-                a,
-                |_| op(&s.node, "size", vec![]),
-                |_| format!("{}.size()", s.text),
-            ),
+                    async_iife(vec![
+                        awaited(op(&s.node, which, vec![string_of(k)])),
+                        done(),
+                    ])
+                }
+            }
+            "contains" => {
+                let c = a;
+                let [k] = take(c);
+                op(&s.node, "has", vec![string_of(k)])
+            }
+            "size" => {
+                let _ = a;
+                op(&s.node, "size", vec![])
+            }
             // The checker admits only the operations of the store's kind, so a miss is a
             // compiler fault (1A.34): a missing checker fact, reported at the call.
-            other => Ok(cx.missing_fact(
+            other => cx.missing_fact(
                 e.span,
                 format_args!("supported `Set` operation (`{other}`)"),
-            )),
+            ),
         });
     }
     None
@@ -763,7 +650,7 @@ fn lower_store_cache_call(
     args: &[Expr],
     cx: &mut LowerCtx,
     pre: &mut Pre,
-) -> Option<Built> {
+) -> Option<bynk_ts::TsExpr> {
     // v0.87 (ADR 0113): a storage-`Cache` operation — `<cache>.<op>(…)` on a
     // `store Cache[K, V]` field. Lowers to an entry op over `__state.<cache>` (entries
     // `{ v, exp }`) that applies TTL expiry against the injected `Clock`: every op but
@@ -796,181 +683,115 @@ fn lower_store_cache_call(
         };
         let a = lower_args(args, cx, pre);
         return Some(match method.name.as_str() {
-            "remove" => node_or_text(
-                a,
-                |c_| {
-                    let [k] = take(c_);
-                    async_iife(vec![
-                        awaited(op(&c.node, "remove", vec![string_of(k)])),
-                        done(),
-                    ])
-                },
-                |c_| {
-                    format!(
-                        "(async () => {{ await {}.remove({}); return undefined; }})()",
-                        c.text,
-                        key_text(&c_[0])
-                    )
-                },
-            ),
-            "put" => node_or_text(
-                a,
-                |c_| {
-                    let [k, v] = take(c_);
-                    async_iife(vec![
-                        now(),
-                        awaited(op(&c.node, "put", vec![string_of(k), stamped(v, ttl)])),
-                        done(),
-                    ])
-                },
-                |c_| {
-                    format!(
-                        "(async () => {{ const __now = {now_text}; await {}.put({}, {{ v: {}, exp: __now + {ttl} }}); return undefined; }})()",
-                        c.text,
-                        key_text(&c_[0]),
-                        c_[1]
-                    )
-                },
-            ),
-            "get" => node_or_text(
-                a,
-                |c_| {
-                    let [k] = take(c_);
-                    async_iife(vec![
-                        now(),
-                        const_(
-                            "__e",
-                            None,
-                            TsExpr::Await(Box::new(op(&c.node, "get", vec![string_of(k)]))),
-                        ),
-                        ret(TsExpr::Conditional {
-                            test: Box::new(paren(is_live())),
-                            consequent: Box::new(call(id("Some"), vec![member(id("__e"), "v")])),
-                            alternate: Box::new(id("None")),
-                        }),
-                    ])
-                },
-                |c_| {
-                    format!(
-                        "(async () => {{ const __now = {now_text}; const __e = await {}.get({}); return (__e !== undefined && __e.exp > __now) ? Some(__e.v) : None; }})()",
-                        c.text,
-                        key_text(&c_[0])
-                    )
-                },
-            ),
-            "contains" => node_or_text(
-                a,
-                |c_| {
-                    let [k] = take(c_);
-                    async_iife(vec![
-                        now(),
-                        const_(
-                            "__e",
-                            None,
-                            TsExpr::Await(Box::new(op(&c.node, "get", vec![string_of(k)]))),
-                        ),
-                        ret(is_live()),
-                    ])
-                },
-                |c_| {
-                    format!(
-                        "(async () => {{ const __now = {now_text}; const __e = await {}.get({}); return __e !== undefined && __e.exp > __now; }})()",
-                        c.text,
-                        key_text(&c_[0])
-                    )
-                },
-            ),
-            "size" => node_or_text(
-                a,
-                |_| {
-                    async_iife(vec![
-                        now(),
-                        ret(TsExpr::Await(Box::new(op(
-                            &c.node,
-                            "liveSize",
-                            vec![id("__now")],
-                        )))),
-                    ])
-                },
-                |_| {
-                    format!(
-                        "(async () => {{ const __now = {now_text}; return await {}.liveSize(__now); }})()",
-                        c.text
-                    )
-                },
-            ),
-            "update" => node_or_text(
-                a,
-                |c_| {
-                    let [k, f] = take(c_);
-                    let modify = block_arrow_of(
-                        vec![param("__e", None)],
-                        vec![
-                            if_then(
-                                TsExpr::Unary {
-                                    op: TsUnaryOp::Not,
-                                    expr: Box::new(is_live()),
-                                },
-                                vec![throw_error("Cache.update: key absent")],
-                            ),
-                            ret(stamped(apply(f, member(id("__e"), "v")), ttl)),
-                        ],
-                    );
-                    async_iife(vec![
-                        now(),
-                        const_("__k", None, string_of(k)),
-                        awaited(op(&c.node, "modify", vec![id("__k"), modify])),
-                        done(),
-                    ])
-                },
-                |c_| {
-                    format!(
-                        "(async () => {{ const __now = {now_text}; const __k = {0}; await {2}.modify(__k, (__e) => {{ if (!(__e !== undefined && __e.exp > __now)) {{ throw new globalThis.Error(\"Cache.update: key absent\"); }} return {{ v: ({1})(__e.v), exp: __now + {ttl} }}; }}); return undefined; }})()",
-                        key_text(&c_[0]),
-                        c_[1],
-                        c.text
-                    )
-                },
-            ),
-            "upsert" => node_or_text(
-                a,
-                |c_| {
-                    let [k, default, f] = take(c_);
-                    let cur = TsExpr::Conditional {
+            "remove" => {
+                let c_ = a;
+                let [k] = take(c_);
+                async_iife(vec![
+                    awaited(op(&c.node, "remove", vec![string_of(k)])),
+                    done(),
+                ])
+            }
+            "put" => {
+                let c_ = a;
+                let [k, v] = take(c_);
+                async_iife(vec![
+                    now(),
+                    awaited(op(&c.node, "put", vec![string_of(k), stamped(v, ttl)])),
+                    done(),
+                ])
+            }
+            "get" => {
+                let c_ = a;
+                let [k] = take(c_);
+                async_iife(vec![
+                    now(),
+                    const_(
+                        "__e",
+                        None,
+                        TsExpr::Await(Box::new(op(&c.node, "get", vec![string_of(k)]))),
+                    ),
+                    ret(TsExpr::Conditional {
                         test: Box::new(paren(is_live())),
-                        consequent: Box::new(member(id("__e"), "v")),
-                        alternate: Box::new(paren(default)),
-                    };
-                    let modify = block_arrow_of(
-                        vec![param("__e", None)],
-                        vec![
-                            const_("__cur", None, cur),
-                            ret(stamped(apply(f, id("__cur")), ttl)),
-                        ],
-                    );
-                    async_iife(vec![
-                        now(),
-                        const_("__k", None, string_of(k)),
-                        awaited(op(&c.node, "modify", vec![id("__k"), modify])),
-                        done(),
-                    ])
-                },
-                |c_| {
-                    format!(
-                        "(async () => {{ const __now = {now_text}; const __k = {0}; await {3}.modify(__k, (__e) => {{ const __cur = (__e !== undefined && __e.exp > __now) ? __e.v : ({1}); return {{ v: ({2})(__cur), exp: __now + {ttl} }}; }}); return undefined; }})()",
-                        key_text(&c_[0]),
-                        c_[1],
-                        c_[2],
-                        c.text
-                    )
-                },
-            ),
+                        consequent: Box::new(call(id("Some"), vec![member(id("__e"), "v")])),
+                        alternate: Box::new(id("None")),
+                    }),
+                ])
+            }
+            "contains" => {
+                let c_ = a;
+                let [k] = take(c_);
+                async_iife(vec![
+                    now(),
+                    const_(
+                        "__e",
+                        None,
+                        TsExpr::Await(Box::new(op(&c.node, "get", vec![string_of(k)]))),
+                    ),
+                    ret(is_live()),
+                ])
+            }
+            "size" => {
+                let _ = a;
+                async_iife(vec![
+                    now(),
+                    ret(TsExpr::Await(Box::new(op(
+                        &c.node,
+                        "liveSize",
+                        vec![id("__now")],
+                    )))),
+                ])
+            }
+            "update" => {
+                let c_ = a;
+                let [k, f] = take(c_);
+                let modify = block_arrow_of(
+                    vec![param("__e", None)],
+                    vec![
+                        if_then(
+                            TsExpr::Unary {
+                                op: TsUnaryOp::Not,
+                                expr: Box::new(is_live()),
+                            },
+                            vec![throw_error("Cache.update: key absent")],
+                        ),
+                        ret(stamped(apply(f, member(id("__e"), "v")), ttl)),
+                    ],
+                );
+                async_iife(vec![
+                    now(),
+                    const_("__k", None, string_of(k)),
+                    awaited(op(&c.node, "modify", vec![id("__k"), modify])),
+                    done(),
+                ])
+            }
+            "upsert" => {
+                let c_ = a;
+                let [k, default, f] = take(c_);
+                let cur = TsExpr::Conditional {
+                    test: Box::new(paren(is_live())),
+                    consequent: Box::new(member(id("__e"), "v")),
+                    alternate: Box::new(paren(default)),
+                };
+                let modify = block_arrow_of(
+                    vec![param("__e", None)],
+                    vec![
+                        const_("__cur", None, cur),
+                        ret(stamped(apply(f, id("__cur")), ttl)),
+                    ],
+                );
+                async_iife(vec![
+                    now(),
+                    const_("__k", None, string_of(k)),
+                    awaited(op(&c.node, "modify", vec![id("__k"), modify])),
+                    done(),
+                ])
+            }
             // The checker admits only the operations of the store's kind, so a miss is a
             // compiler fault (1A.34): a missing checker fact, reported at the call.
-            other => Ok(cx.missing_fact(
+            other => cx.missing_fact(
                 e.span,
                 format_args!("supported `Cache` operation (`{other}`)"),
-            )),
+            ),
         });
     }
     None
@@ -985,7 +806,7 @@ fn lower_store_log_call(
     args: &[Expr],
     cx: &mut LowerCtx,
     pre: &mut Pre,
-) -> Option<Built> {
+) -> Option<bynk_ts::TsExpr> {
     // v0.95 (ADR 0121): a storage-`Log` operation — `<log>.<op>(…)` on a
     // `store Log[T]` field (an array of `{ t, v }`). `append` stamps the clock
     // and pushes (pruning past `@retain`); the time-window roots and the general
@@ -1007,47 +828,32 @@ fn lower_store_log_call(
         if method.name == "append" {
             let now_text = format!("await {}.Clock.now()", cx.cap_deps_expr());
             let now = awaited_now(cx.cap_deps_node());
-            return Some(node_or_text(
-                a,
-                |c| {
-                    let [v] = take(c);
-                    let mut body = vec![
-                        const_("__now", None, now),
-                        awaited(op(&g.node, "append", vec![v, id("__now")])),
-                    ];
-                    if let Some(ms) = retain {
-                        body.push(awaited(op(
-                            &g.node,
-                            "prune",
-                            vec![binary(
-                                TsBinaryOp::Sub,
-                                id("__now"),
-                                TsExpr::Lit(TsLit::Num(ms.to_string())),
-                            )],
-                        )));
-                    }
-                    body.push(done());
-                    async_iife(body)
-                },
-                |c| {
-                    let prune = match retain {
-                        Some(ms) => format!(" await {}.prune(__now - {ms});", g.text),
-                        None => String::new(),
-                    };
-                    format!(
-                        "(async () => {{ const __now = {now_text}; await {1}.append({0}, __now);{prune} return undefined; }})()",
-                        c[0], g.text
-                    )
-                },
-            ));
+            return Some({
+                let c = a;
+                let [v] = take(c);
+                let mut body = vec![
+                    const_("__now", None, now),
+                    awaited(op(&g.node, "append", vec![v, id("__now")])),
+                ];
+                if let Some(ms) = retain {
+                    body.push(awaited(op(
+                        &g.node,
+                        "prune",
+                        vec![binary(
+                            TsBinaryOp::Sub,
+                            id("__now"),
+                            TsExpr::Lit(TsLit::Num(ms.to_string())),
+                        )],
+                    )));
+                }
+                body.push(done());
+                async_iife(body)
+            });
         }
         // A time-window root: a `Query` thunk over the windowed values, `(() => g.since(x))`.
-        let window = |a: Vec<LoweredExpr>, name: &'static str| {
-            node_or_text(
-                a,
-                |c| paren(arrow(vec![], op(&g.node, name, c))),
-                |c| format!("(() => {}.{name}({}))", g.text, c.join(", ")),
-            )
+        let window = |a: Vec<bynk_ts::TsExpr>, name: &'static str| {
+            let c = a;
+            paren(arrow(vec![], op(&g.node, name, c)))
         };
         return Some(match method.name.as_str() {
             "since" => window(a, "since"),
@@ -1069,7 +875,7 @@ fn lower_store_log_call(
                     });
                 query_op(
                     "Log",
-                    LoweredExpr::Node(path_values_source(g.node.clone())),
+                    path_values_source(g.node.clone()),
                     Site { e, method, args },
                     a,
                     &elem,
@@ -1089,7 +895,7 @@ fn lower_store_cell_call(
     args: &[Expr],
     cx: &mut LowerCtx,
     pre: &mut Pre,
-) -> Option<Built> {
+) -> Option<bynk_ts::TsExpr> {
     // v0.98 (ADR 0125): a storage-`Cell` operation — `<cell>.update(f)` on a
     // `store Cell[T]` field. Lowers to a staged read-modify-write over
     // `__state.<cell>` (`Map.update`'s lowering minus the key-absent guard — a
@@ -1111,28 +917,20 @@ fn lower_store_cell_call(
         let n = Receiver::new(&var, &id_.name);
         let a = lower_args(args, cx, pre);
         return Some(match method.name.as_str() {
-            "update" => node_or_text(
-                a,
-                |c| {
-                    let [f] = take(c);
-                    sync_iife(vec![
-                        TsStmt::assign(n.node.clone(), apply(f, n.node.clone()), None),
-                        done(),
-                    ])
-                },
-                |c| {
-                    format!(
-                        "(() => {{ {0} = ({1})({0}); return undefined; }})()",
-                        n.text, c[0]
-                    )
-                },
-            ),
+            "update" => {
+                let c = a;
+                let [f] = take(c);
+                sync_iife(vec![
+                    TsStmt::assign(n.node.clone(), apply(f, n.node.clone()), None),
+                    done(),
+                ])
+            }
             // The checker admits only the operations of the store's kind, so a miss is a
             // compiler fault (1A.34): a missing checker fact, reported at the call.
-            other => Ok(cx.missing_fact(
+            other => cx.missing_fact(
                 method.span,
                 format_args!("supported `Cell` operation (`{other}`)"),
-            )),
+            ),
         });
     }
     None
@@ -1175,21 +973,18 @@ fn route_indexed_filter(
         return None;
     }
     let v = pre.lower_node(value, cx);
-    let built = node_or_text(
-        vec![v],
-        |c| {
-            let [v] = take(c);
-            paren(arrow(
-                vec![],
-                call(
-                    member(m.node.clone(), "byIndex"),
-                    vec![lit_str(field), string_of(v)],
-                ),
-            ))
-        },
-        |c| format!("(() => {}.byIndex(\"{field}\", String({})))", m.text, c[0]),
-    );
-    Some(pre.finish(LoweredExpr::from(built)))
+    let built = {
+        let c = vec![v];
+        let [v] = take(c);
+        paren(arrow(
+            vec![],
+            call(
+                member(m.node.clone(), "byIndex"),
+                vec![lit_str(field), string_of(v)],
+            ),
+        ))
+    };
+    Some(pre.finish(bynk_ts::TsExpr::from(built)))
 }
 
 /// `e` as `<param>.<field>` → the field name; else `None`.

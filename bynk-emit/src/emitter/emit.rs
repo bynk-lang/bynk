@@ -1441,7 +1441,7 @@ fn contract_guarded_body_stmts(
         Some(bynk_ts::TsExpr::Ident("result".to_string())),
         None,
     ))));
-    body.into_stmts(INDENT_STEP)
+    body.into_stmts()
 }
 
 /// Shared builder for the contract call-site guard's own real `if (!(pred))
@@ -1581,7 +1581,7 @@ fn http_handler_method_name_from_str(method: &str, path: &str) -> String {
 /// Slice 3 (semantic-debugging track, ADR 0105): the debug-metadata sidecar's
 /// `{ fn → label }` map — each emitted handler function paired with its Bynk
 /// operation label, so the debugger can name a stack frame `GET "/"` rather than
-/// `http_GET`. Built by re-walking the unit's handlers with the *same* naming
+/// `http_GET`. bynk_ts::TsExpr by re-walking the unit's handlers with the *same* naming
 /// functions the emitter uses (so the keys match the emitted function names);
 /// serialised as a JSON object (manual, like the source map — no serde). Returns
 /// `None` when the unit declares no handlers.
@@ -3392,7 +3392,7 @@ pub(crate) fn emit_service(
         } else {
             body
         };
-        let body = body.into_stmts(INDENT_STEP * 2);
+        let body = body.into_stmts();
 
         // #2280: anchor the method header and prologue to the handler's own
         // `on call` line rather than the previous statement's.
@@ -5621,13 +5621,13 @@ fn emit_agent_load_commit_state(
                     },
                 );
                 let mut pre = Pre::new();
-                let pred = pre.lower_ts(&inv.predicate, &mut cx);
+                let pred = pre.lower_node(&inv.predicate, &mut cx);
                 stmts.extend(build_violation_check(
                     &inv.name.name,
                     "invariant",
                     &declaration_location(ctx, source_text, inv.name.span),
                     pred,
-                    pre.ts_stmts(cx.fault_site(inv.predicate.span)),
+                    pre.ts_stmts(),
                 ));
             }
         }
@@ -5690,13 +5690,13 @@ fn emit_agent_load_commit_state(
                     },
                 );
                 let mut pre = Pre::new();
-                let pred = pre.lower_ts(&tr.predicate, &mut cx);
+                let pred = pre.lower_node(&tr.predicate, &mut cx);
                 transition_body.extend(build_violation_check(
                     &tr.name.name,
                     "transition",
                     &declaration_location(ctx, source_text, tr.name.span),
                     pred,
-                    pre.ts_stmts(cx.fault_site(tr.predicate.span)),
+                    pre.ts_stmts(),
                 ));
             }
             stmts.push(bynk_ts::TsStmt::const_stmt(
@@ -7070,13 +7070,7 @@ fn emit_agent_handlers(
         methods.push(bynk_ts::TsClassMethod {
             doc: h.documentation.as_deref().map(str::to_owned),
             span: Some(h.span),
-            ..bynk_ts::TsClassMethod::new(
-                method,
-                effectful,
-                params,
-                Some(ret),
-                body.into_stmts(INDENT_STEP * 2),
-            )
+            ..bynk_ts::TsClassMethod::new(method, effectful, params, Some(ret), body.into_stmts())
         });
     }
 }
@@ -7112,9 +7106,7 @@ fn iife_const_item(name: &str, awaited: bool, body: Body) -> Item {
         is_async: awaited,
         generics: Vec::new(),
         return_type: None,
-        body: Box::new(bynk_ts::TsArrowBody::Multiline(
-            body.into_stmts(INDENT_STEP),
-        )),
+        body: Box::new(bynk_ts::TsArrowBody::Multiline(body.into_stmts())),
     };
     let call = bynk_ts::TsExpr::Call {
         callee: Box::new(bynk_ts::TsExpr::Paren(Box::new(closure))),
