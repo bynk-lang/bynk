@@ -1824,6 +1824,8 @@ An HTTP handler MUST return `Effect[HttpResult[T]]`
 (`bynk.http.return_not_effect_http_result`); its route MUST be well-formed and
 unique, MUST NOT use the reserved `/_bynk/` prefix
 (`bynk.http.invalid_path`, `bynk.http.duplicate_route`, `bynk.http.reserved_prefix`),
+MUST NOT contain `*`, `{` or `}` in any segment, which are reserved for a future
+route form (`bynk.http.reserved_route_syntax`),
 and each `:name` segment MUST bind to a string-constructible parameter
 (`bynk.http.unbound_path_param`, `bynk.http.path_param_not_stringy`,
 `bynk.http.extra_param`); `GET` and `DELETE` MUST NOT take a `body`

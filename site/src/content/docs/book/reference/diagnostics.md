@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **896** codes in total.
+There are **897** codes in total.
 
 ## Agents
 
@@ -274,6 +274,7 @@ There are **896** codes in total.
 | [`bynk.http.raw_unknown_arg`](/book/reference/http/#raw-request-bodies) | A `@raw` annotation has an argument outside the closed set (`contentType`). |  | — |
 | [`bynk.http.rejected_signature`](/book/reference/http/#rendering-rejections) | An `on rejected` handler is not `on rejected(why: BoundaryRejection) -> HttpResult[()]` with no `by` and no `given`. | [`rejected_handler`](/book/reference/grammar/#rule-rejected_handler) | — |
 | [`bynk.http.reserved_prefix`](/book/reference/http/#handler-form) | A route uses a reserved prefix: `/_bynk/` (internal dispatch) or `/_assets/` (static assets). | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
+| [`bynk.http.reserved_route_syntax`](/book/reference/http/#handler-form) | A route segment contains `*`, `{` or `}`, which are reserved for a future route form. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
 | [`bynk.http.return_not_effect_http_result`](/book/reference/http/#handler-form) | An HTTP handler does not return `Effect[HttpResult[T]]`. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
 | [`bynk.http.security_invalid_field`](/book/reference/http/#security-headers) | A `security` policy field (`hsts`/`nosniff`) has the wrong value shape. |  | — |
 | [`bynk.http.security_not_http`](/book/reference/http/#security-headers) | A `security { }` policy appears on a service that is not `from http`. |  | — |

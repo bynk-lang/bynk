@@ -1,0 +1,8 @@
+context demo
+
+// #3753: `*` is reserved in a route, for a future rest-segment form.
+service api from http {
+  on GET("/files/*key") () -> Effect[HttpResult[Int]] by Visitor {
+    Ok(1)
+  }
+}
