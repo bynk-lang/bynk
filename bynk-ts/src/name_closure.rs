@@ -211,8 +211,15 @@ pub fn unbound_names_providing(
     program: &TsProgram,
     provided: impl Fn(&str) -> bool,
 ) -> Vec<String> {
+    unbound_names_in(&program.stmts, provided)
+}
+
+/// [`unbound_names_providing`] over a module's statements as a slice, for a
+/// caller that holds them before it has a [`TsProgram`] (an emitter deriving a
+/// module's own header from the body it just built).
+pub fn unbound_names_in(stmts: &[TsStmt], provided: impl Fn(&str) -> bool) -> Vec<String> {
     let mut w = Walk::default();
-    for s in &program.stmts {
+    for s in stmts {
         w.stmt(s);
     }
     let types = w
@@ -1093,6 +1100,11 @@ impl Walk {
             TsExpr::Ident(name) => self.use_value(name),
             TsExpr::Lit(_) => {}
             TsExpr::VerbatimExpr(text, _) => self.opaque(text),
+            // Text the emitter printed from nodes, with the names it uses declared
+            // beside it (1A.36b-1): counted as `raw_using`'s are.
+            TsExpr::RawUsing(_, names) => {
+                self.used_declared.extend(names.iter().cloned());
+            }
             TsExpr::Member { object, property } | TsExpr::OptionalMember { object, property } => {
                 if let TsExpr::Ident(head) = object.as_ref() {
                     self.qualified.insert((head.clone(), property.clone()));
@@ -1209,7 +1221,9 @@ impl Walk {
                 self.ty(ty);
             }
             TsExpr::AsConst(expr) => self.expr(expr),
-            TsExpr::Assign { target, value } | TsExpr::AddAssign { target, value } => {
+            TsExpr::Assign { target, value }
+            | TsExpr::AddAssign { target, value }
+            | TsExpr::NullishAssign { target, value } => {
                 self.expr(target);
                 self.expr(value);
             }
@@ -1542,6 +1556,67 @@ mod tests {
             function_over(TsType::named("Response")),
         ]);
         assert!(unbound_names_providing(&p, provided).is_empty());
+    }
+
+    /// 1A.36b-1: an expression's `raw_using` names are uses, as the statement's are, and the
+    /// nodes the text was printed from are read the same way to find them.
+    #[test]
+    fn an_expression_that_declares_its_uses_counts_them() {
+        let text = TsExpr::raw_using(
+            "(__j: __JsonValue) => { return Ok(__j); }",
+            vec!["Ok".to_string(), "__JsonValue".to_string()],
+        );
+        let p = program(vec![TsStmt::expr_stmt(text.clone(), None)]);
+        assert_eq!(unbound_names(&p), ["Ok", "__JsonValue"]);
+        let p = program(vec![
+            import(&["Ok", "type __JsonValue"]),
+            TsStmt::expr_stmt(text, None),
+        ]);
+        assert!(unbound_names(&p).is_empty(), "{:?}", unbound_names(&p));
+        // The nodes it was printed from: parameters and locals bind, the rest is used.
+        let arrow = TsExpr::Arrow {
+            params: vec![TsParam::new(
+                "__j".to_string(),
+                Some(TsType::named("__JsonValue")),
+            )],
+            is_async: false,
+            generics: vec![],
+            return_type: None,
+            body: Box::new(TsArrowBody::Block(vec![TsStmt::return_stmt(
+                Some(TsExpr::Call {
+                    callee: Box::new(TsExpr::Ident("Ok".to_string())),
+                    args: vec![TsExpr::Ident("__j".to_string())],
+                }),
+                None,
+            )])),
+        };
+        assert_eq!(
+            unbound_names_in(&[TsStmt::expr_stmt(arrow, None)], |_| false),
+            ["Ok", "__JsonValue"]
+        );
+    }
+
+    /// 1A.36b-1: `names_imported_from` reads what a module takes from one place.
+    #[test]
+    fn names_are_read_by_the_specifier_they_come_from() {
+        let from = |spec: &str, names: &[&str]| {
+            TsStmt::decl(
+                TsDecl::Import {
+                    type_only: false,
+                    names: names.iter().map(|n| n.to_string()).collect(),
+                    from: spec.to_string(),
+                },
+                None,
+            )
+        };
+        let p = program(vec![
+            from("./__bynk_runtime/result.js", &["Ok", "type Option"]),
+            from("./other.js", &["Thing as Renamed"]),
+        ]);
+        let runtime = p.names_imported_from(|f| f.contains("__bynk_runtime/"));
+        assert_eq!(runtime.into_iter().collect::<Vec<_>>(), ["Ok", "Option"]);
+        let other = p.names_imported_from(|f| f == "./other.js");
+        assert_eq!(other.into_iter().collect::<Vec<_>>(), ["Renamed"]);
     }
 
     /// 1A.36a (Decision D): a `raw_using` statement's names are uses, in either position, and

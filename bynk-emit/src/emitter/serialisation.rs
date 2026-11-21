@@ -2793,9 +2793,25 @@ pub(crate) fn witness_codec_expr(t: &TypeRef, ru: &RuntimeUse) -> TsExpr {
                 })
                 .collect::<Vec<_>>()
                 .join(" ");
-            ident(format!(
-                "(__j: __JsonValue, __p: string) => {{ {one_line} }}"
-            ))
+            // The text hides what the statements use. They are read as the arrow
+            // they print as, so its parameters and locals bind, and the type its
+            // signature spells is declared with them.
+            let arrow = TsExpr::Arrow {
+                params: vec![
+                    TsParam::new("__j".to_string(), Some(TsType::named("__JsonValue"))),
+                    TsParam::new("__p".to_string(), Some(TsType::named("string"))),
+                ],
+                is_async: false,
+                generics: Vec::new(),
+                return_type: None,
+                body: Box::new(TsArrowBody::Block(body)),
+            };
+            let uses =
+                bynk_ts::unbound_names_in(&[bynk_ts::TsStmt::expr_stmt(arrow, None)], |_| false);
+            TsExpr::raw_using(
+                format!("(__j: __JsonValue, __p: string) => {{ {one_line} }}"),
+                uses,
+            )
         }
     };
     TsExpr::object(vec![

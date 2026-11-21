@@ -1229,7 +1229,7 @@ fn emit_const_in(c: &ConstDecl, module: ModuleCtx<'_>) -> Vec<bynk_ts::TsStmt> {
     {
         let mut pre = Pre::new();
         let mut icx = LowerCtx::new(module, BodyMode::StaticInit);
-        let init = pre.lower(&c.init, &mut icx);
+        let init = pre.lower_node(&c.init, &mut icx);
         // The closed static set (`consts::static_error`) holds no `if`,
         // `match`, block or `?`, the only shapes the lowering hoists setup
         // statements for, so an initialiser lowers to one expression.
@@ -1274,9 +1274,18 @@ fn emit_const_in(c: &ConstDecl, module: ModuleCtx<'_>) -> Vec<bynk_ts::TsStmt> {
                 params: Vec::new(),
                 return_type: Some(ty),
                 body: vec![bynk_ts::TsStmt::return_stmt(
-                    Some(bynk_ts::TsExpr::Ident(format!(
-                        "({cache} ??= {{ v: {init} }}).v"
-                    ))),
+                    Some(bynk_ts::TsExpr::Member {
+                        object: Box::new(bynk_ts::TsExpr::Paren(Box::new(
+                            bynk_ts::TsExpr::NullishAssign {
+                                target: Box::new(bynk_ts::TsExpr::Ident(cache)),
+                                value: Box::new(bynk_ts::TsExpr::object(vec![(
+                                    "v".to_string(),
+                                    init,
+                                )])),
+                            },
+                        ))),
+                        property: "v".to_string(),
+                    }),
                     None,
                 )],
                 is_async: false,

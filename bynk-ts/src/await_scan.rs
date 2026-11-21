@@ -13,7 +13,9 @@ pub fn expr_contains_await(expr: &TsExpr) -> bool {
         TsExpr::Lit(_) => false,
         // An `Ident` or a `VerbatimExpr` may carry expression text (a still-text operand wrapped for
         // a node-taking caller), so both are searched as text: a false positive only hoists.
-        TsExpr::Ident(text) | TsExpr::VerbatimExpr(text, _) => text.contains("await"),
+        TsExpr::Ident(text) | TsExpr::VerbatimExpr(text, _) | TsExpr::RawUsing(text, _) => {
+            text.contains("await")
+        }
         TsExpr::Member { object, .. } | TsExpr::OptionalMember { object, .. } => {
             expr_contains_await(object)
         }
@@ -71,7 +73,9 @@ pub fn expr_contains_await(expr: &TsExpr) -> bool {
                 || expr_contains_await(consequent)
                 || expr_contains_await(alternate)
         }
-        TsExpr::Assign { target, value } | TsExpr::AddAssign { target, value } => {
+        TsExpr::Assign { target, value }
+        | TsExpr::AddAssign { target, value }
+        | TsExpr::NullishAssign { target, value } => {
             expr_contains_await(target) || expr_contains_await(value)
         }
     }
