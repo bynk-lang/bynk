@@ -377,3 +377,39 @@ pub(super) fn emit_continue(body: &mut Body, e: &Expr, cx: &mut LowerCtx) -> boo
     ))));
     true
 }
+
+#[cfg(test)]
+mod type_comparison_tests {
+    use crate::testkit::emit_source;
+
+    /// A self tail call in a generic function loops only when the call is at the function's own
+    /// type parameters (compared structurally, not by printed text).
+    #[test]
+    fn a_generic_function_self_tail_call_is_a_loop() {
+        let ts = emit_source(
+            "commons tcog\nfn count[T](xs: List[T], n: Int) -> Int {\n  if n <= 0 { 0 } else { count(xs, n - 1) }\n}\n",
+        );
+        assert!(ts.contains("__tco: while (true) {"), "{ts}");
+        assert!(ts.contains("continue __tco;"), "{ts}");
+    }
+
+    /// The same for a method on a generic record: the receiver must be `Name<T>` over the type's
+    /// own parameters.
+    #[test]
+    fn a_generic_receiver_self_tail_call_is_a_loop() {
+        let ts = emit_source(
+            "commons tcom\ntype Box2[T] = { v: T }\nfn Box2.count(self, n: Int) -> Int {\n  if n <= 0 { 0 } else { self.count(n - 1) }\n}\n",
+        );
+        assert!(ts.contains("__tco: while (true) {"), "{ts}");
+        assert!(ts.contains("continue __tco;"), "{ts}");
+    }
+
+    /// A tail call at a different instantiation is a real call, not a loop.
+    #[test]
+    fn a_self_call_at_another_instantiation_stays_a_call() {
+        let ts = emit_source(
+            "commons tcoi\nfn count[T](xs: List[T], n: Int) -> Int {\n  if n <= 0 { 0 } else { count[Int]([1], n - 1) }\n}\n",
+        );
+        assert!(!ts.contains("__tco"), "{ts}");
+    }
+}

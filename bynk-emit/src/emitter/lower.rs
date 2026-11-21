@@ -3439,18 +3439,29 @@ fn short_circuit(op: BinOp, l: bynk_ts::TsExpr, r: bynk_ts::TsExpr) -> bynk_ts::
     }
 }
 
-/// `(() => { s1; s2; return r; })()`: a `Call` over a bracketed compact-block `Arrow`. The
-/// statements are an expression's own hoists (and an `is` test's bindings), which must run only
-/// when the operator reaches its right operand.
+/// `(() => { s1; s2; return r; })()`: a `Call` over a bracketed `Arrow`. The statements are an
+/// expression's own hoists (and an `is` test's bindings), which must run only when the operator
+/// reaches its right operand. When every statement and the value print on one line the body is
+/// the compact `Block`; otherwise it is the multi-line body, because the compact form cannot hold
+/// a statement that spans lines.
 fn compact_iife(mut body: Vec<bynk_ts::TsStmt>, ret: bynk_ts::TsExpr) -> bynk_ts::TsExpr {
+    let one_line = body
+        .iter()
+        .all(|s| !bynk_ts::print_stmt(s, 0).trim_end().contains('\n'))
+        && !bynk_ts::print_expr(&ret).contains('\n');
     body.push(bynk_ts::TsStmt::return_stmt(Some(ret), None));
+    let body = if one_line {
+        bynk_ts::TsArrowBody::Block(body)
+    } else {
+        bynk_ts::TsArrowBody::Multiline(body)
+    };
     bynk_ts::TsExpr::Call {
         callee: Box::new(bynk_ts::TsExpr::Paren(Box::new(bynk_ts::TsExpr::Arrow {
             params: Vec::new(),
             is_async: false,
             generics: Vec::new(),
             return_type: None,
-            body: Box::new(bynk_ts::TsArrowBody::Block(body)),
+            body: Box::new(body),
         }))),
         args: Vec::new(),
     }
@@ -7100,6 +7111,41 @@ fn minus(x: Int) -> Int { 5 - - -x }
             func(&ts, "f").ends_with(&hoisted("!(x > 0)", skipped_true, reached)),
             "{ts}"
         );
+    }
+}
+
+#[cfg(test)]
+mod compact_iife_tests {
+    use super::*;
+
+    fn multi_line_stmt() -> bynk_ts::TsStmt {
+        bynk_ts::TsStmt::if_stmt(
+            ident_node("flag"),
+            bynk_ts::TsStmt::block(
+                vec![bynk_ts::TsStmt::expr_stmt(ident_node("done"), None)],
+                None,
+            ),
+            None,
+        )
+    }
+
+    /// A hoisted statement that prints over several lines cannot sit in the compact `Block`
+    /// body (the printer refuses it); the arrow takes the multi-line body instead.
+    #[test]
+    fn a_multi_line_hoist_takes_the_multi_line_body() {
+        let iife = compact_iife(vec![multi_line_stmt()], ident_node("r"));
+        let printed = bynk_ts::print_expr(&iife);
+        assert!(printed.starts_with("(() => {\n"), "{printed}");
+        assert!(printed.contains("if (flag) {"), "{printed}");
+        assert!(printed.contains("return r;"), "{printed}");
+    }
+
+    /// One-line statements keep the compact one-line form the corpus has always had.
+    #[test]
+    fn one_line_hoists_stay_compact() {
+        let stmt = bynk_ts::TsStmt::expr_stmt(ident_node("a"), None);
+        let iife = compact_iife(vec![stmt], ident_node("r"));
+        assert_eq!(bynk_ts::print_expr(&iife), "(() => { a; return r; })()");
     }
 }
 

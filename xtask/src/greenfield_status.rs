@@ -2481,8 +2481,10 @@ fn ts_text_idents_violations(files: &[(PathBuf, String)]) -> usize {
 /// Counts non-comment lines outside `#[cfg(test)]` modules in `bynk-emit/src` that contain
 /// `print_expr(`, `print_stmt(` or `print_type(` (a call), or the same name as a path
 /// (`.map(bynk_ts::print_type)`). `print_stmt_with_spans(` and the like are other names and do not
-/// match. Text-level gaps, as for the other line scanners: two calls on one line count once, and a
-/// call whose name is on the next line is missed.
+/// match. Also counted: a path as an argument (`print_type)` or `print_type,`) and an `as` rename of
+/// the import (`print_expr as pe`). Text-level gaps, as for the other line scanners: two calls on
+/// one line count once, a call whose name is on the next line is missed, and a call through a
+/// renamed binding (`pe(&e)`) is counted only at its `use` line.
 fn emit_print_calls(root: &Path) -> Probe {
     Probe {
         name: "emit_print_calls",
@@ -2494,15 +2496,16 @@ fn emit_print_calls(root: &Path) -> Probe {
 
 /// [`emit_print_calls`]'s counting logic over an explicit file list.
 fn emit_print_calls_violations(files: &[(PathBuf, String)]) -> usize {
-    const NEEDLES: [&str; 6] = [
-        "print_expr(",
-        "print_stmt(",
-        "print_type(",
-        "print_expr)",
-        "print_stmt)",
-        "print_type)",
-    ];
-    production_lines_matching(files, |line| line_has_token(line, &NEEDLES))
+    const NAMES: [&str; 3] = ["print_expr", "print_stmt", "print_type"];
+    // A call, a path as the last argument (`)`), a path as an earlier argument (`,`) and an `as`
+    // rename of the import (`use bynk_ts::print_expr as pe;`).
+    const SUFFIXES: [&str; 4] = ["(", ")", ",", " as "];
+    let needles: Vec<String> = NAMES
+        .iter()
+        .flat_map(|n| SUFFIXES.iter().map(move |s| format!("{n}{s}")))
+        .collect();
+    let needles: Vec<&str> = needles.iter().map(String::as_str).collect();
+    production_lines_matching(files, |line| line_has_token(line, &needles))
 }
 
 /// Named identifiers imported from the compiler-generated firstparty/runtime relative
@@ -4773,6 +4776,9 @@ mod tests {
         // Two calls on one line count once; another function's name does not match.
         assert_eq!(count("let a = print_expr(&x) + print_expr(&y);\n"), 1);
         assert_eq!(count("let a = bynk_ts::print_stmt_with_spans(&s, 0);\n"), 0);
+        // A rename of the import and a path passed before the last argument count.
+        assert_eq!(count("use bynk_ts::print_expr as pe;\n"), 1);
+        assert_eq!(count("let a = apply(print_type, &t);\n"), 1);
         assert_eq!(count("let a = my_print_expr(&x);\n"), 0);
         // Comments and `#[cfg(test)]` modules do not count.
         assert_eq!(count("// print_expr(&x)\nfn f() {}\n"), 0);
