@@ -9996,4 +9996,84 @@ mod tests {
             "function f() {\n  if (a) {\n    if (g) {\n      return x;\n    }\n    return y;\n  } else if (b) {\n    if (h) {\n      return x;\n    }\n  }\n}\n"
         );
     }
+
+    /// 1A.38a review: an `else if` chain **without** `same_line_else` takes the fresh-line
+    /// path, so each `else if` starts its own line at the chain's depth and its blocks nest
+    /// where the first `if`'s do.
+    #[test]
+    fn a_fresh_line_else_if_chain_nests_each_link_at_the_chains_own_depth() {
+        let guard = |name: &str| {
+            TsStmt::if_stmt(
+                id(name),
+                TsStmt::block(vec![TsStmt::return_stmt(Some(id("x")), None)], None),
+                None,
+            )
+        };
+        let chain = TsStmt::if_else_stmt(
+            id("a"),
+            TsStmt::block(vec![guard("g")], None),
+            TsStmt::if_else_stmt(
+                id("b"),
+                TsStmt::block(vec![guard("h")], None),
+                TsStmt::block(vec![guard("i")], None),
+                None,
+            ),
+            None,
+        );
+        let decl = TsDecl::Function {
+            name: "f".to_string(),
+            generics: vec![],
+            params: vec![],
+            return_type: None,
+            body: vec![chain],
+            is_async: false,
+            inline: false,
+        };
+        let mut program = TsProgram::new();
+        program.push(TsStmt::decl(decl, None));
+        let printed = print(&program, "x.bynk", "", "x.ts");
+        assert_eq!(
+            printed.text,
+            "function f() {\n  if (a) {\n    if (g) {\n      return x;\n    }\n  }\n  else if (b) {\n    if (h) {\n      return x;\n    }\n  }\n  else {\n    if (i) {\n      return x;\n    }\n  }\n}\n"
+        );
+    }
+
+    /// 1A.38a review: a chain of three or more links (`if`, two `else if`s and a final
+    /// `else`) keeps every link at the first `if`'s depth, not one level deeper per link.
+    #[test]
+    fn a_four_link_else_if_chain_keeps_every_link_at_one_depth() {
+        let body =
+            |name: &str| TsStmt::block(vec![TsStmt::return_stmt(Some(id(name)), None)], None);
+        let chain = TsStmt::if_else_same_line_stmt(
+            id("a"),
+            body("w"),
+            TsStmt::if_else_same_line_stmt(
+                id("b"),
+                body("x"),
+                TsStmt::if_else_same_line_stmt(id("c"), body("y"), body("z"), None),
+                None,
+            ),
+            None,
+        );
+        let decl = TsDecl::Function {
+            name: "f".to_string(),
+            generics: vec![],
+            params: vec![],
+            return_type: None,
+            body: vec![TsStmt::if_stmt(
+                id("outer"),
+                TsStmt::block(vec![chain], None),
+                None,
+            )],
+            is_async: false,
+            inline: false,
+        };
+        let mut program = TsProgram::new();
+        program.push(TsStmt::decl(decl, None));
+        let printed = print(&program, "x.bynk", "", "x.ts");
+        assert_eq!(
+            printed.text,
+            "function f() {\n  if (outer) {\n    if (a) {\n      return w;\n    } else if (b) {\n      return x;\n    } else if (c) {\n      return y;\n    } else {\n      return z;\n    }\n  }\n}\n"
+        );
+    }
 }
