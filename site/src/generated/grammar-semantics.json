@@ -1064,6 +1064,10 @@
       "summary": "A route uses a reserved prefix: `/_bynk/` (internal dispatch) or `/_assets/` (static assets)."
     },
     {
+      "code": "bynk.http.reserved_route_syntax",
+      "summary": "A route segment contains `*`, `{` or `}`, which are reserved for a future route form."
+    },
+    {
       "code": "bynk.http.return_not_effect_http_result",
       "summary": "An HTTP handler does not return `Effect[HttpResult[T]]`."
     },

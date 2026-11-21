@@ -147,6 +147,8 @@ mod integration {
     mod requirements_ledger;
     #[path = "reserved_builtin_type_name.rs"]
     mod reserved_builtin_type_name;
+    #[path = "reserved_route_syntax.rs"]
+    mod reserved_route_syntax;
     #[path = "semantic_tokens_index.rs"]
     mod semantic_tokens_index;
     #[path = "snippets.rs"]

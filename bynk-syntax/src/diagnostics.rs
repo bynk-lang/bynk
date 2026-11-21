@@ -3377,6 +3377,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "handler-form",
     },
     Explain {
+        code: "bynk.http.reserved_route_syntax",
+        blurb: "`*`, `{` and `}` are reserved in a route, both in a literal segment and in a `:name` parameter, for a future form that matches the rest of a path. Matched literally, such a segment would quietly change meaning when that form arrives, so it is refused now. To match a literal `*` or brace, take the segment as a `:name` parameter and check its value in the handler. A route that does not start with `/` is `bynk.http.invalid_path`.",
+        example: "on GET(\"/files/*key\") () -> Effect[HttpResult[String]] by v: Visitor { … }             // ✗ `*` is reserved\n\non GET(\"/files/:key\") (key: String) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
+        page: "/book/reference/http",
+        anchor: "handler-form",
+    },
+    Explain {
         code: "bynk.http.return_not_effect_http_result",
         blurb: "An `on http` handler returns `Effect[HttpResult[T]]`: `Effect` because it may use capabilities, and `HttpResult[T]` because the status is part of the answer (`Ok`, `Created`, `NotFound`, and so on). An `Effect[T]` with no status is refused. Wrap the type, and return one of the `HttpResult` variants.",
         example: "on GET(\"/items\") () -> Effect[String] by v: Visitor { … }   // ✗ no `HttpResult`\n\non GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
@@ -9947,6 +9954,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     dg(
         "bynk.http.reserved_prefix",
         "A route uses a reserved prefix: `/_bynk/` (internal dispatch) or `/_assets/` (static assets).",
+        &["http_handler"],
+    ),
+    dg(
+        "bynk.http.reserved_route_syntax",
+        "A route segment contains `*`, `{` or `}`, which are reserved for a future route form.",
         &["http_handler"],
     ),
     dg(

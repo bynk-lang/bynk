@@ -17,6 +17,10 @@ service <Name> from http {
 
 - **Methods:** `GET`, `POST`, `PUT`, `PATCH`, `DELETE`.
 - **Route:** must start with `/`; a `:name` segment is a path parameter.
+- **Reserved characters:** `*`, `{` and `}` are reserved in a route, in any
+  segment and inside a `:name`, for a future form that matches the rest of a
+  path (`bynk.http.reserved_route_syntax`). To match one literally, take the
+  segment as a `:name` parameter and check it in the handler.
 - **Parameters:** each parameter is a path parameter (matching a `:name`
   segment), the special `body` parameter, or the special
   [`headers`](#request-headers), [`query`](#query-strings), [`cookies`](#cookies) or [`cf`](#request-cf) parameter. A path parameter's type must be
