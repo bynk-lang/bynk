@@ -151,8 +151,12 @@ struct Shadow {
 
 fn compare(program: &TsProgram) -> Shadow {
     let body = program.without_imports();
-    let tree: BTreeSet<String> = bynk_ts::unbound_names(&body).into_iter().collect();
     let imported = program.imported_names();
+    // A name the module imports is its own use even where it shares a global's
+    // name (`Request`, `Response` of `bynk`): the globals must not hide it (1A.36b-1).
+    let tree: BTreeSet<String> = bynk_ts::unbound_names_providing(&body, |n| imported.contains(n))
+        .into_iter()
+        .collect();
     let printed: String = body
         .stmts
         .iter()
@@ -307,6 +311,12 @@ fn the_tree_derived_imports_are_a_subset_of_the_predicted_ones() {
     }
 }
 
+/// A module the driver generates for `test` and `integration test` units
+/// (`tests/<unit>.test.ts`): opaque test text, whose imports stay predicted until 1B.2.
+fn is_driver_test_module(module: &str) -> bool {
+    module.starts_with("tests/") && module.ends_with(".test.ts")
+}
+
 /// The over-import findings, grouped by name.
 fn report(modules: usize, found: &BTreeMap<Key, Shadow>) -> String {
     let over: Vec<(&Key, &Shadow)> = found
@@ -315,12 +325,16 @@ fn report(modules: usize, found: &BTreeMap<Key, Shadow>) -> String {
         .collect();
     let mut plain: BTreeMap<&str, usize> = BTreeMap::new();
     let mut text: BTreeMap<&str, usize> = BTreeMap::new();
-    for (_, s) in &over {
+    let mut text_outside_tests: BTreeMap<&str, usize> = BTreeMap::new();
+    for ((_, _, module), s) in &over {
         for n in &s.plainly_unused {
             *plain.entry(n).or_default() += 1;
         }
         for n in &s.in_text {
             *text.entry(n).or_default() += 1;
+            if !is_driver_test_module(module) {
+                *text_outside_tests.entry(n).or_default() += 1;
+            }
         }
     }
     let mut out = String::new();
@@ -341,6 +355,14 @@ fn report(modules: usize, found: &BTreeMap<Key, Shadow>) -> String {
         "imported, unused by the tree, spelled in the body (modules):"
     );
     for (n, c) in &text {
+        let _ = writeln!(out, "  {n}: {c}");
+    }
+    let _ = writeln!(
+        out,
+        "of which outside the driver's tests/*.test.ts modules ({} occurrences):",
+        text_outside_tests.values().sum::<usize>(),
+    );
+    for (n, c) in &text_outside_tests {
         let _ = writeln!(out, "  {n}: {c}");
     }
     let _ = writeln!(out, "per module:");
