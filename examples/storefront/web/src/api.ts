@@ -801,16 +801,13 @@ export function __toPublic_Order(v: __Wire_Order): Order {
   return { ...v, note: __optToNull(v.note, (x0) => x0) } as unknown as Order;
 }
 
-
 export function __toPublic_Product(v: __Wire_Product): Product {
   return { ...v, note: __optToNull(v.note, (x0) => x0) } as unknown as Product;
 }
 
-
 export function __toWire_NewOrder(v: NewOrder): __Wire_NewOrder {
   return { ...v, note: __nullToOpt(v.note, (x0) => x0) } as unknown as __Wire_NewOrder;
 }
-
 
 const __route_shop_getProducts: __Route = {
   method: "GET",
@@ -831,7 +828,6 @@ const __route_shop_postOrders: __Route = {
     409: [{ kind: "Conflict", body: "message" }],
   },
 };
-
 
 /**
  * The contract of each service and route this client was generated for: a hash of
@@ -856,19 +852,19 @@ export const API_CONTRACTS = {
 export function createClient(options: ClientOptions = {}) {
   return {
     shop: {
-      getProducts: (init?: globalThis.RequestInit): globalThis.Promise<GetProductsResponse | CallFailure> =>
-        __call(options, init, __route_shop_getProducts, () => {
-          return Ok({ params: {  } });
-        }) as globalThis.Promise<GetProductsResponse | CallFailure>,
-      postOrders: (body: NewOrder, init?: globalThis.RequestInit): globalThis.Promise<PostOrdersResponse | CallFailure> =>
-        __call(options, init, __route_shop_postOrders, () => {
-          const __b = __checked(__serialise_NewOrder(__toWire_NewOrder(body)), __deserialise_NewOrder, "$");
-          if (__b.tag === "Err") return __b;
-          return Ok({ params: {  }, body: __b.value });
-        }) as globalThis.Promise<PostOrdersResponse | CallFailure>,
+      getProducts: (init?: globalThis.RequestInit): globalThis.Promise<GetProductsResponse | CallFailure> => __call(options, init, __route_shop_getProducts, () => {
+        return Ok({ params: {} });
+      }) as globalThis.Promise<GetProductsResponse | CallFailure>,
+      postOrders: (body: NewOrder, init?: globalThis.RequestInit): globalThis.Promise<PostOrdersResponse | CallFailure> => __call(options, init, __route_shop_postOrders, () => {
+        const __b = __checked(__serialise_NewOrder(__toWire_NewOrder(body)), __deserialise_NewOrder, "$");
+        if (__b.tag === "Err") return __b;
+        return Ok({ params: {}, body: __b.value });
+      }) as globalThis.Promise<PostOrdersResponse | CallFailure>,
     },
   } as const;
 }
 
-/** The client `createClient` makes. */
+/**
+ * The client `createClient` makes.
+ */
 export type Client = ReturnType<typeof createClient>;

@@ -1144,7 +1144,6 @@ const __route_api_getOrigin: __Route = {
   },
 };
 
-
 /**
  * The contract of each service and route this client was generated for: a hash of
  * what a client acts on (the route's method and path, what it takes, what it can
@@ -1170,52 +1169,50 @@ export const API_CONTRACTS = {
 export function createClient(options: ClientOptions = {}) {
   return {
     api: {
-      postNotes: (body: Note, init?: globalThis.RequestInit): globalThis.Promise<PostNotesResponse | CallFailure> =>
-        __call(options, init, __route_api_postNotes, () => {
-          const __w_body: { [k: string]: JsonValue } = {};
-          __w_body["title"] = __serialise_Title(body.title);
-          __w_body["body"] = __serialise_Option_String(__nullToOpt(body.body, (x0) => x0));
-          __w_body["tags"] = __serialise_List_String(body.tags);
-          __w_body["pinned"] = body.pinned as __JsonValue;
-          __w_body["rank"] = __serialise_Option_Int(__nullToOpt(body.rank, (x0) => x0));
-          const __c_body = __checked(__w_body, __deserialise_Note, "body");
-          if (__c_body.tag === "Err") return __c_body;
-          return Ok({ params: {  }, form: __formString(__w_body, [{ name: "title" }, { name: "body" }, { name: "tags" }, { name: "pinned" }, { name: "rank" }]) });
-        }) as globalThis.Promise<PostNotesResponse | CallFailure>,
-      postUpload: (body: Upload, init?: globalThis.RequestInit): globalThis.Promise<PostUploadResponse | CallFailure> =>
-        __call(options, init, __route_api_postUpload, () => {
-          const __w_body: { [k: string]: JsonValue } = {};
-          const __form = new globalThis.FormData();
-          __w_body["title"] = __serialise_Title(body.title);
-          __w_body["caption"] = __serialise_Option_String(__nullToOpt(body.caption, (x0) => x0));
-          __w_body["photo"] = { filename: { kind: "None" }, contentType: "", bytes: "" };
-          __w_body["cover"] = body.cover === null || body.cover === undefined ? { kind: "None" } : { kind: "Some", value: { filename: { kind: "None" }, contentType: "", bytes: "" } };
-          __w_body["extras"] = body.extras.map(() => ({ filename: { kind: "None" }, contentType: "", bytes: "" }));
-          const __c_body = __checked(__w_body, __deserialise_Upload, "body");
-          if (__c_body.tag === "Err") return __c_body;
-          __appendText(__form, __formString(__w_body, [{ name: "title" }, { name: "caption" }]));
-          __form.append("photo", body.photo, __fileName(body.photo));
-          if (body.cover !== null && body.cover !== undefined) __form.append("cover", body.cover, __fileName(body.cover));
-          for (const part of body.extras) __form.append("extras", part, __fileName(part));
-          return Ok({ params: {  }, multipart: __form });
-        }) as globalThis.Promise<PostUploadResponse | CallFailure>,
-      getPrefs: (cookies: GetPrefsCookies, init?: globalThis.RequestInit): globalThis.Promise<GetPrefsResponse | CallFailure> =>
-        __call(options, init, __route_api_getPrefs, () => {
-          const __w_cookies: { [k: string]: JsonValue } = {};
-          __w_cookies["theme"] = cookies.theme as __JsonValue;
-          if (cookies.lang !== undefined) __w_cookies["lang"] = __serialise_Option_String(__nullToOpt(cookies.lang, (x0) => x0));
-          if (cookies.visits !== undefined) __w_cookies["visits"] = ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(cookies.visits);
-          const __c_cookies = __checked(__w_cookies, __deserialise_Prefs, "cookies");
-          if (__c_cookies.tag === "Err") return __c_cookies;
-          return Ok({ params: {  }, cookies: __cookieString(__w_cookies, [{ name: "theme" }, { name: "lang", wire: "lang-pref" }, { name: "visits" }]) });
-        }) as globalThis.Promise<GetPrefsResponse | CallFailure>,
-      getOrigin: (init?: globalThis.RequestInit): globalThis.Promise<GetOriginResponse | CallFailure> =>
-        __call(options, init, __route_api_getOrigin, () => {
-          return Ok({ params: {  } });
-        }) as globalThis.Promise<GetOriginResponse | CallFailure>,
+      postNotes: (body: Note, init?: globalThis.RequestInit): globalThis.Promise<PostNotesResponse | CallFailure> => __call(options, init, __route_api_postNotes, () => {
+        const __w_body: { [k: string]: JsonValue } = {};
+        __w_body["title"] = __serialise_Title(body.title);
+        __w_body["body"] = __serialise_Option_String(__nullToOpt(body.body, (x0) => x0));
+        __w_body["tags"] = __serialise_List_String(body.tags);
+        __w_body["pinned"] = body.pinned as __JsonValue;
+        __w_body["rank"] = __serialise_Option_Int(__nullToOpt(body.rank, (x0) => x0));
+        const __c_body = __checked(__w_body, __deserialise_Note, "body");
+        if (__c_body.tag === "Err") return __c_body;
+        return Ok({ params: {}, form: __formString(__w_body, [{ name: "title" }, { name: "body" }, { name: "tags" }, { name: "pinned" }, { name: "rank" }]) });
+      }) as globalThis.Promise<PostNotesResponse | CallFailure>,
+      postUpload: (body: Upload, init?: globalThis.RequestInit): globalThis.Promise<PostUploadResponse | CallFailure> => __call(options, init, __route_api_postUpload, () => {
+        const __w_body: { [k: string]: JsonValue } = {};
+        const __form = new globalThis.FormData();
+        __w_body["title"] = __serialise_Title(body.title);
+        __w_body["caption"] = __serialise_Option_String(__nullToOpt(body.caption, (x0) => x0));
+        __w_body["photo"] = { filename: { kind: "None" }, contentType: "", bytes: "" };
+        __w_body["cover"] = body.cover === null || body.cover === undefined ? { kind: "None" } : { kind: "Some", value: { filename: { kind: "None" }, contentType: "", bytes: "" } };
+        __w_body["extras"] = body.extras.map(() => ({ filename: { kind: "None" }, contentType: "", bytes: "" }));
+        const __c_body = __checked(__w_body, __deserialise_Upload, "body");
+        if (__c_body.tag === "Err") return __c_body;
+        __appendText(__form, __formString(__w_body, [{ name: "title" }, { name: "caption" }]));
+        __form.append("photo", body.photo, __fileName(body.photo));
+        if (body.cover !== null && body.cover !== undefined) __form.append("cover", body.cover, __fileName(body.cover));
+        for (const part of body.extras) __form.append("extras", part, __fileName(part));
+        return Ok({ params: {}, multipart: __form });
+      }) as globalThis.Promise<PostUploadResponse | CallFailure>,
+      getPrefs: (cookies: GetPrefsCookies, init?: globalThis.RequestInit): globalThis.Promise<GetPrefsResponse | CallFailure> => __call(options, init, __route_api_getPrefs, () => {
+        const __w_cookies: { [k: string]: JsonValue } = {};
+        __w_cookies["theme"] = cookies.theme as __JsonValue;
+        if (cookies.lang !== undefined) __w_cookies["lang"] = __serialise_Option_String(__nullToOpt(cookies.lang, (x0) => x0));
+        if (cookies.visits !== undefined) __w_cookies["visits"] = ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(cookies.visits);
+        const __c_cookies = __checked(__w_cookies, __deserialise_Prefs, "cookies");
+        if (__c_cookies.tag === "Err") return __c_cookies;
+        return Ok({ params: {}, cookies: __cookieString(__w_cookies, [{ name: "theme" }, { name: "lang", wire: "lang-pref" }, { name: "visits" }]) });
+      }) as globalThis.Promise<GetPrefsResponse | CallFailure>,
+      getOrigin: (init?: globalThis.RequestInit): globalThis.Promise<GetOriginResponse | CallFailure> => __call(options, init, __route_api_getOrigin, () => {
+        return Ok({ params: {} });
+      }) as globalThis.Promise<GetOriginResponse | CallFailure>,
     },
   } as const;
 }
 
-/** The client `createClient` makes. */
+/**
+ * The client `createClient` makes.
+ */
 export type Client = ReturnType<typeof createClient>;

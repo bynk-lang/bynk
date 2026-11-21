@@ -34,7 +34,11 @@ export const SECRET = "BYNK_CALL_TO_SHOP__LEDGER";
  *     post = "9c11c5ec98746e35"
  *     recent = "b8c0680d223be288"
  */
-export const CONTRACTS = { lookup: "037fd84c1e6e1c6b", post: "9c11c5ec98746e35", recent: "b8c0680d223be288" } as const;
+export const CONTRACTS = {
+  lookup: "037fd84c1e6e1c6b",
+  post: "9c11c5ec98746e35",
+  recent: "b8c0680d223be288",
+} as const;
 
 /**
  * The foreign callers the context declares, by actor name.

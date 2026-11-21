@@ -839,7 +839,6 @@ const __route_api_getContract: __Route = {
   },
 };
 
-
 /**
  * The contract of each service and route this client was generated for: a hash of
  * what a client acts on (the route's method and path, what it takes, what it can
@@ -876,71 +875,58 @@ export const API_CONTRACTS = {
 export function createClient(options: ClientOptions = {}) {
   return {
     api: {
-      putBlobByName: (name: string, body: globalThis.Uint8Array | globalThis.ArrayBuffer | globalThis.Blob | globalThis.ReadableStream<globalThis.Uint8Array>, init?: globalThis.RequestInit): globalThis.Promise<PutBlobByNameResponse | CallFailure> =>
-        __call(options, init, __route_api_putBlobByName, () => {
-          return Ok({ params: { "name": globalThis.String(name) }, raw: body, rawType: "application/vnd.bynk.blob" });
-        }) as globalThis.Promise<PutBlobByNameResponse | CallFailure>,
-      postAny: (body: globalThis.Uint8Array | globalThis.ArrayBuffer | globalThis.Blob | globalThis.ReadableStream<globalThis.Uint8Array>, init?: globalThis.RequestInit): globalThis.Promise<PostAnyResponse | CallFailure> =>
-        __call(options, init, __route_api_postAny, () => {
-          return Ok({ params: {  }, raw: body });
-        }) as globalThis.Promise<PostAnyResponse | CallFailure>,
-      getLogo: (init?: globalThis.RequestInit): globalThis.Promise<GetLogoResponse | CallFailure> =>
-        __call(options, init, __route_api_getLogo, () => {
-          return Ok({ params: {  } });
-        }) as globalThis.Promise<GetLogoResponse | CallFailure>,
-      getDocByName: (name: string, init?: globalThis.RequestInit): globalThis.Promise<GetDocByNameResponse | CallFailure> =>
-        __call(options, init, __route_api_getDocByName, () => {
-          return Ok({ params: { "name": globalThis.String(name) } });
-        }) as globalThis.Promise<GetDocByNameResponse | CallFailure>,
-      getChunks: (init?: globalThis.RequestInit): globalThis.Promise<GetChunksResponse | CallFailure> =>
-        __call(options, init, __route_api_getChunks, () => {
-          return Ok({ params: {  } });
-        }) as globalThis.Promise<GetChunksResponse | CallFailure>,
-      postMadeByName: (name: string, body: string, init?: globalThis.RequestInit): globalThis.Promise<PostMadeByNameResponse | CallFailure> =>
-        __call(options, init, __route_api_postMadeByName, () => {
-          const __b = __checked(body as __JsonValue, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j), "$");
-          if (__b.tag === "Err") return __b;
-          return Ok({ params: { "name": globalThis.String(name) }, body: __b.value });
-        }) as globalThis.Promise<PostMadeByNameResponse | CallFailure>,
-      getTicks: (init?: globalThis.RequestInit): globalThis.Promise<GetTicksResponse | CallFailure> =>
-        __call(options, init, __route_api_getTicks, () => {
-          return Ok({ params: {  } });
-        }) as globalThis.Promise<GetTicksResponse | CallFailure>,
-      getCr: (init?: globalThis.RequestInit): globalThis.Promise<GetCrResponse | CallFailure> =>
-        __call(options, init, __route_api_getCr, () => {
-          return Ok({ params: {  } });
-        }) as globalThis.Promise<GetCrResponse | CallFailure>,
-      getFeedByMode: (mode: string, init?: globalThis.RequestInit): globalThis.Promise<GetFeedByModeResponse | CallFailure> =>
-        __call(options, init, __route_api_getFeedByMode, () => {
-          return Ok({ params: { "mode": globalThis.String(mode) } });
-        }) as globalThis.Promise<GetFeedByModeResponse | CallFailure>,
-      getOrigin: (init?: globalThis.RequestInit): globalThis.Promise<GetOriginResponse | CallFailure> =>
-        __call(options, init, __route_api_getOrigin, () => {
-          return Ok({ params: {  } });
-        }) as globalThis.Promise<GetOriginResponse | CallFailure>,
-      getCookie: (init?: globalThis.RequestInit): globalThis.Promise<GetCookieResponse | CallFailure> =>
-        __call(options, init, __route_api_getCookie, () => {
-          return Ok({ params: {  } });
-        }) as globalThis.Promise<GetCookieResponse | CallFailure>,
-      getEitherByMode: (mode: string, init?: globalThis.RequestInit): globalThis.Promise<GetEitherByModeResponse | CallFailure> =>
-        __call(options, init, __route_api_getEitherByMode, () => {
-          return Ok({ params: { "mode": globalThis.String(mode) } });
-        }) as globalThis.Promise<GetEitherByModeResponse | CallFailure>,
-      getTwoByMode: (mode: string, init?: globalThis.RequestInit): globalThis.Promise<GetTwoByModeResponse | CallFailure> =>
-        __call(options, init, __route_api_getTwoByMode, () => {
-          return Ok({ params: { "mode": globalThis.String(mode) } });
-        }) as globalThis.Promise<GetTwoByModeResponse | CallFailure>,
-      getGoneByMode: (mode: string, init?: globalThis.RequestInit): globalThis.Promise<GetGoneByModeResponse | CallFailure> =>
-        __call(options, init, __route_api_getGoneByMode, () => {
-          return Ok({ params: { "mode": globalThis.String(mode) } });
-        }) as globalThis.Promise<GetGoneByModeResponse | CallFailure>,
-      getContract: (init?: globalThis.RequestInit): globalThis.Promise<GetContractResponse | CallFailure> =>
-        __call(options, init, __route_api_getContract, () => {
-          return Ok({ params: {  } });
-        }) as globalThis.Promise<GetContractResponse | CallFailure>,
+      putBlobByName: (name: string, body: globalThis.Uint8Array | globalThis.ArrayBuffer | globalThis.Blob | globalThis.ReadableStream<globalThis.Uint8Array>, init?: globalThis.RequestInit): globalThis.Promise<PutBlobByNameResponse | CallFailure> => __call(options, init, __route_api_putBlobByName, () => {
+        return Ok({ params: { "name": globalThis.String(name) }, raw: body, rawType: "application/vnd.bynk.blob" });
+      }) as globalThis.Promise<PutBlobByNameResponse | CallFailure>,
+      postAny: (body: globalThis.Uint8Array | globalThis.ArrayBuffer | globalThis.Blob | globalThis.ReadableStream<globalThis.Uint8Array>, init?: globalThis.RequestInit): globalThis.Promise<PostAnyResponse | CallFailure> => __call(options, init, __route_api_postAny, () => {
+        return Ok({ params: {}, raw: body });
+      }) as globalThis.Promise<PostAnyResponse | CallFailure>,
+      getLogo: (init?: globalThis.RequestInit): globalThis.Promise<GetLogoResponse | CallFailure> => __call(options, init, __route_api_getLogo, () => {
+        return Ok({ params: {} });
+      }) as globalThis.Promise<GetLogoResponse | CallFailure>,
+      getDocByName: (name: string, init?: globalThis.RequestInit): globalThis.Promise<GetDocByNameResponse | CallFailure> => __call(options, init, __route_api_getDocByName, () => {
+        return Ok({ params: { "name": globalThis.String(name) } });
+      }) as globalThis.Promise<GetDocByNameResponse | CallFailure>,
+      getChunks: (init?: globalThis.RequestInit): globalThis.Promise<GetChunksResponse | CallFailure> => __call(options, init, __route_api_getChunks, () => {
+        return Ok({ params: {} });
+      }) as globalThis.Promise<GetChunksResponse | CallFailure>,
+      postMadeByName: (name: string, body: string, init?: globalThis.RequestInit): globalThis.Promise<PostMadeByNameResponse | CallFailure> => __call(options, init, __route_api_postMadeByName, () => {
+        const __b = __checked(body as __JsonValue, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j), "$");
+        if (__b.tag === "Err") return __b;
+        return Ok({ params: { "name": globalThis.String(name) }, body: __b.value });
+      }) as globalThis.Promise<PostMadeByNameResponse | CallFailure>,
+      getTicks: (init?: globalThis.RequestInit): globalThis.Promise<GetTicksResponse | CallFailure> => __call(options, init, __route_api_getTicks, () => {
+        return Ok({ params: {} });
+      }) as globalThis.Promise<GetTicksResponse | CallFailure>,
+      getCr: (init?: globalThis.RequestInit): globalThis.Promise<GetCrResponse | CallFailure> => __call(options, init, __route_api_getCr, () => {
+        return Ok({ params: {} });
+      }) as globalThis.Promise<GetCrResponse | CallFailure>,
+      getFeedByMode: (mode: string, init?: globalThis.RequestInit): globalThis.Promise<GetFeedByModeResponse | CallFailure> => __call(options, init, __route_api_getFeedByMode, () => {
+        return Ok({ params: { "mode": globalThis.String(mode) } });
+      }) as globalThis.Promise<GetFeedByModeResponse | CallFailure>,
+      getOrigin: (init?: globalThis.RequestInit): globalThis.Promise<GetOriginResponse | CallFailure> => __call(options, init, __route_api_getOrigin, () => {
+        return Ok({ params: {} });
+      }) as globalThis.Promise<GetOriginResponse | CallFailure>,
+      getCookie: (init?: globalThis.RequestInit): globalThis.Promise<GetCookieResponse | CallFailure> => __call(options, init, __route_api_getCookie, () => {
+        return Ok({ params: {} });
+      }) as globalThis.Promise<GetCookieResponse | CallFailure>,
+      getEitherByMode: (mode: string, init?: globalThis.RequestInit): globalThis.Promise<GetEitherByModeResponse | CallFailure> => __call(options, init, __route_api_getEitherByMode, () => {
+        return Ok({ params: { "mode": globalThis.String(mode) } });
+      }) as globalThis.Promise<GetEitherByModeResponse | CallFailure>,
+      getTwoByMode: (mode: string, init?: globalThis.RequestInit): globalThis.Promise<GetTwoByModeResponse | CallFailure> => __call(options, init, __route_api_getTwoByMode, () => {
+        return Ok({ params: { "mode": globalThis.String(mode) } });
+      }) as globalThis.Promise<GetTwoByModeResponse | CallFailure>,
+      getGoneByMode: (mode: string, init?: globalThis.RequestInit): globalThis.Promise<GetGoneByModeResponse | CallFailure> => __call(options, init, __route_api_getGoneByMode, () => {
+        return Ok({ params: { "mode": globalThis.String(mode) } });
+      }) as globalThis.Promise<GetGoneByModeResponse | CallFailure>,
+      getContract: (init?: globalThis.RequestInit): globalThis.Promise<GetContractResponse | CallFailure> => __call(options, init, __route_api_getContract, () => {
+        return Ok({ params: {} });
+      }) as globalThis.Promise<GetContractResponse | CallFailure>,
     },
   } as const;
 }
 
-/** The client `createClient` makes. */
+/**
+ * The client `createClient` makes.
+ */
 export type Client = ReturnType<typeof createClient>;

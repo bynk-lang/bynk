@@ -32,7 +32,9 @@ export const SECRET = "BYNK_CALL_TO_SHOP__LEDGER";
  *     ["shop.ledger".Billing]
  *     tally = "8be1e2fea7be86a4"
  */
-export const CONTRACTS = { tally: "8be1e2fea7be86a4" } as const;
+export const CONTRACTS = {
+  tally: "8be1e2fea7be86a4",
+} as const;
 
 /**
  * The foreign callers the context declares, by actor name.
