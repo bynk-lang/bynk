@@ -5336,9 +5336,11 @@ fn reserved_route_char(
             handler.span,
             format!("`{ch}` in the route `{path}` is reserved for a future route form"),
         )
-        .with_note(format!(
-            "to match a literal `{ch}`, take the segment as a `:name` parameter and check it in the handler"
-        )),
+        .with_note(if seg.starts_with(':') {
+            format!("drop `{ch}` from the parameter's name: a `:name` segment already takes any value, so check it in the handler")
+        } else {
+            format!("to match a literal `{ch}`, take the segment as a `:name` parameter and check it in the handler")
+        }),
     );
     true
 }
@@ -5394,8 +5396,12 @@ fn validate_http_handler(
     }
     // Parse segments and collect path-parameter names.
     let mut path_param_names: Vec<&str> = Vec::new();
+    // #3753: a refused route has no reliable parameter list, so its handler
+    // parameters are not also reported as unbound (`extra_param`).
+    let mut refused = false;
     for seg in path.split('/').filter(|s| !s.is_empty()) {
         if reserved_route_char(seg, path, handler, errors) {
+            refused = true;
             continue;
         }
         if let Some(rest) = seg.strip_prefix(':') {
@@ -5511,7 +5517,7 @@ fn validate_http_handler(
                 ),
             );
         }
-        if !is_path && !is_body && !is_headers && !is_query && !is_cookies && !is_cf {
+        if !refused && !is_path && !is_body && !is_headers && !is_query && !is_cookies && !is_cf {
             errors.push(
                 CompileError::new(
                     "bynk.http.extra_param",

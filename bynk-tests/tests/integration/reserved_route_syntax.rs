@@ -38,7 +38,8 @@ fn ordinary_routes_still_compile() {
 }
 
 /// Each reserved character is refused, on its own or inside a `:name`, with
-/// the one dedicated diagnostic.
+/// the one dedicated diagnostic, whether or not the handler takes the
+/// parameter the route meant to bind.
 #[test]
 fn reserved_characters_are_refused_once() {
     for route in [
@@ -49,12 +50,16 @@ fn reserved_characters_are_refused_once() {
         "/files/:{key}",
         "/files/key}",
     ] {
-        let errors = compile_route(route, "").expect_err("a reserved character must be refused");
-        let codes: Vec<&str> = errors.iter().map(|e| e.category).collect();
-        assert_eq!(
-            codes,
-            ["bynk.http.reserved_route_syntax"],
-            "`{route}` must be refused once, with no cascade"
-        );
+        // With no parameters, and with the one the route meant to bind.
+        for params in ["", "key: String"] {
+            let errors =
+                compile_route(route, params).expect_err("a reserved character must be refused");
+            let codes: Vec<&str> = errors.iter().map(|e| e.category).collect();
+            assert_eq!(
+                codes,
+                ["bynk.http.reserved_route_syntax"],
+                "`{route}` ({params}) must be refused once, with no cascade"
+            );
+        }
     }
 }
