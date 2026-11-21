@@ -141,7 +141,7 @@ pub(crate) struct LowerCtx<'a> {
     /// ordinary hoisted statement: a plain `(() => { ...; return expr; })()`
     /// wrap is safe for the latter (nothing inside needs to escape the arrow)
     /// but captures the former's `return` instead of letting it exit the
-    /// enclosing function — the residual gap `hoist_if_as_statement` (built for
+    /// enclosing function — the residual gap `hoist_if_slot` (built for
     /// T2.1's `if`-hoisting) also closes here, once this flag says it's needed.
     pub(crate) emitted_early_return: bool,
     /// #2857: how many lambdas enclose the expression being lowered. A `?`
@@ -1396,7 +1396,7 @@ impl<'a> LowerCtx<'a> {
         let mut pre = Pre::new();
         let lowered = pre.lower_node(value, self);
         // #2617: a chain rooted at a constant lowers to a call (`Name()`),
-        // which `value_text_for_is` cannot render, so it is lifted to a temp
+        // which `path_for_is` cannot render, so it is lifted to a temp
         // like any other complex receiver.
         if is_simple_is_receiver(value) && !self.roots_at_const(value) {
             return pre.finish(lowered);
@@ -1437,21 +1437,20 @@ impl<'a> LowerCtx<'a> {
             }
             _ => false,
         };
-        match lowered {
-            LoweredExpr::Node(n) if hoisting => pre.push_node(bynk_ts::TsStmt::assign(
+        let n = lowered.into_node(self.fault_site(value.span));
+        if hoisting {
+            pre.push_node(bynk_ts::TsStmt::assign(
                 super::lower::ident_node(tmp),
                 n,
                 None,
-            )),
-            LoweredExpr::Node(n) => pre.push_node(bynk_ts::TsStmt::const_stmt(
+            ));
+        } else {
+            pre.push_node(bynk_ts::TsStmt::const_stmt(
                 bynk_ts::TsBindingName::Ident(tmp.to_string()),
                 None,
                 n,
                 None,
-            )),
-            // 1A: a text receiver keeps its text statement.
-            text if hoisting => pre.push_text(format!("{tmp} = {};", text.into_text())),
-            text => pre.push_text(format!("const {tmp} = {};", text.into_text())),
+            ));
         }
     }
 
@@ -1524,20 +1523,6 @@ impl<'a> LowerCtx<'a> {
         super::lower::path_for_is(value)
     }
 
-    /// Read-only counterpart for the binding gatherer (which returns no
-    /// `Lowered`, so it has nowhere to hoist and cannot lift). If the receiver was already lifted to a temp during
-    /// condition lowering, reuse that temp; otherwise it must be a simple
-    /// repeatable lvalue, rendered inline. The "lower the condition before
-    /// gathering its bindings" ordering in `emit_if_tail`, `lower_and_with_is`
-    /// and the value-position `if` IIFE guarantees the temp exists before this
-    /// is called for complex receivers; `value_text_for_is` panics if it does
-    /// not (#1668).
-    pub(super) fn is_receiver_text(&self, value: &Expr) -> String {
-        if let Some(t) = self.is_receiver_temps.get(&value.span) {
-            return t.clone();
-        }
-        value_text_for_is(value)
-    }
     pub(super) fn receiver_namespace(&self, e: &Expr) -> Option<String> {
         let ty = self.commons().expr_ty(e.id)?;
         if let Ty::Named { name, .. } = &*ty {

@@ -43,12 +43,11 @@ use super::lower_call::test_calls::{
 use super::lower_ctx::LowerCtx;
 use super::lower_stmt::{
     Body, Item, arms_contain_question, block_body, block_body_into, block_contains_question,
-    emit_block_as_function_body_with_return, emit_statement, hoist_if_as_statement,
-    hoist_value_as_statement, if_tail, match_dispatch, match_tail, render_text, ternary_shaped,
-    write_line,
+    emit_block_as_function_body_with_return, emit_statement, hoist_value_as_statement, if_tail,
+    match_dispatch, match_tail, ternary_shaped, write_line,
 };
 use super::ts_types::{
-    ts_base, ts_ty, ts_ty_to_ts_type, ts_type_ref, ts_type_ref_to_ts_type, unchecked_construct,
+    ts_base, ts_ty_to_ts_type, ts_type_ref_to_ts_type, unchecked_construct,
     unchecked_construct_test, unchecked_construct_test_node,
 };
 use super::*;
@@ -497,68 +496,39 @@ fn peel_result_err(
     }
 }
 
-/// Slice 1A.8: the value-position `if`'s hoist, with the node form. Statement
-/// nodes only when the condition, both tails and every statement the branches
-/// hoisted are nodes; otherwise today's text form ([`hoist_if_as_statement`],
-/// still the entry for the short-circuit operators and the async tail). A text
-/// statement is never wrapped to fit inside a node.
-fn hoist_if_value(
+/// Slice 1A.8: the value-position `if`'s hoist: `let slot: T; if (cond) { …; slot = then; } else
+/// { …; slot = else; }` as statement nodes, the slot typed as the checker typed `e`. Also the
+/// short-circuit operators' (`hoist_bool_if`) and the async tail's (`lower_tail_expr`, whose slot
+/// annotation admits a promise). Returns the slot.
+pub(super) fn hoist_if_slot(
     pre: &mut Pre,
+    slot_ty: Option<bynk_ts::TsType>,
     cond: LoweredExpr,
     then_tail: Lowered,
     else_tail: Lowered,
-    e: &Expr,
     cx: &mut LowerCtx,
+    at: bynk_syntax::span::Span,
 ) -> String {
-    let all_nodes = matches!(cond, LoweredExpr::Node(_))
-        && [&then_tail, &else_tail].iter().all(|t| {
-            matches!(t.expr, LoweredExpr::Node(_))
-                && t.pre.iter().all(|s| matches!(s, LoweredStmt::Node(_)))
-        });
-    if all_nodes {
-        let slot = cx.fresh();
-        let ty = checked_ty_node(e, cx);
-        hoisted_if_nodes(pre, &slot, ty, cond, then_tail, else_tail);
-        slot
-    } else {
-        let slot_ty = checked_ty_ts(e, cx);
-        hoist_if_as_statement(pre, cond.into_text(), then_tail, else_tail, slot_ty, cx)
-    }
-}
-
-/// [`hoist_if_value`]'s node form. The slot's type is taken from the
-/// checker's record of the `if` expression (see the TS7034/TS7005 note on the
-/// text form), as a type node. The branches are `Block`s, so the printer nests
-/// them one level per `if`, as `assign_branch`'s padding did.
-fn hoisted_if_nodes(
-    pre: &mut Pre,
-    slot: &str,
-    ty: Option<bynk_ts::TsType>,
-    cond: LoweredExpr,
-    then_tail: Lowered,
-    else_tail: Lowered,
-) {
+    let site = cx.fault_site(at);
+    let slot = cx.fresh();
+    // The slot needs its type spelled out. TypeScript's "evolving `let`" inference gives up
+    // once a branch also `return`s (TS7034/TS7005 under `--strict`), which is exactly the shape
+    // a hoisted `?` produces, so the type is the one the checker recorded for the `if`.
     pre.push_node(bynk_ts::TsStmt::let_stmt(
-        bynk_ts::TsBindingName::Ident(slot.to_string()),
-        ty,
+        bynk_ts::TsBindingName::Ident(slot.clone()),
+        slot_ty,
         None,
         None,
     ));
-    let LoweredExpr::Node(cond) = cond else {
-        unreachable!("hoisted_if_nodes is given a node condition")
-    };
+    let cond = cond.into_node(site);
     let branch = |tail: Lowered| {
-        let mut stmts: Vec<bynk_ts::TsStmt> = tail
-            .pre
-            .into_iter()
-            .filter_map(|s| match s {
-                LoweredStmt::Node(n) => Some(*n),
-                LoweredStmt::Text(_) => None,
-            })
-            .collect();
-        if let LoweredExpr::Node(value) = tail.expr {
-            stmts.push(bynk_ts::TsStmt::assign(ident_node(slot), value, None));
-        }
+        let mut stmts: Vec<bynk_ts::TsStmt> =
+            tail.pre.into_iter().map(|s| s.into_stmt(site)).collect();
+        stmts.push(bynk_ts::TsStmt::assign(
+            ident_node(&slot),
+            tail.expr.into_node(site),
+            None,
+        ));
         bynk_ts::TsStmt::block(stmts, None)
     };
     let then_branch = branch(then_tail);
@@ -569,17 +539,11 @@ fn hoisted_if_nodes(
         else_branch,
         None,
     ));
+    slot
 }
 
-/// The TypeScript rendering of the type the checker recorded for `e`, if any.
-/// Used to annotate the slot [`hoist_if_as_statement`] declares.
-pub(super) fn checked_ty_ts(e: &Expr, cx: &LowerCtx) -> Option<String> {
-    cx.commons()
-        .expr_ty(e.id)
-        .map(|_| ts_ty(cx.commons().expr_types[&e.id].ty, cx.ty_render()))
-}
-
-/// [`checked_ty_ts`] as a type node: the same type, which prints as that text.
+/// The type the checker recorded for `e` as a type node, if any: the annotation of the slot a
+/// hoisted `if` declares.
 pub(super) fn checked_ty_node(e: &Expr, cx: &LowerCtx) -> Option<bynk_ts::TsType> {
     cx.commons()
         .expr_ty(e.id)
@@ -670,37 +634,8 @@ fn question_guard_node(tmp: &str, exit: &QuestionExit) -> bynk_ts::TsStmt {
     bynk_ts::TsStmt::if_stmt(cond, then, None)
 }
 
-/// [`question_guard_node`]'s text twin, kept for a text operand.
-fn question_guard_text(tmp: &str, exit: &QuestionExit) -> String {
-    match exit {
-        QuestionExit::Case {
-            location,
-            start,
-            end,
-            src,
-        } => {
-            let location = crate::emitter::escape_ts_string(location);
-            let src = crate::emitter::escape_ts_string(src);
-            let detail = format!("\"{src}\\n  the operand was Err: \" + __bynkShow({tmp}.error)");
-            format!(
-                "if ({tmp}.tag === \"Err\") {{ throw __bynkExpectFailure(\"{location}\", {start}, {end}, {detail}); }}"
-            )
-        }
-        QuestionExit::NotFound => {
-            format!("if ({tmp}.tag === \"None\") return HttpResult.NotFound;")
-        }
-        QuestionExit::Embed { ty_name, variant } => {
-            format!("if ({tmp}.tag === \"Err\") return Err({ty_name}.{variant}({tmp}.error));")
-        }
-        QuestionExit::Plain => format!("if ({tmp}.tag === \"Err\") return {tmp};"),
-    }
-}
-
 /// `inner?` (slice 1A.8): hoists `const __rN = <inner>;` and the early-return
-/// guard, and yields `__rN.value`. The two statements are nodes when the
-/// operand is a node, and today's text lines otherwise (see
-/// [`Pre::push_nodes_or_text`]); the yielded `__rN.value` is a genuine member
-/// node either way.
+/// guard, and yields `__rN.value`. The two statements and the yielded member are nodes.
 fn lower_question(e: &Expr, inner: &Expr, cx: &mut LowerCtx) -> Lowered {
     let tys = cx.ty_render();
     // v0.153 (ADR 0177): an `Option[T]?` operand lifts into an
@@ -751,26 +686,13 @@ fn lower_question(e: &Expr, inner: &Expr, cx: &mut LowerCtx) -> Lowered {
     } else {
         QuestionExit::Plain
     };
-    pre.push_nodes_or_text(
-        vec![operand],
-        |c| {
-            vec![
-                bynk_ts::TsStmt::const_stmt(
-                    bynk_ts::TsBindingName::Ident(tmp.clone()),
-                    None,
-                    one(c),
-                    None,
-                ),
-                question_guard_node(&tmp, &exit),
-            ]
-        },
-        |c| {
-            vec![
-                format!("const {tmp} = {};", one(c)),
-                question_guard_text(&tmp, &exit),
-            ]
-        },
-    );
+    pre.push_node(bynk_ts::TsStmt::const_stmt(
+        bynk_ts::TsBindingName::Ident(tmp.clone()),
+        None,
+        operand.into_node(cx.fault_site(inner.span)),
+        None,
+    ));
+    pre.push_node(question_guard_node(&tmp, &exit));
     // T2.3 (R6.3): every branch above just pushed a `return` that must
     // exit the enclosing function, not whatever scope this `Lowered`
     // eventually lands in — see `LowerCtx::emitted_early_return`.
@@ -1056,6 +978,19 @@ impl LoweredExpr {
             LoweredExpr::Text(t) => t,
         }
     }
+
+    /// The bridge value as a node (1A.35a part C, temporary: removed in 1A.35b
+    /// together with the `Text` variant). Nothing in lowering builds text any more,
+    /// so a `Text` here is a compiler fault, not a program's: it is recorded as an
+    /// internal fault at `site` (the 1A.34 policy) and the value is `undefined`.
+    pub(crate) fn into_node(self, site: super::internal_fault::FaultSite<'_>) -> bynk_ts::TsExpr {
+        match self {
+            LoweredExpr::Node(n) => n,
+            LoweredExpr::Text(_) => {
+                site.missing_fact("typed expression, which reached lowering as text")
+            }
+        }
+    }
 }
 
 /// Slice 1A.3 (#3696), Decision A: the one mixed-children rule, and the 1A
@@ -1142,13 +1077,6 @@ pub(super) fn paren(child: LoweredExpr) -> Built {
     )
 }
 
-/// 1A: serialiser value is text. A still-text operand handed to a serialiser entry point (the
-/// entry points take a node since 1A.21, #3722, Decision B). The family that lowers the operand
-/// converts, and its call site passes the node instead.
-pub(super) fn text_value(text: impl Into<String>) -> bynk_ts::TsExpr {
-    bynk_ts::TsExpr::Ident(text.into())
-}
-
 /// A genuine identifier node. Never built from expression text.
 pub(super) fn ident_node(name: &str) -> bynk_ts::TsExpr {
     bynk_ts::TsExpr::Ident(name.to_string())
@@ -1184,28 +1112,6 @@ pub(super) fn member_node(object: &str, property: &str) -> bynk_ts::TsExpr {
         object: Box::new(ident_node(object)),
         property: property.to_string(),
     }
-}
-
-/// Finish `lower_expr`'s arm from a [`Built`]: a node returns at once; text
-/// falls out of the match as the arm's `String`, to the shared `finish_text`.
-macro_rules! built_or_text {
-    ($pre:ident, $built:expr) => {
-        match $built {
-            Ok(node) => return $pre.finish(LoweredExpr::Node(node)),
-            Err(text) => text,
-        }
-    };
-}
-
-/// As [`built_or_text!`], for an already-built [`Lowered`] (its hoists join
-/// `$pre`): a node returns at once, text falls out to the shared exit.
-macro_rules! lowered_or_text {
-    ($pre:ident, $lowered:expr) => {
-        match $pre.absorb_node($lowered) {
-            LoweredExpr::Node(node) => return $pre.finish(LoweredExpr::Node(node)),
-            LoweredExpr::Text(text) => text,
-        }
-    };
 }
 
 /// A runtime-constructor call with one argument — `Ok(x)`, `Some(x)`,
@@ -1252,12 +1158,6 @@ pub(super) fn call_built(callee: bynk_ts::TsExpr, args: Vec<LoweredExpr>) -> Bui
     )
 }
 
-/// Witness nodes printed for a text caller (1A: the capability, closure and
-/// kernel families are still text).
-fn print_witnesses(nodes: Vec<bynk_ts::TsExpr>) -> impl Iterator<Item = String> {
-    nodes.into_iter().map(|n| bynk_ts::print_expr(&n))
-}
-
 /// A string-literal node: the printer escapes it exactly as
 /// `escape_ts_string` does (they are one function, `escape_ts_literal`).
 pub(super) fn str_node(s: impl Into<String>) -> bynk_ts::TsExpr {
@@ -1273,17 +1173,31 @@ fn one<T>(children: Vec<T>) -> T {
     }
 }
 
-/// The statement side of the bridge: a hoisted statement is either a typed
-/// [`TsStmt`] or text. Where `pre` statements leave lowering into a `TsStmt`
-/// body ([`Pre::ts_stmts`]) a `Node` stays a node and a `Text` becomes
-/// `TsStmt::raw`, exactly as before.
+/// The statement side of the bridge: a hoisted statement is a typed [`TsStmt`]. Nothing in
+/// lowering builds the `Text` side any more (1A.35a part C): only bynk-emit's own tests do, so a
+/// production build never constructs it. Deleted with the
+/// bridge in 1A.35b.
 pub(crate) enum LoweredStmt {
-    // Boxed: a `TsStmt` is ~350 bytes and almost every hoisted statement is text.
+    // Boxed: a `TsStmt` is ~350 bytes.
     Node(Box<bynk_ts::TsStmt>),
+    #[cfg_attr(not(test), allow(dead_code))]
     Text(String),
 }
 
 impl LoweredStmt {
+    /// The statement as a node (1A.35a part C, temporary: removed with the `Text` bridge in
+    /// 1A.35b). Nothing hoists text any more, so a `Text` is a compiler fault, reported at `site`
+    /// (the 1A.34 policy) as an expression statement over `undefined`.
+    pub(super) fn into_stmt(self, site: FaultSite<'_>) -> bynk_ts::TsStmt {
+        match self {
+            LoweredStmt::Node(n) => *n,
+            LoweredStmt::Text(_) => bynk_ts::TsStmt::expr_stmt(
+                site.missing_fact("statement, which was hoisted as text"),
+                None,
+            ),
+        }
+    }
+
     /// The statement as a statement-body item (see [`Lowered::pre_items`]).
     pub(super) fn item(&self) -> Item {
         match self {
@@ -1339,12 +1253,6 @@ impl Lowered {
     /// emitter: a `Text` becomes a `Line`, a `Node` stays a `Node`.
     pub(super) fn pre_items(&self) -> Vec<Item> {
         self.pre.iter().map(LoweredStmt::item).collect()
-    }
-
-    /// Whether every hoisted statement is a node (1A.11: a statement built
-    /// over these is a node only if it absorbs nothing but nodes).
-    pub(super) fn pre_all_nodes(&self) -> bool {
-        self.pre.iter().all(|s| matches!(s, LoweredStmt::Node(_)))
     }
 }
 
@@ -1472,6 +1380,12 @@ impl Pre {
         self.lower_node(e, cx).into_text()
     }
 
+    /// [`Pre::lower_node`], as the expression's node (see [`LoweredExpr::into_node`]).
+    pub(crate) fn lower_ts(&mut self, e: &Expr, cx: &mut LowerCtx) -> bynk_ts::TsExpr {
+        let node = self.lower_node(e, cx);
+        node.into_node(cx.fault_site(e.span))
+    }
+
     /// As [`Pre::lower`], for a converted caller: hands back the bridge value
     /// without printing it.
     pub(crate) fn lower_node(&mut self, e: &Expr, cx: &mut LowerCtx) -> LoweredExpr {
@@ -1480,6 +1394,7 @@ impl Pre {
     }
 
     /// Absorb an already-built [`Lowered`] and hand back its text.
+    #[cfg(test)]
     pub(crate) fn absorb(&mut self, lowered: Lowered) -> String {
         self.absorb_node(lowered).into_text()
     }
@@ -1502,9 +1417,9 @@ impl Pre {
         })
     }
 
-    /// Hoist a statement this function generated itself (a `?` temp, an
-    /// `is`-receiver binding, a match IIFE's scaffolding), built as text. A
-    /// text construction site: counted by `lowering_text_bridge`.
+    /// Hoist a statement built as text. Test-only (the text fallback's tests); a text construction
+    /// site, counted by `lowering_text_bridge`, and deleted in 1A.35b.
+    #[cfg(test)]
     pub(crate) fn push_text(&mut self, stmt: String) {
         #[cfg(any(test, feature = "text-exit-counters"))]
         TEXT_STMTS.with(|c| c.set(c.get() + 1));
@@ -1518,42 +1433,6 @@ impl Pre {
         self.0.push(LoweredStmt::Node(Box::new(stmt)));
     }
 
-    /// Slice 1A.8, Decision A: [`node_or_text`]'s rule for hoisted statements.
-    /// Statement nodes are hoisted only when *every* child expression is a node
-    /// (`node` receives them in order); if any is text, every child is rendered
-    /// through [`LoweredExpr::into_text`] and `text` builds today's lines. A
-    /// text statement is never wrapped in `TsStmt::raw` to fit inside a node.
-    pub(crate) fn push_nodes_or_text(
-        &mut self,
-        children: Vec<LoweredExpr>,
-        node: impl FnOnce(Vec<bynk_ts::TsExpr>) -> Vec<bynk_ts::TsStmt>,
-        text: impl FnOnce(Vec<String>) -> Vec<String>,
-    ) {
-        if children.iter().all(|c| matches!(c, LoweredExpr::Node(_))) {
-            let nodes = children
-                .into_iter()
-                .filter_map(|c| match c {
-                    LoweredExpr::Node(n) => Some(n),
-                    LoweredExpr::Text(_) => None,
-                })
-                .collect();
-            for stmt in node(nodes) {
-                self.push_node(stmt);
-            }
-        } else {
-            let texts = children.into_iter().map(LoweredExpr::into_text).collect();
-            self.extend_text(text(texts));
-        }
-    }
-
-    /// Hoist several text statements; counted like [`Pre::push_text`].
-    pub(crate) fn extend_text(&mut self, stmts: impl IntoIterator<Item = String>) {
-        let stmts: Vec<String> = stmts.into_iter().collect();
-        #[cfg(any(test, feature = "text-exit-counters"))]
-        TEXT_STMTS.with(|c| c.set(c.get() + stmts.len()));
-        self.0.extend(stmts.into_iter().map(LoweredStmt::Text));
-    }
-
     pub(crate) fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
@@ -1565,9 +1444,15 @@ impl Pre {
 
     /// Hoist `const __rN = <value>;` and hand back a read of `__rN`, so a
     /// value used twice is evaluated once.
-    pub(super) fn bind_temp(&mut self, value: LoweredExpr, cx: &mut LowerCtx) -> LoweredExpr {
+    pub(super) fn bind_temp(
+        &mut self,
+        value: LoweredExpr,
+        cx: &mut LowerCtx,
+        at: bynk_syntax::span::Span,
+    ) -> LoweredExpr {
         let tmp = cx.fresh();
-        self.0.push(binding_stmt(&tmp, value));
+        self.0
+            .push(binding_stmt(&tmp, value.into_node(cx.fault_site(at))));
         LoweredExpr::Node(ident_node(&tmp))
     }
 
@@ -1583,23 +1468,17 @@ impl Pre {
         self.0.iter().map(LoweredStmt::item).collect()
     }
 
-    /// Whether every statement hoisted so far is a node (see
-    /// [`Lowered::pre_all_nodes`]).
-    pub(super) fn all_nodes(&self) -> bool {
-        self.0.iter().all(|s| matches!(s, LoweredStmt::Node(_)))
-    }
-
-    /// The accumulated statements as `TsStmt`s for a typed body: a `Node`
-    /// stays a node, a `Text` becomes `TsStmt::raw` indented by `indent`.
-    /// `indent` is the indentation the printer will give the body's own
-    /// statements (verbatim raw text carries its own); a `Node` needs none
-    /// because the printer nests it at that same depth.
-    pub(crate) fn ts_stmts(&self, indent: &str) -> Vec<bynk_ts::TsStmt> {
+    /// The accumulated statements as `TsStmt`s for a typed body. A statement that is not a node is
+    /// a compiler fault, reported at `site` (see [`LoweredStmt::into_stmt`]).
+    pub(crate) fn ts_stmts(&self, site: FaultSite<'_>) -> Vec<bynk_ts::TsStmt> {
         self.0
             .iter()
             .map(|s| match s {
                 LoweredStmt::Node(n) => (**n).clone(),
-                LoweredStmt::Text(t) => bynk_ts::TsStmt::raw(format!("{indent}{t}\n"), None),
+                LoweredStmt::Text(_) => bynk_ts::TsStmt::expr_stmt(
+                    site.missing_fact("statement, which was hoisted as text"),
+                    None,
+                ),
             })
             .collect()
     }
@@ -1611,6 +1490,13 @@ impl Pre {
             TEXT_EXITS.with(|c| c.set(c.get() + 1));
         }
         Lowered { pre: self.0, expr }
+    }
+
+    /// Finish with an already-built [`Lowered`]: its hoisted statements join this one's, and its
+    /// expression is the result.
+    pub(crate) fn finish_with(mut self, lowered: Lowered) -> Lowered {
+        let expr = self.absorb_node(lowered);
+        self.finish(expr)
     }
 
     /// [`Pre::finish`] with an expression built as text. A text construction
@@ -1663,35 +1549,35 @@ pub(crate) fn lower_expr(e: &Expr, cx: &mut LowerCtx) -> Lowered {
         ));
     }
     let mut pre = Pre::new();
-    let expr = match &e.kind {
+    match &e.kind {
         // Literals are typed nodes (slice 1A.2): see `Lit::lower`.
-        ExprKind::IntLit { value, .. } => return Lit::Int(value.to_string()).lower(),
-        ExprKind::FloatLit { lexeme, .. } => return Lit::Float(lexeme).lower(),
-        ExprKind::DecimalLit { coef, scale, .. } => return Lit::Decimal(coef, *scale).lower(),
-        ExprKind::DurationLit { millis, .. } => return Lit::Duration(millis.to_string()).lower(),
-        ExprKind::StrLit(s) => return Lit::Str(s).lower(),
-        ExprKind::BoolLit(b) => return Lit::Bool(*b).lower(),
-        ExprKind::None => return Lit::None.lower(),
-        ExprKind::UnitLit => return Lit::Unit.lower(),
+        ExprKind::IntLit { value, .. } => Lit::Int(value.to_string()).lower(),
+        ExprKind::FloatLit { lexeme, .. } => Lit::Float(lexeme).lower(),
+        ExprKind::DecimalLit { coef, scale, .. } => Lit::Decimal(coef, *scale).lower(),
+        ExprKind::DurationLit { millis, .. } => Lit::Duration(millis.to_string()).lower(),
+        ExprKind::StrLit(s) => Lit::Str(s).lower(),
+        ExprKind::BoolLit(b) => Lit::Bool(*b).lower(),
+        ExprKind::None => Lit::None.lower(),
+        ExprKind::UnitLit => Lit::Unit.lower(),
         // Slice C: `Wire(<String>)` in a generic position lowers to its raw inner
         // string. The system-http driver site intercepts `Wire` args before this
         // to route them raw (no serialisation) and switch to the outcome decoder.
         ExprKind::Wire(inner) => {
             let child = pre.lower_node(inner, cx);
-            return pre.finish(child);
+            pre.finish(child)
         }
         // v0.43 (ADR 0075): an interpolated string lowers to a TS template
         // literal — chunks as escaped literal text, holes as `${String(…)}`.
-        ExprKind::InterpStr(parts) => lowered_or_text!(pre, lower_interp_str(parts, cx)),
+        ExprKind::InterpStr(parts) => pre.finish_with(lower_interp_str(parts, cx)),
         // v0.20b: a list literal lowers to a TS array literal; `readonly` is
         // a type-level property and the checker owns the element typing.
         ExprKind::ListLit(elems, ..) => {
             let children: Vec<LoweredExpr> =
                 elems.iter().map(|el| pre.lower_node(el, cx)).collect();
-            built_or_text!(pre, array(children))
+            pre.finish_built(array(children))
         }
-        ExprKind::Ident(id) => built_or_text!(pre, lower_ident(e, id, cx)),
-        ExprKind::Call { name, args, .. } => lowered_or_text!(pre, lower_call(e, name, args, cx)),
+        ExprKind::Ident(id) => pre.finish_built(lower_ident(e, id, cx)),
+        ExprKind::Call { name, args, .. } => pre.finish_with(lower_call(e, name, args, cx)),
         ExprKind::UnaryOp(UnaryOp::Neg, inner)
             if cx
                 .commons()
@@ -1703,14 +1589,16 @@ pub(crate) fn lower_expr(e: &Expr, cx: &mut LowerCtx) -> Lowered {
             // #2622: negating a `Decimal` is exact, not a JS unary minus.
             let child = pre.lower_node(inner, cx);
             cx.note_decimal("__bynkDecimalNeg");
-            built_or_text!(pre, runtime_ctor_call(None, "__bynkDecimalNeg", child))
+            pre.finish_built(runtime_ctor_call(None, "__bynkDecimalNeg", child))
         }
         ExprKind::UnaryOp(op, inner) => {
-            built_or_text!(pre, unary_op(*op, pre.lower_node(inner, cx)))
+            let child = pre.lower_node(inner, cx);
+            pre.finish_built(unary_op(*op, child))
         }
-        ExprKind::BinOp(op, lhs, rhs) => lowered_or_text!(pre, lower_bin_op(*op, lhs, rhs, cx)),
+        ExprKind::BinOp(op, lhs, rhs) => pre.finish_with(lower_bin_op(*op, lhs, rhs, cx)),
         ExprKind::Paren(inner) => {
-            built_or_text!(pre, paren(pre.lower_node(inner, cx)))
+            let child = pre.lower_node(inner, cx);
+            pre.finish_built(paren(child))
         }
         ExprKind::Ok(inner) => {
             let child = pre.lower_node(inner, cx);
@@ -1723,23 +1611,20 @@ pub(crate) fn lower_expr(e: &Expr, cx: &mut LowerCtx) -> Lowered {
             if http {
                 cx.note_http_result();
             }
-            built_or_text!(
-                pre,
-                runtime_ctor_call(http.then_some("HttpResult"), "Ok", child)
-            )
+            pre.finish_built(runtime_ctor_call(http.then_some("HttpResult"), "Ok", child))
         }
         ExprKind::Err(inner) => {
             let arg = pre.lower_node(inner, cx);
-            built_or_text!(pre, runtime_ctor_call(None, "Err", arg))
+            pre.finish_built(runtime_ctor_call(None, "Err", arg))
         }
         ExprKind::Some(inner) => {
             let child = pre.lower_node(inner, cx);
-            built_or_text!(pre, runtime_ctor_call(None, "Some", child))
+            pre.finish_built(runtime_ctor_call(None, "Some", child))
         }
-        ExprKind::Question(inner) => return lower_question(e, inner, cx),
+        ExprKind::Question(inner) => lower_question(e, inner, cx),
         ExprKind::RecordConstruction {
             type_name, fields, ..
-        } => lowered_or_text!(pre, lower_record_construction(e, type_name, fields, cx)),
+        } => pre.finish_with(lower_record_construction(e, type_name, fields, cx)),
         ExprKind::FieldAccess { .. }
             if matches!(
                 cx.commons().callees.get(&e.id),
@@ -1750,12 +1635,12 @@ pub(crate) fn lower_expr(e: &Expr, cx: &mut LowerCtx) -> Lowered {
             ) =>
         {
             // #2138: `run.id` — the module's `__bynkRunId`.
-            return pre.finish(LoweredExpr::Node(ident_node("__bynkRunId")));
+            pre.finish(LoweredExpr::Node(ident_node("__bynkRunId")))
         }
         ExprKind::FieldAccess { receiver, field } => {
-            lowered_or_text!(pre, lower_field_access(e, receiver, field, cx))
+            pre.finish_with(lower_field_access(e, receiver, field, cx))
         }
-        ExprKind::MethodCall { .. } => lowered_or_text!(pre, lower_method_call(e, cx)),
+        ExprKind::MethodCall { .. } => pre.finish_with(lower_method_call(e, cx)),
         // #1750: a value-position `if`/`match`/block that holds a `?` becomes a
         // real statement, so the `?`'s `return` exits the function rather than
         // an arrow. A ternary-shaped `if` is left to `lower_if`, whose own
@@ -1767,7 +1652,7 @@ pub(crate) fn lower_expr(e: &Expr, cx: &mut LowerCtx) -> Lowered {
         } if !ternary_shaped(cond, then_block, else_block, cx)
             && (block_contains_question(then_block) || block_contains_question(else_block)) =>
         {
-            pre.absorb(hoist_value_as_statement(e, cx, |body, cx| {
+            pre.finish_with(hoist_value_as_statement(e, cx, |body, cx| {
                 if_tail(body, cond, then_block, else_block, cx, false)
             }))
         }
@@ -1775,79 +1660,73 @@ pub(crate) fn lower_expr(e: &Expr, cx: &mut LowerCtx) -> Lowered {
             cond,
             then_block,
             else_block,
-        } => lowered_or_text!(pre, lower_if(e, cond, then_block, else_block, cx)),
+        } => pre.finish_with(lower_if(e, cond, then_block, else_block, cx)),
         // v0.20a: a lambda lowers to a TS arrow; `async` iff its checked type
         // is an effectful function. A lambda is deliberately its own return
         // scope (ADR 0178) — its body is lowered with no access to the outer
         // `pre`, so anything it hoists (match-as-IIFE etc.) stays local to
         // the arrow, correctly, because a `?`'s `return` there is supposed to
         // exit the lambda.
-        ExprKind::Lambda(lambda) => built_or_text!(pre, lower_lambda(e, lambda, cx)),
+        ExprKind::Lambda(lambda) => pre.finish_built(lower_lambda(e, lambda, cx)),
         // Defensive: the parser builds `ExprKind::Block` only for a lambda body,
         // which `lower_lambda` emits itself, so neither `Block` arm is reached
         // today. Routed like `if`/`match` so a future value-position block
         // with a `?` would not reintroduce the arrow miscompile.
         ExprKind::Block(b) if block_contains_question(b) => {
-            pre.absorb(hoist_value_as_statement(e, cx, |body, cx| {
+            pre.finish_with(hoist_value_as_statement(e, cx, |body, cx| {
                 block_body_into(body, b, cx, false)
             }))
         }
-        ExprKind::Block(b) => built_or_text!(pre, lower_block_as_expr(b, cx)),
+        ExprKind::Block(b) => pre.finish_built(lower_block_as_expr(b, cx)),
         ExprKind::Match { discriminant, arms } if arms_contain_question(arms) => {
-            pre.absorb(hoist_value_as_statement(e, cx, |body, cx| {
+            pre.finish_with(hoist_value_as_statement(e, cx, |body, cx| {
                 match_tail(body, discriminant, arms, cx, false)
             }))
         }
         ExprKind::Match { discriminant, arms } => {
-            lowered_or_text!(pre, lower_match_as_iife(discriminant, arms, cx))
+            pre.finish_with(lower_match_as_iife(discriminant, arms, cx))
         }
-        ExprKind::Is { value, pattern } => lowered_or_text!(pre, lower_is(value, pattern, cx)),
+        ExprKind::Is { value, pattern } => pre.finish_with(lower_is(value, pattern, cx)),
         ExprKind::EffectPure(inner) => {
             let child = pre.lower_node(inner, cx);
-            built_or_text!(
-                pre,
-                node_or_text(
-                    vec![child],
-                    |c| bynk_ts::TsExpr::Call {
-                        callee: Box::new(bynk_ts::TsExpr::Member {
-                            object: Box::new(member_node("globalThis", "Promise")),
-                            property: "resolve".to_string(),
-                        }),
-                        args: vec![one(c)],
-                    },
-                    |c| format!("globalThis.Promise.resolve({})", one(c)),
-                )
-            )
+            pre.finish_built(node_or_text(
+                vec![child],
+                |c| bynk_ts::TsExpr::Call {
+                    callee: Box::new(bynk_ts::TsExpr::Member {
+                        object: Box::new(member_node("globalThis", "Promise")),
+                        property: "resolve".to_string(),
+                    }),
+                    args: vec![one(c)],
+                },
+                |c| format!("globalThis.Promise.resolve({})", one(c)),
+            ))
         }
         ExprKind::RecordSpread {
             type_name: _,
             base,
             overrides,
             ..
-        } => lowered_or_text!(pre, lower_record_spread(base, overrides, cx)),
+        } => pre.finish_with(lower_record_spread(base, overrides, cx)),
         ExprKind::Expect(inner) => {
             let built = expect_built(inner, &mut pre, cx);
-            built_or_text!(pre, built)
+            pre.finish_built(built)
         }
         // 1A.17: the test-domain constructs build nodes.
-        ExprKind::Val { type_ref, args, .. } => {
-            lowered_or_text!(pre, lower_val(type_ref, args, cx))
-        }
+        ExprKind::Val { type_ref, args, .. } => pre.finish_with(lower_val(type_ref, args, cx)),
         ExprKind::Observation(o) => {
             let built = lower_observation(o, cx);
-            built_or_text!(pre, built)
+            pre.finish_built(built)
         }
         ExprKind::Faults(f) => {
             let built = lower_faults(f, cx);
-            built_or_text!(pre, built)
+            pre.finish_built(built)
         }
         // `trace(Cap.op)` → the recorded calls mapped to per-call records
         // whose fields are the operation's parameters (positionally).
         ExprKind::Trace { cap, op } => {
-            return pre.finish(LoweredExpr::Node(trace_node(cx, &cap.name, &op.name)));
+            pre.finish(LoweredExpr::Node(trace_node(cx, &cap.name, &op.name)))
         }
-    };
-    pre.finish_text(expr)
+    }
 }
 
 /// v0.9.1: expect as an expression (v0.112, renamed from `assert`).
@@ -1958,7 +1837,6 @@ fn lower_faults(faults: &FaultsExpr, cx: &mut LowerCtx) -> Built {
         } else if let CallSitePrincipal::BadCredential(bad) = kind {
             cx.call_site_bad_signature = Some(bad.driver());
         } else {
-            // 1A: a still-text principal makes the call text (`call_site_identity`).
             cx.call_site_identity = principal
                 .identity
                 .as_ref()
@@ -1974,18 +1852,12 @@ fn lower_faults(faults: &FaultsExpr, cx: &mut LowerCtx) -> Built {
     // The literal `await` below is a real source of effectfulness for any
     // synchronous-looking IIFE further out — see `emitted_await`.
     cx.emitted_await = true;
-    // 1A.17, Decision F: an async arrow IIFE over a `try`/`catch`, a node only
-    // when the call and everything it hoisted are nodes.
-    let value = if inner.all_nodes() {
-        value
-    } else {
-        LoweredExpr::Text(value.into_text())
-    };
+    // 1A.17, Decision F: an async arrow IIFE over a `try`/`catch`.
     node_or_text(
         vec![value],
         |c| {
             use bynk_ts::{TsBinaryOp, TsExpr, TsLit, TsStmt};
-            let mut try_body = inner.ts_stmts("");
+            let mut try_body = inner.ts_stmts(cx.fault_site(call.span));
             try_body.push(TsStmt::expr_stmt(
                 TsExpr::Await(Box::new(TsExpr::Paren(Box::new(one(c))))),
                 None,
@@ -2174,24 +2046,15 @@ fn lower_observation(o: &ObservationExpr, cx: &mut LowerCtx) -> Built {
                 let names = cap_op_param_names(cx, &o.cap.name, &o.op.name);
                 let record_ty = bynk_check::checker::call_record_type_name(&o.cap.name, &o.op.name);
                 let pred_lowered = lower_expr(p, cx);
-                // The predicate's hoisted statements go in the arrow body: they
-                // are nodes only if every one is.
-                let pre_nodes = pred_lowered.pre_all_nodes();
+                // The predicate's hoisted statements go in the arrow body.
+                let pre_src = pred_lowered.pre_texts().join(" ");
+                let site = cx.fault_site(p.span);
                 let pre_stmts: Vec<bynk_ts::TsStmt> = pred_lowered
                     .pre
-                    .iter()
-                    .filter_map(|s| match s {
-                        LoweredStmt::Node(n) => Some((**n).clone()),
-                        LoweredStmt::Text(_) => None,
-                    })
+                    .into_iter()
+                    .map(|s| s.into_stmt(site))
                     .collect();
-                let pre_src = pred_lowered.pre_texts().join(" ");
-                let pred = if pre_nodes {
-                    pred_lowered.expr
-                } else {
-                    LoweredExpr::Text(pred_lowered.expr.into_text())
-                };
-                let mut children = vec![pred];
+                let mut children = vec![pred_lowered.expr];
                 if let Some(c) = count {
                     children.push(lower_expr(c, cx).expr);
                 }
@@ -2678,14 +2541,10 @@ fn lower_method_call(e: &Expr, cx: &mut LowerCtx) -> Lowered {
     };
     let mut pre = Pre::new();
     // Each dispatcher below returns a bridge value that ends in
-    // `pre.finish_built` (1A.20, #3721, Decision G): the statics (scalar,
-    // runtime value, declared type) build nodes (`lower_call/statics.rs`), and a
-    // dispatcher that has not converted yet returns `Option<String>`, wrapped
-    // here as `Err` (1A: the store, D1, cross-context, events, cookie,
-    // capability, test-service and agent families, each its own slice under
-    // `lower_call/`). Of the kernel methods the `List` kernel builds nodes
-    // (1A.18a and 1A.18b) and every delegated kernel's node passes through
-    // unprinted; the plain instance call that ends this function is a node.
+    // `pre.finish_built` (1A.20, #3721, Decision G): every family builds nodes (the statics in
+    // `lower_call/statics.rs`, the store, D1, cross-context, events, cookie, capability,
+    // test-service and agent families each under `lower_call/`), every delegated kernel's node
+    // passes through unprinted, and the plain instance call that ends this function is a node.
     // Persisted-store receivers: held Map, Map, Set, Cache, Log, Cell (#3167).
     if let Some(built) = lower_store_method_call(e, receiver, method, args, cx, &mut pre) {
         return pre.finish_built(built);
@@ -2796,14 +2655,12 @@ fn lower_ufcs_method_call(
     // Instance call: UFCS lowering with the receiver as first arg. The
     // namespace comes from the receiver's checked type. Every method call the
     // checker accepts has one: a test-service call's outcome is typed by its
-    // handler (#1934), where it once reached this placeholder and failed only
-    // at `tsc` (#1931). The placeholder stays reachable for a program that
-    // failed checking, which is still lowered and whose output is discarded,
-    // so it is not a panic.
-    let known_ns = cx.receiver_namespace(receiver);
-    let ns = known_ns
-        .clone()
-        .unwrap_or_else(|| "/* unknown */".to_string());
+    // handler (#1934), where it once reached a placeholder and failed only at
+    // `tsc` (#1931). A receiver with no namespace is a missing checker fact
+    // (1A.34), reported at the receiver.
+    let Some(ns) = cx.receiver_namespace(receiver) else {
+        return Ok(cx.missing_fact(receiver.span, "receiver namespace for an instance call"));
+    };
     let recv = pre.lower_node(receiver, cx);
     let mut all = vec![recv];
     for a in args {
@@ -2865,47 +2722,19 @@ fn lower_ufcs_method_call(
             None => Vec::new(),
         }
     };
-    // The `/* unknown */` namespace is a placeholder for a program that failed
-    // checking, not an identifier, so that one shape stays text; every other
-    // call is a node, with a `TypeApp` callee when type arguments are explicit
-    // (1A.20, #3721, Decision A).
-    let built = match known_ns {
-        Some(ns) => {
-            let mut callee = bynk_ts::TsExpr::Member {
-                object: Box::new(ident_node(&ns)),
-                property: method.name.clone(),
-            };
-            if !explicit.is_empty() {
-                callee = bynk_ts::TsExpr::TypeApp {
-                    callee: Box::new(callee),
-                    type_args: explicit,
-                };
-            }
-            call_built(callee, all)
-        }
-        None => {
-            let explicit = if explicit.is_empty() {
-                String::new()
-            } else {
-                format!(
-                    "<{}>",
-                    explicit
-                        .iter()
-                        .map(bynk_ts::print_type)
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                )
-            };
-            Err(format!(
-                "{ns}.{}{explicit}({})",
-                method.name,
-                all.into_iter()
-                    .map(LoweredExpr::into_text)
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ))
-        }
+    // Every call is a node, with a `TypeApp` callee when type arguments are explicit (1A.20,
+    // #3721, Decision A).
+    let mut callee = bynk_ts::TsExpr::Member {
+        object: Box::new(ident_node(&ns)),
+        property: method.name.clone(),
     };
+    if !explicit.is_empty() {
+        callee = bynk_ts::TsExpr::TypeApp {
+            callee: Box::new(callee),
+            type_args: explicit,
+        };
+    }
+    let built = call_built(callee, all);
     if needs_exec {
         settle_built(built, cx)
     } else {
@@ -3065,19 +2894,10 @@ fn lower_and_with_is(lhs: &Expr, rhs: &Expr, cx: &mut LowerCtx) -> Option<AndWit
     })
 }
 
-/// #1751/#1752: the receiver text to read variant `tag`'s payload fields from.
-/// When the test was emitted out of line (`unnarrowed`), TypeScript hasn't
-/// narrowed `value_text`, so the read goes through the variant the checker
+/// #1751/#1752: the receiver to read variant `tag`'s payload fields from: `(recv as Extract<typeof
+/// recv, { tag: "V" }>)`. A test is emitted out of line (#2836: every tag-based `is` test is), so
+/// TypeScript has not narrowed `recv` there, and the read goes through the variant the checker
 /// proved.
-fn variant_payload(value_text: &str, tag: &str, unnarrowed: bool) -> String {
-    if unnarrowed {
-        format!("({value_text} as Extract<typeof {value_text}, {{ tag: \"{tag}\" }}>)")
-    } else {
-        value_text.to_string()
-    }
-}
-
-/// [`variant_payload`] as a node: `(recv as Extract<typeof recv, { tag: "V" }>)`.
 fn variant_payload_node(recv: &bynk_ts::TsExpr, tag: &str) -> bynk_ts::TsExpr {
     use bynk_ts::{TsExpr, TsType, TsTypeMember};
     let proven = TsType::Object(vec![TsTypeMember::Prop {
@@ -3122,26 +2942,19 @@ pub(super) fn gather_is_bindings_for_emit(
     }
 }
 
-/// `const <local> = <init>;`: a `Const` node over a node initialiser, else
-/// today's text statement (1A.14: the variant-payload reads stay text, as the
-/// `Extract<typeof …>` cast has no type node).
-fn binding_stmt(local: &str, init: LoweredExpr) -> LoweredStmt {
-    match init {
-        LoweredExpr::Node(n) => LoweredStmt::Node(Box::new(bynk_ts::TsStmt::const_stmt(
-            bynk_ts::TsBindingName::Ident(local.to_string()),
-            None,
-            n,
-            None,
-        ))),
-        text => LoweredStmt::Text(format!("const {local} = {};", text.into_text())),
-    }
+/// `const <local> = <init>;` as a statement node.
+fn binding_stmt(local: &str, init: bynk_ts::TsExpr) -> LoweredStmt {
+    LoweredStmt::Node(Box::new(bynk_ts::TsStmt::const_stmt(
+        bynk_ts::TsBindingName::Ident(local.to_string()),
+        None,
+        init,
+        None,
+    )))
 }
 
-/// The `const name = …;` declarations for one matched `is` test: nodes where
-/// the receiver is a node and the read has a node form (a record field, a list
-/// element or rest, the refined narrowing cast, a variant payload read through
-/// its `Extract` cast, an or-pattern's `if`/`else` dispatch), text otherwise (a
-/// text receiver, and an or-pattern's `let a, b;`, which has no node).
+/// The `const name = …;` declarations for one matched `is` test, as statement nodes (a record
+/// field, a list element or rest, the refined narrowing cast, a variant payload read through its
+/// `Extract` cast, an or-pattern's `let a, b;` and `if`/`else` dispatch).
 fn emit_is_test_bindings(
     e: &Expr,
     cx: &mut LowerCtx,
@@ -3154,7 +2967,6 @@ fn emit_is_test_bindings(
     };
     {
         *found = true;
-        let value_text = cx.is_receiver_text(value);
         let recv = cx.is_receiver_path(value);
         let disc_ty = cx.commons().expr_types.get(&value.id).map(|te| te.ty);
         if let Pattern::Variant {
@@ -3166,21 +2978,17 @@ fn emit_is_test_bindings(
             // variant the checker proved instead.
             // #2836: every tag-based `is` test is emitted un-narrowing (see
             // `lower_is`), so its payload is always read through the proven variant.
-            let payload = variant_payload(&value_text, &variant.name, true);
             // v0.13: refinement narrowing re-binds the value's name to the
             // branded refined type, read from the forced receiver temp.
             if bindings.is_empty()
                 && cx.is_refined_is_check(value, &variant.name)
                 && let ExprKind::Ident(id) = &value.kind
             {
-                let cast: Built = match recv.node() {
-                    Some(r) => Ok(bynk_ts::TsExpr::As {
-                        expr: Box::new(r.clone()),
-                        ty: bynk_ts::TsType::named(variant.name.clone()),
-                    }),
-                    None => Err(format!("{value_text} as {}", variant.name)),
+                let cast = bynk_ts::TsExpr::As {
+                    expr: Box::new(recv.node().clone()),
+                    ty: bynk_ts::TsType::named(variant.name.clone()),
                 };
-                out.push(binding_stmt(&ts_ident(&id.name), cast.into()));
+                out.push(binding_stmt(&ts_ident(&id.name), cast));
                 cx.declare_binder(&id.name);
                 return;
             }
@@ -3199,14 +3007,11 @@ fn emit_is_test_bindings(
                 // #1653: renamed when it shadows (`o is Some(o)`), so the
                 // declaration can't read itself in its temporal dead zone.
                 let local = cx.bind_local_name(&name.name);
-                let read: Built = match recv.node() {
-                    Some(r) => Ok(bynk_ts::TsExpr::Member {
-                        object: Box::new(variant_payload_node(r, &variant.name)),
-                        property: field.clone(),
-                    }),
-                    None => Err(format!("{payload}.{field}")),
+                let read = bynk_ts::TsExpr::Member {
+                    object: Box::new(variant_payload_node(recv.node(), &variant.name)),
+                    property: field.clone(),
                 };
-                out.push(binding_stmt(&local, read.into()));
+                out.push(binding_stmt(&local, read));
             }
         }
         // #2641: a record pattern's depth-1 names — shorthand fields and
@@ -3219,7 +3024,10 @@ fn emit_is_test_bindings(
                     Some(_) => continue,
                 };
                 let local = cx.bind_local_name(&bound.name);
-                out.push(binding_stmt(&local, recv.member(&fname.name).lowered()));
+                out.push(binding_stmt(
+                    &local,
+                    recv.member(&fname.name).node().clone(),
+                ));
             }
         }
         // #2680: a list pattern's depth-1 names — bare-name elements and a
@@ -3228,7 +3036,7 @@ fn emit_is_test_bindings(
             for (i, sub) in elems.iter().enumerate() {
                 if let Pattern::Binding(n) = sub {
                     let local = cx.bind_local_name(&n.name);
-                    out.push(binding_stmt(&local, recv.index(i).lowered()));
+                    out.push(binding_stmt(&local, recv.index(i).node().clone()));
                 }
             }
             if let Some(binder) = rest.as_ref().and_then(|r| r.binder.as_ref()) {
@@ -3267,7 +3075,7 @@ fn emit_is_test_bindings(
                                 let local = cx
                                     .resolved_local_name(&n.name)
                                     .unwrap_or_else(|| ts_ident(&n.name));
-                                pairs.push((local, recv.index(j).lowered()));
+                                pairs.push((local, recv.index(j).node().clone()));
                             }
                         }
                         if let Some(binder) = rest.as_ref().and_then(|r| r.binder.as_ref()) {
@@ -3279,7 +3087,7 @@ fn emit_is_test_bindings(
                         let mut tests = Vec::new();
                         pattern_tests(&recv, disc_ty, alt, cx, &mut tests);
                         let cond = if tests.is_empty() {
-                            LoweredExpr::Node(bool_node(true))
+                            bool_node(true)
                         } else {
                             and_join(tests)
                         };
@@ -3307,27 +3115,18 @@ fn emit_is_test_bindings(
                             // #1765 review: out of line, the dispatch below
                             // starts from the whole union, so its last arm (a
                             // bare `else`) isn't narrowed to this variant.
-                            let read: Built = match recv.node() {
-                                Some(r) => Ok(bynk_ts::TsExpr::Member {
-                                    object: Box::new(variant_payload_node(r, &variant.name)),
-                                    property: field.clone(),
-                                }),
-                                None => Err(format!(
-                                    "{}.{field}",
-                                    variant_payload(&value_text, &variant.name, true)
-                                )),
+                            let read = bynk_ts::TsExpr::Member {
+                                object: Box::new(variant_payload_node(recv.node(), &variant.name)),
+                                property: field.clone(),
                             };
-                            pairs.push((local, read.into()));
+                            pairs.push((local, read));
                         }
-                        let tag_test: Built = match recv.node() {
-                            Some(r) => Ok(bynk_ts::TsExpr::Binary {
-                                op: bynk_ts::TsBinaryOp::StrictEq,
-                                left: Box::new(member_node_of(r, "tag")),
-                                right: Box::new(str_node(variant.name.clone())),
-                            }),
-                            None => Err(format!("{value_text}.tag === \"{}\"", variant.name)),
+                        let tag_test = bynk_ts::TsExpr::Binary {
+                            op: bynk_ts::TsBinaryOp::StrictEq,
+                            left: Box::new(member_node_of(recv.node(), "tag")),
+                            right: Box::new(str_node(variant.name.clone())),
                         };
-                        (Some(LoweredExpr::from(tag_test)), pairs)
+                        (Some(tag_test), pairs)
                     }
                     // #2641: a record alternative has no tag to test; its
                     // depth-1 names read straight off the receiver.
@@ -3342,7 +3141,7 @@ fn emit_is_test_bindings(
                             let local = cx
                                 .resolved_local_name(&bound.name)
                                 .unwrap_or_else(|| ts_ident(&bound.name));
-                            pairs.push((local, recv.member(&fname.name).lowered()));
+                            pairs.push((local, recv.member(&fname.name).node().clone()));
                         }
                         (None, pairs)
                     }
@@ -3351,17 +3150,14 @@ fn emit_is_test_bindings(
                 let cond = if i == last {
                     None
                 } else {
-                    Some(tag.unwrap_or_else(|| LoweredExpr::Node(bool_node(true))))
+                    Some(tag.unwrap_or_else(|| bool_node(true)))
                 };
                 arms.push(OrArm {
                     cond,
                     assigns: pairs,
                 });
             }
-            match or_dispatch_stmt(&arms) {
-                Some(stmt) => out.push(LoweredStmt::Node(Box::new(stmt))),
-                None => out.extend(or_dispatch_lines(arms).into_iter().map(LoweredStmt::Text)),
-            }
+            out.push(LoweredStmt::Node(Box::new(or_dispatch_stmt(arms))));
         }
     }
 }
@@ -3381,45 +3177,24 @@ pub(crate) fn is_simple_is_receiver(value: &Expr) -> bool {
     }
 }
 
-/// Render a *simple* `is` receiver (see `is_simple_is_receiver`) as a textual
-/// reference for binding lookups.
-///
-/// #1668: a complex receiver never reaches this function. Its only caller,
-/// `LowerCtx::is_receiver_text`, serves the binding gatherer
-/// (`gather_is_bindings_for_emit`), and each of the gatherer's call sites
-/// (`lower_and_with_is`, the value-position `if` IIFE, `emit_if_tail`) lowers
-/// the condition first. Lowering every `is` test the gatherer visits
-/// (`bynk_check::narrowing::matched_is_tests`: through `&&`, `!` and parens)
-/// runs `is_receiver_ref`, which lifts a complex receiver into a temp cached by
-/// span, and `is_receiver_text` returns that temp. Reaching the last arm means
-/// that ordering broke. It used to emit a placeholder into the output, invalid
-/// TypeScript that surfaced as a distant `tsc` error; it now fails here, like
-/// the emitter's other broken invariants.
-pub(crate) fn value_text_for_is(value: &Expr) -> String {
+/// The path of a simple `is` receiver: a local, or a field chain over one. A complex receiver
+/// never reaches here: it was lifted to a temp when its condition was lowered, which every
+/// gatherer of `is` bindings does first (`lower_and_with_is`, the value-position `if`,
+/// `emit_if_tail`), so `LowerCtx::is_receiver_path` finds the temp (#1668). Reaching the last
+/// arm means that ordering broke; it used to emit a placeholder into the output, invalid
+/// TypeScript that surfaced as a distant `tsc` error, and now fails here, like the emitter's other
+/// broken invariants.
+pub(super) fn path_for_is(value: &Expr) -> PatPath {
     match &value.kind {
-        ExprKind::Ident(id) => ts_ident(&id.name),
-        ExprKind::FieldAccess { receiver, field } => {
-            format!("{}.{}", value_text_for_is(receiver), field.name)
-        }
-        ExprKind::Paren(inner) => value_text_for_is(inner),
+        ExprKind::Ident(id) => PatPath::ident(&ts_ident(&id.name)),
+        ExprKind::FieldAccess { receiver, field } => path_for_is(receiver).member(&field.name),
+        ExprKind::Paren(inner) => path_for_is(inner),
         _ => panic!(
             "bynk internal error (#1668): the `is` receiver at {:?} is not a simple \
              lvalue and was not lifted to a temp before its bindings were gathered \
              — the condition must be lowered first",
             value.span
         ),
-    }
-}
-
-/// [`value_text_for_is`] as a [`PatPath`] (1A.14): the same chain, each step a
-/// node when it prints as the text step does.
-pub(super) fn path_for_is(value: &Expr) -> PatPath {
-    match &value.kind {
-        ExprKind::Ident(id) => PatPath::ident(&ts_ident(&id.name)),
-        ExprKind::FieldAccess { receiver, field } => path_for_is(receiver).member(&field.name),
-        ExprKind::Paren(inner) => path_for_is(inner),
-        // Panics, with the invariant's message (#1668).
-        _ => PatPath::from_text(&value_text_for_is(value)),
     }
 }
 
@@ -3444,7 +3219,7 @@ fn lower_if(
         // the IIFE path below. That path clears it because a `return` in its
         // arms exits the arrow rather than the enclosing function, so an
         // embedding `?` must behave like a plain one (ADR 0178). This path
-        // inverts that premise: when a branch hoists, `hoist_if_as_statement`
+        // inverts that premise: when a branch hoists, `hoist_if_slot`
         // puts the statements in the *caller's* statement position, so the `?`
         // expansion's `return` does exit the enclosing function and the declared
         // embedding must still apply. Clearing it emitted a bare `return __rN;`
@@ -3467,8 +3242,17 @@ fn lower_if(
         // early return. `lower_if` now returns its own `pre`, so the `if` hoists
         // as a real statement in the caller's statement position and the
         // `return` keeps exiting the enclosing function. See
-        // `hoist_if_as_statement`.
-        let slot = hoist_if_value(&mut pre, cond_lowered, then_tail, else_tail, e, cx);
+        // `hoist_if_slot`.
+        let slot_ty = checked_ty_node(e, cx);
+        let slot = hoist_if_slot(
+            &mut pre,
+            slot_ty,
+            cond_lowered,
+            then_tail,
+            else_tail,
+            cx,
+            e.span,
+        );
         pre.finish(LoweredExpr::Node(ident_node(&slot)))
     } else {
         // T2.2 (R6.4): isolate the effectfulness flag to just this IIFE's own
@@ -3539,56 +3323,19 @@ fn lower_if(
         // ("Unexpected reserved word"), not merely a missed optimisation.
         let needs_async = cx.emitted_await;
         cx.emitted_await = saved_await || needs_async;
-        // The node form: a node condition and branches that are all nodes. An
-        // `is` binding that is still text (a variant payload read) keeps the
-        // text form below.
-        let cond_node = match cond_lowered {
-            LoweredExpr::Node(n) => Ok(n),
-            LoweredExpr::Text(t) => Err(t),
-        };
-        if let Ok(cond) = &cond_node
-            && let Some(then_stmts) = then_body.to_nodes()
-            && let Some(else_stmts) = else_body.to_nodes()
-        {
-            let branch = bynk_ts::TsStmt::if_else_same_line_stmt(
-                cond.clone(),
-                bynk_ts::TsStmt::block(then_stmts, None),
-                bynk_ts::TsStmt::block(else_stmts, None),
-                None,
-            );
-            return pre.finish(LoweredExpr::Node(iife_call(needs_async, vec![branch])));
-        }
-        // The text form, byte for byte what it was.
-        let cond_expr = match cond_node {
-            Ok(n) => bynk_ts::print_expr(&n),
-            Err(t) => t,
-        };
-        let mut iife = String::new();
-        iife.push_str("(() => {\n");
-        iife.push_str("    if (");
-        iife.push_str(&cond_expr);
-        iife.push_str(") {\n");
-        render_text(&then_body, &mut iife, INDENT_STEP * 3);
-        for _ in 0..(INDENT_STEP * 2) {
-            iife.push(' ');
-        }
-        iife.push_str("} else {\n");
-        render_text(&else_body, &mut iife, INDENT_STEP * 3);
-        for _ in 0..(INDENT_STEP * 2) {
-            iife.push(' ');
-        }
-        iife.push_str("}\n");
-        for _ in 0..INDENT_STEP {
-            iife.push(' ');
-        }
-        iife.push_str("})()");
-        pre.finish_text(finish_async_iife(iife, needs_async))
+        let site = cx.fault_site(cond.span);
+        let branch = bynk_ts::TsStmt::if_else_same_line_stmt(
+            cond_lowered.into_node(site),
+            bynk_ts::TsStmt::block(then_body.into_nodes(site), None),
+            bynk_ts::TsStmt::block(else_body.into_nodes(site), None),
+            None,
+        );
+        pre.finish(LoweredExpr::Node(iife_call(needs_async, vec![branch])))
     }
 }
 
 /// `(() => { <body> })()`, an immediately invoked arrow over statement nodes,
-/// `async` and awaited when `is_async` (1A.12). The text counterpart is
-/// `finish_async_iife`, now only the `match` IIFE's and the text fallbacks'.
+/// `async` and awaited when `is_async` (1A.12).
 fn iife_call(is_async: bool, body: Vec<bynk_ts::TsStmt>) -> bynk_ts::TsExpr {
     arrow_call(Vec::new(), Vec::new(), is_async, body)
 }
@@ -3664,7 +3411,7 @@ fn lower_ident(e: &Expr, id: &Ident, cx: &mut LowerCtx) -> Built {
             || cx.commons().exec_plan.fn_needs(decl))
     {
         let tys = cx.ty_render();
-        let params: Vec<String> = match cx
+        let params: Vec<bynk_ts::TsParam> = match cx
             .commons()
             .expr_types
             .get(&e.id)
@@ -3673,33 +3420,40 @@ fn lower_ident(e: &Expr, id: &Ident, cx: &mut LowerCtx) -> Built {
             Some(Ty::Fn { params, .. }) => params
                 .iter()
                 .enumerate()
-                .map(|(i, p)| format!("__a{i}: {}", ts_ty(*p, tys)))
+                .map(|(i, p)| {
+                    bynk_ts::TsParam::new(format!("__a{i}"), Some(ts_ty_to_ts_type(*p, tys)))
+                })
                 .collect(),
             _ => (0..decl.params.len())
-                .map(|i| format!("__a{i}: any"))
+                .map(|i| {
+                    bynk_ts::TsParam::new(format!("__a{i}"), Some(super::lower_list::any_ty()))
+                })
                 .collect(),
         };
-        let names: Vec<String> = (0..params.len()).map(|i| format!("__a{i}")).collect();
-        let mut args = names.clone();
-        // 1A: witness printed for a text caller
-        args.extend(print_witnesses(cx.witness_args(decl, witnesses)));
+        let mut args: Vec<bynk_ts::TsExpr> = params.iter().map(|p| ident_node(&p.name)).collect();
+        args.extend(cx.witness_args(decl, witnesses));
         // #2868: a `given` function closes over the `deps` in scope where it is
         // named.
         if !decl.given.is_empty() {
-            args.push(cx.cap_deps_expr().to_string());
+            args.push(cx.cap_deps_node());
         }
         // #2719: a function in the needs-context set closes over the context in
         // scope where it is named.
         if cx.commons().exec_plan.fn_needs(decl) {
-            args.push(cx.exec_expr());
+            args.push(cx.exec_node());
         }
-        // 1A: text until the closure/query family converts
-        return Err(format!(
-            "(({}) => {}({}))",
-            params.join(", "),
-            ts_ident(&id.name),
-            args.join(", ")
-        ));
+        return Ok(bynk_ts::TsExpr::Paren(Box::new(bynk_ts::TsExpr::Arrow {
+            params,
+            is_async: false,
+            generics: Vec::new(),
+            return_type: None,
+            body: Box::new(bynk_ts::TsArrowBody::Expr(Box::new(
+                bynk_ts::TsExpr::Call {
+                    callee: Box::new(ident_node(&ts_ident(&id.name))),
+                    args,
+                },
+            ))),
+        })));
     }
     // v0.116: inside a `transition` predicate, the contextual `old`/`new` idents
     // are the pre-/post-commit state records, lowered to their JS names (`new` is
@@ -4210,38 +3964,18 @@ fn compact_iife(stmts: Vec<LoweredStmt>, ret: LoweredExpr) -> Built {
     Err(s)
 }
 
-/// A short-circuit operator's `?`-hoisting form (T2.1/T2.3): `let slot:
-/// boolean; if (cond) { …; slot = then; } else { …; slot = else; }` as
-/// statement nodes when the condition, both tails and everything they hoisted
-/// are nodes ([`hoisted_if_nodes`]), else today's text
-/// ([`hoist_if_as_statement`]). Returns the slot.
+/// A short-circuit operator's `?`-hoisting form (T2.1/T2.3): `let slot: boolean; if (cond) { …;
+/// slot = then; } else { …; slot = else; }` ([`hoist_if_slot`]). Returns the slot.
 fn hoist_bool_if(
     pre: &mut Pre,
     cond: LoweredExpr,
     then_tail: Lowered,
     else_tail: Lowered,
     cx: &mut LowerCtx,
+    at: bynk_syntax::span::Span,
 ) -> String {
-    let all_nodes = matches!(cond, LoweredExpr::Node(_))
-        && [&then_tail, &else_tail].iter().all(|t| {
-            matches!(t.expr, LoweredExpr::Node(_))
-                && t.pre.iter().all(|s| matches!(s, LoweredStmt::Node(_)))
-        });
-    if all_nodes {
-        let slot = cx.fresh();
-        let ty = Some(bynk_ts::TsType::named("boolean"));
-        hoisted_if_nodes(pre, &slot, ty, cond, then_tail, else_tail);
-        slot
-    } else {
-        hoist_if_as_statement(
-            pre,
-            cond.into_text(),
-            then_tail,
-            else_tail,
-            Some("boolean".to_string()),
-            cx,
-        )
-    }
+    let ty = Some(bynk_ts::TsType::named("boolean"));
+    hoist_if_slot(pre, ty, cond, then_tail, else_tail, cx, at)
 }
 
 fn lower_bin_op(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut LowerCtx) -> Lowered {
@@ -4286,7 +4020,7 @@ fn lower_bin_op(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut LowerCtx) -> Lowered
         // `hoist_bool_if` (built on T2.1's `if`-hoisting) to hoist this
         // operator as a real `if` statement instead.
         //
-        // #1044 review: `hoist_if_as_statement`'s bare `slot` return is right
+        // #1044 review: `hoist_if_slot`'s bare `slot` return is right
         // for the general path (no narrowing at stake there — see below), but
         // wrong here. `lhs_expr` is the very `is`-check `lower_if`'s own
         // `gather_is_bindings_for_emit` relies on being *textually present* in
@@ -4314,6 +4048,7 @@ fn lower_bin_op(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut LowerCtx) -> Lowered
                 },
                 Lowered::node(bool_node(otherwise == "true")),
                 cx,
+                rhs.span,
             );
             return pre.finish_built(short_circuit(
                 op,
@@ -4375,14 +4110,24 @@ fn lower_bin_op(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut LowerCtx) -> Lowered
         }
         if !r.pre.is_empty() && rhs_returns {
             let value = match op {
-                BinOp::And => hoist_bool_if(&mut pre, l, r, Lowered::node(bool_node(false)), cx),
-                BinOp::Or => hoist_bool_if(&mut pre, l, Lowered::node(bool_node(true)), r, cx),
+                BinOp::And => hoist_bool_if(
+                    &mut pre,
+                    l,
+                    r,
+                    Lowered::node(bool_node(false)),
+                    cx,
+                    rhs.span,
+                ),
+                BinOp::Or => {
+                    hoist_bool_if(&mut pre, l, Lowered::node(bool_node(true)), r, cx, rhs.span)
+                }
                 BinOp::Implies => hoist_bool_if(
                     &mut pre,
                     negated_paren(l),
                     Lowered::node(bool_node(true)),
                     r,
                     cx,
+                    rhs.span,
                 ),
                 _ => unreachable!("guarded by the outer `matches!`"),
             };
@@ -4402,10 +4147,8 @@ fn lower_bin_op(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut LowerCtx) -> Lowered
         return pre.finish_built(short_circuit(op, l, rhs_value));
     }
     let r_lowered = pre.lower_node(rhs, cx);
-    match build_value_bin_op(op, lhs, vec![l_lowered, r_lowered], cx) {
-        Ok(node) => pre.finish(LoweredExpr::Node(node)),
-        Err(text) => pre.finish_text(text),
-    }
+    let built = build_value_bin_op(op, lhs, vec![l_lowered, r_lowered], cx);
+    pre.finish_built(built)
 }
 
 /// A value operator (`==`, `<`, `+`, …; never `&&`/`||`/`implies`) over
@@ -4860,14 +4603,6 @@ fn lower_record_construction(
     pre.finish_built(built)
 }
 
-/// `lower_field_access`'s tail: finish a [`Built`] as a node or as text.
-fn built_or_text_lowered(pre: Pre, built: Built) -> Lowered {
-    match built {
-        Ok(node) => pre.finish(LoweredExpr::Node(node)),
-        Err(text) => pre.finish_text(text),
-    }
-}
-
 fn lower_field_access(e: &Expr, receiver: &Expr, field: &Ident, cx: &mut LowerCtx) -> Lowered {
     let tys = cx.ty_render();
     let mut pre = Pre::new();
@@ -4973,7 +4708,7 @@ fn lower_field_access(e: &Expr, receiver: &Expr, field: &Ident, cx: &mut LowerCt
                 )))
             }
         };
-        return built_or_text_lowered(pre, built);
+        return pre.finish_built(built);
     }
     // v0.9: `HttpResult.Variant` (nullary).
     //
@@ -5073,17 +4808,15 @@ fn lower_field_access(e: &Expr, receiver: &Expr, field: &Ident, cx: &mut LowerCt
         );
         return pre.finish_built(built);
     }
-    built_or_text_lowered(
-        pre,
-        node_or_text(
-            vec![r],
-            |c| bynk_ts::TsExpr::Member {
-                object: Box::new(one(c)),
-                property: field.name.clone(),
-            },
-            |c| format!("{}.{}", one(c), field.name),
-        ),
-    )
+    let built = node_or_text(
+        vec![r],
+        |c| bynk_ts::TsExpr::Member {
+            object: Box::new(one(c)),
+            property: field.name.clone(),
+        },
+        |c| format!("{}.{}", one(c), field.name),
+    );
+    pre.finish_built(built)
 }
 
 /// v0.158 (ADR 0184): the key type `K` of a map `.entries`/`.keys` query, read
@@ -5253,7 +4986,7 @@ mod decode_map_key_tests {
 }
 
 #[cfg(test)]
-mod value_text_for_is_tests {
+mod path_for_is_tests {
     use super::*;
     use bynk_syntax::ast::Ident;
     use bynk_syntax::span::Span;
@@ -5274,14 +5007,14 @@ mod value_text_for_is_tests {
     }
 
     #[test]
-    fn a_simple_receiver_renders_as_its_lvalue() {
+    fn a_simple_receiver_is_its_lvalue_path() {
         let field = expr(ExprKind::FieldAccess {
             receiver: Box::new(expr(ExprKind::Paren(Box::new(expr(ExprKind::Ident(
                 ident("b"),
             )))))),
             field: ident("room"),
         });
-        assert_eq!(value_text_for_is(&field), "b.room");
+        assert_eq!(bynk_ts::print_expr(path_for_is(&field).node()), "b.room");
     }
 
     // #1668 review: a complex receiver reaching here means it was not lifted
@@ -5290,7 +5023,7 @@ mod value_text_for_is_tests {
     #[test]
     #[should_panic(expected = "bynk internal error (#1668)")]
     fn a_complex_receiver_panics_instead_of_emitting_a_placeholder() {
-        value_text_for_is(&expr(ExprKind::IntLit {
+        path_for_is(&expr(ExprKind::IntLit {
             value: 1,
             lexeme: "1".to_string(),
         }));
@@ -5303,7 +5036,6 @@ fn lower_lambda(e: &Expr, lambda: &LambdaExpr, cx: &mut LowerCtx) -> Built {
         cx.commons().expr_ty(e.id).as_deref(),
         Some(bynk_check::checker::Ty::Fn { ret, .. }) if ret.is_effect(tys.types())
     );
-    let prefix = if is_async { "async " } else { "" };
     // #2712: a record-pattern parameter has no annotation to print; its type is
     // the checked function type's, so a lambda with nothing to type it from
     // (held in a `let`) still compiles under `tsc --strict`. #3228: the same
@@ -5316,40 +5048,23 @@ fn lower_lambda(e: &Expr, lambda: &LambdaExpr, cx: &mut LowerCtx) -> Built {
         Some(bynk_check::checker::Ty::Fn { params, .. }) => params.clone(),
         _ => Vec::new(),
     };
-    let params: Vec<String> = lambda
-        .params
-        .iter()
-        .enumerate()
-        .map(|(i, p)| match (&p.type_ref, &p.pattern, fn_params.get(i)) {
-            (Some(tr), _, _) => format!("{}: {}", ts_ident(&p.name.name), ts_type_ref(tr)),
-            (None, _, Some(ty)) => format!("{}: {}", ts_ident(&p.name.name), ts_ty(*ty, tys)),
-            _ => ts_ident(&p.name.name),
-        })
-        .collect();
-    let params = params.join(", ");
-    // 1A.12: the same parameters as nodes, when each type prints through the
-    // type builders exactly as the text above did; otherwise the lambda stays
-    // text.
-    let node_params: Option<Vec<bynk_ts::TsParam>> = lambda
+    let params: Vec<bynk_ts::TsParam> = lambda
         .params
         .iter()
         .enumerate()
         .map(|(i, p)| {
             let ty = match (&p.type_ref, &p.pattern, fn_params.get(i)) {
-                (Some(tr), _, _) => {
-                    let ty = ts_type_ref_to_ts_type(tr, None);
-                    (bynk_ts::print_type(&ty) == ts_type_ref(tr)).then_some(Some(ty))
-                }
-                (None, _, Some(ty)) => Some(Some(ts_ty_to_ts_type(*ty, tys))),
-                _ => Some(None),
-            }?;
-            Some(bynk_ts::TsParam {
+                (Some(tr), _, _) => Some(ts_type_ref_to_ts_type(tr, None)),
+                (None, _, Some(ty)) => Some(ts_ty_to_ts_type(*ty, tys)),
+                _ => None,
+            };
+            bynk_ts::TsParam {
                 name: ts_ident(&p.name.name),
                 ty,
                 optional: false,
                 rest: false,
                 array_pattern: None,
-            })
+            }
         })
         .collect();
     // #908: a param's name is the lambda body's own binding — push a frame and
@@ -5378,78 +5093,33 @@ fn lower_lambda(e: &Expr, lambda: &LambdaExpr, cx: &mut LowerCtx) -> Built {
     // receiver temp inside the lambda is read only inside it, and hoisting its
     // declaration out would share one slot between the lambda's invocations.
     let saved_hoist = cx.is_temp_hoist.take();
-    let result: Built = match &lambda.body.kind {
+    let site = cx.fault_site(lambda.body.span);
+    let result: Built = Ok(match &lambda.body.kind {
         ExprKind::Block(b) => {
             // The body keeps its marks (1A.15, Decision D).
             let body = block_body(b, cx, is_async);
-            match (node_params, body.to_nodes()) {
-                (Some(params), Some(stmts)) => Ok(lambda_node(
-                    params,
-                    is_async,
-                    bynk_ts::TsArrowBody::Multiline(stmts),
-                )),
-                _ => {
-                    let mut out = format!("{prefix}({params}) => {{\n");
-                    render_text(&body, &mut out, INDENT_STEP * 2);
-                    for _ in 0..INDENT_STEP {
-                        out.push(' ');
-                    }
-                    out.push('}');
-                    Err(out)
-                }
-            }
+            lambda_node(
+                params,
+                is_async,
+                bynk_ts::TsArrowBody::Multiline(body.into_nodes(site)),
+            )
         }
         _ => {
             let lowered = lower_expr(&lambda.body, cx);
-            match (node_params, lowered) {
-                (
-                    Some(params),
-                    Lowered {
-                        pre: hoisted,
-                        expr: LoweredExpr::Node(value),
-                    },
-                ) if hoisted.iter().all(|s| matches!(s, LoweredStmt::Node(_))) => {
-                    let body = if hoisted.is_empty() {
-                        // An object-literal body is bracketed by the printer.
-                        bynk_ts::TsArrowBody::Expr(Box::new(value))
-                    } else {
-                        let mut stmts: Vec<bynk_ts::TsStmt> = hoisted
-                            .into_iter()
-                            .filter_map(|s| match s {
-                                LoweredStmt::Node(n) => Some(*n),
-                                LoweredStmt::Text(_) => None,
-                            })
-                            .collect();
-                        stmts.push(bynk_ts::TsStmt::return_stmt(Some(value), None));
-                        bynk_ts::TsArrowBody::Multiline(stmts)
-                    };
-                    Ok(lambda_node(params, is_async, body))
-                }
-                (_, lowered) => {
-                    let body_stmts = lowered.pre_texts();
-                    let body = lowered.expr.into_text();
-                    Err(if body_stmts.is_empty() {
-                        // An object-literal body (a record construction/spread) must be
-                        // parenthesised, or `(x) => { … }` reads as a block, not an object.
-                        let body = if body.trim_start().starts_with('{') {
-                            format!("({body})")
-                        } else {
-                            body
-                        };
-                        format!("{prefix}({params}) => {body}")
-                    } else {
-                        let mut out = format!("{prefix}({params}) => {{\n");
-                        for s in &body_stmts {
-                            out.push_str(s);
-                            out.push('\n');
-                        }
-                        out.push_str(&format!("  return {body};\n}}"));
-                        out
-                    })
-                }
-            }
+            let hoisted = lowered.pre;
+            let value = lowered.expr.into_node(site);
+            let body = if hoisted.is_empty() {
+                // An object-literal body is bracketed by the printer.
+                bynk_ts::TsArrowBody::Expr(Box::new(value))
+            } else {
+                let mut stmts: Vec<bynk_ts::TsStmt> =
+                    hoisted.into_iter().map(|s| s.into_stmt(site)).collect();
+                stmts.push(bynk_ts::TsStmt::return_stmt(Some(value), None));
+                bynk_ts::TsArrowBody::Multiline(stmts)
+            };
+            lambda_node(params, is_async, body)
         }
-    };
+    });
     cx.is_temp_hoist = saved_hoist;
     cx.tail_slot = saved_slot;
     cx.return_ty = saved;
@@ -5496,17 +5166,10 @@ fn lower_block_as_expr(b: &Block, cx: &mut LowerCtx) -> Built {
     let body = block_body(b, cx, false);
     cx.return_ty = saved;
     cx.tail_slot = saved_slot;
-    if let Some(stmts) = body.to_nodes() {
-        return Ok(iife_call(false, stmts));
-    }
-    let mut iife = String::new();
-    iife.push_str("(() => {\n");
-    render_text(&body, &mut iife, INDENT_STEP * 2);
-    for _ in 0..INDENT_STEP {
-        iife.push(' ');
-    }
-    iife.push_str("})()");
-    Err(iife)
+    Ok(iife_call(
+        false,
+        body.into_nodes(cx.fault_site(b.tail.span)),
+    ))
 }
 
 /// #1 review: the discriminant's hoisted statements (`pre`) are the
@@ -5550,65 +5213,14 @@ fn lower_match_as_iife(discriminant: &Expr, arms: &[MatchArm], cx: &mut LowerCtx
     cx.emitted_await = saved_await || needs_async;
     cx.return_ty = saved;
     cx.tail_slot = saved_slot;
-    // The node form (1A.13): a node discriminant and a body that is all nodes.
-    let disc = match disc {
-        LoweredExpr::Node(n) => Ok(n),
-        LoweredExpr::Text(t) => Err(t),
-    };
-    if let Ok(disc) = &disc
-        && let Some(stmts) = body.to_nodes()
-    {
-        let params = vec![bynk_ts::TsParam::new("__d".to_string(), None)];
-        return pre.finish(LoweredExpr::Node(arrow_call(
-            params,
-            vec![disc.clone()],
-            needs_async,
-            stmts,
-        )));
-    }
-    // The text form, byte for byte what it was.
-    let disc = match disc {
-        Ok(n) => bynk_ts::print_expr(&n),
-        Err(t) => t,
-    };
-    let mut iife = String::new();
-    iife.push_str("((__d) => {\n");
-    render_text(&body, &mut iife, INDENT_STEP * 2);
-    for _ in 0..INDENT_STEP {
-        iife.push(' ');
-    }
-    iife.push_str(&format!("}})({disc})"));
-    pre.finish_text(finish_async_iife(iife, needs_async))
-}
-
-/// v0.9.2: a match/if lowered to an IIFE in *expression* position may have arms
-/// that `await` (an effectful `let x <- …` or `do …`). A synchronous arrow can't
-/// host `await`, so when `needs_async` says the body just constructed emitted one
-/// (T2.2, R6.4: a flag set at the two statement sites that emit a literal
-/// `await`, read by the caller — see `LowerCtx::emitted_await` — not a scan of
-/// `iife` for the substring `"await "`), make the outermost arrow `async` and
-/// `await` its call. A nested match/if that already did this leaves its own
-/// `await (async …)()` in the body text *and* restores the flag on `cx` before
-/// returning, so the caller's own read-and-reset still sees it and the
-/// transform still propagates outward.
-fn finish_async_iife(iife: String, needs_async: bool) -> String {
-    if !needs_async {
-        return iife;
-    }
-    let async_iife = if let Some(rest) = iife.strip_prefix("((__d) =>") {
-        format!("(async (__d) =>{rest}")
-    } else if let Some(rest) = iife.strip_prefix("(() => {") {
-        format!("(async () => {{{rest}")
-    } else {
-        // Defensive: unreachable given the two current callers, which always
-        // build one of the two headers above. `needs_async` is authoritative
-        // that `iife` holds a literal `await`, so falling through here emits a
-        // bare `await` in a synchronous arrow — a hard `SyntaxError`, not a
-        // missed optimisation. Fail here instead of at `tsc`.
-        debug_assert!(false, "finish_async_iife: unrecognised IIFE header: {iife}");
-        return iife;
-    };
-    format!("await {async_iife}")
+    let site = cx.fault_site(discriminant.span);
+    let params = vec![bynk_ts::TsParam::new("__d".to_string(), None)];
+    pre.finish(LoweredExpr::Node(arrow_call(
+        params,
+        vec![disc.into_node(site)],
+        needs_async,
+        body.into_nodes(site),
+    )))
 }
 
 /// A literal pattern's value as a node (1A.13, Decision C of #3714): the twin of
@@ -5623,136 +5235,70 @@ pub(super) fn literal_label_node(value: &LiteralValue) -> bynk_ts::TsExpr {
     }
 }
 
-/// The runtime path a pattern is tested against (`__d`, `x.f`, `x[0].g`): its
-/// text, which is what the `is` lowering and every text fallback use, and its
-/// node when the scrutinee lowered to one (1A.13, Decision C of #3714). A step
-/// keeps the node only when it prints exactly as the text step reads, so the
-/// node form can never differ from the text form.
+/// The runtime path a pattern is tested against (`__d`, `x.f`, `x[0].g`), as the node every test
+/// and binding built over it reads (1A.13, Decision C of #3714; text-free since 1A.35a part C).
 #[derive(Clone)]
 pub(super) struct PatPath {
-    text: String,
-    node: Option<bynk_ts::TsExpr>,
+    node: bynk_ts::TsExpr,
 }
 
 impl PatPath {
-    /// A path known only as text: every test and binding built over it is text.
-    pub(super) fn from_text(text: &str) -> Self {
-        PatPath {
-            text: text.to_string(),
-            node: None,
-        }
-    }
-
     /// A bare local.
     pub(super) fn ident(name: &str) -> Self {
         PatPath {
-            text: name.to_string(),
-            node: Some(ident_node(name)),
+            node: ident_node(name),
         }
     }
 
-    pub(super) fn from_lowered(value: LoweredExpr) -> Self {
-        match value {
-            LoweredExpr::Node(n) => PatPath {
-                text: bynk_ts::print_expr(&n),
-                node: Some(n),
-            },
-            LoweredExpr::Text(text) => PatPath { text, node: None },
+    /// The path a lowered scrutinee is read at. A value that is not a node is a compiler fault,
+    /// reported at `site` (see [`LoweredExpr::into_node`]).
+    pub(super) fn from_lowered(value: LoweredExpr, site: FaultSite<'_>) -> Self {
+        PatPath {
+            node: value.into_node(site),
         }
     }
 
-    pub(super) fn as_str(&self) -> &str {
-        &self.text
-    }
-
-    pub(super) fn node(&self) -> Option<&bynk_ts::TsExpr> {
-        self.node.as_ref()
-    }
-
-    /// The path as a bridge value.
-    pub(super) fn lowered(&self) -> LoweredExpr {
-        let built: Built = match &self.node {
-            Some(n) => Ok(n.clone()),
-            None => Err(self.text.clone()),
-        };
-        built.into()
+    pub(super) fn node(&self) -> &bynk_ts::TsExpr {
+        &self.node
     }
 
     /// `path.property`.
     pub(super) fn member(&self, property: &str) -> Self {
-        let text = format!("{}.{property}", self.text);
-        let node = self
-            .node
-            .as_ref()
-            .map(|n| bynk_ts::TsExpr::Member {
-                object: Box::new(n.clone()),
-                property: property.to_string(),
-            })
-            .filter(|n| bynk_ts::print_expr(n) == text);
-        PatPath { text, node }
+        PatPath {
+            node: member_node_of(&self.node, property),
+        }
     }
 
     /// `path[i]`.
     pub(super) fn index(&self, i: usize) -> Self {
-        let text = format!("{}[{i}]", self.text);
-        let node = self
-            .node
-            .as_ref()
-            .map(|n| bynk_ts::TsExpr::Index {
-                object: Box::new(n.clone()),
+        PatPath {
+            node: bynk_ts::TsExpr::Index {
+                object: Box::new(self.node.clone()),
                 index: Box::new(num_lit(i.to_string())),
-            })
-            .filter(|n| bynk_ts::print_expr(n) == text);
-        PatPath { text, node }
+            },
+        }
     }
 }
 
-/// `path <op> rhs`, a node when the path is one, else the `text` the caller
-/// built from the same pieces.
-fn path_test(
-    path: &PatPath,
-    op: bynk_ts::TsBinaryOp,
-    rhs: bynk_ts::TsExpr,
-    text: String,
-) -> LoweredExpr {
-    let built: Built = match path.node() {
-        Some(n) => Ok(bynk_ts::TsExpr::Binary {
-            op,
-            left: Box::new(n.clone()),
-            right: Box::new(rhs),
-        }),
-        None => Err(text),
-    };
-    built.into()
-}
-
-/// `a && b && …`: a left-leaning `And` chain when every test is a node, else
-/// today's ` && `-joined text. `tests` is not empty.
-pub(super) fn and_join(tests: Vec<LoweredExpr>) -> LoweredExpr {
-    let built = node_or_text(
-        tests,
-        |nodes| {
-            nodes
-                .into_iter()
-                .reduce(|left, right| bynk_ts::TsExpr::Binary {
-                    op: bynk_ts::TsBinaryOp::And,
-                    left: Box::new(left),
-                    right: Box::new(right),
-                })
-                .unwrap_or_else(|| unreachable!("and_join is given at least one test"))
-        },
-        |texts| texts.join(" && "),
-    );
-    built.into()
-}
-
-/// v0.130: render a literal pattern's value as a JS `switch` case label.
-pub(super) fn literal_case_label(value: &LiteralValue) -> String {
-    match value {
-        LiteralValue::Int(n) => n.to_string(),
-        LiteralValue::Str(s) => format!("\"{}\"", escape_ts_string(s)),
-        LiteralValue::Bool(b) => b.to_string(),
+/// `path <op> rhs`.
+fn path_test(path: &PatPath, op: bynk_ts::TsBinaryOp, rhs: bynk_ts::TsExpr) -> bynk_ts::TsExpr {
+    bynk_ts::TsExpr::Binary {
+        op,
+        left: Box::new(path.node.clone()),
+        right: Box::new(rhs),
     }
+}
+
+/// `a && b && …`: a left-leaning `And` chain. `tests` is not empty.
+pub(super) fn and_join(tests: Vec<bynk_ts::TsExpr>) -> bynk_ts::TsExpr {
+    tests
+        .into_iter()
+        .reduce(|left, right| bynk_ts::TsExpr::Binary {
+            op: bynk_ts::TsBinaryOp::And,
+            left: Box::new(left),
+            right: Box::new(right),
+        })
+        .unwrap_or_else(|| unreachable!("and_join is given at least one test"))
 }
 
 /// #472: the `Int`/`String`/`Bool` base of a literal-kind type, or `None` for
@@ -5804,21 +5350,8 @@ fn list_elem_ty(path_ty: Option<TyId>, cx: &LowerCtx) -> Option<TyId> {
     }
 }
 
-/// #2680: the expression a list pattern's `..rest` binds, given the list at
-/// `path` and the `n` elements before it. `[..rest]` binds the list itself:
-/// lists are never mutated in place, so sharing it is unobservable. Any other
-/// rest copies the remaining elements, O(length - n).
-fn list_rest_expr(path: &str, n: usize) -> String {
-    if n == 0 {
-        path.to_string()
-    } else {
-        format!("{path}.slice({n})")
-    }
-}
-
 /// Emit the boolean tests that must hold for `pattern` to match the value at
-/// runtime `path` (static type `path_ty`), each a node when the path is one and the
-/// test builds from nodes (1A.13, Decision C of #3714), else text. Irrefutable
+/// runtime `path` (static type `path_ty`), each a node (1A.13, Decision C of #3714). Irrefutable
 /// patterns add nothing; nested variant/literal payloads recurse into
 /// `path.<field>`.
 pub(super) fn pattern_tests(
@@ -5826,11 +5359,10 @@ pub(super) fn pattern_tests(
     path_ty: Option<TyId>,
     pattern: &Pattern,
     cx: &LowerCtx,
-    tests: &mut Vec<LoweredExpr>,
+    tests: &mut Vec<bynk_ts::TsExpr>,
 ) {
     use bynk_ts::{TsBinaryOp, TsExpr, TsLit};
     let tys = cx.ty_render();
-    let p = path.as_str();
     match pattern {
         Pattern::Wildcard(_) | Pattern::Binding(_) => {}
         Pattern::Literal { value, .. } => {
@@ -5838,7 +5370,6 @@ pub(super) fn pattern_tests(
                 path,
                 TsBinaryOp::StrictEq,
                 literal_label_node(value),
-                format!("{p} === {}", literal_case_label(value)),
             ));
         }
         // #2699: `x >= lo && x <= hi`, or the one side an open range has.
@@ -5848,7 +5379,6 @@ pub(super) fn pattern_tests(
                     path,
                     TsBinaryOp::GreaterThanEq,
                     num_lit(lo.to_string()),
-                    format!("{p} >= {}", lo),
                 ));
             }
             if let Some(hi) = r.hi {
@@ -5856,7 +5386,6 @@ pub(super) fn pattern_tests(
                     path,
                     TsBinaryOp::LessThanEq,
                     num_lit(hi.to_string()),
-                    format!("{p} <= {}", hi),
                 ));
             }
         }
@@ -5885,35 +5414,22 @@ pub(super) fn pattern_tests(
             for p in &predicate.predicates {
                 cx.note_predicate(&p.kind);
             }
-            let recv = match path.node() {
-                Some(n) => n.clone(),
-                None => text_value(path.as_str()),
-            };
-            tests.push(LoweredExpr::Node(refined_check_as_bool(
-                recv,
+            tests.push(refined_check_as_bool(
+                path.node().clone(),
                 base,
                 Some(predicate),
-            )));
+            ));
         }
         // #2680: a length test (none for `[..]`, which matches every list),
         // then each refutable element against `path[i]`.
         Pattern::List { elems, rest, .. } => {
             let length = path.member("length");
-            let length_test = |op: TsBinaryOp, n: usize, sym: &str| -> LoweredExpr {
-                let built: Built = match length.node() {
-                    Some(l) => Ok(TsExpr::Binary {
-                        op,
-                        left: Box::new(l.clone()),
-                        right: Box::new(num_lit(n.to_string())),
-                    }),
-                    None => Err(format!("{p}.length {sym} {n}")),
-                };
-                built.into()
-            };
+            let length_test =
+                |op: TsBinaryOp, n: usize| path_test(&length, op, num_lit(n.to_string()));
             match (rest.is_some(), elems.len()) {
                 (true, 0) => {}
-                (true, n) => tests.push(length_test(TsBinaryOp::GreaterThanEq, n, ">=")),
-                (false, n) => tests.push(length_test(TsBinaryOp::StrictEq, n, "===")),
+                (true, n) => tests.push(length_test(TsBinaryOp::GreaterThanEq, n)),
+                (false, n) => tests.push(length_test(TsBinaryOp::StrictEq, n)),
             }
             let elem_ty = list_elem_ty(path_ty, cx);
             for (i, sub) in elems.iter().enumerate() {
@@ -5943,7 +5459,6 @@ pub(super) fn pattern_tests(
                 &path.member("tag"),
                 TsBinaryOp::StrictEq,
                 TsExpr::Lit(TsLit::Str(variant.name.clone())),
-                format!("{p}.tag === \"{}\"", variant.name),
             ));
             for (i, b) in bindings.iter().enumerate() {
                 let sp = b.pattern();
@@ -5966,35 +5481,28 @@ pub(super) fn pattern_tests(
         // AND-joining `tests` composes it correctly with sibling tests, e.g. a
         // nested `Some(1 | 2)`'s outer `.tag === "Some"` test).
         Pattern::Or(alts, _) => {
-            let terms: Vec<LoweredExpr> = alts
+            let terms: Vec<TsExpr> = alts
                 .iter()
                 .map(|alt| {
                     let mut t = Vec::new();
                     pattern_tests(path, path_ty, alt, cx, &mut t);
                     if t.is_empty() {
-                        LoweredExpr::Node(TsExpr::Lit(TsLit::Bool(true)))
+                        TsExpr::Lit(TsLit::Bool(true))
                     } else {
                         and_join(t)
                     }
                 })
                 .collect();
-            let built = node_or_text(
-                terms,
-                |nodes| {
-                    TsExpr::Paren(Box::new(
-                        nodes
-                            .into_iter()
-                            .reduce(|left, right| TsExpr::Binary {
-                                op: TsBinaryOp::Or,
-                                left: Box::new(left),
-                                right: Box::new(right),
-                            })
-                            .unwrap_or_else(|| unreachable!("an or-pattern has alternatives")),
-                    ))
-                },
-                |texts| format!("({})", texts.join(" || ")),
-            );
-            tests.push(built.into());
+            tests.push(TsExpr::Paren(Box::new(
+                terms
+                    .into_iter()
+                    .reduce(|left, right| TsExpr::Binary {
+                        op: TsBinaryOp::Or,
+                        left: Box::new(left),
+                        right: Box::new(right),
+                    })
+                    .unwrap_or_else(|| unreachable!("an or-pattern has alternatives")),
+            )));
         }
     }
 }
@@ -6107,7 +5615,7 @@ pub(super) fn emit_pattern_bindings(
         Pattern::Wildcard(_) | Pattern::Literal { .. } | Pattern::Range(_) => {}
         Pattern::Binding(id) => {
             let local = cx.bind_local_name(&id.name);
-            body.push(const_binding(&local, path.lowered()));
+            body.push(const_binding(&local, path.node().clone()));
         }
         // #472: a refined pattern binds only what its inner pattern binds
         // (`_ where P` binds nothing today).
@@ -6139,7 +5647,7 @@ pub(super) fn emit_pattern_bindings(
                     }
                     None => {
                         let local = cx.bind_local_name(&name.name);
-                        body.push(const_binding(&local, field_path.lowered()));
+                        body.push(const_binding(&local, field_path.node().clone()));
                     }
                 }
             }
@@ -6186,7 +5694,7 @@ pub(super) fn emit_pattern_bindings(
                     let mut t = Vec::new();
                     pattern_tests(path, path_ty, alt, cx, &mut t);
                     Some(if t.is_empty() {
-                        LoweredExpr::Node(bool_node(true))
+                        bool_node(true)
                     } else {
                         and_join(t)
                     })
@@ -6204,10 +5712,7 @@ pub(super) fn emit_pattern_bindings(
                     .collect();
                 arms.push(OrArm { cond, assigns });
             }
-            match or_dispatch_stmt(&arms) {
-                Some(stmt) => body.push(Item::Node(Box::new(stmt))),
-                None => body.extend(or_dispatch_lines(arms).into_iter().map(Item::Line)),
-            }
+            body.push(Item::Node(Box::new(or_dispatch_stmt(arms))));
         }
     }
 }
@@ -6223,8 +5728,8 @@ fn or_pattern_decl(names: Vec<String>) -> bynk_ts::TsStmt {
 /// One alternative of an or-pattern's dispatch: its test (none for the last, the bare
 /// `else`) and the shared names it assigns, each from the path the alternative binds it at.
 struct OrArm {
-    cond: Option<LoweredExpr>,
-    assigns: Vec<(String, LoweredExpr)>,
+    cond: Option<bynk_ts::TsExpr>,
+    assigns: Vec<(String, bynk_ts::TsExpr)>,
 }
 
 /// `recv.property` over a node receiver.
@@ -6235,79 +5740,44 @@ fn member_node_of(recv: &bynk_ts::TsExpr, property: &str) -> bynk_ts::TsExpr {
     }
 }
 
-/// `if (c0) { a = p; } else if (c1) { … } else { … }` over nodes, when every test and every
-/// path is one.
-fn or_dispatch_stmt(arms: &[OrArm]) -> Option<bynk_ts::TsStmt> {
+/// `if (c0) { a = p; } else if (c1) { … } else { … }`.
+fn or_dispatch_stmt(arms: Vec<OrArm>) -> bynk_ts::TsStmt {
     use bynk_ts::{TsExpr, TsStmt};
-    let node = |e: &LoweredExpr| match e {
-        LoweredExpr::Node(n) => Some(n.clone()),
-        LoweredExpr::Text(_) => None,
+    let block = |assigns: Vec<(String, TsExpr)>| -> TsStmt {
+        TsStmt::block(
+            assigns
+                .into_iter()
+                .map(|(local, value)| TsStmt::assign(TsExpr::Ident(local), value, None))
+                .collect(),
+            None,
+        )
     };
-    let block = |arm: &OrArm| -> Option<TsStmt> {
-        let stmts = arm
-            .assigns
-            .iter()
-            .map(|(local, value)| {
-                Some(TsStmt::assign(
-                    TsExpr::Ident(local.clone()),
-                    node(value)?,
-                    None,
-                ))
-            })
-            .collect::<Option<Vec<_>>>()?;
-        Some(TsStmt::block(stmts, None))
-    };
-    let (last, rest) = arms.split_last()?;
-    let mut chain = block(last)?;
-    for arm in rest.iter().rev() {
-        let cond = node(arm.cond.as_ref()?)?;
-        chain = TsStmt::if_else_same_line_stmt(cond, block(arm)?, chain, None);
+    let mut arms = arms.into_iter().rev();
+    let last = arms.next().expect("an or-pattern has alternatives");
+    let mut chain = block(last.assigns);
+    for arm in arms {
+        let cond = arm.cond.expect("every arm but the last has a test");
+        chain = TsStmt::if_else_same_line_stmt(cond, block(arm.assigns), chain, None);
     }
-    Some(chain)
-}
-
-/// [`or_dispatch_stmt`]'s text: the same chain as lines, for a test or path that is still text.
-fn or_dispatch_lines(arms: Vec<OrArm>) -> Vec<String> {
-    let mut lines = Vec::new();
-    for (i, arm) in arms.into_iter().enumerate() {
-        match arm.cond {
-            None => lines.push("} else {".to_string()),
-            Some(cond) => {
-                let kw = if i == 0 { "if" } else { "} else if" };
-                lines.push(format!("{kw} ({}) {{", cond.into_text()));
-            }
-        }
-        for (local, value) in arm.assigns {
-            lines.push(format!("  {local} = {};", value.into_text()));
-        }
-    }
-    lines.push("}".to_string());
-    lines
+    chain
 }
 
 /// `const <local> = <value>;` as an item (see `lower_stmt::const_item`).
-fn const_binding(local: &str, value: LoweredExpr) -> Item {
-    super::lower_stmt::const_item(true, local, None, value, false)
+fn const_binding(local: &str, value: bynk_ts::TsExpr) -> Item {
+    super::lower_stmt::const_node_item(local, None, value, false)
 }
 
-/// The value a list pattern's `..rest` binds, as a bridge value: the list
-/// itself, or `path.slice(n)` (see [`list_rest_expr`], which is the text).
-fn list_rest_value(path: &PatPath, n: usize) -> LoweredExpr {
+/// The value a list pattern's `..rest` binds: the list itself, or `path.slice(n)`. `[..rest]`
+/// binds the list itself: lists are never mutated in place, so sharing it is unobservable. Any
+/// other rest copies the remaining elements, O(length - n) (#2680).
+fn list_rest_value(path: &PatPath, n: usize) -> bynk_ts::TsExpr {
     if n == 0 {
-        return path.lowered();
+        return path.node().clone();
     }
-    let text = list_rest_expr(path.as_str(), n);
-    let built: Built = match path.node() {
-        Some(p) => Ok(bynk_ts::TsExpr::Call {
-            callee: Box::new(bynk_ts::TsExpr::Member {
-                object: Box::new(p.clone()),
-                property: "slice".to_string(),
-            }),
-            args: vec![num_lit(n.to_string())],
-        }),
-        None => Err(text),
-    };
-    built.into()
+    bynk_ts::TsExpr::Call {
+        callee: Box::new(member_node_of(path.node(), "slice")),
+        args: vec![num_lit(n.to_string())],
+    }
 }
 
 /// Collect `(name, runtime-path)` pairs for the names `pattern` binds from
@@ -6320,12 +5790,12 @@ fn pattern_binding_paths(
     path_ty: Option<TyId>,
     pattern: &Pattern,
     cx: &LowerCtx,
-    out: &mut Vec<(String, LoweredExpr)>,
+    out: &mut Vec<(String, bynk_ts::TsExpr)>,
 ) {
     let tys = cx.ty_render();
     match pattern {
         Pattern::Wildcard(_) | Pattern::Literal { .. } | Pattern::Range(_) => {}
-        Pattern::Binding(id) => out.push((id.name.clone(), path.lowered())),
+        Pattern::Binding(id) => out.push((id.name.clone(), path.node().clone())),
         Pattern::Variant {
             variant, bindings, ..
         } => {
@@ -6369,7 +5839,7 @@ fn pattern_binding_paths(
                         let field_ty = record_field_ty(path_ty, &name.name, cx);
                         pattern_binding_paths(&field_path, field_ty, sub, cx, out);
                     }
-                    None => out.push((name.name.clone(), field_path.lowered())),
+                    None => out.push((name.name.clone(), field_path.node().clone())),
                 }
             }
         }
@@ -6395,10 +5865,9 @@ fn lower_is(value: &Expr, pattern: &Pattern, cx: &mut LowerCtx) -> Lowered {
             .get(&variant.name)
             .map(|d| d.body.clone())
     {
-        let recv = match pre.absorb_node(cx.is_receiver_ref_forced(value)) {
-            LoweredExpr::Node(n) => n,
-            LoweredExpr::Text(t) => text_value(t),
-        };
+        let recv = pre
+            .absorb_node(cx.is_receiver_ref_forced(value))
+            .into_node(cx.fault_site(value.span));
         for p in refinement.iter().flat_map(|r| &r.predicates) {
             cx.note_predicate(&p.kind);
         }
@@ -6408,11 +5877,14 @@ fn lower_is(value: &Expr, pattern: &Pattern, cx: &mut LowerCtx) -> Lowered {
             refinement.as_ref(),
         )));
     }
-    let path = PatPath::from_lowered(pre.absorb_node(cx.is_receiver_ref(value)));
+    let path = PatPath::from_lowered(
+        pre.absorb_node(cx.is_receiver_ref(value)),
+        cx.fault_site(value.span),
+    );
     let scrut_ty = cx.commons().expr_types.get(&value.id).map(|te| te.ty);
-    let tested: LoweredExpr = match pattern {
+    let tested: bynk_ts::TsExpr = match pattern {
         // A bare name binding after `is` matches anything over a sum (ADR 0169).
-        Pattern::Wildcard(_) | Pattern::Binding(_) => LoweredExpr::Node(bool_node(true)),
+        Pattern::Wildcard(_) | Pattern::Binding(_) => bool_node(true),
         // v0.130 (DECISION F): the checker rejects a literal on the RHS of `is`,
         // so this is unreachable for a well-typed program; lower it to the
         // value-equality it would mean, defensively.
@@ -6420,7 +5892,6 @@ fn lower_is(value: &Expr, pattern: &Pattern, cx: &mut LowerCtx) -> Lowered {
             &path,
             bynk_ts::TsBinaryOp::StrictEq,
             literal_label_node(value),
-            format!("{} === {}", path.as_str(), literal_case_label(value)),
         ),
         // #472: the checker rejects a refined pattern on the RHS of `is`
         // (D5), so this is unreachable for a well-typed program; lower it
@@ -6459,7 +5930,7 @@ fn lower_is(value: &Expr, pattern: &Pattern, cx: &mut LowerCtx) -> Lowered {
                 "a variant `is` pattern must emit at least its outer tag test"
             );
             if tests.is_empty() {
-                LoweredExpr::Node(bool_node(true))
+                bool_node(true)
             } else {
                 and_join(tests)
             }
@@ -6471,30 +5942,23 @@ fn lower_is(value: &Expr, pattern: &Pattern, cx: &mut LowerCtx) -> Lowered {
     // Passing the boolean through an identity arrow keeps the test and hands tsc
     // nothing to narrow by; the bindings read the payload through the proven
     // variant instead (`variant_payload`).
-    let is_true = matches!(
-        &tested,
-        LoweredExpr::Node(bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Bool(true)))
-    );
+    let is_true = matches!(&tested, bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Bool(true)));
     if matches!(pattern, Pattern::Variant { .. } | Pattern::Or(..)) && !is_true {
-        return pre.finish_built(node_or_text(
-            vec![tested],
-            |c| bynk_ts::TsExpr::Call {
-                callee: Box::new(bynk_ts::TsExpr::Paren(Box::new(bynk_ts::TsExpr::Arrow {
-                    params: vec![bynk_ts::TsParam::new(
-                        "__c".to_string(),
-                        Some(bynk_ts::TsType::named("boolean")),
-                    )],
-                    is_async: false,
-                    generics: Vec::new(),
-                    return_type: None,
-                    body: Box::new(bynk_ts::TsArrowBody::Expr(Box::new(ident_node("__c")))),
-                }))),
-                args: vec![one(c)],
-            },
-            |c| format!("((__c: boolean) => __c)({})", one(c)),
-        ));
+        return pre.finish(LoweredExpr::Node(bynk_ts::TsExpr::Call {
+            callee: Box::new(bynk_ts::TsExpr::Paren(Box::new(bynk_ts::TsExpr::Arrow {
+                params: vec![bynk_ts::TsParam::new(
+                    "__c".to_string(),
+                    Some(bynk_ts::TsType::named("boolean")),
+                )],
+                is_async: false,
+                generics: Vec::new(),
+                return_type: None,
+                body: Box::new(bynk_ts::TsArrowBody::Expr(Box::new(ident_node("__c")))),
+            }))),
+            args: vec![tested],
+        }));
     }
-    pre.finish(tested)
+    pre.finish(LoweredExpr::Node(tested))
 }
 
 /// v0.13: render a refined type's predicates as a single boolean expression over
@@ -7107,18 +6571,6 @@ mod bridge_tests {
         ));
     }
 
-    #[test]
-    fn hoisted_statements_keep_their_order_and_text_becomes_raw() {
-        let mut pre = Pre::new();
-        pre.push_text("const a = 1;".to_string());
-        pre.push_text("const b = 2;".to_string());
-        assert_eq!(pre.stmts(), ["const a = 1;", "const b = 2;"]);
-        let out = pre.ts_stmts("  ");
-        assert_eq!(out.len(), 2);
-        let printed: String = out.iter().map(|s| bynk_ts::print_stmt(s, 0)).collect();
-        assert_eq!(printed, "  const a = 1;\n  const b = 2;\n");
-    }
-
     const LITERALS: &str = r#"
 commons lits
 
@@ -7473,25 +6925,6 @@ fn minus(x: Int) -> Int { 5 - - -x }
     }
 
     #[test]
-    fn the_retained_text_branches_produce_their_old_text() {
-        // A generic function used as a value keeps its text closure.
-        let src = "commons closures\n\
-                   fn pick[T: Ord](a: T, b: T) -> T { if a < b { a } else { b } }\n\
-                   fn f() -> (Int, Int) -> Int { pick }\n";
-        let ts = crate::testkit::emit_source(src);
-        assert!(
-            returned(&ts, "f").starts_with("((__a0: number, __a1: number) => pick("),
-            "{}",
-            returned(&ts, "f")
-        );
-        // ... and it leaves lowering as text: one more text exit than the
-        // same module without the reference.
-        let without = "commons closures\n\
-                       fn pick[T: Ord](a: T, b: T) -> T { if a < b { a } else { b } }\n";
-        assert!(text_exits(src) > text_exits(without));
-    }
-
-    #[test]
     fn an_http_result_variant_read_is_a_node() {
         // 1A.4's `HttpResult.X` read leaves no text exit of its own.
         let src = "commons hr\n\
@@ -7763,23 +7196,6 @@ fn minus(x: Int) -> Int { 5 - - -x }
     }
 
     #[test]
-    fn short_circuit_operators_over_a_text_operand_keep_their_text() {
-        // A `Set` `remove` forced to text (see `force_text`), so the operator over a `contains`
-        // of it is text, byte for byte.
-        let _text = force_text::arm("Set.remove");
-        let src = "commons shortt\n\
-                   fn a(s: Set[String], t: String, y: Bool) -> Bool { s.remove(t).contains(t) && y }\n\
-                   fn b(s: Set[String], t: String, y: Bool) -> Bool { y || s.remove(t).contains(t) }\n\
-                   fn c(s: Set[String], t: String, y: Bool) -> Bool { s.remove(t).contains(t) implies y }\n";
-        assert!(text_exits(src) >= 3);
-        let ts = crate::testkit::emit_source(src);
-        let has = format!("({}).has(t)", removed("s", "t"));
-        assert_eq!(returned(&ts, "a"), format!("{has} && y"));
-        assert_eq!(returned(&ts, "b"), format!("y || {has}"));
-        assert_eq!(returned(&ts, "c"), format!("(!({has}) || y)"));
-    }
-
-    #[test]
     fn identifier_node_helpers_build_genuine_names() {
         let m = member_node("deps", "who");
         assert!(matches!(&m, bynk_ts::TsExpr::Member { object, property }
@@ -7840,20 +7256,6 @@ fn minus(x: Int) -> Int { 5 - - -x }
         assert_eq!(lowered.pre_texts(), ["if (flag) {", "  done;", "}"]);
     }
 
-    #[test]
-    fn a_node_statement_sits_at_the_depth_of_its_raw_text_siblings() {
-        // `ts_stmts` feeds a body the printer nests: raw text carries its own
-        // indent, a node is nested by the printer at the same depth.
-        let mut pre = Pre::new();
-        pre.push_text("const a = 1;".to_string());
-        pre.0.push(LoweredStmt::Node(Box::new(if_node())));
-        pre.push_text("const b = 2;".to_string());
-        let body = bynk_ts::TsStmt::block(pre.ts_stmts("  "), None);
-        let printed = bynk_ts::print_stmt(&body, 0);
-        let want = "{\n  const a = 1;\n  if (flag) {\n    done;\n  }\n  const b = 2;\n}\n";
-        assert_eq!(printed, want);
-    }
-
     // -- 1A.6 (#3705): calls --
 
     const CALLS: &str = "commons calls\n\
@@ -7885,27 +7287,6 @@ fn minus(x: Int) -> Int { 5 - - -x }
             "{fault}"
         );
         assert!(ts.contains("__fault"), "{ts}");
-    }
-
-    #[test]
-    fn a_call_with_a_text_argument_falls_back_to_today_s_text() {
-        // A `contains` over a plain `Set` `remove` forced to text (see `force_text`), so each
-        // call over it is text, byte for byte.
-        let _text = force_text::arm("Set.remove");
-        let src = "commons calltext\n\
-            type S = | A(f: Bool) | B\n\
-            type Box2 = { v: Int }\n\
-            fn Box2.take(self, b: Bool) -> Int { self.v }\n\
-            fn g(b: Bool) -> Bool { b }\n\
-            fn plain(a: Set[String], c: String) -> Bool { g(a.remove(c).contains(c)) }\n\
-            fn ctor(a: Set[String], c: String) -> S { A(a.remove(c).contains(c)) }\n\
-            fn ufcs(b: Box2, a: Set[String], c: String) -> Int { b.take(a.remove(c).contains(c)) }\n";
-        let ts = crate::testkit::emit_source(src);
-        assert!(text_exits(src) > 0);
-        let has = format!("({}).has(c)", removed("a", "c"));
-        assert_eq!(returned(&ts, "plain"), format!("g({has})"));
-        assert_eq!(returned(&ts, "ctor"), format!("S.A({has})"));
-        assert_eq!(returned(&ts, "ufcs"), format!("Box2.take(b, {has})"));
     }
 
     #[test]
@@ -7987,23 +7368,6 @@ fn minus(x: Int) -> Int { 5 - - -x }
     }
 
     #[test]
-    fn a_data_literal_with_a_text_child_falls_back_byte_for_byte() {
-        // A string around a `Set` `remove` forced to text (see `force_text`) stays text, printed
-        // exactly as before.
-        let _text = force_text::arm("Set.remove");
-        let src = "commons textchild\n\
-            type P = { name: String, age: Option[Int] }\n\
-            type Box2[A] = { v: A }\n\
-            fn Box2.cast[U](self) -> Option[U] { None }\n\
-            fn rec(b: Box2[Int]) -> P { P { name: \"x\", age: b.cast[Int]() } }\n\
-            fn s(a: Set[String], c: String) -> String { \"v \\(a.remove(c).length())\" }\n";
-        assert!(text_exits(src) > 0);
-        let ts = crate::testkit::emit_source(src);
-        assert!(ts.contains("{ name: \"x\", age: "), "{ts}");
-        assert!(ts.contains("`v ${String("), "{ts}");
-    }
-
-    #[test]
     fn a_renamed_shorthand_field_keeps_its_wire_key() {
         // `default` and `class` are TS reserved words: the binding is renamed,
         // the key is not, and it prints unquoted (legal in an object literal).
@@ -8054,20 +7418,6 @@ fn minus(x: Int) -> Int { 5 - - -x }
                 l: [1, 2], m: new globalThis.Map(), i: { k: -3 }, p: 1e3 }"
         );
         assert!(ts.contains(&format!("=> ({{ a: x, {tail})")), "{ts}");
-    }
-
-    #[test]
-    fn a_defaulted_record_with_a_text_child_still_falls_back_byte_for_byte() {
-        // The plain `Set.remove`, forced to text (see `force_text`); the record around it,
-        // default and all, prints today's bytes.
-        let _text = force_text::arm("Set.remove");
-        let src = "commons deftext\n\
-            type P = { n: Int, label: String = \"d\" }\n\
-            fn rec(a: Set[String], c: String) -> P { P { n: a.remove(c).length() } }\n";
-        assert!(text_exits(src) > 0);
-        let ts = crate::testkit::emit_source(src);
-        assert!(ts.contains("{ n: (("), "{ts}");
-        assert!(ts.contains(".size, label: \"d\" }"), "{ts}");
     }
 
     #[test]
@@ -8230,30 +7580,6 @@ fn minus(x: Int) -> Int { 5 - - -x }
     }
 
     #[test]
-    fn every_question_guard_prints_as_its_text_twin() {
-        // The node guard and the text guard are one shape; print each exit
-        // both ways and require the same bytes (including the case form's
-        // escaped location, source and `\n` in the detail).
-        for exit in [
-            QuestionExit::Plain,
-            QuestionExit::NotFound,
-            QuestionExit::Embed {
-                ty_name: "AppError".to_string(),
-                variant: "Db".to_string(),
-            },
-            QuestionExit::Case {
-                location: "tests/a \"b\".test.bynk:3:7".to_string(),
-                start: 10,
-                end: 22,
-                src: "f(\"\u{e9}\\n\")?\n`x` ${y}".to_string(),
-            },
-        ] {
-            let node = bynk_ts::print_stmt(&question_guard_node("__r4", &exit), 0);
-            assert_eq!(node, format!("{}\n", question_guard_text("__r4", &exit)));
-        }
-    }
-
-    #[test]
     fn statement_nodes_re_indent_at_depth_through_both_consumers() {
         // 1A.8, Decision C: a multi-line node (the hoisted `if`) printed at
         // depth 0 by `lines()` and re-indented by the caller must equal the
@@ -8298,22 +7624,13 @@ fn minus(x: Int) -> Int { 5 - - -x }
             "    if (c) {\n      __r1 = a;\n    } else {\n      __r1 = b;\n    }\n"
         );
         // `ts_stmts` keeps the node; the printer at depth 2 prints the same bytes.
-        let stmts = pre.ts_stmts("    ");
+        let ru = RuntimeUse::default();
+        let stmts = pre.ts_stmts(FaultSite {
+            sink: &ru,
+            span: bynk_syntax::span::Span::default(),
+        });
         assert_eq!(stmts.len(), 1);
         assert_eq!(bynk_ts::print_stmt(&stmts[0], 2), out);
-    }
-
-    #[test]
-    fn a_ternary_over_a_text_branch_falls_back_to_text() {
-        let _text = force_text::arm("Set.remove");
-        let src = "commons ternt\n\
-            fn f(c: Bool, x: Set[String], y: String) -> Bool { if c { x.remove(y).contains(y) } else { false } }\n";
-        let (exits, _, ts) = exits_and_stmts(src);
-        assert!(exits > 0, "{ts}");
-        assert_eq!(
-            returned(&ts, "f"),
-            format!("(c ? ({}).has(y) : false)", removed("x", "y"))
-        );
     }
 
     #[test]
@@ -8418,25 +7735,6 @@ fn minus(x: Int) -> Int { 5 - - -x }
         );
         assert_eq!(indent(slot_block[3]), base + 2, "{slot_block:?}");
         assert_eq!(indent(slot_block[5]), base, "{slot_block:?}");
-    }
-
-    #[test]
-    fn a_hoisted_if_with_a_text_branch_keeps_its_text_lines() {
-        // A branch tail that is still text (a `contains` over a `Set` `remove`, forced to text:
-        // see `force_text`) keeps the whole hoist as text lines, byte for byte, with
-        // `assign_branch`'s padding.
-        let _text = force_text::arm("Set.remove");
-        let src = "commons iftext\n\
-            fn f(c: Bool, x: Set[String], y: String, r: Result[Bool, String]) -> Result[Bool, String] {\n\
-              let v = if c { r? } else { x.remove(y).contains(y) }\n\
-              Ok(v)\n\
-            }\n";
-        let (exits, stmts, ts) = exits_and_stmts(src);
-        assert!(exits > 0 && stmts > 0, "{ts}");
-        assert!(
-            ts.contains(&format!("  let __r1: boolean;\n  if (c) {{\n    const __r0 = r;\n    if (__r0.tag === \"Err\") return __r0;\n    __r1 = __r0.value;\n  }} else {{\n    __r1 = ({}).has(y);\n  }}\n", removed("x", "y"))),
-            "{ts}"
-        );
     }
 
     /// The function `name` as emitted, from its header to its closing brace.
@@ -8602,28 +7900,6 @@ fn minus(x: Int) -> Int { 5 - - -x }
             "{ts}"
         );
     }
-
-    /// A text operand or hoisted statement (a `contains` over a `Set` `remove`, forced to text: see
-    /// `force_text`) keeps the text forms byte for byte: the binding arrow, the hoisted `if`, the
-    /// plain arrow.
-    #[test]
-    fn short_circuit_text_fallbacks_keep_their_text() {
-        let _text = force_text::arm("Set.remove");
-        let src = "commons sct\n\
-             fn risky(n: Int) -> Result[Int, String] { Ok(n) }\n\
-             fn a(s: Set[String], u: String, k: Bool) -> Bool { k && s.remove(u).contains(u) }\n\
-             fn b(s: Set[String], u: String, x: Int) -> Result[Bool, String] { Ok(s.remove(u).contains(u) && risky(x)? > 0) }\n";
-        let (exits, _, ts) = exits_and_stmts(src);
-        assert!(exits > 0, "{ts}");
-        let has = format!("({}).has(u)", removed("s", "u"));
-        assert_eq!(returned(&ts, "a"), format!("k && {has}"));
-        assert_eq!(
-            func(&ts, "b"),
-            format!(
-                "export function b(s: ReadonlySet<string>, u: string, x: number): Result<boolean, string> {{\n  let __r1: boolean;\n  if ({has}) {{\n    const __r0 = risky(x);\n    if (__r0.tag === \"Err\") return __r0;\n    __r1 = __r0.value > 0;\n  }} else {{\n    __r1 = false;\n  }}\n  return Ok(__r1);\n}}\n"
-            )
-        );
-    }
 }
 
 /// 1A.18a (#3719): the `List` kernel's expression-bodied arms build nodes.
@@ -8720,150 +7996,6 @@ mod list_kernel_tests {
         assert!(ts.contains("import { __bynkDecimalAdd }"), "{ts}");
     }
 
-    /// A receiver that is still text (`String.splitRegex` mapped, whose regex arm is still text) makes the arm fall back to
-    /// today's one-line text, byte for byte: the mixed-operand path of
-    /// `node_or_text`, which the node tests above never reach.
-    #[test]
-    fn a_text_receiver_keeps_the_text_form() {
-        for (elem, ret, expr, want) in [
-            ("Int", "List[Int]", "{R}.map((x) => x)", {
-                let values = text_values("Int");
-                format!("({values}).map((__x: number) => ((x: number) => x)(__x))")
-            }),
-            ("Int", "List[Int]", "{R}.sortBy((x) => x)", {
-                let values = text_values("Int");
-                format!(
-                    "[...{values}].sort((__a: number, __b: number) => {{ const __ka = ((x: number) => x)(__a), __kb = ((x: number) => x)(__b); return __ka < __kb ? -1 : __ka > __kb ? 1 : 0; }})"
-                )
-            }),
-            ("Float", "List[Float]", "{R}.sortBy((x) => x)", {
-                let values = text_values("Float");
-                format!(
-                    "[...{values}].sort((__a: number, __b: number) => __bynkCmpFloat(((x: number) => x)(__a), ((x: number) => x)(__b)))"
-                )
-            }),
-            ("Decimal", "Decimal", "{R}.sum((x) => x)", {
-                let values = text_values("Decimal");
-                format!(
-                    "({values}).reduce((__s: {d}, __x: {d}) => __bynkDecimalAdd(__s, ((x: {d}) => x)(__x)), {{ coefficient: 0n, scale: 0 }})",
-                    d = "{ readonly coefficient: bigint; readonly scale: number }"
-                )
-            }),
-            ("Int", "Int", "{R}.fold(0, (a, x) => a + x)", {
-                let values = text_values("Int");
-                format!(
-                    "((__xs: readonly number[], __acc: number, __f: (acc: number, x: number) => number) => {{ for (const __x of __xs) __acc = __f(__acc, __x); return __acc; }})({values}, 0, (a: number, x: number) => a + x)"
-                )
-            }),
-        ] {
-            let (n, ts) = exits(&format!(
-                "fn f(s: String, v: {elem}) -> {ret} {{ {} }}",
-                expr.replace("{R}", TEXT_RECEIVER)
-            ));
-            assert!(n > 0, "{expr}\n{ts}");
-            assert_eq!(returned_any(&ts), want, "{expr}");
-        }
-    }
-
-    /// The statement-bodied arms (1A.18b, #3719), each over a list parameter
-    /// (nodes) and over a text receiver (`TEXT_RECEIVER`).
-    /// `(element type, return type, extra parameters, expression over {R})`.
-    const STATEMENT_ARMS: &[(&str, &str, &str, &str)] = &[
-        ("Int", "Int", "", "{R}.fold(0, (a, x) => a + x)"),
-        (
-            "Int",
-            "Effect[Int]",
-            ", g: (Int, Int) -> Effect[Int]",
-            "{R}.foldEff(0, g)",
-        ),
-        (
-            "Int",
-            "Effect[()]",
-            ", g: (Int) -> Effect[()]",
-            "{R}.forEach(g)",
-        ),
-        (
-            "Int",
-            "Effect[()]",
-            ", g: (Int) -> Effect[()]",
-            "{R}.parTraverse(g)",
-        ),
-        (
-            "Int",
-            "Effect[List[Result[Int, String]]]",
-            ", g: (Int) -> Effect[Result[Int, String]]",
-            "{R}.traverseAll(g)",
-        ),
-        (
-            "Int",
-            "Effect[Result[List[Int], String]]",
-            ", g: (Int) -> Effect[Result[Int, String]]",
-            "{R}.traverseTry(g)",
-        ),
-        (
-            "Int",
-            "Effect[Result[List[Int], String]]",
-            ", g: (Int) -> Effect[Result[Int, String]]",
-            "{R}.parTraverseTry(g)",
-        ),
-        (
-            "Result[Int, String]",
-            "Result[List[Int], List[String]]",
-            "",
-            "{R}.sequenceAll()",
-        ),
-        (
-            "Result[Int, String]",
-            "Result[List[Int], String]",
-            "",
-            "{R}.sequenceTry()",
-        ),
-        ("Int", "List[Int]", "", "{R}.sortBy((x) => x)"),
-        ("Int", "List[Int]", "", "{R}.sortByDescending((x) => x)"),
-        ("Int", "List[Int]", "", "{R}.distinctBy((x) => x)"),
-        ("Int", "Option[Int]", "", "{R}.min((x) => x)"),
-        ("Int", "Option[Int]", "", "{R}.max((x) => x)"),
-        ("Float", "Option[Float]", "", "{R}.min((x) => x)"),
-        ("Int", "Option[Float]", "", "{R}.average((x) => x)"),
-        (
-            "Int",
-            "List[Int]",
-            ", ys: List[Int]",
-            "{R}.joinOn(ys, (x) => x, (y) => y, (x, y) => x + y)",
-        ),
-        (
-            "Int",
-            "List[Option[Int]]",
-            ", ys: List[Int]",
-            "{R}.leftJoin(ys, (x) => x, (y) => y, (x, y) => y)",
-        ),
-        (
-            "Int",
-            "List[Int]",
-            ", ys: List[Int]",
-            "{R}.join(ys, (x, y) => x == y, (x, y) => x + y)",
-        ),
-        (
-            "Int",
-            "List[Int]",
-            "",
-            "{R}.groupBy((x) => x, (k, rows) => rows.length())",
-        ),
-    ];
-
-    /// A `List` receiver that is still text: `String.splitRegex`'s arm is a statement block, so
-    /// the `map` over it is text too. The element type is the parameter `v`'s.
-    const TEXT_RECEIVER: &str = "s.splitRegex(\",\").map((x) => v)";
-
-    /// `TEXT_RECEIVER` as printed, for an element type.
-    fn text_values(elem: &str) -> String {
-        let (n, ts) = exits(&format!(
-            "fn f(s: String, v: {elem}) -> List[{elem}] {{ {TEXT_RECEIVER} }}"
-        ));
-        assert!(n > 0, "{ts}");
-        returned_any(&ts)
-    }
-
     /// The one returned expression of `f`, async or not.
     fn returned_any(ts: &str) -> String {
         let at = ts.find("function f(").expect("f");
@@ -8873,47 +8005,10 @@ mod list_kernel_tests {
         rest[ret..ret + end].to_string()
     }
 
-    fn arm_source(elem: &str, ret: &str, extra: &str, expr: &str, text_receiver: bool) -> String {
-        let (param, recv) = if text_receiver {
-            (format!("s: String, v: {elem}"), TEXT_RECEIVER)
-        } else {
-            (format!("xs: List[{elem}]"), "xs")
-        };
-        let body = expr.replace("{R}", recv);
+    fn arm_source(elem: &str, ret: &str, extra: &str, expr: &str) -> String {
+        let param = format!("xs: List[{elem}]");
+        let body = expr.replace("{R}", "xs");
         format!("fn f({param}{extra}) -> {ret} {{ {body} }}")
-    }
-
-    /// Every statement-bodied arm over node operands builds a node (no text
-    /// exit), prints on several lines, and says exactly what the text fallback
-    /// says apart from layout: the two forms agree once whitespace is removed.
-    /// The one exception is the plain-key sorts, whose `const a = …, b = …;`
-    /// splits into two statements.
-    #[test]
-    fn statement_arms_over_nodes_match_their_text_forms_modulo_layout() {
-        let squash = |s: &str| s.chars().filter(|c| !c.is_whitespace()).collect::<String>();
-        for (elem, ret, extra, expr) in STATEMENT_ARMS {
-            let (n_node, node_ts) = exits(&arm_source(elem, ret, extra, expr, false));
-            let (n_text, text_ts) = exits(&arm_source(elem, ret, extra, expr, true));
-            assert_eq!(n_node, 0, "{expr}\n{node_ts}");
-            assert!(n_text > 0, "{expr}\n{text_ts}");
-            let node = returned_any(&node_ts);
-            let text = returned_any(&text_ts).replace(&text_values(elem), "xs");
-            assert!(
-                node.contains('\n'),
-                "{expr} should print on several lines\n{node}"
-            );
-            assert!(
-                !text.contains('\n'),
-                "{expr} text fallback is one line\n{text}"
-            );
-            let node = squash(&node);
-            let node = if expr.contains("sortBy") {
-                node.replace(";const__kb=", ",__kb=")
-            } else {
-                node
-            };
-            assert_eq!(node, squash(&text), "{expr}");
-        }
     }
 
     /// The layout of the statement arms: a block-bodied arrow, one statement per
@@ -8979,7 +8074,7 @@ mod list_kernel_tests {
   })()",
             ),
         ] {
-            let (n, ts) = exits(&arm_source(elem, ret, extra, expr, false));
+            let (n, ts) = exits(&arm_source(elem, ret, extra, expr));
             assert_eq!(n, 0, "{ts}");
             assert_eq!(returned_any(&ts), want, "{expr}");
         }
@@ -8994,7 +8089,6 @@ mod list_kernel_tests {
             "Effect[()]",
             ", g: (Int) -> Effect[()]",
             "{R}.parTraverse(g)",
-            false,
         ));
         assert_eq!(n, 0, "{ts}");
         assert!(ts.contains("__bynkSettleAll"), "{ts}");
@@ -9080,27 +8174,19 @@ mod leaf_node_tests {
 
     /// An or-pattern's dispatch is an `if`/`else if`/`else` chain assigning each shared name.
     #[test]
-    fn an_or_dispatch_is_an_if_chain_over_nodes_and_none_over_text() {
-        let arm = |cond: Option<LoweredExpr>, to: &str| OrArm {
+    fn an_or_dispatch_is_an_if_chain_over_nodes() {
+        let arm = |cond: Option<bynk_ts::TsExpr>, to: &str| OrArm {
             cond,
-            assigns: vec![("r".to_string(), LoweredExpr::Node(member_node("s", to)))],
+            assigns: vec![("r".to_string(), member_node("s", to))],
         };
-        let node = |t: &str| Some(LoweredExpr::Node(ident(t)));
-        let chain = or_dispatch_stmt(&[arm(node("a"), "x"), arm(node("b"), "y"), arm(None, "z")])
-            .expect("every test and path is a node");
+        let chain = or_dispatch_stmt(vec![
+            arm(Some(ident("a")), "x"),
+            arm(Some(ident("b")), "y"),
+            arm(None, "z"),
+        ]);
         assert_eq!(
             print_stmt(&chain, 0),
             "if (a) {\n  r = s.x;\n} else if (b) {\n  r = s.y;\n} else {\n  r = s.z;\n}\n"
-        );
-        // A text test has no node form: the caller writes the lines.
-        let text = [
-            arm(Some(LoweredExpr::Text("a && b".to_string())), "x"),
-            arm(None, "z"),
-        ];
-        assert!(or_dispatch_stmt(&text).is_none());
-        assert_eq!(
-            or_dispatch_lines(Vec::from(text)),
-            ["if (a && b) {", "  r = s.x;", "} else {", "  r = s.z;", "}"]
         );
     }
 }

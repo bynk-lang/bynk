@@ -5502,7 +5502,6 @@ fn emit_agent_load_commit_state(
         load_state_body,
     )
     .private();
-    let class_depth = 0;
     methods.push(load_state_method);
     // Arc C, slice 22 (#1373): closes step (9)'s own third sub-slice by
     // landing the deferred remainder, `commitState` (#1371's own `loadState`
@@ -5544,15 +5543,13 @@ fn emit_agent_load_commit_state(
             |name: &str,
              declaration: &str,
              location: &str,
-             pred: String,
+             pred: bynk_ts::TsExpr,
              pre_stmts: Vec<bynk_ts::TsStmt>| {
                 let mut stmts = pre_stmts;
                 stmts.push(bynk_ts::TsStmt::if_stmt(
                     bynk_ts::TsExpr::Unary {
                         op: bynk_ts::TsUnaryOp::Not,
-                        expr: Box::new(bynk_ts::TsExpr::Paren(Box::new(bynk_ts::TsExpr::Ident(
-                            pred,
-                        )))),
+                        expr: Box::new(bynk_ts::TsExpr::Paren(Box::new(pred))),
                     },
                     bynk_ts::TsStmt::block(
                         vec![
@@ -5633,13 +5630,13 @@ fn emit_agent_load_commit_state(
                     },
                 );
                 let mut pre = Pre::new();
-                let pred = pre.lower(&inv.predicate, &mut cx);
+                let pred = pre.lower_ts(&inv.predicate, &mut cx);
                 stmts.extend(build_violation_check(
                     &inv.name.name,
                     "invariant",
                     &declaration_location(ctx, source_text, inv.name.span),
                     pred,
-                    pre.ts_stmts(&"  ".repeat(class_depth + 2)),
+                    pre.ts_stmts(cx.fault_site(inv.predicate.span)),
                 ));
             }
         }
@@ -5702,13 +5699,13 @@ fn emit_agent_load_commit_state(
                     },
                 );
                 let mut pre = Pre::new();
-                let pred = pre.lower(&tr.predicate, &mut cx);
+                let pred = pre.lower_ts(&tr.predicate, &mut cx);
                 transition_body.extend(build_violation_check(
                     &tr.name.name,
                     "transition",
                     &declaration_location(ctx, source_text, tr.name.span),
                     pred,
-                    pre.ts_stmts(&"  ".repeat(class_depth + 3)),
+                    pre.ts_stmts(cx.fault_site(tr.predicate.span)),
                 ));
             }
             stmts.push(bynk_ts::TsStmt::const_stmt(
@@ -8580,7 +8577,7 @@ fn emit_agent_state_record(
     // `pre.is_empty()` branch above passes it straight through unwrapped —
     // no fixture in the 31-fixture `store` sweep reaches this shape (the
     // only store-init-with-`if` fixture, `1029_agent_static_init_hoist`,
-    // takes the `hoist_if_as_statement` path instead, whose own hoisted
+    // takes the `hoist_if_slot` path instead, whose own hoisted
     // statements are individually newline-free), so it was invisible to the
     // zero-diff check. Tracked here so the zero-factory's own `inline` flag
     // can be set correctly below — `inline: true` is only safe when every

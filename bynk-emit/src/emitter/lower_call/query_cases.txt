@@ -1,49 +1,31 @@
 === Filter keyed=false cmp=plain
 (() => __bynkThen(src, (__q) => __q.filter((__x) => (p)(__x))))
---- text
-(() => __bynkThen(src, (__q) => __q.filter((__x) => (p)(__x))))
 === Map keyed=false cmp=plain
-(() => __bynkThen(src, (__q) => __q.map((__x) => (f)(__x))))
---- text
 (() => __bynkThen(src, (__q) => __q.map((__x) => (f)(__x))))
 === FlatMap keyed=false cmp=plain
 (() => __bynkThen(src, async (__q) => {
   const __parts = await globalThis.Promise.all(__q.map((__x) => (f)(__x)()));
   return __parts.flat();
 }))
---- text
-(() => __bynkThen(src, async (__q) => { const __parts = await globalThis.Promise.all(__q.map((__x) => (f)(__x)())); return __parts.flat(); }))
 === SortBy keyed=false cmp=plain
 (() => __bynkThen(src, (__q) => [...__q].sort((__a, __b) => {
   const __ka = (key)(__a);
   const __kb = (key)(__b);
   return __ka < __kb ? -1 : __ka > __kb ? 1 : 0;
 })))
---- text
-(() => __bynkThen(src, (__q) => [...__q].sort((__a, __b) => { const __ka = (key)(__a), __kb = (key)(__b); return __ka < __kb ? -1 : __ka > __kb ? 1 : 0; })))
 === SortByDescending keyed=false cmp=plain
 (() => __bynkThen(src, (__q) => [...__q].sort((__a, __b) => {
   const __ka = (key)(__a);
   const __kb = (key)(__b);
   return __ka < __kb ? 1 : __ka > __kb ? -1 : 0;
 })))
---- text
-(() => __bynkThen(src, (__q) => [...__q].sort((__a, __b) => { const __ka = (key)(__a), __kb = (key)(__b); return __ka < __kb ? 1 : __ka > __kb ? -1 : 0; })))
 === Take keyed=false cmp=plain
-(() => __bynkThen(src, (__q) => __q.slice(0, globalThis.Math.max(0, n))))
---- text
 (() => __bynkThen(src, (__q) => __q.slice(0, globalThis.Math.max(0, n))))
 === Skip keyed=false cmp=plain
 (() => __bynkThen(src, (__q) => __q.slice(globalThis.Math.max(0, n))))
---- text
-(() => __bynkThen(src, (__q) => __q.slice(globalThis.Math.max(0, n))))
 === Distinct keyed=false cmp=plain
 (() => __bynkThen(src, (__q) => [...new globalThis.Set(__q)]))
---- text
-(() => __bynkThen(src, (__q) => [...new globalThis.Set(__q)]))
 === Distinct keyed=true cmp=plain
-(() => __bynkThen(src, (__q) => __bynkDistinct(__q)))
---- text
 (() => __bynkThen(src, (__q) => __bynkDistinct(__q)))
 === DistinctBy keyed=false cmp=plain
 (() => __bynkThen(src, (__q) => (() => {
@@ -58,11 +40,7 @@
   }
   return __out;
 })()))
---- text
-(() => __bynkThen(src, (__q) => (() => { const __seen = new globalThis.Set(); const __out: Item[] = []; for (const __x of __q) { const __k = (key)(__x); if (!__seen.has(__k)) { __seen.add(__k); __out.push(__x); } } return __out; })()))
 === DistinctBy keyed=true cmp=plain
-(() => __bynkThen(src, (__q) => __bynkDistinctBy(__q, key)))
---- text
 (() => __bynkThen(src, (__q) => __bynkDistinctBy(__q, key)))
 === GroupBy keyed=false cmp=plain
 (() => __bynkThen(src, (__q) => {
@@ -81,11 +59,7 @@
     return (into)((key)(__rows[0]), __rows);
   });
 }))
---- text
-(() => __bynkThen(src, (__q) => { const __h: globalThis.Record<string, Item[]> = globalThis.Object.create(null); const __order: string[] = []; for (const __t of __q) { const __k = String((key)(__t)); if (!(__k in __h)) { __h[__k] = []; __order.push(__k); } __h[__k].push(__t); } return __order.map((__k) => { const __rows = __h[__k]; return (into)((key)(__rows[0]), __rows); }); }))
 === GroupBy keyed=true cmp=plain
-(() => __bynkThen(src, (__q) => __bynkGroupBy(__q, key, into)))
---- text
 (() => __bynkThen(src, (__q) => __bynkGroupBy(__q, key, into)))
 === JoinOn keyed=false cmp=plain
 (() => __bynkThen(src, async (__q) => {
@@ -99,11 +73,7 @@
     return __m.map((__u: Other) => (into)(__t, __u));
   });
 }))
---- text
-(() => __bynkThen(src, async (__q) => { const __h: globalThis.Record<string, Other[]> = globalThis.Object.create(null); for (const __u of (await (other)())) { const __k = String((right)(__u)); (__h[__k] = __h[__k] ?? []).push(__u); } return __q.flatMap((__t: Item) => { const __m = __h[String((left)(__t))] ?? []; return __m.map((__u: Other) => (into)(__t, __u)); }); }))
 === JoinOn keyed=true cmp=plain
-(() => __bynkThen(src, async (__q) => __bynkJoinOn(__q, await (other)(), left, right, into)))
---- text
 (() => __bynkThen(src, async (__q) => __bynkJoinOn(__q, await (other)(), left, right, into)))
 === LeftJoin keyed=false cmp=plain
 (() => __bynkThen(src, async (__q) => {
@@ -117,40 +87,26 @@
     return __m.length > 0 ? __m.map((__u: Other) => (into)(__t, Some(__u))) : [(into)(__t, None)];
   });
 }))
---- text
-(() => __bynkThen(src, async (__q) => { const __h: globalThis.Record<string, Other[]> = globalThis.Object.create(null); for (const __u of (await (other)())) { const __k = String((right)(__u)); (__h[__k] = __h[__k] ?? []).push(__u); } return __q.flatMap((__t: Item) => { const __m = __h[String((left)(__t))] ?? []; return __m.length > 0 ? __m.map((__u: Other) => (into)(__t, Some(__u))) : [(into)(__t, None)]; }); }))
 === LeftJoin keyed=true cmp=plain
-(() => __bynkThen(src, async (__q) => __bynkLeftJoin(__q, await (other)(), left, right, into)))
---- text
 (() => __bynkThen(src, async (__q) => __bynkLeftJoin(__q, await (other)(), left, right, into)))
 === Join keyed=false cmp=plain
 (() => __bynkThen(src, async (__q) => {
   const __b = await (other)();
   return __q.flatMap((__t) => __b.filter((__u) => (on)(__t, __u)).map((__u) => (into)(__t, __u)));
 }))
---- text
-(() => __bynkThen(src, async (__q) => { const __b = await (other)(); return __q.flatMap((__t) => __b.filter((__u) => (on)(__t, __u)).map((__u) => (into)(__t, __u))); }))
 === Collect keyed=false cmp=plain
-__bynkThen(src, (__q) => __q)
---- text
 __bynkThen(src, (__q) => __q)
 === First keyed=false cmp=plain
 __bynkThen(src, (__q) => (() => {
   const __a = __q;
   return __a.length > 0 ? Some(__a[0]) : None;
 })())
---- text
-__bynkThen(src, (__q) => (() => { const __a = __q; return __a.length > 0 ? Some(__a[0]) : None; })())
 === FirstOrElse keyed=false cmp=plain
 __bynkThen(src, (__q) => (() => {
   const __a = __q;
   return __a.length > 0 ? __a[0] : (d);
 })())
---- text
-__bynkThen(src, (__q) => (() => { const __a = __q; return __a.length > 0 ? __a[0] : (d); })())
 === Count keyed=false cmp=plain
-__bynkThen(src, (__q) => __q.length)
---- text
 __bynkThen(src, (__q) => __q.length)
 === Fold keyed=false cmp=plain
 __bynkThen(src, (__q) => (() => {
@@ -158,19 +114,11 @@ __bynkThen(src, (__q) => (() => {
   for (const __x of __q) __acc = (f)(__acc, __x);
   return __acc;
 })())
---- text
-__bynkThen(src, (__q) => (() => { let __acc = init; for (const __x of __q) __acc = (f)(__acc, __x); return __acc; })())
 === Any keyed=false cmp=plain
-__bynkThen(src, (__q) => __q.some((__x) => (p)(__x)))
---- text
 __bynkThen(src, (__q) => __q.some((__x) => (p)(__x)))
 === All keyed=false cmp=plain
 __bynkThen(src, (__q) => __q.every((__x) => (p)(__x)))
---- text
-__bynkThen(src, (__q) => __q.every((__x) => (p)(__x)))
 === Sum keyed=false cmp=plain
-__bynkThen(src, (__q) => __q.reduce((__s: number, __x) => __s + (key)(__x), 0))
---- text
 __bynkThen(src, (__q) => __q.reduce((__s: number, __x) => __s + (key)(__x), 0))
 === Min keyed=false cmp=plain
 __bynkThen(src, (__q) => (() => {
@@ -183,8 +131,6 @@ __bynkThen(src, (__q) => (() => {
   }
   return Some(__m);
 })())
---- text
-__bynkThen(src, (__q) => (() => { const __a = __q; if (__a.length === 0) return None; let __m = (key)(__a[0]); for (const __x of __a) { const __k = (key)(__x); if (__k < __m) __m = __k; } return Some(__m); })())
 === Max keyed=false cmp=plain
 __bynkThen(src, (__q) => (() => {
   const __a = __q;
@@ -196,8 +142,6 @@ __bynkThen(src, (__q) => (() => {
   }
   return Some(__m);
 })())
---- text
-__bynkThen(src, (__q) => (() => { const __a = __q; if (__a.length === 0) return None; let __m = (key)(__a[0]); for (const __x of __a) { const __k = (key)(__x); if (__k > __m) __m = __k; } return Some(__m); })())
 === Average keyed=false cmp=plain
 __bynkThen(src, (__q) => (() => {
   const __a = __q;
@@ -206,22 +150,16 @@ __bynkThen(src, (__q) => (() => {
   for (const __x of __a) __s += (key)(__x);
   return Some(__s / __a.length);
 })())
---- text
-__bynkThen(src, (__q) => (() => { const __a = __q; if (__a.length === 0) return None; let __s = 0; for (const __x of __a) __s += (key)(__x); return Some(__s / __a.length); })())
 === ForEach keyed=false cmp=plain
 __bynkThen(src, (__q) => (async () => {
   for (const __x of __q) {
     await (f)(__x);
   }
 })())
---- text
-__bynkThen(src, (__q) => (async () => { for (const __x of __q) { await (f)(__x); } })())
 === ParTraverse keyed=false cmp=plain
 __bynkThen(src, (__q) => (async () => {
   await __bynkSettleAll(__q.map((__x) => () => (f)(__x)));
 })())
---- text
-__bynkThen(src, (__q) => (async () => { await __bynkSettleAll(__q.map((__x) => () => (f)(__x))); })())
 === TraverseAll keyed=false cmp=plain
 __bynkThen(src, (__q) => (async () => {
   const __out: number[] = [];
@@ -230,11 +168,7 @@ __bynkThen(src, (__q) => (async () => {
   }
   return __out;
 })())
---- text
-__bynkThen(src, (__q) => (async () => { const __out: number[] = []; for (const __x of __q) { __out.push(await (f)(__x)); } return __out; })())
 === ParTraverseAll keyed=false cmp=plain
-__bynkThen(src, (__q) => (async () => await __bynkSettleAll(__q.map((__x) => () => (f)(__x))))())
---- text
 __bynkThen(src, (__q) => (async () => await __bynkSettleAll(__q.map((__x) => () => (f)(__x))))())
 === TraverseTry keyed=false cmp=plain
 __bynkThen(src, (__q) => (async () => {
@@ -248,8 +182,6 @@ __bynkThen(src, (__q) => (async () => {
   }
   return Ok(__out);
 })())
---- text
-__bynkThen(src, (__q) => (async () => { const __out: number[] = []; for (const __x of __q) { const __r = await (f)(__x); if (__r.tag === "Err") { return Err(__r.error); } __out.push(__r.value); } return Ok(__out); })())
 === ParTraverseTry keyed=false cmp=plain
 __bynkThen(src, (__q) => (async () => {
   const __rs = await __bynkSettleAll(__q.map((__x) => () => (f)(__x)));
@@ -262,15 +194,9 @@ __bynkThen(src, (__q) => (async () => {
   }
   return Ok(__out);
 })())
---- text
-__bynkThen(src, (__q) => (async () => { const __rs = await __bynkSettleAll(__q.map((__x) => () => (f)(__x))); const __out: number[] = []; for (const __r of __rs) { if (__r.tag === "Err") { return Err(__r.error); } __out.push(__r.value); } return Ok(__out); })())
 === SortBy keyed=false cmp=bare
 (() => __bynkThen(src, (__q) => [...__q].sort((__a, __b) => __bynkCmpFloat((key)(__a), (key)(__b)))))
---- text
-(() => __bynkThen(src, (__q) => [...__q].sort((__a, __b) => __bynkCmpFloat((key)(__a), (key)(__b)))))
 === SortByDescending keyed=false cmp=bare
-(() => __bynkThen(src, (__q) => [...__q].sort((__a, __b) => __bynkCmpFloat((key)(__b), (key)(__a)))))
---- text
 (() => __bynkThen(src, (__q) => [...__q].sort((__a, __b) => __bynkCmpFloat((key)(__b), (key)(__a)))))
 === Min keyed=false cmp=bare
 __bynkThen(src, (__q) => (() => {
@@ -283,15 +209,9 @@ __bynkThen(src, (__q) => (() => {
   }
   return Some(__m);
 })())
---- text
-__bynkThen(src, (__q) => (() => { const __a = __q; if (__a.length === 0) return None; let __m = (key)(__a[0]); for (const __x of __a) { const __k = (key)(__x); if (__bynkCmpFloat(__k, __m) < 0) __m = __k; } return Some(__m); })())
 === SortBy keyed=false cmp=built
 (() => __bynkThen(src, (__q) => ((__c) => [...__q].sort((__a, __b) => __c((key)(__a), (key)(__b))))(__bynkCmpSum([], w))))
---- text
-(() => __bynkThen(src, (__q) => ((__c) => [...__q].sort((__a, __b) => __c((key)(__a), (key)(__b))))(__bynkCmpSum([], w))))
 === SortByDescending keyed=false cmp=built
-(() => __bynkThen(src, (__q) => ((__c) => [...__q].sort((__a, __b) => __c((key)(__b), (key)(__a))))(__bynkCmpSum([], w))))
---- text
 (() => __bynkThen(src, (__q) => ((__c) => [...__q].sort((__a, __b) => __c((key)(__b), (key)(__a))))(__bynkCmpSum([], w))))
 === Min keyed=false cmp=built
 ((__c) => __bynkThen(src, (__q) => (() => {
@@ -304,5 +224,3 @@ __bynkThen(src, (__q) => (() => { const __a = __q; if (__a.length === 0) return 
   }
   return Some(__m);
 })()))(__bynkCmpSum([], w))
---- text
-((__c) => __bynkThen(src, (__q) => (() => { const __a = __q; if (__a.length === 0) return None; let __m = (key)(__a[0]); for (const __x of __a) { const __k = (key)(__x); if (__c(__k, __m) < 0) __m = __k; } return Some(__m); })()))(__bynkCmpSum([], w))

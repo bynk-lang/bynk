@@ -146,11 +146,12 @@ fn query_op(
         },
         tys,
     )
-    // 1A: comment placeholder
+    // The checker admits only the operations of the store's kind, so a miss is a compiler
+    // fault (1A.34): a missing checker fact, reported at the call.
     .unwrap_or_else(|| {
-        Err(format!(
-            "(/* unsupported {what} op {} */ undefined)",
-            method.name
+        Ok(cx.missing_fact(
+            e.span,
+            format_args!("supported `{what}` operation (`{}`)", method.name),
         ))
     })
 }
@@ -709,8 +710,12 @@ fn lower_store_set_call(
                 |_| op(&s.node, "size", vec![]),
                 |_| format!("{}.size()", s.text),
             ),
-            // 1A: comment placeholder
-            other => Err(format!("(/* unsupported Set op {other} */ undefined)")),
+            // The checker admits only the operations of the store's kind, so a miss is a
+            // compiler fault (1A.34): a missing checker fact, reported at the call.
+            other => Ok(cx.missing_fact(
+                e.span,
+                format_args!("supported `Set` operation (`{other}`)"),
+            )),
         });
     }
     None
@@ -960,8 +965,12 @@ fn lower_store_cache_call(
                     )
                 },
             ),
-            // 1A: comment placeholder
-            other => Err(format!("(/* unsupported Cache op {other} */ undefined)")),
+            // The checker admits only the operations of the store's kind, so a miss is a
+            // compiler fault (1A.34): a missing checker fact, reported at the call.
+            other => Ok(cx.missing_fact(
+                e.span,
+                format_args!("supported `Cache` operation (`{other}`)"),
+            )),
         });
     }
     None
@@ -1118,8 +1127,12 @@ fn lower_store_cell_call(
                     )
                 },
             ),
-            // 1A: comment placeholder
-            other => Err(format!("(/* unsupported Cell op {other} */ undefined)")),
+            // The checker admits only the operations of the store's kind, so a miss is a
+            // compiler fault (1A.34): a missing checker fact, reported at the call.
+            other => Ok(cx.missing_fact(
+                method.span,
+                format_args!("supported `Cell` operation (`{other}`)"),
+            )),
         });
     }
     None
