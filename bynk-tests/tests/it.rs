@@ -415,6 +415,8 @@ mod system {
     mod json_codec_behaviour;
     #[path = "kv_behaviour.rs"]
     mod kv_behaviour;
+    #[path = "large_suite_behaviour.rs"]
+    mod large_suite_behaviour;
     #[path = "let_else_staircase.rs"]
     mod let_else_staircase;
     #[path = "malformed_project_config_behaviour.rs"]

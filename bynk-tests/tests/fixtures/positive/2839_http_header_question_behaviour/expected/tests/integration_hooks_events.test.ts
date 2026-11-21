@@ -227,7 +227,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a missing header answers 400 on the wire", "a present header answers 200 on the wire", "the 404 of `?` on a non-header Option still answers 404"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a missing header answers 400 on the wire")) {
     const started = __bynkCaseNow();

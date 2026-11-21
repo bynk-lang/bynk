@@ -366,7 +366,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a signed notice is accepted, and a replay too", "a raw body is signed as sent", "a signature over a malformed body passes the seam and fails the boundary", "unsigned, forged and stale notices are refused", "a forged raw notice is refused before the body is read", "a body-only signature is accepted, and a forged one refused", "a notice signed with the env secret is accepted", "a forged notice is refused under an env secret too"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a signed notice is accepted, and a replay too")) {
     const started = __bynkCaseNow();

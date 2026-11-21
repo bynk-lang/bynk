@@ -307,7 +307,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a real date reaches the handler", "a leap day reaches the handler", "an impossible date is a 400 RefinementViolation before the handler", "a non-leap Feb 29 is refused", "a month out of range is refused", "an unpadded date is refused", "a body field is validated the same way"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a real date reaches the handler")) {
     const started = __bynkCaseNow();

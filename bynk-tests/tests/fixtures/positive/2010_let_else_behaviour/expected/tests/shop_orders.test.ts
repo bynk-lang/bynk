@@ -180,7 +180,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a placed order is confirmed and holds its stock", "the same order cannot be placed twice", "too little stock rejects the order and holds nothing", "a declined card releases the stock and rejects the order", "an else exits only its own block", "a question mark in an else returns from the function"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a placed order is confirmed and holds its stock")) {
     const started = __bynkCaseNow();

@@ -293,7 +293,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a typed cookies record round-trips through the router", "absent cookies take None and their defaults", "cookies are read off the Cookie header", "a name sent twice fills a list", "unknown cookies are ignored", "a cookie value is not decoded", "a refinement violation is refused before the handler", "a non-numeric cookie is a structural mismatch", "a name sent twice for a single-valued cookie is refused", "an unknown enum variant is refused", "a path parameter and cookies together"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a typed cookies record round-trips through the router")) {
     const started = __bynkCaseNow();

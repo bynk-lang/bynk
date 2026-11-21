@@ -221,7 +221,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a streamed body round-trips through the router", "a body of exactly the cap is delivered whole", "a body past the cap is refused on the bytes read, with no content-length to go by", "a streamed route refuses another content type", "a streamed overrun is rendered by on rejected, like any other 413"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a streamed body round-trips through the router")) {
     const started = __bynkCaseNow();

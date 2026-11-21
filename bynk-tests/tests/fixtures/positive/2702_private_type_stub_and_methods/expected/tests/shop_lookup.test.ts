@@ -119,7 +119,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["the stubbed Tag and its method are the visible ones", "a method of the visible Tag"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("the stubbed Tag and its method are the visible ones")) {
     const started = __bynkCaseNow();

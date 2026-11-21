@@ -246,7 +246,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a literal that leaves fields out takes their defaults", "a written field keeps its value", "a nested default fills its own defaulted field", "a spread takes unwritten fields from its base, not the default", "a body with no key for a defaulted field decodes to the default", "a present key decodes as sent, null included", "a body missing a field with no default is still rejected", "a generic record's defaults hold at an instantiation"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a literal that leaves fields out takes their defaults")) {
     const started = __bynkCaseNow();

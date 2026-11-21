@@ -149,7 +149,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a streamed object arrives over HTTP, read back as Raw", "a missing object is NotFound over HTTP"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a streamed object arrives over HTTP, read back as Raw")) {
     const started = __bynkCaseNow();

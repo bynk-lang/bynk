@@ -492,7 +492,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["every call shape threads the context", "a send from a helper runs on the handler's context", "a helper that bounds a call runs on virtual time", "a fast call is within the bound", "a method that bounds a call"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("every call shape threads the context")) {
     const started = __bynkCaseNow();

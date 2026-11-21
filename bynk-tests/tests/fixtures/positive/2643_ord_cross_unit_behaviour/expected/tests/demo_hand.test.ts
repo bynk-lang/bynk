@@ -133,7 +133,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a bounded generic from another unit orders an imported record", "rankOf counts the smaller elements", "sort and max use the imported declaration order"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a bounded generic from another unit orders an imported record")) {
     const started = __bynkCaseNow();

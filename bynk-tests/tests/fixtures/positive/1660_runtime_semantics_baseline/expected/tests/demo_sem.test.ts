@@ -245,7 +245,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a scalar Cell reads back after a reload", "a scalar Cell beside an enum Cell reads back after a reload", "an enum Cell reads back after a reload", "an Option Cell reads back after a reload", "an enum survives a JSON round trip", "a record equals an identical record", "Some(1) equals Some(1)", "String.replace inserts its replacement literally", "a store Map keeps a __proto__ key like any other", "a store Map has no inherited keys"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a scalar Cell reads back after a reload")) {
     const started = __bynkCaseNow();

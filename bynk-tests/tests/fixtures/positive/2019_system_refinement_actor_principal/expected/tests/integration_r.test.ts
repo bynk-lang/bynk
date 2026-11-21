@@ -255,7 +255,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["an admin is answered by the Worker", "an operator is answered by the Worker", "a staff member is answered by the Worker", "a plain user is forbidden by the Worker"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("an admin is answered by the Worker")) {
     const started = __bynkCaseNow();

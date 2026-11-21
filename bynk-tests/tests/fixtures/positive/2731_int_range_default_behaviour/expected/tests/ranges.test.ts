@@ -128,7 +128,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a negative range lands inside it", "a single-value range is that value", "lower bounds still win when they are above zero"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a negative range lands inside it")) {
     const started = __bynkCaseNow();

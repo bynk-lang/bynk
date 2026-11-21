@@ -345,7 +345,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["the agent's emit is observed", "two agents' emits are observed", "an unobserved agent call type-checks", "a service handler's agent call emits", "a service handler's own emit is observed", "the agent's emit is observed at the integration tier", "a faulting handler releases nothing"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("the agent's emit is observed")) {
     const started = __bynkCaseNow();

@@ -552,7 +552,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["functions named after host and runtime names", "Int division beside a user type named Math", "a binding that shadows the value it is read from", "a payload field named tag", "Bytes beside a user type named Uint8Array", "an agent's store collections beside a type named Record and a function named Set", "Set and Map as function names beside the JS Set and Map", "payload fields named like JS reserved words", "a function named require beside a type named Object"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("functions named after host and runtime names")) {
     const started = __bynkCaseNow();

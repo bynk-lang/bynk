@@ -258,7 +258,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a record keys a map by value", "inserting an equal key replaces in place", "an enum is a set member by value", "Bytes key a map by content", "an Option and a List can key a map", "distinct and distinctBy compare records by value", "groupBy and joinOn hash record keys by value", "a generic helper over a Key parameter"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a record keys a map by value")) {
     const started = __bynkCaseNow();

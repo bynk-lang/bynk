@@ -155,7 +155,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["cf is whatever the platform supplies, so no value is asserted"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("cf is whatever the platform supplies, so no value is asserted")) {
     const started = __bynkCaseNow();

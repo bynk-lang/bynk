@@ -159,7 +159,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["concat joins in order", "slice clamps like String.slice", "compare is unsigned lexicographic", "hex is lowercase out and either case in", "base64url is unpadded out and padding-optional in"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("concat joins in order")) {
     const started = __bynkCaseNow();

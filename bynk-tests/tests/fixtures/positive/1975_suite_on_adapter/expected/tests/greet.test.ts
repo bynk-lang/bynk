@@ -258,7 +258,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["the binding reads its secret", "the binding falls back without one", "a stub on the adapter's capability answers instead"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("the binding reads its secret")) {
     const started = __bynkCaseNow();

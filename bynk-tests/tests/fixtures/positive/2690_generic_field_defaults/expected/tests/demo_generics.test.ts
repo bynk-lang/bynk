@@ -218,7 +218,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a literal that leaves a concrete generic field out takes its default", "a written field keeps its value", "a body without the key decodes to the concrete default", "a present key decodes as sent", "a pass-through default holds at an instantiation", "a pass-through default is applied when decoding", "the generic decode path applies the pass-through default"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a literal that leaves a concrete generic field out takes its default")) {
     const started = __bynkCaseNow();

@@ -348,7 +348,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a store Map stores, reads, counts and removes prototype-named keys", "a store Map has no inherited keys", "upsert on an inherited name starts from the default", "an object value under __proto__ adds no phantom keys", "a store Set handles prototype-named members", "a store Cache handles prototype-named keys", "an @indexed map indexes prototype-named field values", "groupBy and joinOn group by prototype-named keys", "update rewrites an existing __proto__ entry in place", "an @indexed update re-indexes a __proto__ entry"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a store Map stores, reads, counts and removes prototype-named keys")) {
     const started = __bynkCaseNow();

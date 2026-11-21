@@ -212,7 +212,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["keys put as 10, 2, a, 5 enumerate in that order after a reload", "keys put in one handler enumerate in that order within the same handler", "overwriting a key keeps its position", "removing a key and putting it again moves it to the end", "an indexed lookup reads in insertion order", "a set and a cache keep integer-like members across a reload"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("keys put as 10, 2, a, 5 enumerate in that order after a reload")) {
     const started = __bynkCaseNow();

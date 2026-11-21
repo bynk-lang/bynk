@@ -192,7 +192,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["both operands of && narrow a refined Int", "the right operand of && sees the left's binding", "a variant payload binds into the right operand", "implies binds into its consequent", "a negated test binds into the else-branch", "a negated disjunction binds both into the else-branch", "a non-negated || narrows nothing but still tests"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("both operands of && narrow a refined Int")) {
     const started = __bynkCaseNow();

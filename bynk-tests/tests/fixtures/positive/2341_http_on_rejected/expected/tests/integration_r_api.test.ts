@@ -351,7 +351,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a handled request is untouched", "an oversized body is rendered by on rejected", "malformed JSON is rendered by on rejected", "a mismatched status falls back to the router's default", "a 405 keeps its Allow header", "a refused body refinement is rendered", "a raw route's 415 is rendered", "a refused path parameter is rendered", "a signature seam's 401 still reads as the seam's refusal"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a handled request is untouched")) {
     const started = __bynkCaseNow();

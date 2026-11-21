@@ -484,7 +484,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a raw body arrives byte for byte, including bytes that are not UTF-8", "a body over the service cap is refused on the bytes read", "a raw route refuses another content type", "a route's own cap wins over the service cap", "a raw body is signed as sent, and a forged one refused", "a multi-actor raw route verifies a signer over the octets, or a user", "a multi-actor raw route counts the bytes read", "a Bytes body without @raw is still base64 in JSON"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a raw body arrives byte for byte, including bytes that are not UTF-8")) {
     const started = __bynkCaseNow();

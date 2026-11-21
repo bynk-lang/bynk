@@ -138,7 +138,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a multi-field payload is exhaustive with no wildcard", "a record is exhaustive over a field's variants", "a literal field of a multi-field payload", "a record inside a variant payload"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a multi-field payload is exhaustive with no wildcard")) {
     const started = __bynkCaseNow();

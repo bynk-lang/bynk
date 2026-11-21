@@ -167,7 +167,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a method type parameter with nothing to infer it from", "an explicit argument pins a method type parameter", "an explicit argument on a bounded method parameter", "the explicit form agrees with inference", "an explicit list from inside a generic method, receiver args a type variable", "an explicit list on a receiver whose argument is a function type"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a method type parameter with nothing to infer it from")) {
     const started = __bynkCaseNow();

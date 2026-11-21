@@ -150,7 +150,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["constants name each other across files", "functions call each other across files and read constants", "an is test reads a constant", "falsy constants read the same every time", "a match reads a constant and a field of one"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("constants name each other across files")) {
     const started = __bynkCaseNow();

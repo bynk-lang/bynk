@@ -314,7 +314,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["the router passes the request's headers", "a RawError answers its own status", "headers and body travel together", "a contract body's error field reads as the variant's message", "a body that is not Bynk's shape reads with an empty message", "under a sum of actors, headers keep their declared place"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("the router passes the request's headers")) {
     const started = __bynkCaseNow();

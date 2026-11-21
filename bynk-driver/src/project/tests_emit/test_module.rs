@@ -861,35 +861,26 @@ pub(super) fn emit_test_module(
         .filter(|r| !bynk_emit::emitter::serialisation::root_names_any(r, &suite_type_names))
         .collect();
     if !json_codec_roots.is_empty() {
-        let (codec_names, codec_insts) = bynk_emit::emitter::serialisation::collect_codec_closure(
-            &json_codec_roots,
-            &synthetic.types,
-        );
-        if !codec_names.is_empty() || !codec_insts.is_empty() {
-            // The helpers below always name `JsonValue`/`BoundaryError` in their
-            // own signatures, regardless of which arm (if any) the case bodies'
-            // own `Json.decode`/`Json.encode` calls happened to trip.
-            runtime_use.note_json_codec();
-            runtime_use.note_boundary_codec();
-            let qual = runtime_use.json_codec_qual();
-            stmts.extend(bynk_emit::emitter::serialisation::decls_as_stmts_block(
-                bynk_emit::emitter::serialisation::emit_helpers_for_owner_qualified(
-                    &codec_names,
-                    &synthetic.types,
-                    target_name,
-                    &qual,
-                    runtime_use,
-                ),
-            ));
-            stmts.extend(bynk_emit::emitter::serialisation::decls_as_stmts(
-                bynk_emit::emitter::serialisation::emit_generic_helpers_qualified(
-                    &codec_insts,
-                    &synthetic.types,
-                    &qual,
-                    runtime_use,
-                ),
+        // #3699: a `trace(Cap.op)` list's elements are the synthetic call-record
+        // types the case bodies were checked with, so their codecs belong in the
+        // closure beside the target's types.
+        let mut closure_types = synthetic.types.clone();
+        if uses_observation {
+            closure_types.extend(call_record_type_decls(
+                target_name,
+                unit_tables,
+                unit_uses,
+                unit_consumes,
+                unit_consumes_aliases,
+                &synthetic.types,
             ));
         }
+        stmts.extend(codec_closure_stmts(
+            &json_codec_roots,
+            &closure_types,
+            target_name,
+            runtime_use,
+        ));
     }
 
     // #2052: a delivery helper per events service some body addressed with
@@ -1653,6 +1644,72 @@ pub(super) fn target_uses_emit(
 /// already get, rather than a raw Rust string literal with `\`-continuations.
 pub(super) fn jwt_signer_runtime_helpers() -> String {
     include_str!("../test_runtime/jwt_signer.ts").to_string()
+}
+
+/// #3699: the synthetic call-record types (`__Cap_op_Call`) a `trace(Cap.op)`
+/// list's elements carry, as the case bodies were checked with them
+/// ([`test_suites::register_call_record_types`]), less any name `known` already
+/// declares.
+fn call_record_type_decls(
+    target_name: &str,
+    unit_tables: &HashMap<String, UnitTable>,
+    unit_uses: &HashMap<String, Vec<String>>,
+    unit_consumes: &HashMap<String, Vec<String>>,
+    unit_consumes_aliases: &HashMap<String, HashMap<String, String>>,
+    known: &HashMap<String, Arc<bynk_syntax::ast::TypeDecl>>,
+) -> Vec<(String, Arc<bynk_syntax::ast::TypeDecl>)> {
+    let Some((mut resolved, _)) = test_suites::build_privileged_resolved(
+        target_name,
+        unit_tables,
+        unit_uses,
+        unit_consumes,
+        unit_consumes_aliases,
+    ) else {
+        return Vec::new();
+    };
+    let before: HashSet<String> = resolved.types.keys().cloned().collect();
+    test_suites::register_call_record_types(&mut resolved, target_name, unit_tables);
+    resolved
+        .types
+        .into_iter()
+        .filter(|(n, _)| !before.contains(n) && !known.contains_key(n))
+        .collect()
+}
+
+/// #917: the module's own codec closure for `roots` over `types`: each named
+/// type's `serialise_*`/`deserialise_*` helpers and each generic instance's.
+/// Empty when the closure is.
+fn codec_closure_stmts(
+    roots: &[TypeRef],
+    types: &HashMap<String, Arc<bynk_syntax::ast::TypeDecl>>,
+    target_name: &str,
+    runtime_use: &RuntimeUse,
+) -> Vec<TsStmt> {
+    use bynk_emit::emitter::serialisation as ser;
+    let (codec_names, codec_insts) = ser::collect_codec_closure(roots, types);
+    if codec_names.is_empty() && codec_insts.is_empty() {
+        return Vec::new();
+    }
+    // The helpers below always name `JsonValue`/`BoundaryError` in their
+    // own signatures, regardless of which arm (if any) the case bodies'
+    // own `Json.decode`/`Json.encode` calls happened to trip.
+    runtime_use.note_json_codec();
+    runtime_use.note_boundary_codec();
+    let qual = runtime_use.json_codec_qual();
+    let mut stmts = ser::decls_as_stmts_block(ser::emit_helpers_for_owner_qualified(
+        &codec_names,
+        types,
+        target_name,
+        &qual,
+        runtime_use,
+    ));
+    stmts.extend(ser::decls_as_stmts(ser::emit_generic_helpers_qualified(
+        &codec_insts,
+        types,
+        &qual,
+        runtime_use,
+    )));
+    stmts
 }
 
 #[cfg(test)]

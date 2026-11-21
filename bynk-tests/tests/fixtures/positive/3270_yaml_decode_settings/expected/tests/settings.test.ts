@@ -502,7 +502,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["decodes the settings file", "an absent Option key and an absent default take their defaults", "an empty mapping takes every default", "T is inferred from the expected result type", "a refinement violation names its path", "a structural mismatch names its path", "a mismatch inside a sequence names its index", "on, off, yes and no stay strings", "quoted scalars are strings, and a timestamp stays a string", "plain numbers are not strings", "a syntax error is Malformed", "anchors, aliases, merge keys, tags and extra documents are refused", "a refusal says where", "a deeply nested document is refused, not unwound"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("decodes the settings file")) {
     const started = __bynkCaseNow();

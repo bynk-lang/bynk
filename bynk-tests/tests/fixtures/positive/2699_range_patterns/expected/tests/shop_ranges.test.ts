@@ -238,7 +238,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["sign splits the integers", "bounds are inclusive", "negative bounds and a literal between ranges", "ranges nest in variants and or-patterns", "ranges nest in records and lists", "a range nested after is", "a partly covered range keeps the rest", "a refined Int, a guard, a single-value range and let-else"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("sign splits the integers")) {
     const started = __bynkCaseNow();

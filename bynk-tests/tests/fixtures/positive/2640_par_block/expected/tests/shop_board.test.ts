@@ -431,7 +431,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["both names are bound after the block", "the effects are issued in source order", "a re-binding reads the value from before the block", "a block in a branch binds for the rest of that branch", "a block in a case drives addressed services together", "a lambda parameter or match arm named like a sibling is its own binding", "a binding that hoists statements still joins", "a Result bound in the block is unwrapped after it", "after the block, the first Err in source order propagates", "an Err in a later binding propagates when the earlier is Ok", "a ? on an argument is hoisted above the block"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("both names are bound after the block")) {
     const started = __bynkCaseNow();

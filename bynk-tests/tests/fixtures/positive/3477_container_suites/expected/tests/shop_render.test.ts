@@ -705,7 +705,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["an unstubbed send faults", "a stubbed send returns its response", "an unavailable container is matched", "a failed start carries its message"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("an unstubbed send faults")) {
     const started = __bynkCaseNow();

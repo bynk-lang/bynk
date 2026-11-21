@@ -267,7 +267,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["the router sends the cookie with the safe defaults", "a redirect carries a cookie too", "several cookies, in order", "a cleared cookie is sent empty and expired", "a cookie value that is not a cookie-octet faults the request"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("the router sends the cookie with the safe defaults")) {
     const started = __bynkCaseNow();

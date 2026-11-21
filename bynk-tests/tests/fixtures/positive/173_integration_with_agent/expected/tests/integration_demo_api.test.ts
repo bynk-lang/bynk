@@ -141,7 +141,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["two ticks on the same id accumulate across the wire", "a fresh id starts from zero in a new case"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("two ticks on the same id accumulate across the wire")) {
     const started = __bynkCaseNow();

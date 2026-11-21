@@ -115,7 +115,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["the region-subtagged locale renders its own translation", "the reference locale still renders its own", "an undeclared locale falls back to the reference"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("the region-subtagged locale renders its own translation")) {
     const started = __bynkCaseNow();

@@ -301,7 +301,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["the sweeper runs, then the count is read over the wire", "the sweeper's own Err is what the address yields", "a delivery is counted once, however often it is delivered", "a consumer's Retry carries its reason", "a consumer that faults is retried", "each case starts from clean state", "a cron handler that faults fails the case"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("the sweeper runs, then the count is read over the wire")) {
     const started = __bynkCaseNow();

@@ -235,7 +235,7 @@ pub(super) fn or_expr(left: TsExpr, right: TsExpr) -> TsExpr {
 /// ```ts
 /// export const __bynkCases: readonly string[] = ["a", "b"];
 /// export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-///   const results = [];
+///   const results: CaseResult[] = [];
 ///   const want = (n: string): boolean => only === undefined || only === n;
 ///   if (want("a")) {
 ///     const started = __bynkCaseNow();
@@ -290,7 +290,15 @@ pub(super) fn build_run_function(entries: &[(String, String)]) -> Vec<TsStmt> {
         )
     };
     let mut body = vec![
-        const_("results", TsExpr::array(vec![])),
+        // #3639: typed, so `tsc` need not infer an evolving array's type by
+        // control-flow analysis over the whole function, which passes its
+        // flow-node limit (TS2563) at 500 cases.
+        TsStmt::const_stmt(
+            TsBindingName::Ident("results".to_string()),
+            Some(TsType::array(TsType::named("CaseResult"))),
+            TsExpr::array(vec![]),
+            None,
+        ),
         const_(
             "want",
             TsExpr::Arrow {

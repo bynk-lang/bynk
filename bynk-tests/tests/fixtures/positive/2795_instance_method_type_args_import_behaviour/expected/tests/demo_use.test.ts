@@ -95,7 +95,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a type named only in an explicit instance-method list", "a type named only in an explicit static list"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a type named only in an explicit instance-method list")) {
     const started = __bynkCaseNow();

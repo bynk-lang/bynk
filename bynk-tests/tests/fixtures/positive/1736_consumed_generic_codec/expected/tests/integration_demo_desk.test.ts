@@ -165,7 +165,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a returned generic record, alone, nested and at another type", "a returned generic sum, each variant", "a generic record built by the consumer and sent", "the consumer's own structurally identical generic is accepted", "a generic record sent back across"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a returned generic record, alone, nested and at another type")) {
     const started = __bynkCaseNow();

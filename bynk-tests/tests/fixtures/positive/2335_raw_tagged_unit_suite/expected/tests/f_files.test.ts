@@ -98,7 +98,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["an archive carries its content-hash tag", "the variant is matchable with wildcards"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("an archive carries its content-hash tag")) {
     const started = __bynkCaseNow();

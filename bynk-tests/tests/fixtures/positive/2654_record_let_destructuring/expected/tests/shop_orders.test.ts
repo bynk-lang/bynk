@@ -192,7 +192,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["shorthand, renamed and wildcard fields", "a nested record pattern", "a refutable record pattern takes its else", "the destructured name shadows an earlier one", "an effectful let destructures what the call returns", "a destructuring let in a test body"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("shorthand, renamed and wildcard fields")) {
     const started = __bynkCaseNow();

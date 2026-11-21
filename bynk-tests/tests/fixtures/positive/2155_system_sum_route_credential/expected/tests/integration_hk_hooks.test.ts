@@ -414,7 +414,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a lone signed notice is accepted", "a lone notice as the processor is accepted", "a notice to the sum route as the processor is signed", "a notice to the sum route as a user carries a token", "unsigned, forged and stale notices to the sum route are refused", "an expired token to the sum route is refused", "a forged raw notice to the sum route is refused", "a Bearer primary's public member is reached with no token", "a Bearer primary's member is reached as itself"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a lone signed notice is accepted")) {
     const started = __bynkCaseNow();

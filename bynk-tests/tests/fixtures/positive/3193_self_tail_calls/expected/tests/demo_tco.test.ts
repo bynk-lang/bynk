@@ -399,7 +399,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a million self tail calls run in constant stack", "an accumulator pair swaps and reads old values", "an Effect function with a million self tail calls", "an Effect function that awaits before a million self tail calls", "a recursive match is a loop", "a nested match arm is a loop", "a pattern binder that shadows a parameter is passed on", "a guarded match arm is a loop", "each iteration's closure keeps its own binding", "a method tail call is a loop", "a generic tail call at its own instantiation is a loop", "requires holds on every iteration", "requires holds on every iteration of an Effect function", "requires reports the iteration whose arguments violate it", "an ensures function is unchanged", "a non-tail self call is unchanged", "mutual recursion is unchanged", "a shifting generic instantiation is unchanged", "a wrapped self call is unchanged", "a self call under ? is unchanged"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a million self tail calls run in constant stack")) {
     const started = __bynkCaseNow();

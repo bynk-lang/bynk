@@ -798,7 +798,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["sums are exact", "equality and order are by value; the scale is kept", "money in a refined type", "div states a scale and a mode", "round honours each mode", "conversions", "lists, keys and text", "a sum payload of a refined decimal round-trips", "a mocked value holds a decimal", "a mocked refined decimal lands inside a negative range", "rounding to the largest scale works", "a leading zero is refused on the wire but not by parse", "constants and field defaults", "a decimal field round-trips as a JSON string", "a malformed decimal on the wire is rejected at the field path", "addition is exact and commutative", "a positive price survives the wire"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("sums are exact")) {
     const started = __bynkCaseNow();

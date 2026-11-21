@@ -162,7 +162,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a case names the context type by its declared name", "a case names the adapter type by its declared name"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a case names the context type by its declared name")) {
     const started = __bynkCaseNow();

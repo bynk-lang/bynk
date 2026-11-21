@@ -265,7 +265,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["the issue's five rows decode", "a bare value is checked as the inner type", "a failed bare value names every Option form", "a tagged object with an extra key is a bare value", "Option[Option[Int]]: tagged forms win, bare forms nest", "a record with kind and value fields: the tagged reading wins", "a kind-tagged sum decodes bare or tagged", "what Json.encode writes decodes back to the same value"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("the issue's five rows decode")) {
     const started = __bynkCaseNow();

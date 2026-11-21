@@ -250,7 +250,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["records compare by field", "sums compare by variant and payload", "a nullary variant decoded from JSON equals the constant", "Option and Result compare structurally", "lists compare element-wise", "maps compare by key and value", "Bytes compare by content, inside records and behind opaque types", "a generic type parameter compares structurally", "Float keeps IEEE semantics"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("records compare by field")) {
     const started = __bynkCaseNow();

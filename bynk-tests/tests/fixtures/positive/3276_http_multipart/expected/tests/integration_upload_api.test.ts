@@ -317,7 +317,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a typed multipart body round-trips through the router", "text and file parts in the wire form", "an unchosen optional file input is None", "a missing required file is refused before the handler", "a refinement on a text part is checked", "a text part for a file field is a structural mismatch", "a body that is not multipart is a MalformedForm", "a file over maxFile is a 413", "a route's own @limit tightens the file cap", "more parts than maxParts is a 413"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a typed multipart body round-trips through the router")) {
     const started = __bynkCaseNow();

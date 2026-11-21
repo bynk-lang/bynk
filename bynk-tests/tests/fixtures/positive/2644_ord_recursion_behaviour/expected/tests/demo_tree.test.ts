@@ -107,7 +107,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a recursive bounded generic forwards its comparator", "recursion at a derived type", "mutual recursion forwards the comparator in both directions"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a recursive bounded generic forwards its comparator")) {
     const started = __bynkCaseNow();

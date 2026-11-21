@@ -339,7 +339,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["T comes from the argument", "T comes from the expected type", "T is given explicitly", "a static with its own type parameter", "an Ord-bounded static takes a comparator", "a Key-bounded static", "a Codable-bounded static", "a free generic function grounded by the expected type", "a generic instance method grounded by the expected type", "the expected type grounds T before a lambda argument needs it", "a static's lambda argument uses a T the expected type grounds"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("T comes from the argument")) {
     const started = __bynkCaseNow();

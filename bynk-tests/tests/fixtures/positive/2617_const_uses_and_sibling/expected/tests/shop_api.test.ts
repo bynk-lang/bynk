@@ -230,7 +230,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["the context reads a used commons' constants", "a service answers with a used constant", "a service answers with the context's own constant", "a sibling file's function reads its sibling's constants", "a refined constant crosses the context's rebrand", "a sum constant crosses the context's rebrand"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("the context reads a used commons' constants")) {
     const started = __bynkCaseNow();

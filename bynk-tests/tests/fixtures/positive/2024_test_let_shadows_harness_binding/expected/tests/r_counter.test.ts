@@ -487,7 +487,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a local named like a service", "a local that reads the service it shadows", "the service before the shadow", "a local named like an agent", "a local named like an asset", "a local named like the deps record", "locals named like a consumed context and its asset", "a let shadowing the history run binder", "a let rebinding a for-all binder"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a local named like a service")) {
     const started = __bynkCaseNow();
