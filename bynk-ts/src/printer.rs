@@ -1603,9 +1603,34 @@ fn render_stmt_level_expr(
     } = expr
     {
         render_multiline_array(out, items, depth, m);
+    } else if let TsExpr::AsConst(inner) = expr
+        && is_multiline_literal(inner)
+    {
+        render_stmt_level_expr(out, inner, depth, m);
+        out.push_str(" as const");
+    } else if let TsExpr::As { expr: inner, ty } = expr
+        && is_multiline_literal(inner)
+    {
+        render_stmt_level_expr(out, inner, depth, m);
+        out.push_str(" as ");
+        render_type(out, ty);
     } else {
         render_expr(out, expr, depth, m);
     }
+}
+
+/// Whether `expr` is a `multiline: true` object or array literal.
+fn is_multiline_literal(expr: &TsExpr) -> bool {
+    matches!(
+        expr,
+        TsExpr::Object {
+            multiline: true,
+            ..
+        } | TsExpr::Array {
+            multiline: true,
+            ..
+        }
+    )
 }
 
 /// `{ <newline> ("  "*depth+1)<key>: <value>,<newline> ... ("  "*depth)}` —
@@ -3174,6 +3199,10 @@ fn render_params(out: &mut String, params: &[TsParam]) {
         if let Some(ty) = &p.ty {
             out.push_str(": ");
             render_type(out, ty);
+        }
+        if let Some(default) = &p.default {
+            out.push_str(" = ");
+            render_expr(out, default, 0, &mut None);
         }
     }
 }
@@ -9995,5 +10024,207 @@ mod tests {
             printed.text,
             "function f() {\n  if (a) {\n    if (g) {\n      return x;\n    }\n    return y;\n  } else if (b) {\n    if (h) {\n      return x;\n    }\n  }\n}\n"
         );
+    }
+
+    /// 1A.38a review: an `else if` chain **without** `same_line_else` takes the fresh-line
+    /// path, so each `else if` starts its own line at the chain's depth and its blocks nest
+    /// where the first `if`'s do.
+    #[test]
+    fn a_fresh_line_else_if_chain_nests_each_link_at_the_chains_own_depth() {
+        let guard = |name: &str| {
+            TsStmt::if_stmt(
+                id(name),
+                TsStmt::block(vec![TsStmt::return_stmt(Some(id("x")), None)], None),
+                None,
+            )
+        };
+        let chain = TsStmt::if_else_stmt(
+            id("a"),
+            TsStmt::block(vec![guard("g")], None),
+            TsStmt::if_else_stmt(
+                id("b"),
+                TsStmt::block(vec![guard("h")], None),
+                TsStmt::block(vec![guard("i")], None),
+                None,
+            ),
+            None,
+        );
+        let decl = TsDecl::Function {
+            name: "f".to_string(),
+            generics: vec![],
+            params: vec![],
+            return_type: None,
+            body: vec![chain],
+            is_async: false,
+            inline: false,
+        };
+        let mut program = TsProgram::new();
+        program.push(TsStmt::decl(decl, None));
+        let printed = print(&program, "x.bynk", "", "x.ts");
+        assert_eq!(
+            printed.text,
+            "function f() {\n  if (a) {\n    if (g) {\n      return x;\n    }\n  }\n  else if (b) {\n    if (h) {\n      return x;\n    }\n  }\n  else {\n    if (i) {\n      return x;\n    }\n  }\n}\n"
+        );
+    }
+
+    /// 1A.38a review: a chain of three or more links (`if`, two `else if`s and a final
+    /// `else`) keeps every link at the first `if`'s depth, not one level deeper per link.
+    #[test]
+    fn a_four_link_else_if_chain_keeps_every_link_at_one_depth() {
+        let body =
+            |name: &str| TsStmt::block(vec![TsStmt::return_stmt(Some(id(name)), None)], None);
+        let chain = TsStmt::if_else_same_line_stmt(
+            id("a"),
+            body("w"),
+            TsStmt::if_else_same_line_stmt(
+                id("b"),
+                body("x"),
+                TsStmt::if_else_same_line_stmt(id("c"), body("y"), body("z"), None),
+                None,
+            ),
+            None,
+        );
+        let decl = TsDecl::Function {
+            name: "f".to_string(),
+            generics: vec![],
+            params: vec![],
+            return_type: None,
+            body: vec![TsStmt::if_stmt(
+                id("outer"),
+                TsStmt::block(vec![chain], None),
+                None,
+            )],
+            is_async: false,
+            inline: false,
+        };
+        let mut program = TsProgram::new();
+        program.push(TsStmt::decl(decl, None));
+        let printed = print(&program, "x.bynk", "", "x.ts");
+        assert_eq!(
+            printed.text,
+            "function f() {\n  if (outer) {\n    if (a) {\n      return w;\n    } else if (b) {\n      return x;\n    } else if (c) {\n      return y;\n    } else {\n      return z;\n    }\n  }\n}\n"
+        );
+    }
+
+    /// 1A.38b: a multiline object under `as const` or `as T` keeps its layout, in a
+    /// declaration's initialiser and in a `return`, with an arrow-valued property whose
+    /// body holds a block arrow nested inside it.
+    #[test]
+    fn a_cast_multiline_object_keeps_its_layout_in_a_const_and_a_return() {
+        let id = |n: &str| TsExpr::Ident(n.to_string());
+        let route = TsExpr::Arrow {
+            params: vec![TsParam::new("init", None)],
+            is_async: false,
+            generics: vec![],
+            return_type: None,
+            body: Box::new(TsArrowBody::Expr(Box::new(TsExpr::As {
+                expr: Box::new(TsExpr::Call {
+                    callee: Box::new(id("__call")),
+                    args: vec![
+                        id("options"),
+                        TsExpr::Arrow {
+                            params: vec![],
+                            is_async: false,
+                            generics: vec![],
+                            return_type: None,
+                            body: Box::new(TsArrowBody::Multiline(vec![TsStmt::return_stmt(
+                                Some(id("x")),
+                                None,
+                            )])),
+                        },
+                    ],
+                }),
+                ty: TsType::named("T"),
+            }))),
+        };
+        let object = || {
+            TsExpr::multiline_object(vec![(
+                "svc".to_string(),
+                TsExpr::multiline_object(vec![
+                    ("a".to_string(), TsExpr::Lit(TsLit::Str("x".to_string()))),
+                    ("route".to_string(), route.clone()),
+                ]),
+            )])
+        };
+        let mut program = TsProgram::new();
+        program.push(TsStmt::decl(
+            TsDecl::Export(Box::new(TsDecl::ConstDecl {
+                name: "API".to_string(),
+                ty: None,
+                init: TsExpr::AsConst(Box::new(object())),
+            })),
+            None,
+        ));
+        program.push(TsStmt::decl(
+            TsDecl::Function {
+                name: "f".to_string(),
+                generics: vec![],
+                params: vec![],
+                return_type: None,
+                body: vec![TsStmt::return_stmt(
+                    Some(TsExpr::As {
+                        expr: Box::new(object()),
+                        ty: TsType::named("T"),
+                    }),
+                    None,
+                )],
+                is_async: false,
+                inline: false,
+            },
+            None,
+        ));
+        let printed = print(&program, "x.bynk", "", "x.ts");
+        assert_eq!(
+            printed.text,
+            "export const API = {\n  svc: {\n    a: \"x\",\n    route: (init) => __call(options, () => {\n      return x;\n    }) as T,\n  },\n} as const;\n\nfunction f() {\n  return {\n    svc: {\n      a: \"x\",\n      route: (init) => __call(options, () => {\n        return x;\n      }) as T,\n    },\n  } as T;\n}\n"
+        );
+    }
+
+    /// 1A.38b: a multiline array under `as const` breaks one item per line too, and a
+    /// one-line object under a cast is untouched.
+    #[test]
+    fn a_cast_multiline_array_keeps_its_layout_and_a_one_line_object_does_not_change() {
+        let item = |n: &str| TsExpr::Lit(TsLit::Str(n.to_string()));
+        let mut program = TsProgram::new();
+        program.push(TsStmt::decl(
+            TsDecl::ConstDecl {
+                name: "xs".to_string(),
+                ty: None,
+                init: TsExpr::AsConst(Box::new(TsExpr::multiline_array(vec![
+                    item("a"),
+                    item("b"),
+                ]))),
+            },
+            None,
+        ));
+        program.push(TsStmt::decl(
+            TsDecl::ConstDecl {
+                name: "o".to_string(),
+                ty: None,
+                init: TsExpr::AsConst(Box::new(TsExpr::object(vec![("k".to_string(), item("v"))]))),
+            },
+            None,
+        ));
+        let printed = print(&program, "x.bynk", "", "x.ts");
+        assert_eq!(
+            printed.text,
+            "const xs = [\n  \"a\",\n  \"b\",\n] as const;\n\nconst o = { k: \"v\" } as const;\n"
+        );
+    }
+
+    /// 1A.38b: a parameter's default prints after its type, `query: Q = {}`.
+    #[test]
+    fn a_parameter_default_prints_after_the_type() {
+        let mut out = String::new();
+        render_params(
+            &mut out,
+            &[
+                TsParam::new("options", Some(TsType::named("ClientOptions")))
+                    .with_default(TsExpr::object(vec![])),
+                TsParam::new("path", Some(TsType::named("string")))
+                    .with_default(TsExpr::Lit(TsLit::Str("$".to_string()))),
+            ],
+        );
+        assert_eq!(out, "options: ClientOptions = {}, path: string = \"$\"");
     }
 }

@@ -1043,7 +1043,6 @@ export function __toWire_Order(v: Order): __Wire_Order {
   return { ...v, note: __nullToOpt(v.note, (x0) => x0) } as unknown as __Wire_Order;
 }
 
-
 const __route_api_postOrders: __Route = {
   method: "POST",
   path: "/orders",
@@ -1075,7 +1074,6 @@ const __route_api_deleteOrderBySku: __Route = {
   },
 };
 
-
 /**
  * The contract of each service and route this client was generated for: a hash of
  * what a client acts on (the route's method and path, what it takes, what it can
@@ -1103,29 +1101,28 @@ export function createClient(options: ClientOptions = {}) {
       /**
        * Place an order.
        */
-      postOrders: (body: Order, init?: globalThis.RequestInit): globalThis.Promise<PostOrdersResponse | CallFailure> =>
-        __call(options, init, __route_api_postOrders, () => {
-          const __b = __checked(__serialise_Order(__toWire_Order(body)), __deserialise_Order, "$");
-          if (__b.tag === "Err") return __b;
-          return Ok({ params: {  }, body: __b.value });
-        }) as globalThis.Promise<PostOrdersResponse | CallFailure>,
-      getOrderBySkuLineByLine: (sku: Sku, line: Handle, init?: globalThis.RequestInit): globalThis.Promise<GetOrderBySkuLineByLineResponse | CallFailure> =>
-        __call(options, init, __route_api_getOrderBySkuLineByLine, () => {
-          const __p_sku = __checked(__serialise_Sku(sku), __deserialise_Sku, "path.sku");
-          if (__p_sku.tag === "Err") return __p_sku;
-          const __p_line = __checked(__serialise_Handle(line), __deserialise_Handle, "path.line");
-          if (__p_line.tag === "Err") return __p_line;
-          return Ok({ params: { "sku": globalThis.String(__p_sku.value), "line": globalThis.String(__p_line.value) } });
-        }) as globalThis.Promise<GetOrderBySkuLineByLineResponse | CallFailure>,
-      deleteOrderBySku: (sku: Sku, init?: globalThis.RequestInit): globalThis.Promise<DeleteOrderBySkuResponse | CallFailure> =>
-        __call(options, init, __route_api_deleteOrderBySku, () => {
-          const __p_sku = __checked(__serialise_Sku(sku), __deserialise_Sku, "path.sku");
-          if (__p_sku.tag === "Err") return __p_sku;
-          return Ok({ params: { "sku": globalThis.String(__p_sku.value) } });
-        }) as globalThis.Promise<DeleteOrderBySkuResponse | CallFailure>,
+      postOrders: (body: Order, init?: globalThis.RequestInit): globalThis.Promise<PostOrdersResponse | CallFailure> => __call(options, init, __route_api_postOrders, () => {
+        const __b = __checked(__serialise_Order(__toWire_Order(body)), __deserialise_Order, "$");
+        if (__b.tag === "Err") return __b;
+        return Ok({ params: {}, body: __b.value });
+      }) as globalThis.Promise<PostOrdersResponse | CallFailure>,
+      getOrderBySkuLineByLine: (sku: Sku, line: Handle, init?: globalThis.RequestInit): globalThis.Promise<GetOrderBySkuLineByLineResponse | CallFailure> => __call(options, init, __route_api_getOrderBySkuLineByLine, () => {
+        const __p_sku = __checked(__serialise_Sku(sku), __deserialise_Sku, "path.sku");
+        if (__p_sku.tag === "Err") return __p_sku;
+        const __p_line = __checked(__serialise_Handle(line), __deserialise_Handle, "path.line");
+        if (__p_line.tag === "Err") return __p_line;
+        return Ok({ params: { "sku": globalThis.String(__p_sku.value), "line": globalThis.String(__p_line.value) } });
+      }) as globalThis.Promise<GetOrderBySkuLineByLineResponse | CallFailure>,
+      deleteOrderBySku: (sku: Sku, init?: globalThis.RequestInit): globalThis.Promise<DeleteOrderBySkuResponse | CallFailure> => __call(options, init, __route_api_deleteOrderBySku, () => {
+        const __p_sku = __checked(__serialise_Sku(sku), __deserialise_Sku, "path.sku");
+        if (__p_sku.tag === "Err") return __p_sku;
+        return Ok({ params: { "sku": globalThis.String(__p_sku.value) } });
+      }) as globalThis.Promise<DeleteOrderBySkuResponse | CallFailure>,
     },
   } as const;
 }
 
-/** The client `createClient` makes. */
+/**
+ * The client `createClient` makes.
+ */
 export type Client = ReturnType<typeof createClient>;

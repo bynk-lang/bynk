@@ -692,6 +692,9 @@ impl Walk {
             if let Some(t) = &p.ty {
                 self.ty(t);
             }
+            if let Some(d) = &p.default {
+                self.expr(d);
+            }
         }
     }
 
@@ -1690,5 +1693,28 @@ mod tests {
             ),
         ]);
         assert!(unbound_names(&p).is_empty(), "{:?}", unbound_names(&p));
+    }
+
+    /// 1A.38b: a parameter's default is a use of the names it mentions.
+    #[test]
+    fn a_name_in_a_parameter_default_is_unbound_unless_imported() {
+        let f = || {
+            TsStmt::decl(
+                TsDecl::Function {
+                    name: "f".to_string(),
+                    generics: vec![],
+                    params: vec![
+                        TsParam::new("a", None).with_default(TsExpr::Ident("fallback".to_string())),
+                    ],
+                    return_type: None,
+                    body: vec![],
+                    is_async: false,
+                    inline: false,
+                },
+                None,
+            )
+        };
+        assert_eq!(unbound_names(&program(vec![f()])), ["fallback"]);
+        assert!(unbound_names(&program(vec![import(&["fallback"]), f()])).is_empty());
     }
 }

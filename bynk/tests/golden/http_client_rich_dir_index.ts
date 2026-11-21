@@ -62,7 +62,6 @@ const __route_api_deleteOrderById: __Route = {
   },
 };
 
-
 /**
  * The contract of each service and route this client was generated for: a hash of
  * what a client acts on (the route's method and path, what it takes, what it can
@@ -89,47 +88,44 @@ export const API_CONTRACTS = {
 export function createClient(options: ClientOptions = {}) {
   return {
     api: {
-      postOrders: (body: NewOrder, init?: globalThis.RequestInit): globalThis.Promise<PostOrdersResponse | CallFailure> =>
-        __call(options, init, __route_api_postOrders, () => {
-          const __b = __checked(__serialise_NewOrder(__toWire_NewOrder(body)), __deserialise_NewOrder, "$");
-          if (__b.tag === "Err") return __b;
-          return Ok({ params: {  }, body: __b.value });
-        }) as globalThis.Promise<PostOrdersResponse | CallFailure>,
-      getOrders: (query: GetOrdersQuery, init?: globalThis.RequestInit): globalThis.Promise<GetOrdersResponse | CallFailure> =>
-        __call(options, init, __route_api_getOrders, () => {
-          const __w_query: { [k: string]: JsonValue } = {};
-          if (query.sku !== undefined) __w_query["sku"] = __serialise_Option_Sku(__nullToOpt(query.sku, (x0) => x0));
-          if (query.limit !== undefined) __w_query["limit"] = ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(query.limit);
-          __w_query["tags"] = __serialise_List_String(query.tags);
-          if (query.since !== undefined) __w_query["since"] = __serialise_Option_Int(__nullToOpt(query.since, (x0) => x0));
-          const __c_query = __checked(__w_query, __deserialise_Filter, "query");
-          if (__c_query.tag === "Err") return __c_query;
-          return Ok({ params: {  }, query: __queryString(__w_query, [{ name: "sku" }, { name: "limit" }, { name: "tags" }, { name: "since" }]) });
-        }) as globalThis.Promise<GetOrdersResponse | CallFailure>,
-      getOrderById: (id: OrderId, init?: globalThis.RequestInit): globalThis.Promise<GetOrderByIdResponse | CallFailure> =>
-        __call(options, init, __route_api_getOrderById, () => {
-          const __p_id = __checked(__serialise_OrderId(id), __deserialise_OrderId, "path.id");
-          if (__p_id.tag === "Err") return __p_id;
-          return Ok({ params: { "id": globalThis.String(__p_id.value) } });
-        }) as globalThis.Promise<GetOrderByIdResponse | CallFailure>,
-      getSearch: (query: GetSearchQuery, init?: globalThis.RequestInit): globalThis.Promise<GetSearchResponse | CallFailure> =>
-        __call(options, init, __route_api_getSearch, () => {
-          const __w_query: { [k: string]: JsonValue } = {};
-          __w_query["q"] = query.q as __JsonValue;
-          if (query.page !== undefined) __w_query["page"] = __serialise_Option_Int(__nullToOpt(query.page, (x0) => x0));
-          const __c_query = __checked(__w_query, __deserialise_Search, "query");
-          if (__c_query.tag === "Err") return __c_query;
-          return Ok({ params: {  }, query: __queryString(__w_query, [{ name: "q" }, { name: "page", wire: "x-page" }]) });
-        }) as globalThis.Promise<GetSearchResponse | CallFailure>,
-      deleteOrderById: (id: OrderId, init?: globalThis.RequestInit): globalThis.Promise<DeleteOrderByIdResponse | CallFailure> =>
-        __call(options, init, __route_api_deleteOrderById, () => {
-          const __p_id = __checked(__serialise_OrderId(id), __deserialise_OrderId, "path.id");
-          if (__p_id.tag === "Err") return __p_id;
-          return Ok({ params: { "id": globalThis.String(__p_id.value) } });
-        }) as globalThis.Promise<DeleteOrderByIdResponse | CallFailure>,
+      postOrders: (body: NewOrder, init?: globalThis.RequestInit): globalThis.Promise<PostOrdersResponse | CallFailure> => __call(options, init, __route_api_postOrders, () => {
+        const __b = __checked(__serialise_NewOrder(__toWire_NewOrder(body)), __deserialise_NewOrder, "$");
+        if (__b.tag === "Err") return __b;
+        return Ok({ params: {}, body: __b.value });
+      }) as globalThis.Promise<PostOrdersResponse | CallFailure>,
+      getOrders: (query: GetOrdersQuery, init?: globalThis.RequestInit): globalThis.Promise<GetOrdersResponse | CallFailure> => __call(options, init, __route_api_getOrders, () => {
+        const __w_query: { [k: string]: JsonValue } = {};
+        if (query.sku !== undefined) __w_query["sku"] = __serialise_Option_Sku(__nullToOpt(query.sku, (x0) => x0));
+        if (query.limit !== undefined) __w_query["limit"] = ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(query.limit);
+        __w_query["tags"] = __serialise_List_String(query.tags);
+        if (query.since !== undefined) __w_query["since"] = __serialise_Option_Int(__nullToOpt(query.since, (x0) => x0));
+        const __c_query = __checked(__w_query, __deserialise_Filter, "query");
+        if (__c_query.tag === "Err") return __c_query;
+        return Ok({ params: {}, query: __queryString(__w_query, [{ name: "sku" }, { name: "limit" }, { name: "tags" }, { name: "since" }]) });
+      }) as globalThis.Promise<GetOrdersResponse | CallFailure>,
+      getOrderById: (id: OrderId, init?: globalThis.RequestInit): globalThis.Promise<GetOrderByIdResponse | CallFailure> => __call(options, init, __route_api_getOrderById, () => {
+        const __p_id = __checked(__serialise_OrderId(id), __deserialise_OrderId, "path.id");
+        if (__p_id.tag === "Err") return __p_id;
+        return Ok({ params: { "id": globalThis.String(__p_id.value) } });
+      }) as globalThis.Promise<GetOrderByIdResponse | CallFailure>,
+      getSearch: (query: GetSearchQuery, init?: globalThis.RequestInit): globalThis.Promise<GetSearchResponse | CallFailure> => __call(options, init, __route_api_getSearch, () => {
+        const __w_query: { [k: string]: JsonValue } = {};
+        __w_query["q"] = query.q as __JsonValue;
+        if (query.page !== undefined) __w_query["page"] = __serialise_Option_Int(__nullToOpt(query.page, (x0) => x0));
+        const __c_query = __checked(__w_query, __deserialise_Search, "query");
+        if (__c_query.tag === "Err") return __c_query;
+        return Ok({ params: {}, query: __queryString(__w_query, [{ name: "q" }, { name: "page", wire: "x-page" }]) });
+      }) as globalThis.Promise<GetSearchResponse | CallFailure>,
+      deleteOrderById: (id: OrderId, init?: globalThis.RequestInit): globalThis.Promise<DeleteOrderByIdResponse | CallFailure> => __call(options, init, __route_api_deleteOrderById, () => {
+        const __p_id = __checked(__serialise_OrderId(id), __deserialise_OrderId, "path.id");
+        if (__p_id.tag === "Err") return __p_id;
+        return Ok({ params: { "id": globalThis.String(__p_id.value) } });
+      }) as globalThis.Promise<DeleteOrderByIdResponse | CallFailure>,
     },
   } as const;
 }
 
-/** The client `createClient` makes. */
+/**
+ * The client `createClient` makes.
+ */
 export type Client = ReturnType<typeof createClient>;

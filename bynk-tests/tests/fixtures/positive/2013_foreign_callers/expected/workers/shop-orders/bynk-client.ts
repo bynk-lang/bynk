@@ -36,7 +36,10 @@ export const SECRET = "BYNK_CALL_TO_SHOP__ORDERS";
  *     ping = "4082ce9e2b74e919"
  *     status = "226b9939f85e69ea"
  */
-export const CONTRACTS = { ping: "4082ce9e2b74e919", status: "226b9939f85e69ea" } as const;
+export const CONTRACTS = {
+  ping: "4082ce9e2b74e919",
+  status: "226b9939f85e69ea",
+} as const;
 
 /**
  * The foreign callers the context declares, by actor name.
