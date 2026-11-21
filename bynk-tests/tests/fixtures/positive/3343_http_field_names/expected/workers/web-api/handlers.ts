@@ -96,7 +96,15 @@ export const api = {
   },
   async http_GET_roundtrip(deps: {}): globalThis.Promise<HttpResult<string>> {
     const text = __formString(__serialise_Signup({ email: "a@b.c", remember: true }), [{ name: "email", wire: "e-mail", kind: "string", list: false, option: false }, { name: "remember", wire: "remember-me", kind: "bool", list: false, option: false }] as const);
-    const __r0 = ((__s: string): Result<Signup, DecodeError> => { const __p = __formDecode(__s, [{ name: "email", wire: "e-mail", kind: "string", list: false, option: false }, { name: "remember", wire: "remember-me", kind: "bool", list: false, option: false }]); if (__p.tag === "Err") return Err(__p.error); const __j: __JsonValue = __p.value; const __r = __deserialise_Signup(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as Signup); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(text);
+    const __r0 = ((__s: string): Result<Signup, DecodeError> => {
+      const __p = __formDecode(__s, [{ name: "email", wire: "e-mail", kind: "string", list: false, option: false }, { name: "remember", wire: "remember-me", kind: "bool", list: false, option: false }]);
+      if (__p.tag === "Err") return Err(__p.error);
+      const __j: __JsonValue = __p.value;
+      const __r = __deserialise_Signup(__j, "$");
+      if (__r.tag === "Ok") return Ok(__r.value as Signup);
+      const __be = __r.error;
+      return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+    })(text);
     switch (__r0.tag) {
       case "Ok": {
         const s = __r0.value;
