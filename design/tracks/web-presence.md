@@ -12,7 +12,8 @@
   axes (§1.2).
 - **Governing records:** [ADR 0141](../decisions/0141-documentation-framework.md)
   (Astro + Starlight, Cloudflare Pages). Two ADRs land up front (§13): the
-  information architecture, and the URL and redirect policy.
+  information architecture, and the link policy (compiler links name codes,
+  never pages).
 - **Design reference:** page mockups for the home page, a Book chapter, an
   example, a reference page and a blog post, and boards for the Book audit and
   the proposed structure, are linked from the spine issue. They use the Bynk
@@ -35,8 +36,9 @@ This track settles three things:
 1. **The information architecture.** The site has four doors (Book, Examples,
    Reference, Blog). The Book is the journey: Start, Learn Bynk, Concepts,
    Guides. Everything looked up moves to Reference.
-2. **The URL policy.** Which URLs move, how old ones keep working, and what may
-   never break.
+2. **The link policy.** The compiler links to documentation by diagnostic code,
+   never by page, so the docs can be reorganised without touching the
+   compiler. Moved pages get simple folder-level redirects.
 3. **One brand.** A shared theme, built from the design system's tokens, used by
    the docs site and the blog.
 
@@ -46,9 +48,10 @@ This track settles three things:
   a generator change); four are new tutorial chapters.
 - **Its surface is not settled.** The structure is a proposal; §14 lists what
   remains open.
-- **It makes a hard-to-reverse commitment.** The compiler emits about 790
-  documentation links (§2.2), and released compilers keep emitting them. Every
-  URL this track moves must redirect for good.
+- **It changes a contract between the compiler and the site.** Today the
+  compiler holds a page and a heading anchor for each of its 802 curated
+  explanations (§2.2). This track replaces them with one URL per diagnostic
+  code that the site promises to serve.
 
 ## 2. What's true today
 
@@ -96,7 +99,8 @@ Moving pages is not only a site change. These read or emit Book paths:
 
 | Dependant | Depends on |
 |---|---|
-| `bynk-syntax/src/diagnostics.rs` | ~610 links into `/book/reference/`, ~129 into `/book/guides/`, ~50 into `/book/spec/`; also generates `reference/diagnostics.md` and holds the `bynk explain` texts |
+| `bynk-syntax/src/diagnostics.rs` | 802 `Explain` entries, each with a `page` and `anchor` (about 610 into `/book/reference/`, 129 into `/book/guides/`, 50 into `/book/spec/`). `Explain::href` turns them into the editor's `codeDescription` link, the URL `bynk explain` prints and the MCP tools' links; `href` falls back to an anchor in the diagnostic index. Also generates `reference/diagnostics.md` |
+| `bynk/src/book.rs`, `bynk/src/mcp/tools.rs` | `bynk book` builds page URLs from the Book bundled at build time, so they follow the content; the MCP tools hard-code the diagnostic index URL |
 | `bynk-syntax/src/keywords.rs` | `reference/keywords.md` |
 | `bynk-ide/src/first_party_docs.rs` | `reference/bynk-capabilities.md` and its URL |
 | `xtask` (`stamp`, `release_notes`, `grammar`, `site_page`) | `reference/changelog.md`, `reference/upgrading.md`, `reference/grammar-appendix.md`, `/book/` |
@@ -119,8 +123,11 @@ The sidebar is generated from `site/src/SUMMARY.md`, not from directories.
 - Every page is in the contents, and a check keeps it that way.
 - One home per diagnostic code: its meaning and its fix together.
 - One Reference surface, covering the language and the tooling.
-- No link breaks: every moved URL redirects permanently, and the compiler's own
-  links point at the new places.
+- The compiler never names a docs page. Its documentation links are
+  `https://bynk-lang.org/d/<code>`, served by the site for every code, so a
+  docs reorganisation needs no compiler change.
+- Moving a folder does not break inbound links: the blog's 18 links into the
+  Book and the repository's own links keep working.
 - The docs site and the blog share one theme from one source, built from the
   design system's tokens, with search that covers both.
 
@@ -182,41 +189,59 @@ One surface with its own contents, sections in this order: Language,
 Architecture, Adapters, Tooling (today's Developer Docs), Diagnostics,
 Specification, Releases. The Specification stays normative and whole.
 
-## 5. URLs and redirects
+## 5. Links and redirects
 
-The load-bearing commitment.
+Bynk is pre-1.0 and has almost no users to protect from a moved page, so this policy
+optimises for a docs structure that can keep changing.
 
-- **R1. A URL that has been published redirects permanently.** Released
-  compilers and editor extensions emit `/book/...` links indefinitely, so a
-  redirect is never removed.
-- **R2. Redirects live in `site/public/_redirects`** (Cloudflare Pages), using
-  splat rules where a whole tree moves (`/book/reference/* /reference/:splat 301`)
-  and single rules otherwise. Astro's `redirects` option stays for the one
-  existing entry and is not grown. Pages caps `_redirects` at 2,000 static and
-  100 dynamic (splat or placeholder) rules, and R1 never removes one, so a tree
-  move must use a splat, and a slice that would add more than a few dozen
-  single rules finds a splat or a naming scheme instead. If the cap is ever
-  reached, the fallback is Cloudflare Bulk Redirects on the zone, not a Worker.
-- **R3. A moved page's links are rewritten at source in the same slice**:
-  `diagnostics.rs`, `keywords.rs`, `first_party_docs.rs`, `xtask`, tests, CI path
-  filters and `llms.txt`. The redirect covers old compilers, not this one.
-- **R4. A redirect test**: a committed list of every URL published before the
-  move, checked in CI to resolve in the built site directly or by exactly one
-  redirect. Chains are not allowed: a redirect's target must be a final URL,
-  so a later move rewrites the targets of earlier rules that point into the
-  tree it moves (for example, slice 5 rewrites slice 3's changelog rule).
-- **R5. Guides keep their URLs.** Regrouping happens in `SUMMARY.md` only.
+- **L1. The compiler links by code.** Every documentation link the toolchain
+  emits for a diagnostic is `https://bynk-lang.org/d/<code>`: the editor's
+  clickable code, `bynk explain`, and the MCP tools. The compiler holds no page
+  paths and no heading anchors for diagnostics.
+- **L2. The site serves every code.** `/d/<code>` is one rule in
+  `site/public/_redirects`, `/d/* /reference/diagnostics/:splat 302`, to a
+  generated page that exists for every registry code (§6). The code is the
+  lookup key, so there is no table to maintain; if the diagnostic pages ever
+  move, only this rule changes. A temporary (302) redirect keeps browsers from
+  caching the target.
+- **L3. Other fixed links are few and short.** The handful of other URLs the
+  toolchain hard-codes (the diagnostic index, *Upgrading*, the first-party
+  capabilities page) use stable short paths of the same kind. `bynk book`
+  already derives its URLs from the bundled Book and needs nothing. There is
+  no general key registry.
+- **L4. A folder move gets one splat redirect**
+  (`/book/reference/* /reference/:splat 301`) for inbound links from the blog,
+  the repository and search engines. There are no per-page guarantees and no
+  redirect test; a single moved page gets a single rule only where something
+  is known to link to it. Pages caps `_redirects` at 2,000 static and 100
+  dynamic rules, which this policy stays far below.
+- **L5. Links inside the repository are rewritten in the same slice**:
+  `keywords.rs`, `first_party_docs.rs`, `xtask`, tests, CI path filters,
+  `llms.txt`, and the blog's links in its own next release.
+- **L6. Guides keep their URLs.** Regrouping happens in `SUMMARY.md` only.
   Whether Concepts pages move to `/book/concepts/` is open (§14).
 
 ## 6. Diagnostics, one page per code
 
 The Diagnostic index is already generated from `bynk-syntax/src/diagnostics.rs`,
 which also holds the curated `bynk explain` texts. Extend the same generator to
-emit a page per explained code at `/reference/diagnostics/<code>/`: the summary,
-the explanation, the compiled example pair, and the fix. Fold each
-troubleshooting page's content into its code's `Explain` entry, then retire
-`book/troubleshooting/` behind redirects. `bynk explain`, the editor's Explain
-panel and the website then show the same text from one source.
+emit a page for **every** registry code at `/reference/diagnostics/<code>/`:
+the summary and severity, and, for an explained code, the explanation, the
+compiled example pair and the fix. An unexplained code's page says so, so
+`/d/<code>` (L2) never 404s.
+
+Each page ends with links to the reference sections that govern the code.
+Those targets are docs structure, so they move out of the compiler:
+`Explain` loses `page` and `anchor`, and the site keeps a data file
+(`site/src/data/diagnostic-links.json`, code → one or more site paths). The
+site build fails when a registry code has no page or a link does not resolve,
+which keeps the drift guard the `page`/`anchor` fields provide today.
+`Explain::href` and `diagnostics::href` return `/d/<code>`.
+
+Fold each troubleshooting page's content into its code's `Explain` entry,
+then retire `book/troubleshooting/` behind one splat redirect. `bynk explain`,
+the editor's Explain panel and the website then show the same text from one
+source.
 
 ## 7. Releases
 
@@ -245,15 +270,17 @@ page.
 
 - **Contents completeness.** `generate-sidebar.mjs --check` also fails when a
   page under `book/` (or `reference/`) is in no contents file.
-- **Redirects** (R4).
+- **Diagnostic pages.** Every registry code has a page, and every target in
+  `diagnostic-links.json` resolves (§6).
 - Existing checks continue: link validation, British English, glossary links,
   spec sections, `llms.txt` links, the docs-consistency tests.
 
 ## 10. Migration and coexistence
 
 Slices land in an order where the site is whole after each one. Structure-only
-slices (1–2) move no URL. The Reference move (slice 5) is the single large
-mechanical slice, and its redirects land in the same PR. The theme slices (6–7)
+slices (1–2) move no URL. The Reference move (slice 5) is a plain move of pages
+with splat redirects: once slice 4 has landed, the compiler names no Reference
+page, so the move does not touch it. The theme slices (6–7)
 are independent of the Book slices and can run in parallel. The site shell
 (slice 8) waits for slice 5, because its header, footer and home page link to
 the `/reference/` URLs that slice 5 creates. The tutorial
@@ -267,14 +294,19 @@ existing file. Slice 12 renames the six existing numbered files
 (`01-first-program.md` and so on) to unnumbered names, with one redirect each,
 so a chapter's URL never changes when chapters are added again.
 
-The back-half feature freeze (`bynk` features, from v0.639.1) does not block
-this track: no slice changes language or compiler behaviour. Slices that touch
-`bynk-syntax` or `xtask` change only documentation links, the docs generator
-and release tooling.
+The back-half feature freeze ([ADR 0876](../decisions/0876-back-half-feature-freeze.md))
+allows design work, so this doc can settle during it. Most slices change only
+the site. Three touch the toolchain: slice 3 changes `xtask stamp`, and slice 4
+changes the URL the editor, `bynk explain` and the MCP tools show, and the
+`Explain` struct. None changes the language. Under ADR 0876, whether slices 3
+and 4 may be built before the freeze lifts is the maintainer's decision.
 
 ## 11. Risks
 
-- **Broken compiler links.** Mitigated by R1 to R4.
+- **A code with no page.** Mitigated by generating a page for every registry
+  code and failing the site build when one is missing (§6).
+- **Broken inbound links.** Mitigated by a splat redirect per moved folder
+  (L4).
 - **Tutorial drift.** Four new chapters extend one running project; each
   chapter's code is compiled by `doc_examples` like the existing ones.
 - **Two contents files diverge.** Both are generated by the same script under
@@ -290,8 +322,8 @@ and release tooling.
 | 1 | Contents complete: list the 18 missing pages; add the completeness check | No | 0 |
 | 2 | Regroup the sidebar into Start, Learn Bynk, Concepts, Guides; replace "How these docs are organised" with a short Book front page | No | 1 |
 | 3 | Releases: per-minor pages, `xtask stamp` writes them; redirect the changelog URL | Yes | 0 |
-| 4 | Diagnostics: generated per-code pages; fold in troubleshooting; redirects | Yes | 0 |
-| 5 | Reference consolidation: move `book/reference`, `book/spec` and `/docs/` to `/reference/`; its own contents; sidebar surfaces; source link rewrite; redirect test | Yes | 3, 4 |
+| 4 | Diagnostics: a generated page for every code; the `/d/<code>` contract (L1–L3); `page`/`anchor` move from `Explain` to the site's data file; fold in troubleshooting | Yes | 0 |
+| 5 | Reference consolidation: move `book/reference`, `book/spec` and `/docs/` to `/reference/`; its own contents; sidebar surfaces; splat redirects; repository links rewritten (L5) | Yes | 3, 4 |
 | 6 | Theme package from the design system tokens; docs site adopts it | No | 0 |
 | 7 | Blog adopts the theme; cross-site search | No | 6 |
 | 8 | Site shell: header, footer and home page per the mockups | No | 5, 6 |
@@ -307,7 +339,10 @@ and release tooling.
   Guides, Reference), concern within each. Supersedes the concern-first
   organisation described in *How these docs are organised*: concern-first made
   Guides a mix of explanation and how-to with no reading order.
-- **D2. URL and redirect policy.** R1 to R5 (§5).
+- **D2. Compiler links name codes, never pages.** L1 to L3 (§5): the
+  toolchain links diagnostics as `/d/<code>`, the site serves a page for every
+  code, and the code-to-section mapping belongs to the docs. Folder moves get
+  splat redirects (L4); nothing promises a published URL forever before 1.0.
 
 Recorded in their slices: one theme package in this repo (slice 6); diagnostics
 pages generated from the registry (slice 4); per-minor release pages
@@ -316,8 +351,8 @@ pages generated from the registry (slice 4); per-minor release pages
 ## 14. Open questions
 
 1. **Do Concepts pages move to `/book/concepts/`?** Moving gives honest URLs
-   and breadcrumbs, but costs redirects and compiler link rewrites for any that
-   `diagnostics.rs` targets. Keeping them where they are costs nothing now.
+   and breadcrumbs. After slice 4 the compiler no longer links to them, so the
+   cost is one rule per moved page and the repository's own links.
 2. **The running project for Learn Bynk.** Extend chapter 2's service through
    all ten chapters, or choose a project from `examples/` that already has
    contexts, an agent and a deploy story?
