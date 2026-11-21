@@ -1,7 +1,6 @@
 //! The scalar kernels (back-half paydown 1A.29, #3730, Decision D): `Int`, `Float`,
 //! `Duration`, `Instant`, `Bytes`, `String` and `Decimal`. Moved out of `lower.rs` byte
-//! for byte, then converted to nodes: each arm builds a node when its receiver and
-//! arguments are nodes and prints today's text otherwise (`node_or_text`).
+//! for byte, then converted to nodes: each arm builds a node over its receiver and arguments.
 //!
 //! The identity kernels return their operand's node, so the printer brackets it (#3770).
 //! `splitRegex`'s body is a `while` over a sticky scan, built as nodes (1A.35a part B).
@@ -9,46 +8,26 @@
 use bynk_check::kernel_op::{BytesOp, DecimalOp, DurationOp, FloatOp, InstantOp, IntOp, StringOp};
 use bynk_ts::{TsArrowBody, TsBinaryOp, TsExpr, TsType};
 
-use super::super::lower::{
-    Built, Lowered, LoweredExpr, Pre, node_or_text, paren, str_node, text_if_forced,
-};
+use super::super::lower::{Lowered, Pre, str_node};
 use super::super::lower_ctx::LowerCtx;
 use super::super::lower_list::{arrow, call, id, member, param, spread, take, zero};
 use super::super::{Expr, ExprKind, rounding_mode};
 use super::kernel::receiver_object;
 
-/// The receiver and then each argument, lowered in order as bridge values.
-fn operands(pre: &mut Pre, cx: &mut LowerCtx, parts: &[&Expr]) -> Vec<LoweredExpr> {
+/// The receiver and then each argument, lowered in order.
+fn operands(pre: &mut Pre, cx: &mut LowerCtx, parts: &[&Expr]) -> Vec<bynk_ts::TsExpr> {
     parts.iter().map(|e| pre.lower_node(e, cx)).collect()
 }
 
-/// A kernel's exit: the built node, or its text through the one shared text exit.
-fn finish(pre: Pre, built: Option<Built>) -> Option<Lowered> {
-    built.map(|b| pre.finish_built(b))
+/// A kernel's exit: the built node, finished over the hoists collected so far.
+fn finish(pre: Pre, built: Option<bynk_ts::TsExpr>) -> Option<Lowered> {
+    built.map(|b| pre.finish(b))
 }
 
-/// An identity conversion: its operand, unchanged. A node is returned as is, so the printer of
-/// whatever node holds it brackets it by precedence (#3770). A still-text operand carries no
-/// precedence the printer could read, so it is bracketed here unless it is a plain name or member
-/// path, which can never bind looser than its parent.
-pub(super) fn identity(pre: &mut Pre, operand: &Expr, cx: &mut LowerCtx) -> Built {
-    match pre.lower_node(operand, cx) {
-        LoweredExpr::Node(n) => Ok(n),
-        LoweredExpr::Text(t) => {
-            if is_simple_path(&t) {
-                Err(t)
-            } else {
-                paren(LoweredExpr::from(Err(t)))
-            }
-        }
-    }
-}
-
-fn is_simple_path(text: &str) -> bool {
-    !text.is_empty()
-        && text
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '$' || c == '.')
+/// An identity conversion: its operand, unchanged. The node is returned as is, so the printer of
+/// whatever node holds it brackets it by precedence (#3770).
+pub(super) fn identity(pre: &mut Pre, operand: &Expr, cx: &mut LowerCtx) -> bynk_ts::TsExpr {
+    pre.lower_node(operand, cx)
 }
 
 fn global_math(name: &str) -> TsExpr {
@@ -56,80 +35,39 @@ fn global_math(name: &str) -> TsExpr {
 }
 
 /// `globalThis.Math.<name>(…)` over the lowered operands.
-fn math_call(name: &str, kids: Vec<LoweredExpr>) -> Built {
-    node_or_text(
-        kids,
-        |n| call(global_math(name), n),
-        |t| format!("globalThis.Math.{name}({})", t.join(", ")),
-    )
+fn math_call(name: &str, kids: Vec<bynk_ts::TsExpr>) -> bynk_ts::TsExpr {
+    let n = kids;
+    call(global_math(name), n)
 }
 
 /// `globalThis.Math.min(globalThis.Math.max(recv, lo), hi)`.
-fn clamp(kids: Vec<LoweredExpr>) -> Built {
-    node_or_text(
-        kids,
-        |n| {
-            let [recv, lo, hi] = take::<3, _>(n);
-            call(
-                global_math("min"),
-                vec![call(global_math("max"), vec![recv, lo]), hi],
-            )
-        },
-        |t| {
-            format!(
-                "globalThis.Math.min(globalThis.Math.max({}, {}), {})",
-                t[0], t[1], t[2]
-            )
-        },
+fn clamp(kids: Vec<bynk_ts::TsExpr>) -> bynk_ts::TsExpr {
+    let n = kids;
+    let [recv, lo, hi] = take::<3, _>(n);
+    call(
+        global_math("min"),
+        vec![call(global_math("max"), vec![recv, lo]), hi],
     )
 }
 
 /// `name(…)` for a runtime helper or a global function (`String`).
-fn plain_call(name: &str, kids: Vec<LoweredExpr>) -> Built {
-    node_or_text(
-        kids,
-        |n| call(id(name), n),
-        |t| format!("{name}({})", t.join(", ")),
-    )
+fn plain_call(name: &str, kids: Vec<bynk_ts::TsExpr>) -> bynk_ts::TsExpr {
+    let n = kids;
+    call(id(name), n)
 }
 
-/// `recv.prop`. `bracketed` is the text fallback's spelling (`(recv).prop`); the node form
-/// is bracketed only where precedence needs it.
-fn member_of(recv: LoweredExpr, prop: &str, bracketed: bool) -> Built {
-    node_or_text(
-        vec![recv],
-        |n| {
-            let [recv] = take::<1, _>(n);
-            member(receiver_object(recv), prop)
-        },
-        |t| {
-            if bracketed {
-                format!("({}).{prop}", t[0])
-            } else {
-                format!("{}.{prop}", t[0])
-            }
-        },
-    )
+/// `recv.prop`, bracketed only where precedence needs it.
+fn member_of(recv: bynk_ts::TsExpr, prop: &str) -> bynk_ts::TsExpr {
+    let n = vec![recv];
+    let [recv] = take::<1, _>(n);
+    member(receiver_object(recv), prop)
 }
 
-/// `recv.method(args)`; the first child is the receiver. `bracketed` is the text fallback's
-/// spelling (`(recv).method(args)`).
-fn method_of(kids: Vec<LoweredExpr>, method: &str, bracketed: bool) -> Built {
-    node_or_text(
-        kids,
-        |mut n| {
-            let recv = receiver_object(n.remove(0));
-            call(member(recv, method), n)
-        },
-        |t| {
-            let args = t[1..].join(", ");
-            if bracketed {
-                format!("({}).{method}({args})", t[0])
-            } else {
-                format!("{}.{method}({args})", t[0])
-            }
-        },
-    )
+/// `recv.method(args)`; the first child is the receiver.
+fn method_of(kids: Vec<bynk_ts::TsExpr>, method: &str) -> bynk_ts::TsExpr {
+    let mut n = kids;
+    let recv = receiver_object(n.remove(0));
+    call(member(recv, method), n)
 }
 
 /// `lo` and `hi` clamped at zero as `String.slice` does: `globalThis.Math.max(0, x)`.
@@ -147,7 +85,7 @@ pub(in crate::emitter) fn lower_int_kernel(
     cx: &mut LowerCtx,
 ) -> Option<Lowered> {
     let mut pre = Pre::new();
-    let built: Option<Built> = match (op, args) {
+    let built: Option<bynk_ts::TsExpr> = match (op, args) {
         // The identity returns its operand unchanged, so a parent node's printer brackets it.
         (IntOp::ToFloat, []) => Some(identity(&mut pre, receiver, cx)),
         (IntOp::Abs, []) => {
@@ -214,7 +152,7 @@ pub(in crate::emitter) fn lower_float_kernel(
     cx: &mut LowerCtx,
 ) -> Option<Lowered> {
     let mut pre = Pre::new();
-    let built: Option<Built> = match (op, args) {
+    let built: Option<bynk_ts::TsExpr> = match (op, args) {
         (FloatOp::Abs, []) => {
             let kids = operands(&mut pre, cx, &[receiver]);
             Some(math_call("abs", kids))
@@ -234,22 +172,13 @@ pub(in crate::emitter) fn lower_float_kernel(
                 op.name()
             };
             cx.note_int();
-            Some(node_or_text(
-                kids,
-                |n| {
-                    call(
-                        id("__bynkToInt"),
-                        vec![call(global_math(f), n), str_node(op.name())],
-                    )
-                },
-                |t| {
-                    format!(
-                        "__bynkToInt(globalThis.Math.{f}({}), \"{}\")",
-                        t[0],
-                        op.name()
-                    )
-                },
-            ))
+            Some({
+                let n = kids;
+                call(
+                    id("__bynkToInt"),
+                    vec![call(global_math(f), n), str_node(op.name())],
+                )
+            })
         }
         (FloatOp::Min | FloatOp::Max, [other]) => {
             let kids = operands(&mut pre, cx, &[receiver, other]);
@@ -262,11 +191,10 @@ pub(in crate::emitter) fn lower_float_kernel(
         (FloatOp::IsNaN | FloatOp::IsFinite, []) => {
             let kids = operands(&mut pre, cx, &[receiver]);
             let name = op.name();
-            Some(node_or_text(
-                kids,
-                |n| call(member(member(id("globalThis"), "Number"), name), n),
-                |t| format!("globalThis.Number.{name}({})", t[0]),
-            ))
+            Some({
+                let n = kids;
+                call(member(member(id("globalThis"), "Number"), name), n)
+            })
         }
         (FloatOp::ToString, []) => {
             let kids = operands(&mut pre, cx, &[receiver]);
@@ -316,7 +244,7 @@ pub(in crate::emitter) fn lower_duration_kernel(
     cx: &mut LowerCtx,
 ) -> Option<Lowered> {
     let mut pre = Pre::new();
-    let built: Option<Built> = match (op, args) {
+    let built: Option<bynk_ts::TsExpr> = match (op, args) {
         // The identity returns its operand unchanged, so a parent node's printer brackets it.
         (DurationOp::ToMillis, []) => Some(identity(&mut pre, receiver, cx)),
         (DurationOp::ToString, []) => {
@@ -338,7 +266,7 @@ pub(in crate::emitter) fn lower_instant_kernel(
     cx: &mut LowerCtx,
 ) -> Option<Lowered> {
     let mut pre = Pre::new();
-    let built: Option<Built> = match (op, args) {
+    let built: Option<bynk_ts::TsExpr> = match (op, args) {
         // The identity returns its operand unchanged, so a parent node's printer brackets it.
         (InstantOp::ToEpochMillis, []) => Some(identity(&mut pre, receiver, cx)),
         (InstantOp::ToString, []) => {
@@ -367,10 +295,10 @@ pub(in crate::emitter) fn lower_bytes_kernel(
     cx: &mut LowerCtx,
 ) -> Option<Lowered> {
     let mut pre = Pre::new();
-    let built: Option<Built> = match (op, args) {
+    let built: Option<bynk_ts::TsExpr> = match (op, args) {
         (BytesOp::Length, []) => {
             let [recv] = take::<1, _>(operands(&mut pre, cx, &[receiver]));
-            Some(member_of(recv, "length", true))
+            Some(member_of(recv, "length"))
         }
         (BytesOp::ToBase64, []) => {
             let kids = operands(&mut pre, cx, &[receiver]);
@@ -387,7 +315,7 @@ pub(in crate::emitter) fn lower_bytes_kernel(
         // aliases a buffer a binding may still hold.
         (BytesOp::Slice, [lo, hi]) => {
             let kids = operands(&mut pre, cx, &[receiver, lo, hi]);
-            Some(slice_clamped(kids, true))
+            Some(slice_clamped(kids))
         }
         (BytesOp::Concat, [other]) => {
             let kids = operands(&mut pre, cx, &[receiver, other]);
@@ -415,48 +343,13 @@ pub(in crate::emitter) fn lower_bytes_kernel(
 }
 
 /// `recv.slice(globalThis.Math.max(0, lo), globalThis.Math.max(0, hi))`, the `Bytes` and
-/// `String` slice (`bracketed` is the text fallback's receiver spelling).
-fn slice_clamped(kids: Vec<LoweredExpr>, bracketed: bool) -> Built {
-    node_or_text(
-        kids,
-        |n| {
-            let [recv, lo, hi] = take::<3, _>(n);
-            call(
-                member(receiver_object(recv), "slice"),
-                vec![at_least_zero(lo), at_least_zero(hi)],
-            )
-        },
-        |t| {
-            let recv = if bracketed {
-                format!("({})", t[0])
-            } else {
-                t[0].clone()
-            };
-            format!(
-                "{recv}.slice(globalThis.Math.max(0, {}), globalThis.Math.max(0, {}))",
-                t[1], t[2]
-            )
-        },
-    )
-}
-
-/// v0.22a: lower a built-in `String` kernel method (ADR 0046). Pinned
-/// semantics: `replace` is replace-**all** (`replaceAll`) and inserts its
-/// replacement literally (#1650); `chars()` is
-/// code **points** (`[...s]`), not code units; `slice` clamps negative
-/// indices to `0` (no TS wrap-around); `indexOf` turns `-1` into `None`.
-/// K6c (#2600): a regex method's pattern literal as a `RegExp` construction,
-/// its inline flags moved into the flags argument, plus `extra` flags (`g` for
-/// a global scan, `y` for a sticky one). `anchored` pins it to the whole
-/// string with lookarounds rather than `^…$`, which an `m` flag would turn into
-/// line anchors. V8 caches a `RegExp`'s compilation by source and
-/// flags, so building one per call compiles each pattern once; a fresh object
-/// also keeps no `lastIndex` state between calls.
-fn regex_construction(literal: &str, extra: &str, anchored: bool) -> String {
-    let (source, flags) = regex_parts(literal, extra, anchored);
-    format!(
-        "new globalThis.RegExp(\"{}\", \"{flags}\")",
-        crate::emitter::escape_ts_string(&source)
+/// `String` slice.
+fn slice_clamped(kids: Vec<bynk_ts::TsExpr>) -> bynk_ts::TsExpr {
+    let n = kids;
+    let [recv, lo, hi] = take::<3, _>(n);
+    call(
+        member(receiver_object(recv), "slice"),
+        vec![at_least_zero(lo), at_least_zero(hi)],
     )
 }
 
@@ -600,12 +493,6 @@ fn option_string() -> TsType {
     TsType::named_with_args("Option", vec![ts_named("string")])
 }
 
-/// The capture-group mapper the `find` and `findAll` regex arms share, as text:
-/// `(__m: RegExpMatchArray): Option<string>[] => [...__m].map(…)`.
-const GROUPS_TEXT: &str = "(__m: globalThis.RegExpMatchArray): Option<string>[] => \
-                           [...__m].map((__g: string | undefined): Option<string> => \
-                           __g === undefined ? None : Some(__g))";
-
 /// `(name: ty): ret => body`, a one-parameter arrow with a declared return type.
 fn typed_arrow(name: &str, ty: TsType, ret: TsType, body: TsExpr) -> TsExpr {
     TsExpr::Arrow {
@@ -630,7 +517,7 @@ fn none_or_some(name: &str, rhs: TsExpr, some: TsExpr) -> TsExpr {
     }
 }
 
-/// [`GROUPS_TEXT`] as a node.
+/// The groups of a regex match, as `Option<string>[]`.
 fn groups_node() -> TsExpr {
     let map_group = typed_arrow(
         "__g",
@@ -671,108 +558,57 @@ fn find_regex_node(regex: TsExpr, recv: TsExpr) -> TsExpr {
 /// One regex arm over a lowered receiver (and the replacement for `replaceRegex`). The node
 /// and the text are the same expression; the `find`, `findAll` and `split` arms carry typed
 /// arrows, written out once each.
-fn regex_arm(op: StringOp, literal: &str, kids: Vec<LoweredExpr>) -> Option<Built> {
+fn regex_arm(op: StringOp, literal: &str, kids: Vec<bynk_ts::TsExpr>) -> Option<bynk_ts::TsExpr> {
     Some(match op {
-        StringOp::MatchesRegex => node_or_text(
-            kids,
-            |n| {
-                let [recv] = take::<1, _>(n);
-                call(member(regex_node(literal, "", true), "test"), vec![recv])
-            },
-            |t| format!("{}.test({})", regex_construction(literal, "", true), t[0]),
-        ),
-        StringOp::ContainsRegex => node_or_text(
-            kids,
-            |n| {
-                let [recv] = take::<1, _>(n);
-                call(member(regex_node(literal, "", false), "test"), vec![recv])
-            },
-            |t| format!("{}.test({})", regex_construction(literal, "", false), t[0]),
-        ),
-        StringOp::FindRegex => node_or_text(
-            kids,
-            |n| {
-                let [recv] = take::<1, _>(n);
-                find_regex_node(regex_node(literal, "", false), recv)
-            },
-            |t| {
-                format!(
-                    "((__m: globalThis.RegExpExecArray | null): Option<readonly Option<string>[]> => \
-                     __m === null ? None : Some(({GROUPS_TEXT})(__m)))({}.exec({}))",
-                    regex_construction(literal, "", false),
-                    t[0]
-                )
-            },
-        ),
-        StringOp::FindAllRegex => node_or_text(
-            kids,
-            |n| {
-                let [recv] = take::<1, _>(n);
-                let scan = call(
-                    member(receiver_object(recv), "matchAll"),
-                    vec![regex_node(literal, "g", false)],
-                );
-                TsExpr::Paren(Box::new(TsExpr::As {
-                    expr: Box::new(call(
-                        member(TsExpr::array(vec![spread(scan)]), "map"),
-                        vec![groups_node()],
-                    )),
-                    ty: TsType::readonly_array(TsType::readonly_array(option_string())),
-                }))
-            },
-            |t| {
-                format!(
-                    "([...({}).matchAll({})].map({GROUPS_TEXT}) as readonly (readonly Option<string>[])[])",
-                    t[0],
-                    regex_construction(literal, "g", false)
-                )
-            },
-        ),
-        StringOp::ReplaceRegex => node_or_text(
-            kids,
-            |n| {
-                let [recv, with] = take::<2, _>(n);
-                call(
-                    member(receiver_object(recv), "replace"),
-                    vec![regex_node(literal, "g", false), with],
-                )
-            },
-            |t| {
-                format!(
-                    "({}).replace({}, {})",
-                    t[0],
-                    regex_construction(literal, "g", false),
-                    t[1]
-                )
-            },
-        ),
+        StringOp::MatchesRegex => {
+            let n = kids;
+            let [recv] = take::<1, _>(n);
+            call(member(regex_node(literal, "", true), "test"), vec![recv])
+        }
+        StringOp::ContainsRegex => {
+            let n = kids;
+            let [recv] = take::<1, _>(n);
+            call(member(regex_node(literal, "", false), "test"), vec![recv])
+        }
+        StringOp::FindRegex => {
+            let n = kids;
+            let [recv] = take::<1, _>(n);
+            find_regex_node(regex_node(literal, "", false), recv)
+        }
+        StringOp::FindAllRegex => {
+            let n = kids;
+            let [recv] = take::<1, _>(n);
+            let scan = call(
+                member(receiver_object(recv), "matchAll"),
+                vec![regex_node(literal, "g", false)],
+            );
+            TsExpr::Paren(Box::new(TsExpr::As {
+                expr: Box::new(call(
+                    member(TsExpr::array(vec![spread(scan)]), "map"),
+                    vec![groups_node()],
+                )),
+                ty: TsType::readonly_array(TsType::readonly_array(option_string())),
+            }))
+        }
+        StringOp::ReplaceRegex => {
+            let n = kids;
+            let [recv, with] = take::<2, _>(n);
+            call(
+                member(receiver_object(recv), "replace"),
+                vec![regex_node(literal, "g", false), with],
+            )
+        }
         // JS `split` with a regex, minus the captured groups it splices in:
         // its own algorithm over a sticky scan, an empty match at the last
         // split point advancing by one code unit.
-        StringOp::SplitRegex => node_or_text(
-            text_if_forced("splitRegex", kids),
-            |n| {
-                let [recv] = take::<1, _>(n);
-                call(
-                    split_regex_arrow(),
-                    vec![recv, regex_node(literal, "y", false)],
-                )
-            },
-            |t| {
-                format!(
-                    "((__s: string, __r: globalThis.RegExp): readonly string[] => {{ \
-                     if (__s.length === 0) {{ return __r.exec(__s) === null ? [\"\"] : []; }} \
-                     const __out: string[] = []; let __p = 0; let __q = 0; \
-                     while (__q < __s.length) {{ __r.lastIndex = __q; const __hit = __r.exec(__s); \
-                     const __e = __r.lastIndex; \
-                     if (__hit === null || __e === __p) {{ __q++; }} \
-                     else {{ __out.push(__s.slice(__p, __q)); __p = __e; __q = __p; }} }} \
-                     __out.push(__s.slice(__p)); return __out; }})({}, {})",
-                    t[0],
-                    regex_construction(literal, "y", false)
-                )
-            },
-        ),
+        StringOp::SplitRegex => {
+            let n = kids;
+            let [recv] = take::<1, _>(n);
+            call(
+                split_regex_arrow(),
+                vec![recv, regex_node(literal, "y", false)],
+            )
+        }
         _ => return None,
     })
 }
@@ -812,49 +648,46 @@ pub(in crate::emitter) fn lower_string_kernel(
         };
         return finish(pre, regex_arm(op, &literal, kids));
     }
-    let built: Option<Built> = match (op, args) {
+    let built: Option<bynk_ts::TsExpr> = match (op, args) {
         (StringOp::Length, []) => {
             let [recv] = take::<1, _>(operands(&mut pre, cx, &[receiver]));
-            Some(member_of(recv, "length", true))
+            Some(member_of(recv, "length"))
         }
         (StringOp::Trim, []) => {
             let kids = operands(&mut pre, cx, &[receiver]);
-            Some(method_of(kids, "trim", false))
+            Some(method_of(kids, "trim"))
         }
         (StringOp::ToUpper, []) => {
             let kids = operands(&mut pre, cx, &[receiver]);
-            Some(method_of(kids, "toUpperCase", false))
+            Some(method_of(kids, "toUpperCase"))
         }
         (StringOp::ToLower, []) => {
             let kids = operands(&mut pre, cx, &[receiver]);
-            Some(method_of(kids, "toLowerCase", false))
+            Some(method_of(kids, "toLowerCase"))
         }
         (StringOp::Chars, []) => {
             let kids = operands(&mut pre, cx, &[receiver]);
-            Some(node_or_text(
-                kids,
-                |n| {
-                    let [recv] = take::<1, _>(n);
-                    TsExpr::array(vec![spread(recv)])
-                },
-                |t| format!("[...{}]", t[0]),
-            ))
+            Some({
+                let n = kids;
+                let [recv] = take::<1, _>(n);
+                TsExpr::array(vec![spread(recv)])
+            })
         }
         (StringOp::Split, [sep]) => {
             let kids = operands(&mut pre, cx, &[receiver, sep]);
-            Some(method_of(kids, "split", false))
+            Some(method_of(kids, "split"))
         }
         (StringOp::Contains, [sub]) => {
             let kids = operands(&mut pre, cx, &[receiver, sub]);
-            Some(method_of(kids, "includes", false))
+            Some(method_of(kids, "includes"))
         }
         (StringOp::StartsWith | StringOp::EndsWith, [sub]) => {
             let kids = operands(&mut pre, cx, &[receiver, sub]);
-            Some(method_of(kids, op.name(), false))
+            Some(method_of(kids, op.name()))
         }
         (StringOp::Concat, [other]) => {
             let kids = operands(&mut pre, cx, &[receiver, other]);
-            Some(method_of(kids, "concat", false))
+            Some(method_of(kids, "concat"))
         }
         (StringOp::Replace, [from, to]) => {
             let kids = operands(&mut pre, cx, &[receiver, from, to]);
@@ -864,52 +697,41 @@ pub(in crate::emitter) fn lower_string_kernel(
             // expression, so its result is the same either way, but it is
             // evaluated once per match (and not at all with no match), so a
             // costly replacement is recomputed.
-            Some(node_or_text(
-                kids,
-                |n| {
-                    let [recv, from, to] = take::<3, _>(n);
-                    call(
-                        member(receiver_object(recv), "replaceAll"),
-                        vec![from, arrow(Vec::new(), to)],
-                    )
-                },
-                |t| format!("{}.replaceAll({}, () => {})", t[0], t[1], t[2]),
-            ))
+            Some({
+                let n = kids;
+                let [recv, from, to] = take::<3, _>(n);
+                call(
+                    member(receiver_object(recv), "replaceAll"),
+                    vec![from, arrow(Vec::new(), to)],
+                )
+            })
         }
         (StringOp::Slice, [lo, hi]) => {
             let kids = operands(&mut pre, cx, &[receiver, lo, hi]);
-            Some(slice_clamped(kids, false))
+            Some(slice_clamped(kids))
         }
         (StringOp::IndexOf, [sub]) => {
             let kids = operands(&mut pre, cx, &[receiver, sub]);
-            Some(node_or_text(
-                kids,
-                |n| {
-                    let [recv, sub] = take::<2, _>(n);
-                    let to_option = arrow(
-                        vec![param("__i", Some(ts_named("number")))],
-                        TsExpr::Conditional {
-                            test: Box::new(TsExpr::Binary {
-                                op: TsBinaryOp::LessThan,
-                                left: Box::new(id("__i")),
-                                right: Box::new(zero()),
-                            }),
-                            consequent: Box::new(id("None")),
-                            alternate: Box::new(call(id("Some"), vec![id("__i")])),
-                        },
-                    );
-                    call(
-                        to_option,
-                        vec![call(member(receiver_object(recv), "indexOf"), vec![sub])],
-                    )
-                },
-                |t| {
-                    format!(
-                        "((__i: number) => __i < 0 ? None : Some(__i))({}.indexOf({}))",
-                        t[0], t[1]
-                    )
-                },
-            ))
+            Some({
+                let n = kids;
+                let [recv, sub] = take::<2, _>(n);
+                let to_option = arrow(
+                    vec![param("__i", Some(ts_named("number")))],
+                    TsExpr::Conditional {
+                        test: Box::new(TsExpr::Binary {
+                            op: TsBinaryOp::LessThan,
+                            left: Box::new(id("__i")),
+                            right: Box::new(zero()),
+                        }),
+                        consequent: Box::new(id("None")),
+                        alternate: Box::new(call(id("Some"), vec![id("__i")])),
+                    },
+                );
+                call(
+                    to_option,
+                    vec![call(member(receiver_object(recv), "indexOf"), vec![sub])],
+                )
+            })
         }
         // K2 (#2594): percent-encoding over the UTF-8 bytes.
         (StringOp::PercentEncode, []) => {
@@ -939,18 +761,17 @@ pub(in crate::emitter) fn lower_decimal_kernel(
     let mut pre = Pre::new();
     let mode = |a: &Expr| rounding_mode(a).map(|m| m.name());
     // A helper call whose last operand is the rounding mode, a string literal.
-    let with_mode = |helper: &str, mut kids: Vec<LoweredExpr>, mode: &str| {
-        kids.push(LoweredExpr::Node(str_node(mode)));
-        node_or_text(
-            kids,
-            |n| call(id(helper), n),
-            |t| format!("{helper}({})", t.join(", ")),
-        )
+    let with_mode = |helper: &str, mut kids: Vec<bynk_ts::TsExpr>, mode: &str| {
+        kids.push(str_node(mode));
+        {
+            let n = kids;
+            call(id(helper), n)
+        }
     };
-    let built: Option<Built> = match (op, args) {
+    let built: Option<bynk_ts::TsExpr> = match (op, args) {
         (DecimalOp::Scale, []) => {
             let [recv] = take::<1, _>(operands(&mut pre, cx, &[receiver]));
-            Some(member_of(recv, "scale", true))
+            Some(member_of(recv, "scale"))
         }
         (DecimalOp::ToString, []) => {
             let kids = operands(&mut pre, cx, &[receiver]);
@@ -1002,50 +823,26 @@ pub(in crate::emitter) fn lower_decimal_kernel(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::emitter::lower::TEXT_EXITS;
     use crate::testkit::emit_source;
 
-    /// `(text exits, emitted TypeScript)` for a one-function commons whose signature is `sig`.
-    fn exits(sig: &str, body: &str) -> (usize, String) {
-        TEXT_EXITS.with(|c| c.set(0));
-        let ts = emit_source(&format!("commons ks\nfn f({sig}) -> {body}\n"));
-        (TEXT_EXITS.with(|c| c.get()), ts)
+    /// The groups arrow as the text the old text form wrote.
+    const GROUPS_TEXT: &str = "(__m: globalThis.RegExpMatchArray): Option<string>[] => \
+                               [...__m].map((__g: string | undefined): Option<string> => \
+                               __g === undefined ? None : Some(__g))";
+
+    /// A pattern's `RegExp` construction as the text the old text form wrote: the node form must
+    /// print the same bytes.
+    fn regex_construction(literal: &str, extra: &str, anchored: bool) -> String {
+        let (source, flags) = regex_parts(literal, extra, anchored);
+        format!(
+            "new globalThis.RegExp(\"{}\", \"{flags}\")",
+            crate::emitter::escape_ts_string(&source)
+        )
     }
 
-    /// `is_simple_path` decides whether a text operand needs brackets: only a bare name or a
-    /// dotted path of names is left as it stands (#3823).
-    #[test]
-    fn is_simple_path_accepts_only_names_and_dotted_paths() {
-        for simple in [
-            "x",
-            "x1",
-            "_x",
-            "$x",
-            "a.b",
-            "a.b.c",
-            "__r0",
-            "globalThis.Math",
-        ] {
-            assert!(is_simple_path(simple), "{simple:?} is a simple path");
-        }
-        for compound in [
-            "",
-            "a + b",
-            "a.b()",
-            "a[0]",
-            "-a",
-            "a ? b : c",
-            "(a)",
-            "a b",
-            "\"a\"",
-            "a.b + 1",
-            "a?.b",
-        ] {
-            assert!(!is_simple_path(compound), "{compound:?} needs brackets");
-        }
-        // The check is about characters, not about whether the text is an identifier; a
-        // number literal is a node by the time it reaches here, so this never matters.
-        assert!(is_simple_path("1.5"));
+    /// The emitted TypeScript for a one-function commons.
+    fn emitted(sig: &str, body: &str) -> String {
+        emit_source(&format!("commons ks\nfn f({sig}) -> {body}\n"))
     }
 
     /// The returned expression of `export function f`.
@@ -1057,10 +854,10 @@ mod tests {
         rest[ret..ret + end].to_string()
     }
 
-    /// One call per kernel op over identifier receivers and arguments: the exact print, with no
-    /// text exit and the `note_*` import where the op has one (checked on the output's imports).
+    /// One call per kernel op over identifier receivers and arguments: the exact print, and the
+    /// `note_*` import where the op has one (checked on the output's imports).
     #[test]
-    fn every_scalar_op_prints_as_a_node_with_no_text_exit() {
+    fn every_scalar_op_prints_as_a_node() {
         let int = "n: Int, m: Int, lo: Int, hi: Int";
         let float = "x: Float, y: Float, lo: Float, hi: Float";
         let rows: &[(&str, &str, &str, &str)] = &[
@@ -1360,9 +1157,8 @@ mod tests {
             ),
         ];
         for (sig, body, want, import) in rows {
-            let (n, ts) = exits(sig, body);
+            let ts = emitted(sig, body);
             assert_eq!(returned(&ts), *want, "{body}");
-            assert_eq!(n, 0, "{body}: text exits\n{ts}");
             if !import.is_empty() {
                 let header: String = ts.lines().filter(|l| l.starts_with("import")).collect();
                 assert!(
@@ -1416,14 +1212,12 @@ mod tests {
                 "((__i: number) => __i < 0 ? None : Some(__i))(s.concat(t).indexOf(t))",
             ),
         ] {
-            let (n, ts) = exits(sig, body);
+            let ts = emitted(sig, body);
             assert_eq!(returned(&ts), want, "{body}");
-            assert_eq!(n, 0, "{body}: text exits\n{ts}");
         }
     }
 
-    /// Every regex arm over a plain, a flagged, an anchored and an escaped pattern, as a node
-    /// with no text exit.
+    /// Every regex arm over a plain, a flagged, an anchored and an escaped pattern.
     #[test]
     fn the_regex_arms_print_as_nodes() {
         let groups = GROUPS_TEXT;
@@ -1461,9 +1255,8 @@ mod tests {
                 "s.replace(new globalThis.RegExp(\"\\\\s+\", \"g\"), \" \")".to_string(),
             ),
         ] {
-            let (n, ts) = exits("s: String", body);
+            let ts = emitted("s: String", body);
             assert_eq!(returned(&ts), want, "{body}");
-            assert_eq!(n, 0, "{body}: text exits\n{ts}");
         }
     }
 
@@ -1472,8 +1265,7 @@ mod tests {
     /// replaced is still there, in the same order.
     #[test]
     fn split_regex_is_a_while_over_a_sticky_scan() {
-        let (n, ts) = exits("s: String", "List[String] { s.splitRegex(\",\") }");
-        assert_eq!(n, 0, "{ts}");
+        let ts = emitted("s: String", "List[String] { s.splitRegex(\",\") }");
         let at = ts.find("return ((__s: string").expect("the arrow") + "return ".len();
         let end = ts[at..].find("})(s, ").expect("the call") + at;
         let squashed: String = ts[at..end].split_whitespace().collect::<Vec<_>>().join(" ");
@@ -1623,9 +1415,8 @@ mod tests {
             ),
             ("n: Int", "Float { n.toFloat() }", "n"),
         ] {
-            let (n, ts) = exits(sig, body);
+            let ts = emitted(sig, body);
             assert_eq!(returned(&ts), want, "{body}");
-            assert_eq!(n, 0, "{body}: the identity arm is a node\n{ts}");
         }
     }
 
@@ -1633,7 +1424,6 @@ mod tests {
     #[test]
     fn an_identity_arm_keeps_its_hoists() {
         let (_, ts) = {
-            TEXT_EXITS.with(|c| c.set(0));
             let ts = emit_source(
                 "commons ks\nfn g() -> Result[Int, String] { Ok(3) }\nfn f() -> Result[Float, String] { Ok(g()?.toFloat()) }\n",
             );

@@ -1,6 +1,6 @@
 //! `cargo xtask greenfield-status` — the probe harness (track doc §8, proposal #999).
 //!
-//! Twenty-six probes measuring the tree against `design/bynk-greenfield-compiler.md`:
+//! Twenty-five probes measuring the tree against `design/bynk-greenfield-compiler.md`:
 //! the twelve in track doc §8, `emit_abi_shapes` (ADR 0310's probe, #999 Decision E —
 //! this slice measures the emit-ABI enumeration guard but does not wire it; wiring is
 //! packaging-track work), phase 7's own four — `ts_writes`, `ts_any`,
@@ -14,11 +14,11 @@
 //! crate-hygiene track's M-3 ratchet, `model_readers_beyond_emit` (B1, #2939), and its H-3 gate,
 //! `unused_deps` (A4, #2976).
 //!
-//! **Twenty-six are gated**, committed and diffed: `workspace_lints`, `fs_below_driver`,
+//! **Twenty-five are gated**, committed and diffed: `workspace_lints`, `fs_below_driver`,
 //! `options_sources`, `hoist_sinks`, `span_keyed_maps`, `emit_diagnostics`,
 //! `ide_emit_edge`, `ast_importers`, `emit_abi_shapes`, `ts_writes`, `ts_any`,
 //! `verbatim_origins`, `verbatim_sites`, `incremental_query_types`,
-//! `unconsumed_ir_items`, `diagnostic_coverage`, `model_readers_beyond_emit`, `unused_deps`, `explained_codes`, `ts_raw_sites_emit`, `ts_raw_sites_testgen`, `ts_text_idents`, `lowering_text_bridge`, `stmt_text_lines`, `emit_thread_locals`, `emit_silent_fallbacks`. Ten of these are
+//! `unconsumed_ir_items`, `diagnostic_coverage`, `model_readers_beyond_emit`, `unused_deps`, `explained_codes`, `ts_raw_sites_emit`, `ts_raw_sites_testgen`, `ts_text_idents`, `emit_thread_locals`, `emit_silent_fallbacks`, `emit_print_calls`. Ten of these are
 //! zero/closure-shaped — a boolean, or a count pinned at a small, argued floor
 //! (`ast_importers` = 5, `emit_abi_shapes` = 1). Phase 7's own four are the same shape:
 //! each converged toward an argued floor over dozens of slices, the same trajectory
@@ -42,7 +42,7 @@
 //! **Two kinds of gate** (#3679, amending ADR 0389/0390). Every gated probe is
 //! *exact-match*: a live reading that differs from its committed row fails unless a
 //! pending file names it in `probes:`. The [`GROWTH_PROBES`] (`ts_writes`, `ts_any`,
-//! `emit_abi_shapes`, `verbatim_sites`, `ts_raw_sites_emit`, `ts_raw_sites_testgen`, `ts_text_idents`, `lowering_text_bridge`, `stmt_text_lines`, `span_keyed_maps`, `emit_thread_locals`, `emit_silent_fallbacks`) are also *directional*:
+//! `emit_abi_shapes`, `verbatim_sites`, `ts_raw_sites_emit`, `ts_raw_sites_testgen`, `ts_text_idents`, `span_keyed_maps`, `emit_thread_locals`, `emit_silent_fallbacks`, `emit_print_calls`) are also *directional*:
 //! `growth_probes_never_rise` (`xtask/tests/greenfield_status.rs`) fails when the
 //! live leading count exceeds the committed one unless a pending file *raises* the
 //! probe with a reason (`raises:`), which the stamp then records in
@@ -117,7 +117,7 @@ pub fn run(root: &Path) -> Report {
 /// The gated probes' names, in [`run_gated`]'s order — what a pending file's
 /// `probes` key may cite. `greenfield_status_table_is_current` asserts this
 /// matches the probes [`run_gated`] actually returns, so the two cannot drift.
-pub const GATED_PROBES: [&str; 26] = [
+pub const GATED_PROBES: [&str; 25] = [
     "workspace_lints",
     "fs_below_driver",
     "options_sources",
@@ -134,10 +134,9 @@ pub const GATED_PROBES: [&str; 26] = [
     "ts_raw_sites_emit",
     "ts_raw_sites_testgen",
     "ts_text_idents",
-    "lowering_text_bridge",
-    "stmt_text_lines",
     "emit_thread_locals",
     "emit_silent_fallbacks",
+    "emit_print_calls",
     "incremental_query_types",
     "unconsumed_ir_items",
     "diagnostic_coverage",
@@ -148,12 +147,12 @@ pub const GATED_PROBES: [&str; 26] = [
 
 /// The gated probes that only a reasoned, recorded `raises:` may increase
 /// (#3679, ADR 0389/0390 amended): `ts_writes`, `ts_any`, `emit_abi_shapes`,
-/// `verbatim_sites`, `ts_raw_sites_emit` and `ts_raw_sites_testgen` (the split of `ts_raw_sites`, #3681), `ts_text_idents` (#3681), `lowering_text_bridge` (1A.2, #3694), `stmt_text_lines` (1A.10, #3711), `span_keyed_maps`, `emit_thread_locals` (1A.19), `emit_silent_fallbacks` (1A.34). Probes already at a zero or closure
+/// `verbatim_sites`, `ts_raw_sites_emit` and `ts_raw_sites_testgen` (the split of `ts_raw_sites`, #3681), `ts_text_idents` (#3681), `span_keyed_maps`, `emit_thread_locals` (1A.19), `emit_silent_fallbacks` (1A.34), `emit_print_calls` (1A.35b). Probes already at a zero or closure
 /// floor are excluded (their exact-match row pins them), as are
 /// `verbatim_origins` (an argued floor of 2) and `model_readers_beyond_emit`
 /// (which has the opposite direction). A subset of [`GATED_PROBES`], pinned by
 /// a unit test.
-pub const GROWTH_PROBES: [&str; 12] = [
+pub const GROWTH_PROBES: [&str; 11] = [
     "ts_writes",
     "ts_any",
     "emit_abi_shapes",
@@ -161,14 +160,13 @@ pub const GROWTH_PROBES: [&str; 12] = [
     "ts_raw_sites_emit",
     "ts_raw_sites_testgen",
     "ts_text_idents",
-    "lowering_text_bridge",
-    "stmt_text_lines",
     "span_keyed_maps",
     "emit_thread_locals",
     "emit_silent_fallbacks",
+    "emit_print_calls",
 ];
 
-/// The twenty-six gated (zero/closure/ratchet) probes only — what [`gated_disagreements`] diffs.
+/// The twenty-five gated (zero/closure/ratchet) probes only — what [`gated_disagreements`] diffs.
 pub fn run_gated(root: &Path) -> Vec<Probe> {
     vec![
         workspace_lints(root),
@@ -187,10 +185,9 @@ pub fn run_gated(root: &Path) -> Vec<Probe> {
         ts_raw_sites_emit(root),
         ts_raw_sites_testgen(root),
         ts_text_idents(root),
-        lowering_text_bridge(root),
-        stmt_text_lines(root),
         emit_thread_locals(root),
         emit_silent_fallbacks(root),
+        emit_print_calls(root),
         incremental_query_types(root),
         unconsumed_ir_items(root),
         diagnostic_coverage(root),
@@ -2201,7 +2198,7 @@ fn verbatim_sites_violations(files: &[(PathBuf, String)]) -> usize {
     count
 }
 
-// --- Gated probes 20-22: ts_raw_sites, ts_text_idents (#3681), lowering_text_bridge (#3694) ---------------
+// --- Gated probes 20-22: ts_raw_sites, ts_text_idents (#3681), emit_print_calls (1A.35b) ---------------
 
 /// Counts non-comment lines outside `#[cfg(test)]` modules that contain any of
 /// `needles` with a non-identifier character (or the line start) immediately
@@ -2214,7 +2211,7 @@ fn opening_token_lines(files: &[(PathBuf, String)], needles: &[&str]) -> usize {
 
 /// The count of non-comment lines outside `#[cfg(test)]` modules for which
 /// `hit` holds — the scan [`opening_token_lines`] and
-/// [`lowering_text_bridge_violations`] share.
+/// [`emit_print_calls_violations`] share.
 fn production_lines_matching(files: &[(PathBuf, String)], hit: impl Fn(&str) -> bool) -> usize {
     let mut count = 0usize;
     for (_, contents) in files {
@@ -2474,134 +2471,41 @@ fn ts_text_idents_violations(files: &[(PathBuf, String)]) -> usize {
     opening_token_lines(files, &["Ident(format!("])
 }
 
-/// Slice 1A.2 (#3694): the production sites where *text* enters the lowering
-/// bridge (`LoweredExpr`/`LoweredStmt`, `bynk-emit/src/emitter/lower.rs`). Each
-/// is a place a lowering function builds TypeScript as a string instead of a
-/// `bynk_ts` node; every converted family retires its share, and the probe
-/// reaches 0 when the bridge's `Text` side is deleted (track §8, invariant 3).
-/// A growth probe ([`GROWTH_PROBES`]): it may only fall unless a pending file
-/// `raises:` it with a reason.
+/// 1A.35b (#3736, Decision F): the `print_expr(`, `print_stmt(` and `print_type(` calls in
+/// `bynk-emit`'s production source. Each prints a tree to text, which is a round trip unless it is
+/// one of the named boundaries (the final program print, `lower_block_to_async_body`, the
+/// assembly of a surviving foreign `raw` statement or text template); the PR that set the
+/// baseline lists them. A growth probe ([`GROWTH_PROBES`]): it may only fall unless a pending
+/// file `raises:` it with a reason, so a round trip cannot creep back in.
 ///
-/// Counts non-comment lines outside `#[cfg(test)]` modules in
-/// [`codegen_family_files`] that contain any text constructor: the variants
-/// `LoweredExpr::Text(` and `LoweredStmt::Text(` (as constructions only; see
-/// [`is_pattern_use`]), the same variants as bare paths used as functions
-/// (`.map(LoweredStmt::Text)`, so `Text)` or `Text,` follows), `Lowered::bare(`,
-/// `Lowered::text_with_pre(`, and the `Pre` methods that wrap text
-/// (`.finish_text(`, `.push_text(`, `.extend_text(`). Definitions (`fn bare(`,
-/// the variant declarations) and pattern uses (`LoweredExpr::Text(t) => …`) do
-/// not match. Text-level gaps, as for [`ts_raw_sites`]: a constructor must open
-/// on one line, and two on one line count once.
-fn lowering_text_bridge(root: &Path) -> Probe {
+/// Counts non-comment lines outside `#[cfg(test)]` modules in `bynk-emit/src` that contain
+/// `print_expr(`, `print_stmt(` or `print_type(` (a call), or the same name as a path
+/// (`.map(bynk_ts::print_type)`). `print_stmt_with_spans(` and the like are other names and do not
+/// match. Also counted: a path as an argument (`print_type)` or `print_type,`) and an `as` rename of
+/// the import (`print_expr as pe`). Text-level gaps, as for the other line scanners: two calls on
+/// one line count once, a call whose name is on the next line is missed, and a call through a
+/// renamed binding (`pe(&e)`) is counted only at its `use` line.
+fn emit_print_calls(root: &Path) -> Probe {
     Probe {
-        name: "lowering_text_bridge",
+        name: "emit_print_calls",
         gated: true,
-        reads: lowering_text_bridge_violations(&codegen_family_files(root)).to_string(),
+        reads: emit_print_calls_violations(&rust_files_relative(&root.join("bynk-emit/src")))
+            .to_string(),
     }
 }
 
-/// [`lowering_text_bridge`]'s counting logic over an explicit file list.
-fn lowering_text_bridge_violations(files: &[(PathBuf, String)]) -> usize {
-    const VARIANT_CALLS: [&str; 2] = ["LoweredExpr::Text(", "LoweredStmt::Text("];
-    const OTHER_NEEDLES: [&str; 13] = [
-        "LoweredExpr::Text)",
-        "LoweredExpr::Text,",
-        "LoweredStmt::Text)",
-        "LoweredStmt::Text,",
-        "Lowered::bare(",
-        "Lowered::text_with_pre(",
-        ".finish_text(",
-        ".push_text(",
-        ".extend_text(",
-        // Method-path forms (`.map(Pre::push_text)`) let text in without a call.
-        "Pre::finish_text",
-        "Pre::push_text",
-        "Pre::extend_text",
-        "Lowered::bare)",
-    ];
-    production_lines_matching(files, |line| {
-        line_has_token(line, &OTHER_NEEDLES)
-            || VARIANT_CALLS.iter().any(|needle| {
-                line.match_indices(needle).any(|(at, _)| {
-                    let word_before = line[..at]
-                        .chars()
-                        .next_back()
-                        .is_some_and(|c| c.is_ascii_alphanumeric() || c == '_');
-                    !word_before && !is_pattern_use(line, at, needle)
-                })
-            })
-    })
-}
-
-/// Slice 1A.10 (#3711, S1 of the statement-emitter design note #3708): the
-/// production sites where *text* enters a statement `Body`
-/// (`bynk-emit/src/emitter/lower_stmt.rs`), each an `Item::Line` the statement
-/// emitter builds as a string instead of a `bynk_ts` statement node. A separate
-/// probe from [`lowering_text_bridge`] so the two trends stay readable: counting
-/// `Line` there would only re-label text that already exists. Slices S2-S4
-/// convert one producer at a time to node items and each lowers this; it reaches
-/// 0 when the last statement producer builds nodes. A growth probe
-/// ([`GROWTH_PROBES`]): it may only fall unless a pending file `raises:` it with
-/// a reason.
-///
-/// Counts non-comment lines outside `#[cfg(test)]` modules in
-/// [`codegen_family_files`] that construct an `Item::Line`: a call
-/// (`Item::Line(` — pattern uses such as a match arm are not constructions, see
-/// [`is_pattern_use`]) or the variant used as a function (`.map(Item::Line)`).
-/// Text-level gaps, as for [`lowering_text_bridge`]: a constructor must open on
-/// one line, and two on one line count once.
-fn stmt_text_lines(root: &Path) -> Probe {
-    Probe {
-        name: "stmt_text_lines",
-        gated: true,
-        reads: stmt_text_lines_violations(&codegen_family_files(root)).to_string(),
-    }
-}
-
-/// [`stmt_text_lines`]'s counting logic over an explicit file list.
-fn stmt_text_lines_violations(files: &[(PathBuf, String)]) -> usize {
-    const CALL: &str = "Item::Line(";
-    const PATH_FORMS: [&str; 2] = ["Item::Line)", "Item::Line,"];
-    production_lines_matching(files, |line| {
-        line_has_token(line, &PATH_FORMS)
-            || line.match_indices(CALL).any(|(at, _)| {
-                let word_before = line[..at]
-                    .chars()
-                    .next_back()
-                    .is_some_and(|c| c.is_ascii_alphanumeric() || c == '_');
-                !word_before && !is_pattern_use(line, at, CALL)
-            })
-    })
-}
-
-/// Whether the `needle` (`Variant::Text(`) occurrence at byte `at` of `line` is a
-/// pattern (a match arm, `if let`, `let`, `matches!`) rather than a
-/// construction. Heuristic, text-level: a pattern is followed, past its closing
-/// parenthesis, by `=>`, `|` or a single `=`, or is preceded by `let` or inside
-/// `matches!(`. A construction whose closing parenthesis is on a later line is
-/// counted as a construction.
-fn is_pattern_use(line: &str, at: usize, needle: &str) -> bool {
-    let before = line[..at].trim_end();
-    if before.ends_with("let") || line[..at].contains("matches!(") {
-        return true;
-    }
-    let mut depth = 0usize;
-    for (i, c) in line[at + needle.len() - 1..].char_indices() {
-        match c {
-            '(' => depth += 1,
-            ')' => {
-                depth -= 1;
-                if depth == 0 {
-                    let after = line[at + needle.len() - 1 + i + 1..].trim_start();
-                    return after.starts_with("=>")
-                        || after.starts_with('|')
-                        || (after.starts_with('=') && !after.starts_with("=="));
-                }
-            }
-            _ => {}
-        }
-    }
-    false
+/// [`emit_print_calls`]'s counting logic over an explicit file list.
+fn emit_print_calls_violations(files: &[(PathBuf, String)]) -> usize {
+    const NAMES: [&str; 3] = ["print_expr", "print_stmt", "print_type"];
+    // A call, a path as the last argument (`)`), a path as an earlier argument (`,`) and an `as`
+    // rename of the import (`use bynk_ts::print_expr as pe;`).
+    const SUFFIXES: [&str; 4] = ["(", ")", ",", " as "];
+    let needles: Vec<String> = NAMES
+        .iter()
+        .flat_map(|n| SUFFIXES.iter().map(move |s| format!("{n}{s}")))
+        .collect();
+    let needles: Vec<&str> = needles.iter().map(String::as_str).collect();
+    production_lines_matching(files, |line| line_has_token(line, &needles))
 }
 
 /// Named identifiers imported from the compiler-generated firstparty/runtime relative
@@ -4184,9 +4088,10 @@ pub fn render_table(report: &Report) -> String {
          `incremental_query_types`/`keystroke_latency` added by P8.0 (#1510); \
          `unconsumed_ir_items` added by Slice D3 of the IR cutover (#1542); \
          `diagnostic_coverage` added by #1662; `model_readers_beyond_emit` added by \
-         crate-hygiene B1 (#2939); `unused_deps` added by crate-hygiene A4 (#2976); `explained_codes` added by #3163; `ts_raw_sites`/`ts_text_idents` added by #3681; `lowering_text_bridge` added by #3694; `stmt_text_lines` added by #3711; \
+         crate-hygiene B1 (#2939); `unused_deps` added by crate-hygiene A4 (#2976); `explained_codes` added by #3163; `ts_raw_sites`/`ts_text_idents` added by #3681; \
          `ts_raw_sites` split into `ts_raw_sites_emit`/`ts_raw_sites_testgen` and `emit_thread_locals` \
-         added by 1A.19; `emit_silent_fallbacks` added by 1A.34. Twenty-six \
+         added by 1A.19; `emit_silent_fallbacks` added by 1A.34; `emit_print_calls` added by 1A.35b \
+         (`lowering_text_bridge` and `stmt_text_lines`, added by #3694 and #3711, were retired at 0 by 1A.35b). Twenty-five \
          probes are gated — a disagreement between this file and a fresh run fails \
          `greenfield_status_table_is_current` (`xtask/tests/greenfield_status.rs`). \
          Five are trend probes, reported only.\n\n",
@@ -4567,11 +4472,10 @@ mod tests {
         | `ts_raw_sites_emit` | yes | 41 |\n\
         | `ts_raw_sites_testgen` | yes | 58 |\n\
         | `ts_text_idents` | yes | 13 |\n\
-        | `lowering_text_bridge` | yes | 128 |\n\
-        | `stmt_text_lines` | yes | 70 |\n\
         | `span_keyed_maps` | yes | 2 |\n\
         | `emit_thread_locals` | yes | 2 |\n\
-        | `emit_silent_fallbacks` | yes | 15 |\n";
+        | `emit_silent_fallbacks` | yes | 15 |\n\
+        | `emit_print_calls` | yes | 30 |\n";
 
     fn growth_live(ts_writes: &str, abi: &str) -> Vec<Probe> {
         vec![
@@ -4582,11 +4486,10 @@ mod tests {
             gated("ts_raw_sites_emit", "41"),
             gated("ts_raw_sites_testgen", "58"),
             gated("ts_text_idents", "13"),
-            gated("lowering_text_bridge", "128"),
-            gated("stmt_text_lines", "70"),
             gated("span_keyed_maps", "2"),
             gated("emit_thread_locals", "2"),
             gated("emit_silent_fallbacks", "15"),
+            gated("emit_print_calls", "30"),
         ]
     }
 
@@ -4860,6 +4763,32 @@ mod tests {
     }
 
     #[test]
+    fn emit_print_calls_counts_calls_and_paths_outside_tests_and_comments() {
+        let count = |src: &str| emit_print_calls_violations(&files_of(&[("a.rs", src)]));
+        // A call of each of the three printers, and one as a path, each on its own line.
+        let src = "fn f() {\n\
+                   \x20   let a = bynk_ts::print_expr(&e);\n\
+                   \x20   let b = bynk_ts::print_stmt(&s, 0);\n\
+                   \x20   let c = print_type(&t);\n\
+                   \x20   let d = ts.iter().map(bynk_ts::print_type).collect();\n\
+                   }\n";
+        assert_eq!(count(src), 4);
+        // Two calls on one line count once; another function's name does not match.
+        assert_eq!(count("let a = print_expr(&x) + print_expr(&y);\n"), 1);
+        assert_eq!(count("let a = bynk_ts::print_stmt_with_spans(&s, 0);\n"), 0);
+        // A rename of the import and a path passed before the last argument count.
+        assert_eq!(count("use bynk_ts::print_expr as pe;\n"), 1);
+        assert_eq!(count("let a = apply(print_type, &t);\n"), 1);
+        assert_eq!(count("let a = my_print_expr(&x);\n"), 0);
+        // Comments and `#[cfg(test)]` modules do not count.
+        assert_eq!(count("// print_expr(&x)\nfn f() {}\n"), 0);
+        assert_eq!(
+            count("fn p() {}\n\n#[cfg(test)]\nmod tests {\n    fn t() { print_expr(&x); }\n}\n"),
+            0
+        );
+    }
+
+    #[test]
     fn emit_thread_locals_excludes_cfg_test_modules() {
         let src = "#[cfg(test)]\nmod tests {\n    thread_local! {\n        static A: u8 = 0;\n    }\n}\n\
                    thread_local! {\n    static B: u8 = 0;\n}\n";
@@ -4885,165 +4814,6 @@ mod tests {
         assert_eq!(count(multiline), 0, "documented multi-line gap");
         assert_eq!(count(comment), 0);
         assert_eq!(count(longer), 0);
-        assert_eq!(count(tests), 0);
-    }
-
-    #[test]
-    fn lowering_text_bridge_counts_every_way_text_enters() {
-        let count = |src: &str| lowering_text_bridge_violations(&files_of(&[("a.rs", src)]));
-        for (name, src) in [
-            ("expr variant", "fn f() { LoweredExpr::Text(s) }\n"),
-            ("stmt variant", "fn f() { LoweredStmt::Text(s) }\n"),
-            ("bare", "fn f() { Lowered::bare(s) }\n"),
-            ("with pre", "fn f() { Lowered::text_with_pre(p, s) }\n"),
-            ("finish", "fn f() { pre.finish_text(s) }\n"),
-            ("push", "fn f() { pre.push_text(s); }\n"),
-            ("extend", "fn f() { pre.extend_text(v); }\n"),
-            (
-                "chain on a new line",
-                "fn f() {\n    pre\n        .finish_text(s)\n}\n",
-            ),
-        ] {
-            assert_eq!(count(src), 1, "{name} must count");
-        }
-        // One per line, summed across lines and files.
-        let two = "fn f() {\n    Lowered::bare(a);\n    pre.push_text(b);\n}\n";
-        assert_eq!(count(two), 2);
-        assert_eq!(
-            lowering_text_bridge_violations(&files_of(&[("a.rs", two), ("b.rs", two)])),
-            4
-        );
-    }
-
-    #[test]
-    fn lowering_text_bridge_counts_path_forms_that_let_text_in_without_a_call() {
-        let count = |src: &str| lowering_text_bridge_violations(&files_of(&[("a.rs", src)]));
-        for (name, src) in [
-            ("expr map", "fn f() { v.map(LoweredExpr::Text) }\n"),
-            ("stmt map", "fn f() { v.map(LoweredStmt::Text) }\n"),
-            ("expr arg", "fn f() { g(LoweredExpr::Text, 1) }\n"),
-            ("stmt arg", "fn f() { g(LoweredStmt::Text, 1) }\n"),
-            ("method path", "fn f() { v.map(Pre::push_text) }\n"),
-            ("bare path", "fn f() { v.map(Lowered::bare) }\n"),
-        ] {
-            assert_eq!(count(src), 1, "{name} must count");
-        }
-    }
-
-    #[test]
-    fn lowering_text_bridge_does_not_count_pattern_uses_as_constructions() {
-        let count = |src: &str| lowering_text_bridge_violations(&files_of(&[("a.rs", src)]));
-        for (name, src) in [
-            (
-                "match arm",
-                "fn f() { match e { LoweredExpr::Text(t) => t, _ => d } }\n",
-            ),
-            (
-                "stmt arm",
-                "fn f() { match s { LoweredStmt::Text(t) => vec![t], _ => d } }\n",
-            ),
-            (
-                "or pattern",
-                "fn f() { match e { LoweredExpr::Text(_) | Other => 1 } }\n",
-            ),
-            (
-                "if let",
-                "fn f() { if let LoweredExpr::Text(t) = e { g(t) } }\n",
-            ),
-            (
-                "let else",
-                "fn f() { let LoweredStmt::Text(t) = s else { return }; }\n",
-            ),
-            (
-                "matches",
-                "fn f() { assert!(matches!(e, LoweredExpr::Text(_))); }\n",
-            ),
-        ] {
-            assert_eq!(count(src), 0, "{name} is a pattern, not a construction");
-        }
-        // A construction on the right of an arm still counts, and so does one
-        // whose argument holds parentheses.
-        assert_eq!(
-            count("fn f() { match e { A => LoweredExpr::Text(format!(\"{}\", (x))), } }\n"),
-            1
-        );
-        assert_eq!(count("fn f() { let x = LoweredStmt::Text(s); }\n"), 1);
-        assert_eq!(count("fn f() { x == LoweredExpr::Text(s) }\n"), 1);
-    }
-
-    #[test]
-    fn lowering_text_bridge_ignores_nodes_definitions_comments_and_tests() {
-        let count = |src: &str| lowering_text_bridge_violations(&files_of(&[("a.rs", src)]));
-        assert_eq!(
-            count("fn f() { Lowered::node(n); LoweredExpr::Node(n); }\n"),
-            0
-        );
-        assert_eq!(
-            count("pub(crate) fn push_text(&mut self, s: String) {}\n"),
-            0
-        );
-        assert_eq!(count("pub(crate) fn finish_text(self, e: String) {}\n"), 0);
-        assert_eq!(count("enum E { Text(String), }\n"), 0);
-        assert_eq!(
-            count("fn f() { MyLowered::bare(s); XLoweredExpr::Text(s); }\n"),
-            0
-        );
-        assert_eq!(
-            count("// Lowered::bare(s); pre.push_text(s)\nfn f() {}\n"),
-            0
-        );
-        let tests = "fn p() {}\n\n#[cfg(test)]\nmod tests {\n    fn t() { Lowered::bare(s); pre.push_text(s); v.map(LoweredStmt::Text); }\n}\n";
-        assert_eq!(count(tests), 0);
-    }
-
-    #[test]
-    fn stmt_text_lines_counts_every_way_text_enters_a_body() {
-        let count = |src: &str| stmt_text_lines_violations(&files_of(&[("a.rs", src)]));
-        for (name, src) in [
-            (
-                "call",
-                "fn f() { body.push(Item::Line(format!(\"x\"))); }\n",
-            ),
-            (
-                "arm result",
-                "fn f() { match s { A => Item::Line(t.clone()), } }\n",
-            ),
-            ("bare path", "fn f() { v.map(Item::Line) }\n"),
-            ("path then comma", "fn f() { g(Item::Line, 1) }\n"),
-        ] {
-            assert_eq!(count(src), 1, "{name} must count");
-        }
-        // One per line, however many files.
-        let two = "fn f() {\n    b.push(Item::Line(a));\n    b.push(Item::Line(c));\n}\n";
-        assert_eq!(count(two), 2);
-        assert_eq!(
-            stmt_text_lines_violations(&files_of(&[("a.rs", two), ("b.rs", two)])),
-            4
-        );
-    }
-
-    #[test]
-    fn stmt_text_lines_ignores_nodes_patterns_definitions_comments_and_tests() {
-        let count = |src: &str| stmt_text_lines_violations(&files_of(&[("a.rs", src)]));
-        assert_eq!(
-            count("fn f() { body.push(Item::Node(n)); Item::Mark(s); }\n"),
-            0
-        );
-        // A match arm, `if let` and `matches!` are patterns, not constructions.
-        assert_eq!(
-            count("fn f() { match i { Item::Line(t) => g(t), _ => d } }\n"),
-            0
-        );
-        assert_eq!(count("fn f() { if let Item::Line(t) = i { g(t) } }\n"), 0);
-        assert_eq!(
-            count("fn f() { assert!(matches!(i, Item::Line(_))); }\n"),
-            0
-        );
-        assert_eq!(count("enum Item { Line(String), }\n"), 0);
-        assert_eq!(count("fn f() { MyItem::Line(s); XItem::Line(s); }\n"), 0);
-        assert_eq!(count("// body.push(Item::Line(s));\nfn f() {}\n"), 0);
-        let tests =
-            "fn p() {}\n\n#[cfg(test)]\nmod tests {\n    fn t() { b.push(Item::Line(s)); }\n}\n";
         assert_eq!(count(tests), 0);
     }
 

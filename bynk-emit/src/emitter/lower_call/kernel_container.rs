@@ -1,7 +1,6 @@
 //! The container kernels (back-half paydown 1A.30, #3731, Decision D): `Option`, `Result`,
 //! `Set` and `Map`. Moved out of `lower.rs` byte for byte, then converted to nodes: each arm
-//! builds a node when its receiver and arguments are nodes and prints today's text otherwise
-//! (`node_or_text`).
+//! builds a node over its receiver and arguments.
 //!
 //! The plain `Set.remove`'s body is a comma expression, built as a `Sequence` node (1A.35a
 //! part B). Every `note_key` fires before the receiver is lowered,
@@ -9,27 +8,25 @@
 
 use bynk_check::checker::{Ty, TyId};
 use bynk_check::kernel_op::{MapOp, OptionOp, ResultOp, SetOp};
-use bynk_ts::{TsBinaryOp, TsExpr, TsParam, TsType, print_type};
+use bynk_ts::{TsBinaryOp, TsExpr, TsParam, TsType};
 
-use super::super::lower::{
-    Built, Lowered, LoweredExpr, Pre, node_or_text, str_node, text_if_forced,
-};
+use super::super::lower::{Lowered, Pre, str_node};
 use super::super::lower_ctx::LowerCtx;
 use super::super::lower_list::{
     arrow, binary, call, fn_type, id, key_is_plain, member, param, paren, spread, take,
 };
-use super::super::ts_types::{ts_array_elem, ts_ty, ts_ty_to_ts_type};
+use super::super::ts_types::ts_ty_to_ts_type;
 use super::super::*;
 use super::kernel::receiver_object;
 
-/// The receiver and then each argument, lowered in order as bridge values.
-fn operands(pre: &mut Pre, cx: &mut LowerCtx, parts: &[&Expr]) -> Vec<LoweredExpr> {
+/// The receiver and then each argument, lowered in order.
+fn operands(pre: &mut Pre, cx: &mut LowerCtx, parts: &[&Expr]) -> Vec<bynk_ts::TsExpr> {
     parts.iter().map(|e| pre.lower_node(e, cx)).collect()
 }
 
-/// A kernel's exit: the built node, or its text through the one shared text exit.
-fn finish(pre: Pre, built: Option<Built>) -> Option<Lowered> {
-    built.map(|b| pre.finish_built(b))
+/// A kernel's exit: the built node, finished over the hoists collected so far.
+fn finish(pre: Pre, built: Option<bynk_ts::TsExpr>) -> Option<Lowered> {
+    built.map(|b| pre.finish(b))
 }
 
 /// `Option<T>`.
@@ -97,19 +94,14 @@ fn cast(expr: TsExpr, ty: TsType) -> TsExpr {
 
 /// `(recv.tag === "<tag>")`: the brackets stay, as the text wrote them, so the test still reads as
 /// one operand inside an unconverted text parent.
-fn is_tag(recv: LoweredExpr, tag: &'static str) -> Built {
-    node_or_text(
-        vec![recv],
-        |n| {
-            let [recv] = take::<1, _>(n);
-            paren(binary(
-                TsBinaryOp::StrictEq,
-                member(receiver_object(recv), "tag"),
-                str_node(tag),
-            ))
-        },
-        |t| format!("({}.tag === \"{tag}\")", t[0]),
-    )
+fn is_tag(recv: bynk_ts::TsExpr, tag: &'static str) -> bynk_ts::TsExpr {
+    let n = vec![recv];
+    let [recv] = take::<1, _>(n);
+    paren(binary(
+        TsBinaryOp::StrictEq,
+        member(receiver_object(recv), "tag"),
+        str_node(tag),
+    ))
 }
 
 /// The `Option[B]` or `Result[_, _]` a combinator call was checked at, peeled with `peel`. A
@@ -147,9 +139,8 @@ pub(in crate::emitter) fn lower_option_kernel(
     let tys = cx.ty_render();
     let mut pre = Pre::new();
     let t = ts_ty_to_ts_type(inner, tys);
-    let ts = print_type(&t);
     let opt = option_of(&t);
-    let built: Option<Built> = match (op, args) {
+    let built: Option<bynk_ts::TsExpr> = match (op, args) {
         (OptionOp::Map, [f]) => {
             // The call's checked type is `Option[B]` — peel for B.
             let b = call_ty(
@@ -163,32 +154,24 @@ pub(in crate::emitter) fn lower_option_kernel(
                     _ => None,
                 },
             );
-            let (b, bs) = (ts_ty_to_ts_type(b, tys), ts_ty(b, tys));
+            let b = ts_ty_to_ts_type(b, tys);
             let kids = operands(&mut pre, cx, &[receiver, f]);
-            Some(node_or_text(
-                kids,
-                |n| {
-                    let params = vec![
-                        param("__o", Some(opt.clone())),
-                        param("__f", Some(fn_type(&[("x", &t)], b))),
-                    ];
-                    let body = cond(
-                        tag_is("__o", "Some"),
-                        call(
-                            id("Some"),
-                            vec![call(id("__f"), vec![field("__o", "value")])],
-                        ),
-                        id("None"),
-                    );
-                    iife(params, body, n)
-                },
-                |x| {
-                    format!(
-                        "((__o: Option<{ts}>, __f: (x: {ts}) => {bs}) => __o.tag === \"Some\" ? Some(__f(__o.value)) : None)({}, {})",
-                        x[0], x[1]
-                    )
-                },
-            ))
+            Some({
+                let n = kids;
+                let params = vec![
+                    param("__o", Some(opt.clone())),
+                    param("__f", Some(fn_type(&[("x", &t)], b))),
+                ];
+                let body = cond(
+                    tag_is("__o", "Some"),
+                    call(
+                        id("Some"),
+                        vec![call(id("__f"), vec![field("__o", "value")])],
+                    ),
+                    id("None"),
+                );
+                iife(params, body, n)
+            })
         }
         (OptionOp::AndThen, [f]) => {
             let b = call_ty(
@@ -202,49 +185,33 @@ pub(in crate::emitter) fn lower_option_kernel(
                     _ => None,
                 },
             );
-            let (b, bs) = (ts_ty_to_ts_type(b, tys), ts_ty(b, tys));
+            let b = ts_ty_to_ts_type(b, tys);
             let kids = operands(&mut pre, cx, &[receiver, f]);
-            Some(node_or_text(
-                kids,
-                |n| {
-                    let params = vec![
-                        param("__o", Some(opt.clone())),
-                        param("__f", Some(fn_type(&[("x", &t)], option_of(&b)))),
-                    ];
-                    let body = cond(
-                        tag_is("__o", "Some"),
-                        call(id("__f"), vec![field("__o", "value")]),
-                        id("None"),
-                    );
-                    iife(params, body, n)
-                },
-                |x| {
-                    format!(
-                        "((__o: Option<{ts}>, __f: (x: {ts}) => Option<{bs}>) => __o.tag === \"Some\" ? __f(__o.value) : None)({}, {})",
-                        x[0], x[1]
-                    )
-                },
-            ))
+            Some({
+                let n = kids;
+                let params = vec![
+                    param("__o", Some(opt.clone())),
+                    param("__f", Some(fn_type(&[("x", &t)], option_of(&b)))),
+                ];
+                let body = cond(
+                    tag_is("__o", "Some"),
+                    call(id("__f"), vec![field("__o", "value")]),
+                    id("None"),
+                );
+                iife(params, body, n)
+            })
         }
         (OptionOp::GetOrElse, [fallback]) => {
             let kids = operands(&mut pre, cx, &[receiver, fallback]);
-            Some(node_or_text(
-                kids,
-                |n| {
-                    let params = vec![
-                        param("__o", Some(opt.clone())),
-                        param("__d", Some(t.clone())),
-                    ];
-                    let body = cond(tag_is("__o", "Some"), field("__o", "value"), id("__d"));
-                    iife(params, body, n)
-                },
-                |x| {
-                    format!(
-                        "((__o: Option<{ts}>, __d: {ts}) => __o.tag === \"Some\" ? __o.value : __d)({}, {})",
-                        x[0], x[1]
-                    )
-                },
-            ))
+            Some({
+                let n = kids;
+                let params = vec![
+                    param("__o", Some(opt.clone())),
+                    param("__d", Some(t.clone())),
+                ];
+                let body = cond(tag_is("__o", "Some"), field("__o", "value"), id("__d"));
+                iife(params, body, n)
+            })
         }
         (OptionOp::IsSome, []) => {
             let recv = pre.lower_node(receiver, cx);
@@ -263,26 +230,18 @@ pub(in crate::emitter) fn lower_option_kernel(
                     _ => None,
                 },
             );
-            let (err, errs) = (ts_ty_to_ts_type(err, tys), ts_ty(err, tys));
+            let err = ts_ty_to_ts_type(err, tys);
             let kids = operands(&mut pre, cx, &[receiver, error]);
-            Some(node_or_text(
-                kids,
-                |n| {
-                    let params = vec![param("__o", Some(opt.clone())), param("__e", Some(err))];
-                    let body = cond(
-                        tag_is("__o", "Some"),
-                        call(id("Ok"), vec![field("__o", "value")]),
-                        call(id("Err"), vec![id("__e")]),
-                    );
-                    iife(params, body, n)
-                },
-                |x| {
-                    format!(
-                        "((__o: Option<{ts}>, __e: {errs}) => __o.tag === \"Some\" ? Ok(__o.value) : Err(__e))({}, {})",
-                        x[0], x[1]
-                    )
-                },
-            ))
+            Some({
+                let n = kids;
+                let params = vec![param("__o", Some(opt.clone())), param("__e", Some(err))];
+                let body = cond(
+                    tag_is("__o", "Some"),
+                    call(id("Ok"), vec![field("__o", "value")]),
+                    call(id("Err"), vec![id("__e")]),
+                );
+                iife(params, body, n)
+            })
         }
         (OptionOp::IsNone, []) => {
             let recv = pre.lower_node(receiver, cx);
@@ -290,51 +249,35 @@ pub(in crate::emitter) fn lower_option_kernel(
         }
         (OptionOp::OrElse, [f]) => {
             let kids = operands(&mut pre, cx, &[receiver, f]);
-            Some(node_or_text(
-                kids,
-                |n| {
-                    let params = vec![
-                        param("__o", Some(opt.clone())),
-                        param("__f", Some(fn_type(&[], opt.clone()))),
-                    ];
-                    let body = cond(tag_is("__o", "Some"), id("__o"), call(id("__f"), vec![]));
-                    iife(params, body, n)
-                },
-                |x| {
-                    format!(
-                        "((__o: Option<{ts}>, __f: () => Option<{ts}>) => __o.tag === \"Some\" ? __o : __f())({}, {})",
-                        x[0], x[1]
-                    )
-                },
-            ))
+            Some({
+                let n = kids;
+                let params = vec![
+                    param("__o", Some(opt.clone())),
+                    param("__f", Some(fn_type(&[], opt.clone()))),
+                ];
+                let body = cond(tag_is("__o", "Some"), id("__o"), call(id("__f"), vec![]));
+                iife(params, body, n)
+            })
         }
         (OptionOp::Filter, [p]) => {
             let kids = operands(&mut pre, cx, &[receiver, p]);
-            Some(node_or_text(
-                kids,
-                |n| {
-                    let params = vec![
-                        param("__o", Some(opt.clone())),
-                        param("__p", Some(fn_type(&[("x", &t)], TsType::named("boolean")))),
-                    ];
-                    let body = cond(
-                        binary(
-                            TsBinaryOp::And,
-                            tag_is("__o", "Some"),
-                            call(id("__p"), vec![field("__o", "value")]),
-                        ),
-                        id("__o"),
-                        id("None"),
-                    );
-                    iife(params, body, n)
-                },
-                |x| {
-                    format!(
-                        "((__o: Option<{ts}>, __p: (x: {ts}) => boolean) => __o.tag === \"Some\" && __p(__o.value) ? __o : None)({}, {})",
-                        x[0], x[1]
-                    )
-                },
-            ))
+            Some({
+                let n = kids;
+                let params = vec![
+                    param("__o", Some(opt.clone())),
+                    param("__p", Some(fn_type(&[("x", &t)], TsType::named("boolean")))),
+                ];
+                let body = cond(
+                    binary(
+                        TsBinaryOp::And,
+                        tag_is("__o", "Some"),
+                        call(id("__p"), vec![field("__o", "value")]),
+                    ),
+                    id("__o"),
+                    id("None"),
+                );
+                iife(params, body, n)
+            })
         }
         _ => None,
     };
@@ -357,9 +300,8 @@ pub(in crate::emitter) fn lower_result_kernel(
     let mut pre = Pre::new();
     let t = ts_ty_to_ts_type(ok, tys);
     let et = ts_ty_to_ts_type(err, tys);
-    let (ts, ets) = (print_type(&t), print_type(&et));
     let res = result_of(&t, &et);
-    let built: Option<Built> = match (op, args) {
+    let built: Option<bynk_ts::TsExpr> = match (op, args) {
         (ResultOp::Map, [f]) => {
             // The call's checked type is `Result[B, E]` — peel for B.
             let b = call_ty(
@@ -373,29 +315,21 @@ pub(in crate::emitter) fn lower_result_kernel(
                     _ => None,
                 },
             );
-            let (b, bs) = (ts_ty_to_ts_type(b, tys), ts_ty(b, tys));
+            let b = ts_ty_to_ts_type(b, tys);
             let kids = operands(&mut pre, cx, &[receiver, f]);
-            Some(node_or_text(
-                kids,
-                |n| {
-                    let params = vec![
-                        param("__r", Some(res.clone())),
-                        param("__f", Some(fn_type(&[("x", &t)], b))),
-                    ];
-                    let body = cond(
-                        tag_is("__r", "Ok"),
-                        call(id("Ok"), vec![call(id("__f"), vec![field("__r", "value")])]),
-                        id("__r"),
-                    );
-                    iife(params, body, n)
-                },
-                |x| {
-                    format!(
-                        "((__r: Result<{ts}, {ets}>, __f: (x: {ts}) => {bs}) => __r.tag === \"Ok\" ? Ok(__f(__r.value)) : __r)({}, {})",
-                        x[0], x[1]
-                    )
-                },
-            ))
+            Some({
+                let n = kids;
+                let params = vec![
+                    param("__r", Some(res.clone())),
+                    param("__f", Some(fn_type(&[("x", &t)], b))),
+                ];
+                let body = cond(
+                    tag_is("__r", "Ok"),
+                    call(id("Ok"), vec![call(id("__f"), vec![field("__r", "value")])]),
+                    id("__r"),
+                );
+                iife(params, body, n)
+            })
         }
         (ResultOp::AndThen, [f]) => {
             let b = call_ty(
@@ -409,29 +343,21 @@ pub(in crate::emitter) fn lower_result_kernel(
                     _ => None,
                 },
             );
-            let (b, bs) = (ts_ty_to_ts_type(b, tys), ts_ty(b, tys));
+            let b = ts_ty_to_ts_type(b, tys);
             let kids = operands(&mut pre, cx, &[receiver, f]);
-            Some(node_or_text(
-                kids,
-                |n| {
-                    let params = vec![
-                        param("__r", Some(res.clone())),
-                        param("__f", Some(fn_type(&[("x", &t)], result_of(&b, &et)))),
-                    ];
-                    let body = cond(
-                        tag_is("__r", "Ok"),
-                        call(id("__f"), vec![field("__r", "value")]),
-                        id("__r"),
-                    );
-                    iife(params, body, n)
-                },
-                |x| {
-                    format!(
-                        "((__r: Result<{ts}, {ets}>, __f: (x: {ts}) => Result<{bs}, {ets}>) => __r.tag === \"Ok\" ? __f(__r.value) : __r)({}, {})",
-                        x[0], x[1]
-                    )
-                },
-            ))
+            Some({
+                let n = kids;
+                let params = vec![
+                    param("__r", Some(res.clone())),
+                    param("__f", Some(fn_type(&[("x", &t)], result_of(&b, &et)))),
+                ];
+                let body = cond(
+                    tag_is("__r", "Ok"),
+                    call(id("__f"), vec![field("__r", "value")]),
+                    id("__r"),
+                );
+                iife(params, body, n)
+            })
         }
         (ResultOp::MapErr, [f]) => {
             // The call's checked type is `Result[T, F]` — peel for F.
@@ -446,52 +372,36 @@ pub(in crate::emitter) fn lower_result_kernel(
                     _ => None,
                 },
             );
-            let (fnode, fts) = (ts_ty_to_ts_type(fty, tys), ts_ty(fty, tys));
+            let fnode = ts_ty_to_ts_type(fty, tys);
             let kids = operands(&mut pre, cx, &[receiver, f]);
-            Some(node_or_text(
-                kids,
-                |n| {
-                    let params = vec![
-                        param("__r", Some(res.clone())),
-                        param("__f", Some(fn_type(&[("e", &et)], fnode))),
-                    ];
-                    let body = cond(
-                        tag_is("__r", "Err"),
-                        call(
-                            id("Err"),
-                            vec![call(id("__f"), vec![field("__r", "error")])],
-                        ),
-                        id("__r"),
-                    );
-                    iife(params, body, n)
-                },
-                |x| {
-                    format!(
-                        "((__r: Result<{ts}, {ets}>, __f: (e: {ets}) => {fts}) => __r.tag === \"Err\" ? Err(__f(__r.error)) : __r)({}, {})",
-                        x[0], x[1]
-                    )
-                },
-            ))
+            Some({
+                let n = kids;
+                let params = vec![
+                    param("__r", Some(res.clone())),
+                    param("__f", Some(fn_type(&[("e", &et)], fnode))),
+                ];
+                let body = cond(
+                    tag_is("__r", "Err"),
+                    call(
+                        id("Err"),
+                        vec![call(id("__f"), vec![field("__r", "error")])],
+                    ),
+                    id("__r"),
+                );
+                iife(params, body, n)
+            })
         }
         (ResultOp::GetOrElse, [fallback]) => {
             let kids = operands(&mut pre, cx, &[receiver, fallback]);
-            Some(node_or_text(
-                kids,
-                |n| {
-                    let params = vec![
-                        param("__r", Some(res.clone())),
-                        param("__d", Some(t.clone())),
-                    ];
-                    let body = cond(tag_is("__r", "Ok"), field("__r", "value"), id("__d"));
-                    iife(params, body, n)
-                },
-                |x| {
-                    format!(
-                        "((__r: Result<{ts}, {ets}>, __d: {ts}) => __r.tag === \"Ok\" ? __r.value : __d)({}, {})",
-                        x[0], x[1]
-                    )
-                },
-            ))
+            Some({
+                let n = kids;
+                let params = vec![
+                    param("__r", Some(res.clone())),
+                    param("__d", Some(t.clone())),
+                ];
+                let body = cond(tag_is("__r", "Ok"), field("__r", "value"), id("__d"));
+                iife(params, body, n)
+            })
         }
         (ResultOp::IsOk, []) => {
             let recv = pre.lower_node(receiver, cx);
@@ -503,24 +413,16 @@ pub(in crate::emitter) fn lower_result_kernel(
         }
         (ResultOp::Ok, []) => {
             let kids = operands(&mut pre, cx, &[receiver]);
-            Some(node_or_text(
-                kids,
-                |n| {
-                    let params = vec![param("__r", Some(res.clone()))];
-                    let body = cond(
-                        tag_is("__r", "Ok"),
-                        call(id("Some"), vec![field("__r", "value")]),
-                        id("None"),
-                    );
-                    iife(params, body, n)
-                },
-                |x| {
-                    format!(
-                        "((__r: Result<{ts}, {ets}>) => __r.tag === \"Ok\" ? Some(__r.value) : None)({})",
-                        x[0]
-                    )
-                },
-            ))
+            Some({
+                let n = kids;
+                let params = vec![param("__r", Some(res.clone()))];
+                let body = cond(
+                    tag_is("__r", "Ok"),
+                    call(id("Some"), vec![field("__r", "value")]),
+                    id("None"),
+                );
+                iife(params, body, n)
+            })
         }
         _ => None,
     };
@@ -528,59 +430,37 @@ pub(in crate::emitter) fn lower_result_kernel(
 }
 
 /// `recv.size` / `(recv).size`-style member of a container receiver.
-fn member_of(recv: LoweredExpr, prop: &'static str) -> Built {
-    node_or_text(
-        vec![recv],
-        |n| {
-            let [recv] = take::<1, _>(n);
-            member(receiver_object(recv), prop)
-        },
-        |t| format!("({}).{prop}", t[0]),
-    )
+fn member_of(recv: bynk_ts::TsExpr, prop: &'static str) -> bynk_ts::TsExpr {
+    let n = vec![recv];
+    let [recv] = take::<1, _>(n);
+    member(receiver_object(recv), prop)
 }
 
-/// `recv.method(args)`; the first child is the receiver. The text fallback keeps
-/// `(recv).method(args)`.
-fn method_of(kids: Vec<LoweredExpr>, method: &'static str) -> Built {
-    node_or_text(
-        kids,
-        |mut n| {
-            let recv = receiver_object(n.remove(0));
-            call(member(recv, method), n)
-        },
-        |t| format!("({}).{method}({})", t[0], t[1..].join(", ")),
-    )
+/// `recv.method(args)`; the first child is the receiver.
+fn method_of(kids: Vec<bynk_ts::TsExpr>, method: &'static str) -> bynk_ts::TsExpr {
+    let mut n = kids;
+    let recv = receiver_object(n.remove(0));
+    call(member(recv, method), n)
 }
 
 /// `[...recv.<method>()]`: the iterator of a `Map` spread into an array.
-fn spread_iter(recv: LoweredExpr, method: &'static str) -> Built {
-    node_or_text(
-        vec![recv],
-        |n| {
-            let [recv] = take::<1, _>(n);
-            TsExpr::Array {
-                items: vec![spread(call(member(receiver_object(recv), method), vec![]))],
-                multiline: false,
-            }
-        },
-        |t| format!("[...({}).{method}()]", t[0]),
-    )
+fn spread_iter(recv: bynk_ts::TsExpr, method: &'static str) -> bynk_ts::TsExpr {
+    let n = vec![recv];
+    let [recv] = take::<1, _>(n);
+    TsExpr::Array {
+        items: vec![spread(call(member(receiver_object(recv), method), vec![]))],
+        multiline: false,
+    }
 }
 
 /// `__bynkSetInsert<T>(recv, x)`-style keyed helper call over the lowered operands.
-fn keyed_helper(name: &'static str, type_args: Vec<TsType>, kids: Vec<LoweredExpr>) -> Built {
-    node_or_text(
-        kids,
-        |n| call(type_app(id(name), type_args.clone()), n),
-        |t| {
-            let args = type_args
-                .iter()
-                .map(print_type)
-                .collect::<Vec<_>>()
-                .join(", ");
-            format!("{name}<{args}>({})", t.join(", "))
-        },
-    )
+fn keyed_helper(
+    name: &'static str,
+    type_args: Vec<TsType>,
+    kids: Vec<bynk_ts::TsExpr>,
+) -> bynk_ts::TsExpr {
+    let n = kids;
+    call(type_app(id(name), type_args.clone()), n)
 }
 
 /// v0.20b: lower a built-in `Map` kernel method. `insert` copies — the
@@ -599,8 +479,7 @@ pub(in crate::emitter) fn lower_set_kernel(
     let tys = cx.ty_render();
     let mut pre = Pre::new();
     let elem_t = ts_ty_to_ts_type(elem, tys);
-    let elem_ts = print_type(&elem_t);
-    let built: Option<Built> = match (op, args) {
+    let built: Option<bynk_ts::TsExpr> = match (op, args) {
         (SetOp::Length, []) => {
             let recv = pre.lower_node(receiver, cx);
             Some(member_of(recv, "size"))
@@ -621,81 +500,56 @@ pub(in crate::emitter) fn lower_set_kernel(
         }
         (SetOp::Insert, [x]) => {
             let kids = operands(&mut pre, cx, &[receiver, x]);
-            Some(node_or_text(
-                kids,
-                |n| {
-                    let [recv, x] = take::<2, _>(n);
-                    let set = new(type_app(global("Set"), vec![elem_t.clone()]), vec![recv]);
-                    paren(cast(
-                        call(member(set, "add"), vec![x]),
-                        TsType::named_with_args("ReadonlySet", vec![elem_t.clone()]),
-                    ))
-                },
-                |t| {
-                    format!(
-                        "(new globalThis.Set<{elem_ts}>({}).add({}) as ReadonlySet<{elem_ts}>)",
-                        t[0], t[1]
-                    )
-                },
-            ))
+            Some({
+                let n = kids;
+                let [recv, x] = take::<2, _>(n);
+                let set = new(type_app(global("Set"), vec![elem_t.clone()]), vec![recv]);
+                paren(cast(
+                    call(member(set, "add"), vec![x]),
+                    TsType::named_with_args("ReadonlySet", vec![elem_t.clone()]),
+                ))
+            })
         }
         // Delete from a copy and return it: `(__s) => (__s.delete(x), __s as ReadonlySet<T>)`
         // applied to `new Set<T>(recv)`, the body a comma expression (1A.35a part B).
         (SetOp::Remove, [x]) => {
             let kids = operands(&mut pre, cx, &[receiver, x]);
-            Some(node_or_text(
-                text_if_forced("Set.remove", kids),
-                |n| {
-                    let [recv, x] = take::<2, _>(n);
-                    let set_ty = TsType::named_with_args("globalThis.Set", vec![elem_t.clone()]);
-                    let remove = arrow(
-                        vec![param("__s", Some(set_ty))],
-                        TsExpr::Sequence(vec![
-                            call(member(id("__s"), "delete"), vec![x]),
-                            cast(
-                                id("__s"),
-                                TsType::named_with_args("ReadonlySet", vec![elem_t.clone()]),
-                            ),
-                        ]),
-                    );
-                    call(
-                        remove,
-                        vec![new(
-                            type_app(global("Set"), vec![elem_t.clone()]),
-                            vec![recv],
-                        )],
-                    )
-                },
-                |t| {
-                    format!(
-                        "((__s: globalThis.Set<{elem_ts}>) => (__s.delete({}), __s as ReadonlySet<{elem_ts}>))(new globalThis.Set<{elem_ts}>({}))",
-                        t[1], t[0]
-                    )
-                },
-            ))
+            Some({
+                let n = kids;
+                let [recv, x] = take::<2, _>(n);
+                let set_ty = TsType::named_with_args("globalThis.Set", vec![elem_t.clone()]);
+                let remove = arrow(
+                    vec![param("__s", Some(set_ty))],
+                    TsExpr::Sequence(vec![
+                        call(member(id("__s"), "delete"), vec![x]),
+                        cast(
+                            id("__s"),
+                            TsType::named_with_args("ReadonlySet", vec![elem_t.clone()]),
+                        ),
+                    ]),
+                );
+                call(
+                    remove,
+                    vec![new(
+                        type_app(global("Set"), vec![elem_t.clone()]),
+                        vec![recv],
+                    )],
+                )
+            })
         }
         (SetOp::ToList, []) => {
             let kids = operands(&mut pre, cx, &[receiver]);
-            Some(node_or_text(
-                kids,
-                |n| {
-                    let [recv] = take::<1, _>(n);
-                    paren(cast(
-                        TsExpr::Array {
-                            items: vec![spread(recv)],
-                            multiline: false,
-                        },
-                        TsType::readonly_array(elem_t.clone()),
-                    ))
-                },
-                |t| {
-                    format!(
-                        "([...({})] as readonly {}[])",
-                        t[0],
-                        ts_array_elem(&elem_ts)
-                    )
-                },
-            ))
+            Some({
+                let n = kids;
+                let [recv] = take::<1, _>(n);
+                paren(cast(
+                    TsExpr::Array {
+                        items: vec![spread(recv)],
+                        multiline: false,
+                    },
+                    TsType::readonly_array(elem_t.clone()),
+                ))
+            })
         }
         _ => None,
     };
@@ -714,8 +568,7 @@ pub(in crate::emitter) fn lower_map_kernel(
     let mut pre = Pre::new();
     let key_t = ts_ty_to_ts_type(key, tys);
     let val_t = ts_ty_to_ts_type(val, tys);
-    let (key_ts, val_ts) = (print_type(&key_t), print_type(&val_t));
-    let built: Option<Built> = match (op, args) {
+    let built: Option<bynk_ts::TsExpr> = match (op, args) {
         (MapOp::Length, []) => {
             let recv = pre.lower_node(receiver, cx);
             Some(member_of(recv, "size"))
@@ -732,39 +585,31 @@ pub(in crate::emitter) fn lower_map_kernel(
         }
         (MapOp::Get, [k]) => {
             let kids = operands(&mut pre, cx, &[receiver, k]);
-            Some(node_or_text(
-                kids,
-                |n| {
-                    let params = vec![
-                        param(
-                            "__m",
-                            Some(TsType::named_with_args(
-                                "ReadonlyMap",
-                                vec![key_t.clone(), val_t.clone()],
-                            )),
-                        ),
-                        param("__k", Some(key_t.clone())),
-                    ];
-                    let body = cond(
-                        call(field("__m", "has"), vec![id("__k")]),
-                        call(
-                            id("Some"),
-                            vec![cast(
-                                call(field("__m", "get"), vec![id("__k")]),
-                                val_t.clone(),
-                            )],
-                        ),
-                        id("None"),
-                    );
-                    iife(params, body, n)
-                },
-                |x| {
-                    format!(
-                        "((__m: ReadonlyMap<{key_ts}, {val_ts}>, __k: {key_ts}) => __m.has(__k) ? Some(__m.get(__k) as {val_ts}) : None)({}, {})",
-                        x[0], x[1]
-                    )
-                },
-            ))
+            Some({
+                let n = kids;
+                let params = vec![
+                    param(
+                        "__m",
+                        Some(TsType::named_with_args(
+                            "ReadonlyMap",
+                            vec![key_t.clone(), val_t.clone()],
+                        )),
+                    ),
+                    param("__k", Some(key_t.clone())),
+                ];
+                let body = cond(
+                    call(field("__m", "has"), vec![id("__k")]),
+                    call(
+                        id("Some"),
+                        vec![cast(
+                            call(field("__m", "get"), vec![id("__k")]),
+                            val_t.clone(),
+                        )],
+                    ),
+                    id("None"),
+                );
+                iife(params, body, n)
+            })
         }
         (MapOp::Insert, [k, v]) if !key_is_plain(key, tys.types()) => {
             cx.runtime_use().note_key("__bynkMapInsert");
@@ -773,14 +618,11 @@ pub(in crate::emitter) fn lower_map_kernel(
         }
         (MapOp::Insert, [k, v]) => {
             let kids = operands(&mut pre, cx, &[receiver, k, v]);
-            Some(node_or_text(
-                kids,
-                |n| {
-                    let [recv, k, v] = take::<3, _>(n);
-                    call(member(new(global("Map"), vec![recv]), "set"), vec![k, v])
-                },
-                |t| format!("new globalThis.Map({}).set({}, {})", t[0], t[1], t[2]),
-            ))
+            Some({
+                let n = kids;
+                let [recv, k, v] = take::<3, _>(n);
+                call(member(new(global("Map"), vec![recv]), "set"), vec![k, v])
+            })
         }
         _ => None,
     };
@@ -791,17 +633,14 @@ pub(in crate::emitter) fn lower_map_kernel(
 mod tests {
     use super::*;
     use crate::emitter::ctx::{BodyMode, ModuleCtx, UnitFacts};
-    use crate::emitter::lower::TEXT_EXITS;
     use crate::emitter::runtime_use::RuntimeUse;
     use crate::testkit::emit_source;
     use bynk_check::checker::{ExprId, TypedCommons, TypedExpr};
     use bynk_syntax::span::Span;
 
-    /// `(text exits, emitted TypeScript)` for a one-function commons whose signature is `sig`.
-    fn exits(sig: &str, body: &str) -> (usize, String) {
-        TEXT_EXITS.with(|c| c.set(0));
-        let ts = emit_source(&format!("commons kc\nfn f{sig} -> {body}\n"));
-        (TEXT_EXITS.with(|c| c.get()), ts)
+    /// The emitted TypeScript for a one-function commons.
+    fn emitted(sig: &str, body: &str) -> String {
+        emit_source(&format!("commons kc\nfn f{sig} -> {body}\n"))
     }
 
     /// The returned expression of `export function f`.
@@ -816,9 +655,9 @@ mod tests {
     const OPT: &str = "((__o: Option<number>, __";
     const RES: &str = "((__r: Result<number, string>, __";
 
-    /// Every `OptionOp` and `ResultOp` over identifier arguments: the exact print, no text exit.
+    /// Every `OptionOp` and `ResultOp` over identifier arguments: the exact print.
     #[test]
-    fn every_option_and_result_op_prints_as_a_node_with_no_text_exit() {
+    fn every_option_and_result_op_prints_as_a_node() {
         let o = "(o: Option[Int], f: (Int) -> Int, g: (Int) -> Option[Int], h: () -> Option[Int], p: (Int) -> Bool, d: Int, e: String)";
         let r = "(r: Result[Int, String], f: (Int) -> Int, g: (Int) -> Result[Int, String], m: (String) -> Int, d: Int)";
         for (sig, body, want) in [
@@ -838,9 +677,8 @@ mod tests {
             (r, "Bool { r.isOk() }", "(r.tag === \"Ok\")".to_string()),
             (r, "Bool { r.isErr() }", "(r.tag === \"Err\")".to_string()),
         ] {
-            let (n, ts) = exits(sig, body);
+            let ts = emitted(sig, body);
             assert_eq!(returned(&ts), want, "{body}");
-            assert_eq!(n, 0, "{body}: text exits\n{ts}");
         }
     }
 
@@ -866,14 +704,13 @@ mod tests {
             ),
             ("(s: Set[List[Int]])", "Int { s.length() }", "s.size"),
         ] {
-            let (n, ts) = exits(sig, body);
+            let ts = emitted(sig, body);
             assert_eq!(returned(&ts), want, "{body}");
-            assert_eq!(n, 0, "{body}: text exits\n{ts}");
         }
     }
 
     /// Every `SetOp` and `MapOp` over a plain and a keyed type: the exact print, the helper's import
-    /// noted only on the keyed path, and no text exit.
+    /// noted only on the keyed path.
     #[test]
     fn set_and_map_ops_print_plain_and_keyed_forms() {
         let s = "(s: Set[String], x: String)";
@@ -929,9 +766,8 @@ mod tests {
                 Some("__bynkMapInsert"),
             ),
         ] {
-            let (n, ts) = exits(sig, body);
+            let ts = emitted(sig, body);
             assert_eq!(returned(&ts), want, "{body}");
-            assert_eq!(n, 0, "{body}: text exits\n{ts}");
             for helper in ["__bynkSetInsert", "__bynkSetRemove", "__bynkMapInsert"] {
                 assert_eq!(
                     ts.contains(&format!("import {{ {helper}"))
@@ -947,8 +783,7 @@ mod tests {
     /// which prints today's bytes.
     #[test]
     fn the_comma_expression_arm_is_a_sequence_node() {
-        let (n, ts) = exits("(s: Set[String], x: String)", "Set[String] { s.remove(x) }");
-        assert_eq!(n, 0, "{ts}");
+        let ts = emitted("(s: Set[String], x: String)", "Set[String] { s.remove(x) }");
         assert_eq!(
             returned(&ts),
             "((__s: globalThis.Set<string>) => (__s.delete(x), __s as ReadonlySet<string>))(new globalThis.Set<string>(s))"
@@ -958,7 +793,7 @@ mod tests {
     /// The receiver is lowered before the argument, as before: a `?` in each hoists in that order.
     #[test]
     fn the_receiver_is_lowered_before_the_argument() {
-        let (_, ts) = exits(
+        let ts = emitted(
             "(a: Result[Option[Int], String], b: Result[Int, String])",
             "Result[Int, String] { Ok(a?.getOrElse(b?)) }",
         );

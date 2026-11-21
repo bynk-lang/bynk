@@ -1,10 +1,7 @@
 //! 1A.28 (#3729): the inline and `Effect` kernel arms (`TestConnection`, `Connection`, the `HttpResult`
 //! cookie ops, the request views, `within`, `race`, `detach` and the `EffectResult` combinators) lower
-//! to nodes. Each project is emitted in memory and the exact line is pinned; the text-exit counter is
-//! read where it is real (the driver links a non-test copy of `bynk-emit`, see `text_exit_counters.rs`),
-//! and a fixture whose unrelated constructs add text exits pins its lines only. The builders' own node
-//! and text forms, and the mismatch panics, are unit tests in `lower_call/kernel.rs`.
-use bynk_emit::emitter::text_counters;
+//! to nodes. Each project is emitted in memory and the exact line is pinned. The builders' own
+//! forms, and the mismatch panics, are unit tests in `lower_call/kernel.rs`.
 
 fn fixture_dir(fixture: &str) -> std::path::PathBuf {
     std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -14,12 +11,10 @@ fn fixture_dir(fixture: &str) -> std::path::PathBuf {
         .join(fixture)
 }
 
-/// `(text exits, every emitted document joined)` for a fixture project, built as the fixture suite builds it.
-fn emit(fixture: &str) -> (usize, String) {
+/// `every emitted document joined` for a fixture project, built as the fixture suite builds it.
+fn emit(fixture: &str) -> String {
     let dir = fixture_dir(fixture);
-    text_counters::reset();
     let result = super::e2e::compile_fixture(&dir, super::e2e::fixture_target(&dir));
-    let exits = text_counters::exits();
     let out = match result {
         Ok(out) => out,
         Err(failure) => panic!(
@@ -27,19 +22,17 @@ fn emit(fixture: &str) -> (usize, String) {
             bynk_driver::render::render_project_errors(&failure.flatten())
         ),
     };
-    let text = out
-        .artefacts
+
+    out.artefacts
         .docs
         .values()
         .map(|d| d.text())
         .collect::<Vec<_>>()
-        .join("\n");
-    (exits, text)
+        .join("\n")
 }
 
-/// `(text exits, every document)` for the one-context project `src` on Workers.
-fn mem(src: &str) -> (usize, String) {
-    text_counters::reset();
+/// `every document` for the one-context project `src` on Workers.
+fn mem(src: &str) -> String {
     let out = bynk_driver::project::compile_files_in_memory(
         &[("ops/jobs.bynk", src)],
         bynk_check::project_model::BuildTarget::Workers,
@@ -52,14 +45,13 @@ fn mem(src: &str) -> (usize, String) {
             bynk_driver::render::render_project_errors(&e.flatten())
         )
     });
-    let text = out
-        .artefacts
+
+    out.artefacts
         .docs
         .values()
         .map(|d| d.text())
         .collect::<Vec<_>>()
-        .join("\n");
-    (text_counters::exits(), text)
+        .join("\n")
 }
 
 /// The lines of `text` equal to `line` once indentation is trimmed.
@@ -75,7 +67,7 @@ fn assert_contains(text: &str, part: &str) {
 }
 
 /// A request view (`headers`), with no other construct that is text, is a call on its receiver with
-/// no text exit and no brackets round the identifier.
+/// no brackets round the identifier.
 #[test]
 fn a_request_view_is_a_call_without_receiver_brackets() {
     let src = r#"context ops.jobs
@@ -87,27 +79,25 @@ service api from http {
 	}
 }
 "#;
-    let (exits, text) = mem(src);
-    assert_eq!(exits, 0, "no text exit:\n{text}");
+    let text = mem(src);
     assert_line(&text, r#"const t = headers.get("x-trace");"#);
 }
 
 /// The fixtures' request views, in a handler and under a `.length`, print without the receiver brackets.
 #[test]
 fn the_request_views_print_without_receiver_brackets() {
-    let (_, text) = emit("2341_http_raw_body_headers");
+    let text = emit("2341_http_raw_body_headers");
     assert_line(
         &text,
         r#"const __letElse587 = headers.get("X-GitHub-Event");"#,
     );
-    let (_, text) = emit("2854_http_query");
+    let text = emit("2854_http_query");
     assert_contains(&text, r#"query.get("q")"#);
     assert_contains(&text, "query.params().size");
     assert!(!text.contains("(query)."), "{text}");
 }
 
-/// `withCookie` and `clearCookie` are the IIFE over `__r: any`; a cookie argument that is a node
-/// (a call) leaves no text exit, one that is still text falls back to the same bytes.
+/// `withCookie` and `clearCookie` are the IIFE over `__r: any`.
 #[test]
 fn the_cookie_ops_are_nodes_and_keep_their_layout() {
     let src = r#"context ops.jobs
@@ -126,11 +116,7 @@ service api from http {
 	}
 }
 "#;
-    let (exits, text) = mem(src);
-    let (base, _) = mem(&src
-        .replace(".withCookie(session(\"abc\"))", "")
-        .replace(".clearCookie(session(\"\"))", ""));
-    assert_eq!(exits, base, "the cookie ops add no text exit:\n{text}");
+    let text = mem(src);
     assert_line(
         &text,
         r#"return ((__r: any) => ({ ...__r, cookies: [...(__r.cookies ?? []), (session("abc"))] }))(HttpResult.NoContent);"#,
@@ -141,8 +127,7 @@ service api from http {
     );
     // A record literal that takes a default is a node since 1A.31 (it was this test's text
     // example): the same IIFE, byte for byte.
-    let (exits, text) = emit("3277_http_cookies_write");
-    assert_eq!(exits, 0, "the fixture has no text exit left:\n{text}");
+    let text = emit("3277_http_cookies_write");
     assert_contains(
         &text,
         r#"cookies: [...(__r.cookies ?? []), { ...({ name: "__Host-sid", value: "","#,
@@ -152,7 +137,7 @@ service api from http {
 /// `cookies()` on an `HttpResult` in a test case: the cast sits in brackets, the receiver does not.
 #[test]
 fn http_result_cookies_drops_the_receiver_brackets() {
-    let (_, text) = emit("3277_http_cookies_write");
+    let text = emit("3277_http_cookies_write");
     assert_contains(&text, "((r as any).cookies ?? [])");
     assert!(!text.contains("(r) as any"), "{text}");
 }
@@ -161,8 +146,7 @@ fn http_result_cookies_drops_the_receiver_brackets() {
 /// other text.
 #[test]
 fn connection_calls_are_nodes() {
-    let (exits, text) = emit("235_held_connection");
-    assert_eq!(exits, 0, "no text exit:\n{text}");
+    let text = emit("235_held_connection");
     assert_line(
         &text,
         r#"const __r0 = await conn.send({ text: "welcome" });"#,
@@ -173,7 +157,7 @@ fn connection_calls_are_nodes() {
 /// A case's `TestConnection`: `sent`, `closed` and `mint`.
 #[test]
 fn test_connection_ops_are_nodes() {
-    let (_, text) = emit("3051_test_websocket_address");
+    let text = emit("3051_test_websocket_address");
     assert_contains(&text, "__bynkEq([...alice.sent], [{ text: \"welcome\" }])");
     assert_contains(&text, "(alice.closed === false)");
     assert_contains(&text, "tc.mint()");
@@ -201,8 +185,7 @@ service run {
 	}
 }
 "#;
-    let (exits, text) = mem(src);
-    assert_eq!(exits, 0, "no text exit:\n{text}");
+    let text = mem(src);
     let at = |needle: &str| {
         text.find(needle)
             .unwrap_or_else(|| panic!("missing {needle}"))
@@ -243,8 +226,7 @@ service run {
 	}
 }
 "#;
-    let (exits, text) = mem(src);
-    assert_eq!(exits, 0, "no text exit:\n{text}");
+    let text = mem(src);
     assert_line(
         &text,
         r#"await __bynkDetach(deps.Count.next(n), deps.__exec, "ops/jobs.bynk:13:6");"#,
@@ -271,8 +253,7 @@ fn c(id: Int) -> Effect[Result[String, String]] { fetch(id).flatMapOk((n: Int) =
 fn d(id: Int) -> Effect[Result[Int, String]] { fetch(id).flatMapErr((e: String) => recover(e)) }
 fn inferred(id: Int) -> Effect[Result[String, String]] { fetch(id).mapOk((n) => label(n)) }
 "#;
-    let (exits, text) = mem(src);
-    assert_eq!(exits, 0, "no text exit:\n{text}");
+    let text = mem(src);
     for line in [
         r#"return (async (__e: globalThis.Promise<Result<number, string>>, __f: (x: number) => string) => { const __r = await __e; return __r.tag === "Ok" ? Ok(__f(__r.value)) : __r; })(fetch(id), (n: number) => label(n));"#,
         r#"return (async (__e: globalThis.Promise<Result<number, string>>, __f: (e: string) => number) => { const __r = await __e; return __r.tag === "Err" ? Err(__f(__r.error)) : __r; })(fetch(id), (e: string) => 500);"#,
@@ -282,4 +263,12 @@ fn inferred(id: Int) -> Effect[Result[String, String]] { fetch(id).mapOk((n) => 
     ] {
         assert_line(&text, line);
     }
+}
+
+/// `Retry("x")` instead of `Ack` prints as the `QueueResult.Retry(...)` call.
+#[test]
+fn a_queue_result_variant_call_is_a_node() {
+    let src = "context ops.jobs\n\nservice inbox from queue(\"jobs\") {\n\ton message(n: Int) -> Effect[QueueResult] {\n\t\tRetry(\"x\")\n\t}\n}\n";
+    let text = mem(src);
+    assert!(text.contains("QueueResult.Retry(\"x\")"), "{text}");
 }

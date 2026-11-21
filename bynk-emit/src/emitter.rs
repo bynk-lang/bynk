@@ -100,10 +100,8 @@ mod cmp;
 mod codec;
 pub mod ctx;
 mod default_value;
-mod lower;
-#[cfg(feature = "text-exit-counters")]
-pub use lower::text_counters;
 mod internal_fault;
+mod lower;
 mod lower_call;
 mod lower_ctx;
 mod lower_list;
@@ -119,8 +117,6 @@ pub mod emit;
 pub(crate) use bynk_check::icu::{self, *};
 pub(crate) use bynk_check::websocket;
 pub use emit::*;
-
-const INDENT_STEP: usize = 2;
 
 pub mod runtime_files;
 /// ADR 0615 (#2426): the runtime as one source per `@bynk/runtime` module. A
@@ -4753,36 +4749,6 @@ fn agent_registry_name(agent: &str) -> String {
 /// The exported agent-construction factory name for an agent class.
 pub fn agent_factory_name(agent: &str) -> String {
     format!("__make{agent}")
-}
-
-/// Takes the AST `BinOp` directly, on purpose. Phase 6 (P6.56, ADR 0381)
-/// investigated converting this to an IR-side operator enum and declined:
-/// its sole caller (`emitter/lower.rs`) holds an AST `BinOp` from
-/// `ExprKind::BinOp` and separately compares `op == BinOp::Eq` a few lines
-/// away, so converting here would only relocate the AST read into that
-/// still-AST-walking caller, net zero. The IR cutover track (#1542, §10)
-/// later confirmed the general form of that finding — retyping the
-/// lowerer's reads one function at a time produces a second lowerer, not a
-/// retype — and deleted the IR-side operator enum with the rest of the
-/// expression IR (Slice D2).
-fn ts_binop(op: BinOp) -> &'static str {
-    match op {
-        // `implies` has no single TS operator — `lower_bin_op` rewrites it to
-        // `(!(P) || Q)` before reaching here, so this arm is never used.
-        BinOp::Implies => "||",
-        BinOp::Or => "||",
-        BinOp::And => "&&",
-        BinOp::Eq => "===",
-        BinOp::NotEq => "!==",
-        BinOp::Lt => "<",
-        BinOp::LtEq => "<=",
-        BinOp::Gt => ">",
-        BinOp::GtEq => ">=",
-        BinOp::Add => "+",
-        BinOp::Sub => "-",
-        BinOp::Mul => "*",
-        BinOp::Div => "/",
-    }
 }
 
 /// #1653: the TypeScript property name of a sum variant's payload field. A

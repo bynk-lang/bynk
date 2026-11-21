@@ -6,14 +6,13 @@
 
 use bynk_check::checker::Callee;
 
-use super::super::lower::{Built, LoweredExpr, Pre, node_or_text, str_node};
+use super::super::lower::{Pre, str_node};
 use super::super::lower_ctx::LowerCtx;
 use super::super::lower_list::{call, id, member};
 use super::super::*;
 
 /// Lower an inline agent invocation, `Agent(<key>).method(args)`, or `None` when the call is not one. A node
-/// (`Call(Member(<construction>, method), args)`, wrapped in the trace step on a traced build) when the key and
-/// arguments are nodes, else the text form.
+/// (`Call(Member(<construction>, method), args)`, wrapped in the trace step on a traced build).
 pub(in crate::emitter) fn lower_inline_agent_call(
     e: &Expr,
     receiver: &Expr,
@@ -21,7 +20,7 @@ pub(in crate::emitter) fn lower_inline_agent_call(
     args: &[Expr],
     cx: &mut LowerCtx,
     pre: &mut Pre,
-) -> Option<Built> {
+) -> Option<bynk_ts::TsExpr> {
     // v0.9.2: inline agent invocation. Source form is
     // `Agent(<key>).method(args)`; receiver parses as
     // `Call(Agent, [<key>])`. Lower to
@@ -57,34 +56,30 @@ pub(in crate::emitter) fn lower_inline_agent_call(
         // upgrade by the same value, so it still is.
         if cx.ws_self_agent() == Some(name.name.as_str()) {
             cx.record_agent_call(&name.name, &method.name);
-            let mut children: Vec<LoweredExpr> =
+            let mut children: Vec<bynk_ts::TsExpr> =
                 args.iter().map(|a| pre.lower_node(a, cx)).collect();
-            children.push(LoweredExpr::Node(id("deps")));
-            return Some(node_or_text(
-                children,
-                |nodes| call(member(id("this"), &method.name), nodes),
-                |texts| format!("this.{}({})", method.name, texts.join(", ")),
-            ));
+            children.push(id("deps"));
+            return Some({
+                let nodes = children;
+                call(member(id("this"), &method.name), nodes)
+            });
         }
         cx.record_agent_call(&name.name, &method.name);
         // The key is lowered first, so its hoisted statements precede the call.
         let key = ctor_args
             .first()
             .map(|a| pre.lower_node(a, cx))
-            .unwrap_or_else(|| LoweredExpr::Node(str_node("default")));
+            .unwrap_or_else(|| str_node("default"));
         let instance = cx.agent_construct_node(&name.name, key);
-        let mut children: Vec<LoweredExpr> = vec![instance.into()];
+        let mut children: Vec<bynk_ts::TsExpr> = vec![instance];
         children.extend(args.iter().map(|a| pre.lower_node(a, cx)));
         // #2355: `this.deps` in a provider body.
-        children.push(LoweredExpr::Node(cx.cap_deps_node()));
-        let built = node_or_text(
-            children,
-            |mut nodes| {
-                let instance = nodes.remove(0);
-                call(member(instance, &method.name), nodes)
-            },
-            |texts| format!("{}.{}({})", texts[0], method.name, texts[1..].join(", ")),
-        );
+        children.push(cx.cap_deps_node());
+        let built = {
+            let mut nodes = children;
+            let instance = nodes.remove(0);
+            call(member(instance, &method.name), nodes)
+        };
         let target = format!("{}.{}", name.name, method.name);
         return Some(trace_built(cx, &target, e.span.start, built));
     }
@@ -92,8 +87,7 @@ pub(in crate::emitter) fn lower_inline_agent_call(
 }
 
 /// Lower a method call on a let-bound agent instance, or `None` when the call is not one. A node
-/// (`Call(Member(<binding>, method), args)`, wrapped in the trace step on a traced build) when the arguments are
-/// nodes, else the text form.
+/// (`Call(Member(<binding>, method), args)`, wrapped in the trace step on a traced build).
 pub(in crate::emitter) fn lower_let_bound_agent_call(
     e: &Expr,
     receiver: &Expr,
@@ -101,7 +95,7 @@ pub(in crate::emitter) fn lower_let_bound_agent_call(
     args: &[Expr],
     cx: &mut LowerCtx,
     pre: &mut Pre,
-) -> Option<Built> {
+) -> Option<bynk_ts::TsExpr> {
     // Let-bound agent invocation. `let x = Agent(key); x.method(args)`
     // — the statement emitter recorded `x` as an agent variable when
     // it lowered the let. Method calls on `x` go straight to the
@@ -119,31 +113,32 @@ pub(in crate::emitter) fn lower_let_bound_agent_call(
     {
         let agent = agent.clone();
         cx.record_agent_call(&agent, &method.name);
-        let mut children: Vec<LoweredExpr> = args.iter().map(|a| pre.lower_node(a, cx)).collect();
-        children.push(LoweredExpr::Node(cx.cap_deps_node()));
+        let mut children: Vec<bynk_ts::TsExpr> =
+            args.iter().map(|a| pre.lower_node(a, cx)).collect();
+        children.push(cx.cap_deps_node());
         // #908: the bynk source name may have been renamed by a re-`let` — resolve to the
         // actual JS binding rather than assuming the source name is still it.
         let recv = cx
             .resolved_local_name(&id_.name)
             .unwrap_or_else(|| id_.name.clone());
-        let built = node_or_text(
-            children,
-            |nodes| call(member(id(&recv), &method.name), nodes),
-            |texts| format!("{}.{}({})", recv, method.name, texts.join(", ")),
-        );
+        let built = {
+            let nodes = children;
+            call(member(id(&recv), &method.name), nodes)
+        };
         let target = format!("{agent}.{}", method.name);
         return Some(trace_built(cx, &target, e.span.start, built));
     }
     None
 }
 
-/// The trace wrapper over a built agent call (1A.24's `trace_step_node` when it is a node, the
-/// string wrapper when an argument is still text).
-fn trace_built(cx: &LowerCtx, target: &str, offset: usize, built: Built) -> Built {
-    match built {
-        Ok(node) => Ok(cx.trace_step_node("agent", target, offset, node)),
-        Err(text) => Err(cx.trace_step("agent", target, offset, text)),
-    }
+/// The trace wrapper over a built agent call (1A.24's `trace_step_node`).
+fn trace_built(
+    cx: &LowerCtx,
+    target: &str,
+    offset: usize,
+    built: bynk_ts::TsExpr,
+) -> bynk_ts::TsExpr {
+    cx.trace_step_node("agent", target, offset, built)
 }
 
 /// `AgentName(key)` (the `Callee::AgentInit` branch of `lower_call`): the factory call over
@@ -151,17 +146,17 @@ fn trace_built(cx: &LowerCtx, target: &str, offset: usize, built: Built) -> Buil
 /// `AgentDecl` declares exactly one key field, which the checker's arity check enforces.
 pub(in crate::emitter) fn lower_agent_init(
     name: &Ident,
-    args_lowered: Vec<LoweredExpr>,
+    args_lowered: Vec<bynk_ts::TsExpr>,
     cx: &mut LowerCtx,
-) -> Built {
+) -> bynk_ts::TsExpr {
     let key = args_lowered.into_iter().next().unwrap_or_else(|| {
-        LoweredExpr::Node(cx.missing_fact(
+        cx.missing_fact(
             name.span,
             format_args!(
                 "key argument of the agent construction `{}(...)`",
                 name.name
             ),
-        ))
+        )
     });
     cx.agent_construct_node(&name.name, key)
 }
@@ -175,21 +170,17 @@ mod tests {
     use bynk_check::checker::TypedCommons;
     use bynk_check::project_model::BuildTarget;
 
-    fn node(text: &str) -> LoweredExpr {
-        LoweredExpr::Node(ident_node(text))
+    fn node(text: &str) -> bynk_ts::TsExpr {
+        ident_node(text)
     }
 
-    fn text(text: &str) -> LoweredExpr {
-        LoweredExpr::Text(text.to_string())
+    fn printed(built: bynk_ts::TsExpr) -> String {
+        bynk_ts::print_expr(&built)
     }
 
-    fn printed(built: Built) -> String {
-        LoweredExpr::from(built).into_text()
-    }
-
-    /// `agent_construct_node` for one build target and body kind, over a node key and a text key:
-    /// the two print the same bytes, and the handler's deps shape widens either way.
-    fn construct(workers: bool, provider: bool, key: LoweredExpr) -> (Built, bool) {
+    /// `agent_construct_node` for one build target and body kind: the handler's deps shape
+    /// widens either way.
+    fn construct(workers: bool, provider: bool, key: bynk_ts::TsExpr) -> (bynk_ts::TsExpr, bool) {
         let commons = TypedCommons::empty();
         let cross = bynk_check::resolver::CrossContextInfo::default();
         let ru = RuntimeUse::default();
@@ -220,25 +211,19 @@ mod tests {
     fn a_bundle_construction_passes_only_the_key() {
         for provider in [false, true] {
             let (built, widened) = construct(false, provider, node("k"));
-            assert!(built.is_ok() && widened);
+            assert!(widened);
             assert_eq!(printed(built), "__makeRoom(k)");
-            let (built, widened) = construct(false, provider, text("a + b"));
-            assert!(built.is_err() && widened);
-            assert_eq!(printed(built), "__makeRoom(a + b)");
         }
     }
 
     /// Workers threads `deps.env`, and `this.deps.env` in a provider body, whose composer
-    /// supplies it (#2355), as a node and as the text it falls back to.
+    /// supplies it (#2355).
     #[test]
     fn a_workers_construction_threads_the_deps_env() {
         for (provider, deps) in [(false, "deps"), (true, "this.deps")] {
             let want = format!("__makeRoom(k, {deps}.env)");
             let (built, widened) = construct(true, provider, node("k"));
-            assert!(built.is_ok() && widened);
-            assert_eq!(printed(built), want);
-            let (built, widened) = construct(true, provider, text("k"));
-            assert!(built.is_err() && widened);
+            assert!(widened);
             assert_eq!(printed(built), want);
         }
     }
@@ -256,8 +241,8 @@ mod tests {
             name: "Room".to_string(),
             span: bynk_syntax::span::Span::new(5, 9),
         };
-        let built = lower_agent_init(&name, vec![], &mut cx);
-        assert!(built.is_ok(), "lowering continues past the fault");
+        // Lowering continues past the fault.
+        let _ = lower_agent_init(&name, vec![], &mut cx);
         let faults = ru.take_faults();
         assert_eq!(faults.len(), 1, "{faults:?}");
         assert_eq!(faults[0].span, name.span);

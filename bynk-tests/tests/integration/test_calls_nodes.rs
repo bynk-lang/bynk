@@ -1,12 +1,9 @@
 //! 1A.26 (#3727): the test-case and system-tier service calls (a local call, an HTTP, cron, queue
 //! or event address in a `bynk test` case, the `system`-tier HTTP, cron and queue drivers, and the
 //! asset fetch) lower to nodes, with the call-site principal (`by Alice(...)`) carried as a node.
-//! Each project is emitted in memory and the exact line is pinned; the text-exit counter is read
-//! where it is real (the driver links a non-test copy of `bynk-emit`, see `text_exit_counters.rs`),
-//! and a fixture whose unrelated constructs add text exits pins its lines only. The builders' own
-//! node and text forms are unit tests in `lower_call/test_calls.rs`.
+//! Each project is emitted in memory and the exact line is pinned. The builders' own forms are
+//! unit tests in `lower_call/test_calls.rs`.
 //!
-use bynk_emit::emitter::text_counters;
 
 fn fixture_dir(fixture: &str) -> std::path::PathBuf {
     std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -31,10 +28,10 @@ fn copy_dir(from: &std::path::Path, to: &std::path::Path) {
     }
 }
 
-/// `(text exits, every emitted document joined)` for a fixture project, built as the fixture suite
+/// `every emitted document joined` for a fixture project, built as the fixture suite
 /// builds it. `rewrite` replaces (or adds) files of a temporary copy, so a suite's own unrelated
 /// constructs can be taken out of the count.
-fn emit(fixture: &str, rewrite: &[(&str, &str)]) -> (usize, String) {
+fn emit(fixture: &str, rewrite: &[(&str, &str)]) -> String {
     let original = fixture_dir(fixture);
     let (dir, copy) = if rewrite.is_empty() {
         (original, None)
@@ -48,9 +45,7 @@ fn emit(fixture: &str, rewrite: &[(&str, &str)]) -> (usize, String) {
         }
         (tmp.clone(), Some(tmp))
     };
-    text_counters::reset();
     let result = super::e2e::compile_fixture(&dir, super::e2e::fixture_target(&dir));
-    let exits = text_counters::exits();
     if let Some(tmp) = copy {
         let _ = std::fs::remove_dir_all(tmp);
     }
@@ -61,19 +56,18 @@ fn emit(fixture: &str, rewrite: &[(&str, &str)]) -> (usize, String) {
             bynk_driver::render::render_project_errors(&failure.flatten())
         ),
     };
-    let text = out
-        .artefacts
+
+    out.artefacts
         .docs
         .values()
         .map(|d| d.text())
         .collect::<Vec<_>>()
-        .join("\n");
-    (exits, text)
+        .join("\n")
 }
 
 /// A project of one context `r` (`src`) and one suite `r` (`suite`), built on the smallest fixture;
 /// `workers` selects the Workers target a `system` suite needs.
-fn project(src: &str, suite: &str, workers: bool) -> (usize, String) {
+fn project(src: &str, suite: &str, workers: bool) -> String {
     let mut files = vec![("src/r.bynk", src), ("tests/r.bynk", suite)];
     if workers {
         files.push(("target.txt", "workers"));
@@ -118,11 +112,11 @@ service api from http {
 "#;
 
 /// Every principal form on an http address: a sum actor, a unit actor, an identity, none, and a
-/// path argument. Each is a node, with no text exit, and the principal does not leak into the call
+/// path argument. Each is a node, and the principal does not leak into the call
 /// that follows it (the save and restore around a `by`).
 #[test]
 fn an_http_address_carries_each_principal_form_as_a_node() {
-    let (exits, text) = project(
+    let text = project(
         HTTP_CONTEXT,
         r#"suite r
 
@@ -139,7 +133,6 @@ case "principals" {
 "#,
         false,
     );
-    assert_eq!(exits, 0, "no text exit:\n{text}");
     for line in [
         r#"const a = await api.http_GET({ ...deps, who: { tag: "User", identity: id } });"#,
         "const b = await api.http_GET_plain({ ...deps, identity: (id as any) });",
@@ -173,7 +166,7 @@ service api from http {
 	on GET("/me") () -> Effect[HttpResult[String]] by u: User { Ok("me") }
 }
 "#;
-    let (exits, text) = project(
+    let text = project(
         src,
         r#"suite r {
 	case "claims" {
@@ -185,7 +178,6 @@ service api from http {
 "#,
         false,
     );
-    assert_eq!(exits, 0, "no text exit:\n{text}");
     assert_line(
         &text,
         "const a = await api.http_GET_me({ ...deps, identity: (id as any), claims: __tokenClaims([]) });",
@@ -200,8 +192,7 @@ service api from http {
 /// byte as before.
 #[test]
 fn a_branded_principal_is_a_node_and_prints_byte_for_byte() {
-    let (exits, text) = emit("2020_test_actor_sum_principal", &[]);
-    assert_eq!(exits, 0, "the brand cast is a node:\n{text}");
+    let text = emit("2020_test_actor_sum_principal", &[]);
     for line in [
         r#"const r = await api.http_GET({ ...deps, who: { tag: "User", identity: ("ada" as any) } });"#,
         r#"const r = await api.http_GET_plain({ ...deps, identity: (("bo" as any) as any) });"#,
@@ -211,10 +202,10 @@ fn a_branded_principal_is_a_node_and_prints_byte_for_byte() {
     }
 }
 
-/// The plain `call`, cron and queue addresses, with no text exit.
+/// The plain `call`, cron and queue addresses, .
 #[test]
 fn plain_cron_and_queue_addresses_are_nodes() {
-    let (exits, text) = emit(
+    let text = emit(
         "1934_case_outcome_typed_by_handler",
         &[(
             "tests/app/web.bynk",
@@ -230,7 +221,6 @@ fn plain_cron_and_queue_addresses_are_nodes() {
 "#,
         )],
     );
-    assert_eq!(exits, 0, "no text exit:\n{text}");
     for line in [
         "const a = await api.http_GET_name(deps);",
         "const b = await calc.call(3, deps);",
@@ -246,12 +236,12 @@ fn plain_cron_and_queue_addresses_are_nodes() {
 /// it; a target with neither passes the bare call (above).
 #[test]
 fn an_addressed_call_is_settled_on_a_sending_or_a_virtual_time_target() {
-    let (_, sends) = emit("1994_test_route_with_send", &[]);
+    let sends = emit("1994_test_route_with_send", &[]);
     assert_line(
         &sends,
         "const r = await __bynkSettle(deps, api.http_GET(deps));",
     );
-    let (_, virtual_time) = emit("2683_within_harness", &[]);
+    let virtual_time = emit("2683_within_harness", &[]);
     assert_line(
         &virtual_time,
         "const r = await __bynkSettleVirtual(deps, quotes.call(1, deps));",
@@ -261,7 +251,7 @@ fn an_addressed_call_is_settled_on_a_sending_or_a_virtual_time_target() {
 /// An event address, with an envelope and without one (`undefined`).
 #[test]
 fn an_event_address_is_a_node_with_and_without_an_envelope() {
-    let (_, text) = emit("2052_test_event_address", &[]);
+    let text = emit("2052_test_event_address", &[]);
     assert_line(
         &text,
         "const __r0 = await __bynkEvent_OnPlaced(e, env, deps);",
@@ -287,7 +277,7 @@ fn an_inbound_email_message_is_built_with_and_without_a_principal() {
         let suite = format!(
             "suite shop.support {{\n  consumes bynk.cloudflare {{ EmailVerdict, InboundEmail }}\n  case \"a\" {{\n    let r <- {call}\n  }}\n}}\n"
         );
-        let (_, text) = emit(
+        let text = emit(
             "3328_email_catch_all_sender",
             &[("tests/support.bynk", suite.as_str())],
         );
@@ -302,7 +292,7 @@ fn an_inbound_email_message_is_built_with_and_without_a_principal() {
 /// type), unchanged.
 #[test]
 fn the_websocket_lifecycle_addresses_stay_text() {
-    let (_, text) = emit("3051_test_websocket_address", &[]);
+    let text = emit("3051_test_websocket_address", &[]);
     assert_contains(
         &text,
         r#"(async () => { const __c = alice; const __a: Parameters<typeof ChatGateway.open> = [__c, room, { ...deps, identity: (UserId.unsafe("alice") as any) }]; __c.remember([room], __a[__a.length - 1]); return ChatGateway.open(...__a); })()"#,
@@ -313,8 +303,7 @@ fn the_websocket_lifecycle_addresses_stay_text() {
 /// `svc.GET(asset)`: the argument is a plain identifier, so the redundant brackets go.
 #[test]
 fn an_asset_fetch_is_a_node() {
-    let (exits, text) = emit("1883_asset_suites_unit", &[]);
-    assert_eq!(exits, 0, "no text exit:\n{text}");
+    let text = emit("1883_asset_suites_unit", &[]);
     assert_line(&text, "const r = await __bynkAssetGet(style.url);");
     assert_line(&text, "const r = await __bynkAssetGet(favicon.url);");
 }
@@ -323,7 +312,7 @@ fn an_asset_fetch_is_a_node() {
 /// path argument; the wrong method.
 #[test]
 fn a_system_http_call_drives_the_driver_its_principal_picks() {
-    let (exits, text) = project(
+    let text = project(
         HTTP_CONTEXT,
         r#"suite r as system {
 	case "drivers" {
@@ -338,7 +327,6 @@ fn a_system_http_call_drives_the_driver_its_principal_picks() {
 "#,
         true,
     );
-    assert_eq!(exits, 0, "no text exit:\n{text}");
     for line in [
         r#"const c = await __sysdrive_api_http_GET(undefined, "", "Visitor");"#,
         r#"const d = await __sysdrive_api_http_GET_open(undefined, "");"#,
@@ -375,7 +363,7 @@ service api from http {
 	on PUT("/form/:id") (id: String, body: Form) -> Effect[HttpResult[String]] by v: Visitor { Ok(id) }
 }
 "#;
-    let (exits, text) = project(
+    let text = project(
         src,
         r#"suite r as system {
 	case "slots" {
@@ -389,7 +377,6 @@ service api from http {
 "#,
         true,
     );
-    assert_eq!(exits, 0, "no text exit:\n{text}");
     for line in [
         r#"const a = await __sysdrive_raw_api_http_PUT_note_Param_id("n1", globalThis.JSON.stringify(__ns_r.__serialise_Note(({ text: "hi" } as any))), undefined, "");"#,
         r#"const b = await __sysdrive_raw_api_http_GET_me_Param_id("n1", __cookieString(__ns_r.__serialise_Session(({ theme: Theme.Dark, visits: 3 } as any))), undefined, "");"#,
@@ -412,7 +399,7 @@ service api from http {
 	on GET("/q\"x\\y") () -> Effect[HttpResult[String]] by Visitor { Ok("b") }
 }
 "#;
-    let (exits, text) = project(
+    let text = project(
         src,
         r#"suite r as system {
 	case "paths" {
@@ -423,7 +410,6 @@ service api from http {
 "#,
         true,
     );
-    assert_eq!(exits, 0, "no text exit:\n{text}");
     assert_line(
         &text,
         r#"const a = await __sysdrive_wrongmethod_api("POST", "/café");"#,
@@ -439,7 +425,7 @@ service api from http {
 /// an actor-sum route's actor name; the no-auth and forged drivers sign nothing.
 #[test]
 fn a_system_call_passes_its_claims_and_its_acting_actor() {
-    let (_, refinement) = emit("2019_system_refinement_actor_principal", &[]);
+    let refinement = emit("2019_system_refinement_actor_principal", &[]);
     assert_line(
         &refinement,
         r#"const r = await __sysdrive_api_http_GET_admin(undefined, ("root" as any), { "admin": true });"#,
@@ -448,7 +434,7 @@ fn a_system_call_passes_its_claims_and_its_acting_actor() {
         &refinement,
         r#"const r = await __sysdrive_api_http_GET_admin(undefined, ("root" as any), {});"#,
     );
-    let (_, oidc) = emit("3052_system_oidc_refusals", &[]);
+    let oidc = emit("3052_system_oidc_refusals", &[]);
     assert_line(
         &oidc,
         r#"const r = await __sysdrive_api_http_GET_who(undefined, ("wid" as any), __bynkOidcClaims(["repository: acme/money"]));"#,
@@ -457,7 +443,7 @@ fn a_system_call_passes_its_claims_and_its_acting_actor() {
         &oidc,
         r#"const r = await __sysdrive_raw_api_http_POST_release("\"v1\"", undefined, ("wid" as any), __bynkOidcClaims([]));"#,
     );
-    let (_, sum) = emit("2155_system_sum_route_credential", &[]);
+    let sum = emit("2155_system_sum_route_credential", &[]);
     assert_line(
         &sum,
         r#"const r = await __sysdrive_api_http_POST_notify("hi", undefined, "", "Processor");"#,
@@ -471,9 +457,9 @@ fn a_system_call_passes_its_claims_and_its_acting_actor() {
 /// A system cron or queue address drives the participant Worker's real entry.
 #[test]
 fn a_system_cron_or_queue_address_drives_its_driver() {
-    let (_, text) = emit("2136_system_cron_queue", &[]);
+    let text = emit("2136_system_cron_queue", &[]);
     assert_line(&text, "const a = await __sysdrive_message_deliveries(d);");
-    let (_, text) = emit(
+    let text = emit(
         "2131_cron_queue_address_in_process",
         &[(
             "tests/jobs_system.bynk",
@@ -499,7 +485,7 @@ fn a_system_cron_or_queue_address_drives_its_driver() {
 /// `extra headers` (#2910) take a slot ahead of the identity.
 #[test]
 fn a_system_call_with_extra_headers_fills_the_slot_ahead_of_sub() {
-    let (_, text) = emit("2931_system_extra_headers_credentialed", &[]);
+    let text = emit("2931_system_extra_headers_credentialed", &[]);
     assert_line(
         &text,
         r#"const r = await __sysdrive_api_http_GET_items({ limit: 7 }, __requestHeaders(["X-Trace: 1"]), "");"#,

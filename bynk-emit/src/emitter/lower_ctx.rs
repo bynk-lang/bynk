@@ -1,8 +1,7 @@
 //! `LowerCtx`: the per-body lowering context and its `impl`.
 
 use super::ctx::*;
-use super::lower::{Built, LoweredExpr, node_or_text};
-use super::lower_call::test_calls::debug_str;
+use super::lower::str_node;
 use super::lower_list::{call, id};
 use super::ts_types::ts_ty_to_ts_type;
 use super::*;
@@ -92,14 +91,14 @@ pub(crate) struct LowerCtx<'a> {
     /// lowered), if the statement carries `by <Actor>(<identity>)`. The
     /// address-call lowering reads it to build the handler's `deps.identity`.
     /// `None` for a unit-identity actor or a non-principal statement.
-    pub call_site_identity: Option<LoweredExpr>,
+    pub call_site_identity: Option<bynk_ts::TsExpr>,
     /// #2380 (L5): the call-site principal's claims (already lowered), for an
     /// `Oidc` handler's `deps.claims`.
-    pub call_site_claims: Option<LoweredExpr>,
+    pub call_site_claims: Option<bynk_ts::TsExpr>,
     /// #3052: the lowered `"name: value"` lines of the call-site principal's
     /// literal `TokenClaims.of(lines)`, which a `system` call mints an `Oidc`
     /// token's claims from.
-    pub call_site_claim_lines: Option<LoweredExpr>,
+    pub call_site_claim_lines: Option<bynk_ts::TsExpr>,
     /// I3 (#1971): the call-site principal's actor name, beside
     /// [`Self::call_site_identity`], for a `call` sum's `deps.who`.
     pub call_site_actor: Option<String>,
@@ -457,17 +456,6 @@ impl<'a> LowerCtx<'a> {
         self.handler().map(|h| h.owning_context.as_str())
     }
 
-    /// #2719: the expression naming the execution context: the hidden `__exec`
-    /// parameter inside a function or method (a lambda there closes over it),
-    /// the handler's `deps.__exec` everywhere else (a test `case` body's deps
-    /// carry the harness's double).
-    pub(crate) fn exec_expr(&self) -> String {
-        match &self.mode {
-            BodyMode::FreeFn | BodyMode::GivenFn { .. } | BodyMode::Method => "__exec".to_string(),
-            _ => format!("{}.__exec", self.cap_deps_expr()),
-        }
-    }
-
     /// [`Self::exec_expr`] as a node, built from the same `BodyMode` and
     /// `HandlerShared` facts (1A.6), never by parsing the string.
     pub(crate) fn exec_node(&self) -> bynk_ts::TsExpr {
@@ -479,15 +467,6 @@ impl<'a> LowerCtx<'a> {
                 object: Box::new(self.cap_deps_node()),
                 property: "__exec".to_string(),
             },
-        }
-    }
-
-    /// v0.12: the receiver expression a capability call resolves against.
-    pub(crate) fn cap_deps_expr(&self) -> &str {
-        if self.deps_on_this() {
-            "this.deps"
-        } else {
-            "deps"
         }
     }
 
@@ -575,34 +554,9 @@ impl<'a> LowerCtx<'a> {
         self.test().and_then(|t| t.assert_loc.as_ref())
     }
 
-    /// #3580: wrap `call`, a lowered call expression, in a trace step when this is
-    /// a traced build, naming its kind, its target and the `.bynk` call site at
-    /// `offset`; otherwise `call` unchanged, so a deploy build's output is
-    /// byte-identical. The call is the wrapper's argument, so its arguments
-    /// evaluate where they always did.
-    pub(crate) fn trace_step(
-        &self,
-        kind: &str,
-        target: &str,
-        offset: usize,
-        call: String,
-    ) -> String {
-        let Some(loc) = self.module.trace.as_ref() else {
-            return call;
-        };
-        self.runtime_use().note_trace_step();
-        let (line, col) = bynk_syntax::span::line_col(&loc.source, offset);
-        let path = loc.rel_path.replace('\\', "/");
-        format!(
-            "__traceStep(\"{kind}\", \"{}\", {{ file: \"{}\", line: {line}, col: {col} }})({call})",
-            escape_ts_string(target),
-            escape_ts_string(&path),
-        )
-    }
-
     /// [`Self::trace_step`] over a call node (1A.24, #3725, Decision C): the same wrapper, built
     /// as `__traceStep("kind", "target", { file, line, col })(call)`. A deploy build returns
-    /// `call` unchanged. The string form stays for the callers that are still text.
+    /// `call` unchanged.
     pub(crate) fn trace_step_node(
         &self,
         kind: &str,
@@ -992,7 +946,7 @@ impl<'a> LowerCtx<'a> {
     pub(crate) fn system_http_claims_arg(
         &self,
         route: &(String, String, String),
-    ) -> Option<LoweredExpr> {
+    ) -> Option<bynk_ts::TsExpr> {
         match &self.mode {
             BodyMode::IntegrationCase {
                 system_http_claims, ..
@@ -1000,15 +954,11 @@ impl<'a> LowerCtx<'a> {
                 let lines = self
                     .call_site_claim_lines
                     .clone()
-                    .unwrap_or_else(|| LoweredExpr::Node(bynk_ts::TsExpr::array(vec![])));
-                Some(
-                    node_or_text(
-                        vec![lines],
-                        |c| call(id("__bynkOidcClaims"), c),
-                        |t| format!("__bynkOidcClaims({})", t.join(", ")),
-                    )
-                    .into(),
-                )
+                    .unwrap_or_else(|| bynk_ts::TsExpr::array(vec![]));
+                Some({
+                    let c = vec![lines];
+                    call(id("__bynkOidcClaims"), c)
+                })
             }
             BodyMode::IntegrationCase {
                 system_http_claims, ..
@@ -1019,8 +969,8 @@ impl<'a> LowerCtx<'a> {
                     .and_then(|a| system_http_claims.actors.get(a))
                 {
                     // The actor's witness claims, as `{ "name": value, … }`.
-                    Some(witness) => LoweredExpr::Node(witness_claims_node(witness)),
-                    None => LoweredExpr::Node(bynk_ts::TsExpr::object(vec![])),
+                    Some(witness) => witness_claims_node(witness),
+                    None => bynk_ts::TsExpr::object(vec![]),
                 },
             ),
             _ => None,
@@ -1043,13 +993,14 @@ impl<'a> LowerCtx<'a> {
     pub(crate) fn system_http_sum_actor_arg(
         &self,
         route: &(String, String, String),
-    ) -> Option<LoweredExpr> {
+    ) -> Option<bynk_ts::TsExpr> {
         match &self.mode {
             BodyMode::IntegrationCase {
                 system_http_claims, ..
-            } => system_http_claims.sum_routes.get(route).map(|primary| {
-                debug_str(self.call_site_actor.as_deref().unwrap_or(primary)).into()
-            }),
+            } => system_http_claims
+                .sum_routes
+                .get(route)
+                .map(|primary| str_node(self.call_site_actor.as_deref().unwrap_or(primary))),
             _ => None,
         }
     }
@@ -1251,42 +1202,26 @@ impl<'a> LowerCtx<'a> {
     /// `deps.env` so the factory can reach the agent's DO namespace — #2355:
     /// `this.deps.env` in a provider body, whose composer supplies it.
     ///
-    /// 1A.27 (#3728): `<factory>(key)` or `<factory>(key, <deps>.env)` as a `Call` node when
-    /// the key is one, else today's text. The factory is a naming function's result, so the
+    /// 1A.27 (#3728): `<factory>(key)` or `<factory>(key, <deps>.env)` as a `Call` node. The factory is a naming function's result, so the
     /// callee is an `Ident` over it.
-    pub(super) fn agent_construct_node(&mut self, agent: &str, key: LoweredExpr) -> Built {
+    pub(super) fn agent_construct_node(
+        &mut self,
+        agent: &str,
+        key: bynk_ts::TsExpr,
+    ) -> bynk_ts::TsExpr {
         if let Some(h) = self.handler_mut() {
             h.agents_instantiated = true;
         }
         let factory = agent_factory_name(agent);
         let workers = matches!(self.target(), BuildTarget::Workers);
         // The deps argument is read only on Workers, where the factory reaches the agent's namespace.
-        let (deps_text, deps_env) = if workers {
-            (
-                self.cap_deps_expr().to_string(),
-                Some(bynk_ts::TsExpr::Member {
-                    object: Box::new(self.cap_deps_node()),
-                    property: "env".to_string(),
-                }),
-            )
-        } else {
-            (String::new(), None)
-        };
-        node_or_text(
-            vec![key],
-            |k| {
-                let mut args = k;
-                args.extend(deps_env);
-                call(id(&factory), args)
-            },
-            |k| {
-                if workers {
-                    format!("{factory}({}, {deps_text}.env)", k[0])
-                } else {
-                    format!("{factory}({})", k[0])
-                }
-            },
-        )
+        let deps_env = workers.then(|| bynk_ts::TsExpr::Member {
+            object: Box::new(self.cap_deps_node()),
+            property: "env".to_string(),
+        });
+        let mut args = vec![key];
+        args.extend(deps_env);
+        call(id(&factory), args)
     }
 
     /// #527: note that the body calls `agent.method`, folding the method's
@@ -1404,7 +1339,7 @@ impl<'a> LowerCtx<'a> {
         let tmp = self.fresh();
         self.declare_is_temp(value, &tmp, lowered, &mut pre);
         self.is_receiver_temps.insert(value.span, tmp.clone());
-        pre.finish(LoweredExpr::Node(super::lower::ident_node(&tmp)))
+        pre.finish(super::lower::ident_node(&tmp))
     }
 
     /// Declare an `is` receiver temp holding `lowered`: a `const` in place, or,
@@ -1418,7 +1353,7 @@ impl<'a> LowerCtx<'a> {
         &mut self,
         value: &Expr,
         tmp: &str,
-        lowered: LoweredExpr,
+        lowered: bynk_ts::TsExpr,
         pre: &mut Pre,
     ) {
         let ty = self
@@ -1437,7 +1372,7 @@ impl<'a> LowerCtx<'a> {
             }
             _ => false,
         };
-        let n = lowered.into_node(self.fault_site(value.span));
+        let n = lowered;
         if hoisting {
             pre.push_node(bynk_ts::TsStmt::assign(
                 super::lower::ident_node(tmp),
@@ -1468,7 +1403,7 @@ impl<'a> LowerCtx<'a> {
         let tmp = self.fresh();
         self.declare_is_temp(value, &tmp, lowered, &mut pre);
         self.is_receiver_temps.insert(value.span, tmp.clone());
-        pre.finish(LoweredExpr::Node(super::lower::ident_node(&tmp)))
+        pre.finish(super::lower::ident_node(&tmp))
     }
 
     /// v0.13: true when `value is Name` is a *refinement* check — the value is a
@@ -1532,7 +1467,7 @@ impl<'a> LowerCtx<'a> {
         }
     }
     /// Resolve the payload field name for the i-th positional binding of
-    /// a variant. Built-ins are recognised by name; user variants are
+    /// a variant. bynk_ts::TsExpr-ins are recognised by name; user variants are
     /// looked up via the type tables.
     ///
     /// P6.56 (design/tracks/the-ir.md §6b): see `sum_owner_of_variant`'s own

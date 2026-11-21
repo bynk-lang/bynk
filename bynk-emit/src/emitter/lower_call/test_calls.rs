@@ -6,19 +6,17 @@
 //! is one and falls back to the same text otherwise.
 //!
 //! The call-site principal (`by Alice(...)`) reaches these as nodes (`LowerCtx::call_site_identity`
-//! and friends, Decision B); a principal that is still text makes the call text.
+//! and friends, Decision B).
 
 use bynk_check::checker::{Callee, HandlerAddress, Ty, WsAddress};
 use bynk_model::IrHttpMethod;
 use bynk_ts::{TsExpr, TsObjectEntry};
 
 use super::super::internal_fault::undefined_node;
-use super::super::lower::{
-    Built, LoweredExpr, Pre, node_or_text, settle_helper, settle_with, str_node,
-};
+use super::super::lower::{Pre, settle_helper, settle_with, str_node};
 use super::super::lower_ctx::LowerCtx;
 use super::super::lower_list::{any_ty, arrow, call, id, member, param, paren, take};
-use super::super::{Expr, ExprKind, Ident, TypeRef, escape_ts_string};
+use super::super::{Expr, ExprKind, Ident, TypeRef};
 
 // ---- Names ----
 
@@ -37,18 +35,6 @@ fn event_helper_name(service: &str) -> String {
     format!("__bynkEvent_{service}")
 }
 
-/// `{s:?}` as a bridge value: a string-literal node when Rust's escaping and the printer's agree
-/// (ASCII route text, identifier actor names), else the Debug text, so a call over a string the
-/// two would write differently falls back to text byte for byte (Decision C).
-pub(in crate::emitter) fn debug_str(s: &str) -> Built {
-    let debug = format!("{s:?}");
-    if debug == format!("\"{}\"", escape_ts_string(s)) {
-        Ok(str_node(s))
-    } else {
-        Err(debug)
-    }
-}
-
 /// `{ ...deps, <entries> }`.
 fn deps_with(entries: Vec<TsObjectEntry>) -> TsExpr {
     let mut all = vec![TsObjectEntry::Spread(id("deps"))];
@@ -64,21 +50,17 @@ fn paren_as_any(value: TsExpr) -> TsExpr {
     })
 }
 
-fn bridge(built: Built) -> LoweredExpr {
-    built.into()
-}
-
 // ---- The call-site principal as the handler's `deps` ----
 
 /// The `deps` argument an addressed test-case call passes, and whether it is the bare `deps`.
 struct DepsArg {
-    value: LoweredExpr,
+    value: bynk_ts::TsExpr,
     plain: bool,
 }
 
 /// I3 (#1971), #2020: `{ ...deps, who: { tag, identity? } }`, a sum handler's principal.
-fn who_deps(actor: &str, identity: Option<LoweredExpr>) -> LoweredExpr {
-    let tag = bridge(debug_str(actor));
+fn who_deps(actor: &str, identity: Option<bynk_ts::TsExpr>) -> bynk_ts::TsExpr {
+    let tag = str_node(actor);
     let who = |tag: TsExpr, identity: Option<TsExpr>| {
         let mut fields = vec![TsObjectEntry::prop("tag".to_string(), tag)];
         fields.extend(identity.map(|i| TsObjectEntry::prop("identity".to_string(), i)));
@@ -87,61 +69,38 @@ fn who_deps(actor: &str, identity: Option<LoweredExpr>) -> LoweredExpr {
             TsExpr::object_entries(fields),
         )])
     };
-    bridge(match identity {
-        Some(identity) => node_or_text(
-            vec![tag, identity],
-            |c| {
-                let [tag, identity] = take(c);
-                who(tag, Some(identity))
-            },
-            |t| {
-                let [tag, identity] = take(t);
-                format!("{{ ...deps, who: {{ tag: {tag}, identity: {identity} }} }}")
-            },
-        ),
-        None => node_or_text(
-            vec![tag],
-            |c| {
-                let [tag] = take(c);
-                who(tag, None)
-            },
-            |t| {
-                let [tag] = take(t);
-                format!("{{ ...deps, who: {{ tag: {tag} }} }}")
-            },
-        ),
-    })
+    match identity {
+        Some(identity) => {
+            let c = vec![tag, identity];
+            let [tag, identity] = take(c);
+            who(tag, Some(identity))
+        }
+        None => {
+            let c = vec![tag];
+            let [tag] = take(c);
+            who(tag, None)
+        }
+    }
 }
 
 /// `{ ...deps, identity: (identity as any), claims? }`; an `Oidc` handler also reads its token's
 /// claims from `deps.claims` (#2380): the principal's, or none.
-fn identity_deps(identity: LoweredExpr, claims: Option<LoweredExpr>) -> LoweredExpr {
+fn identity_deps(identity: bynk_ts::TsExpr, claims: Option<bynk_ts::TsExpr>) -> bynk_ts::TsExpr {
     let mut children = vec![identity];
     children.extend(claims);
-    bridge(node_or_text(
-        children,
-        |c| {
-            let mut nodes = c.into_iter();
-            let mut entries = Vec::new();
-            if let Some(identity) = nodes.next() {
-                entries.push(TsObjectEntry::prop(
-                    "identity".to_string(),
-                    paren_as_any(identity),
-                ));
-            }
-            entries.extend(nodes.map(|claims| TsObjectEntry::prop("claims".to_string(), claims)));
-            deps_with(entries)
-        },
-        |t| {
-            let mut texts = t.into_iter();
-            let identity = texts.next().unwrap_or_default();
-            let claims = texts
-                .next()
-                .map(|c| format!(", claims: {c}"))
-                .unwrap_or_default();
-            format!("{{ ...deps, identity: ({identity} as any){claims} }}")
-        },
-    ))
+    {
+        let c = children;
+        let mut nodes = c.into_iter();
+        let mut entries = Vec::new();
+        if let Some(identity) = nodes.next() {
+            entries.push(TsObjectEntry::prop(
+                "identity".to_string(),
+                paren_as_any(identity),
+            ));
+        }
+        entries.extend(nodes.map(|claims| TsObjectEntry::prop("claims".to_string(), claims)));
+        deps_with(entries)
+    }
 }
 
 /// The key the addressed handler's principal is looked up under (a sum handler's `deps.who`).
@@ -172,7 +131,7 @@ fn test_address(cx: &LowerCtx, e: &Expr) -> Option<HandlerAddress> {
 /// The `deps` argument of an addressed call: the call-site principal folded in, or `deps`.
 fn test_deps(cx: &LowerCtx, service: &str, sum_key: Option<&str>) -> DepsArg {
     let plain = |value| DepsArg { value, plain: true };
-    let deps = || LoweredExpr::Node(id("deps"));
+    let deps = || id("deps");
     let is_sum = sum_key.is_some_and(|k| cx.is_sum_handler(service, k));
     match (cx.call_site_actor.clone(), cx.call_site_identity.clone()) {
         (Some(actor), identity) if is_sum => DepsArg {
@@ -185,9 +144,11 @@ fn test_deps(cx: &LowerCtx, service: &str, sum_key: Option<&str>) -> DepsArg {
         (_, Some(identity)) => {
             let claims = if sum_key.is_some_and(|k| cx.is_oidc_handler(service, k)) {
                 cx.note_token_claims();
-                Some(cx.call_site_claims.clone().unwrap_or_else(|| {
-                    LoweredExpr::Node(call(id("__tokenClaims"), vec![TsExpr::array(vec![])]))
-                }))
+                Some(
+                    cx.call_site_claims
+                        .clone()
+                        .unwrap_or_else(|| call(id("__tokenClaims"), vec![TsExpr::array(vec![])])),
+                )
             } else {
                 None
             };
@@ -206,18 +167,17 @@ fn test_deps(cx: &LowerCtx, service: &str, sum_key: Option<&str>) -> DepsArg {
 fn address_call(
     service: &str,
     key: &str,
-    mut lowered: Vec<LoweredExpr>,
-    deps: LoweredExpr,
-) -> Built {
+    mut lowered: Vec<bynk_ts::TsExpr>,
+    deps: bynk_ts::TsExpr,
+) -> bynk_ts::TsExpr {
     lowered.push(deps);
-    node_or_text(
-        lowered,
-        |nodes| call(member(id(service), key), nodes),
-        |texts| format!("{service}.{key}({})", texts.join(", ")),
-    )
+    {
+        let nodes = lowered;
+        call(member(id(service), key), nodes)
+    }
 }
 
-fn lower_args(args: &[Expr], cx: &mut LowerCtx, pre: &mut Pre) -> Vec<LoweredExpr> {
+fn lower_args(args: &[Expr], cx: &mut LowerCtx, pre: &mut Pre) -> Vec<bynk_ts::TsExpr> {
     args.iter().map(|a| pre.lower_node(a, cx)).collect()
 }
 
@@ -250,36 +210,26 @@ fn handler_facts(cx: &LowerCtx, service: &str) -> Option<HandlerFacts> {
 /// #3328: a case has no Email Routing to mint the `Sender` identity, so a handler that binds it
 /// reads the envelope sender with no DMARC verdict (`DmarcNone`) unless the case names a principal:
 /// `((__m: any) => svc.key(__m, { ...deps, identity: { ... } }))(mail)`.
-fn inbound_email_call(service: &str, key: &str, mail: LoweredExpr) -> Built {
-    node_or_text(
+fn inbound_email_call(service: &str, key: &str, mail: bynk_ts::TsExpr) -> bynk_ts::TsExpr {
+    let c = vec![mail];
+    let [mail] = take(c);
+    let sender = TsExpr::object(vec![
+        ("address".to_string(), member(id("__m"), "from")),
+        (
+            "dmarc".to_string(),
+            TsExpr::object(vec![("tag".to_string(), str_node("DmarcNone"))]),
+        ),
+    ]);
+    let handler = call(
+        member(id(service), key),
+        vec![
+            id("__m"),
+            deps_with(vec![TsObjectEntry::prop("identity".to_string(), sender)]),
+        ],
+    );
+    call(
+        paren(arrow(vec![param("__m", Some(any_ty()))], handler)),
         vec![mail],
-        |c| {
-            let [mail] = take(c);
-            let sender = TsExpr::object(vec![
-                ("address".to_string(), member(id("__m"), "from")),
-                (
-                    "dmarc".to_string(),
-                    TsExpr::object(vec![("tag".to_string(), str_node("DmarcNone"))]),
-                ),
-            ]);
-            let handler = call(
-                member(id(service), key),
-                vec![
-                    id("__m"),
-                    deps_with(vec![TsObjectEntry::prop("identity".to_string(), sender)]),
-                ],
-            );
-            call(
-                paren(arrow(vec![param("__m", Some(any_ty()))], handler)),
-                vec![mail],
-            )
-        },
-        |t| {
-            let [mail] = take(t);
-            format!(
-                "((__m: any) => {service}.{key}(__m, {{ ...deps, identity: {{ address: __m.from, dmarc: {{ tag: \"DmarcNone\" }} }} }}))({mail})"
-            )
-        },
     )
 }
 
@@ -293,7 +243,7 @@ pub(in crate::emitter) fn lower_test_asset_fetch_call(
     args: &[Expr],
     cx: &mut LowerCtx,
     pre: &mut Pre,
-) -> Option<Built> {
+) -> Option<bynk_ts::TsExpr> {
     if let ExprKind::Ident(_) = &receiver.kind
         && matches!(
             cx.commons().callees.get(&e.id),
@@ -302,17 +252,11 @@ pub(in crate::emitter) fn lower_test_asset_fetch_call(
         && let Some(first) = args.first()
     {
         let asset = pre.lower_node(first, cx);
-        return Some(node_or_text(
-            vec![asset],
-            |c| {
-                let [asset] = take(c);
-                call(id("__bynkAssetGet"), vec![member(asset, "url")])
-            },
-            |t| {
-                let [asset] = take(t);
-                format!("__bynkAssetGet(({asset}).url)")
-            },
-        ));
+        return Some({
+            let c = vec![asset];
+            let [asset] = take(c);
+            call(id("__bynkAssetGet"), vec![member(asset, "url")])
+        });
     }
     None
 }
@@ -326,7 +270,7 @@ pub(in crate::emitter) fn lower_system_schedule_call(
     args: &[Expr],
     cx: &mut LowerCtx,
     pre: &mut Pre,
-) -> Option<Built> {
+) -> Option<bynk_ts::TsExpr> {
     if let ExprKind::Ident(id) = &receiver.kind {
         let address = test_address(cx, e);
         let driver = match &address {
@@ -339,11 +283,10 @@ pub(in crate::emitter) fn lower_system_schedule_call(
         if let Some(driver) = driver {
             let skip = usize::from(matches!(address, Some(HandlerAddress::Schedule { .. })));
             let rest = lower_args(&args[skip..], cx, pre);
-            return Some(node_or_text(
-                rest,
-                |nodes| call(TsExpr::Ident(driver.clone()), nodes),
-                |texts| format!("{driver}({})", texts.join(", ")),
-            ));
+            return Some({
+                let nodes = rest;
+                call(TsExpr::Ident(driver.clone()), nodes)
+            });
         }
     }
     None
@@ -353,13 +296,12 @@ pub(in crate::emitter) fn lower_system_schedule_call(
 
 /// #707: a `(method, path)` whose path is a declared route but whose method has no handler is a
 /// wrong-method call; drive the generic `405` driver.
-fn wrong_method_call(service: &str, verb: IrHttpMethod, path: &str) -> Built {
+fn wrong_method_call(service: &str, verb: IrHttpMethod, path: &str) -> bynk_ts::TsExpr {
     let name = wrong_method_driver_name(service);
-    node_or_text(
-        vec![bridge(debug_str(verb.as_str())), bridge(debug_str(path))],
-        |nodes| call(TsExpr::Ident(name.clone()), nodes),
-        |texts| format!("{name}({})", texts.join(", ")),
-    )
+    {
+        let nodes = vec![str_node(verb.as_str()), str_node(path)];
+        call(TsExpr::Ident(name.clone()), nodes)
+    }
 }
 
 /// The driver prefix a call drives. #706: `by Nobody` drives the *no-auth* driver (no
@@ -430,7 +372,7 @@ impl RawSlots {
 
     /// Argument `i`, as the slot the driver takes. A typed argument mixed into a raw call is
     /// converted to its `string` slot; a path param coerces via `String(...)`.
-    fn slot(&self, i: usize, a: &Expr, lowered: LoweredExpr, cx: &LowerCtx) -> LoweredExpr {
+    fn slot(&self, i: usize, a: &Expr, lowered: bynk_ts::TsExpr, cx: &LowerCtx) -> bynk_ts::TsExpr {
         if !self.is_raw || matches!(&a.kind, ExprKind::Wire(_)) {
             return lowered;
         }
@@ -447,25 +389,22 @@ impl RawSlots {
             && *at == i
         {
             cx.note_cookie_string();
-            return serialised(lowered, ty, Wire::Cookie, cx, a.span);
+            return serialised(lowered, ty, Wire::Cookie, cx);
         }
         // #2854: a typed `query` record becomes the query string the raw driver appends to the URL.
         if let Some((at, ty)) = &self.query
             && *at == i
         {
             cx.note_query_string();
-            return serialised(lowered, ty, Wire::Query, cx, a.span);
+            return serialised(lowered, ty, Wire::Query, cx);
         }
         match &self.body {
             Some((at, ty)) if *at == i && self.form => {
                 cx.note_query_string();
-                serialised(lowered, ty, Wire::Form, cx, a.span)
+                serialised(lowered, ty, Wire::Form, cx)
             }
-            Some((at, ty)) if *at == i => serialised(lowered, ty, Wire::Json, cx, a.span),
-            _ => LoweredExpr::Node(call(
-                id("String"),
-                vec![lowered.into_node(cx.fault_site(a.span))],
-            )),
+            Some((at, ty)) if *at == i => serialised(lowered, ty, Wire::Json, cx),
+            _ => call(id("String"), vec![lowered]),
         }
     }
 }
@@ -476,16 +415,15 @@ impl RawSlots {
 /// expects the branded shape. P7.2: deferred, not narrowed; a bare `as unknown as {ty}` broke a
 /// real `tsc --strict` fixture (385, "Cannot find name").
 fn serialised(
-    lowered: LoweredExpr,
+    lowered: bynk_ts::TsExpr,
     ty: &TypeRef,
     wire: Wire,
     cx: &LowerCtx,
-    at: bynk_syntax::span::Span,
-) -> LoweredExpr {
+) -> bynk_ts::TsExpr {
     let (ns, ru) = (cx.system_http_type_ns(), cx.runtime_use());
-    let value = lowered.into_node(cx.fault_site(at));
+    let value = lowered;
     let ser = crate::emitter::serialisation::serialise_expr_via(ty, &paren_as_any(value), ns, ru);
-    LoweredExpr::Node(match wire {
+    match wire {
         Wire::Cookie => call(id("__cookieString"), vec![ser]),
         Wire::Query => call(id("__queryString"), vec![ser]),
         Wire::Form => call(
@@ -496,7 +434,7 @@ fn serialised(
             member(member(id("globalThis"), "JSON"), "stringify"),
             vec![ser],
         ),
-    })
+    }
 }
 
 /// Lower a `system`-tier http address, driven through a real `worker.fetch`, or `None` when the
@@ -507,7 +445,7 @@ pub(in crate::emitter) fn lower_system_http_call(
     args: &[Expr],
     cx: &mut LowerCtx,
     pre: &mut Pre,
-) -> Option<Built> {
+) -> Option<bynk_ts::TsExpr> {
     let ExprKind::Ident(svc) = &receiver.kind else {
         return None;
     };
@@ -532,13 +470,13 @@ pub(in crate::emitter) fn lower_system_http_call(
     let sub = cx
         .call_site_identity
         .clone()
-        .unwrap_or_else(|| LoweredExpr::Node(str_node("")));
+        .unwrap_or_else(|| str_node(""));
     let has_wire = args[1..]
         .iter()
         .any(|a| matches!(&a.kind, ExprKind::Wire(_)));
     let driver = system_driver(cx, has_wire);
     let slots = RawSlots::new(cx, &route, driver.starts_with("__sysdrive_raw"));
-    let mut all: Vec<LoweredExpr> = args[1..]
+    let mut all: Vec<bynk_ts::TsExpr> = args[1..]
         .iter()
         .enumerate()
         .map(|(i, a)| {
@@ -565,15 +503,15 @@ pub(in crate::emitter) fn lower_system_http_call(
         // else the legitimate default: no extra headers, `undefined`.
         let extra_arg = if sends_extra {
             Some(all.pop().unwrap_or_else(|| {
-                LoweredExpr::Node(cx.missing_fact(
+                cx.missing_fact(
                     e.span,
                     "trailing `RequestHeaders` argument of a system call",
-                ))
+                )
             }))
         } else {
             None
         };
-        let slot = extra_arg.unwrap_or_else(|| LoweredExpr::Node(undefined_node()));
+        let slot = extra_arg.unwrap_or_else(undefined_node);
         all.push(slot);
     }
     all.push(sub);
@@ -585,11 +523,10 @@ pub(in crate::emitter) fn lower_system_http_call(
         all.extend(cx.system_http_sum_actor_arg(&route));
     }
     let name = sysdrive_name(&driver, &svc.name, &key);
-    Some(node_or_text(
-        all,
-        |nodes| call(TsExpr::Ident(name.clone()), nodes),
-        |texts| format!("{name}({})", texts.join(", ")),
-    ))
+    Some({
+        let nodes = all;
+        call(TsExpr::Ident(name.clone()), nodes)
+    })
 }
 
 // ---- The test-case service call ----
@@ -601,7 +538,7 @@ pub(in crate::emitter) fn lower_system_http_call(
 /// `deps` shape against the emitted handler; only the route values, which the `TestConnection`
 /// holds as `unknown`, are cast, as production's dispatch casts `__att.args[i]`.
 ///
-/// Built as nodes when the `TestConnection`, the route values and the `deps` are all nodes
+/// bynk_ts::TsExpr as nodes when the `TestConnection`, the route values and the `deps` are all nodes
 /// (`Parameters<typeof …>` is a `typeof` type under an indexed-access type, a number-literal
 /// index for the frame positions), else the same text.
 fn websocket_lifecycle_call(
@@ -609,20 +546,19 @@ fn websocket_lifecycle_call(
     svc: &str,
     args: &[Expr],
     at: bynk_syntax::span::Span,
-    deps: &LoweredExpr,
+    deps: &bynk_ts::TsExpr,
     cx: &mut LowerCtx,
     pre: &mut Pre,
-) -> Built {
+) -> bynk_ts::TsExpr {
     use bynk_ts::{TsBinaryOp, TsBindingName, TsLit, TsStmt, TsType};
     // An argument the checker's arity check guarantees: absent, a missing fact.
     let tc = match args.first() {
         Some(a) => pre.lower_node(a, cx),
-        None => LoweredExpr::Node(cx.missing_fact(
+        None => cx.missing_fact(
             at,
             "`TestConnection` argument of a websocket lifecycle call",
-        )),
+        ),
     };
-    let sig_text = |m: &str| format!("Parameters<typeof {svc}.{m}>");
     let sig =
         |m: &str| TsType::named_with_args("Parameters", vec![TsType::type_of(member(id(svc), m))]);
     let num = |n: usize| TsExpr::Lit(TsLit::Num(n.to_string()));
@@ -669,136 +605,82 @@ fn websocket_lifecycle_call(
     };
     match shape {
         WsAddress::Open => {
-            let route: Vec<LoweredExpr> = args[1..].iter().map(|a| pre.lower_node(a, cx)).collect();
-            let n = route.len();
+            let route: Vec<bynk_ts::TsExpr> =
+                args[1..].iter().map(|a| pre.lower_node(a, cx)).collect();
             let mut children = vec![tc];
             children.extend(route);
             children.push(deps.clone());
-            node_or_text(
-                children,
-                |mut c| {
-                    let tc = c.remove(0);
-                    let deps = c.pop().expect("the deps child is last");
-                    let mut parts = vec![id("__c")];
-                    parts.extend(c.iter().cloned());
-                    parts.push(deps);
-                    let last = TsExpr::Index {
-                        object: Box::new(id("__a")),
-                        index: Box::new(TsExpr::Binary {
-                            op: TsBinaryOp::Sub,
-                            left: Box::new(member(id("__a"), "length")),
-                            right: Box::new(num(1)),
-                        }),
-                    };
-                    iife(vec![
-                        const_("__c", None, tc),
-                        const_("__a", Some(sig("open")), array(parts)),
-                        TsStmt::expr_stmt(
-                            call(member(id("__c"), "remember"), vec![array(c), last]),
-                            None,
-                        ),
-                        spread_call("open"),
-                    ])
-                },
-                |mut t| {
-                    let tc = t.remove(0);
-                    let deps = t.pop().expect("the deps child is last");
-                    debug_assert_eq!(t.len(), n);
-                    let mut parts = vec!["__c".to_string()];
-                    parts.extend(t.iter().cloned());
-                    parts.push(deps);
-                    format!(
-                        "(async () => {{ const __c = {tc}; const __a: {} = [{}]; __c.remember([{}], __a[__a.length - 1]); return {svc}.open(...__a); }})()",
-                        sig_text("open"),
-                        parts.join(", "),
-                        t.join(", ")
-                    )
-                },
-            )
+            {
+                let mut c = children;
+                let tc = c.remove(0);
+                let deps = c.pop().expect("the deps child is last");
+                let mut parts = vec![id("__c")];
+                parts.extend(c.iter().cloned());
+                parts.push(deps);
+                let last = TsExpr::Index {
+                    object: Box::new(id("__a")),
+                    index: Box::new(TsExpr::Binary {
+                        op: TsBinaryOp::Sub,
+                        left: Box::new(member(id("__a"), "length")),
+                        right: Box::new(num(1)),
+                    }),
+                };
+                iife(vec![
+                    const_("__c", None, tc),
+                    const_("__a", Some(sig("open")), array(parts)),
+                    TsStmt::expr_stmt(
+                        call(member(id("__c"), "remember"), vec![array(c), last]),
+                        None,
+                    ),
+                    spread_call("open"),
+                ])
+            }
         }
         WsAddress::Message { frame } => {
             let (frame_idx, n) = frame.map_or((0, 1), |f| (f.frame_index, f.params));
             let frame = match args.get(1) {
                 Some(a) => pre.lower_node(a, cx),
-                None => LoweredExpr::Node(
-                    cx.missing_fact(at, "frame argument of a websocket `message` call"),
-                ),
+                None => cx.missing_fact(at, "frame argument of a websocket `message` call"),
             };
-            node_or_text(
-                vec![tc, frame],
-                |c| {
-                    let [tc, frame] = take(c);
-                    let mut parts = vec![id("__c")];
-                    let mut k = 0usize;
-                    for i in 0..n {
-                        if i == frame_idx {
-                            parts.push(frame.clone());
-                        } else {
-                            parts.push(opened_cast("route", k, "message", i + 1));
-                            k += 1;
-                        }
+            {
+                let c = vec![tc, frame];
+                let [tc, frame] = take(c);
+                let mut parts = vec![id("__c")];
+                let mut k = 0usize;
+                for i in 0..n {
+                    if i == frame_idx {
+                        parts.push(frame.clone());
+                    } else {
+                        parts.push(opened_cast("route", k, "message", i + 1));
+                        k += 1;
                     }
-                    parts.push(deps_cast("message", n + 1));
-                    iife(vec![
-                        const_("__c", None, tc),
-                        const_("__o", None, call(member(id("__c"), "opened"), Vec::new())),
-                        const_("__a", Some(sig("message")), array(parts)),
-                        spread_call("message"),
-                    ])
-                },
-                |t| {
-                    let [tc, frame] = take(t);
-                    let p = sig_text("message");
-                    let mut k = 0usize;
-                    let mut parts = vec!["__c".to_string()];
-                    for i in 0..n {
-                        if i == frame_idx {
-                            parts.push(frame.clone());
-                        } else {
-                            parts.push(format!("__o.route[{k}] as {p}[{}]", i + 1));
-                            k += 1;
-                        }
-                    }
-                    parts.push(format!("__o.deps as {p}[{}]", n + 1));
-                    format!(
-                        "(async () => {{ const __c = {tc}; const __o = __c.opened(); const __a: {p} = [{}]; return {svc}.message(...__a); }})()",
-                        parts.join(", ")
-                    )
-                },
-            )
+                }
+                parts.push(deps_cast("message", n + 1));
+                iife(vec![
+                    const_("__c", None, tc),
+                    const_("__o", None, call(member(id("__c"), "opened"), Vec::new())),
+                    const_("__a", Some(sig("message")), array(parts)),
+                    spread_call("message"),
+                ])
+            }
         }
         WsAddress::Close { params } => {
             let n = params.unwrap_or(0);
-            node_or_text(
-                vec![tc],
-                |c| {
-                    let [tc] = take(c);
-                    let mut parts = vec![id("__c")];
-                    for i in 0..n {
-                        parts.push(opened_cast("route", i, "close", i + 1));
-                    }
-                    parts.push(deps_cast("close", n + 1));
-                    iife(vec![
-                        const_("__c", None, tc),
-                        const_("__o", None, call(member(id("__c"), "opened"), Vec::new())),
-                        const_("__a", Some(sig("close")), array(parts)),
-                        spread_call("close"),
-                    ])
-                },
-                |t| {
-                    let [tc] = take(t);
-                    let p = sig_text("close");
-                    let mut parts = vec!["__c".to_string()];
-                    for i in 0..n {
-                        parts.push(format!("__o.route[{i}] as {p}[{}]", i + 1));
-                    }
-                    parts.push(format!("__o.deps as {p}[{}]", n + 1));
-                    format!(
-                        "(async () => {{ const __c = {tc}; const __o = __c.opened(); const __a: {p} = [{}]; return {svc}.close(...__a); }})()",
-                        parts.join(", ")
-                    )
-                },
-            )
+            {
+                let c = vec![tc];
+                let [tc] = take(c);
+                let mut parts = vec![id("__c")];
+                for i in 0..n {
+                    parts.push(opened_cast("route", i, "close", i + 1));
+                }
+                parts.push(deps_cast("close", n + 1));
+                iife(vec![
+                    const_("__c", None, tc),
+                    const_("__o", None, call(member(id("__c"), "opened"), Vec::new())),
+                    const_("__a", Some(sig("close")), array(parts)),
+                    spread_call("close"),
+                ])
+            }
         }
     }
 }
@@ -814,7 +696,7 @@ pub(in crate::emitter) fn lower_test_service_call(
     args: &[Expr],
     cx: &mut LowerCtx,
     pre: &mut Pre,
-) -> Option<Built> {
+) -> Option<bynk_ts::TsExpr> {
     let ExprKind::Ident(svc) = &receiver.kind else {
         return None;
     };
@@ -829,7 +711,7 @@ pub(in crate::emitter) fn lower_test_service_call(
     let address = test_address(cx, e);
     let sum_key = sum_handler_key(address.as_ref());
     let DepsArg { value: deps, plain } = test_deps(cx, &svc.name, sum_key.as_deref());
-    let settle = |built: Built| Some(settle_with(helper, built));
+    let settle = |built: bynk_ts::TsExpr| Some(settle_with(helper, built));
     // http address: the method is an HTTP verb and the first argument is the route pattern
     // string. The key is a pure function of verb + path; the remaining args are the handler's
     // positional params.
@@ -877,21 +759,18 @@ pub(in crate::emitter) fn lower_test_service_call(
             cx.runtime_use().note_test_event_service(&svc.name);
             let payload = match args.first() {
                 Some(a) => pre.lower_node(a, cx),
-                None => LoweredExpr::Node(
-                    cx.missing_fact(e.span, "event argument of a `svc.event` call"),
-                ),
+                None => cx.missing_fact(e.span, "event argument of a `svc.event` call"),
             };
             // The legitimate default: an omitted envelope is `undefined`.
             let envelope = args
                 .get(1)
                 .map(|a| pre.lower_node(a, cx))
-                .unwrap_or_else(|| LoweredExpr::Node(undefined_node()));
+                .unwrap_or_else(undefined_node);
             let helper_name = event_helper_name(&svc.name);
-            return settle(node_or_text(
-                vec![payload, envelope, deps],
-                |nodes| call(TsExpr::Ident(helper_name.clone()), nodes),
-                |texts| format!("{helper_name}({})", texts.join(", ")),
-            ));
+            return settle({
+                let nodes = vec![payload, envelope, deps];
+                call(TsExpr::Ident(helper_name.clone()), nodes)
+            });
         }
     }
     // `svc.call(args)` and other (non-http) forms: pass args through with deps.
@@ -911,22 +790,18 @@ fn is_inbound_email(e: &Expr, cx: &LowerCtx) -> bool {
 mod tests {
     use super::*;
 
-    fn node(text: &str) -> LoweredExpr {
-        LoweredExpr::Node(id(text))
+    fn node(text: &str) -> bynk_ts::TsExpr {
+        id(text)
     }
 
-    fn text(text: &str) -> LoweredExpr {
-        LoweredExpr::Text(text.to_string())
-    }
-
-    fn printed(built: Built) -> String {
-        LoweredExpr::from(built).into_text()
+    fn printed(built: bynk_ts::TsExpr) -> String {
+        bynk_ts::print_expr(&built)
     }
 
     /// Verbs, route paths and actor names are written the same by Rust's `{:?}` and the printer,
-    /// including `\`, `"` and non-ASCII text, so they build a literal node.
+    /// including `\`, `"` and non-ASCII text.
     #[test]
-    fn debug_str_agrees_with_the_printer_on_route_text() {
+    fn route_text_prints_as_rust_debug_does() {
         for s in [
             "GET",
             "/orders/:id",
@@ -936,77 +811,45 @@ mod tests {
             "/日本語",
             "a'b",
         ] {
-            let built = debug_str(s);
-            assert!(built.is_ok(), "{s:?} should build a node");
-            assert_eq!(printed(built), format!("{s:?}"), "{s:?}");
+            assert_eq!(printed(str_node(s)), format!("{s:?}"), "{s:?}");
         }
     }
 
-    /// Where the two disagree (a control character Rust writes as `\u{7f}` and the printer as
-    /// `\u{7F}`), the text path is kept, so the call stays byte for byte.
+    /// A sum handler's principal.
     #[test]
-    fn debug_str_keeps_the_text_where_the_escapes_differ() {
-        for s in ["/a\u{7f}b", "/a\0b"] {
-            let built = debug_str(s);
-            assert!(built.is_err(), "{s:?} should stay text");
-            assert_eq!(printed(built), format!("{s:?}"));
-        }
-    }
-
-    /// A sum handler's principal, as a node and as the text it falls back to.
-    #[test]
-    fn a_sum_principal_prints_the_same_as_a_node_and_as_text() {
+    fn a_sum_principal_prints() {
         let want = r#"{ ...deps, who: { tag: "User", identity: id } }"#;
-        let as_node = who_deps("User", Some(node("id"))).into_text();
-        assert_eq!(as_node, want);
-        let as_text = who_deps("User", Some(text("id"))).into_text();
-        assert_eq!(as_text, want);
+        assert_eq!(printed(who_deps("User", Some(node("id")))), want);
         assert_eq!(
-            who_deps("Visitor", None).into_text(),
+            printed(who_deps("Visitor", None)),
             r#"{ ...deps, who: { tag: "Visitor" } }"#
         );
     }
 
     /// An identity keeps its `as any`; an `Oidc` handler adds its claims.
     #[test]
-    fn an_identity_principal_prints_the_same_as_a_node_and_as_text() {
+    fn an_identity_principal_prints() {
         let plain = "{ ...deps, identity: (id as any) }";
-        assert_eq!(identity_deps(node("id"), None).into_text(), plain);
-        assert_eq!(identity_deps(text("id"), None).into_text(), plain);
+        assert_eq!(printed(identity_deps(node("id"), None)), plain);
         let claims = "{ ...deps, identity: (id as any), claims: c }";
-        assert_eq!(
-            identity_deps(node("id"), Some(node("c"))).into_text(),
-            claims
-        );
-        assert_eq!(
-            identity_deps(text("id"), Some(node("c"))).into_text(),
-            claims
-        );
+        assert_eq!(printed(identity_deps(node("id"), Some(node("c")))), claims);
     }
 
-    /// The inbound-email arrow prints as the text it replaced, as a node and as text.
+    /// The inbound-email arrow prints as the text it replaced.
     #[test]
-    fn the_inbound_email_arrow_prints_the_same_as_a_node_and_as_text() {
+    fn the_inbound_email_arrow_prints_as_the_text_it_replaced() {
         let want = r#"((__m: any) => svc.key(__m, { ...deps, identity: { address: __m.from, dmarc: { tag: "DmarcNone" } } }))(mail)"#;
         assert_eq!(
             printed(inbound_email_call("svc", "key", node("mail"))),
             want
         );
-        assert_eq!(
-            printed(inbound_email_call("svc", "key", text("mail"))),
-            want
-        );
     }
 
-    /// An addressed call is a node over a member callee when every part is one.
+    /// An addressed call is a node over a member callee.
     #[test]
-    fn an_address_call_is_a_node_only_when_every_part_is_one() {
+    fn an_address_call_is_a_node_over_a_member_callee() {
         let built = address_call("svc", "key", vec![node("a")], node("deps"));
-        assert!(built.is_ok());
         assert_eq!(printed(built), "svc.key(a, deps)");
-        let built = address_call("svc", "key", vec![text("a + b")], node("deps"));
-        assert!(built.is_err());
-        assert_eq!(printed(built), "svc.key(a + b, deps)");
     }
 
     /// The system driver names are composed in one place.

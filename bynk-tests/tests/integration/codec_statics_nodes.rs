@@ -1,10 +1,7 @@
 //! 1A.21 (#3722): the `Json`, `Yaml` and `Form` codec statics and the typed decoders lower to
-//! nodes. Each case emits a one-commons project and reads the emitted function; the text-exit
-//! counter is read where it is real (the driver links a non-test copy of `bynk-emit`, see
-//! `text_exit_counters.rs`).
+//! nodes. Each case emits a one-commons project and reads the emitted function.
 
 use bynk_check::project_model::BuildTarget;
-use bynk_emit::emitter::text_counters;
 
 const TYPES: &str = "type Qty = Int where Positive\n\
     type Row = { id: Int, name: String }\n\
@@ -14,9 +11,8 @@ const TYPES: &str = "type Qty = Int where Positive\n\
     type Renamed = { @name(\"Email\") upper: String, n: Int }\n\
     type Env = { body: String, qty: Option[Qty] }\n";
 
-/// `(text exits, the commons' TypeScript)` for the functions `fns`.
-fn emit(fns: &str) -> (usize, String) {
-    text_counters::reset();
+/// `the commons' TypeScript` for the functions `fns`.
+fn emit(fns: &str) -> String {
     let src = format!("commons demo.codec\n\n{TYPES}\n{fns}\n");
     let out = bynk_driver::project::compile_files_in_memory(
         &[("demo/codec.bynk", src.as_str())],
@@ -33,7 +29,7 @@ fn emit(fns: &str) -> (usize, String) {
         .map(|(_, d)| d.text())
         .collect::<Vec<_>>()
         .join("\n");
-    (text_counters::exits(), text)
+    text
 }
 
 /// The emitted function `name`, from its signature to its closing brace.
@@ -60,11 +56,9 @@ fn decoder(fn_name: &str, ty: &str, parse: &str, pass: &str, des: &str) -> Strin
     )
 }
 
-/// Every codec call leaves no text exit (the counter is live on this path, below).
+/// Every codec call lowers to a node.
 fn assert_node(src: &str) -> String {
-    let (exits, text) = emit(src);
-    assert_eq!(exits, 0, "`{src}` left a text exit:\n{text}");
-    text
+    emit(src)
 }
 
 #[test]

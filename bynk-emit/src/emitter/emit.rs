@@ -34,7 +34,7 @@ use bynk_model::{
 use super::ctx::{AgentStoreState, BodyMode, HandlerShared, ModuleCtx};
 use super::lower_ctx::LowerCtx;
 use super::lower_stmt::{Body, Item, block_body_with_return, claim_scoped, function_body_stmts};
-use super::ts_types::{ts_base, ts_ty, ts_ty_to_ts_type, ts_type_ref, ts_type_ref_to_ts_type};
+use super::ts_types::{ts_base, ts_ty_to_ts_type, ts_type_ref, ts_type_ref_to_ts_type};
 use super::*;
 
 /// P6.x (#1188): reads `shape` — `t`'s already-lowered `bynk-emit::ir::TypeShape`
@@ -463,20 +463,11 @@ fn pred_check_stmt(type_name: &str, pred: &PredKind, base: BaseType) -> bynk_ts:
 /// v0.157 (ADR 0183): the erased TS type-parameter list for a generic
 /// declaration (`<A, B>`), or `""` when non-generic. The same erasure used by
 /// generic functions.
-///
-/// #1333 (R7.1): each name prints through a real [`bynk_ts::TsType::named`]
-/// via [`bynk_ts::print_type`] — P7.9's own established entry point for one
-/// type fragment — instead of splicing the raw `&str` directly; this
-/// function's own `-> String` signature and every one of its 5 real callers
-/// are unchanged.
 pub(crate) fn ts_type_params(params: &[TypeParam]) -> String {
     if params.is_empty() {
         return String::new();
     }
-    let names: Vec<String> = params
-        .iter()
-        .map(|p| bynk_ts::print_type(&bynk_ts::TsType::named(p.name.name.as_str())))
-        .collect();
+    let names: Vec<String> = params.iter().map(|p| p.name.name.clone()).collect();
     format!("<{}>", names.join(", "))
 }
 
@@ -789,11 +780,11 @@ pub(crate) fn emit_forwarded_methods(
             let ident = ts_ident(name);
             params.push(bynk_ts::TsParam::new(
                 ident.clone(),
-                Some(bynk_ts::TsType::named(ts_ty(*ty, tys))),
+                Some(ts_ty_to_ts_type(*ty, tys)),
             ));
             args.push(bynk_ts::TsExpr::Ident(ident));
         }
-        let ret = ts_ty(f.return_ty, tys);
+        let ret = ts_ty_to_ts_type(f.return_ty, tys);
         let call = bynk_ts::TsExpr::Call {
             callee: Box::new(bynk_ts::TsExpr::Member {
                 object: Box::new(bynk_ts::TsExpr::Ident(format!("__Commons{type_name}"))),
@@ -813,7 +804,7 @@ pub(crate) fn emit_forwarded_methods(
             // through a generic receiver.
             generics: Vec::new(),
             params,
-            return_type: Some(bynk_ts::TsType::named(ret)),
+            return_type: Some(ret),
             // `FnSig` carries no doc text either — nothing forwards it.
             doc: None,
             // #1337's own one real `inline: true` site: the pre-conversion
@@ -955,17 +946,9 @@ fn emit_method(
     // `requires` to re-check per iteration; if methods gain them, they belong in
     // the guards closure below.
     let body = if let Some(plan) = super::tco::plan(f, commons, unit.render(commons)) {
-        super::tco::loop_body_stmts(f, &plan, &mut cx, is_async, INDENT_STEP * 2, |_| {
-            Body::new()
-        })
+        super::tco::loop_body_stmts(f, &plan, &mut cx, is_async, |_| Body::new())
     } else {
-        function_body_stmts(
-            &f.body,
-            &mut cx,
-            INDENT_STEP * 2,
-            is_async,
-            Some(&f.return_type),
-        )
+        function_body_stmts(&f.body, &mut cx, is_async, Some(&f.return_type))
     };
     bynk_ts::TsObjectEntry::Method {
         name: method_name.name.clone(),
@@ -1168,17 +1151,11 @@ fn emit_free_fn_in(
             }
             guards
         };
-        super::tco::loop_body_stmts(f, &plan, &mut cx, async_tail, INDENT_STEP, guards)
+        super::tco::loop_body_stmts(f, &plan, &mut cx, async_tail, guards)
     } else if guarded {
         contract_guarded_body_stmts(f, &mut cx, async_tail)
     } else {
-        function_body_stmts(
-            &f.body,
-            &mut cx,
-            INDENT_STEP,
-            async_tail,
-            Some(&f.return_type),
-        )
+        function_body_stmts(&f.body, &mut cx, async_tail, Some(&f.return_type))
     };
 
     // #1486: `no_blank_before` when this function's own doc comment is the
@@ -1336,14 +1313,14 @@ fn requires_guards(body: &mut Body, f: &FnDecl, cx: &mut LowerCtx) {
     // Precondition guards — parameters are the TS function params, in scope.
     for c in &f.requires {
         let mut pre = Pre::new();
-        let pred = pre.lower(&c.predicate, cx);
+        let pred = pre.lower_node(&c.predicate, cx);
         body.extend(pre.items());
         let msg = format!(
             "contract violated: precondition \\`{clause}\\` of {fn_name} ({dump})",
             clause = c.name.name,
             dump = contract_param_dump(f, false),
         );
-        body.push(Item::Node(Box::new(contract_guard_if_stmt(&pred, &msg))));
+        body.push(Item::Node(Box::new(contract_guard_if_stmt(pred, &msg))));
     }
 }
 
@@ -1417,31 +1394,25 @@ fn contract_guarded_body_stmts(
     let mut body = Body::new();
     requires_guards(&mut body, f, cx);
     // Run the original body, capturing its value as `result` for the `ensures`.
-    let original = block_body_with_return(
-        &f.body,
-        cx,
-        INDENT_STEP * 2,
-        async_tail,
-        Some(&f.return_type),
-    );
+    let original = block_body_with_return(&f.body, cx, async_tail, Some(&f.return_type));
     body.push(iife_const_item("result", async_tail, original));
     // Postcondition guards — `result` (and the parameters) are in scope.
     for c in &f.ensures {
         let mut pre = Pre::new();
-        let pred = pre.lower(&c.predicate, cx);
+        let pred = pre.lower_node(&c.predicate, cx);
         body.extend(pre.items());
         let msg = format!(
             "contract violated: postcondition \\`{clause}\\` of {fn_name} ({dump})",
             clause = c.name.name,
             dump = contract_param_dump(f, true),
         );
-        body.push(Item::Node(Box::new(contract_guard_if_stmt(&pred, &msg))));
+        body.push(Item::Node(Box::new(contract_guard_if_stmt(pred, &msg))));
     }
     body.push(Item::Node(Box::new(bynk_ts::TsStmt::return_stmt(
         Some(bynk_ts::TsExpr::Ident("result".to_string())),
         None,
     ))));
-    body.into_stmts(INDENT_STEP)
+    body.into_stmts()
 }
 
 /// Shared builder for the contract call-site guard's own real `if (!(pred))
@@ -1449,12 +1420,10 @@ fn contract_guarded_body_stmts(
 /// __e; }` shape — identical for a `requires`/`ensures` clause, differing
 /// only in `pred`/`msg`, both still-opaque text (see `emit_contract_guarded_
 /// body`'s own doc for why).
-fn contract_guard_if_stmt(pred: &str, msg: &str) -> bynk_ts::TsStmt {
+fn contract_guard_if_stmt(pred: bynk_ts::TsExpr, msg: &str) -> bynk_ts::TsStmt {
     let cond = bynk_ts::TsExpr::Unary {
         op: bynk_ts::TsUnaryOp::Not,
-        expr: Box::new(bynk_ts::TsExpr::Paren(Box::new(bynk_ts::TsExpr::Ident(
-            pred.to_string(),
-        )))),
+        expr: Box::new(bynk_ts::TsExpr::Paren(Box::new(pred))),
     };
     let new_error = bynk_ts::TsExpr::New {
         callee: Box::new(bynk_ts::TsExpr::Ident("globalThis.Error".to_string())),
@@ -1581,7 +1550,7 @@ fn http_handler_method_name_from_str(method: &str, path: &str) -> String {
 /// Slice 3 (semantic-debugging track, ADR 0105): the debug-metadata sidecar's
 /// `{ fn → label }` map — each emitted handler function paired with its Bynk
 /// operation label, so the debugger can name a stack frame `GET "/"` rather than
-/// `http_GET`. Built by re-walking the unit's handlers with the *same* naming
+/// `http_GET`. bynk_ts::TsExpr by re-walking the unit's handlers with the *same* naming
 /// functions the emitter uses (so the keys match the emitted function names);
 /// serialised as a JSON object (manual, like the source map — no serde). Returns
 /// `None` when the unit declares no handlers.
@@ -2897,13 +2866,7 @@ fn provider_op_method(
     for p in &op.params {
         cx.declare_binder(&p.name.name);
     }
-    let body = function_body_stmts(
-        &op.body,
-        &mut cx,
-        INDENT_STEP * 2,
-        effectful,
-        Some(&op.return_type),
-    );
+    let body = function_body_stmts(&op.body, &mut cx, effectful, Some(&op.return_type));
     bynk_ts::TsClassMethod {
         span: Some(op.span),
         ..bynk_ts::TsClassMethod::new(
@@ -3179,7 +3142,6 @@ pub(crate) fn emit_service(
         let lowered_body = block_body_with_return(
             &handler.body,
             &mut cx,
-            INDENT_STEP * 2,
             async_tail,
             Some(&handler.return_type),
         );
@@ -3392,7 +3354,7 @@ pub(crate) fn emit_service(
         } else {
             body
         };
-        let body = body.into_stmts(INDENT_STEP * 2);
+        let body = body.into_stmts();
 
         // #2280: anchor the method header and prologue to the handler's own
         // `on call` line rather than the previous statement's.
@@ -5621,13 +5583,13 @@ fn emit_agent_load_commit_state(
                     },
                 );
                 let mut pre = Pre::new();
-                let pred = pre.lower_ts(&inv.predicate, &mut cx);
+                let pred = pre.lower_node(&inv.predicate, &mut cx);
                 stmts.extend(build_violation_check(
                     &inv.name.name,
                     "invariant",
                     &declaration_location(ctx, source_text, inv.name.span),
                     pred,
-                    pre.ts_stmts(cx.fault_site(inv.predicate.span)),
+                    pre.ts_stmts(),
                 ));
             }
         }
@@ -5690,13 +5652,13 @@ fn emit_agent_load_commit_state(
                     },
                 );
                 let mut pre = Pre::new();
-                let pred = pre.lower_ts(&tr.predicate, &mut cx);
+                let pred = pre.lower_node(&tr.predicate, &mut cx);
                 transition_body.extend(build_violation_check(
                     &tr.name.name,
                     "transition",
                     &declaration_location(ctx, source_text, tr.name.span),
                     pred,
-                    pre.ts_stmts(cx.fault_site(tr.predicate.span)),
+                    pre.ts_stmts(),
                 ));
             }
             stmts.push(bynk_ts::TsStmt::const_stmt(
@@ -6978,18 +6940,8 @@ fn emit_agent_handlers(
         let async_tail = effectful;
         // A writing store handler's body sits one level deeper, inside the
         // implicit-commit closure.
-        let body_indent = if writes_state {
-            INDENT_STEP * 3
-        } else {
-            INDENT_STEP * 2
-        };
-        let lowered_body = block_body_with_return(
-            &h.body,
-            &mut cx,
-            body_indent,
-            async_tail,
-            Some(&h.return_type),
-        );
+        let lowered_body =
+            block_body_with_return(&h.body, &mut cx, async_tail, Some(&h.return_type));
         let mut deps_members = build_deps_object_ty_with_surface(
             &effective_given(&bynk_model::lower_handler_given_ir(h), &cx),
             &cx,
@@ -7061,7 +7013,7 @@ fn emit_agent_handlers(
         // #3465: an agent handler that claimed settles its claims after the state
         // commit and the events flush, so a failure of either releases them.
         if cx.claim_scope_used {
-            body = claim_scoped(body, INDENT_STEP * 2);
+            body = claim_scoped(body);
         }
         // #2270: anchor the method header and prologue to the handler's own
         // `on call` line. Without this they inherit the previous checkpoint,
@@ -7070,13 +7022,7 @@ fn emit_agent_handlers(
         methods.push(bynk_ts::TsClassMethod {
             doc: h.documentation.as_deref().map(str::to_owned),
             span: Some(h.span),
-            ..bynk_ts::TsClassMethod::new(
-                method,
-                effectful,
-                params,
-                Some(ret),
-                body.into_stmts(INDENT_STEP * 2),
-            )
+            ..bynk_ts::TsClassMethod::new(method, effectful, params, Some(ret), body.into_stmts())
         });
     }
 }
@@ -7112,9 +7058,7 @@ fn iife_const_item(name: &str, awaited: bool, body: Body) -> Item {
         is_async: awaited,
         generics: Vec::new(),
         return_type: None,
-        body: Box::new(bynk_ts::TsArrowBody::Multiline(
-            body.into_stmts(INDENT_STEP),
-        )),
+        body: Box::new(bynk_ts::TsArrowBody::Multiline(body.into_stmts())),
     };
     let call = bynk_ts::TsExpr::Call {
         callee: Box::new(bynk_ts::TsExpr::Paren(Box::new(closure))),
@@ -9337,10 +9281,13 @@ fn emit_ws_do_method(
 ) {
     let mut params = vec![bynk_ts::TsParam::new(
         "connection".to_string(),
-        Some(bynk_ts::TsType::named(format!(
-            "Connection<{}>",
-            ts_ty(host.out_ty, UnitFacts::of(ctx).render(commons))
-        ))),
+        Some(bynk_ts::TsType::named_with_args(
+            "Connection",
+            vec![ts_ty_to_ts_type(
+                host.out_ty,
+                UnitFacts::of(ctx).render(commons),
+            )],
+        )),
     )];
     for p in &h.params {
         params.push(bynk_ts::TsParam::new(
@@ -9401,13 +9348,7 @@ fn emit_ws_do_method(
         cx.declare_binder(&p.name.name);
     }
     let async_tail = is_effectful_return(&h.return_type);
-    let body = function_body_stmts(
-        &h.body,
-        &mut cx,
-        INDENT_STEP * 2,
-        async_tail,
-        Some(&h.return_type),
-    );
+    let body = function_body_stmts(&h.body, &mut cx, async_tail, Some(&h.return_type));
     let mut deps_members = build_deps_object_ty_with_surface(
         &effective_given(&bynk_model::lower_handler_given_ir(h), &cx),
         &cx,
@@ -9882,17 +9823,12 @@ fn ws_open_fetch_branch_stmt(host: &WsOpenHost<'_>, tys: TyRender<'_>) -> bynk_t
         bynk_ts::TsBindingName::Ident("connection".to_string()),
         None,
         bynk_ts::TsExpr::Call {
-            // Generic call, no `type_args` field on `Call` — same "an odd,
-            // one-off shape stays opaque text" precedent as `loadState`'s own
-            // `this.state.storage.get<T>` above; tagged `VerbatimExpr`, not
-            // `Ident` (#1539).
-            callee: Box::new(bynk_ts::TsExpr::VerbatimExpr(
-                format!(
-                    "__acceptHibernatableConnection<{}>",
-                    ts_ty(host.out_ty, tys)
-                ),
-                bynk_ts::VerbatimOrigin::Emit,
-            )),
+            callee: Box::new(bynk_ts::TsExpr::TypeApp {
+                callee: Box::new(bynk_ts::TsExpr::Ident(
+                    "__acceptHibernatableConnection".to_string(),
+                )),
+                type_args: vec![ts_ty_to_ts_type(host.out_ty, tys)],
+            }),
             args: accept_args,
         },
         None,
@@ -10047,7 +9983,7 @@ fn emit_ws_dispatch_handlers(
     if !host.has_inbound() {
         return;
     }
-    let out_ts = ts_ty(host.out_ty, tys);
+    let out_ty = ts_ty_to_ts_type(host.out_ty, tys);
     let att_who = if host.sum.is_some() {
         "; who: unknown"
     } else {
@@ -10118,14 +10054,10 @@ fn emit_ws_dispatch_handlers(
             bynk_ts::TsBindingName::Ident("connection".to_string()),
             None,
             bynk_ts::TsExpr::New {
-                // Generic constructor, no `type_args` field on `New` — same
-                // "an odd, one-off shape stays opaque text" precedent as the
-                // generic-method-call sites above; tagged `VerbatimExpr`, not
-                // `Ident` (#1539).
-                callee: Box::new(bynk_ts::TsExpr::VerbatimExpr(
-                    format!("__WorkersConnection<{out_ts}>"),
-                    bynk_ts::VerbatimOrigin::Emit,
-                )),
+                callee: Box::new(bynk_ts::TsExpr::TypeApp {
+                    callee: Box::new(bynk_ts::TsExpr::Ident("__WorkersConnection".to_string())),
+                    type_args: vec![out_ty.clone()],
+                }),
                 args: vec![
                     bynk_ts::TsExpr::Ident("ws".to_string()),
                     bynk_ts::TsExpr::Member {
@@ -10333,7 +10265,8 @@ fn emit_ws_dispatch_handlers(
 
 #[cfg(test)]
 mod doc_block_tests {
-    use super::INDENT_STEP;
+    /// The printer's indentation step, in columns.
+    const INDENT_STEP: usize = 2;
 
     /// A doc block printed as a JSDoc comment at `indent` columns, the way the
     /// printer lays out a `DocComment` statement.
@@ -10416,7 +10349,7 @@ mod doc_block_tests {
     #[test]
     fn indents_at_the_nested_indent_step() {
         let mut out = String::new();
-        emit_doc_block(&mut out, Some("a method"), crate::emitter::INDENT_STEP);
+        emit_doc_block(&mut out, Some("a method"), INDENT_STEP);
         assert_eq!(out, "  /**\n   * a method\n   */\n");
     }
 }

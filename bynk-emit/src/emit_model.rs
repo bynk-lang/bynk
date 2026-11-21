@@ -306,7 +306,7 @@ pub struct ProjectOutput {
     pub display_root: PathBuf,
     /// v0.67: the test manifest — every discovered suite and case, retained at
     /// emit time so `bynk test --no-run --format json` can render a discovery
-    /// document without running the suite. Built from the same names + spans the
+    /// document without running the suite. bynk_ts::TsExpr from the same names + spans the
     /// runner would emit at `suite-begin`/`case`, so a discovery document
     /// reconciles cleanly against a later run's document (same suite name/kind,
     /// same case names). Ordered to match the runner (`emit_test_main`).
@@ -983,7 +983,7 @@ pub struct TraceLoc {
 
 /// #2620: the `.bynk` source of the unit being emitted and its project-relative
 /// identity path, so a `unreachable(…)` / `todo(…)` / `detach` lowering can name
-/// its own `path:line:col`. Built once per unit by the driver; `None` on
+/// its own `path:line:col`. bynk_ts::TsExpr once per unit by the driver; `None` on
 /// [`EmitProjectCtx::unit_source`] is the single-file path, which has no identity.
 pub struct UnitSource {
     text: String,

@@ -9,15 +9,13 @@ use bynk_check::firstparty::FirstPartyCap;
 use bynk_ts::{TsExpr, TsLit, TsStmt, TsType};
 
 use super::super::emit::flatten_emit_ident_chain;
-use super::super::lower::{Built, LoweredExpr, Pre, ident_node, node_or_text};
+use super::super::lower::Pre;
 use super::super::lower_ctx::LowerCtx;
 use super::super::lower_list::{
     binary, block_arrow, call, const_, expr_stmt, id, member, param, paren, ret,
 };
-use super::super::ts_types::{ts_type_ref, ts_type_ref_to_ts_type};
-use super::super::{
-    CommonsItem, Expr, ExprKind, Ident, TypeBody, TypeRef, escape_ts_string, test_scaffold_ns,
-};
+use super::super::ts_types::ts_type_ref_to_ts_type;
+use super::super::{CommonsItem, Expr, ExprKind, Ident, TypeBody, TypeRef, test_scaffold_ns};
 use super::codec_statics::{DecodeSource, json_decoder_fn};
 
 /// `"text"`: raw text, which the printer escapes (the one escaper, `escape_ts_literal`, that
@@ -51,44 +49,19 @@ fn chain(root: TsExpr, path: &[&str]) -> TsExpr {
     path.iter().fold(root, |object, name| member(object, name))
 }
 
-/// Lower every argument, keeping each as the bridge value it lowered to.
-fn lower_args(args: &[Expr], cx: &mut LowerCtx, pre: &mut Pre) -> Vec<LoweredExpr> {
+/// Lower every argument, in order.
+fn lower_args(args: &[Expr], cx: &mut LowerCtx, pre: &mut Pre) -> Vec<bynk_ts::TsExpr> {
     args.iter().map(|a| pre.lower_node(a, cx)).collect()
 }
 
 /// `deps` in a test case or on a `D1.peek` handle, else the handler's own deps receiver, as a node
 /// and as the text the fallbacks print.
-fn deps_receiver(in_test: bool, cx: &LowerCtx) -> (TsExpr, String) {
+fn deps_receiver(in_test: bool, cx: &LowerCtx) -> TsExpr {
     if in_test {
-        (id("deps"), "deps".to_string())
+        id("deps")
     } else {
-        (cx.cap_deps_node(), cx.cap_deps_expr().to_string())
+        cx.cap_deps_node()
     }
-}
-
-/// #926: render a capability call's explicit type argument(s) as a TS
-/// generic argument list (`<T>`), or `""` when absent. Unlike
-/// `Json.decode[T]` (`lower_json_codec_call`, below), which specialises a
-/// runtime codec per call and needs no TS-level generic at all, a capability
-/// operation's `T` is a pure type-level parameter on a real generic TS
-/// interface method (Decision C) — with no argument of type `T`, TypeScript
-/// cannot infer a return-position-only parameter, so the call site must
-/// name it explicitly.
-pub(in crate::emitter) fn capability_call_type_args_ts(
-    type_args: &[TypeRef],
-    wire: Option<&CapEncoding>,
-) -> String {
-    let kept = kept_type_args(type_args, wire);
-    if kept.is_empty() {
-        return String::new();
-    }
-    format!(
-        "<{}>",
-        kept.into_iter()
-            .map(ts_type_ref)
-            .collect::<Vec<_>>()
-            .join(", ")
-    )
 }
 
 /// Constrained generics slice 3: a type parameter that only occurs in encoded (`unknown`)
@@ -133,19 +106,13 @@ pub(in crate::emitter) fn capability_wire(
 /// instantiated type. The provider receives plain JSON and no witness.
 pub(in crate::emitter) fn encode_capability_args(
     wire: Option<&CapEncoding>,
-    args: Vec<LoweredExpr>,
+    args: Vec<bynk_ts::TsExpr>,
     cx: &LowerCtx,
-) -> Vec<LoweredExpr> {
+) -> Vec<bynk_ts::TsExpr> {
     let Some(wire) = wire else {
         return args;
     };
-    let encoded = |ty: &bynk_check::checker::TyId, arg: LoweredExpr| match arg {
-        LoweredExpr::Node(n) => LoweredExpr::Node(cx.encode_call(*ty, n)),
-        // A text argument is encoded as text: the same node, over the text as an operand.
-        LoweredExpr::Text(t) => LoweredExpr::from(Err(bynk_ts::print_expr(
-            &cx.encode_call(*ty, ident_node(&t)),
-        ))),
-    };
+    let encoded = |ty: &bynk_check::checker::TyId, arg: bynk_ts::TsExpr| cx.encode_call(*ty, arg);
     let mut types = wire.encode.iter();
     args.into_iter()
         .map(|arg| match types.next() {
@@ -162,12 +129,12 @@ pub(in crate::emitter) fn encode_capability_args(
 /// miss for an `Option` payload); the runtime helper applies it. Other calls
 /// are returned as they are.
 pub(in crate::emitter) fn decode_capability_reply(
-    call: Built,
+    call: bynk_ts::TsExpr,
     wire: Option<&CapEncoding>,
     cap: &str,
     op: &str,
     cx: &LowerCtx,
-) -> Built {
+) -> bynk_ts::TsExpr {
     use bynk_check::checker::codable::ReplyPolicy;
     let Some(reply) = wire.and_then(|w| w.reply.as_ref()) else {
         return call;
@@ -179,28 +146,19 @@ pub(in crate::emitter) fn decode_capability_reply(
     };
     let payload = reply.payload.display(cx.commons().tys());
     let codec = cx.codec(reply.payload);
-    match call {
-        Ok(node) => Ok(crate::emitter::lower_list::call(
-            id("__bynkCapabilityReply"),
-            vec![
-                node,
-                codec,
-                object(vec![
-                    ("capability", lit_str(cap)),
-                    ("operation", lit_str(op)),
-                    ("type", lit_str(&payload)),
-                ]),
-                lit_str(policy),
-            ],
-        )),
-        Err(text) => Err(format!(
-            "__bynkCapabilityReply({text}, {}, {{ capability: \"{}\", operation: \"{}\", type: \"{}\" }}, \"{policy}\")",
-            bynk_ts::print_expr(&codec),
-            escape_ts_string(cap),
-            escape_ts_string(op),
-            escape_ts_string(&payload),
-        )),
-    }
+    crate::emitter::lower_list::call(
+        id("__bynkCapabilityReply"),
+        vec![
+            call,
+            codec,
+            object(vec![
+                ("capability", lit_str(cap)),
+                ("operation", lit_str(op)),
+                ("type", lit_str(&payload)),
+            ]),
+            lit_str(policy),
+        ],
+    )
 }
 
 /// #934 (call-site key scoping): `Idempotency.dedup[T](key)` and
@@ -227,7 +185,7 @@ pub(in crate::emitter) fn decode_capability_reply(
 pub(in crate::emitter) fn scope_idempotency_key(
     is_first_party: bool,
     method: &str,
-    args_lowered: &mut Vec<LoweredExpr>,
+    args_lowered: &mut Vec<bynk_ts::TsExpr>,
     cx: &LowerCtx,
 ) {
     if !is_first_party || !matches!(method, "dedup" | "remember" | "claim") {
@@ -237,22 +195,9 @@ pub(in crate::emitter) fn scope_idempotency_key(
         .handler_scope()
         .unwrap_or_else(|| panic!("Idempotency.{method} lowered with no handler_scope set"));
     let key = args_lowered.remove(0);
-    let scoped = match key {
-        // `TemplateLit` parts print verbatim, so a scope that a template literal would read
-        // differently (a backtick, `${`, a backslash) keeps the text form, which prints it the
-        // same way and is no worse off.
-        LoweredExpr::Node(n) if template_safe(scope) => LoweredExpr::Node(TsExpr::template_lit(
-            vec![format!("{scope}::"), String::new()],
-            vec![n],
-        )),
-        other => LoweredExpr::from(Err(format!("`{scope}::${{{}}}`", other.into_text()))),
-    };
+    // `TemplateLit` parts print verbatim, so the scope prints as it is spelled.
+    let scoped = TsExpr::template_lit(vec![format!("{scope}::"), String::new()], vec![key]);
     args_lowered.insert(0, scoped);
-}
-
-/// Whether `scope` prints the same inside a template literal's text as it reads.
-fn template_safe(scope: &str) -> bool {
-    !scope.contains('`') && !scope.contains("${") && !scope.contains('\\')
 }
 
 /// W30 (#2840): lower a first-party `Idempotency.claim(key, expiresAfter)` made
@@ -265,43 +210,34 @@ fn template_safe(scope: &str) -> bool {
 /// `<deps>.Idempotency.claim`, so a `stub` of it applies.
 pub(in crate::emitter) fn tracked_claim_call(
     cap_node: TsExpr,
-    cap_expr: &str,
-    args: Vec<LoweredExpr>,
+    args: Vec<bynk_ts::TsExpr>,
     cx: &mut LowerCtx,
-) -> Built {
+) -> bynk_ts::TsExpr {
     cx.claim_scope_used = true;
     // The bare `await` below makes any enclosing thunk or IIFE effectful —
     // see `emitted_await` (a `par` part that is a claim call must be `async`).
     cx.emitted_await = true;
-    node_or_text(
-        args,
-        |nodes| {
-            let k = || id("__k");
-            let t = || id("__t");
-            let claim = TsExpr::Await(Box::new(call(
-                member(cap_node, "claim"),
-                vec![k(), call(member(id("__claims"), "lease"), vec![t()])],
-            )));
-            let note = call(member(id("__claims"), "note"), vec![k(), claim, t()]);
-            let note_arrow = TsExpr::Arrow {
-                params: vec![
-                    param("__k", Some(TsType::named("string"))),
-                    param("__t", Some(TsType::named("number"))),
-                ],
-                is_async: true,
-                generics: vec![],
-                return_type: None,
-                body: Box::new(bynk_ts::TsArrowBody::Expr(Box::new(note))),
-            };
-            paren(TsExpr::Await(Box::new(call(paren(note_arrow), nodes))))
-        },
-        |texts| {
-            format!(
-                "(await (async (__k: string, __t: number) => __claims.note(__k, await {cap_expr}.claim(__k, __claims.lease(__t)), __t))({}, {}))",
-                texts[0], texts[1]
-            )
-        },
-    )
+    {
+        let nodes = args;
+        let k = || id("__k");
+        let t = || id("__t");
+        let claim = TsExpr::Await(Box::new(call(
+            member(cap_node, "claim"),
+            vec![k(), call(member(id("__claims"), "lease"), vec![t()])],
+        )));
+        let note = call(member(id("__claims"), "note"), vec![k(), claim, t()]);
+        let note_arrow = TsExpr::Arrow {
+            params: vec![
+                param("__k", Some(TsType::named("string"))),
+                param("__t", Some(TsType::named("number"))),
+            ],
+            is_async: true,
+            generics: vec![],
+            return_type: None,
+            body: Box::new(bynk_ts::TsArrowBody::Expr(Box::new(note))),
+        };
+        paren(TsExpr::Await(Box::new(call(paren(note_arrow), nodes))))
+    }
 }
 
 /// #3147: lower `D1.peek(<participant>.<Cap>)` in an integration or `system`
@@ -310,7 +246,10 @@ pub(in crate::emitter) fn tracked_claim_call(
 /// `WorkersD1` the app's code calls, over the very database object the
 /// participant's `env` holds, so a call on the handle (an ordinary capability
 /// call on `deps.<local>`) sees what the app wrote.
-pub(in crate::emitter) fn lower_d1_peek_call(e: &Expr, cx: &mut LowerCtx) -> Option<Built> {
+pub(in crate::emitter) fn lower_d1_peek_call(
+    e: &Expr,
+    cx: &mut LowerCtx,
+) -> Option<bynk_ts::TsExpr> {
     let Some(Callee::D1Peek {
         participant,
         binding,
@@ -328,10 +267,10 @@ pub(in crate::emitter) fn lower_d1_peek_call(e: &Expr, cx: &mut LowerCtx) -> Opt
         callee: Box::new(chain(id("bynk_cloudflare__binding"), &["WorkersD1"])),
         args: vec![object(vec![(&binding, read_only)]), lit_str(&binding)],
     };
-    Some(Ok(paren(TsExpr::Assign {
+    Some(paren(TsExpr::Assign {
         target: Box::new(member(id("deps"), &local)),
         value: Box::new(workers_d1),
-    })))
+    }))
 }
 
 /// Lower a derived-`D1` `select`/`firstAs` call (#2865), or `None` when the call is not one. Moved out of
@@ -341,7 +280,7 @@ pub(in crate::emitter) fn lower_d1_select_call(
     args: &[Expr],
     cx: &mut LowerCtx,
     pre: &mut Pre,
-) -> Option<Built> {
+) -> Option<bynk_ts::TsExpr> {
     // #2865: `Cap.select[T](tail, params)` / `Cap.firstAs[T](tail, params)` on
     // a derived `D1`. The checker wrote the statement (`SELECT` + the column
     // list from `T` + the literal tail); this runs it through `all`/`first`
@@ -388,95 +327,69 @@ pub(in crate::emitter) fn lower_d1_select_call(
     };
     // The decoder is a node, except a `Form.decode`'s (`workers_entry` source text).
     // A checked row type has a JSON decoder; one that has none is a missing fact (1A.34).
-    let decoder = LoweredExpr::Node(
-        json_decoder_fn(target, source, cx)
-            .unwrap_or_else(|| cx.missing_fact(e.span, "JSON decoder for a `select` row type")),
-    );
+    let decoder = json_decoder_fn(target, source, cx)
+        .unwrap_or_else(|| cx.missing_fact(e.span, "JSON decoder for a `select` row type"));
     let params = pre.lower_node(params, cx);
     let in_test = cx.in_test_case() || cap.starts_with(bynk_check::checker::peek::LOCAL_PREFIX);
-    let (deps_node, deps_text) = deps_receiver(in_test, cx);
+    let deps_node = deps_receiver(in_test, cx);
     let op = if first { "first" } else { "all" };
-    let escaped_sql = escape_ts_string(&sql);
-    Some(node_or_text(
-        vec![decoder, params],
-        |nodes| {
-            let [decoder, params] = super::super::lower_list::take(nodes);
-            let r = || id("__r");
-            let d = || id("__d");
-            let tag_is = |obj: TsExpr, tag: &str| {
-                binary(
-                    bynk_ts::TsBinaryOp::StrictEq,
-                    member(obj, "tag"),
-                    lit_str(tag),
-                )
-            };
-            let err = |tag: &str, error: TsExpr| {
-                call(
-                    id("Err"),
-                    vec![object(vec![("tag", tag_const(tag)), ("error", error)])],
-                )
-            };
-            let mut body = vec![
-                const_("__decode", None, decoder),
-                const_(
-                    "__r",
-                    None,
-                    TsExpr::Await(Box::new(call(
-                        chain(deps_node, &[&cap, op]),
-                        vec![lit_str(&sql), params],
-                    ))),
-                ),
-                TsStmt::if_stmt(
-                    tag_is(r(), "Err"),
-                    ret(err(sql_tag, member(r(), "error"))),
-                    None,
-                ),
-            ];
-            let decode_arg = if first {
-                body.push(TsStmt::if_stmt(
-                    tag_is(member(r(), "value"), "None"),
-                    ret(call(id("Ok"), vec![id("None")])),
-                    None,
-                ));
-                chain(r(), &["value", "value"])
-            } else {
-                member(r(), "value")
-            };
-            body.push(const_("__d", None, call(id("__decode"), vec![decode_arg])));
-            let ok_value = if first {
-                call(id("Some"), vec![member(d(), "value")])
-            } else {
-                member(d(), "value")
-            };
-            body.push(ret(TsExpr::Conditional {
-                test: Box::new(tag_is(d(), "Ok")),
-                consequent: Box::new(call(id("Ok"), vec![ok_value])),
-                alternate: Box::new(err(decode_tag, member(d(), "error"))),
-            }));
-            call(paren(block_arrow(vec![], true, body)), vec![])
-        },
-        |texts| {
-            let [decoder, params] = super::super::lower_list::take(texts);
-            let decode = if first {
-                format!(
-                    "if (__r.value.tag === \"None\") return Ok(None); \
-                     const __d = __decode(__r.value.value); \
-                     return __d.tag === \"Ok\" ? Ok(Some(__d.value)) : Err({{ tag: \"{decode_tag}\" as const, error: __d.error }});"
-                )
-            } else {
-                format!(
-                    "const __d = __decode(__r.value); \
-                     return __d.tag === \"Ok\" ? Ok(__d.value) : Err({{ tag: \"{decode_tag}\" as const, error: __d.error }});"
-                )
-            };
-            format!(
-                "(async () => {{ const __decode = {decoder}; \
-                 const __r = await {deps_text}.{cap}.{op}(\"{escaped_sql}\", {params}); \
-                 if (__r.tag === \"Err\") return Err({{ tag: \"{sql_tag}\" as const, error: __r.error }}); \
-                 {decode} }})()"
+    Some({
+        let nodes = vec![decoder, params];
+        let [decoder, params] = super::super::lower_list::take(nodes);
+        let r = || id("__r");
+        let d = || id("__d");
+        let tag_is = |obj: TsExpr, tag: &str| {
+            binary(
+                bynk_ts::TsBinaryOp::StrictEq,
+                member(obj, "tag"),
+                lit_str(tag),
             )
-        },
-    ))
+        };
+        let err = |tag: &str, error: TsExpr| {
+            call(
+                id("Err"),
+                vec![object(vec![("tag", tag_const(tag)), ("error", error)])],
+            )
+        };
+        let mut body = vec![
+            const_("__decode", None, decoder),
+            const_(
+                "__r",
+                None,
+                TsExpr::Await(Box::new(call(
+                    chain(deps_node, &[&cap, op]),
+                    vec![lit_str(&sql), params],
+                ))),
+            ),
+            TsStmt::if_stmt(
+                tag_is(r(), "Err"),
+                ret(err(sql_tag, member(r(), "error"))),
+                None,
+            ),
+        ];
+        let decode_arg = if first {
+            body.push(TsStmt::if_stmt(
+                tag_is(member(r(), "value"), "None"),
+                ret(call(id("Ok"), vec![id("None")])),
+                None,
+            ));
+            chain(r(), &["value", "value"])
+        } else {
+            member(r(), "value")
+        };
+        body.push(const_("__d", None, call(id("__decode"), vec![decode_arg])));
+        let ok_value = if first {
+            call(id("Some"), vec![member(d(), "value")])
+        } else {
+            member(d(), "value")
+        };
+        body.push(ret(TsExpr::Conditional {
+            test: Box::new(tag_is(d(), "Ok")),
+            consequent: Box::new(call(id("Ok"), vec![ok_value])),
+            alternate: Box::new(err(decode_tag, member(d(), "error"))),
+        }));
+        call(paren(block_arrow(vec![], true, body)), vec![])
+    })
 }
 
 /// #3386: lower `Actor.issue(identity)` and `Actor.expire()` on a local `SignedCookie` actor, or
@@ -488,7 +401,7 @@ pub(in crate::emitter) fn lower_signed_cookie_call(
     args: &[Expr],
     cx: &mut LowerCtx,
     pre: &mut Pre,
-) -> Option<Built> {
+) -> Option<bynk_ts::TsExpr> {
     let Some(Callee::SignedCookie { actor, issue }) = cx.commons().callees.get(&e.id).cloned()
     else {
         return None;
@@ -501,49 +414,37 @@ pub(in crate::emitter) fn lower_signed_cookie_call(
     })?;
     cx.note_session_cookie();
     if !issue {
-        return Some(Ok(call(
+        return Some(call(
             id("__expireSessionCookie"),
             vec![lit_str(&seam.cookie), lit_str(&seam.same_site)],
-        )));
+        ));
     }
     let key = pre.lower_node(args.first()?, cx);
-    let (deps_node, deps_text) = deps_receiver(cx.in_test_case(), cx);
-    let name = escape_ts_string(&seam.cookie);
-    let same_site = escape_ts_string(&seam.same_site);
-    let actor_text = escape_ts_string(&actor);
-    Some(node_or_text(
-        vec![key],
-        |nodes| {
-            let [key] = super::super::lower_list::take(nodes);
-            let now = TsExpr::Await(Box::new(call(
-                chain(deps_node.clone(), &["Clock", "now"]),
-                vec![],
-            )));
-            let issue = call(
-                id("__issueSessionCookie"),
-                vec![
-                    call(id("__sessionKeysOf"), vec![deps_node, lit_str(&actor)]),
-                    lit_str(&actor),
-                    lit_str(&seam.cookie),
-                    lit_str(&seam.same_site),
-                    key,
-                    lit_num(seam.ttl_secs),
-                    now,
-                ],
-            );
-            call(
-                paren(crate::emitter::lower_list::arrow_with(vec![], true, issue)),
-                vec![],
-            )
-        },
-        |texts| {
-            let [key] = super::super::lower_list::take(texts);
-            format!(
-                "(async () => __issueSessionCookie(__sessionKeysOf({deps_text}, \"{actor_text}\"), \"{actor_text}\", \"{name}\", \"{same_site}\", {key}, {}, await {deps_text}.Clock.now()))()",
-                seam.ttl_secs
-            )
-        },
-    ))
+    let deps_node = deps_receiver(cx.in_test_case(), cx);
+    Some({
+        let nodes = vec![key];
+        let [key] = super::super::lower_list::take(nodes);
+        let now = TsExpr::Await(Box::new(call(
+            chain(deps_node.clone(), &["Clock", "now"]),
+            vec![],
+        )));
+        let issue = call(
+            id("__issueSessionCookie"),
+            vec![
+                call(id("__sessionKeysOf"), vec![deps_node, lit_str(&actor)]),
+                lit_str(&actor),
+                lit_str(&seam.cookie),
+                lit_str(&seam.same_site),
+                key,
+                lit_num(seam.ttl_secs),
+                now,
+            ],
+        );
+        call(
+            paren(crate::emitter::lower_list::arrow_with(vec![], true, issue)),
+            vec![],
+        )
+    })
 }
 
 /// #3446: lower `Record.field.cookie(value)` and `Record.field.expire()` to the `Cookie` record
@@ -558,7 +459,7 @@ pub(in crate::emitter) fn lower_cookie_field_call(
     args: &[Expr],
     cx: &mut LowerCtx,
     pre: &mut Pre,
-) -> Option<Built> {
+) -> Option<bynk_ts::TsExpr> {
     let Some(Callee::CookieField {
         record,
         field,
@@ -574,12 +475,12 @@ pub(in crate::emitter) fn lower_cookie_field_call(
     let f = body.fields.iter().find(|f| f.name.name == field)?;
     let name = f.wire_name().unwrap_or_else(|| f.name.name.clone());
     if expire {
-        return Some(Ok(typed_cookie_node(
+        return Some(typed_cookie_node(
             &name,
             lit_str(""),
             call(id("Some"), vec![lit_num(0)]),
             call(id("Some"), vec![lit_num(0)]),
-        )));
+        ));
     }
     let leaf = match &f.type_ref {
         TypeRef::Option(inner, _) => inner.as_ref(),
@@ -595,47 +496,21 @@ pub(in crate::emitter) fn lower_cookie_field_call(
     // The helper rides the cookie-helper import group (`SESSION_COOKIE_RUNTIME_IMPORTS`).
     cx.note_session_cookie();
     let none = || object(vec![("tag", tag_const("None"))]);
-    Some(node_or_text(
-        vec![value],
-        |nodes| {
-            let [value] = super::super::lower_list::take(nodes);
-            let value = if decimal {
-                call(id("__bynkDecimalToString"), vec![value])
-            } else {
-                value
-            };
-            typed_cookie_node(
-                &name,
-                call(id("__cookieValue"), vec![lit_str(kind), value]),
-                none(),
-                none(),
-            )
-        },
-        |texts| {
-            let [mut value] = super::super::lower_list::take(texts);
-            if decimal {
-                value = format!("__bynkDecimalToString({value})");
-            }
-            let text = format!("__cookieValue(\"{kind}\", {value})");
-            typed_cookie_literal(
-                &escape_ts_string(&name),
-                &text,
-                "{ tag: \"None\" as const }",
-                "{ tag: \"None\" as const }",
-            )
-        },
-    ))
-}
-
-/// #3446: the `Cookie` record literal of a typed write, with every attribute the record's
-/// defaults give (the router and `serialiseCookie` read them all: they apply no defaults of their
-/// own), as a hand-written `Cookie { name, value }` lowers.
-fn typed_cookie_literal(name: &str, value: &str, max_age: &str, expires: &str) -> String {
-    format!(
-        "({{ name: \"{name}\", value: {value}, maxAge: {max_age}, expires: {expires}, \
-         domain: {{ tag: \"None\" as const }}, path: \"/\", secure: true, httpOnly: true, \
-         sameSite: {{ tag: \"Lax\" as const }}, partitioned: false }})"
-    )
+    Some({
+        let nodes = vec![value];
+        let [value] = super::super::lower_list::take(nodes);
+        let value = if decimal {
+            call(id("__bynkDecimalToString"), vec![value])
+        } else {
+            value
+        };
+        typed_cookie_node(
+            &name,
+            call(id("__cookieValue"), vec![lit_str(kind), value]),
+            none(),
+            none(),
+        )
+    })
 }
 
 /// [`typed_cookie_literal`] as a node: the field's wire `name` is raw text (the printer escapes it).
@@ -663,7 +538,7 @@ pub(in crate::emitter) fn lower_events_emit_call(
     args: &[Expr],
     cx: &mut LowerCtx,
     pre: &mut Pre,
-) -> Option<Built> {
+) -> Option<bynk_ts::TsExpr> {
     // Events track, slice 0 (spine #936): `Events.emit[E](event)` never
     // calls through a provider like an ordinary capability op — release-
     // at-commit (the retired events track's §3.0, `design/archive/retired-tracks.md`) buffers it into the handler's own
@@ -724,38 +599,28 @@ pub(in crate::emitter) fn lower_events_emit_call(
         // still a future slice (3c, the cross-build schema registry).
         let schema_version = cx.event_schema_version(&event_name);
         let owner = cx.owning_context().unwrap_or_default().to_string();
-        let publisher_id = escape_ts_string(&owner);
-        let escaped_event = escape_ts_string(&event_name);
         // The envelope is a node over raw text; the text form escapes it as it always did.
-        return Some(node_or_text(
-            vec![payload],
-            |nodes| {
-                let [payload] = super::super::lower_list::take(nodes);
-                let global = |name: &str| member(id("globalThis"), name);
-                let envelope = object(vec![
-                    (
-                        "eventId",
-                        call(member(global("crypto"), "randomUUID"), vec![]),
-                    ),
-                    ("publisherId", lit_str(&owner)),
-                    ("emittedAt", call(member(global("Date"), "now"), vec![])),
-                    ("schemaVersion", lit_num(schema_version)),
-                ]);
-                let entry = object(vec![
-                    ("type", lit_str(&event_name)),
-                    ("payload", payload),
-                    ("envelope", envelope),
-                ]);
-                let push = expr_stmt(call(member(id("__events"), "push"), vec![entry]));
-                call(paren(block_arrow(vec![], true, vec![push])), vec![])
-            },
-            |texts| {
-                let [payload] = super::super::lower_list::take(texts);
-                format!(
-                    "(async () => {{ __events.push({{ type: \"{escaped_event}\", payload: {payload}, envelope: {{ eventId: globalThis.crypto.randomUUID(), publisherId: \"{publisher_id}\", emittedAt: globalThis.Date.now(), schemaVersion: {schema_version} }} }}); }})()"
-                )
-            },
-        ));
+        return Some({
+            let nodes = vec![payload];
+            let [payload] = super::super::lower_list::take(nodes);
+            let global = |name: &str| member(id("globalThis"), name);
+            let envelope = object(vec![
+                (
+                    "eventId",
+                    call(member(global("crypto"), "randomUUID"), vec![]),
+                ),
+                ("publisherId", lit_str(&owner)),
+                ("emittedAt", call(member(global("Date"), "now"), vec![])),
+                ("schemaVersion", lit_num(schema_version)),
+            ]);
+            let entry = object(vec![
+                ("type", lit_str(&event_name)),
+                ("payload", payload),
+                ("envelope", envelope),
+            ]);
+            let push = expr_stmt(call(member(id("__events"), "push"), vec![entry]));
+            call(paren(block_arrow(vec![], true, vec![push])), vec![])
+        });
     }
     None
 }
@@ -770,7 +635,7 @@ pub(in crate::emitter) fn lower_capability_call(
     args: &[Expr],
     cx: &mut LowerCtx,
     pre: &mut Pre,
-) -> Option<Built> {
+) -> Option<bynk_ts::TsExpr> {
     // #1975: a capability call in a test `case` body (`Greeter.hello("ann")`)
     // reaches the case's own `deps`, built by `__makeTestDeps`: the checker
     // puts the target's capabilities in scope there, so it records the call
@@ -788,11 +653,9 @@ pub(in crate::emitter) fn lower_capability_call(
         let args_lowered = encode_capability_args(wire.as_deref(), args_lowered, cx);
         let call = capability_op_call(
             id("deps"),
-            "deps".to_string(),
             &recv.name,
             &method.name,
             Vec::new(),
-            String::new(),
             args_lowered,
         );
         return Some(decode_capability_reply(
@@ -812,15 +675,7 @@ pub(in crate::emitter) fn lower_capability_call(
         let args_lowered = lower_args(args, cx, pre);
         let wire = capability_wire(e, cx);
         let args_lowered = encode_capability_args(wire.as_deref(), args_lowered, cx);
-        let call = capability_op_call(
-            id("deps"),
-            "deps".to_string(),
-            &cap,
-            &method.name,
-            Vec::new(),
-            String::new(),
-            args_lowered,
-        );
+        let call = capability_op_call(id("deps"), &cap, &method.name, Vec::new(), args_lowered);
         return Some(decode_capability_reply(
             call,
             wire.as_deref(),
@@ -851,27 +706,21 @@ pub(in crate::emitter) fn lower_capability_call(
         );
         scope_idempotency_key(is_first_party, &method.name, &mut args_lowered, cx);
         if is_first_party && method.name == "claim" && cx.tracks_claims() {
-            let cap_expr = format!("{}.{}", cx.cap_deps_expr(), recv.name);
             let cap_node = member(cx.cap_deps_node(), &recv.name);
-            return Some(tracked_claim_call(cap_node, &cap_expr, args_lowered, cx));
+            return Some(tracked_claim_call(cap_node, args_lowered, cx));
         }
         let wire = capability_wire(e, cx);
         let args_lowered = encode_capability_args(wire.as_deref(), args_lowered, cx);
         let call = capability_op_call(
             cx.cap_deps_node(),
-            cx.cap_deps_expr().to_string(),
             &recv.name,
             &method.name,
             capability_call_type_args_node(type_args, wire.as_deref()),
-            capability_call_type_args_ts(type_args, wire.as_deref()),
             args_lowered,
         );
         let decoded = decode_capability_reply(call, wire.as_deref(), &recv.name, &method.name, cx);
         let target = format!("{}.{}", recv.name, method.name);
-        return Some(match decoded {
-            Ok(node) => Ok(cx.trace_step_node("capability", &target, e.span.start, node)),
-            Err(text) => Err(cx.trace_step("capability", &target, e.span.start, text)),
-        });
+        return Some(cx.trace_step_node("capability", &target, e.span.start, decoded));
     }
     None
 }
@@ -889,7 +738,7 @@ pub(in crate::emitter) fn lower_cross_capability_call(
     args: &[Expr],
     cx: &mut LowerCtx,
     pre: &mut Pre,
-) -> Option<Built> {
+) -> Option<bynk_ts::TsExpr> {
     let chain = flatten_emit_ident_chain(receiver)?;
     let (_, cap) = cx.cross_context().resolve_cross_capability(&chain)?;
     let mut args_lowered = lower_args(args, cx, pre);
@@ -902,19 +751,16 @@ pub(in crate::emitter) fn lower_cross_capability_call(
     );
     scope_idempotency_key(first_party, &method.name, &mut args_lowered, cx);
     if first_party && method.name == "claim" && cx.tracks_claims() {
-        let cap_expr = format!("{}.{}", cx.cap_deps_expr(), cap);
         let cap_node = member(cx.cap_deps_node(), &cap);
-        return Some(tracked_claim_call(cap_node, &cap_expr, args_lowered, cx));
+        return Some(tracked_claim_call(cap_node, args_lowered, cx));
     }
     let wire = capability_wire(e, cx);
     let args_lowered = encode_capability_args(wire.as_deref(), args_lowered, cx);
     let call = capability_op_call(
         cx.cap_deps_node(),
-        cx.cap_deps_expr().to_string(),
         &cap,
         &method.name,
         capability_call_type_args_node(type_args, wire.as_deref()),
-        capability_call_type_args_ts(type_args, wire.as_deref()),
         args_lowered,
     );
     Some(decode_capability_reply(
@@ -930,34 +776,22 @@ pub(in crate::emitter) fn lower_cross_capability_call(
 /// receiver as a node and as text; the type arguments are empty when there is nothing to name.
 fn capability_op_call(
     deps: TsExpr,
-    deps_text: String,
     cap: &str,
     op: &str,
     type_args: Vec<TsType>,
-    type_args_text: String,
-    args: Vec<LoweredExpr>,
-) -> Built {
-    node_or_text(
-        args,
-        |nodes| {
-            let callee = chain(deps, &[cap, op]);
-            let callee = if type_args.is_empty() {
-                callee
-            } else {
-                TsExpr::TypeApp {
-                    callee: Box::new(callee),
-                    type_args,
-                }
-            };
-            call(callee, nodes)
-        },
-        |texts| {
-            format!(
-                "{deps_text}.{cap}.{op}{type_args_text}({})",
-                texts.join(", ")
-            )
-        },
-    )
+    args: Vec<bynk_ts::TsExpr>,
+) -> bynk_ts::TsExpr {
+    let nodes = args;
+    let callee = chain(deps, &[cap, op]);
+    let callee = if type_args.is_empty() {
+        callee
+    } else {
+        TsExpr::TypeApp {
+            callee: Box::new(callee),
+            type_args,
+        }
+    };
+    call(callee, nodes)
 }
 
 #[cfg(test)]
@@ -1222,10 +1056,10 @@ service lookup {
         );
     }
 
-    /// Both escapers are one function, so a raw-text `Str` node prints what the text path
-    /// printed, for any name, path or SQL string, non-ASCII included.
+    /// The printer and `escape_ts_string` are one function, so a raw-text `Str` node prints what
+    /// the text path printed, for any name, path or SQL string, non-ASCII included.
     #[test]
-    fn the_node_and_text_escapers_agree() {
+    fn the_literal_node_prints_the_escaped_text() {
         for s in [
             "plain",
             "caf\u{e9}",
@@ -1239,16 +1073,16 @@ service lookup {
         ] {
             assert_eq!(
                 bynk_ts::print_expr(&lit_str(s)),
-                format!("\"{}\"", escape_ts_string(s)),
+                format!("\"{}\"", crate::emitter::escape_ts_string(s)),
                 "{s:?}"
             );
         }
     }
 
-    /// The node and text type-argument forms share one filter: with a `wire` encoding only the
-    /// kept flags survive, and none kept names nothing.
+    /// With a `wire` encoding only the kept type-argument flags survive, and none kept names
+    /// nothing.
     #[test]
-    fn the_wire_filter_drops_the_same_type_arguments_in_both_forms() {
+    fn the_wire_filter_drops_the_unkept_type_arguments() {
         use bynk_check::checker::codable::CapEncoding;
         use bynk_syntax::span::Span;
         let named = |n: &str| {
@@ -1269,7 +1103,6 @@ service lookup {
             (vec![true, true, true], "<A, B, C>"),
         ] {
             let w = wire(keep);
-            assert_eq!(capability_call_type_args_ts(&args, Some(&w)), text);
             let nodes = capability_call_type_args_node(&args, Some(&w));
             let printed = if nodes.is_empty() {
                 String::new()
@@ -1285,18 +1118,7 @@ service lookup {
             };
             assert_eq!(printed, text);
         }
-        assert_eq!(capability_call_type_args_ts(&args, None), "<A, B, C>");
         assert_eq!(capability_call_type_args_node(&args, None).len(), 3);
-    }
-
-    /// A scope a template literal would read differently keeps the text form.
-    #[test]
-    fn an_unsafe_idempotency_scope_stays_text() {
-        assert!(template_safe("shop.hooks.api.http_POST"));
-        assert!(!template_safe("a`b"));
-        assert!(!template_safe("a${b"));
-        assert!(!template_safe("a\\b"));
-        assert!(template_safe("a$b"));
     }
 
     /// The typed-cookie node and the text literal print the same bytes.
@@ -1304,19 +1126,21 @@ service lookup {
     fn the_typed_cookie_node_prints_as_the_text_does() {
         let none = || object(vec![("tag", tag_const("None"))]);
         let node = typed_cookie_node("a\"b", lit_str("v"), none(), none());
-        let text = typed_cookie_literal(
-            &escape_ts_string("a\"b"),
-            "\"v\"",
-            "{ tag: \"None\" as const }",
-            "{ tag: \"None\" as const }",
+        // The text literal the node replaced.
+        let (name, value) = (crate::emitter::escape_ts_string("a\"b"), "\"v\"");
+        let none = "{ tag: \"None\" as const }";
+        let text = format!(
+            "({{ name: \"{name}\", value: {value}, maxAge: {none}, expires: {none}, \
+             domain: {{ tag: \"None\" as const }}, path: \"/\", secure: true, httpOnly: true, \
+             sameSite: {{ tag: \"Lax\" as const }}, partitioned: false }})"
         );
         assert_eq!(bynk_ts::print_expr(&node), text);
     }
 
-    /// `trace_step_node` prints what `trace_step` prints in a traced build, and returns the call
-    /// unchanged in a deploy build.
+    /// `trace_step_node` prints `__traceStep("kind", "target", { file, line, col })(call)` in a
+    /// traced build, and returns the call unchanged in a deploy build.
     #[test]
-    fn the_trace_step_node_and_text_forms_agree() {
+    fn the_trace_step_node_wraps_a_traced_call() {
         let commons = TypedCommons::empty();
         let cross = bynk_check::resolver::CrossContextInfo::default();
         let source: std::sync::Arc<str> = std::sync::Arc::from("a\n  Greeter.hello(\"x\")\n");
@@ -1337,12 +1161,14 @@ service lookup {
                 offset,
                 call(chain(id("deps"), &["Greeter", "hello"]), vec![]),
             );
-            let text = cx.trace_step(
-                "capability",
-                "Greeter.hello",
-                offset,
-                "deps.Greeter.hello()".to_string(),
-            );
+            let text = if traced {
+                let (line, col) = bynk_syntax::span::line_col(&source, offset);
+                format!(
+                    "__traceStep(\"capability\", \"Greeter.hello\", {{ file: \"shop/api \\\"x\\\".bynk\", line: {line}, col: {col} }})(deps.Greeter.hello())"
+                )
+            } else {
+                "deps.Greeter.hello()".to_string()
+            };
             assert_eq!(bynk_ts::print_expr(&node), text, "traced: {traced}");
             assert_eq!(text.starts_with("__traceStep("), traced);
             assert_eq!(ru.trace_step(), traced);

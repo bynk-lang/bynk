@@ -91,15 +91,6 @@ pub(super) fn ts_base(b: BaseType) -> &'static str {
 /// #2622: the TypeScript type of a `Decimal` (see `runtime/src/decimal.ts`).
 pub(crate) const DECIMAL_TS_TYPE: &str = "{ readonly coefficient: bigint; readonly scale: number }";
 
-/// #2622: a `Decimal` literal as a TypeScript object literal - no runtime
-/// import. `coef` is the signed coefficient digits.
-pub(crate) fn decimal_ts_literal(coef: &str, scale: u32) -> String {
-    format!(
-        "{{ coefficient: {}n, scale: {scale} }}",
-        decimal_signed_coef(coef)
-    )
-}
-
 pub fn ts_type_ref(r: &TypeRef) -> String {
     ts_type_ref_with(r, None)
 }
@@ -665,44 +656,6 @@ mod ts_type_ref_tests {
     }
 }
 
-/// v0.20b: render a checker `Ty` as a TypeScript type. Used by the inline
-/// kernel-method lowerings, whose IIFE parameters must be annotated
-/// (`noImplicitAny`). Rigid type variables render as themselves — inside an
-/// emitted generic function they are in scope as TS type parameters.
-/// P7.9 (#1315, R7.2): renders `t` by building a real [`bynk_ts::TsType`]
-/// and printing it through [`bynk_ts::print_type`], instead of `format!`-ing
-/// the type text by hand — this function's own signature and every one of
-/// its ~45 real callers are unchanged; only the internal construction moved.
-/// `Ty::ActorSum` needed a new gap closed beyond the accepted proposal's own
-/// `readonly`/`Fn` list — a real, grounded one (found during implementation
-/// review, not speculative): a resolved multi-actor sum lowers to a genuine
-/// type-position union no existing `TsType` variant could represent, closed
-/// by adding `TsType::Union` (see its own doc).
-pub(super) fn ts_ty(t: TyId, tys: TyRender<'_>) -> String {
-    bynk_ts::print_type(&ts_ty_to_ts_type(t, tys))
-}
-
-/// `elem_ts` (a [`ts_ty`] rendering) made safe to suffix with `[]`, for the
-/// kernel lowerings that `format!` an array type around an element's text
-/// rather than building a [`TsType::Array`]. `[]` binds tighter than a prefix
-/// `readonly`, a function arrow, `|` and `&`, so `readonly readonly T[][]`
-/// (TS1354) or `(a0: T) => T[]` would be misread; such an element is
-/// parenthesised. The check is on text, so it is conservative — an operator
-/// nested inside a generic argument parenthesises too, which is redundant but
-/// still valid TypeScript. The printer's own `TsType::Array` arm applies the
-/// exact structural rule.
-pub(super) fn ts_array_elem(elem_ts: &str) -> String {
-    if elem_ts.starts_with("readonly ")
-        || elem_ts.contains("=>")
-        || elem_ts.contains('|')
-        || elem_ts.contains('&')
-    {
-        format!("({elem_ts})")
-    } else {
-        elem_ts.to_string()
-    }
-}
-
 /// #1927: how the module being emitted spells a type it names. A unit's own
 /// value (a function, asset, service, agent or provider) can hide a
 /// `uses`-imported type of its name. The unit's source may not write that
@@ -906,6 +859,11 @@ mod ts_ty_tests {
     use super::*;
     use bynk_check::checker::{NamedKind, Types};
 
+    /// A checker type as the text the printer gives its `TsType`.
+    fn ts_ty(t: TyId, tys: TyRender<'_>) -> String {
+        bynk_ts::print_type(&ts_ty_to_ts_type(t, tys))
+    }
+
     #[test]
     fn base_types() {
         let tys = Arc::new(Types::new());
@@ -1022,14 +980,6 @@ mod ts_ty_tests {
                 TyRender::new(&tys, no_spellings())
             ),
             "readonly (readonly Order[])[]"
-        );
-        assert_eq!(
-            ts_array_elem(&ts_ty(orders, TyRender::new(&tys, no_spellings()))),
-            "(readonly Order[])"
-        );
-        assert_eq!(
-            ts_array_elem(&ts_ty(order, TyRender::new(&tys, no_spellings()))),
-            "Order"
         );
 
         let s = tys.intern(Ty::Base(BaseType::String));

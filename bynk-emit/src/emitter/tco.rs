@@ -23,10 +23,10 @@ use std::rc::Rc;
 use bynk_check::checker::{Callee, TypedCommons};
 use bynk_syntax::ast::{Block, Expr, ExprId, ExprKind, FnDecl, FnName, MatchBody};
 
-use super::lower::{LoweredExpr, Pre};
+use super::lower::Pre;
 use super::lower_ctx::LowerCtx;
 use super::lower_stmt::{Body, Item, assign_item, block_body_with_return, const_item};
-use super::ts_types::{ts_ty, ts_type_ref};
+use super::ts_types::{ts_ty_to_ts_type, ts_type_ref_to_ts_type};
 use super::*;
 
 /// The label of the loop; a `continue` to it passes through any emitted
@@ -218,18 +218,28 @@ fn self_call_args<'e>(
     let mut own: Vec<String> = owner_params.clone();
     own.extend(f.type_params.iter().map(|p| p.name.name.clone()));
     if !own.is_empty() {
-        let rendered = |ex: &Expr| commons.expr_types.get(&ex.id).map(|te| ts_ty(te.ty, tys));
+        let rendered = |ex: &Expr| {
+            commons
+                .expr_types
+                .get(&ex.id)
+                .map(|te| ts_ty_to_ts_type(te.ty, tys))
+        };
+        let named = |n: &String| bynk_ts::TsType::named(n.clone());
         // Explicit method-level type arguments must be the function's own.
         if !type_args.is_empty()
             && (type_args.len() != f.type_params.len()
                 || type_args
                     .iter()
                     .zip(&f.type_params)
-                    .any(|(a, p)| ts_type_ref(a) != p.name.name))
+                    .any(|(a, p)| ts_type_ref_to_ts_type(a, None) != named(&p.name.name)))
         {
             return None;
         }
-        if witnesses.iter().any(|w| !own.contains(&ts_ty(*w, tys))) {
+        let own_types: Vec<bynk_ts::TsType> = own.iter().map(named).collect();
+        if witnesses
+            .iter()
+            .any(|w| !own_types.contains(&ts_ty_to_ts_type(*w, tys)))
+        {
             return None;
         }
         let mut idx = 0;
@@ -238,9 +248,12 @@ fn self_call_args<'e>(
                 return None;
             };
             let want = if owner_params.is_empty() {
-                type_name.name.clone()
+                bynk_ts::TsType::named(type_name.name.clone())
             } else {
-                format!("{}<{}>", type_name.name, owner_params.join(", "))
+                bynk_ts::TsType::named_with_args(
+                    type_name.name.clone(),
+                    owner_params.iter().map(named).collect(),
+                )
             };
             if rendered(all[0])? != want {
                 return None;
@@ -248,7 +261,7 @@ fn self_call_args<'e>(
             idx = 1;
         }
         for (a, p) in all[idx..].iter().zip(&f.params) {
-            if rendered(a)? != ts_type_ref(&p.type_ref) {
+            if rendered(a)? != ts_type_ref_to_ts_type(&p.type_ref, None) {
                 return None;
             }
         }
@@ -284,7 +297,6 @@ pub(crate) fn loop_body_stmts(
     plan: &Rc<TcoPlan>,
     cx: &mut LowerCtx,
     async_tail: bool,
-    base: usize,
     guards: impl FnOnce(&mut LowerCtx) -> Body,
 ) -> Vec<bynk_ts::TsStmt> {
     let mut inner = Body::new();
@@ -301,7 +313,6 @@ pub(crate) fn loop_body_stmts(
     inner.append(block_body_with_return(
         &f.body,
         cx,
-        base + INDENT_STEP,
         async_tail,
         Some(&f.return_type),
     ));
@@ -317,7 +328,7 @@ pub(crate) fn loop_body_stmts(
         .collect();
     let looped = bynk_ts::TsStmt::while_stmt(
         bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Bool(true)),
-        bynk_ts::TsStmt::block(inner.into_stmts(base + INDENT_STEP), None),
+        bynk_ts::TsStmt::block(inner.into_stmts(), None),
         None,
     );
     vec![
@@ -344,7 +355,7 @@ pub(super) fn emit_continue(body: &mut Body, e: &Expr, cx: &mut LowerCtx) -> boo
         return false;
     };
     let mut pre = Pre::new();
-    let vals: Vec<LoweredExpr> = args.iter().map(|a| pre.lower_node(a, cx)).collect();
+    let vals: Vec<bynk_ts::TsExpr> = args.iter().map(|a| pre.lower_node(a, cx)).collect();
     body.extend(pre.items());
     // Every slot is assigned, even where the argument looks like the parameter's
     // own name: a binder in the body can share a parameter's name, and the
@@ -353,17 +364,52 @@ pub(super) fn emit_continue(body: &mut Body, e: &Expr, cx: &mut LowerCtx) -> boo
     // `f(b, a)` swaps and `f(n - 1, acc + n)` reads the old `n`.
     let temps: Vec<String> = vals.iter().map(|_| cx.fresh()).collect();
     for (v, t) in vals.into_iter().zip(&temps) {
-        body.push(const_item(t, None, v, false, cx.fault_site(e.span)));
+        body.push(const_item(t, None, v, false));
     }
     for (s, t) in plan.slots.iter().zip(&temps) {
         body.push(assign_item(
             bynk_ts::TsExpr::Ident(s.var.clone()),
-            LoweredExpr::Node(bynk_ts::TsExpr::Ident(t.clone())),
-            cx.fault_site(e.span),
+            bynk_ts::TsExpr::Ident(t.clone()),
         ));
     }
     body.push(Item::Node(Box::new(bynk_ts::TsStmt::continue_label_stmt(
         LABEL, None,
     ))));
     true
+}
+
+#[cfg(test)]
+mod type_comparison_tests {
+    use crate::testkit::emit_source;
+
+    /// A self tail call in a generic function loops only when the call is at the function's own
+    /// type parameters (compared structurally, not by printed text).
+    #[test]
+    fn a_generic_function_self_tail_call_is_a_loop() {
+        let ts = emit_source(
+            "commons tcog\nfn count[T](xs: List[T], n: Int) -> Int {\n  if n <= 0 { 0 } else { count(xs, n - 1) }\n}\n",
+        );
+        assert!(ts.contains("__tco: while (true) {"), "{ts}");
+        assert!(ts.contains("continue __tco;"), "{ts}");
+    }
+
+    /// The same for a method on a generic record: the receiver must be `Name<T>` over the type's
+    /// own parameters.
+    #[test]
+    fn a_generic_receiver_self_tail_call_is_a_loop() {
+        let ts = emit_source(
+            "commons tcom\ntype Box2[T] = { v: T }\nfn Box2.count(self, n: Int) -> Int {\n  if n <= 0 { 0 } else { self.count(n - 1) }\n}\n",
+        );
+        assert!(ts.contains("__tco: while (true) {"), "{ts}");
+        assert!(ts.contains("continue __tco;"), "{ts}");
+    }
+
+    /// A tail call at a different instantiation is a real call, not a loop.
+    #[test]
+    fn a_self_call_at_another_instantiation_stays_a_call() {
+        let ts = emit_source(
+            "commons tcoi\nfn count[T](xs: List[T], n: Int) -> Int {\n  if n <= 0 { 0 } else { count[Int]([1], n - 1) }\n}\n",
+        );
+        assert!(!ts.contains("__tco"), "{ts}");
+    }
 }

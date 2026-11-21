@@ -16,12 +16,11 @@ use bynk_syntax::ast::{
 use bynk_syntax::span::Span;
 
 use super::ctx::TailSlot;
-use super::internal_fault::FaultSite;
 use super::lower::{
-    Lowered, LoweredExpr, LoweredStmt, PatPath, Pre, and_join, build_value_bin_op,
-    call_site_principal, claim_scope_declaration, emit_pattern_bindings, expect_location_raw,
-    expect_source_text_raw, hoist_if_slot, literal_label_node, member_node, num_lit, pattern_tests,
-    str_node, ternary_built,
+    Lowered, PatPath, Pre, and_join, build_value_bin_op, call_site_principal,
+    claim_scope_declaration, emit_pattern_bindings, expect_location_raw, expect_source_text_raw,
+    hoist_if_slot, literal_label_node, member_node, num_lit, pattern_tests, str_node,
+    ternary_built,
 };
 use super::lower_call::codec_statics::json_encode;
 use super::lower_ctx::LowerCtx;
@@ -31,25 +30,17 @@ use super::*;
 /// The statement emitter builds a [`Body`] — a list of [`Item`]s — instead of
 /// appending text to a caller's buffer; [`render`] is the one adapter that
 /// turns it back into text and records the source-map checkpoints (back-half
-/// paydown 1A.10, S1 of the statement-emitter design note #3708). The producers
-/// below nest with [`Item::Indent`] (always `+ INDENT_STEP`) rather than by
-/// threading an `indent` through every call; the entry points keep their
+/// paydown 1A.10, S1 of the statement-emitter design note #3708). A body holds
+/// statement nodes and source-map marks only (1A.35b); the entry points keep their
 /// `(out, …, indent)` signatures as build-then-render wrappers.
 pub(super) struct Body(Vec<Item>);
 
 pub(super) enum Item {
-    /// Verbatim text, indented on its first line only: today's [`write_line`].
-    /// A multi-line string keeps whatever continuation indentation it carries.
-    Line(String),
     /// A typed statement, printed at depth 0 with every line indented.
-    // Boxed, like `LoweredStmt::Node`: a `TsStmt` dwarfs the other variants.
+    // Boxed: a `TsStmt` dwarfs the other variant.
     Node(Box<bynk_ts::TsStmt>),
     /// A source-map checkpoint at the offset where the next item starts.
     Mark(Span),
-    /// A nested body, rendered at `indent + INDENT_STEP`. No producer builds one since 1A.ws (the
-    /// handler wrappers are arrows now); only the tests do. Deleted with `Line` in 1A.35b.
-    #[cfg_attr(not(test), allow(dead_code))]
-    Indent(Body),
 }
 
 impl Body {
@@ -70,75 +61,30 @@ impl Body {
         self.0.extend(other.0);
     }
 
-    /// The body as statements, if every item is a [`Item::Node`] or an
-    /// [`Item::Mark`] (1A.11, Decision C of #3712); `None` if any item is text
-    /// or a nested [`Item::Indent`], or a mark has no node to attach to.
+    /// The body as the statements of a typed function or method body (1A.15, Decision A of
+    /// #3716), or of any nested block: what the callers of the statement emitter hand to their
+    /// `TsDecl::Function`, `TsObjectEntry::Method` or `TsStmt::block` instead of rendering the
+    /// body to text.
     ///
-    /// A `Mark`'s span goes on the **next** node's [`bynk_ts::TsStmt::span`], and
-    /// on that node only: a statement's hoisted lines followed by its own give
-    /// the span to the first, which is the nearest-enclosing rule the one
-    /// checkpoint implements today. Two marks in a row sit at one offset, where
-    /// the later replaces the earlier, as `SourceMapBuilder::record` does.
-    /// Borrowing rather than consuming lets the caller fall back to the same
-    /// items as text when this says no.
-    pub(super) fn to_nodes(&self) -> Option<Vec<bynk_ts::TsStmt>> {
+    /// An [`Item::Node`] passes through, as itself. An [`Item::Mark`] goes on the **next**
+    /// statement's [`bynk_ts::TsStmt::span`], and on that statement only: a statement's hoisted
+    /// lines followed by its own give the span to the first, which is the nearest-enclosing rule
+    /// the one checkpoint implements today. Two marks in a row sit at one offset, where the later
+    /// replaces the earlier, as `SourceMapBuilder::record` does; the printer records the span
+    /// where that statement starts.
+    pub(super) fn into_stmts(self) -> Vec<bynk_ts::TsStmt> {
         let mut stmts = Vec::with_capacity(self.0.len());
         let mut pending: Option<Span> = None;
-        for item in &self.0 {
+        for item in self.0 {
             match item {
-                Item::Mark(span) => pending = Some(*span),
+                Item::Mark(span) => pending = Some(span),
                 Item::Node(stmt) => {
-                    let mut stmt = (**stmt).clone();
+                    let mut stmt = *stmt;
                     stmt.span = stmt.span.or(pending.take());
                     stmts.push(stmt);
                 }
-                Item::Line(_) | Item::Indent(_) => return None,
             }
         }
-        pending.is_none().then_some(stmts)
-    }
-}
-
-impl Body {
-    /// [`Body::to_nodes`] for a body that must be statements (1A.35a part C, temporary: removed with
-    /// the `Text` bridge in 1A.35b). A body no producer writes text into is always nodes, so a
-    /// `None` is a compiler fault, reported at `site` (the 1A.34 policy) as an empty body.
-    pub(super) fn into_nodes(self, site: FaultSite<'_>) -> Vec<bynk_ts::TsStmt> {
-        self.to_nodes().unwrap_or_else(|| {
-            let reason = if self.0.iter().any(|i| matches!(i, Item::Line(_))) {
-                "statement body, which reached lowering as text"
-            } else {
-                "statement body, which held an indented block or a mark with no statement after it"
-            };
-            site.missing_fact(reason);
-            Vec::new()
-        })
-    }
-}
-
-impl Body {
-    /// The body as the statements of a typed function or method body (1A.15,
-    /// Decision A of #3716): what the callers of the statement emitter hand to
-    /// their `TsDecl::Function` or `TsObjectEntry::Method` instead of
-    /// rendering the body to text. `indent` is the indentation, in columns,
-    /// the printer will give those statements.
-    ///
-    /// - an [`Item::Node`] passes through, as itself;
-    /// - an [`Item::Mark`] goes on the **next** statement's
-    ///   [`bynk_ts::TsStmt::span`] ([`Body::to_nodes`]'s rule), and the printer
-    ///   records it where that statement starts;
-    /// - an [`Item::Line`] that remains becomes one `raw` statement carrying
-    ///   the mark's span, padded to its column: the one place in the emitter
-    ///   where a statement of text becomes a statement (like
-    ///   `Pre::ts_stmts`);
-    /// - an [`Item::Indent`] nests its items one step deeper, which a flat list
-    ///   of statements cannot express for a node, so a node inside one is
-    ///   printed at its depth into one `raw` statement that carries its
-    ///   checkpoints as a `nested_map`.
-    pub(super) fn into_stmts(self, indent: usize) -> Vec<bynk_ts::TsStmt> {
-        let mut stmts = Vec::with_capacity(self.0.len());
-        let mut pending = None;
-        self.push_stmts(&mut stmts, indent, indent, &mut pending);
         // A mark with no statement after it would be dropped silently. Every
         // producer pushes its content after its mark; this makes that explicit.
         debug_assert!(
@@ -147,50 +93,6 @@ impl Body {
         );
         stmts
     }
-
-    fn push_stmts(
-        self,
-        stmts: &mut Vec<bynk_ts::TsStmt>,
-        base: usize,
-        indent: usize,
-        pending: &mut Option<Span>,
-    ) {
-        for item in self.0 {
-            match item {
-                Item::Mark(span) => *pending = Some(span),
-                Item::Node(stmt) => {
-                    let mut stmt = *stmt;
-                    stmt.span = stmt.span.or(pending.take());
-                    if indent == base {
-                        stmts.push(stmt);
-                        continue;
-                    }
-                    let (text, spans) = bynk_ts::print_stmt_with_spans(&stmt, indent / INDENT_STEP);
-                    let mut map = bynk_ts::SourceMapBuilder::new();
-                    for (offset, span) in spans {
-                        map.record(offset, span);
-                    }
-                    let mut raw = bynk_ts::TsStmt::raw(text, None);
-                    raw.nested_map = Some(map);
-                    stmts.push(raw);
-                }
-                Item::Line(text) => {
-                    #[cfg(any(test, feature = "text-exit-counters"))]
-                    LINES_RENDERED.with(|c| c.set(c.get() + 1));
-                    let text = format!("{}{text}\n", " ".repeat(indent));
-                    stmts.push(bynk_ts::TsStmt::raw(text, pending.take()));
-                }
-                Item::Indent(inner) => inner.push_stmts(stmts, base, indent + INDENT_STEP, pending),
-            }
-        }
-    }
-}
-
-#[cfg(any(test, feature = "text-exit-counters"))]
-thread_local! {
-    /// Test-only: how many `Item::Line`s have been rendered (1A.11's "converted
-    /// to nodes" tests read it; see `lower::text_counters`).
-    static LINES_RENDERED: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
 /// Render `body` into `out` at `indent`, recording each [`Item::Mark`] with
@@ -202,11 +104,6 @@ pub(super) fn render(body: &Body, out: &mut String, indent: usize, cx: &LowerCtx
 fn render_with(body: &Body, out: &mut String, indent: usize, cx: Option<&LowerCtx>) {
     for item in &body.0 {
         match item {
-            Item::Line(text) => {
-                #[cfg(any(test, feature = "text-exit-counters"))]
-                LINES_RENDERED.with(|c| c.set(c.get() + 1));
-                write_line(out, indent, text);
-            }
             Item::Node(stmt) => {
                 // A node can carry checkpoints of its own, one per nested
                 // statement that has a span (Decision C of #3712). The printer
@@ -234,7 +131,6 @@ fn render_with(body: &Body, out: &mut String, indent: usize, cx: Option<&LowerCt
                     cx.record_span(out.len(), *span);
                 }
             }
-            Item::Indent(inner) => render_with(inner, out, indent + INDENT_STEP, cx),
         }
     }
 }
@@ -274,7 +170,7 @@ pub(crate) fn emit_block_as_function_body_with_return(
     async_tail: bool,
     return_type: Option<&TypeRef>,
 ) {
-    let body = block_body_with_return(block, cx, indent, async_tail, return_type);
+    let body = block_body_with_return(block, cx, async_tail, return_type);
     render(&body, out, indent, cx);
 }
 
@@ -284,11 +180,10 @@ pub(crate) fn emit_block_as_function_body_with_return(
 pub(crate) fn function_body_stmts(
     block: &Block,
     cx: &mut LowerCtx,
-    indent: usize,
     async_tail: bool,
     return_type: Option<&TypeRef>,
 ) -> Vec<bynk_ts::TsStmt> {
-    block_body_with_return(block, cx, indent, async_tail, return_type).into_stmts(indent)
+    block_body_with_return(block, cx, async_tail, return_type).into_stmts()
 }
 
 /// The items of a function body lowered with its enclosing return type bound,
@@ -296,7 +191,6 @@ pub(crate) fn function_body_stmts(
 pub(super) fn block_body_with_return(
     block: &Block,
     cx: &mut LowerCtx,
-    indent: usize,
     async_tail: bool,
     return_type: Option<&TypeRef>,
 ) -> Body {
@@ -314,7 +208,7 @@ pub(super) fn block_body_with_return(
     // The wrapper's text goes around the body as `Line` items, so the body's
     // checkpoints land at the right offsets without being shifted.
     if cx.claim_scope_used && cx.wraps_claims_in_body() {
-        body = claim_scoped(body, indent);
+        body = claim_scoped(body);
     }
     body
 }
@@ -328,7 +222,7 @@ pub(super) fn block_body_with_return(
 /// The `__claims` initialiser is a node too ([`claim_scope_declaration`], 1A.35a part B). The
 /// layout is the printer's own, which puts the body one `try` block and one closure deeper than
 /// the text wrapper did.
-pub(super) fn claim_scoped(body: Body, indent: usize) -> Body {
+pub(super) fn claim_scoped(body: Body) -> Body {
     use bynk_ts::{TsBindingName, TsExpr, TsLit, TsStmt};
     let ident = |name: &str| TsExpr::Ident(name.to_string());
     let settle = |result: TsExpr, threw: bool| {
@@ -341,7 +235,7 @@ pub(super) fn claim_scoped(body: Body, indent: usize) -> Body {
         )
     };
     // The body sits in the closure, a `try` block and an arrow body deeper.
-    let inner = body.into_stmts(indent + INDENT_STEP * 2);
+    let inner = body.into_stmts();
     let closure = TsExpr::Arrow {
         params: Vec::new(),
         is_async: true,
@@ -418,12 +312,12 @@ fn emit_block_inner(body: &mut Body, block: &Block, cx: &mut LowerCtx, async_tai
             let else_tail = lower_tail_expr(&else_block.tail, cx, async_tail);
             body.extend(pre.items());
             if then_tail.pre.is_empty() && else_tail.pre.is_empty() {
-                // `finish_built` is the one place a `Built` becomes a
-                // `LoweredExpr`; its hoists are empty here.
+                // `finish_built` is the one place a `bynk_ts::TsExpr` becomes a
+                // `bynk_ts::TsExpr`; its hoists are empty here.
                 let ternary = Pre::new()
-                    .finish_built(ternary_built(cond_expr, then_tail.expr, else_tail.expr))
+                    .finish(ternary_built(cond_expr, then_tail.expr, else_tail.expr))
                     .expr;
-                push_tail(body, cx, ternary, cx.fault_site(block.tail.span));
+                push_tail(body, cx, ternary);
             } else {
                 // A branch hoisted after all — the case `simple_expr` used to
                 // mispredict (#945, and the `ListLit`/`InterpStr` fallthrough
@@ -433,15 +327,9 @@ fn emit_block_inner(body: &mut Body, block: &Block, cx: &mut LowerCtx, async_tai
                 // produces for this shape (both branches are statement-free and
                 // their tails lower as plain expressions), rebuilt from the
                 // values already in hand.
-                let then_body = pure_tail_branch(then_tail, cx, then_block.tail.span);
-                let else_body = pure_tail_branch(else_tail, cx, else_block.tail.span);
-                push_if(
-                    body,
-                    cond_expr,
-                    then_body,
-                    else_body,
-                    cx.fault_site(block.tail.span),
-                );
+                let then_body = pure_tail_branch(then_tail, cx);
+                let else_body = pure_tail_branch(else_tail, cx);
+                push_if(body, cond_expr, then_body, else_body);
             }
         }
         ExprKind::If {
@@ -456,7 +344,7 @@ fn emit_block_inner(body: &mut Body, block: &Block, cx: &mut LowerCtx, async_tai
         _ => {
             let tail = lower_tail_expr(&block.tail, cx, async_tail);
             body.extend(tail.pre_items());
-            push_tail(body, cx, tail.expr, cx.fault_site(block.tail.span));
+            push_tail(body, cx, tail.expr);
         }
     }
     cx.shadow_scopes.pop();
@@ -470,8 +358,8 @@ fn stmt_item(stmt: bynk_ts::TsStmt) -> Item {
 /// function, lambda or arrow body, or, inside a statement-form value expression
 /// ([`hoist_value_as_statement`]), the assignment to its slot followed by a labelled `break`
 /// out of its block. `site` is where a value that is not a node is reported.
-fn push_tail(body: &mut Body, cx: &LowerCtx, value: LoweredExpr, site: FaultSite<'_>) {
-    let n = value.into_node(site);
+fn push_tail(body: &mut Body, cx: &LowerCtx, value: bynk_ts::TsExpr) {
+    let n = value;
     match &cx.tail_slot {
         None => body.push(stmt_item(bynk_ts::TsStmt::return_stmt(Some(n), None))),
         Some(TailSlot { slot, label }) => {
@@ -491,16 +379,9 @@ fn push_tail(body: &mut Body, cx: &LowerCtx, value: LoweredExpr, site: FaultSite
 /// `if (cond) { then } else { else }` as one `If` node: the condition is a node, and both bodies
 /// are statements ([`Body::to_nodes`], checkpoints carried onto their statements). `site` is
 /// where a condition or body that is not nodes is reported.
-fn push_if(
-    body: &mut Body,
-    cond: LoweredExpr,
-    then_body: Body,
-    else_body: Body,
-    site: FaultSite<'_>,
-) {
-    let cond = cond.into_node(site);
-    let then_stmts = then_body.into_nodes(site);
-    let else_stmts = else_body.into_nodes(site);
+fn push_if(body: &mut Body, cond: bynk_ts::TsExpr, then_body: Body, else_body: Body) {
+    let then_stmts = then_body.into_stmts();
+    let else_stmts = else_body.into_stmts();
     body.push(stmt_item(bynk_ts::TsStmt::if_else_same_line_stmt(
         cond,
         bynk_ts::TsStmt::block(then_stmts, None),
@@ -510,21 +391,17 @@ fn push_if(
 }
 
 /// `await <value>;` as an item: an `ExprStmt(Await)` node.
-fn do_item(value: LoweredExpr, site: FaultSite<'_>) -> Item {
+fn do_item(value: bynk_ts::TsExpr) -> Item {
     stmt_item(bynk_ts::TsStmt::expr_stmt(
-        bynk_ts::TsExpr::Await(Box::new(value.into_node(site))),
+        bynk_ts::TsExpr::Await(Box::new(value)),
         None,
     ))
 }
 
 /// `<target> = <value>;` as an item: an `Assign` node. `target` is a genuine `Ident` or
 /// `Member`.
-pub(super) fn assign_item(
-    target: bynk_ts::TsExpr,
-    value: LoweredExpr,
-    site: FaultSite<'_>,
-) -> Item {
-    stmt_item(bynk_ts::TsStmt::assign(target, value.into_node(site), None))
+pub(super) fn assign_item(target: bynk_ts::TsExpr, value: bynk_ts::TsExpr) -> Item {
+    stmt_item(bynk_ts::TsStmt::assign(target, value, None))
 }
 
 /// `const <name>[: <ty>] = [await ]<value>;` as an item (1A.11): a `Const` node, the annotation
@@ -532,11 +409,10 @@ pub(super) fn assign_item(
 pub(super) fn const_item(
     name: &str,
     annot: Option<&TypeRef>,
-    value: LoweredExpr,
+    value: bynk_ts::TsExpr,
     awaited: bool,
-    site: FaultSite<'_>,
 ) -> Item {
-    const_node_item(name, annot, value.into_node(site), awaited)
+    const_node_item(name, annot, value, awaited)
 }
 
 /// [`const_item`] over a value that is already a node.
@@ -563,10 +439,10 @@ pub(super) fn const_node_item(
 /// followed by its `return` (or, #1750, its sink's assignment). Exactly the
 /// body [`emit_block_inner`]'s own `_` arm builds for a statement-free block,
 /// which is what `if_tail` would have recursed into.
-fn pure_tail_branch(tail: Lowered, cx: &LowerCtx, span: Span) -> Body {
+fn pure_tail_branch(tail: Lowered, cx: &LowerCtx) -> Body {
     let mut body = Body::new();
     body.extend(tail.pre_items());
-    push_tail(&mut body, cx, tail.expr, cx.fault_site(span));
+    push_tail(&mut body, cx, tail.expr);
     body
 }
 
@@ -602,13 +478,11 @@ fn lower_tail_expr(e: &Expr, cx: &mut LowerCtx, async_tail: bool) -> Lowered {
             let then_tail = lower_tail_expr(&then_block.tail, cx, true);
             let else_tail = lower_tail_expr(&else_block.tail, cx, true);
             if then_tail.pre.is_empty() && else_tail.pre.is_empty() {
-                return pre.finish_built(ternary_built(cond_expr, then_tail.expr, else_tail.expr));
+                return pre.finish(ternary_built(cond_expr, then_tail.expr, else_tail.expr));
             }
             let slot_ty = async_tail_slot_ty(e, cx);
-            let slot = hoist_if_slot(
-                &mut pre, slot_ty, cond_expr, then_tail, else_tail, cx, e.span,
-            );
-            pre.finish(LoweredExpr::Node(bynk_ts::TsExpr::Ident(slot)))
+            let slot = hoist_if_slot(&mut pre, slot_ty, cond_expr, then_tail, else_tail, cx);
+            pre.finish(bynk_ts::TsExpr::Ident(slot))
         }
         _ => lower_expr(e, cx),
     }
@@ -691,7 +565,7 @@ pub(super) fn hoist_value_as_statement(
     // gives up on a `let` whose assignments sit beside a `return`.
     //
     // Statement nodes (1A.35a part B): `let slot: T;` then the labelled block.
-    let stmts = body.into_nodes(cx.fault_site(e.span));
+    let stmts = body.into_stmts();
     pre.push_node(bynk_ts::TsStmt::let_stmt(
         bynk_ts::TsBindingName::Ident(slot.clone()),
         checked_ty_node(e, cx),
@@ -703,7 +577,7 @@ pub(super) fn hoist_value_as_statement(
         bynk_ts::TsStmt::block(stmts, None),
         None,
     ));
-    pre.finish(LoweredExpr::Node(bynk_ts::TsExpr::Ident(slot)))
+    pre.finish(bynk_ts::TsExpr::Ident(slot))
 }
 
 /// #1750: whether a `?` in `b` would lower to a `return` inside `b`'s own
@@ -794,7 +668,7 @@ fn lower_effect_let_value(
     l: &bynk_syntax::ast::LetStmt,
     pre: &mut Pre,
     cx: &mut LowerCtx,
-) -> LoweredExpr {
+) -> bynk_ts::TsExpr {
     // v0.182 (#664): a call-site `by <Actor>(<identity>)` supplies the
     // identity the addressed handler reads as `deps.identity`. Lower it
     // (a test-only brand cast, like an agent key) and stash it for the
@@ -926,19 +800,14 @@ fn emit_par(body: &mut Body, p: &bynk_syntax::ast::ParStmt, cx: &mut LowerCtx) {
     // T2.2 (R6.4): see the matching note at `EffectLet`.
     cx.emitted_await = true;
     let hoisted = parts.iter().any(|part| !part.pre.is_empty());
-    body.push(stmt_item(par_node(
-        parts,
-        &pattern,
-        hoisted,
-        cx.fault_site(p.span),
-    )));
+    body.push(stmt_item(par_node(parts, &pattern, hoisted)));
 }
 
 /// One `par` binding: its hoisted statements, value, annotation, and whether
 /// lowering it awaited.
 struct ParPart<'a> {
     pre: Pre,
-    value: LoweredExpr,
+    value: bynk_ts::TsExpr,
     annot: Option<&'a bynk_syntax::ast::TypeRef>,
     asynchronous: bool,
 }
@@ -947,15 +816,10 @@ struct ParPart<'a> {
 /// over thunk arrows (an `await …;` with no binding when the pattern is empty). The array is one
 /// item per line when any part hoisted, in the printer's own layout (the old text indented items
 /// by one column, an odd offset that is normalised here: 1A.14).
-fn par_node(
-    parts: Vec<ParPart>,
-    pattern: &[String],
-    hoisted: bool,
-    site: FaultSite<'_>,
-) -> bynk_ts::TsStmt {
+fn par_node(parts: Vec<ParPart>, pattern: &[String], hoisted: bool) -> bynk_ts::TsStmt {
     let mut items = Vec::with_capacity(parts.len());
     for part in parts {
-        let value = part.value.into_node(site);
+        let value = part.value;
         let return_type = part.annot.map(|a| {
             bynk_ts::TsType::named_with_args(
                 "globalThis.Promise",
@@ -965,7 +829,7 @@ fn par_node(
         let arrow_body = if part.pre.is_empty() {
             bynk_ts::TsArrowBody::Expr(Box::new(value))
         } else {
-            let mut stmts = part.pre.ts_stmts(site);
+            let mut stmts = part.pre.ts_stmts();
             stmts.push(bynk_ts::TsStmt::return_stmt(Some(value), None));
             bynk_ts::TsArrowBody::Multiline(stmts)
         };
@@ -1020,13 +884,7 @@ fn statement(body: &mut Body, stmt: &Statement, cx: &mut LowerCtx) {
             // either collides with the first `const` of that name — TS2451 —
             // or, one block deeper, shadows it into a TDZ read).
             let bind_name = cx.bind_local_name(&l.name.name);
-            body.push(const_item(
-                &bind_name,
-                l.type_annot.as_ref(),
-                value,
-                false,
-                cx.fault_site(l.span),
-            ));
+            body.push(const_item(&bind_name, l.type_annot.as_ref(), value, false));
         }
         Statement::EffectLet(l) => {
             // `let x <- expr` → `const x = await expr;`
@@ -1038,13 +896,7 @@ fn statement(body: &mut Body, stmt: &Statement, cx: &mut LowerCtx) {
             // sources of effectfulness a synchronous-looking IIFE further out
             // needs to know about — see `emitted_await`.
             cx.emitted_await = true;
-            body.push(const_item(
-                &bind_name,
-                l.type_annot.as_ref(),
-                value,
-                true,
-                cx.fault_site(l.span),
-            ));
+            body.push(const_item(&bind_name, l.type_annot.as_ref(), value, true));
         }
         Statement::Expect(a) if a.snapshot.is_some() => {
             // #2842: `expect <value> matches snapshot "<name>"` compares the
@@ -1105,11 +957,10 @@ fn statement(body: &mut Body, stmt: &Statement, cx: &mut LowerCtx) {
                 let mut lv = pre.lower_node(l, cx);
                 let mut rv = pre.lower_node(r, cx);
                 if pre.len() != before {
-                    lv = pre.bind_temp(lv, cx, l.span);
-                    rv = pre.bind_temp(rv, cx, r.span);
+                    lv = pre.bind_temp(lv, cx);
+                    rv = pre.bind_temp(rv, cx);
                 }
-                let cond =
-                    LoweredExpr::from(build_value_bin_op(*op, l, vec![lv.clone(), rv.clone()], cx));
+                let cond = build_value_bin_op(*op, l, vec![lv.clone(), rv.clone()], cx);
                 // #2622: an operand that holds a `Decimal` prints through the
                 // decimal-aware show, since `JSON.stringify` throws on a `bigint`.
                 let decimal = cx
@@ -1152,7 +1003,6 @@ fn statement(body: &mut Body, stmt: &Statement, cx: &mut LowerCtx) {
                 &location,
                 &src,
                 (span_start, span_end),
-                cx.fault_site(a.span),
             ));
         }
         Statement::Advance(a) => {
@@ -1165,7 +1015,7 @@ fn statement(body: &mut Body, stmt: &Statement, cx: &mut LowerCtx) {
             body.push(stmt_item(bynk_ts::TsStmt::expr_stmt(
                 bynk_ts::TsExpr::Call {
                     callee: Box::new(bynk_ts::TsExpr::Ident("__bynkAdvanceClock".to_string())),
-                    args: vec![amount.into_node(cx.fault_site(a.span))],
+                    args: vec![amount],
                 },
                 None,
             )));
@@ -1179,7 +1029,7 @@ fn statement(body: &mut Body, stmt: &Statement, cx: &mut LowerCtx) {
             body.extend(pre.items());
             // T2.2 (R6.4): see the matching note at `EffectLet`.
             cx.emitted_await = true;
-            body.push(do_item(value, cx.fault_site(d.span)));
+            body.push(do_item(value));
         }
         Statement::Par(p) => emit_par(body, p, cx),
         Statement::Assign(a) => {
@@ -1198,7 +1048,7 @@ fn statement(body: &mut Body, stmt: &Statement, cx: &mut LowerCtx) {
                 Some((var, _)) => member_node(var, &a.target.name),
                 None => bynk_ts::TsExpr::Ident(a.target.name.clone()),
             };
-            body.push(assign_item(target, value, cx.fault_site(a.span)));
+            body.push(assign_item(target, value));
         }
     }
 }
@@ -1228,7 +1078,7 @@ enum ExpectDetail {
         show: &'static str,
         sym: &'static str,
         /// The left and right operands (boxed: a lowered expression is large).
-        operands: Box<(LoweredExpr, LoweredExpr)>,
+        operands: Box<(bynk_ts::TsExpr, bynk_ts::TsExpr)>,
     },
     /// A fixed message (the unescaped text).
     Message(String),
@@ -1237,16 +1087,14 @@ enum ExpectDetail {
 /// `if (!(<cond>)) { throw __bynkExpectFailure(…); }` as an item (1A.17, Decision C): an `If`
 /// over an `InlineBlock`. `location` and `src` are unescaped: the printer escapes them.
 fn expect_item(
-    cond: LoweredExpr,
+    cond: bynk_ts::TsExpr,
     detail: ExpectDetail,
     location: &str,
     src: &str,
     (start, end): (usize, usize),
-    site: FaultSite<'_>,
 ) -> Item {
     use bynk_ts::{TsBinaryOp, TsExpr};
     let compare_head = format!("expect {src}\n  expected: {src}\n  actual:   ");
-    let cond = cond.into_node(site);
     let detail = match detail {
         ExpectDetail::Compare {
             show,
@@ -1265,10 +1113,10 @@ fn expect_item(
             };
             add(
                 add(
-                    add(str_node(compare_head), shown(lv.into_node(site))),
+                    add(str_node(compare_head), shown(lv)),
                     str_node(format!(" {sym} ")),
                 ),
-                shown(rv.into_node(site)),
+                shown(rv),
             )
         }
         ExpectDetail::Message(m) => str_node(m),
@@ -1431,7 +1279,7 @@ pub(super) fn if_tail(
     let mut found = false;
     gather_is_bindings_for_emit(cond, true, cx, &mut is_bindings, &mut found);
     let mut then_body = Body::new();
-    then_body.extend(is_bindings.iter().map(LoweredStmt::item));
+    then_body.extend(is_bindings.iter().map(super::lower::stmt_item));
     emit_block_inner(&mut then_body, then_block, cx, async_tail);
     cx.shadow_scopes.pop();
     // #1654: the else-branch's bindings, those the condition's falsity proves.
@@ -1439,16 +1287,10 @@ pub(super) fn if_tail(
     let mut else_bindings = Vec::new();
     gather_is_bindings_for_emit(cond, false, cx, &mut else_bindings, &mut found);
     let mut else_body = Body::new();
-    else_body.extend(else_bindings.iter().map(LoweredStmt::item));
+    else_body.extend(else_bindings.iter().map(super::lower::stmt_item));
     emit_block_inner(&mut else_body, else_block, cx, async_tail);
     cx.shadow_scopes.pop();
-    push_if(
-        body,
-        cond_expr,
-        then_body,
-        else_body,
-        cx.fault_site(cond.span),
-    );
+    push_if(body, cond_expr, then_body, else_body);
 }
 
 /// v0.130: whether a `match` is literal-kind — its scrutinee is a primitive
@@ -1517,16 +1359,10 @@ pub(super) fn match_tail(
     // lowers to a call (`Fallback()`), so it is bound to a temp too.
     let path = if !is_narrowable_path(discriminant) || cx.roots_at_const(discriminant) {
         let tmp = cx.fresh();
-        body.push(const_item(
-            &tmp,
-            None,
-            disc,
-            false,
-            cx.fault_site(discriminant.span),
-        ));
+        body.push(const_item(&tmp, None, disc, false));
         PatPath::ident(&tmp)
     } else {
-        PatPath::from_lowered(disc, cx.fault_site(discriminant.span))
+        PatPath::from_lowered(disc)
     };
     match_dispatch(body, &path, &disc_ty, arms, cx, async_tail);
 }
@@ -1559,8 +1395,7 @@ pub(super) fn match_dispatch(
         .iter()
         .map(|arm| match_case(path, disc_ty, arm, cx, async_tail))
         .collect();
-    let site = cx.fault_site(arms.first().map_or(Span::default(), |a| a.span));
-    let cases = cases.into_iter().map(|c| c.into_node(site)).collect();
+    let cases = cases.into_iter().map(MatchCase::into_node).collect();
     body.push(stmt_item(bynk_ts::TsStmt::switch_stmt(
         scrutinee.node().clone(),
         cases,
@@ -1580,11 +1415,11 @@ struct MatchCase {
 impl MatchCase {
     /// The arm as a typed case. Its span is carried on the case only when checkpoints are
     /// recorded.
-    fn into_node(self, site: FaultSite<'_>) -> bynk_ts::TsSwitchCase {
+    fn into_node(self) -> bynk_ts::TsSwitchCase {
         bynk_ts::TsSwitchCase {
             default_braced: self.labels.is_empty(),
             labels: self.labels,
-            body: self.inner.into_nodes(site),
+            body: self.inner.into_stmts(),
             case_braced: true,
             span: Some(self.span),
         }
@@ -1750,17 +1585,17 @@ fn match_body(body: &mut Body, arm_body: &MatchBody, cx: &mut LowerCtx, async_ta
             }
             let tail = lower_tail_expr(e, cx, async_tail);
             body.extend(tail.pre_items());
-            push_tail(body, cx, tail.expr, cx.fault_site(e.span));
+            push_tail(body, cx, tail.expr);
         }
         MatchBody::Block(b) => emit_block_inner(body, b, cx, async_tail),
     }
 }
 
 /// `if (cond) { then }` as one `If` node over a body of statements (which keeps its marks).
-fn push_if_then(body: &mut Body, cond: bynk_ts::TsExpr, then: Body, site: FaultSite<'_>) {
+fn push_if_then(body: &mut Body, cond: bynk_ts::TsExpr, then: Body) {
     body.push(stmt_item(bynk_ts::TsStmt::if_stmt(
         cond,
-        bynk_ts::TsStmt::block(then.into_nodes(site), None),
+        bynk_ts::TsStmt::block(then.into_stmts(), None),
         None,
     )));
 }
@@ -1794,7 +1629,6 @@ fn match_if_chain(
         // binding a read resolves to, not whether the arm also happens to
         // emit a wrapping JS block.
         cx.shadow_scopes.push(HashMap::new());
-        let site = cx.fault_site(arm.span);
         let mut tests = Vec::new();
         pattern_tests(path, *disc_ty, &arm.pattern, cx, &mut tests);
         let has_tests = !tests.is_empty();
@@ -1824,18 +1658,15 @@ fn match_if_chain(
                 arm_body.extend(guard_lowered.pre_items());
                 let mut guarded = Body::new();
                 match_body(&mut guarded, &arm.body, cx, async_tail);
-                push_if_then(arm_body, guard_lowered.expr.into_node(site), guarded, site);
+                push_if_then(arm_body, guard_lowered.expr, guarded);
             } else {
                 match_body(arm_body, &arm.body, cx, async_tail);
             }
         }
         if has_tests {
-            push_if_then(body, and_join(tests), nested, site);
+            push_if_then(body, and_join(tests), nested);
         } else if needs_block {
-            body.push(stmt_item(bynk_ts::TsStmt::block(
-                nested.into_nodes(site),
-                None,
-            )));
+            body.push(stmt_item(bynk_ts::TsStmt::block(nested.into_stmts(), None)));
         }
         cx.shadow_scopes.pop();
     }
@@ -1922,10 +1753,6 @@ mod body_tests {
         f(&cx)
     }
 
-    fn line(text: &str) -> Item {
-        Item::Line(text.to_string())
-    }
-
     fn rendered(body: &Body, indent: usize) -> (String, SourceMapBuilder) {
         let smb = RefCell::new(SourceMapBuilder::new());
         smb.borrow_mut().add_source("t.bynk", "x".repeat(200));
@@ -1948,17 +1775,14 @@ mod body_tests {
         )
     }
 
-    /// A `Line` is `write_line`: only its first line takes the indentation, so
-    /// continuation lines keep whatever they carry (#3711, Decision B).
-    #[test]
-    fn a_line_indents_its_first_line_only() {
-        let mut body = Body::new();
-        body.push(line("a;\n  b;"));
-        let (out, _) = rendered(&body, 4);
-        assert_eq!(out, "    a;\n  b;\n");
-        let mut expected = String::new();
-        write_line(&mut expected, 4, "a;\n  b;");
-        assert_eq!(out, expected);
+    /// `const <name> = 1;`
+    fn one(name: &str) -> Item {
+        node(bynk_ts::TsStmt::const_stmt(
+            bynk_ts::TsBindingName::Ident(name.to_string()),
+            None,
+            bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Num("1".to_string())),
+            None,
+        ))
     }
 
     /// A `Node` is printed at depth 0 with every line indented.
@@ -1971,43 +1795,20 @@ mod body_tests {
         assert!(out.lines().all(|l| l.starts_with("  ")), "{out}");
     }
 
-    /// `Indent` nests one `INDENT_STEP` per level, and an empty one is nothing.
-    #[test]
-    fn indent_nests_one_step_per_level() {
-        let mut inner = Body::new();
-        inner.push(line("b;"));
-        let mut mid = Body::new();
-        mid.push(line("a {"));
-        mid.push(Item::Indent(inner));
-        mid.push(line("}"));
-        let mut body = Body::new();
-        body.push(Item::Indent(mid));
-        body.push(Item::Indent(Body::new()));
-        let (out, _) = rendered(&body, 2);
-        assert_eq!(out, "    a {\n      b;\n    }\n");
-    }
-
-    /// A `Mark` records the offset where the next item starts, including inside
-    /// a nested `Indent`.
+    /// A `Mark` records the offset where the next item starts.
     #[test]
     fn a_mark_records_the_offset_where_it_is_reached() {
-        let mut inner = Body::new();
-        inner.push(Item::Mark(Span::new(30, 40)));
-        inner.push(line("c;"));
         let mut body = Body::new();
         body.push(Item::Mark(Span::new(0, 10)));
-        body.push(line("a;"));
+        body.push(one("a"));
         body.push(Item::Mark(Span::new(10, 20)));
-        body.push(line("b {"));
-        body.push(Item::Indent(inner));
-        body.push(line("}"));
+        body.push(one("b"));
         let (out, got) = rendered(&body, 0);
         let mut want = SourceMapBuilder::new();
         want.add_source("t.bynk", "x".repeat(200));
         want.record(0, Span::new(0, 10));
-        want.record("a;\n".len(), Span::new(10, 20));
-        want.record("a;\nb {\n".len(), Span::new(30, 40));
-        assert_eq!(out, "a;\nb {\n  c;\n}\n");
+        want.record("const a = 1;\n".len(), Span::new(10, 20));
+        assert_eq!(out, "const a = 1;\nconst b = 1;\n");
         assert_eq!(got.to_v3(&out, "t.js"), want.to_v3(&out, "t.js"));
     }
 
@@ -2019,7 +1820,7 @@ mod body_tests {
     fn the_claim_scope_wrapper_is_nodes_around_the_body() {
         let mut inner = Body::new();
         inner.push(Item::Mark(Span::new(0, 10)));
-        inner.push(line("const a = 1;"));
+        inner.push(one("a"));
         inner.push(Item::Mark(Span::new(10, 30)));
         inner.push(Item::Node(Box::new(if_node())));
         let stmt = bynk_ts::TsStmt::decl(
@@ -2028,7 +1829,7 @@ mod body_tests {
                 generics: Vec::new(),
                 params: Vec::new(),
                 return_type: None,
-                body: claim_scoped(inner, INDENT_STEP).into_stmts(INDENT_STEP),
+                body: claim_scoped(inner).into_stmts(),
                 is_async: false,
                 inline: false,
             },
@@ -2057,27 +1858,17 @@ mod body_tests {
 
     /// `into_stmts` (1A.15, Decision A): the statements of a function body print
     /// to the text `render` writes at the same indent, and the printer records
-    /// the checkpoints `render` records, for a body mixing marks, text, nodes
-    /// and a nested `Indent` that holds a node.
+    /// the checkpoints `render` records, for a body mixing marks and nodes.
     #[test]
     fn into_stmts_prints_what_render_writes_with_the_same_checkpoints() {
         let build = || {
-            let mut inner = Body::new();
-            inner.push(line("if (x) {"));
-            let mut nested = Body::new();
-            nested.push(Item::Mark(Span::new(40, 50)));
-            nested.push(line("return 1;"));
-            nested.push(Item::Mark(Span::new(50, 55)));
-            nested.push(Item::Node(Box::new(if_node())));
-            inner.push(Item::Indent(nested));
-            inner.push(line("}"));
             let mut body = Body::new();
             body.push(Item::Mark(Span::new(0, 10)));
-            body.push(line("const a = 1;"));
+            body.push(one("a"));
             body.push(Item::Mark(Span::new(10, 30)));
             body.push(Item::Node(Box::new(if_node())));
             body.push(Item::Mark(Span::new(30, 60)));
-            body.push(Item::Indent(inner));
+            body.push(Item::Node(Box::new(if_node())));
             body
         };
         for indent in [2usize, 4] {
@@ -2089,7 +1880,7 @@ mod body_tests {
                 params: Vec::new(),
                 return_type: None,
                 doc: None,
-                body: build().into_stmts(indent),
+                body: build().into_stmts(),
                 span: None,
             };
             // A method's body sits two steps in, so only indent 4 is a method.
@@ -2100,7 +1891,7 @@ mod body_tests {
                         generics: Vec::new(),
                         params: Vec::new(),
                         return_type: None,
-                        body: build().into_stmts(indent),
+                        body: build().into_stmts(),
                         is_async: false,
                         inline: false,
                     },
@@ -2139,18 +1930,6 @@ mod body_tests {
         }
     }
 
-    /// A `Line` becomes one padded `raw` statement carrying the pending mark.
-    #[test]
-    fn into_stmts_turns_a_line_into_a_padded_raw_statement_with_its_span() {
-        let mut body = Body::new();
-        body.push(Item::Mark(Span::new(3, 4)));
-        body.push(line("a;"));
-        let stmts = body.into_stmts(4);
-        assert_eq!(stmts.len(), 1);
-        assert_eq!(stmts[0].span, Some(Span::new(3, 4)));
-        assert_eq!(bynk_ts::print_stmt(&stmts[0], 0), "    a;\n");
-    }
-
     fn ident(name: &str) -> bynk_ts::TsExpr {
         bynk_ts::TsExpr::Ident(name.to_string())
     }
@@ -2172,10 +1951,9 @@ mod body_tests {
         ))
     }
 
-    /// `to_nodes` hands each mark to the next node only, and refuses text, a
-    /// nested `Indent` and a mark with nothing after it.
+    /// `into_stmts` hands each mark to the next statement only.
     #[test]
-    fn to_nodes_attaches_a_mark_to_the_next_node_only() {
+    fn into_stmts_attaches_a_mark_to_the_next_statement_only() {
         let mut body = Body::new();
         body.push(Item::Mark(Span::new(1, 2)));
         body.push(konst("a", "x"));
@@ -2183,29 +1961,18 @@ mod body_tests {
         body.push(Item::Mark(Span::new(3, 4)));
         body.push(Item::Mark(Span::new(5, 6)));
         body.push(ret("a"));
-        let stmts = body.to_nodes().expect("all nodes and marks");
+        let stmts = body.into_stmts();
         let spans: Vec<Option<Span>> = stmts.iter().map(|s| s.span).collect();
         // Two marks in a row sit at one offset: the later one wins, as
         // `SourceMapBuilder::record` has it.
         assert_eq!(spans, [Some(Span::new(1, 2)), None, Some(Span::new(5, 6))]);
-
-        let mut text = Body::new();
-        text.push(konst("a", "x"));
-        text.push(line("b;"));
-        assert!(text.to_nodes().is_none());
-        let mut nested = Body::new();
-        nested.push(Item::Indent(Body::new()));
-        assert!(nested.to_nodes().is_none());
-        let mut trailing = Body::new();
-        trailing.push(konst("a", "x"));
-        trailing.push(Item::Mark(Span::new(1, 2)));
-        assert!(trailing.to_nodes().is_none());
     }
 
-    /// An `if` built from bodies that carry marks renders, with its map, exactly
-    /// as the `Line` form around the same bodies does, at every indent.
+    /// An `if` built from bodies that carry marks renders, with its map, as the
+    /// statement the printer lays out, at every indent: the checkpoints land at
+    /// the start of the line each was put on.
     #[test]
-    fn an_if_node_matches_the_line_form_with_its_checkpoints() {
+    fn an_if_node_renders_with_its_checkpoints() {
         let then_body = || {
             let mut b = Body::new();
             b.push(Item::Mark(Span::new(10, 20)));
@@ -2222,89 +1989,59 @@ mod body_tests {
             b
         };
         for indent in [0, 2, 6] {
-            let mut as_node = Body::new();
-            as_node.push(Item::Mark(Span::new(0, 10)));
-            let ru = RuntimeUse::default();
-            push_if(
-                &mut as_node,
-                LoweredExpr::Node(ident("k")),
-                then_body(),
-                else_body(),
-                FaultSite {
-                    sink: &ru,
-                    span: Span::default(),
-                },
+            let mut body = Body::new();
+            body.push(Item::Mark(Span::new(0, 10)));
+            push_if(&mut body, ident("k"), then_body(), else_body());
+            assert!(matches!(body.0.last(), Some(Item::Node(_))));
+            let (text, got) = rendered(&body, indent);
+            let pad = |n: usize| " ".repeat(indent + n);
+            let want_text = format!(
+                "{p0}if (k) {{\n{p2}const a = x;\n{p2}const b = y;\n{p2}return a;\n{p0}}} else {{\n{p2}return c;\n{p0}}}\n",
+                p0 = pad(0),
+                p2 = pad(2)
             );
-            assert!(matches!(as_node.0.last(), Some(Item::Node(_))));
-            let mut as_lines = Body::new();
-            as_lines.push(Item::Mark(Span::new(0, 10)));
-            as_lines.push(line("if (k) {"));
-            as_lines.push(Item::Indent(then_body()));
-            as_lines.push(line("} else {"));
-            as_lines.push(Item::Indent(else_body()));
-            as_lines.push(line("}"));
-            let (node_text, node_map) = rendered(&as_node, indent);
-            let (line_text, line_map) = rendered(&as_lines, indent);
-            assert_eq!(node_text, line_text, "indent {indent}");
+            assert_eq!(text, want_text, "indent {indent}");
+            let mut want = SourceMapBuilder::new();
+            want.add_source("t.bynk", "x".repeat(200));
+            want.record(0, Span::new(0, 10));
+            want.record(
+                text.find(&format!("{}const a", pad(2))).unwrap(),
+                Span::new(10, 20),
+            );
+            want.record(
+                text.find(&format!("{}return a", pad(2))).unwrap(),
+                Span::new(20, 30),
+            );
+            want.record(
+                text.find(&format!("{}return c", pad(2))).unwrap(),
+                Span::new(40, 50),
+            );
             assert_eq!(
-                node_map.to_v3(&node_text, "t.js"),
-                line_map.to_v3(&line_text, "t.js"),
+                got.to_v3(&text, "t.js"),
+                want.to_v3(&text, "t.js"),
                 "indent {indent}"
             );
         }
-    }
-
-    /// A condition or body that is not nodes is a compiler fault, reported at the site; the `If`
-    /// is still built, over `undefined` and an empty body.
-    #[test]
-    fn an_if_over_text_is_a_fault_not_text() {
-        let ru = RuntimeUse::default();
-        let site = FaultSite {
-            sink: &ru,
-            span: Span::new(3, 4),
-        };
-        let mut body = Body::new();
-        let mut then = Body::new();
-        then.push(line("is_binding;"));
-        push_if(
-            &mut body,
-            LoweredExpr::Text("k".into()),
-            then,
-            Body::new(),
-            site,
-        );
-        assert!(matches!(body.0.first(), Some(Item::Node(_))));
-        let faults = ru.take_faults();
-        assert_eq!(faults.len(), 2, "{faults:?}");
-        assert!(faults.iter().all(|f| f.span == Span::new(3, 4)));
     }
 
     /// `do` and assignment are nodes (they are reached from an agent handler, which the lib's own
     /// unit tests cannot compile in-process).
     #[test]
     fn do_and_assignment_are_nodes() {
-        let ru = RuntimeUse::default();
-        let site = FaultSite {
-            sink: &ru,
-            span: Span::default(),
-        };
         let printed = |item: &Item| match item {
             Item::Node(stmt) => bynk_ts::print_stmt(stmt, 0),
             _ => unreachable!("a statement node"),
         };
-        let call = || {
-            LoweredExpr::Node(bynk_ts::TsExpr::Call {
-                callee: Box::new(ident("f")),
-                args: vec![ident("x")],
-            })
+        let call = || bynk_ts::TsExpr::Call {
+            callee: Box::new(ident("f")),
+            args: vec![ident("x")],
         };
-        assert_eq!(printed(&do_item(call(), site)), "await f(x);\n");
+        assert_eq!(printed(&do_item(call())), "await f(x);\n");
         let member = || member_node("__state", "count");
         assert_eq!(
-            printed(&assign_item(member(), call(), site)),
+            printed(&assign_item(member(), call())),
             "__state.count = f(x);\n"
         );
-        assert!(ru.take_faults().is_empty());
     }
 
     /// A nested checkpoint inside a node lands `indent` further on for every
@@ -2328,19 +2065,12 @@ mod body_tests {
     }
 }
 
-/// 1A.11 (#3712): the statement producers build nodes. `LINES_RENDERED` counts the `Item::Line`s
-/// the emitter rendered, so "0" means every statement was a node.
+/// 1A.11 (#3712): the statement producers build nodes.
 #[cfg(test)]
 mod stmt_node_tests {
-    use super::*;
-
-    /// `(Item::Line items rendered, emitted module)` for a single commons.
-    fn emitted(src: &str) -> (usize, String) {
-        // The text values read a `Set` `remove` as text (see `force_text`).
-        let _text = crate::emitter::lower::force_text::arm("Set.remove");
-        LINES_RENDERED.with(|c| c.set(0));
-        let ts = crate::testkit::emit_source(src);
-        (LINES_RENDERED.with(|c| c.get()), ts)
+    /// The emitted TypeScript for a single commons.
+    fn emitted(src: &str) -> String {
+        crate::testkit::emit_source(src)
     }
 
     /// The body of `export [async ]function <name>` — its lines, up to the
@@ -2361,7 +2091,7 @@ mod stmt_node_tests {
         let src = format!(
             "commons stmts\n\n{EFFECTS}fn pure(x: Int) -> Int {{\n  let y = x + 1\n  y * 2\n}}\n\nfn eff(x: Int) -> Effect[Int] {{\n  let a <- bump(x)\n  do bump(a)\n  Effect.pure(a)\n}}\n"
         );
-        let (lines, ts) = emitted(&src);
+        let ts = emitted(&src);
         assert_eq!(
             body_of(&ts, "pure"),
             "  const y = x + 1;\n  return y * 2;\n"
@@ -2370,7 +2100,6 @@ mod stmt_node_tests {
             body_of(&ts, "eff"),
             "  const a = await bump(x);\n  await bump(a);\n  return a;\n"
         );
-        assert_eq!(lines, 0, "{ts}");
     }
 
     #[test]
@@ -2391,8 +2120,7 @@ mod stmt_node_tests {
             let j: Set[Int] = s\n  \
             let k: List[Option[Id]] = []\n  \
             a\n}\n";
-        let (lines, ts) = emitted(src);
-        assert_eq!(lines, 0, "{ts}");
+        let ts = emitted(src);
         let body = body_of(&ts, "f");
         for want in [
             "const a: number = x;",
@@ -2411,8 +2139,7 @@ mod stmt_node_tests {
     fn a_ternary_tail_is_a_return_of_a_parenthesised_conditional() {
         let src = "commons tern\n\n\
             fn f(c: Bool, x: Int, y: Int) -> Int {\n  if c { x } else { y }\n}\n";
-        let (lines, ts) = emitted(src);
-        assert_eq!(lines, 0, "{ts}");
+        let ts = emitted(src);
         assert_eq!(body_of(&ts, "f"), "  return (c ? x : y);\n");
     }
 
@@ -2425,8 +2152,7 @@ mod stmt_node_tests {
             fn f(c: Bool, d: Bool, x: Int, y: Int, z: Int) -> Int {\n  if c { if d { x } else { y } } else { z }\n}\n\n\
             fn g(c: Bool, x: Int, y: Int) -> Bool {\n  if c { x < y } else { x == y }\n}\n\n\
             fn h(c: Bool, x: Int, y: Int) -> Int {\n  if c { x + y } else { x - y }\n}\n";
-        let (lines, ts) = emitted(src);
-        assert_eq!(lines, 0, "{ts}");
+        let ts = emitted(src);
         assert_eq!(body_of(&ts, "f"), "  return (c ? (d ? x : y) : z);\n");
         assert_eq!(body_of(&ts, "g"), "  return (c ? x < y : x === y);\n");
         assert_eq!(body_of(&ts, "h"), "  return (c ? x + y : x - y);\n");
@@ -2438,8 +2164,7 @@ mod stmt_node_tests {
         // `if`, both bodies converted.
         let src = "commons hoist\n\n\
             fn f(c: Bool, r: Result[Int, String]) -> Result[Int, String] {\n  if c { Ok(r?) } else { Ok(0) }\n}\n";
-        let (lines, ts) = emitted(src);
-        assert_eq!(lines, 0, "{ts}");
+        let ts = emitted(src);
         assert_eq!(
             body_of(&ts, "f"),
             "  if (c) {\n    const __r0 = r;\n    if (__r0.tag === \"Err\") return __r0;\n    return Ok(__r0.value);\n  } else {\n    return Ok(0);\n  }\n"
@@ -2451,8 +2176,7 @@ mod stmt_node_tests {
         let src = "commons deep\n\n\
             fn f(a: Bool, b: Bool, r: Result[Int, String]) -> Result[Int, String] {\n  \
             if a {\n    let x = r?\n    if b {\n      let y = r?\n      Ok(x + y)\n    } else {\n      let z = r?\n      Ok(x + z)\n    }\n  } else {\n    let w = r?\n    Ok(w)\n  }\n}\n";
-        let (lines, ts) = emitted(src);
-        assert_eq!(lines, 0, "{ts}");
+        let ts = emitted(src);
         assert_eq!(
             body_of(&ts, "f"),
             "  if (a) {\n    const __r0 = r;\n    if (__r0.tag === \"Err\") return __r0;\n    const x = __r0.value;\n    if (b) {\n      const __r1 = r;\n      if (__r1.tag === \"Err\") return __r1;\n      const y = __r1.value;\n      return Ok(x + y);\n    } else {\n      const __r2 = r;\n      if (__r2.tag === \"Err\") return __r2;\n      const z = __r2.value;\n      return Ok(x + z);\n    }\n  } else {\n    const __r3 = r;\n    if (__r3.tag === \"Err\") return __r3;\n    const w = __r3.value;\n    return Ok(w);\n  }\n"
@@ -2465,8 +2189,7 @@ mod stmt_node_tests {
         // the `Extract` cast), so the `if` is a node too.
         let src = "commons isb\n\n\
             fn f(o: Option[Int]) -> Int {\n  if o is Some(v) {\n    let k = v + 1\n    k\n  } else {\n    0\n  }\n}\n";
-        let (lines, ts) = emitted(src);
-        assert_eq!(lines, 0, "{ts}");
+        let ts = emitted(src);
         assert_eq!(
             body_of(&ts, "f"),
             "  if (((__c: boolean) => __c)(o.tag === \"Some\")) {\n    const v = (o as Extract<typeof o, { tag: \"Some\" }>).value;\n    const k = v + 1;\n    return k;\n  } else {\n    return 0;\n  }\n"
@@ -2480,7 +2203,7 @@ mod stmt_node_tests {
         let src = "commons slot\n\n\
             fn f(a: Option[Int], r: Result[Int, String]) -> Result[Int, String] {\n  \
             let n = if a is Some(v) { r? + v } else { 0 }\n  Ok(n)\n}\n";
-        let (_, ts) = emitted(src);
+        let ts = emitted(src);
         let body = body_of(&ts, "f");
         assert!(
             body.contains("      __r0 = __r1.value + v;\n      break __r0_out;\n"),
@@ -2497,14 +2220,9 @@ mod stmt_node_tests {
 /// printed at their real depth, with today's text when a part is text.
 #[cfg(test)]
 mod arrow_node_tests {
-    use super::*;
-
-    fn emitted(src: &str) -> (usize, String) {
-        // The text values read a `Set` `remove` as text (see `force_text`).
-        let _text = crate::emitter::lower::force_text::arm("Set.remove");
-        LINES_RENDERED.with(|c| c.set(0));
-        let ts = crate::testkit::emit_source(src);
-        (LINES_RENDERED.with(|c| c.get()), ts)
+    /// The emitted TypeScript for a single commons.
+    fn emitted(src: &str) -> String {
+        crate::testkit::emit_source(src)
     }
 
     fn after(ts: &str, head: &str) -> String {
@@ -2516,8 +2234,7 @@ mod arrow_node_tests {
     #[test]
     fn an_if_iife_over_nodes_prints_at_its_real_depth() {
         let src = "commons p1\n\nfn f(c: Bool, x: Int) -> Int {\n  let r = if c {\n    let y = x + 1\n    y * 2\n  } else {\n    0\n  }\n  r + 1\n}\n";
-        let (lines, ts) = emitted(src);
-        assert_eq!(lines, 0, "{ts}");
+        let ts = emitted(src);
         assert_eq!(
             after(&ts, "export function f("),
             "export function f(c: boolean, x: number): number {\n  const r = (() => {\n    if (c) {\n      const y = x + 1;\n      return y * 2;\n    } else {\n      return 0;\n    }\n  })();\n  return r + 1;\n}\n"
@@ -2528,7 +2245,7 @@ mod arrow_node_tests {
     fn an_async_if_iife_is_an_awaited_async_arrow() {
         // The #2 review's case: a bare `await` inside the arrow needs `async`.
         let src = "commons p2\n\nfn bump(n: Int) -> Effect[Int] {\n  Effect.pure(n)\n}\n\nfn f(c: Bool) -> Effect[Int] {\n  let r = if c {\n    let y <- bump(1)\n    y + 1\n  } else {\n    0\n  }\n  Effect.pure(r)\n}\n";
-        let (_, ts) = emitted(src);
+        let ts = emitted(src);
         assert!(
             ts.contains(
                 "  const r = await (async () => {\n    if (c) {\n      const y = await bump(1);\n      return y + 1;\n    } else {\n      return 0;\n    }\n  })();\n"
@@ -2540,8 +2257,7 @@ mod arrow_node_tests {
     #[test]
     fn if_iifes_nest_three_deep_at_their_real_depths() {
         let src = "commons p4\n\nfn f(c: Bool, d: Bool, x: Int) -> Int {\n  let r = if c {\n    let a = x\n    if d {\n      let b = a + 1\n      if c {\n        let e = b + 1\n        e\n      } else {\n        0\n      }\n    } else {\n      1\n    }\n  } else {\n    2\n  }\n  r\n}\n";
-        let (lines, ts) = emitted(src);
-        assert_eq!(lines, 0, "{ts}");
+        let ts = emitted(src);
         assert!(
             ts.contains(
                 "  const r = (() => {\n    if (c) {\n      const a = x;\n      if (d) {\n        const b = a + 1;\n        if (c) {\n          const e = b + 1;\n          return e;\n        } else {\n          return 0;\n        }\n      } else {\n        return 1;\n      }\n    } else {\n      return 2;\n    }\n  })();\n"
@@ -2553,7 +2269,7 @@ mod arrow_node_tests {
     #[test]
     fn an_if_iife_with_a_text_condition_keeps_its_text_byte_for_byte() {
         let src = "commons p7\n\nfn f(a: Bool, b: Bool, x: Int) -> Int {\n  let r = if a && b {\n    let y = x + 1\n    y\n  } else {\n    0\n  }\n  r\n}\n";
-        let (_, ts) = emitted(src);
+        let ts = emitted(src);
         assert!(
             ts.contains(
                 "  const r = (() => {\n    if (a && b) {\n      const y = x + 1;\n      return y;\n    } else {\n      return 0;\n    }\n  })();\n"
@@ -2565,7 +2281,7 @@ mod arrow_node_tests {
     #[test]
     fn a_lambda_with_typed_and_inferred_params_is_an_arrow_node() {
         let src = "commons p3\n\ntype P = { a: Int }\n\nfn g(xs: List[Int]) -> List[P] {\n  xs.map((x: Int) => P { a: x })\n}\n\nfn f(xs: List[Int]) -> List[Int] {\n  xs.map((x) => x + 1)\n}\n\nfn h(xs: List[Int]) -> List[Int] {\n  xs.map((x) => {\n    let y = x * 2\n    y + 1\n  })\n}\n";
-        let (_, ts) = emitted(src);
+        let ts = emitted(src);
         // Typed and inferred params; an object-literal body is bracketed.
         assert!(ts.contains("((x: number) => x + 1)(__x)"), "{ts}");
         assert!(ts.contains("((x: number) => ({ a: x }))(__x)"), "{ts}");
@@ -2578,7 +2294,7 @@ mod arrow_node_tests {
     #[test]
     fn a_lambda_expression_body_that_hoists_a_question_is_a_block() {
         let src = "commons p6\n\nfn parse(x: Int) -> Result[Int, String] {\n  Ok(x)\n}\n\nfn f(x: Int) -> Result[Int, String] {\n  let g: (Int) -> Result[Int, String] = (y: Int) => Ok(parse(y)? + 1)\n  g(x)\n}\n";
-        let (_, ts) = emitted(src);
+        let ts = emitted(src);
         assert!(
             ts.contains(
                 "= (y: number) => {\n    const __r0 = parse(y);\n    if (__r0.tag === \"Err\") return __r0;\n    return Ok(__r0.value + 1);\n  };\n"
@@ -2588,23 +2304,17 @@ mod arrow_node_tests {
     }
 }
 
-/// 1A.13: `match` lowers to nodes. `LINES_RENDERED == 0` means no text line was
-/// rendered, i.e. every statement of the function went down the node path.
+/// 1A.13: `match` lowers to nodes.
 #[cfg(test)]
 mod match_node_tests {
-    use super::*;
-
-    fn emitted(src: &str) -> (usize, String) {
-        // The text values read a `Set` `remove` as text (see `force_text`).
-        let _text = crate::emitter::lower::force_text::arm("Set.remove");
-        LINES_RENDERED.with(|c| c.set(0));
-        let ts = crate::testkit::emit_source(src);
-        (LINES_RENDERED.with(|c| c.get()), ts)
+    /// The emitted TypeScript for a single commons.
+    fn emitted(src: &str) -> String {
+        crate::testkit::emit_source(src)
     }
 
     #[test]
     fn a_tail_switch_over_variants_prints_stacked_cases_with_bindings() {
-        let (_, ts) = emitted(
+        let ts = emitted(
             "commons t1\n\ntype Shape = | Circle(r: Int) | Square(w: Int) | Dot\n\nfn f(s: Shape) -> Int {\n  match s {\n    Circle(r) => r\n    Square(w) => w * 2\n    Dot => 0\n  }\n}\n",
         );
         assert!(
@@ -2617,7 +2327,7 @@ mod match_node_tests {
 
     #[test]
     fn a_tail_switch_over_literals_stacks_or_pattern_labels() {
-        let (_, ts) = emitted(
+        let ts = emitted(
             "commons t2\n\nfn f(n: Int) -> String {\n  match n {\n    1 => \"a\"\n    2 | 3 => \"b\"\n    _ => \"c\"\n  }\n}\n",
         );
         assert!(
@@ -2630,7 +2340,7 @@ mod match_node_tests {
 
     #[test]
     fn an_or_pattern_with_a_shared_binding_is_an_if_chain_over_a_disjunction() {
-        let (_, ts) = emitted(
+        let ts = emitted(
             "commons t3\n\ntype Shape = | Circle(r: Int) | Square(w: Int) | Dot\n\nfn f(s: Shape) -> Int {\n  match s {\n    Circle(r) | Square(r) => r\n    Dot => 0\n  }\n}\n",
         );
         assert!(
@@ -2643,7 +2353,7 @@ mod match_node_tests {
 
     #[test]
     fn a_guard_lowers_to_an_if_chain_with_the_guard_inside_the_bindings() {
-        let (_, ts) = emitted(
+        let ts = emitted(
             "commons t4\n\ntype Shape = | Circle(r: Int) | Square(w: Int) | Dot\n\nfn f(s: Shape, k: Int) -> Int {\n  match s {\n    Circle(r) if r > k => r\n    Circle(r) => 0\n    Square(w) => w\n    Dot => 1\n  }\n}\n",
         );
         assert!(
@@ -2656,7 +2366,7 @@ mod match_node_tests {
 
     #[test]
     fn a_nested_pattern_is_an_if_chain_over_a_conjunction() {
-        let (_, ts) = emitted(
+        let ts = emitted(
             "commons t5\n\ntype Shape = | Circle(r: Int) | Square(w: Int) | Dot\n\nfn f(s: Option[Shape]) -> Int {\n  match s {\n    Some(Circle(r)) => r\n    Some(Square(w)) => w\n    Some(Dot) => 1\n    None => 0\n  }\n}\n",
         );
         assert!(
@@ -2675,7 +2385,7 @@ mod match_node_tests {
 
     #[test]
     fn a_value_position_match_is_a_sync_arrow_over_the_discriminant() {
-        let (_, ts) = emitted(
+        let ts = emitted(
             "commons t6\n\ntype Shape = | Circle(r: Int) | Square(w: Int) | Dot\n\nfn f(s: Shape) -> Int {\n  let n = match s {\n    Circle(r) => r\n    Square(w) => w * 2\n    Dot => 0\n  }\n  n + 1\n}\n",
         );
         assert!(
@@ -2688,7 +2398,7 @@ mod match_node_tests {
 
     #[test]
     fn an_effectful_value_position_match_is_an_awaited_async_arrow() {
-        let (_, ts) = emitted(
+        let ts = emitted(
             "commons t7\n\ntype Shape = | Circle(r: Int) | Square(w: Int) | Dot\n\nfn bump(n: Int) -> Effect[Int] {\n  Effect.pure(n)\n}\n\nfn f(s: Shape) -> Effect[Int] {\n  let n = match s {\n    Circle(r) => {\n      let y <- bump(r)\n      y\n    }\n    Square(w) => w\n    Dot => 0\n  }\n  Effect.pure(n)\n}\n",
         );
         assert!(
@@ -2701,7 +2411,7 @@ mod match_node_tests {
 
     #[test]
     fn a_question_in_a_tail_arm_hoists_inside_its_case() {
-        let (_, ts) = emitted(
+        let ts = emitted(
             "commons t8\n\ntype Shape = | Circle(r: Int) | Square(w: Int) | Dot\n\nfn parse(x: Int) -> Result[Int, String] {\n  Ok(x)\n}\n\nfn f(s: Shape) -> Result[Int, String] {\n  match s {\n    Circle(r) => Ok(parse(r)? + 1)\n    Square(w) => Ok(w)\n    Dot => Ok(0)\n  }\n}\n",
         );
         assert!(
@@ -2714,7 +2424,7 @@ mod match_node_tests {
 
     #[test]
     fn a_question_in_a_value_position_arm_breaks_out_of_the_labelled_switch() {
-        let (_, ts) = emitted(
+        let ts = emitted(
             "commons t9\n\ntype Shape = | Circle(r: Int) | Square(w: Int) | Dot\n\nfn parse(x: Int) -> Result[Int, String] {\n  Ok(x)\n}\n\nfn f(s: Shape) -> Result[Int, String] {\n  let n = match s {\n    Circle(r) => parse(r)?\n    Square(w) => w\n    Dot => 0\n  }\n  Ok(n)\n}\n",
         );
         assert!(
@@ -2731,7 +2441,7 @@ mod match_node_tests {
     /// builder, so there is no input that stays text for that reason.)
     #[test]
     fn a_typed_lambda_param_prints_as_it_always_did() {
-        let (_, ts) = emitted(
+        let ts = emitted(
             "commons l1\n\nfn i(xs: List[(Int) -> Int]) -> List[Int] {\n  xs.map((x: (Int) -> Int) => 1)\n}\n",
         );
         assert!(
@@ -2743,7 +2453,7 @@ mod match_node_tests {
     /// An `Effect`-returning lambda is an `async` arrow node with a block body.
     #[test]
     fn an_async_lambda_is_an_async_arrow_with_a_block_body() {
-        let (_, ts) = emitted(
+        let ts = emitted(
             "commons l2\n\nfn bump(n: Int) -> Effect[Int] {\n  Effect.pure(n)\n}\n\nfn f(x: Int) -> Effect[Int] {\n  let g: (Int) -> Effect[Int] = (y: Int) => {\n    let z <- bump(y)\n    Effect.pure(z + 1)\n  }\n  g(x)\n}\n",
         );
         assert!(
@@ -2759,14 +2469,9 @@ mod match_node_tests {
 /// awaited), and the 1A.13 review's two extra `match` shapes.
 #[cfg(test)]
 mod par_node_tests {
-    use super::*;
-
-    fn emitted(src: &str) -> (usize, String) {
-        // The text values read a `Set` `remove` as text (see `force_text`).
-        let _text = crate::emitter::lower::force_text::arm("Set.remove");
-        LINES_RENDERED.with(|c| c.set(0));
-        let ts = crate::testkit::emit_source(src);
-        (LINES_RENDERED.with(|c| c.get()), ts)
+    /// The emitted TypeScript for a single commons.
+    fn emitted(src: &str) -> String {
+        crate::testkit::emit_source(src)
     }
 
     fn func(ts: &str, head: &str) -> String {
@@ -2779,10 +2484,9 @@ mod par_node_tests {
 
     #[test]
     fn a_single_line_par_is_a_destructuring_const_over_thunks() {
-        let (lines, ts) = emitted(&format!(
+        let ts = emitted(&format!(
             "{HDR}fn f(x: Int) -> Effect[Int] {{\n  par {{\n    let a <- bump(x)\n    let b <- bump(2)\n  }}\n  Effect.pure(a + b)\n}}\n"
         ));
-        assert_eq!(lines, 0, "{ts}");
         assert_eq!(
             func(&ts, "export async function f("),
             "export async function f(x: number): globalThis.Promise<number> {\n  const [a, b] = await __bynkSettleAll([() => bump(x), () => bump(2)]);\n  return a + b;\n}\n"
@@ -2791,10 +2495,9 @@ mod par_node_tests {
 
     #[test]
     fn a_typed_part_annotates_its_thunk_and_a_do_leaves_a_hole() {
-        let (lines, ts) = emitted(&format!(
+        let ts = emitted(&format!(
             "{HDR}fn f(x: Int) -> Effect[Int] {{\n  par {{\n    let a: Int <- bump(x)\n    do bump(2)\n    let c <- bump(3)\n  }}\n  Effect.pure(a + c)\n}}\n"
         ));
-        assert_eq!(lines, 0, "{ts}");
         assert!(
             ts.contains(
                 "  const [a, , c] = await __bynkSettleAll([(): globalThis.Promise<number> => bump(x), () => bump(2), () => bump(3)]);\n"
@@ -2807,10 +2510,9 @@ mod par_node_tests {
     /// indented them by one column, an odd offset (group (b) of #3715).
     #[test]
     fn a_par_that_hoists_prints_one_thunk_per_line_at_the_printers_depth() {
-        let (lines, ts) = emitted(&format!(
+        let ts = emitted(&format!(
             "{HDR}fn f(s: Shape) -> Effect[Int] {{\n  par {{\n    let a <- pick(mk(s) is Dot)\n    let b: Int <- bump(2)\n  }}\n  Effect.pure(a + b)\n}}\n"
         ));
-        assert_eq!(lines, 0, "{ts}");
         assert_eq!(
             func(&ts, "export async function f("),
             "export async function f(s: Shape): globalThis.Promise<number> {\n  const [a, b] = await __bynkSettleAll([\n    () => {\n      const __r0 = mk(s);\n      return pick(((__c: boolean) => __c)(__r0.tag === \"Dot\"));\n    },\n    (): globalThis.Promise<number> => bump(2),\n  ]);\n  return a + b;\n}\n"
@@ -2822,7 +2524,7 @@ mod par_node_tests {
     /// text in the hoisted `const`; the thunk must stay synchronous.
     #[test]
     fn a_string_literal_containing_await_does_not_make_a_thunk_async() {
-        let (_, ts) = emitted(&format!(
+        let ts = emitted(&format!(
             "{HDR}fn f() -> Effect[Int] {{\n  par {{\n    let a <- pick(mk2(\"await \") is Dot)\n    let b <- bump(2)\n  }}\n  Effect.pure(a + b)\n}}\n"
         ));
         assert!(
@@ -2837,10 +2539,9 @@ mod par_node_tests {
     /// `await` sat in the value, not in a hoisted statement).
     #[test]
     fn a_part_whose_lowering_awaited_is_an_async_thunk() {
-        let (lines, ts) = emitted(&format!(
+        let ts = emitted(&format!(
             "{HDR}fn f(c: Bool) -> Effect[Int] {{\n  par {{\n    let a <- bump(if c {{\n      let y <- bump(1)\n      y\n    }} else {{ 0 }})\n    let b <- bump(2)\n  }}\n  Effect.pure(a + b)\n}}\n"
         ));
-        assert_eq!(lines, 0, "{ts}");
         assert!(
             ts.contains("[async () => bump(await (async () => {\n"),
             "{ts}"
@@ -2856,7 +2557,7 @@ mod par_node_tests {
     /// them as lines, which a later slice converts), so this pins the bytes.
     #[test]
     fn a_guarded_value_match_is_an_arrow_over_an_if_chain() {
-        let (lines, ts) = emitted(
+        let ts = emitted(
             "commons m1\n\ntype Shape = | Circle(r: Int) | Square(w: Int) | Dot\n\nfn f(s: Shape, k: Int) -> Int {\n  let x = match s {\n    Circle(r) if r > k => r\n    Circle(r) => 0\n    Square(w) => w\n    Dot => 1\n  }\n  x\n}\n",
         );
         assert_eq!(
@@ -2864,14 +2565,13 @@ mod par_node_tests {
             "export function f(s: Shape, k: number): number {\n  const x = ((__d) => {\n    if (__d.tag === \"Circle\") {\n      const r = __d.r;\n      if (r > k) {\n        return r;\n      }\n    }\n    if (__d.tag === \"Circle\") {\n      const r = __d.r;\n      return 0;\n    }\n    if (__d.tag === \"Square\") {\n      const w = __d.w;\n      return w;\n    }\n    if (__d.tag === \"Dot\") {\n      return 1;\n    }\n    throw new globalThis.Error(\"non-exhaustive match\");\n  })(s);\n  return x;\n}\n"
         );
         // 1A.15: the arm tails are nodes too, so the whole function is.
-        assert_eq!(lines, 0, "{ts}");
     }
 
     /// 1A.13 review: a list pattern's elements read `path[i]` and its `..rest`
     /// reads `path.slice(n)` (the binding `const`s and the arm's `return` are nodes).
     #[test]
     fn a_list_pattern_binds_elements_by_index_and_the_rest_by_slice() {
-        let (lines, ts) = emitted(
+        let ts = emitted(
             "commons m2\n\nfn f(xs: List[Int]) -> Int {\n  let x = match xs {\n    [a, b, ..rest] => a + b\n    _ => 0\n  }\n  x\n}\n",
         );
         assert_eq!(
@@ -2879,11 +2579,10 @@ mod par_node_tests {
             "export function f(xs: readonly number[]): number {\n  const x = ((__d) => {\n    if (__d.length >= 2) {\n      const a = __d[0];\n      const b = __d[1];\n      const rest = __d.slice(2);\n      return a + b;\n    }\n    return 0;\n  })(xs);\n  return x;\n}\n"
         );
         // 1A.15: the arm tails are nodes too, so the whole function is.
-        assert_eq!(lines, 0, "{ts}");
     }
 }
 
-/// 1A.17 (#3718): the `expect` statement's node and text forms.
+/// 1A.17 (#3718): the `expect` statement's node form.
 #[cfg(test)]
 mod expect_item_tests {
     use super::*;
@@ -2891,9 +2590,8 @@ mod expect_item_tests {
     /// The item as the one line it prints to.
     fn line(item: Item) -> String {
         match item {
-            Item::Line(l) => l,
             Item::Node(n) => bynk_ts::print_stmt(&n, 0).trim_end().to_string(),
-            _ => unreachable!("an expect is one statement"),
+            Item::Mark(_) => unreachable!("an expect is one statement"),
         }
     }
 
@@ -2901,11 +2599,11 @@ mod expect_item_tests {
         bynk_ts::TsExpr::Ident(name.to_string())
     }
 
-    fn node(name: &str) -> LoweredExpr {
-        LoweredExpr::Node(node_expr(name))
+    fn node(name: &str) -> bynk_ts::TsExpr {
+        node_expr(name)
     }
 
-    fn compare(lv: LoweredExpr, rv: LoweredExpr) -> ExpectDetail {
+    fn compare(lv: bynk_ts::TsExpr, rv: bynk_ts::TsExpr) -> ExpectDetail {
         ExpectDetail::Compare {
             show: "__bynkShow",
             sym: "==",
@@ -2917,11 +2615,6 @@ mod expect_item_tests {
     /// they hold: a backslash, a quote, a newline, non-ASCII, U+2028 and a control character.
     #[test]
     fn the_node_prints_the_escaped_location_and_source_on_one_line() {
-        let ru = RuntimeUse::default();
-        let site = FaultSite {
-            sink: &ru,
-            span: Span::default(),
-        };
         let esc = crate::emitter::escape_ts_string;
         for raw in [
             "plain",
@@ -2938,7 +2631,6 @@ mod expect_item_tests {
                 raw,
                 raw,
                 (3, 9),
-                site,
             ));
             let head = esc(&format!("expect {raw}\n  expected: {raw}\n  actual:   "));
             let want = format!(
@@ -2954,7 +2646,6 @@ mod expect_item_tests {
                 raw,
                 raw,
                 (3, 9),
-                site,
             ));
             assert_eq!(
                 msg,
@@ -2972,18 +2663,12 @@ mod expect_item_tests {
     /// `if`/`throw` stays on one line.
     #[test]
     fn the_node_prints_as_the_one_line_if_with_a_bare_not_paren() {
-        let ru = RuntimeUse::default();
-        let site = FaultSite {
-            sink: &ru,
-            span: Span::default(),
-        };
         let got = line(expect_item(
             node("ok"),
             ExpectDetail::Message("expect ok".to_string()),
             "t:1:1",
             "ok",
             (0, 2),
-            site,
         ));
         assert_eq!(
             got,
@@ -2995,12 +2680,10 @@ mod expect_item_tests {
                 ExpectDetail::Message(String::new()),
                 "",
                 "",
-                (0, 0),
-                site
+                (0, 0)
             ),
             Item::Node(_)
         ));
-        assert!(ru.take_faults().is_empty());
     }
 
     /// A snapshot name is always a string-literal node, spelled as the printer spells every

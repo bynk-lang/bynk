@@ -26,7 +26,7 @@ use std::collections::HashMap;
 
 use bynk_check::checker::{NamedKind, Ty, TyId, TypedCommons};
 use bynk_syntax::ast::{BaseType, TypeBody, TypeDecl, TypeRef};
-use bynk_ts::{TsArrowBody, TsExpr, TsLit, TsObjectEntry, TsParam, print_expr};
+use bynk_ts::{TsArrowBody, TsExpr, TsLit, TsObjectEntry, TsParam};
 
 use super::runtime_use::RuntimeUse;
 
@@ -39,11 +39,9 @@ pub(crate) fn witness_ident(param: &str) -> String {
 /// instantiation becomes a self reference.
 struct Frame {
     name: String,
-    /// The printed form of each argument witness, used only to compare two
-    /// instantiations for recursion (`TsExpr` has no `PartialEq`). Nothing
-    /// printed for a key reaches the output (an internal use of printing, not a
-    /// text exit; track 1A.16, Decision C).
-    args: Vec<String>,
+    /// Each argument witness, compared structurally with another instantiation's to find a
+    /// recursion (1A.16, Decision C; `TsExpr` is `PartialEq` since 1A.35b).
+    args: Vec<TsExpr>,
     self_ident: String,
     used: bool,
 }
@@ -140,8 +138,7 @@ impl<'a> CmpGen<'a> {
     /// A record or sum's comparator, with `args` the comparators of its type
     /// arguments, in parameter order.
     fn derive(&self, name: &str, args: Vec<TsExpr>, stack: &mut Vec<Frame>) -> TsExpr {
-        let key: Vec<String> = args.iter().map(print_expr).collect();
-        if let Some(frame) = stack.iter_mut().find(|f| f.name == name && f.args == key) {
+        if let Some(frame) = stack.iter_mut().find(|f| f.name == name && f.args == args) {
             frame.used = true;
             return TsExpr::Ident(frame.self_ident.clone());
         }
@@ -170,7 +167,7 @@ impl<'a> CmpGen<'a> {
         let self_ident = format!("__self{}", stack.len());
         stack.push(Frame {
             name: name.to_string(),
-            args: key,
+            args: args.clone(),
             self_ident: self_ident.clone(),
             used: false,
         });

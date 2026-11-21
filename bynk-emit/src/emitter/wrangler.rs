@@ -726,7 +726,7 @@ pub fn worker_bindings(
 /// contexts the handler calls (#1961), `agents` every local agent when the
 /// handler constructs one (else empty); order as in [`worker_bindings`].
 ///
-/// Built by the same constructors, so each name and source is the Worker's
+/// bynk_ts::TsExpr by the same constructors, so each name and source is the Worker's
 /// own: a called context is never an adapter (an adapter may not declare a
 /// `service`, `bynk.adapter.disallowed_item`), and the Worker binds every
 /// context any of its bodies calls, so it has a Service Binding; every local
