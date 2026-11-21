@@ -212,6 +212,33 @@ mod tests {
         assert_eq!(seen.lock().unwrap().len(), 2);
     }
 
+    /// A listing whose `result_info` has no `total_pages` (D1's) pages on while a
+    /// page comes back full, and stops at the first short one.
+    #[test]
+    fn a_listing_without_a_page_count_pages_while_pages_are_full() {
+        let (base, seen) = stub(vec![
+            (
+                "/d1/database?per_page=100&page=1",
+                format!(
+                    r#"{{"success":true,"result":[{}],"result_info":{{"page":1,"per_page":100,"count":100}}}}"#,
+                    (0..100)
+                        .map(|i| format!(r#"{{"name":"db-{i}"}}"#))
+                        .collect::<Vec<_>>()
+                        .join(",")
+                ),
+            ),
+            (
+                "/d1/database?per_page=100&page=2",
+                r#"{"success":true,"result":[{"name":"shop-orders"}],"result_info":{"page":2,"per_page":100,"count":1}}"#.into(),
+            ),
+        ]);
+        let listings = RestListings(rest(base));
+        let names = listings.names(Kind::D1, None).unwrap();
+        assert_eq!(names.len(), 101);
+        assert!(names.contains("shop-orders"));
+        assert_eq!(seen.lock().unwrap().len(), 2, "no third page asked for");
+    }
+
     #[test]
     fn buckets_follow_the_cursor() {
         // An opaque cursor goes back percent-encoded: a `+` would read as a space.
