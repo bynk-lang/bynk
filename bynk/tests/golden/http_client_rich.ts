@@ -1023,9 +1023,9 @@ export function __deserialise_Event(json: __JsonValue, path: string = "$"): Resu
   const kind = obj["kind"];
   switch (kind) {
     case "Opened": {
-  const __r_by = __deserialise_Option_String(obj["by"], `${path}.by`);
-  if (__r_by.tag === "Err") return __r_by;
-  const __by = __r_by.value;
+      const __r_by = __deserialise_Option_String(obj["by"], `${path}.by`);
+      if (__r_by.tag === "Err") return __r_by;
+      const __by = __r_by.value;
       return Ok({ tag: "Opened", by: __by } as __Wire_Event);
     }
     case "Closed":
@@ -1253,12 +1253,12 @@ export function __deserialise_List_String(json: __JsonValue, path: string = "$")
   }
   const out: string[] = [];
   for (let i = 0; i < json.length; i++) {
-  const item = json[i];
-  if (typeof item !== "string") {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "string", actual: typeof item });
-  }
-  const __el = item;
-  out.push(__el as string);
+    const item = json[i];
+    if (typeof item !== "string") {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "string", actual: typeof item });
+    }
+    const __el = item;
+    out.push(__el as string);
   }
   return Ok(out);
 }
