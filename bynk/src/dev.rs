@@ -254,7 +254,7 @@ pub struct StandIn {
 /// so under the real name it would answer other sessions' bindings to that
 /// Worker and, once stopped, could leave a stale entry for `--local-worker` to
 /// connect to. The context's binding is pointed at this name instead
-/// (`point_at_stand_ins`).
+/// (`publish_dev_configs`).
 ///
 /// Kept within Cloudflare's 63-character Worker name limit: a longer name is
 /// cut and given a hash of the whole, so two stand-ins never share one.
@@ -275,23 +275,28 @@ pub fn stand_in_name(context: &str, worker: &str) -> String {
     format!("{}{suffix}", name[..cut].trim_end_matches('-'))
 }
 
-/// The config a context with stand-ins is served from: its generated
-/// `wrangler.toml` with each binding to a foreign Worker pointed at the
-/// stand-in, beside the original so `main` resolves the same.
-pub const STAND_IN_CONFIG: &str = "wrangler.dev.toml";
+/// The config every context is served from: its generated `wrangler.toml`
+/// with the development bindings applied and each binding to a foreign Worker
+/// pointed at its stand-in, beside the original so `main` resolves the same.
+pub const DEV_CONFIG: &str = "wrangler.dev.toml";
 
-/// Write each served context's [`STAND_IN_CONFIG`] from its generated
-/// `wrangler.toml`, run after every build. A copy, not an edit: a rebuild
-/// rewrites `wrangler.toml` with the Workers' real names, and `wrangler dev`
-/// watching it would reload once with the real Worker bound (reaching a real
-/// local session of it, which the stand-in's own name exists to prevent)
-/// before an edit could retarget it (review of #2008). The copy is replaced
-/// by a rename, so wrangler only ever reads it whole, and only when it
-/// changes.
-fn point_at_stand_ins(workers_dir: &Path, plans: &[(String, Vec<StandIn>)]) -> Result<(), String> {
-    for (context, stand_ins) in plans {
-        let targets: std::collections::BTreeMap<String, String> = stand_ins
+/// Write each served context's [`DEV_CONFIG`] from its generated
+/// `wrangler.toml`, the last step after every build. A copy, not an edit: a
+/// rebuild rewrites `wrangler.toml` with the deploy's names (its real Workers,
+/// its derived Vectorize indexes), and `wrangler dev` watching it would reload
+/// with those bound (review of #2008; #3505) before the development bindings
+/// replaced them. The copy is replaced by a rename once they are all applied,
+/// so wrangler only ever reads it whole, and only when it changes.
+fn publish_dev_configs(
+    workers_dir: &Path,
+    serving: &[Serving],
+    plans: &[(String, Vec<StandIn>)],
+) -> Result<(), String> {
+    for context in serving.iter().map(|s| &s.worker) {
+        let targets: std::collections::BTreeMap<String, String> = plans
             .iter()
+            .filter(|(c, _)| c == context)
+            .flat_map(|(_, stand_ins)| stand_ins)
             .flat_map(|s| {
                 let name = stand_in_name(context, &s.worker);
                 s.bindings.iter().map(move |b| (b.clone(), name.clone()))
@@ -300,9 +305,9 @@ fn point_at_stand_ins(workers_dir: &Path, plans: &[(String, Vec<StandIn>)]) -> R
         let dir = workers_dir.join(context);
         let text = std::fs::read_to_string(dir.join("wrangler.toml")).map_err(|e| e.to_string())?;
         let out = bynk_emit::emitter::wrangler::retarget_services(&text, &targets)?;
-        let path = dir.join(STAND_IN_CONFIG);
+        let path = dir.join(DEV_CONFIG);
         if std::fs::read_to_string(&path).ok().as_deref() != Some(out.as_str()) {
-            let staged = dir.join(format!("{STAND_IN_CONFIG}.tmp"));
+            let staged = dir.join(format!("{DEV_CONFIG}.tmp"));
             std::fs::write(&staged, out).map_err(|e| e.to_string())?;
             std::fs::rename(&staged, &path).map_err(|e| e.to_string())?;
         }
@@ -666,16 +671,14 @@ pub fn run(
     // account's, so there is nothing to stand in for.
     let remote = is_remote(&opts.wrangler_args);
     let stand_in_plans = plan_stand_ins(&workers_dir, &serving, &available, opts, remote);
-    if !stand_in_plans.is_empty()
-        && (passthrough_has(&opts.wrangler_args, "-c")
-            || passthrough_has(&opts.wrangler_args, "--config"))
-    {
+    let user_config = passthrough_has(&opts.wrangler_args, "-c")
+        || passthrough_has(&opts.wrangler_args, "--config");
+    if !stand_in_plans.is_empty() && user_config {
         emsg!(
             "bynk: `-c`/`--config` is the driver's when it runs stand-ins for foreign Workers — pass `--local-worker NAME` instead of a config after `--`."
         );
         return ExitCode::FAILURE;
     }
-    dev_config_patches(project_root, &workers_dir, &serving, &opts.environment);
     let stand_in_configs = match write_stand_ins(&build_dir, &stand_in_plans) {
         Ok(configs) => configs,
         Err(e) => {
@@ -683,20 +686,16 @@ pub fn run(
             return ExitCode::FAILURE;
         }
     };
-    if let Err(e) = point_at_stand_ins(&workers_dir, &stand_in_plans) {
-        emsg!("bynk: could not bind the stand-ins for foreign Workers: {e}");
-        return ExitCode::FAILURE;
-    }
-    // #3479: each `Vectorize` instance is bound to the index `[dev.vectorize-index]`
-    // names, or left unbound.
-    if !bind_dev_vectorize(
+    let dev_configs = DevConfigs {
         project_root,
-        &workers_dir,
-        &available,
-        &serving,
+        workers_dir: &workers_dir,
+        available: &available,
+        serving: &serving,
+        stand_ins: &stand_in_plans,
         remote,
-        true,
-    ) {
+        environment: &opts.environment,
+    };
+    if !dev_configs.write(true) {
         return ExitCode::FAILURE;
     }
 
@@ -787,11 +786,13 @@ pub fn run(
         cmd.current_dir(workers_dir.join(&s.worker));
         // Interop I5 (#1972): the context's own config first (wrangler's
         // primary Worker, the one served on the port), then its stand-ins.
-        if let Some(configs) = stand_in_configs.get(&s.worker) {
-            cmd.args(["-c", STAND_IN_CONFIG]);
-            for config in configs {
-                cmd.arg("-c").arg(config);
-            }
+        // #3505: a `-- -c`/`--config` of the developer's own (refused above when
+        // stand-ins run) is served as given.
+        if !user_config {
+            cmd.args(["-c", DEV_CONFIG]);
+        }
+        for config in stand_in_configs.get(&s.worker).into_iter().flatten() {
+            cmd.arg("-c").arg(config);
         }
         let keys = local
             .edge
@@ -903,22 +904,9 @@ pub fn run(
             emit(opts.format, &DevEvent::Rebuilding);
             let rebuild = dev_build(opts);
             if crate::workers::compile_once_reporting(project_root, &build_dir, rebuild, None) {
-                dev_config_patches(project_root, &workers_dir, &serving, &opts.environment);
-                // Interop I5 (#1972): refresh the served copy from the
-                // rebuilt config. A binding added since start has no
+                // Interop I5 (#1972): a binding added since start has no
                 // stand-in until `bynk dev` restarts.
-                if let Err(e) = point_at_stand_ins(&workers_dir, &stand_in_plans) {
-                    emsg!("bynk: could not bind the stand-ins for foreign Workers: {e}");
-                }
-                // The rebuilt configs name the derived indexes again.
-                bind_dev_vectorize(
-                    project_root,
-                    &workers_dir,
-                    &available,
-                    &serving,
-                    remote,
-                    false,
-                );
+                dev_configs.write(false);
                 emsg!("bynk dev: rebuilt");
                 emit(opts.format, &DevEvent::RebuildOk);
             } else {
@@ -2075,6 +2063,56 @@ fn session_of(serving: &DevEvent, workers_dir: &Path) -> crate::dev_inspect::Ses
                 )
             })
             .collect(),
+    }
+}
+
+/// What a build's development configs are made from.
+struct DevConfigs<'a> {
+    project_root: &'a Path,
+    workers_dir: &'a Path,
+    /// Every Worker of the build.
+    available: &'a [String],
+    serving: &'a [Serving],
+    stand_ins: &'a [(String, Vec<StandIn>)],
+    remote: bool,
+    environment: &'a str,
+}
+
+impl DevConfigs<'_> {
+    /// Make each served Worker's development config from the build's generated
+    /// one, after every build. `announce` on the first build, which fails on what a
+    /// rebuild only reports. `false` after printing why.
+    ///
+    /// #3505: every change is made to the generated config, which nothing serves,
+    /// and the served [`DEV_CONFIG`] is replaced whole only after the last of
+    /// them, so `wrangler dev` never reloads with the deploy's names bound.
+    fn write(&self, announce: bool) -> bool {
+        dev_config_patches(
+            self.project_root,
+            self.workers_dir,
+            self.serving,
+            self.environment,
+        );
+        // #3479: each `Vectorize` instance is bound to the index
+        // `[dev.vectorize-index]` names, or left unbound.
+        let bound = bind_dev_vectorize(
+            self.project_root,
+            self.workers_dir,
+            self.available,
+            self.serving,
+            self.remote,
+            announce,
+        );
+        if !bound && announce {
+            return false;
+        }
+        match publish_dev_configs(self.workers_dir, self.serving, self.stand_ins) {
+            Ok(()) => bound,
+            Err(e) => {
+                emsg!("bynk: could not write the development configs: {e}");
+                false
+            }
+        }
     }
 }
 
@@ -3288,18 +3326,148 @@ mod tests {
                 bindings: names(&["SERVICE_BILLING"]),
             }],
         )];
-        point_at_stand_ins(&dir, &plans).unwrap();
+        let serving = vec![Serving {
+            worker: "shop-billing".to_string(),
+            port: None,
+            inspector_port: None,
+            inspect: false,
+        }];
+        publish_dev_configs(&dir, &serving, &plans).unwrap();
         assert_eq!(
             std::fs::read_to_string(ctx.join("wrangler.toml")).unwrap(),
             generated
         );
-        let served = std::fs::read_to_string(ctx.join(STAND_IN_CONFIG)).unwrap();
+        let served = std::fs::read_to_string(ctx.join(DEV_CONFIG)).unwrap();
         assert!(
             served.contains("service = \"bynk-stand-in-shop-billing-legacy-billing\""),
             "{served}"
         );
-        assert!(!ctx.join(format!("{STAND_IN_CONFIG}.tmp")).exists());
+        assert!(!ctx.join(format!("{DEV_CONFIG}.tmp")).exists());
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A project whose `shop` Worker binds a `Vectorize` capability, `Docs`, that
+    /// `[dev.vectorize-index]` binds to `docs-dev`; the generated config names the
+    /// deploy's derived index, `shop-docs`. `extra` is appended to the generated
+    /// config.
+    fn vectorize_project(tag: &str, extra: &str) -> (std::path::PathBuf, std::path::PathBuf) {
+        let root = std::env::temp_dir().join(format!(
+            "bynk-dev-configs-{tag}-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let workers = root.join("out").join("workers");
+        let dir = workers.join("shop");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            root.join("bynk.toml"),
+            "[project]\nname = \"shop\"\nversion = \"0.1.0\"\n\n[dev.vectorize-index]\nDocs = \"docs-dev\"\n",
+        )
+        .unwrap();
+        std::fs::write(dir.join("wrangler.toml"), generated_shop_config(extra)).unwrap();
+        std::fs::write(
+            dir.join(bynk_emit::emitter::wrangler::VECTORIZE_MANIFEST),
+            "{ \"version\": 1, \"vectorize\": [{ \"binding\": \"VECTORIZE_DOCS\", \"dimensions\": 768, \"metric\": \"cosine\", \"indexed\": [] }] }",
+        )
+        .unwrap();
+        (root, workers)
+    }
+
+    fn generated_shop_config(extra: &str) -> String {
+        format!(
+            "name = \"shop\"\n\n[[vectorize]]\nbinding = \"VECTORIZE_DOCS\"\nindex_name = \"shop-docs\"\n{extra}"
+        )
+    }
+
+    fn serving_shop() -> Vec<Serving> {
+        vec![Serving {
+            worker: "shop".to_string(),
+            port: None,
+            inspector_port: None,
+            inspect: false,
+        }]
+    }
+
+    /// #3505: a rebuild writes the generated config with the deploy's derived
+    /// index names. What `wrangler dev` serves from must never carry them, not
+    /// even between the compile and the development rebind.
+    #[test]
+    fn a_rebuild_never_exposes_the_deploys_index_to_wrangler() {
+        let (root, workers) = vectorize_project("rebuild", "");
+        let available = names(&["shop"]);
+        let serving = serving_shop();
+        let configs = DevConfigs {
+            project_root: &root,
+            workers_dir: &workers,
+            available: &available,
+            serving: &serving,
+            stand_ins: &[],
+            remote: false,
+            environment: "default",
+        };
+        assert!(configs.write(true));
+        let served = workers.join("shop").join(DEV_CONFIG);
+        let first = std::fs::read_to_string(&served).unwrap();
+        assert!(first.contains("index_name = \"docs-dev\""), "{first}");
+        assert!(!first.contains("shop-docs"), "{first}");
+
+        // The rebuild's compile rewrites the generated config.
+        std::fs::write(
+            workers.join("shop").join("wrangler.toml"),
+            generated_shop_config(""),
+        )
+        .unwrap();
+        let between = std::fs::read_to_string(&served).unwrap();
+        assert!(
+            !between.contains("shop-docs"),
+            "served before the rebind: {between}"
+        );
+
+        assert!(configs.write(false));
+        let after = std::fs::read_to_string(&served).unwrap();
+        assert!(after.contains("index_name = \"docs-dev\""), "{after}");
+        assert!(!after.contains("shop-docs"), "{after}");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// #3505: a Worker served with stand-ins is served from its copy, and the
+    /// copy carries the development bindings too.
+    #[test]
+    fn a_worker_with_stand_ins_serves_the_development_index() {
+        let (root, workers) = vectorize_project(
+            "stand-ins",
+            "\n[[services]]\nbinding = \"SERVICE_BILLING\"\nservice = \"legacy-billing\"\n",
+        );
+        let available = names(&["shop"]);
+        let serving = serving_shop();
+        let plans = vec![(
+            "shop".to_string(),
+            vec![StandIn {
+                worker: "legacy-billing".into(),
+                bindings: names(&["SERVICE_BILLING"]),
+            }],
+        )];
+        let configs = DevConfigs {
+            project_root: &root,
+            workers_dir: &workers,
+            available: &available,
+            serving: &serving,
+            stand_ins: &plans,
+            remote: false,
+            environment: "default",
+        };
+        assert!(configs.write(true));
+        let served = std::fs::read_to_string(workers.join("shop").join(DEV_CONFIG)).unwrap();
+        assert!(
+            served.contains("service = \"bynk-stand-in-shop-legacy-billing\""),
+            "{served}"
+        );
+        assert!(served.contains("index_name = \"docs-dev\""), "{served}");
+        assert!(!served.contains("shop-docs"), "{served}");
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]
