@@ -69,15 +69,21 @@ use self::test_module::*;
 /// as a `bynk.internal.missing_checker_fact` diagnostic at the `.bynk` span (the case body's), and
 /// the module's output is not used. Read once the module has lowered; the result says whether any
 /// fault was recorded, so the caller drops the module's output rather than stage it.
+///
+/// A project that already has errors is not reported: a program that failed checking lacks facts
+/// by construction (a mixed-tier suite has no receiver namespace), so a fault there is noise on top
+/// of the real error. The faults are still drained and the output still dropped.
 fn drain_internal_faults(errors: &mut Vec<CompileError>, runtime_use: &RuntimeUse) -> bool {
-    let before = errors.len();
-    errors.extend(
-        runtime_use
-            .take_faults()
-            .into_iter()
-            .map(bynk_emit::emitter::InternalFault::into_compile_error),
-    );
-    errors.len() > before
+    let faults = runtime_use.take_faults();
+    let faulted = !faults.is_empty();
+    if errors.is_empty() {
+        errors.extend(
+            faults
+                .into_iter()
+                .map(bynk_emit::emitter::InternalFault::into_compile_error),
+        );
+    }
+    faulted
 }
 
 /// P5.4: `test <target>` suite processing. The checking half (target/`stub`
@@ -1000,6 +1006,36 @@ mod tests {
 
     // -- the unified emitter type-ref renderers -------------------------------
     use super::test_support::{base, named};
+
+    fn faulted_use() -> RuntimeUse {
+        let ru = RuntimeUse::default();
+        ru.note_internal_fault(Span::new(1, 2), "receiver namespace".to_string());
+        ru
+    }
+
+    #[test]
+    fn a_fault_is_reported_when_the_project_has_no_other_error() {
+        let mut errors = Vec::new();
+        assert!(drain_internal_faults(&mut errors, &faulted_use()));
+        assert_eq!(errors.len(), 1);
+        assert_eq!(errors[0].category, "bynk.internal.missing_checker_fact");
+    }
+
+    #[test]
+    fn a_fault_in_a_project_that_already_has_errors_is_drained_not_reported() {
+        let mut errors = vec![CompileError::new(
+            "bynk.tier.mixed_system_suite",
+            Span::new(0, 1),
+            "x",
+        )];
+        let ru = faulted_use();
+        assert!(
+            drain_internal_faults(&mut errors, &ru),
+            "the output is still dropped"
+        );
+        assert_eq!(errors.len(), 1, "no internal error on top of the real one");
+        assert!(ru.take_faults().is_empty(), "drained");
+    }
 
     #[test]
     fn ts_type_ref_bases_and_generics() {

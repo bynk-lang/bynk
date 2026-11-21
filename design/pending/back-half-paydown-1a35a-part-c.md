@@ -1,6 +1,6 @@
 ---
 level: patch
-changelog: Lowering builds the generic-function-as-value closure, the `Form.decode` and `Form.encode` call and the hoisted async-tail `if` as typed nodes, and nothing in lowering builds text any more; the generated code is unchanged apart from layout, and a lowering step that lacks a checker fact for a receiver namespace or a store operation is reported as an internal fault instead of emitting a placeholder
+changelog: Lowering builds the generic-function-as-value closure, the `Form.decode` and `Form.encode` call and the hoisted async-tail `if` as typed nodes, and nothing in lowering builds text any more; the generated code is unchanged apart from layout, and a lowering step that lacks a checker fact for a receiver namespace or a store operation is reported as an internal fault instead of emitting a placeholder, and no such fault is added to a project that already has errors
 probes: lowering_text_bridge, stmt_text_lines, ts_writes, ts_any, ts_raw_sites_emit, verbatim_origins, verbatim_sites
 raises: verbatim_sites — the `Form.decode`/`Form.encode` field-spec table is `workers_entry` source text for the router's own array literal, so it is one foreign-text carrier (`VerbatimOrigin::FormFieldSpecs`, built at the single site `form_field_specs`) (#3736)
 ---
