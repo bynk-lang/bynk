@@ -2796,9 +2796,10 @@ impl<'a> Plan<'a> {
     /// one title, so the deploy cannot create it.
     pub(crate) fn checked_against(mut self, on: &super::on_account::OnAccount) -> Self {
         use super::on_account::Kind;
-        let verb = |action: &'static str, held: bool| match (action, held) {
-            ("create" | "create or reuse", true) => "reuse",
-            ("create or reuse", false) => "create",
+        // A listing not read changes nothing: the ledger's word stands.
+        let verb = |action: &'static str, held: Option<bool>| match (action, held) {
+            ("create" | "create or reuse", Some(true)) => "reuse",
+            ("create or reuse", Some(false)) => "create",
             (other, _) => other,
         };
         self.account_notes.extend(on.notes.iter().cloned());
@@ -2816,7 +2817,7 @@ impl<'a> Plan<'a> {
                 v.action = verb(v.action, on.holds(Kind::Vectorize, None, &v.index));
             }
             for kv in c.kv.iter().filter(|kv| kv.action == "create") {
-                if on.holds(Kind::Kv, None, &kv.namespace) {
+                if on.holds(Kind::Kv, None, &kv.namespace) == Some(true) {
                     self.account_notes.push(format!(
                         "bynk: warning: the KV namespace `{}` (`{}` of `{}`) is already on the \
                          account, but `bynk.deploy.lock` does not record it, and Cloudflare \
@@ -3902,6 +3903,8 @@ pub(crate) mod tests {
             &'static str,
         )>,
         asked: std::cell::RefCell<Vec<super::super::on_account::Listing>>,
+        /// The kinds whose listing fails.
+        failing: Vec<super::super::on_account::Kind>,
     }
 
     impl super::super::on_account::Listings for Account {
@@ -3913,6 +3916,9 @@ pub(crate) mod tests {
             self.asked
                 .borrow_mut()
                 .push((kind, jurisdiction.map(str::to_string)));
+            if self.failing.contains(&kind) {
+                return Err("Cloudflare answered 403".into());
+            }
             Ok(self
                 .names
                 .iter()
@@ -3964,6 +3970,7 @@ pub(crate) mod tests {
                 (Kind::Vectorize, None, "shop-docs"),
             ],
             asked: Default::default(),
+            failing: Vec::new(),
         };
         let plan = checked(plan_of(&order, &declared, &DeployLock::default()), &account);
         let text = plan_report(&plan, DeployFormat::Short);
@@ -3989,11 +3996,31 @@ pub(crate) mod tests {
         let empty = Account {
             names: Vec::new(),
             asked: Default::default(),
+            failing: Vec::new(),
         };
         let plan = checked(plan_of(&order, &declared, &DeployLock::default()), &empty);
         let text = plan_report(&plan, DeployFormat::Short);
         assert!(text.contains("queue create outbound\n"), "{text}");
         assert!(plan.account_notes().is_empty());
+    }
+
+    /// #3494 review: a listing that fails leaves its kind as the ledger says it:
+    /// a queue only sent to stays `create or reuse`, never a confident `create`.
+    #[test]
+    fn a_failed_listing_leaves_its_kind_as_the_ledger_says() {
+        let order = names(&["shop"]);
+        let declared = every_kind();
+        let account = Account {
+            names: Vec::new(),
+            asked: Default::default(),
+            failing: vec![super::super::on_account::Kind::Queue],
+        };
+        let plan = checked(plan_of(&order, &declared, &DeployLock::default()), &account);
+        let text = plan_report(&plan, DeployFormat::Short);
+        assert!(text.contains("queue create or reuse outbound\n"), "{text}");
+        assert!(text.contains("queue create intake\n"), "{text}");
+        assert_eq!(plan.account_notes().len(), 1, "{:?}", plan.account_notes());
+        assert!(plan.account_notes()[0].contains("queues"));
     }
 
     /// #3494: a plan with nothing to create asks the account nothing.
@@ -4015,6 +4042,7 @@ pub(crate) mod tests {
         let account = Account {
             names: Vec::new(),
             asked: Default::default(),
+            failing: Vec::new(),
         };
         let plan = checked(plan_of(&order, &declared, &lock), &account);
         assert!(account.asked.borrow().is_empty());

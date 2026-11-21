@@ -85,12 +85,12 @@ impl OnAccount {
         on
     }
 
-    /// Whether the account holds `name` of `kind` (within `jurisdiction`).
-    /// `false` for a listing not read.
-    pub(crate) fn holds(&self, kind: Kind, jurisdiction: Option<&str>, name: &str) -> bool {
+    /// Whether the account holds `name` of `kind` (within `jurisdiction`), or
+    /// `None` for a listing not read: unknown, never read as absent.
+    pub(crate) fn holds(&self, kind: Kind, jurisdiction: Option<&str>, name: &str) -> Option<bool> {
         self.names
             .get(&(kind, jurisdiction.map(str::to_string)))
-            .is_some_and(|names| names.contains(name))
+            .map(|names| names.contains(name))
     }
 }
 
@@ -239,12 +239,13 @@ mod tests {
     }
 
     #[test]
-    fn a_failed_listing_is_one_note_and_reads_as_absent() {
+    fn a_failed_listing_is_one_note_and_reads_as_unknown() {
         let wanted = BTreeSet::from([(Kind::Vectorize, None), (Kind::D1, None)]);
         let on = OnAccount::read(&wanted, &Fake);
-        assert!(on.holds(Kind::Vectorize, None, "shop-docs"));
-        assert!(!on.holds(Kind::Kv, None, "shop-docs"), "not asked for");
-        assert!(!on.holds(Kind::D1, None, "shop-docs"));
+        assert_eq!(on.holds(Kind::Vectorize, None, "shop-docs"), Some(true));
+        assert_eq!(on.holds(Kind::Vectorize, None, "shop-notes"), Some(false));
+        assert_eq!(on.holds(Kind::Kv, None, "shop-docs"), None, "not asked for");
+        assert_eq!(on.holds(Kind::D1, None, "shop-docs"), None, "not read");
         assert_eq!(on.notes.len(), 1, "{:?}", on.notes);
         assert!(on.notes[0].contains("D1 databases"), "{}", on.notes[0]);
         assert!(on.notes[0].contains("403"), "{}", on.notes[0]);
