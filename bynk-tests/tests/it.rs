@@ -103,6 +103,8 @@ mod integration {
     mod implementation_index;
     #[path = "import_closure.rs"]
     mod import_closure;
+    #[path = "import_shadow.rs"]
+    mod import_shadow;
     #[path = "inlay_hints.rs"]
     mod inlay_hints;
     #[path = "inspect_agents.rs"]
