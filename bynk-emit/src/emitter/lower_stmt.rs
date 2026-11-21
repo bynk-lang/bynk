@@ -113,7 +113,12 @@ impl Body {
     /// `None` is a compiler fault, reported at `site` (the 1A.34 policy) as an empty body.
     pub(super) fn into_nodes(self, site: FaultSite<'_>) -> Vec<bynk_ts::TsStmt> {
         self.to_nodes().unwrap_or_else(|| {
-            site.missing_fact("statement body, which reached lowering as text");
+            let reason = if self.0.iter().any(|i| matches!(i, Item::Line(_))) {
+                "statement body, which reached lowering as text"
+            } else {
+                "statement body, which held an indented block or a mark with no statement after it"
+            };
+            site.missing_fact(reason);
             Vec::new()
         })
     }

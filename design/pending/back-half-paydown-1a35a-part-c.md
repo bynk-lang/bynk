@@ -18,6 +18,6 @@ Nothing in lowering builds text any more. The remaining text is the bridge machi
 
 **Left for 1A.35b.** `lowering_text_bridge` 34 to 5 and `stmt_text_lines` 23 to 2, all definitions: `From<Built>`'s `Err` arm, `Lowered::bare` (`cfg(test)`), `Pre::push_text` (`cfg(test)`), `Pre::finish_text` and `Pre::finish_built`'s `Err` arm, `LoweredStmt::item`'s `Line` arm, and the `Item::line` helper. The `Item::line` wrappers in `emit.rs` (the result closure, the contract-guard closure, the event guards and `emit_suite_fn`) are text by design and belong to the separate 1A.ws PR. `deserialise_expr`'s text input and the migration step function are 1A.38's. `node_or_text`, `Built` and their text closures remain at their call sites.
 
-Also: `drain_internal_faults` (`bynk-driver` `tests_emit.rs`) reports whether it added errors and the module's output is dropped when it did; a snapshot name is always a string-literal node.
+Also: `drain_internal_faults` (`bynk-driver` `tests_emit.rs`) returns whether any fault was recorded, and the module's output is dropped when one was; a snapshot name is always a string-literal node.
 
 `lowering_text_bridge` falls 34 to 5, `stmt_text_lines` 23 to 2, `ts_writes` and `ts_any` and `ts_raw_sites_emit` fall, and `verbatim_sites` and `verbatim_origins` rise by the one carrier.

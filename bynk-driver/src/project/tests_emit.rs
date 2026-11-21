@@ -70,13 +70,18 @@ use self::test_module::*;
 /// the module's output is not used. Read once the module has lowered; the result says whether any
 /// fault was recorded, so the caller drops the module's output rather than stage it.
 ///
-/// A project that already has errors is not reported: a program that failed checking lacks facts
-/// by construction (a mixed-tier suite has no receiver namespace), so a fault there is noise on top
-/// of the real error. The faults are still drained and the output still dropped.
+/// A project that already has an error-severity diagnostic (in any suite: `errors` is shared by
+/// every suite) is not reported: a program that failed checking lacks facts by construction (a
+/// mixed-tier suite has no receiver namespace), so a fault there is noise on top of the real error.
+/// The faults are still drained and the output still dropped. Warnings do not count: a build with
+/// only warnings succeeds, so its fault must be reported, or the dropped module would go unexplained.
 fn drain_internal_faults(errors: &mut Vec<CompileError>, runtime_use: &RuntimeUse) -> bool {
     let faults = runtime_use.take_faults();
     let faulted = !faults.is_empty();
-    if errors.is_empty() {
+    let failed = errors
+        .iter()
+        .any(|e| bynk_syntax::Severity::for_error(e) == bynk_syntax::Severity::Error);
+    if !failed {
         errors.extend(
             faults
                 .into_iter()
@@ -1031,6 +1036,20 @@ mod tests {
         );
         assert_eq!(errors.len(), 1, "no internal error on top of the real one");
         assert!(ru.take_faults().is_empty(), "drained");
+    }
+
+    #[test]
+    fn a_fault_beside_only_warnings_is_still_reported() {
+        let warning = bynk_syntax::diagnostics::REGISTRY
+            .iter()
+            .find(|d| d.severity == bynk_syntax::Severity::Warning)
+            .expect("the registry has a warning")
+            .code;
+        let mut errors = vec![CompileError::new(warning, Span::new(0, 1), "x")];
+        let ru = faulted_use();
+        assert!(drain_internal_faults(&mut errors, &ru));
+        assert_eq!(errors.len(), 2, "the warning, then the reported fault");
+        assert_eq!(errors[1].category, bynk_emit::emitter::MISSING_CHECKER_FACT);
     }
 
     #[test]
