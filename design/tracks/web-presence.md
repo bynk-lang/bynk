@@ -1,7 +1,7 @@
 # Web presence — the Book reorganised, Reference consolidated, one brand across docs and blog
 
-- **Status:** Settling. Spine issue not yet opened; this doc arrives by a
-  settling draft PR. No slice is accepted.
+- **Status:** Settling. The open questions were settled with the maintainer on
+  21 November 2026 (§14). Spine issue not yet opened. No slice is accepted.
 - **Realises:** the brief of the retired documentation track and
   [ADR 0141](../decisions/0141-documentation-framework.md): *one coherent web
   presence under one domain and design system*. That track stood the site up;
@@ -46,8 +46,8 @@ This track settles three things:
 
 - **It spans many increments.** Some slices are mechanical (contents, redirects,
   a generator change); four are new tutorial chapters.
-- **Its surface is not settled.** The structure is a proposal; §14 lists what
-  remains open.
+- **Its surface needed settling.** The structure was a proposal with open
+  questions; §14 records how they were settled.
 - **It changes a contract between the compiler and the site.** Today the
   compiler holds a page and a heading anchor for each of its 802 curated
   explanations (§2.2). This track replaces them with one URL per diagnostic
@@ -159,7 +159,9 @@ footer.
 
 1. **Start**: What is Bynk? (absorbs *Why Bynk exists*), Anatomy of a Bynk
    service, Coming from TypeScript, Install.
-2. **Learn Bynk**: ten chapters, one running project:
+2. **Learn Bynk**: ten chapters, one running project: the HTTP service begun in
+   chapter 2 grows through every chapter after it, so the existing chapters
+   stay and the four new ones extend the same code:
    1. Compile your first program
    2. Build a small HTTP service
    3. Model your data with types
@@ -170,7 +172,8 @@ footer.
    8. Split into contexts (new)
    9. Test it
    10. Deploy it (new)
-3. **Concepts**: the explanation pages, gathered from the guides and About:
+3. **Concepts**, at `/book/concepts/`: the explanation pages, moved from the
+   guides and About:
    the type-system philosophy, literal admission, the capability model, sends,
    joins and timeouts, the agent model, invariants as contracts, events, actors
    and access, localisation, the testing philosophy, why compile to TypeScript,
@@ -219,7 +222,8 @@ optimises for a docs structure that can keep changing.
   `keywords.rs`, `first_party_docs.rs`, `xtask`, tests, CI path filters,
   `llms.txt`, and the blog's links in its own next release.
 - **L6. Guides keep their URLs.** Regrouping happens in `SUMMARY.md` only.
-  Whether Concepts pages move to `/book/concepts/` is open (§14).
+  Concepts pages move to `/book/concepts/` once slice 4 has landed, with one
+  rule each (§14).
 
 ## 6. Diagnostics, one page per code
 
@@ -245,19 +249,28 @@ source.
 
 ## 7. Releases
 
-Replace the single changelog page with one page per minor version under
-`/reference/releases/`, plus an index. `xtask stamp` writes the row into the
-current minor's page instead of `reference/changelog.md`. *Upgrading* stays a
+Replace the single changelog page with one page per release tag under
+`/reference/releases/<tag>/` (93 tags so far), plus an index, newest first.
+Each page lists the increments the release contains. `xtask stamp` writes each
+increment's row into `/reference/releases/unreleased/`; cutting a release
+renames that page to the new tag and starts an empty one, as a step of the
+release process in the release discipline. *Upgrading* stays a
 Reference page. A notable release can also get a blog post that links to its
 page.
 
 ## 8. One brand
 
-- **A theme package** at `site/theme/`, published as `@bynk-lang/site-theme`:
-  CSS custom properties generated from the design system's tokens (dark and
-  light), the shared header and footer, the `<head>` with fonts, and the Bynk
-  TextMate grammar. The docs site uses it from the workspace; the blog depends
-  on a released version.
+- **A theme package** at `site/theme/`, published to GitHub Packages as
+  `@bynk-lang/site-theme`: CSS custom properties generated from the design
+  system's tokens (dark and light), the shared header and footer, the `<head>`
+  with fonts, and the Bynk TextMate grammar. The docs site uses it from the
+  workspace; the blog depends on a released version. The blog's CI reads it
+  with its `GITHUB_TOKEN` (`packages: read`), and local installs need a token
+  with `read:packages` in `~/.npmrc`; the blog's README says how.
+- **The reader's colour scheme decides.** The site follows
+  `prefers-color-scheme`, with a toggle that overrides it and is remembered.
+  With no preference it falls back to dark, the design system's default. Both
+  themes are first-class: every token has a light and a dark value.
 - **The palette changes.** The indigo accent is retired. Amber marks the single
   primary action and the current page; teal is for links and success. This
   reconciles the site with the bento-blocks mark, as the design system's README
@@ -278,9 +291,10 @@ page.
 ## 10. Migration and coexistence
 
 Slices land in an order where the site is whole after each one. Structure-only
-slices (1–2) move no URL. The Reference move (slice 5) is a plain move of pages
-with splat redirects: once slice 4 has landed, the compiler names no Reference
-page, so the move does not touch it. The theme slices (6–7)
+slices (1–2) move no URL. Slice 5 is a plain move of pages: the Reference
+section with splat redirects, and the Concepts pages to `/book/concepts/` with
+one rule each. Once slice 4 has landed, the compiler names none of these
+pages, so the move does not touch it. The theme slices (6–7)
 are independent of the Book slices and can run in parallel. The site shell
 (slice 8) waits for slice 5, because its header, footer and home page link to
 the `/reference/` URLs that slice 5 creates. The tutorial
@@ -313,6 +327,9 @@ and 4 may be built before the freeze lifts is the maintainer's decision.
   the same `--check`.
 - **Blog lags the theme.** The blog pins a theme version; a theme release notes
   breaking changes.
+- **Package access.** GitHub Packages needs a token even to read, so a missing
+  `read:packages` token stops a blog install. The blog's README and CI
+  configuration carry the setup.
 
 ## 12. Slices
 
@@ -321,10 +338,10 @@ and 4 may be built before the freeze lifts is the maintainer's decision.
 | 0 | Settle this doc; land the two ADRs (§13) | No | — |
 | 1 | Contents complete: list the 18 missing pages; add the completeness check | No | 0 |
 | 2 | Regroup the sidebar into Start, Learn Bynk, Concepts, Guides; replace "How these docs are organised" with a short Book front page | No | 1 |
-| 3 | Releases: per-minor pages, `xtask stamp` writes them; redirect the changelog URL | Yes | 0 |
+| 3 | Releases: one page per release tag and an `unreleased` page that `xtask stamp` writes; a release cut renames it; redirect the changelog URL | Yes | 0 |
 | 4 | Diagnostics: a generated page for every code; the `/d/<code>` contract (L1–L3); `page`/`anchor` move from `Explain` to the site's data file; fold in troubleshooting | Yes | 0 |
-| 5 | Reference consolidation: move `book/reference`, `book/spec` and `/docs/` to `/reference/`; its own contents; sidebar surfaces; splat redirects; repository links rewritten (L5) | Yes | 3, 4 |
-| 6 | Theme package from the design system tokens; docs site adopts it | No | 0 |
+| 5 | Reference consolidation: move `book/reference`, `book/spec` and `/docs/` to `/reference/`; its own contents; sidebar surfaces; splat redirects. Move the Concepts pages to `/book/concepts/`, one rule each. Repository links rewritten (L5) | Yes | 2, 3, 4 |
+| 6 | Theme package from the design system tokens, published to GitHub Packages; light and dark following the reader's setting; docs site adopts it | No | 0 |
 | 7 | Blog adopts the theme; cross-site search | No | 6 |
 | 8 | Site shell: header, footer and home page per the mockups | No | 5, 6 |
 | 9 | Learn Bynk 5: Handle failure with `Result` (`tutorials/failure-and-result.md`) | No | 2 |
@@ -345,21 +362,23 @@ and 4 may be built before the freeze lifts is the maintainer's decision.
   splat redirects (L4); nothing promises a published URL forever before 1.0.
 
 Recorded in their slices: one theme package in this repo (slice 6); diagnostics
-pages generated from the registry (slice 4); per-minor release pages
+pages generated from the registry (slice 4); one release page per tag
 (slice 3).
 
-## 14. Open questions
+## 14. Settled questions
 
-1. **Do Concepts pages move to `/book/concepts/`?** Moving gives honest URLs
-   and breadcrumbs. After slice 4 the compiler no longer links to them, so the
-   cost is one rule per moved page and the repository's own links.
-2. **The running project for Learn Bynk.** Extend chapter 2's service through
-   all ten chapters, or choose a project from `examples/` that already has
-   contexts, an agent and a deploy story?
-3. **How the Releases index is grouped.** One page per minor version means
-   about 640 pages so far, so the index needs grouping: by release tag (per
-   the release discipline), by hundred minor versions, or by year?
-4. **Where the theme package is published** (npm or GitHub Packages), and how
-   the blog is told about a new version.
-5. **Light theme default.** The design system makes dark the default; reading
-   pages may suit light better. Follow the reader's system setting?
+Settled with the maintainer on 21 November 2026.
+
+1. **Concepts pages move to `/book/concepts/`.** URLs and breadcrumbs match
+   the sidebar. The move waits for slice 4, after which the compiler no longer
+   links to them, and lands in slice 5 with one rule per page.
+2. **Learn Bynk grows chapter 2's service.** The existing chapters stay; the
+   four new chapters extend the same service, so no chapter is rewritten
+   around a different project.
+3. **One release page per release tag**, not per minor version: about 90
+   pages so far rather than about 640, matching how the release discipline
+   cuts releases. Increments between tags collect on an `unreleased` page.
+4. **The theme package is published to GitHub Packages**, under the
+   `bynk-lang` organisation. Reading it needs a token, which §8 and §11 cover.
+5. **The site follows the reader's colour scheme**, with a remembered toggle
+   and dark as the fallback.
