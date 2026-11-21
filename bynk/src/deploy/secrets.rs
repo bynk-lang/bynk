@@ -647,7 +647,7 @@ pub(crate) fn foreign_hand_off(
         .clone()
         .unwrap_or_else(|| "<foreign-worker>".to_string());
     format!(
-        "bynk: minted {binding} for `{actor}`, a foreign caller of `{context}`. Its operator sets it on their Worker:\n\n  \
+        "bynk: note: minted {binding} for `{actor}`, a foreign caller of `{context}`. Its operator sets it on their Worker:\n\n  \
          printf '%s' '{value}' | {runner} wrangler secret put {key} --name {name}\n\n  \
          It signs its calls to `{context}` as `{actor}` (X-Bynk-Caller), under that key; see the wire format reference.\n  \
          This is the only time the value is shown: `{deploy} --force` mints a new one.\n",
@@ -779,16 +779,10 @@ pub(crate) fn prepare_bindings(
             // about. Say what will happen and carry on — failing here would
             // refuse to deploy a legal program over a secret it never needed.
             Err(_) if !want.origin.required() => {
-                eprint!(
-                    "{}",
-                    unsupplied_read_notice(environment, worker, &want.name)
-                );
+                colour::eprint(&unsupplied_read_notice(environment, worker, &want.name));
             }
             Err(_) if tolerate_unresolvable(present.as_ref(), first_deploy) => {
-                eprint!(
-                    "{}",
-                    unknown_presence_notice(environment, worker, &want.name)
-                );
+                colour::eprint(&unknown_presence_notice(environment, worker, &want.name));
             }
             Err(e) => return Err(e),
         }
@@ -823,7 +817,7 @@ pub(crate) fn unsupplied_read_notice(
     binding_name: &str,
 ) -> String {
     format!(
-        "bynk: `{}` reads the secret `{binding_name}`, but no value was supplied — it will see None.\n  \
+        "bynk: note: `{}` reads the secret `{binding_name}`, but no value was supplied — it will see None.\n  \
          Supply it with --secrets-file or --secret {binding_name}, if it is meant to be set.\n",
         deployed_worker_name(environment, worker)
     )
@@ -839,7 +833,7 @@ pub(crate) fn unknown_presence_notice(
 ) -> String {
     let worker = deployed_worker_name(environment, worker);
     format!(
-        "bynk: could not ask Cloudflare which secrets `{worker}` has, and no value for `{binding_name}` was supplied — leaving it as it is.\n  \
+        "bynk: warning: could not ask Cloudflare which secrets `{worker}` has, and no value for `{binding_name}` was supplied — leaving it as it is.\n  \
          If it is not set, `{worker}` will answer 401. Check with `wrangler secret list --name {worker}`, or supply a value to set it.\n"
     )
 }

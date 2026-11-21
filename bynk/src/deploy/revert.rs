@@ -1164,7 +1164,7 @@ pub fn revert(root: &Path, opts: &RevertOptions) -> ExitCode {
     match revert_run(root, opts) {
         Ok(code) => code,
         Err(message) => {
-            emsg!("bynk: {message}");
+            emsg!("bynk: error: {message}");
             ExitCode::FAILURE
         }
     }
@@ -1289,7 +1289,7 @@ fn revert_run(root: &Path, opts: &RevertOptions) -> Result<ExitCode, String> {
                 done.join(", ")
             );
             if toml::to_string(&lock).ok() != before {
-                emsg!("bynk: bynk.deploy.lock changed; commit it");
+                emsg!("bynk: note: bynk.deploy.lock changed; commit it");
             }
             Ok(ExitCode::SUCCESS)
         }
@@ -1330,7 +1330,9 @@ fn confirm_revert(yes: bool) -> bool {
         return true;
     }
     if !io::stdin().is_terminal() {
-        emsg!("bynk: refusing to change Cloudflare in a non-interactive session without --yes");
+        emsg!(
+            "bynk: error: refusing to change Cloudflare in a non-interactive session without --yes"
+        );
         return false;
     }
     eprint!("Revert? [y/N] ");

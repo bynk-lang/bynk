@@ -472,7 +472,7 @@ fn remote_env_conflict(opts: &DevOptions) -> bool {
         return false;
     };
     emsg!(
-        "bynk: `--env {}` conflicts with `{conflict}` after `--` — pass one or the other, not both",
+        "bynk: error: `--env {}` conflicts with `{conflict}` after `--` — pass one or the other, not both",
         opts.environment
     );
     true
@@ -511,7 +511,7 @@ fn selected_workers(
 ) -> Option<Vec<String>> {
     let chosen = groups_serving(project_root, requested)
         .and_then(|r| select_contexts(available, &r).map_err(|e| e.to_string()));
-    chosen.map_err(|e| emsg!("bynk: {e}")).ok()
+    chosen.map_err(|e| emsg!("bynk: error: {e}")).ok()
 }
 
 /// Orchestrate a local dev session: pre-flight, compile, select the worker, and
@@ -528,7 +528,7 @@ pub fn run(
     }
 
     if opts.log_events && opts.format != DevFormat::Json {
-        emsg!("bynk: `--log-events` writes events, so it needs `--format json`");
+        emsg!("bynk: error: `--log-events` writes events, so it needs `--format json`");
         return ExitCode::FAILURE;
     }
 
@@ -556,7 +556,7 @@ pub fn run(
     //    §2.4 ambiguity check.
     let build_dir = project_root.join(".bynk").join("dev");
     if let Err(e) = prepare_build_dir(project_root, &build_dir) {
-        emsg!("bynk: could not prepare build directory: {e}");
+        emsg!("bynk: error: could not prepare build directory: {e}");
         return ExitCode::FAILURE;
     }
     // #524: compile the SAME project shape as `bynk compile <project_root>`
@@ -592,7 +592,7 @@ pub fn run(
     }
     if let Some(port) = inspector_port_in_use(&serving) {
         emsg!(
-            "bynk: inspector port {port} is already in use — another `bynk dev` or debugger \
+            "bynk: error: inspector port {port} is already in use — another `bynk dev` or debugger \
              holds it. Pass a different `--inspect-port`, or stop the process using it."
         );
         return ExitCode::FAILURE;
@@ -603,7 +603,7 @@ pub fn run(
     let local = match LocalKeys::read(&workers_dir, &available, project_root) {
         Ok(keys) => keys,
         Err(e) => {
-            emsg!("bynk: {e}");
+            emsg!("bynk: error: {e}");
             return ExitCode::FAILURE;
         }
     };
@@ -626,7 +626,7 @@ pub fn run(
     ] {
         if injected && passthrough_has(&opts.wrangler_args, flag) {
             emsg!(
-                "bynk: `{flag}` is allocated per context — pass `{owner}` to `bynk dev` instead of `-- {flag}`."
+                "bynk: error: `{flag}` is allocated per context — pass `{owner}` to `bynk dev` instead of `-- {flag}`."
             );
             return ExitCode::FAILURE;
         }
@@ -638,7 +638,7 @@ pub fn run(
     // with `Address already in use`.
     if let Some(port) = port_clash(&serving) {
         emsg!(
-            "bynk: port {port} is allocated both to a context's server and to an inspector — \
+            "bynk: error: port {port} is allocated both to a context's server and to an inspector — \
              move `--base-port` or `--inspect-port` so the two ranges do not overlap."
         );
         return ExitCode::FAILURE;
@@ -671,7 +671,7 @@ pub fn run(
             || passthrough_has(&opts.wrangler_args, "--config"))
     {
         emsg!(
-            "bynk: `-c`/`--config` is the driver's when it runs stand-ins for foreign Workers — pass `--local-worker NAME` instead of a config after `--`."
+            "bynk: error: `-c`/`--config` is the driver's when it runs stand-ins for foreign Workers — pass `--local-worker NAME` instead of a config after `--`."
         );
         return ExitCode::FAILURE;
     }
@@ -679,12 +679,12 @@ pub fn run(
     let stand_in_configs = match write_stand_ins(&build_dir, &stand_in_plans) {
         Ok(configs) => configs,
         Err(e) => {
-            emsg!("bynk: could not write the stand-ins for foreign Workers: {e}");
+            emsg!("bynk: error: could not write the stand-ins for foreign Workers: {e}");
             return ExitCode::FAILURE;
         }
     };
     if let Err(e) = point_at_stand_ins(&workers_dir, &stand_in_plans) {
-        emsg!("bynk: could not bind the stand-ins for foreign Workers: {e}");
+        emsg!("bynk: error: could not bind the stand-ins for foreign Workers: {e}");
         return ExitCode::FAILURE;
     }
     // #3479: each `Vectorize` instance is bound to the index `[dev.vectorize-index]`
@@ -719,7 +719,7 @@ pub fn run(
     }
     if matches!(probe.provenance, Provenance::Missing) {
         // The pre-flight gate should have caught this; defensive only.
-        emsg!("bynk: wrangler not found (run `bynk doctor --only deploy`)");
+        emsg!("bynk: error: wrangler not found (run `bynk doctor --only deploy`)");
         return ExitCode::FAILURE;
     }
 
@@ -780,7 +780,7 @@ pub fn run(
     let mut pumps: Vec<std::thread::JoinHandle<()>> = Vec::new();
     for s in &serving {
         let Some(mut cmd) = wrangler_command(&probe.provenance, "dev") else {
-            emsg!("bynk: wrangler not found (run `bynk doctor --only deploy`)");
+            emsg!("bynk: error: wrangler not found (run `bynk doctor --only deploy`)");
             terminate(&mut children, &workers_dir);
             return ExitCode::FAILURE;
         };
@@ -837,7 +837,8 @@ pub fn run(
                 children.push((s.worker.clone(), Served::new(child)));
             }
             Err(e) => {
-                emsg!("bynk: could not run wrangler for `{}`: {e}", s.worker);
+                let w = &s.worker;
+                emsg!("bynk: error: could not run wrangler for `{w}`: {e}");
                 terminate(&mut children, &workers_dir);
                 return ExitCode::FAILURE;
             }
@@ -889,7 +890,7 @@ pub fn run(
                 match written {
                     Ok(()) => emsg!("bynk dev: every context answers — ready"),
                     // Not retried: the session keeps serving, unsignalled.
-                    Err(e) => eprintln!("bynk: could not write the `--ready-json` file: {e}"),
+                    Err(e) => emsg!("bynk: warning: could not write the `--ready-json` file: {e}"),
                 }
             }
             if let Some(note) = r.slow_note(std::time::Instant::now()) {
@@ -908,7 +909,7 @@ pub fn run(
                 // rebuilt config. A binding added since start has no
                 // stand-in until `bynk dev` restarts.
                 if let Err(e) = point_at_stand_ins(&workers_dir, &stand_in_plans) {
-                    emsg!("bynk: could not bind the stand-ins for foreign Workers: {e}");
+                    emsg!("bynk: warning: could not bind the stand-ins for foreign Workers: {e}");
                 }
                 // The rebuilt configs name the derived indexes again.
                 bind_dev_vectorize(
@@ -951,7 +952,7 @@ fn materialise_remote_state(
         if let Err(e) =
             crate::deploy::materialise_deploy_state(project_root, &s.worker, &config, environment)
         {
-            emsg!("bynk: {e}");
+            emsg!("bynk: error: {e}");
             return false;
         }
     }
@@ -1015,16 +1016,18 @@ fn bind_dev_vectorize(
             true
         }
         Err(e) => {
-            emsg!("bynk: {e}");
+            // At start the session stops; on a rebuild it keeps serving.
+            let label = if announce { "error" } else { "warning" };
+            emsg!("bynk: {label}: {e}");
             // A rebuild's configs name the deploy's indexes again: never serve
             // them. Unbound, a call to an instance faults until `bynk.toml` reads.
             if !announce {
                 match crate::dev_vectorize::unbind_all(workers_dir, &names) {
                     Ok(()) => emsg!(
-                        "bynk dev: Vectorize instances are unbound until `bynk.toml` is fixed; calls to them fail"
+                        "bynk dev: warning: Vectorize instances are unbound until `bynk.toml` is fixed; calls to them fail"
                     ),
                     Err(e) => {
-                        emsg!("bynk: could not unbind the Vectorize instances: {e}")
+                        emsg!("bynk: warning: could not unbind the Vectorize instances: {e}")
                     }
                 }
             }
@@ -1050,12 +1053,12 @@ fn hyperdrive_local_env(
     match crate::dev_hyperdrive::local_connections(project_root, workers_dir, &workers, &lookup) {
         Ok((strings, warnings)) => {
             for warning in warnings {
-                emsg!("bynk: {warning}");
+                emsg!("bynk: warning: {warning}");
             }
             Some(strings)
         }
         Err(e) => {
-            emsg!("bynk: {e}");
+            emsg!("bynk: error: {e}");
             None
         }
     }
@@ -1268,7 +1271,7 @@ fn supervise(
             let status = match children[i].1.child.try_wait() {
                 Ok(status) => status,
                 Err(e) => {
-                    emsg!("bynk: could not poll wrangler: {e}");
+                    emsg!("bynk: error: could not poll wrangler: {e}");
                     terminate(children, workers_dir);
                     return 1;
                 }
@@ -1308,7 +1311,7 @@ impl Served {
                 Ok(job) => Some(job),
                 Err(e) => {
                     emsg!(
-                        "bynk dev: could not put wrangler in a job object ({e}); \
+                        "bynk dev: warning: could not put wrangler in a job object ({e}); \
                          stopping it may leave its workerd processes running."
                     );
                     None
@@ -1648,7 +1651,7 @@ fn apply_local_migrations(
         };
         for (binding, dir) in migrating_databases(&config) {
             let Some(mut cmd) = wrangler_command(provenance, "d1") else {
-                emsg!("bynk: wrangler not found (run `bynk doctor --only deploy`)");
+                emsg!("bynk: warning: wrangler not found (run `bynk doctor --only deploy`)");
                 return;
             };
             cmd.args(["migrations", "apply", &binding, "--local"])
@@ -1706,7 +1709,7 @@ fn warm_up_wrangler(provenance: &Provenance, serving: usize) -> bool {
     });
     if warmed != Some(true) {
         emsg!(
-            "bynk: `{}` failed — wrangler could not be installed via {runner}.",
+            "bynk: error: `{}` failed — wrangler could not be installed via {runner}.",
             wrangler_warm_up_command_line(provenance)
         );
         return false;
@@ -1874,7 +1877,7 @@ pub fn wrangler_age_notice(
 /// (§5), unlike the non-deterministic `wrangler dev` stream.
 pub fn preflight_failure_message(report: &Report) -> String {
     format!(
-        "bynk: environment not ready for `dev` — see below.\n\n{}",
+        "bynk: error: environment not ready for `dev` — see below.\n\n{}",
         report::render(report, Format::Human)
     )
 }
@@ -2107,14 +2110,14 @@ fn bind_inspect_registry(workers_dir: &Path, serving: &[Serving]) {
             Ok(out) if out != text => {
                 if let Err(e) = std::fs::write(dir.join("wrangler.toml"), out) {
                     emsg!(
-                        "bynk: could not bind `{}`'s inspect registry: {e}",
+                        "bynk: warning: could not bind `{}`'s inspect registry: {e}",
                         s.worker
                     );
                 }
             }
             Ok(_) => {}
             Err(e) => emsg!(
-                "bynk: could not bind `{}`'s inspect registry: {e}",
+                "bynk: warning: could not bind `{}`'s inspect registry: {e}",
                 s.worker
             ),
         }
@@ -2136,14 +2139,14 @@ fn proxy_ai_search(workers_dir: &Path, serving: &[Serving]) {
             Ok(out) if out != text => {
                 if let Err(e) = std::fs::write(&path, out) {
                     emsg!(
-                        "bynk: could not proxy `{}`'s AI Search bindings to the account: {e}",
+                        "bynk: warning: could not proxy `{}`'s AI Search bindings to the account: {e}",
                         s.worker
                     );
                 }
             }
             Ok(_) => {}
             Err(e) => emsg!(
-                "bynk: could not proxy `{}`'s AI Search bindings: {e}",
+                "bynk: warning: could not proxy `{}`'s AI Search bindings: {e}",
                 s.worker
             ),
         }
@@ -2166,7 +2169,7 @@ fn proxy_mtls(project_root: &Path, workers_dir: &Path, serving: &[Serving], envi
         if let Err(e) =
             crate::deploy::materialise_mtls_for_dev(project_root, &s.worker, &path, environment)
         {
-            emsg!("bynk: {e}");
+            emsg!("bynk: warning: {e}");
         }
         let Ok(text) = std::fs::read_to_string(&path) else {
             continue;
@@ -2175,13 +2178,16 @@ fn proxy_mtls(project_root: &Path, workers_dir: &Path, serving: &[Serving], envi
             Ok(out) if out != text => {
                 if let Err(e) = std::fs::write(&path, out) {
                     emsg!(
-                        "bynk: could not run `{}`'s mTLS bindings on the account: {e}",
+                        "bynk: warning: could not run `{}`'s mTLS bindings on the account: {e}",
                         s.worker
                     );
                 }
             }
             Ok(_) => {}
-            Err(e) => emsg!("bynk: could not run `{}`'s mTLS bindings: {e}", s.worker),
+            Err(e) => emsg!(
+                "bynk: warning: could not run `{}`'s mTLS bindings: {e}",
+                s.worker
+            ),
         }
     }
 }
@@ -2201,14 +2207,14 @@ fn proxy_analytics_sql(workers_dir: &Path, serving: &[Serving]) {
             Ok(out) if out != text => {
                 if let Err(e) = std::fs::write(&path, out) {
                     emsg!(
-                        "bynk: could not run `{}`'s Analytics SQL binding on the account: {e}",
+                        "bynk: warning: could not run `{}`'s Analytics SQL binding on the account: {e}",
                         s.worker
                     );
                 }
             }
             Ok(_) => {}
             Err(e) => emsg!(
-                "bynk: could not run `{}`'s Analytics SQL binding: {e}",
+                "bynk: warning: could not run `{}`'s Analytics SQL binding: {e}",
                 s.worker
             ),
         }
@@ -2246,7 +2252,7 @@ fn dev_vars_for(project_root: &Path) -> Option<Vec<String>> {
             Some(args)
         }
         Err(e) => {
-            emsg!("bynk: {e}");
+            emsg!("bynk: error: {e}");
             None
         }
     }

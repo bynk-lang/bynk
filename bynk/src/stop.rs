@@ -40,7 +40,7 @@ pub fn install() {
             libc::sigemptyset(&mut action.sa_mask);
             if libc::sigaction(sig, &action, std::ptr::null_mut()) != 0 {
                 emsg!(
-                    "bynk dev: could not install a handler for signal {sig}; stopping \
+                    "bynk dev: warning: could not install a handler for signal {sig}; stopping \
                      `bynk dev` with it may leave its workerd processes running."
                 );
             }

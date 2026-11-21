@@ -1,26 +1,26 @@
 # contract skew refusal, environment default
-bynk: `commerce-orders` was compiled against a contract its live dependencies no longer provide (bynk.deploy.contract_skew):
+bynk: error: `commerce-orders` was compiled against a contract its live dependencies no longer provide (bynk.deploy.contract_skew):
   commerce.payment.authorise — compiled against aaaa, live is bbbb
   Deploying this would ship a caller its callee rejects (409 ContractMismatch) on every call.
   Deploy the whole project (`bynk deploy`) so both sides move together.
 # edge key presence unknown, environment default
-bynk: could not ask Cloudflare whether `commerce-payment` holds BYNK_CALL_FROM_COMMERCE__ORDERS; assuming it does. If it does not, the edge `commerce-orders` → `commerce-payment` refuses every call — `bynk deploy --force` sets a fresh key on every edge.
+bynk: warning: could not ask Cloudflare whether `commerce-payment` holds BYNK_CALL_FROM_COMMERCE__ORDERS; assuming it does. If it does not, the edge `commerce-orders` → `commerce-payment` refuses every call — `bynk deploy --force` sets a fresh key on every edge.
 # edge needs a key a --context run cannot copy, environment default
 the edge `commerce-orders` → `commerce-payment` needs a new key on both Workers, but Cloudflare never returns a key's value, so a `--context` run cannot copy it to the Worker it does not deploy.
   Deploy the whole project (`bynk deploy`) to mint a key for every edge.
 # interrupted rotation, environment default
-bynk: this run was setting new keys on `commerce-orders` → `commerce-payment` and stopped before both ends of each were deployed, so each end may hold a different key and calls along it are refused.
+bynk: note: this run was setting new keys on `commerce-orders` → `commerce-payment` and stopped before both ends of each were deployed, so each end may hold a different key and calls along it are refused.
   Rerun `bynk deploy --force` (the whole project) to set one key on both ends; a plain rerun would keep both.
 # progress, environment default
 bynk: deploying `commerce-orders` (2/2)…
 # deployed but not recorded, environment default
-bynk: deployed `commerce-orders` but could not record it in bynk.deploy.lock: permission denied
+bynk: error: deployed `commerce-orders` but could not record it in bynk.deploy.lock: permission denied
 # foreign caller's secret may be set, environment default
-bynk: `commerce-orders` may already hold the LEDGER_CALL_KEY minted for its foreign caller `Ledger`. If `wrangler secret list --name commerce-orders` shows it, hand this off; if not, the next deploy mints another.
+bynk: note: `commerce-orders` may already hold the LEDGER_CALL_KEY minted for its foreign caller `Ledger`. If `wrangler secret list --name commerce-orders` shows it, hand this off; if not, the next deploy mints another.
 # foreign caller's binding refused, environment default
-bynk: `LEDGER_CALL_KEY` (the foreign caller `Ledger` of `commerce-orders`): the supplied value is empty — every call from it would be refused
+bynk: error: `LEDGER_CALL_KEY` (the foreign caller `Ledger` of `commerce-orders`): the supplied value is empty — every call from it would be refused
 # foreign caller hand-off, environment default
-bynk: minted LEDGER_CALL_KEY for `Ledger`, a foreign caller of `commerce.orders`. Its operator sets it on their Worker:
+bynk: note: minted LEDGER_CALL_KEY for `Ledger`, a foreign caller of `commerce.orders`. Its operator sets it on their Worker:
 
   printf '%s' 'abc123' | npx wrangler secret put BYNK_CALL_TO_COMMERCE__ORDERS --name ledger-svc
 
@@ -31,38 +31,38 @@ bynk: `commerce-orders` reads at least one secret whose name the compiler cannot
 # secret already set, environment default
 bynk: secret `API_KEY` is already set on `commerce-orders`, skipping — use --force to overwrite
 # optional read unsupplied, environment default
-bynk: `commerce-orders` reads the secret `API_KEY`, but no value was supplied — it will see None.
+bynk: note: `commerce-orders` reads the secret `API_KEY`, but no value was supplied — it will see None.
   Supply it with --secrets-file or --secret API_KEY, if it is meant to be set.
 # secret presence unknown, environment default
-bynk: could not ask Cloudflare which secrets `commerce-orders` has, and no value for `AUTH_SECRET` was supplied — leaving it as it is.
+bynk: warning: could not ask Cloudflare which secrets `commerce-orders` has, and no value for `AUTH_SECRET` was supplied — leaving it as it is.
   If it is not set, `commerce-orders` will answer 401. Check with `wrangler secret list --name commerce-orders`, or supply a value to set it.
 # secret put failed, environment default
 could not set the secret `API_KEY` on `commerce-orders`: exit 1
 # declared secret missing, environment default
 `commerce-orders` declares the secret `AUTH_SECRET` (an actor's `auth` secret) but no value was supplied — pass it in --secrets-file, or set AUTH_SECRET in the environment. Deploying without it would answer every request with 401.
 # contract skew refusal, environment staging
-bynk: `commerce-orders-staging` was compiled against a contract its live dependencies no longer provide (bynk.deploy.contract_skew):
+bynk: error: `commerce-orders-staging` was compiled against a contract its live dependencies no longer provide (bynk.deploy.contract_skew):
   commerce.payment.authorise — compiled against aaaa, live is bbbb
   Deploying this would ship a caller its callee rejects (409 ContractMismatch) on every call.
   Deploy the whole project (`bynk deploy --env staging`) so both sides move together.
 # edge key presence unknown, environment staging
-bynk: could not ask Cloudflare whether `commerce-payment-staging` holds BYNK_CALL_FROM_COMMERCE__ORDERS; assuming it does. If it does not, the edge `commerce-orders-staging` → `commerce-payment-staging` refuses every call — `bynk deploy --env staging --force` sets a fresh key on every edge.
+bynk: warning: could not ask Cloudflare whether `commerce-payment-staging` holds BYNK_CALL_FROM_COMMERCE__ORDERS; assuming it does. If it does not, the edge `commerce-orders-staging` → `commerce-payment-staging` refuses every call — `bynk deploy --env staging --force` sets a fresh key on every edge.
 # edge needs a key a --context run cannot copy, environment staging
 the edge `commerce-orders-staging` → `commerce-payment-staging` needs a new key on both Workers, but Cloudflare never returns a key's value, so a `--context` run cannot copy it to the Worker it does not deploy.
   Deploy the whole project (`bynk deploy --env staging`) to mint a key for every edge.
 # interrupted rotation, environment staging
-bynk: this run was setting new keys on `commerce-orders-staging` → `commerce-payment-staging` and stopped before both ends of each were deployed, so each end may hold a different key and calls along it are refused.
+bynk: note: this run was setting new keys on `commerce-orders-staging` → `commerce-payment-staging` and stopped before both ends of each were deployed, so each end may hold a different key and calls along it are refused.
   Rerun `bynk deploy --env staging --force` (the whole project) to set one key on both ends; a plain rerun would keep both.
 # progress, environment staging
 bynk: deploying `commerce-orders-staging` (2/2)…
 # deployed but not recorded, environment staging
-bynk: deployed `commerce-orders-staging` but could not record it in bynk.deploy.lock: permission denied
+bynk: error: deployed `commerce-orders-staging` but could not record it in bynk.deploy.lock: permission denied
 # foreign caller's secret may be set, environment staging
-bynk: `commerce-orders-staging` may already hold the LEDGER_CALL_KEY minted for its foreign caller `Ledger`. If `wrangler secret list --name commerce-orders-staging` shows it, hand this off; if not, the next deploy mints another.
+bynk: note: `commerce-orders-staging` may already hold the LEDGER_CALL_KEY minted for its foreign caller `Ledger`. If `wrangler secret list --name commerce-orders-staging` shows it, hand this off; if not, the next deploy mints another.
 # foreign caller's binding refused, environment staging
-bynk: `LEDGER_CALL_KEY` (the foreign caller `Ledger` of `commerce-orders-staging`): the supplied value is empty — every call from it would be refused
+bynk: error: `LEDGER_CALL_KEY` (the foreign caller `Ledger` of `commerce-orders-staging`): the supplied value is empty — every call from it would be refused
 # foreign caller hand-off, environment staging
-bynk: minted LEDGER_CALL_KEY for `Ledger`, a foreign caller of `commerce.orders`. Its operator sets it on their Worker:
+bynk: note: minted LEDGER_CALL_KEY for `Ledger`, a foreign caller of `commerce.orders`. Its operator sets it on their Worker:
 
   printf '%s' 'abc123' | npx wrangler secret put BYNK_CALL_TO_COMMERCE__ORDERS --name ledger-svc
 
@@ -73,10 +73,10 @@ bynk: `commerce-orders-staging` reads at least one secret whose name the compile
 # secret already set, environment staging
 bynk: secret `API_KEY` is already set on `commerce-orders-staging`, skipping — use --force to overwrite
 # optional read unsupplied, environment staging
-bynk: `commerce-orders-staging` reads the secret `API_KEY`, but no value was supplied — it will see None.
+bynk: note: `commerce-orders-staging` reads the secret `API_KEY`, but no value was supplied — it will see None.
   Supply it with --secrets-file or --secret API_KEY, if it is meant to be set.
 # secret presence unknown, environment staging
-bynk: could not ask Cloudflare which secrets `commerce-orders-staging` has, and no value for `AUTH_SECRET` was supplied — leaving it as it is.
+bynk: warning: could not ask Cloudflare which secrets `commerce-orders-staging` has, and no value for `AUTH_SECRET` was supplied — leaving it as it is.
   If it is not set, `commerce-orders-staging` will answer 401. Check with `wrangler secret list --name commerce-orders-staging`, or supply a value to set it.
 # secret put failed, environment staging
 could not set the secret `API_KEY` on `commerce-orders-staging`: exit 1

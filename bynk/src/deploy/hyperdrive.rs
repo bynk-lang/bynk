@@ -678,7 +678,7 @@ pub(crate) fn wants_for_run(
     let settings = match bynk_project::hyperdrive::try_read_hyperdrive_deploy(project_root) {
         Ok(settings) => settings,
         Err(e) => {
-            emsg!("bynk: {e}");
+            emsg!("bynk: error: {e}");
             return None;
         }
     };
@@ -687,7 +687,7 @@ pub(crate) fn wants_for_run(
         Ok(wants) => Some(wants),
         Err(problems) => {
             for problem in problems {
-                emsg!("bynk: {problem}");
+                emsg!("bynk: error: {problem}");
             }
             None
         }
@@ -708,7 +708,7 @@ pub(crate) fn refused_in_ci(
         return false;
     };
     emsg!(
-        "bynk: the Hyperdrive config of `{binding}` of `{worker}` is unrecorded; deploy locally first and commit {LOCK_FILE}, or name an existing config with `config_id` in `[deploy.hyperdrive]`"
+        "bynk: error: the Hyperdrive config of `{binding}` of `{worker}` is unrecorded; deploy locally first and commit {LOCK_FILE}, or name an existing config with `config_id` in `[deploy.hyperdrive]`"
     );
     true
 }
@@ -731,7 +731,7 @@ pub(crate) fn api_for_run(
         return Ok(None);
     }
     RestHyperdrive::from_env().map(Some).map_err(|e| {
-        emsg!("bynk: {e}");
+        emsg!("bynk: error: {e}");
     })
 }
 

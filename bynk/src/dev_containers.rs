@@ -84,7 +84,7 @@ fn describe(containers: &Containers) -> String {
 pub(crate) fn remote_refusal(containers: &Containers, remote: bool) -> Option<String> {
     (remote && !containers.is_empty()).then(|| {
         format!(
-            "bynk: `--remote` is not supported for a Worker with a container ({}): remote bindings are not documented for containers, and `bynk dev` runs them under Docker on this machine. Run `bynk dev` without `--remote`.",
+            "bynk: error: `--remote` is not supported for a Worker with a container ({}): remote bindings are not documented for containers, and `bynk dev` runs them under Docker on this machine. Run `bynk dev` without `--remote`.",
             describe(containers)
         )
     })

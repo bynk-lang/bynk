@@ -872,7 +872,7 @@ fn fail(program: &str, json: bool, message: String) -> ExitCode {
     if json {
         crate::test_stream::print_run(false, &TestRun::runtime_error(message, None));
     } else {
-        emsg!("{program} test: {message}");
+        emsg!("{program} test: error: {message}");
     }
     ExitCode::FAILURE
 }
@@ -1026,7 +1026,7 @@ pub fn run(program: &str, args: MutateArgs) -> ExitCode {
             eprintln!("{}", describe_failure(doc.as_ref(), &text));
         }
         emsg!(
-            "{program} test: the unmutated project does not pass, so there is nothing to mutate — fix it first"
+            "{program} test: error: the unmutated project does not pass, so there is nothing to mutate — fix it first"
         );
         return ExitCode::FAILURE;
     };
@@ -1209,12 +1209,14 @@ pub fn run(program: &str, args: MutateArgs) -> ExitCode {
         }
         Some(min) if ran == 0 => {
             emsg!(
-                "{program} test: no mutant reached a suite, so --mutate-fail-under {min} cannot be met"
+                "{program} test: error: no mutant reached a suite, so --mutate-fail-under {min} cannot be met"
             );
             ExitCode::FAILURE
         }
         Some(min) if score < min => {
-            emsg!("{program} test: mutation score {score}% is below --mutate-fail-under {min}");
+            emsg!(
+                "{program} test: error: mutation score {score}% is below --mutate-fail-under {min}"
+            );
             ExitCode::FAILURE
         }
         _ => ExitCode::SUCCESS,

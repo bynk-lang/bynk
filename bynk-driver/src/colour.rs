@@ -300,8 +300,8 @@ fn message_line(line: &str) -> String {
     }
     for start in starts {
         for (label, style) in LABELS {
-            if line[start..].starts_with(label) {
-                let end = start + label.len();
+            if let Some(end) = label_end(&line[start..], label) {
+                let (label, end) = (&line[start..start + end], start + end);
                 return format!(
                     "{}{}{}",
                     &line[..start],
@@ -314,15 +314,29 @@ fn message_line(line: &str) -> String {
     line.to_string()
 }
 
+/// Where `label` (`error:`) ends at the start of `text`, also in its coded
+/// form, `error[bynk.fetch.status]:`, as the registry and fetch errors have it.
+fn label_end(text: &str, label: &str) -> Option<usize> {
+    if text.starts_with(label) {
+        return Some(label.len());
+    }
+    let word = label.trim_end_matches(':');
+    let code = text.strip_prefix(word)?.strip_prefix('[')?;
+    let close = code.find("]:")?;
+    let plain = |c: char| c.is_ascii_alphanumeric() || "._-".contains(c);
+    (close > 0 && code[..close].chars().all(plain)).then_some(word.len() + 1 + close + 2)
+}
+
 /// A few plain words naming who speaks (`bynk`, `bynk dev`, `bynk test
-/// --coverage`), and never a label itself.
+/// --coverage`, or a workspace member, `packages/ok`), and never a label
+/// itself.
 fn is_speaker(text: &str) -> bool {
     !text.is_empty()
         && text.len() <= 40
         && !LABELS.iter().any(|(l, _)| l.trim_end_matches(':') == text)
         && text
             .chars()
-            .all(|c| c.is_ascii_alphanumeric() || " -_.".contains(c))
+            .all(|c| c.is_ascii_alphanumeric() || " -_./".contains(c))
 }
 
 /// `text` for stderr: its labels coloured as [`message`] does when stderr is
@@ -520,7 +534,19 @@ mod tests {
             message("bynk: warning: x said error: y"),
             format!("bynk: {} x said error: y", amber("warning:"))
         );
+        // A workspace member speaks after `bynk:`, as a path.
+        assert_eq!(
+            message("bynk: packages/ok: error: no member"),
+            format!("bynk: packages/ok: {} no member", red("error:"))
+        );
+        // The coded form takes the colour too, code and all.
+        assert_eq!(
+            message("bynk: error[bynk.fetch.status]: 404 from x"),
+            format!("bynk: {} 404 from x", red("error[bynk.fetch.status]:"))
+        );
         for plain in [
+            "bynk: error[]: empty code",
+            "bynk: error[a b]: a space",
             "bynk: signed out of `acme`",
             "bynk: could not read `a: b`: error: no",
             "",

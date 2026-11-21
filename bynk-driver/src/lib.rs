@@ -980,13 +980,15 @@ impl ManifestCache {
 pub fn run_fmt(prog: &str, args: &FmtArgs) -> ExitCode {
     let check = args.check;
     if args.inputs.is_empty() {
-        crate::emsg!("{prog} fmt: no input files (pass file or directory paths, or `-` for stdin)");
+        crate::emsg!(
+            "{prog} fmt: error: no input files (pass file or directory paths, or `-` for stdin)"
+        );
         return ExitCode::FAILURE;
     }
     let inputs = match expand_fmt_inputs(&args.inputs) {
         Ok(inputs) => inputs,
         Err(e) => {
-            crate::emsg!("{prog} fmt: {e}");
+            crate::emsg!("{prog} fmt: error: {e}");
             return ExitCode::FAILURE;
         }
     };
@@ -1006,7 +1008,7 @@ pub fn run_fmt(prog: &str, args: &FmtArgs) -> ExitCode {
         {
             Ok(opts) => resolved.push(opts),
             Err(e) => {
-                crate::emsg!("{prog} fmt: {e}");
+                crate::emsg!("{prog} fmt: error: {e}");
                 return ExitCode::FAILURE;
             }
         }
@@ -1019,7 +1021,7 @@ pub fn run_fmt(prog: &str, args: &FmtArgs) -> ExitCode {
             use std::io::Read;
             let mut source = String::new();
             if let Err(e) = std::io::stdin().read_to_string(&mut source) {
-                crate::emsg!("{prog} fmt: read from stdin: {e}");
+                crate::emsg!("{prog} fmt: error: read from stdin: {e}");
                 return ExitCode::FAILURE;
             }
             // #1763: compared, and errors rendered, modulo line endings.
@@ -1033,7 +1035,7 @@ pub fn run_fmt(prog: &str, args: &FmtArgs) -> ExitCode {
                         // --check -` gate is otherwise dead, passing green on
                         // non-canonical input.
                         if formatted != source {
-                            crate::emsg!("{prog} fmt: <stdin> is not canonically formatted");
+                            crate::emsg!("{prog} fmt: error: <stdin> is not canonically formatted");
                             had_diff = true;
                         }
                     } else {
@@ -1055,7 +1057,7 @@ pub fn run_fmt(prog: &str, args: &FmtArgs) -> ExitCode {
         let raw = match std::fs::read_to_string(input) {
             Ok(s) => s,
             Err(e) => {
-                crate::emsg!("{prog} fmt: read `{}`: {e}", shown(input));
+                crate::emsg!("{prog} fmt: error: read `{}`: {e}", shown(input));
                 had_error = true;
                 continue;
             }
@@ -1070,13 +1072,16 @@ pub fn run_fmt(prog: &str, args: &FmtArgs) -> ExitCode {
             Ok(formatted) => {
                 if check {
                     if formatted != source {
-                        crate::emsg!("{prog} fmt: {} is not canonically formatted", filename);
+                        crate::emsg!(
+                            "{prog} fmt: error: {} is not canonically formatted",
+                            filename
+                        );
                         had_diff = true;
                     }
                 } else if formatted != source
                     && let Err(e) = atomic_write(input, &formatted)
                 {
-                    crate::emsg!("{prog} fmt: write `{}`: {e}", filename);
+                    crate::emsg!("{prog} fmt: error: write `{}`: {e}", filename);
                     had_error = true;
                 }
             }
@@ -1249,7 +1254,7 @@ pub fn run_check(
     let scope = match fix.map(fix::Scope::codes).transpose() {
         Ok(scope) => scope,
         Err(message) => {
-            crate::emsg!("{prog}: --fix: {message}");
+            crate::emsg!("{prog}: error: --fix: {message}");
             return ExitCode::FAILURE;
         }
     };
@@ -1261,7 +1266,7 @@ pub fn run_check(
     let workspace = match workspace_at_each(input, each) {
         Ok(w) => w,
         Err(message) => {
-            crate::emsg!("{prog}: {message}");
+            crate::emsg!("{prog}: error: {message}");
             return ExitCode::FAILURE;
         }
     };
@@ -1269,7 +1274,7 @@ pub fn run_check(
         let workspace = match workspace {
             Ok(w) => w,
             Err(e) => {
-                crate::emsg!("{prog}: {}: {e}", shown(&input.join("bynk.toml")));
+                crate::emsg!("{prog}: error: {}: {e}", shown(&input.join("bynk.toml")));
                 return ExitCode::FAILURE;
             }
         };
@@ -1441,7 +1446,7 @@ fn check_one(prog: &str, input: &Path, short: bool, member: Option<&Path>) -> bo
         let options = match try_project_options(input) {
             Ok(o) => o,
             Err(e) => {
-                crate::emsg!("{prog}: {e}");
+                crate::emsg!("{prog}: error: {e}");
                 return false;
             }
         };
@@ -1452,7 +1457,7 @@ fn check_one(prog: &str, input: &Path, short: bool, member: Option<&Path>) -> bo
         let options = match schema_lock::read_only(input) {
             Ok(lock) => options.schema_registry(lock),
             Err(e) => {
-                crate::emsg!("{prog}: {e}");
+                crate::emsg!("{prog}: error: {e}");
                 return false;
             }
         };
@@ -1468,7 +1473,7 @@ fn check_one(prog: &str, input: &Path, short: bool, member: Option<&Path>) -> bo
         let source = match std::fs::read_to_string(input) {
             Ok(s) => s,
             Err(e) => {
-                crate::emsg!("{prog}: could not read `{}`: {e}", shown(input));
+                crate::emsg!("{prog}: error: could not read `{}`: {e}", shown(input));
                 return false;
             }
         };

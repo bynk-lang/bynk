@@ -49,17 +49,17 @@ pub(crate) fn apply_container_adoptions(
         // An entry for a container the project no longer declares is not an
         // error when there are none at all: nothing would build either way.
         let settings = bynk_project::containers::try_read_containers_deploy(project_root)
-            .map_err(|e| emsg!("bynk: {e}"))?;
+            .map_err(|e| emsg!("bynk: error: {e}"))?;
         if let Some(capability) = settings.keys().next() {
             emsg!(
-                "bynk: `[deploy.containers.{capability}]` in bynk.toml names no `Container` capability in this project"
+                "bynk: error: `[deploy.containers.{capability}]` in bynk.toml names no `Container` capability in this project"
             );
             return Err(());
         }
         return Ok(());
     }
     let settings = bynk_project::containers::try_read_containers_deploy(project_root)
-        .map_err(|e| emsg!("bynk: {e}"))?;
+        .map_err(|e| emsg!("bynk: error: {e}"))?;
     // An entry that names no declared capability would be silently ignored,
     // and the deploy would build an image the team meant to adopt.
     let capabilities: Vec<&str> = resources
@@ -74,7 +74,7 @@ pub(crate) fn apply_container_adoptions(
             .map(|c| format!("; did you mean `{c}`?"))
             .unwrap_or_default();
         emsg!(
-            "bynk: `[deploy.containers.{capability}]` in bynk.toml names no `Container` capability in this project{hint}; an entry that matches nothing would have the deploy build an image you meant to adopt"
+            "bynk: error: `[deploy.containers.{capability}]` in bynk.toml names no `Container` capability in this project{hint}; an entry that matches nothing would have the deploy build an image you meant to adopt"
         );
         return Err(());
     }
@@ -156,7 +156,7 @@ pub(crate) fn docker_refusal(
         None => "`docker` is not installed",
     };
     Some(format!(
-        "bynk: `{worker}`'s container `{}` is built from `{}/Dockerfile` at deploy, which needs Docker, and {problem}.\n  Start Docker, or run a prebuilt image instead: push it to Cloudflare's registry and name it in bynk.toml,\n    [deploy.containers.{}]\n    image = {{ <environment> = \"registry.cloudflare.com/<ACCOUNT_ID>/<REPOSITORY>@sha256:<DIGEST>\" }}",
+        "bynk: error: `{worker}`'s container `{}` is built from `{}/Dockerfile` at deploy, which needs Docker, and {problem}.\n  Start Docker, or run a prebuilt image instead: push it to Cloudflare's registry and name it in bynk.toml,\n    [deploy.containers.{}]\n    image = {{ <environment> = \"registry.cloudflare.com/<ACCOUNT_ID>/<REPOSITORY>@sha256:<DIGEST>\" }}",
         container.capability, container.build, container.capability
     ))
 }

@@ -112,11 +112,13 @@ pub fn after_write(project: &Path, pending: &[LockedNpm]) {
         );
         let chosen = ask(&lock, &rows);
         if let Err(e) = approve(&path, &mut lock, &chosen) {
-            emsg!("bynk: {e}");
+            emsg!("bynk: warning: {e}");
         }
         return;
     }
-    emsg!("bynk: npm packages awaiting approval — a build reaching them fails until approved:");
+    emsg!(
+        "bynk: note: npm packages awaiting approval — a build reaching them fails until approved:"
+    );
     for &i in &rows {
         describe(&lock, &lock.npm[i]);
     }

@@ -131,7 +131,7 @@ pub fn compile_once_reporting(
             Ok(existing) => SchemaLock::On { existing },
             Err(e) => {
                 emsg!(
-                    "bynk: could not read {}: {e}",
+                    "bynk: error: could not read {}: {e}",
                     bynk_driver::schema_lock::lock_path(project_root).display()
                 );
                 return false;
@@ -148,7 +148,7 @@ pub fn compile_once_reporting(
             .progress(progress)
             .tests(false),
         Err(e) => {
-            emsg!("bynk: {e}");
+            emsg!("bynk: error: {e}");
             return false;
         }
     };
@@ -170,13 +170,13 @@ pub fn compile_once_reporting(
         && let Err(e) = bynk_driver::schema_lock::write(project_root, content)
     {
         emsg!(
-            "bynk: could not write {}: {e}",
+            "bynk: warning: could not write {}: {e}",
             bynk_driver::schema_lock::lock_path(project_root).display()
         );
     }
     if let Err(e) = bynk_driver::write_output(&output, build_dir) {
         emsg!(
-            "bynk: could not write build output under `{}`: {e}",
+            "bynk: error: could not write build output under `{}`: {e}",
             build_dir.display()
         );
         return false;
@@ -198,7 +198,7 @@ pub fn compile_once_reporting(
         setting.as_deref(),
         mode,
     ) {
-        emsg!("bynk: {e}");
+        emsg!("bynk: error: {e}");
         return false;
     }
     true

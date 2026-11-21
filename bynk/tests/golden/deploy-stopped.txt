@@ -1,9 +1,9 @@
 # the last context failed: nothing was left to withhold
 # one context was left
-bynk: stopping — 1 more context was not deployed: commerce-orders. Re-run `bynk deploy` to resume; what already landed is kept.
+bynk: note: stopping — 1 more context was not deployed: commerce-orders. Re-run `bynk deploy` to resume; what already landed is kept.
 # several were left
-bynk: stopping — 2 further contexts were not deployed: commerce-orders, commerce-shipping. Re-run `bynk deploy` to resume; what already landed is kept.
+bynk: note: stopping — 2 further contexts were not deployed: commerce-orders, commerce-shipping. Re-run `bynk deploy` to resume; what already landed is kept.
 # --env staging: one context was left
-bynk: stopping — 1 more context was not deployed: commerce-orders-staging. Re-run `bynk deploy --env staging` to resume; what already landed is kept.
+bynk: note: stopping — 1 more context was not deployed: commerce-orders-staging. Re-run `bynk deploy --env staging` to resume; what already landed is kept.
 # --env staging: several were left
-bynk: stopping — 2 further contexts were not deployed: commerce-orders-staging, commerce-shipping-staging. Re-run `bynk deploy --env staging` to resume; what already landed is kept.
+bynk: note: stopping — 2 further contexts were not deployed: commerce-orders-staging, commerce-shipping-staging. Re-run `bynk deploy --env staging` to resume; what already landed is kept.

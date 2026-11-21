@@ -179,7 +179,7 @@ pub fn status(root: &Path, format: StatusFormat) -> ExitCode {
             ExitCode::SUCCESS
         }
         Err(e) => {
-            emsg!("bynk migrate status: {e}");
+            emsg!("bynk migrate status: error: {e}");
             ExitCode::FAILURE
         }
     }
@@ -231,7 +231,7 @@ pub fn sweep(root: &Path, opts: &SweepOptions) -> ExitCode {
         Ok(true) => ExitCode::SUCCESS,
         Ok(false) => ExitCode::FAILURE,
         Err(e) => {
-            emsg!("bynk migrate sweep: {e}");
+            emsg!("bynk migrate sweep: error: {e}");
             ExitCode::FAILURE
         }
     }
@@ -371,7 +371,9 @@ fn confirm(yes: bool) -> bool {
         return true;
     }
     if !std::io::stdin().is_terminal() {
-        emsg!("bynk: refusing to change Cloudflare in a non-interactive session without --yes");
+        emsg!(
+            "bynk: error: refusing to change Cloudflare in a non-interactive session without --yes"
+        );
         return false;
     }
     eprint!("Sweep? [y/N] ");

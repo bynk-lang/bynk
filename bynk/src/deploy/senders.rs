@@ -227,7 +227,7 @@ pub(crate) fn check_senders_for_run(
     let account = match RestSendingDomains::from_env() {
         Ok(account) => account,
         Err(e) => {
-            emsg!("bynk: {e}");
+            emsg!("bynk: error: {e}");
             return false;
         }
     };
@@ -235,7 +235,7 @@ pub(crate) fn check_senders_for_run(
         Ok(()) => true,
         Err(problems) => {
             for problem in problems {
-                emsg!("bynk: {problem}");
+                emsg!("bynk: error: {problem}");
             }
             false
         }

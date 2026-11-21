@@ -446,7 +446,7 @@ writes to a Worker it doesn't own, so it then prints the command that hands
 the secret to the other Worker's operator:
 
 ```
-bynk: minted LEDGER_CALL_KEY for `Ledger`, a foreign caller of `shop.orders`. Its operator sets it on their Worker:
+bynk: note: minted LEDGER_CALL_KEY for `Ledger`, a foreign caller of `shop.orders`. Its operator sets it on their Worker:
 
   printf '%s' '<value>' | npx wrangler secret put BYNK_CALL_TO_SHOP__ORDERS --name ledger-svc
 ```
@@ -470,7 +470,7 @@ Pin the contract that client was generated at in `bynk.foreign.toml`, beside
 the pin. A foreign caller with no pin is reported, with the lines to add:
 
 ```
-bynk: 1 foreign caller has no pin in bynk.foreign.toml, so a contract change that breaks its client would not be refused. To pin, add:
+bynk: warning: 1 foreign caller has no pin in bynk.foreign.toml, so a contract change that breaks its client would not be refused. To pin, add:
 
   ["shop.orders".Ledger]
   status = "226b9939f85e69ea"
@@ -852,7 +852,7 @@ deploy shop-orders
 naming both:
 
 ```
-bynk: the environment variable `MAIN_DATABASE_URL` is not set, and the `Postgres` capability behind `HYPERDRIVE_MAIN` of `shop-orders` reads its connection string from it (set it, or give environment `default` a `config_id` in `[deploy.hyperdrive]` to adopt a config that exists)
+bynk: error: the environment variable `MAIN_DATABASE_URL` is not set, and the `Postgres` capability behind `HYPERDRIVE_MAIN` of `shop-orders` reads its connection string from it (set it, or give environment `default` a `config_id` in `[deploy.hyperdrive]` to adopt a config that exists)
 ```
 
 **Adopting a config that exists.** A team whose Hyperdrive config already exists
@@ -918,7 +918,7 @@ store's id in `bynk.deploy.lock`; a missing store or secret fails the deploy,
 naming both, with the command that creates the secret:
 
 ```
-bynk: `StripeKey` of `shop-billing` reads secret `stripe-live` of Secrets Store `payments`, which does not exist: create it with `wrangler secrets-store secret create <store-id> --name stripe-live --scopes workers --remote`
+bynk: error: `StripeKey` of `shop-billing` reads secret `stripe-live` of Secrets Store `payments`, which does not exist: create it with `wrangler secrets-store secret create <store-id> --name stripe-live --scopes workers --remote`
 ```
 
 The plan shows the binding as linked, with no action:
@@ -952,7 +952,7 @@ default namespace) and records the link in `bynk.deploy.lock`; a missing instanc
 fails the deploy, naming it:
 
 ```
-bynk: `AI_SEARCH_KB` of `shop-ask` queries AI Search instance `support-docs`, which does not exist on this account. `bynk deploy` links to an instance and never creates one: create `support-docs` in the Cloudflare dashboard, with `wrangler` or with the REST API, or name the instance the account has
+bynk: error: `AI_SEARCH_KB` of `shop-ask` queries AI Search instance `support-docs`, which does not exist on this account. `bynk deploy` links to an instance and never creates one: create `support-docs` in the Cloudflare dashboard, with `wrangler` or with the REST API, or name the instance the account has
 ```
 
 An instance the lookup shows as paused or disabled is a warning, not a failure.
@@ -988,7 +988,7 @@ records the link in `bynk.deploy.lock` (a name and an id, never key material). A
 certificate that is not there fails the deploy, naming it and where to upload one:
 
 ```
-bynk: `MTLS_BACKEND` of `shop-backend` presents mTLS certificate `acme-client`, which does not exist on this account. `bynk deploy` links to a certificate and never uploads one, so its private key never passes through Bynk: upload it with `wrangler mtls-certificate upload --cert … --key … --name acme-client`, the dashboard or the API, or name the certificate the account has
+bynk: error: `MTLS_BACKEND` of `shop-backend` presents mTLS certificate `acme-client`, which does not exist on this account. `bynk deploy` links to a certificate and never uploads one, so its private key never passes through Bynk: upload it with `wrangler mtls-certificate upload --cert … --key … --name acme-client`, the dashboard or the API, or name the certificate the account has
 ```
 
 Every problem is reported together. A name that two client certificates carry fails the
@@ -1021,7 +1021,7 @@ on the domain (or on a wildcard covering it); every domain that is not fails the
 deploy, together, naming the domain:
 
 ```
-bynk: `EMAIL_MAIL` of `shop-orders` may send as `orders@shop.example`: `shop.example` does not have Email Sending enabled on this account; onboard it under Email Service > Email Sending in the dashboard (`bynk deploy` checks a sender domain and never configures one)
+bynk: error: `EMAIL_MAIL` of `shop-orders` may send as `orders@shop.example`: `shop.example` does not have Email Sending enabled on this account; onboard it under Email Service > Email Sending in the dashboard (`bynk deploy` checks a sender domain and never configures one)
 ```
 
 `--dry-run` stays offline and does not ask. The lookup calls Cloudflare's API, so
@@ -1171,7 +1171,7 @@ has never been deployed, `bynk deploy` says so and stops, rather than sending an
 upload Cloudflare would reject:
 
 ```
-bynk: `commerce-orders` binds to `commerce-payment`, which has never been
+bynk: error: `commerce-orders` binds to `commerce-payment`, which has never been
 deployed — a Service Binding to a Worker that does not exist fails at upload.
   Deploy the whole project once (`bynk deploy`) to bring the topology up.
 ```

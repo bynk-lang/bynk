@@ -396,7 +396,7 @@ pub(crate) fn deploy_one(
         // An installed wrangler older than `--secrets-file`: the old order,
         // said out loud, since the guide promises otherwise.
         emsg!(
-            "bynk: this wrangler is older than {SECRETS_FILE_MIN}, which cannot upload secrets with a new Worker, so `{deployed}` will be live for a moment before its secrets are set. Upgrade wrangler to close that window."
+            "bynk: warning: this wrangler is older than {SECRETS_FILE_MIN}, which cannot upload secrets with a new Worker, so `{deployed}` will be live for a moment before its secrets are set. Upgrade wrangler to close that window."
         );
         let pushed = push(
             provenance,

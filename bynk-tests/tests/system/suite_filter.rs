@@ -210,7 +210,7 @@ fn a_value_that_selects_nothing_fails_the_run_after_its_output() {
     assert_eq!(r.doc()["passed"], 1, "the usual document is still printed");
     assert!(
         r.stderr
-            .contains("bynk test: no case matched --case \"typo\""),
+            .contains("bynk test: error: no case matched --case \"typo\""),
         "{}",
         r.stderr
     );
@@ -233,7 +233,7 @@ fn a_value_that_selects_nothing_fails_the_run_after_its_output() {
     assert!(r.stdout.contains("1 passed, 0 failed."), "{}", r.stdout);
     assert!(
         r.stderr
-            .contains("bynk test: no case matched --case \"typo\""),
+            .contains("bynk test: error: no case matched --case \"typo\""),
         "{}",
         r.stderr
     );

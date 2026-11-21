@@ -94,7 +94,7 @@ projects, say), has no single program to compile. `bynk check` and `bynk test`
 refuse there, name the projects (the first five, then a count), and exit non-zero:
 
 ```text
-bynk: `.` is not a project (no `bynk.toml` here or above) but holds 3 projects that have their own: `a`, `b`, `c`.
+bynk: error: `.` is not a project (no `bynk.toml` here or above) but holds 3 projects that have their own: `a`, `b`, `c`.
 Run the command inside one of them, pass `--each` to run it over each, or add a `bynk.toml` here with
 
     [workspace]

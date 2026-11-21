@@ -356,7 +356,7 @@ pub fn check_emit(prog: &str, input: &Path, short: bool) -> bool {
     let options = match crate::try_project_options(input) {
         Ok(o) => o.target(crate::project::BuildTarget::Workers),
         Err(e) => {
-            emsg!("{prog}: {e}");
+            emsg!("{prog}: error: {e}");
             return false;
         }
     };
@@ -372,7 +372,7 @@ pub fn check_emit(prog: &str, input: &Path, short: bool) -> bool {
     let tmp = match private_temp_dir() {
         Ok(t) => t,
         Err(e) => {
-            emsg!("{prog}: could not create a temporary directory: {e}");
+            emsg!("{prog}: error: could not create a temporary directory: {e}");
             return false;
         }
     };
@@ -380,7 +380,10 @@ pub fn check_emit(prog: &str, input: &Path, short: bool) -> bool {
     let result = (|| {
         for (path, doc) in &out.artefacts.docs {
             if let Err(e) = crate::write_document(path, doc, &out.artefacts.docs, &root) {
-                emsg!("{prog}: could not write {}: {e}", root.join(path).display());
+                emsg!(
+                    "{prog}: error: could not write {}: {e}",
+                    root.join(path).display()
+                );
                 return false;
             }
         }
@@ -388,7 +391,7 @@ pub fn check_emit(prog: &str, input: &Path, short: bool) -> bool {
             Ran::Passed => true,
             Ran::Unavailable(why) => {
                 emsg!(
-                    "{prog}: `check --emit` needs `tsc` (with Node.js) to type-check the generated TypeScript, and found none that runs."
+                    "{prog}: error: `check --emit` needs `tsc` (with Node.js) to type-check the generated TypeScript, and found none that runs."
                 );
                 for w in &why {
                     eprintln!("  {w}");
@@ -407,7 +410,7 @@ pub fn check_emit(prog: &str, input: &Path, short: bool) -> bool {
                     Some(f) if short => crate::print_project_failure_short(&f),
                     Some(f) => crate::print_project_failure(&f),
                     // No `error TS` record: a crash, not evidence of a compiler bug.
-                    None => emsg!("{prog}: tsc failed on the generated TypeScript:\n{text}"),
+                    None => emsg!("{prog}: error: tsc failed on the generated TypeScript:\n{text}"),
                 }
                 false
             }

@@ -1,12 +1,12 @@
 # one target never deployed
-bynk: `commerce-orders` binds to `commerce-payment`, which has never been deployed — a Service Binding to a Worker that does not exist fails at upload.
+bynk: error: `commerce-orders` binds to `commerce-payment`, which has never been deployed — a Service Binding to a Worker that does not exist fails at upload.
   Deploy the whole project once (`bynk deploy`) to bring the topology up.
 # two targets never deployed
-bynk: `commerce-orders` binds to `commerce-payment`, `commerce-shipping`, which have never been deployed — a Service Binding to a Worker that does not exist fails at upload.
+bynk: error: `commerce-orders` binds to `commerce-payment`, `commerce-shipping`, which have never been deployed — a Service Binding to a Worker that does not exist fails at upload.
   Deploy the whole project once (`bynk deploy`) to bring the topology up.
 # --env staging: one target never deployed
-bynk: `commerce-orders-staging` binds to `commerce-payment-staging`, which has never been deployed — a Service Binding to a Worker that does not exist fails at upload.
+bynk: error: `commerce-orders-staging` binds to `commerce-payment-staging`, which has never been deployed — a Service Binding to a Worker that does not exist fails at upload.
   Deploy the whole project once (`bynk deploy --env staging`) to bring the topology up.
 # --env staging: two targets never deployed
-bynk: `commerce-orders-staging` binds to `commerce-payment-staging`, `commerce-shipping-staging`, which have never been deployed — a Service Binding to a Worker that does not exist fails at upload.
+bynk: error: `commerce-orders-staging` binds to `commerce-payment-staging`, `commerce-shipping-staging`, which have never been deployed — a Service Binding to a Worker that does not exist fails at upload.
   Deploy the whole project once (`bynk deploy --env staging`) to bring the topology up.

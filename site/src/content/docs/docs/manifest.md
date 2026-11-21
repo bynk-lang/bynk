@@ -159,9 +159,9 @@ formatter (`bynk fmt`), which owns that table, not by `check` or
 `compile`:
 
 ```text
-bynk: `bynk.toml` has no table named `[pahts]` — did you mean `[paths]`?
-bynk: `[project]` has no key named `nmae` — did you mean `name`?
-bynk: `[dependencies]` `fx` has no key named `verison` — did you mean `version`?
+bynk: error: `bynk.toml` has no table named `[pahts]` — did you mean `[paths]`?
+bynk: error: `[project]` has no key named `nmae` — did you mean `name`?
+bynk: error: `[dependencies]` `fx` has no key named `verison` — did you mean `version`?
 ```
 
 The language server doesn't refuse

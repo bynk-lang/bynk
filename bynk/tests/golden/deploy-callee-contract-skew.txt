@@ -1,26 +1,26 @@
 # one live caller on the old hash
-bynk: `shop-payment` no longer provides the contract its live callers were compiled against (bynk.deploy.contract_skew):
+bynk: error: `shop-payment` no longer provides the contract its live callers were compiled against (bynk.deploy.contract_skew):
   `shop-orders` calls shop.payment.authorise — compiled against febd15c2757b72e1, this build provides da0d725f3a004040
   Deploying this would ship a callee that rejects its live callers (409 ContractMismatch) on every call.
   Deploy the whole project (`bynk deploy`) so both sides move together.
 # two live callers, one service removed
-bynk: `shop-payment` no longer provides the contract its live callers were compiled against (bynk.deploy.contract_skew):
+bynk: error: `shop-payment` no longer provides the contract its live callers were compiled against (bynk.deploy.contract_skew):
   `shop-orders` calls shop.payment.authorise — compiled against febd15c2757b72e1, this build provides da0d725f3a004040
   `shop-refunds` calls shop.payment.refund — compiled against 317bdd3de84d2176, this build provides <absent>
   Deploying this would ship a callee that rejects its live callers (409 ContractMismatch) on every call.
   Deploy the whole project (`bynk deploy`) so both sides move together.
 # --env staging: one live caller on the old hash
-bynk: `shop-payment-staging` no longer provides the contract its live callers were compiled against (bynk.deploy.contract_skew):
+bynk: error: `shop-payment-staging` no longer provides the contract its live callers were compiled against (bynk.deploy.contract_skew):
   `shop-orders-staging` calls shop.payment.authorise — compiled against febd15c2757b72e1, this build provides da0d725f3a004040
   Deploying this would ship a callee that rejects its live callers (409 ContractMismatch) on every call.
   Deploy the whole project (`bynk deploy --env staging`) so both sides move together.
 # a live caller of a context removed from the project
-bynk: `shop-payment` no longer provides the contract a live Worker this project no longer builds was compiled against (bynk.deploy.contract_skew):
+bynk: error: `shop-payment` no longer provides the contract a live Worker this project no longer builds was compiled against (bynk.deploy.contract_skew):
   `shop-legacy` (orphaned) calls shop.payment.authorise — compiled against febd15c2757b72e1, this build provides da0d725f3a004040
   Deploying this would ship a callee that rejects it (409 ContractMismatch) on every call, and a whole-project deploy would not move it: that reports an orphaned Worker but never redeploys or deletes it, and `--prune` never deletes a Worker either.
   If it is unused, delete it (`npx wrangler delete --name shop-legacy`) and remove its entry (`[environments.default.workers.shop-legacy]`) from bynk.deploy.lock. If it is still needed, restore its context and deploy the whole project (`bynk deploy`).
 # --env staging: a live caller of a context removed from the project
-bynk: `shop-payment-staging` no longer provides the contract a live Worker this project no longer builds was compiled against (bynk.deploy.contract_skew):
+bynk: error: `shop-payment-staging` no longer provides the contract a live Worker this project no longer builds was compiled against (bynk.deploy.contract_skew):
   `shop-legacy-staging` (orphaned) calls shop.payment.authorise — compiled against febd15c2757b72e1, this build provides da0d725f3a004040
   Deploying this would ship a callee that rejects it (409 ContractMismatch) on every call, and a whole-project deploy would not move it: that reports an orphaned Worker but never redeploys or deletes it, and `--prune` never deletes a Worker either.
   If it is unused, delete it (`npx wrangler delete --name shop-legacy-staging`) and remove its entry (`[environments.staging.workers.shop-legacy]`) from bynk.deploy.lock. If it is still needed, restore its context and deploy the whole project (`bynk deploy --env staging`).

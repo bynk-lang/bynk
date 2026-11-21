@@ -22,7 +22,7 @@ fn print(report: &EvalReport) -> ExitCode {
     match serde_json::to_string(report) {
         Ok(text) => println!("{text}"),
         Err(e) => {
-            emsg!("bynk eval: could not render the result: {e}");
+            emsg!("bynk eval: error: could not render the result: {e}");
             return ExitCode::FAILURE;
         }
     }

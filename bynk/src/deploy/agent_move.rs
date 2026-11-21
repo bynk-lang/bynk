@@ -195,11 +195,11 @@ pub(crate) fn gate(moves: &[AgentMove], accepted: &[String]) -> bool {
     let refused = refusals(moves, accepted);
     let unused = unused_accepts(moves, accepted);
     for why in &refused {
-        emsg!("bynk: {why}");
+        emsg!("bynk: error: {why}");
     }
     for name in &unused {
         emsg!(
-            "bynk: `--accept-fresh-agent {name}` names no context that would move with agent state in this run"
+            "bynk: error: `--accept-fresh-agent {name}` names no context that would move with agent state in this run"
         );
     }
     if !refused.is_empty() || !unused.is_empty() {

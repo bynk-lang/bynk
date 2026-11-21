@@ -411,7 +411,7 @@ pub fn prepare(
         if json {
             crate::test_stream::print_run(stream, &TestRun::runtime_error(message, None));
         } else {
-            emsg!("{program} test: {message}");
+            emsg!("{program} test: error: {message}");
         }
         std::process::ExitCode::FAILURE
     };
@@ -452,7 +452,7 @@ pub fn prepare(
                 crate::print_project_failure(&failure);
             }
             if let Some(note) = note {
-                emsg!("{program} test: {note}");
+                emsg!("{program} test: error: {note}");
             }
             return Err(std::process::ExitCode::FAILURE);
         }

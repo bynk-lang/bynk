@@ -169,7 +169,7 @@ fn a_members_registries_and_workspace_are_refused() {
     // And from the root, naming the member.
     let (_, _, err) = bynk_in(&root, &["check", "--format", "short"]);
     assert!(
-        err.contains("bynk: packages/ok: `[registries]` belongs in the workspace root's"),
+        err.contains("bynk: packages/ok: error: `[registries]` belongs in the workspace root's"),
         "{err}"
     );
 
@@ -208,7 +208,7 @@ fn an_empty_workspace_is_refused() {
     assert_eq!(code, 1);
     assert_eq!(
         err,
-        "bynk: bynk.toml: `[workspace]` matches no member: no directory under the root matches `packages/*`\n"
+        "bynk: error: bynk.toml: `[workspace]` matches no member: no directory under the root matches `packages/*`\n"
     );
 }
 
@@ -234,8 +234,8 @@ fn fmt_runs_across_members_with_root_relative_paths() {
     assert_eq!(
         lines,
         [
-            "bynk fmt: packages/fx/src/fx.bynk is not canonically formatted",
-            "bynk fmt: packages/money/src/money.bynk is not canonically formatted",
+            "bynk fmt: error: packages/fx/src/fx.bynk is not canonically formatted",
+            "bynk fmt: error: packages/money/src/money.bynk is not canonically formatted",
         ],
         "{err}"
     );
@@ -274,7 +274,7 @@ fn test_runs_across_members_under_headers() {
     assert_eq!(code, 1);
     assert!(
         err.contains(
-            "bynk test: `--format json` reports one project — run it inside a member of this workspace"
+            "bynk test: error: `--format json` reports one project — run it inside a member of this workspace"
         ),
         "{err}"
     );
@@ -282,7 +282,7 @@ fn test_runs_across_members_under_headers() {
     assert_eq!(code, 1);
     assert!(
         err.contains(
-            "bynk test: `--format ndjson` streams one project — run it inside a member of this workspace"
+            "bynk test: error: `--format ndjson` streams one project — run it inside a member of this workspace"
         ),
         "{err}"
     );
@@ -353,7 +353,7 @@ fn test_filters_are_judged_across_the_members() {
     let (code, out, err) = run(&bynk(), &root, &["test", "--case", "typo"], &[]);
     assert_eq!(code, 1);
     assert!(
-        err.contains("bynk test: no case matched --case \"typo\""),
+        err.contains("bynk test: error: no case matched --case \"typo\""),
         "{err}"
     );
     assert!(!out.contains("── "), "no member ran:\n{out}");

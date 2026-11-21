@@ -231,7 +231,7 @@ fn each_is_an_error_at_a_project_inside_one_and_on_a_file() {
     let (code, _, err) = run(&alpha, &["test", "--each", "--no-run"]);
     assert_eq!(code, 1, "{err}");
     assert!(
-        err.contains("bynk test: `--each` applies to a directory"),
+        err.contains("bynk test: error: `--each` applies to a directory"),
         "{err}"
     );
 }

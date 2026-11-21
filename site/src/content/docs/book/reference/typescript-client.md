@@ -207,7 +207,7 @@ the context no longer declares the caller (or no handler admits it any more)
 (`bynk.deploy.foreign_contract_skew`):
 
 ```text
-bynk: this build breaks the contract a foreign caller's client was generated at (bynk.deploy.foreign_contract_skew):
+bynk: error: this build breaks the contract a foreign caller's client was generated at (bynk.deploy.foreign_contract_skew):
   shop.ledger.lookup as `Billing` — pinned at 586b853a77dcb029, the build's is 0d1e6f7c2b3a4958
   Deploying this would ship a callee the foreign caller's client is refused by (409 ContractMismatch, or 403).
   Regenerate that caller's client (`bynk-client.ts`), then update its pin in bynk.foreign.toml; the new hashes are in the client's `CONTRACTS`.

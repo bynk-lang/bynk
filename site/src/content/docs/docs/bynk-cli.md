@@ -56,7 +56,11 @@ heading. What is coloured:
 - `bynk revert`: each Worker's heading bold, each check's `ok` green or
   `refused` red, and the verdict.
 - The `error:`, `warning:` and `note:` label of a message on stderr, such as
-  `bynk test: warning: no tests found`.
+  `bynk test: warning: no tests found`, and its coded form, `error[…]:`. Each
+  message of the driver's own carries one after the name of who is speaking:
+  `error:` when the command then fails (`bynk: error: not inside a Bynk
+  project …`), `warning:` when it carries on in a degraded state, and `note:`
+  when the message asks you to act. Progress and information carry none.
 - `bynk doctor`'s marks, rich diagnostics, the
   [build progress](#build-progress) lines, and `--help`.
 
@@ -1168,7 +1172,7 @@ bynk test --suite commerce.money --case "accepts positive"   # that case, only i
 - **A value that selects nothing fails the run.** Each value is judged on its
   own, so `--case a --case typo` fails although `a` matches. The run prints its
   usual output first, then names each unmatched value on stderr
-  (`bynk test: no case matched --case "typo"`, `no suite named --suite "x"`) and
+  (`bynk test: error: no case matched --case "typo"`, `no suite named --suite "x"`) and
   exits non-zero. Before this, a filter that matched nothing passed with
   `0 passed, 0 failed`.
 - `--inspect`, `--coverage` and `--against` (`--against dev` included) honour the
