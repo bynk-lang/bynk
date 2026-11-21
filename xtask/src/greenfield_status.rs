@@ -2519,7 +2519,9 @@ fn emit_print_calls_violations(files: &[(PathBuf, String)]) -> usize {
 /// `uses_json_codec`), less [`IMPORT_PREDICTION_ALLOWLIST`], the resolved-fact queries that
 /// decide a binding, an emitted helper or a structural walk rather than an import (Decision B).
 /// The 17 of the exit row is not read from a name pattern over the driver too: this probe counts
-/// `bynk-emit` and its allowlist, and 1A.36b brings it to 0. A growth probe
+/// `bynk-emit` and its allowlist. 1A.36b-1 deleted the header's predicates and renamed the one
+/// that survives for another reason (`agent_gates_rehydration`, which also decides the
+/// `commitState` an agent emits), so it reads 0. A growth probe
 /// ([`GROWTH_PROBES`]): it may only fall unless a pending file `raises:` it with a reason, so a
 /// new prediction cannot creep in.
 ///
