@@ -51,7 +51,7 @@ use crate::emit_model::{EmitProjectCtx, ExtraImport, ImportExt};
 use bynk_check::builtin_names::map_query;
 use bynk_check::builtin_names::methods::RAW;
 use bynk_check::builtin_names::types::*;
-use bynk_check::checker::{CheckedProgram, ExprId, NamedKind, Ty, TyId, TypedCommons, Types};
+use bynk_check::checker::{CheckedProgram, NamedKind, Ty, TyId, TypedCommons, Types};
 use bynk_check::kernel_op::{FormStatic, JsonStatic, StaticOp, YamlStatic};
 use bynk_check::project_model::BuildTarget;
 use bynk_check::symbols::UnitTable;
@@ -63,9 +63,9 @@ use bynk_model::{
 };
 use bynk_project::UnitKind;
 use bynk_syntax::ast::{
-    AgentDecl, BaseType, BinOp, Block, CommonsItem, Expr, ExprKind, FnDecl, FnName, Ident,
-    InterpPart, LambdaExpr, MatchBody, MessagesDecl, ObservationMatcher, Pattern, PredKind,
-    ServiceDecl, ServiceProtocol, Statement, TypeBody, TypeDecl, TypeRef, UnaryOp, rounding_mode,
+    AgentDecl, BaseType, BinOp, CommonsItem, Expr, ExprKind, FnDecl, FnName, Ident, LambdaExpr,
+    MatchBody, MessagesDecl, PredKind, ServiceDecl, TypeBody, TypeDecl, TypeRef, UnaryOp,
+    rounding_mode,
 };
 use ctx::UnitFacts;
 use ts_types::{TyRender, asset_ts_type, ts_base};
@@ -290,8 +290,12 @@ pub(crate) fn emit(program: &CheckedProgram) -> Result<String, Vec<InternalFault
         }
     }
     // v0.22b: module-local codec helpers for Json.encode/decode targets.
-    body_stmts
-        .extend(emit_json_codec_helpers(commons, &dummy_ctx, &HashSet::new(), &HashSet::new()).0);
+    body_stmts.extend(emit_json_codec_helpers(
+        commons,
+        &dummy_ctx,
+        &HashSet::new(),
+        &HashSet::new(),
+    ));
     let body_program = bynk_ts::TsProgram { stmts: body_stmts };
     let body = bynk_ts::print(&body_program, "", "", "").text;
     let mut out = String::new();
@@ -427,13 +431,9 @@ pub fn emit_project(
     // and_merge`/`extend_printed_and_merged` dance below with the printer
     // doing the same work at the one place (R7.4) it always should have.
     let mut stmts: Vec<bynk_ts::TsStmt> = Vec::new();
-    // Compute which names this file actually references that live elsewhere
-    // (sibling file in the same commons/context, or a used commons / consumed
-    // context).
-    // #1778: `mut` — the implied names settle against the body built below.
-    let mut references = collect_external_references(commons, ctx);
-    // #1778: the body first, so the implied references can settle against
-    // what it spells before the imports and rebrands are built from them.
+    // The body first: the names this file imports from elsewhere (a sibling file, a
+    // used commons, a consumed context) are the ones the body uses and does not
+    // declare, read off the tree below (1A.36b-2, #3737 Decision A).
     let mut body: Vec<bynk_ts::TsStmt> = Vec::new();
     body.extend(write_commons_doc(commons));
     for item in &commons.commons.items {
@@ -699,32 +699,20 @@ pub fn emit_project(
     body.extend(boundary_stmts);
     // v0.22b: module-local codec helpers for this file's Json.encode/decode
     // targets, deduped against the workers boundary helpers above.
-    let (json_stmts, json_names) =
-        emit_json_codec_helpers(commons, ctx, &boundary_names, &boundary_insts);
+    let json_stmts = emit_json_codec_helpers(commons, ctx, &boundary_names, &boundary_insts);
     body.extend(json_stmts);
-    // #1829: a helper this module emits for a commons type names the types
-    // that type reaches, and the source may never mention one (an agent
-    // stores a used commons' `Item`, or `Json.encode`s one, and nothing reads
-    // its `note`). Each is implied, so `settle_implied` imports it when a
-    // helper spells it.
-    references.imply_names(boundary_names.iter().chain(&json_names), commons, ctx);
-    // #2027: an instantiation codec spells a commons type by its unbranded
-    // alias (`__CommonsPage`), and a generic one has no codec of its own to
-    // import, so nothing above implies it. Each alias the body spells
-    // implies its type, which `settle_implied` then keeps.
-    let unbranded = unbranded_commons_qual(commons, ctx);
-    if !unbranded.is_empty() {
-        let spelled = body_words(&body);
-        let reached: Vec<String> = unbranded
-            .into_iter()
-            .filter(|(_, alias)| spelled.contains(alias))
-            .map(|(name, _)| name)
-            .collect();
-        references.imply_names(reached.iter(), commons, ctx);
-    }
-    references.settle_implied(&body);
+    // 1A.36b-2: what the module uses and does not declare, over the whole of it: the
+    // imports the driver adds for the Durable Object deps (`ctx.extra_imports`) and the
+    // boundary helpers' own imports bind names the body spells.
+    let used = {
+        let mut imports = extra_import_stmts(ctx);
+        imports.extend(boundary_imports.iter().cloned());
+        let bound = bynk_ts::TsProgram { stmts: imports }.imported_names();
+        used_external_names(commons, ctx, &body, &bound)
+    };
+    let references = external_references_of(&used, commons, ctx);
     let mut project_imports = emit_project_imports(commons, ctx, &references);
-    let mut cross_context_imports = emit_cross_context_namespace_imports(commons, ctx, &body);
+    let mut cross_context_imports = emit_cross_context_namespace_imports(commons, ctx, &used);
     // #1486: the boundary between `emit_project_imports`'s own last
     // statement and `emit_cross_context_namespace_imports`'s own first
     // (when non-empty) must reproduce the pre-#1486 code's own unconditional
@@ -1117,18 +1105,17 @@ fn collect_json_codec_roots(commons: &TypedCommons) -> Vec<TypeRef> {
 /// this module.
 /// #1478: returns real [`bynk_ts::TsStmt`]s (was `out: &mut String`) — the
 /// same `decls_as_stmts[_block]` conversion `emit_boundary_helpers`/
-/// `emit_consumed_context_helpers` just used. #1829: also returns the type
-/// names it emitted helpers for, which the module must bring into scope.
+/// `emit_consumed_context_helpers` just used.
 fn emit_json_codec_helpers(
     commons: &TypedCommons,
     ctx: &EmitProjectCtx,
     skip_names: &HashSet<String>,
     skip_insts: &HashSet<String>,
-) -> (Vec<bynk_ts::TsStmt>, Vec<String>) {
+) -> Vec<bynk_ts::TsStmt> {
     use serialisation::{collect_codec_closure, emit_generic_helpers, emit_helpers_for_owner};
     let mut roots = collect_json_codec_roots(commons);
     if roots.is_empty() {
-        return (Vec::new(), Vec::new());
+        return Vec::new();
     }
     // #2792: a codec factory root is not a codec target: emit its factory, and
     // root the module's ordinary closure at the parts of its declaration that
@@ -1181,7 +1168,7 @@ fn emit_json_codec_helpers(
                 .collect(),
         ));
     }
-    (stmts, names)
+    stmts
 }
 
 /// Emit boundary serialise/deserialise helpers (v0.8 §3.4 / §5.2) for
@@ -1571,18 +1558,6 @@ fn emit_boundary_helpers(
         names.extend(imported);
         (stmts, names, insts.iter().map(|i| i.ts_name()).collect())
     }
-}
-
-/// Whether `name` is a type a consumed *context* declares. An adapter's types
-/// are recorded as a consumed context's too, but an adapter is linked into each
-/// consuming Worker, so its module is in reach (P5, #2323: an `R2Object` the
-/// source never spells is imported like any other implied name).
-fn is_consumed_context_type(ctx: &EmitProjectCtx, name: &str) -> bool {
-    ctx.imported_from_kind.get(name) == Some(&UnitKind::Context)
-        && !ctx
-            .imported_from
-            .get(name)
-            .is_some_and(|owner| ctx.consumed_adapters.contains(owner))
 }
 
 /// The unit whose module exports `name`'s codecs for this one to import: a
@@ -2489,107 +2464,16 @@ struct ExternalReferences {
     by_commons: HashMap<String, HashSet<String>>,
     /// `sibling source path` → set of names to import (same-commons).
     by_sibling: HashMap<PathBuf, HashSet<String>>,
-    /// #1778: names found only in an expression's checked type, keyed like
-    /// `by_commons`/`by_sibling`. The lowering spells only some of them, so
-    /// each is held here until [`ExternalReferences::settle_implied`] sees the
-    /// emitted body. Importing the rest would add an unused import, and in a
-    /// context a rebrand the module exports for nothing.
-    implied_by_commons: HashMap<String, HashSet<String>>,
-    implied_by_sibling: HashMap<PathBuf, HashSet<String>>,
     /// #1820: names imported from a sibling file as types only: a capability
     /// is an `interface`, which has no value to import once the module is
     /// stripped to JavaScript.
     types_by_sibling: HashMap<PathBuf, HashSet<String>>,
-    /// #1820: every capability a sibling file declares, settled like
-    /// `implied_by_sibling` into `types_by_sibling`. A handler's `deps` type
-    /// names the capabilities it needs, and those include what the agents
-    /// and services it calls need, so which a file spells is known only
-    /// once its body is emitted.
-    implied_types_by_sibling: HashMap<PathBuf, HashSet<String>>,
 }
 
 impl ExternalReferences {
     fn is_empty(&self) -> bool {
         self.by_commons.is_empty() && self.by_sibling.is_empty() && self.types_by_sibling.is_empty()
     }
-
-    /// #1829: record each of `names`, the types a module's emitted helpers
-    /// name, as an *implied* import, resolved the way a source reference is.
-    /// A name this file declares, or a consumed context declares, is skipped,
-    /// as [`record_ty_refs`] skips it.
-    fn imply_names<'a>(
-        &mut self,
-        names: impl Iterator<Item = &'a String>,
-        commons: &TypedCommons,
-        ctx: &EmitProjectCtx,
-    ) {
-        let local_to_file = local_names(commons);
-        let mut found = ExternalReferences::default();
-        for name in names {
-            if !is_consumed_context_type(ctx, name) {
-                record_name_ref(name, &local_to_file, ctx, &mut found);
-            }
-        }
-        for (unit, names) in found.by_commons {
-            self.implied_by_commons
-                .entry(unit)
-                .or_default()
-                .extend(names);
-        }
-        for (path, names) in found.by_sibling {
-            self.implied_by_sibling
-                .entry(path)
-                .or_default()
-                .extend(names);
-        }
-    }
-
-    /// #1778: promote each implied name the emitted body spells, as a whole
-    /// TypeScript identifier, to a real import, and drop the rest. Called
-    /// once the body is built and before the imports and rebrands are, which
-    /// read only `by_commons`/`by_sibling`.
-    fn settle_implied(&mut self, body: &[bynk_ts::TsStmt]) {
-        let mut spelled = body_words(body);
-        // #2027: `__CommonsLine` (`unbranded_commons_qual`) is `Line`'s own
-        // import alias, so it spells `Line`.
-        let aliased: Vec<String> = spelled
-            .iter()
-            .filter_map(|w| w.strip_prefix("__Commons").map(str::to_string))
-            .collect();
-        spelled.extend(aliased);
-        for (unit, names) in std::mem::take(&mut self.implied_by_commons) {
-            let kept: HashSet<String> = names.intersection(&spelled).cloned().collect();
-            if !kept.is_empty() {
-                self.by_commons.entry(unit).or_default().extend(kept);
-            }
-        }
-        for (path, names) in std::mem::take(&mut self.implied_by_sibling) {
-            let kept: HashSet<String> = names.intersection(&spelled).cloned().collect();
-            if !kept.is_empty() {
-                self.by_sibling.entry(path).or_default().extend(kept);
-            }
-        }
-        for (path, names) in std::mem::take(&mut self.implied_types_by_sibling) {
-            let kept: HashSet<String> = names.intersection(&spelled).cloned().collect();
-            if !kept.is_empty() {
-                self.types_by_sibling.entry(path).or_default().extend(kept);
-            }
-        }
-    }
-}
-
-/// Every whole TypeScript identifier `body` spells, as printed.
-fn body_words(body: &[bynk_ts::TsStmt]) -> HashSet<String> {
-    let mut words = HashSet::new();
-    for stmt in body {
-        let text = bynk_ts::print_stmt(stmt, 0);
-        words.extend(
-            text.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_' || c == '$'))
-                .filter(|w| !w.is_empty())
-                .map(str::to_string),
-        );
-    }
-    words
 }
 
 /// The names this file declares, so a reference to one needs no import. A
@@ -2605,629 +2489,103 @@ fn local_names(commons: &TypedCommons) -> HashSet<String> {
         .collect()
 }
 
-fn collect_external_references(commons: &TypedCommons, ctx: &EmitProjectCtx) -> ExternalReferences {
-    // Names declared in this file (so we know what's local-to-file).
-    let local_to_file = local_names(commons);
+/// Whether `name` is declared elsewhere than this file and so imported: a name of a used
+/// commons, of a sibling file (a type, a function or a capability) or of a consumed context.
+fn resolves_externally(name: &str, local_to_file: &HashSet<String>, ctx: &EmitProjectCtx) -> bool {
+    let mut found = ExternalReferences::default();
+    record_external_name(name, local_to_file, ctx, &mut found);
+    !found.is_empty()
+}
 
-    let mut refs = ExternalReferences::default();
-
-    // Walk every expression and TypeRef in this file's items, recording
-    // any reference that resolves to a name declared in a sibling file or
-    // an imported commons.
-    for item in &commons.commons.items {
-        match item {
-            CommonsItem::Type(t) => {
-                collect_refs_in_type_decl(t, &local_to_file, ctx, &mut refs);
-            }
-            // Events track, slice 0 (spine #936): an `event`'s field types
-            // are collected exactly like a `type`'s, via the same synthetic
-            // `TypeDecl` `EventDecl::as_type_decl` builds.
-            CommonsItem::Event(e) => {
-                collect_refs_in_type_decl(&e.as_type_decl(), &local_to_file, ctx, &mut refs);
-            }
-            CommonsItem::Fn(f) => {
-                collect_refs_in_fn(f, &local_to_file, commons, ctx, &mut refs);
-            }
-            CommonsItem::Capability(c) => {
-                for op in &c.ops {
-                    for p in &op.params {
-                        collect_refs_in_typeref(&p.type_ref, &local_to_file, ctx, &mut refs);
-                    }
-                    collect_refs_in_typeref(&op.return_type, &local_to_file, ctx, &mut refs);
-                }
-            }
-            CommonsItem::Provider(p) => {
-                // Reference to the capability so we can import it: a sibling
-                // file's is implied, below (#1820).
-                let _ = &p.capability;
-                for op in &p.ops {
-                    for param in &op.params {
-                        collect_refs_in_typeref(&param.type_ref, &local_to_file, ctx, &mut refs);
-                    }
-                    collect_refs_in_typeref(&op.return_type, &local_to_file, ctx, &mut refs);
-                    collect_refs_in_block(&op.body, &local_to_file, commons, ctx, &mut refs);
-                }
-            }
-            CommonsItem::Service(s) => {
-                // #2720: a `via schema(...)` subscriber whose handler declares
-                // no `env` gets a synthetic `EventEnvelope` parameter at emit
-                // time (`emit_service`); that parameter's type must be imported
-                // exactly as a declared `env: EventEnvelope` would be.
-                let synthesises_envelope = matches!(
-                    &s.protocol,
-                    ServiceProtocol::Events {
-                        schema_dispatch: Some(_),
-                        ..
-                    }
-                );
-                for h in &s.handlers {
-                    for p in &h.params {
-                        collect_refs_in_typeref(&p.type_ref, &local_to_file, ctx, &mut refs);
-                    }
-                    // Kept in step with `emit_service`'s `schema_dispatch_env_binder`
-                    // on purpose: event handler, `schema_dispatch`, no `env` param.
-                    if synthesises_envelope
-                        && matches!(h.kind, bynk_syntax::ast::HandlerKind::Event)
-                        && h.params.len() < 2
-                    {
-                        record_name_ref("EventEnvelope", &local_to_file, ctx, &mut refs);
-                    }
-                    collect_refs_in_typeref(&h.return_type, &local_to_file, ctx, &mut refs);
-                    collect_refs_in_block(&h.body, &local_to_file, commons, ctx, &mut refs);
-                }
-            }
-            CommonsItem::Agent(a) => {
-                collect_refs_in_typeref(&a.key_type, &local_to_file, ctx, &mut refs);
-                for f in &a.store_fields {
-                    for arg in &f.kind.args {
-                        collect_refs_in_typeref(arg, &local_to_file, ctx, &mut refs);
-                    }
-                }
-                for h in &a.handlers {
-                    for p in &h.params {
-                        collect_refs_in_typeref(&p.type_ref, &local_to_file, ctx, &mut refs);
-                    }
-                    collect_refs_in_typeref(&h.return_type, &local_to_file, ctx, &mut refs);
-                    collect_refs_in_block(&h.body, &local_to_file, commons, ctx, &mut refs);
-                }
-            }
-            CommonsItem::Actor(a) => {
-                if let Some(id) = &a.identity {
-                    collect_refs_in_typeref(id, &local_to_file, ctx, &mut refs);
-                }
-            }
-            // A `messages` block's generated table and `render` name
-            // `LocaleTag`/`Message`/`MessageArg` and `render`/`renderArg`
-            // only under private aliases (#1697), imported by `emit_unit`'s
-            // (project.rs) hand-written lines, so a user declaration of the
-            // same name in this unit can't capture them. Nothing is
-            // registered here; user code that names `LocaleTag` itself
-            // imports it the ordinary way.
-            // #1883, slice 1a: an asset references no other declaration.
-            CommonsItem::Messages(_) | CommonsItem::Asset(_) => {}
-            // #2387, slice 1: an embed references no other declaration.
-            CommonsItem::Embed(_) => {}
-            // #2617: a constant's annotation and initialiser may name types,
-            // variants and other constants of a sibling file or used commons.
-            CommonsItem::Const(c) => {
-                collect_refs_in_typeref(&c.ty, &local_to_file, ctx, &mut refs);
-                collect_refs_in_expr(&c.init, &local_to_file, commons, ctx, &mut refs);
-            }
-        }
+/// [`record_name_ref`], a sibling file's capability (an `interface`, imported as a type only,
+/// #1820) and a sibling file's agent factory (`__make<Agent>`, which the file exports, #1820).
+fn record_external_name(
+    name: &str,
+    local_to_file: &HashSet<String>,
+    ctx: &EmitProjectCtx,
+    out: &mut ExternalReferences,
+) {
+    record_name_ref(name, local_to_file, ctx, out);
+    if let Some(agent) = name.strip_prefix("__make")
+        && !local_to_file.contains(agent)
+        && let Some(path) = ctx.file_decl_index.agents.get(agent)
+        && path != &ctx.source_path
+    {
+        out.by_sibling
+            .entry(path.clone())
+            .or_default()
+            .insert(name.to_string());
     }
-    for (cap, path) in &ctx.file_decl_index.capabilities {
-        if !local_to_file.contains(cap) && path != &ctx.source_path {
-            refs.implied_types_by_sibling
-                .entry(path.clone())
-                .or_default()
-                .insert(cap.clone());
-        }
+    if !local_to_file.contains(name)
+        && let Some(path) = ctx.file_decl_index.capabilities.get(name)
+        && path != &ctx.source_path
+    {
+        out.types_by_sibling
+            .entry(path.clone())
+            .or_default()
+            .insert(name.to_string());
+    }
+}
+
+/// The names `body` uses and does not declare, that are not bound by `bound` (the module's other
+/// imports) and are not the runtime's: the candidates for the type imports and the namespace
+/// imports (1A.36b-2). A name a used commons' type is imported under (`__CommonsLine`,
+/// `unbranded_commons_qual`) is read as the name it aliases.
+///
+/// A name that resolves to an import is never hidden by the global tables (`Request`/`Response`
+/// of `bynk`).
+fn used_external_names(
+    commons: &TypedCommons,
+    ctx: &EmitProjectCtx,
+    body: &[bynk_ts::TsStmt],
+    bound: &std::collections::BTreeSet<String>,
+) -> std::collections::BTreeSet<String> {
+    let local_to_file = local_names(commons);
+    // A TypeScript type keyword (`any`) is never an import, even where a used commons has a
+    // function of that name.
+    let resolves = |n: &str| {
+        !TS_TYPE_KEYWORDS.contains(&n)
+            && resolves_externally(external_alias_target(n), &local_to_file, ctx)
+    };
+    bynk_ts::unbound_names_in(body, resolves)
+        .into_iter()
+        .filter(|n| !bound.contains(n))
+        .collect()
+}
+
+/// The lower-case names TypeScript reads as types, which no import brings in.
+const TS_TYPE_KEYWORDS: &[&str] = &[
+    "any",
+    "unknown",
+    "never",
+    "void",
+    "string",
+    "number",
+    "boolean",
+    "object",
+    "symbol",
+    "bigint",
+    "null",
+    "undefined",
+];
+
+/// `__CommonsX` is the import alias of a used commons' `X`.
+fn external_alias_target(name: &str) -> &str {
+    name.strip_prefix("__Commons").unwrap_or(name)
+}
+
+/// The imports the names `used` ask for, each resolved to its home by [`record_name_ref`].
+fn external_references_of(
+    used: &std::collections::BTreeSet<String>,
+    commons: &TypedCommons,
+    ctx: &EmitProjectCtx,
+) -> ExternalReferences {
+    let local_to_file = local_names(commons);
+    let mut refs = ExternalReferences::default();
+    for name in used {
+        record_external_name(external_alias_target(name), &local_to_file, ctx, &mut refs);
     }
     refs
-}
-
-fn collect_refs_in_type_decl(
-    t: &TypeDecl,
-    local_to_file: &HashSet<String>,
-    ctx: &EmitProjectCtx,
-    out: &mut ExternalReferences,
-) {
-    match &t.body {
-        TypeBody::Record(r) => {
-            for f in &r.fields {
-                collect_refs_in_typeref(&f.type_ref, local_to_file, ctx, out);
-            }
-        }
-        TypeBody::Sum(s) => {
-            for v in &s.variants {
-                for p in &v.payload {
-                    collect_refs_in_typeref(&p.type_ref, local_to_file, ctx, out);
-                }
-            }
-        }
-        _ => {}
-    }
-}
-
-fn collect_refs_in_fn(
-    f: &FnDecl,
-    local_to_file: &HashSet<String>,
-    commons: &TypedCommons,
-    ctx: &EmitProjectCtx,
-    out: &mut ExternalReferences,
-) {
-    for p in &f.params {
-        collect_refs_in_typeref(&p.type_ref, local_to_file, ctx, out);
-    }
-    collect_refs_in_typeref(&f.return_type, local_to_file, ctx, out);
-    // For methods: the attached type may also be elsewhere.
-    if let FnName::Method { type_name, .. } = &f.name {
-        record_name_ref(&type_name.name, local_to_file, ctx, out);
-    }
-    collect_refs_in_block(&f.body, local_to_file, commons, ctx, out);
-}
-
-fn collect_refs_in_typeref(
-    r: &TypeRef,
-    local_to_file: &HashSet<String>,
-    ctx: &EmitProjectCtx,
-    out: &mut ExternalReferences,
-) {
-    match r {
-        TypeRef::Named(id) => record_name_ref(&id.name, local_to_file, ctx, out),
-        TypeRef::Result(t, e, _) => {
-            collect_refs_in_typeref(t, local_to_file, ctx, out);
-            collect_refs_in_typeref(e, local_to_file, ctx, out);
-        }
-        // Exhaustive over the compound constructors (#527, the #507 disease):
-        // the old `_ => {}` catch-all dropped `List[KindCount]` and friends,
-        // so a name referenced only inside such a position was never
-        // imported and the emitted module failed `tsc`.
-        TypeRef::Option(t, _)
-        | TypeRef::Effect(t, _)
-        | TypeRef::HttpResult(t, _)
-        | TypeRef::List(t, _)
-        | TypeRef::Set(t, _)
-        | TypeRef::Query(t, _)
-        | TypeRef::Stream(t, _)
-        | TypeRef::Connection(t, _)
-        | TypeRef::History(t, _) => collect_refs_in_typeref(t, local_to_file, ctx, out),
-        TypeRef::Map(k, v, _) => {
-            collect_refs_in_typeref(k, local_to_file, ctx, out);
-            collect_refs_in_typeref(v, local_to_file, ctx, out);
-        }
-        TypeRef::Fn(params, ret, _) => {
-            for t in params {
-                collect_refs_in_typeref(t, local_to_file, ctx, out);
-            }
-            collect_refs_in_typeref(ret, local_to_file, ctx, out);
-        }
-        // v0.157 (ADR 0183): a `Name[Arg, …]` application references the
-        // generic type plus every argument — all must be imported.
-        TypeRef::App { name, args, .. } => {
-            record_name_ref(&name.name, local_to_file, ctx, out);
-            for t in args {
-                collect_refs_in_typeref(t, local_to_file, ctx, out);
-            }
-        }
-        TypeRef::Base(..)
-        | TypeRef::QueueResult(_)
-        | TypeRef::Asset(_)
-        | TypeRef::RequestHeaders(_)
-        | TypeRef::RequestQuery(_)
-        | TypeRef::RequestCookies(_)
-        | TypeRef::TokenClaims(_)
-        | TypeRef::BoundaryRejection(_)
-        | TypeRef::ValidationError(_)
-        | TypeRef::DecodeError(_)
-        | TypeRef::Unit(_) => {}
-    }
-}
-
-fn collect_refs_in_block(
-    b: &Block,
-    local_to_file: &HashSet<String>,
-    commons: &TypedCommons,
-    ctx: &EmitProjectCtx,
-    out: &mut ExternalReferences,
-) {
-    for stmt in &b.statements {
-        collect_refs_in_stmt(stmt, local_to_file, commons, ctx, out);
-    }
-    collect_refs_in_expr(&b.tail, local_to_file, commons, ctx, out);
-}
-
-fn collect_refs_in_stmt(
-    stmt: &Statement,
-    local_to_file: &HashSet<String>,
-    commons: &TypedCommons,
-    ctx: &EmitProjectCtx,
-    out: &mut ExternalReferences,
-) {
-    match stmt {
-        Statement::Let(l) | Statement::EffectLet(l) => {
-            if let Some(t) = &l.type_annot {
-                collect_refs_in_typeref(t, local_to_file, ctx, out);
-            }
-            collect_refs_in_expr(&l.value, local_to_file, commons, ctx, out);
-        }
-        Statement::Expect(a) => {
-            collect_refs_in_expr(&a.value, local_to_file, commons, ctx, out);
-        }
-        Statement::Do(d) => {
-            collect_refs_in_expr(&d.value, local_to_file, commons, ctx, out);
-        }
-        Statement::Assign(a) => {
-            collect_refs_in_expr(&a.value, local_to_file, commons, ctx, out);
-        }
-        Statement::Advance(a) => {
-            collect_refs_in_expr(&a.amount, local_to_file, commons, ctx, out);
-        }
-        Statement::Par(p) => {
-            for inner in &p.statements {
-                collect_refs_in_stmt(inner, local_to_file, commons, ctx, out);
-            }
-        }
-    }
-}
-
-fn collect_refs_in_expr(
-    e: &Expr,
-    local_to_file: &HashSet<String>,
-    commons: &TypedCommons,
-    ctx: &EmitProjectCtx,
-    out: &mut ExternalReferences,
-) {
-    // #1778: the lowering also names types the source never spells. A
-    // literal admitted as a refined type is cast to it (`("a" as Name)`),
-    // and the collection kernels, `if` slots and `List.empty` annotate with
-    // the `ts_ty` of checked types (`(__x: Name) => …`). So every name in
-    // this expression's checked type is a candidate import, kept if the
-    // emitted body spells it (`ExternalReferences::settle_implied`).
-    if let Some(te) = commons.expr_types.get(&e.id) {
-        record_ty_refs(te.ty, local_to_file, commons, ctx, out);
-    }
-    match &e.kind {
-        // A bare ident the checker typed as a sum is a nullary variant
-        // constructor — the lowering qualifies it to `Type.Variant`, so the
-        // owning type must be imported (v0.18: first hit by `Get` from the
-        // consumed bynk surface's `Method`).
-        ExprKind::Ident(id) => {
-            if let Some(type_name) = sum_owner_of_variant(&id.name, e.id, commons) {
-                record_name_ref(&type_name, local_to_file, ctx, out);
-            } else if let Some(bynk_check::checker::Callee::FnValue(decl, _)) = commons.callee(e.id)
-            {
-                // #2868: a function named as a value, from a sibling file or
-                // an imported unit, is imported where it is named.
-                record_name_ref(&decl.name.display(), local_to_file, ctx, out);
-            } else if commons.assets.contains_key(&id.name)
-                || commons.embeds.contains_key(&id.name)
-                || commons.consts.contains_key(&id.name)
-            {
-                // #1883, slice 1b: a bare asset name (an `Asset` argument,
-                // not just `style.url`, which the field-access arm already
-                // records) imports the declaring module's constant.
-                record_name_ref(&id.name, local_to_file, ctx, out);
-            }
-        }
-        ExprKind::IntLit { .. }
-        | ExprKind::FloatLit { .. }
-        | ExprKind::DecimalLit { .. }
-        | ExprKind::DurationLit { .. }
-        | ExprKind::StrLit(_)
-        | ExprKind::BoolLit(_)
-        | ExprKind::None
-        | ExprKind::UnitLit => {}
-        // v0.43: a hole's expression may reference imported names.
-        ExprKind::Wire(inner) => collect_refs_in_expr(inner, local_to_file, commons, ctx, out),
-        ExprKind::InterpStr(parts) => {
-            for part in parts {
-                if let InterpPart::Hole(hole) = part {
-                    collect_refs_in_expr(hole, local_to_file, commons, ctx, out);
-                }
-            }
-        }
-        // v0.20a: a lambda — its annotated param types may reference
-        // imported types; the body walks like any expression.
-        ExprKind::Lambda(lambda) => {
-            for p in &lambda.params {
-                if let Some(tr) = &p.type_ref {
-                    collect_refs_in_typeref(tr, local_to_file, ctx, out);
-                }
-            }
-            collect_refs_in_expr(&lambda.body, local_to_file, commons, ctx, out);
-        }
-        ExprKind::EffectPure(inner) => {
-            collect_refs_in_expr(inner, local_to_file, commons, ctx, out);
-        }
-        ExprKind::Expect(inner) => {
-            collect_refs_in_expr(inner, local_to_file, commons, ctx, out);
-        }
-        // #1812: a fault claim's call-site identity is an expression too.
-        ExprKind::Faults(f) => {
-            if let Some(identity) = f.principal.as_ref().and_then(|p| p.identity.as_deref()) {
-                collect_refs_in_expr(identity, local_to_file, commons, ctx, out);
-            }
-            collect_refs_in_expr(&f.call, local_to_file, commons, ctx, out);
-        }
-        ExprKind::Val { args, .. } => {
-            for a in args {
-                collect_refs_in_expr(a, local_to_file, commons, ctx, out);
-            }
-        }
-        ExprKind::ListLit(elems, ..) => {
-            for el in elems {
-                collect_refs_in_expr(el, local_to_file, commons, ctx, out);
-            }
-        }
-        // v0.117: observation predicates may reference types/fns; `trace` does not.
-        ExprKind::Observation(o) => {
-            if let ObservationMatcher::Called { count, with_pred } = &o.matcher {
-                if let Some(c) = count {
-                    collect_refs_in_expr(c, local_to_file, commons, ctx, out);
-                }
-                if let Some(p) = with_pred {
-                    collect_refs_in_expr(p, local_to_file, commons, ctx, out);
-                }
-            }
-        }
-        ExprKind::Trace { .. } => {}
-        ExprKind::RecordSpread {
-            type_name,
-            base,
-            overrides,
-            ..
-        } => {
-            if let Some(tn) = type_name {
-                record_name_ref(&tn.name, local_to_file, ctx, out);
-            }
-            collect_refs_in_expr(base, local_to_file, commons, ctx, out);
-            for f in overrides {
-                if let Some(v) = &f.value {
-                    collect_refs_in_expr(v, local_to_file, commons, ctx, out);
-                }
-            }
-        }
-        ExprKind::Call { name, args, .. } => {
-            record_name_ref(&name.name, local_to_file, ctx, out);
-            // #1820: constructing an agent declared in a sibling file of a
-            // multi-file unit lowers to its factory, `__make<Agent>`, which
-            // that file exports.
-            // The checker's classification decides, as the lowering does
-            // (`Callee::AgentInit`): a sum variant spelled like an agent is
-            // not one. The index only supplies the declaring file.
-            if !local_to_file.contains(&name.name)
-                && matches!(
-                    commons.callee(e.id),
-                    Some(bynk_check::checker::Callee::AgentInit(_))
-                )
-                && let Some(path) = ctx.file_decl_index.agents.get(&name.name)
-                && path != &ctx.source_path
-            {
-                out.by_sibling
-                    .entry(path.clone())
-                    .or_default()
-                    .insert(agent_factory_name(&name.name));
-            }
-            // A payload-carrying bare variant call (`Won(prize)`) lowers to
-            // `Type.Variant(…)` — import the owning sum type too.
-            if let Some(type_name) = sum_owner_of_variant(&name.name, e.id, commons) {
-                record_name_ref(&type_name, local_to_file, ctx, out);
-            }
-            // #527: a call to a commons-imported fn may lower with a rebrand
-            // assertion naming its return type (`(decide(…) as Decision)`),
-            // so the return type's names must be imported (and rebranded)
-            // in step with the cast.
-            if ctx.unit_kind == UnitKind::Context
-                && ctx.imported_from_kind.get(&name.name) == Some(&UnitKind::Commons)
-                && let Some(f) = commons.fns.get(&name.name)
-            {
-                collect_refs_in_typeref(&f.return_type, local_to_file, ctx, out);
-            }
-            for a in args {
-                collect_refs_in_expr(a, local_to_file, commons, ctx, out);
-            }
-        }
-        ExprKind::BinOp(_, l, r) => {
-            collect_refs_in_expr(l, local_to_file, commons, ctx, out);
-            collect_refs_in_expr(r, local_to_file, commons, ctx, out);
-        }
-        ExprKind::UnaryOp(_, i)
-        | ExprKind::Paren(i)
-        | ExprKind::Ok(i)
-        | ExprKind::Err(i)
-        | ExprKind::Some(i)
-        | ExprKind::Question(i) => collect_refs_in_expr(i, local_to_file, commons, ctx, out),
-        ExprKind::Block(b) => collect_refs_in_block(b, local_to_file, commons, ctx, out),
-        ExprKind::If {
-            cond,
-            then_block,
-            else_block,
-        } => {
-            collect_refs_in_expr(cond, local_to_file, commons, ctx, out);
-            collect_refs_in_block(then_block, local_to_file, commons, ctx, out);
-            collect_refs_in_block(else_block, local_to_file, commons, ctx, out);
-        }
-        ExprKind::RecordConstruction {
-            type_name, fields, ..
-        } => {
-            record_name_ref(&type_name.name, local_to_file, ctx, out);
-            for f in fields {
-                if let Some(v) = &f.value {
-                    collect_refs_in_expr(v, local_to_file, commons, ctx, out);
-                }
-            }
-        }
-        ExprKind::FieldAccess { receiver, field: _ } => {
-            // The bare-ident-as-type case (`TypeName.Variant`) — record the
-            // name so we import the type.
-            if let ExprKind::Ident(id) = &receiver.kind {
-                record_name_ref(&id.name, local_to_file, ctx, out);
-            } else {
-                collect_refs_in_expr(receiver, local_to_file, commons, ctx, out);
-            }
-        }
-        ExprKind::MethodCall {
-            receiver,
-            method: _,
-            type_args,
-            args,
-            ..
-        } => {
-            // #2795: a type named only in an explicit list (`b.probe[Item]()`,
-            // `Box.empty[Item]()`) is kept in the emitted call, so it is imported.
-            for t in type_args {
-                collect_refs_in_typeref(t, local_to_file, ctx, out);
-            }
-            if let ExprKind::Ident(id) = &receiver.kind {
-                record_name_ref(&id.name, local_to_file, ctx, out);
-            } else {
-                collect_refs_in_expr(receiver, local_to_file, commons, ctx, out);
-            }
-            for a in args {
-                collect_refs_in_expr(a, local_to_file, commons, ctx, out);
-            }
-        }
-        ExprKind::Match { discriminant, arms } => {
-            collect_refs_in_expr(discriminant, local_to_file, commons, ctx, out);
-            for arm in arms {
-                if let Pattern::Variant {
-                    type_name: Some(tn),
-                    ..
-                } = &arm.pattern
-                {
-                    record_name_ref(&tn.name, local_to_file, ctx, out);
-                }
-                // #1800: a name used only in a guard needs its import too;
-                // skipping the guard emitted a reference `tsc` cannot find.
-                if let Some(guard) = &arm.guard {
-                    collect_refs_in_expr(guard, local_to_file, commons, ctx, out);
-                }
-                match &arm.body {
-                    MatchBody::Expr(e) => collect_refs_in_expr(e, local_to_file, commons, ctx, out),
-                    MatchBody::Block(b) => {
-                        collect_refs_in_block(b, local_to_file, commons, ctx, out)
-                    }
-                }
-            }
-        }
-        ExprKind::Is { value, pattern } => {
-            collect_refs_in_expr(value, local_to_file, commons, ctx, out);
-            if let Pattern::Variant {
-                type_name: Some(tn),
-                ..
-            } = pattern.as_ref()
-            {
-                record_name_ref(&tn.name, local_to_file, ctx, out);
-            }
-        }
-    }
-}
-
-/// If `name` at `span` is a bare reference to a variant of a sum type (per
-/// the checker's expression type), return the owning sum's name — the same
-/// test the lowering uses to qualify it as `Type.Variant` (see the
-/// `ExprKind::Ident` arm of `lower_expr_into`).
-///
-/// P6.56 (design/tracks/the-ir.md §6b): investigated routing variant
-/// membership through a `TypedCommons`-only `TypeShape::Sum` lowering and
-/// declined, not built — `lower_type_item_ir`'s own `TypeBody::Sum` arm
-/// resolves every payload field's own `TyId` for every variant (an
-/// `.unwrap_or_else(|| panic!(..))` on any resolution miss), just to answer
-/// a name-membership question this call site can settle with a zero-cost,
-/// infallible string comparison today. `positional_field_name` below has
-/// the identical shape and the identical verdict, for the identical
-/// reason.
-fn sum_owner_of_variant(name: &str, id: ExprId, commons: &TypedCommons) -> Option<String> {
-    if let Some(Ty::Named {
-        kind: NamedKind::Sum,
-        name: type_name,
-        ..
-    }) = commons.expr_ty(id).as_deref()
-        && let Some(decl) = commons.types.get(type_name)
-        && let TypeBody::Sum(s) = &decl.body
-        && s.variants.iter().any(|v| v.name.name == name)
-    {
-        return Some(type_name.clone());
-    }
-    None
-}
-
-/// #1778: record every named type reachable in `ty`, the checked type of an
-/// expression, as an *implied* import, which `settle_implied` keeps only if
-/// the emitted body spells it. A name a consumed *context* declares is skipped:
-/// the lowering never names one through a checked type unqualified, and under
-/// Workers a context's value cannot be imported across its Worker boundary.
-fn record_ty_refs(
-    ty: TyId,
-    local_to_file: &HashSet<String>,
-    commons: &TypedCommons,
-    ctx: &EmitProjectCtx,
-    out: &mut ExternalReferences,
-) {
-    match &*commons.tys().get(ty) {
-        Ty::Named { name, args, .. } => {
-            if !is_consumed_context_type(ctx, name) {
-                let mut found = ExternalReferences::default();
-                record_name_ref(name, local_to_file, ctx, &mut found);
-                for (unit, names) in found.by_commons {
-                    out.implied_by_commons
-                        .entry(unit)
-                        .or_default()
-                        .extend(names);
-                }
-                for (path, names) in found.by_sibling {
-                    out.implied_by_sibling
-                        .entry(path)
-                        .or_default()
-                        .extend(names);
-                }
-            }
-            for a in args {
-                record_ty_refs(*a, local_to_file, commons, ctx, out);
-            }
-        }
-        Ty::Option(t)
-        | Ty::Effect(t)
-        | Ty::HttpResult(t)
-        | Ty::HttpOutcome(t)
-        | Ty::List(t)
-        | Ty::Set(t)
-        | Ty::Query(t)
-        | Ty::Stream(t)
-        | Ty::TestConnection(t)
-        | Ty::Connection(t)
-        | Ty::Actor(t) => record_ty_refs(*t, local_to_file, commons, ctx, out),
-        Ty::Result(a, b) | Ty::Map(a, b) => {
-            record_ty_refs(*a, local_to_file, commons, ctx, out);
-            record_ty_refs(*b, local_to_file, commons, ctx, out);
-        }
-        Ty::Fn { params, ret } => {
-            for p in params {
-                record_ty_refs(*p, local_to_file, commons, ctx, out);
-            }
-            record_ty_refs(*ret, local_to_file, commons, ctx, out);
-        }
-        Ty::ActorSum(members) => {
-            for (_, t) in members {
-                record_ty_refs(*t, local_to_file, commons, ctx, out);
-            }
-        }
-        Ty::Error
-        | Ty::Never
-        | Ty::Base(_)
-        | Ty::QueueResult
-        | Ty::BoundaryRejection
-        | Ty::Asset
-        | Ty::RequestHeaders
-        | Ty::RequestQuery
-        | Ty::RequestCookies
-        | Ty::TokenClaims
-        | Ty::ValidationError
-        | Ty::DecodeError
-        | Ty::Unit
-        | Ty::Var(_) => {}
-    }
 }
 
 fn record_name_ref(
@@ -3276,96 +2634,19 @@ fn record_name_ref(
 fn emit_cross_context_namespace_imports(
     commons: &TypedCommons,
     ctx: &EmitProjectCtx,
-    body: &[bynk_ts::TsStmt],
+    used: &std::collections::BTreeSet<String>,
 ) -> Vec<bynk_ts::TsStmt> {
     let info = &ctx.cross_context;
-    // Consumed contexts that expose services (v0.6) plus, v0.15, those whose
-    // capabilities this context references via `given B.Cap`.
-    let mut needed: std::collections::BTreeSet<String> = info
-        .consumed_services
-        .iter()
-        .filter(|(_, svcs)| !svcs.is_empty())
-        .map(|(q, _)| q.clone())
+    // 1A.36b-2: a consumed context's namespace is imported iff the module's tree uses it
+    // (`ns.__makeSurface`, `ns.Code`, `ns.Cap`).
+    let mut candidates: std::collections::BTreeSet<String> =
+        info.consumed_contexts.iter().cloned().collect();
+    candidates.extend(info.consumed_services.keys().cloned());
+    candidates.extend(cross_context_cap_namespaces(commons, ctx));
+    let needed: std::collections::BTreeSet<String> = candidates
+        .into_iter()
+        .filter(|q| used.contains(&qualified_to_ns(q)))
         .collect();
-    needed.extend(cross_context_cap_namespaces(commons, ctx));
-    // #1961: on workers, the owner of each event this context subscribes to.
-    // Its payload codec (`emit_consumed_context_helpers`) names the event
-    // through this alias, and a publisher with no callable service (only
-    // `http` ones) was otherwise never imported: `TS2304` on the subscriber.
-    if matches!(ctx.target, BuildTarget::Workers) {
-        let subscribed: HashSet<String> = commons
-            .commons
-            .items
-            .iter()
-            .filter_map(|item| match item {
-                CommonsItem::Service(s) => {
-                    let bynk_model::ProtocolIr::Events { event, .. } =
-                        bynk_model::lower_protocol_ir_from_commons(&s.protocol, commons)
-                    else {
-                        return None;
-                    };
-                    match &*commons.tys().get(event) {
-                        Ty::Named { name, .. } => Some(name.clone()),
-                        _ => None,
-                    }
-                }
-                _ => None,
-            })
-            .collect();
-        needed.extend(
-            info.consumed_event_names
-                .iter()
-                .filter(|(_, names)| names.iter().any(|n| subscribed.contains(n)))
-                .map(|(c, _)| c.clone()),
-        );
-    }
-    // #2058: a consumed context the body names a type of through its alias
-    // (`(1 as ev_store.Code)`, a literal admitted to its refined type), even
-    // one with no service this context calls.
-    // Only a refined type an expression here is checked as can be cast to,
-    // and only one the body then spells through the alias is imported.
-    let type_ns = crate::emitter::emit::consumed_type_ns(ctx);
-    let named: HashSet<String> = commons
-        .expr_types
-        .values()
-        .filter_map(|te| match &*commons.tys().get(te.ty) {
-            Ty::Named {
-                name,
-                kind: NamedKind::Refined(_),
-                ..
-            } => type_ns.get(name).cloned(),
-            _ => None,
-        })
-        .collect();
-    if !named.is_empty() {
-        let spelled = body_words(body);
-        needed.extend(
-            info.consumed_contexts
-                .iter()
-                .filter(|c| {
-                    let ns = qualified_to_ns(c);
-                    named.contains(&ns) && spelled.contains(&ns)
-                })
-                .cloned(),
-        );
-    }
-    // #2073: on workers, any consumed context whose alias this module's codecs
-    // spell, even one with no service this context calls: the declaring
-    // context of a type a borrowed signature type reaches (`shop_base.Base` in
-    // `shop.order`'s `Order`), or of a field of a type on this context's own
-    // boundary (#2044's codecs, `shop_base.Base` for `Order.b`).
-    if matches!(ctx.target, BuildTarget::Workers) {
-        let spelled = body_words(body);
-        needed.extend(
-            info.consumed_contexts
-                .iter()
-                .filter(|c| {
-                    !ctx.consumed_adapters.contains(c.as_str())
-                        && spelled.contains(&qualified_to_ns(c))
-                })
-                .cloned(),
-        );
-    }
     if needed.is_empty() {
         return Vec::new();
     }
@@ -3607,9 +2888,29 @@ fn emit_project_imports(
             ));
         }
     }
-    // #527: imports the DO-side agent-deps expressions need (binding modules,
-    // other Workers' handlers, the locale `render`). The project driver decides
-    // which; each is an import node here.
+    stmts.extend(extra_import_stmts(ctx));
+    // #1486: every statement in this function's own return, whatever
+    // section it came from (sibling imports, cross-unit imports, the
+    // rebrand-aliasing pair, `extra_imports`), sits directly under its
+    // predecessor with no blank between them — this function never inserted
+    // one under the pre-#1486 flat-print regime (confirmed: no explicit blank
+    // `TsStmt` anywhere in its own body), so every internal adjacency is forced
+    // regardless of `TsStmtKind`. The very first statement is left alone — its
+    // own blank-or-not relative to whatever precedes this function's call
+    // site is `emit_project`'s own call-site decision (the header/`emit_
+    // project_imports` boundary, and the project/cross-context import
+    // boundary, both forced explicitly there instead).
+    for stmt in stmts.iter_mut().skip(1) {
+        stmt.no_blank_before = true;
+    }
+    stmts
+}
+
+/// #527: imports the DO-side agent-deps expressions need (binding modules,
+/// other Workers' handlers, the locale `render`). The project driver decides
+/// which; each is an import node here.
+fn extra_import_stmts(ctx: &EmitProjectCtx) -> Vec<bynk_ts::TsStmt> {
+    let mut stmts = Vec::new();
     for import in &ctx.extra_imports {
         let decl = match import {
             ExtraImport::Namespace { alias, from } => bynk_ts::TsDecl::ImportNamespace {
@@ -3628,20 +2929,6 @@ fn emit_project_imports(
             },
         };
         stmts.push(bynk_ts::TsStmt::decl(decl, None));
-    }
-    // #1486: every statement in this function's own return, whatever
-    // section it came from (sibling imports, cross-unit imports, the
-    // rebrand-aliasing pair, `extra_imports`), sits directly under its
-    // predecessor with no blank between them — this function never inserted
-    // one under the pre-#1486 flat-print regime (confirmed: no explicit blank
-    // `TsStmt` anywhere in its own body), so every internal adjacency is forced
-    // regardless of `TsStmtKind`. The very first statement is left alone — its
-    // own blank-or-not relative to whatever precedes this function's call
-    // site is `emit_project`'s own call-site decision (the header/`emit_
-    // project_imports` boundary, and the project/cross-context import
-    // boundary, both forced explicitly there instead).
-    for stmt in stmts.iter_mut().skip(1) {
-        stmt.no_blank_before = true;
     }
     stmts
 }

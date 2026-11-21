@@ -32,11 +32,10 @@ use bynk_ts::TsProgram;
 #[path = "../par/mod.rs"]
 mod par;
 
-/// `(source, target, module, name)`: a name the tree uses that the module does
-/// not import. #3807: a boundary cast in a handler body names a namespace the
-/// module never imports. 1A.36b's derivation fixes it, or this entry stays.
-const KNOWN_UNDER_IMPORTS: &[(&str, &str, &str, &str)] =
-    &[("2901_alias_caller_plain", "bundle", "edge.ts", "lib")];
+/// `(source, target, module, name)`: a name the tree uses that the module does not
+/// import. Empty since 1A.36b-2: the imports are the tree's, so none can be missing; an entry
+/// would be a defect to report, with its issue. (#3807's `lib` was the last.)
+const KNOWN_UNDER_IMPORTS: &[(&str, &str, &str, &str)] = &[];
 
 /// `(name, reason)`: a runtime export a derived module may spell as code without importing it,
 /// because the spelling is not a use of the export. `words` reads identifiers, not scopes.

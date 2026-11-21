@@ -4429,6 +4429,7 @@ mod decode_map_key_tests {
 #[cfg(test)]
 mod path_for_is_tests {
     use super::*;
+    use bynk_syntax::ast::ExprId;
     use bynk_syntax::ast::Ident;
     use bynk_syntax::span::Span;
 
