@@ -1991,7 +1991,7 @@ fn emit_unit(
     // unaliased `render`.
     // #1820: in a split context, only a file declaring one of the plan's
     // agents builds its deps, so only that file imports what they need.
-    let mut extra_import_lines: Vec<String> = agent_deps_plan
+    let mut extra_imports: Vec<ExtraImport> = agent_deps_plan
         .filter(|p| {
             !unit_ctx.split_worker
                 || p.exprs.keys().any(|agent| {
@@ -2026,10 +2026,23 @@ fn emit_unit(
             &types_path,
             import_ext,
         );
-        extra_import_lines.push(format!(
-            "import {{ render as __bynkLocaleRender, renderArg as __bynkRenderArg }} from \"{import}\";\n\
-             import type {{ LocaleTag as __bynkLocaleTag, Message as __bynkMessage, MessageArg as __bynkMessageArg }} from \"{types_import}\";"
-        ));
+        extra_imports.push(ExtraImport::Named {
+            names: vec![
+                "render as __bynkLocaleRender".to_string(),
+                "renderArg as __bynkRenderArg".to_string(),
+            ],
+            from: import,
+            type_only: false,
+        });
+        extra_imports.push(ExtraImport::Named {
+            names: vec![
+                "LocaleTag as __bynkLocaleTag".to_string(),
+                "Message as __bynkMessage".to_string(),
+                "MessageArg as __bynkMessageArg".to_string(),
+            ],
+            from: types_import,
+            type_only: true,
+        });
     }
 
     let agent_called_contexts: Vec<String> =
@@ -2058,7 +2071,7 @@ fn emit_unit(
         target,
         local_agents: info.table.agents.keys().cloned().collect(),
         agent_given_deps: agent_deps_plan.map(|p| p.exprs.clone()).unwrap_or_default(),
-        extra_import_lines,
+        extra_imports,
         agent_method_givens: info
             .table
             .agents
@@ -5193,9 +5206,9 @@ pub struct AgentDepsPlan {
     /// agent name → TS object-literal expression for its `given` deps
     /// (e.g. `{ Clock: new bynk__binding.ClockProvider() }`).
     pub exprs: HashMap<String, String>,
-    /// Import lines the expressions need in `handlers.ts` (binding modules,
+    /// Imports the expressions need in `handlers.ts` (binding modules,
     /// other Workers' handlers). Same relative depth as `compose.ts`.
-    pub imports: Vec<String>,
+    pub imports: Vec<ExtraImport>,
 }
 
 /// Build the [`AgentDepsPlan`] for context `name`, or `None` when no local
@@ -5331,9 +5344,10 @@ fn plan_agent_given_deps(
         let ns = u.replace('.', "_");
         if let Some(b) = adapter_bindings.get(u) {
             let module = bynk_emit::emitter::ts_specifier(&b.output_path.with_extension("js"));
-            imports.push(format!(
-                "import * as {ns}__binding from \"{up}../../{module}\";"
-            ));
+            imports.push(ExtraImport::Namespace {
+                alias: format!("{ns}__binding"),
+                from: format!("{up}../../{module}"),
+            });
         } else {
             // A split context's modules sit one directory below its Worker's.
             let spec = layout.handlers_specifier(name, u);
@@ -5342,7 +5356,10 @@ fn plan_agent_given_deps(
             } else {
                 spec
             };
-            imports.push(format!("import * as handlers_{ns} from \"{spec}\";"));
+            imports.push(ExtraImport::Namespace {
+                alias: format!("handlers_{ns}"),
+                from: spec,
+            });
         }
     }
     Some(AgentDepsPlan { exprs, imports })

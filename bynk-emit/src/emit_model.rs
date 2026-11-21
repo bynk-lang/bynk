@@ -1005,6 +1005,25 @@ impl UnitSource {
     }
 }
 
+/// One import `handlers.ts` needs beyond the ones the emitter derives (#527): the
+/// driver forms them from what it knows of the build (adapter-binding modules,
+/// other Workers' handlers, the locale `render`), and the emitter writes each as
+/// an import node. A small enum owned here, so the driver does not build
+/// `bynk_ts` nodes itself.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ExtraImport {
+    /// `import * as <alias> from "<from>";`
+    Namespace { alias: String, from: String },
+    /// `import { <names> } from "<from>";`, or `import type { .. }` when
+    /// `type_only`. Each name is spelled as it appears between the braces
+    /// (`render as __bynkLocaleRender`).
+    Named {
+        names: Vec<String>,
+        from: String,
+        type_only: bool,
+    },
+}
+
 pub struct EmitProjectCtx {
     /// Source path of the file being emitted (relative to project root).
     pub source_path: PathBuf,
@@ -1047,8 +1066,8 @@ pub struct EmitProjectCtx {
     /// expression building those deps DO-side (workers contexts only; the DO
     /// wire cannot carry providers). Consumed by `emit_agent`'s fetch branch.
     pub agent_given_deps: HashMap<String, String>,
-    /// #527: extra import lines `handlers.ts` needs for the expressions above.
-    pub extra_import_lines: Vec<String>,
+    /// #527: extra imports `handlers.ts` needs for the expressions above.
+    pub extra_imports: Vec<ExtraImport>,
     /// #527: for each local agent, each `on call` method's `given` capability
     /// list. The lowering records which agent methods a handler body calls so
     /// the handler's emitted deps *type* carries the callee's capabilities —
