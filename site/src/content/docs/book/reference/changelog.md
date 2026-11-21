@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.640.1** | Lowering builds the generic-function-as-value closure, the `Form.decode` and `Form.encode` call and the hoisted async-tail `if` as typed nodes, and nothing in lowering builds text any more; the generated code is unchanged apart from layout, and a lowering step that lacks a checker fact for a receiver namespace or a store operation is reported as an internal fault instead of emitting a placeholder, and no such fault is added to a project that already has errors |
 | **v0.640.0** | `*`, `{` and `}` are reserved in an HTTP route, in a literal segment or inside a `:name`, and refused with `bynk.http.reserved_route_syntax`, so a rest-segment form can be added later without changing what an existing route means |
 | **v0.639.62** | `bynk dev` serves each Worker from a copy of its config that is replaced only once the development bindings are in it, so a rebuild never briefly binds the deploy's Vectorize index, and a Worker with stand-ins gets its development index too; `bynk migrate status` and `bynk migrate sweep` find the agent classes of a context in a `[deploy.workers]` group in the group's Worker |
 | **v0.639.61** | `bynk explain` explains 20 more error codes, among them the `[deploy.workers]` group rules, `[package] exports`, `[unstable] allow` and D1 migration file names |
