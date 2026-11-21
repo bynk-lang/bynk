@@ -120,6 +120,7 @@ export default defineConfig({
                 { label: "Check your environment with bynk doctor", link: "/docs/editor-and-tooling/doctor/" },
                 { label: "Format your code with bynk-fmt", link: "/docs/editor-and-tooling/format/" },
                 { label: "Set up editor support", link: "/docs/editor-and-tooling/editor-support/" },
+                { label: "Set up Neovim, Helix or Zed", link: "/docs/editor-and-tooling/other-editors/" },
                 { label: "Debug in VS Code", link: "/docs/editor-and-tooling/debugging/" },
               ],
             },
