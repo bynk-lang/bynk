@@ -233,6 +233,7 @@ fn param(name: &str, ty: TsType) -> TsParam {
         optional: false,
         rest: false,
         array_pattern: None,
+        default: None,
     }
 }
 

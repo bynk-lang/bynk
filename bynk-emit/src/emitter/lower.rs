@@ -4505,6 +4505,7 @@ fn lower_lambda(e: &Expr, lambda: &LambdaExpr, cx: &mut LowerCtx) -> bynk_ts::Ts
                 optional: false,
                 rest: false,
                 array_pattern: None,
+                default: None,
             }
         })
         .collect();

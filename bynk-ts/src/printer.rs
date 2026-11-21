@@ -3200,6 +3200,10 @@ fn render_params(out: &mut String, params: &[TsParam]) {
             out.push_str(": ");
             render_type(out, ty);
         }
+        if let Some(default) = &p.default {
+            out.push_str(" = ");
+            render_expr(out, default, 0, &mut None);
+        }
     }
 }
 
@@ -10206,5 +10210,21 @@ mod tests {
             printed.text,
             "const xs = [\n  \"a\",\n  \"b\",\n] as const;\n\nconst o = { k: \"v\" } as const;\n"
         );
+    }
+
+    /// 1A.38b: a parameter's default prints after its type, `query: Q = {}`.
+    #[test]
+    fn a_parameter_default_prints_after_the_type() {
+        let mut out = String::new();
+        render_params(
+            &mut out,
+            &[
+                TsParam::new("options", Some(TsType::named("ClientOptions")))
+                    .with_default(TsExpr::object(vec![])),
+                TsParam::new("path", Some(TsType::named("string")))
+                    .with_default(TsExpr::Lit(TsLit::Str("$".to_string()))),
+            ],
+        );
+        assert_eq!(out, "options: ClientOptions = {}, path: string = \"$\"");
     }
 }

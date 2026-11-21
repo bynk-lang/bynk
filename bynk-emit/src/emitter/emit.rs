@@ -837,6 +837,7 @@ fn exec_param(name: &str) -> bynk_ts::TsParam {
                     optional: false,
                     rest: false,
                     array_pattern: None,
+                    default: None,
                 }],
                 bynk_ts::TsType::named("void"),
             ),
@@ -844,6 +845,7 @@ fn exec_param(name: &str) -> bynk_ts::TsParam {
         optional: false,
         rest: false,
         array_pattern: None,
+        default: None,
     }
 }
 
@@ -2805,6 +2807,7 @@ fn deps_param(deps_ty: &bynk_ts::TsType) -> bynk_ts::TsParam {
         optional: false,
         rest: false,
         array_pattern: None,
+        default: None,
     }
 }
 

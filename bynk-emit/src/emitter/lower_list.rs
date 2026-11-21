@@ -98,6 +98,7 @@ pub(super) fn param(name: &str, ty: Option<TsType>) -> TsParam {
         optional: false,
         rest: false,
         array_pattern: None,
+        default: None,
     }
 }
 

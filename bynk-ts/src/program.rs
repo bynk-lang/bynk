@@ -2647,6 +2647,10 @@ pub struct TsParam {
     /// are its element names (an empty name is a hole). It prints in place of
     /// `name`, which is then unused. Build it with [`TsParam::array_pattern`].
     pub array_pattern: Option<Vec<String>>,
+    /// `name: ty = default` (1A.38b): the value the parameter takes when its
+    /// argument is left out (`query: Q = {}`). Build one with
+    /// [`TsParam::with_default`]; `optional` and a default do not combine.
+    pub default: Option<TsExpr>,
 }
 
 impl TsParam {
@@ -2658,7 +2662,19 @@ impl TsParam {
             optional: false,
             rest: false,
             array_pattern: None,
+            default: None,
         }
+    }
+
+    /// This parameter with a default value, `name: T = default`.
+    #[must_use]
+    pub fn with_default(mut self, default: TsExpr) -> Self {
+        debug_assert!(
+            !self.optional && !self.rest,
+            "with_default: an optional or rest parameter takes no default"
+        );
+        self.default = Some(default);
+        self
     }
 
     /// A parameter that destructures an array: `([a, b]) => …`.
