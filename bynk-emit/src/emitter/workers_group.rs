@@ -1169,4 +1169,30 @@ mod tests {
         assert!(full.contains("/_bynk/migrate/"), "{full}");
         assert!(full.contains("/_bynk/inspect/"), "{full}");
     }
+
+    /// The entry binds every name it uses: the member imports, the handler types
+    /// and the runtime's `__verifyCall` account for all of them, in every shape of
+    /// group (a lone member, several; fan-out, events, migrate, inspect).
+    #[test]
+    fn the_entry_binds_every_name_it_uses() {
+        let sets = [
+            vec![member("app.a")],
+            vec![member("app.a"), member("app.b"), member("app.c")],
+        ];
+        for members in &sets {
+            for bits in 0..16u32 {
+                let mut entry = entry_of(members);
+                entry.has_fanout = bits & 1 != 0;
+                entry.has_events = bits & 2 != 0;
+                entry.has_migrate = bits & 4 != 0;
+                entry.has_inspect = bits & 8 != 0;
+                let unbound = bynk_ts::unbound_names(&emit_group_entry(&entry));
+                assert!(
+                    unbound.is_empty(),
+                    "{} members, {bits:#06b}: {unbound:?}",
+                    members.len()
+                );
+            }
+        }
+    }
 }
