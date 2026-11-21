@@ -20,7 +20,6 @@ bynk-check/src/analysis.rs::analyse_project_inner = 643
 bynk-check/src/checker.rs::type_of = 643
 bynk-check/src/checker/calls.rs::check_static_call = 570
 bynk-emit/src/emitter/emit.rs::emit_agent_load_commit_state = 550
-bynk-emit/src/emitter/emit.rs::emit_agent_state_persistence = 347
 bynk-emit/src/emitter/workers.rs::emit_websocket_upgrade = 526
 bynk-check/src/symbols.rs::build_unit_table = 521
 bynk-check/src/checker/kernels.rs::check_list_kernel_method = 498

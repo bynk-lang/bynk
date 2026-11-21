@@ -7,7 +7,6 @@
 //! `ts_*`/`LowerCtx` core stay in the parent and are reached via `use super::*`.
 
 use std::collections::{HashMap, HashSet};
-use std::fmt::Write as _;
 use std::sync::Arc;
 
 use super::internal_fault::FaultSite;
@@ -5880,6 +5879,393 @@ fn migrate_dispatcher_decl(migrate_fn: &str, dispatch: Vec<bynk_ts::TsStmt>) -> 
     )
 }
 
+/// What a migration step function is built over, beyond the step itself.
+struct MigrateNames<'a> {
+    agent_name: &'a str,
+    state_ty: &'a str,
+    zero_fn: &'a str,
+    /// The functions a step calls on the carried state, present when the agent has them.
+    rehydrate_fn: Option<&'a str>,
+    hydrate_fn: Option<&'a str>,
+    encode_fn: Option<&'a str>,
+    /// The current shape's `store Map` fields.
+    map_names: &'a HashSet<String>,
+}
+
+/// `["a", "b"]`: a list of names as an array literal.
+fn hist_str_array(names: &[String]) -> bynk_ts::TsExpr {
+    bynk_ts::TsExpr::array(names.iter().map(|n| hist_str(n)).collect())
+}
+
+/// `stored["name"]`.
+fn stored_at(key: bynk_ts::TsExpr) -> bynk_ts::TsExpr {
+    bynk_ts::TsExpr::Index {
+        object: Box::new(hist_id("stored")),
+        index: Box::new(key),
+    }
+}
+
+/// `const <name>: globalThis.Record<string, unknown> = {};`.
+fn empty_record_const(name: &str) -> bynk_ts::TsStmt {
+    bynk_ts::TsStmt::const_stmt(
+        bynk_ts::TsBindingName::Ident(name.to_string()),
+        Some(wire_record_ty()),
+        bynk_ts::TsExpr::object(Vec::new()),
+        None,
+    )
+}
+
+/// `for (const __k of <keys>) if (<test>) <into>[__k] = stored[__k];`: copy the stored keys
+/// that pass `test` (written over `__k`) into the record `into`.
+fn copy_stored_keys(keys: bynk_ts::TsExpr, test: bynk_ts::TsExpr, into: &str) -> bynk_ts::TsStmt {
+    bynk_ts::TsStmt::for_of(
+        "__k",
+        keys,
+        bynk_ts::TsStmt::if_stmt(
+            test,
+            bynk_ts::TsStmt::assign(
+                bynk_ts::TsExpr::Index {
+                    object: Box::new(hist_id(into)),
+                    index: Box::new(hist_id("__k")),
+                },
+                stored_at(hist_id("__k")),
+                None,
+            ),
+            None,
+        ),
+        None,
+    )
+}
+
+/// One field of `__ow`, the stored record's old fields gathered for the old type's decoder.
+fn migrate_old_field_entry(
+    f: &RecordField,
+    plan: &bynk_check::schema_registry::MigrationStep,
+    commons: &TypedCommons,
+    ctx: &EmitProjectCtx,
+) -> bynk_ts::TsObjectEntry {
+    let n = &f.name.name;
+    let raw = match &f.type_ref {
+        // A store `Map` is a `Record<string, V>`; a `Map` value's wire form is an entries
+        // array. A `Cell` holding a map is already in that wire form.
+        TypeRef::Map(k, _, _) if plan.store_maps.contains(n) => {
+            let key = if type_base_is_string(k, &commons.types) {
+                hist_id("__k")
+            } else {
+                hist_call(persist_global("Number"), vec![hist_id("__k")])
+            };
+            let entries = hist_call(
+                persist_global("Object.entries"),
+                vec![persist_cast(stored_at(hist_str(n)), persist_record_ty())],
+            );
+            hist_call(
+                hist_member(entries, "map"),
+                vec![bynk_ts::TsExpr::Arrow {
+                    params: vec![bynk_ts::TsParam::array_pattern(
+                        vec!["__k".to_string(), "__v".to_string()],
+                        None,
+                    )],
+                    is_async: false,
+                    generics: Vec::new(),
+                    return_type: None,
+                    body: Box::new(bynk_ts::TsArrowBody::Expr(Box::new(
+                        bynk_ts::TsExpr::array(vec![key, hist_id("__v")]),
+                    ))),
+                }],
+            )
+        }
+        _ => stored_at(hist_str(n)),
+    };
+    // A field the stored record lacks (an additive predecessor, Decision C) takes the old
+    // type's declared default (the record decoder applies it), or else its type's zero.
+    if f.init.is_some() {
+        return bynk_ts::TsObjectEntry::Spread(bynk_ts::TsExpr::Paren(Box::new(
+            bynk_ts::TsExpr::Conditional {
+                test: Box::new(persist_present(n)),
+                consequent: Box::new(bynk_ts::TsExpr::object(vec![(n.clone(), raw)])),
+                alternate: Box::new(bynk_ts::TsExpr::object(Vec::new())),
+            },
+        )));
+    }
+    match bynk_check::checker::zero_value(&f.type_ref, f.refinement.as_ref(), &commons.types) {
+        Some(z) => bynk_ts::TsObjectEntry::prop(
+            n.clone(),
+            bynk_ts::TsExpr::Conditional {
+                test: Box::new(persist_present(n)),
+                consequent: Box::new(raw),
+                alternate: Box::new(serialisation::serialise_expr(
+                    &f.type_ref,
+                    &zero_value_expr(&z),
+                    &ctx.runtime_use,
+                )),
+            },
+        ),
+        None => bynk_ts::TsObjectEntry::prop(n.clone(), raw),
+    }
+}
+
+/// The step's decode of the old record: `const __ow = {..}; const __od = <decode>; if (..)
+/// throw ..; const <old> = __od.value;`. Binds the old name in `cx`.
+fn migrate_decode_old(
+    names: &MigrateNames<'_>,
+    plan: &bynk_check::schema_registry::MigrationStep,
+    step: &bynk_syntax::ast::MigrateDecl,
+    (commons, ctx): (&TypedCommons, &EmitProjectCtx),
+    cx: &mut LowerCtx,
+    body: &mut Vec<bynk_ts::TsStmt>,
+) {
+    if let Some(old) = &step.old
+        && let TypeRef::Named(id) = &old.type_ref
+        && let Some(decl) = commons.types.get(&id.name)
+        && let TypeBody::Record(r) = &decl.body
+    {
+        let entries = r
+            .fields
+            .iter()
+            .map(|f| migrate_old_field_entry(f, plan, commons, ctx))
+            .collect();
+        let decoded = serialisation::deserialise_expr(
+            &old.type_ref,
+            &bynk_ts::TsExpr::Paren(Box::new(persist_cast(
+                hist_id("__ow"),
+                bynk_ts::TsType::named("never"),
+            ))),
+            &old.name.name,
+            &ctx.runtime_use,
+        );
+        let old_js = cx.bind_local_name(&old.name.name);
+        body.push(hist_const("__ow", bynk_ts::TsExpr::object_entries(entries)));
+        body.push(hist_const("__od", decoded));
+        let od = || hist_id("__od");
+        body.push(bynk_ts::TsStmt::if_stmt(
+            hist_binary(
+                bynk_ts::TsBinaryOp::StrictEq,
+                hist_member(od(), "tag"),
+                hist_str("Err"),
+            ),
+            bynk_ts::TsStmt::throw_stmt(
+                hist_call(
+                    hist_id("__rehydrationViolation"),
+                    vec![hist_str(names.agent_name), hist_member(od(), "error")],
+                ),
+                None,
+            ),
+            None,
+        ));
+        body.push(hist_const(&old_js, hist_member(od(), "value")));
+    }
+}
+
+/// The step's items inside its `try`: each `let` and each assignment's hoisted statements and
+/// value, ending in `__out = { ...__c, f: v, .. } as <State>;`. Every assignment reads the carried
+/// state, never another assignment (record-literal semantics).
+fn migrate_step_try_body(
+    names: &MigrateNames<'_>,
+    step: &bynk_syntax::ast::MigrateDecl,
+    cx: &mut LowerCtx,
+) -> Vec<bynk_ts::TsStmt> {
+    let mut stmts = Vec::new();
+    let mut entries = vec![bynk_ts::TsObjectEntry::Spread(hist_id("__c"))];
+    for item in &step.items {
+        match item {
+            bynk_syntax::ast::MigrateItem::Let(l) => {
+                let mut pre = Pre::new();
+                let v = pre.lower_node(&l.value, cx);
+                stmts.extend(pre.ts_stmts());
+                let js = cx.bind_local_name(&l.name.name);
+                stmts.push(hist_const(&js, v));
+            }
+            bynk_syntax::ast::MigrateItem::Assign(asg) => {
+                let mut pre = Pre::new();
+                let v = pre.lower_node(&asg.value, cx);
+                stmts.extend(pre.ts_stmts());
+                let n = &asg.target.name;
+                let v = if names.map_names.contains(n) {
+                    // A `Map` value is a `ReadonlyMap`; a store `Map` is a handle keyed by
+                    // `String(k)`, built fresh from the zero state so it carries its
+                    // `@indexed` indexers.
+                    let fill = bynk_ts::TsStmt::for_of(
+                        "[__k, __v]",
+                        v,
+                        bynk_ts::TsStmt::expr_stmt(
+                            hist_call(
+                                hist_member(hist_id("__h"), "put"),
+                                vec![
+                                    hist_call(persist_global("String"), vec![hist_id("__k")]),
+                                    hist_id("__v"),
+                                ],
+                            ),
+                            None,
+                        ),
+                        None,
+                    );
+                    let handle = bynk_ts::TsExpr::Arrow {
+                        params: vec![bynk_ts::TsParam::new("__h".to_string(), None)],
+                        is_async: false,
+                        generics: Vec::new(),
+                        return_type: None,
+                        body: Box::new(bynk_ts::TsArrowBody::Block(vec![
+                            fill,
+                            bynk_ts::TsStmt::return_stmt(Some(hist_id("__h")), None),
+                        ])),
+                    };
+                    hist_call(
+                        bynk_ts::TsExpr::Paren(Box::new(handle)),
+                        vec![hist_member(
+                            hist_call(hist_id(names.zero_fn), Vec::new()),
+                            n,
+                        )],
+                    )
+                } else {
+                    v
+                };
+                entries.push(bynk_ts::TsObjectEntry::prop(n.clone(), v));
+            }
+            bynk_syntax::ast::MigrateItem::Drop(_) => {}
+        }
+    }
+    stmts.push(bynk_ts::TsStmt::assign(
+        hist_id("__out"),
+        persist_cast(
+            bynk_ts::TsExpr::object_entries(entries),
+            bynk_ts::TsType::named(names.state_ty),
+        ),
+        None,
+    ));
+    stmts
+}
+
+/// `function <step_fn>(stored: Record<string, unknown>): Record<string, unknown>`: one `migrate
+/// from N` step, carrying a stored (wire-shaped) record from version N to the current shape.
+fn migration_step_decl(
+    names: &MigrateNames<'_>,
+    step_fn: &str,
+    plan: &bynk_check::schema_registry::MigrationStep,
+    step: &bynk_syntax::ast::MigrateDecl,
+    env: (&TypedCommons, &EmitProjectCtx),
+    cx: &mut LowerCtx,
+) -> bynk_ts::TsStmt {
+    let state_ty = || bynk_ts::TsType::named(names.state_ty);
+    let has_own = |key: bynk_ts::TsExpr| {
+        hist_call(
+            persist_global("Object.prototype.hasOwnProperty.call"),
+            vec![hist_id("stored"), key],
+        )
+    };
+    let mut body = Vec::new();
+    // 1. Decode the old fields through the old type's own codec.
+    migrate_decode_old(names, plan, step, env, cx, &mut body);
+    // 2. The carried state: version N's fields the current shape keeps unchanged, decoded as
+    //    today; every other field at its zero.
+    body.push(empty_record_const("__picked"));
+    body.push(copy_stored_keys(
+        hist_str_array(&plan.carried),
+        has_own(hist_id("__k")),
+        "__picked",
+    ));
+    body.push(bynk_ts::TsStmt::const_stmt(
+        bynk_ts::TsBindingName::Ident("__c".to_string()),
+        None,
+        persist_cast(
+            bynk_ts::TsExpr::object_entries(vec![
+                bynk_ts::TsObjectEntry::Spread(hist_call(hist_id(names.zero_fn), Vec::new())),
+                bynk_ts::TsObjectEntry::Spread(hist_id("__picked")),
+            ]),
+            state_ty(),
+        ),
+        None,
+    ));
+    for f in [names.rehydrate_fn, names.hydrate_fn].into_iter().flatten() {
+        body.push(bynk_ts::TsStmt::expr_stmt(
+            hist_call(
+                hist_id(f),
+                vec![
+                    hist_id("__c"),
+                    persist_recast(hist_id("__picked"), state_ty()),
+                ],
+            ),
+            None,
+        ));
+    }
+    // 3. The body. A throw is `MigrationFailed`, never a bare 500 (Decision D).
+    body.push(hist_let("__out", Some(state_ty()), None));
+    body.push(bynk_ts::TsStmt::try_catch(
+        bynk_ts::TsStmt::block(migrate_step_try_body(names, step, cx), None),
+        None::<String>,
+        bynk_ts::TsStmt::block(
+            vec![bynk_ts::TsStmt::throw_stmt(
+                hist_call(
+                    hist_id("__migrationFailed"),
+                    vec![hist_str(names.agent_name), hist_num(plan.from)],
+                ),
+                None,
+            )],
+            None,
+        ),
+        None,
+    ));
+    // 4. Back to the wire, keeping any key version N did not know.
+    let encoded = match names.encode_fn {
+        Some(f) => hist_call(hist_id(f), vec![hist_id("__out")]),
+        None => bynk_ts::TsExpr::Paren(Box::new(persist_recast(
+            hist_id("__out"),
+            persist_record_ty(),
+        ))),
+    };
+    body.push(hist_const(
+        "__known",
+        bynk_ts::TsExpr::New {
+            callee: Box::new(bynk_ts::TsExpr::TypeApp {
+                callee: Box::new(persist_global("Set")),
+                type_args: vec![bynk_ts::TsType::named("string")],
+            }),
+            args: vec![hist_str_array(&plan.known)],
+        },
+    ));
+    body.push(empty_record_const("__keep"));
+    body.push(copy_stored_keys(
+        hist_call(persist_global("Object.keys"), vec![hist_id("stored")]),
+        hist_binary(
+            bynk_ts::TsBinaryOp::And,
+            hist_binary(
+                bynk_ts::TsBinaryOp::StrictNotEq,
+                hist_id("__k"),
+                hist_str("__v"),
+            ),
+            bynk_ts::TsExpr::Unary {
+                op: bynk_ts::TsUnaryOp::Not,
+                expr: Box::new(hist_call(
+                    hist_member(hist_id("__known"), "has"),
+                    vec![hist_id("__k")],
+                )),
+            },
+        ),
+        "__keep",
+    ));
+    body.push(bynk_ts::TsStmt::return_stmt(
+        Some(bynk_ts::TsExpr::object_entries(vec![
+            bynk_ts::TsObjectEntry::Spread(hist_id("__keep")),
+            bynk_ts::TsObjectEntry::Spread(encoded),
+        ])),
+        None,
+    ));
+    bynk_ts::TsStmt::decl(
+        bynk_ts::TsDecl::Function {
+            name: step_fn.to_string(),
+            generics: Vec::new(),
+            params: vec![bynk_ts::TsParam::new(
+                "stored".to_string(),
+                Some(wire_record_ty()),
+            )],
+            return_type: Some(wire_record_ty()),
+            body,
+            is_async: false,
+            inline: false,
+        },
+        None,
+    )
+}
+
 /// What `loadState` does with the merged state's collections: fill the in-memory handles from the
 /// record, or, for a lazily read record (#3189), attach storage-backed ones in their place.
 fn hydrate_or_attach_stmt(
@@ -6571,12 +6957,6 @@ fn emit_agent_state_persistence(
         .unwrap_or_default();
     if !step_plans.is_empty() {
         let agent_name = &a.name.name;
-        let present = |name: &str| {
-            format!("globalThis.Object.prototype.hasOwnProperty.call(stored, \"{name}\")")
-        };
-        let ser = |ty: &TypeRef, value: &str| {
-            bynk_ts::print_expr(&serialisation::serialise_text(ty, value, &ctx.runtime_use))
-        };
         let cell_names: HashSet<String> = effective_fields
             .iter()
             .map(|f| f.name.name.clone())
@@ -6585,13 +6965,6 @@ fn emit_agent_state_persistence(
             .iter()
             .map(|(n, _)| n.name.clone())
             .collect();
-        let quote_list = |names: &[String]| {
-            names
-                .iter()
-                .map(|n| format!("\"{n}\""))
-                .collect::<Vec<_>>()
-                .join(", ")
-        };
         let mut dispatch: Vec<bynk_ts::TsStmt> = Vec::new();
         for plan in &step_plans {
             let Some(step) = a.migrations.iter().find(|m| m.from == plan.from) else {
@@ -6613,163 +6986,21 @@ fn emit_agent_state_persistence(
                     fields: cell_names.difference(&shadowed).cloned().collect(),
                 },
             );
-            let mut body = String::new();
-            // 1. Decode the old fields through the old type's own codec. A
-            //    field the stored record lacks (an additive predecessor,
-            //    Decision C) takes the old type's declared default — the
-            //    record decoder applies it — or else its type's zero.
-            if let Some(old) = &step.old
-                && let TypeRef::Named(id) = &old.type_ref
-                && let Some(decl) = commons.types.get(&id.name)
-                && let TypeBody::Record(r) = &decl.body
-            {
-                let mut entries = Vec::new();
-                for f in &r.fields {
-                    let n = &f.name.name;
-                    let raw = match &f.type_ref {
-                        // A store `Map` is a `Record<string, V>`; a `Map`
-                        // value's wire form is an entries array. A `Cell`
-                        // holding a map is already in that wire form.
-                        TypeRef::Map(k, _, _) if plan.store_maps.contains(n) => format!(
-                            "globalThis.Object.entries(stored[\"{n}\"] as globalThis.Record<string, unknown>).map(([__k, __v]) => [{key}, __v])",
-                            key = if type_base_is_string(k, &commons.types) {
-                                "__k"
-                            } else {
-                                "globalThis.Number(__k)"
-                            }
-                        ),
-                        _ => format!("stored[\"{n}\"]"),
-                    };
-                    if f.init.is_some() {
-                        entries.push(format!(
-                            "...({p} ? {{ {n}: {raw} }} : {{}})",
-                            p = present(n)
-                        ));
-                    } else {
-                        match zero_value_ts(&f.type_ref, f.refinement.as_ref(), &commons.types) {
-                            Some(z) => entries.push(format!(
-                                "{n}: {p} ? {raw} : {zw}",
-                                p = present(n),
-                                zw = ser(&f.type_ref, &z)
-                            )),
-                            None => entries.push(format!("{n}: {raw}")),
-                        }
-                    }
-                }
-                let d = bynk_ts::print_expr(&serialisation::deserialise_expr(
-                    &old.type_ref,
-                    &bynk_ts::TsExpr::Paren(Box::new(persist_cast(
-                        hist_id("__ow"),
-                        bynk_ts::TsType::named("never"),
-                    ))),
-                    &old.name.name,
-                    &ctx.runtime_use,
-                ));
-                let old_js = cx.bind_local_name(&old.name.name);
-                writeln!(body, "  const __ow = {{ {} }};", entries.join(", ")).unwrap();
-                writeln!(
-                    body,
-                    "  const __od = {d}; if (__od.tag === \"Err\") throw __rehydrationViolation(\"{agent_name}\", __od.error);"
-                )
-                .unwrap();
-                writeln!(body, "  const {old_js} = __od.value;").unwrap();
-            }
-            // 2. The carried state: version N's fields the current shape keeps
-            //    unchanged, decoded as today; every other field at its zero.
-            writeln!(
-                body,
-                "  const __picked: globalThis.Record<string, unknown> = {{}}; for (const __k of [{}]) if (globalThis.Object.prototype.hasOwnProperty.call(stored, __k)) __picked[__k] = stored[__k];",
-                quote_list(&plan.carried)
-            )
-            .unwrap();
-            writeln!(
-                body,
-                "  const __c = {{ ...{zero_fn}(), ...__picked }} as {state_ty};"
-            )
-            .unwrap();
-            if has_rehydrate {
-                writeln!(
-                    body,
-                    "  {rehydrate_fn}(__c, __picked as unknown as {state_ty});"
-                )
-                .unwrap();
-            }
-            if has_collections {
-                writeln!(
-                    body,
-                    "  {hydrate_fn}(__c, __picked as unknown as {state_ty});"
-                )
-                .unwrap();
-            }
-            // 3. The body, with record-literal semantics: every assignment
-            //    reads the carried state, never another assignment. A throw
-            //    is `MigrationFailed`, never a bare 500 (Decision D).
-            writeln!(body, "  let __out: {state_ty};").unwrap();
-            writeln!(body, "  try {{").unwrap();
-            let mut assigns = Vec::new();
-            for item in &step.items {
-                match item {
-                    bynk_syntax::ast::MigrateItem::Let(l) => {
-                        let mut pre = Pre::new();
-                        let v = pre.lower(&l.value, &mut cx);
-                        for s in &pre.stmts() {
-                            writeln!(body, "    {s}").unwrap();
-                        }
-                        let js = cx.bind_local_name(&l.name.name);
-                        writeln!(body, "    const {js} = {v};").unwrap();
-                    }
-                    bynk_syntax::ast::MigrateItem::Assign(asg) => {
-                        let mut pre = Pre::new();
-                        let v = pre.lower(&asg.value, &mut cx);
-                        for s in &pre.stmts() {
-                            writeln!(body, "    {s}").unwrap();
-                        }
-                        let n = &asg.target.name;
-                        let v = if map_names.contains(n) {
-                            // A `Map` value is a `ReadonlyMap`; a store `Map` is a
-                            // handle keyed by `String(k)`, built fresh from the zero
-                            // state so it carries its `@indexed` indexers.
-                            format!(
-                                "((__h) => {{ for (const [__k, __v] of {v}) __h.put(globalThis.String(__k), __v); return __h; }})({zero_fn}().{n})"
-                            )
-                        } else {
-                            v
-                        };
-                        assigns.push(format!("{n}: {v}"));
-                    }
-                    bynk_syntax::ast::MigrateItem::Drop(_) => {}
-                }
-            }
-            let fields_out = if assigns.is_empty() {
-                String::new()
-            } else {
-                format!(", {}", assigns.join(", "))
-            };
-            writeln!(body, "    __out = {{ ...__c{fields_out} }} as {state_ty};").unwrap();
-            writeln!(
-                body,
-                "  }} catch {{ throw __migrationFailed(\"{agent_name}\", {}); }}",
-                plan.from
-            )
-            .unwrap();
-            // 4. Back to the wire, keeping any key version N did not know.
-            let enc = if has_encode {
-                format!("{encode_fn}(__out)")
-            } else {
-                "(__out as unknown as globalThis.Record<string, unknown>)".to_string()
-            };
-            writeln!(
-                body,
-                "  const __known = new globalThis.Set<string>([{}]); const __keep: globalThis.Record<string, unknown> = {{}}; for (const __k of globalThis.Object.keys(stored)) if (__k !== \"__v\" && !__known.has(__k)) __keep[__k] = stored[__k];",
-                quote_list(&plan.known)
-            )
-            .unwrap();
-            writeln!(body, "  return {{ ...__keep, ...{enc} }};").unwrap();
-            stmts.push(bynk_ts::TsStmt::raw(
-                format!(
-                    "function {step_fn}(stored: globalThis.Record<string, unknown>): globalThis.Record<string, unknown> {{\n{body}}}\n"
-                ),
-                None,
+            stmts.push(migration_step_decl(
+                &MigrateNames {
+                    agent_name,
+                    state_ty: &state_ty,
+                    zero_fn,
+                    rehydrate_fn: has_rehydrate.then_some(rehydrate_fn.as_str()),
+                    hydrate_fn: has_collections.then_some(hydrate_fn.as_str()),
+                    encode_fn: has_encode.then_some(encode_fn.as_str()),
+                    map_names: &map_names,
+                },
+                &step_fn,
+                plan,
+                step,
+                (commons, ctx),
+                &mut cx,
             ));
             dispatch.push(migrate_step_dispatch(plan.lo, plan.from, &step_fn));
         }
