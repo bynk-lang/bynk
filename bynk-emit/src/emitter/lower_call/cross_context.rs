@@ -811,10 +811,7 @@ mod tests {
     #[test]
     fn a_call_with_no_signature_is_an_internal_fault() {
         let (built, faults) = lower_workers(&info_with(false, Vec::new()), &[]);
-        assert_eq!(
-            bynk_ts::print_expr(&built.expect("lowering continues")),
-            "undefined"
-        );
+        assert_eq!(bynk_ts::print_expr(&built), "undefined");
         assert_eq!(faults.len(), 1, "{faults:?}");
         assert_eq!(faults[0].span, ident("charge").span);
         assert!(
@@ -830,10 +827,7 @@ mod tests {
     fn a_call_whose_arity_disagrees_with_the_signature_is_an_internal_fault() {
         let info = info_with(true, vec![("total".to_string(), named("Int"))]);
         let (built, faults) = lower_workers(&info, &[]);
-        assert_eq!(
-            bynk_ts::print_expr(&built.expect("lowering continues")),
-            "undefined"
-        );
+        assert_eq!(bynk_ts::print_expr(&built), "undefined");
         assert_eq!(faults.len(), 1, "{faults:?}");
         assert!(
             faults[0].what.contains("takes 1 but the call has 0"),
@@ -849,7 +843,7 @@ mod tests {
             .insert("shop.pay".to_string(), Default::default());
         let (call, faults) = lower_workers(&info, &[]);
         assert!(faults.is_empty(), "{faults:?}");
-        let call = call.expect("a zero-argument call is a node");
+        let call = call;
         let printed = bynk_ts::print_expr(&call);
         assert!(
             printed.starts_with("__callService(deps.env.SHOP_PAY, \"charge\", {}, "),

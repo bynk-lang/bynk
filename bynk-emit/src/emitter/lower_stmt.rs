@@ -1761,10 +1761,6 @@ mod body_tests {
         f(&cx)
     }
 
-    fn line(text: &str) -> Item {
-        Item::Line(text.to_string())
-    }
-
     fn rendered(body: &Body, indent: usize) -> (String, SourceMapBuilder) {
         let smb = RefCell::new(SourceMapBuilder::new());
         smb.borrow_mut().add_source("t.bynk", "x".repeat(200));
@@ -1787,17 +1783,14 @@ mod body_tests {
         )
     }
 
-    /// A `Line` is `write_line`: only its first line takes the indentation, so
-    /// continuation lines keep whatever they carry (#3711, Decision B).
-    #[test]
-    fn a_line_indents_its_first_line_only() {
-        let mut body = Body::new();
-        body.push(line("a;\n  b;"));
-        let (out, _) = rendered(&body, 4);
-        assert_eq!(out, "    a;\n  b;\n");
-        let mut expected = String::new();
-        write_line(&mut expected, 4, "a;\n  b;");
-        assert_eq!(out, expected);
+    /// `const <name> = 1;`
+    fn one(name: &str) -> Item {
+        node(bynk_ts::TsStmt::const_stmt(
+            bynk_ts::TsBindingName::Ident(name.to_string()),
+            None,
+            bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Num("1".to_string())),
+            None,
+        ))
     }
 
     /// A `Node` is printed at depth 0 with every line indented.
@@ -1810,43 +1803,20 @@ mod body_tests {
         assert!(out.lines().all(|l| l.starts_with("  ")), "{out}");
     }
 
-    /// `Indent` nests one `INDENT_STEP` per level, and an empty one is nothing.
-    #[test]
-    fn indent_nests_one_step_per_level() {
-        let mut inner = Body::new();
-        inner.push(line("b;"));
-        let mut mid = Body::new();
-        mid.push(line("a {"));
-        mid.push(Item::Indent(inner));
-        mid.push(line("}"));
-        let mut body = Body::new();
-        body.push(Item::Indent(mid));
-        body.push(Item::Indent(Body::new()));
-        let (out, _) = rendered(&body, 2);
-        assert_eq!(out, "    a {\n      b;\n    }\n");
-    }
-
-    /// A `Mark` records the offset where the next item starts, including inside
-    /// a nested `Indent`.
+    /// A `Mark` records the offset where the next item starts.
     #[test]
     fn a_mark_records_the_offset_where_it_is_reached() {
-        let mut inner = Body::new();
-        inner.push(Item::Mark(Span::new(30, 40)));
-        inner.push(line("c;"));
         let mut body = Body::new();
         body.push(Item::Mark(Span::new(0, 10)));
-        body.push(line("a;"));
+        body.push(one("a"));
         body.push(Item::Mark(Span::new(10, 20)));
-        body.push(line("b {"));
-        body.push(Item::Indent(inner));
-        body.push(line("}"));
+        body.push(one("b"));
         let (out, got) = rendered(&body, 0);
         let mut want = SourceMapBuilder::new();
         want.add_source("t.bynk", "x".repeat(200));
         want.record(0, Span::new(0, 10));
-        want.record("a;\n".len(), Span::new(10, 20));
-        want.record("a;\nb {\n".len(), Span::new(30, 40));
-        assert_eq!(out, "a;\nb {\n  c;\n}\n");
+        want.record("const a = 1;\n".len(), Span::new(10, 20));
+        assert_eq!(out, "const a = 1;\nconst b = 1;\n");
         assert_eq!(got.to_v3(&out, "t.js"), want.to_v3(&out, "t.js"));
     }
 
@@ -1858,7 +1828,7 @@ mod body_tests {
     fn the_claim_scope_wrapper_is_nodes_around_the_body() {
         let mut inner = Body::new();
         inner.push(Item::Mark(Span::new(0, 10)));
-        inner.push(line("const a = 1;"));
+        inner.push(one("a"));
         inner.push(Item::Mark(Span::new(10, 30)));
         inner.push(Item::Node(Box::new(if_node())));
         let stmt = bynk_ts::TsStmt::decl(
@@ -1896,27 +1866,17 @@ mod body_tests {
 
     /// `into_stmts` (1A.15, Decision A): the statements of a function body print
     /// to the text `render` writes at the same indent, and the printer records
-    /// the checkpoints `render` records, for a body mixing marks, text, nodes
-    /// and a nested `Indent` that holds a node.
+    /// the checkpoints `render` records, for a body mixing marks and nodes.
     #[test]
     fn into_stmts_prints_what_render_writes_with_the_same_checkpoints() {
         let build = || {
-            let mut inner = Body::new();
-            inner.push(line("if (x) {"));
-            let mut nested = Body::new();
-            nested.push(Item::Mark(Span::new(40, 50)));
-            nested.push(line("return 1;"));
-            nested.push(Item::Mark(Span::new(50, 55)));
-            nested.push(Item::Node(Box::new(if_node())));
-            inner.push(Item::Indent(nested));
-            inner.push(line("}"));
             let mut body = Body::new();
             body.push(Item::Mark(Span::new(0, 10)));
-            body.push(line("const a = 1;"));
+            body.push(one("a"));
             body.push(Item::Mark(Span::new(10, 30)));
             body.push(Item::Node(Box::new(if_node())));
             body.push(Item::Mark(Span::new(30, 60)));
-            body.push(Item::Indent(inner));
+            body.push(Item::Node(Box::new(if_node())));
             body
         };
         for indent in [2usize, 4] {
@@ -1978,18 +1938,6 @@ mod body_tests {
         }
     }
 
-    /// A `Line` becomes one padded `raw` statement carrying the pending mark.
-    #[test]
-    fn into_stmts_turns_a_line_into_a_padded_raw_statement_with_its_span() {
-        let mut body = Body::new();
-        body.push(Item::Mark(Span::new(3, 4)));
-        body.push(line("a;"));
-        let stmts = body.into_stmts();
-        assert_eq!(stmts.len(), 1);
-        assert_eq!(stmts[0].span, Some(Span::new(3, 4)));
-        assert_eq!(bynk_ts::print_stmt(&stmts[0], 0), "    a;\n");
-    }
-
     fn ident(name: &str) -> bynk_ts::TsExpr {
         bynk_ts::TsExpr::Ident(name.to_string())
     }
@@ -2011,10 +1959,9 @@ mod body_tests {
         ))
     }
 
-    /// `to_nodes` hands each mark to the next node only, and refuses text, a
-    /// nested `Indent` and a mark with nothing after it.
+    /// `into_stmts` hands each mark to the next statement only.
     #[test]
-    fn to_nodes_attaches_a_mark_to_the_next_node_only() {
+    fn into_stmts_attaches_a_mark_to_the_next_statement_only() {
         let mut body = Body::new();
         body.push(Item::Mark(Span::new(1, 2)));
         body.push(konst("a", "x"));
@@ -2022,29 +1969,18 @@ mod body_tests {
         body.push(Item::Mark(Span::new(3, 4)));
         body.push(Item::Mark(Span::new(5, 6)));
         body.push(ret("a"));
-        let stmts = body.to_nodes().expect("all nodes and marks");
+        let stmts = body.into_stmts();
         let spans: Vec<Option<Span>> = stmts.iter().map(|s| s.span).collect();
         // Two marks in a row sit at one offset: the later one wins, as
         // `SourceMapBuilder::record` has it.
         assert_eq!(spans, [Some(Span::new(1, 2)), None, Some(Span::new(5, 6))]);
-
-        let mut text = Body::new();
-        text.push(konst("a", "x"));
-        text.push(line("b;"));
-        assert!(text.to_nodes().is_none());
-        let mut nested = Body::new();
-        nested.push(Item::Indent(Body::new()));
-        assert!(nested.to_nodes().is_none());
-        let mut trailing = Body::new();
-        trailing.push(konst("a", "x"));
-        trailing.push(Item::Mark(Span::new(1, 2)));
-        assert!(trailing.to_nodes().is_none());
     }
 
-    /// An `if` built from bodies that carry marks renders, with its map, exactly
-    /// as the `Line` form around the same bodies does, at every indent.
+    /// An `if` built from bodies that carry marks renders, with its map, as the
+    /// statement the printer lays out, at every indent: the checkpoints land at
+    /// the start of the line each was put on.
     #[test]
-    fn an_if_node_matches_the_line_form_with_its_checkpoints() {
+    fn an_if_node_renders_with_its_checkpoints() {
         let then_body = || {
             let mut b = Body::new();
             b.push(Item::Mark(Span::new(10, 20)));
@@ -2061,62 +1997,45 @@ mod body_tests {
             b
         };
         for indent in [0, 2, 6] {
-            let mut as_node = Body::new();
-            as_node.push(Item::Mark(Span::new(0, 10)));
-            let ru = RuntimeUse::default();
-            push_if(&mut as_node, ident("k"), then_body(), else_body());
-            assert!(matches!(as_node.0.last(), Some(Item::Node(_))));
-            let mut as_lines = Body::new();
-            as_lines.push(Item::Mark(Span::new(0, 10)));
-            as_lines.push(line("if (k) {"));
-            as_lines.push(Item::Indent(then_body()));
-            as_lines.push(line("} else {"));
-            as_lines.push(Item::Indent(else_body()));
-            as_lines.push(line("}"));
-            let (node_text, node_map) = rendered(&as_node, indent);
-            let (line_text, line_map) = rendered(&as_lines, indent);
-            assert_eq!(node_text, line_text, "indent {indent}");
+            let mut body = Body::new();
+            body.push(Item::Mark(Span::new(0, 10)));
+            push_if(&mut body, ident("k"), then_body(), else_body());
+            assert!(matches!(body.0.last(), Some(Item::Node(_))));
+            let (text, got) = rendered(&body, indent);
+            let pad = |n: usize| " ".repeat(indent + n);
+            let want_text = format!(
+                "{p0}if (k) {{\n{p2}const a = x;\n{p2}const b = y;\n{p2}return a;\n{p0}}} else {{\n{p2}return c;\n{p0}}}\n",
+                p0 = pad(0),
+                p2 = pad(2)
+            );
+            assert_eq!(text, want_text, "indent {indent}");
+            let mut want = SourceMapBuilder::new();
+            want.add_source("t.bynk", "x".repeat(200));
+            want.record(0, Span::new(0, 10));
+            want.record(
+                text.find(&format!("{}const a", pad(2))).unwrap(),
+                Span::new(10, 20),
+            );
+            want.record(
+                text.find(&format!("{}return a", pad(2))).unwrap(),
+                Span::new(20, 30),
+            );
+            want.record(
+                text.find(&format!("{}return c", pad(2))).unwrap(),
+                Span::new(40, 50),
+            );
             assert_eq!(
-                node_map.to_v3(&node_text, "t.js"),
-                line_map.to_v3(&line_text, "t.js"),
+                got.to_v3(&text, "t.js"),
+                want.to_v3(&text, "t.js"),
                 "indent {indent}"
             );
         }
-    }
-
-    /// A condition or body that is not nodes is a compiler fault, reported at the site; the `If`
-    /// is still built, over `undefined` and an empty body.
-    #[test]
-    fn an_if_over_text_is_a_fault_not_text() {
-        let ru = RuntimeUse::default();
-        let site = FaultSite {
-            sink: &ru,
-            span: Span::new(3, 4),
-        };
-        let mut body = Body::new();
-        let mut then = Body::new();
-        then.push(line("is_binding;"));
-        push_if(
-            &mut body,
-            bynk_ts::TsExpr::Text("k".into()),
-            then,
-            Body::new(),
-        );
-        assert!(matches!(body.0.first(), Some(Item::Node(_))));
-        let faults = ru.take_faults();
-        assert_eq!(faults.len(), 2, "{faults:?}");
-        assert!(faults.iter().all(|f| f.span == Span::new(3, 4)));
     }
 
     /// `do` and assignment are nodes (they are reached from an agent handler, which the lib's own
     /// unit tests cannot compile in-process).
     #[test]
     fn do_and_assignment_are_nodes() {
-        let ru = RuntimeUse::default();
-        let site = FaultSite {
-            sink: &ru,
-            span: Span::default(),
-        };
         let printed = |item: &Item| match item {
             Item::Node(stmt) => bynk_ts::print_stmt(stmt, 0),
             _ => unreachable!("a statement node"),
@@ -2131,7 +2050,6 @@ mod body_tests {
             printed(&assign_item(member(), call())),
             "__state.count = f(x);\n"
         );
-        assert!(ru.take_faults().is_empty());
     }
 
     /// A nested checkpoint inside a node lands `indent` further on for every
@@ -2155,19 +2073,12 @@ mod body_tests {
     }
 }
 
-/// 1A.11 (#3712): the statement producers build nodes. `LINES_RENDERED` counts the `Item::Line`s
-/// the emitter rendered, so "0" means every statement was a node.
+/// 1A.11 (#3712): the statement producers build nodes.
 #[cfg(test)]
 mod stmt_node_tests {
-    use super::*;
-
-    /// `(Item::Line items rendered, emitted module)` for a single commons.
-    fn emitted(src: &str) -> (usize, String) {
-        // The text values read a `Set` `remove` as text (see `force_text`).
-        let _text = crate::emitter::lower::force_text::arm("Set.remove");
-        LINES_RENDERED.with(|c| c.set(0));
-        let ts = crate::testkit::emit_source(src);
-        (LINES_RENDERED.with(|c| c.get()), ts)
+    /// The emitted TypeScript for a single commons.
+    fn emitted(src: &str) -> String {
+        crate::testkit::emit_source(src)
     }
 
     /// The body of `export [async ]function <name>` — its lines, up to the
@@ -2188,7 +2099,7 @@ mod stmt_node_tests {
         let src = format!(
             "commons stmts\n\n{EFFECTS}fn pure(x: Int) -> Int {{\n  let y = x + 1\n  y * 2\n}}\n\nfn eff(x: Int) -> Effect[Int] {{\n  let a <- bump(x)\n  do bump(a)\n  Effect.pure(a)\n}}\n"
         );
-        let (lines, ts) = emitted(&src);
+        let ts = emitted(&src);
         assert_eq!(
             body_of(&ts, "pure"),
             "  const y = x + 1;\n  return y * 2;\n"
@@ -2197,7 +2108,6 @@ mod stmt_node_tests {
             body_of(&ts, "eff"),
             "  const a = await bump(x);\n  await bump(a);\n  return a;\n"
         );
-        assert_eq!(lines, 0, "{ts}");
     }
 
     #[test]
@@ -2218,8 +2128,7 @@ mod stmt_node_tests {
             let j: Set[Int] = s\n  \
             let k: List[Option[Id]] = []\n  \
             a\n}\n";
-        let (lines, ts) = emitted(src);
-        assert_eq!(lines, 0, "{ts}");
+        let ts = emitted(src);
         let body = body_of(&ts, "f");
         for want in [
             "const a: number = x;",
@@ -2238,8 +2147,7 @@ mod stmt_node_tests {
     fn a_ternary_tail_is_a_return_of_a_parenthesised_conditional() {
         let src = "commons tern\n\n\
             fn f(c: Bool, x: Int, y: Int) -> Int {\n  if c { x } else { y }\n}\n";
-        let (lines, ts) = emitted(src);
-        assert_eq!(lines, 0, "{ts}");
+        let ts = emitted(src);
         assert_eq!(body_of(&ts, "f"), "  return (c ? x : y);\n");
     }
 
@@ -2252,8 +2160,7 @@ mod stmt_node_tests {
             fn f(c: Bool, d: Bool, x: Int, y: Int, z: Int) -> Int {\n  if c { if d { x } else { y } } else { z }\n}\n\n\
             fn g(c: Bool, x: Int, y: Int) -> Bool {\n  if c { x < y } else { x == y }\n}\n\n\
             fn h(c: Bool, x: Int, y: Int) -> Int {\n  if c { x + y } else { x - y }\n}\n";
-        let (lines, ts) = emitted(src);
-        assert_eq!(lines, 0, "{ts}");
+        let ts = emitted(src);
         assert_eq!(body_of(&ts, "f"), "  return (c ? (d ? x : y) : z);\n");
         assert_eq!(body_of(&ts, "g"), "  return (c ? x < y : x === y);\n");
         assert_eq!(body_of(&ts, "h"), "  return (c ? x + y : x - y);\n");
@@ -2265,8 +2172,7 @@ mod stmt_node_tests {
         // `if`, both bodies converted.
         let src = "commons hoist\n\n\
             fn f(c: Bool, r: Result[Int, String]) -> Result[Int, String] {\n  if c { Ok(r?) } else { Ok(0) }\n}\n";
-        let (lines, ts) = emitted(src);
-        assert_eq!(lines, 0, "{ts}");
+        let ts = emitted(src);
         assert_eq!(
             body_of(&ts, "f"),
             "  if (c) {\n    const __r0 = r;\n    if (__r0.tag === \"Err\") return __r0;\n    return Ok(__r0.value);\n  } else {\n    return Ok(0);\n  }\n"
@@ -2278,8 +2184,7 @@ mod stmt_node_tests {
         let src = "commons deep\n\n\
             fn f(a: Bool, b: Bool, r: Result[Int, String]) -> Result[Int, String] {\n  \
             if a {\n    let x = r?\n    if b {\n      let y = r?\n      Ok(x + y)\n    } else {\n      let z = r?\n      Ok(x + z)\n    }\n  } else {\n    let w = r?\n    Ok(w)\n  }\n}\n";
-        let (lines, ts) = emitted(src);
-        assert_eq!(lines, 0, "{ts}");
+        let ts = emitted(src);
         assert_eq!(
             body_of(&ts, "f"),
             "  if (a) {\n    const __r0 = r;\n    if (__r0.tag === \"Err\") return __r0;\n    const x = __r0.value;\n    if (b) {\n      const __r1 = r;\n      if (__r1.tag === \"Err\") return __r1;\n      const y = __r1.value;\n      return Ok(x + y);\n    } else {\n      const __r2 = r;\n      if (__r2.tag === \"Err\") return __r2;\n      const z = __r2.value;\n      return Ok(x + z);\n    }\n  } else {\n    const __r3 = r;\n    if (__r3.tag === \"Err\") return __r3;\n    const w = __r3.value;\n    return Ok(w);\n  }\n"
@@ -2292,8 +2197,7 @@ mod stmt_node_tests {
         // the `Extract` cast), so the `if` is a node too.
         let src = "commons isb\n\n\
             fn f(o: Option[Int]) -> Int {\n  if o is Some(v) {\n    let k = v + 1\n    k\n  } else {\n    0\n  }\n}\n";
-        let (lines, ts) = emitted(src);
-        assert_eq!(lines, 0, "{ts}");
+        let ts = emitted(src);
         assert_eq!(
             body_of(&ts, "f"),
             "  if (((__c: boolean) => __c)(o.tag === \"Some\")) {\n    const v = (o as Extract<typeof o, { tag: \"Some\" }>).value;\n    const k = v + 1;\n    return k;\n  } else {\n    return 0;\n  }\n"
@@ -2307,7 +2211,7 @@ mod stmt_node_tests {
         let src = "commons slot\n\n\
             fn f(a: Option[Int], r: Result[Int, String]) -> Result[Int, String] {\n  \
             let n = if a is Some(v) { r? + v } else { 0 }\n  Ok(n)\n}\n";
-        let (_, ts) = emitted(src);
+        let ts = emitted(src);
         let body = body_of(&ts, "f");
         assert!(
             body.contains("      __r0 = __r1.value + v;\n      break __r0_out;\n"),
@@ -2324,14 +2228,9 @@ mod stmt_node_tests {
 /// printed at their real depth, with today's text when a part is text.
 #[cfg(test)]
 mod arrow_node_tests {
-    use super::*;
-
-    fn emitted(src: &str) -> (usize, String) {
-        // The text values read a `Set` `remove` as text (see `force_text`).
-        let _text = crate::emitter::lower::force_text::arm("Set.remove");
-        LINES_RENDERED.with(|c| c.set(0));
-        let ts = crate::testkit::emit_source(src);
-        (LINES_RENDERED.with(|c| c.get()), ts)
+    /// The emitted TypeScript for a single commons.
+    fn emitted(src: &str) -> String {
+        crate::testkit::emit_source(src)
     }
 
     fn after(ts: &str, head: &str) -> String {
@@ -2343,8 +2242,7 @@ mod arrow_node_tests {
     #[test]
     fn an_if_iife_over_nodes_prints_at_its_real_depth() {
         let src = "commons p1\n\nfn f(c: Bool, x: Int) -> Int {\n  let r = if c {\n    let y = x + 1\n    y * 2\n  } else {\n    0\n  }\n  r + 1\n}\n";
-        let (lines, ts) = emitted(src);
-        assert_eq!(lines, 0, "{ts}");
+        let ts = emitted(src);
         assert_eq!(
             after(&ts, "export function f("),
             "export function f(c: boolean, x: number): number {\n  const r = (() => {\n    if (c) {\n      const y = x + 1;\n      return y * 2;\n    } else {\n      return 0;\n    }\n  })();\n  return r + 1;\n}\n"
@@ -2355,7 +2253,7 @@ mod arrow_node_tests {
     fn an_async_if_iife_is_an_awaited_async_arrow() {
         // The #2 review's case: a bare `await` inside the arrow needs `async`.
         let src = "commons p2\n\nfn bump(n: Int) -> Effect[Int] {\n  Effect.pure(n)\n}\n\nfn f(c: Bool) -> Effect[Int] {\n  let r = if c {\n    let y <- bump(1)\n    y + 1\n  } else {\n    0\n  }\n  Effect.pure(r)\n}\n";
-        let (_, ts) = emitted(src);
+        let ts = emitted(src);
         assert!(
             ts.contains(
                 "  const r = await (async () => {\n    if (c) {\n      const y = await bump(1);\n      return y + 1;\n    } else {\n      return 0;\n    }\n  })();\n"
@@ -2367,8 +2265,7 @@ mod arrow_node_tests {
     #[test]
     fn if_iifes_nest_three_deep_at_their_real_depths() {
         let src = "commons p4\n\nfn f(c: Bool, d: Bool, x: Int) -> Int {\n  let r = if c {\n    let a = x\n    if d {\n      let b = a + 1\n      if c {\n        let e = b + 1\n        e\n      } else {\n        0\n      }\n    } else {\n      1\n    }\n  } else {\n    2\n  }\n  r\n}\n";
-        let (lines, ts) = emitted(src);
-        assert_eq!(lines, 0, "{ts}");
+        let ts = emitted(src);
         assert!(
             ts.contains(
                 "  const r = (() => {\n    if (c) {\n      const a = x;\n      if (d) {\n        const b = a + 1;\n        if (c) {\n          const e = b + 1;\n          return e;\n        } else {\n          return 0;\n        }\n      } else {\n        return 1;\n      }\n    } else {\n      return 2;\n    }\n  })();\n"
@@ -2380,7 +2277,7 @@ mod arrow_node_tests {
     #[test]
     fn an_if_iife_with_a_text_condition_keeps_its_text_byte_for_byte() {
         let src = "commons p7\n\nfn f(a: Bool, b: Bool, x: Int) -> Int {\n  let r = if a && b {\n    let y = x + 1\n    y\n  } else {\n    0\n  }\n  r\n}\n";
-        let (_, ts) = emitted(src);
+        let ts = emitted(src);
         assert!(
             ts.contains(
                 "  const r = (() => {\n    if (a && b) {\n      const y = x + 1;\n      return y;\n    } else {\n      return 0;\n    }\n  })();\n"
@@ -2392,7 +2289,7 @@ mod arrow_node_tests {
     #[test]
     fn a_lambda_with_typed_and_inferred_params_is_an_arrow_node() {
         let src = "commons p3\n\ntype P = { a: Int }\n\nfn g(xs: List[Int]) -> List[P] {\n  xs.map((x: Int) => P { a: x })\n}\n\nfn f(xs: List[Int]) -> List[Int] {\n  xs.map((x) => x + 1)\n}\n\nfn h(xs: List[Int]) -> List[Int] {\n  xs.map((x) => {\n    let y = x * 2\n    y + 1\n  })\n}\n";
-        let (_, ts) = emitted(src);
+        let ts = emitted(src);
         // Typed and inferred params; an object-literal body is bracketed.
         assert!(ts.contains("((x: number) => x + 1)(__x)"), "{ts}");
         assert!(ts.contains("((x: number) => ({ a: x }))(__x)"), "{ts}");
@@ -2405,7 +2302,7 @@ mod arrow_node_tests {
     #[test]
     fn a_lambda_expression_body_that_hoists_a_question_is_a_block() {
         let src = "commons p6\n\nfn parse(x: Int) -> Result[Int, String] {\n  Ok(x)\n}\n\nfn f(x: Int) -> Result[Int, String] {\n  let g: (Int) -> Result[Int, String] = (y: Int) => Ok(parse(y)? + 1)\n  g(x)\n}\n";
-        let (_, ts) = emitted(src);
+        let ts = emitted(src);
         assert!(
             ts.contains(
                 "= (y: number) => {\n    const __r0 = parse(y);\n    if (__r0.tag === \"Err\") return __r0;\n    return Ok(__r0.value + 1);\n  };\n"
@@ -2415,23 +2312,17 @@ mod arrow_node_tests {
     }
 }
 
-/// 1A.13: `match` lowers to nodes. `LINES_RENDERED == 0` means no text line was
-/// rendered, i.e. every statement of the function went down the node path.
+/// 1A.13: `match` lowers to nodes.
 #[cfg(test)]
 mod match_node_tests {
-    use super::*;
-
-    fn emitted(src: &str) -> (usize, String) {
-        // The text values read a `Set` `remove` as text (see `force_text`).
-        let _text = crate::emitter::lower::force_text::arm("Set.remove");
-        LINES_RENDERED.with(|c| c.set(0));
-        let ts = crate::testkit::emit_source(src);
-        (LINES_RENDERED.with(|c| c.get()), ts)
+    /// The emitted TypeScript for a single commons.
+    fn emitted(src: &str) -> String {
+        crate::testkit::emit_source(src)
     }
 
     #[test]
     fn a_tail_switch_over_variants_prints_stacked_cases_with_bindings() {
-        let (_, ts) = emitted(
+        let ts = emitted(
             "commons t1\n\ntype Shape = | Circle(r: Int) | Square(w: Int) | Dot\n\nfn f(s: Shape) -> Int {\n  match s {\n    Circle(r) => r\n    Square(w) => w * 2\n    Dot => 0\n  }\n}\n",
         );
         assert!(
@@ -2444,7 +2335,7 @@ mod match_node_tests {
 
     #[test]
     fn a_tail_switch_over_literals_stacks_or_pattern_labels() {
-        let (_, ts) = emitted(
+        let ts = emitted(
             "commons t2\n\nfn f(n: Int) -> String {\n  match n {\n    1 => \"a\"\n    2 | 3 => \"b\"\n    _ => \"c\"\n  }\n}\n",
         );
         assert!(
@@ -2457,7 +2348,7 @@ mod match_node_tests {
 
     #[test]
     fn an_or_pattern_with_a_shared_binding_is_an_if_chain_over_a_disjunction() {
-        let (_, ts) = emitted(
+        let ts = emitted(
             "commons t3\n\ntype Shape = | Circle(r: Int) | Square(w: Int) | Dot\n\nfn f(s: Shape) -> Int {\n  match s {\n    Circle(r) | Square(r) => r\n    Dot => 0\n  }\n}\n",
         );
         assert!(
@@ -2470,7 +2361,7 @@ mod match_node_tests {
 
     #[test]
     fn a_guard_lowers_to_an_if_chain_with_the_guard_inside_the_bindings() {
-        let (_, ts) = emitted(
+        let ts = emitted(
             "commons t4\n\ntype Shape = | Circle(r: Int) | Square(w: Int) | Dot\n\nfn f(s: Shape, k: Int) -> Int {\n  match s {\n    Circle(r) if r > k => r\n    Circle(r) => 0\n    Square(w) => w\n    Dot => 1\n  }\n}\n",
         );
         assert!(
@@ -2483,7 +2374,7 @@ mod match_node_tests {
 
     #[test]
     fn a_nested_pattern_is_an_if_chain_over_a_conjunction() {
-        let (_, ts) = emitted(
+        let ts = emitted(
             "commons t5\n\ntype Shape = | Circle(r: Int) | Square(w: Int) | Dot\n\nfn f(s: Option[Shape]) -> Int {\n  match s {\n    Some(Circle(r)) => r\n    Some(Square(w)) => w\n    Some(Dot) => 1\n    None => 0\n  }\n}\n",
         );
         assert!(
@@ -2502,7 +2393,7 @@ mod match_node_tests {
 
     #[test]
     fn a_value_position_match_is_a_sync_arrow_over_the_discriminant() {
-        let (_, ts) = emitted(
+        let ts = emitted(
             "commons t6\n\ntype Shape = | Circle(r: Int) | Square(w: Int) | Dot\n\nfn f(s: Shape) -> Int {\n  let n = match s {\n    Circle(r) => r\n    Square(w) => w * 2\n    Dot => 0\n  }\n  n + 1\n}\n",
         );
         assert!(
@@ -2515,7 +2406,7 @@ mod match_node_tests {
 
     #[test]
     fn an_effectful_value_position_match_is_an_awaited_async_arrow() {
-        let (_, ts) = emitted(
+        let ts = emitted(
             "commons t7\n\ntype Shape = | Circle(r: Int) | Square(w: Int) | Dot\n\nfn bump(n: Int) -> Effect[Int] {\n  Effect.pure(n)\n}\n\nfn f(s: Shape) -> Effect[Int] {\n  let n = match s {\n    Circle(r) => {\n      let y <- bump(r)\n      y\n    }\n    Square(w) => w\n    Dot => 0\n  }\n  Effect.pure(n)\n}\n",
         );
         assert!(
@@ -2528,7 +2419,7 @@ mod match_node_tests {
 
     #[test]
     fn a_question_in_a_tail_arm_hoists_inside_its_case() {
-        let (_, ts) = emitted(
+        let ts = emitted(
             "commons t8\n\ntype Shape = | Circle(r: Int) | Square(w: Int) | Dot\n\nfn parse(x: Int) -> Result[Int, String] {\n  Ok(x)\n}\n\nfn f(s: Shape) -> Result[Int, String] {\n  match s {\n    Circle(r) => Ok(parse(r)? + 1)\n    Square(w) => Ok(w)\n    Dot => Ok(0)\n  }\n}\n",
         );
         assert!(
@@ -2541,7 +2432,7 @@ mod match_node_tests {
 
     #[test]
     fn a_question_in_a_value_position_arm_breaks_out_of_the_labelled_switch() {
-        let (_, ts) = emitted(
+        let ts = emitted(
             "commons t9\n\ntype Shape = | Circle(r: Int) | Square(w: Int) | Dot\n\nfn parse(x: Int) -> Result[Int, String] {\n  Ok(x)\n}\n\nfn f(s: Shape) -> Result[Int, String] {\n  let n = match s {\n    Circle(r) => parse(r)?\n    Square(w) => w\n    Dot => 0\n  }\n  Ok(n)\n}\n",
         );
         assert!(
@@ -2558,7 +2449,7 @@ mod match_node_tests {
     /// builder, so there is no input that stays text for that reason.)
     #[test]
     fn a_typed_lambda_param_prints_as_it_always_did() {
-        let (_, ts) = emitted(
+        let ts = emitted(
             "commons l1\n\nfn i(xs: List[(Int) -> Int]) -> List[Int] {\n  xs.map((x: (Int) -> Int) => 1)\n}\n",
         );
         assert!(
@@ -2570,7 +2461,7 @@ mod match_node_tests {
     /// An `Effect`-returning lambda is an `async` arrow node with a block body.
     #[test]
     fn an_async_lambda_is_an_async_arrow_with_a_block_body() {
-        let (_, ts) = emitted(
+        let ts = emitted(
             "commons l2\n\nfn bump(n: Int) -> Effect[Int] {\n  Effect.pure(n)\n}\n\nfn f(x: Int) -> Effect[Int] {\n  let g: (Int) -> Effect[Int] = (y: Int) => {\n    let z <- bump(y)\n    Effect.pure(z + 1)\n  }\n  g(x)\n}\n",
         );
         assert!(
@@ -2586,14 +2477,9 @@ mod match_node_tests {
 /// awaited), and the 1A.13 review's two extra `match` shapes.
 #[cfg(test)]
 mod par_node_tests {
-    use super::*;
-
-    fn emitted(src: &str) -> (usize, String) {
-        // The text values read a `Set` `remove` as text (see `force_text`).
-        let _text = crate::emitter::lower::force_text::arm("Set.remove");
-        LINES_RENDERED.with(|c| c.set(0));
-        let ts = crate::testkit::emit_source(src);
-        (LINES_RENDERED.with(|c| c.get()), ts)
+    /// The emitted TypeScript for a single commons.
+    fn emitted(src: &str) -> String {
+        crate::testkit::emit_source(src)
     }
 
     fn func(ts: &str, head: &str) -> String {
@@ -2606,10 +2492,9 @@ mod par_node_tests {
 
     #[test]
     fn a_single_line_par_is_a_destructuring_const_over_thunks() {
-        let (lines, ts) = emitted(&format!(
+        let ts = emitted(&format!(
             "{HDR}fn f(x: Int) -> Effect[Int] {{\n  par {{\n    let a <- bump(x)\n    let b <- bump(2)\n  }}\n  Effect.pure(a + b)\n}}\n"
         ));
-        assert_eq!(lines, 0, "{ts}");
         assert_eq!(
             func(&ts, "export async function f("),
             "export async function f(x: number): globalThis.Promise<number> {\n  const [a, b] = await __bynkSettleAll([() => bump(x), () => bump(2)]);\n  return a + b;\n}\n"
@@ -2618,10 +2503,9 @@ mod par_node_tests {
 
     #[test]
     fn a_typed_part_annotates_its_thunk_and_a_do_leaves_a_hole() {
-        let (lines, ts) = emitted(&format!(
+        let ts = emitted(&format!(
             "{HDR}fn f(x: Int) -> Effect[Int] {{\n  par {{\n    let a: Int <- bump(x)\n    do bump(2)\n    let c <- bump(3)\n  }}\n  Effect.pure(a + c)\n}}\n"
         ));
-        assert_eq!(lines, 0, "{ts}");
         assert!(
             ts.contains(
                 "  const [a, , c] = await __bynkSettleAll([(): globalThis.Promise<number> => bump(x), () => bump(2), () => bump(3)]);\n"
@@ -2634,10 +2518,9 @@ mod par_node_tests {
     /// indented them by one column, an odd offset (group (b) of #3715).
     #[test]
     fn a_par_that_hoists_prints_one_thunk_per_line_at_the_printers_depth() {
-        let (lines, ts) = emitted(&format!(
+        let ts = emitted(&format!(
             "{HDR}fn f(s: Shape) -> Effect[Int] {{\n  par {{\n    let a <- pick(mk(s) is Dot)\n    let b: Int <- bump(2)\n  }}\n  Effect.pure(a + b)\n}}\n"
         ));
-        assert_eq!(lines, 0, "{ts}");
         assert_eq!(
             func(&ts, "export async function f("),
             "export async function f(s: Shape): globalThis.Promise<number> {\n  const [a, b] = await __bynkSettleAll([\n    () => {\n      const __r0 = mk(s);\n      return pick(((__c: boolean) => __c)(__r0.tag === \"Dot\"));\n    },\n    (): globalThis.Promise<number> => bump(2),\n  ]);\n  return a + b;\n}\n"
@@ -2649,7 +2532,7 @@ mod par_node_tests {
     /// text in the hoisted `const`; the thunk must stay synchronous.
     #[test]
     fn a_string_literal_containing_await_does_not_make_a_thunk_async() {
-        let (_, ts) = emitted(&format!(
+        let ts = emitted(&format!(
             "{HDR}fn f() -> Effect[Int] {{\n  par {{\n    let a <- pick(mk2(\"await \") is Dot)\n    let b <- bump(2)\n  }}\n  Effect.pure(a + b)\n}}\n"
         ));
         assert!(
@@ -2664,10 +2547,9 @@ mod par_node_tests {
     /// `await` sat in the value, not in a hoisted statement).
     #[test]
     fn a_part_whose_lowering_awaited_is_an_async_thunk() {
-        let (lines, ts) = emitted(&format!(
+        let ts = emitted(&format!(
             "{HDR}fn f(c: Bool) -> Effect[Int] {{\n  par {{\n    let a <- bump(if c {{\n      let y <- bump(1)\n      y\n    }} else {{ 0 }})\n    let b <- bump(2)\n  }}\n  Effect.pure(a + b)\n}}\n"
         ));
-        assert_eq!(lines, 0, "{ts}");
         assert!(
             ts.contains("[async () => bump(await (async () => {\n"),
             "{ts}"
@@ -2683,7 +2565,7 @@ mod par_node_tests {
     /// them as lines, which a later slice converts), so this pins the bytes.
     #[test]
     fn a_guarded_value_match_is_an_arrow_over_an_if_chain() {
-        let (lines, ts) = emitted(
+        let ts = emitted(
             "commons m1\n\ntype Shape = | Circle(r: Int) | Square(w: Int) | Dot\n\nfn f(s: Shape, k: Int) -> Int {\n  let x = match s {\n    Circle(r) if r > k => r\n    Circle(r) => 0\n    Square(w) => w\n    Dot => 1\n  }\n  x\n}\n",
         );
         assert_eq!(
@@ -2691,14 +2573,13 @@ mod par_node_tests {
             "export function f(s: Shape, k: number): number {\n  const x = ((__d) => {\n    if (__d.tag === \"Circle\") {\n      const r = __d.r;\n      if (r > k) {\n        return r;\n      }\n    }\n    if (__d.tag === \"Circle\") {\n      const r = __d.r;\n      return 0;\n    }\n    if (__d.tag === \"Square\") {\n      const w = __d.w;\n      return w;\n    }\n    if (__d.tag === \"Dot\") {\n      return 1;\n    }\n    throw new globalThis.Error(\"non-exhaustive match\");\n  })(s);\n  return x;\n}\n"
         );
         // 1A.15: the arm tails are nodes too, so the whole function is.
-        assert_eq!(lines, 0, "{ts}");
     }
 
     /// 1A.13 review: a list pattern's elements read `path[i]` and its `..rest`
     /// reads `path.slice(n)` (the binding `const`s and the arm's `return` are nodes).
     #[test]
     fn a_list_pattern_binds_elements_by_index_and_the_rest_by_slice() {
-        let (lines, ts) = emitted(
+        let ts = emitted(
             "commons m2\n\nfn f(xs: List[Int]) -> Int {\n  let x = match xs {\n    [a, b, ..rest] => a + b\n    _ => 0\n  }\n  x\n}\n",
         );
         assert_eq!(
@@ -2706,11 +2587,10 @@ mod par_node_tests {
             "export function f(xs: readonly number[]): number {\n  const x = ((__d) => {\n    if (__d.length >= 2) {\n      const a = __d[0];\n      const b = __d[1];\n      const rest = __d.slice(2);\n      return a + b;\n    }\n    return 0;\n  })(xs);\n  return x;\n}\n"
         );
         // 1A.15: the arm tails are nodes too, so the whole function is.
-        assert_eq!(lines, 0, "{ts}");
     }
 }
 
-/// 1A.17 (#3718): the `expect` statement's node and text forms.
+/// 1A.17 (#3718): the `expect` statement's node form.
 #[cfg(test)]
 mod expect_item_tests {
     use super::*;
@@ -2718,9 +2598,8 @@ mod expect_item_tests {
     /// The item as the one line it prints to.
     fn line(item: Item) -> String {
         match item {
-            Item::Line(l) => l,
             Item::Node(n) => bynk_ts::print_stmt(&n, 0).trim_end().to_string(),
-            _ => unreachable!("an expect is one statement"),
+            Item::Mark(_) => unreachable!("an expect is one statement"),
         }
     }
 
@@ -2744,11 +2623,6 @@ mod expect_item_tests {
     /// they hold: a backslash, a quote, a newline, non-ASCII, U+2028 and a control character.
     #[test]
     fn the_node_prints_the_escaped_location_and_source_on_one_line() {
-        let ru = RuntimeUse::default();
-        let site = FaultSite {
-            sink: &ru,
-            span: Span::default(),
-        };
         let esc = crate::emitter::escape_ts_string;
         for raw in [
             "plain",
@@ -2797,11 +2671,6 @@ mod expect_item_tests {
     /// `if`/`throw` stays on one line.
     #[test]
     fn the_node_prints_as_the_one_line_if_with_a_bare_not_paren() {
-        let ru = RuntimeUse::default();
-        let site = FaultSite {
-            sink: &ru,
-            span: Span::default(),
-        };
         let got = line(expect_item(
             node("ok"),
             ExpectDetail::Message("expect ok".to_string()),
@@ -2823,7 +2692,6 @@ mod expect_item_tests {
             ),
             Item::Node(_)
         ));
-        assert!(ru.take_faults().is_empty());
     }
 
     /// A snapshot name is always a string-literal node, spelled as the printer spells every

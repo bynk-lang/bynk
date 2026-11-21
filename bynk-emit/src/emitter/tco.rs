@@ -26,7 +26,7 @@ use bynk_syntax::ast::{Block, Expr, ExprId, ExprKind, FnDecl, FnName, MatchBody}
 use super::lower::Pre;
 use super::lower_ctx::LowerCtx;
 use super::lower_stmt::{Body, Item, assign_item, block_body_with_return, const_item};
-use super::ts_types::{ts_ty, ts_type_ref};
+use super::ts_types::{ts_ty_to_ts_type, ts_type_ref_to_ts_type};
 use super::*;
 
 /// The label of the loop; a `continue` to it passes through any emitted
@@ -218,18 +218,28 @@ fn self_call_args<'e>(
     let mut own: Vec<String> = owner_params.clone();
     own.extend(f.type_params.iter().map(|p| p.name.name.clone()));
     if !own.is_empty() {
-        let rendered = |ex: &Expr| commons.expr_types.get(&ex.id).map(|te| ts_ty(te.ty, tys));
+        let rendered = |ex: &Expr| {
+            commons
+                .expr_types
+                .get(&ex.id)
+                .map(|te| ts_ty_to_ts_type(te.ty, tys))
+        };
+        let named = |n: &String| bynk_ts::TsType::named(n.clone());
         // Explicit method-level type arguments must be the function's own.
         if !type_args.is_empty()
             && (type_args.len() != f.type_params.len()
                 || type_args
                     .iter()
                     .zip(&f.type_params)
-                    .any(|(a, p)| ts_type_ref(a) != p.name.name))
+                    .any(|(a, p)| ts_type_ref_to_ts_type(a, None) != named(&p.name.name)))
         {
             return None;
         }
-        if witnesses.iter().any(|w| !own.contains(&ts_ty(*w, tys))) {
+        let own_types: Vec<bynk_ts::TsType> = own.iter().map(named).collect();
+        if witnesses
+            .iter()
+            .any(|w| !own_types.contains(&ts_ty_to_ts_type(*w, tys)))
+        {
             return None;
         }
         let mut idx = 0;
@@ -238,9 +248,12 @@ fn self_call_args<'e>(
                 return None;
             };
             let want = if owner_params.is_empty() {
-                type_name.name.clone()
+                bynk_ts::TsType::named(type_name.name.clone())
             } else {
-                format!("{}<{}>", type_name.name, owner_params.join(", "))
+                bynk_ts::TsType::named_with_args(
+                    type_name.name.clone(),
+                    owner_params.iter().map(named).collect(),
+                )
             };
             if rendered(all[0])? != want {
                 return None;
@@ -248,7 +261,7 @@ fn self_call_args<'e>(
             idx = 1;
         }
         for (a, p) in all[idx..].iter().zip(&f.params) {
-            if rendered(a)? != ts_type_ref(&p.type_ref) {
+            if rendered(a)? != ts_type_ref_to_ts_type(&p.type_ref, None) {
                 return None;
             }
         }

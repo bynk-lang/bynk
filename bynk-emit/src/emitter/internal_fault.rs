@@ -228,26 +228,6 @@ mod tests {
         );
     }
 
-    /// 1A.35a part C: nothing in lowering builds text any more, so a value that reaches lowering
-    /// as text (only the text-fallback hook can make one) is a fault at its statement, never
-    /// text in the output.
-    #[test]
-    fn text_that_reaches_a_statement_is_a_fault_not_text() {
-        let _text = crate::emitter::lower::force_text::arm("Set.remove");
-        let source =
-            "commons t\n\nfn f(x: Set[String], y: String) -> Set[String] { x.remove(y) }\n";
-        let (typed, warnings) =
-            crate::check_single_typed(source, crate::SingleFileMode::Build).expect("checks");
-        let program = certify(typed, warnings).expect("certifies");
-        let faults = crate::emitter::emit(&program).expect_err("a text value is a fault");
-        assert!(
-            faults
-                .iter()
-                .any(|f| f.what.contains("reached lowering as text")),
-            "{faults:?}"
-        );
-    }
-
     #[test]
     fn a_missing_field_default_is_recorded_at_the_construction() {
         let (_, faults) = faults_after(|typed| {

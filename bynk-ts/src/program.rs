@@ -393,7 +393,7 @@ pub struct ExportedName<'a> {
 /// sealing: they're normal typed constructors, not a "wrap opaque text"
 /// escape hatch, so the `verbatim_sites` concern that motivates `verbatim`'s
 /// own single-constructor discipline doesn't apply to them.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct TsStmt {
     pub(crate) kind: TsStmtKind,
     /// Where this statement's content originated in the `.bynk` source, if
@@ -475,7 +475,7 @@ pub struct TsStmt {
     pub no_blank_before: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) enum TsStmtKind {
     Verbatim {
         // Read by `TsProgram::verbatim_content` (#1538) to attribute each
@@ -830,7 +830,7 @@ pub(crate) enum TsStmtKind {
 /// One declarator of a `TsStmtKind::LetList`: `name`, `name!: T`, `name: T` or
 /// `name: T = init` (1A.35a part B). `definite` prints the `!` assertion, which
 /// TypeScript allows only with a type and no initialiser.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct TsDeclarator {
     pub name: String,
     pub definite: bool,
@@ -905,7 +905,7 @@ impl TsDeclarator {
 /// shape `default_braced` itself set as precedent. Only meaningful when
 /// it has a label (a `default` case's bracing is `default_braced`'s
 /// business, not this field's — the inverse of that field's own scoping).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct TsSwitchCase {
     /// The `case` labels: empty is `default`; more than one prints stacked,
     /// `case a:` / `case b: {`, sharing the one body (1A.13, #3714: the
@@ -1452,7 +1452,7 @@ impl TsStmt {
 /// the destructured properties themselves (`{ a, b }`), not the renamed
 /// (`{ a: renamed }`) or nested (`{ a: { b } }`) forms, since nothing in
 /// the grounding file needs either.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum TsBindingName {
     Ident(String),
     ObjectPattern(Vec<String>),
@@ -1468,7 +1468,7 @@ pub enum TsBindingName {
 /// deliberately not built here). Arc C slice 3 (#1321, `workers.rs`) adds
 /// `Arrow`, `OptionalMember`/`OptionalIndex` (Decision A, gaps 3/4) — this
 /// slice's own real, grounded needs.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum TsExpr {
     /// A real identifier — the only content this variant is for. #1539
     /// (review of `design/reviews/2026-08-30-post-restructuring-review.md`
@@ -1812,7 +1812,7 @@ pub enum TsExpr {
 /// with no other real use of a genuinely multi-line block body has been
 /// found); a future multi-line block-bodied arrow is a real, separate gap
 /// this variant does not yet cover.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum TsArrowBody {
     Expr(Box<TsExpr>),
     Block(Vec<TsStmt>),
@@ -1947,7 +1947,7 @@ impl TsExpr {
 /// as an object- or array-literal entry in this file, never as a
 /// standalone expression, so scoping it to entry position is the narrower
 /// correct change).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum TsObjectEntry {
     /// `key: value`, with an optional JSDoc block before it (printed the
     /// way [`TsObjectEntry::Method`]'s `doc` is). Build it with
@@ -2209,7 +2209,7 @@ pub enum TsBinaryOp {
 /// `CorsPolicy.credentials`/`SecurityPolicy.nosniff` object-literal fields
 /// are real booleans, e.g. `credentials: true`, `nosniff: false` — nothing
 /// before this slice's own grounding ever built one).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum TsLit {
     Str(String),
     /// Rendered verbatim, as text — TypeScript's own numeric-literal
@@ -2245,7 +2245,7 @@ pub enum TsLit {
 /// sketch's `Union`/`Intersection`/`Literal`/`TypeParam`/`Readonly` (still
 /// unused; `readonly` here is a modifier on `Array`, not the sketch's own
 /// separate `Readonly` wrapper variant).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum TsType {
     /// A named type, optionally generic — `string`/`unknown` (no type
     /// arguments) or `Record<string, T>`/`Promise<Response>` (some).
@@ -2502,7 +2502,7 @@ impl TsType {
 /// parameters do) — `waitUntil`'s own real parameter has a real name
 /// (`promise`) the printed text must show, unlike `Fn`'s callers, none of
 /// which have one to show.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum TsTypeMember {
     Prop {
         name: String,
@@ -2605,7 +2605,7 @@ impl TsTypeMember {
 }
 
 /// One function/method/constructor parameter.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct TsParam {
     pub name: String,
     pub ty: Option<TsType>,
@@ -2660,7 +2660,7 @@ impl TsParam {
 }
 
 /// One `class` field.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct TsClassField {
     pub name: String,
     pub ty: TsType,
@@ -2704,14 +2704,14 @@ impl TsClassField {
 }
 
 /// A class's own constructor.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct TsClassCtor {
     pub params: Vec<TsParam>,
     pub body: Vec<TsStmt>,
 }
 
 /// One class method.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct TsClassMethod {
     pub name: String,
     /// `private {name}(...)`, e.g. `loadState`/`commitState` — the
@@ -2789,7 +2789,7 @@ impl TsClassMethod {
 /// here, the same "small, grounded, same class of gap" this track's own
 /// history repeatedly found and closed (P7.8's `Assign`/`Continue`/
 /// `TryCatch`, Arc C slice 1's `Comment`).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum TsDecl {
     /// `import { a, b } from "spec";` (`type_only: false`) or
     /// `import type { a, b } from "spec";` (`type_only: true`). Only the

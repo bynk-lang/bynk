@@ -25,7 +25,7 @@ fn operands(pre: &mut Pre, cx: &mut LowerCtx, parts: &[&Expr]) -> Vec<bynk_ts::T
     parts.iter().map(|e| pre.lower_node(e, cx)).collect()
 }
 
-/// A kernel's exit: the built node, or its text through the one shared text exit.
+/// A kernel's exit: the built node, finished over the hoists collected so far.
 fn finish(pre: Pre, built: Option<bynk_ts::TsExpr>) -> Option<Lowered> {
     built.map(|b| pre.finish(b))
 }
@@ -645,17 +645,14 @@ pub(in crate::emitter) fn lower_map_kernel(
 mod tests {
     use super::*;
     use crate::emitter::ctx::{BodyMode, ModuleCtx, UnitFacts};
-    use crate::emitter::lower::TEXT_EXITS;
     use crate::emitter::runtime_use::RuntimeUse;
     use crate::testkit::emit_source;
     use bynk_check::checker::{ExprId, TypedCommons, TypedExpr};
     use bynk_syntax::span::Span;
 
-    /// `(text exits, emitted TypeScript)` for a one-function commons whose signature is `sig`.
-    fn exits(sig: &str, body: &str) -> (usize, String) {
-        TEXT_EXITS.with(|c| c.set(0));
-        let ts = emit_source(&format!("commons kc\nfn f{sig} -> {body}\n"));
-        (TEXT_EXITS.with(|c| c.get()), ts)
+    /// The emitted TypeScript for a one-function commons.
+    fn emitted(sig: &str, body: &str) -> String {
+        emit_source(&format!("commons kc\nfn f{sig} -> {body}\n"))
     }
 
     /// The returned expression of `export function f`.
@@ -670,9 +667,9 @@ mod tests {
     const OPT: &str = "((__o: Option<number>, __";
     const RES: &str = "((__r: Result<number, string>, __";
 
-    /// Every `OptionOp` and `ResultOp` over identifier arguments: the exact print, no text exit.
+    /// Every `OptionOp` and `ResultOp` over identifier arguments: the exact print.
     #[test]
-    fn every_option_and_result_op_prints_as_a_node_with_no_text_exit() {
+    fn every_option_and_result_op_prints_as_a_node() {
         let o = "(o: Option[Int], f: (Int) -> Int, g: (Int) -> Option[Int], h: () -> Option[Int], p: (Int) -> Bool, d: Int, e: String)";
         let r = "(r: Result[Int, String], f: (Int) -> Int, g: (Int) -> Result[Int, String], m: (String) -> Int, d: Int)";
         for (sig, body, want) in [
@@ -692,9 +689,8 @@ mod tests {
             (r, "Bool { r.isOk() }", "(r.tag === \"Ok\")".to_string()),
             (r, "Bool { r.isErr() }", "(r.tag === \"Err\")".to_string()),
         ] {
-            let (n, ts) = exits(sig, body);
+            let ts = emitted(sig, body);
             assert_eq!(returned(&ts), want, "{body}");
-            assert_eq!(n, 0, "{body}: text exits\n{ts}");
         }
     }
 
@@ -720,14 +716,13 @@ mod tests {
             ),
             ("(s: Set[List[Int]])", "Int { s.length() }", "s.size"),
         ] {
-            let (n, ts) = exits(sig, body);
+            let ts = emitted(sig, body);
             assert_eq!(returned(&ts), want, "{body}");
-            assert_eq!(n, 0, "{body}: text exits\n{ts}");
         }
     }
 
     /// Every `SetOp` and `MapOp` over a plain and a keyed type: the exact print, the helper's import
-    /// noted only on the keyed path, and no text exit.
+    /// noted only on the keyed path.
     #[test]
     fn set_and_map_ops_print_plain_and_keyed_forms() {
         let s = "(s: Set[String], x: String)";
@@ -783,9 +778,8 @@ mod tests {
                 Some("__bynkMapInsert"),
             ),
         ] {
-            let (n, ts) = exits(sig, body);
+            let ts = emitted(sig, body);
             assert_eq!(returned(&ts), want, "{body}");
-            assert_eq!(n, 0, "{body}: text exits\n{ts}");
             for helper in ["__bynkSetInsert", "__bynkSetRemove", "__bynkMapInsert"] {
                 assert_eq!(
                     ts.contains(&format!("import {{ {helper}"))
@@ -801,8 +795,7 @@ mod tests {
     /// which prints today's bytes.
     #[test]
     fn the_comma_expression_arm_is_a_sequence_node() {
-        let (n, ts) = exits("(s: Set[String], x: String)", "Set[String] { s.remove(x) }");
-        assert_eq!(n, 0, "{ts}");
+        let ts = emitted("(s: Set[String], x: String)", "Set[String] { s.remove(x) }");
         assert_eq!(
             returned(&ts),
             "((__s: globalThis.Set<string>) => (__s.delete(x), __s as ReadonlySet<string>))(new globalThis.Set<string>(s))"
@@ -812,7 +805,7 @@ mod tests {
     /// The receiver is lowered before the argument, as before: a `?` in each hoists in that order.
     #[test]
     fn the_receiver_is_lowered_before_the_argument() {
-        let (_, ts) = exits(
+        let ts = emitted(
             "(a: Result[Option[Int], String], b: Result[Int, String])",
             "Result[Int, String] { Ok(a?.getOrElse(b?)) }",
         );

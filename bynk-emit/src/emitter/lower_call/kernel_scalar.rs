@@ -20,7 +20,7 @@ fn operands(pre: &mut Pre, cx: &mut LowerCtx, parts: &[&Expr]) -> Vec<bynk_ts::T
     parts.iter().map(|e| pre.lower_node(e, cx)).collect()
 }
 
-/// A kernel's exit: the built node, or its text through the one shared text exit.
+/// A kernel's exit: the built node, finished over the hoists collected so far.
 fn finish(pre: Pre, built: Option<bynk_ts::TsExpr>) -> Option<Lowered> {
     built.map(|b| pre.finish(b))
 }
@@ -532,7 +532,7 @@ fn none_or_some(name: &str, rhs: TsExpr, some: TsExpr) -> TsExpr {
     }
 }
 
-/// [`GROUPS_TEXT`] as a node.
+/// The groups of a regex match, as `Option<string>[]`.
 fn groups_node() -> TsExpr {
     let map_group = typed_arrow(
         "__g",
@@ -838,50 +838,26 @@ pub(in crate::emitter) fn lower_decimal_kernel(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::emitter::lower::TEXT_EXITS;
     use crate::testkit::emit_source;
 
-    /// `(text exits, emitted TypeScript)` for a one-function commons whose signature is `sig`.
-    fn exits(sig: &str, body: &str) -> (usize, String) {
-        TEXT_EXITS.with(|c| c.set(0));
-        let ts = emit_source(&format!("commons ks\nfn f({sig}) -> {body}\n"));
-        (TEXT_EXITS.with(|c| c.get()), ts)
+    /// The groups arrow as the text the old text form wrote.
+    const GROUPS_TEXT: &str = "(__m: globalThis.RegExpMatchArray): Option<string>[] => \
+                               [...__m].map((__g: string | undefined): Option<string> => \
+                               __g === undefined ? None : Some(__g))";
+
+    /// A pattern's `RegExp` construction as the text the old text form wrote: the node form must
+    /// print the same bytes.
+    fn regex_construction(literal: &str, extra: &str, anchored: bool) -> String {
+        let (source, flags) = regex_parts(literal, extra, anchored);
+        format!(
+            "new globalThis.RegExp(\"{}\", \"{flags}\")",
+            crate::emitter::escape_ts_string(&source)
+        )
     }
 
-    /// `is_simple_path` decides whether a text operand needs brackets: only a bare name or a
-    /// dotted path of names is left as it stands (#3823).
-    #[test]
-    fn is_simple_path_accepts_only_names_and_dotted_paths() {
-        for simple in [
-            "x",
-            "x1",
-            "_x",
-            "$x",
-            "a.b",
-            "a.b.c",
-            "__r0",
-            "globalThis.Math",
-        ] {
-            assert!(is_simple_path(simple), "{simple:?} is a simple path");
-        }
-        for compound in [
-            "",
-            "a + b",
-            "a.b()",
-            "a[0]",
-            "-a",
-            "a ? b : c",
-            "(a)",
-            "a b",
-            "\"a\"",
-            "a.b + 1",
-            "a?.b",
-        ] {
-            assert!(!is_simple_path(compound), "{compound:?} needs brackets");
-        }
-        // The check is about characters, not about whether the text is an identifier; a
-        // number literal is a node by the time it reaches here, so this never matters.
-        assert!(is_simple_path("1.5"));
+    /// The emitted TypeScript for a one-function commons.
+    fn emitted(sig: &str, body: &str) -> String {
+        emit_source(&format!("commons ks\nfn f({sig}) -> {body}\n"))
     }
 
     /// The returned expression of `export function f`.
@@ -893,10 +869,10 @@ mod tests {
         rest[ret..ret + end].to_string()
     }
 
-    /// One call per kernel op over identifier receivers and arguments: the exact print, with no
-    /// text exit and the `note_*` import where the op has one (checked on the output's imports).
+    /// One call per kernel op over identifier receivers and arguments: the exact print, and the
+    /// `note_*` import where the op has one (checked on the output's imports).
     #[test]
-    fn every_scalar_op_prints_as_a_node_with_no_text_exit() {
+    fn every_scalar_op_prints_as_a_node() {
         let int = "n: Int, m: Int, lo: Int, hi: Int";
         let float = "x: Float, y: Float, lo: Float, hi: Float";
         let rows: &[(&str, &str, &str, &str)] = &[
@@ -1196,9 +1172,8 @@ mod tests {
             ),
         ];
         for (sig, body, want, import) in rows {
-            let (n, ts) = exits(sig, body);
+            let ts = emitted(sig, body);
             assert_eq!(returned(&ts), *want, "{body}");
-            assert_eq!(n, 0, "{body}: text exits\n{ts}");
             if !import.is_empty() {
                 let header: String = ts.lines().filter(|l| l.starts_with("import")).collect();
                 assert!(
@@ -1252,14 +1227,12 @@ mod tests {
                 "((__i: number) => __i < 0 ? None : Some(__i))(s.concat(t).indexOf(t))",
             ),
         ] {
-            let (n, ts) = exits(sig, body);
+            let ts = emitted(sig, body);
             assert_eq!(returned(&ts), want, "{body}");
-            assert_eq!(n, 0, "{body}: text exits\n{ts}");
         }
     }
 
-    /// Every regex arm over a plain, a flagged, an anchored and an escaped pattern, as a node
-    /// with no text exit.
+    /// Every regex arm over a plain, a flagged, an anchored and an escaped pattern.
     #[test]
     fn the_regex_arms_print_as_nodes() {
         let groups = GROUPS_TEXT;
@@ -1297,9 +1270,8 @@ mod tests {
                 "s.replace(new globalThis.RegExp(\"\\\\s+\", \"g\"), \" \")".to_string(),
             ),
         ] {
-            let (n, ts) = exits("s: String", body);
+            let ts = emitted("s: String", body);
             assert_eq!(returned(&ts), want, "{body}");
-            assert_eq!(n, 0, "{body}: text exits\n{ts}");
         }
     }
 
@@ -1308,8 +1280,7 @@ mod tests {
     /// replaced is still there, in the same order.
     #[test]
     fn split_regex_is_a_while_over_a_sticky_scan() {
-        let (n, ts) = exits("s: String", "List[String] { s.splitRegex(\",\") }");
-        assert_eq!(n, 0, "{ts}");
+        let ts = emitted("s: String", "List[String] { s.splitRegex(\",\") }");
         let at = ts.find("return ((__s: string").expect("the arrow") + "return ".len();
         let end = ts[at..].find("})(s, ").expect("the call") + at;
         let squashed: String = ts[at..end].split_whitespace().collect::<Vec<_>>().join(" ");
@@ -1459,9 +1430,8 @@ mod tests {
             ),
             ("n: Int", "Float { n.toFloat() }", "n"),
         ] {
-            let (n, ts) = exits(sig, body);
+            let ts = emitted(sig, body);
             assert_eq!(returned(&ts), want, "{body}");
-            assert_eq!(n, 0, "{body}: the identity arm is a node\n{ts}");
         }
     }
 
@@ -1469,7 +1439,6 @@ mod tests {
     #[test]
     fn an_identity_arm_keeps_its_hoists() {
         let (_, ts) = {
-            TEXT_EXITS.with(|c| c.set(0));
             let ts = emit_source(
                 "commons ks\nfn g() -> Result[Int, String] { Ok(3) }\nfn f() -> Result[Float, String] { Ok(g()?.toFloat()) }\n",
             );

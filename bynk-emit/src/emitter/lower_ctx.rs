@@ -1,7 +1,7 @@
 //! `LowerCtx`: the per-body lowering context and its `impl`.
 
 use super::ctx::*;
-use super::lower_call::test_calls::debug_str;
+use super::lower::str_node;
 use super::lower_list::{call, id};
 use super::ts_types::ts_ty_to_ts_type;
 use super::*;
@@ -1000,9 +1000,10 @@ impl<'a> LowerCtx<'a> {
         match &self.mode {
             BodyMode::IntegrationCase {
                 system_http_claims, ..
-            } => system_http_claims.sum_routes.get(route).map(|primary| {
-                debug_str(self.call_site_actor.as_deref().unwrap_or(primary)).into()
-            }),
+            } => system_http_claims
+                .sum_routes
+                .get(route)
+                .map(|primary| str_node(self.call_site_actor.as_deref().unwrap_or(primary))),
             _ => None,
         }
     }

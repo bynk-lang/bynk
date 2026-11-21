@@ -34,7 +34,7 @@ use bynk_model::{
 use super::ctx::{AgentStoreState, BodyMode, HandlerShared, ModuleCtx};
 use super::lower_ctx::LowerCtx;
 use super::lower_stmt::{Body, Item, block_body_with_return, claim_scoped, function_body_stmts};
-use super::ts_types::{ts_base, ts_ty, ts_ty_to_ts_type, ts_type_ref, ts_type_ref_to_ts_type};
+use super::ts_types::{ts_base, ts_ty_to_ts_type, ts_type_ref, ts_type_ref_to_ts_type};
 use super::*;
 
 /// P6.x (#1188): reads `shape` — `t`'s already-lowered `bynk-emit::ir::TypeShape`
@@ -789,11 +789,11 @@ pub(crate) fn emit_forwarded_methods(
             let ident = ts_ident(name);
             params.push(bynk_ts::TsParam::new(
                 ident.clone(),
-                Some(bynk_ts::TsType::named(ts_ty(*ty, tys))),
+                Some(ts_ty_to_ts_type(*ty, tys)),
             ));
             args.push(bynk_ts::TsExpr::Ident(ident));
         }
-        let ret = ts_ty(f.return_ty, tys);
+        let ret = ts_ty_to_ts_type(f.return_ty, tys);
         let call = bynk_ts::TsExpr::Call {
             callee: Box::new(bynk_ts::TsExpr::Member {
                 object: Box::new(bynk_ts::TsExpr::Ident(format!("__Commons{type_name}"))),
@@ -813,7 +813,7 @@ pub(crate) fn emit_forwarded_methods(
             // through a generic receiver.
             generics: Vec::new(),
             params,
-            return_type: Some(bynk_ts::TsType::named(ret)),
+            return_type: Some(ret),
             // `FnSig` carries no doc text either — nothing forwards it.
             doc: None,
             // #1337's own one real `inline: true` site: the pre-conversion
@@ -9292,10 +9292,13 @@ fn emit_ws_do_method(
 ) {
     let mut params = vec![bynk_ts::TsParam::new(
         "connection".to_string(),
-        Some(bynk_ts::TsType::named(format!(
-            "Connection<{}>",
-            ts_ty(host.out_ty, UnitFacts::of(ctx).render(commons))
-        ))),
+        Some(bynk_ts::TsType::named_with_args(
+            "Connection",
+            vec![ts_ty_to_ts_type(
+                host.out_ty,
+                UnitFacts::of(ctx).render(commons),
+            )],
+        )),
     )];
     for p in &h.params {
         params.push(bynk_ts::TsParam::new(
@@ -9831,17 +9834,12 @@ fn ws_open_fetch_branch_stmt(host: &WsOpenHost<'_>, tys: TyRender<'_>) -> bynk_t
         bynk_ts::TsBindingName::Ident("connection".to_string()),
         None,
         bynk_ts::TsExpr::Call {
-            // Generic call, no `type_args` field on `Call` — same "an odd,
-            // one-off shape stays opaque text" precedent as `loadState`'s own
-            // `this.state.storage.get<T>` above; tagged `VerbatimExpr`, not
-            // `Ident` (#1539).
-            callee: Box::new(bynk_ts::TsExpr::VerbatimExpr(
-                format!(
-                    "__acceptHibernatableConnection<{}>",
-                    ts_ty(host.out_ty, tys)
-                ),
-                bynk_ts::VerbatimOrigin::Emit,
-            )),
+            callee: Box::new(bynk_ts::TsExpr::TypeApp {
+                callee: Box::new(bynk_ts::TsExpr::Ident(
+                    "__acceptHibernatableConnection".to_string(),
+                )),
+                type_args: vec![ts_ty_to_ts_type(host.out_ty, tys)],
+            }),
             args: accept_args,
         },
         None,
@@ -9996,7 +9994,7 @@ fn emit_ws_dispatch_handlers(
     if !host.has_inbound() {
         return;
     }
-    let out_ts = ts_ty(host.out_ty, tys);
+    let out_ty = ts_ty_to_ts_type(host.out_ty, tys);
     let att_who = if host.sum.is_some() {
         "; who: unknown"
     } else {
@@ -10067,14 +10065,10 @@ fn emit_ws_dispatch_handlers(
             bynk_ts::TsBindingName::Ident("connection".to_string()),
             None,
             bynk_ts::TsExpr::New {
-                // Generic constructor, no `type_args` field on `New` — same
-                // "an odd, one-off shape stays opaque text" precedent as the
-                // generic-method-call sites above; tagged `VerbatimExpr`, not
-                // `Ident` (#1539).
-                callee: Box::new(bynk_ts::TsExpr::VerbatimExpr(
-                    format!("__WorkersConnection<{out_ts}>"),
-                    bynk_ts::VerbatimOrigin::Emit,
-                )),
+                callee: Box::new(bynk_ts::TsExpr::TypeApp {
+                    callee: Box::new(bynk_ts::TsExpr::Ident("__WorkersConnection".to_string())),
+                    type_args: vec![out_ty.clone()],
+                }),
                 args: vec![
                     bynk_ts::TsExpr::Ident("ws".to_string()),
                     bynk_ts::TsExpr::Member {
@@ -10282,7 +10276,8 @@ fn emit_ws_dispatch_handlers(
 
 #[cfg(test)]
 mod doc_block_tests {
-    use super::INDENT_STEP;
+    /// The printer's indentation step, in columns.
+    const INDENT_STEP: usize = 2;
 
     /// A doc block printed as a JSDoc comment at `indent` columns, the way the
     /// printer lays out a `DocComment` statement.
@@ -10365,7 +10360,7 @@ mod doc_block_tests {
     #[test]
     fn indents_at_the_nested_indent_step() {
         let mut out = String::new();
-        emit_doc_block(&mut out, Some("a method"), crate::emitter::INDENT_STEP);
+        emit_doc_block(&mut out, Some("a method"), INDENT_STEP);
         assert_eq!(out, "  /**\n   * a method\n   */\n");
     }
 }

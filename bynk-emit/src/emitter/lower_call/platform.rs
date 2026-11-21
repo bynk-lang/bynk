@@ -1058,10 +1058,10 @@ service lookup {
         );
     }
 
-    /// Both escapers are one function, so a raw-text `Str` node prints what the text path
-    /// printed, for any name, path or SQL string, non-ASCII included.
+    /// The printer and `escape_ts_string` are one function, so a raw-text `Str` node prints what
+    /// the text path printed, for any name, path or SQL string, non-ASCII included.
     #[test]
-    fn the_node_and_text_escapers_agree() {
+    fn the_literal_node_prints_the_escaped_text() {
         for s in [
             "plain",
             "caf\u{e9}",
@@ -1075,16 +1075,16 @@ service lookup {
         ] {
             assert_eq!(
                 bynk_ts::print_expr(&lit_str(s)),
-                format!("\"{}\"", escape_ts_string(s)),
+                format!("\"{}\"", crate::emitter::escape_ts_string(s)),
                 "{s:?}"
             );
         }
     }
 
-    /// The node and text type-argument forms share one filter: with a `wire` encoding only the
-    /// kept flags survive, and none kept names nothing.
+    /// With a `wire` encoding only the kept type-argument flags survive, and none kept names
+    /// nothing.
     #[test]
-    fn the_wire_filter_drops_the_same_type_arguments_in_both_forms() {
+    fn the_wire_filter_drops_the_unkept_type_arguments() {
         use bynk_check::checker::codable::CapEncoding;
         use bynk_syntax::span::Span;
         let named = |n: &str| {
@@ -1105,7 +1105,6 @@ service lookup {
             (vec![true, true, true], "<A, B, C>"),
         ] {
             let w = wire(keep);
-            assert_eq!(capability_call_type_args_ts(&args, Some(&w)), text);
             let nodes = capability_call_type_args_node(&args, Some(&w));
             let printed = if nodes.is_empty() {
                 String::new()
@@ -1121,18 +1120,7 @@ service lookup {
             };
             assert_eq!(printed, text);
         }
-        assert_eq!(capability_call_type_args_ts(&args, None), "<A, B, C>");
         assert_eq!(capability_call_type_args_node(&args, None).len(), 3);
-    }
-
-    /// A scope a template literal would read differently keeps the text form.
-    #[test]
-    fn an_unsafe_idempotency_scope_stays_text() {
-        assert!(template_safe("shop.hooks.api.http_POST"));
-        assert!(!template_safe("a`b"));
-        assert!(!template_safe("a${b"));
-        assert!(!template_safe("a\\b"));
-        assert!(template_safe("a$b"));
     }
 
     /// The typed-cookie node and the text literal print the same bytes.
@@ -1140,19 +1128,21 @@ service lookup {
     fn the_typed_cookie_node_prints_as_the_text_does() {
         let none = || object(vec![("tag", tag_const("None"))]);
         let node = typed_cookie_node("a\"b", lit_str("v"), none(), none());
-        let text = typed_cookie_literal(
-            &escape_ts_string("a\"b"),
-            "\"v\"",
-            "{ tag: \"None\" as const }",
-            "{ tag: \"None\" as const }",
+        // The text literal the node replaced.
+        let (name, value) = (crate::emitter::escape_ts_string("a\"b"), "\"v\"");
+        let none = "{ tag: \"None\" as const }";
+        let text = format!(
+            "({{ name: \"{name}\", value: {value}, maxAge: {none}, expires: {none}, \
+             domain: {{ tag: \"None\" as const }}, path: \"/\", secure: true, httpOnly: true, \
+             sameSite: {{ tag: \"Lax\" as const }}, partitioned: false }})"
         );
         assert_eq!(bynk_ts::print_expr(&node), text);
     }
 
-    /// `trace_step_node` prints what `trace_step` prints in a traced build, and returns the call
-    /// unchanged in a deploy build.
+    /// `trace_step_node` prints `__traceStep("kind", "target", { file, line, col })(call)` in a
+    /// traced build, and returns the call unchanged in a deploy build.
     #[test]
-    fn the_trace_step_node_and_text_forms_agree() {
+    fn the_trace_step_node_wraps_a_traced_call() {
         let commons = TypedCommons::empty();
         let cross = bynk_check::resolver::CrossContextInfo::default();
         let source: std::sync::Arc<str> = std::sync::Arc::from("a\n  Greeter.hello(\"x\")\n");
@@ -1173,12 +1163,14 @@ service lookup {
                 offset,
                 call(chain(id("deps"), &["Greeter", "hello"]), vec![]),
             );
-            let text = cx.trace_step(
-                "capability",
-                "Greeter.hello",
-                offset,
-                "deps.Greeter.hello()".to_string(),
-            );
+            let text = if traced {
+                let (line, col) = bynk_syntax::span::line_col(&source, offset);
+                format!(
+                    "__traceStep(\"capability\", \"Greeter.hello\", {{ file: \"shop/api \\\"x\\\".bynk\", line: {line}, col: {col} }})(deps.Greeter.hello())"
+                )
+            } else {
+                "deps.Greeter.hello()".to_string()
+            };
             assert_eq!(bynk_ts::print_expr(&node), text, "traced: {traced}");
             assert_eq!(text.starts_with("__traceStep("), traced);
             assert_eq!(ru.trace_step(), traced);

@@ -65,7 +65,7 @@ fn json_string(s: &str) -> String {
 /// *sub*-builder (one per spliced body) records against its local buffer,
 /// then is [`merge`](Self::merge)d into the module builder at the splice
 /// offset.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub struct SourceMapBuilder {
     /// `(name, text)` per source file referenced by this map. Index 0 is the
     /// primary source (the file being emitted); test modules add more.

@@ -1095,12 +1095,6 @@ impl Pre {
         self.absorb_node(lowered)
     }
 
-    /// Absorb an already-built [`Lowered`] and hand back its text.
-    #[cfg(test)]
-    pub(crate) fn absorb(&mut self, lowered: Lowered) -> String {
-        bynk_ts::print_expr(&self.absorb_node(lowered))
-    }
-
     /// Absorb an already-built [`Lowered`] and hand back its expression.
     pub(crate) fn absorb_node(&mut self, lowered: Lowered) -> bynk_ts::TsExpr {
         self.0.extend(lowered.pre);
@@ -5454,6 +5448,19 @@ fn refined_check_as_bool(
     TsExpr::Paren(Box::new(joined))
 }
 
+/// Test-only: a node as the text the printer gives it.
+#[cfg(test)]
+trait Printed {
+    fn printed(&self) -> String;
+}
+
+#[cfg(test)]
+impl Printed for bynk_ts::TsExpr {
+    fn printed(&self) -> String {
+        bynk_ts::print_expr(self)
+    }
+}
+
 #[cfg(test)]
 mod idempotency_scoping_tests {
     use super::*;
@@ -5489,7 +5496,7 @@ mod idempotency_scoping_tests {
             ),
             BodyMode::Method,
         );
-        let mut args = vec![bynk_ts::TsExpr::Text("orderId".to_string())];
+        let mut args = vec![ident_node("orderId")];
         scope_idempotency_key(true, "dedup", &mut args, &cx);
     }
 
@@ -5517,10 +5524,10 @@ mod idempotency_scoping_tests {
                 actor_sum_binder: None,
             },
         );
-        let mut args = vec![bynk_ts::TsExpr::Text("orderId".to_string())];
+        let mut args = vec![ident_node("orderId")];
         scope_idempotency_key(true, "dedup", &mut args, &cx);
         assert_eq!(
-            args[0].clone().into_text(),
+            args[0].clone().printed(),
             "`shop.reserve.ordering.call::${orderId}`"
         );
     }
@@ -5548,13 +5555,10 @@ mod idempotency_scoping_tests {
                 actor_sum_binder: None,
             },
         );
-        let mut args = vec![
-            bynk_ts::TsExpr::Text("id".to_string()),
-            bynk_ts::TsExpr::Text("3600000".to_string()),
-        ];
+        let mut args = vec![ident_node("id"), num_lit("3600000".to_string())];
         scope_idempotency_key(true, "claim", &mut args, &cx);
-        assert_eq!(args[0].clone().into_text(), "`shop.hooks.api.POST::${id}`");
-        assert_eq!(args[1].clone().into_text(), "3600000");
+        assert_eq!(args[0].clone().printed(), "`shop.hooks.api.POST::${id}`");
+        assert_eq!(args[1].clone().printed(), "3600000");
     }
 
     /// The declaration node prints the very text it replaced (1A.35a part B), token for token
@@ -5594,9 +5598,9 @@ mod idempotency_scoping_tests {
             ),
             BodyMode::Method,
         );
-        let mut args = vec![bynk_ts::TsExpr::Text("orderId".to_string())];
+        let mut args = vec![ident_node("orderId")];
         scope_idempotency_key(false, "dedup", &mut args, &cx);
-        assert_eq!(args[0].clone().into_text(), "orderId");
+        assert_eq!(args[0].clone().printed(), "orderId");
     }
 }
 
@@ -5869,8 +5873,7 @@ mod settle_tests {
 mod bridge_tests {
     use super::*;
 
-    /// A plain `Set.remove` forced to text (`force_text`; its body is a comma expression node
-    /// since 1A.35a part B). `contains` over it is text too, in the bracketed form.
+    /// A plain `Set.remove`: its body is a comma expression node (1A.35a part B).
     fn removed(set: &str, key: &str) -> String {
         format!(
             "((__s: globalThis.Set<string>) => (__s.delete({key}), __s as ReadonlySet<string>))(new globalThis.Set<string>({set}))"
@@ -5878,8 +5881,8 @@ mod bridge_tests {
     }
 
     /// A `contains` over a plain `Set` `remove` is a node (a comma expression, 1A.35a part B): a
-    /// call, a ternary, the short-circuit forms and a hoisted `if` over it leave no text exit, and
-    /// print the call as a member's object with no brackets of its own.
+    /// call, a ternary, the short-circuit forms and a hoisted `if` over it print the call as a
+    /// member's object with no brackets of its own.
     #[test]
     fn a_set_remove_is_a_node_in_every_parent() {
         let src = "commons rmnode\n\
@@ -5892,8 +5895,7 @@ mod bridge_tests {
               let v = if c { r? } else { x.remove(y).contains(y) }\n\
               Ok(v)\n\
             }\n";
-        let (exits, stmts, ts) = exits_and_stmts(src);
-        assert_eq!((exits, stmts), (0, 0), "{ts}");
+        let ts = crate::testkit::emit_source(src);
         let has = |set: &str, key: &str| format!("{}.has({key})", removed(set, key));
         assert_eq!(returned(&ts, "call"), format!("g({})", has("a", "c")));
         assert_eq!(
@@ -5909,31 +5911,23 @@ mod bridge_tests {
 
     fn lit_text(l: Lowered) -> String {
         assert!(l.pre.is_empty(), "a literal hoists nothing");
-        assert!(matches!(l.expr, _), "a literal is a node");
-        l.expr.into_text()
+        l.expr.printed()
     }
 
-    /// 1A.20, Decision G: a delegated kernel's `Lowered` passes through
-    /// `Pre::absorb_built` as a node (not printed), an unconverted one's text as
-    /// `Err`, a declined kernel as `None`, and the hoisted statements land in the
-    /// `Pre` in each case.
+    /// 1A.20, Decision G: a delegated kernel's `Lowered` passes through `Pre::absorb_built` as a
+    /// node, a declined kernel as `None`, and the hoisted statements land in the `Pre`.
     #[test]
     fn absorb_built_passes_a_kernel_node_through() {
         let mut pre = Pre::new();
         let stub = Lowered {
-            pre: vec![LoweredStmt::Text("const __t = 1;".to_string())],
+            pre: vec![bynk_ts::TsStmt::expr_stmt(ident_node("t"), None)],
             expr: ident_node("x"),
         };
         match pre.absorb_built(Some(stub)) {
-            Some(Ok(bynk_ts::TsExpr::Ident(name))) => assert_eq!(name, "x"),
+            Some(bynk_ts::TsExpr::Ident(name)) => assert_eq!(name, "x"),
             other => panic!("expected a node, got {other:?}"),
         }
-        assert_eq!(pre.stmts(), ["const __t = 1;"]);
-        let text = Lowered::bare("(m).size".to_string());
-        match pre.absorb_built(Some(text)) {
-            Some(Err(t)) => assert_eq!(t, "(m).size"),
-            other => panic!("expected text, got {other:?}"),
-        }
+        assert_eq!(pre.stmts(), ["t;"]);
         assert!(pre.absorb_built(None).is_none());
         assert_eq!(pre.stmts().len(), 1, "declining hoists nothing");
     }
@@ -5962,7 +5956,10 @@ mod bridge_tests {
         ] {
             assert_eq!(
                 lit_text(Lowered::node(decimal_lit(coef, scale))),
-                crate::emitter::ts_types::decimal_ts_literal(coef, scale),
+                format!(
+                    "{{ coefficient: {}n, scale: {scale} }}",
+                    decimal_signed_coef(coef)
+                ),
                 "{coef}/{scale}"
             );
         }
@@ -5996,20 +5993,6 @@ mod bridge_tests {
         let f = bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Bool(false));
         assert_eq!(lit_text(Lowered::node(t)), "true");
         assert_eq!(lit_text(Lowered::node(f)), "false");
-    }
-
-    #[test]
-    fn pre_hands_converted_and_unconverted_children_the_same_way() {
-        let mut pre = Pre::new();
-        assert_eq!(pre.absorb(Lowered::bare("x + 1")), "x + 1");
-        assert!(matches!(
-            pre.absorb_node(Lowered::bare("x")),
-            bynk_ts::TsExpr::Text(_)
-        ));
-        assert!(matches!(
-            pre.absorb_node(Lowered::node(num_lit("1".to_string()))),
-            _
-        ));
     }
 
     const LITERALS: &str = r#"
@@ -6093,27 +6076,12 @@ fn minus_neg() -> Int { 5 - -3 }
         e
     }
 
-    fn text(t: &str) -> bynk_ts::TsExpr {
-        bynk_ts::TsExpr::Text(t.to_string())
-    }
-
-    /// A [`bynk_ts::TsExpr`] as the bridge value (test-only; production text leaves
-    /// through `lower_expr`'s shared exit).
-    fn bridge(b: bynk_ts::TsExpr) -> bynk_ts::TsExpr {
-        match b {
-            Ok(n) => n,
-            Err(t) => bynk_ts::TsExpr::Text(t),
-        }
-    }
-
-    // The production helpers return a `bynk_ts::TsExpr`; these shadow them with the
-    // bridge value so the tests read the same either way.
     fn t_unary_op(op: UnaryOp, c: bynk_ts::TsExpr) -> bynk_ts::TsExpr {
-        bridge(super::unary_op(op, c))
+        super::unary_op(op, c)
     }
 
     fn t_paren(c: bynk_ts::TsExpr) -> bynk_ts::TsExpr {
-        bridge(super::paren(c))
+        super::paren(c)
     }
 
     fn t_runtime_ctor_call(
@@ -6121,19 +6089,7 @@ fn minus_neg() -> Int { 5 - -3 }
         name: &'static str,
         arg: bynk_ts::TsExpr,
     ) -> bynk_ts::TsExpr {
-        bridge(super::runtime_ctor_call(object, name, arg))
-    }
-
-    fn t_node_or_text(
-        children: Vec<bynk_ts::TsExpr>,
-        node: impl FnOnce(Vec<bynk_ts::TsExpr>) -> bynk_ts::TsExpr,
-        text: impl FnOnce(Vec<String>) -> String,
-    ) -> bynk_ts::TsExpr {
-        bridge(super(node)(children))
-    }
-
-    fn is_node(e: &bynk_ts::TsExpr) -> bool {
-        matches!(e, _)
+        super::runtime_ctor_call(object, name, arg)
     }
 
     #[test]
@@ -6142,23 +6098,22 @@ fn minus_neg() -> Int { 5 - -3 }
         // `-(a - b)`: the source's explicit `Paren` is kept as a node.
         let sub = t_paren(node(bin(Add, "a", "b")));
         let neg = t_unary_op(UnaryOp::Neg, sub);
-        assert!(is_node(&neg));
-        assert_eq!(neg.into_text(), "-(a + b)");
+        assert_eq!(neg.printed(), "-(a + b)");
         // `!(x && y)`.
         let not = t_unary_op(UnaryOp::Not, t_paren(node(bin(And, "x", "y"))));
-        assert_eq!(not.into_text(), "!(x && y)");
+        assert_eq!(not.printed(), "!(x && y)");
         // A bare binary operand (no source `Paren`) is bracketed by the printer.
         let bare = t_unary_op(UnaryOp::Not, node(bin(And, "x", "y")));
-        assert_eq!(bare.into_text(), "!(x && y)");
+        assert_eq!(bare.printed(), "!(x && y)");
         let bare = t_unary_op(UnaryOp::Neg, node(bin(Add, "a", "b")));
-        assert_eq!(bare.into_text(), "-(a + b)");
+        assert_eq!(bare.printed(), "-(a + b)");
         // Nested unaries: `!!x`, `-!x`, and `-(-x)`, never the decrement `--x`.
         let not_not = t_unary_op(UnaryOp::Not, t_unary_op(UnaryOp::Not, node(id("x"))));
-        assert_eq!(not_not.into_text(), "!!x");
+        assert_eq!(not_not.printed(), "!!x");
         let neg_not = t_unary_op(UnaryOp::Neg, t_unary_op(UnaryOp::Not, node(id("x"))));
-        assert_eq!(neg_not.into_text(), "-!x");
+        assert_eq!(neg_not.printed(), "-!x");
         let neg_neg = t_unary_op(UnaryOp::Neg, t_unary_op(UnaryOp::Neg, node(id("x"))));
-        assert_eq!(neg_neg.into_text(), "-(-x)");
+        assert_eq!(neg_neg.printed(), "-(-x)");
     }
 
     #[test]
@@ -6172,7 +6127,7 @@ fn minus_neg() -> Int { 5 - -3 }
             _ => panic!("a node child gives a call node"),
         }
         assert_eq!(
-            neg.into_text(),
+            neg.printed(),
             "__bynkDecimalNeg({ coefficient: 120n, scale: 2 })"
         );
     }
@@ -6180,8 +6135,7 @@ fn minus_neg() -> Int { 5 - -3 }
     #[test]
     fn constructor_calls_and_lists_are_nodes_over_node_children() {
         let ok = t_runtime_ctor_call(None, "Ok", node(num_lit("1".into())));
-        assert!(is_node(&ok));
-        assert_eq!(ok.into_text(), "Ok(1)");
+        assert_eq!(ok.printed(), "Ok(1)");
         let http = t_runtime_ctor_call(Some("HttpResult"), "Ok", node(id("v")));
         match &http {
             bynk_ts::TsExpr::Call { callee, .. } => {
@@ -6189,60 +6143,17 @@ fn minus_neg() -> Int { 5 - -3 }
             }
             _ => panic!("expected a call node"),
         }
-        assert_eq!(http.into_text(), "HttpResult.Ok(v)");
+        assert_eq!(http.printed(), "HttpResult.Ok(v)");
         assert_eq!(
-            t_runtime_ctor_call(None, "Err", node(id("e"))).into_text(),
+            t_runtime_ctor_call(None, "Err", node(id("e"))).printed(),
             "Err(e)"
         );
         assert_eq!(
-            t_runtime_ctor_call(None, "Some", node(id("s"))).into_text(),
+            t_runtime_ctor_call(None, "Some", node(id("s"))).printed(),
             "Some(s)"
         );
-        let list = t_node_or_text(
-            vec![node(id("a")), node(num_lit("2".into()))],
-            |items| bynk_ts::TsExpr::Array {
-                items,
-                multiline: false,
-            },
-            |items| format!("[{}]", items.join(", ")),
-        );
-        assert!(is_node(&list));
-        assert_eq!(list.into_text(), "[a, 2]");
-    }
-
-    #[test]
-    fn a_text_child_makes_every_arm_fall_back_to_todays_text() {
-        let t = || text("f(x) + 1");
-        for (got, want) in [
-            (t_unary_op(UnaryOp::Neg, t()), "-f(x) + 1"),
-            (t_unary_op(UnaryOp::Not, t()), "!f(x) + 1"),
-            (t_paren(t()), "(f(x) + 1)"),
-            (t_runtime_ctor_call(None, "Ok", t()), "Ok(f(x) + 1)"),
-            (t_runtime_ctor_call(None, "Err", t()), "Err(f(x) + 1)"),
-            (t_runtime_ctor_call(None, "Some", t()), "Some(f(x) + 1)"),
-            (
-                t_runtime_ctor_call(Some("HttpResult"), "Ok", t()),
-                "HttpResult.Ok(f(x) + 1)",
-            ),
-            (
-                t_runtime_ctor_call(None, "__bynkDecimalNeg", t()),
-                "__bynkDecimalNeg(f(x) + 1)",
-            ),
-        ] {
-            assert!(!is_node(&got));
-            assert_eq!(got.into_text(), want);
-        }
-        // A list with one text element among nodes renders every element as text.
-        let list = t_node_or_text(
-            vec![node(id("a")), t()],
-            |items| bynk_ts::TsExpr::Array {
-                items,
-                multiline: false,
-            },
-            |items| format!("[{}]", items.join(", ")),
-        );
-        assert!(!is_node(&list));
-        assert_eq!(list.into_text(), "[a, f(x) + 1]");
+        let list = array(vec![node(id("a")), node(num_lit("2".into()))]);
+        assert_eq!(list.printed(), "[a, 2]");
     }
 
     #[test]
@@ -6265,8 +6176,7 @@ fn minus_neg() -> Int { 5 - -3 }
             ("i", "[1, 2, 3]"),
             ("j", "Some(2)"),
             ("k", "__bynkDecimalNeg({ coefficient: 15n, scale: 1 })"),
-            // A negated negation is `-(-x)`, never the decrement `--x`, whether
-            // the operand is a node (a literal) or still text (an identifier).
+            // A negated negation is `-(-x)`, never the decrement `--x`.
             ("m", "-(-1)"),
             ("n", "-(-x)"),
             ("o", "-(-(-x))"),
@@ -6303,13 +6213,6 @@ fn minus(x: Int) -> Int { 5 - - -x }
         }
     }
 
-    /// The number of expressions that left lowering as text while emitting `src`.
-    fn text_exits(src: &str) -> usize {
-        TEXT_EXITS.with(|c| c.set(0));
-        let _ = crate::testkit::emit_source(src);
-        TEXT_EXITS.with(|c| c.get())
-    }
-
     #[test]
     fn identifiers_and_wrappers_over_them_lower_to_nodes() {
         // 1A.4 (#3701): an identifier is a node, so `Some(x)`, `-x` and
@@ -6321,7 +6224,6 @@ fn minus(x: Int) -> Int { 5 - - -x }
                    fn c(x: Int, y: Int) -> List[Int] { [x, y] }\n\
                    fn d(x: Int) -> Int { - -x }\n\
                    fn e(ok: Bool) -> Bool { !ok }\n";
-        assert_eq!(text_exits(src), 0);
         let ts = crate::testkit::emit_source(src);
         for (name, want) in [
             ("a", "Some(x)"),
@@ -6342,13 +6244,7 @@ fn minus(x: Int) -> Int { 5 - - -x }
                     const K: Int = 4\n";
         let fields = "fn a(p: P) -> String { p.name }\n\
                       fn c(p: P) -> Int { p.age }\n";
-        // The constant's own initialiser still leaves as text (not this
-        // slice), so a constant read is measured against that baseline: adding
-        // `fn b() -> Int { K }` adds no text exit.
-        let base = text_exits(head);
-        assert_eq!(text_exits(&format!("{head}{fields}")), base);
         let src = format!("{head}{fields}fn b() -> Int {{ K }}\n");
-        assert_eq!(text_exits(&src), base);
         let ts = crate::testkit::emit_source(&src);
         for (name, want) in [("a", "p.name"), ("b", "K()"), ("c", "p.age")] {
             assert_eq!(returned(&ts, name), want, "{name}");
@@ -6360,7 +6256,6 @@ fn minus(x: Int) -> Int { 5 - - -x }
         let src = "commons variants\n\
                    type Colour = | Red | Green\n\
                    fn a() -> Colour { Red }\n";
-        assert_eq!(text_exits(src), 0);
         let ts = crate::testkit::emit_source(src);
         assert_eq!(returned(&ts, "a"), "Colour.Red");
     }
@@ -6370,7 +6265,6 @@ fn minus(x: Int) -> Int { 5 - - -x }
         // 1A.4's `HttpResult.X` read leaves no text exit of its own.
         let src = "commons hr\n\
                    fn f() -> HttpResult[Int] { HttpResult.NotFound }\n";
-        assert_eq!(text_exits(src), 0);
         assert_eq!(
             returned(&crate::testkit::emit_source(src), "f"),
             "HttpResult.NotFound"
@@ -6380,7 +6274,7 @@ fn minus(x: Int) -> Int { 5 - - -x }
     // ---- 1A.5 (#3703): value binary operators -------------------------------
 
     fn t_plain_binary(op: BinOp, l: bynk_ts::TsExpr, r: bynk_ts::TsExpr) -> bynk_ts::TsExpr {
-        bridge(super::plain_binary(op, vec![l, r]))
+        super::plain_binary(op, vec![l, r])
     }
 
     fn t_helper_call(
@@ -6388,7 +6282,7 @@ fn minus(x: Int) -> Int { 5 - - -x }
         l: bynk_ts::TsExpr,
         r: bynk_ts::TsExpr,
     ) -> bynk_ts::TsExpr {
-        bridge(super::helper_call(helper, vec![l, r]))
+        super::helper_call(helper, vec![l, r])
     }
 
     #[test]
@@ -6409,7 +6303,7 @@ fn minus(x: Int) -> Int { 5 - - -x }
         ] {
             let got = t_plain_binary(op, n("a"), n("b"));
             assert!(matches!(&got, bynk_ts::TsExpr::Binary { .. }), "{want}");
-            assert_eq!(got.into_text(), want);
+            assert_eq!(got.printed(), want);
         }
         // Decimal, `Int /` and structural `==`: a call over a genuine identifier.
         let call = t_helper_call("__bynkDecimalAdd", n("a"), n("b"));
@@ -6420,12 +6314,9 @@ fn minus(x: Int) -> Int { 5 - - -x }
             }
             _ => panic!("a node pair gives a call node"),
         }
-        assert_eq!(call.into_text(), "__bynkDecimalAdd(a, b)");
+        assert_eq!(call.printed(), "__bynkDecimalAdd(a, b)");
         // Structural `!=`: `Unary(Not, Call)`.
-        let ne = bridge(super::negated(super::helper_call(
-            "__bynkEq",
-            vec![n("a"), n("b")],
-        )));
+        let ne = super::negated(super::helper_call("__bynkEq", vec![n("a"), n("b")]));
         assert!(matches!(
             &ne,
             bynk_ts::TsExpr::Unary {
@@ -6433,51 +6324,11 @@ fn minus(x: Int) -> Int { 5 - - -x }
                 ..
             }
         ));
-        assert_eq!(ne.into_text(), "!__bynkEq(a, b)");
+        assert_eq!(ne.printed(), "!__bynkEq(a, b)");
         // `Ord`: `cmp(l, r) < 0`.
-        let ord = bridge(super::ordered_comparison(
-            BinOp::Lt,
-            id("__cmp_P"),
-            vec![n("a"), n("b")],
-        ));
+        let ord = super::ordered_comparison(BinOp::Lt, id("__cmp_P"), vec![n("a"), n("b")]);
         assert!(matches!(&ord, bynk_ts::TsExpr::Binary { .. }));
-        assert_eq!(ord.into_text(), "__cmp_P(a, b) < 0");
-    }
-
-    #[test]
-    fn a_text_operand_makes_each_value_operator_fall_back_to_todays_text() {
-        let t = || text("f(x)");
-        let n = || node(id("b"));
-        for (got, want) in [
-            (t_plain_binary(BinOp::Sub, t(), n()), "f(x) - b"),
-            (t_plain_binary(BinOp::Div, n(), t()), "b / f(x)"),
-            (
-                t_helper_call("__bynkDecimalMul", t(), n()),
-                "__bynkDecimalMul(f(x), b)",
-            ),
-            (
-                t_helper_call("__bynkIntDiv", n(), t()),
-                "__bynkIntDiv(b, f(x))",
-            ),
-            (
-                bridge(super::negated(super::helper_call(
-                    "__bynkEq",
-                    vec![t(), n()],
-                ))),
-                "!__bynkEq(f(x), b)",
-            ),
-            (
-                bridge(super::ordered_comparison(
-                    BinOp::GtEq,
-                    id("__cmp_P"),
-                    vec![t(), n()],
-                )),
-                "__cmp_P(f(x), b) >= 0",
-            ),
-        ] {
-            assert!(!is_node(&got), "{want}");
-            assert_eq!(got.into_text(), want);
-        }
+        assert_eq!(ord.printed(), "__cmp_P(a, b) < 0");
     }
 
     #[test]
@@ -6488,23 +6339,17 @@ fn minus(x: Int) -> Int { 5 - - -x }
             callee: Box::new(id("__bynkCmpList")),
             args: vec![id("__bynkCmpInt")],
         };
-        let got = bridge(super::ordered_comparison(
-            BinOp::Lt,
-            cmp,
-            vec![node(id("a")), node(id("b"))],
-        ));
-        assert!(is_node(&got));
-        assert_eq!(got.into_text(), "__bynkCmpList(__bynkCmpInt)(a, b) < 0");
+        let got = super::ordered_comparison(BinOp::Lt, cmp, vec![node(id("a")), node(id("b"))]);
+        assert_eq!(got.printed(), "__bynkCmpList(__bynkCmpInt)(a, b) < 0");
     }
 
     #[test]
-    fn comparison_over_a_derived_ord_record_lowers_with_zero_text_exits() {
+    fn comparison_over_a_derived_ord_record_lowers_to_nodes() {
         // 1A.5's composite-comparator fallback, closed by 1A.16.
         let src = "commons ordrec\n\
             type P = { a: Int, b: String } derives Ord\n\
             fn lt(x: P, y: P) -> Bool { x < y }\n\
             fn lts(x: List[Int], y: List[Int]) -> Bool { x < y }\n";
-        assert_eq!(text_exits(src), 0);
         let ts = crate::testkit::emit_source(src);
         assert!(
             returned(&ts, "lt").contains("(x, y) < 0"),
@@ -6549,7 +6394,6 @@ fn minus(x: Int) -> Int { 5 - - -x }
                    fn g(a: Int, b: Int) -> Int { -(a * b) }\n\
                    fn h(a: Int, b: Int, c: Int) -> Int { a + b * c }\n\
                    fn i(a: Int, b: Int, c: Int) -> Int { a - b + c }\n";
-        assert_eq!(text_exits(src), 0);
         let ts = crate::testkit::emit_source(src);
         for (name, want) in [
             ("a", "a - b - c"),
@@ -6578,7 +6422,6 @@ fn minus(x: Int) -> Int { 5 - - -x }
                    fn eq(x: P, y: P) -> Bool { x == y }\n\
                    fn ne(x: P, y: P) -> Bool { x != y }\n\
                    fn ord[T: Ord](x: T, y: T) -> Bool { x < y }\n";
-        assert_eq!(text_exits(src), 0);
         let ts = crate::testkit::emit_source(src);
         for (name, want) in [
             ("dec", "__bynkDecimalAdd(x, y)"),
@@ -6626,7 +6469,6 @@ fn minus(x: Int) -> Int { 5 - - -x }
                    fn b(x: Bool, y: Bool) -> Bool { x || y }\n\
                    fn c(x: Bool, y: Bool) -> Bool { x implies y }\n\
                    fn d(x: Bool, y: Bool, z: Bool) -> Bool { (x || y) && z }\n";
-        assert_eq!(text_exits(src), 0);
         let ts = crate::testkit::emit_source(src);
         assert_eq!(returned(&ts, "a"), "x && y");
         assert_eq!(returned(&ts, "b"), "x || y");
@@ -6661,38 +6503,23 @@ fn minus(x: Int) -> Int { 5 - - -x }
         )
     }
 
-    /// The same statement as three text hoists, one per line, the shape a text
-    /// producer gives a nested statement (nesting travels inside the string).
-    fn if_text(pre: &mut Pre) {
-        pre.push_text("if (flag) {".to_string());
-        pre.push_text("  done;".to_string());
-        pre.push_text("}".to_string());
-    }
-
+    /// A node statement indents every line of its print, not only the first.
     #[test]
-    fn a_node_statement_indents_every_line_like_its_text_equivalent() {
-        let mut as_node = Pre::new();
-        as_node.0.push(if_node());
-        let mut as_text = Pre::new();
-        if_text(&mut as_text);
-        assert_eq!(as_node.stmts(), as_text.stmts());
+    fn a_node_statement_indents_every_line() {
+        let mut pre = Pre::new();
+        pre.push_node(if_node());
+        assert_eq!(pre.stmts(), ["if (flag) {", "  done;", "}"]);
         for indent in [0, 2, 6] {
-            let (mut n, mut t) = (String::new(), String::new());
-            for s in &as_node.stmts() {
+            let mut n = String::new();
+            for s in &pre.stmts() {
                 write_line(&mut n, indent, s);
             }
-            for s in &as_text.stmts() {
-                write_line(&mut t, indent, s);
-            }
-            assert_eq!(n, t, "indent {indent}");
             assert!(
                 n.lines().all(|l| l.starts_with(&" ".repeat(indent))),
                 "every line carries the caller's indentation:\n{n}"
             );
+            assert_eq!(n.lines().count(), 3, "indent {indent}");
         }
-        // `Lowered::pre_texts` takes the same path.
-        let lowered = as_node.finish(num_lit("1".to_string()));
-        assert_eq!(lowered.pre_texts(), ["if (flag) {", "  done;", "}"]);
     }
 
     // -- 1A.6 (#3705): calls --
@@ -6709,7 +6536,6 @@ fn minus(x: Int) -> Int { 5 - - -x }
 
     #[test]
     fn calls_over_identifiers_lower_to_nodes_and_still_note_their_imports() {
-        assert_eq!(text_exits(CALLS), 0);
         let ts = crate::testkit::emit_source(CALLS);
         for (name, want) in [
             ("plain", "g(x, y)"),
@@ -6750,8 +6576,6 @@ fn minus(x: Int) -> Int { 5 - - -x }
         let witness = "commons witnesses\n\
             fn lt[T: Ord](a: T, b: T) -> Bool { a < b }\n\
             fn use(a: Int, b: Int) -> Bool { lt(a, b) }\n";
-        let before = text_exits("commons witnesses\nfn use(a: Int, b: Int) -> Bool { a < b }\n");
-        assert_eq!(text_exits(witness), before);
         let ts = crate::testkit::emit_source(witness);
         assert_eq!(returned(&ts, "use"), "lt(a, b, __bynkCmpInt)");
         // Explicit type arguments on a generic instance method (#2795): `Call`
@@ -6777,7 +6601,6 @@ fn minus(x: Int) -> Int { 5 - - -x }
 
     #[test]
     fn data_literals_over_nodes_lower_to_nodes() {
-        assert_eq!(text_exits(DATA), 0);
         let ts = crate::testkit::emit_source(DATA);
         for (name, want) in [
             ("mk", "{ name: n, age: a }"),
@@ -6799,7 +6622,6 @@ fn minus(x: Int) -> Int { 5 - - -x }
             fn f(n: String) -> String { \"a`b\\(n)c\\\\d $ ${n}\" }\n\
             fn g(n: String) -> String { \"\\(n)\" }\n\
             fn h(n: String) -> String { \"x\\(n)\\n\" }\n";
-        assert_eq!(text_exits(src), 0);
         let ts = crate::testkit::emit_source(src);
         assert_eq!(returned(&ts, "f"), "`a\\`b${String(n)}c\\\\d \\$ \\${n}`");
         assert_eq!(returned(&ts, "g"), "`${String(n)}`");
@@ -6814,7 +6636,6 @@ fn minus(x: Int) -> Int { 5 - - -x }
             type R = { default: Int, class: Int }\n\
             fn mk(default: Int, class: Int) -> R { R { default, class } }\n\
             fn sp(r: R, default: Int) -> R { R { ...r, default } }\n";
-        assert_eq!(text_exits(src), 0);
         let ts = crate::testkit::emit_source(src);
         assert_eq!(
             returned(&ts, "mk"),
@@ -6830,7 +6651,6 @@ fn minus(x: Int) -> Int { 5 - - -x }
             type C = { n: Int, label: String = \"none\" }\n\
             fn mk(n: Int) -> C { C { n } }\n\
             fn full(n: Int) -> C { C { n, label: \"x\" } }\n";
-        assert_eq!(text_exits(src), 0);
         let ts = crate::testkit::emit_source(src);
         assert_eq!(returned(&ts, "mk"), "{ n, label: \"none\" }");
         assert_eq!(returned(&ts, "full"), "{ n, label: \"x\" }");
@@ -6846,7 +6666,6 @@ fn minus(x: Int) -> Int { 5 - - -x }
             fn short(a: Int) -> C { C { a } }\n\
             fn some(a: Int) -> C { C { a, o: Some(a) } }\n\
             fn lam(xs: List[Int]) -> List[C] { xs.map((x) => C { a: x }) }\n";
-        assert_eq!(text_exits(src), 0);
         let ts = crate::testkit::emit_source(src);
         let tail = "plan: { tag: \"Free\" as const }, o: { tag: \"None\" as const }, l: [1, 2], \
             m: new globalThis.Map(), i: { k: -3 }, p: 1e3 }";
@@ -6927,7 +6746,6 @@ fn minus(x: Int) -> Int { 5 - - -x }
         let src = "commons results\n\
             fn created(x: Int) -> HttpResult[Int] { Created(x) }\n\
             fn raw(b: Bytes) -> HttpResult[Int] { RawError(Forbidden, b, \"text/plain\") }\n";
-        assert_eq!(text_exits(src), 0);
         let ts = crate::testkit::emit_source(src);
         assert_eq!(returned(&ts, "created"), "HttpResult.Created(x)");
         assert_eq!(
@@ -6936,26 +6754,12 @@ fn minus(x: Int) -> Int { 5 - - -x }
         );
     }
 
-    /// 1A.8: `(text expressions, text statements)` hoisted while emitting
-    /// `src`, with the emitted TypeScript.
-    fn exits_and_stmts(src: &str) -> (usize, usize, String) {
-        TEXT_EXITS.with(|c| c.set(0));
-        TEXT_STMTS.with(|c| c.set(0));
-        let ts = crate::testkit::emit_source(src);
-        (
-            TEXT_EXITS.with(|c| c.get()),
-            TEXT_STMTS.with(|c| c.get()),
-            ts,
-        )
-    }
-
     #[test]
     fn a_question_over_a_node_operand_hoists_statement_nodes() {
         let src = "commons qnodes\n\
             fn f(x: Result[Int, String]) -> Result[Int, String] { Ok(x? + 1) }\n\
             fn g(x: Result[Int, String]) -> Result[Int, String] { Ok(x?) }\n";
-        let (exits, stmts, ts) = exits_and_stmts(src);
-        assert_eq!((exits, stmts), (0, 0), "{ts}");
+        let ts = crate::testkit::emit_source(src);
         assert!(
             ts.contains(
                 "  const __r0 = x;\n  if (__r0.tag === \"Err\") return __r0;\n  return Ok(__r0.value + 1);\n"
@@ -6971,8 +6775,7 @@ fn minus(x: Int) -> Int { 5 - - -x }
         let src = "commons nf\n\
             fn lookup(i: Int) -> Option[Int] { if i > 0 { Some(i) } else { None } }\n\
             fn f(i: Int) -> HttpResult[Int] { Ok(lookup(i)?) }\n";
-        let (exits, stmts, ts) = exits_and_stmts(src);
-        assert_eq!((exits, stmts), (0, 0), "{ts}");
+        let ts = crate::testkit::emit_source(src);
         assert!(
             ts.contains(
                 "  const __r0 = lookup(i);\n  if (__r0.tag === \"None\") return HttpResult.NotFound;\n  return HttpResult.Ok(__r0.value);\n"
@@ -6988,8 +6791,7 @@ fn minus(x: Int) -> Int { 5 - - -x }
             type IoError = enum { Disk }\n\
             type AppError =\n  | Io(reason: IoError)\n  | Other\n  embeds IoError as Io\n\
             fn g(r: Result[Int, IoError]) -> Result[Int, AppError] { Ok(r? + 1) }\n";
-        let (exits, stmts, ts) = exits_and_stmts(src);
-        assert_eq!((exits, stmts), (0, 0), "{ts}");
+        let ts = crate::testkit::emit_source(src);
         assert!(
             ts.contains(
                 "  const __r0 = r;\n  if (__r0.tag === \"Err\") return Err(AppError.Io(__r0.error));\n  return Ok(__r0.value + 1);\n"
@@ -7007,8 +6809,7 @@ fn minus(x: Int) -> Int { 5 - - -x }
             fn f(x: Result[Int, String], n: Int) -> Result[Int, String] {\n\
               Ok((match n { 0 => x, _ => x })?)\n\
             }\n";
-        let (exits, stmts, ts) = exits_and_stmts(src);
-        assert_eq!((exits, stmts), (0, 0), "{ts}");
+        let ts = crate::testkit::emit_source(src);
         assert!(
             ts.contains("  const __r0 = (((__d) => {")
                 && ts.contains(
@@ -7053,21 +6854,17 @@ fn minus(x: Int) -> Int { 5 - - -x }
             "}".to_string(),
         ];
         assert_eq!(pre.stmts(), text_lines);
-        // Written two levels deep, as `write_line` indents each entry.
+        // Written two levels (four columns) deep, as `write_line` indents each entry.
         let mut out = String::new();
         for l in pre.stmts() {
-            write_line(&mut out, INDENT_STEP * 2, &l);
+            write_line(&mut out, 4, &l);
         }
         assert_eq!(
             out,
             "    if (c) {\n      __r1 = a;\n    } else {\n      __r1 = b;\n    }\n"
         );
         // `ts_stmts` keeps the node; the printer at depth 2 prints the same bytes.
-        let ru = RuntimeUse::default();
-        let stmts = pre.ts_stmts(FaultSite {
-            sink: &ru,
-            span: bynk_syntax::span::Span::default(),
-        });
+        let stmts = pre.ts_stmts();
         assert_eq!(stmts.len(), 1);
         assert_eq!(bynk_ts::print_stmt(&stmts[0], 2), out);
     }
@@ -7079,8 +6876,7 @@ fn minus(x: Int) -> Int { 5 - - -x }
               let v = if c { x? } else { 0 }\n\
               Ok(v)\n\
             }\n";
-        let (exits, stmts, ts) = exits_and_stmts(src);
-        assert_eq!((exits, stmts), (0, 0), "{ts}");
+        let ts = crate::testkit::emit_source(src);
         assert!(
             ts.contains(
                 "  let __r1: number;\n  if (c) {\n    const __r0 = x;\n    if (__r0.tag === \"Err\") return __r0;\n    __r1 = __r0.value;\n  } else {\n    __r1 = 0;\n  }\n"
@@ -7098,8 +6894,7 @@ fn minus(x: Int) -> Int { 5 - - -x }
               let v = if a { if b { x? } else { 1 } } else { 2 }\n\
               Ok(v)\n\
             }\n";
-        let (exits, stmts, ts) = exits_and_stmts(src);
-        assert_eq!((exits, stmts), (0, 0), "{ts}");
+        let ts = crate::testkit::emit_source(src);
         assert!(
             ts.contains("  let __r2: number;\n  if (a) {\n    let __r1: number;\n    if (b) {\n"),
             "{ts}"
@@ -7116,15 +6911,11 @@ fn minus(x: Int) -> Int { 5 - - -x }
     fn a_ternary_over_nodes_is_a_paren_conditional() {
         let src = "commons tern\n\
             fn f(c: Bool, x: Int, y: Int) -> Int { if c { x } else { y } }\n";
-        let (exits, stmts, ts) = exits_and_stmts(src);
-        assert_eq!((exits, stmts), (0, 0), "{ts}");
+        let ts = crate::testkit::emit_source(src);
         assert_eq!(returned(&ts, "f"), "(c ? x : y)");
     }
 
-    /// The emitted suite module for a one-case suite over `src`. It lowers
-    /// through the driver, so it returns no text-exit counts: `TEXT_EXITS` is
-    /// compiled only into this crate's own test build, and the driver runs a
-    /// separate copy of the emitter (see `text_counters`).
+    /// The emitted suite module for a one-case suite over `src`.
     fn suite_ts(src: &str, suite: &str) -> String {
         let out = crate::testkit::emit_project(
             &[("demo/day.bynk", src), ("tests/day.bynk", suite)],
@@ -7197,8 +6988,7 @@ fn minus(x: Int) -> Int { 5 - - -x }
              fn w(s: Shape) -> Bool {{ s is _ }}\n\
              fn l(xs: List[Int]) -> Bool {{ xs is [1, ..] }}\n"
         );
-        let (exits, stmts, ts) = exits_and_stmts(&src);
-        assert_eq!((exits, stmts), (0, 0), "{ts}");
+        let ts = crate::testkit::emit_source(&src);
         assert_eq!(
             returned(&ts, "v"),
             "((__c: boolean) => __c)(s.tag === \"Circle\")"
@@ -7224,10 +7014,9 @@ fn minus(x: Int) -> Int { 5 - - -x }
             "{IS_HDR}fn a(s: Shape, k: Int) -> Bool {{ mk(s) is Dot && k > 0 }}\n\
              fn b(s: Shape, k: Int) -> Bool {{ k > 0 && mk(s) is Dot }}\n"
         );
-        let (exits, stmts, ts) = exits_and_stmts(&src);
+        let ts = crate::testkit::emit_source(&src);
         // The hoisted `let __r0!: Shape;` declaration is a definite-assignment `let` node
         // (1A.35a part B), so no statement is text.
-        assert_eq!((exits, stmts), (0, 0), "{ts}");
         assert_eq!(
             func(&ts, "a"),
             "export function a(s: Shape, k: number): boolean {\n  const __r0 = mk(s);\n  return ((__c: boolean) => __c)(__r0.tag === \"Dot\") && k > 0;\n}\n"
@@ -7251,8 +7040,7 @@ fn minus(x: Int) -> Int { 5 - - -x }
              fn ret(xs: List[Int], k: Int) -> Result[Bool, String] {{ Ok(xs is [x, ..] && risky(x)? > k) }}\n\
              fn retimp(xs: List[Int], k: Int) -> Result[Bool, String] {{ Ok(xs is [x, ..] implies risky(x)? > k) }}\n"
         );
-        let (exits, stmts, ts) = exits_and_stmts(&src);
-        assert_eq!((exits, stmts), (0, 0), "{ts}");
+        let ts = crate::testkit::emit_source(&src);
         assert_eq!(
             returned(&ts, "none"),
             "((__c: boolean) => __c)(s.tag === \"Dot\") && k"
@@ -7276,8 +7064,7 @@ fn minus(x: Int) -> Int { 5 - - -x }
     }
 
     /// A variant binding reads its payload through the `Extract` cast, now a node
-    /// (`typeof` under a generic type), so the IIFE is a node with no text exit and
-    /// prints as it did; the antecedent stays in the hoisted form for narrowing
+    /// (`typeof` under a generic type), so the IIFE is a node and prints as it did; the antecedent stays in the hoisted form for narrowing
     /// (#1044).
     #[test]
     fn a_variant_payload_binding_is_a_node_through_the_extract_cast() {
@@ -7285,8 +7072,7 @@ fn minus(x: Int) -> Int { 5 - - -x }
             "{IS_HDR}fn g(s: Shape, k: Int) -> Bool {{ s is Circle(r) && r > k }}\n\
              fn h(s: Shape, k: Int) -> Result[Bool, String] {{ Ok(s is Circle(r) && risky(r)? > k) }}\n"
         );
-        let (exits, stmts, ts) = exits_and_stmts(&src);
-        assert_eq!((exits, stmts), (0, 0), "{ts}");
+        let ts = crate::testkit::emit_source(&src);
         assert_eq!(
             returned(&ts, "g"),
             "((__c: boolean) => __c)(s.tag === \"Circle\") && ((() => { const r = (s as Extract<typeof s, { tag: \"Circle\" }>).r; return r > k; })())"
@@ -7311,8 +7097,7 @@ fn minus(x: Int) -> Int { 5 - - -x }
              fn e(x: Int) -> Result[Bool, String] {{ Ok(x > 0 || risky(x)? > 0) }}\n\
              fn f(x: Int) -> Result[Bool, String] {{ Ok(x > 0 implies risky(x)? > 0) }}\n"
         );
-        let (exits, _, ts) = exits_and_stmts(&src);
-        assert_eq!(exits, 0, "{ts}");
+        let ts = crate::testkit::emit_source(&src);
         let arrow =
             "(() => { __r0 = mk(s); return ((__c: boolean) => __c)(__r0.tag === \"Dot\"); })()";
         assert_eq!(returned(&ts, "a"), format!("x > 0 && {arrow}"));
@@ -7346,13 +7131,9 @@ fn minus(x: Int) -> Int { 5 - - -x }
 mod list_kernel_tests {
     use crate::testkit::emit_source;
 
-    /// `(text exits, emitted TypeScript)` for a one-function commons.
-    fn exits(body: &str) -> (usize, String) {
-        // The text receivers read `String.splitRegex` as text (see `force_text`).
-        let _text = super::force_text::arm("splitRegex");
-        super::TEXT_EXITS.with(|c| c.set(0));
-        let ts = emit_source(&format!("commons lk\n{body}\n"));
-        (super::TEXT_EXITS.with(|c| c.get()), ts)
+    /// The emitted TypeScript for a one-function commons.
+    fn emitted(body: &str) -> String {
+        emit_source(&format!("commons lk\n{body}\n"))
     }
 
     /// The returned expression of `export function f`.
@@ -7364,10 +7145,9 @@ mod list_kernel_tests {
         rest[ret..ret + end].to_string()
     }
 
-    /// Each arm over node operands prints exactly today's text and leaves no
-    /// expression as text.
+    /// Each arm over node operands prints exactly today's text.
     #[test]
-    fn expression_arms_over_nodes_print_as_before_with_no_text_exit() {
+    fn expression_arms_over_nodes_print_as_before() {
         for (body, want) in [
             ("fn f(xs: List[Int]) -> Int { xs.length() }", "(xs).length"),
             ("fn f(xs: List[Int]) -> Int { xs.count() }", "(xs).length"),
@@ -7420,17 +7200,15 @@ mod list_kernel_tests {
                 "[...xs].sort((__a: number, __b: number) => __bynkCmpFloat(((x: number) => x)(__b), ((x: number) => x)(__a)))",
             ),
         ] {
-            let (n, ts) = exits(body);
+            let ts = emitted(body);
             assert_eq!(returned(&ts), want, "{body}");
-            assert_eq!(n, 0, "{body}: text exits\n{ts}");
         }
     }
 
     /// The `Decimal` sum starts from the zero decimal and notes its helper.
     #[test]
     fn a_decimal_sum_is_a_node_and_imports_its_helper() {
-        let (n, ts) = exits("fn f(xs: List[Decimal]) -> Decimal { xs.sum((x) => x) }");
-        assert_eq!(n, 0, "{ts}");
+        let ts = emitted("fn f(xs: List[Decimal]) -> Decimal { xs.sum((x) => x) }");
         assert!(ts.contains("__bynkDecimalAdd(__s, ((x: { readonly coefficient: bigint; readonly scale: number }) => x)(__x)), { coefficient: 0n, scale: 0 })"), "{ts}");
         assert!(ts.contains("import { __bynkDecimalAdd }"), "{ts}");
     }
@@ -7513,8 +7291,7 @@ mod list_kernel_tests {
   })()",
             ),
         ] {
-            let (n, ts) = exits(&arm_source(elem, ret, extra, expr));
-            assert_eq!(n, 0, "{ts}");
+            let ts = emitted(&arm_source(elem, ret, extra, expr));
             assert_eq!(returned_any(&ts), want, "{expr}");
         }
     }
@@ -7523,13 +7300,12 @@ mod list_kernel_tests {
     /// helper that `par*` calls: `note_settle_all` fires as it did.
     #[test]
     fn par_arms_import_their_settle_helper() {
-        let (n, ts) = exits(&arm_source(
+        let ts = emitted(&arm_source(
             "Int",
             "Effect[()]",
             ", g: (Int) -> Effect[()]",
             "{R}.parTraverse(g)",
         ));
-        assert_eq!(n, 0, "{ts}");
         assert!(ts.contains("__bynkSettleAll"), "{ts}");
         assert!(
             ts.contains("(async (__xs: readonly number[]) => {\n"),

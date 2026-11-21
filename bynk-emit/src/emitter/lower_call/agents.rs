@@ -177,16 +177,12 @@ mod tests {
         ident_node(text)
     }
 
-    fn text(text: &str) -> bynk_ts::TsExpr {
-        bynk_ts::TsExpr::Text(text.to_string())
-    }
-
     fn printed(built: bynk_ts::TsExpr) -> String {
-        bynk_ts::TsExpr::from(built).into_text()
+        bynk_ts::print_expr(&built)
     }
 
-    /// `agent_construct_node` for one build target and body kind, over a node key and a text key:
-    /// the two print the same bytes, and the handler's deps shape widens either way.
+    /// `agent_construct_node` for one build target and body kind: the handler's deps shape
+    /// widens either way.
     fn construct(workers: bool, provider: bool, key: bynk_ts::TsExpr) -> (bynk_ts::TsExpr, bool) {
         let commons = TypedCommons::empty();
         let cross = bynk_check::resolver::CrossContextInfo::default();
@@ -218,25 +214,19 @@ mod tests {
     fn a_bundle_construction_passes_only_the_key() {
         for provider in [false, true] {
             let (built, widened) = construct(false, provider, node("k"));
-            assert!(built.is_ok() && widened);
+            assert!(widened);
             assert_eq!(printed(built), "__makeRoom(k)");
-            let (built, widened) = construct(false, provider, text("a + b"));
-            assert!(built.is_err() && widened);
-            assert_eq!(printed(built), "__makeRoom(a + b)");
         }
     }
 
     /// Workers threads `deps.env`, and `this.deps.env` in a provider body, whose composer
-    /// supplies it (#2355), as a node and as the text it falls back to.
+    /// supplies it (#2355).
     #[test]
     fn a_workers_construction_threads_the_deps_env() {
         for (provider, deps) in [(false, "deps"), (true, "this.deps")] {
             let want = format!("__makeRoom(k, {deps}.env)");
             let (built, widened) = construct(true, provider, node("k"));
-            assert!(built.is_ok() && widened);
-            assert_eq!(printed(built), want);
-            let (built, widened) = construct(true, provider, text("k"));
-            assert!(built.is_err() && widened);
+            assert!(widened);
             assert_eq!(printed(built), want);
         }
     }
@@ -254,8 +244,8 @@ mod tests {
             name: "Room".to_string(),
             span: bynk_syntax::span::Span::new(5, 9),
         };
-        let built = lower_agent_init(&name, vec![], &mut cx);
-        assert!(built.is_ok(), "lowering continues past the fault");
+        // Lowering continues past the fault.
+        let _ = lower_agent_init(&name, vec![], &mut cx);
         let faults = ru.take_faults();
         assert_eq!(faults.len(), 1, "{faults:?}");
         assert_eq!(faults[0].span, name.span);

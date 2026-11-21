@@ -656,23 +656,6 @@ mod ts_type_ref_tests {
     }
 }
 
-/// v0.20b: render a checker `Ty` as a TypeScript type. Used by the inline
-/// kernel-method lowerings, whose IIFE parameters must be annotated
-/// (`noImplicitAny`). Rigid type variables render as themselves — inside an
-/// emitted generic function they are in scope as TS type parameters.
-/// P7.9 (#1315, R7.2): renders `t` by building a real [`bynk_ts::TsType`]
-/// and printing it through [`bynk_ts::print_type`], instead of `format!`-ing
-/// the type text by hand — this function's own signature and every one of
-/// its ~45 real callers are unchanged; only the internal construction moved.
-/// `Ty::ActorSum` needed a new gap closed beyond the accepted proposal's own
-/// `readonly`/`Fn` list — a real, grounded one (found during implementation
-/// review, not speculative): a resolved multi-actor sum lowers to a genuine
-/// type-position union no existing `TsType` variant could represent, closed
-/// by adding `TsType::Union` (see its own doc).
-pub(super) fn ts_ty(t: TyId, tys: TyRender<'_>) -> String {
-    bynk_ts::print_type(&ts_ty_to_ts_type(t, tys))
-}
-
 /// #1927: how the module being emitted spells a type it names. A unit's own
 /// value (a function, asset, service, agent or provider) can hide a
 /// `uses`-imported type of its name. The unit's source may not write that
@@ -876,6 +859,11 @@ mod ts_ty_tests {
     use super::*;
     use bynk_check::checker::{NamedKind, Types};
 
+    /// A checker type as the text the printer gives its `TsType`.
+    fn ts_ty(t: TyId, tys: TyRender<'_>) -> String {
+        bynk_ts::print_type(&ts_ty_to_ts_type(t, tys))
+    }
+
     #[test]
     fn base_types() {
         let tys = Arc::new(Types::new());
@@ -992,14 +980,6 @@ mod ts_ty_tests {
                 TyRender::new(&tys, no_spellings())
             ),
             "readonly (readonly Order[])[]"
-        );
-        assert_eq!(
-            ts_array_elem(&ts_ty(orders, TyRender::new(&tys, no_spellings()))),
-            "(readonly Order[])"
-        );
-        assert_eq!(
-            ts_array_elem(&ts_ty(order, TyRender::new(&tys, no_spellings()))),
-            "Order"
         );
 
         let s = tys.intern(Ty::Base(BaseType::String));

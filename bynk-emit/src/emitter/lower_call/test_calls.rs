@@ -35,13 +35,6 @@ fn event_helper_name(service: &str) -> String {
     format!("__bynkEvent_{service}")
 }
 
-/// `{s:?}` as a bridge value: a string-literal node when Rust's escaping and the printer's agree
-/// (ASCII route text, identifier actor names), else the Debug text, so a call over a string the
-/// two would write differently falls back to text byte for byte (Decision C).
-pub(in crate::emitter) fn debug_str(s: &str) -> bynk_ts::TsExpr {
-    str_node(s)
-}
-
 /// `{ ...deps, <entries> }`.
 fn deps_with(entries: Vec<TsObjectEntry>) -> TsExpr {
     let mut all = vec![TsObjectEntry::Spread(id("deps"))];
@@ -57,10 +50,6 @@ fn paren_as_any(value: TsExpr) -> TsExpr {
     })
 }
 
-fn bridge(built: bynk_ts::TsExpr) -> bynk_ts::TsExpr {
-    built.into()
-}
-
 // ---- The call-site principal as the handler's `deps` ----
 
 /// The `deps` argument an addressed test-case call passes, and whether it is the bare `deps`.
@@ -71,7 +60,7 @@ struct DepsArg {
 
 /// I3 (#1971), #2020: `{ ...deps, who: { tag, identity? } }`, a sum handler's principal.
 fn who_deps(actor: &str, identity: Option<bynk_ts::TsExpr>) -> bynk_ts::TsExpr {
-    let tag = bridge(debug_str(actor));
+    let tag = str_node(actor);
     let who = |tag: TsExpr, identity: Option<TsExpr>| {
         let mut fields = vec![TsObjectEntry::prop("tag".to_string(), tag)];
         fields.extend(identity.map(|i| TsObjectEntry::prop("identity".to_string(), i)));
@@ -80,7 +69,7 @@ fn who_deps(actor: &str, identity: Option<bynk_ts::TsExpr>) -> bynk_ts::TsExpr {
             TsExpr::object_entries(fields),
         )])
     };
-    bridge(match identity {
+    match identity {
         Some(identity) => {
             let c = vec![tag, identity];
             let [tag, identity] = take(c);
@@ -91,7 +80,7 @@ fn who_deps(actor: &str, identity: Option<bynk_ts::TsExpr>) -> bynk_ts::TsExpr {
             let [tag] = take(c);
             who(tag, None)
         }
-    })
+    }
 }
 
 /// `{ ...deps, identity: (identity as any), claims? }`; an `Oidc` handler also reads its token's
@@ -99,7 +88,7 @@ fn who_deps(actor: &str, identity: Option<bynk_ts::TsExpr>) -> bynk_ts::TsExpr {
 fn identity_deps(identity: bynk_ts::TsExpr, claims: Option<bynk_ts::TsExpr>) -> bynk_ts::TsExpr {
     let mut children = vec![identity];
     children.extend(claims);
-    bridge({
+    {
         let c = children;
         let mut nodes = c.into_iter();
         let mut entries = Vec::new();
@@ -111,7 +100,7 @@ fn identity_deps(identity: bynk_ts::TsExpr, claims: Option<bynk_ts::TsExpr>) -> 
         }
         entries.extend(nodes.map(|claims| TsObjectEntry::prop("claims".to_string(), claims)));
         deps_with(entries)
-    })
+    }
 }
 
 /// The key the addressed handler's principal is looked up under (a sum handler's `deps.who`).
@@ -312,7 +301,7 @@ pub(in crate::emitter) fn lower_system_schedule_call(
 fn wrong_method_call(service: &str, verb: IrHttpMethod, path: &str) -> bynk_ts::TsExpr {
     let name = wrong_method_driver_name(service);
     {
-        let nodes = vec![bridge(debug_str(verb.as_str())), bridge(debug_str(path))];
+        let nodes = vec![str_node(verb.as_str()), str_node(path)];
         call(TsExpr::Ident(name.clone()), nodes)
     }
 }
@@ -807,18 +796,14 @@ mod tests {
         id(text)
     }
 
-    fn text(text: &str) -> bynk_ts::TsExpr {
-        bynk_ts::TsExpr::Text(text.to_string())
-    }
-
     fn printed(built: bynk_ts::TsExpr) -> String {
-        bynk_ts::TsExpr::from(built).into_text()
+        bynk_ts::print_expr(&built)
     }
 
     /// Verbs, route paths and actor names are written the same by Rust's `{:?}` and the printer,
-    /// including `\`, `"` and non-ASCII text, so they build a literal node.
+    /// including `\`, `"` and non-ASCII text.
     #[test]
-    fn debug_str_agrees_with_the_printer_on_route_text() {
+    fn route_text_prints_as_rust_debug_does() {
         for s in [
             "GET",
             "/orders/:id",
@@ -828,77 +813,45 @@ mod tests {
             "/日本語",
             "a'b",
         ] {
-            let built = debug_str(s);
-            assert!(built.is_ok(), "{s:?} should build a node");
-            assert_eq!(printed(built), format!("{s:?}"), "{s:?}");
+            assert_eq!(printed(str_node(s)), format!("{s:?}"), "{s:?}");
         }
     }
 
-    /// Where the two disagree (a control character Rust writes as `\u{7f}` and the printer as
-    /// `\u{7F}`), the text path is kept, so the call stays byte for byte.
+    /// A sum handler's principal.
     #[test]
-    fn debug_str_keeps_the_text_where_the_escapes_differ() {
-        for s in ["/a\u{7f}b", "/a\0b"] {
-            let built = debug_str(s);
-            assert!(built.is_err(), "{s:?} should stay text");
-            assert_eq!(printed(built), format!("{s:?}"));
-        }
-    }
-
-    /// A sum handler's principal, as a node and as the text it falls back to.
-    #[test]
-    fn a_sum_principal_prints_the_same_as_a_node_and_as_text() {
+    fn a_sum_principal_prints() {
         let want = r#"{ ...deps, who: { tag: "User", identity: id } }"#;
-        let as_node = who_deps("User", Some(node("id"))).into_text();
-        assert_eq!(as_node, want);
-        let as_text = who_deps("User", Some(text("id"))).into_text();
-        assert_eq!(as_text, want);
+        assert_eq!(printed(who_deps("User", Some(node("id")))), want);
         assert_eq!(
-            who_deps("Visitor", None).into_text(),
+            printed(who_deps("Visitor", None)),
             r#"{ ...deps, who: { tag: "Visitor" } }"#
         );
     }
 
     /// An identity keeps its `as any`; an `Oidc` handler adds its claims.
     #[test]
-    fn an_identity_principal_prints_the_same_as_a_node_and_as_text() {
+    fn an_identity_principal_prints() {
         let plain = "{ ...deps, identity: (id as any) }";
-        assert_eq!(identity_deps(node("id"), None).into_text(), plain);
-        assert_eq!(identity_deps(text("id"), None).into_text(), plain);
+        assert_eq!(printed(identity_deps(node("id"), None)), plain);
         let claims = "{ ...deps, identity: (id as any), claims: c }";
-        assert_eq!(
-            identity_deps(node("id"), Some(node("c"))).into_text(),
-            claims
-        );
-        assert_eq!(
-            identity_deps(text("id"), Some(node("c"))).into_text(),
-            claims
-        );
+        assert_eq!(printed(identity_deps(node("id"), Some(node("c")))), claims);
     }
 
-    /// The inbound-email arrow prints as the text it replaced, as a node and as text.
+    /// The inbound-email arrow prints as the text it replaced.
     #[test]
-    fn the_inbound_email_arrow_prints_the_same_as_a_node_and_as_text() {
+    fn the_inbound_email_arrow_prints_as_the_text_it_replaced() {
         let want = r#"((__m: any) => svc.key(__m, { ...deps, identity: { address: __m.from, dmarc: { tag: "DmarcNone" } } }))(mail)"#;
         assert_eq!(
             printed(inbound_email_call("svc", "key", node("mail"))),
             want
         );
-        assert_eq!(
-            printed(inbound_email_call("svc", "key", text("mail"))),
-            want
-        );
     }
 
-    /// An addressed call is a node over a member callee when every part is one.
+    /// An addressed call is a node over a member callee.
     #[test]
-    fn an_address_call_is_a_node_only_when_every_part_is_one() {
+    fn an_address_call_is_a_node_over_a_member_callee() {
         let built = address_call("svc", "key", vec![node("a")], node("deps"));
-        assert!(built.is_ok());
         assert_eq!(printed(built), "svc.key(a, deps)");
-        let built = address_call("svc", "key", vec![text("a + b")], node("deps"));
-        assert!(built.is_err());
-        assert_eq!(printed(built), "svc.key(a + b, deps)");
     }
 
     /// The system driver names are composed in one place.

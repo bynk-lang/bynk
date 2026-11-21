@@ -562,16 +562,11 @@ pub(in crate::emitter) fn lower_runtime_value_static_call(
 
 #[cfg(test)]
 mod tests {
-    use crate::emitter::lower::TEXT_EXITS;
     use crate::testkit::emit_source;
 
-    /// `(text exits, emitted TypeScript)` for a one-function commons.
-    fn exits(body: &str) -> (usize, String) {
-        // The text arguments read `String.splitRegex` as text (see `force_text`).
-        let _text = crate::emitter::lower::force_text::arm("splitRegex");
-        TEXT_EXITS.with(|c| c.set(0));
-        let ts = emit_source(&format!("commons st\n{body}\n"));
-        (TEXT_EXITS.with(|c| c.get()), ts)
+    /// The emitted TypeScript for a one-function commons.
+    fn emitted(body: &str) -> String {
+        emit_source(&format!("commons st\n{body}\n"))
     }
 
     /// The returned expression of `export function f`.
@@ -595,7 +590,7 @@ mod tests {
     /// Each static over identifier arguments prints exactly today's text and
     /// leaves no expression as text (1A.4's counter reads 0).
     #[test]
-    fn statics_over_nodes_print_as_before_with_no_text_exit() {
+    fn statics_over_nodes_print_as_before() {
         let int_parse = parse_text(
             INT_RE,
             "globalThis.Number(__s) + 0",
@@ -675,9 +670,8 @@ mod tests {
                 "__bynkDecimalFromInt(n)".to_string(),
             ),
         ] {
-            let (n, ts) = exits(body);
+            let ts = emitted(body);
             assert_eq!(returned(&ts), want, "{body}");
-            assert_eq!(n, 0, "{body}: text exits\n{ts}");
         }
     }
 
@@ -686,14 +680,12 @@ mod tests {
     /// text path.
     #[test]
     fn set_of_notes_its_key_helper_only_for_a_non_plain_key() {
-        let (n, ts) = exits("fn f(xs: List[Int]) -> Set[Int] { Set.of(xs) }");
+        let ts = emitted("fn f(xs: List[Int]) -> Set[Int] { Set.of(xs) }");
         assert_eq!(returned(&ts), "new globalThis.Set<number>(xs)");
-        assert_eq!(n, 0, "{ts}");
         assert!(!ts.contains("__bynkSetOf"), "{ts}");
 
-        let (n, ts) = exits("fn f(xs: List[Bytes]) -> Set[Bytes] { Set.of(xs) }");
+        let ts = emitted("fn f(xs: List[Bytes]) -> Set[Bytes] { Set.of(xs) }");
         assert_eq!(returned(&ts), "__bynkSetOf<globalThis.Uint8Array>(xs)");
-        assert_eq!(n, 0, "{ts}");
         assert!(ts.contains("__bynkSetOf"), "{ts}");
     }
 
@@ -701,11 +693,10 @@ mod tests {
     /// still reaches the statement list, and the argument stays a node.
     #[test]
     fn an_identity_static_keeps_its_arguments_hoists() {
-        let (n, ts) = exits(
+        let ts = emitted(
             "fn g() -> Result[Int, String] { Ok(3) }\n\
              fn f() -> Result[Duration, String] { Ok(Duration.millis(g()?)) }",
         );
-        assert_eq!(n, 0, "{ts}");
         assert!(ts.contains("const __r0 = g();"), "{ts}");
         assert!(ts.contains("return Ok(__r0.value);"), "{ts}");
     }
@@ -714,12 +705,11 @@ mod tests {
     /// laid out across lines, with every token of the one-line text it replaced.
     #[test]
     fn stream_of_is_an_async_generator_node() {
-        let (n, ts) = exits("fn f(xs: List[String]) -> Stream[String] { Stream.of(xs) }");
+        let ts = emitted("fn f(xs: List[String]) -> Stream[String] { Stream.of(xs) }");
         assert_eq!(
             returned(&ts),
             "(async function* () {\n    for (const __e of xs) {\n      yield __e;\n    }\n  })()"
         );
-        assert_eq!(n, 0, "{ts}");
     }
 
     /// A static on a declared type: with and without explicit type arguments,
@@ -740,18 +730,16 @@ mod tests {
                 "Box.empty<readonly number[]>()",
             ),
         ] {
-            let (n, ts) = exits(&format!("{box_}{f}"));
+            let ts = emitted(&format!("{box_}{f}"));
             assert_eq!(returned(&ts), want, "{f}");
-            assert_eq!(n, 0, "{f}: text exits\n{ts}");
         }
         // A comparator witness follows the arguments.
-        let (n, ts) = exits(
+        let ts = emitted(
             "type Sorted[T: Ord] = { items: List[T] }\n\
              fn Sorted.empty() -> Sorted[T] { Sorted { items: [] } }\n\
              fn f() -> Sorted[Int] { Sorted.empty() }",
         );
         assert_eq!(returned(&ts), "Sorted.empty(__bynkCmpInt)");
-        assert_eq!(n, 0, "{ts}");
     }
 
     /// A UFCS call with explicit type arguments: the receiver's own arguments
@@ -775,9 +763,8 @@ mod tests {
                 "Box.probe<readonly number[], Option<number>>(b)",
             ),
         ] {
-            let (n, ts) = exits(&format!("{head}{f}"));
+            let ts = emitted(&format!("{head}{f}"));
             assert_eq!(returned(&ts), want, "{f}");
-            assert_eq!(n, 0, "{f}: text exits\n{ts}");
         }
     }
 
@@ -811,7 +798,7 @@ mod tests {
                 "((__r: Result<number, string>, __d: number) => __r.tag === \"Ok\" ? __r.value : __d)(r, 0)",
             ),
         ] {
-            let (_, ts) = exits(body);
+            let ts = emitted(body);
             assert_eq!(returned(&ts), want, "{body}");
         }
     }

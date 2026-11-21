@@ -615,19 +615,11 @@ mod tests {
     use bynk_syntax::span::Span;
 
     fn printed(e: TsExpr) -> String {
-        print_expr(&e)
-    }
-
-    fn text(s: &str) -> bynk_ts::TsExpr {
-        bynk_ts::TsExpr::Text(s.to_string())
+        bynk_ts::print_expr(&e)
     }
 
     fn node(s: &str) -> bynk_ts::TsExpr {
         ident_node(s)
-    }
-
-    fn built_text(b: bynk_ts::TsExpr) -> String {
-        bynk_ts::TsExpr::from(b).into_text()
     }
 
     /// A receiver is bracketed only where precedence needs it: a plain identifier or call is not, a
@@ -662,21 +654,15 @@ mod tests {
         assert_eq!(on(TsExpr::Lit(TsLit::Num("1".to_string()))), "(1).op()");
     }
 
-    /// The `TestConnection` arms: node forms drop the receiver brackets; a text receiver falls back
-    /// to the bracketed text.
+    /// The `TestConnection` arms: the receiver is bracketed only where precedence needs it.
     #[test]
-    fn the_test_connection_arms_print_both_forms() {
-        for (op, node_form, text_form) in [
-            (TestConnectionOp::Sent, "[...c.sent]", "[...(a + b).sent]"),
-            (TestConnectionOp::Closed, "c.closed", "(a + b).closed"),
-            (TestConnectionOp::Connection, "c.mint()", "(a + b).mint()"),
+    fn the_test_connection_arms_print_their_forms() {
+        for (op, want) in [
+            (TestConnectionOp::Sent, "[...c.sent]"),
+            (TestConnectionOp::Closed, "c.closed"),
+            (TestConnectionOp::Connection, "c.mint()"),
         ] {
-            let built = lower_test_connection(op, node("c"));
-            assert!(built.is_ok());
-            assert_eq!(built_text(built), node_form);
-            let built = lower_test_connection(op, text("a + b"));
-            assert!(built.is_err());
-            assert_eq!(built_text(built), text_form);
+            assert_eq!(printed(lower_test_connection(op, node("c"))), want);
         }
         // A receiver that needs brackets keeps them as a node.
         let sum = TsExpr::Binary {
@@ -685,17 +671,16 @@ mod tests {
             right: Box::new(id("b")),
         };
         assert_eq!(
-            built_text(lower_test_connection(TestConnectionOp::Closed, sum)),
+            printed(lower_test_connection(TestConnectionOp::Closed, sum)),
             "(a + b).closed"
         );
     }
 
-    /// `detach`'s site is a `Str` node only where the printer's escape prints the bytes the text
-    /// path does. The single escape (a fault location) agrees on every shape, non-ASCII included;
-    /// the doubly escaped assertion location agrees where escaping is the identity and keeps the
-    /// text elsewhere.
+    /// `detach`'s site is a `Str` node, and the printer's escape is `escape_ts_string`: the
+    /// single escape (a fault location) and the doubly escaped assertion location (the node
+    /// over an already escaped string) both print the bytes the text path used to write.
     #[test]
-    fn the_site_string_is_a_node_only_where_the_escapers_agree() {
+    fn the_site_string_prints_the_escapes_the_text_path_wrote() {
         use crate::emitter::escape_ts_string;
         for raw in [
             "src/shapes.bynk:47:20",
@@ -709,41 +694,9 @@ mod tests {
             "line\u{2028}sep.bynk:1:1",
         ] {
             let once = escape_ts_string(raw);
-            let single = quoted_or_text(raw, &once);
-            assert!(matches!(single, _), "{raw}");
-            assert_eq!(single.into_text(), format!("\"{once}\""));
+            assert_eq!(printed(str_node(raw)), format!("\"{once}\""));
             let twice = escape_ts_string(&once);
-            let double = quoted_or_text(raw, &twice);
-            let expect_node = once == raw;
-            assert_eq!(matches!(double, _), expect_node, "{raw}");
-            assert_eq!(double.into_text(), format!("\"{twice}\""), "{raw}");
-        }
-    }
-
-    /// The four `EffectResult` text forms, for a receiver or callback that is still text.
-    #[test]
-    fn the_effect_result_text_forms_are_unchanged() {
-        let ts = ["T", "E", "A", "B"];
-        let want = [
-            (
-                EffectResultOp::MapOk,
-                r#"(async (__e: globalThis.Promise<Result<T, E>>, __f: (x: T) => A) => { const __r = await __e; return __r.tag === "Ok" ? Ok(__f(__r.value)) : __r; })(r, f)"#,
-            ),
-            (
-                EffectResultOp::MapErr,
-                r#"(async (__e: globalThis.Promise<Result<T, E>>, __f: (e: E) => B) => { const __r = await __e; return __r.tag === "Err" ? Err(__f(__r.error)) : __r; })(r, f)"#,
-            ),
-            (
-                EffectResultOp::FlatMapOk,
-                r#"(async (__e: globalThis.Promise<Result<T, E>>, __f: (x: T) => globalThis.Promise<Result<A, E>>) => { const __r = await __e; return __r.tag === "Ok" ? await __f(__r.value) : __r; })(r, f)"#,
-            ),
-            (
-                EffectResultOp::FlatMapErr,
-                r#"(async (__e: globalThis.Promise<Result<T, E>>, __f: (e: E) => globalThis.Promise<Result<T, B>>) => { const __r = await __e; return __r.tag === "Err" ? await __f(__r.error) : __r; })(r, f)"#,
-            ),
-        ];
-        for (op, expected) in want {
-            assert_eq!(effect_result_text(op, &ts, "r", "f"), expected);
+            assert_eq!(printed(str_node(once)), format!("\"{twice}\""), "{raw}");
         }
     }
 

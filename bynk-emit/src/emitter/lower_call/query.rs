@@ -1112,8 +1112,8 @@ mod tests {
 
     fn node_print(built: Option<bynk_ts::TsExpr>) -> String {
         match built {
-            Some(Ok(node)) => bynk_ts::print_expr(&node),
-            other => panic!("a node was expected, found {:?}", other.map(|b| b.err())),
+            Some(node) => bynk_ts::print_expr(&node),
+            None => panic!("a node was expected"),
         }
     }
 
@@ -1154,7 +1154,7 @@ mod tests {
     }
 
     /// Every operation, over a node source and node arguments, prints exactly as recorded,
-    /// with no text exit (an `Ok` node), for each way a comparator is bound.
+    /// for each way a comparator is bound.
     #[test]
     fn every_operation_over_nodes_prints_as_recorded() {
         let env = env();
@@ -1347,18 +1347,20 @@ mod tests {
         }
     }
 
-    /// `Stream` generators are nodes (1A.35a part B): over node operands they print, laid out
-    /// across lines, every token of the one-line text they replaced; over text operands they
-    /// are that text, byte for byte.
+    /// `Stream` generators are nodes (1A.35a part B): they print, laid out across lines, every
+    /// token of the one-line text they replaced.
     #[test]
-    fn the_stream_generators_are_nodes_over_node_operands() {
-        let claim = STREAM_CLAIM;
-        let squash = |built: Option<bynk_ts::TsExpr>| match built.expect("a stream op") {
-            Ok(n) => bynk_ts::print_expr(&n)
+    fn the_stream_generators_are_nodes() {
+        let claim = concat!(
+            "const __m = __s as unknown as { [k: symbol]: boolean }; const __k = globalThis.Symbol.for(\"",
+            stream_read_symbol!(),
+            "\"); if (__m[__k]) { throw new globalThis.Error(\"bynk: a stream can be read only once\"); } __m[__k] = true;"
+        );
+        let squash = |built: Option<bynk_ts::TsExpr>| {
+            bynk_ts::print_expr(&built.expect("a stream op"))
                 .split_whitespace()
                 .collect::<Vec<_>>()
-                .join(" "),
-            Err(t) => panic!("text, not a node: {t}"),
+                .join(" ")
         };
         let node = |name: &str| id(name);
         assert_eq!(
@@ -1385,18 +1387,6 @@ mod tests {
             squash(lower_stream_method(node("src"), StreamOp::Collect, vec![])),
             format!(
                 "(async (__s) => {{ {claim} const __r = []; for await (const __e of __s) {{ __r.push(__e); }} return __r; }})(src)"
-            )
-        );
-        // A text operand keeps today's one-line text.
-        let text = |t: &str| bynk_ts::TsExpr::Text(t.to_string());
-        let Some(Err(printed)) = lower_stream_method(text("src"), StreamOp::Map, vec![node("f")])
-        else {
-            panic!("a text source keeps its text");
-        };
-        assert_eq!(
-            printed,
-            format!(
-                "(async function* (__s) {{ {claim} for await (const __e of __s) {{ yield (f)(__e); }} }})(src)"
             )
         );
     }
