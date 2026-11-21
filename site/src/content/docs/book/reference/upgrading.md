@@ -17,6 +17,10 @@ here broke nothing, or its author did not say so: please
 
 <!-- stamp:breaking-entries -->
 
+## v0.640.0
+
+A route containing `*`, `{` or `}`, such as `on GET("/files/*key")`, used to match those characters literally and is now refused with `bynk.http.reserved_route_syntax`. To match one literally, take the segment as a `:name` parameter and check its value in the handler.
+
 ## v0.639.57
 
 A service that declares two `on call` handlers no longer compiles (`bynk.service.duplicate_call_handler`). Only the last one ever ran, so delete the other, or move it into a service of its own.
