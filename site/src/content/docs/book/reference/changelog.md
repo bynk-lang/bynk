@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.639.60** | A test suite of 500 or more cases now type-checks, instead of failing `bynk test` with `bynk.codegen.tsc_failed` (TS2563) because the generated runner was too large for `tsc` to analyse; and a `trace(Cap.op)` list or call record can be encoded, by `Json.encode` or as a `bynk eval` value, instead of failing with `bynk.codegen.tsc_failed` |
 | **v0.639.59** | The `rust` examples in the crate READMEs are self-contained, and CI compiles and runs them as doctests so they cannot fall out of date |
 | **v0.639.58** | Completion and hover show `joinOn` and `leftJoin` with their `left` and `right` key functions, as the checker checks them, instead of an `on` predicate |
 | **v0.639.57** | A `system` case's `is` test on a handler result whose type comes from a commons is checked again, so a wrong variant such as `r is Created(_)` on an `HttpOutcome[Note]` is `bynk.types.is_unknown_variant` instead of a failure in `tsc`; and a service with two `on call` handlers, where the second silently replaced the first, is now `bynk.service.duplicate_call_handler` |
