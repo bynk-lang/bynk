@@ -5443,16 +5443,19 @@ fn refined_check_as_bool(
 
 /// Test-only: a node as the text the printer gives it.
 #[cfg(test)]
-trait Printed {
-    fn printed(&self) -> String;
-}
+mod test_support {
+    pub(super) trait Printed {
+        fn printed(&self) -> String;
+    }
 
-#[cfg(test)]
-impl Printed for bynk_ts::TsExpr {
-    fn printed(&self) -> String {
-        bynk_ts::print_expr(self)
+    impl Printed for bynk_ts::TsExpr {
+        fn printed(&self) -> String {
+            bynk_ts::print_expr(self)
+        }
     }
 }
+#[cfg(test)]
+use test_support::Printed;
 
 #[cfg(test)]
 mod idempotency_scoping_tests {
