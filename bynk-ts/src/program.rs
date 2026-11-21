@@ -3078,6 +3078,47 @@ pub enum VerbatimOrigin {
 mod tests {
     use super::*;
 
+    /// The tree compares structurally (1A.35b): two separately built, equal trees are equal, a
+    /// difference anywhere inside is not, and a node never equals a different node that prints
+    /// the same text. This is what lets a recursion check compare witnesses without printing.
+    #[test]
+    fn the_tree_compares_structurally() {
+        let call = |callee: &str, arg: TsExpr| TsExpr::Call {
+            callee: Box::new(TsExpr::Ident(callee.to_string())),
+            args: vec![arg],
+        };
+        let num = |n: &str| TsExpr::Lit(TsLit::Num(n.to_string()));
+        assert_eq!(call("f", num("1")), call("f", num("1")));
+        assert_ne!(call("f", num("1")), call("f", num("2")));
+        assert_ne!(call("f", num("1")), call("g", num("1")));
+        // An identifier and a verbatim fragment can print alike and are still different nodes.
+        assert_ne!(
+            TsExpr::Ident("x".to_string()),
+            TsExpr::VerbatimExpr("x".to_string(), VerbatimOrigin::Emit)
+        );
+        // Types, including an array over a union, compare the same way.
+        let list = |t: TsType| TsType::readonly_array(t);
+        assert_eq!(list(TsType::named("A")), list(TsType::named("A")));
+        assert_ne!(list(TsType::named("A")), TsType::array(TsType::named("A")));
+        assert_eq!(
+            TsType::named_with_args("Result", vec![TsType::named("A"), TsType::named("B")]),
+            TsType::named_with_args("Result", vec![TsType::named("A"), TsType::named("B")])
+        );
+        // A statement inside an arrow body is part of the comparison.
+        let arrow = |ret: TsExpr| TsExpr::Arrow {
+            params: Vec::new(),
+            is_async: false,
+            generics: Vec::new(),
+            return_type: None,
+            body: Box::new(TsArrowBody::Block(vec![TsStmt::return_stmt(
+                Some(ret),
+                None,
+            )])),
+        };
+        assert_eq!(arrow(num("1")), arrow(num("1")));
+        assert_ne!(arrow(num("1")), arrow(num("2")));
+    }
+
     #[test]
     fn verbatim_carries_its_own_span() {
         let span = Span::new(3, 8);

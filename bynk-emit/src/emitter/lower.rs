@@ -1076,10 +1076,11 @@ impl Pre {
         Pre(Vec::new())
     }
 
-    /// Lower `e`, absorbing whatever it hoists, and hand back its text. The
-    /// replacement for `lower_expr_into(e, stmts, cx)`: identical ordering —
-    /// the callee's statements land here, in order, at the point of the call —
-    /// but the callee never saw the buffer.
+    /// Lower `e`, absorbing whatever it hoists, and hand back its text. A named print boundary
+    /// (1A.35b): for the callers that assemble a foreign statement or a text template around the
+    /// expression (the driver's `lower_block_to_async_body`, a constant's cache initialiser, an
+    /// agent's state zero value, the migration step function). A caller that builds a node uses
+    /// [`Pre::lower_node`].
     pub(crate) fn lower(&mut self, e: &Expr, cx: &mut LowerCtx) -> String {
         bynk_ts::print_expr(&self.lower_node(e, cx))
     }
@@ -1129,7 +1130,8 @@ impl Pre {
     }
 
     /// The accumulated statements as text, for a caller that is writing them
-    /// into a text statement position rather than hoisting them further.
+    /// into a text statement position rather than hoisting them further. A named print boundary,
+    /// with [`Pre::lower`].
     pub(crate) fn stmts(&self) -> Vec<String> {
         self.0.iter().flat_map(stmt_lines).collect()
     }
