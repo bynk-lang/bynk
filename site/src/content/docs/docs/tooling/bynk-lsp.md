@@ -6,7 +6,8 @@ The Bynk language server, the `bynk-lsp` binary, a
 over **stdio**. Editors talk to it; most users reach it through the
 [VS Code extension](/docs/tooling/vscode-bynk/) rather than directly. See the
 [Set up editor support](/docs/editor-and-tooling/editor-support/) how-to for
-wiring it into an editor.
+wiring it into an editor, and [Set up Neovim, Helix or
+Zed](/docs/editor-and-tooling/other-editors/) for configs for those editors.
 
 Text is synchronised in full: on every change the whole document is re-sent
 (`TextDocumentSyncKind::FULL`), and the server holds the current buffer in

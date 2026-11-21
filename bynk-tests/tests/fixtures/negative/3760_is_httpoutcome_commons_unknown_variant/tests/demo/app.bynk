@@ -1,0 +1,9 @@
+suite demo.app as system {
+	// #3760: a wire call returns `HttpOutcome[Note]`, so `Created` is not one
+	// of its variants (it should be `Handled(Created(_))`), even though `Note`
+	// comes from a commons.
+	case "a wire call is matched against a handler result" {
+		let r <- api.POST("/notes", Wire("{\"text\": \"hi\"}")) by Visitor
+		expect r is Created(_)
+	}
+}

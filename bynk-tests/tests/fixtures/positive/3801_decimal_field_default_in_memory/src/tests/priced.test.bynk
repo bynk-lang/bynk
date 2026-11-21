@@ -1,0 +1,11 @@
+suite demo.priced {
+  // #3801: the omitted `Decimal` default is a decimal value, not its wire text.
+
+  case "arithmetic on the default price" {
+    expect total(mk("a")) == 2.25d
+  }
+
+  case "the default price is the declared decimal" {
+    expect mk("a").price == 1.50d
+  }
+}

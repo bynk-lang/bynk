@@ -123,7 +123,11 @@ are desktop-only.
 > names `bynkc-lsp`, change the command to `bynk-lsp` (for example
 > `cmd = { "bynk-lsp" }` in Neovim).
 
-Any editor with a generic LSP client can use `bynk-lsp`. Syntax highlighting is
+Any editor with a generic LSP client can use `bynk-lsp`: run the `bynk-lsp`
+command (it speaks stdio and takes no arguments) for `*.bynk` files, with
+`bynk.toml` as the project root marker. [Set up Neovim, Helix or
+Zed](/docs/editor-and-tooling/other-editors/) has a config for each of those
+editors. Syntax highlighting is
 also available through the [`tree-sitter-bynk`](/docs/tooling/tree-sitter-bynk/)
 grammar. A TOML language server that reads JSON Schemas (taplo, in Zed, Helix
 and others) checks `bynk.toml` once the file names the schema; see

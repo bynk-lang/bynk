@@ -461,12 +461,16 @@ mod system {
     mod runtime_helpers;
     #[path = "schema_lock_check_and_test_cli.rs"]
     mod schema_lock_check_and_test_cli;
+    #[path = "schema_lock_paths_note_behaviour.rs"]
+    mod schema_lock_paths_note_behaviour;
     #[path = "signature_auth.rs"]
     mod signature_auth;
     #[path = "signed_cookie_loop_workerd.rs"]
     mod signed_cookie_loop_workerd;
     #[path = "snapshot_behaviour.rs"]
     mod snapshot_behaviour;
+    #[path = "stale_workers_output_behaviour.rs"]
+    mod stale_workers_output_behaviour;
     #[path = "store_behaviour.rs"]
     mod store_behaviour;
     #[path = "storefront_example.rs"]

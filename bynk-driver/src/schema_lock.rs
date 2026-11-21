@@ -82,6 +82,60 @@ pub fn write(project_root: &Path, content: &str) -> io::Result<()> {
     write_named(project_root, LOCK_FILE, content)
 }
 
+/// [`write()`], then a note naming each agent whose entry the write gave
+/// `paths` it did not record before (#3749). ADR 0682 C fills them in on an
+/// unchanged build, once; saying so is what gets the filled lock committed,
+/// rather than rebuilt and dropped in every throwaway CI checkout.
+pub fn write_reporting(prog: &str, project_root: &Path, content: &str) -> io::Result<()> {
+    let existing = read(project_root).ok().flatten();
+    write(project_root, content)?;
+    let filled = agents_given_paths(project_root, existing.as_deref(), content);
+    if !filled.is_empty() {
+        crate::emsg!(
+            "{prog}: note: {LOCK_FILE}: recorded stored positions for {}; commit it",
+            filled.join(", ")
+        );
+    }
+    Ok(())
+}
+
+/// #3749: the agents (`<unit>.<Agent>`, sorted) whose current snapshot in
+/// `existing` holds a stored field with no recorded `paths` that `content`
+/// records them for. Empty when there is no earlier lock, or either side does
+/// not parse (the build has reported that already).
+pub fn agents_given_paths(
+    project_root: &Path,
+    existing: Option<&str>,
+    content: &str,
+) -> Vec<String> {
+    use bynk_project::schema_registry::parse;
+    let (Some(_), Ok(old), Ok(new)) = (
+        existing,
+        parse(existing, project_root),
+        parse(Some(content), project_root),
+    ) else {
+        return Vec::new();
+    };
+    old.agents()
+        .filter(|(key, entry)| {
+            let Some(before) = entry.current() else {
+                return false;
+            };
+            let Some(after) = new.get_agent(key).and_then(|e| e.shape(before.version)) else {
+                return false;
+            };
+            before.fields.iter().any(|f| {
+                f.paths.is_empty()
+                    && after
+                        .fields
+                        .iter()
+                        .any(|n| n.name == f.name && !n.paths.is_empty())
+            })
+        })
+        .map(|(key, _)| key.clone())
+        .collect()
+}
+
 /// [`write()`] for any lock file at the project root (#2554 writes
 /// `bynk.contracts.lock` with the same atomic discipline).
 pub(crate) fn write_named(project_root: &Path, file: &str, content: &str) -> io::Result<()> {

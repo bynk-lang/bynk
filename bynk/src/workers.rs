@@ -166,8 +166,11 @@ pub fn compile_once_reporting(
     // A write failure here is reported but does not fail the build — the
     // same non-fatal handling `schema_registry::write`'s own eprintln used
     // to give it when this lived inside `compile_project`.
+    // #3796: a dry run reconciles the lock in memory only; the project's
+    // committed lock changes when a real build does.
     if let Some(content) = &output.schema_lock
-        && let Err(e) = bynk_driver::schema_lock::write(project_root, content)
+        && !build.dry_run
+        && let Err(e) = bynk_driver::schema_lock::write_reporting("bynk", project_root, content)
     {
         emsg!(
             "bynk: could not write {}: {e}",
@@ -192,9 +195,17 @@ pub fn compile_once_reporting(
     // `--no-install` stops, naming the detected command.
     let mode = bynk_driver::npm_install::Mode::of(build.dry_run, build.no_install);
     let setting = bynk_driver::npm_install::configured_manager(project_root);
-    if let Err(e) = bynk_driver::npm_install::install_for_project(
+    // #3796: a dry run builds in a scratch directory; its report names where a
+    // real deploy installs.
+    let shown_dir = if build.dry_run {
+        project_root.join(".bynk").join("deploy")
+    } else {
+        build_dir.to_path_buf()
+    };
+    if let Err(e) = bynk_driver::npm_install::install_for_project_shown_as(
         project_root,
         build_dir,
+        &shown_dir,
         setting.as_deref(),
         mode,
     ) {
@@ -202,6 +213,33 @@ pub fn compile_once_reporting(
         return false;
     }
     true
+}
+
+/// #3796: where a `bynk deploy --dry-run` builds: a fresh directory under the
+/// system's temporary directory, removed when this is dropped, so previewing a
+/// deploy leaves the project as it found it.
+pub struct ScratchBuildDir(std::path::PathBuf);
+
+impl ScratchBuildDir {
+    pub fn new() -> std::io::Result<Self> {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_nanos());
+        let dir =
+            std::env::temp_dir().join(format!("bynk-deploy-plan-{}-{nanos}", std::process::id()));
+        std::fs::create_dir_all(&dir)?;
+        Ok(ScratchBuildDir(dir))
+    }
+
+    pub fn path(&self) -> &Path {
+        &self.0
+    }
+}
+
+impl Drop for ScratchBuildDir {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
 }
 
 /// Ensure `.bynk/` is gitignored on first build (cargo's `target/.gitignore`
