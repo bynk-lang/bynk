@@ -4398,7 +4398,7 @@ fn emit_lazy_field_spec(
         }
         let d = bynk_ts::print_expr(&serialisation::deserialise_expr(
             ty,
-            "(__w as unknown as __JsonValue)",
+            &persist_json_input(hist_id("__w")),
             path,
             &ctx.runtime_use,
         ));
@@ -4415,7 +4415,7 @@ fn emit_lazy_field_spec(
         };
         let d = bynk_ts::print_expr(&serialisation::deserialise_expr(
             k,
-            "(__k as unknown as __JsonValue)",
+            &persist_json_input(hist_id("__k")),
             path,
             &ctx.runtime_use,
         ));
@@ -6018,13 +6018,13 @@ fn persist_present(name: &str) -> bynk_ts::TsExpr {
     )
 }
 
-/// `<value> as unknown as __JsonValue`, in parentheses, printed as the text the
-/// boundary deserialiser takes for its input.
-fn persist_json_input(value: bynk_ts::TsExpr) -> String {
-    bynk_ts::print_expr(&bynk_ts::TsExpr::Paren(Box::new(persist_recast(
+/// `(<value> as unknown as __JsonValue)`: the value laundered to the JSON the boundary
+/// deserialiser takes as its input.
+fn persist_json_input(value: bynk_ts::TsExpr) -> bynk_ts::TsExpr {
+    bynk_ts::TsExpr::Paren(Box::new(persist_recast(
         value,
         bynk_ts::TsType::named("__JsonValue"),
-    ))))
+    )))
 }
 
 /// The decode's first two statements: `const __r = <decoded>;` and the throw on an `Err`
@@ -6193,9 +6193,7 @@ fn agent_state_checks_and_entries(
     // `JsonValue` before the boundary deserialiser decodes it.
     let ser =
         |ty: &TypeRef, value: &str| serialisation::serialise_text(ty, value, &ctx.runtime_use);
-    // 1A: `deserialise_expr` still takes its input as text (printed from a node by
-    // `persist_json_input`); the input moves onto `TsExpr` in 1A.38 (#3745).
-    let deser = |ty: &TypeRef, json: String, path: &str| {
+    let deser = |ty: &TypeRef, json: bynk_ts::TsExpr, path: &str| {
         serialisation::deserialise_expr(ty, &json, path, &ctx.runtime_use)
     };
     // `Cell[T]` — decode the field value as `T`.
@@ -6660,7 +6658,10 @@ fn emit_agent_state_persistence(
                 }
                 let d = bynk_ts::print_expr(&serialisation::deserialise_expr(
                     &old.type_ref,
-                    "(__ow as never)",
+                    &bynk_ts::TsExpr::Paren(Box::new(persist_cast(
+                        hist_id("__ow"),
+                        bynk_ts::TsType::named("never"),
+                    ))),
                     &old.name.name,
                     &ctx.runtime_use,
                 ));
@@ -10094,7 +10095,8 @@ fn emit_ws_dispatch_handlers(
                  codec-eligible"
             )
         });
-        let decode = serialisation::deserialise_expr(&in_type, "__json", "frame", runtime_use);
+        let decode =
+            serialisation::deserialise_expr(&in_type, &hist_id("__json"), "frame", runtime_use);
         let mut stmts = Vec::new();
         att_guard(&mut stmts);
         stmts.extend(host.rebuild.stmts());

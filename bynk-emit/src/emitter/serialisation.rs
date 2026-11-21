@@ -1531,10 +1531,7 @@ fn emit_record_codec(
 ) -> Vec<TsDecl> {
     // #2656: a record on a type cycle threads the nesting depth.
     let depth = depth_for(codecs, fn_suffix, true);
-    let mut serialise_params = vec![TsParam::new(
-        "value".to_string(),
-        Some(ts_type.clone()),
-    )];
+    let mut serialise_params = vec![TsParam::new("value".to_string(), Some(ts_type.clone()))];
     let mut serialise_body = Vec::new();
     if depth.is_some() {
         serialise_params.push(depth_param());
@@ -1845,10 +1842,7 @@ fn emit_sum_codec(
             }
         })
         .collect();
-    let mut serialise_params = vec![TsParam::new(
-        "value".to_string(),
-        Some(ts_type.clone()),
-    )];
+    let mut serialise_params = vec![TsParam::new("value".to_string(), Some(ts_type.clone()))];
     let mut serialise_body = Vec::new();
     if depth.is_some() {
         serialise_params.push(depth_param());
@@ -2034,7 +2028,13 @@ mod emit_sum_codec_tests {
                 },
             ],
         };
-        let decls = emit_sum_codec("Parcel", &TsType::named("Parcel"), &sum, &DepthCodecs::new(), &ru);
+        let decls = emit_sum_codec(
+            "Parcel",
+            &TsType::named("Parcel"),
+            &sum,
+            &DepthCodecs::new(),
+            &ru,
+        );
         assert_eq!(
             render_decls(decls),
             "export function __serialise_Parcel(value: Parcel): __JsonValue {\n  switch (value.tag) {\n    case \"Pending\":\n      return { kind: \"Pending\" };\n    case \"Shipped\": {\n      return { kind: \"Shipped\", tracking: value.tracking as __JsonValue, weight: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error(\"Int outside the safe-integer range at boundary\"); return v as __JsonValue; })(value.weight) };\n    }\n  }\n}\n\nexport function __deserialise_Parcel(json: __JsonValue, path: string = \"$\"): Result<Parcel, __BoundaryError> {\n  if (typeof json !== \"object\" || json === null || globalThis.Array.isArray(json)) {\n    return Err({ kind: \"StructuralMismatch\", path, expected: \"object\", actual: typeof json });\n  }\n  const obj = json as { [k: string]: __JsonValue };\n  const kind = obj[\"kind\"];\n  switch (kind) {\n    case \"Pending\":\n      return Ok({ tag: \"Pending\" } as Parcel);\n    case \"Shipped\": {\n      if (typeof obj[\"tracking\"] !== \"string\") {\n        return Err({ kind: \"StructuralMismatch\", path: `${path}.tracking`, expected: \"string\", actual: typeof obj[\"tracking\"] });\n      }\n      const __tracking = obj[\"tracking\"];\n      if (typeof obj[\"weight\"] !== \"number\") {\n        return Err({ kind: \"StructuralMismatch\", path: `${path}.weight`, expected: \"number\", actual: typeof obj[\"weight\"] });\n      }\n      if (!globalThis.Number.isSafeInteger(obj[\"weight\"])) {\n        return Err({ kind: \"StructuralMismatch\", path: `${path}.weight`, expected: \"safe integer\", actual: String(obj[\"weight\"]) });\n      }\n      const __weight = obj[\"weight\"];\n      return Ok({ tag: \"Shipped\", tracking: __tracking, weight: __weight } as Parcel);\n    }\n    default:\n      return Err({ kind: \"StructuralMismatch\", path, expected: \"sum variant kind\", actual: String(kind) });\n  }\n}\n"
@@ -2711,7 +2711,11 @@ pub fn deserialise_ref_via(t: &TypeRef, ns: &str, ru: &RuntimeUse) -> TsExpr {
             generics: Vec::new(),
             return_type: None,
             body: Box::new(TsArrowBody::Expr(Box::new(deserialise_expr_via(
-                other, "__j", "$", ns, ru,
+                other,
+                &ident("__j"),
+                "$",
+                ns,
+                ru,
             )))),
         },
     }
@@ -2849,7 +2853,7 @@ fn strip_effect(t: &TypeRef) -> &TypeRef {
 /// v0.22b: an expression-form deserialise call for a codec target. Named
 /// types and generic instantiations go through their (module-local)
 /// helpers; bases inline the structural check.
-pub(crate) fn deserialise_expr(t: &TypeRef, json: &str, path: &str, ru: &RuntimeUse) -> TsExpr {
+pub(crate) fn deserialise_expr(t: &TypeRef, json: &TsExpr, path: &str, ru: &RuntimeUse) -> TsExpr {
     deserialise_expr_via(t, json, path, "", ru)
 }
 
@@ -2864,7 +2868,7 @@ pub(crate) fn deserialise_expr(t: &TypeRef, json: &str, path: &str, ru: &Runtime
 /// and the runtime-owned error types.
 pub(crate) fn deserialise_expr_via(
     t: &TypeRef,
-    json: &str,
+    json: &TsExpr,
     path: &str,
     ns: &str,
     ru: &RuntimeUse,
@@ -2899,7 +2903,7 @@ pub(crate) fn deserialise_expr_via(
             call(
                 ident("Ok"),
                 vec![as_expr(
-                    as_expr(ident(json), TsType::named("unknown")),
+                    as_expr(json.clone(), TsType::named("unknown")),
                     TsType::named(ty.to_string()),
                 )],
             ),
@@ -2926,7 +2930,7 @@ pub(crate) fn deserialise_expr_via(
     match t {
         TypeRef::Named(id) => call(
             ident(format!("{ns}__deserialise_{}", id.name)),
-            vec![ident(json), str_lit(path)],
+            vec![json.clone(), str_lit(path)],
         ),
         TypeRef::Result(..)
         | TypeRef::Option(..)
@@ -2937,7 +2941,7 @@ pub(crate) fn deserialise_expr_via(
         // monomorphised codec (`deserialise_Paginated_User`).
         | TypeRef::App { .. } => call(
             ident(format!("{ns}__deserialise_{}", inner_ts_name(t))),
-            vec![ident(json), str_lit(path)],
+            vec![json.clone(), str_lit(path)],
         ),
         TypeRef::Effect(inner, _) => deserialise_expr_via(inner, json, path, ns, ru),
         // A `()` carries no wire content — the wire slot is `null` and the value
@@ -3053,7 +3057,7 @@ pub(crate) fn deserialise_expr_via(
                         )),
                     }))),
                 },
-                vec![ident(json)],
+                vec![json.clone()],
             )
         }
         TypeRef::Base(b, _) => {
@@ -3112,7 +3116,7 @@ pub(crate) fn deserialise_expr_via(
                             alternate: Box::new(structural_mismatch(expected, typeof_v())),
                         }))),
                     },
-                    vec![ident(json)],
+                    vec![json.clone()],
                 );
             };
             // The two failure modes are **not** the same error, and collapsing
@@ -3155,7 +3159,7 @@ pub(crate) fn deserialise_expr_via(
                         }),
                     }))),
                 },
-                vec![ident(json)],
+                vec![json.clone()],
             )
         }
         // Everything else is rejected by the checker's codec-domain rule (the
@@ -3185,7 +3189,7 @@ mod deserialise_expr_via_error_type_tests {
         let ru = RuntimeUse::default();
         let t = TypeRef::ValidationError(sp());
         assert_eq!(
-            bynk_ts::print_expr(&deserialise_expr(&t, "json", "path", &ru)),
+            bynk_ts::print_expr(&deserialise_expr(&t, &ident("json"), "path", &ru)),
             "Ok(json as unknown as ValidationError) as Result<ValidationError, __BoundaryError>"
         );
     }
@@ -3195,7 +3199,7 @@ mod deserialise_expr_via_error_type_tests {
         let ru = RuntimeUse::default();
         let t = TypeRef::DecodeError(sp());
         assert_eq!(
-            bynk_ts::print_expr(&deserialise_expr(&t, "json", "path", &ru)),
+            bynk_ts::print_expr(&deserialise_expr(&t, &ident("json"), "path", &ru)),
             "Ok(json as unknown as DecodeError) as Result<DecodeError, __BoundaryError>"
         );
     }
@@ -3205,7 +3209,7 @@ mod deserialise_expr_via_error_type_tests {
         let ru = RuntimeUse::default();
         let t = TypeRef::HttpResult(Box::new(TypeRef::Base(BaseType::Int, sp())), sp());
         assert_eq!(
-            bynk_ts::print_expr(&deserialise_expr(&t, "json", "path", &ru)),
+            bynk_ts::print_expr(&deserialise_expr(&t, &ident("json"), "path", &ru)),
             "Ok(json as unknown as HttpResult<number>) as Result<HttpResult<number>, __BoundaryError>"
         );
     }
@@ -3215,7 +3219,7 @@ mod deserialise_expr_via_error_type_tests {
         let ru = RuntimeUse::default();
         let t = TypeRef::QueueResult(sp());
         assert_eq!(
-            bynk_ts::print_expr(&deserialise_expr(&t, "json", "path", &ru)),
+            bynk_ts::print_expr(&deserialise_expr(&t, &ident("json"), "path", &ru)),
             "Ok(json as unknown as QueueResult) as Result<QueueResult, __BoundaryError>"
         );
     }
