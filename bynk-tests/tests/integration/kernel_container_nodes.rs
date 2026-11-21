@@ -110,43 +110,6 @@ fn the_container_kernels_print_as_nodes_with_no_text_exit() {
     );
 }
 
-/// The plain `Set.remove` is a comma-expression node now; forced to text (`force_text`), it is
-/// a text exit and prints today's bytes, while a keyed element type takes the helper node.
-#[test]
-fn the_plain_set_remove_stays_text() {
-    let _text = text_counters::force_text("Set.remove");
-    let src = r#"context ops.jobs
-
-fn drop_(s: Set[String], x: String) -> Set[String] { s.remove(x) }
-"#;
-    let (exits, text) = mem(src);
-    assert!(
-        exits > 0,
-        "the comma-expression arm is a text exit:\n{text}"
-    );
-    assert_line(
-        &text,
-        "return ((__s: globalThis.Set<string>) => (__s.delete(x), __s as ReadonlySet<string>))(new globalThis.Set<string>(s));",
-    );
-}
-
-/// A receiver that is still text keeps today's text form around the container kernel, with the
-/// receiver's own brackets, and the combinator's evaluation order is receiver then argument.
-#[test]
-fn a_text_receiver_falls_back_to_todays_text() {
-    let _text = text_counters::force_text("Set.remove");
-    let src = r#"context ops.jobs
-
-fn size_(s: Set[String], x: String) -> Int { s.remove(x).length() }
-"#;
-    let (exits, text) = mem(src);
-    assert!(exits > 0, "{text}");
-    assert_line(
-        &text,
-        "return (((__s: globalThis.Set<string>) => (__s.delete(x), __s as ReadonlySet<string>))(new globalThis.Set<string>(s))).size;",
-    );
-}
-
 /// 1A.30 review (nit): a receiver that is itself a node but not an identifier. A conditional
 /// receiver is bracketed under the member access, and the whole expression stays a node. The
 /// source's own parentheses lower to a `Paren` node and the printer brackets the conditional

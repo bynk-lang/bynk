@@ -67,14 +67,17 @@ use self::test_module::*;
 
 /// 1A.34: a checker fact a suite's lowering needed and did not find is a compiler fault, reported
 /// as a `bynk.internal.missing_checker_fact` diagnostic at the `.bynk` span (the case body's), and
-/// the module's output is not used. Read once the module has lowered.
-fn drain_internal_faults(errors: &mut Vec<CompileError>, runtime_use: &RuntimeUse) {
+/// the module's output is not used. Read once the module has lowered; the result says whether any
+/// fault was recorded, so the caller drops the module's output rather than stage it.
+fn drain_internal_faults(errors: &mut Vec<CompileError>, runtime_use: &RuntimeUse) -> bool {
+    let before = errors.len();
     errors.extend(
         runtime_use
             .take_faults()
             .into_iter()
             .map(bynk_emit::emitter::InternalFault::into_compile_error),
     );
+    errors.len() > before
 }
 
 /// P5.4: `test <target>` suite processing. The checking half (target/`stub`
@@ -212,7 +215,11 @@ pub(crate) fn process_tests(
             &runtime_use,
             tys,
         );
-        drain_internal_faults(errors, &runtime_use);
+        let emit_out = if drain_internal_faults(errors, &runtime_use) {
+            None
+        } else {
+            emit_out
+        };
         if let Some((path, program, source_map, runnable)) = emit_out {
             outputs.push(StagedFile {
                 output_path: path,
@@ -465,7 +472,11 @@ pub(crate) fn process_integration_tests(
             super::project_mentions_encode_plain(parsed),
             &runtime_use,
         );
-        drain_internal_faults(errors, &runtime_use);
+        let emitted = if drain_internal_faults(errors, &runtime_use) {
+            None
+        } else {
+            emitted
+        };
         if let Some((path, program, source_map, runnable)) = emitted {
             outputs.push(StagedFile {
                 output_path: path,

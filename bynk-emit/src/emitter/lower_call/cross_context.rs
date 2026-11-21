@@ -11,7 +11,7 @@ use bynk_check::kernel_op::{ListStatic, MapStatic, StaticOp};
 use bynk_ts::{TsExpr, TsType};
 
 use super::super::emit::{flatten_emit_ident_chain, test_scaffold_ns};
-use super::super::lower::{Built, LoweredExpr, Pre, node_or_text, text_value};
+use super::super::lower::{Built, Pre};
 use super::super::lower_ctx::LowerCtx;
 use super::super::lower_list::{call, id, member, paren};
 use super::super::{TypeBody, TypeDecl, UnaryOp, *};
@@ -35,11 +35,11 @@ pub(in crate::emitter) fn lower_cross_context_service_call(
     cx.note_cross_context_used(&consumed);
     Some(match cx.target() {
         BuildTarget::Bundle => {
-            let args_lowered: Vec<LoweredExpr> = args
+            let args_lowered: Vec<TsExpr> = args
                 .iter()
                 .enumerate()
                 .map(|(i, a)| {
-                    let lowered = pre.lower_node(a, cx);
+                    let lowered = pre.lower_ts(a, cx);
                     // #2042: every argument at a generic parameter
                     // that names a user type is cast, not only one
                     // holding a callee-typed part (#2039): a value the
@@ -56,14 +56,8 @@ pub(in crate::emitter) fn lower_cross_context_service_call(
                     )
                 })
                 .collect();
-            let service = node_or_text(
-                args_lowered,
-                |nodes| {
-                    let surface = member(member(id("deps"), "surface"), &key);
-                    call(member(surface, &method.name), nodes)
-                },
-                |texts| format!("deps.surface.{key}.{}({})", method.name, texts.join(", ")),
-            );
+            let surface = member(member(id("deps"), "surface"), &key);
+            let service = call(member(surface, &method.name), args_lowered);
             // #2825: the result takes the caller's declaration of a
             // same-named refined or opaque type, whose brand differs.
             return_cast(
@@ -72,7 +66,7 @@ pub(in crate::emitter) fn lower_cross_context_service_call(
                 &cx.commons().types,
                 cx.consumed_type_ns(),
                 method,
-                service.into(),
+                service,
                 cx.in_test_scaffold(),
             )
         }
@@ -241,11 +235,8 @@ pub(crate) fn lower_workers_cross_context_call(
         None => t.clone(),
     };
     let mut args_serialised: Vec<TsExpr> = Vec::new();
-    // Whether any argument is still text: the call is then printed and
-    // returned as text, with that argument spliced (1A.25, #3726).
-    let mut any_text = false;
     for (i, a) in args.iter().enumerate() {
-        let mut lowered = pre.lower_node(a, cx);
+        let mut lowered = pre.lower_ts(a, cx);
         let (_, param_ty) = &svc.params[i];
         let wire_ty = renamed(param_ty);
         // #2025, #2039: a literal in a cross-context argument (directly, or
@@ -285,14 +276,12 @@ pub(crate) fn lower_workers_cross_context_call(
                 cx.in_test_scaffold(),
             );
         }
-        let value = match lowered {
-            LoweredExpr::Node(node) => node,
-            LoweredExpr::Text(text) => {
-                any_text = true;
-                text_value(text)
-            }
-        };
-        args_serialised.push(serialise_expr_via(&wire_ty, &value, &ns, cx.runtime_use()));
+        args_serialised.push(serialise_expr_via(
+            &wire_ty,
+            &lowered,
+            &ns,
+            cx.runtime_use(),
+        ));
     }
     // Arc C, slice 29 (#1390): `args_json`, `deser_ref`, and the final call
     // itself now build a real `bynk_ts::TsExpr::Call`, printed through the
@@ -421,13 +410,7 @@ pub(crate) fn lower_workers_cross_context_call(
         ],
     };
     let target = format!("{consumed}.{}", method.name);
-    if any_text {
-        // 1A: an argument is still text, so the call prints as text.
-        let call = bynk_ts::print_expr(&call_expr);
-        Err(cx.trace_step("call", &target, call_start, call))
-    } else {
-        Ok(cx.trace_step_node("call", &target, call_start, call_expr))
-    }
+    Ok(cx.trace_step_node("call", &target, call_start, call_expr))
 }
 
 /// If `receiver` is a dotted chain or single ident that matches one of the
@@ -475,48 +458,30 @@ pub(crate) fn param_cast(
     info: &bynk_check::resolver::CrossContextInfo,
     method: &Ident,
     idx: usize,
-    arg: LoweredExpr,
+    arg: TsExpr,
     // Whether an argument at a generic parameter that names a user type is
     // cast too (the bundle path, #2039, #2042); the workers path casts only a
     // named parameter type, since its instantiation codecs are unbranded.
     cast_generic: bool,
     in_test_scaffold: bool,
-) -> LoweredExpr {
+) -> TsExpr {
     match param_cast_type(consumed, info, method, idx, cast_generic, in_test_scaffold) {
         Some(ty) => cast_through_unknown(arg, ty),
         None => arg,
     }
 }
 
-/// `(value as unknown as ty)`: the cast every boundary crossing takes. A node value builds
+/// `(value as unknown as ty)`: the cast every boundary crossing takes, built as
 /// `Paren(As(As(value, unknown), ty))` (the printer leaves the left-nested `As` unbracketed, so
-/// this prints `(value as unknown as ty)`); a text value keeps the same text.
-fn cast_through_unknown(value: LoweredExpr, ty: TsType) -> LoweredExpr {
-    let (operand, is_text) = match value {
-        LoweredExpr::Node(node) => (node, false),
-        LoweredExpr::Text(text) => (text_value(text), true),
-    };
-    let cast = paren(TsExpr::As {
+/// this prints `(value as unknown as ty)`).
+fn cast_through_unknown(value: TsExpr, ty: TsType) -> TsExpr {
+    paren(TsExpr::As {
         expr: Box::new(TsExpr::As {
-            expr: Box::new(operand),
+            expr: Box::new(value),
             ty: TsType::named("unknown"),
         }),
         ty,
-    });
-    if is_text {
-        // 1A: the operand is still text, so the cast prints as text.
-        LoweredExpr::Text(bynk_ts::print_expr(&cast))
-    } else {
-        LoweredExpr::Node(cast)
-    }
-}
-
-/// A bridge value as a [`Built`]: the node, else its text.
-fn built(value: LoweredExpr) -> Built {
-    match value {
-        LoweredExpr::Node(node) => Ok(node),
-        LoweredExpr::Text(text) => Err(text),
-    }
+    })
 }
 
 /// The type [`param_cast`] casts argument `idx` to, or `None` when it takes no cast.
@@ -663,7 +628,7 @@ pub(crate) fn return_cast(
     caller_types: &HashMap<String, Arc<TypeDecl>>,
     consumed_type_ns: &HashMap<String, String>,
     method: &Ident,
-    call: LoweredExpr,
+    call: TsExpr,
     in_test_scaffold: bool,
 ) -> Built {
     let Some(service) = info
@@ -671,14 +636,14 @@ pub(crate) fn return_cast(
         .get(consumed)
         .and_then(|svcs| svcs.get(&method.name))
     else {
-        return built(call);
+        return Ok(call);
     };
     let return_type = unalias_type_ref(info, consumed, &service.return_type);
     let consumed_type_ns = &consumed_type_ns_unaliased(info, consumed, consumed_type_ns);
     let mut names = HashSet::new();
     type_ref_names(&return_type, &mut names);
     if !reaches_brand(&names, caller_types, consumed_type_ns) {
-        return built(call);
+        return Ok(call);
     }
     let ns_of = |owner: &str| {
         if in_test_scaffold {
@@ -704,7 +669,7 @@ pub(crate) fn return_cast(
         })
         .collect();
     let ty = crate::emitter::ts_types::ts_type_ref_qualified_multi_ts_type(&return_type, &type_ns);
-    built(cast_through_unknown(call, ty))
+    Ok(cast_through_unknown(call, ty))
 }
 
 /// #2828: whether any of `names`, or a type their caller-bound declarations
@@ -892,15 +857,13 @@ mod tests {
         );
     }
 
-    /// A node operand builds `Paren(As(As(..)))`; a text operand prints the same bytes as text.
+    /// The cast builds `Paren(As(As(..)))`, which prints as one bracketed double cast.
     #[test]
-    fn the_cast_prints_the_same_bytes_as_a_node_and_as_text() {
-        let ty = || TsType::named("shop_pay.Money");
-        let node = cast_through_unknown(LoweredExpr::Node(id("total")), ty());
-        let text = cast_through_unknown(LoweredExpr::Text("total".to_string()), ty());
-        let expected = "(total as unknown as shop_pay.Money)";
-        assert!(matches!(&node, LoweredExpr::Node(_)));
-        assert_eq!(node.into_text(), expected);
-        assert!(matches!(&text, LoweredExpr::Text(t) if t == expected));
+    fn the_cast_is_one_bracketed_double_cast() {
+        let cast = cast_through_unknown(id("total"), TsType::named("shop_pay.Money"));
+        assert_eq!(
+            bynk_ts::print_expr(&cast),
+            "(total as unknown as shop_pay.Money)"
+        );
     }
 }

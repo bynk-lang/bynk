@@ -12,7 +12,7 @@ use bynk_ts::{
 };
 
 use super::internal_fault::FaultSite;
-use super::lower::{Built, Pre, decimal_lit, ident_node, node_or_text, num_lit};
+use super::lower::{Built, LoweredExpr, Pre, decimal_lit, ident_node, node_or_text, num_lit};
 use super::lower_ctx::LowerCtx;
 use super::ts_types::{TyRender, ts_ty, ts_ty_to_ts_type};
 use super::{BaseType, Expr};
@@ -60,6 +60,12 @@ struct ListArm<'a> {
 // ---- Node builders shared by the arms and, by design, the sibling kernels ----
 
 /// The `N` children of an `N`-child builder, in order.
+/// The nodes of lowered children, for a plain constructor (1A.35a part C, temporary: removed with
+/// the `Text` bridge in 1A.35b). A child that is not a node is a compiler fault, reported at `site`.
+pub(super) fn nodes_of(children: Vec<LoweredExpr>, site: FaultSite<'_>) -> Vec<TsExpr> {
+    children.into_iter().map(|c| c.into_node(site)).collect()
+}
+
 pub(super) fn take<const N: usize, T>(children: Vec<T>) -> [T; N] {
     children
         .try_into()
@@ -1368,8 +1374,6 @@ fn list_sum(a: &ListArm, key: &Expr, pre: &mut Pre, cx: &mut LowerCtx) -> Built 
 }
 
 fn list_min_max(a: &ListArm, op: ListOp, key: &Expr, pre: &mut Pre, cx: &mut LowerCtx) -> Built {
-    let xs_ts = &a.xs_ts;
-    let cmp = if op == ListOp::Min { "<" } else { ">" };
     let cmp_op = if op == ListOp::Min {
         TsBinaryOp::LessThan
     } else {
@@ -1378,10 +1382,9 @@ fn list_min_max(a: &ListArm, op: ListOp, key: &Expr, pre: &mut Pre, cx: &mut Low
     let key_cmp = kernel_key_comparator(&a.args[0], cx);
     let recv = pre.lower_node(a.receiver, cx);
     let key = pre.lower_node(key, cx);
-    node_or_text(
-        vec![recv, key],
-        |n| {
-            let [recv, key] = take(n);
+    let [recv, key] = take(nodes_of(vec![recv, key], cx.fault_site(a.e.span)));
+    Ok({
+        {
             // The kernel over `__xs`, ordering by `better(__k, __m)`.
             let kernel = |better: &dyn Fn() -> TsExpr| {
                 let take_key = TsStmt::if_stmt(better(), assign(id("__m"), id("__k")), None);
@@ -1418,21 +1421,8 @@ fn list_min_max(a: &ListArm, op: ListOp, key: &Expr, pre: &mut Pre, cx: &mut Low
                     )
                 }),
             }
-        },
-        |t| {
-            let [recv, key] = take(t);
-            match &key_cmp {
-                None => format!(
-                    "((__xs: {xs_ts}) => {{ if (__xs.length === 0) return None; let __m = ({key})(__xs[0]); for (const __x of __xs) {{ const __k = ({key})(__x); if (__k {cmp} __m) __m = __k; }} return Some(__m); }})({recv})"
-                ),
-                Some(key_cmp) => with_comparator(key_cmp, |c| {
-                    format!(
-                        "((__xs: {xs_ts}) => {{ if (__xs.length === 0) return None; let __m = ({key})(__xs[0]); for (const __x of __xs) {{ const __k = ({key})(__x); if ({c}(__k, __m) {cmp} 0) __m = __k; }} return Some(__m); }})({recv})"
-                    )
-                }),
-            }
-        },
-    )
+        }
+    })
 }
 
 fn list_average(a: &ListArm, key: &Expr, pre: &mut Pre, cx: &mut LowerCtx) -> Built {
@@ -1841,20 +1831,5 @@ pub(super) fn with_comparator_node(cmp: &TsExpr, body: impl FnOnce(TsExpr) -> Ts
             arrow(vec![param("__c", None)], body(id("__c"))),
             vec![cmp.clone()],
         ),
-    }
-}
-
-/// Bind comparator expression `cmp` as `__c` around `body`. A bare identifier (a
-/// runtime comparator or an in-scope witness) is substituted directly; a built
-/// comparator is evaluated once, outside the loop that calls it.
-///
-/// 1A: `body` builds text for the `Query` kernel, which stays text until its own
-/// slice; the list kernel's arms use [`with_comparator_node`]. `cmp` is matched
-/// as the node it is.
-pub(super) fn with_comparator(cmp: &TsExpr, body: impl FnOnce(&str) -> String) -> String {
-    if bare_comparator(cmp).is_some() {
-        body(&bynk_ts::print_expr(cmp))
-    } else {
-        format!("((__c) => {})({})", body("__c"), bynk_ts::print_expr(cmp))
     }
 }

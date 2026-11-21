@@ -128,7 +128,7 @@ mod tests {
     use bynk_check::checker::{Callee, TypedCommons, certify};
     use bynk_check::kernel_op::{KernelOp, OptionOp};
 
-    const SOURCE: &str = "commons demo\n\ntype P = { n: Int = 1 }\n\nfn total(xs: List[Int]) -> Int { xs.fold(0, (a, b) => a + b) }\n\nfn make() -> P { P { } }\n";
+    const SOURCE: &str = "commons demo\n\ntype P = { n: Int = 1 }\n\nfn total(xs: List[Int]) -> Int { xs.fold(0, (a, b) => a + b) }\n\nfn make() -> P { P { } }\n\nfn P.size(self) -> Int { self.n }\n\nfn probe(p: P) -> Int { p.size() }\n";
 
     /// Check `SOURCE`, let `mutate` take a fact out, certify and emit. The faults, in order.
     fn faults_after(mutate: impl FnOnce(&mut TypedCommons)) -> (String, Vec<InternalFault>) {
@@ -202,6 +202,48 @@ mod tests {
             faults[0]
                 .what
                 .contains("receiver type matching the resolved kernel op"),
+            "{faults:?}"
+        );
+    }
+
+    /// 1A.35a part C: an instance call whose receiver has no recorded type has no namespace to
+    /// call into, which used to lower to a `/* unknown */` placeholder; it is a fault now.
+    #[test]
+    fn a_receiver_with_no_namespace_is_recorded_at_the_receiver() {
+        let (_, faults) = faults_after(|typed| {
+            let at = SOURCE.find("p.size()").unwrap();
+            let receiver = typed
+                .expr_types
+                .iter()
+                .find(|(_, te)| te.span == Span::new(at, at + 1))
+                .map(|(id, _)| *id)
+                .expect("the receiver is typed");
+            typed.expr_types.remove(&receiver);
+        });
+        assert!(
+            faults
+                .iter()
+                .any(|f| f.what.contains("receiver namespace for an instance call")),
+            "{faults:?}"
+        );
+    }
+
+    /// 1A.35a part C: nothing in lowering builds text any more, so a value that reaches lowering
+    /// as text (only the text-fallback hook can make one) is a fault at its statement, never
+    /// text in the output.
+    #[test]
+    fn text_that_reaches_a_statement_is_a_fault_not_text() {
+        let _text = crate::emitter::lower::force_text::arm("Set.remove");
+        let source =
+            "commons t\n\nfn f(x: Set[String], y: String) -> Set[String] { x.remove(y) }\n";
+        let (typed, warnings) =
+            crate::check_single_typed(source, crate::SingleFileMode::Build).expect("checks");
+        let program = certify(typed, warnings).expect("certifies");
+        let faults = crate::emitter::emit(&program).expect_err("a text value is a fault");
+        assert!(
+            faults
+                .iter()
+                .any(|f| f.what.contains("reached lowering as text")),
             "{faults:?}"
         );
     }

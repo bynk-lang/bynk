@@ -955,45 +955,6 @@ mod tests {
         );
     }
 
-    /// A text receiver or argument falls back to today's text byte for byte, with the text form's
-    /// bracketing.
-    #[test]
-    fn a_text_operand_falls_back_to_todays_text() {
-        // The plain `Set.remove` forced to text (see `force_text`).
-        let _text = crate::emitter::lower::force_text::arm("Set.remove");
-        let removed = "((__s: globalThis.Set<string>) => (__s.delete(x), __s as ReadonlySet<string>))(new globalThis.Set<string>(s))";
-        for (body, want) in [
-            ("Int { s.remove(x).length() }", format!("({removed}).size")),
-            (
-                "Bool { s.remove(x).contains(x) }",
-                format!("({removed}).has(x)"),
-            ),
-            (
-                "Set[String] { s.remove(x).insert(x) }",
-                format!("(new globalThis.Set<string>({removed}).add(x) as ReadonlySet<string>)"),
-            ),
-            (
-                "List[String] { s.remove(x).toList() }",
-                format!("([...({removed})] as readonly string[])"),
-            ),
-        ] {
-            let (n, ts) = exits("(s: Set[String], x: String)", body);
-            assert_eq!(returned(&ts), want, "{body}");
-            assert!(n > 0, "{body}: expected a text exit\n{ts}");
-        }
-        let (n, ts) = exits(
-            "(s: Set[String], x: String, o: Option[Set[String]])",
-            "Set[String] { o.getOrElse(s.remove(x)) }",
-        );
-        assert_eq!(
-            returned(&ts),
-            format!(
-                "((__o: Option<ReadonlySet<string>>, __d: ReadonlySet<string>) => __o.tag === \"Some\" ? __o.value : __d)(o, {removed})"
-            )
-        );
-        assert!(n > 0, "{ts}");
-    }
-
     /// The receiver is lowered before the argument, as before: a `?` in each hoists in that order.
     #[test]
     fn the_receiver_is_lowered_before_the_argument() {

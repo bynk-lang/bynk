@@ -376,8 +376,8 @@ pub(in crate::emitter) fn lower_scalar_static_call(
         return Some(set_of(plain, ts_ty_to_ts_type(t, tys), xs));
     }
     // v0.22b: the typed JSON codec (ADR 0045).
-    // 1A: the codec's decoders and encoders are their own family (1A.21); it
-    // stays as it is, and a node it returns passes through.
+    // The codec's decoders and encoders are their own family (1A.21), and a node they return
+    // passes through.
     if let Some(built) = lower_json_codec_call(e, receiver, args, cx, pre) {
         return Some(built);
     }
@@ -728,7 +728,7 @@ mod tests {
     /// goes through `__bynkSetOf`, which is imported on both the node and the
     /// text path.
     #[test]
-    fn set_of_notes_its_key_helper_on_both_paths() {
+    fn set_of_notes_its_key_helper_only_for_a_non_plain_key() {
         let (n, ts) = exits("fn f(xs: List[Int]) -> Set[Int] { Set.of(xs) }");
         assert_eq!(returned(&ts), "new globalThis.Set<number>(xs)");
         assert_eq!(n, 0, "{ts}");
@@ -738,97 +738,6 @@ mod tests {
         assert_eq!(returned(&ts), "__bynkSetOf<globalThis.Uint8Array>(xs)");
         assert_eq!(n, 0, "{ts}");
         assert!(ts.contains("__bynkSetOf"), "{ts}");
-
-        // A text argument falls back to today's text, with the import still noted.
-        let text_list = |elem: &str| {
-            let (n, ts) = exits(&format!(
-                "fn f(p: String, c: {elem}) -> List[{elem}] {{ p.splitRegex(\",\").map((x) => c) }}"
-            ));
-            assert!(n > 0, "{ts}");
-            returned(&ts)
-        };
-        let (n, ts) = exits(
-            "fn f(p: String, c: Bytes) -> Set[Bytes] { Set.of(p.splitRegex(\",\").map((x) => c)) }",
-        );
-        assert_eq!(
-            returned(&ts),
-            format!("__bynkSetOf<globalThis.Uint8Array>({})", text_list("Bytes"))
-        );
-        assert!(n > 0, "{ts}");
-        assert!(ts.contains("__bynkSetOf"), "{ts}");
-        let (_, ts) = exits(
-            "fn f(p: String, c: Int) -> Set[Int] { Set.of(p.splitRegex(\",\").map((x) => c)) }",
-        );
-        assert_eq!(
-            returned(&ts),
-            format!("new globalThis.Set<number>({})", text_list("Int"))
-        );
-    }
-
-    /// The source of a `String` that is still text: `String.splitRegex`'s arm is a statement block,
-    /// so the `List` kernel over it is text too (1A.30 moved the `Option` kernels to nodes).
-    const TEXT_STRING: &str = "p.splitRegex(\",\").map((x) => \"\").firstOrElse(\"\")";
-
-    /// `p.splitRegex(",")` as printed.
-    fn split_text() -> String {
-        let (n, ts) = exits("fn f(p: String) -> List[String] { p.splitRegex(\",\") }");
-        assert!(n > 0, "{ts}");
-        returned(&ts)
-    }
-
-    /// [`TEXT_STRING`] as printed.
-    fn text_arg() -> String {
-        let (n, ts) = exits(&format!("fn f(p: String) -> String {{ {TEXT_STRING} }}"));
-        assert!(n > 0, "{ts}");
-        returned(&ts)
-    }
-
-    /// A static over a text argument (a `splitRegex` list is still text) falls
-    /// back to today's text, byte for byte.
-    #[test]
-    fn a_text_argument_keeps_the_text_form() {
-        let int_parse = parse_text(
-            INT_RE,
-            "globalThis.Number(__s) + 0",
-            "globalThis.Number.isSafeInteger(__n)",
-            &text_arg(),
-        );
-        let float_parse = parse_text(
-            FLOAT_RE,
-            "globalThis.Number(__s)",
-            "globalThis.Number.isFinite(__n)",
-            &text_arg(),
-        );
-        for (body, want) in [
-            (
-                "fn f(p: String) -> Option[Int] { Int.parse(p.splitRegex(\",\").map((x) => \"\").firstOrElse(\"\")) }",
-                int_parse,
-            ),
-            (
-                "fn f(p: String) -> Option[Float] { Float.parse(p.splitRegex(\",\").map((x) => \"\").firstOrElse(\"\")) }",
-                float_parse,
-            ),
-            (
-                "fn f(p: String) -> Option[Instant] { Instant.fromIso(p.splitRegex(\",\").map((x) => \"\").firstOrElse(\"\")) }",
-                format!("__bynkInstantFromIso({})", text_arg()),
-            ),
-            (
-                "fn f(p: String) -> Bytes { Bytes.fromUtf8(p.splitRegex(\",\").map((x) => \"\").firstOrElse(\"\")) }",
-                format!("new globalThis.TextEncoder().encode({})", text_arg()),
-            ),
-            (
-                "fn f(p: String) -> Option[Decimal] { Decimal.parse(p.splitRegex(\",\").map((x) => \"\").firstOrElse(\"\")) }",
-                format!("__bynkDecimalParse({})", text_arg()),
-            ),
-            (
-                "fn f(p: String) -> Duration { Duration.millis(p.splitRegex(\",\").length()) }",
-                format!("(({}).length)", split_text()),
-            ),
-        ] {
-            let (n, ts) = exits(body);
-            assert_eq!(returned(&ts), want, "{body}");
-            assert!(n > 0, "{body}: a text argument is a text exit\n{ts}");
-        }
     }
 
     /// The identity statics keep the hoists of their argument: the `?` temporary
@@ -857,7 +766,7 @@ mod tests {
     }
 
     /// A static on a declared type: with and without explicit type arguments,
-    /// with a witness, and over a text argument.
+    /// and with a witness.
     #[test]
     fn type_statics_print_with_type_arguments_and_witnesses() {
         let box_ = "type Box[T] = { value: T }\n\
@@ -878,11 +787,6 @@ mod tests {
             assert_eq!(returned(&ts), want, "{f}");
             assert_eq!(n, 0, "{f}: text exits\n{ts}");
         }
-        let (n, ts) = exits(&format!(
-            "{box_}fn f(p: String) -> Box[Int] {{ Box.of(p.splitRegex(\",\").length()) }}"
-        ));
-        assert_eq!(returned(&ts), format!("Box.of(({}).length)", split_text()));
-        assert!(n > 0, "{ts}");
         // A comparator witness follows the arguments.
         let (n, ts) = exits(
             "type Sorted[T: Ord] = { items: List[T] }\n\

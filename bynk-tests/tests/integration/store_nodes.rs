@@ -166,42 +166,6 @@ agent Bag {
 }
 ";
 
-const TEXT_ARGS: &str = "context fall
-
-capability Clock {
-  fn now() -> Effect[Instant]
-}
-
-provides Clock = SystemClock {
-  fn now() -> Effect[Instant] {
-    Instant.fromEpochMillis(0)
-  }
-}
-
-type Hit = { sku: String, qty: Int }
-type Frame = { text: String }
-
-agent Fall {
-  key id: String
-  store items: Map[String, Int]
-  store tags: Set[String]
-  store seen: Cache[String, Int] @ttl(5.minutes)
-  store history: Log[Hit] @retain(30.days)
-  store n: Cell[Int] = 0
-  store conns: Map[String, Connection[Frame]]
-
-  on call mapPut(k: String) -> Effect[()] { let _ <- items.put(k.splitRegex(\",\").firstOrElse(k), 1)\n Effect.pure(()) }
-  on call mapGet(k: String) -> Effect[Option[Int]] { items.get(k.splitRegex(\",\").firstOrElse(\"\")) }
-  on call setAdd(k: String) -> Effect[()] { let _ <- tags.add(k.splitRegex(\",\").firstOrElse(k))\n Effect.pure(()) }
-  on call cachePut(k: String) -> Effect[()] given Clock { let _ <- seen.put(k.splitRegex(\",\").firstOrElse(k), 1)\n Effect.pure(()) }
-  on call logAppend(k: String) -> Effect[()] given Clock { let _ <- history.append(Hit { sku: k.splitRegex(\",\").firstOrElse(k), qty: 1 })\n Effect.pure(()) }
-  on call logSince(t: Instant, k: String) -> Effect[Int] { history.since(t).filter((h) => h.sku == k.splitRegex(\",\").firstOrElse(k)).count() }
-  on call cellUpdate(k: String) -> Effect[()] { let _ <- n.update((c) => c + k.splitRegex(\",\").firstOrElse(k).length())\n Effect.pure(()) }
-  on call join(k: String, conn: Connection[Frame]) -> Effect[()] { let _ <- conns.put(k.splitRegex(\",\").firstOrElse(k), conn)\n () }
-  on call leave(k: String) -> Effect[()] { let _ <- conns.remove(k.splitRegex(\",\").firstOrElse(k))\n () }
-}
-";
-
 /// Every source, with how it is emitted: its name in the cases file, the files, the target and
 /// the module the handlers land in.
 fn sources() -> Vec<(
@@ -241,20 +205,6 @@ fn sources() -> Vec<(
             "shop.ts",
         ),
         ("par_bundle", "par.bynk", PAR, BuildTarget::Bundle, "par.ts"),
-        (
-            "fall_bundle",
-            "fall.bynk",
-            TEXT_ARGS,
-            BuildTarget::Bundle,
-            "fall.ts",
-        ),
-        (
-            "fall_workers",
-            "fall.bynk",
-            TEXT_ARGS,
-            BuildTarget::Workers,
-            "fall/handlers.ts",
-        ),
     ]
 }
 
@@ -285,7 +235,6 @@ fn cases() -> Vec<(&'static str, &'static str, &'static str)> {
 
 #[test]
 fn every_store_operation_prints_as_pinned() {
-    let _text = text_counters::force_text("splitRegex");
     let mut checked = 0;
     for (src, file, text, target, module) in sources() {
         let (exits, emitted) = emit(&[(file, text)], target, module);
@@ -295,60 +244,12 @@ fn every_store_operation_prints_as_pinned() {
                 checked += 1;
             }
         }
-        // The identifier-argument sources are nodes from end to end; the fallback source
-        // keeps text where an argument is text.
-        if src.starts_with("fall") {
-            assert!(exits > 0, "{src}: the text arguments exit as text");
-        } else if src.starts_with("room") || src == "agents" {
+        // The sources are nodes from end to end.
+        if src.starts_with("room") || src == "agents" {
             assert_eq!(exits, 0, "{src}: no store operation left as text");
         }
     }
     assert_eq!(checked, cases().len(), "every pinned case was read");
-}
-
-#[test]
-fn a_text_argument_falls_back_to_the_one_line_text_byte_for_byte() {
-    let _text = text_counters::force_text("splitRegex");
-    // Each arm, over an argument that is still text: the one-line IIFE the arm printed before.
-    let (_, bundle) = emit(&[("fall.bynk", TEXT_ARGS)], BuildTarget::Bundle, "fall.ts");
-    for (name, want) in [
-        (
-            "mapPut",
-            "const __r0 = await (async () => { await __state.items.put(String(((__xs: readonly string[], __d: string) => __xs.length > 0 ? __xs[0] : __d)(((__s: string, __r: globalThis.RegExp): readonly string[] => { if (__s.length === 0) { return __r.exec(__s) === null ? [\"\"] : []; } const __out: string[] = []; let __p = 0; let __q = 0; while (__q < __s.length) { __r.lastIndex = __q; const __hit = __r.exec(__s); const __e = __r.lastIndex; if (__hit === null || __e === __p) { __q++; } else { __out.push(__s.slice(__p, __q)); __p = __e; __q = __p; } } __out.push(__s.slice(__p)); return __out; })(k, new globalThis.RegExp(\",\", \"y\")), k)), 1); return undefined; })();",
-        ),
-        (
-            "setAdd",
-            "const __r0 = await (async () => { await __state.tags.add(String(((__xs: readonly string[], __d: string) => __xs.length > 0 ? __xs[0] : __d)(((__s: string, __r: globalThis.RegExp): readonly string[] => { if (__s.length === 0) { return __r.exec(__s) === null ? [\"\"] : []; } const __out: string[] = []; let __p = 0; let __q = 0; while (__q < __s.length) { __r.lastIndex = __q; const __hit = __r.exec(__s); const __e = __r.lastIndex; if (__hit === null || __e === __p) { __q++; } else { __out.push(__s.slice(__p, __q)); __p = __e; __q = __p; } } __out.push(__s.slice(__p)); return __out; })(k, new globalThis.RegExp(\",\", \"y\")), k))); return undefined; })();",
-        ),
-        (
-            "cachePut",
-            "const __r0 = await (async () => { const __now = __noteClock(__state, await deps.Clock.now()); await __state.seen.put(String(((__xs: readonly string[], __d: string) => __xs.length > 0 ? __xs[0] : __d)(((__s: string, __r: globalThis.RegExp): readonly string[] => { if (__s.length === 0) { return __r.exec(__s) === null ? [\"\"] : []; } const __out: string[] = []; let __p = 0; let __q = 0; while (__q < __s.length) { __r.lastIndex = __q; const __hit = __r.exec(__s); const __e = __r.lastIndex; if (__hit === null || __e === __p) { __q++; } else { __out.push(__s.slice(__p, __q)); __p = __e; __q = __p; } } __out.push(__s.slice(__p)); return __out; })(k, new globalThis.RegExp(\",\", \"y\")), k)), { v: 1, exp: __now + 300000 }); return undefined; })();",
-        ),
-        (
-            "logAppend",
-            "const __r0 = await (async () => { const __now = await deps.Clock.now(); await __state.history.append({ sku: ((__xs: readonly string[], __d: string) => __xs.length > 0 ? __xs[0] : __d)(((__s: string, __r: globalThis.RegExp): readonly string[] => { if (__s.length === 0) { return __r.exec(__s) === null ? [\"\"] : []; } const __out: string[] = []; let __p = 0; let __q = 0; while (__q < __s.length) { __r.lastIndex = __q; const __hit = __r.exec(__s); const __e = __r.lastIndex; if (__hit === null || __e === __p) { __q++; } else { __out.push(__s.slice(__p, __q)); __p = __e; __q = __p; } } __out.push(__s.slice(__p)); return __out; })(k, new globalThis.RegExp(\",\", \"y\")), k), qty: 1 }, __now); await __state.history.prune(__now - 2592000000); return undefined; })();",
-        ),
-        (
-            "cellUpdate",
-            "const __r0 = await (() => { __state.n = ((c: number) => c + (((__xs: readonly string[], __d: string) => __xs.length > 0 ? __xs[0] : __d)(((__s: string, __r: globalThis.RegExp): readonly string[] => { if (__s.length === 0) { return __r.exec(__s) === null ? [\"\"] : []; } const __out: string[] = []; let __p = 0; let __q = 0; while (__q < __s.length) { __r.lastIndex = __q; const __hit = __r.exec(__s); const __e = __r.lastIndex; if (__hit === null || __e === __p) { __q++; } else { __out.push(__s.slice(__p, __q)); __p = __e; __q = __p; } } __out.push(__s.slice(__p)); return __out; })(k, new globalThis.RegExp(\",\", \"y\")), k)).length)(__state.n); return undefined; })();",
-        ),
-    ] {
-        assert!(
-            handler(&bundle, name).contains(want),
-            "{name}:\n{}",
-            handler(&bundle, name)
-        );
-    }
-    // The held `Map` on Workers.
-    let (_, workers) = emit(
-        &[("fall.bynk", TEXT_ARGS)],
-        BuildTarget::Workers,
-        "fall/handlers.ts",
-    );
-    assert!(handler(&workers, "join").contains(
-        "(async () => { const __k = String(((__xs: readonly string[], __d: string) => __xs.length > 0 ? __xs[0] : __d)(((__s: string, __r: globalThis.RegExp): readonly string[] => { if (__s.length === 0) { return __r.exec(__s) === null ? [\"\"] : []; } const __out: string[] = []; let __p = 0; let __q = 0; while (__q < __s.length) { __r.lastIndex = __q; const __hit = __r.exec(__s); const __e = __r.lastIndex; if (__hit === null || __e === __p) { __q++; } else { __out.push(__s.slice(__p, __q)); __p = __e; __q = __p; } } __out.push(__s.slice(__p)); return __out; })(k, new globalThis.RegExp(\",\", \"y\")), k)); const __new = __connIdOf(conn);"
-    ));
-    assert!(handler(&workers, "leave").contains("(async () => { const __k = String(((__xs: readonly string[], __d: string) => __xs.length > 0 ? __xs[0] : __d)(((__s: string, __r: globalThis.RegExp): readonly string[] => { if (__s.length === 0) { return __r.exec(__s) === null ? [\"\"] : []; } const __out: string[] = []; let __p = 0; let __q = 0; while (__q < __s.length) { __r.lastIndex = __q; const __hit = __r.exec(__s); const __e = __r.lastIndex; if (__hit === null || __e === __p) { __q++; } else { __out.push(__s.slice(__p, __q)); __p = __e; __q = __p; } } __out.push(__s.slice(__p)); return __out; })(k, new globalThis.RegExp(\",\", \"y\")), k)); const __cid = await __state.conns.get(__k);"));
 }
 
 #[test]
