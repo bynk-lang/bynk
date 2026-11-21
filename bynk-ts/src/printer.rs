@@ -2678,6 +2678,11 @@ fn render_type(out: &mut String, ty: &TsType) {
         TsType::Indexed { object, index } => render_indexed_type(out, object, index),
         TsType::StringLiteral(text) => render_lit(out, &TsLit::Str(text.clone())),
         TsType::NumberLiteral(n) => out.push_str(&n.to_string()),
+        TsType::Paren(inner) => {
+            out.push('(');
+            render_type(out, inner);
+            out.push(')');
+        }
     }
 }
 
@@ -3169,6 +3174,7 @@ fn type_admits_undefined(ty: &TsType) -> bool {
         | TsType::Indexed { .. }
         | TsType::StringLiteral(_)
         | TsType::NumberLiteral(_) => false,
+        TsType::Paren(inner) => type_admits_undefined(inner),
     }
 }
 
@@ -3193,6 +3199,11 @@ fn render_params(out: &mut String, params: &[TsParam]) {
             }
             None => out.push_str(&p.name),
         }
+        debug_assert!(
+            !(p.optional && p.default.is_some()),
+            "render_params: a parameter cannot be optional and have a default (`{}?: T = v` is not valid TypeScript)",
+            p.name
+        );
         if p.optional {
             out.push('?');
         }
@@ -4898,6 +4909,37 @@ mod tests {
             )),
             "(A | B)[K]"
         );
+    }
+
+    /// `TsType::Paren` always prints its parentheses, around whatever it holds (the thunk
+    /// type a `Query` annotation is written as), and an array of it is not parenthesised
+    /// again.
+    #[test]
+    fn print_type_renders_a_parenthesised_type() {
+        let thunk = TsType::Fn {
+            names: vec![],
+            params: vec![],
+            ret: Box::new(TsType::named("T")),
+        };
+        assert_eq!(print_type(&TsType::paren(thunk.clone())), "(() => T)");
+        assert_eq!(
+            print_type(&TsType::array(TsType::paren(thunk))),
+            "(() => T)[]"
+        );
+        assert_eq!(print_type(&TsType::paren(TsType::named("A"))), "(A)");
+    }
+
+    /// A parameter that is both optional and defaulted prints `x?: T = v`, a TypeScript
+    /// error, so a struct literal that builds one is refused as `with_default` refuses it.
+    #[test]
+    #[cfg(debug_assertions)]
+    #[should_panic(expected = "cannot be optional and have a default")]
+    fn an_optional_parameter_with_a_default_is_refused() {
+        let mut p = TsParam::new("x", Some(TsType::named("T")));
+        p.optional = true;
+        p.default = Some(TsExpr::Lit(TsLit::Num("1".to_string())));
+        let mut out = String::new();
+        render_params(&mut out, &[p]);
     }
 
     /// An integer literal type indexes a tuple type: `Parameters<typeof f>[0]`.

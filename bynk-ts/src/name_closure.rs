@@ -652,6 +652,7 @@ impl Walk {
                 self.ty(index);
             }
             TsType::StringLiteral(_) | TsType::NumberLiteral(_) => {}
+            TsType::Paren(inner) => self.ty(inner),
         }
     }
 
@@ -1186,6 +1187,21 @@ mod tests {
             import(&["type Shape"]),
             function_over(mapped("Shape")),
         ]);
+        assert!(unbound_names(&p).is_empty(), "{:?}", unbound_names(&p));
+    }
+
+    #[test]
+    fn a_parenthesised_type_uses_the_names_it_holds() {
+        let thunk = |name: &str| {
+            TsType::paren(TsType::Fn {
+                names: vec![],
+                params: vec![],
+                ret: Box::new(TsType::named(name)),
+            })
+        };
+        let p = program(vec![function_over(thunk("Row"))]);
+        assert_eq!(unbound_names(&p), ["Row"]);
+        let p = program(vec![import(&["type Row"]), function_over(thunk("Row"))]);
         assert!(unbound_names(&p).is_empty(), "{:?}", unbound_names(&p));
     }
 
