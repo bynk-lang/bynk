@@ -113,6 +113,10 @@ pub(crate) struct Plan<'a> {
     /// its [`deployed_worker_name`] (#2028).
     order: Vec<String>,
     contexts: Vec<ContextPlan<'a>>,
+    /// #3494: what checking the plan against the account found to say, printed
+    /// after it.
+    #[serde(skip)]
+    account_notes: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -288,6 +292,7 @@ struct PlanR2<'a> {
     binding: &'a str,
     /// `create`, `reuse`, or `recreate`: a changed `@jurisdiction` makes a new
     /// bucket, and the objects of the old one do not move (see [`r2_action`]).
+    /// #3494: a bucket of its name the account already holds is `reuse`.
     action: &'static str,
     /// The bucket's account-facing name, [`r2_bucket_name`]d.
     bucket: String,
@@ -296,17 +301,17 @@ struct PlanR2<'a> {
 }
 
 /// #3479: one Vectorize index. The name is the identity and the configuration
-/// is fixed at creation, so `reuse` is a plain statement of the ledger; the
-/// plan is offline, so whether an existing index still matches is checked by
-/// the deploy, which fails on a mismatch.
+/// is fixed at creation, so `reuse` states that an index of the name is there;
+/// whether it still matches is checked by the deploy, which fails on a
+/// mismatch.
 #[derive(Debug, Serialize)]
 struct PlanVectorize<'a> {
     /// `VECTORIZE_<SNAKE>`.
     binding: &'a str,
-    /// `create` (an index, or reusing one of its name already on the account
-    /// that matches), `adopt` (an existing index `bynk.toml` names, which is
-    /// never created, changed or deleted) or `reuse` (the one the ledger
-    /// recorded).
+    /// `create`, `adopt` (an existing index `bynk.toml` names, which is never
+    /// created, changed or deleted) or `reuse` (the one the ledger recorded, or
+    /// #3494 one of its name the account already holds, which the deploy
+    /// adopts).
     action: &'static str,
     /// The index's account-facing name, [`vectorize_index_name`]d.
     index: String,
@@ -322,14 +327,14 @@ struct PlanVectorize<'a> {
 struct PlanD1<'a> {
     /// `D1_<SNAKE>`.
     binding: &'a str,
-    /// `create` (a database, or adopting one of its name already on the
-    /// account) or `reuse` (the one the ledger recorded, by its id).
+    /// `create` or `reuse` (the one the ledger recorded, by its id, or #3494
+    /// one of its name the account already holds, which the deploy adopts).
     action: &'static str,
     /// The database's account-facing name, [`d1_database_name`]d.
     database: String,
     /// P4b (#2608): its migration files. `bynk deploy` applies the ones the
-    /// database hasn't recorded before the push; the plan is offline, so it
-    /// can't say which those are.
+    /// database hasn't recorded before the push; the plan does not read the
+    /// databases, so it can't say which those are.
     #[serde(skip_serializing_if = "<[_]>::is_empty")]
     migrations: &'a [String],
 }
@@ -365,7 +370,8 @@ struct PlanDataset<'a> {
 #[derive(Debug, Serialize)]
 struct PlanQueue {
     /// `create` when this project has never made the queue, `reuse` when the
-    /// ledger has it. Either way the provision step attempts the create and
+    /// ledger has it (or #3494 the account does), `create or reuse` for a queue
+    /// only sent to when the account was not asked. Either way the provision step attempts the create and
     /// treats an existing queue as success, so `reuse` is a forecast — "expect
     /// nothing new" — not a promise to stay silent (ADR 0194 D2).
     action: &'static str,
@@ -1220,7 +1226,8 @@ pub fn run(
         opts.force,
         &opts.environment,
     )
-    .with_hyperdrive(&order, &resources, &lock, &hyperdrive_wants);
+    .with_hyperdrive(&order, &resources, &lock, &hyperdrive_wants)
+    .checked_against_account();
     print_plan_then_forward_warnings(&plan, opts, &order, &resources, project_root);
     if opts.dry_run {
         return ExitCode::SUCCESS;
@@ -2753,6 +2760,106 @@ fn hyperdrive_plan<'a>(
 }
 
 impl<'a> Plan<'a> {
+    /// #3494: the listings the account is asked for: one per kind (and R2
+    /// jurisdiction) of which this plan would create something.
+    pub(crate) fn account_listings(&self) -> BTreeSet<super::on_account::Listing> {
+        use super::on_account::Kind;
+        let creates = |action: &str| action == "create" || action == "create or reuse";
+        let mut wanted = BTreeSet::new();
+        for c in &self.contexts {
+            if c.kv.iter().any(|kv| creates(kv.action)) {
+                wanted.insert((Kind::Kv, None));
+            }
+            for r2 in c.r2.iter().filter(|r2| creates(r2.action)) {
+                wanted.insert((Kind::R2, r2.jurisdiction.map(str::to_string)));
+            }
+            if c.d1.iter().any(|d1| creates(d1.action)) {
+                wanted.insert((Kind::D1, None));
+            }
+            if c.queues.iter().any(|q| creates(q.action)) {
+                wanted.insert((Kind::Queue, None));
+            }
+            if c.vectorize.iter().any(|v| creates(v.action)) {
+                wanted.insert((Kind::Vectorize, None));
+            }
+        }
+        wanted
+    }
+
+    /// #3494: this plan with what `on` says the account already holds: a
+    /// resource it would create that is already there is `reuse`, since the
+    /// deploy adopts it (R2, D1, Vectorize) or reuses it (a queue), and one it
+    /// would only create if absent (a queue sent to) is `create` when it is not.
+    /// A KV namespace is noted instead: Cloudflare refuses a second namespace of
+    /// one title, so the deploy cannot create it.
+    pub(crate) fn checked_against(mut self, on: &super::on_account::OnAccount) -> Self {
+        use super::on_account::Kind;
+        // A listing not read changes nothing: the ledger's word stands.
+        let verb = |action: &'static str, held: Option<bool>| match (action, held) {
+            ("create" | "create or reuse", Some(true)) => "reuse",
+            ("create or reuse", Some(false)) => "create",
+            (other, _) => other,
+        };
+        self.account_notes.extend(on.notes.iter().cloned());
+        for c in &mut self.contexts {
+            for r2 in &mut c.r2 {
+                r2.action = verb(r2.action, on.holds(Kind::R2, r2.jurisdiction, &r2.bucket));
+            }
+            for d1 in &mut c.d1 {
+                d1.action = verb(d1.action, on.holds(Kind::D1, None, &d1.database));
+            }
+            for q in &mut c.queues {
+                q.action = verb(q.action, on.holds(Kind::Queue, None, &q.queue));
+            }
+            for v in &mut c.vectorize {
+                v.action = verb(v.action, on.holds(Kind::Vectorize, None, &v.index));
+            }
+            for kv in c.kv.iter().filter(|kv| kv.action == "create") {
+                if on.holds(Kind::Kv, None, &kv.namespace) == Some(true) {
+                    self.account_notes.push(format!(
+                        "bynk: warning: the KV namespace `{}` (`{}` of `{}`) is already on the \
+                         account, but `bynk.deploy.lock` does not record it, and Cloudflare \
+                         refuses a second namespace of one title: the deploy cannot create it. \
+                         Delete the namespace if it holds nothing you need, or rename the \
+                         capability",
+                        kv.namespace, kv.binding, c.worker
+                    ));
+                }
+            }
+        }
+        self
+    }
+
+    /// #3494: [`Plan::checked_against`] the account, when
+    /// `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` say which and allow
+    /// it to be read; a plan with nothing to create asks nothing. Without them
+    /// the plan is the ledger's, and a note says so.
+    pub(crate) fn checked_against_account(self) -> Self {
+        let wanted = self.account_listings();
+        if wanted.is_empty() {
+            return self;
+        }
+        match super::on_account::RestListings::from_env() {
+            Ok(listings) => {
+                let on = super::on_account::OnAccount::read(&wanted, &listings);
+                self.checked_against(&on)
+            }
+            Err(why) => {
+                let mut plan = self;
+                plan.account_notes.push(format!(
+                    "bynk: note: `create` is what `bynk.deploy.lock` records, not checked against \
+                     the account; {why}"
+                ));
+                plan
+            }
+        }
+    }
+
+    /// #3494: what checking the plan against the account found to say.
+    pub(crate) fn account_notes(&self) -> &[String] {
+        &self.account_notes
+    }
+
     /// #3319: show each Hyperdrive config as `bynk.toml` and the environment
     /// say it will be handled (a `sync` from the variable, an `adopt`), once the deploy has read them.
     pub(crate) fn with_hyperdrive(
@@ -2795,6 +2902,7 @@ pub(crate) fn derive_plan<'a>(
     let orphans = find_orphans(lock, environment, resources);
     Plan {
         environment,
+        account_notes: Vec::new(),
         shown_orphans: orphans.as_named_in(environment),
         orphans,
         order: order
@@ -3782,6 +3890,163 @@ pub(crate) mod tests {
             "staging",
         );
         assert_eq!(staging.contexts[0].vectorize[0].index, "shop-docs-staging");
+    }
+
+    // ---- #3494: the plan checked against the account ----
+
+    /// An account holding `names` of each kind (R2 within the jurisdiction
+    /// given), counting what it was asked for.
+    struct Account {
+        names: Vec<(
+            super::super::on_account::Kind,
+            Option<&'static str>,
+            &'static str,
+        )>,
+        asked: std::cell::RefCell<Vec<super::super::on_account::Listing>>,
+        /// The kinds whose listing fails.
+        failing: Vec<super::super::on_account::Kind>,
+    }
+
+    impl super::super::on_account::Listings for Account {
+        fn names(
+            &self,
+            kind: super::super::on_account::Kind,
+            jurisdiction: Option<&str>,
+        ) -> Result<BTreeSet<String>, String> {
+            self.asked
+                .borrow_mut()
+                .push((kind, jurisdiction.map(str::to_string)));
+            if self.failing.contains(&kind) {
+                return Err("Cloudflare answered 403".into());
+            }
+            Ok(self
+                .names
+                .iter()
+                .filter(|(k, j, _)| *k == kind && *j == jurisdiction)
+                .map(|(_, _, n)| n.to_string())
+                .collect())
+        }
+    }
+
+    fn checked<'a>(plan: Plan<'a>, account: &Account) -> Plan<'a> {
+        let on = super::super::on_account::OnAccount::read(&plan.account_listings(), account);
+        plan.checked_against(&on)
+    }
+
+    fn every_kind() -> BTreeMap<String, Resources> {
+        project(vec![(
+            "shop",
+            Resources::default()
+                .needs_kv()
+                .r2_buckets(&[
+                    ("R2_FILES", "shop-files", None),
+                    ("R2_ARCHIVE", "shop-archive", Some("eu")),
+                ])
+                .d1_databases(&[("D1_ORDERS", "shop-orders")])
+                .consumes(&["intake"])
+                .produces(&["outbound"])
+                .vectorize_indexes(&[("VECTORIZE_DOCS", "shop-docs", 768, "cosine", &[])]),
+        )])
+    }
+
+    /// #3494: a resource the ledger does not record but the account already
+    /// holds by name is `reuse`, as the deploy will use it, for every kind
+    /// whose name the plan derives; KV, whose second namespace of a title
+    /// Cloudflare refuses, is named in a note instead.
+    #[test]
+    fn a_resource_already_on_the_account_is_planned_as_reuse() {
+        use super::super::on_account::Kind;
+        let order = names(&["shop"]);
+        let declared = every_kind();
+        let account = Account {
+            names: vec![
+                (Kind::Kv, None, "shop"),
+                (Kind::R2, None, "shop-files"),
+                // The same name in the default jurisdiction is another bucket.
+                (Kind::R2, None, "shop-archive"),
+                (Kind::D1, None, "shop-orders"),
+                (Kind::Queue, None, "intake"),
+                (Kind::Queue, None, "outbound"),
+                (Kind::Vectorize, None, "shop-docs"),
+            ],
+            asked: Default::default(),
+            failing: Vec::new(),
+        };
+        let plan = checked(plan_of(&order, &declared, &DeployLock::default()), &account);
+        let text = plan_report(&plan, DeployFormat::Short);
+        for line in [
+            "r2 reuse shop-files (R2_FILES)\n",
+            "r2 create shop-archive (R2_ARCHIVE) in jurisdiction eu\n",
+            "d1 reuse shop-orders (D1_ORDERS)\n",
+            "queue reuse intake\n",
+            "queue reuse outbound\n",
+            "vectorize reuse shop-docs (VECTORIZE_DOCS, 768, cosine)\n",
+            "kv create shop\n",
+        ] {
+            assert!(text.contains(line), "missing {line:?} in:\n{text}");
+        }
+        let notes = plan.account_notes();
+        assert_eq!(notes.len(), 1, "{notes:?}");
+        assert!(
+            notes[0].contains("`shop`") && notes[0].contains("already on the account"),
+            "{}",
+            notes[0]
+        );
+        // A queue only sent to, not on the account, is now known to be created.
+        let empty = Account {
+            names: Vec::new(),
+            asked: Default::default(),
+            failing: Vec::new(),
+        };
+        let plan = checked(plan_of(&order, &declared, &DeployLock::default()), &empty);
+        let text = plan_report(&plan, DeployFormat::Short);
+        assert!(text.contains("queue create outbound\n"), "{text}");
+        assert!(plan.account_notes().is_empty());
+    }
+
+    /// #3494 review: a listing that fails leaves its kind as the ledger says it:
+    /// a queue only sent to stays `create or reuse`, never a confident `create`.
+    #[test]
+    fn a_failed_listing_leaves_its_kind_as_the_ledger_says() {
+        let order = names(&["shop"]);
+        let declared = every_kind();
+        let account = Account {
+            names: Vec::new(),
+            asked: Default::default(),
+            failing: vec![super::super::on_account::Kind::Queue],
+        };
+        let plan = checked(plan_of(&order, &declared, &DeployLock::default()), &account);
+        let text = plan_report(&plan, DeployFormat::Short);
+        assert!(text.contains("queue create or reuse outbound\n"), "{text}");
+        assert!(text.contains("queue create intake\n"), "{text}");
+        assert_eq!(plan.account_notes().len(), 1, "{:?}", plan.account_notes());
+        assert!(plan.account_notes()[0].contains("queues"));
+    }
+
+    /// #3494: a plan with nothing to create asks the account nothing.
+    #[test]
+    fn a_plan_the_ledger_covers_asks_the_account_nothing() {
+        let order = names(&["shop"]);
+        let declared = project(vec![(
+            "shop",
+            Resources::default().vectorize_indexes(&[(
+                "VECTORIZE_DOCS",
+                "shop-docs",
+                768,
+                "cosine",
+                &[],
+            )]),
+        )]);
+        let mut lock = DeployLock::default();
+        lock.record_vectorize("default", "shop", "VECTORIZE_DOCS", "shop-docs", false);
+        let account = Account {
+            names: Vec::new(),
+            asked: Default::default(),
+            failing: Vec::new(),
+        };
+        let plan = checked(plan_of(&order, &declared, &lock), &account);
+        assert!(account.asked.borrow().is_empty());
+        assert!(plan_report(&plan, DeployFormat::Short).contains("vectorize reuse shop-docs"));
     }
 
     // ---- P5 (#2323): R2 buckets ----

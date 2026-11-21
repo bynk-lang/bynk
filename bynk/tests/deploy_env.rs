@@ -97,6 +97,9 @@ fn dry_run(dir: &Path, args: &[&str]) -> (bool, String, String) {
         .args(args)
         .current_dir(dir)
         .env_remove("CI")
+        // #3494: with these, the plan reads the account.
+        .env_remove("CLOUDFLARE_API_TOKEN")
+        .env_remove("CLOUDFLARE_ACCOUNT_ID")
         .output()
         .expect("run bynk");
     (

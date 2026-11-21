@@ -1545,8 +1545,7 @@ impl Orphans {
 /// `order`/`selected`), so `resources.keys()` alone is the full live-worker
 /// set and this reuses data `run()` already has rather than reading anything
 /// new. No live Cloudflare call: the report half of reconciliation costs
-/// nothing and needs no auth, keeping `--dry-run`'s "never authenticates"
-/// promise intact.
+/// nothing and needs no auth.
 ///
 /// Pure, so the diff — including the shared-queue case (a queue two contexts
 /// still consume must never appear orphaned because a *third* context that

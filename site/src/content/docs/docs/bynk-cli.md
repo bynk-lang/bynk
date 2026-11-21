@@ -612,7 +612,7 @@ run it inside a member. Each member keeps its own deploy state.
 | `PATH` | `.` | A directory inside the project. The root is found by walking up for `bynk.toml`. |
 | `--context NAME` | every context | Deploy this context alone, assuming the contexts it consumes are already live. A dependency that has never been deployed is named and refused rather than pushed into — as is one that is live but no longer provides the contract this context was compiled against, and a build of this context that no longer provides what a live caller was compiled against (`bynk.deploy.contract_skew`; see [Contract skew](/book/guides/projects-build-and-deployment/contract-skew/)). Accepts the dotted name (`a.b`) or its worker-directory form (`a-b`). |
 | `--worker NAME` | every Worker | Deploy one Worker by its directory name under `workers/`: a [`[deploy.workers.<key>]`](/docs/manifest/#worker-groups) group's key, or a context's worker-directory form (`a-b`). A group is one Worker, so it deploys as a unit; naming one of its members with `--context` is refused, with the Worker that holds it. Like `--context`, it assumes the Workers it binds to are already live. Not with `--context`. |
-| `--dry-run`, `--plan` | off | Print the per-context plan and resolved order, then exit without changing Cloudflare or `bynk.deploy.lock`. Works offline — it never authenticates. |
+| `--dry-run`, `--plan` | off | Print the per-context plan and resolved order, then exit without changing Cloudflare or `bynk.deploy.lock`. With `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` set it reads the account to check what it would create (see below); without them it works offline. |
 | `--no-install` | off | Do not install the build's npm packages; stop, naming the detected install command, when one is missing. Also `BYNK_NO_INSTALL=1`. See [Installing npm packages](#installing-npm-packages). |
 | `--format FORMAT` | `short` | Plan output: line-oriented `short` or machine-readable `json`. |
 | `--yes` | off | Skip the confirmation required before a resource is created or a Worker is published. Required for non-interactive calls. |
@@ -680,6 +680,18 @@ Per context, the plan carries one line per resource it declares:
 | `queue create\|reuse <name>` | A queue is provisioned before the push, which `wrangler deploy` will not do for you. `reuse` forecasts that it already exists; existence is checked against Cloudflare at provision time regardless, so a queue deleted out-of-band is restored. |
 | `durable object <Class> (<storage>; advisory — Cloudflare reconciles it)` | One line per Durable Object class (each agent, and a context's events fan-out) the push declares in the config's `exports` map. **Advisory**: Cloudflare compares the declared classes with the Worker's namespaces on every deploy and creates what's missing, and `bynk` keeps no record of them, so this states what the push will declare, never which namespaces already exist. In `--format json` it is `"durable_objects": [{"class": …, "storage": "sqlite", "reconciled_by": "Cloudflare"}]`. |
 | `deploy\|redeploy <worker>` | The Worker is pushed; `redeploy` when the ledger has pushed it before. |
+
+**Checked against the account.** The plan's `create` comes from
+`bynk.deploy.lock`. When the plan would create something and
+`CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` are set, `deploy` (and
+`--dry-run`) also lists what the account already holds of those kinds. An R2
+bucket, D1 database, Vectorize index or queue of the same name is planned as
+`reuse`, since the deploy uses it rather than making another. A queue the
+context only sends to becomes `create` or `reuse` instead of `create or reuse`.
+A KV namespace of the same title is a warning: Cloudflare refuses a second
+namespace of one title, so the deploy cannot create it. The token needs read
+access to the kinds listed. Without the variables, the plan stays the ledger's
+and a note says so. A listing that fails is a warning, never a failure.
 
 Each context's Cloudflare ids and its deployed state are recorded in the
 committed, secret-free `bynk.deploy.lock` at the project root, written as each

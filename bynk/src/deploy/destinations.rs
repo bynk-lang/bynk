@@ -325,6 +325,10 @@ pub(crate) fn print_plan_then_forward_warnings(
     project_root: &Path,
 ) {
     print_plan(plan, opts.format);
+    // #3494: what checking the plan against the account found.
+    for note in plan.account_notes() {
+        colour::eprintln(note);
+    }
     if any_email_handlers(order, resources) {
         let groups = super::plan::GroupNames::of(project_root);
         let dir_of = |context: &str| groups.dir(context);
