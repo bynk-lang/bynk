@@ -3004,6 +3004,15 @@ pub enum TsDecl {
 }
 
 impl TsDecl {
+    /// `import <alias> from "<from>";`: a default import with no braced names.
+    pub fn import_default(alias: impl Into<String>, from: impl Into<String>) -> Self {
+        TsDecl::ImportDefault {
+            alias: alias.into(),
+            named: Vec::new(),
+            from: from.into(),
+        }
+    }
+
     /// A class with no `implements` clause and no closing-line span: the shape
     /// every class had before 1A.32a. Name the extras with [`TsDecl::implementing`]
     /// and [`TsDecl::ending_at`].
