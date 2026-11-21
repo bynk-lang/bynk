@@ -15,6 +15,13 @@
 //! `lib/cloudflare/`. Nothing in `lib/core/` depends on `lib/cloudflare/`, so the
 //! platform layer can be split out later without renaming a unit.
 
+// The README's `rust` examples are compiled (and, unless marked `no_run`, run)
+// as doctests, so they cannot rot (#1645). `cfg(doctest)` keeps this item out of
+// every build and out of the docs.rs front page, which the `//!` docs above own.
+#[cfg(doctest)]
+#[doc = include_str!("../README.md")]
+struct ReadmeDoctests;
+
 /// The deploy platform — a selection axis distinct from the `--target
 /// {bundle,workers}` emit mode (§6.2). It chooses which `bynk-<platform>.ts`
 /// binding is linked for the `bynk` surface. v0.17 shipped `cloudflare`;

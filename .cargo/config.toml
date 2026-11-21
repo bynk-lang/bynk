@@ -4,3 +4,10 @@
 # cargo's build chatter.
 [alias]
 xtask = "run --quiet --package xtask --"
+# #1645: `cargo readme-doctests` compiles every crate README's `rust` examples as
+# doctests (each crate's `lib.rs` includes its README under `cfg(doctest)`), and
+# runs those not marked `no_run`. The crate list is exactly the crates whose
+# README has a `rust` block; `xtask/tests/docs_consistency/readme_doctests.rs`
+# keeps the two in step. CI runs it in the `test` job (Linux) and, for a
+# README-only change, in the `drift` job — nextest cannot run doctests.
+readme-doctests = "test --doc --locked -p bynk-check -p bynk-emit -p bynk-fmt -p bynk-ide -p bynk-model -p bynk-project -p bynk-std -p bynk-strip -p bynk-syntax -p bynk-testkit -p bynk-ts"

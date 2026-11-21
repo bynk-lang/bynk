@@ -20,10 +20,20 @@ no second resolution to drift from the first: a test built on these helpers
 cannot silently miss a file because this crate's notion of "the project's
 files" diverged from the compiler's own.
 
-```rust
+```rust,no_run
+use std::path::Path;
+
+use bynk_driver::project::{ProjectFailure, ProjectOutput, compile_project};
+
+// `no_run`: `compile_options_single` reads the project under `src_dir` from disk.
+fn build(src_dir: &Path) -> Result<ProjectOutput, ProjectFailure> {
+    let opts = bynk_testkit::compile_options_single(src_dir);
+    compile_project(&opts)
+}
+
 // In an integration test:
-let opts = bynk_testkit::compile_options_single(src_dir);
-let output = bynk_driver::project::compile_project(&opts)?;
+let output = build(Path::new("tests/fixtures/my_project/src")).map_err(ProjectFailure::flatten);
+assert!(output.is_ok());
 ```
 
 This crate ships no production code, and is invisible to

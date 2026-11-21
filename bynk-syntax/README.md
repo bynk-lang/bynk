@@ -59,10 +59,15 @@ bynk-syntax = "0.639"
 ```
 
 ```rust
-use bynk_syntax::{lexer, parser};
+use bynk_syntax::{CompileError, ast::Commons, lexer, parser};
 
-let tokens = lexer::tokenize(source)?;
-let unit = parser::parse(&tokens, source)?;
+fn parse(source: &str) -> Result<Commons, Vec<CompileError>> {
+    let tokens = lexer::tokenize(source).map_err(|e| vec![e])?;
+    parser::parse(&tokens, source)
+}
+
+assert!(parse("commons demo { type Id = Int }").is_ok());
+assert!(parse("commons demo { type Id = }").is_err());
 ```
 
 See the [API docs](https://docs.rs/bynk-syntax) for the full surface.
