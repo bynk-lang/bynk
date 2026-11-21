@@ -194,11 +194,14 @@ async function buildPerModule() {
     }
     for (const m of content.matchAll(/^export\s+(type\s+)?\{([^}]*)\};$/gm)) {
       for (const raw of m[2].split(",")) {
-        const item = raw.trim();
+        let item = raw.trim();
         if (!item) continue;
+        // An inline modifier (`export { type Foo, Bar }`) makes that one item type-only.
+        const inlineType = /^type\s+/.test(item);
+        if (inlineType) item = item.replace(/^type\s+/, "");
         const name = item.split(/\s+as\s+/).pop();
         names.push(name);
-        if (!m[1]) valueExported.add(name);
+        if (!m[1] && !inlineType) valueExported.add(name);
       }
     }
     for (const n of names) {

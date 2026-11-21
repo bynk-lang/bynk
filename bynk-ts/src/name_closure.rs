@@ -562,6 +562,11 @@ impl Walk {
             .filter(|w| w[1] == "in" || w[0] == "infer")
             .map(|w| if w[0] == "infer" { w[1] } else { w[0] })
             .collect();
+        // The unmatched `{`, `(` and `[` before the cursor: a word followed by `:`
+        // is an object key only when the nearest of them is `{`. Elsewhere the
+        // colon belongs to a conditional type (`A extends B ? C : D`), a
+        // parameter or a tuple label.
+        let mut openers: Vec<u8> = Vec::new();
         let mut i = 0;
         while i < bytes.len() {
             let b = bytes[i];
@@ -581,7 +586,10 @@ impl Walk {
                     let word = &text[start..i];
                     let after_dot = start > 0 && bytes[start - 1] == b'.';
                     let rest = text[i..].trim_start();
-                    let is_key = rest.starts_with(':') || rest.starts_with("?:");
+                    let after_question = text[..start].trim_end().ends_with('?');
+                    let is_key = openers.last() == Some(&b'{')
+                        && !after_question
+                        && (rest.starts_with(':') || rest.starts_with("?:"));
                     if after_dot || is_key || !(b.is_ascii_uppercase() || b == b'_') {
                         continue;
                     }
@@ -593,6 +601,14 @@ impl Walk {
                         self.qualified
                             .insert((word.to_string(), member.to_string()));
                     }
+                }
+                b'{' | b'(' | b'[' => {
+                    openers.push(b);
+                    i += 1;
+                }
+                b'}' | b')' | b']' => {
+                    openers.pop();
+                    i += 1;
                 }
                 _ => i += 1,
             }
@@ -1529,6 +1545,28 @@ mod tests {
             function_over(TsType::named("Option<A>")),
         ]);
         assert!(unbound_names(&p).is_empty(), "{:?}", unbound_names(&p));
+    }
+
+    /// 1A.36b-2: a capitalised word before `:` is a key only inside `{ }`. In a conditional type
+    /// the colon separates the branches, so the true branch is a use.
+    #[test]
+    fn a_conditional_type_branch_is_a_use_not_a_key() {
+        let over = |name: &str| program(vec![function_over(TsType::named(name))]);
+        assert_eq!(
+            unbound_names(&over("A extends B ? C : D")),
+            ["A", "B", "C", "D"]
+        );
+        // Inside an object type the same shape stays a key and a conditional value is a use.
+        assert_eq!(
+            unbound_names(&over("{ Key: A extends B ? C : D }")),
+            ["A", "B", "C", "D"]
+        );
+        assert!(unbound_names(&over("{ Key?: string; Other: number }")).is_empty());
+        // A key after a nested group closes is still a key.
+        assert_eq!(
+            unbound_names(&over("{ F: (x: X) => Y; K: Z }")),
+            ["X", "Y", "Z"]
+        );
     }
 
     /// 1A.36b-1: the global tables hide a name the module imports that shares a global's name,

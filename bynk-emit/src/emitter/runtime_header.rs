@@ -15,8 +15,10 @@
 //!
 //! Text the emitter still writes as a string is invisible to the closure, bar
 //! the names it declares with `TsStmt::raw_using`. A producer of such text must
-//! declare the runtime names it spells; `import_shadow.rs` reports any name a
-//! module's printed body spells that the tree did not use.
+//! declare the runtime names it spells. `import_shadow.rs` is the net under
+//! that rule: for every module whose header is derived it asserts that each
+//! runtime export the printed code spells (outside strings and comments) is
+//! imported, so a name only text spells fails there rather than in `tsc`.
 //!
 //! # The gate
 //!
