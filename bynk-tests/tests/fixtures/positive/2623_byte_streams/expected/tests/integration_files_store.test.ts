@@ -152,7 +152,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a RawStreamed body arrives over HTTP, read back as Raw", "a nested stream-carrying record streams too"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a RawStreamed body arrives over HTTP, read back as Raw")) {
     const started = __bynkCaseNow();

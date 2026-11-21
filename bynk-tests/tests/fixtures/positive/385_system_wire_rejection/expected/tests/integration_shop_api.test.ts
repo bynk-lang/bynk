@@ -526,7 +526,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a typed create returns Created over the real wire", "an empty sku is rejected at the boundary before the handler", "malformed json is rejected at the boundary", "valid raw input passes the boundary to the handler", "no credential is rejected at the seam", "no credential combined with a raw body is rejected at the seam", "no credential combined with a raw path and a typed body is rejected at the seam", "the wrong method is a 405 fall-through", "a handler-returned 400 is Handled, not a boundary rejection", "a raw path segment with a typed body passes both through the boundary", "a raw path segment failing refinement is rejected even with a typed body", "an empty raw path segment does not route and falls through", "a typed path segment with a raw body passes both through the boundary", "a refinement rejection carries the router's detail", "a malformed body's rejection carries the parser's detail", "a handled raw body carries the handler's typed result"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a typed create returns Created over the real wire")) {
     const started = __bynkCaseNow();

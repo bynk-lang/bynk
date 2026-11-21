@@ -185,7 +185,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["backslash r and n produce a real CR LF", "unicode escapes name the scalar value", "nul survives to the runtime", "a raw string is taken as written", "a multi-line string strips the closing indentation", "a multi-line string interpolates and escapes", "a raw multi-line string keeps its backslashes", "a raw regex pattern checks and runs like the doubled form"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("backslash r and n produce a real CR LF")) {
     const started = __bynkCaseNow();

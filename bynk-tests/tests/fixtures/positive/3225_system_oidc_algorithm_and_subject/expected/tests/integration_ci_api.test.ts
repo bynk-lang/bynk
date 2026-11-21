@@ -734,7 +734,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a valid token is admitted", "alg none and an HS256 token keyed with the public key are refused", "an empty sub and a missing sub are refused when the identity is refined", "an empty sub and a missing sub are refused when the identity is any string", "a wrong-algorithm raw request is refused", "a no-subject raw request is refused", "the trustFrom variable does not make either refusal go away", "a wrong-algorithm token is not handled", "a no-subject token is not handled"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a valid token is admitted")) {
     const started = __bynkCaseNow();

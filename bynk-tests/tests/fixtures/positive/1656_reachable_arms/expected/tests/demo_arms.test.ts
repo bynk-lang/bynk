@@ -131,7 +131,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a guarded arm does not cover the same pattern after it", "a narrow arm precedes a wider one", "multi-field payloads", "a refined arm does not cover the arms after it"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a guarded arm does not cover the same pattern after it")) {
     const started = __bynkCaseNow();

@@ -403,7 +403,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["an event delivered twice is counted once", "dedup holds at integration too", "a default envelope is fresh on each delivery", "a default envelope carries the current schema version", "the pattern filter is honoured", "the schema guard is honoured"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("an event delivered twice is counted once")) {
     const started = __bynkCaseNow();

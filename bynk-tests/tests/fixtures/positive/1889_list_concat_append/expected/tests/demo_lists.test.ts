@@ -236,7 +236,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a fold with append builds the list in order", "a fold with concat joins the lists in order", "a foldEff with concat builds the list in order", "a foldEff with append builds the list in order", "append onto an empty list", "concat with an empty other is the receiver", "concat onto an empty receiver is the other", "concat of two empty lists is empty", "append and concat leave the receiver unchanged", "append builds a nested list in order", "concat joins nested lists in order", "append adds an empty list as one element"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a fold with append builds the list in order")) {
     const started = __bynkCaseNow();

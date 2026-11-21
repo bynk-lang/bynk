@@ -165,7 +165,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a RawCreated answers 201, read back as Created", "a plain-text RawCreated still reads as Created", "a retry answers 200"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a RawCreated answers 201, read back as Created")) {
     const started = __bynkCaseNow();

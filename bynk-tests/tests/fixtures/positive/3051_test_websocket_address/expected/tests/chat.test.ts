@@ -137,7 +137,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a joiner is welcomed and then hears the broadcast", "a closed member hears nothing further", "an agent can be handed a test connection directly"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a joiner is welcomed and then hears the broadcast")) {
     const started = __bynkCaseNow();

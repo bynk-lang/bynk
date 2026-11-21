@@ -717,7 +717,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a plain encoding writes the shape a non-Bynk API sends", "a plain encoding round-trips through Json.decode", "Json.encode still writes the tagged form", "a top-level Option and a list of them", "a plain call does not leak into a later tagged one", "an encode inside the argument stays tagged", "a None literal argument"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a plain encoding writes the shape a non-Bynk API sends")) {
     const started = __bynkCaseNow();

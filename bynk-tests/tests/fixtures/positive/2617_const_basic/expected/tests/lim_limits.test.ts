@@ -171,7 +171,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["scalar constants hold their literals", "a constant may refer to another", "constructed constants", "functions read constants", "a local shadows a constant"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("scalar constants hold their literals")) {
     const started = __bynkCaseNow();

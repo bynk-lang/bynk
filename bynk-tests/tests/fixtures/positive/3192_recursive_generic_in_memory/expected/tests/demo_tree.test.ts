@@ -169,7 +169,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a recursive generic sum builds and folds", "a recursive generic record chains through Option", "the same generic function works at another element type", "mutually recursive generics declare and build", "mutually recursive generics of different arity declare and build"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a recursive generic sum builds and folds")) {
     const started = __bynkCaseNow();

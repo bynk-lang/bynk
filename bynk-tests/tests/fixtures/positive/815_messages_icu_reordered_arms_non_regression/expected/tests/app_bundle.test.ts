@@ -97,7 +97,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["reference locale renders its own arm order fine", "reordered-and-extra-arm locale still renders correctly"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("reference locale renders its own arm order fine")) {
     const started = __bynkCaseNow();

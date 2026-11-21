@@ -335,7 +335,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a suite without a stub reaches the provider", "a suite's stub applies to its case", "another suite's stub applies to its own case", "a case's own stub beats its suite's", "a property without a stub reaches the provider", "a suite's stub applies to its property"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a suite without a stub reaches the provider")) {
     const started = __bynkCaseNow();

@@ -201,7 +201,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["map reads a field with no throwaway name", "fold mixes a name and a pattern parameter", "renamed and wildcard fields, with a block body", "a nested record pattern filters", "a generic record is typed from the expected function type", "two pattern parameters in one lambda", "a held lambda with a pattern parameter"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("map reads a field with no throwaway name")) {
     const started = __bynkCaseNow();

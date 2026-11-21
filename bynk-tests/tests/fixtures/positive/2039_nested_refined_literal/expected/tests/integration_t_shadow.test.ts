@@ -210,7 +210,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["an Option payload from a caller with its own Cents", "list elements from a caller with its own Cents", "empty constructors from a caller with its own Cents", "a negative literal from a caller with its own Delta", "an Err payload from a caller with its own Cents", "a parenthesised literal from a caller with its own Cents", "a Result payload from a caller with its own Cents"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("an Option payload from a caller with its own Cents")) {
     const started = __bynkCaseNow();

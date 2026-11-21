@@ -119,7 +119,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["bare date renders a non-empty string containing the year", "full style is longer than short style (more detail, not less)", "missing param falls back to the literal placeholder text"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("bare date renders a non-empty string containing the year")) {
     const started = __bynkCaseNow();

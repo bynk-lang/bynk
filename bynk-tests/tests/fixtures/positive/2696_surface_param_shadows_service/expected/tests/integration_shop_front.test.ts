@@ -131,7 +131,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a parameter named like its service survives the surface", "a parameter named deps survives the surface", "a caller-binding handler's parameter named like its service survives"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a parameter named like its service survives the surface")) {
     const started = __bynkCaseNow();

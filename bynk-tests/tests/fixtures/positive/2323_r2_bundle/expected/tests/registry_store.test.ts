@@ -1345,7 +1345,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["an object round-trips", "an absent-only write refuses an existing key", "an etag-match write swaps only the current version", "delete is idempotent and list pages by prefix", "instances are separate", "a stubbed instance answers", "instances are separate at integration"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("an object round-trips")) {
     const started = __bynkCaseNow();

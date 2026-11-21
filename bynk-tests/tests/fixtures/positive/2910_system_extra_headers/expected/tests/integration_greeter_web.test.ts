@@ -158,7 +158,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a route without a headers parameter is sent Accept-Language", "without the header the reference locale answers", "a raw Wire body is sent with extra headers"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a route without a headers parameter is sent Accept-Language")) {
     const started = __bynkCaseNow();

@@ -188,7 +188,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a literal is admitted at compile time", "real dates are accepted by .of", "impossible dates are refused by .of", "anything but exactly YYYY-MM-DD is refused", "Json.decode enforces the same rule", "Day agrees with Instant.fromIso on a midnight"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a literal is admitted at compile time")) {
     const started = __bynkCaseNow();

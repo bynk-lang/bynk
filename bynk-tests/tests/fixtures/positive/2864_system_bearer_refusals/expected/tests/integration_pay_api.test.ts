@@ -326,7 +326,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a correctly signed token is admitted", "a non-ASCII identity round-trips through the signed token", "a missing token is refused", "a forged token is refused", "an expired token is refused", "a forged raw request is refused", "an expired raw request is refused", "a forged token is not handled", "an expired token is not handled"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a correctly signed token is admitted")) {
     const started = __bynkCaseNow();

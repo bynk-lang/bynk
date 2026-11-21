@@ -434,7 +434,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a service is given the consumed context's provider", "a local provider is built with the consumed capability", "an agent is given the consumed context's provider", "a stub replaces the consumed context's provider", "a stub reaches a provider built over the stubbed capability", "a prefixed platform capability is its test double", "a stub reaches every provider built over it"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a service is given the consumed context's provider")) {
     const started = __bynkCaseNow();

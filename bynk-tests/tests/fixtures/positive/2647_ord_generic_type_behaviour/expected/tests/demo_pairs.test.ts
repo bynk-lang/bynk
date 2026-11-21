@@ -146,7 +146,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["one generic type at two instantiations", "a bounded generic over a derived type forwards both comparators", "a generic sum orders by variant and then payload", "type arguments nest"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("one generic type at two instantiations")) {
     const started = __bynkCaseNow();

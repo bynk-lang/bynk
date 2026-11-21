@@ -127,7 +127,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["short code rejects too-short input", "short code accepts valid input", "long url accepts a typical url"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("short code rejects too-short input")) {
     const started = __bynkCaseNow();

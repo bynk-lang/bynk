@@ -418,7 +418,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a reachable arm returns its value", "an unreachable arm faults when evaluated", "an unreachable branch is not taken for a valid input", "an unreachable branch faults on an invalid input", "todo faults when it runs", "a handler that faults does not commit agent state", "bind on a fault call faults", "a fault in the first arm joins with the others", "a faulting guard with no else", "let else with a fault", "a fault in a lambda body", "a parameter named todo shadows the built-in", "a faulting guard in an effectful body", "a fault argument does not bind a type variable"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a reachable arm returns its value")) {
     const started = __bynkCaseNow();

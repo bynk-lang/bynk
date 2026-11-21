@@ -614,7 +614,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a typed form round-trips through the router", "absent keys take None and their defaults", "a checked checkbox sends on", "a Bool also reads true and off", "a Bool that is neither is a structural mismatch", "repeated keys fill a list", "an empty value is absent for an Option and a non-String, and empty for a String", "unknown keys are ignored", "a refinement violation is refused before the handler", "an age out of range is refused", "a non-numeric age is a structural mismatch", "a missing required field is a structural mismatch", "a repeated key on a single-valued field is refused", "an unknown enum variant is refused", "a path parameter and a form body together", "a capped form route reads its body through the counter", "a form body over the cap is a 413", "an empty Decimal is absent and takes its default", "a filled Decimal reads as its text", "a route answers 415 to another content type", "a form with a non-UTF-8 charset is a 415", "no content type is a 415", "a signed webhook form is verified, then decoded", "an unsigned or forged webhook form is refused"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a typed form round-trips through the router")) {
     const started = __bynkCaseNow();

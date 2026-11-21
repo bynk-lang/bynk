@@ -190,7 +190,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a method on an Ok payload", "a field of an Ok payload", "the whole outcome compared", "a call's outcome is the handler's return type", "a cron outcome is the handler's Result", "a queue verdict binds its reason"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a method on an Ok payload")) {
     const started = __bynkCaseNow();

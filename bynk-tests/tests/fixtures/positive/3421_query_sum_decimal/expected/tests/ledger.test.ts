@@ -116,7 +116,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["0.10 + 0.20 is exactly 0.30, not a float's 0.30000000000000004", "an empty basket sums to the zero decimal", "a filtered query sums the rows it keeps"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("0.10 + 0.20 is exactly 0.30, not a float's 0.30000000000000004")) {
     const started = __bynkCaseNow();

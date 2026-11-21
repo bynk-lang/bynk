@@ -96,7 +96,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a record-keyed map survives the agent's stored state", "a record-keyed map is returned to the caller keyed by value"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a record-keyed map survives the agent's stored state")) {
     const started = __bynkCaseNow();

@@ -579,7 +579,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a suite stub beats the double", "a case stub beats the suite stub", "a later case sees the suite stub again"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a suite stub beats the double")) {
     const started = __bynkCaseNow();

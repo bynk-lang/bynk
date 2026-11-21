@@ -229,7 +229,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["an empty list, one element and many", "exact lengths and an open tail", "a rest alone binds the whole list", "nested element patterns", "a record or a literal inside a list", "or-patterns and guards", "is binds names", "let else"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("an empty list, one element and many")) {
     const started = __bynkCaseNow();

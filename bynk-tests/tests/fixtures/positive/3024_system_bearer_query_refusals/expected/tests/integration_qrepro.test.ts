@@ -213,7 +213,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a reader gets the report through the seam", "no credential is refused at the seam", "a forged token is refused", "an expired token is refused"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a reader gets the report through the seam")) {
     const started = __bynkCaseNow();

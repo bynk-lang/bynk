@@ -133,7 +133,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a context reaches the sum as Caller", "legacy reaches the sum as itself", "legacy reaches ping"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a context reaches the sum as Caller")) {
     const started = __bynkCaseNow();

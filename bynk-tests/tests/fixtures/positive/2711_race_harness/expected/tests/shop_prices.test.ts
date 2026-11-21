@@ -1136,7 +1136,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["the faster mirror wins", "the receiver wins when it is faster", "a fast fault loses to a slower success", "a fast fault in the receiver loses to a slower success too", "when every side faults, the call faults", "a same-instant tie goes to the receiver", "a same-instant tie in a chain goes to the earliest side", "the third of a chain can win", "the loser is still recorded", "both writes of a raced pair happen", "race then within: the race wins inside the deadline", "race then within times out when both sides never finish", "a lambda in the handler races each element alone", "a real provider answers", "a latency stub decides the race at integration"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("the faster mirror wins")) {
     const started = __bynkCaseNow();

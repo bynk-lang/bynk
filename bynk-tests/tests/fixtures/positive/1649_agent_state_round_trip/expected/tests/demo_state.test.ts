@@ -323,7 +323,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["an enum Cell", "an Option Cell", "a sum Cell with a payload", "a Result Cell", "a record Cell holding an Option", "a record Cell holding Bytes", "a List of enums", "a store Map of enums", "a Cache of Options", "a Log of sums", "a scalar beside an enum", "a transition reads the decoded prior state"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("an enum Cell")) {
     const started = __bynkCaseNow();

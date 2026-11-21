@@ -250,7 +250,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["integration: a name no env gives is none", "integration: a case env is what the Secrets double answers", "unit: the processor comes from the suite env", "unit: a case env overrides the suite's", "unit: a later case sees the suite value again"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("integration: a name no env gives is none")) {
     const started = __bynkCaseNow();

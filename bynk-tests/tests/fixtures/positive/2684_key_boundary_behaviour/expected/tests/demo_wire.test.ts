@@ -699,7 +699,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a record-keyed map round-trips", "a decoded map looks up by value", "a decoded set is keyed by value", "a repeated set member is rejected", "a distinct set decodes", "a repeated map key is rejected, not last-entry-wins (#2707)", "a repeated composite map key is rejected by value (#2707)", "a repeated Decimal map key is rejected on its canonical value (#2707)", "distinct map keys still decode (#2707)"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a record-keyed map round-trips")) {
     const started = __bynkCaseNow();

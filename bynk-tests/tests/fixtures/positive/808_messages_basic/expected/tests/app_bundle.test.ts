@@ -158,7 +158,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["substitutes a present placeholder", "renders a literal-only template unchanged", "leaves an unmatched placeholder as literal text", "substitutes multiple typed placeholders", "falls back to bynk.locale.render for a code the bundle doesn't declare"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("substitutes a present placeholder")) {
     const started = __bynkCaseNow();

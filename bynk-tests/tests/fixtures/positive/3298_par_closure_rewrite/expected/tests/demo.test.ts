@@ -108,7 +108,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a sequential update loop counts every element", "a parallel closure that calls another agent is allowed", "a parallel closure may read a store and iterate one"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a sequential update loop counts every element")) {
     const started = __bynkCaseNow();

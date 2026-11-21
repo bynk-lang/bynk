@@ -181,7 +181,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a good quote is accepted", "a non-positive unit is refused at its path", "a negative total is refused by its inline refinement", "a leading zero is a structural mismatch"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a good quote is accepted")) {
     const started = __bynkCaseNow();

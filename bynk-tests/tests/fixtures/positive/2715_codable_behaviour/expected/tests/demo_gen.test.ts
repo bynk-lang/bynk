@@ -1060,7 +1060,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a record round-trips through a generic function", "a sum and a refined type", "a refined type is revalidated through the witness", "base types and Bytes", "a list agrees with the monomorphised codec", "an option agrees, including its lenient forms", "a result agrees", "a set with a composite element agrees, duplicates included", "a map with a composite key agrees", "a nested container agrees", "a comparator and a codec witness are both passed", "a generic function used as a value captures its witness"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a record round-trips through a generic function")) {
     const started = __bynkCaseNow();

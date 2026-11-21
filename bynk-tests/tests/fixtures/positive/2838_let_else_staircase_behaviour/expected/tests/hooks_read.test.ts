@@ -126,7 +126,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["the staircase and its flat form agree on every path", "the flat form yields the success value and each failure", "a binding fallback behaves the same flat"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("the staircase and its flat form agree on every path")) {
     const started = __bynkCaseNow();

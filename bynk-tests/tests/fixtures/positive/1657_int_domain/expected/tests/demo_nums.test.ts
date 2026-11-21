@@ -175,7 +175,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["Int.parse accepts a signed decimal", "Int.parse rejects hex, exponents, whitespace and fractions", "Int.parse rejects a value outside the safe range", "Float.parse accepts a decimal with an optional exponent", "Float.parse rejects whitespace, prefixes and non-finite values", "the JSON boundary accepts exactly the safe integers"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("Int.parse accepts a signed decimal")) {
     const started = __bynkCaseNow();

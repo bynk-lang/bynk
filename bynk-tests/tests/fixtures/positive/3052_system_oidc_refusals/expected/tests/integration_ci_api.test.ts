@@ -800,7 +800,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a valid token with chosen claims is admitted", "a valid token with no claims is admitted", "a non-ASCII subject round-trips", "a missing token is refused", "a forged token is refused", "an expired token is refused", "a token for another issuer is refused", "a token for another audience is refused", "a valid raw request is admitted", "a forged raw request is refused", "an expired raw request is refused", "the trustFrom variable moves the trust roots", "a trustFrom without an audience keeps the declared one", "a forged token is not handled", "an expired token is not handled", "a token for another issuer is not handled", "a token for another audience is not handled"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a valid token with chosen claims is admitted")) {
     const started = __bynkCaseNow();

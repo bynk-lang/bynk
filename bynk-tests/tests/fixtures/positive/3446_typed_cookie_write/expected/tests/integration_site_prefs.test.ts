@@ -230,7 +230,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["the router sends a typed cookie with the safe defaults", "a __Host- field is sent Secure with Path=/ and no Domain", "expire is sent empty and already expired"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("the router sends a typed cookie with the safe defaults")) {
     const started = __bynkCaseNow();

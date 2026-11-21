@@ -102,7 +102,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["a call result as the receiver, nothing to infer the parameter from", "a call result as the receiver, the argument pins the parameter", "a chained call result as the receiver"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a call result as the receiver, nothing to infer the parameter from")) {
     const started = __bynkCaseNow();

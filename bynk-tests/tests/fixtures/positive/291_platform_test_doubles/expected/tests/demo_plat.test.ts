@@ -2345,7 +2345,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["the clock reads the epoch", "random integers come from a fixed seed", "random uuids count up", "no secret is set", "the locale is en", "the logger records without printing", "idempotency remembers within a case", "idempotency is fresh per case", "kv is in-memory", "kv is fresh per case", "a stubbed operation answers; the rest reach the double", "a stubbed fetch answers for the network", "a fetch double sees the request's headers", "an unstubbed fetch faults rather than reach the network", "the doubles hold at the integration tier"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("the clock reads the epoch")) {
     const started = __bynkCaseNow();

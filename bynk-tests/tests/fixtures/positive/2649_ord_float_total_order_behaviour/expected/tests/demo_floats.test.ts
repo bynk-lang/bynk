@@ -182,7 +182,7 @@ const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow()
 export const __bynkCases: readonly string[] = ["sort puts NaN last", "sortBy agrees with sort at NaN", "max is NaN when one is present, min only when all are", "negative zero and zero compare equal, so the sort is stable", "a Float in a record sorts NaN last too", "the operators keep IEEE semantics"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
-  const results = [];
+  const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("sort puts NaN last")) {
     const started = __bynkCaseNow();
