@@ -342,9 +342,11 @@ jobs:
               - 'design/decisions/**'
             readmes:
               # The library crates' READMEs carry the crate-layering diagram that
-              # readme_layering checks against their Cargo.toml dependencies.
+              # readme_layering checks against their Cargo.toml dependencies, and
+              # the `rust` examples `cargo readme-doctests` compiles (#1645).
               - *global
               - 'bynk-*/README.md'
+              - '.cargo/config.toml'
             pending:
               # Pending-increment files (increment-allocation track). A change
               # here that touches no Rust would skip the `test` job, so the
@@ -896,8 +898,9 @@ jobs:
         if: matrix.os != 'ubuntu-latest'
         run: npx -y wrangler@4 --version
         continue-on-error: true
-      # `cargo nextest run --workspace` runs every crate's suite (no rustdoc
-      # doctests exist in the tree, so nextest loses nothing). The corpus's includes:
+      # `cargo nextest run --workspace` runs every crate's suite. nextest cannot
+      # run rustdoc doctests; the only ones in the tree are the crate READMEs'
+      # examples, which the `README examples` step below runs. The corpus's includes:
       #   - doc_examples        — the example-compilation gate (the Book)
       #   - diagnostics_registry / keywords_reference / grammar_reference
       #     — assert the generated reference pages are up to date
@@ -943,6 +946,13 @@ jobs:
           # workerd smokes may skip if wrangler cannot boot. Linux requires them
           # in the `test-system` job (see there, and bynk-tests/tests/require/mod.rs
           # for the one implementation of the "non-empty means required" contract).
+      # #1645: the crate READMEs' `rust` examples, compiled and run as doctests
+      # (`cargo readme-doctests`, a `.cargo/config.toml` alias naming only the
+      # crates whose README has one). Linux only: the examples are
+      # OS-independent. A README-only change runs it in the `drift` job instead.
+      - name: README examples (doctests)
+        if: matrix.os == 'ubuntu-latest'
+        run: cargo readme-doctests
       # C4b (#2940): every test is in exactly one tier (unit, integration,
       # system; the `ci-*` profiles in .config/nextest.toml). Linux only: the
       # partition is OS-independent. `--profile test` reuses the test build
@@ -1617,6 +1627,11 @@ jobs:
     #     (a `decisions` input) and asserts decisions/README.md indexes every ADR.
     #   - xtask/tests/docs_consistency/readme_layering.rs reads bynk-*/README.md (a
     #     `readmes` input) and asserts the crate-layering diagram matches the manifests.
+    #   - `cargo readme-doctests` compiles and runs the `rust` examples in
+    #     bynk-*/README.md (a `readmes` input) as doctests (#1645), which the
+    #     `test` job runs in its own `README examples` step;
+    #     xtask/tests/docs_consistency/readme_doctests.rs keeps the alias's crate
+    #     list in step with the READMEs that have a `rust` block.
     #   - xtask validates design/pending/**.md (a `pending` input) against the
     #     pending-increment format (increment-allocation track).
     # This job runs them exactly when `test` would NOT but a drift input changed,
@@ -1651,6 +1666,11 @@ jobs:
       # (the guards, the pending-increment format and the bynk.toml schema).
       - name: Docs and index guards; pending-increment files; bynk.toml schema
         run: cargo test -p xtask
+      # #1645: only on a README change — the grammar/decisions/pending PRs this
+      # job also serves touch no README example.
+      - name: README examples (doctests)
+        if: needs.changes.outputs.readmes == 'true'
+        run: cargo readme-doctests
 
   dependency-review:
     # On PRs, flag newly-introduced dependencies that carry known advisories or

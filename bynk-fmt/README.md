@@ -58,9 +58,13 @@ bynk-fmt = "0.639"
 ```
 
 ```rust
-use bynk_fmt::{format_source, FormatOptions};
+use bynk_fmt::{FormatError, FormatOptions, format_source};
 
-let pretty = format_source(source, &FormatOptions::default())?;
+fn pretty(source: &str) -> Result<String, FormatError> {
+    format_source(source, &FormatOptions::default())
+}
+
+assert_eq!(pretty("commons demo{type Id=Int}").unwrap(), "commons demo {\n\ttype Id = Int\n}\n");
 ```
 
 The public API is small:

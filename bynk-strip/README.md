@@ -67,8 +67,11 @@ bynk-strip = "0.639"
 ```
 
 ```rust
-let js = bynk_strip::strip_types("const n: number = 1;", "main.ts")?;
-assert_eq!(js.trim(), "const n = 1;");
+fn strip(ts: &str) -> Result<String, bynk_strip::StripError> {
+    bynk_strip::strip_types(ts, "main.ts")
+}
+
+assert_eq!(strip("const n: number = 1;").unwrap().trim(), "const n = 1;");
 ```
 
 See the [API docs](https://docs.rs/bynk-strip) for the full surface.

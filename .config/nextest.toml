@@ -5,8 +5,9 @@
 # Why nextest at all: the suite is ~700 tests spread across dozens of
 # integration-test binaries (the bynk-tests/tests/fixtures/** corpus especially).
 # `cargo test` runs those binaries sequentially; nextest runs one process pool
-# across all of them, cutting the test leg's wall-clock. There are no rustdoc
-# doctests in the tree (nextest cannot run those), so nothing is lost — the
+# across all of them, cutting the test leg's wall-clock. nextest cannot run
+# rustdoc doctests; the only ones in the tree are the crate READMEs' examples
+# (#1645), which CI runs separately with `cargo readme-doctests`. The
 # `doc_examples` gate is an ordinary `#[test]`, which nextest runs normally.
 
 # Test groups (see the macOS overrides on `profile.default` below).
