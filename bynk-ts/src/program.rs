@@ -135,7 +135,17 @@ impl TsProgram {
                     out.insert(alias.clone());
                     out.extend(named.iter().map(|n| local(n)));
                 }
-                _ => {}
+                TsDecl::ReExport { .. }
+                | TsDecl::ExportNames { .. }
+                | TsDecl::ReExportAll { .. }
+                | TsDecl::Export(_)
+                | TsDecl::Interface { .. }
+                | TsDecl::ConstDecl { .. }
+                | TsDecl::Class { .. }
+                | TsDecl::Function { .. }
+                | TsDecl::TypeAlias { .. }
+                | TsDecl::ExportDefault(_)
+                | TsDecl::DeclareConst { .. } => {}
             }
         }
         out

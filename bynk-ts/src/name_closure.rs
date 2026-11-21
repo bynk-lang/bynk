@@ -472,10 +472,8 @@ impl Walk {
         // initialiser) uses the constructor, not the `new` keyword.
         let text = text.trim_start();
         let text = text.strip_prefix("new ").unwrap_or(text);
-        if let Some(ident) = leading_ident(text) {
-            if !self.in_scope(ident) {
-                self.used_values.insert(ident.to_string());
-            }
+        if let Some(ident) = leading_ident(text).filter(|i| !self.in_scope(i)) {
+            self.used_values.insert(ident.to_string());
         }
     }
 
