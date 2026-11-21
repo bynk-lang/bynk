@@ -747,11 +747,11 @@ export function __deserialise_List_Product(json: __JsonValue, path: string = "$"
   }
   const out: __Wire_Product[] = [];
   for (let i = 0; i < json.length; i++) {
-  const item = json[i];
-  const __r_el = __deserialise_Product(item, `${path}[${i}]`);
-  if (__r_el.tag === "Err") return __r_el;
-  const __el = __r_el.value;
-  out.push(__el as __Wire_Product);
+    const item = json[i];
+    const __r_el = __deserialise_Product(item, `${path}[${i}]`);
+    if (__r_el.tag === "Err") return __r_el;
+    const __el = __r_el.value;
+    out.push(__el as __Wire_Product);
   }
   return Ok(out);
 }
