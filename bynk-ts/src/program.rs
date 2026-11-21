@@ -343,6 +343,11 @@ fn walk_expr<'a>(expr: &'a TsExpr, out: &mut Vec<(VerbatimOrigin, &'a str)>) {
             test,
             consequent,
             alternate,
+        }
+        | TsExpr::MultilineConditional {
+            test,
+            consequent,
+            alternate,
         } => {
             walk_expr(test, out);
             walk_expr(consequent, out);
@@ -1725,6 +1730,17 @@ pub enum TsExpr {
         consequent: Box<TsExpr>,
         alternate: Box<TsExpr>,
     },
+    /// [`TsExpr::Conditional`] broken over three lines (1A.38a): the test, then
+    /// `? consequent` and `: alternate` each on a line of their own, one level
+    /// deeper than the statement that holds it. A separate variant rather than a
+    /// `multiline` field, so none of the existing `Conditional` constructions
+    /// changes; it takes every precedence and parenthesisation rule `Conditional`
+    /// does. Build it with [`TsExpr::multiline_conditional`].
+    MultilineConditional {
+        test: Box<TsExpr>,
+        consequent: Box<TsExpr>,
+        alternate: Box<TsExpr>,
+    },
     /// An explicit, printer-preserved parenthesization — distinct from every
     /// other variant's own precedence-*derived* parens (`render_operand`/
     /// `render_binary_operand`), which the printer adds or omits based on
@@ -1893,6 +1909,16 @@ impl TsExpr {
             entries,
             multiline: true,
             end_span: Some(end_span),
+        }
+    }
+
+    /// A [`TsExpr::MultilineConditional`]: `test`, then `? consequent` and
+    /// `: alternate` on their own lines.
+    pub fn multiline_conditional(test: TsExpr, consequent: TsExpr, alternate: TsExpr) -> Self {
+        TsExpr::MultilineConditional {
+            test: Box::new(test),
+            consequent: Box::new(consequent),
+            alternate: Box::new(alternate),
         }
     }
 
@@ -2833,7 +2859,16 @@ pub enum TsDecl {
     /// export) is the first real default import anywhere in `bynk-emit`'s
     /// own converted content — every prior import site is either named
     /// ([`TsDecl::Import`]) or namespace ([`TsDecl::ImportNamespace`]).
-    ImportDefault { alias: String, from: String },
+    ///
+    /// 1A.38a: `named` carries the braced names that ride on the same statement
+    /// (`import __entry0, { isMiss as __miss0 } from "…";`, a Worker group's
+    /// member import), in [`TsDecl::Import`]'s own spelling (`a as b`,
+    /// `type T`). Empty is the plain default import every earlier site builds.
+    ImportDefault {
+        alias: String,
+        named: Vec<String>,
+        from: String,
+    },
     /// `export { a, b } from "spec";` — a re-export, structurally distinct
     /// from both [`TsDecl::Import`] (which binds locally, carries no
     /// `export` keyword) and [`TsDecl::Export`] (which wraps a whole

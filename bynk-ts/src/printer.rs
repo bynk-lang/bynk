@@ -1273,6 +1273,7 @@ fn needs_parens_as_operand(expr: &TsExpr) -> bool {
             | TsExpr::AsConst(_)
             | TsExpr::Arrow { .. }
             | TsExpr::Conditional { .. }
+            | TsExpr::MultilineConditional { .. }
             | TsExpr::Assign { .. }
             | TsExpr::AddAssign { .. }
             | TsExpr::Function { .. }
@@ -1307,6 +1308,7 @@ fn new_callee_needs_parens(callee: &TsExpr) -> bool {
         | TsExpr::Unary { .. }
         | TsExpr::Binary { .. }
         | TsExpr::Conditional { .. }
+        | TsExpr::MultilineConditional { .. }
         | TsExpr::Paren(_)
         | TsExpr::Spread(_)
         | TsExpr::NonNull(_)
@@ -1410,6 +1412,7 @@ fn render_binary_operand(
         | TsExpr::AsConst(_)
         | TsExpr::Arrow { .. }
         | TsExpr::Conditional { .. }
+        | TsExpr::MultilineConditional { .. }
         | TsExpr::Assign { .. }
         | TsExpr::AddAssign { .. }
         | TsExpr::Yield(_) => true,
@@ -1849,6 +1852,7 @@ fn render_cast_operand(
         TsExpr::Binary { .. }
             | TsExpr::Arrow { .. }
             | TsExpr::Conditional { .. }
+            | TsExpr::MultilineConditional { .. }
             | TsExpr::Yield(_)
     );
     if needs_parens {
@@ -1912,7 +1916,10 @@ fn render_conditional(
     // machinery the way `test` does.
     let test_needs_parens = matches!(
         test,
-        TsExpr::Arrow { .. } | TsExpr::Conditional { .. } | TsExpr::Yield(_)
+        TsExpr::Arrow { .. }
+            | TsExpr::Conditional { .. }
+            | TsExpr::MultilineConditional { .. }
+            | TsExpr::Yield(_)
     );
     if test_needs_parens {
         out.push('(');
@@ -1925,6 +1932,43 @@ fn render_conditional(
     render_expr(out, consequent, depth, m);
     out.push_str(" : ");
     render_expr(out, alternate, depth, m);
+}
+
+/// [`TsExpr::MultilineConditional`]: the test on the current line, then
+/// `? consequent` and `: alternate` on lines of their own, one indent level (two
+/// spaces) deeper than `depth`. The test, the consequent and the alternate take
+/// the same parenthesisation as [`render_conditional`]'s.
+fn render_multiline_conditional(
+    out: &mut String,
+    test: &TsExpr,
+    consequent: &TsExpr,
+    alternate: &TsExpr,
+    depth: usize,
+    m: &mut Option<MergeTarget<'_>>,
+) {
+    let test_needs_parens = matches!(
+        test,
+        TsExpr::Arrow { .. }
+            | TsExpr::Conditional { .. }
+            | TsExpr::MultilineConditional { .. }
+            | TsExpr::Yield(_)
+    );
+    if test_needs_parens {
+        out.push('(');
+        render_expr(out, test, depth, m);
+        out.push(')');
+    } else {
+        render_expr(out, test, depth, m);
+    }
+    let indent = "  ".repeat(depth + 1);
+    out.push('\n');
+    out.push_str(&indent);
+    out.push_str("? ");
+    render_expr(out, consequent, depth + 1, m);
+    out.push('\n');
+    out.push_str(&indent);
+    out.push_str(": ");
+    render_expr(out, alternate, depth + 1, m);
 }
 
 fn render_expr(out: &mut String, expr: &TsExpr, depth: usize, m: &mut Option<MergeTarget<'_>>) {
@@ -2145,6 +2189,11 @@ fn render_expr(out: &mut String, expr: &TsExpr, depth: usize, m: &mut Option<Mer
             consequent,
             alternate,
         } => render_conditional(out, test, consequent, alternate, depth, m),
+        TsExpr::MultilineConditional {
+            test,
+            consequent,
+            alternate,
+        } => render_multiline_conditional(out, test, consequent, alternate, depth, m),
         TsExpr::Paren(inner) => {
             out.push('(');
             render_expr(out, inner, depth, m);
@@ -2316,7 +2365,9 @@ fn starts_with_object(expr: &TsExpr) -> bool {
         TsExpr::AsConst(expr) => starts_with_object(expr),
         TsExpr::DefaultIife { .. } => false,
         TsExpr::Binary { left, .. } => starts_with_object(left),
-        TsExpr::Conditional { test, .. } => starts_with_object(test),
+        TsExpr::Conditional { test, .. } | TsExpr::MultilineConditional { test, .. } => {
+            starts_with_object(test)
+        }
         TsExpr::Ident(_)
         | TsExpr::VerbatimExpr(..)
         | TsExpr::Arrow { .. }
@@ -3130,9 +3181,14 @@ fn render_decl_body(
             out.push_str(from);
             out.push_str("\";\n");
         }
-        TsDecl::ImportDefault { alias, from } => {
+        TsDecl::ImportDefault { alias, named, from } => {
             out.push_str("import ");
             out.push_str(alias);
+            if !named.is_empty() {
+                out.push_str(", { ");
+                out.push_str(&named.join(", "));
+                out.push_str(" }");
+            }
             out.push_str(" from \"");
             out.push_str(from);
             out.push_str("\";\n");
@@ -5971,6 +6027,7 @@ mod tests {
         program.push(TsStmt::decl(
             TsDecl::ImportDefault {
                 alias: "worker_shop_api".to_string(),
+                named: Vec::new(),
                 from: "../workers/shop-api/index.js".to_string(),
             },
             None,
@@ -9745,5 +9802,102 @@ mod tests {
             ],
         };
         assert_eq!(print_expr(&call), format!("__formDecode(__s, {specs})"));
+    }
+
+    /// 1A.38a: a default import that also names braced imports, the Worker group's
+    /// member import. The names keep `TsDecl::Import`'s `a as b` spelling.
+    #[test]
+    fn prints_a_default_import_with_named_imports() {
+        let mut program = TsProgram::new();
+        program.push(TsStmt::decl(
+            TsDecl::ImportDefault {
+                alias: "__entry0".to_string(),
+                named: vec!["isMiss as __miss0".to_string(), "type T".to_string()],
+                from: "./shop.index.js".to_string(),
+            },
+            None,
+        ));
+        let printed = print(&program, "x.bynk", "", "x.ts");
+        assert_eq!(
+            printed.text,
+            "import __entry0, { isMiss as __miss0, type T } from \"./shop.index.js\";\n"
+        );
+    }
+
+    /// 1A.38a: the multiline `Conditional` is the test, then `? a` and `: b` one level
+    /// deeper than the statement holding it, here a depth-1 `const` in a function
+    /// body. Its three sub-expressions print as they do in a one-line `Conditional`.
+    #[test]
+    fn prints_a_multiline_conditional_one_level_deeper_than_its_statement() {
+        let cond = TsExpr::multiline_conditional(
+            TsExpr::Paren(Box::new(TsExpr::Binary {
+                op: TsBinaryOp::StrictEq,
+                left: Box::new(id("a")),
+                right: Box::new(id("b")),
+            })),
+            TsExpr::Call {
+                callee: Box::new(id("f")),
+                args: vec![id("x")],
+            },
+            id("y"),
+        );
+        let decl = TsDecl::Function {
+            name: "g".to_string(),
+            generics: vec![],
+            params: vec![],
+            return_type: None,
+            body: vec![TsStmt::const_stmt(
+                TsBindingName::Ident("v".to_string()),
+                None,
+                cond,
+                None,
+            )],
+            is_async: false,
+            inline: false,
+        };
+        let mut program = TsProgram::new();
+        program.push(TsStmt::decl(decl, None));
+        let printed = print(&program, "x.bynk", "", "x.ts");
+        assert_eq!(
+            printed.text,
+            "function g() {\n  const v = (a === b)\n    ? f(x)\n    : y;\n}\n"
+        );
+    }
+
+    /// 1A.38a: a `MultilineConditional` takes `Conditional`'s precedence rules: it is
+    /// bracketed as a binary operand, as a call callee, and as another conditional's
+    /// test.
+    #[test]
+    fn a_multiline_conditional_is_bracketed_wherever_a_conditional_is() {
+        let cond = || TsExpr::multiline_conditional(id("t"), id("c"), id("a"));
+        let one_line = || TsExpr::Conditional {
+            test: Box::new(id("t")),
+            consequent: Box::new(id("c")),
+            alternate: Box::new(id("a")),
+        };
+        let wrapped = |e: TsExpr| TsExpr::Binary {
+            op: TsBinaryOp::Add,
+            left: Box::new(e),
+            right: Box::new(id("z")),
+        };
+        assert_eq!(
+            print_expr(&wrapped(cond())),
+            "(t\n  ? c\n  : a) + z".to_string()
+        );
+        assert_eq!(
+            print_expr(&TsExpr::Call {
+                callee: Box::new(cond()),
+                args: vec![]
+            }),
+            "(t\n  ? c\n  : a)()"
+        );
+        assert_eq!(
+            print_expr(&TsExpr::multiline_conditional(one_line(), id("c"), id("a"))),
+            "(t ? c : a)\n  ? c\n  : a"
+        );
+        assert_eq!(
+            print_expr(&TsExpr::multiline_conditional(cond(), id("c"), id("a"))),
+            "(t\n  ? c\n  : a)\n  ? c\n  : a"
+        );
     }
 }
