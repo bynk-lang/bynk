@@ -332,29 +332,16 @@ pub(super) fn ts_type_ref_to_ts_type(r: &TypeRef, qualify: Option<QualifyFn<'_>>
         TypeRef::Set(t, _) => {
             TsType::named_with_args("ReadonlySet", vec![ts_type_ref_to_ts_type(t, qualify)])
         }
-        // A `Query[T]`'s own real shape is `(() => readonly T[])` — an
-        // *outer* paren pair around the whole function type (found by the
-        // zero-diff check this slice's own "Done when" requires: the
-        // general `TsType::Fn` rendering, correctly matching the real
-        // parametered-function-type case, has no such wrap, but every
-        // fixture's own Query annotation does — e.g.
-        // `bynk-tests/tests/fixtures/positive/302_query_annotated_let/expected/
-        // probe.ts:46`). `TsType` has no general parenthesisation wrapper
-        // (adding one for this single real use would be inventing a new
-        // variant beyond this slice's own authorised gap list — `readonly`
-        // and `Fn`, nothing else); pre-rendering the `Fn` type immediately
-        // and wrapping the *text* in parens, carried as an opaque `Named`
-        // with no type arguments (which prints its `name` verbatim,
-        // byte-for-byte, whatever it contains), reproduces the real shape
-        // exactly without widening the algebra. Worth reconsidering if a
-        // second real case ever needs the same wrap.
+        // A `Query[T]`'s own real shape is `(() => readonly T[])`: an outer paren pair around
+        // the whole function type, which every fixture's own Query annotation has (e.g.
+        // `bynk-tests/tests/fixtures/positive/302_query_annotated_let/expected/probe.ts:46`).
         TypeRef::Query(t, _) => {
             let fn_ty = TsType::Fn {
                 names: vec![],
                 params: vec![],
                 ret: Box::new(query_result_ty(ts_type_ref_to_ts_type(t, qualify))),
             };
-            TsType::named(format!("({})", bynk_ts::print_type(&fn_ty)))
+            TsType::paren(fn_ty)
         }
         // v0.100: `Stream[T]` lowers to a host async iterable.
         TypeRef::Stream(t, _) => {
@@ -782,7 +769,7 @@ pub(super) fn ts_ty_to_ts_type(t: TyId, tys: TyRender<'_>) -> TsType {
                 params: vec![],
                 ret: Box::new(query_result_ty(ts_ty_to_ts_type(*t, tys))),
             };
-            TsType::named(format!("({})", bynk_ts::print_type(&fn_ty)))
+            TsType::paren(fn_ty)
         }
         // v0.100: a `Stream[T]` lowers to a host async iterable.
         Ty::Stream(t) => TsType::named_with_args("AsyncIterable", vec![ts_ty_to_ts_type(*t, tys)]),

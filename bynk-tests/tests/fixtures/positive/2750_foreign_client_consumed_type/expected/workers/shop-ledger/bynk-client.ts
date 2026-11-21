@@ -2,7 +2,7 @@
 // The typed client for context `shop.ledger`, for a Worker that is not Bynk.
 // It imports `@bynk/wire-client`: https://bynk-lang.org/book/reference/typescript-client/
 
-import { Err, Ok, type __JsonValue, type __ServiceBinding, type WireVersion as __WireVersion, __callService } from "@bynk/wire-client";
+import { Err, Ok, type Result, type __BoundaryError, type __JsonValue, type __ServiceBinding, type WireVersion as __WireVersion, __callService } from "@bynk/wire-client";
 
 /**
  * The context this client calls.

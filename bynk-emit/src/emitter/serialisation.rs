@@ -688,6 +688,11 @@ fn depth_param() -> TsParam {
     }
 }
 
+/// `Result<ok, __BoundaryError>`: what every generated decoder returns.
+fn boundary_result(ok: TsType) -> TsType {
+    TsType::named_with_args("Result", vec![ok, TsType::named("__BoundaryError")])
+}
+
 /// `json: __JsonValue, path: string = "$"`, plus [`depth_param`] for a codec
 /// on a type cycle (#2656): the parameters of every generated decoder.
 fn deserialise_params(depth: Option<Depth<'_>>) -> Vec<TsParam> {
@@ -1479,7 +1484,7 @@ fn emit_record(
     // namespace (`commerce_payment.Receipt`); the codec function name stays
     // bare and local. Its field codec calls are unqualified too — they resolve
     // to the caller's own locally-generated helpers.
-    let ts_type = qual_type(qual, name);
+    let ts_type = TsType::named(qual_type(qual, name));
     emit_record_codec(name, &ts_type, &fields, types, codecs, ru)
 }
 
@@ -1518,7 +1523,7 @@ fn emit_record(
 /// `ResultInst`/`OptionInst`/etc. arms, still out of this slice's scope).
 fn emit_record_codec(
     fn_suffix: &str,
-    ts_type: &str,
+    ts_type: &TsType,
     fields: &[WireField],
     types: &std::collections::HashMap<String, Arc<TypeDecl>>,
     codecs: &DepthCodecs,
@@ -1526,10 +1531,7 @@ fn emit_record_codec(
 ) -> Vec<TsDecl> {
     // #2656: a record on a type cycle threads the nesting depth.
     let depth = depth_for(codecs, fn_suffix, true);
-    let mut serialise_params = vec![TsParam::new(
-        "value".to_string(),
-        Some(TsType::named(ts_type)),
-    )];
+    let mut serialise_params = vec![TsParam::new("value".to_string(), Some(ts_type.clone()))];
     let mut serialise_body = Vec::new();
     if depth.is_some() {
         serialise_params.push(depth_param());
@@ -1688,7 +1690,7 @@ fn emit_record_codec(
                     .map(|field| (field.name.clone(), ident(format!("__{}", field.name))))
                     .collect(),
             ),
-            TsType::named(ts_type),
+            ts_type.clone(),
         )],
     )));
 
@@ -1696,7 +1698,7 @@ fn emit_record_codec(
         name: format!("__deserialise_{fn_suffix}"),
         generics: Vec::new(),
         params: deserialise_params(depth),
-        return_type: Some(TsType::named(format!("Result<{ts_type}, __BoundaryError>"))),
+        return_type: Some(boundary_result(ts_type.clone())),
         body,
         is_async: false,
         inline: false,
@@ -1733,7 +1735,7 @@ fn emit_sum(
         }) => s,
         _ => unreachable!("emit_sum is only ever called for a non-generic Sum declaration"),
     };
-    let ty = qual_type(qual, name);
+    let ty = TsType::named(qual_type(qual, name));
     emit_sum_codec(name, &ty, &sum, codecs, ru)
 }
 
@@ -1788,7 +1790,7 @@ fn emit_sum(
 /// formatting drift).
 fn emit_sum_codec(
     fn_suffix: &str,
-    ts_type: &str,
+    ts_type: &TsType,
     sum: &WireSum,
     codecs: &DepthCodecs,
     ru: &RuntimeUse,
@@ -1840,10 +1842,7 @@ fn emit_sum_codec(
             }
         })
         .collect();
-    let mut serialise_params = vec![TsParam::new(
-        "value".to_string(),
-        Some(TsType::named(ts_type)),
-    )];
+    let mut serialise_params = vec![TsParam::new("value".to_string(), Some(ts_type.clone()))];
     let mut serialise_body = Vec::new();
     if depth.is_some() {
         serialise_params.push(depth_param());
@@ -1905,7 +1904,7 @@ fn emit_sum_codec(
                         ident("Ok"),
                         vec![as_expr(
                             TsExpr::object(vec![(tag.to_string(), str_lit(vname.clone()))]),
-                            TsType::named(ts_type),
+                            ts_type.clone(),
                         )],
                     ))],
                     false,
@@ -1933,7 +1932,7 @@ fn emit_sum_codec(
                 }
                 stmts.push(return_(call(
                     ident("Ok"),
-                    vec![as_expr(TsExpr::object(entries), TsType::named(ts_type))],
+                    vec![as_expr(TsExpr::object(entries), ts_type.clone())],
                 )));
                 case_(str_lit(vname.clone()), stmts, true)
             }
@@ -1949,7 +1948,7 @@ fn emit_sum_codec(
         name: format!("__deserialise_{fn_suffix}"),
         generics: Vec::new(),
         params: deserialise_params(depth),
-        return_type: Some(TsType::named(format!("Result<{ts_type}, __BoundaryError>"))),
+        return_type: Some(boundary_result(ts_type.clone())),
         body: deserialise_body,
         is_async: false,
         inline: false,
@@ -2029,7 +2028,13 @@ mod emit_sum_codec_tests {
                 },
             ],
         };
-        let decls = emit_sum_codec("Parcel", "Parcel", &sum, &DepthCodecs::new(), &ru);
+        let decls = emit_sum_codec(
+            "Parcel",
+            &TsType::named("Parcel"),
+            &sum,
+            &DepthCodecs::new(),
+            &ru,
+        );
         assert_eq!(
             render_decls(decls),
             "export function __serialise_Parcel(value: Parcel): __JsonValue {\n  switch (value.tag) {\n    case \"Pending\":\n      return { kind: \"Pending\" };\n    case \"Shipped\": {\n      return { kind: \"Shipped\", tracking: value.tracking as __JsonValue, weight: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error(\"Int outside the safe-integer range at boundary\"); return v as __JsonValue; })(value.weight) };\n    }\n  }\n}\n\nexport function __deserialise_Parcel(json: __JsonValue, path: string = \"$\"): Result<Parcel, __BoundaryError> {\n  if (typeof json !== \"object\" || json === null || globalThis.Array.isArray(json)) {\n    return Err({ kind: \"StructuralMismatch\", path, expected: \"object\", actual: typeof json });\n  }\n  const obj = json as { [k: string]: __JsonValue };\n  const kind = obj[\"kind\"];\n  switch (kind) {\n    case \"Pending\":\n      return Ok({ tag: \"Pending\" } as Parcel);\n    case \"Shipped\": {\n      if (typeof obj[\"tracking\"] !== \"string\") {\n        return Err({ kind: \"StructuralMismatch\", path: `${path}.tracking`, expected: \"string\", actual: typeof obj[\"tracking\"] });\n      }\n      const __tracking = obj[\"tracking\"];\n      if (typeof obj[\"weight\"] !== \"number\") {\n        return Err({ kind: \"StructuralMismatch\", path: `${path}.weight`, expected: \"number\", actual: typeof obj[\"weight\"] });\n      }\n      if (!globalThis.Number.isSafeInteger(obj[\"weight\"])) {\n        return Err({ kind: \"StructuralMismatch\", path: `${path}.weight`, expected: \"safe integer\", actual: String(obj[\"weight\"]) });\n      }\n      const __weight = obj[\"weight\"];\n      return Ok({ tag: \"Shipped\", tracking: __tracking, weight: __weight } as Parcel);\n    }\n    default:\n      return Err({ kind: \"StructuralMismatch\", path, expected: \"sum variant kind\", actual: String(kind) });\n  }\n}\n"
@@ -2706,7 +2711,11 @@ pub fn deserialise_ref_via(t: &TypeRef, ns: &str, ru: &RuntimeUse) -> TsExpr {
             generics: Vec::new(),
             return_type: None,
             body: Box::new(TsArrowBody::Expr(Box::new(deserialise_expr_via(
-                other, "__j", "$", ns, ru,
+                other,
+                &ident("__j"),
+                "$",
+                ns,
+                ru,
             )))),
         },
     }
@@ -2844,7 +2853,7 @@ fn strip_effect(t: &TypeRef) -> &TypeRef {
 /// v0.22b: an expression-form deserialise call for a codec target. Named
 /// types and generic instantiations go through their (module-local)
 /// helpers; bases inline the structural check.
-pub(crate) fn deserialise_expr(t: &TypeRef, json: &str, path: &str, ru: &RuntimeUse) -> TsExpr {
+pub(crate) fn deserialise_expr(t: &TypeRef, json: &TsExpr, path: &str, ru: &RuntimeUse) -> TsExpr {
     deserialise_expr_via(t, json, path, "", ru)
 }
 
@@ -2859,7 +2868,7 @@ pub(crate) fn deserialise_expr(t: &TypeRef, json: &str, path: &str, ru: &Runtime
 /// and the runtime-owned error types.
 pub(crate) fn deserialise_expr_via(
     t: &TypeRef,
-    json: &str,
+    json: &TsExpr,
     path: &str,
     ns: &str,
     ru: &RuntimeUse,
@@ -2894,7 +2903,7 @@ pub(crate) fn deserialise_expr_via(
             call(
                 ident("Ok"),
                 vec![as_expr(
-                    as_expr(ident(json), TsType::named("unknown")),
+                    as_expr(json.clone(), TsType::named("unknown")),
                     TsType::named(ty.to_string()),
                 )],
             ),
@@ -2921,7 +2930,7 @@ pub(crate) fn deserialise_expr_via(
     match t {
         TypeRef::Named(id) => call(
             ident(format!("{ns}__deserialise_{}", id.name)),
-            vec![ident(json), str_lit(path)],
+            vec![json.clone(), str_lit(path)],
         ),
         TypeRef::Result(..)
         | TypeRef::Option(..)
@@ -2932,7 +2941,7 @@ pub(crate) fn deserialise_expr_via(
         // monomorphised codec (`deserialise_Paginated_User`).
         | TypeRef::App { .. } => call(
             ident(format!("{ns}__deserialise_{}", inner_ts_name(t))),
-            vec![ident(json), str_lit(path)],
+            vec![json.clone(), str_lit(path)],
         ),
         TypeRef::Effect(inner, _) => deserialise_expr_via(inner, json, path, ns, ru),
         // A `()` carries no wire content — the wire slot is `null` and the value
@@ -3048,7 +3057,7 @@ pub(crate) fn deserialise_expr_via(
                         )),
                     }))),
                 },
-                vec![ident(json)],
+                vec![json.clone()],
             )
         }
         TypeRef::Base(b, _) => {
@@ -3107,7 +3116,7 @@ pub(crate) fn deserialise_expr_via(
                             alternate: Box::new(structural_mismatch(expected, typeof_v())),
                         }))),
                     },
-                    vec![ident(json)],
+                    vec![json.clone()],
                 );
             };
             // The two failure modes are **not** the same error, and collapsing
@@ -3150,7 +3159,7 @@ pub(crate) fn deserialise_expr_via(
                         }),
                     }))),
                 },
-                vec![ident(json)],
+                vec![json.clone()],
             )
         }
         // Everything else is rejected by the checker's codec-domain rule (the
@@ -3180,7 +3189,7 @@ mod deserialise_expr_via_error_type_tests {
         let ru = RuntimeUse::default();
         let t = TypeRef::ValidationError(sp());
         assert_eq!(
-            bynk_ts::print_expr(&deserialise_expr(&t, "json", "path", &ru)),
+            bynk_ts::print_expr(&deserialise_expr(&t, &ident("json"), "path", &ru)),
             "Ok(json as unknown as ValidationError) as Result<ValidationError, __BoundaryError>"
         );
     }
@@ -3190,7 +3199,7 @@ mod deserialise_expr_via_error_type_tests {
         let ru = RuntimeUse::default();
         let t = TypeRef::DecodeError(sp());
         assert_eq!(
-            bynk_ts::print_expr(&deserialise_expr(&t, "json", "path", &ru)),
+            bynk_ts::print_expr(&deserialise_expr(&t, &ident("json"), "path", &ru)),
             "Ok(json as unknown as DecodeError) as Result<DecodeError, __BoundaryError>"
         );
     }
@@ -3200,7 +3209,7 @@ mod deserialise_expr_via_error_type_tests {
         let ru = RuntimeUse::default();
         let t = TypeRef::HttpResult(Box::new(TypeRef::Base(BaseType::Int, sp())), sp());
         assert_eq!(
-            bynk_ts::print_expr(&deserialise_expr(&t, "json", "path", &ru)),
+            bynk_ts::print_expr(&deserialise_expr(&t, &ident("json"), "path", &ru)),
             "Ok(json as unknown as HttpResult<number>) as Result<HttpResult<number>, __BoundaryError>"
         );
     }
@@ -3210,7 +3219,7 @@ mod deserialise_expr_via_error_type_tests {
         let ru = RuntimeUse::default();
         let t = TypeRef::QueueResult(sp());
         assert_eq!(
-            bynk_ts::print_expr(&deserialise_expr(&t, "json", "path", &ru)),
+            bynk_ts::print_expr(&deserialise_expr(&t, &ident("json"), "path", &ru)),
             "Ok(json as unknown as QueueResult) as Result<QueueResult, __BoundaryError>"
         );
     }
@@ -3824,13 +3833,9 @@ pub fn emit_generic_helpers_qualified(
             // is the erased generic `Paginated<User>`.
             GenericInst::RecordInst { name, args } => {
                 let fn_suffix = app_ts_name(name, args);
-                let ts_type = format!(
-                    "{}<{}>",
+                let ts_type = TsType::named_with_args(
                     qual_type(qual, name),
-                    args.iter()
-                        .map(|a| bynk_ts::print_type(&qualified_ts_type(a, qual)))
-                        .collect::<Vec<_>>()
-                        .join(", ")
+                    args.iter().map(|a| qualified_ts_type(a, qual)).collect(),
                 );
                 // `record_inst_fields` is `None` only for an unknown name, a
                 // non-record body, or an arity mismatch — all of which the
@@ -3912,13 +3917,9 @@ pub fn emit_generic_helpers_qualified(
                 let fn_suffix = app_ts_name(name, args);
                 // #1736: qualified like `RecordInst` above: a consumed
                 // context's generic sum is named through its namespace.
-                let ts_type = format!(
-                    "{}<{}>",
+                let ts_type = TsType::named_with_args(
                     qual_type(qual, name),
-                    args.iter()
-                        .map(|a| bynk_ts::print_type(&qualified_ts_type(a, qual)))
-                        .collect::<Vec<_>>()
-                        .join(", ")
+                    args.iter().map(|a| qualified_ts_type(a, qual)).collect(),
                 );
                 let variants = sum_inst_variants(name, args, types).unwrap_or_else(|| {
                     unreachable!("SumInst `{name}` is not a resolved generic sum")
@@ -3971,12 +3972,9 @@ pub fn emit_generic_helpers_qualified(
             GenericInst::ResultInst { ok, err } => {
                 let ok_ts = inner_ts_name(ok);
                 let err_ts = inner_ts_name(err);
-                let ok_inner = bynk_ts::print_type(&qualified_ts_type(ok, qual));
-                let err_inner = bynk_ts::print_type(&qualified_ts_type(err, qual));
-                let result_ty = TsType::named_with_args(
-                    "Result",
-                    vec![TsType::named(ok_inner), TsType::named(err_inner)],
-                );
+                let ok_inner = qualified_ts_type(ok, qual);
+                let err_inner = qualified_ts_type(err, qual);
+                let result_ty = TsType::named_with_args("Result", vec![ok_inner, err_inner]);
 
                 let serialise = TsDecl::Export(Box::new(TsDecl::Function {
                     name: format!("__serialise_Result_{ok_ts}_{err_ts}"),
@@ -4056,8 +4054,7 @@ pub fn emit_generic_helpers_qualified(
             }
             GenericInst::OptionInst { inner } => {
                 let inner_ts = inner_ts_name(inner);
-                let inner_ty = bynk_ts::print_type(&qualified_ts_type(inner, qual));
-                let inner_ty = TsType::named(inner_ty);
+                let inner_ty = qualified_ts_type(inner, qual);
                 let option_ty = TsType::named_with_args("Option", vec![inner_ty.clone()]);
 
                 // #2858: in a project with a plain-JSON route the one `Option`
@@ -4130,7 +4127,7 @@ pub fn emit_generic_helpers_qualified(
             // v0.20b: `List[T]` — element-wise wire format (a JSON array).
             GenericInst::ListInst { elem } => {
                 let elem_ts = inner_ts_name(elem);
-                let elem_ty = TsType::named(bynk_ts::print_type(&qualified_ts_type(elem, qual)));
+                let elem_ty = qualified_ts_type(elem, qual);
                 let readonly_elem_array = TsType::readonly_array(elem_ty.clone());
 
                 let serialise = TsDecl::Export(Box::new(TsDecl::Function {
@@ -4213,7 +4210,7 @@ pub fn emit_generic_helpers_qualified(
             // one, so it means the payload is not the set it claims to be.
             GenericInst::SetInst { elem } => {
                 let elem_ts = inner_ts_name(elem);
-                let elem_ty = TsType::named(bynk_ts::print_type(&qualified_ts_type(elem, qual)));
+                let elem_ty = qualified_ts_type(elem, qual);
                 let set_ty = TsType::named_with_args("ReadonlySet", vec![elem_ty.clone()]);
                 // Slice 2 (DECISION H): a composite element decodes into the keyed
                 // set, whose `has` is value equality, so a wire duplicate is
@@ -4224,8 +4221,10 @@ pub fn emit_generic_helpers_qualified(
                     ru.note_key("__BynkKeySet");
                     "__BynkKeySet"
                 };
-                let set_ctor =
-                    bynk_ts::print_type(&TsType::named_with_args(set_ctor, vec![elem_ty.clone()]));
+                let set_ctor = TsExpr::TypeApp {
+                    callee: Box::new(ident(set_ctor)),
+                    type_args: vec![elem_ty.clone()],
+                };
 
                 let serialise = TsDecl::Export(Box::new(TsDecl::Function {
                     name: format!("__serialise_Set_{elem_ts}"),
@@ -4292,7 +4291,7 @@ pub fn emit_generic_helpers_qualified(
                         const_(
                             "out",
                             TsExpr::New {
-                                callee: Box::new(ident(set_ctor)),
+                                callee: Box::new(set_ctor.clone()),
                                 args: vec![],
                             },
                         ),
@@ -4317,8 +4316,8 @@ pub fn emit_generic_helpers_qualified(
             GenericInst::MapInst { key, val } => {
                 let key_ts = inner_ts_name(key);
                 let val_ts = inner_ts_name(val);
-                let key_ty = TsType::named(bynk_ts::print_type(&qualified_ts_type(key, qual)));
-                let val_ty = TsType::named(bynk_ts::print_type(&qualified_ts_type(val, qual)));
+                let key_ty = qualified_ts_type(key, qual);
+                let val_ty = qualified_ts_type(val, qual);
                 let map_ty =
                     TsType::named_with_args("ReadonlyMap", vec![key_ty.clone(), val_ty.clone()]);
                 // `new Map<{key_ty}, {val_ty}>()`'s own callee has no real
@@ -4339,10 +4338,10 @@ pub fn emit_generic_helpers_qualified(
                     ru.note_key("__BynkKeyMap");
                     "__BynkKeyMap"
                 };
-                let map_ctor = bynk_ts::print_type(&TsType::named_with_args(
-                    map_ctor,
-                    vec![key_ty.clone(), val_ty.clone()],
-                ));
+                let map_ctor = TsExpr::TypeApp {
+                    callee: Box::new(ident(map_ctor)),
+                    type_args: vec![key_ty.clone(), val_ty.clone()],
+                };
 
                 let serialise = TsDecl::Export(Box::new(TsDecl::Function {
                     name: format!("__serialise_Map_{key_ts}_{val_ts}"),
@@ -4459,7 +4458,7 @@ pub fn emit_generic_helpers_qualified(
                             TsBindingName::Ident("out".to_string()),
                             None,
                             TsExpr::New {
-                                callee: Box::new(ident(map_ctor)),
+                                callee: Box::new(map_ctor.clone()),
                                 args: vec![],
                             },
                             None,

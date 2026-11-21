@@ -4601,7 +4601,13 @@ pub(crate) fn deserialise_call(
     path: &str,
     ru: &RuntimeUse,
 ) -> TsExpr {
-    crate::emitter::serialisation::deserialise_expr_via(t, json_expr, path, "handlers.", ru)
+    crate::emitter::serialisation::deserialise_expr_via(
+        t,
+        &bynk_ts::TsExpr::Ident(json_expr.to_string()),
+        path,
+        "handlers.",
+        ru,
+    )
 }
 
 fn serialise_call(t: &TypeRef, value: &str, ru: &RuntimeUse) -> TsExpr {

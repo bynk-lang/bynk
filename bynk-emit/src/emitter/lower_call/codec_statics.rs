@@ -307,7 +307,12 @@ pub(in super::super) fn json_decoder_fn(
             vec![ident_node("__j"), str_node("$")],
         )
     } else {
-        super::super::serialisation::deserialise_expr(&tref, "__j", "$", cx.runtime_use())
+        super::super::serialisation::deserialise_expr(
+            &tref,
+            &ident_node("__j"),
+            "$",
+            cx.runtime_use(),
+        )
     };
     let row_pass = if sql {
         sql_bool_pass(t, cx)

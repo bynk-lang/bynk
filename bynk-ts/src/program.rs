@@ -2407,6 +2407,12 @@ pub enum TsType {
     StringLiteral(String),
     /// A non-negative integer literal type, `0`, as a tuple index (`T[0]`).
     NumberLiteral(u32),
+    /// `(T)`: a type in parentheses, always. The printer already parenthesises where a
+    /// postfix operator would misread (an array element, an indexed object); this is for a
+    /// position the printer does not know about, such as the thunk type a `Query` annotation
+    /// is written as, `(() => T)`. It prints as the parentheses around the inner type's own
+    /// spelling, and `name_closure` looks through it.
+    Paren(Box<TsType>),
 }
 
 /// The modifier on a [`TsType::Mapped`] type's `readonly`.
@@ -2506,6 +2512,11 @@ impl TsType {
             object: Box::new(object),
             index: Box::new(index),
         }
+    }
+
+    /// `(inner)`: the type in parentheses.
+    pub fn paren(inner: TsType) -> Self {
+        TsType::Paren(Box::new(inner))
     }
 
     /// The string literal type `"text"`.
@@ -2636,8 +2647,8 @@ pub struct TsParam {
     pub name: String,
     pub ty: Option<TsType>,
     /// `name?: ty` — `events_fanout.rs`'s own `env?: unknown` constructor
-    /// parameter needs this; nothing in the grounding file needs a default
-    /// value, so only optionality is represented, not defaults.
+    /// parameter needs this. `optional` and a [`TsParam::default`] do not combine
+    /// (`x?: T = v` is a TypeScript error); the printer asserts it.
     pub optional: bool,
     /// `...name: T` — a rest parameter (1A.32b: the history driver's console mute,
     /// `(...__a: unknown[]) => …`). Prints before the name; `optional` and `rest`
@@ -2649,7 +2660,8 @@ pub struct TsParam {
     pub array_pattern: Option<Vec<String>>,
     /// `name: ty = default` (1A.38b): the value the parameter takes when its
     /// argument is left out (`query: Q = {}`). Build one with
-    /// [`TsParam::with_default`]; `optional` and a default do not combine.
+    /// [`TsParam::with_default`]; `optional` and a default do not combine. The default
+    /// is printed without a source-map segment of its own.
     pub default: Option<TsExpr>,
 }
 

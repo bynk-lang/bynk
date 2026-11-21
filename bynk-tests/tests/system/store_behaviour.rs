@@ -2913,3 +2913,78 @@ fn a_migrate_step_reads_a_cell_holding_a_map() {
         Some(&lock),
     );
 }
+
+// A step reading a store `Map` through `old` gathers its stored `Record` into the entries array the
+// old type's decoder takes (a textual key as it is, any other key through `Number`), and a step
+// assigning a store `Map` fills a fresh handle from the zero state.
+const STORE_MAP_V1: &str = "context shop\n\
+\n\
+agent Cart {\n\
+\x20 key id: String\n\
+\x20 store prices: Map[String, Int]\n\
+\x20 store codes: Map[Int, Int]\n\
+\n\
+\x20 on call ping() -> Effect[Int] {\n\
+\x20   1\n\
+\x20 }\n\
+}\n";
+
+const STORE_MAP_V2: &str = "context shop\n\
+\n\
+type CartV1 = { prices: Map[String, Int], codes: Map[Int, Int] }\n\
+\n\
+agent Cart {\n\
+\x20 key id: String\n\
+\x20 store costs: Map[String, Int]\n\
+\x20 store bycode: Map[Int, Int]\n\
+\n\
+\x20 migrate from 1 (old: CartV1) {\n\
+\x20   costs := old.prices\n\
+\x20   bycode := old.codes\n\
+\x20 }\n\
+\n\
+\x20 on call costCount() -> Effect[Int] {\n\
+\x20   let n <- costs.size()\n\
+\x20   Effect.pure(n)\n\
+\x20 }\n\
+\x20 on call codeCount() -> Effect[Int] {\n\
+\x20   let n <- bycode.size()\n\
+\x20   Effect.pure(n)\n\
+\x20 }\n\
+}\n";
+
+const STORE_MAP_DRIVER_TS: &str = r#"
+import { Cart } from "./shop.js";
+
+function assert(cond: boolean, msg: string): void {
+  if (!cond) {
+    throw new Error(`assertion failed: ${msg}`);
+  }
+}
+
+const m = new Map<string, unknown>([["state", { prices: { a: 1, b: 2 }, codes: { "7": 1, "8": 2, "9": 3 } }]]);
+const state = {
+  storage: {
+    async get(key: any): Promise<any> { if (typeof key === "string") return structuredClone(m.get(key)); const out = new Map<string, unknown>(); for (const k of key as string[]) if (m.has(k)) out.set(k, structuredClone(m.get(k))); return out; },
+      async put(a: any, v?: unknown): Promise<void> { if (typeof a === "string") m.set(a, structuredClone(v)); else for (const [k, x] of Object.entries(a)) m.set(k, structuredClone(x)); },
+      async delete(a: any): Promise<any> { if (typeof a === "string") return m.delete(a); let n = 0; for (const k of a as string[]) if (m.delete(k)) n++; return n; },
+      async list(o: any = {}): Promise<Map<string, unknown>> { const keys = [...m.keys()].filter((k) => (o.prefix === undefined || k.startsWith(o.prefix)) && (o.start === undefined || k >= o.start) && (o.end === undefined || k < o.end)).sort(); if (o.reverse) keys.reverse(); const out = new Map<string, unknown>(); for (const k of keys.slice(0, o.limit ?? keys.length)) out.set(k, structuredClone(m.get(k))); return out; },
+      async transaction(f: (txn: unknown) => Promise<unknown>): Promise<unknown> { const before = new Map(m); try { return await f(this); } catch (e) { m.clear(); for (const [k, x] of before) m.set(k, x); throw e; } },
+  },
+};
+const cart = new Cart(state as never);
+assert((await cart.costCount({})) === 2, "a store Map with a textual key migrates through old");
+assert((await cart.codeCount({})) === 3, "a store Map with a numeric key migrates through old");
+console.log("ALL OK");
+"#;
+
+#[test]
+fn a_migrate_step_carries_a_store_map_through_old() {
+    let lock = lock_through("store_map", &[STORE_MAP_V1]);
+    verify_with_lock(
+        "migrate_store_map",
+        STORE_MAP_V2,
+        STORE_MAP_DRIVER_TS,
+        Some(&lock),
+    );
+}
