@@ -242,8 +242,12 @@ fn the_tree_derived_imports_are_a_subset_of_the_predicted_ones() {
         let mut modules = 0;
         if dir.join("src").is_dir() {
             for target in [BuildTarget::Bundle, BuildTarget::Workers] {
-                if let Some(out) = compile(dir, target) {
-                    modules += record(&mut found, &name, target, &out);
+                match compile(dir, target) {
+                    Some(out) => modules += record(&mut found, &name, target, &out),
+                    // Only the Workers target may refuse a positive fixture (a host-supplied
+                    // capability); a Bundle failure would silently shrink the subset check.
+                    None if target == BuildTarget::Workers => {}
+                    None => panic!("{name} must compile for the Bundle target"),
                 }
             }
         } else {
