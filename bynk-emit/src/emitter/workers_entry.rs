@@ -170,15 +170,6 @@ fn block(stmts: Vec<TsStmt>) -> TsStmt {
     TsStmt::block(stmts, None)
 }
 
-/// #3580: the runtime names a traced entry imports.
-fn trace_imports(trace: bool) -> Vec<String> {
-    if trace {
-        vec!["__traceFetch".to_string(), "__traceFault".to_string()]
-    } else {
-        Vec::new()
-    }
-}
-
 /// What `fetch`'s catch does with a fault (#1825): log it, report it, and answer
 /// the bare 500. #3580: a traced build also hands the fault to the request's record.
 fn fault_handler(context: &str, trace: bool) -> Vec<TsStmt> {
@@ -543,26 +534,6 @@ fn inspect_registry_export(inspect: &[String]) -> Option<TsStmt> {
     })
 }
 
-/// The runtime names the entry imports for `bynk migrate sweep`'s wake (#2259), the
-/// request recorder (#3580) and the inspect route (#3581), each only when the build
-/// has it.
-fn sweep_trace_inspect_imports(
-    migratable: &[(String, i64)],
-    trace: bool,
-    inspect: &[String],
-) -> Vec<String> {
-    let mut names = Vec::new();
-    if !migratable.is_empty() {
-        names.push("__sweepAgentInstances".to_string());
-    }
-    names.extend(trace_imports(trace));
-    if !inspect.is_empty() {
-        names.push("__inspectRoute".to_string());
-        names.push("BynkInspectRegistry".to_string());
-    }
-    names
-}
-
 /// The entry's internal admin routes, in dispatch order, each followed by a blank:
 /// State-migrations S4 (#2259 Decision D): `bynk migrate sweep`'s wake, present only
 /// while a sweep has set its key (without it the route is `404`, as if absent); it
@@ -858,34 +829,6 @@ fn json_error_kind(kind: &str, fields: Vec<(String, TsExpr)>) -> TsExpr {
 /// `[<items>]` of string literals.
 fn str_array(items: &[String]) -> TsExpr {
     TsExpr::array(items.iter().map(|s| str_lit(s.clone())).collect())
-}
-
-/// `missing_bindings`'s own dedup logic (`crate::emitter`), reimplemented
-/// over a `Vec<String>` of already-real import names — the tree-node analogue
-/// of the old text post-pass, the same precedent `workers.rs`'s own
-/// `append_missing_bindings` (#1321) already set for the identical problem:
-/// the runtime import line is now a `TsDecl::Import` node built once, so the
-/// post-pass that appends codec-family runtime names (#914) can no longer
-/// splice into printed text (`crate::emitter::inject_runtime_imports`'s own
-/// mechanism) and instead mutates the node's `names` directly, before the
-/// import decl is pushed into the program. Strips an optional `type ` prefix,
-/// compares bare names, so a name already present (bare or `type`-prefixed)
-/// is never added twice.
-fn append_missing_bindings(names: &mut Vec<String>, extra: &str) {
-    fn bare(binding: &str) -> &str {
-        binding
-            .trim()
-            .strip_prefix("type ")
-            .unwrap_or(binding.trim())
-    }
-    let present: std::collections::HashSet<&str> = names.iter().map(|n| bare(n)).collect();
-    let wanted: Vec<String> = extra
-        .split(',')
-        .map(str::trim)
-        .filter(|b| !b.is_empty() && !present.contains(bare(b)))
-        .map(str::to_string)
-        .collect();
-    names.extend(wanted);
 }
 
 /// #3386: the cookie a route's `SignedCookie` seam reads, if it has one.
@@ -1370,11 +1313,6 @@ pub fn emit_worker_entry(
     // (the same derivation CORS reads for its allow-methods).
     let path_methods: Vec<PathMethods> =
         build_path_method_table(&http_routes, &cors_services, &security_services);
-    // A context with a `GET` route synthesises `HEAD` answers, which strip the
-    // built `Response` body through the runtime's `headResponse`.
-    let has_get_route = http_routes
-        .iter()
-        .any(|r| r.method == bynk_model::IrHttpMethod::Get);
 
     // v0.10a: collect cron handlers across all services, carrying the per-service
     // declaration index (the method-name key) and sorting by schedule expression
@@ -1452,140 +1390,8 @@ pub fn emit_worker_entry(
         }
     }
 
-    let has_http = !http_routes.is_empty();
-    // #973: whether this Worker hosts any `from Events(E)` subscriber — decides
-    // whether the entry route needs `deserialiseEventEnvelope` to validate the
-    // envelope before dispatching (see the `/_bynk/event/` block below).
-    let has_event_services = service_names.iter().any(|sname| {
-        table.services.get(*sname).is_some_and(|s| {
-            s.handlers.iter().any(|h| {
-                matches!(
-                    bynk_model::lower_handler_kind_ir(&h.kind),
-                    bynk_model::IrHandlerKind::Event
-                )
-            })
-        })
-    });
-
-    let mut imports: Vec<String> = vec![
-        "Ok".to_string(),
-        "Err".to_string(),
-        "type Result".to_string(),
-        "type __JsonValue".to_string(),
-        "type __BoundaryError".to_string(),
-        "__boundaryError".to_string(),
-        // I2 (#1971): every Worker answers `/_bynk/call/`, so every Worker
-        // verifies it.
-        "__verifyCall".to_string(),
-        // #2193: every Worker's `fetch` catch answers through it.
-        "__faultResponse".to_string(),
-    ];
-    imports.extend(sweep_trace_inspect_imports(migratable, trace, inspect.0));
-    if has_http {
-        imports.push("__matchPath".to_string());
-        imports.push("__httpResultToResponse".to_string());
-        if http_routes.iter().any(|r| r.json_plain) {
-            imports.push("__withPlainJson".to_string());
-        }
-    }
-    if has_event_services {
-        imports.push("__deserialiseEventEnvelope".to_string());
-    }
-    // v0.139: a context that answers `HEAD` (any `GET` route) strips the built
-    // response body through `headResponse`.
-    if has_get_route {
-        imports.push("__headResponse".to_string());
-        // v0.140 (ADR 0163): every `GET` carries a weak `ETag` and is answered
-        // `304` on a matching `If-None-Match` via `notModifiedIfMatch`.
-        imports.push("__notModifiedIfMatch".to_string());
-    }
-    // v0.140 (ADR 0163): a `GET` carrying `@cache` stamps `Cache-Control` through
-    // `applyCache` — imported only when some route declares one.
-    if http_routes.iter().any(|r| r.cache.is_some()) {
-        imports.push(
-            if edge_cache {
-                "__applyEdgeCache"
-            } else {
-                "__applyCache"
-            }
-            .to_string(),
-        );
-    }
-    // L7 (#2414, Decision C): an opted-in Worker marks a `GET` route without
-    // `@cache` `no-store`, and runs every answer through `edgeCacheGuard`.
-    if edge_cache {
-        if http_routes
-            .iter()
-            .any(|r| r.method == bynk_model::IrHttpMethod::Get && r.cache.is_none())
-        {
-            imports.push("__noStore".to_string());
-        }
-        imports.push("__edgeCacheGuard".to_string());
-        if needs_locale_request && http_routes.iter().any(|r| r.cache.is_some()) {
-            imports.push("__varyAcceptLanguage".to_string());
-        }
-    }
-    // v0.131: a context with a CORS-enabled service imports the CORS helpers.
-    if !cors_services.is_empty() {
-        imports.push("type __CorsPolicy".to_string());
-        imports.push("__applyCors".to_string());
-        imports.push("__corsPreflightResponse".to_string());
-    }
-    // v0.141: a context with any `from http` service imports the security-header
-    // helper — every such service stamps at least the default `nosniff`.
-    if !security_services.is_empty() {
-        imports.push("type __SecurityPolicy".to_string());
-        imports.push("__applySecurityHeaders".to_string());
-    }
-    // A capped route with a body reads it through the counting reader; a raw route
-    // with a declared media type checks the request's `Content-Type`.
-    let body_has = |r: &HttpRoute| r.handler.params.iter().any(|p| p.name.name == "body");
-    if http_routes
-        .iter()
-        .any(|r| !r.sum && body_has(r) && r.max_body.is_some() && !streamed_body(r))
-    {
-        imports.push("__readBodyCapped".to_string());
-    }
-    push_streamed_body_imports(&http_routes, &mut imports);
-    if http_routes
-        .iter()
-        .any(|r| body_has(r) && r.raw.as_deref().is_some_and(|ct| ct != "*/*"))
-    {
-        imports.push("__mediaTypeMatches".to_string());
-    }
-    push_request_param_imports(&http_routes, &mut imports);
-    // #3276: a `@multipart` route checks its `Content-Type` and reads its parts.
-    if http_routes
-        .iter()
-        .any(|r| body_has(r) && r.multipart.is_some())
-    {
-        imports.push("__multipartMediaTypeMatches".to_string());
-        imports.push("__multipartObject".to_string());
-    }
-    // #3276: a `@form` route checks its `Content-Type` and decodes its body.
-    if http_routes
-        .iter()
-        .any(|r| body_has(r) && r.form_fields.is_some())
-    {
-        imports.push("__formMediaTypeMatches".to_string());
-        imports.push("__formObject".to_string());
-    }
-    push_request_view_imports(&http_routes, &mut imports);
-    // #2341 (decision C): a service with `on rejected` renders its rejections.
-    if http_routes.iter().any(|r| r.rejected.is_some()) {
-        imports.push("__renderRejection".to_string());
-    }
-    // v0.51: a context with a Signature handler imports the HMAC verifier.
-    if http_routes.iter().any(|r| r.signature.is_some()) {
-        imports.push("__verifySignatureHmacSha256".to_string());
-    }
-    // The runtime import's own `names` list isn't finalised yet — #914's own
-    // codec-family follow-on (here, only `Bytes`) is only known once the
-    // whole body below has run and populated `runtime_use`, so this decl (and
-    // the rest of the header) is held and pushed after that, in the same
-    // relative order it would have printed in — the tree-node analogue of the
-    // old text post-pass, the same deferral `workers.rs`'s own conversion
-    // (#1321) already established for the identical problem.
+    // The runtime import is read off the finished tree (below), so the header is held until the
+    // body has been built (1A.36b-2).
     let mut header_decls: Vec<TsStmt> = vec![
         TsStmt::decl(
             TsDecl::Import {
@@ -2165,87 +1971,10 @@ pub fn emit_worker_entry(
         &fault_exec_params,
         &other_compose_args,
         &runtime_use,
-        (&mut imports, &mut default_entries),
+        &mut default_entries,
     );
 
-    // v0.176 (#642): a `Bytes` may now cross a workers boundary, so the
-    // entry's inbound codec can reference the base64 helpers — fold in
-    // whatever the body above actually reached for, the tree-node analogue
-    // of the old text post-pass (`append_missing_bindings`'s own doc
-    // explains why it can't reuse `crate::emitter::inject_runtime_imports`
-    // unchanged). This is why the runtime import decl was held rather than
-    // pushed immediately after being computed: `runtime_use.bytes()` is only
-    // known now, after every `deserialise_call`/`serialise_call` site in
-    // `fetch`/`scheduled`/`queue`'s own bodies above has run.
-    if runtime_use.bytes() {
-        append_missing_bindings(&mut imports, crate::emitter::BYTES_RUNTIME_IMPORTS);
-    }
-    if runtime_use.bytes_ops() {
-        append_missing_bindings(&mut imports, crate::emitter::BYTES_OPS_RUNTIME_IMPORTS);
-    }
-    let time = crate::emitter::time_runtime_imports(&runtime_use);
-    append_missing_bindings(&mut imports, &time);
-    if runtime_use.iso_date() {
-        append_missing_bindings(&mut imports, crate::emitter::ISO_DATE_RUNTIME_IMPORTS);
-    }
-    if runtime_use.yaml() {
-        append_missing_bindings(&mut imports, crate::emitter::YAML_RUNTIME_IMPORTS);
-    }
-    if runtime_use.settle_all() {
-        append_missing_bindings(&mut imports, crate::emitter::SETTLE_ALL_RUNTIME_IMPORTS);
-    }
-    append_missing_bindings(
-        &mut imports,
-        crate::emitter::effect_runtime_imports(&runtime_use),
-    );
-    if runtime_use.fault() {
-        append_missing_bindings(&mut imports, crate::emitter::FAULT_RUNTIME_IMPORTS);
-    }
-    if runtime_use.url_ops() {
-        append_missing_bindings(&mut imports, crate::emitter::URL_OPS_RUNTIME_IMPORTS);
-    }
-    if runtime_use.request_headers() {
-        append_missing_bindings(
-            &mut imports,
-            crate::emitter::REQUEST_HEADERS_RUNTIME_IMPORTS,
-        );
-    }
-    if runtime_use.request_cookies() {
-        append_missing_bindings(
-            &mut imports,
-            crate::emitter::REQUEST_COOKIES_RUNTIME_IMPORTS,
-        );
-    }
-    if runtime_use.request_query() {
-        append_missing_bindings(&mut imports, crate::emitter::REQUEST_QUERY_RUNTIME_IMPORTS);
-    }
-    if runtime_use.query_string() {
-        append_missing_bindings(&mut imports, crate::emitter::QUERY_STRING_RUNTIME_IMPORTS);
-    }
-    if runtime_use.form_codec() {
-        append_missing_bindings(&mut imports, crate::emitter::FORM_CODEC_RUNTIME_IMPORTS);
-    }
-    if runtime_use.multipart_form() {
-        append_missing_bindings(&mut imports, crate::emitter::MULTIPART_FORM_RUNTIME_IMPORTS);
-    }
-    if runtime_use.cookie_string() {
-        append_missing_bindings(&mut imports, crate::emitter::COOKIE_STRING_RUNTIME_IMPORTS);
-    }
-    if runtime_use.eq() {
-        append_missing_bindings(&mut imports, crate::emitter::EQ_RUNTIME_IMPORTS);
-    }
-    if runtime_use.int() {
-        append_missing_bindings(&mut imports, crate::emitter::INT_RUNTIME_IMPORTS);
-    }
-    append_missing_bindings(&mut imports, &runtime_use.cmp_imports());
-    if !agent_names.is_empty() {
-        append_missing_bindings(&mut imports, ", __serialiseAgentClass");
-    }
-    for stmt in
-        crate::emitter::runtime_files::runtime_import_stmts(false, &imports, "../../runtime.js")
-    {
-        program.push(stmt);
-    }
+    let runtime_import_at = program.stmts.len();
     for decl in header_decls {
         program.push(decl);
     }
@@ -2259,6 +1988,19 @@ pub fn emit_worker_entry(
         TsDecl::ExportDefault(TsExpr::multiline_object_entries(default_entries)),
         None,
     ));
+
+    // 1A.36b-2: the runtime import is what the module's tree uses, after the banner and before
+    // the other imports.
+    let names =
+        super::runtime_header::derived_worker_runtime_names(&program.stmts[runtime_import_at..]);
+    for (i, stmt) in super::runtime_files::runtime_import_stmts(false, &names, "../../runtime.js")
+        .into_iter()
+        .enumerate()
+    {
+        program.stmts.insert(runtime_import_at + i, stmt);
+    }
+    // Each fixed import (`handlers`, `compose`) is kept only if the tree uses it.
+    program.prune_unused_imports();
 
     program
 }
@@ -2374,7 +2116,7 @@ fn push_message_entries(
     exec_params: &[TsParam],
     compose_args: &[TsExpr],
     runtime_use: &RuntimeUse,
-    (imports, entries): (&mut Vec<String>, &mut Vec<TsObjectEntry>),
+    entries: &mut Vec<TsObjectEntry>,
 ) {
     if !queue_routes.is_empty() {
         entries.push(emit_queue_handler(
@@ -2386,7 +2128,6 @@ fn push_message_entries(
     }
     let email_routes = super::workers_email::collect_routes(table);
     if !email_routes.is_empty() {
-        imports.extend(super::workers_email::RUNTIME_IMPORTS.map(String::from));
         entries.push(super::workers_email::emit_email_handler(
             &email_routes,
             exec_params,
@@ -2434,7 +2175,15 @@ fn emit_queue_handler(
     for route in queue_routes {
         let method_key = crate::emitter::queue_handler_method_name(&route.service, route.index);
         let dser = match &route.msg_type {
-            Some(t) => deserialise_call(t, "(msg.body as __JsonValue)", "$", ru),
+            Some(t) => deserialise_node(
+                t,
+                &TsExpr::Paren(Box::new(as_expr(
+                    member(ident("msg"), "body"),
+                    TsType::named("__JsonValue"),
+                ))),
+                "$",
+                ru,
+            ),
             // P7.2: `msg.body` is already declared `unknown` at `queue()`'s own
             // signature above — no cast needed at all when there's no declared type
             // to (dis)trust it against.
@@ -4135,69 +3884,6 @@ fn emit_http_route_dispatch(
     block(inner)
 }
 
-/// #2341, #2854, #3277: the runtime imports for a route's `headers`, typed `query` and typed `cookies` parameters.
-fn push_request_param_imports(http_routes: &[HttpRoute], imports: &mut Vec<String>) {
-    // #2341 (decision A): a route taking `headers` builds them from the request.
-    if http_routes.iter().any(|r| {
-        r.handler
-            .params
-            .iter()
-            .any(|p| p.name.name == "headers" && matches!(p.type_ref, TypeRef::RequestHeaders(_)))
-    }) {
-        imports.push("__requestHeaders".to_string());
-    }
-    // #2854: a route taking `query` decodes it (typed) or views it (raw).
-    if http_routes.iter().any(|r| r.query_fields.is_some()) {
-        imports.push("__queryObject".to_string());
-    }
-    // #3277: a route taking `cookies` decodes the `Cookie` header.
-    if http_routes.iter().any(|r| r.cookies_fields.is_some()) {
-        imports.push("__cookieObject".to_string());
-    }
-}
-
-/// #2854, #3277, #3513: the runtime imports for a route's raw `query` and `cookies` views, and for `cf: RequestCf`.
-fn push_request_view_imports(http_routes: &[HttpRoute], imports: &mut Vec<String>) {
-    if http_routes.iter().any(|r| {
-        r.handler
-            .params
-            .iter()
-            .any(|p| p.name.name == "query" && matches!(p.type_ref, TypeRef::RequestQuery(_)))
-    }) {
-        imports.push("__requestQuery".to_string());
-    }
-    // #3277: a route taking the raw `cookies` view builds it off the request.
-    if http_routes.iter().any(|r| {
-        r.handler
-            .params
-            .iter()
-            .any(|p| p.name.name == "cookies" && matches!(p.type_ref, TypeRef::RequestCookies(_)))
-    }) {
-        imports.push("__requestCookies".to_string());
-    }
-    // #3513 C: a route taking `cf: RequestCf` reads `request.cf`.
-    if http_routes.iter().any(|r| {
-        !r.path.split('/').any(|seg| seg == ":cf")
-            && r.handler.params.iter().any(|p| {
-                p.name.name == "cf"
-                    && matches!(&p.type_ref, TypeRef::Named(id) if id.name == "RequestCf")
-            })
-    }) {
-        imports.push("__cfObject".to_string());
-    }
-}
-
-/// #3380: the runtime imports a context's streamed `@raw` bodies need: the
-/// counted body stream, and the wrapper that turns a mid-read overrun into the
-/// route's `413`.
-fn push_streamed_body_imports(http_routes: &[HttpRoute], imports: &mut Vec<String>) {
-    let has_body = |r: &HttpRoute| r.handler.params.iter().any(|p| p.name.name == "body");
-    if http_routes.iter().any(|r| has_body(r) && streamed_body(r)) {
-        imports.push("__requestBodyStream".to_string());
-        imports.push("__untilBodyTooLarge".to_string());
-    }
-}
-
 /// #3380: `const body = requestBodyStream(request, cap)`: the octets as they
 /// arrive, counted against the cap as the handler pulls them. The checker
 /// requires a cap on every `@raw` route.
@@ -4601,13 +4287,13 @@ pub(crate) fn deserialise_call(
     path: &str,
     ru: &RuntimeUse,
 ) -> TsExpr {
-    crate::emitter::serialisation::deserialise_expr_via(
-        t,
-        &bynk_ts::TsExpr::Ident(json_expr.to_string()),
-        path,
-        "handlers.",
-        ru,
-    )
+    deserialise_node(t, &bynk_ts::TsExpr::Ident(json_expr.to_string()), path, ru)
+}
+
+/// [`deserialise_call`] over a built node, for a subject that names a runtime type (`msg.body as
+/// __JsonValue`): the import is read off the tree, which cannot see a name spelled as text.
+fn deserialise_node(t: &TypeRef, json: &TsExpr, path: &str, ru: &RuntimeUse) -> TsExpr {
+    crate::emitter::serialisation::deserialise_expr_via(t, json, path, "handlers.", ru)
 }
 
 fn serialise_call(t: &TypeRef, value: &str, ru: &RuntimeUse) -> TsExpr {
@@ -4713,13 +4399,6 @@ mod tests {
             ["DELETE", "GET", "HEAD", "OPTIONS", "PUT"]
         );
         assert_eq!(derive_allowed_methods(std::iter::empty()), ["OPTIONS"]);
-    }
-
-    #[test]
-    fn missing_bindings_are_appended_once_whatever_their_type_prefix() {
-        let mut names = vec!["Ok".to_string(), "type Result".to_string()];
-        append_missing_bindings(&mut names, "Ok, Err, Result, type __JsonValue, ,");
-        assert_eq!(names, ["Ok", "type Result", "Err", "type __JsonValue"]);
     }
 
     /// A context with an `on call` service, a GET route with a path

@@ -151,6 +151,41 @@ impl TsProgram {
         out
     }
 
+    /// Drop every import this program never uses (1A.36b-2): an entry of a named import whose
+    /// local name no other statement uses, and a namespace import whose alias none does. A named
+    /// import left with no entry goes altogether. The order of what stays is kept, and so is
+    /// each import's `type` prefix; a default import is left alone.
+    ///
+    /// A use is what [`crate::unbound_names_in`] reports over the program without its imports,
+    /// so text the tree cannot see (a `Verbatim` or `Raw` statement, bar the names
+    /// `raw_using` declares) uses nothing. It is how a module whose imports were assembled from
+    /// facts that cannot all hold at once (a fixed header, an import the driver adds for a
+    /// feature a body may not reach) ends up importing what its tree uses and no more.
+    pub fn prune_unused_imports(&mut self) {
+        fn local(spec: &str) -> &str {
+            let spec = spec.trim();
+            let spec = spec.strip_prefix("type ").unwrap_or(spec).trim();
+            spec.rsplit(" as ").next().unwrap_or(spec).trim()
+        }
+        let used: std::collections::BTreeSet<String> =
+            crate::unbound_names_in(&self.without_imports().stmts, |_| true)
+                .into_iter()
+                .collect();
+        self.stmts.retain_mut(|stmt| {
+            let TsStmtKind::Decl(decl) = &mut stmt.kind else {
+                return true;
+            };
+            match decl {
+                TsDecl::Import { names, .. } => {
+                    names.retain(|n| used.contains(local(n)));
+                    !names.is_empty()
+                }
+                TsDecl::ImportNamespace { alias, .. } => used.contains(alias.as_str()),
+                _ => true,
+            }
+        });
+    }
+
     /// The local names the top-level named imports from a specifier `from_matches`
     /// accepts bind (`X`, `type X`, `X as Y` bind `X`, `X`, `Y`): what a module takes
     /// from one place, such as the runtime (1A.36b-1).

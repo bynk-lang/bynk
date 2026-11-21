@@ -1,22 +1,21 @@
-//! 1A.36a (#3737, Decision E): the shadow check for tree-derived imports.
+//! The shadow check for tree-derived imports (1A.36a, #3737 Decision E; the equality since
+//! 1A.36b-2).
 //!
-//! For every module the positive corpus emits, on both targets, this computes
-//! the import set the built tree asks for ([`bynk_ts::unbound_names`] over the
-//! module with its structured imports removed) and compares it with the names
-//! the module actually imports, which today's predicates chose before the body
-//! existed. Nothing here changes output: it is the evidence 1A.36b's derivation
-//! is checked against.
+//! For every module the positive corpus emits, on both targets, this computes the import set
+//! the built tree asks for ([`bynk_ts::unbound_names`] over the module with its structured
+//! imports removed) and compares it with the names the module actually imports. It changes no
+//! output.
 //!
-//! * The tree set must be a **subset** of the imported set. A name the tree uses
-//!   and the module does not import is an under-import; the only one on record
-//!   is [`KNOWN_UNDER_IMPORTS`] (#3807, the same defect `import_closure.rs`
-//!   lists).
-//! * Where the tree set is a **strict** subset, the module over-imports, and the
-//!   extra names are the unused imports the prediction adds. Each such name is
-//!   classed by whether it still appears as a whole word in the module's
-//!   printed body: a name that does may be used by text the tree cannot see
-//!   (a `Verbatim` or `Raw` statement, which `unbound_names` does not read), so
-//!   dropping it needs a look; a name that does not is plainly unused.
+//! * **Tree == imported**, for every module the emitter or the driver builds bar the driver's
+//!   `tests/*.test.ts` modules (predicted until 1B.2) and the runtime's own files. A name the
+//!   tree uses and the module does not import is an under-import ([`KNOWN_UNDER_IMPORTS`], empty
+//!   since #3807); a name imported and not used is an over-import ([`NOT_EQUAL_OK`], empty).
+//!   Each over-import is classed by whether it still appears as a whole word in the printed
+//!   body: a name that does is used by text the tree cannot see (a `Verbatim` or `Raw`
+//!   statement without `raw_using`).
+//! * **No runtime export is spelled in code without being imported** (strings, comments and
+//!   members skipped), the net under the derived headers. The allowlist
+//!   [`UNIMPORTED_RUNTIME_OK`] holds the spellings that are not uses.
 //!
 //! The report is printed to stderr (run with `--nocapture`), and written to the
 //! file `BYNK_IMPORT_SHADOW_REPORT` names when that is set.
@@ -36,6 +35,10 @@ mod par;
 /// import. Empty since 1A.36b-2: the imports are the tree's, so none can be missing; an entry
 /// would be a defect to report, with its issue. (#3807's `lib` was the last.)
 const KNOWN_UNDER_IMPORTS: &[(&str, &str, &str, &str)] = &[];
+
+/// `(module file, name, reason)`: a name an emitter-built module imports though its tree does not
+/// use it. Empty: the tree is the import set everywhere outside the driver's test modules.
+const NOT_EQUAL_OK: &[(&str, &str, &str)] = &[];
 
 /// `(name, reason)`: a runtime export a derived module may spell as code without importing it,
 /// because the spelling is not a use of the export. `words` reads identifiers, not scopes.
@@ -297,7 +300,7 @@ fn compile(dir: &Path, target: BuildTarget) -> Option<bynk_driver::project::Proj
 }
 
 #[test]
-fn the_tree_derived_imports_are_a_subset_of_the_predicted_ones() {
+fn the_tree_derived_imports_are_the_imported_ones() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/positive");
     let mut dirs: Vec<PathBuf> = fs::read_dir(&root)
         .expect("positive fixtures")
@@ -371,23 +374,30 @@ fn the_tree_derived_imports_are_a_subset_of_the_predicted_ones() {
         known_gone.join("\n"),
     );
 
-    // 1A.36b-1: a module whose header the emitter derives from its tree imports no
-    // runtime name it does not use. What still over-imports is predicted elsewhere: the
-    // driver's `tests/*.test.ts` modules (1B.2) and the Workers' `index.ts` and
-    // `compose.ts`, which `workers_entry.rs` and `workers.rs` build.
+    // 1A.36b-2: for every module the emitter builds, the tree set is the imported set. Nothing
+    // is predicted outside the driver's `tests/*.test.ts` modules (1B.2) and the runtime's own
+    // files, so no such module imports a name its tree does not use, runtime or not. A module
+    // that does is listed in [`NOT_EQUAL_OK`] with its reason; none is known.
     let over_imported: Vec<String> = found
         .iter()
-        .filter(|((_, _, m), _)| !predicts_its_runtime_imports(m))
+        .filter(|((_, _, m), _)| {
+            !predicts_its_runtime_imports(m) && !m.starts_with("__bynk_runtime/")
+        })
         .flat_map(|((s, t, m), sh)| {
             sh.plainly_unused
                 .iter()
-                .filter(|n| sh.from_runtime.contains(*n))
+                .chain(&sh.in_text)
+                .filter(|n| {
+                    !NOT_EQUAL_OK
+                        .iter()
+                        .any(|(module, name, _)| *module == m.as_str() && *name == n.as_str())
+                })
                 .map(move |n| format!("  {s} [{t}] {m}: {n}"))
         })
         .collect();
     assert!(
         over_imported.is_empty(),
-        "a module with a derived header imports a runtime name its tree does not use:\n{}",
+        "a module the emitter builds imports a name its tree does not use:\n{}",
         over_imported.join("\n"),
     );
 
@@ -428,14 +438,10 @@ fn is_driver_test_module(module: &str) -> bool {
 }
 
 /// Whether a module's runtime import is still predicted rather than derived: the driver's test
-/// modules, and the Worker entry (`index.ts`) and composition root (`compose.ts`), whose import
-/// lists `workers_entry.rs` and `workers.rs` assemble from `RuntimeUse`.
+/// modules only (1B.2). Every module the emitter builds, the Worker `index.ts` and `compose.ts`
+/// included since 1A.36b-2, takes its runtime import from its tree.
 fn predicts_its_runtime_imports(module: &str) -> bool {
     is_driver_test_module(module)
-        || module
-            .rsplit('/')
-            .next()
-            .is_some_and(|f| f == "index.ts" || f == "compose.ts")
 }
 
 /// The over-import findings, grouped by name.

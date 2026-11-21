@@ -546,8 +546,8 @@ impl Walk {
     /// an upper-case letter or `_`, outside string literals and not a member
     /// (`.name`) or a key (`name:`, `name?:`). A qualified head (`ns.T`) is the
     /// use of a namespace and records the member, as for a structured name.
-    /// Lower-case words are keywords, primitives, parameters and `typeof`
-    /// operands, none of them an import of a generated module.
+    /// Lower-case words are keywords, primitives and parameters (a `typeof`
+    /// operand is a use of the value it names), none of them an import of a generated module.
     fn use_type_text(&mut self, text: &str) {
         let bytes = text.as_bytes();
         let ident = |b: u8| b.is_ascii_alphanumeric() || b == b'_' || b == b'$';
@@ -584,6 +584,25 @@ impl Walk {
                         i += 1;
                     }
                     let word = &text[start..i];
+                    // `typeof x` uses the value `x` (a namespace, for
+                    // `typeof ns.__makeSurface`), never a type.
+                    if word == "typeof" {
+                        let operand = text[i..].trim_start();
+                        if let Some(name) = leading_ident(operand) {
+                            if !self.in_scope(name) {
+                                self.used_values.insert(name.to_string());
+                                if let Some(member) = operand[name.len()..]
+                                    .strip_prefix('.')
+                                    .and_then(leading_ident)
+                                {
+                                    self.qualified
+                                        .insert((name.to_string(), member.to_string()));
+                                }
+                            }
+                            i = text.len() - operand.len() + name.len();
+                        }
+                        continue;
+                    }
                     let after_dot = start > 0 && bytes[start - 1] == b'.';
                     let rest = text[i..].trim_start();
                     let after_question = text[..start].trim_end().ends_with('?');
@@ -1352,6 +1371,19 @@ mod tests {
             None,
         )]);
         assert_eq!(unbound_names(&p), ["missing"]);
+        // The same operand inside type text: a namespace spelled only there.
+        let over = |name: &str| program(vec![function_over(TsType::named(name))]);
+        assert_eq!(
+            unbound_names(&over(
+                "globalThis.ReturnType<typeof commerce_payment.__makeSurface>"
+            )),
+            ["commerce_payment"]
+        );
+        let bound = program(vec![
+            import(&["commerce_payment"]),
+            function_over(TsType::named("Array<typeof commerce_payment.f>")),
+        ]);
+        assert!(unbound_names(&bound).is_empty());
     }
 
     #[test]

@@ -1066,6 +1066,10 @@ pub struct EmitProjectCtx {
     /// expression building those deps DO-side (workers contexts only; the DO
     /// wire cannot carry providers). Consumed by `emit_agent`'s fetch branch.
     pub agent_given_deps: HashMap<String, String>,
+    /// 1A.36b-2: for each agent in `agent_given_deps`, the namespaces its expression spells
+    /// (`bynk__binding`, `handlers_shop_orders`), declared with the text so the module's imports
+    /// follow its tree.
+    pub agent_given_deps_names: HashMap<String, Vec<String>>,
     /// #527: extra imports `handlers.ts` needs for the expressions above.
     pub extra_imports: Vec<ExtraImport>,
     /// #527: for each local agent, each `on call` method's `given` capability

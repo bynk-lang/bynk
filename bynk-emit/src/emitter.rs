@@ -367,6 +367,7 @@ fn single_file_ctx() -> EmitProjectCtx {
         target: BuildTarget::Bundle,
         local_agents: HashSet::new(),
         agent_given_deps: HashMap::new(),
+        agent_given_deps_names: HashMap::new(),
         extra_imports: Vec::new(),
         agent_method_givens: HashMap::new(),
         agent_called_contexts: Vec::new(),
@@ -800,9 +801,12 @@ pub fn emit_project(
         program_stmts.push(bynk_ts::TsStmt::blank(None));
     }
     program_stmts.append(&mut stmts);
-    let program = bynk_ts::TsProgram {
+    let mut program = bynk_ts::TsProgram {
         stmts: program_stmts,
     };
+    // 1A.36b-2: what the driver adds (`extra_imports`) and the boundary helpers bring in is
+    // there for a body that may never reach it, so each import is kept only if the tree uses it.
+    program.prune_unused_imports();
     // The generated `file` name: the source basename with `.bynk` → `.ts`.
     let generated_file = Path::new(source_name)
         .file_stem()
