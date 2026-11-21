@@ -115,7 +115,7 @@ mod tests {
         let code = "bynk.wasm.panic";
         assert!(diagnostics::explain(code).is_none());
         assert!(matches!(lookup(code), Lookup::KnownUnexplained(_)));
-        let out = render_known_unexplained(code, "Two functions share a name.");
+        let out = render_known_unexplained(code, "The in-browser compiler panicked internally.");
         assert!(out.contains(code));
         assert!(out.contains("No extended explanation"));
     }

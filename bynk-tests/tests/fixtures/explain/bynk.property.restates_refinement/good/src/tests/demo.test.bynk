@@ -1,7 +1,0 @@
-suite demo {
-  property "doubling a positive number makes it bigger" {
-    for all q: Pos {
-      expect double(q) > q
-    }
-  }
-}

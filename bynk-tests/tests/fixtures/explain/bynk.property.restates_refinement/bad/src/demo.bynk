@@ -1,7 +1,0 @@
-commons demo
-
-type Pos = Int where Positive
-
-fn double(n: Pos) -> Int {
-  n + n
-}

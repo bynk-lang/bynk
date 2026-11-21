@@ -4919,13 +4919,6 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "unstable",
     },
     Explain {
-        code: "bynk.property.restates_refinement",
-        blurb: "A refinement type guarantees its predicate: every `Pos` the generator makes is positive, by construction. A property whose whole body checks that predicate again can never fail, so it tests nothing and only lengthens the run. Assert something about what your code does with valid inputs instead. The check is narrow on purpose: it fires only when the body is exactly the refinement over the bound variable, such as `expect q > 0` for a `Positive` type.",
-        example: "type Pos = Int where Positive\n\nfor all q: Pos {   // ✗ only re-checks what `Pos` guarantees\n\x20\x20expect q > 0\n}\n\nfor all q: Pos {   // ✓ checks what the code does with it\n\x20\x20expect double(q) > q\n}",
-        page: "/book/reference/testing",
-        anchor: "properties",
-    },
-    Explain {
         code: "bynk.property.where_not_bool",
         blurb: "A `where` clause on `for all` discards each generated input \
                 that fails it, so it must be a `Bool`. A filter of another \
