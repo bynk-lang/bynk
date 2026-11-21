@@ -1,6 +1,6 @@
 //! `cargo xtask greenfield-status` — the probe harness (track doc §8, proposal #999).
 //!
-//! Twenty-five probes measuring the tree against `design/bynk-greenfield-compiler.md`:
+//! Twenty-six probes measuring the tree against `design/bynk-greenfield-compiler.md`:
 //! the twelve in track doc §8, `emit_abi_shapes` (ADR 0310's probe, #999 Decision E —
 //! this slice measures the emit-ABI enumeration guard but does not wire it; wiring is
 //! packaging-track work), phase 7's own four — `ts_writes`, `ts_any`,
@@ -14,11 +14,11 @@
 //! crate-hygiene track's M-3 ratchet, `model_readers_beyond_emit` (B1, #2939), and its H-3 gate,
 //! `unused_deps` (A4, #2976).
 //!
-//! **Twenty-five are gated**, committed and diffed: `workspace_lints`, `fs_below_driver`,
+//! **Twenty-six are gated**, committed and diffed: `workspace_lints`, `fs_below_driver`,
 //! `options_sources`, `hoist_sinks`, `span_keyed_maps`, `emit_diagnostics`,
 //! `ide_emit_edge`, `ast_importers`, `emit_abi_shapes`, `ts_writes`, `ts_any`,
 //! `verbatim_origins`, `verbatim_sites`, `incremental_query_types`,
-//! `unconsumed_ir_items`, `diagnostic_coverage`, `model_readers_beyond_emit`, `unused_deps`, `explained_codes`, `ts_raw_sites_emit`, `ts_raw_sites_testgen`, `ts_text_idents`, `emit_thread_locals`, `emit_silent_fallbacks`, `emit_print_calls`. Ten of these are
+//! `unconsumed_ir_items`, `diagnostic_coverage`, `model_readers_beyond_emit`, `unused_deps`, `explained_codes`, `ts_raw_sites_emit`, `ts_raw_sites_testgen`, `ts_text_idents`, `emit_thread_locals`, `emit_silent_fallbacks`, `emit_print_calls`, `import_prediction_fns`. Ten of these are
 //! zero/closure-shaped — a boolean, or a count pinned at a small, argued floor
 //! (`ast_importers` = 5, `emit_abi_shapes` = 1). Phase 7's own four are the same shape:
 //! each converged toward an argued floor over dozens of slices, the same trajectory
@@ -42,7 +42,7 @@
 //! **Two kinds of gate** (#3679, amending ADR 0389/0390). Every gated probe is
 //! *exact-match*: a live reading that differs from its committed row fails unless a
 //! pending file names it in `probes:`. The [`GROWTH_PROBES`] (`ts_writes`, `ts_any`,
-//! `emit_abi_shapes`, `verbatim_sites`, `ts_raw_sites_emit`, `ts_raw_sites_testgen`, `ts_text_idents`, `span_keyed_maps`, `emit_thread_locals`, `emit_silent_fallbacks`, `emit_print_calls`) are also *directional*:
+//! `emit_abi_shapes`, `verbatim_sites`, `ts_raw_sites_emit`, `ts_raw_sites_testgen`, `ts_text_idents`, `span_keyed_maps`, `emit_thread_locals`, `emit_silent_fallbacks`, `emit_print_calls`, `import_prediction_fns`) are also *directional*:
 //! `growth_probes_never_rise` (`xtask/tests/greenfield_status.rs`) fails when the
 //! live leading count exceeds the committed one unless a pending file *raises* the
 //! probe with a reason (`raises:`), which the stamp then records in
@@ -117,7 +117,7 @@ pub fn run(root: &Path) -> Report {
 /// The gated probes' names, in [`run_gated`]'s order — what a pending file's
 /// `probes` key may cite. `greenfield_status_table_is_current` asserts this
 /// matches the probes [`run_gated`] actually returns, so the two cannot drift.
-pub const GATED_PROBES: [&str; 25] = [
+pub const GATED_PROBES: [&str; 26] = [
     "workspace_lints",
     "fs_below_driver",
     "options_sources",
@@ -137,6 +137,7 @@ pub const GATED_PROBES: [&str; 25] = [
     "emit_thread_locals",
     "emit_silent_fallbacks",
     "emit_print_calls",
+    "import_prediction_fns",
     "incremental_query_types",
     "unconsumed_ir_items",
     "diagnostic_coverage",
@@ -147,12 +148,12 @@ pub const GATED_PROBES: [&str; 25] = [
 
 /// The gated probes that only a reasoned, recorded `raises:` may increase
 /// (#3679, ADR 0389/0390 amended): `ts_writes`, `ts_any`, `emit_abi_shapes`,
-/// `verbatim_sites`, `ts_raw_sites_emit` and `ts_raw_sites_testgen` (the split of `ts_raw_sites`, #3681), `ts_text_idents` (#3681), `span_keyed_maps`, `emit_thread_locals` (1A.19), `emit_silent_fallbacks` (1A.34), `emit_print_calls` (1A.35b). Probes already at a zero or closure
+/// `verbatim_sites`, `ts_raw_sites_emit` and `ts_raw_sites_testgen` (the split of `ts_raw_sites`, #3681), `ts_text_idents` (#3681), `span_keyed_maps`, `emit_thread_locals` (1A.19), `emit_silent_fallbacks` (1A.34), `emit_print_calls` (1A.35b), `import_prediction_fns` (1A.36a). Probes already at a zero or closure
 /// floor are excluded (their exact-match row pins them), as are
 /// `verbatim_origins` (an argued floor of 2) and `model_readers_beyond_emit`
 /// (which has the opposite direction). A subset of [`GATED_PROBES`], pinned by
 /// a unit test.
-pub const GROWTH_PROBES: [&str; 11] = [
+pub const GROWTH_PROBES: [&str; 12] = [
     "ts_writes",
     "ts_any",
     "emit_abi_shapes",
@@ -164,9 +165,10 @@ pub const GROWTH_PROBES: [&str; 11] = [
     "emit_thread_locals",
     "emit_silent_fallbacks",
     "emit_print_calls",
+    "import_prediction_fns",
 ];
 
-/// The twenty-five gated (zero/closure/ratchet) probes only — what [`gated_disagreements`] diffs.
+/// The twenty-six gated (zero/closure/ratchet) probes only — what [`gated_disagreements`] diffs.
 pub fn run_gated(root: &Path) -> Vec<Probe> {
     vec![
         workspace_lints(root),
@@ -188,6 +190,7 @@ pub fn run_gated(root: &Path) -> Vec<Probe> {
         emit_thread_locals(root),
         emit_silent_fallbacks(root),
         emit_print_calls(root),
+        import_prediction_fns(root),
         incremental_query_types(root),
         unconsumed_ir_items(root),
         diagnostic_coverage(root),
@@ -2242,7 +2245,9 @@ fn line_has_token(line: &str, needles: &[&str]) -> bool {
 }
 
 /// #3681, split by origin in 1A.19: `TsStmt::raw(text, span)` construction sites
-/// in the emitter's source. `TsStmt::raw` prints a whole statement verbatim — a
+/// in the emitter's source, and (1A.36a) `TsStmt::raw_using(text, names)` ones: the
+/// constructor that records the names a surviving fixed snippet uses is the same
+/// escape hatch, so it is counted with `raw(` and the survivors stay measured. `TsStmt::raw` prints a whole statement verbatim — a
 /// separate escape hatch from `TsStmt::verbatim`, which [`verbatim_sites`] counts and
 /// this probe deliberately does not fold into it (that would break `verbatim_sites`'
 /// history). Retired by building real nodes.
@@ -2298,7 +2303,7 @@ fn ts_raw_sites_violations(files: &[(PathBuf, String)], testgen: bool) -> usize 
         .filter(|(p, _)| is_testgen_path(p) == testgen)
         .cloned()
         .collect();
-    opening_token_lines(&part, &["TsStmt::raw("])
+    opening_token_lines(&part, &["TsStmt::raw(", "TsStmt::raw_using("])
 }
 
 /// 1A.19: unconditional `thread_local!` declarations in `bynk-emit`'s production
@@ -2506,6 +2511,67 @@ fn emit_print_calls_violations(files: &[(PathBuf, String)]) -> usize {
         .collect();
     let needles: Vec<&str> = needles.iter().map(String::as_str).collect();
     production_lines_matching(files, |line| line_has_token(line, &needles))
+}
+
+/// 1A.36a (#3737, Decision F): the functions in `bynk-emit`'s production source that decide,
+/// ahead of the body, a fact the built tree will carry anyway: a name segment `needs`,
+/// `mentions` or `uses` (`agent_needs_rehydrate`, `file_mentions_connection`,
+/// `uses_json_codec`), less [`IMPORT_PREDICTION_ALLOWLIST`], the resolved-fact queries that
+/// decide a binding, an emitted helper or a structural walk rather than an import (Decision B).
+/// The 17 of the exit row is not read from a name pattern over the driver too: this probe counts
+/// `bynk-emit` and its allowlist, and 1A.36b brings it to 0. A growth probe
+/// ([`GROWTH_PROBES`]): it may only fall unless a pending file `raises:` it with a reason, so a
+/// new prediction cannot creep in.
+///
+/// Counts non-comment lines outside `#[cfg(test)]` modules in `bynk-emit/src` that declare a
+/// `fn` whose name has such a segment (split on `_`) and is not allowlisted. Text-level gaps, as
+/// for the other line scanners: a `fn` whose name is on the next line is missed, and two
+/// declarations on one line count once.
+fn import_prediction_fns(root: &Path) -> Probe {
+    Probe {
+        name: "import_prediction_fns",
+        gated: true,
+        reads: import_prediction_fns_violations(&rust_files_relative(&root.join("bynk-emit/src")))
+            .to_string(),
+    }
+}
+
+/// The resolved-fact queries [`import_prediction_fns`] does not count (Decision B of #3737).
+/// They decide a Worker's bindings from the checker's resolved `Callee` map
+/// (`unit_table_uses_emit`, `unit_table_uses_idempotency`, `call_handler_needs_exec`), whether a
+/// context's `deps` interface carries `__eventsDispatch` (`commons_uses_emit`), or are structural
+/// type walks (`mentions_decimal`, `mentions_factory_param`). None of them decides an import.
+const IMPORT_PREDICTION_ALLOWLIST: [&str; 6] = [
+    "unit_table_uses_emit",
+    "unit_table_uses_idempotency",
+    "call_handler_needs_exec",
+    "commons_uses_emit",
+    "mentions_decimal",
+    "mentions_factory_param",
+];
+
+/// The name of the function a line declares (`fn name(`, after any `pub`, `pub(crate)`, `const`,
+/// `async` or `unsafe`), or `None` when the line declares none.
+fn declared_fn_name(line: &str) -> Option<&str> {
+    let is_word = |c: char| c.is_ascii_alphanumeric() || c == '_';
+    let at = line
+        .match_indices("fn ")
+        .find(|(at, _)| !line[..*at].chars().next_back().is_some_and(is_word))?
+        .0;
+    let rest = line[at + 3..].trim_start();
+    let end = rest.find(|c: char| !is_word(c)).unwrap_or(rest.len());
+    (end > 0).then(|| &rest[..end])
+}
+
+/// [`import_prediction_fns`]'s counting logic over an explicit file list.
+fn import_prediction_fns_violations(files: &[(PathBuf, String)]) -> usize {
+    production_lines_matching(files, |line| {
+        declared_fn_name(line).is_some_and(|name| {
+            name.split('_')
+                .any(|seg| matches!(seg, "needs" | "mentions" | "uses"))
+                && !IMPORT_PREDICTION_ALLOWLIST.contains(&name)
+        })
+    })
 }
 
 /// Named identifiers imported from the compiler-generated firstparty/runtime relative
@@ -4091,7 +4157,8 @@ pub fn render_table(report: &Report) -> String {
          crate-hygiene B1 (#2939); `unused_deps` added by crate-hygiene A4 (#2976); `explained_codes` added by #3163; `ts_raw_sites`/`ts_text_idents` added by #3681; \
          `ts_raw_sites` split into `ts_raw_sites_emit`/`ts_raw_sites_testgen` and `emit_thread_locals` \
          added by 1A.19; `emit_silent_fallbacks` added by 1A.34; `emit_print_calls` added by 1A.35b \
-         (`lowering_text_bridge` and `stmt_text_lines`, added by #3694 and #3711, were retired at 0 by 1A.35b). Twenty-five \
+         (`lowering_text_bridge` and `stmt_text_lines`, added by #3694 and #3711, were retired at 0 by 1A.35b); \
+         `import_prediction_fns` added by 1A.36a. Twenty-six \
          probes are gated — a disagreement between this file and a fresh run fails \
          `greenfield_status_table_is_current` (`xtask/tests/greenfield_status.rs`). \
          Five are trend probes, reported only.\n\n",
@@ -4475,7 +4542,8 @@ mod tests {
         | `span_keyed_maps` | yes | 2 |\n\
         | `emit_thread_locals` | yes | 2 |\n\
         | `emit_silent_fallbacks` | yes | 15 |\n\
-        | `emit_print_calls` | yes | 30 |\n";
+        | `emit_print_calls` | yes | 30 |\n\
+        | `import_prediction_fns` | yes | 8 |\n";
 
     fn growth_live(ts_writes: &str, abi: &str) -> Vec<Probe> {
         vec![
@@ -4490,6 +4558,7 @@ mod tests {
             gated("emit_thread_locals", "2"),
             gated("emit_silent_fallbacks", "15"),
             gated("emit_print_calls", "30"),
+            gated("import_prediction_fns", "8"),
         ]
     }
 
@@ -4656,6 +4725,59 @@ mod tests {
         assert_eq!(
             ts_raw_sites_violations(&files_of(&[("a.rs", src), ("b.rs", src)]), false),
             4
+        );
+    }
+
+    /// 1A.36a: a surviving fixed snippet moved onto `TsStmt::raw_using(` is still a raw site, so
+    /// the probe keeps measuring it (the four survivors read 4, not 0).
+    #[test]
+    fn ts_raw_sites_counts_raw_using_as_well_as_raw() {
+        let count = |src: &str| ts_raw_sites_violations(&files_of(&[("a.rs", src)]), false);
+        assert_eq!(
+            count("fn f() { push(TsStmt::raw_using(TEXT, NAMES)); }\n"),
+            1
+        );
+        assert_eq!(count("fn f() { push(TsStmt::raw(TEXT, None)); }\n"), 1);
+        // One of each, on their own lines, add up; a longer type name does not count.
+        let both = "fn f() {\n    a(TsStmt::raw(T, None));\n    b(TsStmt::raw_using(T, N));\n    \
+                    c(MyTsStmt::raw_using(T, N));\n    // TsStmt::raw_using(T, N)\n}\n";
+        assert_eq!(count(both), 2);
+        // `raw_using` is not a prefix match of some other name.
+        assert_eq!(
+            count("fn f() { TsStmt::raw_usingx(T); TsStmt::rawish(T); }\n"),
+            0
+        );
+    }
+
+    #[test]
+    fn import_prediction_fns_counts_prediction_names_outside_tests_comments_and_the_allowlist() {
+        let count = |src: &str| import_prediction_fns_violations(&files_of(&[("a.rs", src)]));
+        // Each of the three segments, with the visibility and qualifier forms a declaration takes.
+        let src = "fn agent_needs_rehydrate() {}\n\
+                   pub(crate) fn type_ref_mentions(t: &T) -> bool { true }\n\
+                   pub const fn uses_json_codec() {}\n\
+                   async fn file_mentions_http_result() {}\n";
+        assert_eq!(count(src), 4);
+        // The allowlist is the resolved-fact queries, exact names only.
+        assert_eq!(
+            count("pub fn unit_table_uses_emit() {}\nfn mentions_decimal() {}\n"),
+            0
+        );
+        assert_eq!(count("fn mentions_decimal_extra() {}\n"), 1);
+        // A segment, not a substring: `causes`, `focuses` and `reuses_x` name no prediction.
+        assert_eq!(
+            count("fn causes() {}\nfn focuses_on() {}\nfn reuses_x() {}\n"),
+            0
+        );
+        // A call, a comment and a test module do not declare a function in production.
+        let src = "fn f() { agent_needs_rehydrate(); }\n// fn uses_codec() {}\n\n\
+                   #[cfg(test)]\nmod tests {\n    fn needs_x() {}\n}\n";
+        assert_eq!(count(src), 0);
+        // Counted across files.
+        let one = "fn uses_codec() {}\n";
+        assert_eq!(
+            import_prediction_fns_violations(&files_of(&[("a.rs", one), ("b.rs", one)])),
+            2
         );
     }
 
