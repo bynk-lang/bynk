@@ -57,6 +57,9 @@ fn bynk(dir: &Path, args: &[&str]) -> (bool, String) {
         .args(args)
         .current_dir(dir)
         .env_remove("CI")
+        // #3494: with these, the plan reads the account.
+        .env_remove("CLOUDFLARE_API_TOKEN")
+        .env_remove("CLOUDFLARE_ACCOUNT_ID")
         .output()
         .expect("run bynk");
     let mut s = String::from_utf8_lossy(&out.stdout).into_owned();

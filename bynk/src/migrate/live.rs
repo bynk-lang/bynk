@@ -95,25 +95,40 @@ pub(crate) struct Rest {
 impl Rest {
     pub(crate) fn get(&self, path: &str) -> Result<serde_json::Value, String> {
         let url = format!("{}/accounts/{}{path}", self.base, self.credentials.account);
-        self.fetch(&url, path)
+        self.fetch(&url, path, None)
+    }
+
+    /// [`Rest::get`] with one more request header (#3494: an R2 listing names
+    /// its jurisdiction in `cf-r2-jurisdiction`).
+    pub(crate) fn get_with_header(
+        &self,
+        path: &str,
+        header: (&str, &str),
+    ) -> Result<serde_json::Value, String> {
+        let url = format!("{}/accounts/{}{path}", self.base, self.credentials.account);
+        self.fetch(&url, path, Some(header))
     }
 
     /// A `GET` of a path that is not under the account (`/zones/…`), answered
     /// as [`Rest::get`] is (#3302: a zone's Email Sending subdomains).
     pub(crate) fn get_global(&self, path: &str) -> Result<serde_json::Value, String> {
-        self.fetch(&format!("{}{path}", self.base), path)
+        self.fetch(&format!("{}{path}", self.base), path, None)
     }
 
-    fn fetch(&self, url: &str, path: &str) -> Result<serde_json::Value, String> {
-        let mut response = self
-            .agent
-            .get(url)
-            .header(
-                "Authorization",
-                &format!("Bearer {}", self.credentials.token),
-            )
-            .call()
-            .map_err(|e| format!("GET {path}: {e}"))?;
+    fn fetch(
+        &self,
+        url: &str,
+        path: &str,
+        header: Option<(&str, &str)>,
+    ) -> Result<serde_json::Value, String> {
+        let mut request = self.agent.get(url).header(
+            "Authorization",
+            &format!("Bearer {}", self.credentials.token),
+        );
+        if let Some((name, value)) = header {
+            request = request.header(name, value);
+        }
+        let mut response = request.call().map_err(|e| format!("GET {path}: {e}"))?;
         let status = response.status().as_u16();
         let text = response
             .body_mut()

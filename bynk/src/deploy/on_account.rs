@@ -1,0 +1,252 @@
+//! #3494: what the account already holds of the resources a plan would create.
+//!
+//! The plan reads `bynk.deploy.lock`, so a resource the ledger does not record
+//! is `create` even when one of its name is already on the account, which the
+//! deploy then adopts (R2, D1, Vectorize) or reuses (a queue), and which stops
+//! the deploy for KV (Cloudflare refuses a second namespace of one title). With
+//! `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` set, the plan asks the
+//! account, `--dry-run` included, for the kinds it would otherwise call
+//! `create`, and says `reuse` for a name it finds. Without them the plan stays
+//! ledger-only, as before, and says so once. A listing that fails is named in
+//! one note and leaves that kind ledger-only: the check never fails a deploy.
+//!
+//! Every listing is `GET /accounts/{account_id}/…`, every page followed:
+//! - KV: `/storage/kv/namespaces` (`title`), page-based;
+//! - R2: `/r2/buckets` (`name`), cursor-based, one listing per jurisdiction
+//!   (`cf-r2-jurisdiction`), since a bucket is named within its jurisdiction;
+//! - D1: `/d1/database` (`name`), page-based;
+//! - Queues: `/queues` (`queue_name`), page-based;
+//! - Vectorize: `/vectorize/v2/indexes` (`name`), one page.
+
+use std::collections::{BTreeMap, BTreeSet};
+
+use crate::migrate::live::{self, Credentials, Rest};
+
+/// A kind of resource whose account-facing name the plan derives.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum Kind {
+    Kv,
+    R2,
+    D1,
+    Queue,
+    Vectorize,
+}
+
+impl Kind {
+    /// The kind as a note names it.
+    fn noun(self) -> &'static str {
+        match self {
+            Kind::Kv => "KV namespaces",
+            Kind::R2 => "R2 buckets",
+            Kind::D1 => "D1 databases",
+            Kind::Queue => "queues",
+            Kind::Vectorize => "Vectorize indexes",
+        }
+    }
+}
+
+/// One listing: a kind, and for R2 the jurisdiction (`None` is the default).
+pub(crate) type Listing = (Kind, Option<String>);
+
+/// The account's names of one kind.
+pub(crate) trait Listings {
+    /// Every name of `kind` on the account; an R2 bucket's within `jurisdiction`.
+    fn names(&self, kind: Kind, jurisdiction: Option<&str>) -> Result<BTreeSet<String>, String>;
+}
+
+/// The names the account holds, for the listings a plan asked for.
+#[derive(Debug, Default)]
+pub(crate) struct OnAccount {
+    names: BTreeMap<Listing, BTreeSet<String>>,
+    /// One note per listing that could not be read.
+    pub(crate) notes: Vec<String>,
+}
+
+impl OnAccount {
+    /// Read each of `wanted` from `listings`.
+    pub(crate) fn read(wanted: &BTreeSet<Listing>, listings: &dyn Listings) -> Self {
+        let mut on = OnAccount::default();
+        for (kind, jurisdiction) in wanted {
+            match listings.names(*kind, jurisdiction.as_deref()) {
+                Ok(names) => {
+                    on.names.insert((*kind, jurisdiction.clone()), names);
+                }
+                Err(e) => on.notes.push(format!(
+                    "bynk: warning: could not list the account's {}{} ({e}); the plan says what \
+                     `bynk.deploy.lock` records for them",
+                    kind.noun(),
+                    jurisdiction
+                        .as_deref()
+                        .map(|j| format!(" in jurisdiction {j}"))
+                        .unwrap_or_default(),
+                )),
+            }
+        }
+        on
+    }
+
+    /// Whether the account holds `name` of `kind` (within `jurisdiction`).
+    /// `false` for a listing not read.
+    pub(crate) fn holds(&self, kind: Kind, jurisdiction: Option<&str>, name: &str) -> bool {
+        self.names
+            .get(&(kind, jurisdiction.map(str::to_string)))
+            .is_some_and(|names| names.contains(name))
+    }
+}
+
+/// The listings over Cloudflare's REST API.
+pub(crate) struct RestListings(pub(crate) Rest);
+
+impl RestListings {
+    /// From `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, or why not.
+    pub(crate) fn from_env() -> Result<Self, String> {
+        let credentials = Credentials::from_env_for(
+            "check the plan against the account",
+            "an API token that can read the account's KV, R2, D1, Queues and Vectorize",
+        )?;
+        Ok(RestListings(Rest {
+            agent: live::agent()?,
+            credentials,
+            base: live::API.to_string(),
+        }))
+    }
+
+    /// Every page of a page-based listing at `path` (which takes `page=`), the
+    /// `field` of each entry of `result`.
+    fn paged(&self, path: &str, field: &str) -> Result<BTreeSet<String>, String> {
+        let mut names = BTreeSet::new();
+        for page in 1.. {
+            let sep = if path.contains('?') { '&' } else { '?' };
+            let body = self.0.get(&format!("{path}{sep}page={page}"))?;
+            let entries = body["result"]
+                .as_array()
+                .ok_or_else(|| format!("GET {path}: no `result` list"))?;
+            names.extend(
+                entries
+                    .iter()
+                    .filter_map(|e| e[field].as_str().map(str::to_string)),
+            );
+            let info = &body["result_info"];
+            let more = match info["total_pages"].as_u64() {
+                Some(total) => page < total,
+                None => info["per_page"]
+                    .as_u64()
+                    .is_some_and(|per| entries.len() as u64 >= per && !entries.is_empty()),
+            };
+            if !more {
+                break;
+            }
+        }
+        Ok(names)
+    }
+
+    /// Every bucket in `jurisdiction`, following the listing's cursor.
+    fn buckets(&self, jurisdiction: Option<&str>) -> Result<BTreeSet<String>, String> {
+        let mut names = BTreeSet::new();
+        let mut cursor: Option<String> = None;
+        loop {
+            let path = match &cursor {
+                Some(c) => format!("/r2/buckets?per_page=1000&cursor={c}"),
+                None => "/r2/buckets?per_page=1000".to_string(),
+            };
+            let body = match jurisdiction {
+                Some(j) => self.0.get_with_header(&path, ("cf-r2-jurisdiction", j))?,
+                None => self.0.get(&path)?,
+            };
+            names.extend(
+                body["result"]["buckets"]
+                    .as_array()
+                    .ok_or("GET /r2/buckets: no `buckets` list")?
+                    .iter()
+                    .filter_map(|b| b["name"].as_str().map(str::to_string)),
+            );
+            match body["result_info"]["cursor"].as_str() {
+                Some(next) if !next.is_empty() && cursor.as_deref() != Some(next) => {
+                    cursor = Some(next.to_string());
+                }
+                _ => break,
+            }
+        }
+        Ok(names)
+    }
+}
+
+impl Listings for RestListings {
+    fn names(&self, kind: Kind, jurisdiction: Option<&str>) -> Result<BTreeSet<String>, String> {
+        match kind {
+            Kind::Kv => self.paged("/storage/kv/namespaces?per_page=100", "title"),
+            Kind::R2 => self.buckets(jurisdiction),
+            Kind::D1 => self.paged("/d1/database?per_page=100", "name"),
+            Kind::Queue => self.paged("/queues", "queue_name"),
+            Kind::Vectorize => self.paged("/vectorize/v2/indexes", "name"),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::migrate::live::tests::{rest, stub};
+
+    #[test]
+    fn a_listing_follows_every_page() {
+        let (base, seen) = stub(vec![
+            (
+                "/storage/kv/namespaces?per_page=100&page=1",
+                r#"{"success":true,"result":[{"id":"a","title":"shop"}],"result_info":{"total_pages":2}}"#.into(),
+            ),
+            (
+                "/storage/kv/namespaces?per_page=100&page=2",
+                r#"{"success":true,"result":[{"id":"b","title":"shop-staging"}],"result_info":{"total_pages":2}}"#.into(),
+            ),
+        ]);
+        let listings = RestListings(rest(base));
+        assert_eq!(
+            listings.names(Kind::Kv, None).unwrap(),
+            BTreeSet::from(["shop".to_string(), "shop-staging".to_string()])
+        );
+        assert_eq!(seen.lock().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn buckets_follow_the_cursor() {
+        let (base, _) = stub(vec![
+            (
+                "/r2/buckets?per_page=1000&cursor=next",
+                r#"{"success":true,"result":{"buckets":[{"name":"shop-files-staging"}]},"result_info":{"cursor":""}}"#.into(),
+            ),
+            (
+                "/r2/buckets?per_page=1000",
+                r#"{"success":true,"result":{"buckets":[{"name":"shop-files"}]},"result_info":{"cursor":"next"}}"#.into(),
+            ),
+        ]);
+        let listings = RestListings(rest(base));
+        assert_eq!(
+            listings.names(Kind::R2, None).unwrap(),
+            BTreeSet::from(["shop-files".to_string(), "shop-files-staging".to_string()])
+        );
+    }
+
+    struct Fake;
+
+    impl Listings for Fake {
+        fn names(&self, kind: Kind, _: Option<&str>) -> Result<BTreeSet<String>, String> {
+            match kind {
+                Kind::D1 => Err("Cloudflare answered 403".into()),
+                _ => Ok(BTreeSet::from(["shop-docs".to_string()])),
+            }
+        }
+    }
+
+    #[test]
+    fn a_failed_listing_is_one_note_and_reads_as_absent() {
+        let wanted = BTreeSet::from([(Kind::Vectorize, None), (Kind::D1, None)]);
+        let on = OnAccount::read(&wanted, &Fake);
+        assert!(on.holds(Kind::Vectorize, None, "shop-docs"));
+        assert!(!on.holds(Kind::Kv, None, "shop-docs"), "not asked for");
+        assert!(!on.holds(Kind::D1, None, "shop-docs"));
+        assert_eq!(on.notes.len(), 1, "{:?}", on.notes);
+        assert!(on.notes[0].contains("D1 databases"), "{}", on.notes[0]);
+        assert!(on.notes[0].contains("403"), "{}", on.notes[0]);
+    }
+}

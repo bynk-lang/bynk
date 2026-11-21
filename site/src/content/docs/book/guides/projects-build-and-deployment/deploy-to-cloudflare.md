@@ -22,8 +22,10 @@ bynk deploy --yes
 
 ## Review a plan
 
-No Cloudflare calls or project-state changes happen with `--dry-run` (or its
-`--plan` alias):
+`--dry-run` (or its `--plan` alias) changes nothing on Cloudflare or in the
+project. With `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` set, it reads
+the account to see whether a resource it would create is already there, and
+plans that one as `reuse`; without them it works offline:
 
 ```sh
 bynk deploy --dry-run
@@ -347,9 +349,8 @@ Pass `--force` when you've rotated a value. The default skips deliberately:
 setting every secret on every deploy would cut a fresh Cloudflare secret version
 each time, for nothing.
 
-One consequence worth knowing: `--dry-run` never authenticates, which is what
-lets you plan offline — so a plan says `set` for everything, and the skip shows
-up when you actually run.
+One consequence worth knowing: the plan never reads the Worker's secrets, so it
+says `set` for everything, and the skip shows up when you actually run.
 
 ### Session keys
 
