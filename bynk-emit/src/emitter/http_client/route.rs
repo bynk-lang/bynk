@@ -8,7 +8,10 @@ use std::sync::Arc;
 use bynk_check::contract;
 use bynk_check::project_model::TypeDecl;
 use bynk_check::wire::{TypeBody, TypeRef};
-use bynk_ts::{TsDecl, TsStmt, TsType, TsTypeMember};
+use bynk_ts::{
+    TsArrowBody, TsBinaryOp, TsBindingName, TsDecl, TsExpr, TsLit, TsObjectEntry, TsParam, TsStmt,
+    TsType, TsTypeMember,
+};
 
 use super::*;
 
@@ -117,7 +120,7 @@ impl Gen {
         };
 
         // The route constant: its replies and how to decode them.
-        let mut by_status: BTreeMap<u16, Vec<String>> = BTreeMap::new();
+        let mut by_status: BTreeMap<u16, Vec<TsExpr>> = BTreeMap::new();
         let mut raw_seen: Vec<u16> = Vec::new();
         for (status, variant, payload) in &replies {
             if payload.is_raw() {
@@ -130,29 +133,47 @@ impl Gen {
                     .filter(|(s, _, p)| s == status && p.is_raw())
                     .map(|(_, _, p)| p)
                     .collect();
-                let etag = match Self::raw_etag(&group) {
-                    RawEtag::None => "",
-                    RawEtag::Maybe => ", etag: \"maybe\"",
-                    RawEtag::Required => ", etag: \"required\"",
-                };
+                let mut fields = vec![("kind", str_lit(variant)), ("body", str_lit("raw"))];
+                match Self::raw_etag(&group) {
+                    RawEtag::None => {}
+                    RawEtag::Maybe => fields.push(("etag", str_lit("maybe"))),
+                    RawEtag::Required => fields.push(("etag", str_lit("required"))),
+                }
                 by_status
                     .entry(*status)
                     .or_default()
-                    .push(format!("{{ kind: \"{variant}\", body: \"raw\"{etag} }}"));
+                    .push(object_of(fields));
                 continue;
             }
             let entry = match payload {
                 ReplyPayload::Value => {
                     let t = success.clone().expect("a value reply has a success type");
                     let decode = serialisation::deserialise_ref_via(&t, "", &self.ru);
-                    let decode = bynk_ts::print_expr(&decode);
-                    let conv = self.convert(&t, Dir::ToPublic, "v", 0)?;
-                    let decode = if conv == "v" {
-                        decode
+                    let converts = self.holds_option(&t);
+                    let conv = self.convert(&t, Dir::ToPublic, id("v"), 0)?;
+                    let decode = if converts {
+                        // `(json) => __then(decode(json, "$"), (v) => conv)`
+                        arrow(
+                            vec!["json"],
+                            call(
+                                "__then",
+                                vec![
+                                    TsExpr::Call {
+                                        callee: Box::new(decode),
+                                        args: vec![id("json"), str_lit("$")],
+                                    },
+                                    arrow(vec!["v"], conv),
+                                ],
+                            ),
+                        )
                     } else {
-                        format!("(json) => __then({decode}(json, \"$\"), (v) => {conv})")
+                        decode
                     };
-                    format!("{{ kind: \"{variant}\", body: \"value\", decode: {decode} }}")
+                    object_of(vec![
+                        ("kind", str_lit(variant)),
+                        ("body", str_lit("value")),
+                        ("decode", decode),
+                    ])
                 }
                 other => {
                     let body = match other {
@@ -162,29 +183,44 @@ impl Gen {
                         ReplyPayload::Events => "events",
                         _ => "none",
                     };
-                    format!("{{ kind: \"{variant}\", body: \"{body}\" }}")
+                    object_of(vec![("kind", str_lit(variant)), ("body", str_lit(body))])
                 }
             };
             by_status.entry(*status).or_default().push(entry);
         }
-        let mut constant = format!(
-            "const {ident}: __Route = {{\n  method: \"{}\",\n  path: \"{}\",\n  contract: \"{hash}\",\n  replies: {{\n",
-            r.method, r.path
-        );
-        for (status, entries) in &by_status {
-            constant.push_str(&format!("    {status}: [{}],\n", entries.join(", ")));
-        }
-        constant.push_str("  },\n");
+        let mut constant_entries = vec![
+            TsObjectEntry::prop("method", str_lit(&r.method)),
+            TsObjectEntry::prop("path", str_lit(&r.path)),
+            TsObjectEntry::prop("contract", str_lit(&hash)),
+            TsObjectEntry::prop(
+                "replies",
+                TsExpr::multiline_object_entries(
+                    by_status
+                        .into_iter()
+                        .map(|(status, entries)| {
+                            TsObjectEntry::prop(status.to_string(), TsExpr::array(entries))
+                        })
+                        .collect(),
+                ),
+            ),
+        ];
         if replies
             .iter()
             .any(|(_, _, p)| p.is_raw() || *p == ReplyPayload::Events)
         {
-            constant.push_str("  streamed: __streamed,\n");
+            constant_entries.push(TsObjectEntry::prop("streamed", id("__streamed")));
         }
-        constant.push_str("};\n\n");
+        let constant = TsStmt::decl(
+            TsDecl::ConstDecl {
+                name: ident.clone(),
+                ty: Some(TsType::named("__Route")),
+                init: TsExpr::multiline_object_entries(constant_entries),
+            },
+            None,
+        );
 
         // The function: its parameters and the encoding of each.
-        let (signature, build, arg_types) = self.encoding(r, rp)?;
+        let (mut params, build, arg_types) = self.encoding(r, rp)?;
         let init =
             if r.params.iter().any(
                 |p| matches!(p, ParamInput::Path { name, .. } if super::super::ts_ident(name) == "init"),
@@ -193,30 +229,50 @@ impl Gen {
             } else {
                 "init"
             };
+        params.push(TsParam::optional(
+            init,
+            Some(TsType::named("globalThis.RequestInit")),
+        ));
         let ret = if replies.is_empty() {
-            "CallFailure".to_string()
+            TsType::named("CallFailure")
         } else {
-            format!("{} | CallFailure", rp.response)
+            TsType::union(vec![
+                TsType::named(rp.response.clone()),
+                TsType::named("CallFailure"),
+            ])
         };
-        let doc = r
-            .doc
-            .as_deref()
-            .map(|d| {
-                let mut text = String::from("      /**\n");
-                for line in d.lines() {
-                    text.push_str(
-                        &format!("       * {}\n", line.trim_end()).replace(" * \n", " *\n"),
-                    );
-                }
-                text.push_str("       */\n");
-                text
-            })
-            .unwrap_or_default();
-        let method = format!(
-            "{doc}      {}: ({signature}{sep}{init}?: globalThis.RequestInit): globalThis.Promise<{ret}> =>\n        __call(options, {init}, {ident}, () => {{\n{build}        }}) as globalThis.Promise<{ret}>,\n",
+        let promise = TsType::named_with_args("globalThis.Promise", vec![ret]);
+        let call = TsExpr::Call {
+            callee: Box::new(id("__call")),
+            args: vec![
+                id("options"),
+                id(init),
+                id(&ident),
+                TsExpr::Arrow {
+                    params: Vec::new(),
+                    is_async: false,
+                    generics: Vec::new(),
+                    return_type: None,
+                    body: Box::new(TsArrowBody::Multiline(build)),
+                },
+            ],
+        };
+        let mut method = TsObjectEntry::prop(
             property(&rp.function),
-            sep = if signature.is_empty() { "" } else { ", " },
+            TsExpr::Arrow {
+                params,
+                is_async: false,
+                generics: Vec::new(),
+                return_type: Some(promise.clone()),
+                body: Box::new(TsArrowBody::Expr(Box::new(TsExpr::As {
+                    expr: Box::new(call),
+                    ty: promise,
+                }))),
+            },
         );
+        if let Some(doc) = r.doc.as_deref() {
+            method = method.with_doc(doc);
+        }
         Ok(RouteText {
             hash,
             constant,
@@ -363,101 +419,98 @@ impl Gen {
 
     /// The parameter list, the body of the encoding thunk and the types of the
     /// arguments the route takes beyond the boundary's own (`query`, `cookies`).
-    fn encoding(
-        &mut self,
-        r: &RouteInput,
-        rp: &RoutePlan,
-    ) -> Result<(String, String, Vec<TsStmt>), ClientError> {
-        let mut signature: Vec<String> = Vec::new();
-        let mut build = String::new();
-        let mut params = Vec::new();
-        let mut entries: Vec<String> = Vec::new();
+    fn encoding(&mut self, r: &RouteInput, rp: &RoutePlan) -> Result<Encoding, ClientError> {
+        let mut signature: Vec<TsParam> = Vec::new();
+        let mut build: Vec<TsStmt> = Vec::new();
+        let mut params: Vec<TsObjectEntry> = Vec::new();
+        let mut entries: Vec<TsObjectEntry> = Vec::new();
         let mut arg_types: Vec<TsStmt> = Vec::new();
         for p in &r.params {
             match p {
                 ParamInput::Path { name, ty } => {
                     let ty = self.renamed(ty);
-                    let id = super::super::ts_ident(name);
-                    signature.push(format!("{id}: {}", self.public_text(&ty)?));
+                    let ident = super::super::ts_ident(name);
+                    signature.push(TsParam::new(ident.clone(), Some(self.public_type(&ty)?)));
                     let checked = match &ty {
-                        TypeRef::Base(..) => format!("globalThis.String({id})"),
+                        TypeRef::Base(..) => call("globalThis.String", vec![id(&ident)]),
                         _ => {
-                            let ser = bynk_ts::print_expr(&serialisation::serialise_expr_via(
-                                &ty,
-                                &bynk_ts::TsExpr::Ident(id.clone()),
-                                "",
-                                &self.ru,
-                            ));
-                            let de = bynk_ts::print_expr(&serialisation::deserialise_ref_via(
-                                &ty, "", &self.ru,
-                            ));
-                            build.push_str(&format!(
-                                "          const __p_{id} = __checked({ser}, {de}, \"path.{name}\");\n          if (__p_{id}.tag === \"Err\") return __p_{id};\n"
-                            ));
-                            format!("globalThis.String(__p_{id}.value)")
+                            let ser =
+                                serialisation::serialise_expr_via(&ty, &id(&ident), "", &self.ru);
+                            let de = serialisation::deserialise_ref_via(&ty, "", &self.ru);
+                            let local = format!("__p_{ident}");
+                            build.extend(checked_stmts(&local, ser, de, &format!("path.{name}")));
+                            call("globalThis.String", vec![member(id(&local), "value")])
                         }
                     };
-                    params.push(format!("\"{name}\": {checked}"));
+                    params.push(TsObjectEntry::prop(format!("\"{name}\""), checked));
                 }
                 ParamInput::Body {
                     ty,
                     kind: BodyKind::Json,
                 } => {
                     let ty = self.renamed(ty);
-                    signature.push(format!("body: {}", self.public_text(&ty)?));
-                    let wired = self.convert(&ty, Dir::ToWire, "body", 0)?;
-                    let ser = bynk_ts::print_expr(&serialisation::serialise_expr_via(
-                        &ty,
-                        &bynk_ts::TsExpr::Ident(wired.clone()),
-                        "",
-                        &self.ru,
-                    ));
-                    let de =
-                        bynk_ts::print_expr(&serialisation::deserialise_ref_via(&ty, "", &self.ru));
-                    build.push_str(&format!(
-                        "          const __b = __checked({ser}, {de}, \"$\");\n          if (__b.tag === \"Err\") return __b;\n"
-                    ));
-                    entries.push("body: __b.value".to_string());
+                    signature.push(TsParam::new("body", Some(self.public_type(&ty)?)));
+                    let wired = self.convert(&ty, Dir::ToWire, id("body"), 0)?;
+                    let ser = serialisation::serialise_expr_via(&ty, &wired, "", &self.ru);
+                    let de = serialisation::deserialise_ref_via(&ty, "", &self.ru);
+                    build.extend(checked_stmts("__b", ser, de, "$"));
+                    entries.push(TsObjectEntry::prop("body", member(id("__b"), "value")));
                 }
                 ParamInput::Body {
                     ty,
                     kind: BodyKind::Form,
                 } => {
                     let ty = self.renamed(ty);
-                    signature.push(format!("body: {}", self.public_text(&ty)?));
+                    signature.push(TsParam::new("body", Some(self.public_type(&ty)?)));
                     let arg = self.record_arg(&ty, "body", "body", None)?;
-                    build.push_str(&arg.text);
-                    entries.push(format!("form: __formString(__w_body, [{}])", arg.specs));
+                    build.extend(arg.stmts);
+                    entries.push(TsObjectEntry::prop(
+                        "form",
+                        call(
+                            "__formString",
+                            vec![id("__w_body"), TsExpr::array(arg.specs)],
+                        ),
+                    ));
                 }
                 ParamInput::Body {
                     ty,
                     kind: BodyKind::Multipart,
                 } => {
                     let ty = self.renamed(ty);
-                    signature.push(format!("body: {}", self.multipart_type(&ty)?));
-                    let arg = self.multipart_arg(&ty)?;
-                    build.push_str(&arg);
-                    entries.push("multipart: __form".to_string());
+                    signature.push(TsParam::new("body", Some(self.multipart_type(&ty)?)));
+                    build.extend(self.multipart_arg(&ty)?);
+                    entries.push(TsObjectEntry::prop("multipart", id("__form")));
                 }
                 ParamInput::Body {
                     kind: BodyKind::Raw { content_type },
                     ..
                 } => {
-                    signature.push(
-                        "body: globalThis.Uint8Array | globalThis.ArrayBuffer | globalThis.Blob | globalThis.ReadableStream<globalThis.Uint8Array>"
-                            .to_string(),
-                    );
-                    entries.push("raw: body".to_string());
+                    signature.push(TsParam::new(
+                        "body",
+                        Some(TsType::union(vec![
+                            TsType::named("globalThis.Uint8Array"),
+                            TsType::named("globalThis.ArrayBuffer"),
+                            TsType::named("globalThis.Blob"),
+                            TsType::named("globalThis.ReadableStream<globalThis.Uint8Array>"),
+                        ])),
+                    ));
+                    entries.push(TsObjectEntry::prop("raw", id("body")));
                     if let Some(ct) = content_type {
-                        entries.push(format!("rawType: {ct:?}"));
+                        entries.push(TsObjectEntry::prop("rawType", str_lit(ct)));
                     }
                 }
                 ParamInput::Query { ty } => {
                     let ty = self.renamed(ty);
                     let name = rp.query.clone().expect("a query route has a query type");
                     let arg = self.record_arg(&ty, "query", "query", Some(&name))?;
-                    build.push_str(&arg.text);
-                    entries.push(format!("query: __queryString(__w_query, [{}])", arg.specs));
+                    build.extend(arg.stmts.iter().cloned());
+                    entries.push(TsObjectEntry::prop(
+                        "query",
+                        call(
+                            "__queryString",
+                            vec![id("__w_query"), TsExpr::array(arg.specs.clone())],
+                        ),
+                    ));
                     signature.push(arg.parameter("query", &name));
                     arg_types.extend(arg.decl);
                 }
@@ -468,109 +521,160 @@ impl Gen {
                         .clone()
                         .expect("a cookies route has a cookies type");
                     let arg = self.record_arg(&ty, "cookies", "cookies", Some(&name))?;
-                    build.push_str(&arg.text);
-                    entries.push(format!(
-                        "cookies: __cookieString(__w_cookies, [{}])",
-                        arg.specs
+                    build.extend(arg.stmts.iter().cloned());
+                    entries.push(TsObjectEntry::prop(
+                        "cookies",
+                        call(
+                            "__cookieString",
+                            vec![id("__w_cookies"), TsExpr::array(arg.specs.clone())],
+                        ),
                     ));
                     signature.push(arg.parameter("cookies", &name));
                     arg_types.extend(arg.decl);
                 }
             }
         }
-        entries.insert(0, format!("params: {{ {} }}", params.join(", ")));
-        build.push_str(&format!(
-            "          return Ok({{ {} }});\n",
-            entries.join(", ")
+        entries.insert(
+            0,
+            TsObjectEntry::prop("params", TsExpr::object_entries(params)),
+        );
+        build.push(TsStmt::return_stmt(
+            Some(call("Ok", vec![TsExpr::object_entries(entries)])),
+            None,
         ));
-        Ok((signature.join(", "), build, arg_types))
+        Ok((signature, build, arg_types))
     }
 
     /// The type of a `@multipart` body: the record's public type, its file parts
     /// `Blob`s.
-    fn multipart_type(&self, record: &TypeRef) -> Result<String, ClientError> {
-        self.public_text(record)
+    fn multipart_type(&self, record: &TypeRef) -> Result<TsType, ClientError> {
+        self.public_type(record)
     }
 
     /// The statements that write a `@multipart` body: its text fields and file parts
     /// into a `FormData`, after the record's own decoder has checked the fields (a
     /// file part stands in as an empty file, since its bytes are the caller's).
-    fn multipart_arg(&mut self, record: &TypeRef) -> Result<String, ClientError> {
-        let TypeRef::Named(id) = record else {
+    fn multipart_arg(&mut self, record: &TypeRef) -> Result<Vec<TsStmt>, ClientError> {
+        let TypeRef::Named(id_) = record else {
             return fail("a `@multipart` body is a record");
         };
-        let Some(decl) = self.sc.types.get(&id.name).cloned() else {
+        let Some(decl) = self.sc.types.get(&id_.name).cloned() else {
             return fail("the `@multipart` record is not declared");
         };
         let TypeBody::Record(rec) = &decl.body else {
             return fail("a `@multipart` body is a record");
         };
-        let mut text = String::from(
-            "          const __w_body: { [k: string]: JsonValue } = {};\n          const __form = new globalThis.FormData();\n",
-        );
-        let mut parts = String::new();
+        let mut stmts = vec![
+            wire_object_stmt("body"),
+            const_of(
+                "__form",
+                None,
+                TsExpr::New {
+                    callee: Box::new(member(id("globalThis"), "FormData")),
+                    args: Vec::new(),
+                },
+            ),
+        ];
+        let mut parts: Vec<TsStmt> = Vec::new();
         let mut specs = Vec::new();
         for f in &rec.fields {
             let fname = f.name.name.clone();
-            let key = format!("{fname:?}");
             let wire = f.wire_name().unwrap_or_else(|| fname.clone());
-            let wire_key = format!("{wire:?}");
             let (inner, list, option) = match &f.type_ref {
                 TypeRef::List(i, _) => (i.as_ref(), true, false),
                 TypeRef::Option(i, _) => (i.as_ref(), false, true),
                 other => (other, false, false),
             };
             let is_file = matches!(inner, TypeRef::Named(i) if self.is_file(&i.name));
+            let field = || member(id("body"), &fname);
             if !is_file {
-                let wired = self.convert(&f.type_ref, Dir::ToWire, &format!("body.{fname}"), 0)?;
-                let ser = bynk_ts::print_expr(&serialisation::serialise_expr_via(
-                    &f.type_ref,
-                    &bynk_ts::TsExpr::Ident(wired.clone()),
-                    "",
-                    &self.ru,
-                ));
-                text.push_str(&format!("          __w_body[{key}] = {ser};\n"));
-                let w = f
-                    .wire_name()
-                    .map(|w| format!(", wire: {w:?}"))
-                    .unwrap_or_default();
-                specs.push(format!("{{ name: {key}{w} }}"));
+                let wired = self.convert(&f.type_ref, Dir::ToWire, field(), 0)?;
+                let ser = serialisation::serialise_expr_via(&f.type_ref, &wired, "", &self.ru);
+                stmts.push(wire_assign("body", &fname, ser));
+                specs.push(field_spec(&fname, f.wire_name()));
                 continue;
             }
             // A file part: an empty file stands in for the decoder, and the blob is appended.
-            let stub = "{ filename: { kind: \"None\" }, contentType: \"\", bytes: \"\" }";
-            let (check, append) = match (list, option) {
-                (true, _) => (
-                    format!("body.{fname}.map(() => ({stub}))"),
-                    format!(
-                        "          for (const part of body.{fname}) __form.append({wire_key}, part, __fileName(part));\n"
-                    ),
-                ),
-                (_, true) => (
-                    format!(
-                        "body.{fname} === null || body.{fname} === undefined ? {{ kind: \"None\" }} : {{ kind: \"Some\", value: {stub} }}"
-                    ),
-                    format!(
-                        "          if (body.{fname} !== null && body.{fname} !== undefined) __form.append({wire_key}, body.{fname}, __fileName(body.{fname}));\n"
-                    ),
-                ),
-                _ => (
-                    stub.to_string(),
-                    format!(
-                        "          __form.append({wire_key}, body.{fname}, __fileName(body.{fname}));\n"
-                    ),
-                ),
+            let stub = || {
+                object_of(vec![
+                    ("filename", object_of(vec![("kind", str_lit("None"))])),
+                    ("contentType", str_lit("")),
+                    ("bytes", str_lit("")),
+                ])
             };
-            text.push_str(&format!("          __w_body[{key}] = {check};\n"));
-            parts.push_str(&append);
+            let append = |part: TsExpr| {
+                TsStmt::expr_stmt(
+                    TsExpr::Call {
+                        callee: Box::new(member(id("__form"), "append")),
+                        args: vec![str_lit(&wire), part.clone(), call("__fileName", vec![part])],
+                    },
+                    None,
+                )
+            };
+            let (check, appended) = match (list, option) {
+                (true, _) => (
+                    TsExpr::Call {
+                        callee: Box::new(member(field(), "map")),
+                        args: vec![TsExpr::Arrow {
+                            params: Vec::new(),
+                            is_async: false,
+                            generics: Vec::new(),
+                            return_type: None,
+                            body: Box::new(TsArrowBody::Expr(Box::new(stub()))),
+                        }],
+                    },
+                    TsStmt::for_of("part", field(), append(id("part")), None),
+                ),
+                (_, true) => {
+                    let present = TsExpr::Binary {
+                        op: TsBinaryOp::And,
+                        left: Box::new(compare(
+                            TsBinaryOp::StrictNotEq,
+                            field(),
+                            TsExpr::Lit(TsLit::Null),
+                        )),
+                        right: Box::new(compare(TsBinaryOp::StrictNotEq, field(), id("undefined"))),
+                    };
+                    let absent = TsExpr::Binary {
+                        op: TsBinaryOp::Or,
+                        left: Box::new(compare(
+                            TsBinaryOp::StrictEq,
+                            field(),
+                            TsExpr::Lit(TsLit::Null),
+                        )),
+                        right: Box::new(compare(TsBinaryOp::StrictEq, field(), id("undefined"))),
+                    };
+                    (
+                        TsExpr::Conditional {
+                            test: Box::new(absent),
+                            consequent: Box::new(object_of(vec![("kind", str_lit("None"))])),
+                            alternate: Box::new(object_of(vec![
+                                ("kind", str_lit("Some")),
+                                ("value", stub()),
+                            ])),
+                        },
+                        TsStmt::if_stmt(present, append(field()), None),
+                    )
+                }
+                _ => (stub(), append(field())),
+            };
+            stmts.push(wire_assign("body", &fname, check));
+            parts.push(appended);
         }
-        let de = bynk_ts::print_expr(&serialisation::deserialise_ref_via(record, "", &self.ru));
-        text.push_str(&format!(
-            "          const __c_body = __checked(__w_body, {de}, \"body\");\n          if (__c_body.tag === \"Err\") return __c_body;\n          __appendText(__form, __formString(__w_body, [{}]));\n",
-            specs.join(", ")
+        let de = serialisation::deserialise_ref_via(record, "", &self.ru);
+        stmts.extend(checked_stmts("__c_body", id("__w_body"), de, "body"));
+        stmts.push(TsStmt::expr_stmt(
+            call(
+                "__appendText",
+                vec![
+                    id("__form"),
+                    call("__formString", vec![id("__w_body"), TsExpr::array(specs)]),
+                ],
+            ),
+            None,
         ));
-        text.push_str(&parts);
-        Ok(text)
+        stmts.extend(parts);
+        Ok(stmts)
     }
 
     /// A record argument (`query`, `cookies` or a `@form` body): each field written
@@ -586,17 +690,17 @@ impl Gen {
         at: &str,
         custom: Option<&str>,
     ) -> Result<RecordArg, ClientError> {
-        let TypeRef::Named(id) = record else {
+        let TypeRef::Named(id_) = record else {
             return fail(format!("a `{arg}` parameter is a record"));
         };
-        let Some(decl) = self.sc.types.get(&id.name).cloned() else {
-            return fail(format!("the `{arg}` record `{}` is not declared", id.name));
+        let Some(decl) = self.sc.types.get(&id_.name).cloned() else {
+            return fail(format!("the `{arg}` record `{}` is not declared", id_.name));
         };
         let TypeBody::Record(rec) = &decl.body else {
             return fail(format!("a `{arg}` parameter is a record"));
         };
         let mut members = Vec::new();
-        let mut text = format!("          const __w_{arg}: {{ [k: string]: JsonValue }} = {{}};\n");
+        let mut stmts = vec![wire_object_stmt(arg)];
         let mut specs = Vec::new();
         let mut all_optional = true;
         for f in &rec.fields {
@@ -610,30 +714,27 @@ impl Gen {
                 optional,
                 readonly: true,
             });
-            let wired = self.convert(&f.type_ref, Dir::ToWire, &format!("{arg}.{fname}"), 0)?;
-            let ser = bynk_ts::print_expr(&serialisation::serialise_expr_via(
-                &f.type_ref,
-                &bynk_ts::TsExpr::Ident(wired.clone()),
-                "",
-                &self.ru,
-            ));
-            let key = format!("{fname:?}");
+            let given = member(id(arg), &fname);
+            let wired = self.convert(&f.type_ref, Dir::ToWire, given.clone(), 0)?;
+            let ser = serialisation::serialise_expr_via(&f.type_ref, &wired, "", &self.ru);
+            let write = wire_assign(arg, &fname, ser);
             if optional {
-                text.push_str(&format!(
-                    "          if ({arg}.{fname} !== undefined) __w_{arg}[{key}] = {ser};\n"
+                stmts.push(TsStmt::if_stmt(
+                    compare(TsBinaryOp::StrictNotEq, given, id("undefined")),
+                    write,
+                    None,
                 ));
             } else {
-                text.push_str(&format!("          __w_{arg}[{key}] = {ser};\n"));
+                stmts.push(write);
             }
-            let wire = f
-                .wire_name()
-                .map(|w| format!(", wire: {w:?}"))
-                .unwrap_or_default();
-            specs.push(format!("{{ name: {key}{wire} }}"));
+            specs.push(field_spec(&fname, f.wire_name()));
         }
-        let de = bynk_ts::print_expr(&serialisation::deserialise_ref_via(record, "", &self.ru));
-        text.push_str(&format!(
-            "          const __c_{arg} = __checked(__w_{arg}, {de}, \"{at}\");\n          if (__c_{arg}.tag === \"Err\") return __c_{arg};\n"
+        let de = serialisation::deserialise_ref_via(record, "", &self.ru);
+        stmts.extend(checked_stmts(
+            &format!("__c_{arg}"),
+            id(&format!("__w_{arg}")),
+            de,
+            at,
         ));
         let declared = custom.map(|name| {
             let mut d = TsStmt::decl(
@@ -660,41 +761,158 @@ impl Gen {
         });
         Ok(RecordArg {
             decl: declared.into_iter().flatten().collect(),
-            text,
-            specs: specs.join(", "),
+            stmts,
+            specs,
             all_optional,
         })
     }
 }
+
+/// A route's parameters, the statements of its encoding thunk and the argument types it declares.
+type Encoding = (Vec<TsParam>, Vec<TsStmt>, Vec<TsStmt>);
 
 /// A record argument's type, its encoding and what that needs.
 struct RecordArg {
     /// The argument's own interface, when it has one.
     decl: Vec<TsStmt>,
     /// The statements that write and check its wire form.
-    text: String,
+    stmts: Vec<TsStmt>,
     /// The `QueryField`s that name each field's wire key.
-    specs: String,
+    specs: Vec<TsExpr>,
     /// Whether every field may be left out, so the argument may be.
     all_optional: bool,
 }
 
 impl RecordArg {
     /// The parameter, `name: Type`, or `name: Type = {}` when it may be left out.
-    fn parameter(&self, name: &str, ty: &str) -> String {
+    fn parameter(&self, name: &str, ty: &str) -> TsParam {
+        let param = TsParam::new(name, Some(TsType::named(ty)));
         if self.all_optional {
-            format!("{name}: {ty} = {{}}")
+            param.with_default(TsExpr::object(Vec::new()))
         } else {
-            format!("{name}: {ty}")
+            param
         }
     }
+}
+
+// ---------------------------------------------------------------------
+// Small node builders
+// ---------------------------------------------------------------------
+
+fn id(name: &str) -> TsExpr {
+    TsExpr::Ident(name.to_string())
+}
+
+fn str_lit(text: &str) -> TsExpr {
+    TsExpr::Lit(TsLit::Str(text.to_string()))
+}
+
+fn member(object: TsExpr, property: &str) -> TsExpr {
+    TsExpr::Member {
+        object: Box::new(object),
+        property: property.to_string(),
+    }
+}
+
+fn call(callee: &str, args: Vec<TsExpr>) -> TsExpr {
+    TsExpr::Call {
+        callee: Box::new(id(callee)),
+        args,
+    }
+}
+
+/// `(a, b) => body`.
+fn arrow(params: Vec<&str>, body: TsExpr) -> TsExpr {
+    TsExpr::Arrow {
+        params: params.into_iter().map(|p| TsParam::new(p, None)).collect(),
+        is_async: false,
+        generics: Vec::new(),
+        return_type: None,
+        body: Box::new(TsArrowBody::Expr(Box::new(body))),
+    }
+}
+
+/// A one-line object literal of `key: value` entries.
+fn object_of(fields: Vec<(&str, TsExpr)>) -> TsExpr {
+    TsExpr::object(
+        fields
+            .into_iter()
+            .map(|(k, v)| (k.to_string(), v))
+            .collect(),
+    )
+}
+
+fn compare(op: TsBinaryOp, left: TsExpr, right: TsExpr) -> TsExpr {
+    TsExpr::Binary {
+        op,
+        left: Box::new(left),
+        right: Box::new(right),
+    }
+}
+
+fn const_of(name: &str, ty: Option<TsType>, init: TsExpr) -> TsStmt {
+    TsStmt::const_stmt(TsBindingName::Ident(name.to_string()), ty, init, None)
+}
+
+/// `const __w_<arg>: { [k: string]: JsonValue } = {};`
+fn wire_object_stmt(arg: &str) -> TsStmt {
+    const_of(
+        &format!("__w_{arg}"),
+        Some(TsType::Object(vec![TsTypeMember::index(
+            "k",
+            TsType::named("string"),
+            TsType::named("JsonValue"),
+        )])),
+        TsExpr::object(Vec::new()),
+    )
+}
+
+/// `__w_<arg>["field"] = value;`
+fn wire_assign(arg: &str, field: &str, value: TsExpr) -> TsStmt {
+    TsStmt::assign(
+        TsExpr::Index {
+            object: Box::new(id(&format!("__w_{arg}"))),
+            index: Box::new(str_lit(field)),
+        },
+        value,
+        None,
+    )
+}
+
+/// `{ name: "field", wire: "wire" }`, the `QueryField` of one field.
+fn field_spec(field: &str, wire: Option<String>) -> TsExpr {
+    let mut fields = vec![("name", str_lit(field))];
+    if let Some(w) = wire {
+        fields.push(("wire", str_lit(&w)));
+    }
+    object_of(fields)
+}
+
+/// `const <local> = __checked(value, decoder, "at"); if (<local>.tag === "Err") return <local>;`
+fn checked_stmts(local: &str, value: TsExpr, decoder: TsExpr, at: &str) -> Vec<TsStmt> {
+    vec![
+        const_of(
+            local,
+            None,
+            call("__checked", vec![value, decoder, str_lit(at)]),
+        ),
+        TsStmt::if_stmt(
+            compare(
+                TsBinaryOp::StrictEq,
+                member(id(local), "tag"),
+                str_lit("Err"),
+            ),
+            TsStmt::return_stmt(Some(id(local)), None),
+            None,
+        ),
+    ]
 }
 
 pub(super) struct RouteText {
     /// The route's contract hash.
     pub(super) hash: String,
-    pub(super) constant: String,
-    pub(super) method: String,
+    pub(super) constant: TsStmt,
+    pub(super) method: TsObjectEntry,
     pub(super) response_type: Option<Vec<TsStmt>>,
     pub(super) arg_types: Vec<TsStmt>,
 }

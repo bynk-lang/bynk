@@ -41,7 +41,10 @@ use bynk_check::contract;
 use bynk_check::project_model::TypeDecl;
 use bynk_check::wire::TypeBody;
 use bynk_check::wire::TypeRef;
-use bynk_ts::{TsDecl, TsProgram, TsStmt, TsType, TsTypeMember};
+use bynk_ts::{
+    TsArrowBody, TsBinaryOp, TsDecl, TsExpr, TsLit, TsObjectEntry, TsParam, TsProgram, TsStmt,
+    TsType, TsTypeMember,
+};
 
 use super::client::{SurfaceClosure, surface_closure};
 use super::runtime_use::RuntimeUse;
@@ -387,7 +390,7 @@ struct Gen {
     qual: HashMap<String, String>,
     ru: RuntimeUse,
     /// Generated conversion functions, by name.
-    convs: BTreeMap<String, String>,
+    convs: BTreeMap<String, Option<TsDecl>>,
     /// Types already found to hold an `Option`, or not.
     holds: HashMap<String, bool>,
 }
@@ -547,14 +550,6 @@ impl Gen {
     /// The type a codec makes and takes.
     fn wire_type(&self, t: &TypeRef) -> TsType {
         serialisation::qualified_ts_type(t, &self.qual)
-    }
-
-    fn public_text(&self, t: &TypeRef) -> Result<String, ClientError> {
-        Ok(bynk_ts::print_type(&self.public_type(t)?))
-    }
-
-    fn wire_text(&self, t: &TypeRef) -> String {
-        bynk_ts::print_type(&self.wire_type(t))
     }
 
     /// One boundary type's declaration, in whichever of its two shapes `ty` renders.
@@ -747,28 +742,44 @@ impl Gen {
         &mut self,
         t: &TypeRef,
         dir: Dir,
-        expr: &str,
+        expr: TsExpr,
         depth: usize,
-    ) -> Result<String, ClientError> {
+    ) -> Result<TsExpr, ClientError> {
         if !self.holds_option(t) {
-            return Ok(expr.to_string());
+            return Ok(expr);
         }
         let x = format!("x{depth}");
+        let lambda = |body: TsExpr| TsExpr::Arrow {
+            params: vec![TsParam::new(x.clone(), None)],
+            is_async: false,
+            generics: Vec::new(),
+            return_type: None,
+            body: Box::new(TsArrowBody::Expr(Box::new(body))),
+        };
         match t {
             TypeRef::Option(inner, _) => {
                 if matches!(inner.as_ref(), TypeRef::Option(..)) {
                     return fail("an `Option[Option[T]]` has no `T | null` form");
                 }
-                let body = self.convert(inner, dir, &x, depth + 1)?;
+                let body = self.convert(inner, dir, TsExpr::Ident(x.clone()), depth + 1)?;
                 let f = match dir {
                     Dir::ToPublic => "__optToNull",
                     Dir::ToWire => "__nullToOpt",
                 };
-                Ok(format!("{f}({expr}, ({x}) => {body})"))
+                Ok(TsExpr::Call {
+                    callee: Box::new(TsExpr::Ident(f.to_string())),
+                    args: vec![expr, lambda(body)],
+                })
             }
             TypeRef::List(inner, _) => {
-                let body = self.convert(inner, dir, &x, depth + 1)?;
-                Ok(format!("{expr}.map(({x}) => {body})"))
+                let body = self.convert(inner, dir, TsExpr::Ident(x.clone()), depth + 1)?;
+                Ok(TsExpr::Call {
+                    callee: Box::new(TsExpr::Member {
+                        object: Box::new(expr),
+                        property: "map".to_string(),
+                    }),
+                    args: vec![lambda(body)],
+                })
             }
             TypeRef::Set(..) | TypeRef::Map(..) | TypeRef::Result(..) => fail(
                 "an `Option` inside a `Map`, `Set` or `Result` has no `T | null` form in this version of `bynk client`",
@@ -776,18 +787,18 @@ impl Gen {
             TypeRef::Named(id) => {
                 let key = id.name.clone();
                 self.named_conversion(&key, &key, &[], t, dir)?;
-                Ok(format!("{}{key}({expr})", dir.prefix()))
+                Ok(conversion_call(dir, &key, expr))
             }
             TypeRef::App { name, args, .. } => {
                 let key = serialisation::app_ts_name(&name.name, args);
                 self.named_conversion(&key, &name.name, args, t, dir)?;
-                Ok(format!("{}{key}({expr})", dir.prefix()))
+                Ok(conversion_call(dir, &key, expr))
             }
-            _ => Ok(expr.to_string()),
+            _ => Ok(expr),
         }
     }
 
-    /// Emit (once) the function converting values of the record or sum `t`.
+    /// Build (once) the function converting values of the record or sum `t`.
     fn named_conversion(
         &mut self,
         key: &str,
@@ -801,18 +812,20 @@ impl Gen {
             return Ok(());
         }
         // Reserve the name first, so a type that holds itself terminates.
-        self.convs.insert(name.clone(), String::new());
+        self.convs.insert(name.clone(), None);
         let Some((is_record, variants)) = self.variants_of(decl, args) else {
             return Ok(());
         };
-        let (wire, public) = (self.wire_text(t), self.public_text(t)?);
+        let (wire, public) = (self.wire_type(t), self.public_type(t)?);
         let (from, to) = match dir {
             Dir::ToPublic => (wire, public),
             Dir::ToWire => (public, wire),
         };
-        let mut body = String::new();
+        let v = || TsExpr::Ident("v".to_string());
+        let mut body = Vec::new();
         for (variant, fields) in &variants {
-            let mut props = Vec::new();
+            let mut entries = vec![TsObjectEntry::Spread(v())];
+            let mut converted = false;
             for (field, ft) in fields {
                 if self.holds_option(ft) {
                     let prop = if is_record {
@@ -820,27 +833,52 @@ impl Gen {
                     } else {
                         super::payload_prop(field)
                     };
-                    let conv = self.convert(ft, dir, &format!("v.{prop}"), 0)?;
-                    props.push(format!("{prop}: {conv}"));
+                    let from_prop = TsExpr::Member {
+                        object: Box::new(v()),
+                        property: prop.clone(),
+                    };
+                    let conv = self.convert(ft, dir, from_prop, 0)?;
+                    entries.push(TsObjectEntry::prop(prop, conv));
+                    converted = true;
                 }
             }
-            if props.is_empty() {
+            if !converted {
                 continue;
             }
-            let object = format!("{{ ...v, {} }} as unknown as {to}", props.join(", "));
+            let object = cast_via_unknown(TsExpr::object_entries(entries), &to);
             if is_record {
-                body.push_str(&format!("  return {object};\n"));
+                body.push(TsStmt::return_stmt(Some(object), None));
             } else {
-                body.push_str(&format!(
-                    "  if (v.tag === \"{variant}\") return {object};\n"
+                let is_variant = TsExpr::Binary {
+                    op: TsBinaryOp::StrictEq,
+                    left: Box::new(TsExpr::Member {
+                        object: Box::new(v()),
+                        property: "tag".to_string(),
+                    }),
+                    right: Box::new(TsExpr::Lit(TsLit::Str(variant.clone()))),
+                };
+                body.push(TsStmt::if_stmt(
+                    is_variant,
+                    TsStmt::return_stmt(Some(object), None),
+                    None,
                 ));
             }
         }
         if !is_record {
-            body.push_str(&format!("  return v as unknown as {to};\n"));
+            body.push(TsStmt::return_stmt(Some(cast_via_unknown(v(), &to)), None));
         }
-        let text = format!("export function {name}(v: {from}): {to} {{\n{body}}}\n");
-        self.convs.insert(name, text);
+        self.convs.insert(
+            name.clone(),
+            Some(TsDecl::Function {
+                name,
+                generics: Vec::new(),
+                params: vec![TsParam::new("v", Some(from))],
+                return_type: Some(to),
+                body,
+                is_async: false,
+                inline: false,
+            }),
+        );
         Ok(())
     }
 
@@ -852,32 +890,42 @@ impl Gen {
         let mut stmts: Vec<TsStmt> = Vec::new();
 
         // The route glue is built first: it decides which conversions exist.
-        let mut glue = String::new();
+        let mut glue: Vec<TsStmt> = Vec::new();
         let mut unions: Vec<TsStmt> = Vec::new();
-        let mut client = String::new();
-        let mut contracts = String::new();
+        let mut services: Vec<TsObjectEntry> = Vec::new();
+        let mut contracts: Vec<TsObjectEntry> = Vec::new();
         for (s, sp) in input.services.iter().zip(&plan.services) {
-            client.push_str(&format!("    {}: {{\n", property(&sp.key)));
+            let mut methods: Vec<TsObjectEntry> = Vec::new();
             let mut hashes: Vec<(String, String)> = Vec::new();
             for (r, rp) in s.routes.iter().zip(&sp.routes) {
                 let route = self.route(&sp.key, r, rp, &s.types)?;
                 hashes.push((rp.function.clone(), route.hash.clone()));
-                glue.push_str(&route.constant);
+                glue.push(route.constant);
                 unions.extend(route.response_type.into_iter().flatten());
                 unions.extend(route.arg_types);
-                client.push_str(&route.method);
+                methods.push(route.method);
             }
-            client.push_str("    },\n");
-            let all: Vec<String> = hashes.iter().map(|(_, h)| h.clone()).collect();
-            contracts.push_str(&format!(
-                "  {}: {{\n    service: \"{}\",\n    routes: {{\n",
+            services.push(TsObjectEntry::prop(
                 property(&sp.key),
-                contract::http_service_contract_hash(&all)
+                TsExpr::multiline_object_entries(methods),
             ));
-            for (function, hash) in &hashes {
-                contracts.push_str(&format!("      {}: \"{hash}\",\n", property(function)));
-            }
-            contracts.push_str("    },\n  },\n");
+            let all: Vec<String> = hashes.iter().map(|(_, h)| h.clone()).collect();
+            let routes = hashes
+                .iter()
+                .map(|(function, hash)| {
+                    TsObjectEntry::prop(property(function), TsExpr::Lit(TsLit::Str(hash.clone())))
+                })
+                .collect();
+            contracts.push(TsObjectEntry::prop(
+                property(&sp.key),
+                TsExpr::multiline_object_entries(vec![
+                    TsObjectEntry::prop(
+                        "service",
+                        TsExpr::Lit(TsLit::Str(contract::http_service_contract_hash(&all))),
+                    ),
+                    TsObjectEntry::prop("routes", TsExpr::multiline_object_entries(routes)),
+                ]),
+            ));
         }
 
         // Boundary types, public then wire, then the codecs over the wire ones.
@@ -936,22 +984,12 @@ impl Gen {
                 &self.ru,
             ),
         ));
-        for text in self.convs.values().filter(|t| !t.is_empty()) {
-            codecs.push(TsStmt::raw(format!("{text}\n"), None));
+        for decl in self.convs.values().flatten() {
+            codecs.push(TsStmt::decl(TsDecl::Export(Box::new(decl.clone())), None));
         }
-        let mut index: Vec<TsStmt> = vec![TsStmt::raw(glue, None)];
-        index.push(TsStmt::raw(
-            format!(
-                "/**\n * The contract of each service and route this client was generated for: a hash of\n * what a client acts on (the route's method and path, what it takes, what it can\n * answer). It moves when that does and not for a handler's body. Informational: log\n * it, compare it with the server's, or send it with `sendContract`.\n */\nexport const API_CONTRACTS = {{\n{contracts}}} as const;\n"
-            ),
-            None,
-        ));
-        index.push(TsStmt::raw(
-            format!(
-                "/**\n * The client: one property per service, one function per route. Each returns\n * the route's own response, a union keyed by `status`, or a `CallFailure`.\n */\nexport function createClient(options: ClientOptions = {{}}) {{\n  return {{\n{client}  }} as const;\n}}\n\n/** The client `createClient` makes. */\nexport type Client = ReturnType<typeof createClient>;\n"
-            ),
-            None,
-        ));
+        let mut index: Vec<TsStmt> = glue;
+        index.extend(contracts_stmts(contracts));
+        index.extend(client_stmts(services));
 
         let print = |stmts: Vec<TsStmt>| {
             // A refinement's `field` names the type the codec was given: the
@@ -969,6 +1007,82 @@ impl Gen {
 }
 
 type Variant = (String, Vec<(String, TypeRef)>);
+
+/// `__toPublic_Key(expr)`, the call of a generated conversion.
+fn conversion_call(dir: Dir, key: &str, expr: TsExpr) -> TsExpr {
+    let function = format!("{}{key}", dir.prefix());
+    TsExpr::Call {
+        callee: Box::new(TsExpr::Ident(function)),
+        args: vec![expr],
+    }
+}
+
+/// A documented export that follows its own doc comment with no blank line between.
+fn documented(doc: &str, decl: TsDecl) -> Vec<TsStmt> {
+    let mut stmt = TsStmt::decl(TsDecl::Export(Box::new(decl)), None);
+    stmt.no_blank_before = true;
+    vec![TsStmt::doc_comment(doc, None), stmt]
+}
+
+/// `export const API_CONTRACTS = { .. } as const;` under its doc block: the hash of
+/// each service and route.
+fn contracts_stmts(services: Vec<TsObjectEntry>) -> Vec<TsStmt> {
+    documented(
+        "The contract of each service and route this client was generated for: a hash of\nwhat a client acts on (the route's method and path, what it takes, what it can\nanswer). It moves when that does and not for a handler's body. Informational: log\nit, compare it with the server's, or send it with `sendContract`.",
+        TsDecl::ConstDecl {
+            name: "API_CONTRACTS".to_string(),
+            ty: None,
+            init: TsExpr::AsConst(Box::new(TsExpr::multiline_object_entries(services))),
+        },
+    )
+}
+
+/// `createClient` and the `Client` type, each under its doc comment.
+fn client_stmts(services: Vec<TsObjectEntry>) -> Vec<TsStmt> {
+    let mut out = documented(
+        "The client: one property per service, one function per route. Each returns\nthe route's own response, a union keyed by `status`, or a `CallFailure`.",
+        TsDecl::Function {
+            name: "createClient".to_string(),
+            generics: Vec::new(),
+            params: vec![
+                TsParam::new("options", Some(TsType::named("ClientOptions")))
+                    .with_default(TsExpr::object(Vec::new())),
+            ],
+            return_type: None,
+            body: vec![TsStmt::return_stmt(
+                Some(TsExpr::AsConst(Box::new(TsExpr::multiline_object_entries(
+                    services,
+                )))),
+                None,
+            )],
+            is_async: false,
+            inline: false,
+        },
+    );
+    out.extend(documented(
+        "The client `createClient` makes.",
+        TsDecl::TypeAlias {
+            name: "Client".to_string(),
+            type_params: Vec::new(),
+            ty: TsType::named_with_args(
+                "ReturnType",
+                vec![TsType::type_of(TsExpr::Ident("createClient".to_string()))],
+            ),
+        },
+    ));
+    out
+}
+
+/// `expr as unknown as ty`.
+fn cast_via_unknown(expr: TsExpr, ty: &TsType) -> TsExpr {
+    TsExpr::As {
+        expr: Box::new(TsExpr::As {
+            expr: Box::new(expr),
+            ty: TsType::named("unknown"),
+        }),
+        ty: ty.clone(),
+    }
+}
 
 // ---------------------------------------------------------------------
 // Names
