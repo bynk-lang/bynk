@@ -2760,8 +2760,6 @@ fn hyperdrive_plan<'a>(
 }
 
 impl<'a> Plan<'a> {
-    /// #3319: show each Hyperdrive config as `bynk.toml` and the environment
-    /// say it will be handled (a `sync` from the variable, an `adopt`), once the deploy has read them.
     /// #3494: the listings the account is asked for: one per kind (and R2
     /// jurisdiction) of which this plan would create something.
     pub(crate) fn account_listings(&self) -> BTreeSet<super::on_account::Listing> {
@@ -2862,6 +2860,8 @@ impl<'a> Plan<'a> {
         &self.account_notes
     }
 
+    /// #3319: show each Hyperdrive config as `bynk.toml` and the environment
+    /// say it will be handled (a `sync` from the variable, an `adopt`), once the deploy has read them.
     pub(crate) fn with_hyperdrive(
         mut self,
         order: &[String],

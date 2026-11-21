@@ -187,7 +187,7 @@ pub fn signed_request(
 }
 
 /// Percent-encode everything but unreserved characters, for a query value or a path segment.
-fn percent_encode(s: &str) -> String {
+pub(crate) fn percent_encode(s: &str) -> String {
     let mut out = String::new();
     for b in s.bytes() {
         match b {

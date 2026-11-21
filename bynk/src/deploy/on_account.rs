@@ -146,7 +146,11 @@ impl RestListings {
         let mut cursor: Option<String> = None;
         loop {
             let path = match &cursor {
-                Some(c) => format!("/r2/buckets?per_page=1000&cursor={c}"),
+                // The cursor is opaque: encoded, so a `+` or `=` in it survives.
+                Some(c) => format!(
+                    "/r2/buckets?per_page=1000&cursor={}",
+                    crate::dev_inspect::percent_encode(c)
+                ),
                 None => "/r2/buckets?per_page=1000".to_string(),
             };
             let body = match jurisdiction {
@@ -210,20 +214,23 @@ mod tests {
 
     #[test]
     fn buckets_follow_the_cursor() {
-        let (base, _) = stub(vec![
+        // An opaque cursor goes back percent-encoded: a `+` would read as a space.
+        let (base, seen) = stub(vec![
             (
-                "/r2/buckets?per_page=1000&cursor=next",
+                "/r2/buckets?per_page=1000&cursor=a%2Bb%2Fc%3D",
                 r#"{"success":true,"result":{"buckets":[{"name":"shop-files-staging"}]},"result_info":{"cursor":""}}"#.into(),
             ),
             (
                 "/r2/buckets?per_page=1000",
-                r#"{"success":true,"result":{"buckets":[{"name":"shop-files"}]},"result_info":{"cursor":"next"}}"#.into(),
+                r#"{"success":true,"result":{"buckets":[{"name":"shop-files"}]},"result_info":{"cursor":"a+b/c="}}"#.into(),
             ),
         ]);
         let listings = RestListings(rest(base));
         assert_eq!(
             listings.names(Kind::R2, None).unwrap(),
-            BTreeSet::from(["shop-files".to_string(), "shop-files-staging".to_string()])
+            BTreeSet::from(["shop-files".to_string(), "shop-files-staging".to_string()]),
+            "{:?}",
+            seen.lock().unwrap()
         );
     }
 
