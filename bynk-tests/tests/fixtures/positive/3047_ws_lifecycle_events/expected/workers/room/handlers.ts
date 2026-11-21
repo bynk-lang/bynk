@@ -134,10 +134,10 @@ export class Room {
     const __state = await this.loadState();
     const __events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number } }> = [];
     const __result = await (async () => {
-    const __r0 = await (async () => {
-      __events.push({ type: "Said", payload: { text: text }, envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "room", emittedAt: globalThis.Date.now(), schemaVersion: 1 } });
-    })();
-    return undefined;
+      const __r0 = await (async () => {
+        __events.push({ type: "Said", payload: { text: text }, envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "room", emittedAt: globalThis.Date.now(), schemaVersion: 1 } });
+      })();
+      return undefined;
     })();
     if (__events.length > 0) { await deps.__eventsDispatch(__events); }
     return __result;

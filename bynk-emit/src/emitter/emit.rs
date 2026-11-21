@@ -1403,10 +1403,8 @@ fn requires_guards(body: &mut Body, f: &FnDecl, cx: &mut LowerCtx) {
 /// and the offending argument/`result` values. This wrapper is emitted only in
 /// the dev/test profile and is O(1) in code size (one guard, not per call site).
 ///
-/// 1A.15: the body is the statements of the function body, not text — the
-/// original body runs inside the `(() => { ... })()` text, whose lowered
-/// statements nest one step deeper, so they reach the printer through
-/// [`Body::into_stmts`] with their checkpoints.
+/// 1A.15: the body is the statements of the function body, not text. 1A.ws: the closure the
+/// original body runs in is a node too ([`iife_const_item`]), the body its arrow's statements.
 fn contract_guarded_body_stmts(
     f: &FnDecl,
     cx: &mut LowerCtx,
@@ -1419,19 +1417,14 @@ fn contract_guarded_body_stmts(
     let mut body = Body::new();
     requires_guards(&mut body, f, cx);
     // Run the original body, capturing its value as `result` for the `ensures`.
-    body.push(Item::line(if async_tail {
-        "const result = await (async () => {"
-    } else {
-        "const result = (() => {"
-    }));
-    body.push(Item::Indent(block_body_with_return(
+    let original = block_body_with_return(
         &f.body,
         cx,
         INDENT_STEP * 2,
         async_tail,
         Some(&f.return_type),
-    )));
-    body.push(Item::line("})();"));
+    );
+    body.push(iife_const_item("result", async_tail, original));
     // Postcondition guards — `result` (and the parameters) are in scope.
     for c in &f.ensures {
         let mut pre = Pre::new();
@@ -3212,7 +3205,7 @@ pub(crate) fn emit_service(
             && let Some((param_name, _)) = ir_params.first()
             && let Some(guard) = event_pattern_guard_ir(&ts_ident(param_name), Some(pattern))
         {
-            guards.push(Item::line(format!("if (!({guard})) return undefined;")));
+            guards.push(return_undefined_unless(guard));
         }
         // Events track, slice 4 (spine #936): a `via schema(N)` guard,
         // independent of and in addition to the payload-pattern guard above
@@ -3229,7 +3222,7 @@ pub(crate) fn emit_service(
         {
             // Inserted ahead of the subscriber-filter guard, as it always was.
             let mut schema_guard = Body::new();
-            schema_guard.push(Item::line(format!("if (!({test})) return undefined;")));
+            schema_guard.push(return_undefined_unless(test));
             schema_guard.append(std::mem::replace(&mut guards, Body::new()));
             guards = schema_guard;
         }
@@ -3390,10 +3383,8 @@ pub(crate) fn emit_service(
         // `__exec`'s gate on `block_uses_send`.
         let body_emits_directly = bynk_model::block_uses_emit(&handler.body, &commons.callees);
         // #1361: the events-IIFE wrapper (if any) surrounds the guards and the
-        // lowered body. 1A.15: the whole method body is statements now; the
-        // wrapper's own lines are nodes where the printer would lay them out
-        // the same way, and text where it would not (the body sits at the
-        // IIFE's own indentation, which a nested arrow body would not).
+        // lowered body. The whole method body is statements, the wrapper an
+        // arrow whose body is the guards and the lowered body (1A.ws).
         let mut body = guards;
         body.append(lowered_body);
         let body = if body_emits_directly {
@@ -7111,15 +7102,56 @@ fn events_decl_item() -> Item {
     )))
 }
 
-/// The line that opens the closure a handler body runs in so that its own
-/// `return`s resolve `__result`. Text, because the body sits at this line's own
-/// indentation, where a nested arrow body would sit one step deeper.
-fn result_closure_open() -> Item {
-    Item::line("const __result = await (async () => {")
+/// `const <name> = <await >(<async >() => { <body> })();`: `body` run in a closure of its own, so
+/// that its `return`s resolve `name` rather than the enclosing function. The body sits inside the
+/// arrow, one step deeper than the declaration, where the printer lays it out and records its
+/// checkpoints.
+fn iife_const_item(name: &str, awaited: bool, body: Body) -> Item {
+    let closure = bynk_ts::TsExpr::Arrow {
+        params: Vec::new(),
+        is_async: awaited,
+        generics: Vec::new(),
+        return_type: None,
+        body: Box::new(bynk_ts::TsArrowBody::Multiline(
+            body.into_stmts(INDENT_STEP),
+        )),
+    };
+    let call = bynk_ts::TsExpr::Call {
+        callee: Box::new(bynk_ts::TsExpr::Paren(Box::new(closure))),
+        args: Vec::new(),
+    };
+    let init = if awaited {
+        bynk_ts::TsExpr::Await(Box::new(call))
+    } else {
+        call
+    };
+    Item::Node(Box::new(bynk_ts::TsStmt::const_stmt(
+        bynk_ts::TsBindingName::Ident(name.to_string()),
+        None,
+        init,
+        None,
+    )))
 }
 
-fn result_closure_close() -> Item {
-    Item::line("})();")
+/// The closure a handler body runs in so that its own `return`s resolve `__result`.
+fn result_closure_item(body: Body) -> Item {
+    iife_const_item("__result", true, body)
+}
+
+/// `if (!(<test>)) return undefined;`: a handler that the guard `test` does not admit does nothing.
+fn return_undefined_unless(test: String) -> Item {
+    let cond = bynk_ts::TsExpr::Unary {
+        op: bynk_ts::TsUnaryOp::Not,
+        expr: Box::new(bynk_ts::TsExpr::Paren(Box::new(bynk_ts::TsExpr::Ident(
+            test,
+        )))),
+    };
+    let nothing = bynk_ts::TsExpr::Ident("undefined".to_string());
+    Item::Node(Box::new(bynk_ts::TsStmt::if_stmt(
+        cond,
+        bynk_ts::TsStmt::return_stmt(Some(nothing), None),
+        None,
+    )))
 }
 
 /// `if (__events.length > 0) { await deps.__eventsDispatch(__events); }`, with
@@ -7165,9 +7197,7 @@ fn return_result_item() -> Item {
 fn events_release_body(body: Body) -> Body {
     let mut wrapped = Body::new();
     wrapped.push(events_decl_item());
-    wrapped.push(result_closure_open());
-    wrapped.append(body);
-    wrapped.push(result_closure_close());
+    wrapped.push(result_closure_item(body));
     wrapped.push(events_flush_item(false));
     wrapped.push(return_result_item());
     wrapped
@@ -7187,7 +7217,7 @@ fn this_await(method: &str, args: Vec<bynk_ts::TsExpr>) -> bynk_ts::TsExpr {
 /// One agent handler method's prologue + lowered body + epilogue (#3167). A
 /// store handler that writes wraps its body in the implicit-commit closure; one
 /// that emits events directly flushes them after it. The body items are
-/// `lowered`, lowered at one step deeper when the closure wraps them.
+/// `lowered`; when the closure wraps them they sit inside its arrow body.
 fn assemble_agent_body(
     lowered: Body,
     is_store_agent: bool,
@@ -7230,14 +7260,8 @@ fn assemble_agent_body(
     if body_emits_directly {
         body.push(events_decl_item());
     }
-    body.push(result_closure_open());
-    // A writing handler's body sits one step deeper, inside the closure.
-    if writes_state {
-        body.push(Item::Indent(lowered));
-    } else {
-        body.append(lowered);
-    }
-    body.push(result_closure_close());
+    // The body sits inside the closure; the printer indents it.
+    body.push(result_closure_item(lowered));
     if writes_state {
         let mut args = vec![bynk_ts::TsExpr::Ident("__state".to_string())];
         if let Some(h) = history_handler {
