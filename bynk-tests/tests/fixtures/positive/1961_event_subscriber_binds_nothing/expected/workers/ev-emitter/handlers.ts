@@ -19,10 +19,10 @@ export const api = {
   async http_POST_ping_Param_n(n: string, deps: { __eventsDispatch: (events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number } }>) => globalThis.Promise<void> }): globalThis.Promise<HttpResult<string>> {
     const __events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number } }> = [];
     const __result = await (async () => {
-    const __r0 = await (async () => {
-      __events.push({ type: "Pinged", payload: { n: 7 }, envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "ev.emitter", emittedAt: globalThis.Date.now(), schemaVersion: 1 } });
-    })();
-    return HttpResult.Created("sent");
+      const __r0 = await (async () => {
+        __events.push({ type: "Pinged", payload: { n: 7 }, envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "ev.emitter", emittedAt: globalThis.Date.now(), schemaVersion: 1 } });
+      })();
+      return HttpResult.Created("sent");
     })();
     if (__events.length > 0) {
       await deps.__eventsDispatch(__events);

@@ -112,10 +112,10 @@ export const place = {
   async call(id: string, deps: { env: { TALLY: __DurableObjectNamespace }; __eventsDispatch: (events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number } }>) => globalThis.Promise<void> }): globalThis.Promise<number> {
     const __events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number } }> = [];
     const __result = await (async () => {
-    const __r0 = await (async () => {
-      __events.push({ type: "Placed", payload: { id: id }, envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "shop.order", emittedAt: globalThis.Date.now(), schemaVersion: 1 } });
-    })();
-    return __makeTally(id, deps.env).bump(id, deps);
+      const __r0 = await (async () => {
+        __events.push({ type: "Placed", payload: { id: id }, envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "shop.order", emittedAt: globalThis.Date.now(), schemaVersion: 1 } });
+      })();
+      return __makeTally(id, deps.env).bump(id, deps);
     })();
     if (__events.length > 0) {
       await deps.__eventsDispatch(__events);
