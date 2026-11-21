@@ -979,10 +979,35 @@ fn plan_stand_ins(
     stand_in_plans
 }
 
+/// What binding the served Workers' `Vectorize` instances for development did.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DevVectorize {
+    /// Bound as `[dev.vectorize-index]` says (or nothing to bind).
+    Bound,
+    /// Not bound, but every instance is left out, so the config names no
+    /// deploy index: safe to serve.
+    Unbound,
+    /// Neither bound nor unbound: the config may still name the deploy's
+    /// indexes, so it must not be served (#3505 review).
+    Unsafe,
+}
+
+impl DevVectorize {
+    /// Whether the configs may then be served: never with the deploy's indexes
+    /// possibly still bound, and on the first build only once bound as asked.
+    fn may_publish(self, announce: bool) -> bool {
+        match self {
+            DevVectorize::Bound => true,
+            DevVectorize::Unbound => !announce,
+            DevVectorize::Unsafe => false,
+        }
+    }
+}
+
 /// #3479: bind the served Workers' `Vectorize` instances for development
 /// (see [`crate::dev_vectorize`]), printing why not on a failure and, when
 /// `announce`, the one note of what is bound. `--remote` keeps the account's
-/// deployed names, so it binds nothing. `false` after printing why not.
+/// deployed names, so it binds nothing.
 fn bind_dev_vectorize(
     project_root: &Path,
     workers_dir: &Path,
@@ -990,9 +1015,9 @@ fn bind_dev_vectorize(
     serving: &[Serving],
     remote: bool,
     announce: bool,
-) -> bool {
+) -> DevVectorize {
     if remote {
-        return true;
+        return DevVectorize::Bound;
     }
     let names: Vec<String> = serving.iter().map(|s| s.worker.clone()).collect();
     match crate::dev_vectorize::bind_for_dev(project_root, workers_dir, available, &names) {
@@ -1000,23 +1025,29 @@ fn bind_dev_vectorize(
             if announce && let Some(note) = crate::dev_vectorize::report_note(&bound) {
                 colour::eprintln(&note);
             }
-            true
+            DevVectorize::Bound
+        }
+        // The first build stops here, before anything is served.
+        Err(e) if announce => {
+            emsg!("bynk: {e}");
+            DevVectorize::Unsafe
         }
         Err(e) => {
             emsg!("bynk: {e}");
             // A rebuild's configs name the deploy's indexes again: never serve
             // them. Unbound, a call to an instance faults until `bynk.toml` reads.
-            if !announce {
-                match crate::dev_vectorize::unbind_all(workers_dir, &names) {
-                    Ok(()) => emsg!(
+            match crate::dev_vectorize::unbind_all(workers_dir, &names) {
+                Ok(()) => {
+                    emsg!(
                         "bynk dev: Vectorize instances are unbound until `bynk.toml` is fixed; calls to them fail"
-                    ),
-                    Err(e) => {
-                        emsg!("bynk: could not unbind the Vectorize instances: {e}")
-                    }
+                    );
+                    DevVectorize::Unbound
+                }
+                Err(e) => {
+                    emsg!("bynk: could not unbind the Vectorize instances: {e}");
+                    DevVectorize::Unsafe
                 }
             }
-            false
         }
     }
 }
@@ -2103,11 +2134,14 @@ impl DevConfigs<'_> {
             self.remote,
             announce,
         );
-        if !bound && announce {
+        if !bound.may_publish(announce) {
+            if bound == DevVectorize::Unsafe && !announce {
+                emsg!("bynk dev: still serving the last good build's configs");
+            }
             return false;
         }
         match publish_dev_configs(self.workers_dir, self.serving, self.stand_ins) {
-            Ok(()) => bound,
+            Ok(()) => bound == DevVectorize::Bound,
             Err(e) => {
                 emsg!("bynk: could not write the development configs: {e}");
                 false
@@ -3431,6 +3465,48 @@ mod tests {
         assert!(after.contains("index_name = \"docs-dev\""), "{after}");
         assert!(!after.contains("shop-docs"), "{after}");
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// #3505 review: a rebuild that cannot bind serves its Workers unbound, never
+    /// with the deploy's index; one whose config may still name it serves nothing
+    /// new.
+    #[test]
+    fn a_rebuild_that_cannot_bind_never_publishes_the_deploys_index() {
+        let (root, workers) = vectorize_project("unbound", "");
+        let available = names(&["shop"]);
+        let serving = serving_shop();
+        let configs = DevConfigs {
+            project_root: &root,
+            workers_dir: &workers,
+            available: &available,
+            serving: &serving,
+            stand_ins: &[],
+            remote: false,
+            environment: "default",
+        };
+        assert!(configs.write(true));
+        // `vars` that is not a table: the binding cannot edit the config.
+        std::fs::write(
+            workers.join("shop").join("wrangler.toml"),
+            generated_shop_config("").replace(
+                "name = \"shop\"\n",
+                "name = \"shop\"\nvars = \"not a table\"\n",
+            ),
+        )
+        .unwrap();
+        assert!(!configs.write(false));
+        let served = std::fs::read_to_string(workers.join("shop").join(DEV_CONFIG)).unwrap();
+        assert!(!served.contains("shop-docs"), "{served}");
+        assert!(!served.contains("VECTORIZE_DOCS"), "{served}");
+        let _ = std::fs::remove_dir_all(&root);
+
+        // A config the unbinding could not edit (a failed write) is never
+        // published; the last good one keeps serving.
+        assert!(!DevVectorize::Unsafe.may_publish(false));
+        assert!(!DevVectorize::Unsafe.may_publish(true));
+        assert!(DevVectorize::Unbound.may_publish(false));
+        assert!(!DevVectorize::Unbound.may_publish(true));
+        assert!(DevVectorize::Bound.may_publish(true));
     }
 
     /// #3505: a Worker served with stand-ins is served from its copy, and the
