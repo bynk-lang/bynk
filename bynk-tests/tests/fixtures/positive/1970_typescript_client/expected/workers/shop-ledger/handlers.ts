@@ -2,9 +2,9 @@
 // context shop.ledger
 
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
-import { __bynkBytesEqual, __bynkBytesToBase64, __bynkBytesFromBase64, __bynkBytesDecodeUtf8 } from "../../__bynk_runtime/bytes.js";
+import { __bynkBytesToBase64, __bynkBytesFromBase64 } from "../../__bynk_runtime/bytes.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
-import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
+import type { __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary.js";
 
 import { Money as __CommonsMoney } from "../../shop/money.js";
 import { __serialise_Currency, __deserialise_Currency, __serialise_Money, __deserialise_Money } from "../../shop/money.js";

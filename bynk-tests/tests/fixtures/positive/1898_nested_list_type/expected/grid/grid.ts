@@ -2,7 +2,6 @@
 // commons grid
 
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
-import type { ValidationError } from "../__bynk_runtime/errors.js";
 
 export interface Bucket {
   readonly size: number;

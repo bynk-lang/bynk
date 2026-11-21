@@ -6,7 +6,7 @@ import { __bynkCmpFloat, __bynkCmpInt, __bynkCmpOption } from "../__bynk_runtime
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
 import { __StoreMap, __fillHeld, __fillMap, __wireEntries, __wireHeld, __wireHeldOrder, __wireMap } from "../__bynk_runtime/store.js";
-import { __readStored, __commitStored, __noteClock, __bynkThen } from "../__bynk_runtime/entries.js";
+import { __readStored, __commitStored, __bynkThen } from "../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 import type { Connection } from "../__bynk_runtime/connection.js";

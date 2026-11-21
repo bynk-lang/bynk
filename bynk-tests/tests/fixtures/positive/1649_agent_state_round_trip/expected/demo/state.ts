@@ -2,9 +2,9 @@
 // context demo.state
 
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
-import { __bynkBytesEqual, __bynkBytesToBase64, __bynkBytesFromBase64, __bynkBytesDecodeUtf8 } from "../__bynk_runtime/bytes.js";
+import { __bynkBytesToBase64, __bynkBytesFromBase64 } from "../__bynk_runtime/bytes.js";
 import { __bynkEq } from "../__bynk_runtime/equality.js";
-import { type ValidationError, __invariantViolation } from "../__bynk_runtime/errors.js";
+import { __invariantViolation } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
 import { __StoreCache, __StoreLog, __StoreMap, __fillLog, __fillMap, __wireEntries, __wireLog, __wireMap } from "../__bynk_runtime/store.js";
 import { __readStored, __commitStored, __noteClock, __bynkThen, __readsLazily } from "../__bynk_runtime/entries.js";

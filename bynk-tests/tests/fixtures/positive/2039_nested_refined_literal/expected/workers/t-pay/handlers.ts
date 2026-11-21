@@ -3,7 +3,7 @@
 
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
-import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
+import type { __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary.js";
 
 import { Order as __CommonsOrder } from "../../t/orders.js";
 import { Cents as __CommonsCents, Delta as __CommonsDelta } from "../../t/values.js";

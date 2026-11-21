@@ -3,7 +3,7 @@
 
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
-import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
+import type { __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary.js";
 
 import { CurrencyCode as __CommonsCurrencyCode, Money as __CommonsMoney } from "../../t/money.js";
 import { __serialise_CurrencyCode, __deserialise_CurrencyCode, __serialise_Money, __deserialise_Money } from "../../t/money.js";

@@ -2,8 +2,7 @@
 // context shop.api
 
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
-import type { ValidationError } from "../../__bynk_runtime/errors.js";
-import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
+import type { __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary.js";
 
 import { Paginated as __CommonsPaginated, User as __CommonsUser } from "../../shop/envelope.js";
 import { __serialise_User, __deserialise_User } from "../../shop/envelope.js";
