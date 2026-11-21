@@ -955,13 +955,10 @@ impl<'a> LowerCtx<'a> {
                     .call_site_claim_lines
                     .clone()
                     .unwrap_or_else(|| bynk_ts::TsExpr::array(vec![]));
-                Some(
-                    {
-                        let c = vec![lines];
-                        call(id("__bynkOidcClaims"), c)
-                    }
-                    .into(),
-                )
+                Some({
+                    let c = vec![lines];
+                    call(id("__bynkOidcClaims"), c)
+                })
             }
             BodyMode::IntegrationCase {
                 system_http_claims, ..

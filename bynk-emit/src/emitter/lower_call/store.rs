@@ -1,7 +1,7 @@
 //! The persisted-store receivers of a method call: held `Map`, `Map`, `Set`, `Cache`, `Log` and
 //! `Cell` (back-half paydown 1A.23, #3724), with the `@indexed` filter routing. Moved out of
-//! `lower.rs` byte for byte (Decision F), then converted to nodes: each arm builds a node when
-//! its arguments are nodes and otherwise today's text (`node_or_text`).
+//! `lower.rs` byte for byte (Decision F), then converted to nodes: each arm builds a node over
+//! its arguments.
 //!
 //! A statement-bodied operation is an immediately invoked arrow with a multi-line block body
 //! (`TsArrowBody::Multiline`, Decision C), one statement per line.
@@ -96,7 +96,7 @@ fn apply(f: TsExpr, x: TsExpr) -> TsExpr {
     call(paren(f), vec![x])
 }
 
-/// The operation's arguments as bridge values, lowered in order.
+/// The operation's arguments, lowered in order.
 fn lower_args(args: &[Expr], cx: &mut LowerCtx, pre: &mut Pre) -> Vec<bynk_ts::TsExpr> {
     args.iter().map(|x| pre.lower_node(x, cx)).collect()
 }
@@ -970,7 +970,7 @@ fn route_indexed_filter(
             ),
         ))
     };
-    Some(pre.finish(bynk_ts::TsExpr::from(built)))
+    Some(pre.finish(built))
 }
 
 /// `e` as `<param>.<field>` → the field name; else `None`.

@@ -1,7 +1,6 @@
 //! The scalar kernels (back-half paydown 1A.29, #3730, Decision D): `Int`, `Float`,
 //! `Duration`, `Instant`, `Bytes`, `String` and `Decimal`. Moved out of `lower.rs` byte
-//! for byte, then converted to nodes: each arm builds a node when its receiver and
-//! arguments are nodes and prints today's text otherwise (`node_or_text`).
+//! for byte, then converted to nodes: each arm builds a node over its receiver and arguments.
 //!
 //! The identity kernels return their operand's node, so the printer brackets it (#3770).
 //! `splitRegex`'s body is a `while` over a sticky scan, built as nodes (1A.35a part B).
@@ -15,7 +14,7 @@ use super::super::lower_list::{arrow, call, id, member, param, spread, take, zer
 use super::super::{Expr, ExprKind, rounding_mode};
 use super::kernel::receiver_object;
 
-/// The receiver and then each argument, lowered in order as bridge values.
+/// The receiver and then each argument, lowered in order.
 fn operands(pre: &mut Pre, cx: &mut LowerCtx, parts: &[&Expr]) -> Vec<bynk_ts::TsExpr> {
     parts.iter().map(|e| pre.lower_node(e, cx)).collect()
 }

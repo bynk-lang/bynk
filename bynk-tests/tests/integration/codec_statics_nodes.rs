@@ -58,8 +58,7 @@ fn decoder(fn_name: &str, ty: &str, parse: &str, pass: &str, des: &str) -> Strin
 
 /// Every codec call lowers to a node.
 fn assert_node(src: &str) -> String {
-    let text = emit(src);
-    text
+    emit(src)
 }
 
 #[test]

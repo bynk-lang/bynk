@@ -72,7 +72,7 @@ pub(in crate::emitter) fn lower_inline_agent_call(
             .map(|a| pre.lower_node(a, cx))
             .unwrap_or_else(|| str_node("default"));
         let instance = cx.agent_construct_node(&name.name, key);
-        let mut children: Vec<bynk_ts::TsExpr> = vec![instance.into()];
+        let mut children: Vec<bynk_ts::TsExpr> = vec![instance];
         children.extend(args.iter().map(|a| pre.lower_node(a, cx)));
         // #2355: `this.deps` in a provider body.
         children.push(cx.cap_deps_node());

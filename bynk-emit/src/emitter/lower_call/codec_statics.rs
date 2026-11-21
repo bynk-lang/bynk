@@ -559,7 +559,7 @@ pub(in super::super) fn eval_value_line(
     // A value with no wire shape (a function, say) still reports its type, and
     // no value.
     let Some(json) = json_encode(pre, tail, cx, false) else {
-        let _ = pre.lower(tail, cx);
+        let _ = pre.lower_node(tail, cx);
         return Some(log(add(head, raw("'}'"))));
     };
     // The encoder names `JsonValue` and `BoundaryError`, whether or not the

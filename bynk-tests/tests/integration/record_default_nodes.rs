@@ -16,14 +16,13 @@ fn mem(src: &str) -> String {
             bynk_driver::render::render_project_errors(&e.flatten())
         )
     });
-    let text = out
-        .artefacts
+
+    out.artefacts
         .docs
         .values()
         .map(|d| d.text())
         .collect::<Vec<_>>()
-        .join("\n");
-    text
+        .join("\n")
 }
 
 fn assert_line(text: &str, line: &str) {

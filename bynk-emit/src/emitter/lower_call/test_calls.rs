@@ -513,7 +513,7 @@ pub(in crate::emitter) fn lower_system_http_call(
         } else {
             None
         };
-        let slot = extra_arg.unwrap_or_else(|| undefined_node());
+        let slot = extra_arg.unwrap_or_else(undefined_node);
         all.push(slot);
     }
     all.push(sub);
@@ -767,7 +767,7 @@ pub(in crate::emitter) fn lower_test_service_call(
             let envelope = args
                 .get(1)
                 .map(|a| pre.lower_node(a, cx))
-                .unwrap_or_else(|| undefined_node());
+                .unwrap_or_else(undefined_node);
             let helper_name = event_helper_name(&svc.name);
             return settle({
                 let nodes = vec![payload, envelope, deps];

@@ -463,20 +463,11 @@ fn pred_check_stmt(type_name: &str, pred: &PredKind, base: BaseType) -> bynk_ts:
 /// v0.157 (ADR 0183): the erased TS type-parameter list for a generic
 /// declaration (`<A, B>`), or `""` when non-generic. The same erasure used by
 /// generic functions.
-///
-/// #1333 (R7.1): each name prints through a real [`bynk_ts::TsType::named`]
-/// via [`bynk_ts::print_type`] — P7.9's own established entry point for one
-/// type fragment — instead of splicing the raw `&str` directly; this
-/// function's own `-> String` signature and every one of its 5 real callers
-/// are unchanged.
 pub(crate) fn ts_type_params(params: &[TypeParam]) -> String {
     if params.is_empty() {
         return String::new();
     }
-    let names: Vec<String> = params
-        .iter()
-        .map(|p| bynk_ts::print_type(&bynk_ts::TsType::named(p.name.name.as_str())))
-        .collect();
+    let names: Vec<String> = params.iter().map(|p| p.name.name.clone()).collect();
     format!("<{}>", names.join(", "))
 }
 
@@ -1322,14 +1313,14 @@ fn requires_guards(body: &mut Body, f: &FnDecl, cx: &mut LowerCtx) {
     // Precondition guards — parameters are the TS function params, in scope.
     for c in &f.requires {
         let mut pre = Pre::new();
-        let pred = pre.lower(&c.predicate, cx);
+        let pred = pre.lower_node(&c.predicate, cx);
         body.extend(pre.items());
         let msg = format!(
             "contract violated: precondition \\`{clause}\\` of {fn_name} ({dump})",
             clause = c.name.name,
             dump = contract_param_dump(f, false),
         );
-        body.push(Item::Node(Box::new(contract_guard_if_stmt(&pred, &msg))));
+        body.push(Item::Node(Box::new(contract_guard_if_stmt(pred, &msg))));
     }
 }
 
@@ -1408,14 +1399,14 @@ fn contract_guarded_body_stmts(
     // Postcondition guards — `result` (and the parameters) are in scope.
     for c in &f.ensures {
         let mut pre = Pre::new();
-        let pred = pre.lower(&c.predicate, cx);
+        let pred = pre.lower_node(&c.predicate, cx);
         body.extend(pre.items());
         let msg = format!(
             "contract violated: postcondition \\`{clause}\\` of {fn_name} ({dump})",
             clause = c.name.name,
             dump = contract_param_dump(f, true),
         );
-        body.push(Item::Node(Box::new(contract_guard_if_stmt(&pred, &msg))));
+        body.push(Item::Node(Box::new(contract_guard_if_stmt(pred, &msg))));
     }
     body.push(Item::Node(Box::new(bynk_ts::TsStmt::return_stmt(
         Some(bynk_ts::TsExpr::Ident("result".to_string())),
@@ -1429,12 +1420,10 @@ fn contract_guarded_body_stmts(
 /// __e; }` shape — identical for a `requires`/`ensures` clause, differing
 /// only in `pred`/`msg`, both still-opaque text (see `emit_contract_guarded_
 /// body`'s own doc for why).
-fn contract_guard_if_stmt(pred: &str, msg: &str) -> bynk_ts::TsStmt {
+fn contract_guard_if_stmt(pred: bynk_ts::TsExpr, msg: &str) -> bynk_ts::TsStmt {
     let cond = bynk_ts::TsExpr::Unary {
         op: bynk_ts::TsUnaryOp::Not,
-        expr: Box::new(bynk_ts::TsExpr::Paren(Box::new(bynk_ts::TsExpr::Ident(
-            pred.to_string(),
-        )))),
+        expr: Box::new(bynk_ts::TsExpr::Paren(Box::new(pred))),
     };
     let new_error = bynk_ts::TsExpr::New {
         callee: Box::new(bynk_ts::TsExpr::Ident("globalThis.Error".to_string())),

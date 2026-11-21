@@ -55,14 +55,13 @@ fn emit(fixture: &str, rewrite: &[(&str, &str)]) -> String {
             bynk_driver::render::render_project_errors(&failure.flatten())
         ),
     };
-    let text = out
-        .artefacts
+
+    out.artefacts
         .docs
         .values()
         .map(|d| d.text())
         .collect::<Vec<_>>()
-        .join("\n");
-    text
+        .join("\n")
 }
 
 /// Every line in `text` equals one of `lines` (trimmed of indentation), in order, as a block.

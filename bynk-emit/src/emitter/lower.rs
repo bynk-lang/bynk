@@ -518,7 +518,6 @@ pub(super) fn hoist_if_slot(
         None,
         None,
     ));
-    let cond = cond;
     let branch = |tail: Lowered| {
         let mut stmts: Vec<bynk_ts::TsStmt> = tail.pre.into_iter().collect();
         stmts.push(bynk_ts::TsStmt::assign(ident_node(&slot), tail.expr, None));
@@ -1011,15 +1010,11 @@ pub(super) fn runtime_ctor_call(
     }
 }
 
-/// `callee(a, b, …)` over a genuine callee node: a `Call` node, or today's
-/// `callee(a, b)` text (the callee prints exactly as it is spelled).
+/// `callee(a, b, …)` over a genuine callee node.
 pub(super) fn call_built(callee: bynk_ts::TsExpr, args: Vec<bynk_ts::TsExpr>) -> bynk_ts::TsExpr {
-    {
-        let args = args;
-        bynk_ts::TsExpr::Call {
-            callee: Box::new(callee),
-            args,
-        }
+    bynk_ts::TsExpr::Call {
+        callee: Box::new(callee),
+        args,
     }
 }
 
@@ -2131,8 +2126,8 @@ fn lower_method_call(e: &Expr, cx: &mut LowerCtx) -> Lowered {
         unreachable!("lower_method_call is called on a method call")
     };
     let mut pre = Pre::new();
-    // Each dispatcher below returns a bridge value that ends in
-    // `pre.finish_built` (1A.20, #3721, Decision G): every family builds nodes (the statics in
+    // Each dispatcher below returns a node that ends in
+    // `pre.finish` (1A.20, #3721, Decision G): every family builds nodes (the statics in
     // `lower_call/statics.rs`, the store, D1, cross-context, events, cookie, capability,
     // test-service and agent families each under `lower_call/`), every delegated kernel's node
     // passes through unprinted, and the plain instance call that ends this function is a node.
@@ -3417,7 +3412,6 @@ fn negated_paren(l: bynk_ts::TsExpr) -> bynk_ts::TsExpr {
             expr: Box::new(bynk_ts::TsExpr::Paren(Box::new(one(c)))),
         }
     }
-    .into()
 }
 
 /// The short-circuit operators over two operands: `l && r`, `l || r`, and
@@ -3560,7 +3554,7 @@ fn lower_bin_op(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut LowerCtx) -> Lowered
         }
         // Emit:  lhs && ((() => { const n = ...; return rhs; })())
         let iife: bynk_ts::TsExpr = compact_iife(bindings, rhs_expr);
-        return pre.finish(short_circuit(op, lhs_expr, paren(iife).into()));
+        return pre.finish(short_circuit(op, lhs_expr, paren(iife)));
     }
     let l_lowered = pre.lower_node(lhs, cx);
     // #1/#3 review: `&&`/`||`/`implies` short-circuit — `design/bynk-type-
@@ -3672,9 +3666,8 @@ pub(super) fn build_value_bin_op(
             BinOp::Sub => "__bynkDecimalSub",
             _ => "__bynkDecimalMul",
         });
-    // Slice 1A.5 (#3703): each value-operator branch builds a node when both
-    // operands are nodes (`node_or_text`), today's text otherwise. The
-    // `cx.note_*` side effects fire here, once, on both paths.
+    // Slice 1A.5 (#3703): each value-operator branch builds a node. The
+    // `cx.note_*` side effects fire here, once.
     if let Some(helper) = decimal_helper {
         cx.note_decimal(helper);
         helper_call(helper, children)
@@ -4043,7 +4036,7 @@ fn lower_record_construction(
                         false => Slot::Unbranded,
                     };
                     let node: bynk_ts::TsExpr = default_value_node(&v, &slot);
-                    children.push(node.into());
+                    children.push(node);
                 }
                 // The checker rejected any default that has no value: a missing
                 // fact (1A.34), reported at the construction.
@@ -4053,7 +4046,7 @@ fn lower_record_construction(
                         type_name.span,
                         format_args!("default value for field `{}`", declared.name.name),
                     );
-                    children.push(node.into());
+                    children.push(node);
                 }
             }
         }
@@ -6262,7 +6255,7 @@ fn minus(x: Int) -> Int { 5 - - -x }
 
     #[test]
     fn an_http_result_variant_read_is_a_node() {
-        // 1A.4's `HttpResult.X` read leaves no text exit of its own.
+        // 1A.4's `HttpResult.X` read.
         let src = "commons hr\n\
                    fn f() -> HttpResult[Int] { HttpResult.NotFound }\n";
         assert_eq!(
@@ -6742,7 +6735,7 @@ fn minus(x: Int) -> Int { 5 - - -x }
     #[test]
     fn http_and_queue_result_variant_calls_are_nodes() {
         // 1A.6 review nit: direct node-path assertions for the `HttpResult.V(…)`
-        // and `QueueResult.V(…)` call forms, with no text exit.
+        // and `QueueResult.V(…)` call forms.
         let src = "commons results\n\
             fn created(x: Int) -> HttpResult[Int] { Created(x) }\n\
             fn raw(b: Bytes) -> HttpResult[Int] { RawError(Forbidden, b, \"text/plain\") }\n";

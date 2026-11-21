@@ -843,7 +843,6 @@ mod tests {
             .insert("shop.pay".to_string(), Default::default());
         let (call, faults) = lower_workers(&info, &[]);
         assert!(faults.is_empty(), "{faults:?}");
-        let call = call;
         let printed = bynk_ts::print_expr(&call);
         assert!(
             printed.starts_with("__callService(deps.env.SHOP_PAY, \"charge\", {}, "),

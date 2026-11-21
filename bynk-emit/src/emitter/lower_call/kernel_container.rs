@@ -1,7 +1,6 @@
 //! The container kernels (back-half paydown 1A.30, #3731, Decision D): `Option`, `Result`,
 //! `Set` and `Map`. Moved out of `lower.rs` byte for byte, then converted to nodes: each arm
-//! builds a node when its receiver and arguments are nodes and prints today's text otherwise
-//! (`node_or_text`).
+//! builds a node over its receiver and arguments.
 //!
 //! The plain `Set.remove`'s body is a comma expression, built as a `Sequence` node (1A.35a
 //! part B). Every `note_key` fires before the receiver is lowered,
@@ -20,7 +19,7 @@ use super::super::ts_types::ts_ty_to_ts_type;
 use super::super::*;
 use super::kernel::receiver_object;
 
-/// The receiver and then each argument, lowered in order as bridge values.
+/// The receiver and then each argument, lowered in order.
 fn operands(pre: &mut Pre, cx: &mut LowerCtx, parts: &[&Expr]) -> Vec<bynk_ts::TsExpr> {
     parts.iter().map(|e| pre.lower_node(e, cx)).collect()
 }

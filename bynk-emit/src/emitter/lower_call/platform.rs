@@ -49,7 +49,7 @@ fn chain(root: TsExpr, path: &[&str]) -> TsExpr {
     path.iter().fold(root, |object, name| member(object, name))
 }
 
-/// Lower every argument, keeping each as the bridge value it lowered to.
+/// Lower every argument, in order.
 fn lower_args(args: &[Expr], cx: &mut LowerCtx, pre: &mut Pre) -> Vec<bynk_ts::TsExpr> {
     args.iter().map(|a| pre.lower_node(a, cx)).collect()
 }

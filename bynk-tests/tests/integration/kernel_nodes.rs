@@ -22,14 +22,13 @@ fn emit(fixture: &str) -> String {
             bynk_driver::render::render_project_errors(&failure.flatten())
         ),
     };
-    let text = out
-        .artefacts
+
+    out.artefacts
         .docs
         .values()
         .map(|d| d.text())
         .collect::<Vec<_>>()
-        .join("\n");
-    text
+        .join("\n")
 }
 
 /// `every document` for the one-context project `src` on Workers.
@@ -46,14 +45,13 @@ fn mem(src: &str) -> String {
             bynk_driver::render::render_project_errors(&e.flatten())
         )
     });
-    let text = out
-        .artefacts
+
+    out.artefacts
         .docs
         .values()
         .map(|d| d.text())
         .collect::<Vec<_>>()
-        .join("\n");
-    text
+        .join("\n")
 }
 
 /// The lines of `text` equal to `line` once indentation is trimmed.

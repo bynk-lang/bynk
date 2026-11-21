@@ -381,7 +381,6 @@ fn push_tail(body: &mut Body, cx: &LowerCtx, value: bynk_ts::TsExpr) {
 /// are statements ([`Body::to_nodes`], checkpoints carried onto their statements). `site` is
 /// where a condition or body that is not nodes is reported.
 fn push_if(body: &mut Body, cond: bynk_ts::TsExpr, then_body: Body, else_body: Body) {
-    let cond = cond;
     let then_stmts = then_body.into_stmts();
     let else_stmts = else_body.into_stmts();
     body.push(stmt_item(bynk_ts::TsStmt::if_else_same_line_stmt(
@@ -962,12 +961,7 @@ fn statement(body: &mut Body, stmt: &Statement, cx: &mut LowerCtx) {
                     lv = pre.bind_temp(lv, cx);
                     rv = pre.bind_temp(rv, cx);
                 }
-                let cond = bynk_ts::TsExpr::from(build_value_bin_op(
-                    *op,
-                    l,
-                    vec![lv.clone(), rv.clone()],
-                    cx,
-                ));
+                let cond = build_value_bin_op(*op, l, vec![lv.clone(), rv.clone()], cx);
                 // #2622: an operand that holds a `Decimal` prints through the
                 // decimal-aware show, since `JSON.stringify` throws on a `bigint`.
                 let decimal = cx
@@ -1102,7 +1096,6 @@ fn expect_item(
 ) -> Item {
     use bynk_ts::{TsBinaryOp, TsExpr};
     let compare_head = format!("expect {src}\n  expected: {src}\n  actual:   ");
-    let cond = cond;
     let detail = match detail {
         ExpectDetail::Compare {
             show,

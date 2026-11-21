@@ -213,18 +213,14 @@ fn parse_iife(is_int: bool, s: bynk_ts::TsExpr) -> bynk_ts::TsExpr {
 /// `Set.of(xs)` over a plain key is `new globalThis.Set<T>(xs)`; over a keyed one
 /// the runtime's `__bynkSetOf<T>(xs)`.
 fn set_of(plain: bool, elem: TsType, xs: bynk_ts::TsExpr) -> bynk_ts::TsExpr {
-    let one = |c: Vec<TsExpr>| c.into_iter().next().expect("one child");
-    let node_elem = elem.clone();
-    (move |c| {
-        if plain {
-            new(type_app(global("Set"), vec![node_elem]), vec![one(c)])
-        } else {
-            TsExpr::Call {
-                callee: Box::new(type_app(ident_node("__bynkSetOf"), vec![node_elem])),
-                args: vec![one(c)],
-            }
+    if plain {
+        new(type_app(global("Set"), vec![elem]), vec![xs])
+    } else {
+        TsExpr::Call {
+            callee: Box::new(type_app(ident_node("__bynkSetOf"), vec![elem])),
+            args: vec![xs],
         }
-    })(vec![xs])
+    }
 }
 
 /// Lower the built-in scalar and collection statics (`HttpResult.*`, `List.empty`, `Map.empty`, `Set.empty`/`of`, the JSON codec, `Float.pi`/`e`, the numeric parses, `Duration.millis`, `Instant.from*`), or `None` when the call is none of them. Moved out of

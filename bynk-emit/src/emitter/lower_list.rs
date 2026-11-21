@@ -266,8 +266,7 @@ fn bare_comparator(cmp: &TsExpr) -> Option<&TsExpr> {
 /// v0.20b: lower a built-in `List` kernel method. Returns None for a method
 /// name the kernel doesn't own (the checker has already rejected it; this
 /// keeps the dispatch defensive). All forms are pure expressions; `foldEff`
-/// returns a Promise that the surrounding `<-` bind awaits. A node when the
-/// operands are nodes, else text (see `node_or_text`); every arm builds a node,
+/// returns a Promise that the surrounding `<-` bind awaits. Every arm builds a node,
 /// the statement-bodied ones as block-bodied arrows (1A.18b). Anything an
 /// operand hoists lands in `pre`.
 pub(super) fn lower_list_kernel(
