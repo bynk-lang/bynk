@@ -2,7 +2,6 @@
 // context demo.keys
 
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
-import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
 import { __StoreCache, __StoreMap, __StoreSet, __fillMap, __fillSet, __wireEntries, __wireMap, __wirePostings, __wireSet } from "../__bynk_runtime/store.js";
 import { __readStored, __commitStored, __noteClock, __bynkThen, __readsLazily } from "../__bynk_runtime/entries.js";

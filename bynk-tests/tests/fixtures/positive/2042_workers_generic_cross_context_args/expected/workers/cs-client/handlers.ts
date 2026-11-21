@@ -2,8 +2,7 @@
 // context cs.client
 
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
-import type { ValidationError } from "../../__bynk_runtime/errors.js";
-import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
+import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService } from "../../__bynk_runtime/boundary.js";
 
 import { Line as __CommonsLine, Page as __CommonsPage } from "../../cs/values.js";
 

@@ -1330,6 +1330,7 @@ fn needs_parens_as_operand(expr: &TsExpr) -> bool {
             | TsExpr::MultilineConditional { .. }
             | TsExpr::Assign { .. }
             | TsExpr::AddAssign { .. }
+            | TsExpr::NullishAssign { .. }
             | TsExpr::Function { .. }
             | TsExpr::Yield(_)
     )
@@ -1351,6 +1352,7 @@ fn new_callee_needs_parens(callee: &TsExpr) -> bool {
         TsExpr::TypeApp { callee, .. } => new_callee_needs_parens(callee),
         TsExpr::Ident(_)
         | TsExpr::VerbatimExpr(..)
+        | TsExpr::RawUsing(..)
         | TsExpr::LinesArray(_)
         | TsExpr::Arrow { .. }
         | TsExpr::Object { .. }
@@ -1368,6 +1370,7 @@ fn new_callee_needs_parens(callee: &TsExpr) -> bool {
         | TsExpr::NonNull(_)
         | TsExpr::Assign { .. }
         | TsExpr::AddAssign { .. }
+        | TsExpr::NullishAssign { .. }
         | TsExpr::Sequence(_)
         | TsExpr::Function { .. }
         | TsExpr::Yield(_)
@@ -1469,6 +1472,7 @@ fn render_binary_operand(
         | TsExpr::MultilineConditional { .. }
         | TsExpr::Assign { .. }
         | TsExpr::AddAssign { .. }
+        | TsExpr::NullishAssign { .. }
         | TsExpr::Yield(_) => true,
         // #2955 review: a unary or `await` operand directly left of `**` is a
         // JS syntax error (`!a ** b`, `typeof a ** b`, `await a ** b`), not a
@@ -1543,6 +1547,7 @@ fn render_binary_operand(
         }
         TsExpr::Ident(_)
         | TsExpr::VerbatimExpr(..)
+        | TsExpr::RawUsing(..)
         | TsExpr::Member { .. }
         | TsExpr::OptionalMember { .. }
         | TsExpr::Index { .. }
@@ -2058,6 +2063,7 @@ fn render_expr(out: &mut String, expr: &TsExpr, depth: usize, m: &mut Option<Mer
         // `verbatim_sites` (xtask's gated probes) to line-scan, not for the
         // printer to branch on.
         TsExpr::VerbatimExpr(text, _origin) => out.push_str(text),
+        TsExpr::RawUsing(text, _) => out.push_str(text),
         TsExpr::Member { object, property } => {
             render_operand(out, object, depth, m);
             out.push('.');
@@ -2300,6 +2306,11 @@ fn render_expr(out: &mut String, expr: &TsExpr, depth: usize, m: &mut Option<Mer
             out.push_str(" += ");
             render_expr(out, value, depth, m);
         }
+        TsExpr::NullishAssign { target, value } => {
+            render_expr(out, target, depth, m);
+            out.push_str(" ??= ");
+            render_expr(out, value, depth, m);
+        }
         TsExpr::Lit(lit) => render_lit(out, lit),
         TsExpr::Sequence(items) => render_sequence(out, items, depth, m),
         TsExpr::Function {
@@ -2449,6 +2460,7 @@ fn starts_with_object(expr: &TsExpr) -> bool {
         }
         TsExpr::Ident(_)
         | TsExpr::VerbatimExpr(..)
+        | TsExpr::RawUsing(..)
         | TsExpr::Arrow { .. }
         | TsExpr::New { .. }
         | TsExpr::Array { .. }
@@ -2461,6 +2473,7 @@ fn starts_with_object(expr: &TsExpr) -> bool {
         | TsExpr::NonNull(_)
         | TsExpr::Assign { .. }
         | TsExpr::AddAssign { .. }
+        | TsExpr::NullishAssign { .. }
         | TsExpr::Sequence(_)
         | TsExpr::Function { .. }
         | TsExpr::Yield(_)
@@ -5505,6 +5518,48 @@ mod tests {
         let id = |n: &str| TsExpr::Ident(n.to_string());
         let lines = TsExpr::LinesArray(vec![TsExpr::Spread(Box::new(id("a"))), id("b")]);
         assert_eq!(print_expr(&lines), "[\n  ...a,\n  b,\n]");
+    }
+
+    /// `TsExpr::NullishAssign` (1A.36b-1): `target ??= value`, the accessor a cached
+    /// constant is built from, bracketed as an assignment is wherever it is an operand.
+    #[test]
+    fn a_nullish_assignment_prints_and_brackets() {
+        let id = |n: &str| TsExpr::Ident(n.to_string());
+        let cached = TsExpr::NullishAssign {
+            target: Box::new(id("__const_N")),
+            value: Box::new(TsExpr::object(vec![("v".to_string(), id("n"))])),
+        };
+        assert_eq!(print_expr(&cached), "__const_N ??= { v: n }");
+        let read = TsExpr::Member {
+            object: Box::new(TsExpr::Paren(Box::new(cached.clone()))),
+            property: "v".to_string(),
+        };
+        assert_eq!(print_expr(&read), "(__const_N ??= { v: n }).v");
+        let operand = TsExpr::Binary {
+            op: TsBinaryOp::Or,
+            left: Box::new(cached),
+            right: Box::new(id("x")),
+        };
+        assert_eq!(print_expr(&operand), "(__const_N ??= { v: n }) || x");
+    }
+
+    /// `TsExpr::RawUsing` (1A.36b-1): prints as its text, as an identifier does, and is
+    /// bracketed as one is.
+    #[test]
+    fn raw_using_prints_its_text_like_an_identifier() {
+        let text = "(__j: __JsonValue) => { return Ok(__j); }";
+        let raw = TsExpr::raw_using(text, vec!["Ok".to_string(), "__JsonValue".to_string()]);
+        assert_eq!(print_expr(&raw), text);
+        let call = TsExpr::Call {
+            callee: Box::new(TsExpr::Ident("enc".to_string())),
+            args: vec![raw.clone()],
+        };
+        assert_eq!(print_expr(&call), format!("enc({text})"));
+        let member = TsExpr::Member {
+            object: Box::new(raw),
+            property: "x".to_string(),
+        };
+        assert_eq!(print_expr(&member), format!("{text}.x"));
     }
 
     /// `TsExpr::Assign` (1A.18b, #3719): an assignment expression, bracketed by

@@ -56,7 +56,7 @@ use bynk_check::kernel_op::{FormStatic, JsonStatic, StaticOp, YamlStatic};
 use bynk_check::project_model::BuildTarget;
 use bynk_check::symbols::UnitTable;
 use bynk_model::TypeShape;
-use bynk_model::{block_uses_emit, walk_block_exprs};
+use bynk_model::walk_block_exprs;
 use bynk_model::{
     lower_capability_ops_ir, lower_protocol_ir, lower_service_handler_signature_ir,
     lower_store_field_shape_ir, lower_type_shape_ir,
@@ -64,7 +64,7 @@ use bynk_model::{
 use bynk_project::UnitKind;
 use bynk_syntax::ast::{
     AgentDecl, BaseType, BinOp, Block, CommonsItem, Expr, ExprKind, FnDecl, FnName, Ident,
-    InterpPart, LambdaExpr, MatchBody, MessagesDecl, ObservationMatcher, Param, Pattern, PredKind,
+    InterpPart, LambdaExpr, MatchBody, MessagesDecl, ObservationMatcher, Pattern, PredKind,
     ServiceDecl, ServiceProtocol, Statement, TypeBody, TypeDecl, TypeRef, UnaryOp, rounding_mode,
 };
 use ctx::UnitFacts;
@@ -106,6 +106,7 @@ mod lower_call;
 mod lower_ctx;
 mod lower_list;
 mod lower_stmt;
+pub(crate) mod runtime_header;
 pub(crate) mod runtime_use;
 mod tco;
 pub mod ts_types;
@@ -294,23 +295,7 @@ pub(crate) fn emit(program: &CheckedProgram) -> Result<String, Vec<InternalFault
     let body_program = bynk_ts::TsProgram { stmts: body_stmts };
     let body = bynk_ts::print(&body_program, "", "", "").text;
     let mut out = String::new();
-    // v0.153 (ADR 0177): a commons that names `HttpResult` in any signature —
-    // e.g. a free `fn -> HttpResult[T]` using the `?`-Option lift — imports it.
-    // Structural (over the AST), not a body-string scan, so a comment or string
-    // literal mentioning `HttpResult` never triggers a spurious import.
-    let uses_http = file_mentions_http_result(commons);
-    // #1319: same structural-scan pattern as `uses_http` — a commons naming
-    // `QueueResult` in a field/type declaration imports it, independent of
-    // any queue-consumer handler (which this single-file path has no
-    // concept of anyway).
-    let uses_queue = file_mentions_queue_result(commons);
-    write_header_single(
-        &mut out,
-        commons,
-        &dummy_ctx.runtime_use,
-        uses_http,
-        uses_queue,
-    );
+    write_header_single(&mut out, commons, &body_program.stmts);
     out.push_str(&body);
     let faults = dummy_ctx.runtime_use.take_faults();
     if faults.is_empty() {
@@ -575,7 +560,7 @@ pub fn emit_project(
         .iter()
         .find(|m| m.annotations.iter().any(|a| a.name.name == "reference"))
     {
-        let mut item_stmts = emit_messages_bundle(&messages_blocks, reference, &ctx.runtime_use);
+        let mut item_stmts = emit_messages_bundle(&messages_blocks, reference);
         if let Some(first) = item_stmts.first_mut() {
             first.span = Some(reference.span);
         }
@@ -797,7 +782,7 @@ pub fn emit_project(
     // on `stmt.span`/`stmt.nested_map`, which travel with the statement
     // itself; prepending the header is now ordinary `Vec` splicing, nothing
     // to rebase.
-    let mut program_stmts = write_header(commons, ctx, program);
+    let mut program_stmts = write_header(commons, ctx, &stmts);
     // #1486: `write_header`'s own last statement (the runtime import, when
     // the file has any commons items) sits directly adjacent to whatever
     // `stmts` starts with — genuinely import-kind itself whenever
@@ -912,170 +897,6 @@ pub fn agent_cross_context_targets(
     out
 }
 
-/// P6.32 (design/tracks/the-ir.md §6a): the one built-in wrapper type
-/// [`type_ref_mentions`] is looking for — `file_mentions_json_error`/
-/// `_http_result`/`_connection` used to carry three separately hand-written
-/// copies of the identical recursive walk below, differing in exactly one
-/// line each (which wrapper variant stops the recursion and reports `true`).
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum TypeRefMarker {
-    DecodeError,
-    HttpResult,
-    Connection,
-    /// Closes the `ts_any` residual (#1319): `has_queue` (`write_header`'s
-    /// own `QueueResult` import gate) only detected a real `from queue on
-    /// message` consumer handler, never a bare field/type-declaration
-    /// mention — the one gap among the four runtime-owned error types that
-    /// `DecodeError`/`HttpResult` already closed via this same marker
-    /// mechanism (`ValidationError` needs no marker at all; it's imported
-    /// unconditionally).
-    QueueResult,
-}
-
-/// The shared recursive walk `file_mentions_json_error`/`_http_result`/
-/// `_connection` each used to hand-roll their own copy of. `marker`'s own
-/// wrapper variant reports `true` immediately without recursing into its
-/// payload (matching each original function's own `=> true` arm exactly —
-/// `matches!(marker, ..) || type_ref_mentions(a, marker)` short-circuits on
-/// the left, so the right side never evaluates when `t` itself is a match);
-/// every other wrapper variant recurses into its inner type(s) exactly as
-/// each original's own "recurse" bucket did.
-fn type_ref_mentions(t: &TypeRef, marker: TypeRefMarker) -> bool {
-    match t {
-        TypeRef::DecodeError(_) => marker == TypeRefMarker::DecodeError,
-        TypeRef::HttpResult(a, _) => {
-            marker == TypeRefMarker::HttpResult || type_ref_mentions(a, marker)
-        }
-        TypeRef::Connection(a, _) => {
-            marker == TypeRefMarker::Connection || type_ref_mentions(a, marker)
-        }
-        TypeRef::Result(a, b, _) | TypeRef::Map(a, b, _) => {
-            type_ref_mentions(a, marker) || type_ref_mentions(b, marker)
-        }
-        TypeRef::Option(a, _)
-        | TypeRef::Effect(a, _)
-        | TypeRef::Query(a, _)
-        | TypeRef::Stream(a, _)
-        | TypeRef::History(a, _)
-        | TypeRef::List(a, _)
-        | TypeRef::Set(a, _) => type_ref_mentions(a, marker),
-        TypeRef::Fn(params, ret, _) => {
-            params.iter().any(|p| type_ref_mentions(p, marker)) || type_ref_mentions(ret, marker)
-        }
-        // v0.157 (ADR 0183): recurse into a generic application's arguments.
-        TypeRef::App { args, .. } => args.iter().any(|a| type_ref_mentions(a, marker)),
-        TypeRef::QueueResult(_) => marker == TypeRefMarker::QueueResult,
-        TypeRef::Base(..)
-        | TypeRef::Named(_)
-        | TypeRef::Asset(_)
-        | TypeRef::RequestHeaders(_)
-        | TypeRef::RequestQuery(_)
-        | TypeRef::RequestCookies(_)
-        | TypeRef::TokenClaims(_)
-        | TypeRef::BoundaryRejection(_)
-        | TypeRef::ValidationError(_)
-        | TypeRef::Unit(_) => false,
-    }
-}
-
-/// The shared outer walk `file_mentions_json_error`/`_http_result` used to
-/// hand-roll two byte-identical copies of (P6.32) — every signature or type
-/// declaration in the file, checked via [`type_ref_mentions`].
-/// `file_mentions_connection` keeps its own distinct outer walk (a
-/// `Connection` can additionally live in a `store` field, which neither
-/// marker below can) rather than being folded in here.
-fn commons_mentions_type(commons: &TypedCommons, marker: TypeRefMarker) -> bool {
-    let in_type_ref = |t: &TypeRef| type_ref_mentions(t, marker);
-    let sig = |params: &[Param], ret: &TypeRef| {
-        params.iter().any(|p| in_type_ref(&p.type_ref)) || in_type_ref(ret)
-    };
-    commons.commons.items.iter().any(|item| match item {
-        CommonsItem::Fn(f) => sig(&f.params, &f.return_type),
-        CommonsItem::Service(s) => s.handlers.iter().any(|h| sig(&h.params, &h.return_type)),
-        CommonsItem::Agent(a) => a.handlers.iter().any(|h| sig(&h.params, &h.return_type)),
-        CommonsItem::Capability(c) => c.ops.iter().any(|op| sig(&op.params, &op.return_type)),
-        CommonsItem::Provider(p) => p.ops.iter().any(|op| sig(&op.params, &op.return_type)),
-        CommonsItem::Type(t) => match &t.body {
-            TypeBody::Record(r) => r.fields.iter().any(|f| in_type_ref(&f.type_ref)),
-            TypeBody::Sum(s) => s
-                .variants
-                .iter()
-                .any(|v| v.payload.iter().any(|p| in_type_ref(&p.type_ref))),
-            TypeBody::Refined { .. } | TypeBody::Opaque { .. } => false,
-        },
-        // An `event` registers into the `types` table and is checked over
-        // the same record-field path as `CommonsItem::Type`'s `Record` arm.
-        CommonsItem::Event(e) => e.body.fields.iter().any(|f| in_type_ref(&f.type_ref)),
-        // #2617: a constant's annotation is part of the module's surface.
-        CommonsItem::Const(c) => in_type_ref(&c.ty),
-        CommonsItem::Actor(_)
-        | CommonsItem::Messages(_)
-        | CommonsItem::Asset(_)
-        | CommonsItem::Embed(_) => false,
-    })
-}
-
-/// v0.22b: whether any signature or type declaration in this file names
-/// `DecodeError` — drives the conditional `type DecodeError` runtime import.
-fn file_mentions_json_error(commons: &TypedCommons) -> bool {
-    commons_mentions_type(commons, TypeRefMarker::DecodeError)
-}
-
-/// Closes the `ts_any` residual (#1319): true if any signature or type
-/// declaration in this file names `QueueResult` — a field/sum-payload
-/// mention, not just a `from queue on message` consumer handler (which
-/// `has_queue`, `write_header`'s own other `QueueResult` gate, already
-/// covers). Drives the conditional `QueueResult` runtime import the same
-/// way `file_mentions_json_error`/`file_mentions_http_result` already do
-/// for their own types.
-fn file_mentions_queue_result(commons: &TypedCommons) -> bool {
-    commons_mentions_type(commons, TypeRefMarker::QueueResult)
-}
-
-/// v0.153 (ADR 0177): true if any signature or type declaration in this file
-/// names `HttpResult` — a service HTTP handler, or a free `fn` / provider /
-/// capability whose parameter or return type mentions it (the `?`-Option lift
-/// makes a bare `fn -> HttpResult[T]` emit `HttpResult.NotFound`). Drives the
-/// conditional `HttpResult` runtime import in both single-file and project
-/// headers, so the import can never be missing nor spuriously added.
-fn file_mentions_http_result(commons: &TypedCommons) -> bool {
-    commons_mentions_type(commons, TypeRefMarker::HttpResult)
-}
-
-/// v0.102: true if a file's signatures or store fields mention `Connection[F]`,
-/// so the header imports the runtime `Connection` interface. Covers the held
-/// sites: capability-operation returns, service/agent handler parameters, and
-/// `store` field value types (`Map[K, Connection]` / `Cell[Option[Connection]]`).
-fn file_mentions_connection(commons: &TypedCommons) -> bool {
-    let in_type_ref = |t: &TypeRef| type_ref_mentions(t, TypeRefMarker::Connection);
-    let sig = |params: &[Param], ret: &TypeRef| {
-        params.iter().any(|p| in_type_ref(&p.type_ref)) || in_type_ref(ret)
-    };
-    commons.commons.items.iter().any(|item| match item {
-        CommonsItem::Fn(f) => sig(&f.params, &f.return_type),
-        CommonsItem::Service(s) => s.handlers.iter().any(|h| sig(&h.params, &h.return_type)),
-        CommonsItem::Agent(a) => {
-            a.handlers.iter().any(|h| sig(&h.params, &h.return_type))
-                || a.store_fields
-                    .iter()
-                    .any(|f| f.kind.args.iter().any(in_type_ref))
-        }
-        CommonsItem::Capability(c) => c.ops.iter().any(|op| sig(&op.params, &op.return_type)),
-        CommonsItem::Provider(p) => p.ops.iter().any(|op| sig(&op.params, &op.return_type)),
-        // A `Connection` is a held resource storable only in a `store` field
-        // (handled above) — never in a plain record field, so `Type`/`Event`
-        // need no case here; `Actor`/`Messages` carry no `TypeRef` at all.
-        CommonsItem::Type(_)
-        | CommonsItem::Actor(_)
-        | CommonsItem::Messages(_)
-        | CommonsItem::Event(_)
-        | CommonsItem::Asset(_)
-        | CommonsItem::Embed(_)
-        // #2617: a constant's static initialiser can never be a held value.
-        | CommonsItem::Const(_) => false,
-    })
-}
-
 /// v0.22b: a checker `Ty` rendered back to a `TypeRef` for the codec
 /// machinery (which is `TypeRef`-driven). `None` for types the codec
 /// rejects anyway (functions, effects, type variables). `pub(crate)` since
@@ -1168,19 +989,6 @@ pub fn ty_to_type_ref(t: TyId, tys: &Arc<Types>) -> Option<TypeRef> {
 /// misread as a real `Json.encode`/`decode` call; `Callee::Intrinsic`'s own
 /// presence is exactly the checker's already-verified "no, this really is
 /// the builtin" answer.
-/// Whether the module needs the JSON-codec imports: it has a codec root, or it
-/// declares a `Codable` witness, whose parameter type names `__JsonValue` and
-/// `__BoundaryError` whether or not the body encodes anything.
-fn uses_json_codec(commons: &TypedCommons) -> bool {
-    !collect_json_codec_roots(commons).is_empty()
-        || commons.commons.items.iter().any(|item| match item {
-            CommonsItem::Fn(f) => bynk_check::checker::codable::witness_list(f, &commons.types)
-                .iter()
-                .any(|w| w.kind == bynk_check::checker::codable::WitnessKind::Codec),
-            _ => false,
-        })
-}
-
 fn collect_json_codec_roots(commons: &TypedCommons) -> Vec<TypeRef> {
     let tys = commons.tys();
     let mut roots: Vec<TypeRef> = Vec::new();
@@ -3920,27 +3728,15 @@ fn relative_to(from: &Path, target: &Path) -> PathBuf {
     out
 }
 
-/// #1478: real-node-internally already — returns its own real statements
-/// (the two-comment banner, plus a conditional runtime-import declaration)
-/// instead of writing into `out: &mut String`.
-/// The runtime names a module's cookie helpers import: the `RequestCookies` view (#3277)
-/// and the `SignedCookie` session-cookie issuer and deleter (#3386).
-fn cookie_runtime_imports(ru: &RuntimeUse, parts: &mut Vec<&str>) {
-    for (used, imports) in [
-        (ru.request_cookies(), REQUEST_COOKIES_RUNTIME_IMPORTS),
-        (ru.session_cookie(), SESSION_COOKIE_RUNTIME_IMPORTS),
-        (ru.session_signing(), SESSION_SIGNING_RUNTIME_IMPORTS),
-    ] {
-        if used {
-            parts.extend(imports.trim_start_matches(", ").split(", "));
-        }
-    }
-}
-
+/// A module's header: the two-line banner, and the runtime import its tree asks
+/// for (1A.36b-1). `body` is every statement the module has besides the header,
+/// built first, so the import is what the tree uses and cannot disagree with it
+/// (see [`runtime_header`]). A unit the driver builds (`Test`, `Integration`)
+/// gets the banner only: its imports are the driver's.
 fn write_header(
     commons: &TypedCommons,
     ctx: &EmitProjectCtx,
-    program: &CheckedProgram,
+    body: &[bynk_ts::TsStmt],
 ) -> Vec<bynk_ts::TsStmt> {
     // Arc C, slice 30 (#1392): the 2-line banner converts to two real
     // `TsStmt::Comment` statements, the same `events_fanout.rs`-established
@@ -3961,421 +3757,20 @@ fn write_header(
         bynk_ts::TsStmt::comment("Generated by bynk — do not edit by hand.", None),
         bynk_ts::TsStmt::comment(format!("{kind} {}", commons.commons.name.joined()), None),
     ];
-    if !commons.commons.items.is_empty() {
-        let runtime_import = runtime_import_for(&ctx.source_path, ctx.import_ext);
-        let has_agent = commons
-            .commons
-            .items
-            .iter()
-            .any(|i| matches!(i, CommonsItem::Agent(_)));
-        // v0.80: a file with any agent invariant imports the `invariantViolation`
-        // fault helper used by the generated `commitState` gate. v0.116: a step
-        // invariant (`transition`) uses the same fault helper, so a transition-only
-        // agent must import it too.
-        let has_agent_invariants = commons.commons.items.iter().any(|i| match i {
-            CommonsItem::Agent(a) => !a.invariants.is_empty() || !a.transitions.is_empty(),
-            _ => false,
-        });
-        // v0.153 (ADR 0177): a service HTTP handler imports `HttpResult`, and so
-        // does any *free* `fn` / provider / capability whose signature names it
-        // (the `?`-Option lift makes a bare `fn -> HttpResult[T]` emit
-        // `HttpResult.NotFound`) — the structural scan covers both, closing the
-        // free-fn gap the single-file path already handles.
-        // P6.24a/P6.19: `h.kind`/`s.protocol` read through the IR-native
-        // `IrHandlerKind`/`ProtocolIr` readers below — pure syntax, no body
-        // lowering, safe regardless of the still-open `Question`/`Is` gap
-        // (design/tracks/the-ir.md's own P6.3 correction).
-        let has_http = commons.commons.items.iter().any(|i| match i {
-            CommonsItem::Service(s) => s.handlers.iter().any(|h| {
-                matches!(
-                    bynk_model::lower_handler_kind_ir(&h.kind),
-                    bynk_model::IrHandlerKind::Http { .. }
-                )
-            }),
-            _ => false,
-        }) || file_mentions_http_result(commons);
-        // A `from queue` `on message` is the queue consumer (imports `QueueResult`);
-        // a `from websocket` `on message` (slice 3b-iii) is the inbound handler and
-        // is not a queue concern. #1319: a bare field/type-declaration mention
-        // (the `ts_any` residual's own real-type-cast sites) is a second, real
-        // way to need the import with no consumer handler at all — closed via
-        // `file_mentions_queue_result`, the same structural-scan pattern
-        // `file_mentions_http_result` already uses for its own type.
-        let has_queue = commons.commons.items.iter().any(|i| match i {
-            CommonsItem::Service(s) => {
-                !matches!(
-                    bynk_model::lower_protocol_ir_from_commons(&s.protocol, commons),
-                    bynk_model::ProtocolIr::WebSocket { .. }
-                ) && s.handlers.iter().any(|h| {
-                    matches!(
-                        bynk_model::lower_handler_kind_ir(&h.kind),
-                        bynk_model::IrHandlerKind::Message
-                    )
-                })
-            }
-            _ => false,
-        }) || file_mentions_queue_result(commons);
-        let workers = matches!(ctx.target, BuildTarget::Workers);
-        let mut parts: Vec<&str> = vec![
-            "Ok",
-            "Err",
-            "Some",
-            "None",
-            "type Result",
-            "type Option",
-            "type ValidationError",
-        ];
-        // v0.22b: the codec types are imported only when the file uses the
-        // `Json` codec (or names `DecodeError` in a signature) — keeping every
-        // non-codec module's header byte-identical to v0.22a.
-        let uses_codec = uses_json_codec(commons);
-        let mentions_json_error = file_mentions_json_error(commons);
-        if uses_codec || mentions_json_error {
-            parts.push("type DecodeError");
-        }
-        // v0.102: a file naming `Connection[F]` imports the runtime interface.
-        if file_mentions_connection(commons) {
-            parts.push("type Connection");
-        }
-        if has_agent {
-            // v0.9.2: agent-declaring files lower instantiation through the
-            // `makeAgent` helper and a per-agent `StateRegistry`, and the
-            // generated factory's signature names `DurableObjectNamespace`.
-            parts.push("type __DurableObjectState");
-            parts.push("type __DurableObjectNamespace");
-            parts.push("__StateRegistry");
-            parts.push("__makeAgent");
-            parts.extend(inspect_agent_imports(workers && ctx.inspect_agents));
-        } else if workers
-            && commons
-                .callees
-                .values()
-                .any(|c| matches!(c, bynk_check::checker::Callee::AgentInit(_)))
-        {
-            // #1820: a file of a split context that constructs only a
-            // sibling file's agents passes `env` to its factory, so its
-            // handlers' `deps.env` names the agents' namespaces too.
-            parts.push("type __DurableObjectNamespace");
-        }
-        if has_agent_invariants {
-            parts.push("__invariantViolation");
-        }
-        // #1678: on `workers` an agent's calls cross its Durable Object's
-        // `fetch` through a wire table read by both ends.
-        if workers && has_agent {
-            parts.push("type __AgentWire");
-            parts.push("__decodeAgentArgs");
-            parts.push("__encodeAgentResult");
-            // #1818: an agent that reads its own key decodes it on the DO side.
-            let reads_key = |a: &AgentDecl| crate::emitter::emit::agent_reads_key(a);
-            if commons
-                .commons
-                .items
-                .iter()
-                .any(|i| matches!(i, CommonsItem::Agent(a) if reads_key(a)))
-            {
-                parts.push("__decodeAgentKey");
-            }
-            let passes_through = commons.commons.items.iter().any(|i| match i {
-                CommonsItem::Agent(a) => {
-                    (reads_key(a) && serialisation::agent_wire_passes_through(&a.key_type))
-                        || a.handlers.iter().any(|h| {
-                            serialisation::agent_wire_passes_through(&h.return_type)
-                                || h.params
-                                    .iter()
-                                    .any(|p| serialisation::agent_wire_passes_through(&p.type_ref))
-                        })
-                }
-                _ => false,
-            });
-            if passes_through {
-                parts.push("__AGENT_WIRE_PASS");
-            }
-        }
-        // Events track, slice 0 (spine #936): an agent whose own handler body
-        // emits directly needs its Workers-mode DO fetch dispatcher to
-        // rebuild `deps.__eventsDispatch` from `env.EVENTS_FANOUT` (mirrors
-        // the `#527` `given`-provider rebuild — see `emit_agent`) — a
-        // function does not survive the JSON wire any better than a
-        // provider does.
-        let has_agent_uses_emit = workers
-            && commons.commons.items.iter().any(|i| match i {
-                CommonsItem::Agent(a) => a
-                    .handlers
-                    .iter()
-                    .any(|h| block_uses_emit(&h.body, &commons.callees)),
-                _ => false,
-            });
-        if has_agent_uses_emit {
-            parts.push("__dispatchToEventsFanout");
-        }
-        // v0.96 (ADR 0124): an agent whose load-time validation gate fires imports
-        // the `rehydrationViolation` fault helper.
-        let has_rehydration_gate = emit::commons_need_rehydrate(commons, program);
-        // State-migrations S2 (#2224): a `migrate` step decodes its old shape
-        // (a failure is a `RehydrationViolation`) and turns a throw into
-        // `MigrationFailed`.
-        let has_migration_step = commons.commons.items.iter().any(|i| match i {
-            CommonsItem::Agent(a) => ctx
-                .agent_schema_versions
-                .get(&a.name.name)
-                .is_some_and(|v| !v.steps.is_empty()),
-            _ => false,
-        });
-        if has_rehydration_gate || has_migration_step {
-            parts.push("__rehydrationViolation");
-        }
-        if has_migration_step {
-            parts.push("__migrationFailed");
-        }
-        // State-migrations S1 (#2211): every agent reports stored keys its
-        // definition no longer declares; an agent built with the schema lock
-        // also checks its stored `__v` marker (Decision A: none without one).
-        if has_agent {
-            parts.push("__reportUnknownStoredKeys");
-            // Per-entry storage slice 0 (#3189): faults on a `__layout` marker
-            // a later build wrote.
-            parts.push("__checkStoredLayout");
-            // Per-entry storage (#3189): the codec between the stored record
-            // and the wholesale-shaped state a handler reads.
-            parts.push("__readStored");
-            parts.push("__commitStored");
-            // Cache reaping (#3189): a `Cache` op notes the clock it read.
-            parts.push("__noteClock");
-        }
-        // Ordered store collections (#3254): the handle classes an agent's state is made
-        // of, and the helpers that put them in wire form and fill them back.
-        parts.extend(emit::commons_state_runtime_names(commons, program));
-        let has_versioned_agent = commons.commons.items.iter().any(|i| match i {
-            CommonsItem::Agent(a) => ctx.agent_schema_versions.contains_key(&a.name.name),
-            _ => false,
-        });
-        if has_versioned_agent {
-            parts.push("__checkStoredSchemaVersion");
-        }
-        // State-migrations S4 (#2259 Decision D): on Workers, a versioned
-        // agent's Durable Object answers `bynk migrate sweep`'s wake.
-        if workers && has_versioned_agent {
-            parts.push("__wakeForMigration");
-        }
-        // v0.104/v0.105 (real-time track slice 3b): on Workers a `store Map[K,
-        // Connection]` persists the connection id; its entry ops re-resolve the live
-        // socket via `resolveConnection` and read a connection's id via `connIdOf`.
-        if workers && emit::commons_have_held_storage(commons, program) {
-            parts.push("__resolveConnection");
-            parts.push("__connIdOf");
-        }
-        // v0.104/v0.105 (real-time track slice 3b): on Workers a context hosting a
-        // `from websocket` `on open` accepts the socket inside its Durable Object via
-        // the hibernatable API — `acceptHibernatableConnection` (accept + tag + wrap),
-        // a `WebSocketPair`, and the `101` upgrade response. (The service and its
-        // hosting agent share the one Worker module, so these land in one
-        // `handlers.ts`.)
-        let hosts_ws_open = commons.commons.items.iter().any(|i| match i {
-            CommonsItem::Service(s) => s.handlers.iter().any(|h| {
-                matches!(
-                    bynk_model::lower_handler_kind_ir(&h.kind),
-                    bynk_model::IrHandlerKind::Open
-                )
-            }),
-            _ => false,
-        });
-        if workers && hosts_ws_open {
-            parts.push("__acceptHibernatableConnection");
-            parts.push("__newWebSocketPair");
-            parts.push("__webSocketUpgradeResponse");
-        }
-        // v0.106 (slice 3b-iii): a context with an inbound/close handler re-wraps
-        // the firing socket as a `WorkersConnection` in `webSocketMessage`/
-        // `webSocketClose`.
-        let hosts_ws_inbound = commons.commons.items.iter().any(|i| match i {
-            CommonsItem::Service(s) => {
-                matches!(
-                    bynk_model::lower_protocol_ir_from_commons(&s.protocol, commons),
-                    bynk_model::ProtocolIr::WebSocket { .. }
-                ) && s.handlers.iter().any(|h| {
-                    matches!(
-                        bynk_model::lower_handler_kind_ir(&h.kind),
-                        bynk_model::IrHandlerKind::Message | bynk_model::IrHandlerKind::Close
-                    )
-                })
-            }
-            _ => false,
-        });
-        if workers && hosts_ws_inbound {
-            parts.push("__WorkersConnection");
-        }
-        if has_http {
-            // `HttpResult` is both a value (the constructor namespace) and a
-            // type (the discriminated union). A bare named import brings both
-            // in — `type HttpResult` would duplicate the identifier.
-            parts.push(HTTP_RESULT);
-        }
-        if has_queue {
-            // v0.44: `QueueResult` is both a value (the verdict namespace) and a
-            // type; a bare named import brings both in.
-            parts.push(QUEUE_RESULT);
-        }
-        if workers {
-            parts.push("type __JsonValue");
-            parts.push("type __BoundaryError");
-            parts.push("type __ServiceBinding");
-            parts.push("__callService");
-            parts.push("__boundaryError");
-        } else if uses_codec || has_agent {
-            // v0.22b: the bundle-mode codec helpers reference JsonValue and
-            // BoundaryError. v0.96 (ADR 0124): so do an agent's emitted
-            // rehydration deserialisers and the gate's inline base checks — the
-            // boundary helpers now emit on bundle too (for the rehydration gate).
-            parts.push("type __JsonValue");
-            parts.push("type __BoundaryError");
-        }
-        // #1476: `bytes()`/`icu()` fold in here directly now, in the same order
-        // the old post-print `inject_runtime_imports` pass appended them (bytes
-        // first, then icu) — `ctx.runtime_use` is already fully populated by the
-        // time `write_header` runs (moved to the end of `emit_project`), so this
-        // needs no post-print text surgery at all, just reading the same two
-        // flags one function call later than before.
-        //
-        // Review of #1490: this drops `inject_runtime_imports`'s own
-        // `missing_bindings` dedup (matching a `type Foo` group binding against
-        // an already-bound bare `Foo` and vice versa) — safe only because
-        // neither `BYTES_RUNTIME_IMPORTS`'s nor `MESSAGES_RUNTIME_IMPORTS`'s own
-        // names overlap anything `parts` already carries above (confirmed by
-        // direct inspection, not assumed). A future group that *does* overlap
-        // needs that filter reinstated here, not just appended unconditionally
-        // — `missing_bindings`'s own doc named exactly this case (the
-        // test-scaffold module's own `Ok`/`Err` overlap) before this issue
-        // deleted the only place that reasoning was written down.
-        if ctx.runtime_use.bytes() {
-            parts.extend(BYTES_RUNTIME_IMPORTS.trim_start_matches(", ").split(", "));
-        }
-        if ctx.runtime_use.bytes_ops() {
-            parts.extend(
-                BYTES_OPS_RUNTIME_IMPORTS
-                    .trim_start_matches(", ")
-                    .split(", "),
-            );
-        }
-        let time = time_runtime_imports(&ctx.runtime_use);
-        parts.extend(
-            time.trim_start_matches(", ")
-                .split(", ")
-                .filter(|p| !p.is_empty()),
-        );
-        if ctx.runtime_use.iso_date() {
-            parts.extend(
-                ISO_DATE_RUNTIME_IMPORTS
-                    .trim_start_matches(", ")
-                    .split(", "),
-            );
-        }
-        if ctx.runtime_use.yaml() {
-            parts.extend(YAML_RUNTIME_IMPORTS.trim_start_matches(", ").split(", "));
-        }
-        if ctx.runtime_use.settle_all() {
-            parts.extend(
-                SETTLE_ALL_RUNTIME_IMPORTS
-                    .trim_start_matches(", ")
-                    .split(", "),
-            );
-        }
-        let effects = effect_runtime_imports(&ctx.runtime_use);
-        if !effects.is_empty() {
-            parts.extend(effects.trim_start_matches(", ").split(", "));
-        }
-        if ctx.runtime_use.fault() {
-            parts.extend(FAULT_RUNTIME_IMPORTS.trim_start_matches(", ").split(", "));
-        }
-        parts.extend(trace_step_imports(&ctx.runtime_use));
-        if ctx.runtime_use.url_ops() {
-            parts.extend(URL_OPS_RUNTIME_IMPORTS.trim_start_matches(", ").split(", "));
-        }
-        if ctx.runtime_use.request_headers() {
-            parts.extend(
-                REQUEST_HEADERS_RUNTIME_IMPORTS
-                    .trim_start_matches(", ")
-                    .split(", "),
-            );
-        }
-        cookie_runtime_imports(&ctx.runtime_use, &mut parts);
-        if ctx.runtime_use.request_query() {
-            parts.extend(
-                REQUEST_QUERY_RUNTIME_IMPORTS
-                    .trim_start_matches(", ")
-                    .split(", "),
-            );
-        }
-        if ctx.runtime_use.query_string() {
-            parts.extend(
-                QUERY_STRING_RUNTIME_IMPORTS
-                    .trim_start_matches(", ")
-                    .split(", "),
-            );
-        }
-        if ctx.runtime_use.form_codec() {
-            parts.extend(
-                FORM_CODEC_RUNTIME_IMPORTS
-                    .trim_start_matches(", ")
-                    .split(", "),
-            );
-        }
-        if ctx.runtime_use.cookie_string() {
-            parts.extend(
-                COOKIE_STRING_RUNTIME_IMPORTS
-                    .trim_start_matches(", ")
-                    .split(", "),
-            );
-        }
-        if ctx.runtime_use.multipart_form() {
-            parts.extend(
-                MULTIPART_FORM_RUNTIME_IMPORTS
-                    .trim_start_matches(", ")
-                    .split(", "),
-            );
-        }
-        if ctx.runtime_use.eq() {
-            parts.extend(EQ_RUNTIME_IMPORTS.trim_start_matches(", ").split(", "));
-        }
-        if ctx.runtime_use.int() {
-            parts.extend(INT_RUNTIME_IMPORTS.trim_start_matches(", ").split(", "));
-        }
-        if ctx.runtime_use.icu() {
-            parts.extend(
-                MESSAGES_RUNTIME_IMPORTS
-                    .trim_start_matches(", ")
-                    .split(", "),
-            );
-        }
-        let mut names: Vec<String> = parts.into_iter().map(str::to_string).collect();
-        names.extend(
-            ctx.runtime_use
-                .cmp_imports()
-                .split(", ")
-                .filter(|s| !s.is_empty())
-                .map(str::to_string),
-        );
+    if !commons.commons.items.is_empty() && runtime_header::derives_runtime_imports(ctx.unit_kind) {
+        let names = runtime_header::derived_runtime_names(body);
         stmts.extend(runtime_files::runtime_import_stmts(
             false,
             &names,
-            &runtime_import,
+            &runtime_import_for(&ctx.source_path, ctx.import_ext),
         ));
-        // #1486: no explicit trailing blank stmt here — the printer's
-        // automatic top-level spacing policy supplies the single blank
-        // before whatever follows the header (never import-kind at this
-        // function's own call site, so never exempted from it).
     }
     stmts
 }
 
-/// Variant of write_header for single-file (no project context) emission.
-fn write_header_single(
-    out: &mut String,
-    commons: &TypedCommons,
-    runtime_use: &RuntimeUse,
-    uses_http: bool,
-    uses_queue: bool,
-) {
+/// Variant of write_header for single-file (no project context) emission: the
+/// same banner and the same derivation, over the module's built `body`.
+fn write_header_single(out: &mut String, commons: &TypedCommons, body: &[bynk_ts::TsStmt]) {
     // Arc C, slice 30 (#1392): the same 2-comment-statement conversion
     // `write_header` above already established.
     out.push_str(&bynk_ts::print_stmt(
@@ -4394,139 +3789,7 @@ fn write_header_single(
     ));
     writeln!(out).unwrap();
     if !commons.commons.items.is_empty() {
-        // v0.22b: codec imports only when the file uses the `Json` codec.
-        let uses_codec = uses_json_codec(commons);
-        let codec_imports = if uses_codec {
-            ", type DecodeError, type __JsonValue, type __BoundaryError"
-        } else if file_mentions_json_error(commons) {
-            ", type DecodeError"
-        } else {
-            ""
-        };
-        // v0.110 (ADR 0142): the `Bytes` runtime helpers, imported only when a
-        // `Bytes` value is constructed or compared in the body.
-        let bytes_imports = if runtime_use.bytes() {
-            BYTES_RUNTIME_IMPORTS
-        } else {
-            ""
-        };
-        // #2016: the `Bytes` operation helpers, imported only when called.
-        let bytes_ops_imports = if runtime_use.bytes_ops() {
-            BYTES_OPS_RUNTIME_IMPORTS
-        } else {
-            ""
-        };
-        // K3 (#2592): the `Instant` ISO-8601 helpers, imported only when called.
-        let time_ops_imports = time_runtime_imports(runtime_use);
-        // K2 (#2594): the percent-encoding helpers, imported only when called.
-        let iso_date_imports = if runtime_use.iso_date() {
-            ISO_DATE_RUNTIME_IMPORTS
-        } else {
-            ""
-        };
-        // #3214: the YAML parser, imported only by a module that calls `Yaml.decode`.
-        let yaml_imports = if runtime_use.yaml() {
-            YAML_RUNTIME_IMPORTS
-        } else {
-            ""
-        };
-        let url_ops_imports = if runtime_use.url_ops() {
-            URL_OPS_RUNTIME_IMPORTS
-        } else {
-            ""
-        };
-        // #2640: the `par` join, imported only when a body has a `par` block.
-        let settle_all_imports = if runtime_use.settle_all() {
-            SETTLE_ALL_RUNTIME_IMPORTS
-        } else {
-            ""
-        };
-        // #2683, #2711, #3437: the `within`, `race` and `detach` helpers, imported only when a body uses one.
-        let race_imports = effect_runtime_imports(runtime_use);
-        // #2620: `unreachable`/`todo`'s helper, imported only when a body calls one.
-        let fault_imports = if runtime_use.fault() {
-            FAULT_RUNTIME_IMPORTS
-        } else {
-            ""
-        };
-        // #2341 (L4): the `RequestHeaders` constructor, imported only when a
-        // body built one (`RequestHeaders.of`/`empty`).
-        let request_headers_imports = if runtime_use.request_headers() {
-            REQUEST_HEADERS_RUNTIME_IMPORTS
-        } else {
-            ""
-        };
-        // #3277: the `RequestCookies` constructor, likewise.
-        let request_cookies_imports = if runtime_use.request_cookies() {
-            REQUEST_COOKIES_RUNTIME_IMPORTS
-        } else {
-            ""
-        };
-        // #3386: the session-cookie issuer and deleter, likewise.
-        let session_cookie_imports = if runtime_use.session_cookie() {
-            SESSION_COOKIE_RUNTIME_IMPORTS
-        } else {
-            ""
-        };
-        // #2854: the `RequestQuery` constructor, likewise.
-        let request_query_imports = if runtime_use.request_query() {
-            REQUEST_QUERY_RUNTIME_IMPORTS
-        } else {
-            ""
-        };
-        let query_string_imports = if runtime_use.query_string() {
-            QUERY_STRING_RUNTIME_IMPORTS
-        } else {
-            ""
-        };
-        let form_codec_imports = if runtime_use.form_codec() {
-            FORM_CODEC_RUNTIME_IMPORTS
-        } else {
-            ""
-        };
-        let cookie_string_imports = if runtime_use.cookie_string() {
-            COOKIE_STRING_RUNTIME_IMPORTS
-        } else {
-            ""
-        };
-        let multipart_form_imports = if runtime_use.multipart_form() {
-            MULTIPART_FORM_RUNTIME_IMPORTS
-        } else {
-            ""
-        };
-        // #1652: the structural-equality walker, imported only when a
-        // non-primitive `==`/`!=` lowered to it.
-        let eq_imports = if runtime_use.eq() {
-            EQ_RUNTIME_IMPORTS
-        } else {
-            ""
-        };
-        // #1657: the `Int` domain traps, imported only when a division or a
-        // Float→`Int` conversion lowered to them.
-        let int_imports = if runtime_use.int() {
-            INT_RUNTIME_IMPORTS
-        } else {
-            ""
-        };
-        // Constrained generics slice 1: the comparator helpers behind `Ord`.
-        let cmp_imports = runtime_use.cmp_imports();
-        // v0.153 (ADR 0177): `HttpResult` is a value (its variant namespace) and
-        // a type, so it imports without a `type` prefix — one binding serves
-        // both `HttpResult.NotFound` and the `HttpResult<T>` annotation.
-        let http_imports = if uses_http { ", HttpResult" } else { "" };
-        // #1319: `QueueResult` is likewise a value (its verdict namespace) and
-        // a type; a bare named import brings both in, matching `HttpResult`'s
-        // own shape immediately above.
-        let queue_imports = if uses_queue { ", QueueResult" } else { "" };
-        // The fixed prefix plus each optional group joins as one comma-space
-        // separated run either way — split back into individual names for
-        // `TsDecl::Import.names` rather than re-deriving each optional
-        // group's own name list a second time (the string-building above,
-        // unchanged, already gets this exactly right).
-        let inside = format!(
-            "Ok, Err, Some, None, type Result, type Option, type ValidationError{codec_imports}{bytes_imports}{bytes_ops_imports}{time_ops_imports}{iso_date_imports}{yaml_imports}{settle_all_imports}{race_imports}{fault_imports}{url_ops_imports}{request_headers_imports}{request_cookies_imports}{session_cookie_imports}{form_codec_imports}{request_query_imports}{query_string_imports}{multipart_form_imports}{cookie_string_imports}{eq_imports}{int_imports}{cmp_imports}{http_imports}{queue_imports}"
-        );
-        let names: Vec<String> = inside.split(", ").map(str::to_string).collect();
+        let names = runtime_header::derived_runtime_names(body);
         for stmt in runtime_files::runtime_import_stmts(false, &names, "./runtime.js") {
             out.push_str(&bynk_ts::print_stmt(&stmt, 0));
         }
@@ -4547,10 +3810,6 @@ pub const REQUEST_QUERY_RUNTIME_IMPORTS: &str = ", __requestQuery";
 /// #3277: the `RequestCookies` constructor a test builds a raw cookies view with,
 /// and the header text a system-tier driver sends for one.
 pub const REQUEST_COOKIES_RUNTIME_IMPORTS: &str = ", __requestCookies, __requestCookiesHeader";
-/// #3386: what `Actor.issue(identity)` and `Actor.expire()` lower to, and #3446: what a typed
-/// cookie write (`Record.field.cookie(v)`) encodes its value with.
-pub const SESSION_COOKIE_RUNTIME_IMPORTS: &str =
-    ", __issueSessionCookie, __expireSessionCookie, __sessionKeysOf, __cookieValue";
 /// #3386: what a `system` driver mints a `SignedCookie` session cookie with.
 pub const SESSION_SIGNING_RUNTIME_IMPORTS: &str = ", __signSessionCookie, __newSessionKey";
 /// #2854: the typed-query serialiser a mixed typed+`Wire` system call and a typed
@@ -4637,35 +3896,6 @@ pub fn effect_runtime_imports(ru: &RuntimeUse) -> &'static str {
 
 /// #2620: the deliberate-fault helper behind `unreachable`/`todo`.
 pub const FAULT_RUNTIME_IMPORTS: &str = ", __fault";
-/// #3581: what a `bynk dev` build's agent module imports to record an instance and
-/// answer the inspect route.
-fn inspect_agent_imports(on: bool) -> Vec<&'static str> {
-    if on {
-        vec![
-            "__noteAgentInstance",
-            "__inspectAgent",
-            "__historyBefore",
-            "__historyRecord",
-        ]
-    } else {
-        Vec::new()
-    }
-}
-
-/// #3580: the trace helpers a traced build's module imports, by what it used:
-/// `__traceStep` around a call, `__traceBinding` around a cross-context call's
-/// Service Binding.
-fn trace_step_imports(runtime_use: &RuntimeUse) -> Vec<&'static str> {
-    let mut names = Vec::new();
-    if runtime_use.trace_step() {
-        names.push("__traceStep");
-    }
-    if runtime_use.trace_binding() {
-        names.push("__traceBinding");
-    }
-    names
-}
-
 /// K2 (#2594): the percent-encoding helpers (`percentEncode`,
 /// `percentDecode`), appended only when the body calls one.
 pub const URL_OPS_RUNTIME_IMPORTS: &str = ", __bynkPercentEncode, __bynkPercentDecode";
@@ -4683,12 +3913,6 @@ pub const EQ_RUNTIME_IMPORTS: &str = ", __bynkEq";
 /// #1657: the `Int` domain traps (`bynk-emit/runtime/src/int.ts`).
 pub const INT_RUNTIME_IMPORTS: &str = ", __bynkIntDiv, __bynkToInt, __bynkIntDivFloor, __bynkIntRem, __bynkIntMod, __bynkIntPow, \
      __bynkIntAnd, __bynkIntOr, __bynkIntXor, __bynkIntAndNot, __bynkIntShl, __bynkIntShr";
-
-/// message-bundles slice 3 (#878, Decision G): the ICU-formatting runtime
-/// helpers, appended to a module's import list when an emitted `messages`
-/// bundle's `render` references any of them (`emit_icu_placeholder`,
-/// `bynk-emit/src/emitter/emit.rs`).
-const MESSAGES_RUNTIME_IMPORTS: &str = ", __selectPluralArm, __formatIcuNumber, __formatIcuDate";
 
 /// #914: the names an **inlined** boundary deserialiser builds directly, appended
 /// to the import list of a module that curates its own — a Worker's `compose.ts`
@@ -5267,10 +4491,12 @@ mod conditional_runtime_import_tests {
         }
     }
 
-    /// The opposite direction: a `plural` placeholder does call a formatter, and
-    /// the three are imported as a group.
+    /// The opposite direction: a `plural` placeholder does call a formatter. The
+    /// import is what the tree spells (1A.36b-1), so the dispatch and the number
+    /// formatter its `#` uses come in, and the date formatter, which no arm calls,
+    /// does not.
     #[test]
-    fn a_plural_bundle_imports_the_icu_formatters() {
+    fn a_plural_bundle_imports_the_icu_formatters_it_calls() {
         let ts = emit_bundle(
             "messages \"en\" @reference {\n  \"cart\" => \"You have {n, plural, one {# item} other {# items}} in your cart\"\n}\n",
         );
@@ -5278,12 +4504,16 @@ mod conditional_runtime_import_tests {
             ts.contains("__selectPluralArm("),
             "the plural dispatch should have been emitted: {ts}"
         );
-        for helper in ICU_HELPERS {
+        for helper in ["__selectPluralArm", "__formatIcuNumber"] {
             assert!(
                 runtime_import_line(&ts).contains(helper),
                 "`{helper}` should be imported for a plural bundle: {ts}"
             );
         }
+        assert!(
+            !runtime_import_line(&ts).contains("__formatIcuDate"),
+            "no arm formats a date: {ts}"
+        );
     }
 
     /// A bundle with no ICU dispatch at all — a plain `{name}` placeholder goes
@@ -5298,74 +4528,6 @@ mod conditional_runtime_import_tests {
                 "`{helper}` must not be imported for a bundle with no ICU dispatch: {ts}"
             );
         }
-    }
-}
-
-/// P6.32 (design/tracks/the-ir.md §6a): pins the marker-parameterised
-/// `type_ref_mentions` against the exact truth table its three former
-/// hand-rolled copies (`file_mentions_json_error`/`_http_result`/
-/// `_connection`) each implemented independently — in particular, that a
-/// marker's own wrapper variant stops the recursion (matching the original
-/// `=> true` arms) rather than also searching that variant's own inner type,
-/// and that a non-matching wrapper variant recurses rather than reporting
-/// `false` outright.
-#[cfg(test)]
-mod type_ref_mentions_tests {
-    use super::*;
-
-    fn base(b: BaseType) -> TypeRef {
-        TypeRef::Base(b, bynk_syntax::span::Span::new(0, 0))
-    }
-
-    fn http_result(inner: TypeRef) -> TypeRef {
-        TypeRef::HttpResult(Box::new(inner), bynk_syntax::span::Span::new(0, 0))
-    }
-
-    fn connection(inner: TypeRef) -> TypeRef {
-        TypeRef::Connection(Box::new(inner), bynk_syntax::span::Span::new(0, 0))
-    }
-
-    fn json_error() -> TypeRef {
-        TypeRef::DecodeError(bynk_syntax::span::Span::new(0, 0))
-    }
-
-    #[test]
-    fn a_markers_own_wrapper_matches_regardless_of_its_inner_type() {
-        // `HttpResult[String]` matches the `HttpResult` marker even though its
-        // own inner type (`String`) does not itself mention `HttpResult` —
-        // the wrapper variant itself is the match, mirroring each original
-        // function's own unconditional `=> true` arm.
-        let t = http_result(base(BaseType::String));
-        assert!(type_ref_mentions(&t, TypeRefMarker::HttpResult));
-        assert!(!type_ref_mentions(&t, TypeRefMarker::Connection));
-        assert!(!type_ref_mentions(&t, TypeRefMarker::DecodeError));
-    }
-
-    #[test]
-    fn a_non_matching_wrapper_still_recurses_into_its_inner_type() {
-        // `HttpResult[Connection[String]]` does not match the `HttpResult`
-        // marker itself when the marker is `Connection` — it must still find
-        // the `Connection` nested one level in.
-        let t = http_result(connection(base(BaseType::String)));
-        assert!(type_ref_mentions(&t, TypeRefMarker::Connection));
-        assert!(type_ref_mentions(&t, TypeRefMarker::HttpResult));
-        assert!(!type_ref_mentions(&t, TypeRefMarker::DecodeError));
-    }
-
-    #[test]
-    fn json_error_has_no_inner_type_to_recurse_into() {
-        let t = json_error();
-        assert!(type_ref_mentions(&t, TypeRefMarker::DecodeError));
-        assert!(!type_ref_mentions(&t, TypeRefMarker::HttpResult));
-        assert!(!type_ref_mentions(&t, TypeRefMarker::Connection));
-    }
-
-    #[test]
-    fn a_plain_base_type_matches_no_marker() {
-        let t = base(BaseType::Int);
-        assert!(!type_ref_mentions(&t, TypeRefMarker::DecodeError));
-        assert!(!type_ref_mentions(&t, TypeRefMarker::HttpResult));
-        assert!(!type_ref_mentions(&t, TypeRefMarker::Connection));
     }
 }
 

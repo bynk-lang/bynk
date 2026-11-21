@@ -4,10 +4,9 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
 import { __bynkDecimalParseWire, __bynkDecimalToString } from "../../__bynk_runtime/decimal.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
-import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
+import type { __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 import { __cookieValue } from "../../__bynk_runtime/http.js";
-import { __issueSessionCookie, __expireSessionCookie, __sessionKeysOf } from "../../__bynk_runtime/session.js";
 
 import { Cookie } from "../../bynk.js";
 

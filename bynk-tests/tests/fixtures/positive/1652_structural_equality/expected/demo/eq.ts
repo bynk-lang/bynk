@@ -2,7 +2,7 @@
 // commons demo.eq
 
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
-import { __bynkBytesEqual, __bynkBytesToBase64, __bynkBytesFromBase64, __bynkBytesDecodeUtf8 } from "../__bynk_runtime/bytes.js";
+import { __bynkBytesEqual } from "../__bynk_runtime/bytes.js";
 import { __bynkEq } from "../__bynk_runtime/equality.js";
 import type { ValidationError, DecodeError } from "../__bynk_runtime/errors.js";
 import type { __JsonValue, __BoundaryError } from "../__bynk_runtime/boundary.js";

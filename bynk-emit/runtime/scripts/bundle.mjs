@@ -180,14 +180,25 @@ async function buildPerModule() {
   // name -> defining module, for every exported name (declarations and the
   // alias lists above). The emitter splits an import of runtime names by it.
   const exported = new Map();
+  // A name is type-only when every export of it is a type (`interface`, `type`,
+  // `export type { … }`): an import of it is `import type`, and it has no value
+  // to use. A name with a value export too (`HttpResult`, a const beside its type)
+  // is not: one bare binding serves both.
+  const valueExported = new Set();
   for (const [file, content] of files) {
     const module = file.replace(/\.ts$/, "");
     const names = [];
-    for (const m of content.matchAll(/^export\s+(?:declare\s+)?(?:abstract\s+)?(?:async\s+)?(?:const|let|function\*?|class|interface|type|enum)\s+([A-Za-z_$][\w$]*)/gm)) names.push(m[1]);
-    for (const m of content.matchAll(/^export\s+(?:type\s+)?\{([^}]*)\};$/gm)) {
-      for (const raw of m[1].split(",")) {
+    for (const m of content.matchAll(/^export\s+(?:declare\s+)?(?:abstract\s+)?(?:async\s+)?(const|let|function\*?|class|interface|type|enum)\s+([A-Za-z_$][\w$]*)/gm)) {
+      names.push(m[2]);
+      if (m[1] !== "interface" && m[1] !== "type") valueExported.add(m[2]);
+    }
+    for (const m of content.matchAll(/^export\s+(type\s+)?\{([^}]*)\};$/gm)) {
+      for (const raw of m[2].split(",")) {
         const item = raw.trim();
-        if (item) names.push(item.split(/\s+as\s+/).pop());
+        if (!item) continue;
+        const name = item.split(/\s+as\s+/).pop();
+        names.push(name);
+        if (!m[1]) valueExported.add(name);
       }
     }
     for (const n of names) {
@@ -197,6 +208,7 @@ async function buildPerModule() {
       exported.set(n, module);
     }
   }
+  const typeOnly = [...exported.keys()].filter((n) => !valueExported.has(n)).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
   const exportRows = [...exported].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([n, m]) => `    ("${n}", "${m}"),`);
   const rows = PER_MODULE.map((n) => `    ("${n}", include_str!("runtime/${n}.ts")),`);
   const table = [
@@ -209,6 +221,11 @@ async function buildPerModule() {
     "/// Every name a runtime module exports, with the module that defines it.",
     "pub(crate) const RUNTIME_EXPORTS: &[(&str, &str)] = &[",
     ...exportRows,
+    "];",
+    "",
+    "/// The exported names that name only a type: an import of one is `import type`.",
+    "pub(crate) const RUNTIME_TYPE_ONLY: &[&str] = &[",
+    ...typeOnly.map((n) => `    "${n}",`),
     "];",
     "",
   ].join("\n");

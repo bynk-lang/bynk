@@ -14,7 +14,7 @@ use std::path::PathBuf;
 
 use bynk_ts::TsDecl;
 
-use super::runtime_modules::{RUNTIME_EXPORTS, RUNTIME_MODULES};
+use super::runtime_modules::{RUNTIME_EXPORTS, RUNTIME_MODULES, RUNTIME_TYPE_ONLY};
 
 /// The directory (at the root of the output) the runtime modules are emitted to.
 pub const RUNTIME_DIR: &str = "__bynk_runtime";
@@ -25,6 +25,18 @@ fn module_of(name: &str) -> Option<&'static str> {
         .binary_search_by_key(&name, |(n, _)| n)
         .ok()
         .map(|i| RUNTIME_EXPORTS[i].1)
+}
+
+/// Whether `name` is a name a runtime module exports.
+pub(crate) fn is_runtime_export(name: &str) -> bool {
+    module_of(name).is_some()
+}
+
+/// Whether the runtime exports `name` as a type and nothing else, so that an
+/// import of it is a `type` import. A name that is also a value (`HttpResult`,
+/// a const beside its type) is not: one bare binding serves both.
+pub(crate) fn is_type_only_export(name: &str) -> bool {
+    RUNTIME_TYPE_ONLY.binary_search(&name).is_ok()
 }
 
 /// Split a runtime specifier (`./runtime.js`, `../../runtime.ts`) into the

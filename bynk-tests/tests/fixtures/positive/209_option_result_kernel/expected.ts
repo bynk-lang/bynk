@@ -2,8 +2,7 @@
 // commons combinators
 
 import { Ok, Err, Some, None, type Result, type Option } from "./__bynk_runtime/result.js";
-import { __bynkIntDiv, __bynkToInt, __bynkIntDivFloor, __bynkIntRem, __bynkIntMod, __bynkIntPow, __bynkIntAnd, __bynkIntOr, __bynkIntXor, __bynkIntAndNot, __bynkIntShl, __bynkIntShr } from "./__bynk_runtime/int.js";
-import type { ValidationError } from "./__bynk_runtime/errors.js";
+import { __bynkIntDiv } from "./__bynk_runtime/int.js";
 
 export function doubledOr(o: Option<number>, fallback: number): number {
   return ((__o: Option<number>, __d: number) => __o.tag === "Some" ? __o.value : __d)(((__o: Option<number>, __f: (x: number) => number) => __o.tag === "Some" ? Some(__f(__o.value)) : None)(o, (n: number) => n * 2), fallback);

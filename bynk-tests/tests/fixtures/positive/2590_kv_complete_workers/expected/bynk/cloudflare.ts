@@ -2,9 +2,9 @@
 // adapter bynk.cloudflare
 
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
-import { __bynkBytesEqual, __bynkBytesToBase64, __bynkBytesFromBase64, __bynkBytesDecodeUtf8 } from "../__bynk_runtime/bytes.js";
-import type { ValidationError, DecodeError } from "../__bynk_runtime/errors.js";
-import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../__bynk_runtime/boundary.js";
+import { __bynkBytesToBase64, __bynkBytesFromBase64 } from "../__bynk_runtime/bytes.js";
+import type { DecodeError } from "../__bynk_runtime/errors.js";
+import type { __JsonValue, __BoundaryError } from "../__bynk_runtime/boundary.js";
 
 import { BytesResponse, FetchError, Request, Response } from "../bynk.js";
 

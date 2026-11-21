@@ -35,6 +35,17 @@
 //! `handlers.ts` and test modules: chiefly service handler bodies, which
 //! `bynk-emit` still renders to text. That part of a module stays `tsc`'s
 //! job (#1823 lived there).
+//!
+//! **A type written as text is read.** A [`TsType::Named`] whose name carries
+//! its arguments or members as text (`Option<A>`, `Result<T, __BoundaryError>`,
+//! a union or function type) uses the names in that text, and a type
+//! parameter's constraint or default (`T extends Shape`) uses the names it
+//! holds (1A.36b-1). What is read is a type the emitter wrote itself, so the
+//! reading is narrow: capitalised words, not members, keys or string literals.
+//!
+//! **A global never hides a name the caller provides.** See
+//! [`unbound_names_providing`]: a module that imports a name sharing a
+//! global's (`Request`, `Response`) uses its import.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -181,24 +192,50 @@ const GLOBAL_VALUES: &[&str] = &[
 /// Every name `program` uses, in type or value position, that it does not
 /// bind, sorted and deduplicated.
 pub fn unbound_names(program: &TsProgram) -> Vec<String> {
+    unbound_names_providing(program, |_| false)
+}
+
+/// [`unbound_names`] for a module whose imports `provided` knows: a name that
+/// `provided` accepts is never hidden by the global tables.
+///
+/// The global tables exist so that `Promise` or `URL`, which TypeScript and the
+/// Workers runtime provide, are not reported. They also hide a name the module
+/// imports that happens to share a global's name (a user type `Request` or
+/// `Response` of `bynk`, or a runtime export spelled like a global): the module
+/// uses its own import, not the global, and an import list derived from the
+/// tree has to see it. Emitted code spells every real global qualified
+/// (`globalThis.Promise`), so a bare use of such a name is a use of the import.
+/// `provided` answers for the names a caller can import: the runtime's exports
+/// when deriving a runtime header, the module's own imports when comparing.
+pub fn unbound_names_providing(
+    program: &TsProgram,
+    provided: impl Fn(&str) -> bool,
+) -> Vec<String> {
+    unbound_names_in(&program.stmts, provided)
+}
+
+/// [`unbound_names_providing`] over a module's statements as a slice, for a
+/// caller that holds them before it has a [`TsProgram`] (an emitter deriving a
+/// module's own header from the body it just built).
+pub fn unbound_names_in(stmts: &[TsStmt], provided: impl Fn(&str) -> bool) -> Vec<String> {
     let mut w = Walk::default();
-    for s in &program.stmts {
+    for s in stmts {
         w.stmt(s);
     }
     let types = w
         .used_types
         .iter()
-        .filter(|n| !w.bound.contains(*n) && !GLOBAL_TYPES.contains(&n.as_str()));
+        .filter(|n| !w.bound.contains(*n) && (provided(n) || !GLOBAL_TYPES.contains(&n.as_str())));
     let values = w
         .used_values
         .iter()
-        .filter(|n| !w.bound.contains(*n) && !GLOBAL_VALUES.contains(&n.as_str()));
+        .filter(|n| !w.bound.contains(*n) && (provided(n) || !GLOBAL_VALUES.contains(&n.as_str())));
     // 1A.36a (Decision D): a name a `Raw` statement declares it uses may be a
     // type or a value, so it is judged against both global tables.
     let declared = w.used_declared.iter().filter(|n| {
         !w.bound.contains(*n)
-            && !GLOBAL_TYPES.contains(&n.as_str())
-            && !GLOBAL_VALUES.contains(&n.as_str())
+            && (provided(n)
+                || (!GLOBAL_TYPES.contains(&n.as_str()) && !GLOBAL_VALUES.contains(&n.as_str())))
     });
     let all: BTreeSet<String> = types.chain(values).chain(declared).cloned().collect();
     all.into_iter().collect()
@@ -485,6 +522,10 @@ impl Walk {
     /// Run `f` with `names` (type parameters, a mapped key) bound for the
     /// duration of one node only. They never reach the flat `bound` and
     /// `value_bound` sets, so they bind nothing outside the node.
+    ///
+    /// A type parameter may be written with its constraint and default
+    /// (`T extends Shape = Circle`): the text after the name uses types, which
+    /// can name the parameters of the same list (1A.36b-1).
     fn scoped(&mut self, names: &[String], f: impl FnOnce(&mut Self)) {
         let depth = self.scope.len();
         for n in names {
@@ -492,8 +533,70 @@ impl Walk {
                 self.scope.push(ident.to_string());
             }
         }
+        for n in names {
+            if let Some(ident) = leading_ident(n) {
+                self.use_type_text(&n.trim_start()[ident.len()..]);
+            }
+        }
         f(self);
         self.scope.truncate(depth);
+    }
+
+    /// The names a type written as text uses: every identifier that starts with
+    /// an upper-case letter or `_`, outside string literals and not a member
+    /// (`.name`) or a key (`name:`, `name?:`). A qualified head (`ns.T`) is the
+    /// use of a namespace and records the member, as for a structured name.
+    /// Lower-case words are keywords, primitives, parameters and `typeof`
+    /// operands, none of them an import of a generated module.
+    fn use_type_text(&mut self, text: &str) {
+        let bytes = text.as_bytes();
+        let ident = |b: u8| b.is_ascii_alphanumeric() || b == b'_' || b == b'$';
+        // A mapped key (`[S in keyof T]`) and an `infer X` binder are bound by the
+        // text itself, wherever the text spells them.
+        let words: Vec<&str> = text
+            .split(|c: char| !(c.is_alphanumeric() || c == '_' || c == '$'))
+            .filter(|w| !w.is_empty())
+            .collect();
+        let local: Vec<&str> = words
+            .windows(2)
+            .filter(|w| w[1] == "in" || w[0] == "infer")
+            .map(|w| if w[0] == "infer" { w[1] } else { w[0] })
+            .collect();
+        let mut i = 0;
+        while i < bytes.len() {
+            let b = bytes[i];
+            match b {
+                b'"' | b'\'' | b'`' => {
+                    i += 1;
+                    while i < bytes.len() && bytes[i] != b {
+                        i += if bytes[i] == b'\\' { 2 } else { 1 };
+                    }
+                    i += 1;
+                }
+                _ if ident(b) => {
+                    let start = i;
+                    while i < bytes.len() && ident(bytes[i]) {
+                        i += 1;
+                    }
+                    let word = &text[start..i];
+                    let after_dot = start > 0 && bytes[start - 1] == b'.';
+                    let rest = text[i..].trim_start();
+                    let is_key = rest.starts_with(':') || rest.starts_with("?:");
+                    if after_dot || is_key || !(b.is_ascii_uppercase() || b == b'_') {
+                        continue;
+                    }
+                    if self.in_scope(word) || local.contains(&word) {
+                        continue;
+                    }
+                    self.used_types.insert(word.to_string());
+                    if let Some(member) = text[i..].strip_prefix('.').and_then(leading_ident) {
+                        self.qualified
+                            .insert((word.to_string(), member.to_string()));
+                    }
+                }
+                _ => i += 1,
+            }
+        }
     }
 
     /// An import specifier: `X`, `type X`, `X as Y` or `type X as Y` binds
@@ -650,6 +753,16 @@ impl Walk {
                 }
                 for a in type_args {
                     self.ty(a);
+                }
+                // A name that is more than an identifier carries a type as
+                // text: `Option<A>`, `Result<T, __BoundaryError>`, a union
+                // `A | B`, a function type. Its arguments and members use names
+                // too (1A.36b-1).
+                if name
+                    .chars()
+                    .any(|c| !(c.is_alphanumeric() || matches!(c, '_' | '$' | '.')))
+                {
+                    self.use_type_text(name);
                 }
             }
             TsType::Array { element, .. } => self.ty(element),
@@ -987,6 +1100,11 @@ impl Walk {
             TsExpr::Ident(name) => self.use_value(name),
             TsExpr::Lit(_) => {}
             TsExpr::VerbatimExpr(text, _) => self.opaque(text),
+            // Text the emitter printed from nodes, with the names it uses declared
+            // beside it (1A.36b-1): counted as `raw_using`'s are.
+            TsExpr::RawUsing(_, names) => {
+                self.used_declared.extend(names.iter().cloned());
+            }
             TsExpr::Member { object, property } | TsExpr::OptionalMember { object, property } => {
                 if let TsExpr::Ident(head) = object.as_ref() {
                     self.qualified.insert((head.clone(), property.clone()));
@@ -1103,7 +1221,9 @@ impl Walk {
                 self.ty(ty);
             }
             TsExpr::AsConst(expr) => self.expr(expr),
-            TsExpr::Assign { target, value } | TsExpr::AddAssign { target, value } => {
+            TsExpr::Assign { target, value }
+            | TsExpr::AddAssign { target, value }
+            | TsExpr::NullishAssign { target, value } => {
                 self.expr(target);
                 self.expr(value);
             }
@@ -1340,6 +1460,163 @@ mod tests {
             alias("Box", &["T extends Shape"], TsType::named("T")),
         ]);
         assert!(unbound_names(&p).is_empty(), "{:?}", unbound_names(&p));
+    }
+
+    /// 1A.36b-1: a constraint or a default (`T extends Shape = Circle`) uses types, and can name
+    /// the other parameters of its own list. A type named only there is unbound unless imported.
+    #[test]
+    fn a_type_parameter_constraint_and_default_use_the_names_they_hold() {
+        let boxed = |param: &str| alias("Box", &[param], TsType::named("T"));
+        // `Shape` appears nowhere else: only the constraint uses it.
+        let p = program(vec![boxed("T extends Shape")]);
+        assert_eq!(unbound_names(&p), ["Shape"]);
+        let p = program(vec![import(&["type Shape"]), boxed("T extends Shape")]);
+        assert!(unbound_names(&p).is_empty(), "{:?}", unbound_names(&p));
+        // A default is a use too; an `extends` clause may use a generic type.
+        let p = program(vec![boxed("T = Circle")]);
+        assert_eq!(unbound_names(&p), ["Circle"]);
+        let p = program(vec![boxed("T extends Readonly<Option<Shape>>")]);
+        assert_eq!(unbound_names(&p), ["Option", "Shape"]);
+        // A parameter of the same list is bound inside the constraint, and a
+        // global is not reported.
+        let p = alias("Pair", &["A", "B extends Array<A>"], TsType::named("B"));
+        assert!(unbound_names(&program(vec![p])).is_empty());
+        // A function's own list is read the same way.
+        let f = TsStmt::decl(
+            TsDecl::Function {
+                name: "f".to_string(),
+                generics: vec!["T extends Shape".to_string()],
+                params: vec![],
+                return_type: None,
+                body: vec![],
+                is_async: false,
+                inline: false,
+            },
+            None,
+        );
+        assert_eq!(unbound_names(&program(vec![f])), ["Shape"]);
+    }
+
+    /// 1A.36b-1: a `Named` type whose name carries its arguments as text uses the head and every
+    /// name in the arguments, however it was spelled.
+    #[test]
+    fn a_named_type_that_carries_its_arguments_as_text_uses_them() {
+        let over = |name: &str| program(vec![function_over(TsType::named(name))]);
+        assert_eq!(unbound_names(&over("Option<A>")), ["A", "Option"]);
+        assert_eq!(
+            unbound_names(&over("Result<unknown, __BoundaryError>")),
+            ["Result", "__BoundaryError"]
+        );
+        // A union, a function type and a global-qualified generic.
+        assert_eq!(unbound_names(&over("Foo | Bar | null")), ["Bar", "Foo"]);
+        assert_eq!(
+            unbound_names(&over("(a: Req) => globalThis.Promise<Res>")),
+            ["Req", "Res"]
+        );
+        // A mapped key and an `infer` binder are bound by the text.
+        assert_eq!(
+            unbound_names(&over("{ readonly [S in keyof Services]: Services[S] }")),
+            ["Services"]
+        );
+        assert_eq!(unbound_names(&over("Box<infer U> | U")), ["Box"]);
+        // Members, string literals, numbers, keys and lower-case words are not names.
+        assert!(unbound_names(&over("\"Some\" | 200 | string")).is_empty());
+        assert!(unbound_names(&over("{ Key: string }")).is_empty());
+        assert_eq!(unbound_names(&over("ns.T<number>")), ["ns"]);
+        // Imported, they are bound; a type parameter in scope is not a use.
+        let p = program(vec![
+            import(&["type Option", "type A"]),
+            function_over(TsType::named("Option<A>")),
+        ]);
+        assert!(unbound_names(&p).is_empty(), "{:?}", unbound_names(&p));
+    }
+
+    /// 1A.36b-1: the global tables hide a name the module imports that shares a global's name,
+    /// unless the caller says it provides that name.
+    #[test]
+    fn a_provided_name_is_not_hidden_by_a_global() {
+        let p = program(vec![function_over(TsType::named("Response"))]);
+        assert!(unbound_names(&p).is_empty());
+        let provided = |n: &str| n == "Response";
+        assert_eq!(unbound_names_providing(&p, provided), ["Response"]);
+        // Value position, and a name the caller does not provide, stay hidden.
+        let call = TsStmt::expr_stmt(
+            TsExpr::Call {
+                callee: Box::new(TsExpr::Ident("Request".to_string())),
+                args: vec![],
+            },
+            None,
+        );
+        let p = program(vec![call]);
+        assert!(unbound_names_providing(&p, provided).is_empty());
+        assert_eq!(unbound_names_providing(&p, |n| n == "Request"), ["Request"]);
+        // Imported, the provided name is bound whatever it is called.
+        let p = program(vec![
+            import(&["Response"]),
+            function_over(TsType::named("Response")),
+        ]);
+        assert!(unbound_names_providing(&p, provided).is_empty());
+    }
+
+    /// 1A.36b-1: an expression's `raw_using` names are uses, as the statement's are, and the
+    /// nodes the text was printed from are read the same way to find them.
+    #[test]
+    fn an_expression_that_declares_its_uses_counts_them() {
+        let text = TsExpr::raw_using(
+            "(__j: __JsonValue) => { return Ok(__j); }",
+            vec!["Ok".to_string(), "__JsonValue".to_string()],
+        );
+        let p = program(vec![TsStmt::expr_stmt(text.clone(), None)]);
+        assert_eq!(unbound_names(&p), ["Ok", "__JsonValue"]);
+        let p = program(vec![
+            import(&["Ok", "type __JsonValue"]),
+            TsStmt::expr_stmt(text, None),
+        ]);
+        assert!(unbound_names(&p).is_empty(), "{:?}", unbound_names(&p));
+        // The nodes it was printed from: parameters and locals bind, the rest is used.
+        let arrow = TsExpr::Arrow {
+            params: vec![TsParam::new(
+                "__j".to_string(),
+                Some(TsType::named("__JsonValue")),
+            )],
+            is_async: false,
+            generics: vec![],
+            return_type: None,
+            body: Box::new(TsArrowBody::Block(vec![TsStmt::return_stmt(
+                Some(TsExpr::Call {
+                    callee: Box::new(TsExpr::Ident("Ok".to_string())),
+                    args: vec![TsExpr::Ident("__j".to_string())],
+                }),
+                None,
+            )])),
+        };
+        assert_eq!(
+            unbound_names_in(&[TsStmt::expr_stmt(arrow, None)], |_| false),
+            ["Ok", "__JsonValue"]
+        );
+    }
+
+    /// 1A.36b-1: `names_imported_from` reads what a module takes from one place.
+    #[test]
+    fn names_are_read_by_the_specifier_they_come_from() {
+        let from = |spec: &str, names: &[&str]| {
+            TsStmt::decl(
+                TsDecl::Import {
+                    type_only: false,
+                    names: names.iter().map(|n| n.to_string()).collect(),
+                    from: spec.to_string(),
+                },
+                None,
+            )
+        };
+        let p = program(vec![
+            from("./__bynk_runtime/result.js", &["Ok", "type Option"]),
+            from("./other.js", &["Thing as Renamed"]),
+        ]);
+        let runtime = p.names_imported_from(|f| f.contains("__bynk_runtime/"));
+        assert_eq!(runtime.into_iter().collect::<Vec<_>>(), ["Ok", "Option"]);
+        let other = p.names_imported_from(|f| f == "./other.js");
+        assert_eq!(other.into_iter().collect::<Vec<_>>(), ["Renamed"]);
     }
 
     /// 1A.36a (Decision D): a `raw_using` statement's names are uses, in either position, and

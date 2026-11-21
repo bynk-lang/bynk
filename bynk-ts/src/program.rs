@@ -151,6 +151,34 @@ impl TsProgram {
         out
     }
 
+    /// The local names the top-level named imports from a specifier `from_matches`
+    /// accepts bind (`X`, `type X`, `X as Y` bind `X`, `X`, `Y`): what a module takes
+    /// from one place, such as the runtime (1A.36b-1).
+    pub fn names_imported_from(
+        &self,
+        from_matches: impl Fn(&str) -> bool,
+    ) -> std::collections::BTreeSet<String> {
+        let mut out = std::collections::BTreeSet::new();
+        for stmt in &self.stmts {
+            if let TsStmtKind::Decl(TsDecl::Import { names, from, .. }) = &stmt.kind
+                && from_matches(from)
+            {
+                for spec in names {
+                    let spec = spec.trim();
+                    let spec = spec.strip_prefix("type ").unwrap_or(spec).trim();
+                    out.insert(
+                        spec.rsplit(" as ")
+                            .next()
+                            .unwrap_or(spec)
+                            .trim()
+                            .to_string(),
+                    );
+                }
+            }
+        }
+        out
+    }
+
     /// The module specifier of every top-level import declaration (named,
     /// namespace or default), in statement order.
     pub fn import_specifiers(&self) -> Vec<&str> {
@@ -360,7 +388,7 @@ fn walk_object_entry<'a>(entry: &'a TsObjectEntry, out: &mut Vec<(VerbatimOrigin
 
 fn walk_expr<'a>(expr: &'a TsExpr, out: &mut Vec<(VerbatimOrigin, &'a str)>) {
     match expr {
-        TsExpr::Ident(_) => {}
+        TsExpr::Ident(_) | TsExpr::RawUsing(..) => {}
         TsExpr::VerbatimExpr(text, origin) => out.push((*origin, text.as_str())),
         TsExpr::Member { object, .. } | TsExpr::OptionalMember { object, .. } => {
             walk_expr(object, out);
@@ -423,7 +451,9 @@ fn walk_expr<'a>(expr: &'a TsExpr, out: &mut Vec<(VerbatimOrigin, &'a str)>) {
         TsExpr::Paren(e) | TsExpr::Spread(e) | TsExpr::NonNull(e) | TsExpr::Yield(e) => {
             walk_expr(e, out)
         }
-        TsExpr::Assign { target, value } | TsExpr::AddAssign { target, value } => {
+        TsExpr::Assign { target, value }
+        | TsExpr::AddAssign { target, value }
+        | TsExpr::NullishAssign { target, value } => {
             walk_expr(target, out);
             walk_expr(value, out);
         }
@@ -1595,6 +1625,15 @@ pub enum TsExpr {
     /// it) — none of these has a real node to convert to without expanding
     /// this crate's own type algebra well past what #1539 asks for.
     VerbatimExpr(String, VerbatimOrigin),
+    /// Expression text that also declares the names it uses (1A.36b-1): the
+    /// expression twin of [`TsStmt::raw_using`]. `text` prints exactly as an
+    /// [`TsExpr::Ident`]'s does and is bracketed as one is, so a caller whose
+    /// expression is *printed nodes* joined into one line (a form no node can
+    /// hold) keeps it, and `names` are the identifiers the text spells without
+    /// declaring, which `name_closure` counts as uses. The names are taken from
+    /// the nodes the text was printed from (`unbound_names_in` over them), never
+    /// scanned out of the text.
+    RawUsing(String, Vec<String>),
     /// `object.property`.
     Member {
         object: Box<TsExpr>,
@@ -1875,6 +1914,13 @@ pub enum TsExpr {
         target: Box<TsExpr>,
         value: Box<TsExpr>,
     },
+    /// `target ??= value` (1A.36b-1): assigns only when the target is `null` or
+    /// `undefined`, and yields the target's value. A sibling of [`TsExpr::Assign`]
+    /// that a cached constant's accessor is built from, bracketed as it is.
+    NullishAssign {
+        target: Box<TsExpr>,
+        value: Box<TsExpr>,
+    },
     Lit(TsLit),
     /// `(a, b, c)` (1A.35a part B): a comma expression, which evaluates each
     /// item in order and yields the last. It prints with its own brackets, so it
@@ -1931,6 +1977,11 @@ pub enum TsArrowBody {
 }
 
 impl TsExpr {
+    /// [`TsExpr::RawUsing`]: `text`, with the `names` it uses declared.
+    pub fn raw_using(text: impl Into<String>, names: Vec<String>) -> Self {
+        TsExpr::RawUsing(text.into(), names)
+    }
+
     /// The ordinary, single-line object literal, `Prop`-only — every entry
     /// is `key: value`. `events_fanout.rs`'s own entries (and this crate's
     /// own printer tests) are all this shape; kept taking a plain

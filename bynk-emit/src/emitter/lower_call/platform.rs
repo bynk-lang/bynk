@@ -412,7 +412,6 @@ pub(in crate::emitter) fn lower_signed_cookie_call(
         }
         _ => None,
     })?;
-    cx.note_session_cookie();
     if !issue {
         return Some(call(
             id("__expireSessionCookie"),
@@ -493,8 +492,6 @@ pub(in crate::emitter) fn lower_cookie_field_call(
         // A `Decimal` is its rendered text on the wire; the runtime helper takes it as such.
         cx.note_decimal("__bynkDecimalToString");
     }
-    // The helper rides the cookie-helper import group (`SESSION_COOKIE_RUNTIME_IMPORTS`).
-    cx.note_session_cookie();
     let none = || object(vec![("tag", tag_const("None"))]);
     Some({
         let nodes = vec![value];
@@ -1171,7 +1168,10 @@ service lookup {
             };
             assert_eq!(bynk_ts::print_expr(&node), text, "traced: {traced}");
             assert_eq!(text.starts_with("__traceStep("), traced);
-            assert_eq!(ru.trace_step(), traced);
+            // The wrapper names `__traceStep` in the tree, so a traced module imports it.
+            let used =
+                bynk_ts::unbound_names_in(&[bynk_ts::TsStmt::expr_stmt(node, None)], |_| false);
+            assert_eq!(used.iter().any(|n| n == "__traceStep"), traced);
         }
     }
 

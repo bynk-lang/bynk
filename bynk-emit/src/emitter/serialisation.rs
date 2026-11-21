@@ -2243,11 +2243,8 @@ fn emit_field_deserialise_wire(
         // #1319: closes the `ts_any` residual for the four runtime-owned
         // error types — each now casts through its own real, exported
         // runtime type (`bynk-emit/runtime/src/errors.ts`/`queue.ts`/
-        // `http.ts`), gated into the module's own import list the same way
-        // `DecodeError`/`HttpResult` already were (`write_header`'s
-        // `file_mentions_json_error`/`file_mentions_http_result`, now joined
-        // by `file_mentions_queue_result`; `ValidationError` is imported
-        // unconditionally). `Effect` stays `any`: a stray field-position
+        // `http.ts`), and imported because the module's tree names it (the
+        // header derives its imports from the tree, 1A.36b-1). `Effect` stays `any`: a stray field-position
         // `Effect[T]` genuinely has no shape to derive one from (this
         // function's own doc explains why it reaches here at all), and
         // narrowing it is not part of this residual — `unknown` would
@@ -2793,9 +2790,25 @@ pub(crate) fn witness_codec_expr(t: &TypeRef, ru: &RuntimeUse) -> TsExpr {
                 })
                 .collect::<Vec<_>>()
                 .join(" ");
-            ident(format!(
-                "(__j: __JsonValue, __p: string) => {{ {one_line} }}"
-            ))
+            // The text hides what the statements use. They are read as the arrow
+            // they print as, so its parameters and locals bind, and the type its
+            // signature spells is declared with them.
+            let arrow = TsExpr::Arrow {
+                params: vec![
+                    TsParam::new("__j".to_string(), Some(TsType::named("__JsonValue"))),
+                    TsParam::new("__p".to_string(), Some(TsType::named("string"))),
+                ],
+                is_async: false,
+                generics: Vec::new(),
+                return_type: None,
+                body: Box::new(TsArrowBody::Block(body)),
+            };
+            let uses =
+                bynk_ts::unbound_names_in(&[bynk_ts::TsStmt::expr_stmt(arrow, None)], |_| false);
+            TsExpr::raw_using(
+                format!("(__j: __JsonValue, __p: string) => {{ {one_line} }}"),
+                uses,
+            )
         }
     };
     TsExpr::object(vec![

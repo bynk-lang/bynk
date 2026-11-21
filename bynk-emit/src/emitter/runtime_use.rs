@@ -1,38 +1,34 @@
-//! Which `runtime.ts` helpers an emitted module actually references.
+//! Which runtime helpers an emitted module's *callers other than its own header* need.
 //!
-//! Most of the runtime import list is fixed (`Ok`, `Err`, `Some`, `None`, …),
-//! but four groups are conditional, because importing them unconditionally
-//! would put names in every module that most modules never use:
+//! A unit module's runtime import is derived from its built tree (1A.36b-1,
+//! `runtime_header`), so nothing here decides it. What these notes still serve:
 //!
-//! - the `Bytes` helpers (`__bynkBytesEqual` and friends, v0.110 / ADR 0142),
-//!   emitted by the `Bytes` kernel, `==` on `Bytes`, and the boundary codecs;
-//! - the structural-equality walker (`__bynkEq`, #1652), emitted by `==`/`!=`
-//!   on any operand that is neither a primitive nor `Bytes`;
-//! - the ICU formatters (`selectPluralArm`, `formatIcuNumber`, `formatIcuDate`,
-//!   #878), emitted by a `messages` bundle's `render`;
-//! - the boundary-codec group (`Ok`, `Err`, `Result`, `BoundaryError`, #914),
-//!   which an *inlined* deserialiser builds directly;
-//! - the JSON-codec group (`Ok`, `Err`, `Result`, `JsonValue`, `DecodeError`,
-//!   #914), which the `Json.decode[T]` wrapper names in its own signature and
-//!   body, independently of which arm the inner deserialiser takes.
+//! - the Worker modules (`workers.rs`, `workers_entry.rs`), whose import lists are
+//!   assembled from them until 1A.36b-2;
+//! - the driver's test modules (`tests_emit`), whose imports stay predicted until 1B.2;
+//! - emission itself: `plain_json`, `virtual_time` and the codec roots decide what is
+//!   *emitted*, not what is imported.
 //!
-//! Most modules import `Ok`/`Err`/`Result` unconditionally and never consult the
-//! last two; they exist for the module kinds that curate their runtime import
-//! list — a Worker's `compose.ts` and the test-scaffold modules.
+//! The groups the notes carry are the `Bytes` helpers (`__bynkBytesEqual` and friends,
+//! v0.110 / ADR 0142), the structural-equality walker (`__bynkEq`, #1652), the `Instant`,
+//! percent-encoding, request and cookie helpers, the boundary-codec group (`Ok`, `Err`,
+//! `Result`, `BoundaryError`, #914) an *inlined* deserialiser builds, and the JSON-codec
+//! group (`Ok`, `Err`, `Result`, `JsonValue`, `DecodeError`, #914) the `Json.decode[T]`
+//! wrapper names. The notes whose only reader was a unit module's header (the ICU
+//! formatters, the session-cookie helpers and the two trace helpers) are gone, the tree
+//! carrying the fact.
 //!
-//! #917 adds a fifth, differently-shaped piece of state, riding this same
-//! shared reference for the same reason: a test-scaffold module's `Json.decode`/
-//! `Json.encode` on a named type has no local codec to delegate to (the unit it
-//! imports exports the type but not a codec for it), so the module generates its
-//! own — the `json_codec_qual`/`json_codec_roots` fields carry the namespace a
-//! foreign type's TS positions render through and the roots its bodies reached
-//! for, respectively. Not a runtime-*helper* reference like the four flags
-//! above, but the same "note during lowering, decide after" shape.
+//! #917 adds a differently-shaped piece of state, riding this same shared reference for
+//! the same reason: a test-scaffold module's `Json.decode`/`Json.encode` on a named type has
+//! no local codec to delegate to (the unit it imports exports the type but not a codec for
+//! it), so the module generates its own — the `json_codec_qual`/`json_codec_roots` fields
+//! carry the namespace a foreign type's TS positions render through and the roots its bodies
+//! reached for, respectively.
 //!
 //! The condition is "did emission actually reference it", which is a fact only
 //! emission knows. This type is how that fact travels: the producers call
-//! [`RuntimeUse::note_bytes`] / [`RuntimeUse::note_icu`] as they emit, and the
-//! header/post-pass reads the flags to decide the import list.
+//! [`RuntimeUse::note_bytes`] and the like as they emit, and a module that still curates its
+//! import list reads the flags afterwards.
 //!
 //! # Why not scan the generated text
 //!
@@ -47,11 +43,8 @@
 //! that would obviously catch it, because the marker and the scan live in
 //! different files.
 //!
-//! The same reasoning is already recorded a few lines from the code this
-//! replaces: `HttpResult`'s import is decided structurally (over the AST)
-//! "so a comment or string literal mentioning `HttpResult` never triggers a
-//! spurious import" (`file_mentions_http_result`). This extends that principle
-//! to the two conditions that were still text scans.
+//! A unit module's header went further: it reads the tree, which carries each name as a
+//! node, so no note is needed there at all.
 //!
 //! # What keeps the producers honest
 //!
@@ -115,10 +108,6 @@ pub struct RuntimeUse {
     detach: Cell<bool>,
     /// #2620: the module references `unreachable`/`todo`'s helper, `__fault`.
     fault: Cell<bool>,
-    /// #3580: the module wraps a call in `__traceStep` (a traced build).
-    trace_step: Cell<bool>,
-    /// #3580: the module wraps a Service Binding in `__traceBinding` (slice 2).
-    trace_binding: Cell<bool>,
     /// #2683: the test module runs on virtual time, so an addressed call is
     /// driven by `__bynkSettleVirtual`.
     virtual_time: Cell<bool>,
@@ -133,8 +122,6 @@ pub struct RuntimeUse {
     request_query: Cell<bool>,
     /// #3277: the module builds a `RequestCookies` (`__requestCookies`).
     request_cookies: Cell<bool>,
-    /// #3386: the module issues or deletes a `SignedCookie` session cookie.
-    session_cookie: Cell<bool>,
     /// #3386: a `system` driver mints session cookies (`__signSessionCookie`, `__newSessionKey`).
     session_signing: Cell<bool>,
     /// #2854: a typed query becomes a query string (`__queryString`).
@@ -162,7 +149,6 @@ pub struct RuntimeUse {
     /// `__bynkCmpRecord`, …) the module's witnesses, ordering operators and
     /// ordering kernels reference.
     cmp: RefCell<std::collections::BTreeSet<&'static str>>,
-    icu: Cell<bool>,
     /// #2858: the project has a plain-JSON route, so the generated `Option`
     /// encoders carry the plain branch `withPlainJson` switches on. Absent, they
     /// are emitted byte-for-byte as before.
@@ -285,11 +271,6 @@ impl RuntimeUse {
         self.race.set(true);
     }
 
-    /// Record that the module references `__traceStep` (#3580).
-    pub fn note_trace_step(&self) {
-        self.trace_step.set(true);
-    }
-
     /// Record that the module references the `__fault` helper (#2620).
     pub fn note_fault(&self) {
         self.fault.set(true);
@@ -310,11 +291,6 @@ impl RuntimeUse {
         self.request_header_pairs.get()
     }
 
-    /// Record that the module issues or deletes a session cookie (#3386).
-    pub fn note_session_cookie(&self) {
-        self.session_cookie.set(true);
-    }
-
     /// Record that a `system` driver mints session cookies (#3386).
     pub fn note_session_signing(&self) {
         self.session_signing.set(true);
@@ -323,11 +299,6 @@ impl RuntimeUse {
     /// Whether the session-signing helpers must be imported (#3386).
     pub fn session_signing(&self) -> bool {
         self.session_signing.get()
-    }
-
-    /// Whether the session-cookie helpers must be imported (#3386).
-    pub fn session_cookie(&self) -> bool {
-        self.session_cookie.get()
     }
 
     /// Record that the module builds a `RequestCookies` value (#3277).
@@ -496,11 +467,6 @@ impl RuntimeUse {
             .collect::<String>()
     }
 
-    /// Record that the module references the ICU formatting helpers.
-    pub fn note_icu(&self) {
-        self.icu.set(true);
-    }
-
     /// Record that the module inlines a boundary deserialiser, which builds
     /// `Ok(…)` / `Err(… as BoundaryError)` directly rather than delegating to a
     /// `deserialise_<T>` in its own namespace.
@@ -620,21 +586,6 @@ impl RuntimeUse {
         self.within.get()
     }
 
-    /// Record that the module references `__traceBinding` (#3580).
-    pub fn note_trace_binding(&self) {
-        self.trace_binding.set(true);
-    }
-
-    /// Whether `__traceBinding` must be imported (#3580).
-    pub fn trace_binding(&self) -> bool {
-        self.trace_binding.get()
-    }
-
-    /// Whether `__traceStep` must be imported (#3580).
-    pub fn trace_step(&self) -> bool {
-        self.trace_step.get()
-    }
-
     /// Whether `__fault` must be imported (#2620).
     pub fn fault(&self) -> bool {
         self.fault.get()
@@ -676,11 +627,6 @@ impl RuntimeUse {
     pub fn json_codec(&self) -> bool {
         self.json_codec.get()
     }
-
-    /// Whether the ICU formatting helpers must be imported.
-    pub fn icu(&self) -> bool {
-        self.icu.get()
-    }
 }
 
 #[cfg(test)]
@@ -696,7 +642,7 @@ mod tests {
         let u = RuntimeUse::default();
         u.note_bytes();
         assert!(u.bytes());
-        assert!(!u.icu(), "noting one helper does not set the other");
+        assert!(!u.eq(), "noting one helper does not set the other");
         u.note_bytes();
         assert!(u.bytes(), "a second note is not a toggle");
     }

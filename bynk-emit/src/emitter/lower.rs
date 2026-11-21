@@ -7359,7 +7359,8 @@ mod list_kernel_tests {
     }
 
     /// Decision G: the imports derive from the printed output, so a module using
-    /// `get`, `first`, `sequenceAll` and `traverseTry` imports what it did before.
+    /// `get`, `first`, `sequenceAll` and `traverseTry` imports what it uses: the
+    /// `Result` and `Option` names, and nothing from `errors` (1A.36b-1).
     #[test]
     fn imports_follow_the_printed_kernel_output() {
         let src = "commons lk\n\
@@ -7376,7 +7377,7 @@ mod list_kernel_tests {
             ),
             "{ts}"
         );
-        assert_eq!(ts.matches("import ").count(), 2, "{ts}");
+        assert_eq!(ts.matches("import ").count(), 1, "{ts}");
     }
 }
 

@@ -435,4 +435,7 @@ const HANDLER_IF_BODY: &str = r#"const k = 1;
       const d = __r3.value;
       return HttpResult.Ok(d);
     }"#;
-const HANDLER_IF_MAPPINGS: &str = ";;;;;;;;AAEA;AACC;AAAA;AAAA;AAGD;AACC;AACC;AACA;AACC;AAAA;AAAA;AACA;AACC;AAAA;AAAA;AACA;AAAA;AAEA;AAAA;AAAA;AACA;AAAA;AAAA;AAGD;AAAA;AAAA;AACA;AAAA;AAAA;AAdH;AAAA";
+// 1A.36b-1: two `;` fewer than it was pinned with. The module no longer imports two runtime
+// modules it does not use (`errors` and `boundary`), so every statement sits two
+// generated lines higher; each still maps to the same source position.
+const HANDLER_IF_MAPPINGS: &str = ";;;;;;AAEA;AACC;AAAA;AAAA;AAGD;AACC;AACC;AACA;AACC;AAAA;AAAA;AACA;AACC;AAAA;AAAA;AACA;AAAA;AAEA;AAAA;AAAA;AACA;AAAA;AAAA;AAGD;AAAA;AAAA;AACA;AAAA;AAAA;AAdH;AAAA";

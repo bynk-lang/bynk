@@ -3,8 +3,8 @@
 
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
 import { __bynkPgRow } from "../../__bynk_runtime/time.js";
-import type { ValidationError, DecodeError } from "../../__bynk_runtime/errors.js";
-import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
+import type { DecodeError } from "../../__bynk_runtime/errors.js";
+import type { __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 
 import { PgStatement, PgValue } from "../../bynk/cloudflare.js";
