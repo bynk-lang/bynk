@@ -9,15 +9,13 @@ use bynk_check::firstparty::FirstPartyCap;
 use bynk_ts::{TsExpr, TsLit, TsStmt, TsType};
 
 use super::super::emit::flatten_emit_ident_chain;
-use super::super::lower::{Pre, ident_node};
+use super::super::lower::Pre;
 use super::super::lower_ctx::LowerCtx;
 use super::super::lower_list::{
     binary, block_arrow, call, const_, expr_stmt, id, member, param, paren, ret,
 };
-use super::super::ts_types::{ts_type_ref, ts_type_ref_to_ts_type};
-use super::super::{
-    CommonsItem, Expr, ExprKind, Ident, TypeBody, TypeRef, escape_ts_string, test_scaffold_ns,
-};
+use super::super::ts_types::ts_type_ref_to_ts_type;
+use super::super::{CommonsItem, Expr, ExprKind, Ident, TypeBody, TypeRef, test_scaffold_ns};
 use super::codec_statics::{DecodeSource, json_decoder_fn};
 
 /// `"text"`: raw text, which the printer escapes (the one escaper, `escape_ts_literal`, that
@@ -58,37 +56,12 @@ fn lower_args(args: &[Expr], cx: &mut LowerCtx, pre: &mut Pre) -> Vec<bynk_ts::T
 
 /// `deps` in a test case or on a `D1.peek` handle, else the handler's own deps receiver, as a node
 /// and as the text the fallbacks print.
-fn deps_receiver(in_test: bool, cx: &LowerCtx) -> (TsExpr, String) {
+fn deps_receiver(in_test: bool, cx: &LowerCtx) -> TsExpr {
     if in_test {
-        (id("deps"), "deps".to_string())
+        id("deps")
     } else {
-        (cx.cap_deps_node(), cx.cap_deps_expr().to_string())
+        cx.cap_deps_node()
     }
-}
-
-/// #926: render a capability call's explicit type argument(s) as a TS
-/// generic argument list (`<T>`), or `""` when absent. Unlike
-/// `Json.decode[T]` (`lower_json_codec_call`, below), which specialises a
-/// runtime codec per call and needs no TS-level generic at all, a capability
-/// operation's `T` is a pure type-level parameter on a real generic TS
-/// interface method (Decision C) — with no argument of type `T`, TypeScript
-/// cannot infer a return-position-only parameter, so the call site must
-/// name it explicitly.
-pub(in crate::emitter) fn capability_call_type_args_ts(
-    type_args: &[TypeRef],
-    wire: Option<&CapEncoding>,
-) -> String {
-    let kept = kept_type_args(type_args, wire);
-    if kept.is_empty() {
-        return String::new();
-    }
-    format!(
-        "<{}>",
-        kept.into_iter()
-            .map(ts_type_ref)
-            .collect::<Vec<_>>()
-            .join(", ")
-    )
 }
 
 /// Constrained generics slice 3: a type parameter that only occurs in encoded (`unknown`)
@@ -237,7 +210,6 @@ pub(in crate::emitter) fn scope_idempotency_key(
 /// `<deps>.Idempotency.claim`, so a `stub` of it applies.
 pub(in crate::emitter) fn tracked_claim_call(
     cap_node: TsExpr,
-    cap_expr: &str,
     args: Vec<bynk_ts::TsExpr>,
     cx: &mut LowerCtx,
 ) -> bynk_ts::TsExpr {
@@ -359,9 +331,8 @@ pub(in crate::emitter) fn lower_d1_select_call(
         .unwrap_or_else(|| cx.missing_fact(e.span, "JSON decoder for a `select` row type"));
     let params = pre.lower_node(params, cx);
     let in_test = cx.in_test_case() || cap.starts_with(bynk_check::checker::peek::LOCAL_PREFIX);
-    let (deps_node, deps_text) = deps_receiver(in_test, cx);
+    let deps_node = deps_receiver(in_test, cx);
     let op = if first { "first" } else { "all" };
-    let escaped_sql = escape_ts_string(&sql);
     Some({
         let nodes = vec![decoder, params];
         let [decoder, params] = super::super::lower_list::take(nodes);
@@ -449,10 +420,7 @@ pub(in crate::emitter) fn lower_signed_cookie_call(
         ));
     }
     let key = pre.lower_node(args.first()?, cx);
-    let (deps_node, deps_text) = deps_receiver(cx.in_test_case(), cx);
-    let name = escape_ts_string(&seam.cookie);
-    let same_site = escape_ts_string(&seam.same_site);
-    let actor_text = escape_ts_string(&actor);
+    let deps_node = deps_receiver(cx.in_test_case(), cx);
     Some({
         let nodes = vec![key];
         let [key] = super::super::lower_list::take(nodes);
@@ -545,17 +513,6 @@ pub(in crate::emitter) fn lower_cookie_field_call(
     })
 }
 
-/// #3446: the `Cookie` record literal of a typed write, with every attribute the record's
-/// defaults give (the router and `serialiseCookie` read them all: they apply no defaults of their
-/// own), as a hand-written `Cookie { name, value }` lowers.
-fn typed_cookie_literal(name: &str, value: &str, max_age: &str, expires: &str) -> String {
-    format!(
-        "({{ name: \"{name}\", value: {value}, maxAge: {max_age}, expires: {expires}, \
-         domain: {{ tag: \"None\" as const }}, path: \"/\", secure: true, httpOnly: true, \
-         sameSite: {{ tag: \"Lax\" as const }}, partitioned: false }})"
-    )
-}
-
 /// [`typed_cookie_literal`] as a node: the field's wire `name` is raw text (the printer escapes it).
 fn typed_cookie_node(name: &str, value: TsExpr, max_age: TsExpr, expires: TsExpr) -> TsExpr {
     paren(object(vec![
@@ -642,8 +599,6 @@ pub(in crate::emitter) fn lower_events_emit_call(
         // still a future slice (3c, the cross-build schema registry).
         let schema_version = cx.event_schema_version(&event_name);
         let owner = cx.owning_context().unwrap_or_default().to_string();
-        let publisher_id = escape_ts_string(&owner);
-        let escaped_event = escape_ts_string(&event_name);
         // The envelope is a node over raw text; the text form escapes it as it always did.
         return Some({
             let nodes = vec![payload];
@@ -698,11 +653,9 @@ pub(in crate::emitter) fn lower_capability_call(
         let args_lowered = encode_capability_args(wire.as_deref(), args_lowered, cx);
         let call = capability_op_call(
             id("deps"),
-            "deps".to_string(),
             &recv.name,
             &method.name,
             Vec::new(),
-            String::new(),
             args_lowered,
         );
         return Some(decode_capability_reply(
@@ -722,15 +675,7 @@ pub(in crate::emitter) fn lower_capability_call(
         let args_lowered = lower_args(args, cx, pre);
         let wire = capability_wire(e, cx);
         let args_lowered = encode_capability_args(wire.as_deref(), args_lowered, cx);
-        let call = capability_op_call(
-            id("deps"),
-            "deps".to_string(),
-            &cap,
-            &method.name,
-            Vec::new(),
-            String::new(),
-            args_lowered,
-        );
+        let call = capability_op_call(id("deps"), &cap, &method.name, Vec::new(), args_lowered);
         return Some(decode_capability_reply(
             call,
             wire.as_deref(),
@@ -761,19 +706,16 @@ pub(in crate::emitter) fn lower_capability_call(
         );
         scope_idempotency_key(is_first_party, &method.name, &mut args_lowered, cx);
         if is_first_party && method.name == "claim" && cx.tracks_claims() {
-            let cap_expr = format!("{}.{}", cx.cap_deps_expr(), recv.name);
             let cap_node = member(cx.cap_deps_node(), &recv.name);
-            return Some(tracked_claim_call(cap_node, &cap_expr, args_lowered, cx));
+            return Some(tracked_claim_call(cap_node, args_lowered, cx));
         }
         let wire = capability_wire(e, cx);
         let args_lowered = encode_capability_args(wire.as_deref(), args_lowered, cx);
         let call = capability_op_call(
             cx.cap_deps_node(),
-            cx.cap_deps_expr().to_string(),
             &recv.name,
             &method.name,
             capability_call_type_args_node(type_args, wire.as_deref()),
-            capability_call_type_args_ts(type_args, wire.as_deref()),
             args_lowered,
         );
         let decoded = decode_capability_reply(call, wire.as_deref(), &recv.name, &method.name, cx);
@@ -809,19 +751,16 @@ pub(in crate::emitter) fn lower_cross_capability_call(
     );
     scope_idempotency_key(first_party, &method.name, &mut args_lowered, cx);
     if first_party && method.name == "claim" && cx.tracks_claims() {
-        let cap_expr = format!("{}.{}", cx.cap_deps_expr(), cap);
         let cap_node = member(cx.cap_deps_node(), &cap);
-        return Some(tracked_claim_call(cap_node, &cap_expr, args_lowered, cx));
+        return Some(tracked_claim_call(cap_node, args_lowered, cx));
     }
     let wire = capability_wire(e, cx);
     let args_lowered = encode_capability_args(wire.as_deref(), args_lowered, cx);
     let call = capability_op_call(
         cx.cap_deps_node(),
-        cx.cap_deps_expr().to_string(),
         &cap,
         &method.name,
         capability_call_type_args_node(type_args, wire.as_deref()),
-        capability_call_type_args_ts(type_args, wire.as_deref()),
         args_lowered,
     );
     Some(decode_capability_reply(
@@ -837,11 +776,9 @@ pub(in crate::emitter) fn lower_cross_capability_call(
 /// receiver as a node and as text; the type arguments are empty when there is nothing to name.
 fn capability_op_call(
     deps: TsExpr,
-    deps_text: String,
     cap: &str,
     op: &str,
     type_args: Vec<TsType>,
-    type_args_text: String,
     args: Vec<bynk_ts::TsExpr>,
 ) -> bynk_ts::TsExpr {
     {

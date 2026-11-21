@@ -6,15 +6,15 @@
 
 use bynk_check::checker::{Callee, Ty, TyId};
 use bynk_check::kernel_op::{EffectOp, EffectResultOp, HttpResultOp, KernelOp, TestConnectionOp};
-use bynk_ts::{TsArrowBody, TsBinaryOp, TsExpr, TsLit, TsObjectEntry, TsType, print_expr};
+use bynk_ts::{TsArrowBody, TsBinaryOp, TsExpr, TsLit, TsObjectEntry, TsType};
 
-use super::super::lower::{Pre, expect_location, expect_location_raw, str_node};
+use super::super::lower::{Pre, expect_location, str_node};
 use super::super::lower_ctx::LowerCtx;
 use super::super::lower_list::{
     any_ty, arrow, binary, call, const_, fn_type, id, lower_list_kernel, member, param, paren,
     promise, ret, spread, take,
 };
-use super::super::ts_types::{ts_ty, ts_ty_to_ts_type};
+use super::super::ts_types::ts_ty_to_ts_type;
 use super::super::*;
 use super::kernel_container::{
     lower_map_kernel, lower_option_kernel, lower_result_kernel, lower_set_kernel,
@@ -50,7 +50,6 @@ fn lower_effect_kernel_call(
             let recv = pre.lower_node(receiver, cx);
             let after = pre.lower_node(&args[0], cx);
             let exec = cx.exec_node();
-            let exec_text = cx.exec_expr();
             return Some({
                 let n = vec![recv, after, exec];
                 call(id("__bynkWithin"), n)
@@ -89,13 +88,11 @@ fn lower_effect_kernel_call(
             }
             operands.push(head);
             operands.reverse();
-            let operand_count = operands.len();
             let mut children: Vec<bynk_ts::TsExpr> = operands
                 .into_iter()
                 .map(|o| pre.lower_node(o, cx))
                 .collect();
             children.push(cx.exec_node());
-            let exec_text = cx.exec_expr();
             return Some({
                 let mut n = children;
                 let exec = n.pop().expect("the execution context is the last child");
@@ -132,7 +129,6 @@ fn lower_effect_kernel_call(
             if let Some(raw) = &err_raw {
                 children.push(str_node(raw.as_str()));
             }
-            let exec_text = cx.exec_expr();
             return Some({
                 let n = children;
                 call(id("__bynkDetach"), n)
@@ -410,21 +406,15 @@ fn lower_effect_result_kernel(
         },
         _ => None,
     };
-    let (a_ts, b_ts, a_text, b_text) = match peeled {
-        Some((a, b)) => (
-            ts_ty_to_ts_type(a, tys),
-            ts_ty_to_ts_type(b, tys),
-            ts_ty(a, tys),
-            ts_ty(b, tys),
-        ),
+    let (a_ts, b_ts) = match peeled {
+        Some((a, b)) => (ts_ty_to_ts_type(a, tys), ts_ty_to_ts_type(b, tys)),
         // A missing fact (1A.34); the placeholder keeps lowering going.
         None => {
             let missing = cx.missing_fact_ty(
                 e.span,
                 "`Effect[Result[_, _]]` type for an effectful `Result` combinator call",
             );
-            let text = bynk_ts::print_type(&missing);
-            (missing.clone(), missing, text.clone(), text)
+            (missing.clone(), missing)
         }
     };
     let [f] = args else {
@@ -492,32 +482,10 @@ fn lower_effect_result_kernel(
         return_type: None,
         body: Box::new(TsArrowBody::Block(body)),
     };
-    let (t_text, et_text) = (ts_ty(ok, tys), ts_ty(err, tys));
     Some({
         let n = vec![recv, f];
         call(paren(async_arrow), n)
     })
-}
-
-/// The text form of an `EffectResult` combinator, for a receiver or callback that is still text:
-/// an `async` IIFE over `(__e, __f)`. `ts` is `[T, E, A, B]`, the receiver's and the result's
-/// type arguments.
-fn effect_result_text(op: EffectResultOp, ts: &[&str; 4], recv: &str, f: &str) -> String {
-    let [t, et, a_ts, b_ts] = *ts;
-    match op {
-        EffectResultOp::MapOk => format!(
-            "(async (__e: globalThis.Promise<Result<{t}, {et}>>, __f: (x: {t}) => {a_ts}) => {{ const __r = await __e; return __r.tag === \"Ok\" ? Ok(__f(__r.value)) : __r; }})({recv}, {f})"
-        ),
-        EffectResultOp::MapErr => format!(
-            "(async (__e: globalThis.Promise<Result<{t}, {et}>>, __f: (e: {et}) => {b_ts}) => {{ const __r = await __e; return __r.tag === \"Err\" ? Err(__f(__r.error)) : __r; }})({recv}, {f})"
-        ),
-        EffectResultOp::FlatMapOk => format!(
-            "(async (__e: globalThis.Promise<Result<{t}, {et}>>, __f: (x: {t}) => globalThis.Promise<Result<{a_ts}, {et}>>) => {{ const __r = await __e; return __r.tag === \"Ok\" ? await __f(__r.value) : __r; }})({recv}, {f})"
-        ),
-        EffectResultOp::FlatMapErr => format!(
-            "(async (__e: globalThis.Promise<Result<{t}, {et}>>, __f: (e: {et}) => globalThis.Promise<Result<{t}, {b_ts}>>) => {{ const __r = await __e; return __r.tag === \"Err\" ? await __f(__r.error) : __r; }})({recv}, {f})"
-        ),
-    }
 }
 
 /// A receiver as the object of a member access. The printer brackets a binary, a cast, an arrow, a

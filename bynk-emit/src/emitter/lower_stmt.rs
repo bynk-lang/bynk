@@ -16,7 +16,6 @@ use bynk_syntax::ast::{
 use bynk_syntax::span::Span;
 
 use super::ctx::TailSlot;
-use super::internal_fault::FaultSite;
 use super::lower::{
     Lowered, PatPath, Pre, and_join, build_value_bin_op, call_site_principal,
     claim_scope_declaration, emit_pattern_bindings, expect_location_raw, expect_source_text_raw,
@@ -172,7 +171,7 @@ pub(crate) fn emit_block_as_function_body_with_return(
     async_tail: bool,
     return_type: Option<&TypeRef>,
 ) {
-    let body = block_body_with_return(block, cx, indent, async_tail, return_type);
+    let body = block_body_with_return(block, cx, async_tail, return_type);
     render(&body, out, indent, cx);
 }
 
@@ -182,11 +181,10 @@ pub(crate) fn emit_block_as_function_body_with_return(
 pub(crate) fn function_body_stmts(
     block: &Block,
     cx: &mut LowerCtx,
-    indent: usize,
     async_tail: bool,
     return_type: Option<&TypeRef>,
 ) -> Vec<bynk_ts::TsStmt> {
-    block_body_with_return(block, cx, indent, async_tail, return_type).into_stmts()
+    block_body_with_return(block, cx, async_tail, return_type).into_stmts()
 }
 
 /// The items of a function body lowered with its enclosing return type bound,
@@ -194,7 +192,6 @@ pub(crate) fn function_body_stmts(
 pub(super) fn block_body_with_return(
     block: &Block,
     cx: &mut LowerCtx,
-    indent: usize,
     async_tail: bool,
     return_type: Option<&TypeRef>,
 ) -> Body {
@@ -212,7 +209,7 @@ pub(super) fn block_body_with_return(
     // The wrapper's text goes around the body as `Line` items, so the body's
     // checkpoints land at the right offsets without being shifted.
     if cx.claim_scope_used && cx.wraps_claims_in_body() {
-        body = claim_scoped(body, indent);
+        body = claim_scoped(body);
     }
     body
 }
@@ -226,7 +223,7 @@ pub(super) fn block_body_with_return(
 /// The `__claims` initialiser is a node too ([`claim_scope_declaration`], 1A.35a part B). The
 /// layout is the printer's own, which puts the body one `try` block and one closure deeper than
 /// the text wrapper did.
-pub(super) fn claim_scoped(body: Body, indent: usize) -> Body {
+pub(super) fn claim_scoped(body: Body) -> Body {
     use bynk_ts::{TsBindingName, TsExpr, TsLit, TsStmt};
     let ident = |name: &str| TsExpr::Ident(name.to_string());
     let settle = |result: TsExpr, threw: bool| {
@@ -321,7 +318,7 @@ fn emit_block_inner(body: &mut Body, block: &Block, cx: &mut LowerCtx, async_tai
                 let ternary = Pre::new()
                     .finish(ternary_built(cond_expr, then_tail.expr, else_tail.expr))
                     .expr;
-                push_tail(body, cx, ternary, cx.fault_site(block.tail.span));
+                push_tail(body, cx, ternary);
             } else {
                 // A branch hoisted after all — the case `simple_expr` used to
                 // mispredict (#945, and the `ListLit`/`InterpStr` fallthrough
@@ -331,15 +328,9 @@ fn emit_block_inner(body: &mut Body, block: &Block, cx: &mut LowerCtx, async_tai
                 // produces for this shape (both branches are statement-free and
                 // their tails lower as plain expressions), rebuilt from the
                 // values already in hand.
-                let then_body = pure_tail_branch(then_tail, cx, then_block.tail.span);
-                let else_body = pure_tail_branch(else_tail, cx, else_block.tail.span);
-                push_if(
-                    body,
-                    cond_expr,
-                    then_body,
-                    else_body,
-                    cx.fault_site(block.tail.span),
-                );
+                let then_body = pure_tail_branch(then_tail, cx);
+                let else_body = pure_tail_branch(else_tail, cx);
+                push_if(body, cond_expr, then_body, else_body);
             }
         }
         ExprKind::If {
@@ -354,7 +345,7 @@ fn emit_block_inner(body: &mut Body, block: &Block, cx: &mut LowerCtx, async_tai
         _ => {
             let tail = lower_tail_expr(&block.tail, cx, async_tail);
             body.extend(tail.pre_items());
-            push_tail(body, cx, tail.expr, cx.fault_site(block.tail.span));
+            push_tail(body, cx, tail.expr);
         }
     }
     cx.shadow_scopes.pop();
@@ -368,7 +359,7 @@ fn stmt_item(stmt: bynk_ts::TsStmt) -> Item {
 /// function, lambda or arrow body, or, inside a statement-form value expression
 /// ([`hoist_value_as_statement`]), the assignment to its slot followed by a labelled `break`
 /// out of its block. `site` is where a value that is not a node is reported.
-fn push_tail(body: &mut Body, cx: &LowerCtx, value: bynk_ts::TsExpr, site: FaultSite<'_>) {
+fn push_tail(body: &mut Body, cx: &LowerCtx, value: bynk_ts::TsExpr) {
     let n = value;
     match &cx.tail_slot {
         None => body.push(stmt_item(bynk_ts::TsStmt::return_stmt(Some(n), None))),
@@ -389,13 +380,7 @@ fn push_tail(body: &mut Body, cx: &LowerCtx, value: bynk_ts::TsExpr, site: Fault
 /// `if (cond) { then } else { else }` as one `If` node: the condition is a node, and both bodies
 /// are statements ([`Body::to_nodes`], checkpoints carried onto their statements). `site` is
 /// where a condition or body that is not nodes is reported.
-fn push_if(
-    body: &mut Body,
-    cond: bynk_ts::TsExpr,
-    then_body: Body,
-    else_body: Body,
-    site: FaultSite<'_>,
-) {
+fn push_if(body: &mut Body, cond: bynk_ts::TsExpr, then_body: Body, else_body: Body) {
     let cond = cond;
     let then_stmts = then_body.into_stmts();
     let else_stmts = else_body.into_stmts();
@@ -408,7 +393,7 @@ fn push_if(
 }
 
 /// `await <value>;` as an item: an `ExprStmt(Await)` node.
-fn do_item(value: bynk_ts::TsExpr, site: FaultSite<'_>) -> Item {
+fn do_item(value: bynk_ts::TsExpr) -> Item {
     stmt_item(bynk_ts::TsStmt::expr_stmt(
         bynk_ts::TsExpr::Await(Box::new(value)),
         None,
@@ -417,11 +402,7 @@ fn do_item(value: bynk_ts::TsExpr, site: FaultSite<'_>) -> Item {
 
 /// `<target> = <value>;` as an item: an `Assign` node. `target` is a genuine `Ident` or
 /// `Member`.
-pub(super) fn assign_item(
-    target: bynk_ts::TsExpr,
-    value: bynk_ts::TsExpr,
-    site: FaultSite<'_>,
-) -> Item {
+pub(super) fn assign_item(target: bynk_ts::TsExpr, value: bynk_ts::TsExpr) -> Item {
     stmt_item(bynk_ts::TsStmt::assign(target, value, None))
 }
 
@@ -432,7 +413,6 @@ pub(super) fn const_item(
     annot: Option<&TypeRef>,
     value: bynk_ts::TsExpr,
     awaited: bool,
-    site: FaultSite<'_>,
 ) -> Item {
     const_node_item(name, annot, value, awaited)
 }
@@ -461,10 +441,10 @@ pub(super) fn const_node_item(
 /// followed by its `return` (or, #1750, its sink's assignment). Exactly the
 /// body [`emit_block_inner`]'s own `_` arm builds for a statement-free block,
 /// which is what `if_tail` would have recursed into.
-fn pure_tail_branch(tail: Lowered, cx: &LowerCtx, span: Span) -> Body {
+fn pure_tail_branch(tail: Lowered, cx: &LowerCtx) -> Body {
     let mut body = Body::new();
     body.extend(tail.pre_items());
-    push_tail(&mut body, cx, tail.expr, cx.fault_site(span));
+    push_tail(&mut body, cx, tail.expr);
     body
 }
 
@@ -503,9 +483,7 @@ fn lower_tail_expr(e: &Expr, cx: &mut LowerCtx, async_tail: bool) -> Lowered {
                 return pre.finish(ternary_built(cond_expr, then_tail.expr, else_tail.expr));
             }
             let slot_ty = async_tail_slot_ty(e, cx);
-            let slot = hoist_if_slot(
-                &mut pre, slot_ty, cond_expr, then_tail, else_tail, cx, e.span,
-            );
+            let slot = hoist_if_slot(&mut pre, slot_ty, cond_expr, then_tail, else_tail, cx);
             pre.finish(bynk_ts::TsExpr::Ident(slot))
         }
         _ => lower_expr(e, cx),
@@ -824,12 +802,7 @@ fn emit_par(body: &mut Body, p: &bynk_syntax::ast::ParStmt, cx: &mut LowerCtx) {
     // T2.2 (R6.4): see the matching note at `EffectLet`.
     cx.emitted_await = true;
     let hoisted = parts.iter().any(|part| !part.pre.is_empty());
-    body.push(stmt_item(par_node(
-        parts,
-        &pattern,
-        hoisted,
-        cx.fault_site(p.span),
-    )));
+    body.push(stmt_item(par_node(parts, &pattern, hoisted)));
 }
 
 /// One `par` binding: its hoisted statements, value, annotation, and whether
@@ -845,12 +818,7 @@ struct ParPart<'a> {
 /// over thunk arrows (an `await …;` with no binding when the pattern is empty). The array is one
 /// item per line when any part hoisted, in the printer's own layout (the old text indented items
 /// by one column, an odd offset that is normalised here: 1A.14).
-fn par_node(
-    parts: Vec<ParPart>,
-    pattern: &[String],
-    hoisted: bool,
-    site: FaultSite<'_>,
-) -> bynk_ts::TsStmt {
+fn par_node(parts: Vec<ParPart>, pattern: &[String], hoisted: bool) -> bynk_ts::TsStmt {
     let mut items = Vec::with_capacity(parts.len());
     for part in parts {
         let value = part.value;
@@ -918,13 +886,7 @@ fn statement(body: &mut Body, stmt: &Statement, cx: &mut LowerCtx) {
             // either collides with the first `const` of that name — TS2451 —
             // or, one block deeper, shadows it into a TDZ read).
             let bind_name = cx.bind_local_name(&l.name.name);
-            body.push(const_item(
-                &bind_name,
-                l.type_annot.as_ref(),
-                value,
-                false,
-                cx.fault_site(l.span),
-            ));
+            body.push(const_item(&bind_name, l.type_annot.as_ref(), value, false));
         }
         Statement::EffectLet(l) => {
             // `let x <- expr` → `const x = await expr;`
@@ -936,13 +898,7 @@ fn statement(body: &mut Body, stmt: &Statement, cx: &mut LowerCtx) {
             // sources of effectfulness a synchronous-looking IIFE further out
             // needs to know about — see `emitted_await`.
             cx.emitted_await = true;
-            body.push(const_item(
-                &bind_name,
-                l.type_annot.as_ref(),
-                value,
-                true,
-                cx.fault_site(l.span),
-            ));
+            body.push(const_item(&bind_name, l.type_annot.as_ref(), value, true));
         }
         Statement::Expect(a) if a.snapshot.is_some() => {
             // #2842: `expect <value> matches snapshot "<name>"` compares the
@@ -1054,7 +1010,6 @@ fn statement(body: &mut Body, stmt: &Statement, cx: &mut LowerCtx) {
                 &location,
                 &src,
                 (span_start, span_end),
-                cx.fault_site(a.span),
             ));
         }
         Statement::Advance(a) => {
@@ -1081,7 +1036,7 @@ fn statement(body: &mut Body, stmt: &Statement, cx: &mut LowerCtx) {
             body.extend(pre.items());
             // T2.2 (R6.4): see the matching note at `EffectLet`.
             cx.emitted_await = true;
-            body.push(do_item(value, cx.fault_site(d.span)));
+            body.push(do_item(value));
         }
         Statement::Par(p) => emit_par(body, p, cx),
         Statement::Assign(a) => {
@@ -1100,7 +1055,7 @@ fn statement(body: &mut Body, stmt: &Statement, cx: &mut LowerCtx) {
                 Some((var, _)) => member_node(var, &a.target.name),
                 None => bynk_ts::TsExpr::Ident(a.target.name.clone()),
             };
-            body.push(assign_item(target, value, cx.fault_site(a.span)));
+            body.push(assign_item(target, value));
         }
     }
 }
@@ -1144,7 +1099,6 @@ fn expect_item(
     location: &str,
     src: &str,
     (start, end): (usize, usize),
-    site: FaultSite<'_>,
 ) -> Item {
     use bynk_ts::{TsBinaryOp, TsExpr};
     let compare_head = format!("expect {src}\n  expected: {src}\n  actual:   ");
@@ -1344,13 +1298,7 @@ pub(super) fn if_tail(
     else_body.extend(else_bindings.iter().map(super::lower::stmt_item));
     emit_block_inner(&mut else_body, else_block, cx, async_tail);
     cx.shadow_scopes.pop();
-    push_if(
-        body,
-        cond_expr,
-        then_body,
-        else_body,
-        cx.fault_site(cond.span),
-    );
+    push_if(body, cond_expr, then_body, else_body);
 }
 
 /// v0.130: whether a `match` is literal-kind — its scrutinee is a primitive
@@ -1419,16 +1367,10 @@ pub(super) fn match_tail(
     // lowers to a call (`Fallback()`), so it is bound to a temp too.
     let path = if !is_narrowable_path(discriminant) || cx.roots_at_const(discriminant) {
         let tmp = cx.fresh();
-        body.push(const_item(
-            &tmp,
-            None,
-            disc,
-            false,
-            cx.fault_site(discriminant.span),
-        ));
+        body.push(const_item(&tmp, None, disc, false));
         PatPath::ident(&tmp)
     } else {
-        PatPath::from_lowered(disc, cx.fault_site(discriminant.span))
+        PatPath::from_lowered(disc)
     };
     match_dispatch(body, &path, &disc_ty, arms, cx, async_tail);
 }
@@ -1461,7 +1403,6 @@ pub(super) fn match_dispatch(
         .iter()
         .map(|arm| match_case(path, disc_ty, arm, cx, async_tail))
         .collect();
-    let site = cx.fault_site(arms.first().map_or(Span::default(), |a| a.span));
     let cases = cases.into_iter().map(MatchCase::into_node).collect();
     body.push(stmt_item(bynk_ts::TsStmt::switch_stmt(
         scrutinee.node().clone(),
@@ -1652,14 +1593,14 @@ fn match_body(body: &mut Body, arm_body: &MatchBody, cx: &mut LowerCtx, async_ta
             }
             let tail = lower_tail_expr(e, cx, async_tail);
             body.extend(tail.pre_items());
-            push_tail(body, cx, tail.expr, cx.fault_site(e.span));
+            push_tail(body, cx, tail.expr);
         }
         MatchBody::Block(b) => emit_block_inner(body, b, cx, async_tail),
     }
 }
 
 /// `if (cond) { then }` as one `If` node over a body of statements (which keeps its marks).
-fn push_if_then(body: &mut Body, cond: bynk_ts::TsExpr, then: Body, site: FaultSite<'_>) {
+fn push_if_then(body: &mut Body, cond: bynk_ts::TsExpr, then: Body) {
     body.push(stmt_item(bynk_ts::TsStmt::if_stmt(
         cond,
         bynk_ts::TsStmt::block(then.into_stmts(), None),
@@ -1696,7 +1637,6 @@ fn match_if_chain(
         // binding a read resolves to, not whether the arm also happens to
         // emit a wrapping JS block.
         cx.shadow_scopes.push(HashMap::new());
-        let site = cx.fault_site(arm.span);
         let mut tests = Vec::new();
         pattern_tests(path, *disc_ty, &arm.pattern, cx, &mut tests);
         let has_tests = !tests.is_empty();
@@ -1726,13 +1666,13 @@ fn match_if_chain(
                 arm_body.extend(guard_lowered.pre_items());
                 let mut guarded = Body::new();
                 match_body(&mut guarded, &arm.body, cx, async_tail);
-                push_if_then(arm_body, guard_lowered.expr, guarded, site);
+                push_if_then(arm_body, guard_lowered.expr, guarded);
             } else {
                 match_body(arm_body, &arm.body, cx, async_tail);
             }
         }
         if has_tests {
-            push_if_then(body, and_join(tests), nested, site);
+            push_if_then(body, and_join(tests), nested);
         } else if needs_block {
             body.push(stmt_item(bynk_ts::TsStmt::block(nested.into_stmts(), None)));
         }
@@ -1927,7 +1867,7 @@ mod body_tests {
                 generics: Vec::new(),
                 params: Vec::new(),
                 return_type: None,
-                body: claim_scoped(inner, INDENT_STEP).into_stmts(),
+                body: claim_scoped(inner).into_stmts(),
                 is_async: false,
                 inline: false,
             },
@@ -2124,16 +2064,7 @@ mod body_tests {
             let mut as_node = Body::new();
             as_node.push(Item::Mark(Span::new(0, 10)));
             let ru = RuntimeUse::default();
-            push_if(
-                &mut as_node,
-                ident("k"),
-                then_body(),
-                else_body(),
-                FaultSite {
-                    sink: &ru,
-                    span: Span::default(),
-                },
-            );
+            push_if(&mut as_node, ident("k"), then_body(), else_body());
             assert!(matches!(as_node.0.last(), Some(Item::Node(_))));
             let mut as_lines = Body::new();
             as_lines.push(Item::Mark(Span::new(0, 10)));
@@ -2170,7 +2101,6 @@ mod body_tests {
             bynk_ts::TsExpr::Text("k".into()),
             then,
             Body::new(),
-            site,
         );
         assert!(matches!(body.0.first(), Some(Item::Node(_))));
         let faults = ru.take_faults();
@@ -2195,10 +2125,10 @@ mod body_tests {
             callee: Box::new(ident("f")),
             args: vec![ident("x")],
         };
-        assert_eq!(printed(&do_item(call(), site)), "await f(x);\n");
+        assert_eq!(printed(&do_item(call())), "await f(x);\n");
         let member = || member_node("__state", "count");
         assert_eq!(
-            printed(&assign_item(member(), call(), site)),
+            printed(&assign_item(member(), call())),
             "__state.count = f(x);\n"
         );
         assert!(ru.take_faults().is_empty());
@@ -2835,7 +2765,6 @@ mod expect_item_tests {
                 raw,
                 raw,
                 (3, 9),
-                site,
             ));
             let head = esc(&format!("expect {raw}\n  expected: {raw}\n  actual:   "));
             let want = format!(
@@ -2851,7 +2780,6 @@ mod expect_item_tests {
                 raw,
                 raw,
                 (3, 9),
-                site,
             ));
             assert_eq!(
                 msg,
@@ -2880,7 +2808,6 @@ mod expect_item_tests {
             "t:1:1",
             "ok",
             (0, 2),
-            site,
         ));
         assert_eq!(
             got,
@@ -2892,8 +2819,7 @@ mod expect_item_tests {
                 ExpectDetail::Message(String::new()),
                 "",
                 "",
-                (0, 0),
-                site
+                (0, 0)
             ),
             Item::Node(_)
         ));

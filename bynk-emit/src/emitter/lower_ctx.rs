@@ -456,17 +456,6 @@ impl<'a> LowerCtx<'a> {
         self.handler().map(|h| h.owning_context.as_str())
     }
 
-    /// #2719: the expression naming the execution context: the hidden `__exec`
-    /// parameter inside a function or method (a lambda there closes over it),
-    /// the handler's `deps.__exec` everywhere else (a test `case` body's deps
-    /// carry the harness's double).
-    pub(crate) fn exec_expr(&self) -> String {
-        match &self.mode {
-            BodyMode::FreeFn | BodyMode::GivenFn { .. } | BodyMode::Method => "__exec".to_string(),
-            _ => format!("{}.__exec", self.cap_deps_expr()),
-        }
-    }
-
     /// [`Self::exec_expr`] as a node, built from the same `BodyMode` and
     /// `HandlerShared` facts (1A.6), never by parsing the string.
     pub(crate) fn exec_node(&self) -> bynk_ts::TsExpr {
@@ -478,15 +467,6 @@ impl<'a> LowerCtx<'a> {
                 object: Box::new(self.cap_deps_node()),
                 property: "__exec".to_string(),
             },
-        }
-    }
-
-    /// v0.12: the receiver expression a capability call resolves against.
-    pub(crate) fn cap_deps_expr(&self) -> &str {
-        if self.deps_on_this() {
-            "this.deps"
-        } else {
-            "deps"
         }
     }
 
@@ -572,31 +552,6 @@ impl<'a> LowerCtx<'a> {
     /// v0.59: the test body's source context, for `assert`/`expect` locations.
     pub(crate) fn assert_loc(&self) -> Option<&AssertLoc> {
         self.test().and_then(|t| t.assert_loc.as_ref())
-    }
-
-    /// #3580: wrap `call`, a lowered call expression, in a trace step when this is
-    /// a traced build, naming its kind, its target and the `.bynk` call site at
-    /// `offset`; otherwise `call` unchanged, so a deploy build's output is
-    /// byte-identical. The call is the wrapper's argument, so its arguments
-    /// evaluate where they always did.
-    pub(crate) fn trace_step(
-        &self,
-        kind: &str,
-        target: &str,
-        offset: usize,
-        call: String,
-    ) -> String {
-        let Some(loc) = self.module.trace.as_ref() else {
-            return call;
-        };
-        self.runtime_use().note_trace_step();
-        let (line, col) = bynk_syntax::span::line_col(&loc.source, offset);
-        let path = loc.rel_path.replace('\\', "/");
-        format!(
-            "__traceStep(\"{kind}\", \"{}\", {{ file: \"{}\", line: {line}, col: {col} }})({call})",
-            escape_ts_string(target),
-            escape_ts_string(&path),
-        )
     }
 
     /// [`Self::trace_step`] over a call node (1A.24, #3725, Decision C): the same wrapper, built
@@ -1263,23 +1218,13 @@ impl<'a> LowerCtx<'a> {
         let factory = agent_factory_name(agent);
         let workers = matches!(self.target(), BuildTarget::Workers);
         // The deps argument is read only on Workers, where the factory reaches the agent's namespace.
-        let (deps_text, deps_env) = if workers {
-            (
-                self.cap_deps_expr().to_string(),
-                Some(bynk_ts::TsExpr::Member {
-                    object: Box::new(self.cap_deps_node()),
-                    property: "env".to_string(),
-                }),
-            )
-        } else {
-            (String::new(), None)
-        };
-        {
-            let k = vec![key];
-            let mut args = k;
-            args.extend(deps_env);
-            call(id(&factory), args)
-        }
+        let deps_env = workers.then(|| bynk_ts::TsExpr::Member {
+            object: Box::new(self.cap_deps_node()),
+            property: "env".to_string(),
+        });
+        let mut args = vec![key];
+        args.extend(deps_env);
+        call(id(&factory), args)
     }
 
     /// #527: note that the body calls `agent.method`, folding the method's

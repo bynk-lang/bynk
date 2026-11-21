@@ -48,7 +48,7 @@ use super::lower_stmt::{
 };
 use super::ts_types::{
     ts_base, ts_ty_to_ts_type, ts_type_ref_to_ts_type, unchecked_construct,
-    unchecked_construct_test, unchecked_construct_test_node,
+    unchecked_construct_test_node,
 };
 use super::*;
 
@@ -507,9 +507,7 @@ pub(super) fn hoist_if_slot(
     then_tail: Lowered,
     else_tail: Lowered,
     cx: &mut LowerCtx,
-    at: bynk_syntax::span::Span,
 ) -> String {
-    let site = cx.fault_site(at);
     let slot = cx.fresh();
     // The slot needs its type spelled out. TypeScript's "evolving `let`" inference gives up
     // once a branch also `return`s (TS7034/TS7005 under `--strict`), which is exactly the shape
@@ -759,25 +757,6 @@ fn lower_const_literal_node(e: &Expr) -> Option<bynk_ts::TsExpr> {
         },
         _ => None,
     }
-}
-
-/// The text of a unary operator applied to its operand's lowered `inner`.
-///
-/// A negated negation (`- -x`, `- -5`) would otherwise splice to `--x`, which
-/// TypeScript reads as a pre-decrement (or, on a literal, a syntax error), so a
-/// `-` operand whose text begins with `-` is bracketed, as the `bynk_ts`
-/// printer does for `TsUnaryOp::Neg`: `-(-x)`.
-fn unary_text(op: UnaryOp, inner: &str) -> String {
-    let sym = match op {
-        UnaryOp::Neg => "-",
-        UnaryOp::Not => "!",
-    };
-    let (open, close) = if op == UnaryOp::Neg && inner.starts_with('-') {
-        ("(", ")")
-    } else {
-        ("", "")
-    };
-    format!("{sym}{open}{inner}{close}")
 }
 
 /// A literal's data, destructured from its `ExprKind` by `lower_expr`'s own
@@ -1035,7 +1014,6 @@ pub(super) fn runtime_ctor_call(
 /// `callee(a, b, …)` over a genuine callee node: a `Call` node, or today's
 /// `callee(a, b)` text (the callee prints exactly as it is spelled).
 pub(super) fn call_built(callee: bynk_ts::TsExpr, args: Vec<bynk_ts::TsExpr>) -> bynk_ts::TsExpr {
-    let callee_text = bynk_ts::print_expr(&callee);
     {
         let args = args;
         bynk_ts::TsExpr::Call {
@@ -1067,13 +1045,6 @@ impl Lowered {
             pre: Vec::new(),
             expr,
         }
-    }
-
-    /// The hoisted statements as lines of text, for a caller that assembles them into text. Each
-    /// prints at depth 0 and yields one entry per line, the printer's own nesting kept as leading
-    /// spaces, so a caller that indents each entry indents every line of a multi-line statement.
-    pub(crate) fn pre_texts(&self) -> Vec<String> {
-        self.pre.iter().flat_map(stmt_lines).collect()
     }
 
     /// The hoisted statements as statement-body items, for the statement emitter.
@@ -1661,7 +1632,6 @@ fn lower_observation(o: &ObservationExpr, cx: &mut LowerCtx) -> bynk_ts::TsExpr 
     };
     let paren = |e: TsExpr| TsExpr::Paren(Box::new(e));
     // The text twin of `recorded_calls`, for the fallbacks below.
-    let calls_text = bynk_ts::print_expr(&calls);
     match &o.matcher {
         ObservationMatcher::NeverCalled => paren(binary(
             TsBinaryOp::StrictEq,
@@ -1709,8 +1679,6 @@ fn lower_observation(o: &ObservationExpr, cx: &mut LowerCtx) -> bynk_ts::TsExpr 
                 let record_ty = bynk_check::checker::call_record_type_name(&o.cap.name, &o.op.name);
                 let pred_lowered = lower_expr(p, cx);
                 // The predicate's hoisted statements go in the arrow body.
-                let pre_src = pred_lowered.pre_texts().join(" ");
-                let site = cx.fault_site(p.span);
                 let pre_stmts: Vec<bynk_ts::TsStmt> = pred_lowered.pre.into_iter().collect();
                 let mut children = vec![pred_lowered.expr];
                 if let Some(c) = count {
@@ -2861,15 +2829,7 @@ fn lower_if(
         // `return` keeps exiting the enclosing function. See
         // `hoist_if_slot`.
         let slot_ty = checked_ty_node(e, cx);
-        let slot = hoist_if_slot(
-            &mut pre,
-            slot_ty,
-            cond_lowered,
-            then_tail,
-            else_tail,
-            cx,
-            e.span,
-        );
+        let slot = hoist_if_slot(&mut pre, slot_ty, cond_lowered, then_tail, else_tail, cx);
         pre.finish(ident_node(&slot))
     } else {
         // T2.2 (R6.4): isolate the effectfulness flag to just this IIFE's own
@@ -2936,7 +2896,6 @@ fn lower_if(
         // ("Unexpected reserved word"), not merely a missed optimisation.
         let needs_async = cx.emitted_await;
         cx.emitted_await = saved_await || needs_async;
-        let site = cx.fault_site(cond.span);
         let branch = bynk_ts::TsStmt::if_else_same_line_stmt(
             cond_lowered,
             bynk_ts::TsStmt::block(then_body.into_stmts(), None),
@@ -3225,7 +3184,6 @@ fn consumed_variant_literal(
     let Some((ty, props)) = shape else {
         return Err(args);
     };
-    let text_ty = bynk_ts::print_type(&ty);
     Ok({
         let c = args;
         let mut entries = vec![bynk_ts::TsObjectEntry::prop(
@@ -3528,10 +3486,9 @@ fn hoist_bool_if(
     then_tail: Lowered,
     else_tail: Lowered,
     cx: &mut LowerCtx,
-    at: bynk_syntax::span::Span,
 ) -> String {
     let ty = Some(bynk_ts::TsType::named("boolean"));
-    hoist_if_slot(pre, ty, cond, then_tail, else_tail, cx, at)
+    hoist_if_slot(pre, ty, cond, then_tail, else_tail, cx)
 }
 
 fn lower_bin_op(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut LowerCtx) -> Lowered {
@@ -3604,7 +3561,6 @@ fn lower_bin_op(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut LowerCtx) -> Lowered
                 },
                 Lowered::node(bool_node(otherwise == "true")),
                 cx,
-                rhs.span,
             );
             return pre.finish(short_circuit(op, lhs_expr, ident_node(&slot)));
         }
@@ -3662,24 +3618,14 @@ fn lower_bin_op(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut LowerCtx) -> Lowered
         }
         if !r.pre.is_empty() && rhs_returns {
             let value = match op {
-                BinOp::And => hoist_bool_if(
-                    &mut pre,
-                    l,
-                    r,
-                    Lowered::node(bool_node(false)),
-                    cx,
-                    rhs.span,
-                ),
-                BinOp::Or => {
-                    hoist_bool_if(&mut pre, l, Lowered::node(bool_node(true)), r, cx, rhs.span)
-                }
+                BinOp::And => hoist_bool_if(&mut pre, l, r, Lowered::node(bool_node(false)), cx),
+                BinOp::Or => hoist_bool_if(&mut pre, l, Lowered::node(bool_node(true)), r, cx),
                 BinOp::Implies => hoist_bool_if(
                     &mut pre,
                     negated_paren(l),
                     Lowered::node(bool_node(true)),
                     r,
                     cx,
-                    rhs.span,
                 ),
                 _ => unreachable!("guarded by the outer `matches!`"),
             };
@@ -3848,7 +3794,6 @@ fn ordered_comparison(
     cmp: bynk_ts::TsExpr,
     children: Vec<bynk_ts::TsExpr>,
 ) -> bynk_ts::TsExpr {
-    let cmp_text = bynk_ts::print_expr(&cmp);
     {
         let c = children;
         let (l, r) = two(c);
@@ -4609,7 +4554,6 @@ fn lower_lambda(e: &Expr, lambda: &LambdaExpr, cx: &mut LowerCtx) -> bynk_ts::Ts
     // receiver temp inside the lambda is read only inside it, and hoisting its
     // declaration out would share one slot between the lambda's invocations.
     let saved_hoist = cx.is_temp_hoist.take();
-    let site = cx.fault_site(lambda.body.span);
     let result: bynk_ts::TsExpr = match &lambda.body.kind {
         ExprKind::Block(b) => {
             // The body keeps its marks (1A.15, Decision D).
@@ -4725,7 +4669,6 @@ fn lower_match_as_iife(discriminant: &Expr, arms: &[MatchArm], cx: &mut LowerCtx
     cx.emitted_await = saved_await || needs_async;
     cx.return_ty = saved;
     cx.tail_slot = saved_slot;
-    let site = cx.fault_site(discriminant.span);
     let params = vec![bynk_ts::TsParam::new("__d".to_string(), None)];
     pre.finish(arrow_call(
         params,
@@ -4764,7 +4707,7 @@ impl PatPath {
 
     /// The path a lowered scrutinee is read at. A value that is not a node is a compiler fault,
     /// reported at `site` (see [`bynk_ts::TsExpr::into_node`]).
-    pub(super) fn from_lowered(value: bynk_ts::TsExpr, site: FaultSite<'_>) -> Self {
+    pub(super) fn from_lowered(value: bynk_ts::TsExpr) -> Self {
         PatPath { node: value }
     }
 
@@ -5381,10 +5324,7 @@ fn lower_is(value: &Expr, pattern: &Pattern, cx: &mut LowerCtx) -> Lowered {
         }
         return pre.finish(refined_check_as_bool(recv, base, refinement.as_ref()));
     }
-    let path = PatPath::from_lowered(
-        pre.absorb_node(cx.is_receiver_ref(value)),
-        cx.fault_site(value.span),
-    );
+    let path = PatPath::from_lowered(pre.absorb_node(cx.is_receiver_ref(value)));
     let scrut_ty = cx.commons().expr_types.get(&value.id).map(|te| te.ty);
     let tested: bynk_ts::TsExpr = match pattern {
         // A bare name binding after `is` matches anything over a sum (ADR 0169).

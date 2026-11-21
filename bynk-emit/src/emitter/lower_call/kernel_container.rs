@@ -9,14 +9,14 @@
 
 use bynk_check::checker::{Ty, TyId};
 use bynk_check::kernel_op::{MapOp, OptionOp, ResultOp, SetOp};
-use bynk_ts::{TsBinaryOp, TsExpr, TsParam, TsType, print_type};
+use bynk_ts::{TsBinaryOp, TsExpr, TsParam, TsType};
 
 use super::super::lower::{Lowered, Pre, str_node};
 use super::super::lower_ctx::LowerCtx;
 use super::super::lower_list::{
     arrow, binary, call, fn_type, id, key_is_plain, member, param, paren, spread, take,
 };
-use super::super::ts_types::{ts_array_elem, ts_ty, ts_ty_to_ts_type};
+use super::super::ts_types::ts_ty_to_ts_type;
 use super::super::*;
 use super::kernel::receiver_object;
 
@@ -142,7 +142,6 @@ pub(in crate::emitter) fn lower_option_kernel(
     let tys = cx.ty_render();
     let mut pre = Pre::new();
     let t = ts_ty_to_ts_type(inner, tys);
-    let ts = print_type(&t);
     let opt = option_of(&t);
     let built: Option<bynk_ts::TsExpr> = match (op, args) {
         (OptionOp::Map, [f]) => {
@@ -158,7 +157,7 @@ pub(in crate::emitter) fn lower_option_kernel(
                     _ => None,
                 },
             );
-            let (b, bs) = (ts_ty_to_ts_type(b, tys), ts_ty(b, tys));
+            let b = ts_ty_to_ts_type(b, tys);
             let kids = operands(&mut pre, cx, &[receiver, f]);
             Some({
                 let n = kids;
@@ -189,7 +188,7 @@ pub(in crate::emitter) fn lower_option_kernel(
                     _ => None,
                 },
             );
-            let (b, bs) = (ts_ty_to_ts_type(b, tys), ts_ty(b, tys));
+            let b = ts_ty_to_ts_type(b, tys);
             let kids = operands(&mut pre, cx, &[receiver, f]);
             Some({
                 let n = kids;
@@ -234,7 +233,7 @@ pub(in crate::emitter) fn lower_option_kernel(
                     _ => None,
                 },
             );
-            let (err, errs) = (ts_ty_to_ts_type(err, tys), ts_ty(err, tys));
+            let err = ts_ty_to_ts_type(err, tys);
             let kids = operands(&mut pre, cx, &[receiver, error]);
             Some({
                 let n = kids;
@@ -304,7 +303,6 @@ pub(in crate::emitter) fn lower_result_kernel(
     let mut pre = Pre::new();
     let t = ts_ty_to_ts_type(ok, tys);
     let et = ts_ty_to_ts_type(err, tys);
-    let (ts, ets) = (print_type(&t), print_type(&et));
     let res = result_of(&t, &et);
     let built: Option<bynk_ts::TsExpr> = match (op, args) {
         (ResultOp::Map, [f]) => {
@@ -320,7 +318,7 @@ pub(in crate::emitter) fn lower_result_kernel(
                     _ => None,
                 },
             );
-            let (b, bs) = (ts_ty_to_ts_type(b, tys), ts_ty(b, tys));
+            let b = ts_ty_to_ts_type(b, tys);
             let kids = operands(&mut pre, cx, &[receiver, f]);
             Some({
                 let n = kids;
@@ -348,7 +346,7 @@ pub(in crate::emitter) fn lower_result_kernel(
                     _ => None,
                 },
             );
-            let (b, bs) = (ts_ty_to_ts_type(b, tys), ts_ty(b, tys));
+            let b = ts_ty_to_ts_type(b, tys);
             let kids = operands(&mut pre, cx, &[receiver, f]);
             Some({
                 let n = kids;
@@ -377,7 +375,7 @@ pub(in crate::emitter) fn lower_result_kernel(
                     _ => None,
                 },
             );
-            let (fnode, fts) = (ts_ty_to_ts_type(fty, tys), ts_ty(fty, tys));
+            let fnode = ts_ty_to_ts_type(fty, tys);
             let kids = operands(&mut pre, cx, &[receiver, f]);
             Some({
                 let n = kids;
@@ -493,7 +491,6 @@ pub(in crate::emitter) fn lower_set_kernel(
     let tys = cx.ty_render();
     let mut pre = Pre::new();
     let elem_t = ts_ty_to_ts_type(elem, tys);
-    let elem_ts = print_type(&elem_t);
     let built: Option<bynk_ts::TsExpr> = match (op, args) {
         (SetOp::Length, []) => {
             let recv = pre.lower_node(receiver, cx);
@@ -583,7 +580,6 @@ pub(in crate::emitter) fn lower_map_kernel(
     let mut pre = Pre::new();
     let key_t = ts_ty_to_ts_type(key, tys);
     let val_t = ts_ty_to_ts_type(val, tys);
-    let (key_ts, val_ts) = (print_type(&key_t), print_type(&val_t));
     let built: Option<bynk_ts::TsExpr> = match (op, args) {
         (MapOp::Length, []) => {
             let recv = pre.lower_node(receiver, cx);

@@ -91,15 +91,6 @@ pub(super) fn ts_base(b: BaseType) -> &'static str {
 /// #2622: the TypeScript type of a `Decimal` (see `runtime/src/decimal.ts`).
 pub(crate) const DECIMAL_TS_TYPE: &str = "{ readonly coefficient: bigint; readonly scale: number }";
 
-/// #2622: a `Decimal` literal as a TypeScript object literal - no runtime
-/// import. `coef` is the signed coefficient digits.
-pub(crate) fn decimal_ts_literal(coef: &str, scale: u32) -> String {
-    format!(
-        "{{ coefficient: {}n, scale: {scale} }}",
-        decimal_signed_coef(coef)
-    )
-}
-
 pub fn ts_type_ref(r: &TypeRef) -> String {
     ts_type_ref_with(r, None)
 }
@@ -680,27 +671,6 @@ mod ts_type_ref_tests {
 /// by adding `TsType::Union` (see its own doc).
 pub(super) fn ts_ty(t: TyId, tys: TyRender<'_>) -> String {
     bynk_ts::print_type(&ts_ty_to_ts_type(t, tys))
-}
-
-/// `elem_ts` (a [`ts_ty`] rendering) made safe to suffix with `[]`, for the
-/// kernel lowerings that `format!` an array type around an element's text
-/// rather than building a [`TsType::Array`]. `[]` binds tighter than a prefix
-/// `readonly`, a function arrow, `|` and `&`, so `readonly readonly T[][]`
-/// (TS1354) or `(a0: T) => T[]` would be misread; such an element is
-/// parenthesised. The check is on text, so it is conservative — an operator
-/// nested inside a generic argument parenthesises too, which is redundant but
-/// still valid TypeScript. The printer's own `TsType::Array` arm applies the
-/// exact structural rule.
-pub(super) fn ts_array_elem(elem_ts: &str) -> String {
-    if elem_ts.starts_with("readonly ")
-        || elem_ts.contains("=>")
-        || elem_ts.contains('|')
-        || elem_ts.contains('&')
-    {
-        format!("({elem_ts})")
-    } else {
-        elem_ts.to_string()
-    }
 }
 
 /// #1927: how the module being emitted spells a type it names. A unit's own

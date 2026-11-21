@@ -7,7 +7,7 @@
 //! (`TsArrowBody::Multiline`, Decision C), one statement per line.
 
 use bynk_check::checker::Callee;
-use bynk_ts::{TsBinaryOp, TsExpr, TsLit, TsStmt, TsType, TsUnaryOp, print_type};
+use bynk_ts::{TsBinaryOp, TsExpr, TsLit, TsStmt, TsType, TsUnaryOp};
 
 use super::super::lower::{Lowered, Pre, member_node};
 use super::super::lower_ctx::LowerCtx;
@@ -22,17 +22,15 @@ use super::query::{
 };
 
 /// A store field's handle, `<var>.<field>`, as a node (the working-state variable and the
-/// field's name are each an identifier) and as the text the fallbacks print.
+/// field's name are each an identifier).
 struct Receiver {
     node: TsExpr,
-    text: String,
 }
 
 impl Receiver {
     fn new(var: &str, field: &str) -> Self {
         Receiver {
             node: member(id(var), field),
-            text: format!("{var}.{field}"),
         }
     }
 }
@@ -96,12 +94,6 @@ fn throw_error(message: &str) -> TsStmt {
 /// `(f)(x)`: a Bynk function value applied.
 fn apply(f: TsExpr, x: TsExpr) -> TsExpr {
     call(paren(f), vec![x])
-}
-
-/// `String(x)` as text: a key may be a number or a branded value, and the handle is keyed by
-/// its string.
-fn key_text(x: &str) -> String {
-    format!("String({x})")
 }
 
 /// The operation's arguments as bridge values, lowered in order.
@@ -233,7 +225,6 @@ fn lower_store_held_map_call(
         )
         && let Some(f_node) = cx.agent_held_map_frame(&id_.name).cloned()
     {
-        let f_ts = print_type(&f_node);
         let var = cx.agent_store_var().to_string();
         let m = Receiver::new(&var, &id_.name);
         let a = lower_args(args, cx, pre);
@@ -669,10 +660,6 @@ fn lower_store_cache_call(
         // Cache reaping (#3189): note the clock the op read against the state the handler
         // commits, so the commit can delete the entries that clock says are expired. Each
         // operation reads it once, in its own `const __now`.
-        let now_text = format!(
-            "__noteClock({var}, await {}.Clock.now())",
-            cx.cap_deps_expr()
-        );
         let deps = cx.cap_deps_node();
         let now = || {
             const_(
@@ -826,7 +813,6 @@ fn lower_store_log_call(
         let g = Receiver::new(&var, &id_.name);
         let a = lower_args(args, cx, pre);
         if method.name == "append" {
-            let now_text = format!("await {}.Clock.now()", cx.cap_deps_expr());
             let now = awaited_now(cx.cap_deps_node());
             return Some({
                 let c = a;

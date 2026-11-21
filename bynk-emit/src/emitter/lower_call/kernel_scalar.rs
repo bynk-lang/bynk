@@ -9,7 +9,7 @@
 use bynk_check::kernel_op::{BytesOp, DecimalOp, DurationOp, FloatOp, InstantOp, IntOp, StringOp};
 use bynk_ts::{TsArrowBody, TsBinaryOp, TsExpr, TsType};
 
-use super::super::lower::{Lowered, Pre, paren, str_node};
+use super::super::lower::{Lowered, Pre, str_node};
 use super::super::lower_ctx::LowerCtx;
 use super::super::lower_list::{arrow, call, id, member, param, spread, take, zero};
 use super::super::{Expr, ExprKind, rounding_mode};
@@ -65,7 +65,7 @@ fn plain_call(name: &str, kids: Vec<bynk_ts::TsExpr>) -> bynk_ts::TsExpr {
 
 /// `recv.prop`. `bracketed` is the text fallback's spelling (`(recv).prop`); the node form
 /// is bracketed only where precedence needs it.
-fn member_of(recv: bynk_ts::TsExpr, prop: &str, bracketed: bool) -> bynk_ts::TsExpr {
+fn member_of(recv: bynk_ts::TsExpr, prop: &str) -> bynk_ts::TsExpr {
     {
         let n = vec![recv];
         let [recv] = take::<1, _>(n);
@@ -75,7 +75,7 @@ fn member_of(recv: bynk_ts::TsExpr, prop: &str, bracketed: bool) -> bynk_ts::TsE
 
 /// `recv.method(args)`; the first child is the receiver. `bracketed` is the text fallback's
 /// spelling (`(recv).method(args)`).
-fn method_of(kids: Vec<bynk_ts::TsExpr>, method: &str, bracketed: bool) -> bynk_ts::TsExpr {
+fn method_of(kids: Vec<bynk_ts::TsExpr>, method: &str) -> bynk_ts::TsExpr {
     {
         let mut n = kids;
         let recv = receiver_object(n.remove(0));
@@ -311,7 +311,7 @@ pub(in crate::emitter) fn lower_bytes_kernel(
     let built: Option<bynk_ts::TsExpr> = match (op, args) {
         (BytesOp::Length, []) => {
             let [recv] = take::<1, _>(operands(&mut pre, cx, &[receiver]));
-            Some(member_of(recv, "length", true))
+            Some(member_of(recv, "length"))
         }
         (BytesOp::ToBase64, []) => {
             let kids = operands(&mut pre, cx, &[receiver]);
@@ -328,7 +328,7 @@ pub(in crate::emitter) fn lower_bytes_kernel(
         // aliases a buffer a binding may still hold.
         (BytesOp::Slice, [lo, hi]) => {
             let kids = operands(&mut pre, cx, &[receiver, lo, hi]);
-            Some(slice_clamped(kids, true))
+            Some(slice_clamped(kids))
         }
         (BytesOp::Concat, [other]) => {
             let kids = operands(&mut pre, cx, &[receiver, other]);
@@ -357,7 +357,7 @@ pub(in crate::emitter) fn lower_bytes_kernel(
 
 /// `recv.slice(globalThis.Math.max(0, lo), globalThis.Math.max(0, hi))`, the `Bytes` and
 /// `String` slice (`bracketed` is the text fallback's receiver spelling).
-fn slice_clamped(kids: Vec<bynk_ts::TsExpr>, bracketed: bool) -> bynk_ts::TsExpr {
+fn slice_clamped(kids: Vec<bynk_ts::TsExpr>) -> bynk_ts::TsExpr {
     {
         let n = kids;
         let [recv, lo, hi] = take::<3, _>(n);
@@ -366,26 +366,6 @@ fn slice_clamped(kids: Vec<bynk_ts::TsExpr>, bracketed: bool) -> bynk_ts::TsExpr
             vec![at_least_zero(lo), at_least_zero(hi)],
         )
     }
-}
-
-/// v0.22a: lower a built-in `String` kernel method (ADR 0046). Pinned
-/// semantics: `replace` is replace-**all** (`replaceAll`) and inserts its
-/// replacement literally (#1650); `chars()` is
-/// code **points** (`[...s]`), not code units; `slice` clamps negative
-/// indices to `0` (no TS wrap-around); `indexOf` turns `-1` into `None`.
-/// K6c (#2600): a regex method's pattern literal as a `RegExp` construction,
-/// its inline flags moved into the flags argument, plus `extra` flags (`g` for
-/// a global scan, `y` for a sticky one). `anchored` pins it to the whole
-/// string with lookarounds rather than `^…$`, which an `m` flag would turn into
-/// line anchors. V8 caches a `RegExp`'s compilation by source and
-/// flags, so building one per call compiles each pattern once; a fresh object
-/// also keeps no `lastIndex` state between calls.
-fn regex_construction(literal: &str, extra: &str, anchored: bool) -> String {
-    let (source, flags) = regex_parts(literal, extra, anchored);
-    format!(
-        "new globalThis.RegExp(\"{}\", \"{flags}\")",
-        crate::emitter::escape_ts_string(&source)
-    )
 }
 
 /// The `RegExp` source and flags [`regex_construction`] writes.
@@ -527,12 +507,6 @@ fn ts_named(name: &str) -> TsType {
 fn option_string() -> TsType {
     TsType::named_with_args("Option", vec![ts_named("string")])
 }
-
-/// The capture-group mapper the `find` and `findAll` regex arms share, as text:
-/// `(__m: RegExpMatchArray): Option<string>[] => [...__m].map(…)`.
-const GROUPS_TEXT: &str = "(__m: globalThis.RegExpMatchArray): Option<string>[] => \
-                           [...__m].map((__g: string | undefined): Option<string> => \
-                           __g === undefined ? None : Some(__g))";
 
 /// `(name: ty): ret => body`, a one-parameter arrow with a declared return type.
 fn typed_arrow(name: &str, ty: TsType, ret: TsType, body: TsExpr) -> TsExpr {
@@ -692,19 +666,19 @@ pub(in crate::emitter) fn lower_string_kernel(
     let built: Option<bynk_ts::TsExpr> = match (op, args) {
         (StringOp::Length, []) => {
             let [recv] = take::<1, _>(operands(&mut pre, cx, &[receiver]));
-            Some(member_of(recv, "length", true))
+            Some(member_of(recv, "length"))
         }
         (StringOp::Trim, []) => {
             let kids = operands(&mut pre, cx, &[receiver]);
-            Some(method_of(kids, "trim", false))
+            Some(method_of(kids, "trim"))
         }
         (StringOp::ToUpper, []) => {
             let kids = operands(&mut pre, cx, &[receiver]);
-            Some(method_of(kids, "toUpperCase", false))
+            Some(method_of(kids, "toUpperCase"))
         }
         (StringOp::ToLower, []) => {
             let kids = operands(&mut pre, cx, &[receiver]);
-            Some(method_of(kids, "toLowerCase", false))
+            Some(method_of(kids, "toLowerCase"))
         }
         (StringOp::Chars, []) => {
             let kids = operands(&mut pre, cx, &[receiver]);
@@ -716,19 +690,19 @@ pub(in crate::emitter) fn lower_string_kernel(
         }
         (StringOp::Split, [sep]) => {
             let kids = operands(&mut pre, cx, &[receiver, sep]);
-            Some(method_of(kids, "split", false))
+            Some(method_of(kids, "split"))
         }
         (StringOp::Contains, [sub]) => {
             let kids = operands(&mut pre, cx, &[receiver, sub]);
-            Some(method_of(kids, "includes", false))
+            Some(method_of(kids, "includes"))
         }
         (StringOp::StartsWith | StringOp::EndsWith, [sub]) => {
             let kids = operands(&mut pre, cx, &[receiver, sub]);
-            Some(method_of(kids, op.name(), false))
+            Some(method_of(kids, op.name()))
         }
         (StringOp::Concat, [other]) => {
             let kids = operands(&mut pre, cx, &[receiver, other]);
-            Some(method_of(kids, "concat", false))
+            Some(method_of(kids, "concat"))
         }
         (StringOp::Replace, [from, to]) => {
             let kids = operands(&mut pre, cx, &[receiver, from, to]);
@@ -749,7 +723,7 @@ pub(in crate::emitter) fn lower_string_kernel(
         }
         (StringOp::Slice, [lo, hi]) => {
             let kids = operands(&mut pre, cx, &[receiver, lo, hi]);
-            Some(slice_clamped(kids, false))
+            Some(slice_clamped(kids))
         }
         (StringOp::IndexOf, [sub]) => {
             let kids = operands(&mut pre, cx, &[receiver, sub]);
@@ -812,7 +786,7 @@ pub(in crate::emitter) fn lower_decimal_kernel(
     let built: Option<bynk_ts::TsExpr> = match (op, args) {
         (DecimalOp::Scale, []) => {
             let [recv] = take::<1, _>(operands(&mut pre, cx, &[receiver]));
-            Some(member_of(recv, "scale", true))
+            Some(member_of(recv, "scale"))
         }
         (DecimalOp::ToString, []) => {
             let kids = operands(&mut pre, cx, &[receiver]);

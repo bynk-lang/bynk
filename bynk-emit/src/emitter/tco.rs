@@ -284,7 +284,6 @@ pub(crate) fn loop_body_stmts(
     plan: &Rc<TcoPlan>,
     cx: &mut LowerCtx,
     async_tail: bool,
-    base: usize,
     guards: impl FnOnce(&mut LowerCtx) -> Body,
 ) -> Vec<bynk_ts::TsStmt> {
     let mut inner = Body::new();
@@ -301,7 +300,6 @@ pub(crate) fn loop_body_stmts(
     inner.append(block_body_with_return(
         &f.body,
         cx,
-        base + INDENT_STEP,
         async_tail,
         Some(&f.return_type),
     ));
@@ -353,13 +351,12 @@ pub(super) fn emit_continue(body: &mut Body, e: &Expr, cx: &mut LowerCtx) -> boo
     // `f(b, a)` swaps and `f(n - 1, acc + n)` reads the old `n`.
     let temps: Vec<String> = vals.iter().map(|_| cx.fresh()).collect();
     for (v, t) in vals.into_iter().zip(&temps) {
-        body.push(const_item(t, None, v, false, cx.fault_site(e.span)));
+        body.push(const_item(t, None, v, false));
     }
     for (s, t) in plan.slots.iter().zip(&temps) {
         body.push(assign_item(
             bynk_ts::TsExpr::Ident(s.var.clone()),
             bynk_ts::TsExpr::Ident(t.clone()),
-            cx.fault_site(e.span),
         ));
     }
     body.push(Item::Node(Box::new(bynk_ts::TsStmt::continue_label_stmt(

@@ -214,7 +214,6 @@ fn parse_iife(is_int: bool, s: bynk_ts::TsExpr) -> bynk_ts::TsExpr {
 /// the runtime's `__bynkSetOf<T>(xs)`.
 fn set_of(plain: bool, elem: TsType, xs: bynk_ts::TsExpr) -> bynk_ts::TsExpr {
     let one = |c: Vec<TsExpr>| c.into_iter().next().expect("one child");
-    let text_ty = bynk_ts::print_type(&elem);
     let node_elem = elem.clone();
     (move |c| {
         if plain {

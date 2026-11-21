@@ -52,7 +52,6 @@ pub(in crate::emitter) fn lower_stream_method(
     op: StreamOp,
     a: Vec<bynk_ts::TsExpr>,
 ) -> Option<bynk_ts::TsExpr> {
-    let claim = STREAM_CLAIM;
     let mut kids = vec![source];
     kids.extend(a);
     Some(match (op, kids.len()) {
@@ -208,17 +207,6 @@ macro_rules! stream_read_symbol {
 
 /// The key as a string, for the node form of the claim.
 const STREAM_READ_SYMBOL: &str = stream_read_symbol!();
-
-/// K-streams (#2623): mark the stream `__s` as read, or fault if it already
-/// was. The mark lives on the stream object under a registered symbol, so it
-/// holds across modules, and the runtime's response bodies set the same one
-/// (`claimStream` in `bynk-emit/runtime/src/http.ts`). Inline, so a file that
-/// uses streams still needs no runtime import (ADR 0128 D6).
-const STREAM_CLAIM: &str = concat!(
-    "const __m = __s as unknown as { [k: symbol]: boolean }; const __k = globalThis.Symbol.for(\"",
-    stream_read_symbol!(),
-    "\"); if (__m[__k]) { throw new globalThis.Error(\"bynk: a stream can be read only once\"); } __m[__k] = true;"
-);
 
 /// What `lower_query_method` needs to know about the receiver beyond its
 /// already-lowered arguments: the element types, and whether a key-based
@@ -454,10 +442,6 @@ impl Arm<'_> {
     /// The operation as a node: `node` receives the source, then the arguments. A source or
     /// argument that is not a node is a compiler fault, reported at the call (1A.35a part C).
     fn built_vec(self, node: impl FnOnce(TsExpr, Vec<TsExpr>) -> TsExpr) -> bynk_ts::TsExpr {
-        let site = FaultSite {
-            sink: self.shape.runtime_use,
-            span: self.shape.span,
-        };
         let (source, invoke) = match self.source {
             QuerySource::Values(source) => (source, false),
             QuerySource::Thunk(recv) => (recv, true),

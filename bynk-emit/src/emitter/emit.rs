@@ -955,17 +955,9 @@ fn emit_method(
     // `requires` to re-check per iteration; if methods gain them, they belong in
     // the guards closure below.
     let body = if let Some(plan) = super::tco::plan(f, commons, unit.render(commons)) {
-        super::tco::loop_body_stmts(f, &plan, &mut cx, is_async, INDENT_STEP * 2, |_| {
-            Body::new()
-        })
+        super::tco::loop_body_stmts(f, &plan, &mut cx, is_async, |_| Body::new())
     } else {
-        function_body_stmts(
-            &f.body,
-            &mut cx,
-            INDENT_STEP * 2,
-            is_async,
-            Some(&f.return_type),
-        )
+        function_body_stmts(&f.body, &mut cx, is_async, Some(&f.return_type))
     };
     bynk_ts::TsObjectEntry::Method {
         name: method_name.name.clone(),
@@ -1168,17 +1160,11 @@ fn emit_free_fn_in(
             }
             guards
         };
-        super::tco::loop_body_stmts(f, &plan, &mut cx, async_tail, INDENT_STEP, guards)
+        super::tco::loop_body_stmts(f, &plan, &mut cx, async_tail, guards)
     } else if guarded {
         contract_guarded_body_stmts(f, &mut cx, async_tail)
     } else {
-        function_body_stmts(
-            &f.body,
-            &mut cx,
-            INDENT_STEP,
-            async_tail,
-            Some(&f.return_type),
-        )
+        function_body_stmts(&f.body, &mut cx, async_tail, Some(&f.return_type))
     };
 
     // #1486: `no_blank_before` when this function's own doc comment is the
@@ -1417,13 +1403,7 @@ fn contract_guarded_body_stmts(
     let mut body = Body::new();
     requires_guards(&mut body, f, cx);
     // Run the original body, capturing its value as `result` for the `ensures`.
-    let original = block_body_with_return(
-        &f.body,
-        cx,
-        INDENT_STEP * 2,
-        async_tail,
-        Some(&f.return_type),
-    );
+    let original = block_body_with_return(&f.body, cx, async_tail, Some(&f.return_type));
     body.push(iife_const_item("result", async_tail, original));
     // Postcondition guards — `result` (and the parameters) are in scope.
     for c in &f.ensures {
@@ -2897,13 +2877,7 @@ fn provider_op_method(
     for p in &op.params {
         cx.declare_binder(&p.name.name);
     }
-    let body = function_body_stmts(
-        &op.body,
-        &mut cx,
-        INDENT_STEP * 2,
-        effectful,
-        Some(&op.return_type),
-    );
+    let body = function_body_stmts(&op.body, &mut cx, effectful, Some(&op.return_type));
     bynk_ts::TsClassMethod {
         span: Some(op.span),
         ..bynk_ts::TsClassMethod::new(
@@ -3179,7 +3153,6 @@ pub(crate) fn emit_service(
         let lowered_body = block_body_with_return(
             &handler.body,
             &mut cx,
-            INDENT_STEP * 2,
             async_tail,
             Some(&handler.return_type),
         );
@@ -6978,18 +6951,8 @@ fn emit_agent_handlers(
         let async_tail = effectful;
         // A writing store handler's body sits one level deeper, inside the
         // implicit-commit closure.
-        let body_indent = if writes_state {
-            INDENT_STEP * 3
-        } else {
-            INDENT_STEP * 2
-        };
-        let lowered_body = block_body_with_return(
-            &h.body,
-            &mut cx,
-            body_indent,
-            async_tail,
-            Some(&h.return_type),
-        );
+        let lowered_body =
+            block_body_with_return(&h.body, &mut cx, async_tail, Some(&h.return_type));
         let mut deps_members = build_deps_object_ty_with_surface(
             &effective_given(&bynk_model::lower_handler_given_ir(h), &cx),
             &cx,
@@ -7061,7 +7024,7 @@ fn emit_agent_handlers(
         // #3465: an agent handler that claimed settles its claims after the state
         // commit and the events flush, so a failure of either releases them.
         if cx.claim_scope_used {
-            body = claim_scoped(body, INDENT_STEP * 2);
+            body = claim_scoped(body);
         }
         // #2270: anchor the method header and prologue to the handler's own
         // `on call` line. Without this they inherit the previous checkpoint,
@@ -9393,13 +9356,7 @@ fn emit_ws_do_method(
         cx.declare_binder(&p.name.name);
     }
     let async_tail = is_effectful_return(&h.return_type);
-    let body = function_body_stmts(
-        &h.body,
-        &mut cx,
-        INDENT_STEP * 2,
-        async_tail,
-        Some(&h.return_type),
-    );
+    let body = function_body_stmts(&h.body, &mut cx, async_tail, Some(&h.return_type));
     let mut deps_members = build_deps_object_ty_with_surface(
         &effective_given(&bynk_model::lower_handler_given_ir(h), &cx),
         &cx,

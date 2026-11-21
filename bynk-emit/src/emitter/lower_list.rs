@@ -8,13 +8,12 @@ use bynk_check::checker::{NamedKind, Ty, TyId, Types};
 use bynk_check::kernel_op::ListOp;
 use bynk_ts::{
     TsArrowBody, TsBinaryOp, TsBindingName, TsExpr, TsLit, TsParam, TsStmt, TsType, TsUnaryOp,
-    print_type,
 };
 
 use super::internal_fault::FaultSite;
 use super::lower::{Pre, decimal_lit, ident_node, num_lit};
 use super::lower_ctx::LowerCtx;
-use super::ts_types::{TyRender, ts_ty, ts_ty_to_ts_type};
+use super::ts_types::{TyRender, ts_ty_to_ts_type};
 use super::{BaseType, Expr};
 
 /// v0.150 (ADR 0174): peel a `traverseTry`/`parTraverseTry` call's checked type
@@ -43,17 +42,11 @@ pub(super) fn any_ty() -> TsType {
     TsType::named("any")
 }
 
-/// What every arm reads: the call, its receiver and arguments, and the element
-/// type spelled once as a type (`elem_ts`) and as the list parameter's type
-/// (`xs_ts`, `readonly E[]`). Both come from the node, so the text fallbacks and
-/// the node forms bracket a type the same way.
+/// What every arm reads: the call, its receiver and arguments, and the element type as a node.
 struct ListArm<'a> {
     e: &'a Expr,
     receiver: &'a Expr,
     args: &'a [Expr],
-    elem_ts: String,
-    xs_ts: String,
-    /// The same element type as a node, for the arms that build nodes.
     elem: TsType,
 }
 
@@ -222,11 +215,6 @@ pub(super) fn promise(t: TsType) -> TsType {
     TsType::named_with_args("globalThis.Promise", vec![t])
 }
 
-/// `T[]` as text, for the text fallbacks.
-pub(super) fn array_ts(t: &TsType) -> String {
-    print_type(&TsType::array(t.clone()))
-}
-
 pub(super) fn zero() -> TsExpr {
     num_lit("0".to_string())
 }
@@ -292,15 +280,11 @@ pub(super) fn lower_list_kernel(
     pre: &mut Pre,
 ) -> Option<bynk_ts::TsExpr> {
     let tys = cx.ty_render();
-    let elem_ts = ts_ty(elem, tys);
-    let elem_node = ts_ty_to_ts_type(elem, tys);
     let a = ListArm {
         e,
         receiver,
         args,
-        xs_ts: print_type(&xs_ty(&elem_node)),
-        elem_ts,
-        elem: elem_node,
+        elem: ts_ty_to_ts_type(elem, tys),
     };
     let p = pre;
     let built: Option<bynk_ts::TsExpr> = match (op, args) {
@@ -375,7 +359,6 @@ fn list_length(a: &ListArm, pre: &mut Pre, cx: &mut LowerCtx) -> bynk_ts::TsExpr
 }
 
 fn list_get(a: &ListArm, index: &Expr, pre: &mut Pre, cx: &mut LowerCtx) -> bynk_ts::TsExpr {
-    let (xs_ts, elem_ts) = (&a.xs_ts, &a.elem_ts);
     let recv = pre.lower_node(a.receiver, cx);
     let idx = pre.lower_node(index, cx);
     {
@@ -452,7 +435,7 @@ fn list_fold(
     pre: &mut Pre,
     cx: &mut LowerCtx,
 ) -> bynk_ts::TsExpr {
-    let (e, elem_ts, xs_ts) = (a.e, &a.elem_ts, &a.xs_ts);
+    let e = a.e;
     let tys = cx.ty_render();
     // The call's checked type is the accumulator type.
     let acc = cx
@@ -461,7 +444,6 @@ fn list_fold(
         .get(&e.id)
         .map(|te| ts_ty_to_ts_type(te.ty, tys))
         .unwrap_or_else(|| cx.missing_fact_ty(e.span, "type for a `fold` call"));
-    let acc_ts = print_type(&acc);
     let recv = pre.lower_node(a.receiver, cx);
     let init = pre.lower_node(init, cx);
     let f = pre.lower_node(f, cx);
@@ -497,7 +479,7 @@ fn list_fold_eff(
     pre: &mut Pre,
     cx: &mut LowerCtx,
 ) -> bynk_ts::TsExpr {
-    let (e, elem_ts, xs_ts) = (a.e, &a.elem_ts, &a.xs_ts);
+    let e = a.e;
     let tys = cx.ty_render();
     // The call's checked type is `Effect[Acc]` — peel for the TS
     // accumulator annotation.
@@ -506,7 +488,6 @@ fn list_fold_eff(
         Some(_) => ts_ty_to_ts_type(cx.commons().expr_types[&e.id].ty, tys),
         None => cx.missing_fact_ty(e.span, "type for a `foldEff` call"),
     };
-    let acc_ts = print_type(&acc);
     let recv = pre.lower_node(a.receiver, cx);
     let init = pre.lower_node(init, cx);
     let f = pre.lower_node(f, cx);
@@ -536,7 +517,6 @@ fn list_fold_eff(
 // order, awaiting each; yields `Promise<void>`. The eager `List`
 // analogue of the `Query.forEach` terminal, emitted inline.
 fn list_for_each(a: &ListArm, f: &Expr, pre: &mut Pre, cx: &mut LowerCtx) -> bynk_ts::TsExpr {
-    let xs_ts = &a.xs_ts;
     let recv = pre.lower_node(a.receiver, cx);
     let f = pre.lower_node(f, cx);
     {
@@ -557,7 +537,6 @@ fn list_for_each(a: &ListArm, f: &Expr, pre: &mut Pre, cx: &mut LowerCtx) -> byn
 // not head-of-line-block the rest. The eager `List` analogue of the
 // `Query.parTraverse` terminal, emitted inline.
 fn list_par_traverse(a: &ListArm, f: &Expr, pre: &mut Pre, cx: &mut LowerCtx) -> bynk_ts::TsExpr {
-    let (xs_ts, elem_ts) = (&a.xs_ts, &a.elem_ts);
     cx.note_settle_all();
     let recv = pre.lower_node(a.receiver, cx);
     let f = pre.lower_node(f, cx);
@@ -583,7 +562,7 @@ fn list_par_traverse(a: &ListArm, f: &Expr, pre: &mut Pre, cx: &mut LowerCtx) ->
 // issues all at once and `Promise.all`s the resolved `Result`s. Both
 // yield `Promise<Result<…>[]>`.
 fn list_traverse_all(a: &ListArm, f: &Expr, pre: &mut Pre, cx: &mut LowerCtx) -> bynk_ts::TsExpr {
-    let (e, xs_ts) = (a.e, &a.xs_ts);
+    let e = a.e;
     let tys = cx.ty_render();
     // The call's checked type is `Effect[List[Result[B, E]]]` — peel to
     // the `Result[B, E]` TS for the output-array annotation.
@@ -594,7 +573,6 @@ fn list_traverse_all(a: &ListArm, f: &Expr, pre: &mut Pre, cx: &mut LowerCtx) ->
         },
         _ => cx.missing_fact_ty(e.span, "`Effect[List[_]]` type for a `traverseAll` call"),
     };
-    let res_arr = array_ts(&res);
     let recv = pre.lower_node(a.receiver, cx);
     let f = pre.lower_node(f, cx);
     {
@@ -624,7 +602,6 @@ fn list_par_traverse_all(
     pre: &mut Pre,
     cx: &mut LowerCtx,
 ) -> bynk_ts::TsExpr {
-    let (xs_ts, elem_ts) = (&a.xs_ts, &a.elem_ts);
     cx.note_settle_all();
     let recv = pre.lower_node(a.receiver, cx);
     let f = pre.lower_node(f, cx);
@@ -657,7 +634,7 @@ fn settle_thunks(a: &ListArm, f: TsExpr) -> TsExpr {
 // `Result[List[T], E']`; `T` and `E` (the element's own `Err` type) type
 // the accumulators.
 fn list_sequence(a: &ListArm, name: ListOp, pre: &mut Pre, cx: &mut LowerCtx) -> bynk_ts::TsExpr {
-    let (e, xs_ts) = (a.e, &a.xs_ts);
+    let e = a.e;
     let tys = cx.ty_render();
     let (ok, err) = match cx.commons().expr_ty(e.id).as_deref() {
         Some(Ty::Result(ok, err)) => {
@@ -676,7 +653,6 @@ fn list_sequence(a: &ListArm, name: ListOp, pre: &mut Pre, cx: &mut LowerCtx) ->
             (missing.clone(), missing)
         }
     };
-    let (ok_arr, err_arr) = (array_ts(&ok), array_ts(&err));
     let recv = pre.lower_node(a.receiver, cx);
     {
         let n = vec![recv];
@@ -747,14 +723,13 @@ fn list_sequence(a: &ListArm, name: ListOp, pre: &mut Pre, cx: &mut LowerCtx) ->
 // awaits each in order, bailing on the first `Err`; `parTraverseTry`
 // issues all at once, then scans the resolved `Result`s in input order.
 fn list_traverse_try(a: &ListArm, f: &Expr, pre: &mut Pre, cx: &mut LowerCtx) -> bynk_ts::TsExpr {
-    let (e, xs_ts) = (a.e, &a.xs_ts);
+    let e = a.e;
     let tys = cx.ty_render();
     let u = list_ok_elem(
         cx.commons().expr_types.get(&e.id).map(|te| te.ty),
         tys,
         cx.fault_site(e.span),
     );
-    let u_arr = array_ts(&u);
     let recv = pre.lower_node(a.receiver, cx);
     let f = pre.lower_node(f, cx);
     {
@@ -784,7 +759,7 @@ fn list_par_traverse_try(
     pre: &mut Pre,
     cx: &mut LowerCtx,
 ) -> bynk_ts::TsExpr {
-    let (e, xs_ts, elem_ts) = (a.e, &a.xs_ts, &a.elem_ts);
+    let e = a.e;
     let tys = cx.ty_render();
     cx.note_settle_all();
     let u = list_ok_elem(
@@ -792,7 +767,6 @@ fn list_par_traverse_try(
         tys,
         cx.fault_site(e.span),
     );
-    let u_arr = array_ts(&u);
     let recv = pre.lower_node(a.receiver, cx);
     let f = pre.lower_node(f, cx);
     {
@@ -855,7 +829,6 @@ fn list_callback(
     pre: &mut Pre,
     cx: &mut LowerCtx,
 ) -> bynk_ts::TsExpr {
-    let elem_ts = &a.elem_ts;
     let recv = pre.lower_node(a.receiver, cx);
     let f = pre.lower_node(f, cx);
     {
@@ -894,7 +867,6 @@ fn list_skip(a: &ListArm, n: &Expr, pre: &mut Pre, cx: &mut LowerCtx) -> bynk_ts
 // array, so `indexOf` is reference identity. An IIFE avoids re-evaluating
 // the receiver.
 fn list_up_to(a: &ListArm, step: &Expr, pre: &mut Pre, cx: &mut LowerCtx) -> bynk_ts::TsExpr {
-    let (xs_ts, elem_ts) = (&a.xs_ts, &a.elem_ts);
     let recv = pre.lower_node(a.receiver, cx);
     let step = pre.lower_node(step, cx);
     {
@@ -910,7 +882,6 @@ fn list_up_to(a: &ListArm, step: &Expr, pre: &mut Pre, cx: &mut LowerCtx) -> byn
 }
 
 fn list_first(a: &ListArm, pre: &mut Pre, cx: &mut LowerCtx) -> bynk_ts::TsExpr {
-    let xs_ts = &a.xs_ts;
     let recv = pre.lower_node(a.receiver, cx);
     {
         let n = vec![recv];
@@ -942,7 +913,6 @@ fn list_first_or_else(
     pre: &mut Pre,
     cx: &mut LowerCtx,
 ) -> bynk_ts::TsExpr {
-    let (xs_ts, elem_ts) = (&a.xs_ts, &a.elem_ts);
     let recv = pre.lower_node(a.receiver, cx);
     let default = pre.lower_node(default, cx);
     {
@@ -1062,27 +1032,6 @@ fn sort_node(a: &ListArm, descending: bool, cmp: &TsExpr, recv: TsExpr, key: TsE
     }
 }
 
-/// The text of the two comparator forms, for a text receiver or key.
-fn sort_comparator_text(
-    a: &ListArm,
-    descending: bool,
-    cmp: &TsExpr,
-    recv: &str,
-    key: &str,
-) -> String {
-    let (xs_ts, elem_ts) = (&a.xs_ts, &a.elem_ts);
-    let (first, second) = sort_order(descending);
-    let cmp_text = bynk_ts::print_expr(cmp);
-    match bare_comparator(cmp) {
-        Some(_) => format!(
-            "[...{recv}].sort((__a: {elem_ts}, __b: {elem_ts}) => {cmp_text}(({key})({first}), ({key})({second})))"
-        ),
-        None => format!(
-            "((__c, __r: {xs_ts}) => [...__r].sort((__a: {elem_ts}, __b: {elem_ts}) => __c(({key})({first}), ({key})({second}))))({cmp_text}, {recv})"
-        ),
-    }
-}
-
 /// The plain-key form as a node: the bare operators over two bound keys.
 fn sort_plain_node(a: &ListArm, descending: bool, recv: TsExpr, key: TsExpr) -> TsExpr {
     sort_plain_by(Some(&a.elem), descending, recv, key)
@@ -1120,15 +1069,6 @@ pub(super) fn sort_plain_by(
     method_sort(TsExpr::array(vec![spread(recv)]), pair)
 }
 
-/// The plain-key form's text, for a text receiver or key.
-fn sort_plain_text(a: &ListArm, descending: bool, recv: &str, key: &str) -> String {
-    let elem_ts = &a.elem_ts;
-    let (lo, hi) = if descending { ("1", "-1") } else { ("-1", "1") };
-    format!(
-        "[...{recv}].sort((__a: {elem_ts}, __b: {elem_ts}) => {{ const __ka = ({key})(__a), __kb = ({key})(__b); return __ka < __kb ? {lo} : __ka > __kb ? {hi} : 0; }})"
-    )
-}
-
 /// `distinct`, `distinctBy`, `joinOn`, `leftJoin` and `groupBy` over a key that
 /// is not a JS primitive: the `keys` runtime helper `helper` takes the
 /// receiver, then each remaining argument in order. `note_key` fires before
@@ -1162,8 +1102,6 @@ fn list_distinct(a: &ListArm, pre: &mut Pre, cx: &mut LowerCtx) -> bynk_ts::TsEx
 }
 
 fn list_distinct_by(a: &ListArm, key: &Expr, pre: &mut Pre, cx: &mut LowerCtx) -> bynk_ts::TsExpr {
-    let xs_ts = &a.xs_ts;
-    let out_arr = array_ts(&a.elem);
     let recv = pre.lower_node(a.receiver, cx);
     let key = pre.lower_node(key, cx);
     {
@@ -1175,7 +1113,6 @@ fn list_distinct_by(a: &ListArm, key: &Expr, pre: &mut Pre, cx: &mut LowerCtx) -
 }
 
 fn list_sum(a: &ListArm, key: &Expr, pre: &mut Pre, cx: &mut LowerCtx) -> bynk_ts::TsExpr {
-    let elem_ts = &a.elem_ts;
     let tys = cx.ty_render();
     let decimal = key_fn_ret(key, cx).and_then(|t| t.base(tys.types())) == Some(BaseType::Decimal);
     let recv = pre.lower_node(a.receiver, cx);
@@ -1273,18 +1210,13 @@ fn list_min_max(
 }
 
 fn list_average(a: &ListArm, key: &Expr, pre: &mut Pre, cx: &mut LowerCtx) -> bynk_ts::TsExpr {
-    let (e, xs_ts) = (a.e, &a.xs_ts);
+    let e = a.e;
     let tys = cx.ty_render();
     // D3: Duration averages round to integer millis; Int/Float -> Float.
     let round = matches!(
         cx.commons().expr_ty(e.id).as_deref(),
         Some(Ty::Option(inner)) if matches!(&*tys.get(*inner), Ty::Base(BaseType::Duration))
     );
-    let mean = if round {
-        "globalThis.Math.round(__s / __xs.length)"
-    } else {
-        "__s / __xs.length"
-    };
     let recv = pre.lower_node(a.receiver, cx);
     let key = pre.lower_node(key, cx);
     {
@@ -1335,10 +1267,8 @@ fn list_join_on(
     pre: &mut Pre,
     cx: &mut LowerCtx,
 ) -> bynk_ts::TsExpr {
-    let elem_ts = &a.elem_ts;
     let recv = pre.lower_node(a.receiver, cx);
     let u = join_other_elem(a.args, cx);
-    let (u_ts, u_arr) = (print_type(&u), array_ts(&u));
     let other = pre.lower_node(other, cx);
     let left = pre.lower_node(left, cx);
     let right = pre.lower_node(right, cx);
@@ -1485,10 +1415,8 @@ fn list_join(
     pre: &mut Pre,
     cx: &mut LowerCtx,
 ) -> bynk_ts::TsExpr {
-    let elem_ts = &a.elem_ts;
     let recv = pre.lower_node(a.receiver, cx);
     let u = join_other_elem(a.args, cx);
-    let (u_ts, u_xs) = (print_type(&u), print_type(&xs_ty(&u)));
     let other = pre.lower_node(other, cx);
     let on = pre.lower_node(on, cx);
     let into = pre.lower_node(into, cx);
@@ -1516,8 +1444,6 @@ fn list_group_by(
     pre: &mut Pre,
     cx: &mut LowerCtx,
 ) -> bynk_ts::TsExpr {
-    let record = record_of(&a.elem);
-    let record_ts = print_type(&record);
     let recv = pre.lower_node(a.receiver, cx);
     let key = pre.lower_node(key, cx);
     let into = pre.lower_node(into, cx);

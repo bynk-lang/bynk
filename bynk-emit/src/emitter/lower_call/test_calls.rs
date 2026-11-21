@@ -16,7 +16,7 @@ use super::super::internal_fault::undefined_node;
 use super::super::lower::{Pre, settle_helper, settle_with, str_node};
 use super::super::lower_ctx::LowerCtx;
 use super::super::lower_list::{any_ty, arrow, call, id, member, param, paren, take};
-use super::super::{Expr, ExprKind, Ident, TypeRef, escape_ts_string};
+use super::super::{Expr, ExprKind, Ident, TypeRef};
 
 // ---- Names ----
 
@@ -402,21 +402,21 @@ impl RawSlots {
             && *at == i
         {
             cx.note_cookie_string();
-            return serialised(lowered, ty, Wire::Cookie, cx, a.span);
+            return serialised(lowered, ty, Wire::Cookie, cx);
         }
         // #2854: a typed `query` record becomes the query string the raw driver appends to the URL.
         if let Some((at, ty)) = &self.query
             && *at == i
         {
             cx.note_query_string();
-            return serialised(lowered, ty, Wire::Query, cx, a.span);
+            return serialised(lowered, ty, Wire::Query, cx);
         }
         match &self.body {
             Some((at, ty)) if *at == i && self.form => {
                 cx.note_query_string();
-                serialised(lowered, ty, Wire::Form, cx, a.span)
+                serialised(lowered, ty, Wire::Form, cx)
             }
-            Some((at, ty)) if *at == i => serialised(lowered, ty, Wire::Json, cx, a.span),
+            Some((at, ty)) if *at == i => serialised(lowered, ty, Wire::Json, cx),
             _ => call(id("String"), vec![lowered]),
         }
     }
@@ -432,7 +432,6 @@ fn serialised(
     ty: &TypeRef,
     wire: Wire,
     cx: &LowerCtx,
-    at: bynk_syntax::span::Span,
 ) -> bynk_ts::TsExpr {
     let (ns, ru) = (cx.system_http_type_ns(), cx.runtime_use());
     let value = lowered;
@@ -573,7 +572,6 @@ fn websocket_lifecycle_call(
             "`TestConnection` argument of a websocket lifecycle call",
         ),
     };
-    let sig_text = |m: &str| format!("Parameters<typeof {svc}.{m}>");
     let sig =
         |m: &str| TsType::named_with_args("Parameters", vec![TsType::type_of(member(id(svc), m))]);
     let num = |n: usize| TsExpr::Lit(TsLit::Num(n.to_string()));
@@ -622,7 +620,6 @@ fn websocket_lifecycle_call(
         WsAddress::Open => {
             let route: Vec<bynk_ts::TsExpr> =
                 args[1..].iter().map(|a| pre.lower_node(a, cx)).collect();
-            let n = route.len();
             let mut children = vec![tc];
             children.extend(route);
             children.push(deps.clone());
