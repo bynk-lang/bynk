@@ -816,3 +816,243 @@ fn every_wrangler_operation_of_the_resource_kinds_keeps_its_messages() {
         "the wrangler messages changed. This is a stop-and-report, never a bless (#4043, Decision F).\n--- got ---\n{got}"
     );
 }
+
+// ---- 1D.3c (#4043): the REST client, pinned before it moves ----
+
+/// A one-request HTTP stub answering `status` and `body`, and the request line it saw (method,
+/// path, and the `cf-r2-jurisdiction` header when sent).
+fn answering(status: u16, body: &'static str) -> (String, std::thread::JoinHandle<String>) {
+    use std::io::{BufRead, BufReader, Read, Write};
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let seen = std::thread::spawn(move || {
+        let (stream, _) = listener.accept().unwrap();
+        let mut reader = BufReader::new(stream.try_clone().unwrap());
+        let mut line = String::new();
+        reader.read_line(&mut line).unwrap();
+        let mut request = line
+            .split_whitespace()
+            .take(2)
+            .collect::<Vec<_>>()
+            .join(" ");
+        let mut length = 0usize;
+        loop {
+            let mut header = String::new();
+            if reader.read_line(&mut header).unwrap_or(0) == 0 || header == "\r\n" {
+                break;
+            }
+            let lower = header.to_ascii_lowercase();
+            if let Some(n) = lower.strip_prefix("content-length:") {
+                length = n.trim().parse().unwrap_or(0);
+            }
+            if lower.starts_with("cf-r2-jurisdiction:") {
+                request.push_str(&format!(" [{}]", header.trim()));
+            }
+        }
+        let mut sent = vec![0u8; length];
+        let _ = reader.read_exact(&mut sent);
+        if length > 0 {
+            request.push_str(&format!(" {}", String::from_utf8_lossy(&sent)));
+        }
+        let mut stream = stream;
+        let reason = if status == 200 { "OK" } else { "Error" };
+        let _ = write!(
+            stream,
+            "HTTP/1.1 {status} {reason}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        );
+        request
+    });
+    (base, seen)
+}
+
+/// The shapes a REST call is answered in.
+const REST_SHAPES: &[(&str, Option<(u16, &str)>)] = &[
+    ("unreachable", None),
+    (
+        "200, success",
+        Some((200, r#"{"success":true,"result":{"id":"x"}}"#)),
+    ),
+    (
+        "200, success false",
+        Some((
+            200,
+            r#"{"success":false,"errors":[{"code":7003,"message":"No route"}]}"#,
+        )),
+    ),
+    (
+        "404 with errors",
+        Some((
+            404,
+            r#"{"success":false,"errors":[{"code":10007,"message":"not found"}]}"#,
+        )),
+    ),
+    (
+        "403 with errors",
+        Some((
+            403,
+            r#"{"success":false,"errors":[{"code":10000,"message":"Authentication error"}]}"#,
+        )),
+    ),
+    ("500 without errors", Some((500, r#"{"success":false}"#))),
+    ("200, unreadable", Some((200, "<html>not json</html>"))),
+];
+
+type RestRun = fn(&crate::migrate::live::Rest) -> Result<serde_json::Value, String>;
+
+/// Every request shape the REST client sends.
+const REST_METHODS: &[(&str, RestRun)] = &[
+    ("GET", |r| r.get("/workers/scripts/s/versions")),
+    ("GET with a header", |r| {
+        r.get_with_header("/r2/buckets", ("cf-r2-jurisdiction", "eu"))
+    }),
+    ("GET outside the account", |r| {
+        r.get_global("/zones?name=example.com")
+    }),
+    ("POST", |r| {
+        r.post(
+            "/d1/database/d/query",
+            &serde_json::json!({"sql": "SELECT 1"}),
+        )
+    }),
+    ("PUT", |r| {
+        r.put("/hyperdrive/configs/h", &serde_json::json!({"name": "h"}))
+    }),
+    ("DELETE", |r| r.delete("/hyperdrive/configs/h")),
+];
+
+/// `text` with any `(os error N)` written `(os error N)` literally.
+fn os_error_number(text: &str) -> String {
+    match text.find("(os error ") {
+        Some(at) => match text[at..].find(')') {
+            Some(end) => format!("{}(os error N){}", &text[..at], &text[at + end + 1..]),
+            None => text.to_string(),
+        },
+        None => text.to_string(),
+    }
+}
+
+fn rest_messages() -> String {
+    let mut out = String::new();
+    for (method, run) in REST_METHODS {
+        for (shape, answer) in REST_SHAPES {
+            let (base, seen) = match answer {
+                // A port nothing listens on: the connection is refused.
+                None => ("http://127.0.0.1:9".to_string(), None),
+                Some((status, body)) => {
+                    let (base, seen) = answering(*status, body);
+                    (base, Some(seen))
+                }
+            };
+            let rest = crate::migrate::live::tests::rest(base.clone());
+            let result = run(&rest);
+            out.push_str(&format!("== REST {method} · {shape}\n"));
+            if let Some(seen) = seen {
+                out.push_str(&format!("   request: {}\n", seen.join().unwrap()));
+            }
+            let result = match result {
+                Ok(value) => format!("ok {value}"),
+                // The OS's number for a refused connection differs (111 on Linux, 61 on macOS).
+                Err(e) => format!("error {}", os_error_number(&e.replace(&base, "<base>"))),
+            };
+            for (i, line) in result.lines().enumerate() {
+                out.push_str(if i == 0 { "   -> " } else { "      " });
+                out.push_str(line);
+                out.push('\n');
+            }
+        }
+        out.push('\n');
+    }
+    out
+}
+
+#[test]
+fn the_rest_client_keeps_its_messages() {
+    let got = rest_messages();
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("src/deploy/fixtures/cloudflare_rest_messages.txt");
+    if std::env::var_os("BYNK_WRITE_MESSAGE_FIXTURE").is_some() {
+        std::fs::write(&path, &got).unwrap();
+    }
+    let want = std::fs::read_to_string(&path).unwrap_or_default();
+    assert!(
+        got == want,
+        "the REST client's messages changed. This is a stop-and-report, never a bless (#4043, Decision F).\n--- got ---\n{got}"
+    );
+}
+
+/// What each REST consumer says when neither credential is set: the run's environment, so this
+/// is checked only where neither is set (CI, and a shell without them).
+#[test]
+fn each_rest_consumer_names_its_purpose_when_credentials_are_missing() {
+    if ["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"]
+        .iter()
+        .any(|v| std::env::var_os(v).is_some())
+    {
+        eprintln!("skipped: a Cloudflare credential is set in this environment");
+        return;
+    }
+    let mut got = String::new();
+    let mut said = |who: &str, message: String| {
+        got.push_str(&format!("== {who}\n   -> {message}\n"));
+    };
+    said(
+        "sweep (Credentials::from_env)",
+        crate::migrate::live::Credentials::from_env()
+            .err()
+            .unwrap_or_default(),
+    );
+    said(
+        "Hyperdrive",
+        super::hyperdrive::RestHyperdrive::from_env()
+            .err()
+            .unwrap_or_default(),
+    );
+    said(
+        "email destinations",
+        format!(
+            "{:?}",
+            super::destinations::RestDestinations::from_env().err()
+        ),
+    );
+    said(
+        "account listings",
+        super::on_account::RestListings::from_env()
+            .err()
+            .unwrap_or_default(),
+    );
+    said(
+        "email senders",
+        super::senders::RestSendingDomains::from_env()
+            .err()
+            .unwrap_or_default(),
+    );
+    said(
+        "Secrets Store",
+        super::linked::RestStores::from_env()
+            .err()
+            .unwrap_or_default(),
+    );
+    said(
+        "AI Search",
+        super::linked::RestAiSearch::from_env()
+            .err()
+            .unwrap_or_default(),
+    );
+    said(
+        "mTLS certificates",
+        super::linked::RestMtls::from_env()
+            .err()
+            .unwrap_or_default(),
+    );
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("src/deploy/fixtures/cloudflare_credentials.txt");
+    if std::env::var_os("BYNK_WRITE_MESSAGE_FIXTURE").is_some() {
+        std::fs::write(&path, &got).unwrap();
+    }
+    let want = std::fs::read_to_string(&path).unwrap_or_default();
+    assert!(
+        got == want,
+        "the credential messages changed. This is a stop-and-report, never a bless (#4043, Decision F).\n--- got ---\n{got}"
+    );
+}
