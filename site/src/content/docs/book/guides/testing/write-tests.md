@@ -114,7 +114,7 @@ suite quantities {
 ```
 
 A `Matches`-refined string cannot be fabricated blindly — a bare `Val` of one is
-rejected ([`bynk.val.needs_pin`](/book/troubleshooting/val-errors/)); pin it
+rejected ([`bynk.val.needs_pin`](/book/reference/diagnostics/bynk.val.needs_pin/)); pin it
 instead, or give the type an example once, where it is declared, so every `Val`
 of it (and the derived smoke) has a value:
 
@@ -338,4 +338,4 @@ expect calls.all((c) => c.msg.length() > 0)
 
 - Tutorial: [Test it](/book/tutorials/06-testing/).
 - Reference: [testing](/book/reference/testing/).
-- Troubleshooting: [`bynk.val.*` errors](/book/troubleshooting/val-errors/), [`bynk.observe.*` errors](/book/troubleshooting/observation-errors/).
+- Diagnostics: [`bynk.val.*` errors](/book/reference/diagnostics/#value-fabrication), [`bynk.observe.*` errors](/book/reference/diagnostics/#observation).

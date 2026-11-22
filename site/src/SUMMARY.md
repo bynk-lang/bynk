@@ -206,30 +206,6 @@
   - [Appendix A — Planned features](spec/appendix-planned.md)
   - [Appendix B — Version history](spec/appendix-version-history.md)
 
-# Troubleshooting
-
-- [Troubleshooting](troubleshooting/index.md)
-  - [`bynk.generics.missing_eq_bound`](troubleshooting/generics-missing-eq-bound.md)
-  - [`bynk.generics.missing_codable_bound`](troubleshooting/generics-missing-codable-bound.md)
-  - [`bynk.generics.missing_key_bound`](troubleshooting/generics-missing-key-bound.md)
-  - [`bynk.generics.missing_ord_bound`](troubleshooting/generics-missing-ord-bound.md)
-  - [`bynk.refine.literal_violates`](troubleshooting/refine-literal-violates.md)
-  - [`bynk.agents.non_zeroable_state_field`](troubleshooting/agents-non-zeroable-state-field.md)
-  - [`bynk.agents.bad_state_initialiser`](troubleshooting/agents-bad-state-initialiser.md)
-  - [`bynk.agent.non_additive_state_change`](troubleshooting/agent-non-additive-state-change.md)
-  - [`bynk.provider.dependency_cycle`](troubleshooting/provider-dependency-cycle.md)
-  - [`bynk.exports.*` cross-context capability errors](troubleshooting/exports-capability-errors.md)
-  - [`bynk.adapter.*` / binding errors](troubleshooting/adapter-errors.md)
-  - [`bynk.types.is_base_mismatch`](troubleshooting/is-base-mismatch.md)
-  - [`bynk.val.*` errors](troubleshooting/val-errors.md)
-  - [`bynk.cron.*` errors](troubleshooting/cron-errors.md)
-  - [`bynk.queue.*` errors](troubleshooting/queue-errors.md)
-  - [`bynk.integration.*` errors](troubleshooting/integration-errors.md)
-  - [`bynk.contract.*` errors](troubleshooting/contract-errors.md)
-  - [`bynk.history.*` errors](troubleshooting/history-errors.md)
-  - [`bynk.observe.*` errors](troubleshooting/observation-errors.md)
-  - [`bynk.transition.*` errors](troubleshooting/transition-errors.md)
-
 # About Bynk
 
 - [Versioning & roadmap](about/versioning-and-roadmap.md)

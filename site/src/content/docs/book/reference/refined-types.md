@@ -102,7 +102,7 @@ Admission applies in these positions:
 - a refined-typed call argument.
 
 A literal that violates the predicate is a compile error
-([`bynk.refine.literal_violates`](/book/troubleshooting/refine-literal-violates/)).
+([`bynk.refine.literal_violates`](/book/reference/diagnostics/bynk.refine.literal_violates/)).
 **Opaque types are excluded** from admission. Admitted literals are compile-time
 literals only — integers, strings, booleans, and `()` — not arithmetic
 expressions or identifiers.
@@ -155,7 +155,7 @@ fn classify(n: Int) -> Int {
 - The value must be an **identifier** to be narrowed (a `let` binding or a
   parameter); `f(x) is Quantity` is a valid check but narrows nothing.
 - The refined type's base must match the value's
-  ([`bynk.types.is_base_mismatch`](/book/troubleshooting/is-base-mismatch/)).
+  ([`bynk.types.is_base_mismatch`](/book/reference/diagnostics/bynk.types.is_base_mismatch/)).
 - This is the flow-sensitive counterpart to `.of`: `.of(v)` returns a `Result`
   for the untrusted case; `is` narrows in a guard. Refinements are **not**
   preserved through arithmetic (`a + b` of two refined `Int`s is a plain `Int`)

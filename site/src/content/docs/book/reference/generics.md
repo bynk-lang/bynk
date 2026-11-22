@@ -405,8 +405,8 @@ capability you declare, are the open follow-ups.
 - Guide: [Key a map by a record](/book/guides/type-system/key-a-map-by-a-record/).
 - Guide: [Understand ordering your own types](/book/guides/type-system/ordering-your-own-types/).
 - Guide: [Generic code that crosses the boundary](/book/guides/type-system/generic-code-that-crosses-the-boundary/).
-- Troubleshooting: [`bynk.generics.missing_codable_bound`](/book/troubleshooting/generics-missing-codable-bound/),
-  [`bynk.generics.missing_eq_bound`](/book/troubleshooting/generics-missing-eq-bound/),
-  [`bynk.generics.missing_ord_bound`](/book/troubleshooting/generics-missing-ord-bound/).
+- Diagnostics: [`bynk.generics.missing_codable_bound`](/book/reference/diagnostics/bynk.generics.missing_codable_bound/),
+  [`bynk.generics.missing_eq_bound`](/book/reference/diagnostics/bynk.generics.missing_eq_bound/),
+  [`bynk.generics.missing_ord_bound`](/book/reference/diagnostics/bynk.generics.missing_ord_bound/).
 - Spec: [§5.2 Generic instantiation](/book/spec/static-semantics/) and
   [§4.3.1b](/book/spec/syntactic-grammar/).

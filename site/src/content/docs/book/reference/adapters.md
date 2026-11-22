@@ -261,4 +261,4 @@ to call in the first place, ADR 0182).
 
 - [Wrap a library as an adapter](/book/guides/effects-and-capabilities/wrap-a-library/)
 - [Capabilities & providers](/book/reference/capabilities/)
-- [Adapter & binding errors](/book/troubleshooting/adapter-errors/)
+- [Adapter errors](/book/reference/diagnostics/#adapters)

@@ -72,11 +72,11 @@ what stateless platform capabilities want. No Worker hop is involved.
 ## The rules
 
 - `exports capability` names must be declared **and** provided
-  ([`bynk.exports.undeclared_capability`](/book/troubleshooting/exports-capability-errors/),
-  [`bynk.exports.capability_not_provided`](/book/troubleshooting/exports-capability-errors/)).
+  ([`bynk.exports.undeclared_capability`](/book/reference/diagnostics/bynk.exports.undeclared_capability/),
+  [`bynk.exports.capability_not_provided`](/book/reference/diagnostics/bynk.exports.capability_not_provided/)).
 - `given B.Cap` requires `B` to be `consumes`-d (otherwise
   `bynk.resolve.unconsumed_context`) and to export `Cap`
-  ([`bynk.given.cross_context_unknown_capability`](/book/troubleshooting/exports-capability-errors/)).
+  ([`bynk.given.cross_context_unknown_capability`](/book/reference/diagnostics/bynk.given.cross_context_unknown_capability/)).
 
 ## Related
 

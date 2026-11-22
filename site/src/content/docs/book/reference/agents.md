@@ -67,7 +67,7 @@ store retries: Cell[Int]         = 3         // a non-zero default
 A field that has neither an initialiser nor an implicit zero — an opaque type, a
 non-`Option` sum, or a refined type that excludes its zero (`Int where
 Positive`) — is rejected with
-[`bynk.agents.non_zeroable_state_field`](/book/troubleshooting/agents-non-zeroable-state-field/).
+[`bynk.agents.non_zeroable_state_field`](/book/reference/diagnostics/bynk.agents.non_zeroable_state_field/).
 Add an initialiser (or, to model "not set yet", use `Option[T]`). Collection kinds
 with no implicit zero (such as `Cell[List[T]]`) likewise need an initialiser —
 typically `= []`.
@@ -353,9 +353,60 @@ Anything else changes what is on disk, and the build refuses it with
 `one (one.dark added without a default)`, `prefs.theme removed`,
 `prefs.size lost its default`. A lock written before the build recorded positions
 judges a change inside a value as a retype until one build with the unchanged
-definition fills them in. A refused change needs a migration step. For how to read
-the message and the fixes in order, see
-[`bynk.agent.non_additive_state_change`](/book/troubleshooting/agent-non-additive-state-change/).
+definition fills them in (see [A lock written by an older toolchain](#a-lock-written-by-an-older-toolchain)).
+A refused change needs a migration step, or one of the other fixes in
+[`bynk.agent.non_additive_state_change`](/book/reference/diagnostics/bynk.agent.non_additive_state_change/).
+
+### Reading a refused change
+
+The error sits on the agent's name and lists what broke, grouped by cause:
+
+| Clause | Cause |
+|---|---|
+| `field(s) removed: owner` | A `store` field is gone. |
+| `field(s) retyped: prefs (…)` | A stored field's value changed. The parentheses name each position that broke. |
+| `field(s) retyped: items` | The same, with no position: the lock predates positions. |
+| `field(s) changed storage kind: n` | A field moved between storage kinds, such as `Cell` and `Map`. |
+
+A renamed field is a removed field plus an added one, so it appears as `removed`.
+When exactly one removed and one added field share a stored shape, a note names
+them as a likely rename.
+
+Each clause in parentheses is a path from the `store` field to the place that
+changed, followed by what happened there:
+
+| Clause | Meaning |
+|---|---|
+| `one (one.dark added without a default)` | A record field was added with no default, so a record stored before it cannot decode. |
+| `prefs.theme removed` | A recorded record field, variant or element position no longer exists. |
+| `prefs.size retyped` | The position is still there but now holds a different type. |
+| `prefs.size lost its default` | A record field that had a default no longer has one, so a record stored without it would not decode. |
+| `last?\|Paused removed` | A sum type lost a variant (a rename is a removal plus an addition), so a value stored with it would not decode. |
+
+The path is built from these segments:
+
+| Segment | Meaning | Example |
+|---|---|---|
+| `.field` | A record field, or a variant's payload field. | `prefs.theme`, `last?\|Added.sku` |
+| `[]` | The element of a `List` or `Set`. | `many[]`, `many[].size` |
+| `?` | The value inside an `Option`. | `last?` |
+| `{}` | The value of a `Map` nested inside another type. | `index{}` |
+| `\|Variant` | One variant of a sum type, or `\|Ok` / `\|Err` of a `Result`. | `last?\|Paused` |
+| `#0`, `#1` | The first and second type argument of a storage kind that takes two. For `Map[K, V]`, `#0` is the key and `#1` the value. | `byId#1.size` |
+
+The first segment is always the `store` field's name. A field with a single type
+argument (`Cell[Prefs]`, `Log[Prefs]`) has no `#` segment. `bynk check` and
+`bynk test` reconcile against the lock without writing it; only a build records a
+new version.
+
+### A lock written by an older toolchain
+
+A `bynk.schema.lock` written before positions were recorded has no `paths` for its
+fields. Against such a lock the first change inside a stored value is judged as a
+retype of the whole field, and the error carries a note saying the lock predates
+per-path shapes. Revert the change, build once so the lock records the positions
+(the version does not change), then reapply it. A record field added with a
+default is then accepted.
 
 ## Migrations
 
