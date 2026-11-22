@@ -245,11 +245,22 @@ prefix   key id          secret      checksum
   a secret scanner confirm a match offline with few false positives, and lets
   the seam refuse a mistyped or truncated key before any lookup.
 
+**Every field is fixed-width.** The secret and the checksum share a part with no
+separator, so the seam splits them by position. Each field is therefore encoded
+as big-endian base62, left-padded with `0` to its width: 33 characters for the
+24-byte id, 43 for the 32-byte secret, 6 for the 4-byte checksum. Plain base62
+drops leading zeros, so without the padding about one key in 62 would be
+shorter than its own format and fail to parse. A field of the right width whose
+value does not fit its byte count is malformed, so each key has exactly one
+encoding. The harness pins round-trips for an id, a secret and a checksum with
+a leading zero byte, and for the all-zero and all-`0xff` values.
+
 Base62 and `_` separators keep the key one "word": a double-click selects all
 of it, and it survives URLs and shell quoting. GitHub's token format made the
 same choices for the same reasons (a type prefix, base62, a CRC32 checksum).
 
-A presented key longer than 128 characters is refused before parsing, as an
+A key is therefore at most 100 characters (a 16-character prefix, 33, 49 and
+two separators). A presented key longer than 128 characters is refused before parsing, as an
 oversized cookie is (`session.ts:20-21`).
 
 ## 6. The store and the lookup
@@ -261,12 +272,26 @@ the seam reaches it from a key. The proposal is an **opaque handle**:
   pepper `kid`, label, created, expires, last used}, plus the identity itself.
   It is the only agent on the request path.
 - **`<Actor>KeyOwner(identity)`** holds that identity's handle, minted at random
-  the first time a key is minted for it and never changed. Only the members use
-  it; verification never does.
+  the first time a key is minted for it and replaced by `revokeAll`. Only the
+  members use it; verification never does.
 
-Verification is one agent call: the handle is in the key. `revokeAll` is one
-atomic commit in one agent. Nothing in a key reveals whose it is: the handle is
-random, not derived from the identity.
+Verification is one agent call: the handle is in the key. Nothing in a key
+reveals whose it is: the handle is random, not derived from the identity.
+
+**`revokeAll` rotates the handle.** It is the incident-response member, so it
+also cuts the link between the leaked ids and the identity's future keys. It
+runs as a `KeyOwner` handler: it empties the current `Keys(handle)` instance
+in one atomic commit and marks it retired, then mints a fresh handle, which
+`KeyOwner` commits when the handler returns. A retired instance holds no
+records and refuses inserts, so a key presented against it gets the ordinary
+`401` after the same work. `mint` also runs through `KeyOwner`, and an agent
+runs one handler at a time (`agents.md:462-470`), so a mint cannot land on a
+handle `revokeAll` is retiring. The order fails safe: if the second commit
+fails, the keys are already gone and the old handle stays, empty, until a retry
+rotates it. Afterwards an attacker holding an old id can still address the
+retired instance, but no live key is there, and new ids share nothing with the
+old ones. A single `revoke` does not rotate the handle: the identity's other
+keys still live in that instance (§12).
 
 What each option reveals or costs:
 
@@ -275,7 +300,7 @@ What each option reveals or costs:
 | The id encodes the identity | the identity, to anyone who sees an id (logs, a leak, a console) | one call | atomic |
 | An index agent per key id → identity | nothing | two sequential calls | atomic |
 | A record per key id, an identity agent for listing | nothing | one call | one write per key, not atomic |
-| **An opaque handle (proposed)** | that two keys share an owner, when both ids are seen | one call | atomic |
+| **An opaque handle (proposed)** | that two keys share an owner, when both ids are seen, until `revokeAll` | one call | atomic, then the handle is replaced |
 
 Both agents are generated, declared and migrated like any agent, and appear in
 `bynk.schema.lock` with a compiler-owned shape (as #3938 proposes for the
@@ -309,6 +334,13 @@ expired keys are pruned when a key is minted or listed.
   because a stored HMAC cannot be re-keyed without the secret. That is stated
   in the reference beside the rotation steps. A sweep that reports how many
   records remain under the old `kid` is slice 3's.
+- **A record whose `kid` matches neither pepper** (after `previous` is dropped,
+  or after two rotations) is compared against the dummy digest and refused with
+  the same `401`, after the same work, as any other post-parse refusal (D3). It
+  is not pruned on the refusal path, which would put a write there and let
+  anyone holding an old id cause one. `mint`, which sends the live `kid`s with
+  the digest, prunes such records along with expired ones, before the cap is
+  checked. Until then `list` shows them, marked as no longer usable.
 - The pepper is unpadded base64url of at least 32 bytes; a bad pepper faults
   the request, as a bad session key does.
 
@@ -329,7 +361,12 @@ On a route an `ApiKey` actor guards, before the body:
 5. **Mint the identity** through the identity type's `of`; a violation is
    `401`.
 6. **Run the handler**, with the credential removed from its `RequestHeaders`
-   view (the `hideCookie` mechanism, generalised to a header name).
+   view (the `hideCookie` mechanism, generalised to a header name). In a sum
+   (slice 4) the header an `ApiKey` arm reads is hidden whichever arm
+   resolves, `Bearer`, `Oidc` or a `Visitor` fallback included: a refused key
+   may still be a live secret, and no handler needs it. On such a route a
+   `Bearer` or `Oidc` handler loses its raw `Authorization` view and reads its
+   claims instead.
 
 Every refusal from step 2 onwards is the same `401`, with the same body and
 headers, whatever failed. A store fault (the agent unreachable, `AgentBusy`)
@@ -342,7 +379,14 @@ authenticated request; the reference states it.
 
 ## 9. Members
 
-Inside the declaring context only, as for `SignedCookie`:
+Inside the declaring context only, as for `SignedCookie`. `mint` is legal only
+in a service handler, where the pepper arrives. `list`, `revoke` and
+`revokeAll` need no pepper, only calls to the generated agents, so they are
+legal wherever an agent can be called: a service handler or an agent's handler
+(`agents.md:510-511`), so that, for example, an account-closure workflow in an
+agent can call `revokeAll`. A provider cannot call them. Slice 1 adds
+`bynk.actor.api_key_mint_outside_handler`, and slice 2
+`bynk.actor.api_key_member_in_provider`.
 
 ```bynk
 service console from http {
@@ -369,9 +413,9 @@ service console from http {
 | Member | Type | Notes |
 |---|---|---|
 | `mint(identity, label)` | `Effect[Result[ApiKeySecret, TooManyKeys]]` | Needs `given Clock`. Service handlers only: the pepper is there |
-| `list(identity)` | `Effect[List[ApiKeyInfo]]` | Ids, labels, created, expires, last used. Never a secret or a digest |
-| `revoke(identity, id)` | `Effect[Bool]` | `false` when the key is not that identity's, or is already gone |
-| `revokeAll(identity)` | `Effect[Int]` | The number revoked; one commit |
+| `list(identity)` | `Effect[List[ApiKeyInfo]]` | Ids, labels, created, expires, last used. Never a secret or a digest. Service and agent handlers |
+| `revoke(identity, id)` | `Effect[Bool]` | `false` when the key is not that identity's, or is already gone. Service and agent handlers |
+| `revokeAll(identity)` | `Effect[Int]` | The number revoked; one commit empties the keys, then the handle is replaced (§6). Service and agent handlers |
 
 - **`ApiKeySecret`** is `{ id: ApiKeyId, key: ApiKeyValue, label, created,
   expires }`. `ApiKeyValue` encodes on the wire as the key string, so a
@@ -388,7 +432,7 @@ service console from http {
 
 ## 10. Testing principals
 
-- `by Client("acme")` acts as the key holder at every tier. Below `system` the
+- `by Client("acct-7")` acts as the key holder at every tier. Below `system` the
   identity is given, as for every actor. At `system` the harness mints a real
   key into the in-process generated agent under the suite's pepper (its `env`
   entry, else a fixed test pepper) and presents it, so the real seam verifies
@@ -440,6 +484,9 @@ responses.
 - **Targeted queueing.** An attacker who has seen a victim's key id can flood
   that handle's instance and push the victim towards `AgentBusy`. The same rate
   limit applies; the id is public by design, so this is stated, not hidden.
+  `revokeAll` ends the exposure, because the identity's new keys live under a
+  fresh handle (§6); `revoke` of one key does not, because the others still
+  share its instance. The reference says so beside the incident steps.
 - **Dropping `previous` too early** ends keys still in use. Mitigated by the
   sweep in slice 3 and by the reference's rotation steps.
 - **The generated agents in the schema lock.** Their shape is the compiler's;
@@ -495,6 +542,9 @@ response once; the runtime does not log response bodies.
 
 - A key is a bearer credential: anyone holding it is the client until it is
   revoked or expires.
+- Without `ttl`, a key never expires. The reference says so beside the rotation
+  and revocation steps, and advises a `ttl` or a periodic review of `list`'s
+  last-used times.
 - Revocation is as fast as the next request, not faster: a request already
   past the seam completes.
 - Nothing stops a handler from writing the minted key somewhere unsafe before
@@ -519,8 +569,10 @@ because a scheme that verifies keys nobody can mint ships nothing usable.
 
 - **D1. The key format and the opaque handle.** `<prefix>_<id>_<secret><checksum>`,
   base62, a 24-byte public id of a random 16-byte handle and an 8-byte key
-  number, a 256-bit secret, a CRC32 checksum. The request path addresses an
-  identity's key store by the handle, never by the identity.
+  number, a 256-bit secret, a CRC32 checksum. Every field is zero-padded to a
+  fixed width (33, 43 and 6 characters), and a value too large for its bytes is
+  malformed. The request path addresses an identity's key store by the handle,
+  never by the identity, and `revokeAll` replaces the handle.
 - **D2. Keys are stored only as peppered HMACs; the secret is returned once.**
   The pepper is an environment secret that stays in the seam and service
   handlers and never enters an agent. Each record names its pepper's `kid`.
@@ -579,7 +631,8 @@ is marked ready.
 5. **Members.** *Proposed:* `mint(identity, label)` returning
    `Effect[Result[ApiKeySecret, TooManyKeys]]`, needing `Clock`, in service
    handlers only; `list(identity)`; `revoke(identity, id) -> Effect[Bool]`;
-   `revokeAll(identity) -> Effect[Int]`. Expiry is the actor's `ttl`, not a
+   `revokeAll(identity) -> Effect[Int]`, which also replaces the handle; the
+   last three in service and agent handlers, never in a provider. Expiry is the actor's `ttl`, not a
    `mint` argument.
    - `revoke` takes the identity so the safe check (this key is this
      identity's) is the default; an actor answers *who*, but the member should
@@ -616,7 +669,7 @@ is marked ready.
    - *Rejected:* standing alone on its route like `SignedCookie` today, which
      would force the route duplication #3936 exists to remove.
 
-9. **Testing.** *Proposed:* `by Client("acme")` mints into the in-process
+9. **Testing.** *Proposed:* `by Client("acct-7")` mints into the in-process
    store at `system`; failure principals `Nobody`, `Malformed`, `Unknown`,
    `Forged`, `Revoked`, `Expired` (§10); acting as an `ApiKey` actor against a
    deployment is refused.
