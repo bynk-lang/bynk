@@ -167,7 +167,9 @@ function toEntry(node, pages) {
 function partItems(children, pages) {
   if (children.length === 1 && children[0].path !== null && children[0].children.length > 0) {
     const entry = toEntry(children[0], pages);
-    return entry.items;
+    // A single page whose children all came from an empty `{release pages}`
+    // folder is a plain link: keep it rather than lose the part's contents.
+    return entry.items ?? [entry];
   }
   return children.map((child) => toEntry(child, pages));
 }

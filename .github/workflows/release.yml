@@ -115,7 +115,7 @@ jobs:
           if [ -f "$page" ]; then
             echo "::notice::$page is present"
           else
-            echo "::error::$page is missing. Cut the release before tagging: run \`cargo xtask release-page --apply\`, merge that, then tag the merge commit v${ver}."
+            echo "::error::$page is missing. Cut the release before tagging: run \`cargo xtask release-page --apply\` and merge it in a PR with no design/pending/ file (so the stamp doesn't bump the version), then tag that merge commit v${ver}."
             exit 1
           fi
       - name: Commit under release must be on main (reviewed)

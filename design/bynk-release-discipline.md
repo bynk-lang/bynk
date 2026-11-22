@@ -93,9 +93,12 @@ cut when the work it ships is whole:**
    slices are all merged and its spine closes, so the version on `main` after it
    merges is a coherent unit. The maintainer cuts its page in the Book first:
    `cargo xtask release-page --apply` turns the Book's Unreleased page into the
-   page for the current version (#3868). They merge that, then tag the merge
-   commit (`git tag vX.Y.Z` on a commit whose CI is green). `release.yml`
-   refuses a tag whose page is missing.
+   page for the current version (#3868). The cut's PR carries no
+   `design/pending/` file, so the stamp doesn't bump the version when it
+   merges; and nothing else merges between it and the tag. Then tag the merge
+   commit (`git tag vX.Y.Z` on a commit whose CI is green and whose
+   `Cargo.toml` version is the cut version). `release.yml` refuses a tag whose
+   page is missing.
 2. **When a user-facing fix needs to reach users** before the track it sits in
    retires: a broken download, a crash in a released `bynkc`, a security fix.
    That release is cut and tagged the same way as soon as the fix merges.

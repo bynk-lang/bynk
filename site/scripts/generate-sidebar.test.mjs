@@ -128,3 +128,9 @@ test("{release pages} with no parent page is malformed", () => {
   assert.equal(malformed.length, 1);
   assert.match(malformed[0].why, /parent entry/);
 });
+
+test("an empty {release pages} folder leaves its parent as a plain link", () => {
+  const sidebar = buildSidebar(WITH_RELEASES, [...PAGES, "reference/releases/index.md"]);
+  const reference = sidebar.find((e) => e.label === "Reference");
+  assert.deepEqual(reference.items, [{ label: "Releases", link: "/book/reference/releases/" }]);
+});

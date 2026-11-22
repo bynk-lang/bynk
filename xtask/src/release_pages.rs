@@ -138,6 +138,15 @@ pub fn cut(unreleased: &str, index: &str, version: Version, date: &str) -> Resul
             "{UNRELEASED_PAGE} has no increments, so there is nothing to release"
         ));
     };
+    // The page is named for the workspace version; its rows must end there, or
+    // the page would describe a release it isn't. The newest increment's
+    // version *is* the workspace version, unless a bump happened without a row.
+    if newest != version.to_string() {
+        return Err(format!(
+            "{UNRELEASED_PAGE}'s newest increment is v{newest}, but the workspace version is \
+             v{version}. Cut the release from a commit where they agree."
+        ));
+    }
     let when = long_date(date).ok_or_else(|| format!("{date:?} is not a YYYY-MM-DD date"))?;
     let span = if oldest == newest {
         format!("one increment, v{newest}.")
@@ -227,6 +236,13 @@ mod tests {
             format!("{RELEASES_DIR}/v0-2-0.md")
         );
         assert!(cut.release.contains("one increment, v0.2.0."));
+    }
+
+    #[test]
+    fn rows_that_end_at_another_version_are_refused() {
+        let page = unreleased(&["| **v0.2.0** | Only |"]);
+        let err = cut(&page, INDEX, v("0.2.1"), "2026-11-22").unwrap_err();
+        assert!(err.contains("newest increment is v0.2.0"), "{err}");
     }
 
     #[test]
