@@ -48,11 +48,15 @@
         "link": "/book/tutorials/04-refined-types/"
       },
       {
-        "label": "5. Add a stateful agent",
+        "label": "5. Handle failure with Result",
+        "link": "/book/tutorials/failure-and-result/"
+      },
+      {
+        "label": "6. Add a stateful agent",
         "link": "/book/tutorials/05-stateful-agent/"
       },
       {
-        "label": "6. Test it",
+        "label": "7. Test it",
         "link": "/book/tutorials/06-testing/"
       }
     ]

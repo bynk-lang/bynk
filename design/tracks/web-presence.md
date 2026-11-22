@@ -167,7 +167,8 @@ footer.
    2. Build a small HTTP service
    3. Model your data with types
    4. Make illegal states unrepresentable
-   5. Handle failure with `Result` (new)
+   5. Handle failure with `Result` (new; written in slice 9, at
+      `tutorials/failure-and-result.md`)
    6. Reach out with capabilities (new)
    7. Add a stateful agent
    8. Split into contexts (new)

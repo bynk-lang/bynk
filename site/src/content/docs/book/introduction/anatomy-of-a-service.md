@@ -91,5 +91,5 @@ domain types, an explicit effect, persistent state, and a typed HTTP boundary â€
 each named in the language, not left to convention.
 
 Ready to build one yourself? Start at
-[Tutorial 1](/book/tutorials/01-first-program/); the stateful-agent and HTTP
-pieces arrive in [Tutorial 5](/book/tutorials/05-stateful-agent/).
+[Compile your first program](/book/tutorials/01-first-program/); the stateful-agent and HTTP
+pieces arrive in [Add a stateful agent](/book/tutorials/05-stateful-agent/).

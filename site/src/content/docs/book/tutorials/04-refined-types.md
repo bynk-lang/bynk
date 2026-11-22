@@ -1,7 +1,7 @@
 ---
 title: Make illegal states unrepresentable
 ---
-The types from [Tutorial 3](/book/tutorials/03-modelling-data/) describe the *shape* of the
+The types from [Model your data with types](/book/tutorials/03-modelling-data/) describe the *shape* of the
 shortener's data. **Refined types** go further: they describe which *values* are
 allowed. A short code is not just any string — it has a length and a permitted
 character set. A target is not just any string — it must look like a URL. With
@@ -95,7 +95,7 @@ of(value: string): Result<ShortCode, ValidationError> {
 }
 ```
 
-This is what makes the **400-at-the-boundary** behaviour from Tutorial 2 precise:
+This is what makes the **400-at-the-boundary** behaviour from [Build a small HTTP service](/book/tutorials/02-http-service/) precise:
 because `CreateLinkRequest.target` is now a `Url`, the body deserialiser validates
 the URL shape and rejects a malformed one with `400` before the handler runs.
 
@@ -124,6 +124,9 @@ match ShortCode.of(raw) {
   Err(_)   => ServerError("generated an invalid code")
 }
 ```
+
+The next chapter takes `Result` further: errors of your own, composing several
+steps that can fail, and turning an error into an HTTP response.
 
 ## A note on `.unsafe`
 
@@ -211,10 +214,10 @@ reject an invalid literal *before runtime*, validated untrusted input with `.of`
 and handled the resulting `Result` with both `?` and `match`. An invalid short
 code now has nowhere to live.
 
-The API still mints a placeholder code and forgets it. Next we give the shortener
-a memory — somewhere to actually store a link.
+The shortener's handlers so far fail in only one way. Next, it gets a rule of
+its own to break, and a tidy way to report every failure.
 
-➡️ **[Tutorial 5: Add a stateful agent](/book/tutorials/05-stateful-agent/)**
+➡️ **Next: [Handle failure with `Result`](/book/tutorials/failure-and-result/)**
 
 ---
 

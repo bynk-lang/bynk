@@ -103,4 +103,4 @@ Bynk is a service-tier language, not a teaching tool — but a language that
 explains every refusal is one you come to understand *as you use it*.
 
 If you have not yet, the fastest way to get the feel of these ideas is to build
-something: start with [Tutorial 1](/book/tutorials/01-first-program/).
+something: start with [Compile your first program](/book/tutorials/01-first-program/).

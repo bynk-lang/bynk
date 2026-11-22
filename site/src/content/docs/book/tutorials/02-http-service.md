@@ -6,7 +6,7 @@ across the rest of the tutorials. We begin with its HTTP front door: a service
 with a couple of endpoints, compiled to a ready-to-run Cloudflare Worker. Along
 the way you will meet `context`, `service`, HTTP handlers, and `HttpResult`.
 
-This builds on [Tutorial 1](/book/tutorials/01-first-program/). You need `bynk` installed.
+This builds on [Compile your first program](/book/tutorials/01-first-program/). You need `bynk` installed.
 
 ## Start a project
 
@@ -40,7 +40,7 @@ A few new things:
 - `on GET("/links/:code") by Visitor (code: String)` is a handler: it answers
   `GET /links/<something>`, binds the `:code` path segment to the `code`
   parameter, and returns `Effect[HttpResult[String]]`.
-- We have no storage yet — that arrives in [Tutorial 5](/book/tutorials/05-stateful-agent/) —
+- We have no storage yet — that arrives in [Add a stateful agent](/book/tutorials/05-stateful-agent/) —
   so every lookup honestly returns `NotFound`, the `HttpResult` variant for
   `404`.
 
@@ -125,7 +125,7 @@ service api from http {
 ```
 
 `CreateLinkRequest` is a **record type** — you will learn records properly in
-[Tutorial 3](/book/tutorials/03-modelling-data/). The new handler takes a special `body`
+[Model your data with types](/book/tutorials/03-modelling-data/). The new handler takes a special `body`
 parameter typed as `CreateLinkRequest`, and returns `Created(…)` — the
 `HttpResult` variant for `201 Created`. (For now it just echoes the target back;
 real storage and a minted code come later.)
@@ -206,7 +206,7 @@ a typed request body.
 Those record types we glossed over deserve a proper look — that is next, and we
 will start modelling the shortener's data in earnest.
 
-➡️ **[Tutorial 3: Model your data with types](/book/tutorials/03-modelling-data/)**
+➡️ **Next: [Model your data with types](/book/tutorials/03-modelling-data/)**
 
 ---
 

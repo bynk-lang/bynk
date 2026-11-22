@@ -4,7 +4,7 @@ title: Test it
 A language built around correctness should make tests easy, and Bynk builds
 testing in: `suite`/`case` blocks, `expect`, value fabrication with `Val[T]`, and
 per-seam test doubles with `stub`. In this final tutorial we test the shortener
-from [Tutorial 5](/book/tutorials/05-stateful-agent/) and meet each of those tools.
+from [Add a stateful agent](/book/tutorials/05-stateful-agent/) and meet each of those tools.
 
 ## Lay out a test project
 
