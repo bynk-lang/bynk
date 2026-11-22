@@ -73,7 +73,7 @@ case "an admin is answered" {
 Below the `system` tier the claim is given, not checked. In a `system` suite
 the signed token carries claims that satisfy the predicate, so the Worker
 admits `by Admin("root")` and answers `by User("root")` with `403`. See
-[acting as an actor](/book/reference/testing/#call-site-by).
+[acting as an actor](/reference/testing/#call-site-by).
 
-**See also:** [Reference — Actors](/book/reference/actors/),
-[Diagnostic index (`bynk.actor.refinement_*`)](/book/reference/diagnostics/).
+**See also:** [Reference — Actors](/reference/actors/),
+[Diagnostic index (`bynk.actor.refinement_*`)](/reference/diagnostics/).

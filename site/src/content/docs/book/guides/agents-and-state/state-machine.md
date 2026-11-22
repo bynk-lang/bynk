@@ -70,7 +70,7 @@ Text equivalent: a fresh `Order` starts at `Pending`. `place()` advances
 
 In VS Code, the `Show State` lens on `agent Order` draws this diagram from the
 handlers themselves, with a table of what each handler does from each state
-(see [the extension's agent state view](/docs/tooling/vscode-bynk/)).
+(see [the extension's agent state view](/reference/tooling/vscode-bynk/)).
 
 ## Read the state, then transition
 
@@ -107,6 +107,6 @@ can't reference `self`, parameters, or capabilities.
 
 ## Related
 
-- Reference: [Agents](/book/reference/agents/) — state initialisation and the
+- Reference: [Agents](/reference/agents/) — state initialisation and the
   full state-machine rules.
 - Tutorial: [Add a stateful agent](/book/tutorials/05-stateful-agent/).

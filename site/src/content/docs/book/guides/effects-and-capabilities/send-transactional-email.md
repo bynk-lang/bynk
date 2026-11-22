@@ -65,7 +65,7 @@ spam relay. Breaking a platform limit (more than 50 recipients, 32 attachments o
 25 MiB, no `text` or `html`) or setting a reserved header (`From`, `To`, `Cc`,
 `Bcc`, `Subject`, `Reply-To`, or any name or value with a line break) is a
 programming error, so the call faults before anything is sent. See
-[Outbound email](/book/reference/bynk-capabilities/#outbound-email-email).
+[Outbound email](/reference/bynk-capabilities/#outbound-email-email).
 
 ## Deploy
 

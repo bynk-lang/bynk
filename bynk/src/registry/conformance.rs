@@ -149,14 +149,14 @@ impl Report {
     }
 }
 
-const S_CONFIG: &str = "/docs/registry-protocol/#configjson";
-const S_TRUST: &str = "/docs/registry-protocol/#trust";
-const S_INDEX: &str = "/docs/registry-protocol/#index-files";
-const S_ARCHIVES: &str = "/docs/registry-protocol/#archives";
-const S_PUBLISH: &str = "/docs/registry-protocol/#publish-api";
-const S_DELEGATION: &str = "/docs/registry-protocol/#delegation-and-revocation";
-const S_WITHDRAWALS: &str = "/docs/registry-protocol/#withdrawals";
-const SPEC_FOR_SKIP: &str = "/docs/registry-protocol/#conformance";
+const S_CONFIG: &str = "/reference/tooling/registry-protocol/#configjson";
+const S_TRUST: &str = "/reference/tooling/registry-protocol/#trust";
+const S_INDEX: &str = "/reference/tooling/registry-protocol/#index-files";
+const S_ARCHIVES: &str = "/reference/tooling/registry-protocol/#archives";
+const S_PUBLISH: &str = "/reference/tooling/registry-protocol/#publish-api";
+const S_DELEGATION: &str = "/reference/tooling/registry-protocol/#delegation-and-revocation";
+const S_WITHDRAWALS: &str = "/reference/tooling/registry-protocol/#withdrawals";
+const SPEC_FOR_SKIP: &str = "/reference/tooling/registry-protocol/#conformance";
 
 /// How long `yank.yank` and `yank.unyank` wait for the index to show the
 /// change: an edge cache may serve an index file for up to a minute (the

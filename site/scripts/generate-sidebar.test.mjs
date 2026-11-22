@@ -1,4 +1,4 @@
-// Tests for generate-sidebar.mjs (web presence track, slices 1–3): the
+// Tests for generate-sidebar.mjs (web presence track, slices 1–3 and 5): the
 // contents checks and the sidebar it builds, on small in-memory Books, so a
 // change to the generator can't quietly stop a check from firing.
 //
@@ -7,7 +7,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { buildSidebar, completeness, parseSummary, releasePages } from "./generate-sidebar.mjs";
+import { TREES, buildSidebar, completeness, parseSummary, releasePages } from "./generate-sidebar.mjs";
 
 const PAGES = ["index.md", "intro/what.md", "guides/a.md", "guides/b.mdx"];
 const SUMMARY = `# Summary
@@ -133,4 +133,37 @@ test("an empty {release pages} folder leaves its parent as a plain link", () => 
   const sidebar = buildSidebar(WITH_RELEASES, [...PAGES, "reference/releases/index.md"]);
   const reference = sidebar.find((e) => e.label === "Reference");
   assert.deepEqual(reference.items, [{ label: "Releases", link: "/book/reference/releases/" }]);
+});
+
+// Slice 5: the Reference is a second tree with its own contents, routed under
+// /reference/, and held to the same checks.
+const REFERENCE = TREES.find((t) => t.name === "Reference");
+const REF_PAGES = ["index.md", "types.md", "tooling/index.mdx", "tooling/bynk-cli.md"];
+const REF_CONTENTS = `# Summary
+
+[Reference](index.md)
+
+# Language
+
+- [Types](types.md)
+
+# Tooling
+
+- [Tooling](tooling/index.md)
+  - [CLI](tooling/bynk-cli.md)
+`;
+
+test("a second tree routes its pages under its own base", () => {
+  const sidebar = buildSidebar(REF_CONTENTS, REF_PAGES, REFERENCE);
+  assert.deepEqual(sidebar[0], { label: "Reference", link: "/reference/" });
+  assert.deepEqual(sidebar.find((e) => e.label === "Tooling").items, [
+    { label: "Overview", link: "/reference/tooling/" },
+    { label: "CLI", link: "/reference/tooling/bynk-cli/" },
+  ]);
+});
+
+test("the second tree's contents are checked against its own pages", () => {
+  const report = completeness(REF_CONTENTS, [...REF_PAGES, "spec/index.md"], REFERENCE.base);
+  assert.deepEqual(report.unlisted, ["spec/index.md"]);
+  assert.deepEqual(report.missing, []);
 });

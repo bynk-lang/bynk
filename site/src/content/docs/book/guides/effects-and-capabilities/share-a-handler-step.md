@@ -64,4 +64,4 @@ the quick fix adds them to the caller's `given`.
 - Only a free function that returns `Effect[T]` may declare `given`; a method cannot,
   and `Events` cannot be named (`bynk.given.fn_unsupported`). Emit events from the handler.
 
-**See also:** [Reference — Capabilities in functions](/book/reference/capabilities/#capabilities-in-functions).
+**See also:** [Reference — Capabilities in functions](/reference/capabilities/#capabilities-in-functions).

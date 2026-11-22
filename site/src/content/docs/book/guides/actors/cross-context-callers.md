@@ -40,4 +40,4 @@ channel but reads no caller — and is unchanged from before.
 `Producer`).
 
 **See also:** [Consume another context's services](/book/guides/program-structure/consume-services/),
-[Reference — Actors](/book/reference/actors/).
+[Reference — Actors](/reference/actors/).

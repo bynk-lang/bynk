@@ -61,6 +61,6 @@ at the call, because functions are not equality-supporting, and the signature
 says so up front (hover on `same` shows `[T: Eq]`). A generic that never compares
 its parameter stays unbounded and keeps accepting functions.
 
-Reference: [Generics and bounds](/book/reference/generics/). If you are upgrading
+Reference: [Generics and bounds](/reference/generics/). If you are upgrading
 older code, see
-[`bynk.generics.missing_eq_bound`](/book/reference/diagnostics/bynk.generics.missing_eq_bound/).
+[`bynk.generics.missing_eq_bound`](/reference/diagnostics/bynk.generics.missing_eq_bound/).

@@ -204,7 +204,7 @@ doesn't stop you evaluating.
 ## 6. Unsaved edits
 
 With `--sources-stdin`, the buffers on standard input win over the files on disk,
-as for [`bynk compile`](/docs/bynk-cli/#bynk-compile):
+as for [`bynk compile`](/reference/tooling/bynk-cli/#bynk-compile):
 
 ```sh
 echo '{"/work/shop/src/money.bynk": "commons shop.money\n…"}' \
@@ -234,6 +234,6 @@ A run that goes past the time limit is killed and reported as
 `{"error":{"kind":"timeout", …}}`. The limit is 60 seconds; `--timeout SECONDS`
 changes it.
 
-See the [`bynk eval` reference](/docs/bynk-cli/#bynk-eval) for every flag and the
+See the [`bynk eval` reference](/reference/tooling/bynk-cli/#bynk-eval) for every flag and the
 result's shape, and [Run your tests](/book/guides/testing/run-tests/) for the
 runner it shares.

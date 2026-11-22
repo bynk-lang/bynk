@@ -39,7 +39,7 @@ flowchart LR
 - **`Events`** is the first-party capability that emits one: `Events.emit[E](value)`,
   `given Events` on the handler. Like every generic capability operation
   (`Idempotency.dedup[T]`, for the same reason — see
-  [First-party `bynk` capabilities](/book/reference/bynk-capabilities/)), the
+  [First-party `bynk` capabilities](/reference/bynk-capabilities/)), the
   type argument is always explicit, never inferred from `value`'s type.
 
   ```bynk,fragment
@@ -148,7 +148,7 @@ for it:
 **The idempotency idiom.** Delivery is at-least-once (see below) — an
 effectful subscriber that must not double-apply an emission claims
 `env.eventId` using the already-documented
-[`Idempotency`](/book/reference/bynk-capabilities/) capability, exactly as
+[`Idempotency`](/reference/bynk-capabilities/) capability, exactly as
 shown above. `claim` is atomic and is released if the handler fails, so a
 redelivery after a failure runs the work again, and one after success is
 skipped. This is the ordinary capability, not new syntax —
@@ -187,7 +187,7 @@ suite commerce.notifications {
 With no envelope, the case gets a fresh `eventId` on every call, the
 publishing context as `publisherId`, and the event's current schema version.
 A `system` case calls the handler that emits the event instead. See
-[Delivering an event](/book/reference/testing/#event-address).
+[Delivering an event](/reference/testing/#event-address).
 
 ## Evolving an event's shape with field defaults
 
@@ -215,7 +215,7 @@ default must be a static, wire-representable value of the field's declared
 type (a literal, a sum variant, `Some`/`None`/`Ok`/`Err`, a record, or
 `T.unsafe(lit)` for an opaque type), with no reference to `self`, a
 parameter, or a capability. Ordinary record types take defaults under the
-same rule (see [Records](/book/reference/types/#field-defaults)); on an event,
+same rule (see [Records](/reference/types/#field-defaults)); on an event,
 a default is also what lets the schema registry count an added field as
 additive.
 
@@ -503,7 +503,7 @@ and shared, so a duplicate delivered to another isolate, or after a restart, is
 still skipped.
 
 **See also:**
-[First-party `bynk` capabilities](/book/reference/bynk-capabilities/),
+[First-party `bynk` capabilities](/reference/bynk-capabilities/),
 [Understand the capability model](/book/guides/effects-and-capabilities/understand-the-capability-model/),
 [Understand: invariants as contracts](/book/guides/agents-and-state/understand-invariants/),
-[Diagnostics](/book/reference/diagnostics/).
+[Diagnostics](/reference/diagnostics/).

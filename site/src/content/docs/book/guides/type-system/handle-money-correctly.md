@@ -54,7 +54,7 @@ remainder is `total - share * ways`, an exact `Decimal` you can allocate.
 Pick the mode for the rule you are implementing: `HalfEven` (banker's rounding)
 avoids a bias across many roundings, `HalfUp` is the schoolbook rule, `Down` never
 overstates what a customer is charged. The seven modes and their effect on `2.5`
-and `-2.5` are in the [reference](/book/reference/types/#decimal).
+and `-2.5` are in the [reference](/reference/types/#decimal).
 
 ## Crossing a boundary
 
@@ -100,6 +100,6 @@ A currency code is not part of the type. A `bynk.money` commons that pairs a
 `Decimal` with an ISO 4217 code is a planned follow-on; until then, carry the
 code in a record beside the amount.
 
-**See also:** [Reference: Decimal](/book/reference/types/#decimal),
-[Wire format](/book/reference/wire-format/),
-[Spec §6.1.1](/book/spec/type-system/#611-base-types).
+**See also:** [Reference: Decimal](/reference/types/#decimal),
+[Wire format](/reference/wire-format/),
+[Spec §6.1.1](/reference/spec/type-system/#611-base-types).

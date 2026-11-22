@@ -83,8 +83,8 @@ service api from http {
 
 `GET /notes?owner=ada&limit=100` reaches the handler; `GET /notes?limit=0` is a
 `400` before it. Keys the record doesn't declare are ignored. For keys you can't
-name ahead of time, take a raw [`query: RequestQuery`](/book/reference/http/#request-query)
-instead. See [Query strings](/book/reference/http/#query-strings).
+name ahead of time, take a raw [`query: RequestQuery`](/reference/http/#request-query)
+instead. See [Query strings](/reference/http/#query-strings).
 
 ## Accept a request body
 
@@ -109,7 +109,7 @@ Return the `HttpResult` variant matching the outcome — `Ok` (200),
 `Unauthorized` (401), `Forbidden` (403), `NotFound` (404), `Conflict(msg)` (409),
 `UnprocessableEntity(msg)` (422), `TooManyRequests(msg)` (429),
 `ServerError(msg)` (500), `ServiceUnavailable(msg)` (503). See the
-[HTTP reference](/book/reference/http/) for the full table. Map domain errors
+[HTTP reference](/reference/http/) for the full table. Map domain errors
 to statuses with `match`:
 
 ```bynk
@@ -136,13 +136,13 @@ on POST("/hook") (headers: RequestHeaders, body: Bytes) -> Effect[HttpResult[Str
 ```
 
 The checker warns on `headers.get("X")?` and offers this rewrite as a fix. See
-[HTTP → Answering another status](/book/reference/http/#answering-another-status).
+[HTTP → Answering another status](/reference/http/#answering-another-status).
 
 ## Stream an incremental response
 
 To send a response as it is produced — a progress feed, a token relay, a live
 tick — return `Streaming(stream)` instead of a buffered `Ok(value)`. It carries a
-[`Stream[String]`](/book/reference/types/#stream) and emits it as Server-Sent
+[`Stream[String]`](/reference/types/#stream) and emits it as Server-Sent
 Events (`text/event-stream`); each stream element is one `data:` event.
 
 ```bynk
@@ -171,7 +171,7 @@ on GET("/feed/:mode") (mode: String) -> Effect[HttpResult[()]] by Visitor {
 }
 ```
 
-See [HTTP → Streamed responses](/book/reference/http/#streamed-responses) for
+See [HTTP → Streamed responses](/reference/http/#streamed-responses) for
 the framing rules and the mid-stream-error pattern.
 
 ## Return a non-JSON body
@@ -179,7 +179,7 @@ the framing rules and the mid-stream-error pattern.
 Handlers return typed values, serialised as JSON. To serve something that is
 *not* JSON — `robots.txt`, `sitemap.xml`, an RSS feed, a CSV download, a QR-code
 PNG — return `Raw(body, contentType)`. It writes a raw
-[`Bytes`](/book/reference/types/#bytes) body straight into the response under the
+[`Bytes`](/reference/types/#bytes) body straight into the response under the
 `content-type` you declare, with **no codec** in between.
 
 `Bytes` is binary-first: a PNG flows in directly, and text goes through
@@ -204,13 +204,13 @@ A body too large to hold in memory streams instead: `RawStreamed(body,
 contentType)` takes a `Stream[Bytes]`, usually from a capability, and writes each
 chunk as the client reads it. It sends no `ETag`, and a fault partway through cuts
 the response off, since the status is already sent. See
-[Streamed raw responses](/book/reference/http/#streamed-raw-responses).
+[Streamed raw responses](/reference/http/#streamed-raw-responses).
 
 **Why can't I just return HTML?** Because rendering is the frontend tier's job,
 not the service's. Bynk serves *bytes with a content-type*; it deliberately has
 no HTML template layer. A page — including a styled `404` — belongs in the
 frontend (Cloudflare Pages), not in a handler. See
-[HTTP → Raw responses](/book/reference/http/#raw-responses) for the full rules.
+[HTTP → Raw responses](/reference/http/#raw-responses) for the full rules.
 
 ## Call it from a browser (CORS)
 
@@ -257,7 +257,7 @@ the browser blocks it — the same fail-closed posture as authentication.
 > rejects that pair at runtime, so Bynk rejects it at compile time. With
 > credentials, name the exact origins.
 
-See [HTTP → CORS](/book/reference/http/#cors) for the full field table and matching
+See [HTTP → CORS](/reference/http/#cors) for the full field table and matching
 rules.
 
 ### Cross-site cookies need `credentials: true`
@@ -282,7 +282,7 @@ service api from http {
 Likewise, a `domain` on a cookie makes every subdomain receive it, so it warns
 (`bynk.http.cookie_domain_widens`) unless the name starts `__Host-`, where a `domain` is an
 error. Drop `domain` to keep a cookie to the host that set it. See
-[HTTP → Setting cookies](/book/reference/http/#setting-cookies).
+[HTTP → Setting cookies](/reference/http/#setting-cookies).
 
 ## Set a cookie from the record that reads it
 
@@ -325,7 +325,7 @@ and `Domain` the cookie was set with. A cookie in no record is still written as 
 Decoding a cookie is not authenticating it: a `cookies` record reads what the browser sends,
 and anyone can send any value. To sign a user in, use a [signed cookie](/book/guides/actors/authenticate-with-a-signed-cookie/)
 (its session cookie cannot be written through a record). See
-[HTTP → Writing a cookie from its record](/book/reference/http/#typed-cookie-write).
+[HTTP → Writing a cookie from its record](/reference/http/#typed-cookie-write).
 
 ## Secure by default (security headers)
 
@@ -356,7 +356,7 @@ service api from http {
 
 Reach for `security { nosniff: false }` only if you have a specific reason to send
 no security headers (for instance, HSTS and `nosniff` are already terminated at
-your edge). See [HTTP → Security headers](/book/reference/http/#security-headers)
+your edge). See [HTTP → Security headers](/reference/http/#security-headers)
 for the field table and the caveats.
 
 ## Cache a read endpoint
@@ -404,7 +404,7 @@ the safe choice for anything that might vary by caller. Durations are plural
 (`5.minutes`, `1.hours`), and `@cache` is only valid on a `GET` returning `Ok`;
 the compiler flags a singular unit or a misplaced annotation.
 
-See [HTTP → Caching](/book/reference/http/#caching) for the eligibility rules and
+See [HTTP → Caching](/reference/http/#caching) for the eligibility rules and
 the full field table.
 
 ## Cap request size
@@ -441,7 +441,7 @@ understated) — nothing reaches your handler. `@limit` is only valid on a body-
 `maxBody` is a byte count (the `_` is just visual grouping). A route with no cap is
 unchanged, so this is opt-in.
 
-See [HTTP → Request body limits](/book/reference/http/#request-body-limits) for the
+See [HTTP → Request body limits](/reference/http/#request-body-limits) for the
 precedence rule, how the bytes read are counted, and the field tables.
 
 ## Serve JSON to non-Bynk clients
@@ -473,7 +473,7 @@ service api from http {
 client still reads it. Plain mode refuses an `Option[Option[T]]` or `Option[()]` in a response
 type (`Some(None)` and `None` would both be `null`).
 
-See [HTTP → JSON for non-Bynk clients](/book/reference/http/#json-for-non-bynk-clients).
+See [HTTP → JSON for non-Bynk clients](/reference/http/#json-for-non-bynk-clients).
 
 ## Build and run
 
@@ -483,4 +483,4 @@ HTTP services compile to a Cloudflare Worker with `--target workers`. See
 ## Related
 
 - Tutorial: [Build a small HTTP service](/book/tutorials/02-http-service/).
-- Reference: [HTTP](/book/reference/http/) — the complete variant/status table.
+- Reference: [HTTP](/reference/http/) — the complete variant/status table.

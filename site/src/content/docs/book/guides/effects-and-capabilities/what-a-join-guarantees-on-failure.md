@@ -27,7 +27,7 @@ before the handler learns of it. It buys two things.
 
 A block does not undo its effects, any more than a sequence of `<-`s does. Calls that
 finished before the failure keep their effect, in the same way as in sequential code
-([agents and state](/book/reference/agents/)):
+([agents and state](/reference/agents/)):
 
 - a call to another agent or context that returned has run, and stays run;
 - writes to the agent's own `store` are staged and discarded with the failed handler;
@@ -45,4 +45,4 @@ because no call in it can read another's result.
 
 A stub resolves at once, so a test sees the same outcome every run. `expect A.op before
 B.op` compares the order calls were *issued* in; see
-[observation](/book/reference/testing/#observation).
+[observation](/reference/testing/#observation).

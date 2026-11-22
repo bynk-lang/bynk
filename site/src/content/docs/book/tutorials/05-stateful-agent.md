@@ -4,7 +4,7 @@ title: Add a stateful agent
 Everything so far has been stateless: a request comes in, a value goes out,
 nothing is remembered. A URL shortener has to remember — which code maps to which
 URL, and how often each was followed. In Bynk, the unit of state is an
-**[agent](/book/reference/glossary/#term-agent)**:
+**[agent](/reference/glossary/#term-agent)**:
 a named thing, identified by a key, that owns some state and exposes handlers to
 read and change it.
 
@@ -311,5 +311,5 @@ We have asserted that all this works — now let us prove it.
 
 *For what an agent really is and why state must be zeroable, see
 [The agent model](/book/guides/agents-and-state/the-agent-model/). For exact rules, see the
-[agents reference](/book/reference/agents/). For capabilities and providers, see
+[agents reference](/reference/agents/). For capabilities and providers, see
 the [how-to guides](/book/guides/effects-and-capabilities/).*

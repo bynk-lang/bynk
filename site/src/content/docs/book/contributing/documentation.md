@@ -11,8 +11,10 @@ time by a small remark plugin, so writing a page is mostly writing prose.
 It is organised **by kind first, then by concern** (see the
 [book's front page](/book/)). **Start** and **Learn Bynk** are read in order;
 **Concepts** holds the explanation pages, grouped by concern; **Guides** holds
-the how-to pages, grouped by what the reader is building; the **Reference** and
-**Specification** are kept whole for looking things up.
+the how-to pages, grouped by what the reader is building. The
+[Reference](/reference/) is a surface of its own, kept whole for looking things
+up: the language, architecture, adapters, tooling, diagnostics, the
+specification and the releases, under `site/src/content/docs/reference/`.
 [Diátaxis](https://diataxis.fr/) governs each page — one mode per page — and
 the part a page sits in says which mode it is. A new page goes in the part for
 its mode: an explanation in Concepts, under its concern; a how-to in Guides,
@@ -49,24 +51,34 @@ Refresh the copy from the extension when its grammar changes.
 
 ## The sidebar
 
-The sidebar is **generated**, not hand-maintained. `site/src/SUMMARY.md` is the
-Book's authored table of contents; `site/scripts/generate-sidebar.mjs` turns it
-into the committed `site/src/generated/sidebar.json` that `astro.config.mjs`
-imports. After editing `SUMMARY.md`, regenerate and commit:
+The sidebars are **generated**, not hand-maintained. Each tree has an authored
+table of contents: `site/src/SUMMARY.md` for the Book (`book/`, served at
+`/book/`) and `site/src/REFERENCE.md` for the Reference (`reference/`, served at
+`/reference/`). `site/scripts/generate-sidebar.mjs` turns them into the
+committed `site/src/generated/sidebar.json` and `reference-sidebar.json` that
+`astro.config.mjs` imports. After editing either, regenerate and commit:
 
 ```sh
-node site/scripts/generate-sidebar.mjs            # rewrite sidebar.json
-node site/scripts/generate-sidebar.mjs --check     # CI: fail if it drifted or a page is unlisted
+node site/scripts/generate-sidebar.mjs            # rewrite both sidebars
+node site/scripts/generate-sidebar.mjs --check     # CI: fail if one drifted or a page is unlisted
 ```
 
-The `--check` mode runs in CI, so a `SUMMARY.md` edit that you forget to
+The `--check` mode runs in CI, so a contents edit that you forget to
 regenerate fails the build.
 
-**Every Book page must be listed in `SUMMARY.md`.** The sidebar comes from
-`SUMMARY.md`, not from the folders, so a page nobody lists exists but no
-sidebar shows it. When you add a page under `site/src/content/docs/book/`, add
-its entry to `SUMMARY.md` in the same change. `--check` fails naming any page
-that isn't listed, and any entry that names no page.
+**Every page must be listed in its tree's contents.** A sidebar comes from the
+contents, not from the folders, so a page nobody lists exists but no sidebar
+shows it. When you add a page under `site/src/content/docs/book/`, add its entry
+to `SUMMARY.md`; under `site/src/content/docs/reference/`, to `REFERENCE.md`; in
+the same change. `--check` fails naming any page that isn't listed, and any
+entry that names no page.
+
+**Which tree a page goes in** follows what the reader is doing. Learning,
+understanding and getting a task done are the Book; looking up exact
+behaviour — a construct's rules, a tool's flags, a code, the specification, a
+release — is the Reference. In the Reference a page's folder decides its URL
+and `REFERENCE.md` decides its section, so a page can sit in Architecture
+while its file is under `tooling/`.
 
 ## Diagrams and callouts
 
@@ -103,7 +115,7 @@ content is the directive:
 
 The plugin replaces it with an EBNF code block holding that production, rendered
 from the committed `site/src/generated/grammar.json` (the same source the
-[grammar appendix](/book/reference/grammar-appendix/) is built from) so it cannot
+[grammar appendix](/reference/grammar-appendix/) is built from) so it cannot
 drift from the parser. That JSON is itself a drift-guarded render of the grammar
 — `xtask/tests/docs_consistency/generated_grammar_json.rs` regenerates and checks it — so
 the rendered production is **generated, never hand-edited**. An unknown rule name
@@ -127,7 +139,7 @@ diagnostics yields a neutral line rather than failing, since an unconstrained
 production is legitimate; to add or change a mapping, edit `grammar_symbol` and
 re-bless.
 
-The annotated reference ([`reference/grammar.md`](/book/reference/grammar/)) must
+The annotated reference ([`reference/grammar.md`](/reference/grammar/)) must
 cover every production: `xtask/tests/docs_consistency/grammar_coverage.rs` asserts that each
 embeddable grammar rule has exactly one `{{#grammar <rule>}}` entry with a
 matching `{#rule-<rule>}` heading anchor (a custom heading id — see below), and
@@ -237,13 +249,13 @@ rest are Rust drift-guard tests and Node `--check` scripts that CI runs.
    `generated_site_json`); re-bless them with `BYNK_BLESS=1` too.
 
    Each diagnostic code also has a page of its own, at
-   `/book/reference/diagnostics/<code>/`, which `/d/<code>` redirects to and
+   `/reference/diagnostics/<code>/`, which `/d/<code>` redirects to and
    which every tool links (the editor, `bynk explain`, the MCP tools and the
    playground). What a code means and how to fix it is written once, in its
    `Explain` entry in `bynk-syntax/src/diagnostics.rs`, which `bynk explain`,
    the editor's Explain panel and the code's page all show; the Book has no
    separate page per error. The pages are rendered by
-   `site/src/pages/book/reference/diagnostics/[code].astro` from
+   `site/src/pages/reference/diagnostics/[code].astro` from
    `site/src/generated/diagnostics.json`, which `diagnostics_registry.rs`
    guards like the index page. A page lists the Book pages that explain its
    code from `site/src/data/diagnostic-links.json`; when you write a section
@@ -293,7 +305,7 @@ node site/scripts/build-llms-full.mjs --check     # CI: fail if out of date
   planned.
 - **Payloadless sums use the `enum` form.** A sum whose variants all carry no
   payload is written `enum { A, B, C }` in examples — it is the canonical spelling
-  ([`types`](/book/reference/types/#sum-types)). Reserve the `| A | B` pipe form
+  ([`types`](/reference/types/#sum-types)). Reserve the `| A | B` pipe form
   for sums where a variant carries a payload (or the grammar reference teaching the
   `sum_type` production itself). The two are the same type; the convention keeps
   examples uniform.
@@ -321,10 +333,10 @@ ways — read them as a tuning fork before you draft a page.
 
 ## Glossary first-use linking
 
-The [glossary](/book/reference/glossary/) gives each load-bearing term a stable
+The [glossary](/reference/glossary/) gives each load-bearing term a stable
 anchor, `#term-<slug>` (e.g. `#term-refined-type`). On a reader-facing page, link
 the **first** occurrence of a glossary term to its entry —
-`[refined type](/book/reference/glossary/#term-refined-type)` — and only the first;
+`[refined type](/reference/glossary/#term-refined-type)` — and only the first;
 never inside a heading, a code fence, or on the glossary page itself.
 
 `site/scripts/check-glossary-links.sh` is an **advisory** lint: it lists, per page,
@@ -335,10 +347,10 @@ auto-link — terms are common words, so a human decides each first use.
 
 ## The language specification
 
-The [Bynk Language Specification](/book/spec/) lives in
-`site/src/content/docs/book/spec/`. It is the **normative** definition of the
+The [Bynk Language Specification](/reference/spec/) lives in
+`site/src/content/docs/reference/spec/`. It is the **normative** definition of the
 **current language**, updated in place per increment, distinct in register from
-the friendly [grammar reference](/book/reference/grammar/): the reference is
+the friendly [grammar reference](/reference/grammar/): the reference is
 per-construct lookup, the spec is the complete citable definition. The two share
 their generated facts.
 
@@ -373,9 +385,9 @@ never against older design documents. Cite the historical design notes for
 Treat docs as part of an increment's definition of done (see
 [Testing & fixtures](/book/contributing/testing/)): update the affected reference
 (regenerating the generated pages), update the affected
-[specification](/book/spec/) chapters (per *Keeping the spec current* above), and
+[specification](/reference/spec/) chapters (per *Keeping the spec current* above), and
 write the changelog line in your `design/pending/` file: the stamp adds it to
-[Unreleased](/book/reference/releases/unreleased/) when the increment merges,
+[Unreleased](/reference/releases/unreleased/) when the increment merges,
 and cutting a release moves it to that release's page. The Book's
 current-version banners are single-sourced —
 `scripts/bump-version.sh` rewrites them (and regenerates `llms-full.txt`) and

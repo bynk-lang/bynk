@@ -11,4 +11,4 @@ the storage-kind ops), committed atomically when the handler returns.
 - [Build a stateful agent](/book/guides/agents-and-state/stateful-agent/)
 - [Model an agent as a state machine](/book/guides/agents-and-state/state-machine/)
 
-**See also:** [Reference — Agents](/book/reference/agents/).
+**See also:** [Reference — Agents](/reference/agents/).

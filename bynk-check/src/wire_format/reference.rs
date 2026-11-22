@@ -814,7 +814,7 @@ apart. Anyone else gets a bare `403`.
 A TypeScript Worker need not speak any of this by hand. For each context with
 a foreign caller the build emits a typed client, `bynk-client.ts`, which
 signs, stamps the contract hash and encodes exactly as this page describes;
-see [TypeScript client](/book/reference/typescript-client/).
+see [TypeScript client](/reference/typescript-client/).
 "#
     );
     out

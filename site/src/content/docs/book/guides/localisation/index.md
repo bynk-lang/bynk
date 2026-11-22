@@ -16,5 +16,5 @@ touches the bundle and nothing else.
 — an HTTP service that negotiates a locale and renders from a three-language
 bundle.
 
-**See also:** [First-party `bynk` capabilities](/book/reference/bynk-capabilities/),
-[Diagnostics](/book/reference/diagnostics/).
+**See also:** [First-party `bynk` capabilities](/reference/bynk-capabilities/),
+[Diagnostics](/reference/diagnostics/).

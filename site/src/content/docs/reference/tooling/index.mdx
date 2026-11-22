@@ -1,0 +1,70 @@
+---
+title: Tooling
+description: Operating the Bynk toolchain — the bynk compiler and driver, the bynk.toml manifest, TypeScript emission, editor tooling, and a reference page for each tool.
+---
+
+import { CardGrid, LinkCard } from "@astrojs/starlight/components";
+
+This section of the Reference is for the person operating the toolchain:
+running the compiler in CI, wiring up a project, reading the emitted TypeScript,
+and setting up an editor. It assumes you already know roughly what Bynk is and
+answers the operational questions instead — which command, which flag, which key
+in `bynk.toml`, what the build actually produces.
+
+To learn the language itself — what its constructs mean and how its types
+behave — read the [Book](/book/) and the [language reference](/reference/); the
+normative emission and runtime semantics live in the
+[specification](/reference/spec/). This section is about operating the tools
+that act on that language.
+
+## Command-line tools
+
+<CardGrid>
+  <LinkCard title="bynk — the CLI" href="/reference/tooling/bynk-cli/" description="The compiler and developer front-end: compile, check, fmt, test, and the Node toolchain commands (doctor, new, dev, deploy)." />
+</CardGrid>
+
+## Project & output
+
+<CardGrid>
+  <LinkCard title="bynk.toml manifest" href="/reference/tooling/manifest/" description="The project configuration file and every key it understands." />
+  <LinkCard title="Emission" href="/reference/tooling/emission/" description="What TypeScript each Bynk construct compiles to, and the two build targets — bundle versus workers." />
+</CardGrid>
+
+## Editor & tooling
+
+<CardGrid>
+  <LinkCard title="Overview" href="/reference/tooling/editor-and-tooling/" description="Task-focused how-tos for keeping your environment and editor working." />
+  <LinkCard title="Check your environment" href="/reference/tooling/editor-and-tooling/doctor/" description="Confirm the toolchain is installed and configured correctly with bynk doctor." />
+  <LinkCard title="Format your code" href="/reference/tooling/editor-and-tooling/format/" description="Apply the canonical layout to your sources with bynk-fmt." />
+  <LinkCard title="Set up editor support" href="/reference/tooling/editor-and-tooling/editor-support/" description="Wire up diagnostics, completion, and highlighting in your editor." />
+  <LinkCard title="Debug in VS Code" href="/reference/tooling/editor-and-tooling/debugging/" description="Step through a running Bynk program from the VS Code debugger." />
+</CardGrid>
+
+## Tool reference
+
+The reference for each tool around the compiler. If you just want editor
+support, the how-to [Set up editor support](/reference/tooling/editor-and-tooling/editor-support/)
+is the quickest path.
+
+| Tool | Binary / package | Purpose |
+|---|---|---|
+| [`bynk-fmt`](/reference/tooling/bynk-fmt/) | `bynk fmt` | The canonical source formatter. |
+| [`bynk-lsp`](/reference/tooling/bynk-lsp/) | `bynk-lsp` | The language server (diagnostics, hover, go-to-definition, formatting). |
+| [`bynk mcp`](/reference/tooling/bynk-mcp/) | `bynk mcp` | A Model Context Protocol server, so AI agents outside VS Code can ask the toolchain about Bynk. |
+| [`bynk client`](/reference/tooling/bynk-client/) | `bynk client` | A typed TypeScript client for a project's `from http` services, for a front end. Experimental. |
+| [`bynk openapi`](/reference/tooling/bynk-openapi/) | `bynk openapi` | An OpenAPI 3.1 document for a project's `from http` services, for client codegen, docs and CI. |
+| [`tree-sitter-bynk`](/reference/tooling/tree-sitter-bynk/) | — | The grammar used for highlighting and structural tooling. |
+| [`vscode-bynk`](/reference/tooling/vscode-bynk/) | VS Code extension | Editor integration built on `bynk-lsp`. |
+
+All are built from the same repository as the compiler, so they track the
+language version for version (currently v0.640).
+
+## API reference
+
+Generated `rustdoc` for the Bynk workspace crates — the compiler internals behind
+the toolchain, for contributors and embedders. Most users compile Bynk through the
+CLIs rather than depending on these crates directly.
+
+<CardGrid>
+  <LinkCard title="Crate API docs" href="/reference/api/" description="rustdoc for every workspace crate: bynk, the compiler pipeline libraries, and the tooling crates." />
+</CardGrid>

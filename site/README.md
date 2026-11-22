@@ -4,9 +4,9 @@ An [Astro](https://astro.build/) + [Starlight](https://starlight.astro.build/) s
 
 ## What it holds
 
-- **The Book** (`src/content/docs/book/`): the language guide, tutorials and reference.
+- **The Book** (`src/content/docs/book/`): the tutorials, concepts and guides. Its contents are `src/SUMMARY.md`.
 - **Bynk by Example** (`src/content/docs/by-example/`): project pages built from `../examples/` and a snippets tier. The `<Example>` component reads real source, so a page cannot drift from what the compiler checks, and runnable blocks link to (or embed) the playground.
-- **Developer docs** (`src/content/docs/docs/`): the CLI, manifest, emission and tooling, plus generated crate API docs.
+- **The Reference** (`src/content/docs/reference/`): the language reference, architecture, adapters, tooling (the CLI, manifest, emission and each tool, plus generated crate API docs), the diagnostics, the normative specification and the releases. Its contents are `src/REFERENCE.md`.
 
 Every fenced `bynk` block is compiled by the `doc_examples` gate in `bynk-tests/tests/`, so the code shown is checked by CI.
 

@@ -30,19 +30,19 @@ fn current_version_banners_agree_with_the_release() {
     // phrase that must carry the current version)
     let banners = [
         ("book/index.md", format!("currently v{mm}")),
-        ("docs/tooling/index.md", format!("currently v{mm}")),
+        ("reference/tooling/index.mdx", format!("currently v{mm}")),
         (
             "book/about/versioning-and-roadmap.md",
             format!("written against v{mm}"),
         ),
-        ("book/spec/scope.md", format!("current version, v{mm}")),
+        ("reference/spec/scope.md", format!("current version, v{mm}")),
         (
-            "book/spec/appendix-version-history.md",
+            "reference/spec/appendix-version-history.md",
             format!("current version, v{mm}"),
         ),
-        ("book/spec/index.md", format!("current version, v{mm}")),
+        ("reference/spec/index.md", format!("current version, v{mm}")),
         (
-            "book/reference/releases/index.md",
+            "reference/releases/index.md",
             format!("written against **v{mm}**"),
         ),
         // The LLM primer (#2464) is served from `site/public/`, outside the

@@ -74,7 +74,7 @@ suite mailer as system {
 At `system` the message is serialised, sent through a JSON round trip, and
 delivered through the deployable Worker's own `queue` entry point, as the
 platform delivers it. A consumer that faults is retried, so the address yields
-`Retry`. See [Cron and queue at `system`](/book/reference/testing/#cron-queue-system).
+`Retry`. See [Cron and queue at `system`](/reference/testing/#cron-queue-system).
 
 ## Send to the queue
 
@@ -92,7 +92,7 @@ service signup from http {
 }
 ```
 
-See [Sending to a queue](/book/reference/bynk-capabilities/#sending-to-a-queue-queue).
+See [Sending to a queue](/reference/bynk-capabilities/#sending-to-a-queue-queue).
 
 ## Build and run
 
@@ -103,5 +103,5 @@ queue becomes a `[[queues.consumers]]` binding in the generated
 
 ## Related
 
-- Reference: [Queue](/book/reference/queue/).
-- Reference: [Cron](/book/reference/cron/) — the sibling time-driven handler.
+- Reference: [Queue](/reference/queue/).
+- Reference: [Cron](/reference/cron/) — the sibling time-driven handler.

@@ -19,7 +19,7 @@ fn fixture(tag: &str) -> PathBuf {
 
     write("Cargo.toml", "[workspace.package]\nversion = \"0.185.0\"\n");
     write(
-        "site/src/content/docs/book/reference/releases/unreleased.md",
+        "site/src/content/docs/reference/releases/unreleased.md",
         "# Changelog\n\n## Recent increments\n\n| Version | Highlights |\n|---|---|\n| **v0.185.0** | Old thing |\n",
     );
     write(
@@ -73,10 +73,9 @@ fn stamp_one_increment_with_an_adr() {
     stamp::apply(&root, &plan, None, bumper(&root)).expect("apply");
 
     // Changelog: new row on top.
-    let changelog = fs::read_to_string(
-        root.join("site/src/content/docs/book/reference/releases/unreleased.md"),
-    )
-    .unwrap();
+    let changelog =
+        fs::read_to_string(root.join("site/src/content/docs/reference/releases/unreleased.md"))
+            .unwrap();
     let sep = changelog.find("|---|---|").unwrap();
     let after = &changelog[sep..];
     assert!(
@@ -147,10 +146,9 @@ fn stamp_two_increments_get_sequential_versions() {
 
     stamp::apply(&root, &plan, None, bumper(&root)).expect("apply");
 
-    let changelog = fs::read_to_string(
-        root.join("site/src/content/docs/book/reference/releases/unreleased.md"),
-    )
-    .unwrap();
+    let changelog =
+        fs::read_to_string(root.join("site/src/content/docs/reference/releases/unreleased.md"))
+            .unwrap();
     // Newest (0.186.1) on top, then 0.186.0, then the pre-existing 0.185.0.
     let pos = |v: &str| changelog.find(v).unwrap();
     assert!(pos("v0.186.1") < pos("v0.186.0"));
@@ -204,7 +202,7 @@ fn a_failed_bump_rolls_back_and_leaves_a_clean_retry() {
     )
     .unwrap();
 
-    let changelog_path = root.join("site/src/content/docs/book/reference/releases/unreleased.md");
+    let changelog_path = root.join("site/src/content/docs/reference/releases/unreleased.md");
     let readme_path = root.join("design/decisions/README.md");
     let changelog_before = fs::read_to_string(&changelog_path).unwrap();
     let readme_before = fs::read_to_string(&readme_path).unwrap();
@@ -262,7 +260,7 @@ fn apply_refuses_to_clobber_an_existing_adr() {
     fs::write(&target, "# 0206 — pre-existing, do not clobber\n").unwrap();
     let sentinel = fs::read_to_string(&target).unwrap();
 
-    let changelog_path = root.join("site/src/content/docs/book/reference/releases/unreleased.md");
+    let changelog_path = root.join("site/src/content/docs/reference/releases/unreleased.md");
     let changelog_before = fs::read_to_string(&changelog_path).unwrap();
 
     let err = stamp::apply(&root, &plan, None, |_| panic!("bump must not run"))
@@ -499,7 +497,7 @@ const UPGRADING_FIXTURE: &str =
     "# Upgrading\n\nIntro.\n\n<!-- stamp:breaking-entries -->\n\n## v0.185.0\n\nOld break.\n\n";
 
 fn upgrading_path(root: &Path) -> PathBuf {
-    root.join("site/src/content/docs/book/reference/upgrading.md")
+    root.join("site/src/content/docs/reference/upgrading.md")
 }
 
 #[test]
@@ -588,10 +586,9 @@ fn breaking_without_the_page_fails_before_writing_anything() {
     .unwrap();
     let plan = stamp::plan(&root).expect("plan");
     stamp::apply(&root, &plan, None, bumper(&root)).expect_err("page is missing");
-    let changelog = fs::read_to_string(
-        root.join("site/src/content/docs/book/reference/releases/unreleased.md"),
-    )
-    .unwrap();
+    let changelog =
+        fs::read_to_string(root.join("site/src/content/docs/reference/releases/unreleased.md"))
+            .unwrap();
     assert!(!changelog.contains("Break a"), "nothing may be written");
     assert!(root.join("design/pending/a-break.md").exists());
 }

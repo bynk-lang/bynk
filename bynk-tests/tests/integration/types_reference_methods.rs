@@ -12,7 +12,7 @@ use bynk_check::kernel_op::{KernelMethod, ListOp, MapOp, OptionOp, ResultOp, Set
 
 fn types_reference() -> String {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../site/src/content/docs/book/reference/types.md");
+        .join("../site/src/content/docs/reference/types.md");
     fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()))
 }
 

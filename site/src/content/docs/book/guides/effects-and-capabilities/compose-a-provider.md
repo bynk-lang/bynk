@@ -62,7 +62,7 @@ rest.
 - Each `given` name must be a declared capability
   (`bynk.given.unknown_capability`).
 - A capability can't depend on itself, directly or transitively
-  ([`bynk.provider.dependency_cycle`](/book/reference/diagnostics/bynk.provider.dependency_cycle/)).
+  ([`bynk.provider.dependency_cycle`](/reference/diagnostics/bynk.provider.dependency_cycle/)).
 
 ## How it's wired
 
@@ -73,4 +73,4 @@ orders it.
 
 ## Related
 
-- Reference: [Capabilities & providers](/book/reference/capabilities/).
+- Reference: [Capabilities & providers](/reference/capabilities/).

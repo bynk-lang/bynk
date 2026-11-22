@@ -63,6 +63,6 @@ test for "available never goes negative"; the invariant *is* that guarantee.
   [the agent model](/book/guides/agents-and-state/the-agent-model/).
 - They are **not** transactional rollback. A fault means the *offending commit*
   is never written, not that the whole handler is undone (effects already sent
-  stand). See [Agent invariants](/book/reference/agent-invariants/).
+  stand). See [Agent invariants](/reference/agent-invariants/).
 - They are **not** a typed outcome. A violation is a fault the caller cannot
   pattern-match — it aborts, the same way any other fault does.

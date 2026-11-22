@@ -8,7 +8,7 @@ Senders that promise delivery promise it *at least once*: a webhook is resent wh
 your answer is slow, a queue message is redelivered when a consumer is cut off, a
 client retries a command it never saw an answer to. The same delivery can reach you
 more than once, and two copies can arrive at the same moment.
-[`Idempotency.claim`](/book/reference/bynk-capabilities/#the-idempotency-capability)
+[`Idempotency.claim`](/reference/bynk-capabilities/#the-idempotency-capability)
 is the one call that makes "the first delivery wins" correct under that.
 
 ## Claim the delivery
@@ -83,6 +83,6 @@ first.
 
 - [Verify webhooks](/book/guides/actors/verify-webhooks/): the signature check that
   runs before the handler, and the replay window it enforces.
-- [The `Idempotency` capability](/book/reference/bynk-capabilities/#the-idempotency-capability).
+- [The `Idempotency` capability](/reference/bynk-capabilities/#the-idempotency-capability).
 - [Deploy to Cloudflare](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/#the-idempotency-database):
   the database `claim` uses.

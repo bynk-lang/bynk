@@ -20,9 +20,9 @@ The book has four parts to read, and three to look things up in:
   of the language: why it works the way it does.
 - **[Guides](/book/guides/)** — how to do a particular task, grouped by what
   you are building.
-- **[Reference](/book/reference/)** and the
-  **[Specification](/book/spec/)** — exact rules. The
-  **[Diagnostic index](/book/reference/diagnostics/)** lists every error the
+- **[Reference](/reference/)** and the
+  **[Specification](/reference/spec/)** — exact rules. The
+  **[Diagnostic index](/reference/diagnostics/)** lists every error the
   compiler reports, with a page for each saying what it means and how to fix it.
 
 Each page does one of those jobs, following [Diátaxis](https://diataxis.fr/):
@@ -40,5 +40,5 @@ If you are not sure where to start:
 - **Have a specific task?** Go to the [Guides](/book/guides/).
 
 > [!NOTE]
-> Meet an unfamiliar term? The [glossary](/book/reference/glossary/) defines Bynk's
+> Meet an unfamiliar term? The [glossary](/reference/glossary/) defines Bynk's
 > load-bearing vocabulary, one line each.

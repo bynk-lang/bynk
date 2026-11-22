@@ -1,7 +1,7 @@
 //! Generates the complete-grammar appendix from `tree-sitter-bynk/src/grammar.json`
 //! and keeps it up to date.
 //!
-//! `site/src/content/docs/book/reference/grammar-appendix.md` is rendered from
+//! `site/src/content/docs/reference/grammar-appendix.md` is rendered from
 //! the compiled grammar (via `bynk_tests::grammar`), so it cannot drift from
 //! the `tree-sitter-bynk` grammar. That grammar is a separate parser from the
 //! compiler's own recursive-descent parser (`bynk-syntax`); the two are held in
@@ -25,7 +25,7 @@ fn grammar_json() -> String {
 #[test]
 fn generated_grammar_appendix_is_up_to_date() {
     let page = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../site/src/content/docs/book/reference/grammar-appendix.md");
+        .join("../site/src/content/docs/reference/grammar-appendix.md");
     let rendered = xtask::site_page::to_site_page(
         &xtask::grammar::render_appendix(&grammar_json()),
         "reference",
@@ -39,7 +39,7 @@ fn generated_grammar_appendix_is_up_to_date() {
     let current = fs::read_to_string(&page).unwrap_or_default();
     assert_eq!(
         current, rendered,
-        "site/src/content/docs/book/reference/grammar-appendix.md is out of date with the grammar.\n\
+        "site/src/content/docs/reference/grammar-appendix.md is out of date with the grammar.\n\
          Regenerate with: BYNK_BLESS=1 cargo test -p xtask --test docs_consistency grammar_reference::"
     );
 }

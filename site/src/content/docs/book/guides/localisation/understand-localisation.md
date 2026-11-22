@@ -157,5 +157,5 @@ at render time rather than failing the build.
 **See also:**
 [Declare a message bundle](/book/guides/localisation/declare-a-message-bundle/),
 [Format with ICU](/book/guides/localisation/format-with-icu/),
-[First-party `bynk` capabilities](/book/reference/bynk-capabilities/),
+[First-party `bynk` capabilities](/reference/bynk-capabilities/),
 [Understand the capability model](/book/guides/effects-and-capabilities/understand-the-capability-model/).

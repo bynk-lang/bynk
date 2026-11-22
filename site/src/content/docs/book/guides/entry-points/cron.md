@@ -74,7 +74,7 @@ suite reaper as system {
 At `unit` and `integration` the handler runs in process. At `system` it runs
 through the deployable Worker's own `scheduled` entry point, which needs a target
 that already qualifies for `system` (an `http` or `queue` service, or a consumed
-context). See [Cron and queue at `system`](/book/reference/testing/#cron-queue-system).
+context). See [Cron and queue at `system`](/reference/testing/#cron-queue-system).
 
 ## Build and run
 
@@ -84,5 +84,5 @@ schedule lands in the `[triggers]` table of the generated `wrangler.toml`. See
 
 ## Related
 
-- Reference: [Cron](/book/reference/cron/).
-- Reference: [HTTP](/book/reference/http/) — the sibling request-driven handler.
+- Reference: [Cron](/reference/cron/).
+- Reference: [HTTP](/reference/http/) — the sibling request-driven handler.

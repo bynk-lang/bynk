@@ -175,7 +175,7 @@ fn the_reference_pages_example_manifest_matches_the_schema() {
     // one of them. A map table's entries contribute their keys, and map tables
     // with the same entry keys (`[dependencies]`, `[dev-dependencies]`) share
     // them: one entry shape is shown once.
-    let page = read("site/src/content/docs/docs/manifest.md");
+    let page = read("site/src/content/docs/reference/tooling/manifest.md");
     let section = page
         .split("\n## Example\n")
         .nth(1)

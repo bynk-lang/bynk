@@ -96,4 +96,4 @@ These examples are honest about what compiles *today* (Bynk is pre-1.0):
   `stub` overrides any one operation. `sessions` stubs the `Clock` to test expiry,
   `webhook-relay` stubs `Secrets` and `Fetch` to test forwarding, and `event-log`
   drives its time-window routes. See
-  [Platform capabilities under test](https://bynk-lang.org/book/reference/testing/#platform-doubles).
+  [Platform capabilities under test](https://bynk-lang.org/reference/testing/#platform-doubles).

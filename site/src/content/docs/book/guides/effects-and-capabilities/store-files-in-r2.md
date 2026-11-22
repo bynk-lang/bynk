@@ -139,5 +139,5 @@ discards an upload, and R2 discards one left incomplete for 7 days.
 Every test gets an in-memory bucket per instance, with the same conditions,
 metadata and paging, so no stub is needed; `stub Archives.get(_) returns …`
 still works when you want one. See
-[the reference](/book/reference/bynk-capabilities/#object-storage-r2) for every
+[the reference](/reference/bynk-capabilities/#object-storage-r2) for every
 operation.

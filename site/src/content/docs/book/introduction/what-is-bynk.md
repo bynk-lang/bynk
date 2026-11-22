@@ -3,9 +3,9 @@ title: What is Bynk?
 ---
 Bynk is a statically typed programming language for building services. It is
 **architecture-first**: the shape of a program — its
-[contexts](/book/reference/glossary/#term-context),
-[services](/book/reference/glossary/#term-service),
-[agents](/book/reference/glossary/#term-agent), and the types that flow between
+[contexts](/reference/glossary/#term-context),
+[services](/reference/glossary/#term-service),
+[agents](/reference/glossary/#term-agent), and the types that flow between
 them — is part of the language, not a convention layered on top. Bynk compiles to **typed TypeScript** and targets
 **Cloudflare Workers**.
 
@@ -39,9 +39,9 @@ capability, a stateful agent, and an HTTP service — read
 ## What makes Bynk distinct
 
 - **Make illegal states unrepresentable.** Bynk leans on
-  *[refined types](/book/reference/glossary/#term-refined-type)*
-  (types carrying a predicate), *[opaque types](/book/reference/glossary/#term-opaque-type)*,
-  and *errors-as-values* ([`Result`](/book/reference/glossary/#term-result-option),
+  *[refined types](/reference/glossary/#term-refined-type)*
+  (types carrying a predicate), *[opaque types](/reference/glossary/#term-opaque-type)*,
+  and *errors-as-values* ([`Result`](/reference/glossary/#term-result-option),
   `Ok`/`Some`/`None`) so that whole classes of bug cannot be
   expressed. See [The type-system philosophy](/book/guides/type-system/philosophy/).
 - **Architecture in the language.** Contexts, services, and stateful *agents*
@@ -51,7 +51,7 @@ capability, a stateful agent, and an HTTP service — read
   See [Why compile to TypeScript](/book/guides/projects-build-and-deployment/why-compile-to-typescript/).
 - **Testing is built in.** `suite`/`case` blocks, `expect`, generative
   `property`/`for all`, the `as <tier>` dial, per-seam `stub` test doubles, and
-  [`Val[T]`](/book/reference/glossary/#term-val) value fabrication ship with the
+  [`Val[T]`](/reference/glossary/#term-val) value fabrication ship with the
   language.
 
 ## What Bynk is *not* (yet)

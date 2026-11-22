@@ -1,6 +1,6 @@
 // @ts-check
 //! Fail if a section number is used by more than one heading in the normative
-//! specification (`src/content/docs/book/spec/*.md`). Spec sections are cited by
+//! specification (`src/content/docs/reference/spec/*.md`). Spec sections are cited by
 //! number (§7.3.4e), so a repeated number makes a citation ambiguous, and a
 //! section copied by mistake can contradict its original. The link checker cannot
 //! see either case. A duplicated §7.3.4e did exactly that (#2610, #2611).
@@ -19,7 +19,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const SPEC = path.join(HERE, "../src/content/docs/book/spec");
+const SPEC = path.join(HERE, "../src/content/docs/reference/spec");
 
 /** @type {Map<string, string[]>} section number → `file:line` of each heading */
 const seen = new Map();

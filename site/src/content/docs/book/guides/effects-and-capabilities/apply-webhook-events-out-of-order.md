@@ -269,4 +269,4 @@ database from a case. A mutation pass (break each guard, expect a failure) is
 the quickest check that the suite pins every rule.
 
 **See also:** [Verify an inbound webhook](/book/guides/actors/verify-webhooks/),
-[Reference, SQL databases: `D1`](/book/reference/bynk-capabilities/#sql-databases-d1).
+[Reference, SQL databases: `D1`](/reference/bynk-capabilities/#sql-databases-d1).

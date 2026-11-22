@@ -34,5 +34,5 @@ Effects are explicit and capability-gated: a handler declares what it needs via
 - [Search by meaning with Vectorize and Workers AI](/book/guides/effects-and-capabilities/search-by-meaning-with-vectorize/)
 - [Sign and verify data](/book/guides/effects-and-capabilities/sign-and-verify-data/)
 
-**See also:** [Reference — Capabilities & providers](/book/reference/capabilities/),
-[Adapters](/book/reference/adapters/).
+**See also:** [Reference — Capabilities & providers](/reference/capabilities/),
+[Adapters](/reference/adapters/).

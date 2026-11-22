@@ -271,6 +271,6 @@ binds `r` in the truthy branch.
 
 - For a one-branch test that yields a `Bool`, see
   [Narrow and bind with `is`](/book/guides/type-system/narrow-with-is/).
-- Reference: [type system](/book/reference/types/).
+- Reference: [type system](/reference/types/).
 
 To match a record by its fields, see [Match on a record's fields](/book/guides/type-system/match-on-a-records-fields/). To match a list by its length and elements, see [Match on a list's shape](/book/guides/type-system/match-on-a-lists-shape/). To match an `Int` by the band it falls in, see [Match on a range of numbers](/book/guides/type-system/match-on-a-range-of-numbers/).

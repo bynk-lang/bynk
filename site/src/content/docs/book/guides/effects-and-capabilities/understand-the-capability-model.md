@@ -7,7 +7,7 @@ call an HTTP API, to read the clock. Bynk does not let that happen invisibly.
 Every effect on the outside world is **explicit in a type** and **gated by a
 capability** the code must be granted. This page is the mental model behind the
 *Do* recipes that follow; for the exact syntax and error categories, see the
-[capabilities reference](/book/reference/capabilities/).
+[capabilities reference](/reference/capabilities/).
 
 ```mermaid
 flowchart LR
@@ -69,7 +69,7 @@ effect and binds its result.
 > the `Logger` in its `given` clause: the editor shows the shortest chain of
 > agent calls from that declaration to the call that uses it, each step a link.
 > The **Show capability path** quick fix lists every chain. See the
-> [extension's guide](/docs/tooling/vscode-bynk/).
+> [extension's guide](/reference/tooling/vscode-bynk/).
 
 ## `do`: run a unit effect, no binder
 
@@ -148,14 +148,14 @@ That is an **adapter**: it declares a capability and binds it to a TypeScript
 implementation (an npm library, a remote API), so the rest of your code consumes
 a real integration as an ordinary capability, with the messy boundary sealed
 behind the contract. [Wrap a library as an adapter](/book/guides/effects-and-capabilities/wrap-a-library/) walks
-through one; the [adapters reference](/book/reference/adapters/) is the full
+through one; the [adapters reference](/reference/adapters/) is the full
 surface.
 
 Bynk ships first-party capabilities this way under the **`bynk`** namespace — for
 example `bynk.Secrets` (configuration and secrets) and `bynk.Fetch` (outbound
 HTTP) — consumed with `consumes bynk { … }` and granted with `given`, exactly
 like any capability you declare yourself. The
-[first-party `bynk` capabilities](/book/reference/bynk-capabilities/) reference
+[first-party `bynk` capabilities](/reference/bynk-capabilities/) reference
 catalogues the full set.
 
 ## The shape to take away
@@ -169,6 +169,6 @@ catalogues the full set.
 
 With that model in hand, the recipes below are mechanical.
 
-**See also:** [Capabilities & providers reference](/book/reference/capabilities/),
-[Adapters reference](/book/reference/adapters/),
+**See also:** [Capabilities & providers reference](/reference/capabilities/),
+[Adapters reference](/reference/adapters/),
 [How a Bynk program is shaped](/book/guides/program-structure/how-a-program-is-shaped/).

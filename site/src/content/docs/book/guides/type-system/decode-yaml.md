@@ -116,5 +116,5 @@ and column in the message, never half-read:
 Anchors and aliases are refused on purpose: they let a small file expand into an
 enormous one, and a settings file should read the same top to bottom.
 
-**See also:** [Reference: `Yaml.decode`](/book/reference/types/#yaml-decode),
+**See also:** [Reference: `Yaml.decode`](/reference/types/#yaml-decode),
 [Decode untrusted JSON into a typed value](/book/guides/type-system/decode-json/).

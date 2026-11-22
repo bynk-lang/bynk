@@ -11,8 +11,8 @@
 # false-positive on substrings and code. A human decides each first use.
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)/src/content/docs/book"
-GLOSSARY_REL="reference/glossary.md"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)/src/content/docs"
+GLOSSARY_REL="reference/glossary.md" # under the Reference since slice 5
 
 # slug ::: case-insensitive(1/0) ::: regex ::: display
 TERMS="$(cat <<'EOF'
@@ -74,7 +74,7 @@ while IFS= read -r file; do
     printf '%s' "$findings"
     total=$((total + 1))
   fi
-done < <(find "$ROOT" -name '*.md' | sort)
+done < <(find "$ROOT/book" "$ROOT/reference" -name '*.md' | sort)
 
 echo ""
 echo "Glossary-link lint: $total page(s) have glossary terms with no first-use link."

@@ -2,7 +2,7 @@
 
 A proposal is a **transient input** to an increment, not a durable artefact: the
 durable record of a landed increment is the code and its fixtures, the
-[normative spec](../../site/src/content/docs/book/spec/index.md) updated in place, the
+[normative spec](../../site/src/content/docs/reference/spec/index.md) updated in place, the
 [decision records](../decisions/README.md), and the **reader-facing book**
 (`site/src/content/docs/book/` — guides, reference, tutorials, changelog, roadmap) left current
 and reliable. The spec is normative; the book is what a newcomer or evaluator

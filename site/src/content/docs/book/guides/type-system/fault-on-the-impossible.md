@@ -51,5 +51,5 @@ case "an archived order is never labelled" {
 - **Don't** use it for input a caller could get wrong: return a `Result` so the
   caller can handle it. There is deliberately no general `panic`.
 
-**See also:** [Reference — Deliberate faults](/book/reference/types/#faults),
-[Spec §5.2](/book/spec/static-semantics/#52-well-typedness).
+**See also:** [Reference — Deliberate faults](/reference/types/#faults),
+[Spec §5.2](/reference/spec/static-semantics/#52-well-typedness).

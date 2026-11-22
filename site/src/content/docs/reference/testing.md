@@ -1,0 +1,2121 @@
+---
+title: Testing
+---
+## `suite` blocks {#suite-blocks}
+
+A test file is a `suite` block naming its target unit, containing named `case`s:
+
+```bynk,fragment
+suite counters {
+	case "a fresh counter starts at zero" {
+		let n <- Counter(CounterId.unsafe("fresh")).current()
+		expect n == 0
+	}
+}
+```
+
+Case descriptions within a suite must be unique
+(`bynk.suite.duplicate_case_name`); the target must exist
+(`bynk.suite.unknown_target`). Test files live under the project's `tests/` tree —
+see [Lay out a project](/book/guides/projects-build-and-deployment/layout/).
+
+A case drives the target's services by their natural surface — resolved against
+the declared handler and checked for arity and argument types:
+
+| service | address |
+|---|---|
+| `on call` | `svc.call(args)` |
+| `from http` | `svc.GET("/path")`, `svc.POST("/path", body)` — the path is the route **pattern**, then the handler's params (path params, then body); a `system` case may add a trailing [`RequestHeaders`](#request-headers) when the route declares no `headers:` |
+| `from cron` | `svc.schedule("<expr>")` — matched to the handler with that schedule |
+| `from queue` | `svc.message(msg)` |
+| `from Events(E)` | `svc.event(e)`, `svc.event(e, env)` — [one delivered event](#event-address) |
+| `from websocket` | `svc.open(tc, route…)`, `svc.message(tc, frame)`, `svc.close(tc)` — [a connection's lifecycle](#websocket-address) |
+
+A route/schedule the service does not declare is `bynk.test.service_unknown_route`;
+`svc.call(...)` on a service with no `on call` handler is
+`bynk.test.service_no_call_handler`.
+
+At `unit` and `integration` the `schedule` and `message` addresses run the
+handler in process. At `system` they run it through the deployable Worker's own
+entry points; see [Cron and queue at `system`](#cron-queue-system).
+
+The `call` address works at `unit` and `integration` only. An `on call` service is
+internal to a deployment and signed per caller, so a `system` case that calls it
+is `bynk.test.call_needs_in_process`; drive an `http` route that reaches the
+handler instead.
+
+The outcome is typed by what the addressed handler returns. `let r <-
+api.GET("/x")` on a handler that returns `Effect[HttpResult[User]]` binds `r`
+as an `HttpResult[User]`, so `Ok(u)` binds `u` as a `User`. The same holds for
+`svc.call(…)`, `svc.schedule("…")` (usually a `Result[(), String]`) and
+`svc.message(m)` (a `QueueResult`, whose `Retry(reason)` binds a `String`). A
+match or `is` test on the outcome is checked like any other: an unknown variant,
+a wrong arity, or a method the payload's type lacks is an error.
+
+A handler that detaches an effect (`e.detach()`) runs in a case as on the Worker: the effect is
+handed to the execution context's `waitUntil`, and the runner awaits every
+such effect after the call returns, so the case's expectations see its effects.
+A failure the detached effect reports (a fault, or an `Err` when it is a
+`Result`) does not fail the case, as on the Worker: the runner prints each
+under the case and counts them as `detached_failures` in `--format json`.
+
+```bynk,fragment
+suite app.web {
+	case "the greeting names the visitor" {
+		let r <- api.GET("/hello") by Visitor
+		match r {
+			Ok(greeting) => expect greeting.startsWith("Hello"),
+			_ => expect false,
+		}
+	}
+}
+```
+
+A call that reaches past the handler's types yields an
+[`HttpOutcome`](#httpoutcome) instead. Such calls drive a raw `Wire(…)`
+argument, drive `by Nobody`, or use a method the path declares no handler for.
+A [static asset](#assets) fetch yields an `HttpResult[()]`.
+
+### Delivering an event — `svc.event(e)` {#event-address}
+
+A case delivers one event to a `from Events(E)` service with `svc.event(e)`, or
+`svc.event(e, env)` to choose its [envelope](/book/guides/events/understand-events/#the-envelope-and-idempotent-handling).
+The event goes through the service's generated handler, the same path the
+fan-out uses, so the subscription's pattern filter and `via schema(N)` guard
+apply. An event they reject reaches no handler code.
+
+```bynk,fragment
+suite shop.ledger {
+	case "an event delivered twice is counted once" {
+		let e = OrderPlaced { id: "o1" }
+		let env = EventEnvelope {
+			eventId: "evt-1",
+			publisherId: "shop.orders",
+			emittedAt: Instant.fromEpochMillis(0),
+			schemaVersion: 1,
+		}
+		let _ <- OnPlaced.event(e, env)
+		let _ <- OnPlaced.event(e, env)
+		let t <- Books("main").totals()
+		expect t.orders == 1
+	}
+}
+```
+
+With no envelope, the case supplies one as an emission would mint it:
+
+| field | default |
+|---|---|
+| `eventId` | fresh on every call (`"test-event-1"`, `"test-event-2"`, …), so two deliveries are two emissions |
+| `publisherId` | the context that publishes `E` to the target: the target itself, or the one context it consumes that declares `E` |
+| `emittedAt` | the test clock's reading, `Instant.fromEpochMillis(0)`; the clock is not called |
+| `schemaVersion` | the event's current version, the one an emission embeds |
+
+The payload must be the event the service subscribes to. Another event is
+`bynk.test.event_not_subscribed`, and any other wrong payload or envelope is
+`bynk.types.argument_mismatch`. `EventEnvelope` comes from `bynk`, so a suite can
+build one only when its target `consumes bynk`. `svc.event` on a service of
+another protocol is `bynk.test.service_bad_address`. When two consumed contexts
+both declare `E`, a default envelope has no single publisher, so the case must
+pass its own (`bynk.test.event_publisher_ambiguous`).
+
+The address works at `unit` and `integration`. A `system` case can't use it
+(`bynk.test.event_needs_in_process`). There, an event reaches a subscriber only
+through its publisher's fan-out, so a `system` case calls the handler that
+emits it.
+
+### Driving a WebSocket service — `svc.open(tc, …)` {#websocket-address}
+
+A case drives a `from websocket` service by the handlers it declares, against a
+`TestConnection[F]()` that records what the server sends. `F` is the service's
+`out` frame type.
+
+```bynk,fragment
+suite chat {
+	case "a joiner is welcomed and then hears the broadcast" {
+		let alice = TestConnection[ServerFrame]()
+		let bob = TestConnection[ServerFrame]()
+		let room = RoomId.unsafe("r1")
+		let _ <- ChatGateway.open(alice, room) by Participant(UserId.unsafe("alice"))
+		let _ <- ChatGateway.open(bob, room) by Participant(UserId.unsafe("bob"))
+		expect alice.sent() == [ServerFrame { text: "welcome" }]
+		let _ <- ChatGateway.message(alice, ClientFrame { text: "hi" })
+		expect bob.sent() == [ServerFrame { text: "welcome" }, ServerFrame { text: "hi" }]
+		let _ <- ChatGateway.close(bob)
+	}
+}
+```
+
+| address | what it does |
+|---|---|
+| `svc.open(tc, route…) by A(…)` | runs `on open` with `tc` as the `connection`, the handler's route values and the principal |
+| `svc.message(tc, frame)` | runs `on message` with one decoded `in` frame |
+| `svc.close(tc)` | runs `on close`: the client went away |
+
+- **The connection remembers `open`.** `message` and `close` take neither route
+  values nor `by`. The connection carries both from `open`, as the platform
+  recovers them from the socket, so a case cannot present values production
+  never sees. A `by` on either is `bynk.test.ws_lifecycle_by`. To act as another
+  principal, open a new `TestConnection`. A `message` or `close` on a connection
+  that was never opened fails the case.
+- **Reading the connection.** `tc.sent()` is the frames the server wrote, in
+  order (`List[F]`), and `tc.closed()` is `true` once the server closed it. The
+  client going away (`svc.close(tc)`) does not set `closed()`. Both are plain
+  reads, not effects. `message` takes a decoded frame of the service's `in`
+  type; there is no raw-text form.
+- **Handing a connection to an agent.** `tc.connection()` gives the owned
+  `Connection[F]` an agent's handler takes, so a case can drive the agent
+  without the service: `Room(r).join(u, tc.connection())`. A `TestConnection`
+  gives up one connection; asking again fails the case.
+- **Tiers.** The address works at `unit` and `integration`. A `system` case
+  can't use it (`bynk.test.ws_needs_in_process`): a deployed WebSocket is a real
+  upgrade through the Worker and a Durable Object, which a `system` case does
+  not drive.
+- `svc.message` is the WebSocket address on a `from websocket` service and the
+  queue address on a `from queue` service. `TestConnection` can be named only
+  in a `suite`.
+
+### Fetching a static asset — `svc.GET(asset)` {#assets}
+
+A case can name the [static assets](/reference/assets/) its target's
+Worker ships (the target's own, those of the commons it `uses`, and the
+content-hashed ones of the contexts it consumes) and fetch one through any of its HTTP
+services by passing the asset instead of a route:
+
+```bynk,fragment
+suite t.web {
+	case "the stylesheet is served" {
+		let r <- api.GET(style)
+		match r {
+			Raw(body, ct) => expect ct == "text/css; charset=utf-8",
+			_ => expect false,
+		}
+	}
+}
+```
+
+The platform serves an asset before the Worker runs, so no handler is
+involved, at any tier: the call answers as the platform would, with
+`Raw(body, contentType)` for a file the target's Worker ships (the content type
+the platform sends for its extension) and `NotFound` for any other path. Only
+`GET` fetches an asset (`bynk.test.asset_address_method`), it takes the asset
+alone (`bynk.test.service_call_arity`), and it carries no `by`: an asset is
+public (`bynk.test.principal_on_asset`). At the `system` tier, a request a
+handler route would receive for an asset's path still goes to the Worker; only
+`svc.GET(asset)` reaches the asset tier.
+
+### Passing token claims — `by Workload("id", TokenClaims.of([…]))` {#token-claims}
+
+A handler guarded by an [`Oidc` actor](/reference/actors/#reading-claims)
+reads its token's claims through its binder. At `unit` and `integration` a case
+supplies them as the principal's second argument, from `"name: value"` lines;
+with none, the handler sees no claims:
+
+```bynk,fragment
+suite ci.release {
+	case "a release from the trusted workflow" {
+		let r <- api.POST("/release") by Workload("wid", TokenClaims.of(["repository: acme/money"]))
+		expect r is Ok(_)
+	}
+}
+```
+
+Each line is a string claim. Only an `Oidc` actor's principal takes claims
+(`bynk.test.principal_claims_not_oidc`). A `system` case mints the token itself:
+the [driver is the issuer](#failure-principals), signing a token whose `sub` is
+the identity and whose claims are those lines, and the Worker's real seam
+verifies it. There the claims must be written as a literal `TokenClaims.of([…])`
+in the principal (`bynk.test.system_claims_need_literal`), because the driver
+writes the lines into the token.
+
+### Sending request headers — `RequestHeaders.of` {#request-headers}
+
+A handler that declares [`headers: RequestHeaders`](/reference/http/#request-headers)
+takes them as an ordinary argument, in the parameter's position. A case builds one
+from `"name: value"` lines, or an empty one:
+
+```bynk,fragment
+suite reg.api {
+	case "a bearer token is read from the headers" {
+		let r <- api.GET("/whoami", RequestHeaders.of(["Authorization: Bearer abc"])) by Visitor
+		expect r == Ok("token abc")
+	}
+
+	case "no token" {
+		let r <- api.GET("/whoami", RequestHeaders.empty()) by Visitor
+		expect r is RawError(401, _, _)
+	}
+}
+```
+
+A line with no colon is ignored, and names are case-insensitive, as on the wire.
+At the `unit` and `integration` tiers the value reaches the handler directly; at
+`system` the driver sends the lines as the request's headers, beside the ones it
+sets itself (`content-type`, and the credential of an actor's `by`), which win.
+The one exception is a [`SignedCookie`](/reference/actors/#signed-cookies) route's
+`Sec-Fetch-Site`: the driver sends `same-origin`, as a browser's own page would, so a case that
+sets `Sec-Fetch-Site` and `Origin` itself probes the route's CSRF check
+(`RequestHeaders.of(["Sec-Fetch-Site: cross-site", "Origin: https://evil.example"])`).
+
+A route that declares no `headers:` parameter can still be sent headers in a
+`system` case, by a trailing `RequestHeaders` argument after the route's own
+arguments. A route that negotiates `Locale.current()` against `Accept-Language`
+is tested this way:
+
+```bynk,fragment
+suite greeter.web as system {
+	case "the locale is negotiated from Accept-Language" {
+		let r <- api.GET("/hello", RequestHeaders.of(["Accept-Language: fr"])) by Visitor
+		expect r is Ok("Bonjour, Ada !")
+	}
+}
+```
+
+The extra argument is accepted only at `system`; at `unit` and `integration` the
+route sees only its declared parameters, so it stays an arity error
+(`bynk.test.service_call_arity`). A route that declares `headers:` takes the
+argument in that parameter, and a second `RequestHeaders` is an arity error. A
+literal `Authorization` line is refused
+(`bynk.test.extra_headers_authorization`): the case's `by <Actor>` owns the
+credential the driver sends.
+
+### Sending a form {#sending-a-form}
+
+A handler marked [`@form`](/reference/http/#form-bodies) takes its `body` record
+as an ordinary argument. At the `unit` and `integration` tiers the record reaches the
+handler as it is, without the boundary. At `system` the driver sends it as the form
+the record encodes to (`application/x-www-form-urlencoded`), so the router decodes it:
+
+```bynk,fragment
+suite signup.api as system {
+	case "a typed form round-trips through the router" {
+		let r <- api.POST("/signup", SignupForm {
+			email: "a@b.c",
+			age: Some(41),
+			plan: Pro,
+			tags: ["x"],
+			remember: true,
+		})
+		expect r is Ok(_)
+	}
+}
+```
+
+A `Wire(…)` body is sent as a form too, so a case can probe the decoding rules with
+the text a browser sends, and observe the boundary's rejections:
+
+```bynk,fragment
+suite signup.api as system {
+	case "an empty age is absent" {
+		let r <- api.POST("/signup", Wire("email=a%40b.c&age="))
+		expect r is Handled(Ok(_))
+	}
+
+	case "a bad email is refused before the handler" {
+		let r <- api.POST("/signup", Wire("email=nope"))
+		expect r is Rejected(RefinementViolation(_))
+	}
+}
+```
+
+On a `@form` route the driver's own `content-type` is the default: a trailing `RequestHeaders`
+with a `Content-Type` line replaces it, which is how a case probes the route's `415`:
+`api.POST("/signup", Wire("{}"), RequestHeaders.of(["Content-Type: application/json"]))`.
+(On a [`@raw`](/reference/http/#raw-request-bodies) route, a `Wire` body is sent as
+`text/plain` instead, which is how a case probes the `415`.)
+
+### Sending a multipart body {#sending-a-multipart-body}
+
+A [`@multipart`](/reference/http/#multipart-bodies) route's `body` record is passed
+like a form's. A `File` is a record literal (`File { filename: Some("a.png"), contentType:
+"image/png", bytes: png }`). At `unit` and `integration` the record reaches the handler as it
+is; at `system` the driver sends it as the `FormData` it encodes to, a `Blob` per `File`.
+A `Wire(…)` body is the multipart text itself, framed with the boundary `bynk-boundary`, so
+a case can send what a browser would, and observe the boundary's rejections:
+`Rejected(MalformedForm(_))` for a body that is not multipart, `Rejected(PayloadTooLarge(_))`
+for a file over `maxFile` or too many parts.
+
+### Sending a streamed body {#sending-a-streamed-body}
+
+A [`@raw`](/reference/http/#streamed-request-bodies) route whose `body` is a
+`Stream[Bytes]` takes a stream as its argument, in the parameter's position, usually
+`Stream.of([…])`. At the `unit` and `integration` tiers the stream reaches the handler as it
+is, without the boundary, so no cap is applied there. At `system` the driver sends it as a
+chunked request body with no `content-length`, so the router's counted read is what runs: a
+body past the cap is `Rejected(PayloadTooLarge(_))`, as the buffered route's is. A `Wire(…)`
+body is sent as one streamed chunk of text, under `text/plain`, so a `"*/*"` route takes it,
+and a route declaring another media type answers `Rejected(UnsupportedMediaType(_))`. A
+handler that reads the stream twice faults with `bynk: a stream can be read only once`.
+
+### Sending cookies — a typed `cookies` {#sending-cookies}
+
+A handler that declares [`cookies: T`](/reference/http/#cookies) takes the record as an
+ordinary argument, in the parameter's position. At the `unit` and `integration` tiers the
+record reaches the handler as it is, without the boundary. At `system` the driver sends it as
+the request's `Cookie` header, so the router parses and validates it. A `Wire(…)` argument is
+the header text itself, so a case can send what a browser would and observe the boundary's
+rejections:
+
+```bynk,fragment
+suite web.api as system {
+	case "a signed-in visitor" {
+		let r <- api.GET("/me", Wire("sid=abc; theme=Dark"))
+		expect r is Handled(Ok(_))
+	}
+
+	case "a refinement violation is refused" {
+		let r <- api.GET("/me", Wire("sid=a-token-that-is-far-too-long"))
+		expect r is Rejected(RefinementViolation(_))
+	}
+}
+```
+
+A raw `cookies: RequestCookies` parameter takes a `RequestCookies.of(["__Host-sid=abc", "theme=dark"])`
+(or `RequestCookies.empty()`) at every tier; at `system` the driver sends it as the `Cookie`
+header. `Wire("a=1; b=2")` sends the header text itself.
+An entry with no `=` (for example `RequestCookies.of(["sid"])`) is dropped, exactly as the
+server drops it from a real `Cookie` header.
+
+### Reading the cookies a result sets — `cookies()` {#result-cookies}
+
+A result that [sets cookies](/reference/http/#setting-cookies) carries them, and
+`result.cookies()` reads them as a `List[Cookie]`, at every tier. At `system` they are the
+`Set-Cookie` headers the router sent, parsed back, so a case sees what a browser would:
+
+```bynk,fragment
+suite auth.api as system {
+	case "login sets the session cookie" {
+		let r <- api.POST("/login", Login { user: "ada" })
+		expect r.cookies().map((c) => c.name) == ["sid"]
+	}
+}
+```
+
+### Sending a query — a typed `query` and `RequestQuery.of` {#request-query}
+
+A handler that declares a [`query`](/reference/http/#query-strings) takes it as
+an ordinary argument, in the parameter's position, as it takes `headers` and
+`body`. For a typed `query: T` a case passes a `T`:
+
+```bynk,fragment
+suite activity.api {
+	case "a filter reaches the handler" {
+		let r <- api.GET("/activity", ActivityFilter {
+			repo: Some("bynk-lang/bynk"),
+			since: None,
+			tag: [],
+			limit: 100,
+		})
+		expect r is Ok(_)
+	}
+}
+```
+
+For a raw `query: RequestQuery` a case builds the view from `"name=value"` pairs
+(parsed as a query string, so `+` is a space and `&` starts another pair), or an empty one:
+`RequestQuery.of(["q=one", "q=two"])`, `RequestQuery.empty()`.
+
+At the `unit` and `integration` tiers the value reaches the handler directly,
+without the boundary. At `system` the driver sends it as the request's query
+string, so the router decodes and validates it. A `system` case drives a rejection
+by passing the query as raw text with [`Wire`](#driving-a-rejection-with-wire), in
+the query's slot:
+
+```bynk,fragment
+suite activity.api as system {
+	case "a limit out of range is refused before the handler" {
+		let r <- api.GET("/activity", Wire("?limit=0"))
+		expect r is Rejected(RefinementViolation(_))
+	}
+}
+```
+
+The text is appended to the path as given, so it starts with `?`.
+
+### Acting as an actor — `by <Actor>(<identity>)` {#call-site-by}
+
+A handler guarded by an actor (`by u: User`) runs as a verified identity. A case
+supplies that identity with a call-site `by` clause on the effect-let:
+
+```bynk,fragment
+case "each owner's list is private" {
+  let _    <- api.POST("/todos", AddRequest { title: "bob's" }) by User("bob")
+  let mine <- api.GET("/todos")                                 by User("carol")
+  expect mine is Ok(_)
+}
+```
+
+- `by User("bob")` — the actor and the identity value. The value is typed against
+  the actor's identity type, so `by User("")` fails `UserId`'s refinement.
+- `by Visitor` — a unit-identity actor takes **no** argument
+  (`bynk.test.actor_no_identity` if one is given; `bynk.test.actor_identity_required`
+  if an identity-carrying actor is written bare).
+- `by Admin("root")` — a [refinement actor](/book/guides/actors/authorisation/)
+  carries its base actor's identity, so it takes the base's identity value (a
+  bare `by Admin` is `bynk.test.actor_identity_required`). At the `unit` and
+  `integration` tiers its claim is given, not checked. At the `system` tier the
+  signed token carries claims that satisfy the refinement's predicate, so the
+  Worker admits it, and a case acting as the base (`by User("root")`) gets the
+  `403` a real token lacking the claim would.
+- `by Visitor` or `by User("ada")` on a handler guarded by an
+  [actor sum](/book/guides/actors/multiple-callers/) (`by who: User | Visitor`)
+  — the case names any member, with the identity that member carries, and the
+  handler runs with its binder bound to that member's arm. At `system` the
+  driver sends that member's credential: a token for a Bearer member, a
+  signature for a `Signature` member, nothing for `Visitor`. A non-member is
+  `bynk.test.principal_identity_mismatch`; a case with no `by` is
+  `bynk.test.principal_required`.
+- `by Caller("orders")` — an `on call` handler that binds its caller
+  (`by c: Caller`) reads the calling context's name, and a case has no calling
+  context, so it must name one; without it the call is
+  `bynk.test.actor_identity_required`.
+- cron and queue run as their internal actor and need no `by`.
+
+At the `unit` tier the identity is *given*, not verified — the handler runs
+in-process against fresh, per-case agent state. **Promote the same case to `as
+system`** and the identical body drives the *deployable* Worker: the address
+becomes a real `fetch` into the public route table, `by User("bob")` is signed
+into a JWT the real auth seam verifies, and the `HttpResult` is decoded from the
+`Response`. The developer writes no auth — the framework signs a valid credential
+from the `by` clause; *proper* auth (real IdPs, expired/forged tokens) is an
+end-to-end concern, not the system tier's. A single-context `from http` service
+qualifies for `as system` (it has a real serialisation edge); a `cron`-only target
+does not (`bynk.tier.system_needs_wire`).
+
+### Cron and queue at `system` {#cron-queue-system}
+
+At `system`, `svc.schedule(…)` and `q.message(m)` drive the participant Worker's
+real `scheduled` and `queue` entry points, and each address still yields the
+handler's own result, so `expect r is Ok(_)` reads the same at every tier.
+
+```bynk,fragment
+suite shop.inventory as system {
+	case "a delivery is counted once, however often it is delivered" {
+		let d = Delivery {
+			id: "d1",
+			sku: "widget",
+			qty: 6,
+		}
+		let a <- deliveries.message(d)
+		let b <- deliveries.message(d)
+		expect a is Ack
+		expect b is Ack
+		let s <- api.GET("/stock/widget") by Admin("root")
+		expect s is Ok(6)
+	}
+}
+```
+
+- **`svc.schedule("<expr>", at)`** calls `scheduled` with `{ cron: "<expr>",
+  scheduledTime: at }`. The scheduled time is required, as at `unit`, when the
+  handler declares it; a handler that doesn't is fired at `0`. The address yields
+  the handler's `Result`, which the test build's entry hands back to the harness.
+  A cron handler that faults fails the case, as it does at `unit`.
+- **`q.message(m)`** serialises `m` as the producer does, sends it through a JSON
+  round trip, and calls `queue` with a one-message batch. A message whose type
+  doesn't survive the round trip fails as it would on the platform. The batch
+  records whether the consumer called `ack()` or `retry()`, and the address yields
+  `Ack` or `Retry(reason)` with the reason the consumer gave. A consumer that
+  faults is retried, as on the platform, so the address yields `Retry`.
+- **The execution context is settled**: any detached effect the handler hands to
+  `waitUntil` finishes before the address returns.
+- **State carries through the case.** Every address in a `system` case reaches
+  the same participants, so a later `api.GET(…)` reads what the sweeper or the
+  consumer wrote. Each case still starts from fresh state.
+
+A queue-only target qualifies for `system` on its own, because the message
+crosses the platform's serialisation. A cron-only target doesn't: a scheduled
+event carries only a string and a time. A cron address is legal in a suite that
+already qualifies.
+
+### Against a deployment
+
+The same `system` cases can run against Workers that are already deployed:
+`bynk test --against <name>` sends each driver's request to the Worker's URL
+from a target named under `[test.targets]` in `bynk.toml`, signing with
+secrets read from the environment. Only the public `http` routes are
+reachable there, so a case that moves the clock, addresses an `on call`
+service, delivers a queue message, runs a cron handler, or fetches an asset is refused (`bynk.test.remote_unsupported_*`), or skipped under
+`--skip-unsupported`. A case that reads a participant's database with
+[`D1.peek`](#peek-a-database) is refused the same way
+(`bynk.test.remote_unsupported_peek`), and skipped, naming why, under
+`--skip-unsupported`: a deployment has no in-process database, and reaching a
+deployed one would make a test run touch real data. See
+[Running against a deployment](/reference/tooling/bynk-cli/#running-against-a-deployment).
+
+### The run's identity — `run.id` {#run-id}
+
+A deployment keeps its state between runs, so a case that creates
+`order-1` finds it already there the second time. `run.id` is a `String` that
+names the test run: always `"local"` in process, and fresh for each
+`bynk test --against` run (every `bynk dev` session of one `--against dev` run
+shares it). Build what a case creates from it:
+
+```bynk,fragment
+case "a new order is accepted" {
+  let r <- api.POST("/orders/:id", "order-\(run.id)") by Visitor
+  expect r is Ok(true)
+}
+```
+
+- **It is read in a `case` body.** `run` names the test run only where the
+  case hasn't bound a `run` of its own: `let run = …` shadows it, and a
+  [history property's](#history-properties) `for all run: History[…]` is an
+  ordinary binding.
+- **In process it is fixed**, so a case reads the same every run and the
+  in-process run stays deterministic.
+- See the guide
+  [Testing against a running system](/book/guides/testing/against-a-running-system/).
+
+### Driving a rejection with `Wire`
+
+A typed argument is valid by construction, so the boundary can never reject it. To
+test the *rejection* path — the part the boundary exists for — a `system`-tier case
+passes a raw `Wire(<String>)` argument: the string reaches the router
+**unvalidated**, exactly as an over-the-wire request would, so a refinement
+violation or malformed JSON is refused *before the handler runs*.
+
+```bynk,fragment
+case "an empty sku is rejected at the boundary" as system {
+  let r <- api.POST("/cart", Wire("{\"sku\": \"\"}")) by User("alice")
+  expect r is Rejected(_)
+}
+```
+
+A `Wire` stands in any slot of the address. In a typed [`query`](#request-query)'s
+slot it is the raw query string, `?` and all: `api.GET("/activity", Wire("?limit=0"))`.
+
+A `Wire`-carrying call yields an `HttpOutcome[T]` instead of the handler's
+`HttpResult[T]`.
+
+### The `HttpOutcome` type {#httpoutcome}
+
+```text
+HttpOutcome[T]    = Rejected(BoundaryRejection) | Handled(HttpResult[T])
+BoundaryRejection = RefinementViolation(detail: String)
+                  | MalformedJson(detail: String)
+                  | StructuralMismatch(detail: String)
+                  | Unauthorized
+                  | MethodNotAllowed
+                  | PayloadTooLarge(detail: String)
+                  | UnsupportedMediaType(detail: String)
+                  | MalformedForm(detail: String)
+```
+
+`Rejected` means the request was refused before the handler ran. `Handled`
+means the handler ran, and it carries the handler's typed result. A valid raw
+body reaches the handler, so `expect r is Handled(_)` holds, and
+`Handled(Created(item))` binds `item` with the handler's type. A nested pattern
+tests the rejection's kind:
+
+```bynk,fragment
+expect r is Rejected(_)                       // any boundary rejection
+expect r is Rejected(RefinementViolation(_))  // specifically a refinement violation
+expect r is Rejected(MalformedJson(_))        // specifically malformed JSON
+```
+
+`PayloadTooLarge` is the router's `413` to a body past its route's cap, counted
+on the bytes read, so a `Wire` body longer than the cap probes it.
+`UnsupportedMediaType` is its `415` to a [`@raw`](/reference/http/#raw-request-bodies)
+route's other `Content-Type`. A `Wire` body is text, so on a `@raw` route the
+driver sends it as `text/plain`: a route declaring another media type answers
+`Rejected(UnsupportedMediaType(_))`, and a `"*/*"` route takes it (use one to
+probe the cap with a `Wire` body). A typed call to a raw route sends the `Bytes`
+under the declared type. A case that matches `BoundaryRejection` exhaustively
+needs an arm for each of the two.
+
+The body and path rejections carry `detail`, the router's one-line
+description of what it refused:
+
+```bynk,fragment
+match r {
+  Rejected(RefinementViolation(d)) => expect d.contains("sku")
+  _ => expect false
+}
+```
+
+`HttpOutcome` and `BoundaryRejection` are checked like any sum, so a mistyped
+kind name is a compile error. Neither can be constructed: only a case's service
+address produces them, and a case tests them with `is` or `match`. A source file
+names `BoundaryRejection` only as the parameter of
+[`on rejected`](/reference/http/#rendering-rejections).
+
+A service with `on rejected` answers a rejection with its own body, so the
+driver no longer finds the router's `{ kind }` and decodes the response by its
+status: a rendered `413` reads as `Handled(PayloadTooLarge(message))`, its
+`message` the body's `error` field if it has one. A `405` keeps its `Allow`, so it
+still reads as `Rejected(MethodNotAllowed)`, and a rendering the router refused
+(another status) reads as the default rejection. `Wire` is legal **only** as a
+service-address argument in a `system`-tier case. At `unit` there is no wire to
+be raw about (`bynk.test.wire_needs_system`). It drives an http body or path
+segment only: on a queue, cron, `on call` or event address it is
+`bynk.test.wire_http_only`, and a queue message is passed as a typed value. No refined value is ever built
+from it: the router validates the raw string, which is the whole point.
+
+### Testing the auth seam with `by Nobody`, `by Forged`, `by Stale`, `by Expired`, `by WrongIssuer`, `by WrongAudience`, `by WrongAlgorithm` and `by NoSubject` {#failure-principals}
+
+`by User("bob")` presents a valid, framework-signed credential the real seam
+verifies. To test the *rejection* — an unauthenticated request — a `system`-tier
+case drives the route as **`by Nobody`**: the request carries no credential, so
+the seam refuses it before the handler runs.
+
+```bynk,fragment
+case "no credential is rejected at the seam" as system {
+  let r <- api.POST("/cart", Item { sku: "widget" }) by Nobody
+  expect r is Rejected(Unauthorized)
+}
+```
+
+A route whose actor is a **`Signature`** (HMAC webhook) actor needs no `by` at
+all: the actor has no identity, so at `system` the driver signs every call the
+way the actor declares — its `secret`, `header` and `timestamp` — over exactly
+the bytes it sends (the serialised JSON of a typed call, the raw string of a
+`Wire(…)` call). The Worker's real seam verifies it. The secret is the suite's
+[`env`](#env) entry for the actor's `secret`, else a fixed test secret. Below
+`system` nothing changes: the handler runs in process and the seam is skipped.
+
+Eight reserved principals drive the failures. Each yields the same
+[`HttpOutcome[T]`](#httpoutcome) as a `Wire` call, with the seam's `401` as
+`Rejected(Unauthorized)`:
+
+| Principal | What the `system` driver sends | Legal on |
+|---|---|---|
+| `by Nobody` | no credential: no `Authorization` header, no session cookie, or no signature headers | a route with a Bearer, `Oidc`, `SignedCookie` or `Signature` actor |
+| `by Forged` | on a `Signature` route, a signature made with a secret the seam does not hold; on a Bearer route, a well-formed token (a valid `sub`, a future `exp`) signed with a secret the seam does not hold; on a `SignedCookie` route, a well-formed cookie signed with a key the seam does not hold; on an `Oidc` route, the same, signed by a key the test JWKS does not publish | a route with a `Signature`, Bearer, `SignedCookie` or `Oidc` actor |
+| `by Stale` | a correct signature, timestamped `tolerance + 60` seconds in the past | a route with a `Signature` actor that declares `timestamp` and `tolerance` |
+| `by Expired` | a Bearer or `Oidc` token, or a `SignedCookie` cookie, with a valid `sub`, correctly signed, whose lifetime ended an hour before the test clock | a route with a Bearer, `SignedCookie` or `Oidc` actor |
+| `by WrongIssuer` | an `Oidc` token correctly signed and unexpired, whose `iss` is not the actor's issuer | a route with an `Oidc` actor |
+| `by WrongAudience` | an `Oidc` token correctly signed and unexpired, whose `aud` is not the actor's audience | a route with an `Oidc` actor |
+| `by WrongAlgorithm` | two otherwise valid `Oidc` tokens under an algorithm the seam must refuse: one with `alg: none` (no signature), and one `HS256`-signed with the JWKS public key as the HMAC secret (algorithm confusion) | a route with an `Oidc` actor |
+| `by NoSubject` | two correctly signed, unexpired `Oidc` tokens with a `sub` the seam must refuse: one empty, one absent | a route with an `Oidc` actor |
+
+On an [actor sum](/book/guides/actors/multiple-callers/) the actor may be one
+member: `by Forged` and `by Stale` sign as the sum's first `Signature` member,
+and a sum with no `Signature` member, `by Forged` and `by Expired` mint the token
+for its first Bearer member. A sum that admits `Visitor` (`by who: Processor |
+Visitor`) never answers `401`: a request with a missing or bad credential
+resolves as `Visitor`. So none of them is legal there.
+
+All eight are `system`-tier only: below it the seam is skipped and the identity
+is given, so there is no credential to forge (`bynk.test.forged_needs_system`).
+`by Expired` on any other route is `bynk.test.expired_needs_bearer_route`, and
+`by WrongIssuer`, `by WrongAudience`, `by WrongAlgorithm` or `by NoSubject` on a
+route with no `Oidc` actor is `bynk.test.wrong_issuer_needs_oidc_route`,
+`bynk.test.wrong_audience_needs_oidc_route`,
+`bynk.test.wrong_algorithm_needs_oidc_route` or
+`bynk.test.no_subject_needs_oidc_route`.
+
+```bynk,fragment
+case "unsigned, forged and stale notices are refused" as system {
+  let n = Notice { id: "evt_1", event: "payment.captured" }
+  let none <- webhooks.POST("/webhooks/processor", n) by Nobody
+  let forged <- webhooks.POST("/webhooks/processor", n) by Forged
+  let stale <- webhooks.POST("/webhooks/processor", n) by Stale
+  expect none is Rejected(Unauthorized)
+  expect forged is Rejected(Unauthorized)
+  expect stale is Rejected(Unauthorized)
+}
+```
+
+They name no actor and present no identity (`by Nobody(...)` is an error).
+They are meaningful only at `system`, where the real seam exists:
+`bynk.test.credential_needs_system` for `Nobody`, `bynk.test.forged_needs_system`
+for `Forged` and `Stale`. `Forged` on a route with no `Signature`, Bearer or `Oidc`
+actor, or `Stale` on one with no `Signature` actor, is `bynk.test.forged_needs_signature_route`, and `Stale` on an actor with
+no `timestamp` and `tolerance` is `bynk.test.stale_needs_timestamp`.
+
+#### An `Oidc` route: the driver is the issuer {#oidc-issuer}
+
+A route an [`Oidc` actor](/reference/actors/#reading-claims) guards needs no
+fake issuer of your own. At `system` the driver generates a key pair for the
+test process, answers the Worker's JWKS fetch for the actor's `jwks` URL with it,
+and mints the token a call presents: `by Workload("wid", TokenClaims.of([…]))`
+sends a valid one (`iss` and `aud` the actor's, `sub` `"wid"`, the claim lines as
+string claims), and the failure principals above send the tokens the seam must
+refuse. The Worker is the unmodified emitted one: the key pair, the JWKS answer
+and the minting exist only in the test module, and nothing in the deployed
+Worker trusts them. Other requests, including any other `fetch` the code makes,
+go to the real network.
+
+```bynk,fragment
+suite ci.release as system {
+	case "a trusted workflow's token is admitted" {
+		let r <- api.POST(
+			"/release",
+			Release { tag: "v1" }
+		) by Workload("wid", TokenClaims.of(["repository: acme/money"]))
+		expect r is Ok(_)
+	}
+
+	case "tokens the seam must refuse are refused" {
+		let forged <- api.POST("/release", Release { tag: "v1" }) by Forged
+		let expired <- api.POST("/release", Release { tag: "v1" }) by Expired
+		let wrongIss <- api.POST("/release", Release { tag: "v1" }) by WrongIssuer
+		let wrongAud <- api.POST("/release", Release { tag: "v1" }) by WrongAudience
+		expect forged is Rejected(Unauthorized)
+		expect expired is Rejected(Unauthorized)
+		expect wrongIss is Rejected(Unauthorized)
+		expect wrongAud is Rejected(Unauthorized)
+	}
+
+	case "algorithm confusion and an unusable subject are refused" {
+		// `alg: none` and an HS256 token keyed with the JWKS public key
+		let alg <- api.POST("/release", Release { tag: "v1" }) by WrongAlgorithm
+		// an empty `sub` and a missing `sub`, even when the identity type is refined
+		let sub <- api.POST("/release", Release { tag: "v1" }) by NoSubject
+		expect alg is Rejected(Unauthorized)
+		expect sub is Rejected(Unauthorized)
+	}
+}
+```
+
+`by WrongAlgorithm` and `by NoSubject` each present two tokens, one after the
+other, and the call reads the first outcome that is *not* the seam's refusal, or
+the refusal when every token was refused. So one `expect … is
+Rejected(Unauthorized)` fails if the seam admits any of them, and the failing
+outcome is the one the seam gave. The tokens are otherwise valid (`iss`, `aud`,
+`exp` and the signature are all right), so only the algorithm, or the `sub`, is
+at fault. The seam refuses a missing or empty `sub` before the handler runs, so
+the identity type's refinement (`String where NonEmpty`, say) is never asked
+about it.
+
+If the actor declares [`trustFrom`](/reference/actors/#trust-roots-from-the-environment)
+and the suite's [`env`](#env) sets that variable, the driver mints for, and
+answers the JWKS URL of, the roots the variable names, exactly as the seam reads
+them. A malformed value fails the case, as the seam refuses every request.
+
+The key is ES256 (the seam accepts RS256 as well; its RS256 path is covered by
+the compiler's own tests). Against a [remote target](/reference/testing/)
+the deployed Worker fetches its own JWKS, which the driver cannot answer, so a
+call that mints an `Oidc` token fails with a message saying so; `by Nobody` still
+works there.
+
+### Testing the wrong method — the `405` fall-through {#wrong-method}
+
+Address an **existing path with a method it declares no handler for** to test the
+router's method fall-through. The path must be a declared route (a genuinely
+unknown path is still `bynk.test.service_unknown_route`); the wrong method drives
+the `405`:
+
+```bynk,fragment
+case "DELETE is not allowed on /cart" as system {
+  let r <- api.DELETE("/cart")           // /cart is declared for POST, not DELETE
+  expect r is Rejected(MethodNotAllowed)
+}
+```
+
+No handler runs, so the call takes no arguments and no `by` clause. Like the
+other boundary refusals it yields an [`HttpOutcome`](#httpoutcome), over `()`
+because no handler's result is involved: a `405` is
+`Rejected(MethodNotAllowed)`.
+
+## `expect` {#expect}
+
+`expect <bool-predicate>` checks a predicate. It exists in both statement form (a
+line in a `case` body) and expression form (e.g. inside a `match` arm). The
+predicate must be `Bool` (`bynk.expect.not_bool`), and `expect` is valid **only**
+inside a `case` (`bynk.expect.outside_case`). It is the **same predicate surface**
+as `invariant`/`ensures` — `is`, `implies`, the operators, pure methods (one
+predicate surface, ADR 0144) — so it pairs naturally with `is`: `expect r is
+Ok(_)`. When the predicate is a top-level comparison (`==`, `!=`, `<`, `<=`, `>`,
+`>=`), a failure reports the predicate and its **expected-vs-actual** operands, not
+just a location.
+
+The predicate is **pure**: it states a claim, it does not run anything. A call that
+has an effect, such as a capability operation or a service call, is refused
+inside it (`bynk.expect.impure_predicate`), even when it is held in a list or
+returned by a lambda, because it would run when the claim is checked and be
+recorded as if the unit under test had made it. Run the call first and state the
+claim about its result:
+
+```bynk,fragment
+expect [Logger.log("x")].length() == 1   // ✗ bynk.expect.impure_predicate
+let r <- authorise.call(100)
+expect r is Ok(_)                         // ✓
+```
+
+The rule reads the predicate, not what runs: a lambda that would make such a call
+is refused even if nothing applies it (`[() => Logger.log("x")].length() == 1`).
+`expect`'s own forms are the exceptions: a [fault claim](#faults) runs its call,
+and an [observation](#observation) or `trace(Cap.op)` reads the calls already
+recorded.
+
+### `?` in a case {#question-in-case}
+
+A `case` body returns no `Result`, so `?` has nowhere to propagate to. Instead,
+`?` on a `Result` whose error is a `ValidationError` (what a refined type's `.of`
+returns) **fails the case** when the operand is `Err`: the failure reports the
+`?` expression, the error value and the `?`'s `file:line:col`, as a failed
+`expect` does. On `Ok` it yields the value. This holds anywhere in the case,
+including inside `if` and `match` arms; a `?` inside a lambda keeps its normal
+meaning (it returns from the lambda). Any other error type is
+`bynk.types.question_error_mismatch`, and an `Option` operand is refused as it is
+outside a handler.
+
+### Claiming a fault — `expect <call> faults` {#faults}
+
+A **fault** is not a value. A capability that fails (a [`stub … fails`](#stub), or a
+real provider's failure) and an invariant violation both *throw*: the fault
+propagates out of the handler, and out of the case, failing it before its next
+`expect` runs. A fault is untyped, and no caller can handle it, so it never
+surfaces as an `Err`. To test that a call faults, claim it:
+
+```bynk,fragment
+case "a store fault faults the quote" {
+  stub Kv.get(_) fails
+  expect Prices(Val[AcctId]).quote("GBP") faults
+}
+```
+
+`expect <call> faults` awaits the call and holds when it **throws**. When the call
+returns instead, the case fails with `the call returned without faulting`. Any
+fault satisfies the claim, whatever raised it; a failed `expect` inside the call is
+the case failing, not the call faulting, and propagates as usual.
+
+- **The subject is the call itself**, an `Effect[_]`, not a value bound from it.
+  `let r <- svc.call()` has already run the call, so `expect r faults` is
+  `bynk.expect.faults_not_effect`.
+- **The claim is a test's observation, not a handler.** It exists only in a `case`
+  (`bynk.expect.outside_case`); production code still cannot catch a fault.
+- **It needs an in-process call.** At `system` a fault reaches the case as an error
+  response from the deployed Worker, never a throw, so a `system`-tier case cannot
+  claim one (`bynk.test.faults_needs_in_process`); assert the response instead.
+  The Worker answers a fault with a `500` that carries no `error` payload, which
+  the driver decodes as `ServerError("")`, so `expect r is ServerError(_)` is the
+  closest assertion. It cannot tell a fault from a handler that returns
+  `ServerError(...)` on purpose (even an empty message is a legal return): at
+  `system`, the response is all there is to observe.
+- **It takes a call-site `by` clause** between the call and `faults`, as `let r <-`
+  does, so a handler that reads a caller identity can be claimed against (#1812):
+
+  ```bynk,fragment
+  case "a store fault faults bob's order" {
+    stub Kv.put(_, _) fails
+    expect api.POST("/orders", Order { sku: "w" }) by User("bob") faults
+  }
+  ```
+
+  The principal is checked against the addressed handler exactly as an effect-let's
+  is, so leaving it off a handler that needs an identity is still
+  `bynk.test.principal_required`. `by Nobody` is the exception: it exercises the
+  `system`-tier auth seam, where no fault can be claimed, so a fault claim driven
+  `by Nobody` is `bynk.test.faults_needs_in_process` at any tier; assert its
+  `Rejected(Unauthorized)` response with `let r <- … by Nobody` instead.
+
+A [sequenced stub](#sequenced-stub--returns-each) makes a fault and a later success
+observable in one case:
+
+```bynk,fragment
+case "the store recovers" {
+  stub Kv.get(_) returns each [fails, Some(row)]
+  expect Prices(Val[AcctId]).quote("GBP") faults    // the first call faults
+  let r <- Prices(Val[AcctId]).quote("GBP")          // the second returns
+  expect r is Ok(_)
+}
+```
+
+### Snapshotting a value — `expect <value> matches snapshot "<name>"` {#snapshots}
+
+Asserting a large structured value field by field is unreviewable when it is big and
+rots when its shape grows. A **snapshot** compares the whole value instead: `expect
+v matches snapshot "name"` encodes `v` the way `Json.encode` does and compares that
+JSON with the snapshot stored for the case.
+
+```bynk,fragment
+case "an issues delivery reads whole" {
+  let r = read("{\"id\":\"d-1\",\"action\":{\"kind\":\"Opened\"}}")
+  expect r matches snapshot "issues opened"
+}
+```
+
+- **The value need only be `Codable`**, not a `Bool`: the domain `Json.encode`
+  accepts (`bynk.test.snapshot_not_codable` otherwise). `Option`s and sums are in
+  their tagged form, and an `Err` is a value like any other. A value that
+  mentions an instant or a random id is not stable; stub `Clock` and `Random`
+  (already deterministic under test) so it is.
+- **The name is a string literal**, unique within its case
+  (`bynk.test.snapshot_name_not_literal`, `bynk.test.snapshot_duplicate_name`), so
+  the compiler knows every snapshot a suite takes. `matches` and `snapshot` are
+  contextual words: elsewhere they are ordinary names.
+- **Snapshots are stored per suite file**, in `snapshots/<suite file>.snap.json`
+  under the project root (the file's path from the project root, without `.bynk`,
+  so `tests/hooks.bynk` has `snapshots/tests/hooks.snap.json`). The file is one
+  JSON object keyed by case name, then snapshot name; keys are sorted at every
+  level and the text is indented two spaces, so a change is a readable diff. The
+  files are ordinary text, reviewed in the pull request like code.
+- **The compiler inlines the stored file into the test module**, so the harness
+  reads nothing at test time. Only `bynk test --update-snapshots` writes, from the
+  driver, never from the emitted test.
+
+The outcomes, by run:
+
+| State | `bynk test` | `bynk test --update-snapshots` |
+|---|---|---|
+| The value equals the stored snapshot | passes | nothing changes |
+| The value differs | fails, showing a line diff (`-` stored, `+` actual) | the file is updated, and counted *updated* |
+| No snapshot is stored | **fails** — never passes silently, so CI cannot pass an unreviewed snapshot | the snapshot is written, and counted *written* |
+| A stored snapshot no case takes any more (**obsolete**) | passes, and is counted *obsolete* | it is deleted |
+
+An obsolete snapshot is one whose case or name is gone from the suite, or whose
+whole suite file no longer takes a snapshot. The run reports the **written**,
+**updated** and **obsolete** counts in every output format: a `snapshots:` line in
+`rich`, a `snapshots` object `{ "written", "updated", "obsolete" }` on the
+[JSON document](#machine-readable-output---format-json) and on the NDJSON
+`run-end`. They are absent for a project with no snapshot. With `--case` or
+`--suite`, only the snapshots of the cases that ran are compared or updated, and
+none is obsolete because its case was filtered out.
+
+A snapshot is for a case in a unit-tier suite. It is refused in a `property`
+(`bynk.test.snapshot_in_property`: the body runs for many inputs) and in a
+`system`-tier case or an integration or system suite
+(`bynk.test.snapshot_needs_unit_suite`). `--update-snapshots` is refused with
+`--against`, `--smoke`, `--coverage`, `--inspect` and `--no-run`: a snapshot is
+recorded from an in-process run of the project's own suites.
+
+## Tiers — the `as <tier>` clause {#tiers-the-as-tier-clause}
+
+A `case` runs at one of three **tiers**, declared with an `as <tier>` clause in its
+header. The three names are the testing pyramid — `unit`, `integration`, `system` —
+and a tier is **one body promoted, not a distinct kind of test**:
+
+| Tier | Collaborators | Wire crossed? |
+|------|---------------|---------------|
+| `unit` (default, elided) | in process; a seam may be stubbed with `stub` | no |
+| `integration` | real, **within one context** | no |
+| `system` | contexts stood up as the Workers they deploy as | **yes** — the real serialise → JSON → deserialise edge |
+
+```bynk,ignore
+suite money {
+  case "never negative"                   { … }  // as unit, by default
+  case "used in a payment" as integration { … }  // real collaborators, one context, no wire
+  case "checkout end to end" as system    { … }  // contexts wired across the real edge
+}
+```
+
+A consumed adapter's capability is a seam at the `unit` tier: with no `stub`, it
+has no provider. At the `integration` tier the adapter's real binding runs, and the
+binding's own `given` capabilities take the tier's doubles, and any `stub` the case
+puts on one the target also reaches. At the `system` tier the deployed Worker builds
+the binding, as it does in production.
+
+A `suite` may target an **adapter**. The binding is the unit under test, so it runs
+at every tier. A case calls the adapter's capabilities directly
+(`let s <- Greeter.hello("ann")`), and the binding's `given` capabilities take their
+doubles and stubs as above.
+
+`unit` is the default and is **never written**. `as` also sits on the **`suite`**
+header, setting a default every `case` inherits and may override (case wins):
+
+```bynk,ignore
+suite checkout as integration {          // every case defaults to integration…
+  case "small order authorises"       { … }  // as integration (inherited)
+  case "a unit-level edge"    as unit { … }  // case overrides the suite default
+}
+```
+
+A case's effective tier is `case.tier ?? suite.tier ?? unit`. Between `unit` and
+`integration`, promotion changes **only** the header, and the body is identical.
+
+- **`system` is a suite of its own.** A `system` case runs against deployed
+  Workers and addresses a service by its context path (`shop.orders.place(…)`),
+  not `place.call(…)`, so a `system` suite holds `system` cases only. Mixing
+  tiers in one suite is `bynk.tier.mixed_system_suite`.
+- **Crossing a context needs `system`.** Below `system` a case runs in-process:
+  no consumed context is stood up, and `stub` doubles capabilities, not a
+  context's services. A `unit` or `integration` case, or a `property` (always
+  in-process), that reaches another context's service, directly or through a
+  service or agent handler that calls one, is
+  `bynk.tier.cross_context_needs_system`.
+- **Participants are inferred**, not listed: `system` derives its wired
+  collaborator set from the unit under test's transitive `consumes` graph. There
+  is no `wires` clause.
+- **`system` needs a serialisation edge**: a `system` suite must cross a real
+  serialise → JSON → deserialise boundary — either two or more wired contexts, **or**
+  a single target that exposes an `http` or `queue` service (its public boundary,
+  or the platform's serialisation of a message). A target with neither is
+  `bynk.tier.system_needs_wire`. A `cron`-only target doesn't qualify, but a
+  `system` case may address a `cron` service in a target that does
+  ([Cron and queue at `system`](#cron-queue-system)). `integration` carries no
+  such rule — it is real collaborators within one context, no wire.
+- Tiers are **`case`-only**: a `property` generates and does not promote, so a
+  suite-level `as` binds its `case` members only, and a `property` header has no
+  place for an `as` (it does not parse).
+- The **agent-state lifecycle is fixed across tiers**: the unit under test is
+  always a real in-memory instance, keyed normally, fresh per case; only its
+  collaborators' realness and whether sends cross a serialisation boundary change.
+
+See [Test tiers](/book/guides/testing/integration/) for the full guide, and
+[`bynk.tier.*` errors](/reference/diagnostics/#test-tiers).
+
+## `stub` — per-seam test doubles {#stub}
+
+`as <tier>` sets the *default* provision of every seam; a **`stub`** clause
+overrides *one* method's provision under test — an explicit call pattern on the
+left, a value or `fails` on the right, **never a computed body**:
+
+```bynk,fragment
+suite pricing {
+	stub Rates.lookup("GBP") returns 1.25  // suite-scoped: applies to every case
+
+	stub Rates.lookup(_) returns 1.0  // fallback; first matching clause wins
+
+	case "a store fault faults the quote" {
+		stub Kv.get(_) fails  // case-scoped: overrides for this case
+		expect Prices(Val[AcctId]).quote("GBP") faults
+	}
+}
+```
+
+This substitutes a consumed seam of the unit under test — the third of the seam
+triad: `consumes` *declares* a seam, `given` *requires* it, and `stub`
+*substitutes* it under test (its own keyword since #548; formerly a pun on the
+production `provides`).
+
+- **The left is `Cap.method(<pattern>, …)`** — the capability, the method, and an
+  **argument pattern** per parameter. A pattern is the [one predicate
+  surface](/reference/testing/#expect): a literal (`"GBP"`, `1000`), `_`
+  (any), or an `is` narrowing. Clauses for the same method are tried **top to
+  bottom, first match wins**, so put specific before fallback.
+- **The right is `returns <value>` or `fails`** — a *value* or a *fault*. An `Err`
+  is an in-band outcome: stub it with `returns Err(…)` and assert it with `expect r
+  is Err(_)`. `fails` injects a capability *fault*: the operation throws, as a real
+  provider's failure would, and the fault propagates out of the handler and out of
+  the case unless the case [claims it with `faults`](#faults). It is never a
+  block: a double that needs logic is the signal to promote the tier.
+- **`stub` is capability-only.** An agent's realness is the tier's job, not a
+  provider's, so `stub` targets a *capability* seam only. Overriding a
+  capability the unit does not `consumes` is `bynk.stub.not_a_seam`; naming an
+  operation the capability does not declare is `bynk.stub.unknown_op`; a
+  `returns` value whose type disagrees with the operation's result type is
+  `bynk.stub.rhs_type`.
+- **`stub` is in-process only.** A `stub` overrides a seam at `unit` and
+  `integration`. At `system` each context runs as the Worker it deploys as and
+  builds its own providers, so a `stub` there is `bynk.stub.at_system`.
+- **Precedence:** case `stub` > suite `stub` > the tier default, **per
+  operation**. A case-scoped clause applies to its own case only. An operation
+  no clause covers (for this case) reaches the tier default, so stubbing
+  `Kv.get` leaves `Kv.put` working.
+
+Bare [observation](#observation) needs **no `stub`** — the recording proxy
+records calls at the seam regardless. You reach for `stub` only when the case
+depends on a collaborator's *return*.
+
+### Sequenced `stub` — `returns each`
+
+A single value cannot express a collaborator whose successive calls differ — an
+advancing clock, a `Kv.get` that returns `None` then `Some`, a network that fails
+twice then succeeds. The **return-sequence** form supplies one outcome per call, in
+order:
+
+```bynk,fragment
+stub Clock.now()  returns each [1000, 2000, 3000]      // three successive successes
+stub Kv.get(_)     returns each [None, Some(row)]        // None, then Some…
+stub Net.fetch(_)  returns each [fails, fails, ok(resp)] // fails twice, then succeeds
+```
+
+- `returns each [<outcome>, …]` — the `each` distinguishes "one outcome per call"
+  from a single call that returns a *list value* (`returns [a, b]` still returns the
+  two-element list once). Each `<outcome>` is a value (a success), the atom `fails`
+  (a fault), or `ok(v)` when a fault and a success value must sit in one sequence.
+- **Exhaustion: the last outcome repeats** (steady state). `[fails, fails, ok(resp)]`
+  is "fails twice, then succeeds forever"; `[1000, 2000, 3000]` holds at `3000`
+  after the third call. A malformed sequence (e.g. empty) is
+  `bynk.stub.bad_sequence`.
+- A collaborator that must *compute* its next return (a delta-advancing clock, a
+  threaded cursor) exceeds a fixed sequence and is a reserved **virtual fixture** —
+  a named follow-on, not shipped in v0.118.
+
+### Latency and virtual time — `after`, `never` {#stub-latency}
+
+A stub can take time, to test a [`within`](/reference/capabilities/#within):
+
+```bynk,fragment
+stub Pricing.quote(_) returns 7 after 3.seconds   // completes when the clock reaches 3s
+stub Pricing.quote(_) never                        // never completes
+```
+
+- `returns <value> after <d>`: the call completes once the case's harness clock has
+  advanced `d` from the call. `d` is a `Duration` (`bynk.stub.after_type`). `after`
+  goes on `returns` only. `never` is a right-hand side of its own.
+- A stub with neither resolves at once, as before.
+- **The harness clock has a timer queue.** `within` registers its deadline on it, in
+  place of the host's `setTimeout`, and so does an `after` stub. `advance Clock by d`
+  fires every timer due by then. A module whose target calls `within`, or whose stubs
+  take time, runs on this clock; any other keeps the plain counter, byte for byte.
+- **Auto-advance.** When an addressed call has not settled after the microtasks have
+  run, the harness moves the clock to the earliest timer, but only if every capability
+  call in flight is a stub waiting on `after` or `never`. A call into a real provider
+  holds the clock back, so a test never times out work that is simply doing I/O.
+  `within(2.seconds)` against a stub `after 3.seconds` therefore yields
+  `Err(TimedOut { after: 2.seconds })` every time, with no sleeping. **A tie goes to
+  the effect:** a stub that completes exactly at the deadline wins.
+- **Abandoned effects settle at the end of the call**, as detached effects do. An abandoned
+  `after` effect completes by moving the clock on; an abandoned `never` is left, since
+  nothing will ever finish it. A call that can never complete and has no `within` to
+  end it faults the case.
+- **Calls are recorded when they are issued,** so `expect Pricing.quote called once`
+  sees a call `within` gave up on, and `before` compares issue order.
+- **A race ([`race`](/reference/capabilities/#race)) is decided by the same
+  stubs.** `stub Prices.get("east", _) returns 1 after 2.seconds` against
+  `stub Prices.get("west", _) returns 2 after 1.seconds` makes the west mirror win. Stubs
+  match by argument. **A same-instant tie goes to the receiver:** stubs are scheduled in
+  issue order, and the earlier side wins. The loser is recorded and settles at the end of
+  the call, like an abandoned `within`. A race between two *contexts* runs at
+  `integration`, since stubs replace capabilities only. At `system`, `race` is real time.
+- Latency exists where `stub` does: `unit` and `integration`. At `system`, and under
+  `bynk test --against`, `within` reads real time; test the timeout path at `unit`.
+
+See [`bynk.stub.*` errors](/reference/diagnostics/#stubs).
+
+## Helper functions in a suite {#helpers}
+
+A suite may declare plain **`fn`s** for its cases and properties to call: a
+request builder, a fixture, an expected value. They sit among the suite's other
+items, in the fragment form and inside a block `suite x { … }` alike, and are
+written like any function:
+
+```bynk,fragment
+suite hooks.github
+
+--- Request headers for one GitHub delivery.
+fn gh(event: String, delivery: String) -> RequestHeaders {
+	RequestHeaders.of(["X-GitHub-Event: \(event)", "X-GitHub-Delivery: \(delivery)"])
+}
+
+case "an issue event is recorded" {
+	let r <- github.POST("/github", gh("issues", "d-1"), Bytes.fromUtf8("{}")) by GitHub
+	expect r is Ok("accepted")
+}
+```
+
+- **Every tier.** A helper is callable from a `case` or `property` at `unit`,
+  `integration` and `system`, from the other helpers of its suite, and in the
+  value of a `stub … returns`, such as `stub Fetch.send(_) returns reply(200)`.
+- **Test-only.** A helper is checked in the suite's view and emitted into the
+  test module alone. The deployable output is the same with or without it, and a
+  helper adds nothing to the target's surface. So a helper may use what a test
+  body may, such as [`Val[T]`](#val), `RequestHeaders.of`, `RequestQuery.of` and `TokenClaims.of`.
+- **Pure.** A helper returns a value. One that returns an `Effect` is
+  `bynk.suite.fn_effectful`: build the value in the helper and run the effect in
+  the `case`. A method (`fn Type.name`) is `bynk.suite.fn_method`.
+- **Private to its suite.** Another suite, even one targeting the same unit,
+  cannot call it, and may declare a helper of the same name. A suite split across
+  files is, as for [`stub`](#stub) and [`env`](#env), one suite per file.
+- **No shadowing.** A helper whose name is already in a case's scope (a function,
+  type, constant, embed, asset, service or agent of the target or of a commons
+  it `uses`) is `bynk.suite.fn_name_clash`. Two helpers of one suite with one
+  name are `bynk.suite.duplicate_fn`.
+- **Not exported.** There is no way to share helpers across suites.
+
+## Types and constants in a suite {#suite-types-consts}
+
+A suite may also declare its own **`type`** and **`const`** items, for the
+shapes and values only its tests care about: a row type to read a count back
+through `select[T]`, a repository name or a limit shared by several cases.
+
+```bynk,fragment
+suite shop.stock
+
+type Counted = {
+	n: Int,
+}
+
+const Repo: String = "bynk-lang/bynk"
+
+case "a count reads back as a typed row" {
+	let _ <- Stock.run("CREATE TABLE items (id TEXT)", [])
+	let rows <- Stock.select[Counted]("FROM (SELECT count(*) AS n FROM items)", [])
+	expect rows == Ok([Counted { n: 0 }])
+}
+```
+
+- **Private to the suite, like a helper.** The items are visible to the suite's
+  cases, properties and helper `fn`s, and to each other in any order. Another
+  suite, even one targeting the same unit, cannot see them and may declare the
+  same name. A suite split across files is one suite per file.
+- **Test-only.** They are emitted into the test output alone, with their JSON
+  codecs, so `select[T]`, `firstAs[T]`, `Json.encode` and `Json.decode` work on a
+  suite type. The deployable is the same with or without them.
+- **Checked as a unit's own are.** A type is any non-generic declaration the
+  language has (a record, a sum, a refined or opaque type); a generic one is
+  `bynk.suite.type_generic`, and methods stay `bynk.suite.fn_method`. A constant
+  has an upper-camel name and a static initialiser, and cannot refer to itself
+  (`bynk.resolve.const_name_case`, `bynk.resolve.bad_const_initialiser`,
+  `bynk.resolve.const_cycle`).
+- **No shadowing.** A name already in a case's scope (a declaration of the
+  target or of a commons it `uses`, or a sum variant) is
+  `bynk.suite.type_name_clash` or `bynk.suite.const_name_clash`. A name repeated
+  in the suite is `bynk.suite.duplicate_type` or `bynk.suite.duplicate_const`.
+- **Not yet in a suite-scoped `stub` value.** The value of a `stub … returns` is
+  emitted outside the runner, so it cannot name a suite type or constant. Build
+  the value in a case, or use a helper `fn`.
+
+## What a suite consumes — `consumes` {#suite-consumes}
+
+A suite file consumes what it names, as a unit's file does. It sees all of its
+target's own declarations, but a name from another unit (a type, a capability it
+`stub`s, a service it calls) is in scope only through a `consumes` in **that suite
+file**. The target's `consumes` clauses are not inherited, and a suite split
+across files needs a clause in each file that names the thing.
+
+```bynk,fragment
+suite shop.checkout
+
+consumes bynk { Claim }
+consumes bynk.cloudflare { D1 }
+
+case "a held claim" {
+	let c: Claim = Claimed
+	expect c == Claimed
+}
+```
+
+- **Where.** After any `uses`, before the first `stub`, `env`, `fixture`, `type`,
+  `const`, `fn`, `case` or `property` of a fragment-form suite; anywhere among the
+  members of a braced one.
+- **What a clause may list.** Anything the target's consumed unit exports: types,
+  whose variants come with them, and capabilities. A bare `consumes U` brings in
+  all of `U`'s names for this file. Types a listed capability's signatures use
+  (`Response` through a `Fetch` stub) need listing in the suite as well.
+- **Suite types win.** A suite's own `type` still takes the name over an unlisted
+  standard-library type, as it does for a unit.
+- **Naming what the suite does not consume is an error.** A suite file that
+  names something its own `consumes` does not bring in is
+  `bynk.consumes.type_not_selected`, `bynk.consumes.capability_not_selected` or
+  `bynk.consumes.unit_not_consumed`; `bynk check --fix=<code>` adds the clause to
+  the suite file.
+
+## Test input from a file — `fixture` {#fixtures}
+
+A suite reads a project file's text into a `String` constant with a `fixture`
+declaration, so a realistic payload sits in `fixtures/` instead of an escaped
+literal in a case:
+
+```bynk,fragment
+suite github.events
+
+fixture issueOpened = "fixtures/github/issues-opened.json"
+
+case "a real issues delivery decodes" {
+	let r = read(Some("issues"), Some("d-1"), Bytes.fromUtf8(issueOpened))
+	expect r is Ok(_)
+}
+```
+
+It is visible to its own suite at every tier, and is never deployed. See
+[Test fixtures](/reference/fixtures/).
+
+## Configuring a suite — `env { … }` {#env}
+
+A suite or case declares the variables and secrets its participants see with an
+**`env`** clause. Each entry is a name and a `String` literal, the shape a
+Worker's `env` holds, or the name of a [`fixture`](/reference/fixtures/)
+the same suite declares:
+
+```bynk,fragment
+suite shop.orders as system {
+	env {
+		AUTH_JWT_SECRET = "test-secret"
+		PAYMENTS_PROCESSOR = "fake"
+	}
+
+	case "the fake processor is chosen" {
+		let r <- api.GET("/processor") by Visitor
+		expect r is Ok("fake")
+	}
+
+	case "a case can switch it back" {
+		env {
+			PAYMENTS_PROCESSOR = "live"
+		}
+		let r <- api.GET("/processor") by Visitor
+		expect r is Ok("live")
+	}
+}
+```
+
+- **Every tier.** At `system` the entries go on each participant's Worker `env`,
+  as Wrangler would put them there, so `Secrets.get` (and anything else that
+  reads `env`) sees them. At `unit` and `integration` they are what the
+  [`Secrets` double](#platform-doubles) answers: `Some(value)` for a name an
+  entry gives, `None` for any other. The same body with the same `env` runs at
+  every tier.
+- **Not a `stub`.** `env` sets the environment and replaces no seam, so it is
+  legal at `system`, where a [`stub`](#stub) is not.
+- **One map for every participant.** Each participant sees the same entries.
+- **A case layers over its suite**, name by name: a case's entry replaces the
+  suite's entry of the same name, and the suite's other entries still apply. A
+  suite's `env` applies to its own cases; another suite targeting the same unit
+  does not see it, and a `property` runs with none.
+- **Test secrets.** An entry naming a `Bearer` actor's declared `secret` replaces
+  the fixed test secret: the `system` driver signs the token with it, and the
+  Worker's seam verifies with it. Without one, the fixed test secret is used.
+- **Use throwaway values.** An `env` exists only in the test build, but it is
+  still source: never paste a real secret into a test file.
+
+- **A fixture as a value.** `KEY = appKey` gives the text of the suite's
+  `fixture appKey`, so a long value such as a test-only private key lives in
+  one file under `fixtures/` instead of pasted into every suite that needs it.
+  The text is verbatim: a file's trailing newline is part of the value. Only a
+  fixture of the same suite can be named, in its own `env` or a case's. A
+  fixture used only in an `env` counts as used.
+
+A name given twice at one scope is `bynk.suite.duplicate_env`. A value that is
+neither a `String` literal nor a fixture of the suite is
+`bynk.suite.env_not_literal`. At `system`, a name a
+participant's Worker already binds (a Service Binding, KV namespace or Durable
+Object namespace), or a key the test harness sets there itself (a call edge's
+`BYNK_CALL_FROM_…`/`BYNK_CALL_TO_…` key, or a `Foreign` caller's secret), is
+`bynk.suite.env_binding_clash`. That check runs on an
+otherwise clean build, after the Worker bindings are known.
+
+## Platform capabilities under test {#platform-doubles}
+
+A platform capability that a context consumes (`consumes bynk { Clock, Logger }`,
+`consumes bynk.cloudflare { Kv }`) has no real provider in a test. At the `unit`
+and `integration` tiers `bynk test` gives each one a **deterministic test
+double** instead. It returns the same answer on every run, does no I/O, and is
+fresh for each case:
+
+| Capability | Under test |
+|---|---|
+| `Clock` | `now()` reads the case's [harness clock](#time-in-tests): the epoch (`Instant.fromEpochMillis(0)`) plus what the case has advanced |
+| `Random` | `uuid()` counts up (`00000000-0000-4000-8000-000000000001`, `…002`, …); `int(lo, hi)` draws from a fixed seed |
+| `Secrets` | `get(name)` is the [`env`](#env) entry for `name`, else `None` |
+| `Locale` | `current()` is `"en"` |
+| `Logger` | records every level (`log` too), prints nothing |
+| `Events` | records, delivers nothing |
+| `Idempotency` | in memory; `remember`'s and `claim`'s `expiresAfter` are honoured on the harness clock at `unit` (the real clock at `integration`), so `advance Clock` lapses a window; `dedup` and `remember` store the JSON the call encodes, so a value written as one type and read as another is a miss |
+| `Kv` | in memory, values kept as bytes with their metadata; `putTtl`'s TTL and `putWith`'s expiry are kept and listed but not enforced; the new operations check the platform's limits, and `listPage` pages in key order |
+| `R2` | each instance an in-memory bucket, honouring `putWith`'s conditions, metadata and `list`'s paging |
+| `RateLimit` | each instance counts calls per key over windows of its `@period`, allowing `@limit` per window — on the harness clock at `unit`, the real clock at `integration` |
+| `Queue` | each instance accepts every send, checking each body is JSON and a delay is in range; nothing is delivered — at `integration` and `system` each Worker binds a recorder |
+| `Analytics` | each instance accepts every write within the platform's limits (20 blobs totalling 16 KB, 20 finite doubles, a 96-byte index) and faults on one over them — at `integration` and `system` each Worker binds a recorder |
+| `Version` | `current()` is a fixed version: id `"test"`, no tag, `deployed` at the epoch — at `system` each Worker binds version `"integration"` |
+| `StoredSecret` | each instance's `get()` **faults** until stubbed: a test never reads the Secrets Store, and the stubbed value is never printed |
+| `Email` | each instance is the binding's own provider over an in-memory outbox: a send needs no stub, is recorded (`expect Mail.send called with …`), answers `"test-message-N"`, and faults on 51 recipients, 33 attachments, 25 MiB, neither `text` nor `html`, and a reserved or line-broken header — at `integration` and `system` each Worker binds an outbox |
+| `Postgres` | each instance's `all(_, _)`, `first(_, _)`, `run(_, _)` and `transaction(_)` **fault** until stubbed: a test never reaches a database — at `integration` each Worker's `env.HYPERDRIVE_<NAME>` faults on its connection string until the instance is stubbed. With `[test] postgres = "pglite"` each instance is instead the binding's own provider over a real in-memory Postgres ([PGlite](#postgres-under-test)): statements run for real, on a database that starts each case from `schema.sql` |
+| `MySql` | each instance's `all(_, _)`, `first(_, _)`, `run(_, _)` and `transaction(_)` **fault** until stubbed: a test never reaches a database, and there is no in-memory double — at `integration` each Worker's `env.HYPERDRIVE_<NAME>` faults on its connection until the instance is stubbed |
+| `Service` | each instance's `send(_)` **faults** until stubbed: a test never reaches the Worker behind it |
+| `Fetch` | `send(_)`, `sendWith(_, _)`, `receiveBytes(_, _)`, `sendBytes(_, _, _)`, `receiveStream(_, _)` and `sendStream(_, _, _)` **fault**: a test never reaches the network |
+
+### Postgres under test {#postgres-under-test}
+
+By default a `Postgres` instance has no database in a test, and every operation
+faults until a case [stubs](#stub) it. A project that wants its statements run
+for real opts in, in `bynk.toml`:
+
+```toml
+[test]
+postgres = "pglite"
+```
+
+Each `Postgres` instance is then the binding's own provider over
+[PGlite](https://pglite.dev/), Postgres compiled to WebAssembly, at the `unit` and
+`integration` tiers alike (at `integration` each Worker's Hyperdrive binding
+carries a database of its own). A case starts from an empty database with the
+project's `schema.sql`, when it has one, applied; that file is also what switches
+[the statement check](/reference/bynk-capabilities/#postgres-sql-checked-for-syntax)
+on. A test that needs more than the schema creates it itself, with `run`. A
+`schema.sql` that does not apply faults the case, naming the failure.
+
+Statements behave as they do on Postgres: a unique violation is `PgConstraint`
+with SQLSTATE `23505`, a missing table is `PgFailed` with `42P01`, a `transaction`
+that fails applies none of its statements, and values read under the same rules as
+a deployed Worker (`int8` and `numeric` as text, `timestamptz` as ISO-8601, `bytea` as
+base64, `json` and `jsonb` nested). A `stub` still answers first, so a case forces
+what a single connection cannot make happen:
+
+- **`PgSerialization` (SQLSTATE `40001`) cannot arise.** It needs two concurrent
+  transactions, and the double has one session. Stub the operation to test a retry.
+- **`PgConnection` cannot arise** for the same reason: there is no network.
+- The server is PGlite's PostgreSQL (PGlite 0.5 runs PostgreSQL 18), which is
+  not the version your database runs. A behaviour that changed between the two
+  versions differs, and so do extensions: the managed service's may be missing
+  here.
+
+The cost is start-up, so it is opt-in: the package is about 27 MB installed, a
+database takes about 1.5 s to start (once for each instance, for the whole run:
+a case resets it in a few milliseconds, not starts a new one), and it holds about
+a gigabyte of memory. `bynk test` installs the package (pinned exactly, as a
+first-party dependency) only for a project that opts in.
+
+Expiry is not modelled for `Kv`: a value written with a TTL stays readable for the
+whole case, so a test of TTL expiry on `Kv` stubs the read instead
+(`stub Kv.get(_) returns each [Some(v), None]`). `Idempotency` does model it:
+`advance Clock by` past a `remember` or `claim` window and the entry is gone. An agent `Cache` store's
+`@ttl` does consult the `Clock`, so stubbing `Clock.now` drives its expiry.
+
+A case reads a different answer with an ordinary [`stub`](#stub), which
+overrides just the operations it names. Every other operation keeps the double:
+
+```bynk,fragment
+case "a session expires after its ttl" {
+  stub Clock.now() returns each [Instant.fromEpochMillis(0), Instant.fromEpochMillis(1860000)]
+  do Sessions("s").login("t1", "ann")
+  let who <- Sessions("s").whoami("t1")
+  expect who is None
+}
+```
+
+A handler that calls `Fetch.send` needs a `stub Fetch.send(_) returns …`; without
+one, the case fails with a message naming the missing stub. Platform
+capabilities are seams like the context's own, so
+[observation](#observation) works on them too
+(`expect Logger.info called once with msg == "…"`).
+
+## Time in tests {#time-in-tests}
+
+Each case has one **harness clock**. It starts at the epoch
+(`Instant.fromEpochMillis(0)`), and only an `advance` statement moves it:
+
+```bynk,fragment
+case "a hold older than fifteen minutes has expired" {
+  let r <- api.POST("/holds/:id", "h1") by Visitor
+  expect r is Ok(true)
+  advance Clock by 16.minutes
+  let e <- api.GET("/holds/:id", "h1") by Visitor
+  expect e is Ok(true)
+}
+```
+
+- **At every tier the case reads the same time.** At `unit` and `integration`
+  the `Clock` double reads the harness clock. At `system` every participant's
+  first-party `Clock` reads it too, because the harness puts it in the
+  environment it gives each Worker, as it does the in-memory KV and Durable
+  Object namespaces. A case that passes at `unit` therefore promotes to `system`
+  unchanged.
+- **`advance Clock by <Duration>`** is a statement in a `case` body. It names
+  `Clock`, the one time source the harness owns, and its amount is a
+  `Duration`. A computed negative amount faults the case, because the clock
+  only moves forward. Outside a case it is `bynk.test.advance_outside_case`; on
+  another capability, `bynk.test.advance_not_clock`; with another type,
+  `bynk.test.advance_not_duration`.
+- **It isn't a `stub`.** A `stub` overrides one operation of one context's seam,
+  so `stub Clock.now` stays refused at `system` (`bynk.stub.at_system`). The
+  harness clock is the single time source every participant reads. Where both
+  apply, at `unit` and `integration`, a `stub Clock.now` wins over the clock for
+  the operations it names.
+- **It governs the first-party `Clock` only.** A context's own `provides Clock`
+  is untouched. So are the runtime's own clocks: JWT `exp`, the `Signature`
+  tolerance and Durable Object alarms keep reading wall-clock time, so a test
+  token never expires because a case advanced the clock.
+- **The scheduled time isn't defaulted.** A cron address still takes its
+  scheduled time explicitly when the handler declares it
+  ([Cron and queue at `system`](#cron-queue-system)).
+- **Against a real runtime it is wall-clock time.** Under `bynk test --against`
+  the Workers read their own clock, which the runner can't reach, so `advance`
+  is refused (`bynk.test.remote_unsupported_advance`). An `expect` that
+  compares an `Instant` built from a constant, such as
+  `Instant.fromEpochMillis(0)`, is warned about
+  (`bynk.test.remote_clock_dependent`): compare instants the run produced
+  (`expires > created`) instead.
+
+## Reading a participant's database {#peek-a-database}
+
+A `system` case drives the whole app through its real boundaries, so it cannot
+name a capability: `Orders.all(…)` there is `bynk.resolve.unknown_name`. To check
+what a request stored, `D1.peek` gives the case a **read-only handle** on one
+participant's test D1 database:
+
+```bynk,fragment
+case "placing an order stores it" {
+  let r <- api.POST("/orders", "A1") by User("bob")
+  expect r is Ok(_)
+
+  let db = D1.peek(shop.orders.Orders)
+  let rows <- db.all("SELECT sku, qty FROM orders WHERE owner = ?1", [Text("bob")])
+  expect rows is Ok(_)
+}
+```
+
+- **It names a participant and its D1 capability**, as
+  `D1.peek(<participant>.<Capability>)`. It is valid only in an `integration` or
+  `system` case (`bynk.test.peek_outside_case`), on a capability derived from
+  `D1` (`bynk.test.peek_not_a_database`) that the participant declares
+  (`bynk.test.peek_unknown_capability`).
+- **It is bound by `let`**: `let db = D1.peek(…)`, then `db.all(…)`. A `D1.peek`
+  anywhere else is `bynk.test.peek_not_bound`.
+- **It offers the reads**, with the capability's own signatures: `all`, `first`,
+  and `select[T]` / `firstAs[T]`. A literal statement is checked against the
+  migrations' schema like any other D1 call. The `D1` value types (`SqlValue` and
+  the rest) are in scope in the case, with no `consumes`.
+- **It is read-only.** `run` and `batch`, and any statement that would write
+  (`INSERT`, `UPDATE`, `DELETE`, a schema change), are `bynk.test.peek_write`.
+  The leading keyword is enough to refuse one, so this holds under
+  `[check] d1_sql = false` too; with the schema, a write the keyword hides
+  (`WITH … DELETE`) is found from the prepared statement. To get state into the
+  database, drive the app.
+- **It reads the database the app wrote.** It is the same in-memory database
+  the participant's own D1 calls run against in this case, with the
+  participant's migrations applied.
+- **It is local.** Under `bynk test --against`, a case that uses it is refused
+  (`bynk.test.remote_unsupported_peek`), or skipped under `--skip-unsupported`.
+- **A guide.** [Check what a request stored](/book/guides/testing/check-what-the-app-stored/)
+  walks through an example.
+- **Seeding is not part of it.** Starting a case from a known row is tracked in
+  [#3563](https://github.com/bynk-lang/bynk/issues/3563).
+
+## `Val[T]` — value fabrication {#val}
+
+`Val[T]` fabricates a valid inhabitant of `T` drawn from its refinement domain;
+`Val[T](pin)` pins a specific one, refinement-checked at compile time.
+
+| Kind | Bare `Val[T]` yields |
+|---|---|
+| `Int where Positive` | `1` |
+| `Int where NonNegative` | `0` |
+| `Int where InRange(a, b)` | `a` |
+| `String where MinLength(k)` / `Length(k)` | a string of length `k` |
+| `String where Matches(…)` / `IsoDate` | its `@example` ([below](#val-example)); **error** without one — must pin (`bynk.val.needs_pin`) |
+| sum | the first variant (payloads recursively fabricated) |
+| record | every field fabricated, an inline `where` on a field narrowing it as a refined type's does (`qty: Int where Positive` is `1`; a field `where Matches(…)` takes its `@example`, or must pin) |
+| opaque | `.unsafe(<base zero>)` |
+
+`Val[T]` is test-only (`bynk.val.outside_test`). A pin must be a compile-time
+literal (`bynk.val.pin_not_literal`), must satisfy the refinement
+(`bynk.val.literal_violates`), and is only accepted where the kind supports it
+(`bynk.val.pin_unsupported`). See
+[`bynk.val.*` errors](/reference/diagnostics/#value-fabrication).
+
+### `@example` — a value for a pattern {#val-example}
+
+`Val` cannot invent a string that matches an arbitrary regex, so a `Matches` (or
+`IsoDate`) refinement can carry an example that bare `Val` uses instead of
+asking for a pin. The annotation follows the refinement, on a type declaration or
+on a record field's inline `where`:
+
+```bynk,fragment
+type Code = String where Matches("[A-Z]{3}") @example("ABC")
+type Tag = { code: String where Matches("[a-z]+") @example("abc") }
+```
+
+The example may also be a constant declared exactly the base type and bound to a
+literal (`@example(CodeSample)`).
+
+`Val[Code]` is `"ABC"`, and `Val[Tag]` is a `Tag` whose `code` is `"abc"`, as does
+any record or sum that reaches them. The compiler checks the example at the
+declaration, against every predicate of the refinement (so
+`Matches("[a-z]+") && MaxLength(3)` refuses `"abcd"`), whether or not a test
+uses it:
+
+| Code | Raised when |
+|---|---|
+| `bynk.types.example_violates` | the example does not satisfy the refinement |
+| `bynk.types.example_not_literal` | the argument is not exactly one literal of the base type |
+| `bynk.types.example_unneeded` | the refinement is one `Val` already generates (only `Matches` and `IsoDate` take an example) |
+| `bynk.types.example_on_named_field` | the annotation is on a field whose type is a named type; put it on that type |
+| `bynk.types.duplicate_example` | a refinement carries more than one `@example` |
+| `bynk.types.unknown_annotation` | the annotation after a refinement is not `@example` |
+
+A named type's example is the type's own: a record field that narrows such a type with
+extra inline predicates needs a pin, since the example was never checked against them.
+
+An example is a test witness only: it changes neither what the type accepts, nor
+its wire format, contract hash or emitted code. A pinned `Val[T](lit)` overrides
+it. A `for all` over such a type is **still** refused (`bynk.val.needs_pin`),
+because a property over one value would run the same case every time; use
+`Val`. `bynk test --smoke` uses examples, so a route with a patterned path
+parameter or body field has its *answers* case run.
+
+## `property` / `for all` — generative tests {#properties}
+
+A `property` is the generative sibling of `case`, legal in the same `suite`. Where
+a `case` supplies its subjects, a `property` **generates** them and checks that a
+claim holds across many:
+
+```bynk,fragment
+property "more discount, never a higher price" {
+  for all p: Price, a: Percent, b: Percent where a <= b {
+    expect discount(p, b) <= discount(p, a)
+  }
+}
+```
+
+`for all x: T` binds `x` to a *generated* inhabitant of `T` (comma-separated for
+multiple bindings). An optional `where <pred>` — a pure `Bool` — filters generated
+tuples before the body runs (a non-`Bool` filter is `bynk.property.where_not_bool`).
+The body is one or more `expect`s: the **same predicate surface** as a `case`, an
+`invariant`, or an `ensures`.
+
+Generation draws from `T`'s **refinement domain** and includes boundary values:
+
+| Type | `for all` / `Val` generates |
+|---|---|
+| `Int where Positive` | `1`, small positives, and the boundary |
+| `Int where NonNegative` | `0` and small non-negatives |
+| `Int where InRange(a, b)` | `a`, `b`, and interior values |
+| `String where MinLength(k)` / `Length(k)` | strings at and above length `k` |
+| `String where Matches(…)` | **must pin** (`bynk.val.needs_pin`) — no generator; an `@example` serves `Val`, not `for all` |
+| sum | each variant |
+| record | each field generated; under `for all`, a field with an inline `where` (`qty: Int where Positive`) draws from that refinement, as the rows above |
+| opaque | over the base type |
+
+A type must be **refinement-generable** to appear in `for all` (or `Val`): a
+`String where Matches(re)` has no generator and must be pinned instead; an **agent**
+cannot be generated (`bynk.val.agent_not_generable`) — behavioural agent testing
+over handler sequences is a later slice.
+
+**When a `property` earns its keep.** Reach for a `property` when a claim should
+hold across a *range* of inputs — a relationship between inputs and an output
+(monotonicity, a round-trip, an ordering). Reach for a `case` when one specific,
+named scenario is the point. A `property` that merely re-checks a refinement its
+type already guarantees (e.g. `for all q: Quantity { expect q > 0 }` when
+`Quantity` is `Int where Positive`) proves nothing and is flagged
+`bynk.property.restates_refinement` (a conservative, syntactic check).
+
+On failure a property reports the case count, the run's root seed, and a **shrunk**
+counterexample with a copy-paste reproduce line — see
+[Run your tests](/book/guides/testing/run-tests/) and
+[`bynk.val.*` errors](/reference/diagnostics/#value-fabrication).
+
+## History properties — `for all run: History[Agent]` {#history-properties}
+
+A `property` generates *values*; a **history property** generates a *run* of an
+agent. `for all run: History[Wallet]` binds `run` to a generated, driven
+call-history of the `Wallet` agent — the generative sibling of `property` now spans
+values *and* whole behaviours:
+
+```bynk,fragment
+suite demo.wallet {
+	property "no accepted spend without a prior accepted top-up" {
+		for all run: History[Wallet] {
+			expect run.all((s) => (s.call is Spend && s.accepted)
+				implies run.upTo(s).any((p) => p.call is TopUp && p.accepted))
+		}
+	}
+}
+```
+
+The runner:
+
+1. **generates** a bounded random sequence of `Wallet`'s handler calls — each
+   handler chosen uniformly, each argument drawn from its parameter's refinement
+   domain (the same generator, seed, and shrinker a value `for all` uses);
+2. **drives** the sequence against a **fresh** `Wallet` from its initial state,
+   invoking the **real** handlers and their real invariants — so every state in
+   `run` is one a handler actually reached (reachability by construction, never a
+   fabricated state);
+3. **binds** `run` and evaluates the predicate; on failure it reports the seed and a
+   **shrunk minimal failing sequence**.
+
+### A history is a `List[Step]`
+
+`run` is an ordinary `List` — assert it with the surface you already know (`.all` /
+`.any` / indexing / `.length()`), exactly as [`trace(Cap.op)`](#observation) is a
+`List`. There is no temporal vocabulary: "always P" is `run.all((s) => P)`,
+"eventually P" is `run.any((s) => P)`, and "P before Q" is a quantified prefix check
+via `run.upTo(s)` (the history strictly before step `s`). Each `Step` carries:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `.call` | a sum over the agent's handlers (`Spend { amount }`, `TopUp { amount }`) | which handler ran, with its generated arguments — matched with `is` / `match`. The variant is the handler name with its first letter upper-cased. |
+| `.accepted` | `Bool` | whether the handler **committed** a new state (vs. rejected — an `invariant` / `transition` refusal leaves the state uncommitted) |
+| `.old` / `.new` | the agent's state | the committed old→new pair (the same `old`/`new` a `transition` sees), so a step is a reached edge of the state graph |
+
+### Rules
+
+- `History[T]` requires `T` to be an **agent** — only an agent has handlers to
+  sequence and reachable states to observe (`bynk.history.not_an_agent`). It is
+  legal **only** in `for all` position inside a `property`; anywhere else it is
+  `bynk.history.outside_property` (it is a generator, not a value type).
+- The agent must be **drivable**: every handler parameter must be
+  refinement-generable, else `bynk.history.not_generable`.
+- A history property carries **no** `as` — it runs in-process against the real
+  handlers, on the generative, flake-free tier ([tiers](#tiers-the-as-tier-clause)
+  are `case`-only). Capability seams a driven handler calls are still recordable and
+  still [`stub`](#stub)-stubbable, so observation and test doubles compose
+  inside a driven run.
+- A history property that merely restates a declared `invariant` / `transition`
+  (e.g. `run.all((s) => s.new.balance >= 0)` when the agent carries `invariant
+  nonneg: balance >= 0`) re-checks a guarantee every reached state already has, and
+  is flagged `bynk.history.restates_invariant` (a conservative, syntactic check).
+
+**The bounded-reach ceiling.** A history property is a runner *sample* over
+bounded, generated runs — never a proof. **Unbounded** liveness ("eventually P" over
+an infinite run) is deliberately *not expressible*: a bounded run can only witness
+bounded reach. This is the design choice that keeps history properties cheap and
+flake-free and out of model-checking territory. An always-on-every-path guarantee, if
+you need one, belongs to a policy / `system`-tier guarantee, not a history property.
+
+On failure a history property reports the run count, the run's root seed, and a
+**shrunk minimal sequence** with a reproduce line — see
+[`bynk.history.*` errors](/reference/diagnostics/#history-properties). Single-agent
+histories are the v1 surface; multi-agent / cross-context protocols are a named
+follow-on.
+
+## Contracts — `requires` / `ensures` {#contracts}
+
+A **contract** is the invariant predicate attached to a function. Between a pure
+function's return type and its body, declare any number of named `requires`
+(preconditions) and `ensures` (postconditions):
+
+```bynk
+commons commerce.money
+
+fn discount(p: Int, pct: Int) -> Int
+	requires p_nonneg: p >= 0
+	requires pct_in_range: pct >= 0 && pct <= 100
+	ensures never_above: result <= p
+	ensures never_negative: result >= 0
+{
+	p - (p * pct) / 100
+}
+```
+
+- **`requires <name>: <pred>`** is a precondition over the parameters. `result`
+  is **not** in scope (`bynk.contract.result_in_requires`).
+- **`ensures <name>: <pred>`** is a postcondition over the parameters **and**
+  `result` — the return value (the awaited element for an `Effect` return).
+  Outside an `ensures`, `result` is an ordinary identifier.
+- Each predicate is the **same predicate surface** as a `case`, a `property`, or
+  an `invariant`: a pure `Bool` with `implies`, `is`, operators, and pure methods
+  — no effects, capabilities, `expect`, or `Val`
+  (`bynk.contract.impure_predicate`, `bynk.contract.not_bool`).
+- A record literal in a clause must be **parenthesised**: `requires r: (p == P { x: 1 })`.
+  The `{` after a clause opens the function body, so a bare `P { … }` is not read
+  as a record construction there (as in an `if`/`match` condition).
+
+**Checked at two points, for free.** A contract needs no test to run:
+
+1. **At every call** in the dev/test build, a call-site guard checks each
+   `requires` on entry and each `ensures` on exit, throwing a contract failure
+   that names the clause and the offending arguments/`result`. The guard is
+   **stripped from the deploy build** (`bynk compile`) — contracts add no
+   production cost and never change production behaviour.
+2. **By the runner.** For every contracted function reachable from a test target,
+   the runner **generates** arguments over the parameter domains (the same engine
+   `for all` uses — boundary-inclusive, seeded, shrinking), **filters** them by the
+   `requires` (exactly as a `for all … where` does — inputs failing a precondition
+   are discarded), calls the function, and checks the `ensures`. A failure reports
+   the case count, the seed, and a shrunk counterexample with the same reproduce
+   line a `property` gives. A contract is a property that is always on.
+
+**`ensures` vs `property`.** A claim about *one* result belongs in `ensures` —
+checked everywhere and generated for free. A `property` earns its keep only when
+the claim is **relational or spans calls** (monotonicity, a round-trip) — which no
+per-call postcondition can express. A `case`/`property` that merely restates a
+contract already declared at the source is redundant and flagged
+`bynk.contract.restated_by_test` (a conservative, syntactic check).
+
+See [`bynk.contract.*` errors](/reference/diagnostics/#contracts).
+
+## Step invariants — `transition` {#transitions}
+
+Where an `ensures` constrains one function *call* and an `invariant` constrains one
+committed *state*, a **`transition`** constrains the *move* between two committed
+states — declared on the agent, over the `old`/`new` state pair:
+
+```bynk,fragment
+agent Order {
+  key id: OrderId
+
+  store status: Cell[OrderStatus] = Pending
+
+  transition paid_is_terminal:
+    old.status is Paid implies new.status is Paid
+
+  on call pay() -> Effect[()] {
+    status := Paid
+    ()
+  }
+}
+```
+
+A `transition` is checked at the **commit boundary**, from the second commit
+onward (the genesis commit has no `old` and is skipped), so — like an invariant —
+it is carried by the agent and inherited by *every* `case` for free, at every tier;
+you never write a test for it. It is **not** attacked by the runner: a fabricated
+agent state is valid but not necessarily reachable, so behavioural generation over
+transitions is a runner-driven handler-sequence concern, not value fabrication.
+
+Full reference: [Agent invariants → Step invariants](/reference/agent-invariants/#step-invariants).
+See [`bynk.transition.*` errors](/reference/diagnostics/#transitions-step-invariants).
+
+## Observation — `expect Cap.op called …` {#observation}
+
+Where the rungs above assert over *values* and *state*, observation asserts over
+*interaction*: that the unit under test called a capability, with what arguments,
+how many times, and in what order. Because a capability is injected at a known
+seam, its calls are **recorded automatically** in the test build — a
+pure-observation `case` needs no `stub` or setup at all:
+
+```bynk,fragment
+suite orders {
+	case "an oversized order is rejected and logged" {
+		let r <- place.call(50000)
+		expect r is Err(_)
+		expect Logger.log called once with msg == "rejected: amount too large"
+		expect Store.put never called  // a rejected order writes nothing
+	}
+}
+```
+
+The subject is a **`Cap.op` reference** — the capability and one of its operations,
+*named, not called* (no argument list). The sugar forms are:
+
+| Form | Holds when |
+|------|-----------|
+| `expect Cap.op called` | at least one call |
+| `expect Cap.op never called` | zero calls |
+| `expect Cap.op called once` | exactly one call |
+| `expect Cap.op called <n> times` | exactly `<n>` calls (`<n>` an integer literal) |
+| `expect Cap.op called with <pred>` | at least one call whose arguments satisfy `<pred>` |
+| `expect Cap.op called <n> times with <pred>` | exactly `<n>` calls, and they match |
+| `expect A.op before B.op` | both occurred, and the first `A.op` precedes the first `B.op` |
+
+`before` compares the order calls were **issued** in, not the order they finished.
+Inside a [`par` block](/reference/capabilities/#par) the first call of each
+binding is issued in source order, so between two bindings' first calls it is
+source order; a later call inside a composite binding (a function that makes
+several calls) is issued when its earlier ones complete, so it follows completion
+order. Neither is evidence that one effect finished first, and a test that needs
+completion order is testing a race: write it against a stub that controls it.
+
+A **`with` predicate** is the ordinary predicate surface with the operation's
+parameters in scope by their declared names (`Logger.log(msg: String)` → `msg`), so
+`with msg == "…"` reads directly; it must be pure `Bool`. It is checked against
+every recorded call, so an effectful call inside it is refused
+(`bynk.observe.impure_with`) rather than run once per call.
+
+For anything the sugar does not cover, the **escape hatch** binds the recorded calls
+as an ordinary value:
+
+```bynk,fragment
+let calls = trace(Logger.log)
+expect calls.length() == 2
+expect calls.all((c) => c.msg.length() > 0)
+```
+
+`trace(Cap.op)` yields a `List` of per-operation call records in call order — each
+record's fields are the operation's parameters (`{ msg: String }` for `Logger.log`)
+— so it is asserted with the `List` surface you already know (`length()`, `all` /
+`any`, indexing). There is no test-only iteration construct: "for every recorded
+call …" is `calls.all((c) => …)`.
+
+Recording is emitted **only** under `bynk test`; the deploy build calls the seam
+directly, so observation adds no production cost. Observation is *scenario-specific*
+— a claim about one case; a *universal* guarantee ("every payment audits, on every
+path") is a policy, not a test.
+
+See [`bynk.observe.*` errors](/reference/diagnostics/#observation).
+
+## System tests — a flow across Workers {#system-tests}
+
+A `case as system` exercises a **flow across several contexts**, each stood up as
+the Worker it actually deploys as — so the real cross-context wire (serialise →
+JSON → deserialise → structural projection) is under test, which the in-process
+tiers never touch. Its participants are **inferred** from the unit under test's
+`consumes` graph, so there is nothing to wire by hand:
+
+```bynk,fragment
+suite checkout as system {
+	case "small order authorises across the wire" {
+		let r <- shop.orders.place(100)
+		expect r is Ok(_)
+	}
+}
+```
+
+- A case calls into a participant by **qualified name** —
+  `shop.orders.place(100)` (a service) — exactly as a cross-context caller would.
+  The call travels a simulated Service Binding into the target Worker; any further
+  cross-context calls it makes (e.g. `orders → payment`) cross the wire too.
+- The inferred set must span **at least two contexts** (the target and a consumed
+  one); otherwise `bynk.tier.system_needs_wire`. The closure under `consumes` is
+  derived automatically, so a consumed context can never be left unwired.
+- A `stub` is not legal at `system`, suite- or case-scoped
+  (`bynk.stub.at_system`). Each participant runs as the Worker it deploys as, and
+  that Worker builds its own capability providers, so there is no seam to put a
+  double in. A case that needs a stubbed seam stays at `unit` or `integration`.
+
+Cross-context capabilities (`given B.Cap`) are wired as in production: the
+provider is instantiated locally in the consumer Worker (v0.15 model A1).
+**Agents** (Durable Objects) work too: a participant's agents are backed by
+in-memory Durable Object instances — same key, same instance **within a case**;
+state starts empty and is **fresh per case**. See
+[Test tiers](/book/guides/testing/integration/).
+
+`bynk test` runs `system` cases in plain Node alongside the in-process tiers — it
+compiles the inferred participants in workers mode under `out/workers/`, stands
+them up in-process, and routes the real wire between them. No
+`wrangler`/`miniflare` needed.
+
+## Doc examples {#doc-examples}
+
+A fenced `bynk` block in a doc-block is a **doc example**, and `bynk test`
+checks it. The block becomes a `case` in a synthetic `suite` that targets the
+unit declaring the doc, so it has that unit's scope and the usual test
+semantics. The checks run after the project itself compiles, and a failing
+example fails the run before any test runs.
+
+A fence of statements and expressions (an `expect`, a `let`) is the body of the
+`case`. A fence of declarations (`type`, `fn`, `capability`, …) is checked as a
+sibling `commons` of its own, which `uses` the declaring unit when that is a
+`commons`, so the example may build on it. A declaration fence in a `context`
+is checked in a copy of the context with the fence's items added. An item that
+redeclares a name the context already has replaces that declaration in the
+copy, so a doc on `type Order` can show `type Order = …`. Only diagnostics
+inside the fence are reported, not an error the replacement causes elsewhere.
+Use `bynk fragment` to opt a fence out. A fence that is neither is a parse error at the fence.
+
+Doc examples are **type-checked, not run**, unless marked `bynk test` (below). A
+diagnostic is reported at the example's own line in the source file, with its
+usual category.
+
+### Running an example {#doc-examples-run}
+
+Mark a fence of statements `bynk test` to run it too. It becomes an ordinary
+case, named `doc example <file>:<line>` after its opening fence, in the suite of
+the unit that declares the doc. It appears in `--no-run --format json` discovery
+and in a run's output beside the unit's own cases, and a failing `expect` is
+reported at its own line and column in the source file:
+
+````text
+---
+Doubles a number.
+
+```bynk test
+expect double(2) == 4
+```
+---
+fn double(n: Int) -> Int { n * 2 }
+````
+
+In the `--format json` and `ndjson` output a doc example's case carries
+`"origin": "doc"`, after the case's other optional fields. No other case has an
+`origin` field, so a reader treats a missing one as an ordinary `case`, and a
+document with no doc examples is unchanged.
+
+`bynk test` is for an example that makes sense as a test: its `expect`s are the
+assertions. A fence of declarations marked `bynk test` is checked, as above, but
+has no case to run. A fence without the mark stays check-only, so a doc can show
+code that is correct but shouldn't run (it needs a stub, say) without a case
+failing.
+
+
+The fence's info string decides what happens. The first word must be `bynk`, and
+further words follow after a space or comma (`bynk ignore` and `bynk,ignore` are
+the same):
+
+| fence | effect |
+|---|---|
+| `bynk` | type-checked |
+| `bynk test` | type-checked, and run as a case |
+| `bynk ignore` | skipped |
+| `bynk fragment` | skipped: a partial snippet with no scope to check against |
+| `bynk fail` | skipped |
+| any other language | not looked at |
+
+Only `---` doc-blocks on a `commons` or `context` hold examples. See [Write
+examples that stay true](/book/guides/program-structure/document-your-code/#examples).
+
+## Smoke tests — `bynk test --smoke` {#smoke}
+
+`bynk test --smoke` writes a `system` suite for each context with a `from http`
+service, and runs it instead of the project's own suites. The cases use only
+the surface above: arguments from [`Val`](#val), a [`by`](#call-site-by)
+principal, a [`Wire`](#driving-a-rejection-with-wire) body and
+[`by Nobody`](#failure-principals). For a route `PUT /cart/:sku` guarded by
+`by u: User`, `bynk test --smoke --print` shows:
+
+```bynk,fragment
+case "smoke: PUT /cart/:sku answers" {
+  let r <- api.PUT("/cart/:sku", Val[Sku], Val[Item]) by User(Val[UserId])
+  expect !(r is ServerError(_) || r is NotImplemented(_) || r is BadGateway(_) || r is ServiceUnavailable(_) || r is GatewayTimeout(_))
+}
+case "smoke: PUT /cart/:sku rejects a malformed body" {
+  let r <- api.PUT("/cart/:sku", Val[Sku], Wire("{not json")) by User(Val[UserId])
+  expect r is Rejected(_)
+}
+case "smoke: PUT /cart/:sku refuses no credential" {
+  let r <- api.PUT("/cart/:sku", Val[Sku], Val[Item]) by Nobody
+  expect r is Rejected(Unauthorized)
+}
+```
+
+- **answers** is made for every route. It passes unless the answer is a 5xx,
+  even one the handler builds itself: its input is valid by construction.
+- **rejects a malformed body** is made for a route with a JSON `body` (not a
+  [`@raw`](/reference/http/#raw-request-bodies) one). On a service with
+  `on rejected`, a rendered `400` (`Handled(BadRequest(_))`) passes too.
+- **refuses no credential** is made for a route whose actor isn't public.
+
+In a smoke run decoding is strict: a status no `HttpResult` carries, or a JSON
+body that doesn't decode as the route's declared type, fails the case. A route
+`Val` can't fill (a `Matches` type, a principal it can't build) is skipped and
+named with the checker's reason. An `answers` case that gets a non-5xx status
+its route doesn't declare still passes, with a
+`bynk.test.smoke_undeclared_status` warning naming the route, the status and
+the declared statuses. See
+[Smoke-testing every route](/reference/tooling/bynk-cli/#smoke-testing-every-route) for
+the flags, and for which routes run against a deployment.
+
+## Running
+
+```sh
+bynk test .
+```
+
+`bynk test` compiles the project (including tests), type-checks the output with
+`tsc`, and runs it with Node — both must be on your path. `--no-run` emits the
+TypeScript without running it. Exit code is non-zero if any test fails.
+
+If `tsc` rejects the generated TypeScript, that is a compiler bug, not a problem
+with your tests. `bynk test` reports it as `bynk.codegen.tsc_failed` at the Bynk
+source line the failing generated line came from, with the `tsc` error and the
+generated line attached, so you can report it. Under `--format json` it is a
+`compile` error whose `diagnostics` hold those lines and whose `stderr` holds the
+raw `tsc` output. `bynk check --emit` runs the same `tsc` step without the
+tests.
+
+A project that declares no tests is not a failure by default: `bynk test` prints
+`warning: no tests found in <dir>` on stderr and exits 0, so a library or a
+freshly scaffolded project can run it before it has tests. Pass
+`--require-tests` to make that an `error:` with exit code 1, so CI does not pass
+a project that never wrote a test. It applies with `--no-run` too, so a
+discovery-only step can enforce it. At a workspace root, every member must
+declare at least one test.
+
+### Debugging under Node (`--inspect`)
+
+`bynk test --inspect` launches the test runner under Node's inspector
+(`node --inspect-brk`) and prints an inspector URL:
+
+```sh
+bynk test . --inspect
+# → Debugger listening on ws://127.0.0.1:9229/…
+```
+
+The inspector uses Node's default port, 9229, when it is free. If another
+process already holds 9229, it takes a free port instead and says so; attach to
+the URL it prints.
+
+Attach any JavaScript debugger to that URL (VS Code's built-in Node debugger,
+Chrome DevTools, …). Breakpoints set in your **`.bynk` sources** bind and pause
+there — the compiler emits source maps (since v0.68) and, under `--inspect`, runs
+the emitted TypeScript directly so those maps resolve breakpoints back to `.bynk`.
+This requires **Node ≥ 22.6** (it relies on Node's TypeScript type-stripping) and
+does not run `tsc`. Breakpoints bind on the statement you click — both in the code a
+test exercises and **inside the test body itself** (since v0.70 maps test-case and
+handler bodies per-statement). A one-click VS Code launch is in progress.
+
+### Machine-readable output (`--format json`)
+
+`bynk test --format json` emits a single pinned JSON document of results
+instead of the human ✓ / ✗ output — one `suites` array of `{ name, kind, cases }`,
+each case `{ name, outcome, message?, location? }` with `outcome` one of `"pass"`
+or `"fail"`. A project that doesn't compile yields `error.kind == "compile"`
+(the diagnostic lines); a runner that crashes mid-stream yields
+`error.kind == "runtime"` with the observed prefix and captured stderr. A project
+with no tests yields an empty `suites` array, or, under `--require-tests`,
+`error.kind == "no_tests"` and a non-zero exit.
+
+A project that takes [snapshots](#snapshots) gains a last field, `snapshots`: `{ "written", "updated", "obsolete" }`, the counts of snapshots the run wrote, updated and found obsolete (deleted, under `--update-snapshots`).
+
+Add `--no-run` for **discovery**: `bynk test --no-run --format json` lists every
+suite and case **without running them** — a pure compile (no `tsc`, no Node, no
+`out/` written). Each case carries `outcome: "discovered"` and its declaration
+`location` (the `case "…"` name). The suite/case names match a normal run's, so a
+consumer can list tests first and fold in pass/fail from a later run. This is how
+the VS Code Test Explorer populates its tree before you run anything.

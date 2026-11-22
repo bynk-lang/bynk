@@ -58,7 +58,7 @@ par {
 
 The calls in a block run together, so none can use another's result. A binding that
 mentions a name another binding of the block binds is refused
-([`bynk.par.sibling_name`](/book/reference/diagnostics/)), even if an earlier `let` of
+([`bynk.par.sibling_name`](/reference/diagnostics/)), even if an earlier `let` of
 the same name is in scope. Without that rule the call would silently read the earlier,
 stale value. If one call needs another's result, put it after the block:
 
@@ -73,7 +73,7 @@ let recent <- Orders.latest(orders)   // uses `orders`, so it comes after
 A block holds only `let x <- e` and `do e`. Writes to an agent's `store` stay
 sequential, so do them before or after the block, and a `?` is matched after the block
 rather than inside it. The
-[reference](/book/reference/capabilities/#par) lists everything that is refused.
+[reference](/reference/capabilities/#par) lists everything that is refused.
 
 The same holds for the closure you give to `parTraverse`, `parTraverseAll` or
 `parTraverseTry`: it runs for every element at once, so it may not write a `store`
@@ -110,4 +110,4 @@ finished first.
 ## See also
 
 - [What a join guarantees on failure](/book/guides/effects-and-capabilities/what-a-join-guarantees-on-failure/)
-- [Reference: joining independent effects](/book/reference/capabilities/#par)
+- [Reference: joining independent effects](/reference/capabilities/#par)

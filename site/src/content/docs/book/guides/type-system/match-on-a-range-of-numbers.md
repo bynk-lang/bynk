@@ -105,4 +105,4 @@ this match arm is unreachable — every value `3..5` matches is already matched 
 - Exclusive bounds (`0..<10`) and naming the matched number (`n @ 0..9`) are not
   available; use a guard for the second.
 
-See [range patterns](/book/reference/types/#range-patterns) for the rules.
+See [range patterns](/reference/types/#range-patterns) for the rules.

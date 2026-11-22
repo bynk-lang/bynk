@@ -96,7 +96,7 @@ discipline](design/bynk-release-discipline.md)).
 To let an AI agent ask the toolchain about Bynk (diagnostics, symbols,
 documentation, architecture, wire contracts), point its MCP client at
 `bynk mcp`, for example `claude mcp add bynk -- bynk mcp`. Set-up for other
-clients is in the [`bynk mcp` page](https://bynk-lang.org/docs/tooling/bynk-mcp/).
+clients is in the [`bynk mcp` page](https://bynk-lang.org/reference/tooling/bynk-mcp/).
 
 ## Quick start
 
@@ -177,8 +177,8 @@ each topic keeps its explanation, recipes, and reference together:
 - **[Tutorials](https://bynk-lang.org/book/tutorials/01-first-program/)** — learn Bynk by building.
 - **[Guides](https://bynk-lang.org/book/guides/)** — task-focused recipes, each section
   opening with the *why* before the *how*.
-- **[Reference](https://bynk-lang.org/book/reference/)** — exact behaviour, including the
-  [normative spec](https://bynk-lang.org/book/spec/) and [CLI reference](https://bynk-lang.org/docs/bynk-cli/).
+- **[Reference](https://bynk-lang.org/reference/)** — exact behaviour, including the
+  [normative spec](https://bynk-lang.org/reference/spec/) and [CLI reference](https://bynk-lang.org/reference/tooling/bynk-cli/).
 
 The online Book's source lives in [`site/`](site/). Build it locally with
 [Astro](https://astro.build/): `cd site && npm install && npm run dev`.

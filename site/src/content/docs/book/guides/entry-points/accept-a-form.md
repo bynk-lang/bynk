@@ -77,6 +77,6 @@ fn read(text: String) -> Result[Signup, DecodeError] {
 `Form.encode(signup)` writes the text back, for a test or an outbound request. A failure
 is a `DecodeError` whose `path` is rooted at `$` (`$.email`).
 
-**See also:** [Reference: form bodies](/book/reference/http/#form-bodies),
-[`Form.decode` and `Form.encode`](/book/reference/types/#form-codec),
-[Sending a form in a test](/book/reference/testing/#sending-a-form).
+**See also:** [Reference: form bodies](/reference/http/#form-bodies),
+[`Form.decode` and `Form.encode`](/reference/types/#form-codec),
+[Sending a form in a test](/reference/testing/#sending-a-form).

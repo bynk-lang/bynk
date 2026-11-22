@@ -27,7 +27,7 @@ pub const SCHEMA_PATH: &str = "site/public/schemas/bynk.toml.json";
 pub const SCHEMA_URL: &str = "https://bynk-lang.org/schemas/bynk.toml.json";
 
 /// The manifest reference page, linked from each table's hover.
-const DOCS_URL: &str = "https://bynk-lang.org/docs/manifest/";
+const DOCS_URL: &str = "https://bynk-lang.org/reference/tooling/manifest/";
 
 /// The whole `bynk.toml` schema, keys sorted so the committed text is stable.
 pub fn generate() -> Value {

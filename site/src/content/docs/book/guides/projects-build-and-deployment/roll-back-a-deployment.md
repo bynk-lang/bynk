@@ -37,7 +37,7 @@ each to its own previous deployment, whatever the last release touched. If the l
 release changed one context, revert just that one with `--context`; the plan says
 so when it applies. `--to <version>` names one Worker's version and needs `--context` (or `--worker`).
 
-**A Worker group goes back as one.** The contexts of a [`[deploy.workers.<key>]`](/docs/manifest/#worker-groups)
+**A Worker group goes back as one.** The contexts of a [`[deploy.workers.<key>]`](/reference/tooling/manifest/#worker-groups)
 group are one Cloudflare script, so reverting it puts every member back to the
 previous version together, in one step, and a member cannot be reverted alone:
 naming one with `--context` is refused, with the Worker that holds it, and you

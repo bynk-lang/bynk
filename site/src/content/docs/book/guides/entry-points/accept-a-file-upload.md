@@ -63,5 +63,5 @@ suite upload.api as system {
 }
 ```
 
-**See also:** [Reference: multipart bodies](/book/reference/http/#multipart-bodies),
-[the `File` type](/book/reference/types/#file).
+**See also:** [Reference: multipart bodies](/reference/http/#multipart-bodies),
+[the `File` type](/reference/types/#file).

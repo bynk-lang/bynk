@@ -34,7 +34,7 @@ service api from http {
 A few new things:
 
 - `context shortener` declares a
-  **[context](/book/reference/glossary/#term-context)** rather than a `commons`. Contexts
+  **[context](/reference/glossary/#term-context)** rather than a `commons`. Contexts
   are the unit Bynk deploys — each becomes one Worker.
 - `service api from http { … }` groups request handlers.
 - `on GET("/links/:code") by Visitor (code: String)` is a handler: it answers
@@ -47,7 +47,7 @@ A few new things:
 > The router derives the rest of the method contract from these routes for free:
 > a wrong method to a live path is a `405` with an `Allow` header (not a `404`),
 > a plain `OPTIONS` is answered, and `HEAD` mirrors `GET` — nothing to write. See
-> [HTTP § Method semantics](/book/reference/http/#method-semantics).
+> [HTTP § Method semantics](/reference/http/#method-semantics).
 
 > The file's name must match the context's name: `context shortener` lives in
 > `shortener.bynk`. The compiler uses the source layout to determine each unit's
@@ -174,7 +174,7 @@ set covers the common, modern HTTP status codes (RFC 9110) — success (`Ok` 200
 `Created` 201, `Accepted` 202, `NoContent` 204), redirects carrying a `Location`
 URL (`Found` 302, `SeeOther` 303, `PermanentRedirect` 308, …), and the
 client/server failures (`BadRequest` 400, `NotFound` 404, `TooManyRequests` 429,
-`ServerError` 500, …). See the [HTTP reference](/book/reference/http/) for the
+`ServerError` 500, …). See the [HTTP reference](/reference/http/) for the
 complete list and the status code each maps to.
 
 ## Run it

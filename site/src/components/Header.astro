@@ -4,9 +4,9 @@
 // can jump between surfaces from any page. Reproduces the upstream layout verbatim
 // (so the responsive grid keeps working) and adds one nav group before the social
 // icons. GitHub stays the social icon already configured in astro.config.mjs.
-// The blog (bynk-lang/blog, src/components/Header.astro) carries a copy of this
-// nav with absolute links back here; it is built on its own and served at /blog/
-// by a Worker on this domain. Keep the two lists in step.
+// The blog takes the same list from the theme package's `NAV_LINKS`
+// (bynk-lang/site-theme); it is built on its own and served at /blog/ by a
+// Worker on this domain. Keep the two lists in step.
 import config from "virtual:starlight/user-config";
 
 import LanguageSelect from "virtual:starlight/components/LanguageSelect";
@@ -21,14 +21,13 @@ const shouldRenderSearch =
 const navLinks = [
   { label: "Book", href: "/book/" },
   { label: "By Example", href: "/by-example/" },
-  { label: "Reference", href: "/book/reference/" },
-  { label: "Developer Docs", href: "/docs/" },
+  { label: "Reference", href: "/reference/" },
   { label: "Blog", href: "/blog/" },
   { label: "Playground", href: "https://playground.bynk-lang.dev", external: true },
 ];
 
 // The surface being viewed: the link whose path is the longest prefix of this
-// page's, so a page under /book/reference/ marks Reference rather than Book.
+// page's, so a page under /reference/ marks Reference rather than Book.
 const current = navLinks
   .filter((link) => !link.external && Astro.url.pathname.startsWith(link.href))
   .reduce((best, link) => (!best || link.href.length > best.href.length ? link : best), undefined);

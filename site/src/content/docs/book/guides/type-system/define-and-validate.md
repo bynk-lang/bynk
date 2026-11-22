@@ -18,7 +18,7 @@ commons signup {
 ```
 
 For the full predicate list, see the
-[refined-type reference](/book/reference/refined-types/).
+[refined-type reference](/reference/refined-types/).
 
 The base may be `Int`, `Float`, or `String`. `Float` is a distinct primitive —
 it never coerces to or from `Int` — and takes float bounds:
@@ -94,5 +94,5 @@ the rejected value is not reachable from Bynk yet:
 
 - To admit a value you *do* know at compile time, see
   [Use a literal where a refined type is expected](/book/guides/type-system/use-a-literal/).
-- Reference: [refined-type API](/book/reference/refined-types/).
+- Reference: [refined-type API](/reference/refined-types/).
 - Why it works this way: [The type-system philosophy](/book/guides/type-system/philosophy/).

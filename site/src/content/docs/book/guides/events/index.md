@@ -13,6 +13,6 @@ handler never learns whether, or how, a subscriber ran.
 — a publisher, a subscriber, and the release-at-commit/abort-suppression proof,
 compiled and run under real `tsc` + `node`.
 
-**See also:** [First-party `bynk` capabilities](/book/reference/bynk-capabilities/),
+**See also:** [First-party `bynk` capabilities](/reference/bynk-capabilities/),
 [Understand the capability model](/book/guides/effects-and-capabilities/understand-the-capability-model/),
-[Diagnostics](/book/reference/diagnostics/).
+[Diagnostics](/reference/diagnostics/).

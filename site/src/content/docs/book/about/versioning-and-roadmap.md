@@ -92,7 +92,7 @@ the planning backlogs (`bynk-tooling-proposal-queue.md`,
   (`fn same[T: Eq](a: T, b: T)`, or `where A: Eq` on a method for its receiver
   type's parameter); static methods on generic types shipped with it. Introducing
   bounds was a breaking change with a machine-applicable fix; see
-  [Generics and bounds](/book/reference/generics/). Not currently planned: `Codable` in
+  [Generics and bounds](/reference/generics/). Not currently planned: `Codable` in
   capability operation return types
   ([#2791](https://github.com/bynk-lang/bynk/issues/2791)) and composite keys for
   an agent's `store` `Map`, `Set` and `Cache`
@@ -124,7 +124,7 @@ the planning backlogs (`bynk-tooling-proposal-queue.md`,
   Next: the hosted first-party registry
   ([#843](https://github.com/bynk-lang/bynk/issues/843)).
 - **Concurrent effects.** Shipped: a
-  [`par` block](/book/reference/capabilities/#par) issues independent effects
+  [`par` block](/reference/capabilities/#par) issues independent effects
   together and waits for all of them, raising the first fault in source order.
   `parTraverse`, `parTraverseAll` and `parTraverseTry` now wait for every
   element before they raise, the same way
@@ -157,7 +157,7 @@ are scheduled for later increments, none yet shipped:
   recovers, with ordering across concurrent publishes.
 
 Storage kinds, once on this list, have shipped: an agent's `store` fields are
-`Cell`, `Map`, `Set`, `Cache` or `Log` (see [Agents](/book/reference/agents/)).
+`Cell`, `Map`, `Set`, `Cache` or `Log` (see [Agents](/reference/agents/)).
 
 "Deferred, not missing" matters because it shapes how you read the rest of the
 book. Their absence is a roadmap decision, not an oversight; when they land, they
@@ -167,8 +167,8 @@ feature before them.
 ## Compatibility during 0.x
 
 While Bynk is pre-1.0, increments may change behaviour. The
-[releases](/book/reference/releases/) record what changed in each increment, one
-page per release, and [Upgrading](/book/reference/upgrading/) notes breaking changes. Full multi-version documentation is itself deferred until
+[releases](/reference/releases/) record what changed in each increment, one
+page per release, and [Upgrading](/reference/upgrading/) notes breaking changes. Full multi-version documentation is itself deferred until
 the run-up to 1.0, when stability makes it worthwhile; until then the book tracks
 a single current version.
 
@@ -176,4 +176,4 @@ a single current version.
 
 - [Why Bynk exists](/book/about/why-bynk-exists/) — the motivation behind the design these
   increments are building toward.
-- Reference: [releases](/book/reference/releases/).
+- Reference: [releases](/reference/releases/).

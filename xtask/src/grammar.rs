@@ -271,7 +271,7 @@ fn render_extra(node: &Value) -> String {
 }
 
 /// Render the complete grammar reference appendix
-/// (`site/src/content/docs/book/reference/grammar-appendix.md`): the
+/// (`site/src/content/docs/reference/grammar-appendix.md`): the
 /// generated-file header, the
 /// notation note, the full `ebnf` block of every production (display names,
 /// trivial wrappers collapsed), and the Tokens & trivia section.

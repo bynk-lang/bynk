@@ -147,5 +147,5 @@ binding that loads it. Only `.wasm` files can be included.
 
 ## See also
 
-- [Adapters reference](/book/reference/adapters/)
-- [Adapter errors](/book/reference/diagnostics/#adapters)
+- [Adapters reference](/reference/adapters/)
+- [Adapter errors](/reference/diagnostics/#adapters)

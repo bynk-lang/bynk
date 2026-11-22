@@ -149,7 +149,7 @@ function semanticsNodes(name) {
         children: [
           {
             type: "link",
-            url: `/book/reference/diagnostics/${diagnostic.code}/`,
+            url: `/reference/diagnostics/${diagnostic.code}/`,
             children: [{ type: "inlineCode", value: diagnostic.code }],
           },
           text(` — ${diagnostic.summary}`),
@@ -165,7 +165,7 @@ function semanticsNodes(name) {
         text("See the "),
         {
           type: "link",
-          url: "/book/reference/diagnostics/",
+          url: "/reference/diagnostics/",
           children: [text("diagnostic index")],
         },
         text(" for all codes."),

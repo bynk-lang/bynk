@@ -40,7 +40,7 @@ bynk deploy -- --minify
 
 ## From VS Code
 
-The [VS Code extension](/docs/tooling/vscode-bynk/) deploys plan-first.
+The [VS Code extension](/reference/tooling/vscode-bynk/) deploys plan-first.
 **Bynk: Deploy…** asks for an environment (the ones recorded in
 `bynk.deploy.lock`, or a new one) and, in a multi-context project, whether to
 deploy everything or one context. It then runs `bynk deploy --dry-run --format
@@ -183,7 +183,7 @@ read a shape they don't know and write it back. Nothing is lost: deploy forward
 again, or move the data by hand through your own handlers. See
 [Change stored state safely](/book/guides/agents-and-state/stateful-agent/#change-stored-state-safely).
 
-**Retiring migration steps.** [`bynk migrate sweep`](/docs/bynk-cli/#bynk-migrate-sweep)
+**Retiring migration steps.** [`bynk migrate sweep`](/reference/tooling/bynk-cli/#bynk-migrate-sweep)
 wakes every stored agent instance in your deployed Workers, so the `migrate` steps
 older instances needed can be deleted. For the length of a run, each Worker holds a
 temporary secret, `BYNK_MIGRATE_KEY`, which signs the sweep's calls to its reserved
@@ -354,7 +354,7 @@ says `set` for everything, and the skip shows up when you actually run.
 
 ### Session keys
 
-A [`SignedCookie`](/book/reference/actors/#signed-cookies) actor signs the session cookies it issues, so
+A [`SignedCookie`](/reference/actors/#signed-cookies) actor signs the session cookies it issues, so
 it needs a key, and the key has to be long and random. You never choose one: when the variable named by
 `secret` is unset, `bynk deploy` mints 32 random bytes (unpadded base64url), sets it on the Worker and
 prints only its name, as for any secret. A plan lists it as `managed`.
@@ -460,11 +460,11 @@ foreign Worker then needs the new value. To share a value you already hold,
 supply it (`--secrets-file`, or `LEDGER_CALL_KEY` in the environment). The
 deploy then sets yours and prints nothing. Only your end is yours to set, so
 `--context` can mint these too. The foreign Worker signs each call as `Ledger`,
-as the [wire format](/book/reference/wire-format/#foreign-callers) describes.
+as the [wire format](/reference/wire-format/#foreign-callers) describes.
 `bynk dev` gives the secret a fixed local value.
 
 A TypeScript Worker calls through the typed client the build generates for the
-context, `bynk-client.ts` ([TypeScript client](/book/reference/typescript-client/)).
+context, `bynk-client.ts` ([TypeScript client](/reference/typescript-client/)).
 Pin the contract that client was generated at in `bynk.foreign.toml`, beside
 `bynk.toml`, and the deploy refuses a build that would break it
 (`bynk.deploy.foreign_contract_skew`) until you regenerate the client and update
@@ -492,7 +492,7 @@ calls from Workers still on it, and the other way round. So:
 
 ### Several KV namespaces
 
-Each [derived capability](/book/reference/capabilities/#derived-capabilities)
+Each [derived capability](/reference/capabilities/#derived-capabilities)
 (`capability Sessions = Kv`) is a namespace of its own. The plan gives it a line
 of its own, with its binding:
 
@@ -517,7 +517,7 @@ that before planning, `--dry-run` included, and names both namespaces.
 
 ### R2 buckets
 
-Each [`R2` instance](/book/reference/bynk-capabilities/#object-storage-r2)
+Each [`R2` instance](/reference/bynk-capabilities/#object-storage-r2)
 (`capability Archives = R2`) is a bucket of its own. There is no id to mint: the
 name is the identity, so the plan says `create` until the ledger records the
 bucket and `reuse` after:
@@ -552,7 +552,7 @@ deploy has created.
 
 ### Vectorize indexes
 
-Each [`Vectorize` instance](/book/reference/bynk-capabilities/#vector-indexes-vectorize)
+Each [`Vectorize` instance](/reference/bynk-capabilities/#vector-indexes-vectorize)
 (`capability Docs = Vectorize @dimensions(768) @metric("cosine")`) is an index of
 its own, which the deploy creates because it is state your project owns. The plan
 says `create` the first time and `reuse` after:
@@ -613,7 +613,7 @@ Docs = "docs-dev"
 
 It binds that index, remotely, and checks it against the declaration on the first
 call; a capability with no entry is unbound and a call to it fails, naming the entry
-to add. See [the manifest reference](/docs/manifest/#binding-a-vectorize-index-under-bynk-dev).
+to add. See [the manifest reference](/reference/tooling/manifest/#binding-a-vectorize-index-under-bynk-dev).
 
 A renamed or removed instance leaves its index recorded and reported as an orphan
 (`orphan vectorize shop-cart VECTORIZE_DOCS (shop-cart-docs; deleted by --prune)`).
@@ -622,7 +622,7 @@ index and saying its vectors go too. It is never deleted otherwise.
 
 ### Containers
 
-Each [`Container` instance](/book/reference/bynk-capabilities/#containers-container)
+Each [`Container` instance](/reference/bynk-capabilities/#containers-container)
 (`capability Renderer = Container @build("containers/render") @port(8080)`) is a
 Durable Object class backed by a Docker image. `bynk deploy` neither builds nor
 pushes the image: it hands the Worker to `wrangler deploy`, which builds the image
@@ -683,7 +683,7 @@ container class.
 
 ### Rate limiters
 
-Each [`RateLimit` instance](/book/reference/bynk-capabilities/#rate-limiting-ratelimit)
+Each [`RateLimit` instance](/reference/bynk-capabilities/#rate-limiting-ratelimit)
 (`capability PublishLimit = RateLimit @limit(20) @period(60.seconds)`) needs a
 `namespace_id`: a number, unique on the Cloudflare account, that names its
 counters. Cloudflare doesn't mint one; you choose it, so `bynk deploy` allocates
@@ -736,7 +736,7 @@ capability.
 
 ### D1 databases
 
-Each [`D1` instance](/book/reference/bynk-capabilities/#sql-databases-d1)
+Each [`D1` instance](/reference/bynk-capabilities/#sql-databases-d1)
 (`capability Orders = D1`) is a database of its own, named `<worker>-<capability>`
 with an environment suffix under `--env` (`shop-cart-orders-staging`).
 Cloudflare mints its id, so the plan says `create` until the ledger records the
@@ -762,7 +762,7 @@ database and refuses one no deploy has created; plain `bynk dev` uses a local
 database of wrangler's.
 
 A database's schema comes from its
-[migrations](/book/reference/bynk-capabilities/#schema-migrations),
+[migrations](/reference/bynk-capabilities/#schema-migrations),
 `migrations/<database>/NNNN_<name>.sql` in the project. The plan lists the
 files of each database that has any. It runs offline, so it can't say which
 of them the database has already applied:
@@ -785,7 +785,7 @@ apply, so wrangler doesn't ask again.
 
 #### The idempotency database
 
-A Worker that calls [`Idempotency`](/book/reference/bynk-capabilities/#the-idempotency-capability)
+A Worker that calls [`Idempotency`](/reference/bynk-capabilities/#the-idempotency-capability)
 (`claim`, `dedup` or `remember`) gets a database with no declaration: `<worker>-idempotency`,
 bound as `D1_IDEMPOTENCY`, which holds its claims and remembered values. It is provisioned, adopted and recorded like
 any other, and the plan lists it:
@@ -804,7 +804,7 @@ starts with an empty cache: what its instances held in memory is not carried ove
 
 ### Postgres databases: Hyperdrive
 
-Each [`Postgres` instance](/book/reference/bynk-capabilities/#postgres-databases-postgres)
+Each [`Postgres` instance](/reference/bynk-capabilities/#postgres-databases-postgres)
 (`capability Main = Postgres`) binds a Hyperdrive config, and `bynk deploy` makes
 it. Tell it where the database's connection string is, in `bynk.toml`, by the
 **name of an environment variable**:
@@ -893,7 +893,7 @@ message: what Cloudflare answers is scrubbed of it before it is shown.
 
 #### MySQL databases
 
-A [`MySql` instance](/book/reference/bynk-capabilities/#mysql-databases-mysql)
+A [`MySql` instance](/reference/bynk-capabilities/#mysql-databases-mysql)
 (`capability Legacy = MySql`) deploys exactly as above, with a `mysql://` URL
 (`mysql://user:password@db.example.com:3306/shop`, the port defaulting to 3306)
 under `[deploy.hyperdrive.Legacy]`. The build writes `bynk-hyperdrive.json` beside
@@ -935,7 +935,7 @@ as declared, without an environment suffix, and `--prune` never touches one.
 The secret's value never reaches `bynk`, the plan, the ledger or generated
 config: only its name and the store's id do.
 
-**Per-Worker secrets or stored secrets?** [`bynk.Secrets`](/book/reference/bynk-capabilities/#the-portable-surface--bynk)
+**Per-Worker secrets or stored secrets?** [`bynk.Secrets`](/reference/bynk-capabilities/#the-portable-surface--bynk)
 reads a secret set on one Worker, the portable kind that `bynk deploy` sets from
 your environment (see [Secrets](#secrets)). A stored secret is account-wide:
 shared across Workers, rotated once in the store, and Cloudflare-only. Use
@@ -1111,7 +1111,7 @@ package manager you already use (pnpm, bun, Yarn classic or npm); a warm re-run
 installs nothing and needs no network. `--no-install` (or `BYNK_NO_INSTALL=1`)
 stops instead, naming the command to run, for CI that provisions `node_modules`
 itself. `--dry-run` never installs: it reports what it would install, and with
-which tool. See [Installing npm packages](/docs/bynk-cli/#installing-npm-packages).
+which tool. See [Installing npm packages](/reference/tooling/bynk-cli/#installing-npm-packages).
 
 ### Workers outside the project
 

@@ -129,4 +129,4 @@ suite shop.backend {
 }
 ```
 
-The reference is [Mutual TLS: `MtlsCertificate`](/book/reference/bynk-capabilities/#mutual-tls-mtlscertificate).
+The reference is [Mutual TLS: `MtlsCertificate`](/reference/bynk-capabilities/#mutual-tls-mtlscertificate).

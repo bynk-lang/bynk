@@ -152,5 +152,5 @@ verifiers are unchanged. In a browser, Web Crypto exists only in a secure contex
 (HTTPS or `localhost`); elsewhere an operation fails loudly rather than falling
 back to something weaker.
 
-**See also:** [`bynk.crypto` reference](/book/reference/bynk-capabilities/#cryptography--bynkcrypto),
+**See also:** [`bynk.crypto` reference](/reference/bynk-capabilities/#cryptography--bynkcrypto),
 [Verify webhooks](/book/guides/actors/verify-webhooks/).
