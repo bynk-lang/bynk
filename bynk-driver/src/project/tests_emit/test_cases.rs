@@ -422,7 +422,9 @@ pub(super) fn suite_late_codecs(
         runtime_use,
         &runtime_use.json_codec_roots_since(mark),
     );
-    reindent_by(&late, "    ")
+    let mut printed = String::new();
+    emitter::extend_printed_at(&mut printed, late, 0);
+    reindent_by(&printed, "    ")
 }
 
 /// #2834: the suite's helper `fn`s as local function declarations, for a runner
@@ -502,7 +504,9 @@ pub(super) fn suite_fn_decls(
             &runtime_use.json_codec_qual(),
             runtime_use,
         );
-        out.push_str(&reindent_by(&decls, "    "));
+        let mut printed = String::new();
+        emitter::extend_printed_at(&mut printed, decls, 0);
+        out.push_str(&reindent_by(&printed, "    "));
     }
     // #2841: each fixture is a local name for its file's module-level constant.
     for f in suite_fns.fixtures {

@@ -2486,6 +2486,11 @@ fn ts_text_idents_violations(files: &[(PathBuf, String)]) -> usize {
 /// baseline lists them. A growth probe ([`GROWTH_PROBES`]): it may only fall unless a pending
 /// file `raises:` it with a reason, so a round trip cannot creep back in.
 ///
+/// **End state (1A.39a):** the probe reads 1. The one line is `extend_printed_at` in `emitter.rs`,
+/// the driver's test-harness entry: it prints the statements the driver asks for, at a depth. It
+/// stays until 1B.2 moves `tests_emit` into `bynk-emit`, and the probe then reads 0. The final
+/// program print (`bynk_ts::print`) and `lower_block_to_async_body` count no line.
+///
 /// Counts non-comment lines outside `#[cfg(test)]` modules in `bynk-emit/src` that contain
 /// `print_expr(`, `print_stmt(` or `print_type(` (a call), or the same name as a path
 /// (`.map(bynk_ts::print_type)`). `print_stmt_with_spans(` and the like are other names and do not

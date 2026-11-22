@@ -10,7 +10,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use super::internal_fault::FaultSite;
-use super::zero_value::{render_zero_value, zero_expr as zero_value_expr};
+use super::zero_value::zero_expr as zero_value_expr;
 use crate::emit_model::EmitProjectCtx;
 use bynk_check::actors::ActorDecl;
 use bynk_check::checker::{TyId, TypedCommons, Types};
@@ -33,7 +33,7 @@ use bynk_model::{
 use super::ctx::{AgentStoreState, BodyMode, HandlerShared, ModuleCtx};
 use super::lower_ctx::LowerCtx;
 use super::lower_stmt::{Body, Item, block_body_with_return, claim_scoped, function_body_stmts};
-use super::ts_types::{ts_base, ts_ty_to_ts_type, ts_type_ref, ts_type_ref_to_ts_type};
+use super::ts_types::{ts_base, ts_ty_to_ts_type, ts_type_ref_to_ts_type};
 use super::*;
 
 /// P6.x (#1188): reads `shape` — `t`'s already-lowered `bynk-emit::ir::TypeShape`
@@ -137,16 +137,20 @@ pub(crate) fn emit_type_in(
     stmts
 }
 
-/// A state field's zero value as TypeScript text. The checker admits a field with no initialiser
+/// A state field's zero value. The checker admits a field with no initialiser
 /// only when its type has a zero (`bynk.agents.non_zeroable_state_field`), so none is a missing
 /// fact (1A.34), reported at the field.
-fn state_field_zero(f: &RecordField, commons: &TypedCommons, ctx: &EmitProjectCtx) -> String {
+fn state_field_zero(
+    f: &RecordField,
+    commons: &TypedCommons,
+    ctx: &EmitProjectCtx,
+) -> bynk_ts::TsExpr {
     zero_value_ts(&f.type_ref, f.refinement.as_ref(), &commons.types).unwrap_or_else(|| {
         let site = FaultSite {
             sink: &ctx.runtime_use,
             span: f.span,
         };
-        bynk_ts::print_expr(&site.missing_fact("zero value for a state field"))
+        site.missing_fact("zero value for a state field")
     })
 }
 
@@ -156,8 +160,8 @@ fn zero_value_ts(
     type_ref: &TypeRef,
     inline: Option<&Refinement>,
     types: &HashMap<String, Arc<TypeDecl>>,
-) -> Option<String> {
-    bynk_check::checker::zero_value(type_ref, inline, types).map(|z| render_zero_value(&z))
+) -> Option<bynk_ts::TsExpr> {
+    bynk_check::checker::zero_value(type_ref, inline, types).map(|z| zero_value_expr(&z))
 }
 
 /// The runtime test a `via schema(...)` guard negates (events slice 4b, #990):
@@ -917,7 +921,7 @@ fn emit_method(
     for p in &f.params {
         params.push(bynk_ts::TsParam::new(
             ts_ident(&p.name.name),
-            Some(bynk_ts::TsType::named(ts_type_ref(&p.type_ref))),
+            Some(ts_type_ref_to_ts_type(&p.type_ref, None)),
         ));
     }
     let empty = bynk_check::resolver::CrossContextInfo::default();
@@ -956,7 +960,7 @@ fn emit_method(
         is_async,
         generics,
         params,
-        return_type: Some(bynk_ts::TsType::named(ts_type_ref(&f.return_type))),
+        return_type: Some(ts_type_ref_to_ts_type(&f.return_type, None)),
         doc,
         inline: false,
         body,
@@ -1951,19 +1955,16 @@ fn emit_icu_placeholder(p: &icu::IcuPlaceholder<'_>, locale_tag: &str) -> bynk_t
             })
         }
         icu::PlaceholderKind::Select { arms } => {
-            let arms_obj: Vec<String> = arms
+            // The arm keys are quoted here, because a `Prop`'s key prints as given.
+            let arms_obj: Vec<(String, bynk_ts::TsExpr)> = arms
                 .iter()
                 .map(|(k, segs)| {
-                    format!(
-                        "\"{}\": {}",
-                        escape_ts_string(k),
-                        bynk_ts::print_expr(&emit_sub_message(segs, locale_tag))
+                    (
+                        format!("\"{}\"", escape_ts_string(k)),
+                        emit_sub_message(segs, locale_tag),
                     )
                 })
                 .collect();
-            let key = format!("\"{}\"", escape_ts_string(p.name));
-            let fallback_text = format!("\"{{{}}}\"", escape_ts_string(p.name));
-            let arg = format!("params.get({key})");
             // `Object.hasOwn` (not `?? __arms["other"]`): the arm table is an
             // object literal, so a runtime `__arg.value` naming an
             // `Object.prototype` member (`"constructor"`, `"toString"`,
@@ -1973,18 +1974,81 @@ fn emit_icu_placeholder(p: &icu::IcuPlaceholder<'_>, locale_tag: &str) -> bynk_t
             // dispatch's real question is own-property presence. `Object.hasOwn`
             // is ES2022, which `emit_tsconfig` already targets.
             //
-            // Stays one opaque leaf — the only one of this cluster's 4 real
-            // shapes with a BLOCK-bodied IIFE (see this function's own doc:
-            // `TsArrowBody::Block` exists since #1435, but this arm was not
-            // reconverted along with it) — now tagged `VerbatimExpr`, not
-            // `Ident` (#1539).
-            bynk_ts::TsExpr::VerbatimExpr(
-                format!(
-                    "((__arg) => {{ if (__arg === undefined || __arg.tag !== \"Text\") {{ return {fallback_text}; }} const __arms: globalThis.Record<string, string> = {{ {} }}; return globalThis.Object.hasOwn(__arms, __arg.value) ? __arms[__arg.value] : __arms[\"other\"]; }})({arg})",
-                    arms_obj.join(", "),
+            // A block-bodied IIFE whose statements print on the one line, so its braced
+            // `if` sits beside the rest (`TsArrowBody::Flat`, 1A.39a).
+            let arms_ty = bynk_ts::TsType::named_with_args(
+                "globalThis.Record",
+                vec![
+                    bynk_ts::TsType::named("string"),
+                    bynk_ts::TsType::named("string"),
+                ],
+            );
+            let arms_ref = || bynk_ts::TsExpr::Ident("__arms".to_string());
+            let missing = bynk_ts::TsExpr::Binary {
+                op: bynk_ts::TsBinaryOp::Or,
+                left: Box::new(bynk_ts::TsExpr::Binary {
+                    op: bynk_ts::TsBinaryOp::StrictEq,
+                    left: Box::new(bynk_ts::TsExpr::Ident("__arg".to_string())),
+                    right: Box::new(bynk_ts::TsExpr::Ident("undefined".to_string())),
+                }),
+                right: Box::new(bynk_ts::TsExpr::Binary {
+                    op: bynk_ts::TsBinaryOp::StrictNotEq,
+                    left: Box::new(arg_tag("tag")),
+                    right: Box::new(bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(
+                        "Text".to_string(),
+                    ))),
+                }),
+            };
+            let has_own = bynk_ts::TsExpr::Call {
+                callee: Box::new(bynk_ts::TsExpr::Member {
+                    object: Box::new(bynk_ts::TsExpr::Member {
+                        object: Box::new(bynk_ts::TsExpr::Ident("globalThis".to_string())),
+                        property: "Object".to_string(),
+                    }),
+                    property: "hasOwn".to_string(),
+                }),
+                args: vec![arms_ref(), arg_tag("value")],
+            };
+            let index = |key: bynk_ts::TsExpr| bynk_ts::TsExpr::Index {
+                object: Box::new(arms_ref()),
+                index: Box::new(key),
+            };
+            let body = vec![
+                bynk_ts::TsStmt::if_stmt(
+                    missing,
+                    bynk_ts::TsStmt::block(
+                        vec![bynk_ts::TsStmt::return_stmt(Some(fallback()), None)],
+                        None,
+                    ),
+                    None,
                 ),
-                bynk_ts::VerbatimOrigin::Emit,
-            )
+                bynk_ts::TsStmt::const_stmt(
+                    bynk_ts::TsBindingName::Ident("__arms".to_string()),
+                    Some(arms_ty),
+                    bynk_ts::TsExpr::object(arms_obj),
+                    None,
+                ),
+                bynk_ts::TsStmt::return_stmt(
+                    Some(bynk_ts::TsExpr::Conditional {
+                        test: Box::new(has_own),
+                        consequent: Box::new(index(arg_tag("value"))),
+                        alternate: Box::new(index(bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(
+                            "other".to_string(),
+                        )))),
+                    }),
+                    None,
+                ),
+            ];
+            bynk_ts::TsExpr::Call {
+                callee: Box::new(bynk_ts::TsExpr::Arrow {
+                    params: vec![bynk_ts::TsParam::new("__arg".to_string(), None)],
+                    is_async: false,
+                    generics: Vec::new(),
+                    return_type: None,
+                    body: Box::new(bynk_ts::TsArrowBody::Flat(body)),
+                }),
+                args: vec![arg_expr()],
+            }
         }
         icu::PlaceholderKind::Number { style } => {
             let mut args = vec![tag_lit_str(), arg_tag("value")];
@@ -4307,86 +4371,188 @@ fn emit_lazy_field_spec(
         return None;
     }
     let agent_name = &a.name.name;
-    // `value_ts` is the field's value type: the encoder takes `unknown` and narrows it once.
-    let codec = |ty: &TypeRef, path: &str, value_ts: &str| -> String {
-        if !is_codecable(ty) {
-            return String::new();
-        }
-        let d = bynk_ts::print_expr(&serialisation::deserialise_expr(
-            ty,
-            &persist_json_input(hist_id("__w")),
-            path,
-            &ctx.runtime_use,
-        ));
-        let e = bynk_ts::print_expr(&serialisation::serialise_text(ty, "__v", &ctx.runtime_use));
-        format!(
-            ", decode: (__w: unknown) => {{ const __r = {d}; if (__r.tag === \"Err\") throw __rehydrationViolation(\"{agent_name}\", __r.error); return __r.value; }}, encode: (__u: unknown) => {{ const __v = __u as {value_ts}; return {e}; }}"
-        )
-    };
     // A refined textual `Map` key or `Set` element is checked as it is read back, as the whole-record
     // gate checks every one at load (a key the program supplies is typed and is not checked).
-    let key_check = |key_ty: Option<&TypeRef>, path: &str| -> String {
+    let key_check = |key_ty: Option<&TypeRef>, path: &str| -> Vec<bynk_ts::TsObjectEntry> {
         let Some(k) = key_ty.filter(|k| type_base_is_string(k, &commons.types)) else {
-            return String::new();
+            return Vec::new();
         };
-        let d = bynk_ts::print_expr(&serialisation::deserialise_expr(
+        let d = serialisation::deserialise_expr(
             k,
             &persist_json_input(hist_id("__k")),
             path,
             &ctx.runtime_use,
-        ));
-        format!(
-            ", checkKey: (__k: string) => {{ const __r = {d}; if (__r.tag === \"Err\") throw __rehydrationViolation(\"{agent_name}\", __r.error); }}"
-        )
+        );
+        let body = vec![
+            bynk_ts::TsStmt::const_stmt(
+                bynk_ts::TsBindingName::Ident("__r".to_string()),
+                None,
+                d,
+                None,
+            ),
+            rehydration_guard(agent_name),
+        ];
+        vec![bynk_ts::TsObjectEntry::prop(
+            "checkKey",
+            lazy_codec_arrow("__k", "string", body),
+        )]
     };
-    let field = |name: &str, kind: &str, tail: String| {
-        format!("{{ name: \"{name}\", kind: \"{kind}\"{tail} }}")
+    let codec = |ty: &TypeRef, path: &str, value_ts: &bynk_ts::TsType| {
+        lazy_codec_entries(ty, path, value_ts, agent_name, ctx)
     };
-    let mut spec: Vec<String> = Vec::new();
+    let mut spec: Vec<bynk_ts::TsExpr> = Vec::new();
     for (name, v) in &layout.store_map_fields {
-        let ts = layout
-            .map_value_ts
-            .get(&name.name)
-            .map(bynk_ts::print_type)
-            .unwrap_or_default();
-        let checked = key_check(store_field_key_type(a, &name.name), &name.name);
-        spec.push(field(
-            &name.name,
-            "map",
-            codec(v, &name.name, &ts) + &checked,
-        ));
+        let ts = layout.map_value_ts.get(&name.name).unwrap_or_else(|| {
+            panic!(
+                "bynk internal error: no value type recorded for store Map `{}`",
+                name.name
+            )
+        });
+        let mut extra = codec(v, &name.name, ts);
+        extra.extend(key_check(store_field_key_type(a, &name.name), &name.name));
+        spec.push(lazy_field_entry(&name.name, "map", extra));
     }
     for (name, elem) in &layout.store_set_fields {
-        spec.push(field(&name.name, "set", key_check(Some(elem), &name.name)));
+        spec.push(lazy_field_entry(
+            &name.name,
+            "set",
+            key_check(Some(elem), &name.name),
+        ));
     }
     for (name, v, _) in &layout.store_cache_fields {
         let ts = match layout.store_field_ty.get(name.name.as_str()) {
             Some(StoreKindIr::Cache(_, v_ty, _)) => {
-                bynk_ts::print_type(&ts_ty_to_ts_type(*v_ty, UnitFacts::of(ctx).render(commons)))
+                ts_ty_to_ts_type(*v_ty, UnitFacts::of(ctx).render(commons))
             }
-            _ => ts_type_ref(v),
+            _ => ts_type_ref_to_ts_type(v, None),
         };
-        spec.push(field(&name.name, "cache", codec(v, &name.name, &ts)));
+        spec.push(lazy_field_entry(
+            &name.name,
+            "cache",
+            codec(v, &name.name, &ts),
+        ));
     }
     for (name, v, _) in &layout.store_log_fields {
-        let ts = layout
-            .log_value_ts
-            .get(&name.name)
-            .map(bynk_ts::print_type)
-            .unwrap_or_default();
-        spec.push(field(&name.name, "log", codec(v, &name.name, &ts)));
+        let ts = layout.log_value_ts.get(&name.name).unwrap_or_else(|| {
+            panic!(
+                "bynk internal error: no element type recorded for store Log `{}`",
+                name.name
+            )
+        });
+        spec.push(lazy_field_entry(
+            &name.name,
+            "log",
+            codec(v, &name.name, ts),
+        ));
     }
     let name = format!("__lazyFieldsOf{agent_name}");
     stmts.push(bynk_ts::TsStmt::const_stmt(
         bynk_ts::TsBindingName::Ident(name.clone()),
         None,
-        bynk_ts::TsExpr::VerbatimExpr(
-            format!("[{}] as const", spec.join(", ")),
-            bynk_ts::VerbatimOrigin::Emit,
-        ),
+        bynk_ts::TsExpr::AsConst(Box::new(bynk_ts::TsExpr::array(spec))),
         None,
     ));
     Some(name)
+}
+
+/// One entry of a spec array: `{ name: "x", kind: "map", ..extra }`.
+fn lazy_field_entry(name: &str, kind: &str, extra: Vec<bynk_ts::TsObjectEntry>) -> bynk_ts::TsExpr {
+    let mut entries = vec![
+        bynk_ts::TsObjectEntry::prop("name", hist_str(name)),
+        bynk_ts::TsObjectEntry::prop("kind", hist_str(kind)),
+    ];
+    entries.extend(extra);
+    bynk_ts::TsExpr::object_entries(entries)
+}
+
+/// `(<param>: <ty>) => { <body> }`, the compact one-line arrow of a spec's codec.
+fn lazy_codec_arrow(param: &str, ty: &str, body: Vec<bynk_ts::TsStmt>) -> bynk_ts::TsExpr {
+    bynk_ts::TsExpr::Arrow {
+        params: vec![bynk_ts::TsParam::new(
+            param.to_string(),
+            Some(bynk_ts::TsType::named(ty)),
+        )],
+        is_async: false,
+        generics: Vec::new(),
+        return_type: None,
+        body: Box::new(bynk_ts::TsArrowBody::Block(body)),
+    }
+}
+
+/// `if (__r.tag === "Err") throw __rehydrationViolation("<agent>", __r.error);`
+fn rehydration_guard(agent_name: &str) -> bynk_ts::TsStmt {
+    bynk_ts::TsStmt::if_stmt(
+        bynk_ts::TsExpr::Binary {
+            op: bynk_ts::TsBinaryOp::StrictEq,
+            left: Box::new(hist_member(hist_id("__r"), "tag")),
+            right: Box::new(hist_str("Err")),
+        },
+        bynk_ts::TsStmt::throw_stmt(
+            bynk_ts::TsExpr::Call {
+                callee: Box::new(hist_id("__rehydrationViolation")),
+                args: vec![hist_str(agent_name), hist_member(hist_id("__r"), "error")],
+            },
+            None,
+        ),
+        None,
+    )
+}
+
+/// The `decode` and `encode` entries of a spec field (#3189): a stored value decodes when an
+/// entry is first read (so a corrupt one faults when touched), and a written value encodes as it
+/// is staged. `value_ts` is the field's value type: the encoder takes `unknown` and narrows it
+/// once. A type with no wire form has neither.
+fn lazy_codec_entries(
+    ty: &TypeRef,
+    path: &str,
+    value_ts: &bynk_ts::TsType,
+    agent_name: &str,
+    ctx: &EmitProjectCtx,
+) -> Vec<bynk_ts::TsObjectEntry> {
+    if !is_codecable(ty) {
+        return Vec::new();
+    }
+    let d = serialisation::deserialise_expr(
+        ty,
+        &persist_json_input(hist_id("__w")),
+        path,
+        &ctx.runtime_use,
+    );
+    let e = serialisation::serialise_text(ty, "__v", &ctx.runtime_use);
+    let decode = lazy_codec_arrow(
+        "__w",
+        "unknown",
+        vec![
+            bynk_ts::TsStmt::const_stmt(
+                bynk_ts::TsBindingName::Ident("__r".to_string()),
+                None,
+                d,
+                None,
+            ),
+            rehydration_guard(agent_name),
+            bynk_ts::TsStmt::return_stmt(Some(hist_member(hist_id("__r"), "value")), None),
+        ],
+    );
+    let encode = lazy_codec_arrow(
+        "__u",
+        "unknown",
+        vec![
+            bynk_ts::TsStmt::const_stmt(
+                bynk_ts::TsBindingName::Ident("__v".to_string()),
+                None,
+                bynk_ts::TsExpr::As {
+                    expr: Box::new(hist_id("__u")),
+                    ty: value_ts.clone(),
+                },
+                None,
+            ),
+            bynk_ts::TsStmt::return_stmt(Some(e), None),
+        ],
+    );
+    vec![
+        bynk_ts::TsObjectEntry::prop("decode", decode),
+        bynk_ts::TsObjectEntry::prop("encode", encode),
+    ]
 }
 
 /// The agent's `store Map[K, V]` fields whose value is a held `Connection`, as
@@ -4673,10 +4839,20 @@ pub(crate) fn agent_reads_key(a: &AgentDecl) -> bool {
 /// #1818: `this.__key = __decodeAgentKey(<codec>, <json>) as <K>;`, setting the
 /// key of an agent that reads it at an entry point: the agent dispatch, a
 /// forwarded WebSocket upgrade, or a waking WebSocket message or close.
-fn agent_key_assign(codec: &str, key_ts: &str, json: &str) -> bynk_ts::TsStmt {
+fn agent_key_assign(
+    codec: &str,
+    key_ty: &bynk_ts::TsType,
+    json: bynk_ts::TsExpr,
+) -> bynk_ts::TsStmt {
     bynk_ts::TsStmt::assign(
-        bynk_ts::TsExpr::Ident("this.__key".to_string()),
-        bynk_ts::TsExpr::Ident(format!("__decodeAgentKey({codec}, {json}) as {key_ts}")),
+        hist_member(hist_id("this"), "__key"),
+        bynk_ts::TsExpr::As {
+            expr: Box::new(hist_call(
+                hist_id("__decodeAgentKey"),
+                vec![hist_id(codec), json],
+            )),
+            ty: key_ty.clone(),
+        },
         None,
     )
 }
@@ -7581,8 +7757,8 @@ fn emit_agent_dispatch(
         if reads_key {
             agent_dispatch_stmts.push(agent_key_assign(
                 &agent_key_codec_name(&a.name.name),
-                &crate::emitter::ts_types::ts_type_ref(&a.key_type),
-                "key",
+                &ts_type_ref_to_ts_type(&a.key_type, None),
+                hist_id("key"),
             ));
         }
         // #1678: the wire arguments are decoded through this agent's table
@@ -8549,6 +8725,194 @@ fn history_drive_loop(
     )
 }
 
+/// The entries of an agent's fresh-state record, one per state field: a `Cell` field's initialiser
+/// (or its zero), then an empty handle for each `Map`, held map, `Set`, `Cache` and `Log`.
+fn agent_zero_entries(
+    layout: &AgentStoreLayout,
+    commons: &TypedCommons,
+    ctx: &EmitProjectCtx,
+) -> Vec<bynk_ts::TsObjectEntry> {
+    let tys = UnitFacts::of(ctx).render(commons);
+    let AgentStoreLayout {
+        store_field_ty,
+        effective_fields,
+        held_maps,
+        store_map_fields,
+        store_map_indexes,
+        set_field_names,
+        store_cache_fields,
+        store_log_fields,
+        ..
+    } = layout;
+    let mut entries: Vec<bynk_ts::TsObjectEntry> = effective_fields
+        .iter()
+        .map(|f| {
+            let val = match &f.init {
+                Some(init) => state_field_init_value(init, commons, ctx),
+                None => state_field_zero(f, commons, ctx),
+            };
+            bynk_ts::TsObjectEntry::prop(f.name.name.clone(), val)
+        })
+        .collect();
+    // A fresh `store Map`/`Set`/`Cache`/`Log` is an empty handle (#3254): insertion-ordered
+    // whatever its keys. A `Map` carries the indexers of its `@indexed(by:)` fields, so its
+    // handle keeps the posting lists itself (v0.93, ADR 0118).
+    for (name, _) in store_map_fields {
+        let value_ty = match store_field_ty.get(name.name.as_str()) {
+            Some(StoreKindIr::Map(_, v)) => *v,
+            other => panic!(
+                "bynk internal error: state field `{}` is not a resolved Map in this \
+                 function's own state reader, found {other:?}",
+                name.name
+            ),
+        };
+        let mut indexed: Vec<&String> = store_map_indexes
+            .get(&name.name)
+            .map(|fs| fs.iter().collect())
+            .unwrap_or_default();
+        indexed.sort();
+        let args = if indexed.is_empty() {
+            Vec::new()
+        } else {
+            vec![bynk_ts::TsExpr::array(
+                indexed.into_iter().map(|f| map_indexer(f)).collect(),
+            )]
+        };
+        entries.push(bynk_ts::TsObjectEntry::prop(
+            name.name.clone(),
+            store_handle_init("__StoreMap", Some(ts_ty_to_ts_type(value_ty, tys)), args),
+        ));
+    }
+    // A fresh held `Map[K, Connection]` (a `K → connId` handle) is empty too.
+    for (name, _) in held_maps {
+        entries.push(bynk_ts::TsObjectEntry::prop(
+            name.name.clone(),
+            store_handle_init(
+                "__StoreMap",
+                Some(bynk_ts::TsType::named("string")),
+                Vec::new(),
+            ),
+        ));
+    }
+    for name in set_field_names {
+        entries.push(bynk_ts::TsObjectEntry::prop(
+            name.to_string(),
+            store_handle_init("__StoreSet", None, Vec::new()),
+        ));
+    }
+    for (name, _, _) in store_cache_fields {
+        let value_ty = match store_field_ty.get(name.name.as_str()) {
+            Some(StoreKindIr::Cache(_, v, _)) => *v,
+            other => panic!(
+                "bynk internal error: state field `{}` is not a resolved Cache in this \
+                 function's own state reader, found {other:?}",
+                name.name
+            ),
+        };
+        entries.push(bynk_ts::TsObjectEntry::prop(
+            name.name.clone(),
+            store_handle_init(
+                "__StoreCache",
+                Some(ts_ty_to_ts_type(value_ty, tys)),
+                Vec::new(),
+            ),
+        ));
+    }
+    for (name, _, _) in store_log_fields {
+        let elem_ty = match store_field_ty.get(name.name.as_str()) {
+            Some(StoreKindIr::Log(t, _)) => *t,
+            other => panic!(
+                "bynk internal error: state field `{}` is not a resolved Log in this \
+                 function's own state reader, found {other:?}",
+                name.name
+            ),
+        };
+        entries.push(bynk_ts::TsObjectEntry::prop(
+            name.name.clone(),
+            store_handle_init(
+                "__StoreLog",
+                Some(ts_ty_to_ts_type(elem_ty, tys)),
+                Vec::new(),
+            ),
+        ));
+    }
+    entries
+}
+
+/// `new <handle><<ty>>(<args>)`, a fresh store handle: the type argument is the value (or element)
+/// type, and a `Set` carries none.
+fn store_handle_init(
+    handle: &str,
+    type_arg: Option<bynk_ts::TsType>,
+    args: Vec<bynk_ts::TsExpr>,
+) -> bynk_ts::TsExpr {
+    let callee = hist_id(handle);
+    bynk_ts::TsExpr::New {
+        callee: Box::new(match type_arg {
+            Some(ty) => bynk_ts::TsExpr::TypeApp {
+                callee: Box::new(callee),
+                type_args: vec![ty],
+            },
+            None => callee,
+        }),
+        args,
+    }
+}
+
+/// `{ index: "<field>", of: (__v) => String(__v.<field>) }`: how a `Map` handle derives the posting
+/// key of one `@indexed(by:)` field.
+fn map_indexer(field: &str) -> bynk_ts::TsExpr {
+    bynk_ts::TsExpr::object(vec![
+        ("index".to_string(), hist_str(field)),
+        (
+            "of".to_string(),
+            bynk_ts::TsExpr::Arrow {
+                params: vec![bynk_ts::TsParam::new("__v".to_string(), None)],
+                is_async: false,
+                generics: Vec::new(),
+                return_type: None,
+                body: Box::new(bynk_ts::TsArrowBody::Expr(Box::new(hist_call(
+                    hist_id("String"),
+                    vec![hist_member(hist_id("__v"), field)],
+                )))),
+            },
+        ),
+    ])
+}
+
+/// The lowered, static initialiser of a state field. A static initialiser lowers to a pure
+/// expression (no setup statements). #1029 review: if any appear, wrap them in an IIFE rather
+/// than splicing them into a comma sequence. The comma form only ever worked for
+/// expression-shaped hoists: a `const` or an `if` operand does not parse, and T2.1 made a
+/// statement-shaped hoist reachable here for the first time, since a value-position `if` that
+/// hoists now yields `let …; if (…) {…}` where it used to yield a self-contained arrow. An IIFE is
+/// sound for this position specifically: a static initialiser has no enclosing function to
+/// `return` out of, so the arrow cannot swallow a control transfer the way it would in a handler
+/// body.
+fn state_field_init_value(
+    init: &Expr,
+    commons: &TypedCommons,
+    ctx: &EmitProjectCtx,
+) -> bynk_ts::TsExpr {
+    let mut pre = Pre::new();
+    let mut module = ModuleCtx::for_unit(commons, ctx);
+    module.target = ctx.target;
+    module.agent_method_givens = ctx.agent_method_givens.clone();
+    module.agent_called_contexts = ctx.agent_called_contexts.clone();
+    module.event_schema_versions = ctx.event_schema_versions.clone();
+    module.consumed_type_ns = consumed_type_ns(ctx);
+    module.consumed_type_declared = ctx.consumed_type_aliases.clone();
+    module.consumed_context_types = ctx.consumed_context_types();
+    let mut icx = LowerCtx::new(module, BodyMode::StaticInit);
+    icx.local_agents = ctx.local_agents.clone();
+    let expr = pre.lower_node(init, &mut icx);
+    if pre.is_empty() {
+        expr
+    } else {
+        compact_iife(pre.ts_stmts(), expr)
+    }
+}
+
 /// The names of an agent's state registry and fresh-state factory.
 struct AgentStateNames {
     /// The per-agent state registry (`__agentStates…`).
@@ -8747,141 +9111,8 @@ fn emit_agent_state_record(
     stmts.push(registry_const);
     // v0.11: build the fresh-state record. A field with an explicit initialiser
     // lowers its (static) expression; a field without one uses the v0.9.2
-    // implicit zero.
-    let mut zero_entries: Vec<bynk_ts::TsObjectEntry> = Vec::new();
-    // Review of #1370, finding 1: `lower_if`'s own non-`ternary_shaped`
-    // branch and `build_match_iife` can both return a genuinely multi-line
-    // IIFE as `val` (real embedded `\n` bytes) with `pre` empty, so the
-    // `pre.is_empty()` branch above passes it straight through unwrapped —
-    // no fixture in the 31-fixture `store` sweep reaches this shape (the
-    // only store-init-with-`if` fixture, `1029_agent_static_init_hoist`,
-    // takes the `hoist_if_slot` path instead, whose own hoisted
-    // statements are individually newline-free), so it was invisible to the
-    // zero-diff check. Tracked here so the zero-factory's own `inline` flag
-    // can be set correctly below — `inline: true` is only safe when every
-    // entry's own value is genuinely single-line (`render_compact_stmts`'s
-    // own `debug_assert!` panics on an embedded newline, a real
-    // debug-build crash for a `store` field initialised with a `match` or a
-    // statement-shaped/`is`-binding `if`, not merely a formatting nit).
-    let mut zero_record_has_multiline_value = false;
-    for f in effective_fields {
-        let val = if let Some(init) = &f.init {
-            let mut pre = Pre::new();
-            let mut module = ModuleCtx::for_unit(commons, ctx);
-            module.target = ctx.target;
-            module.agent_method_givens = ctx.agent_method_givens.clone();
-            module.agent_called_contexts = ctx.agent_called_contexts.clone();
-            module.event_schema_versions = ctx.event_schema_versions.clone();
-            module.consumed_type_ns = consumed_type_ns(ctx);
-            module.consumed_type_declared = ctx.consumed_type_aliases.clone();
-            module.consumed_context_types = ctx.consumed_context_types();
-            let mut icx = LowerCtx::new(module, BodyMode::StaticInit);
-            icx.local_agents = ctx.local_agents.clone();
-            let expr = pre.lower(init, &mut icx);
-            // A static initialiser lowers to a pure expression (no setup
-            // statements). #1029 review: if any appear, wrap them in an IIFE
-            // rather than splicing them into a comma sequence. The comma
-            // form only ever worked for expression-shaped hoists — a `const`
-            // or an `if` operand does not parse — and T2.1 made a
-            // statement-shaped hoist reachable here for the first time, since
-            // a value-position `if` that hoists now yields `let …; if (…) {…}`
-            // where it used to yield a self-contained arrow. An IIFE is
-            // sound for this position specifically: a static initialiser has
-            // no enclosing function to `return` out of, so the arrow cannot
-            // swallow a control transfer the way it would in a handler body.
-            if pre.is_empty() {
-                expr
-            } else {
-                format!("(() => {{ {} return {expr}; }})()", pre.stmts().join(" "))
-            }
-        } else {
-            state_field_zero(f, commons, ctx)
-        };
-        if val.contains('\n') {
-            zero_record_has_multiline_value = true;
-        }
-        zero_entries.push(bynk_ts::TsObjectEntry::prop(
-            f.name.name.clone(),
-            bynk_ts::TsExpr::Ident(val),
-        ));
-    }
-    // A fresh `store Map`/`Set`/`Cache`/`Log` is an empty handle (#3254): insertion-ordered
-    // whatever its keys. A `Map` carries the indexers of its `@indexed(by:)` fields, so its
-    // handle keeps the posting lists itself (v0.93, ADR 0118).
-    for (name, _) in store_map_fields {
-        let value_ty = match store_field_ty.get(name.name.as_str()) {
-            Some(StoreKindIr::Map(_, v)) => *v,
-            other => panic!(
-                "bynk internal error: state field `{}` is not a resolved Map in this \
-                 function's own state reader, found {other:?}",
-                name.name
-            ),
-        };
-        let v_ts = bynk_ts::print_type(&ts_ty_to_ts_type(value_ty, tys));
-        let indexers = store_map_indexes
-            .get(&name.name)
-            .map(|fs| {
-                let mut fs: Vec<&String> = fs.iter().collect();
-                fs.sort();
-                fs.into_iter()
-                    .map(|f| format!("{{ index: \"{f}\", of: (__v) => String(__v.{f}) }}"))
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            })
-            .unwrap_or_default();
-        let args = if indexers.is_empty() {
-            String::new()
-        } else {
-            format!("[{indexers}]")
-        };
-        zero_entries.push(bynk_ts::TsObjectEntry::prop(
-            name.name.clone(),
-            bynk_ts::TsExpr::Ident(format!("new __StoreMap<{v_ts}>({args})")),
-        ));
-    }
-    // A fresh held `Map[K, Connection]` (a `K → connId` handle) is empty too.
-    for (name, _) in held_maps {
-        zero_entries.push(bynk_ts::TsObjectEntry::prop(
-            name.name.clone(),
-            bynk_ts::TsExpr::Ident("new __StoreMap<string>()".to_string()),
-        ));
-    }
-    for name in set_field_names {
-        zero_entries.push(bynk_ts::TsObjectEntry::prop(
-            name.to_string(),
-            bynk_ts::TsExpr::Ident("new __StoreSet()".to_string()),
-        ));
-    }
-    for (name, _, _) in store_cache_fields {
-        let value_ty = match store_field_ty.get(name.name.as_str()) {
-            Some(StoreKindIr::Cache(_, v, _)) => *v,
-            other => panic!(
-                "bynk internal error: state field `{}` is not a resolved Cache in this \
-                 function's own state reader, found {other:?}",
-                name.name
-            ),
-        };
-        let v_ts = bynk_ts::print_type(&ts_ty_to_ts_type(value_ty, tys));
-        zero_entries.push(bynk_ts::TsObjectEntry::prop(
-            name.name.clone(),
-            bynk_ts::TsExpr::Ident(format!("new __StoreCache<{v_ts}>()")),
-        ));
-    }
-    for (name, _, _) in store_log_fields {
-        let elem_ty = match store_field_ty.get(name.name.as_str()) {
-            Some(StoreKindIr::Log(t, _)) => *t,
-            other => panic!(
-                "bynk internal error: state field `{}` is not a resolved Log in this \
-                 function's own state reader, found {other:?}",
-                name.name
-            ),
-        };
-        let e_ts = bynk_ts::print_type(&ts_ty_to_ts_type(elem_ty, tys));
-        zero_entries.push(bynk_ts::TsObjectEntry::prop(
-            name.name.clone(),
-            bynk_ts::TsExpr::Ident(format!("new __StoreLog<{e_ts}>()")),
-        ));
-    }
+    // implicit zero. A fresh store handle is empty.
+    let zero_entries = agent_zero_entries(layout, commons, ctx);
     // #1486: `no_blank_before: true`, unconditional — no blank line wanted
     // between `registry_const` and this function, matching the
     // pre-conversion hand-written text this crate's own zero-diff
@@ -8901,11 +9132,9 @@ fn emit_agent_state_record(
                 None,
             )],
             is_async: false,
-            // Single-line only when safe (see the `zero_record_has_multiline_
-            // value` note above) — a genuinely multi-line `Cell` initialiser
-            // falls back to the ordinary multi-line block form instead of
-            // tripping `render_compact_stmts`'s own debug_assert!.
-            inline: !zero_record_has_multiline_value,
+            // One line when the record fits on it: a genuinely multi-line `Cell` initialiser
+            // makes the printer fall back to the ordinary multi-line block form (1A.39a).
+            inline: true,
         },
         None,
     );
@@ -9139,7 +9368,7 @@ pub(crate) fn emit_agent(
         for host in &mut ws_open_hosts {
             host.agent_key = Some((
                 agent_key_codec_name(&a.name.name),
-                crate::emitter::ts_types::ts_type_ref(&a.key_type),
+                ts_type_ref_to_ts_type(&a.key_type, None),
             ));
         }
     }
@@ -9261,7 +9490,7 @@ struct WsOpenHost<'a> {
     // #1818: for a hosting agent that reads its own key, the key codec's name
     // and the key's TS type. A WebSocket body runs through these entry points,
     // not the `/_bynk/agent/` dispatch, so each sets `this.__key` itself.
-    agent_key: Option<(String, String)>,
+    agent_key: Option<(String, bynk_ts::TsType)>,
     // #3045: the `given`/events deps every entry point rebuilds from the DO's `env`.
     rebuild: WsDepsRebuild,
 }
@@ -10040,8 +10269,12 @@ fn ws_open_fetch_branch_stmt(host: &WsOpenHost<'_>, tys: TyRender<'_>) -> bynk_t
         accept_args.push(bynk_ts::TsExpr::object(meta));
     }
     // #1818: the edge forwards the agent's key with the upgrade.
-    if let Some((codec, key_ts)) = &host.agent_key {
-        stmts.push(agent_key_assign(codec, key_ts, "__payload.key"));
+    if let Some((codec, key_ty)) = &host.agent_key {
+        stmts.push(agent_key_assign(
+            codec,
+            key_ty,
+            hist_member(hist_id("__payload"), "key"),
+        ));
     }
     stmts.push(bynk_ts::TsStmt::const_stmt(
         bynk_ts::TsBindingName::Ident("connection".to_string()),
@@ -10059,14 +10292,8 @@ fn ws_open_fetch_branch_stmt(host: &WsOpenHost<'_>, tys: TyRender<'_>) -> bynk_t
     ));
     let mut call_args = vec![bynk_ts::TsExpr::Ident("connection".to_string())];
     for (i, p) in h.params.iter().enumerate() {
-        // `__payload.args[i] as <type>` — an `Index`-under-`As` cast; tagged
-        // `VerbatimExpr`, not `Ident` (#1539), the same "small and local"
-        // boundary the rest of this slice draws rather than modeling every
-        // remaining opaque shape as real nodes.
-        call_args.push(bynk_ts::TsExpr::VerbatimExpr(
-            format!("__payload.args[{i}] as {}", ts_type_ref(&p.type_ref)),
-            bynk_ts::VerbatimOrigin::Emit,
-        ));
+        // `__payload.args[i] as <type>`: an `Index` under an `As`.
+        call_args.push(ws_arg_cast("__payload", i, &p.type_ref));
     }
     // #3042: the agent handler an `on open` transfers to may declare `given`,
     // and `on open` hands it `deps` as they stand. Providers cannot cross the
@@ -10293,8 +10520,12 @@ fn emit_ws_dispatch_handlers(
             None,
         ));
         // #1818: restore the key the `on open` attached.
-        if let Some((codec, key_ts)) = &host.agent_key {
-            stmts.push(agent_key_assign(codec, key_ts, "__att.key"));
+        if let Some((codec, key_ty)) = &host.agent_key {
+            stmts.push(agent_key_assign(
+                codec,
+                key_ty,
+                hist_member(hist_id("__att"), "key"),
+            ));
         }
     };
 
@@ -10382,7 +10613,7 @@ fn emit_ws_dispatch_handlers(
         ));
         // The decoded frame fills the param typed as the service `in`; the rest are
         // route values recovered (positionally) from the attachment args.
-        let mut call_args = vec!["connection".to_string()];
+        let mut call_args = vec![hist_id("connection")];
         let mut route_idx = 0usize;
         // Resolved-`Ty` equality (not `type_refs_match`'s surface-syntax
         // comparison, which fell through to `_ => false` for a `List`/`Map`/
@@ -10398,12 +10629,9 @@ fn emit_ws_dispatch_handlers(
         };
         for p in &m.params {
             if resolve_ty(&p.type_ref) == host.in_ty {
-                call_args.push("__dec.value".to_string());
+                call_args.push(hist_member(hist_id("__dec"), "value"));
             } else {
-                call_args.push(format!(
-                    "__att.args[{route_idx}] as {}",
-                    ts_type_ref(&p.type_ref)
-                ));
+                call_args.push(ws_arg_cast("__att", route_idx, &p.type_ref));
                 route_idx += 1;
             }
         }
@@ -10413,11 +10641,7 @@ fn emit_ws_dispatch_handlers(
                     object: Box::new(bynk_ts::TsExpr::Ident("this".to_string())),
                     property: method,
                 }),
-                args: call_args
-                    .into_iter()
-                    .map(bynk_ts::TsExpr::Ident)
-                    .chain([deps_arg.clone()])
-                    .collect(),
+                args: call_args.into_iter().chain([deps_arg.clone()]).collect(),
             })),
             None,
         ));
@@ -10448,9 +10672,9 @@ fn emit_ws_dispatch_handlers(
         let mut stmts = ws_close_unused_params();
         att_guard(&mut stmts);
         stmts.extend(host.rebuild.stmts());
-        let mut call_args = vec!["connection".to_string()];
+        let mut call_args = vec![hist_id("connection")];
         for (i, p) in c.params.iter().enumerate() {
-            call_args.push(format!("__att.args[{i}] as {}", ts_type_ref(&p.type_ref)));
+            call_args.push(ws_arg_cast("__att", i, &p.type_ref));
         }
         stmts.push(bynk_ts::TsStmt::expr_stmt(
             bynk_ts::TsExpr::Await(Box::new(bynk_ts::TsExpr::Call {
@@ -10458,11 +10682,7 @@ fn emit_ws_dispatch_handlers(
                     object: Box::new(bynk_ts::TsExpr::Ident("this".to_string())),
                     property: method,
                 }),
-                args: call_args
-                    .into_iter()
-                    .map(bynk_ts::TsExpr::Ident)
-                    .chain([deps_arg])
-                    .collect(),
+                args: call_args.into_iter().chain([deps_arg]).collect(),
             })),
             None,
         ));
@@ -10485,6 +10705,18 @@ fn emit_ws_dispatch_handlers(
             stmts,
         );
         methods.push(close_method);
+    }
+}
+
+/// `<holder>.args[<i>] as <type>`: a wire argument recovered from a hibernated connection's
+/// attachment (or the forwarded payload), read at its declared type.
+fn ws_arg_cast(holder: &str, i: usize, ty: &TypeRef) -> bynk_ts::TsExpr {
+    bynk_ts::TsExpr::As {
+        expr: Box::new(bynk_ts::TsExpr::Index {
+            object: Box::new(hist_member(hist_id(holder), "args")),
+            index: Box::new(hist_num(i)),
+        }),
+        ty: ts_type_ref_to_ts_type(ty, None),
     }
 }
 
@@ -11202,15 +11434,15 @@ pub(crate) fn call_sum_ts_type(members: &[bynk_check::actors::CallSumMember]) ->
 /// suite's types and constants already merged in; `qual` qualifies a target
 /// type a suite type's codec mentions, as the module-level codecs do.
 ///
-/// Returns the printed statements with the `export` modifiers dropped (a
-/// function-local declaration cannot carry one), unindented.
+/// Returns the statements with the `export` modifiers dropped (a function-local declaration
+/// cannot carry one). The driver prints them, at its own test-harness boundary.
 pub fn emit_suite_decls(
     types: &[TypeDecl],
     consts: &[ConstDecl],
     typed: &TypedCommons,
     qual: &std::collections::HashMap<String, String>,
     runtime_use: &RuntimeUse,
-) -> String {
+) -> Vec<bynk_ts::TsStmt> {
     let mut stmts: Vec<bynk_ts::TsStmt> = Vec::new();
     for t in types {
         let Some(def) = typed.types.get(&t.name.name) else {
@@ -11259,11 +11491,8 @@ pub fn emit_suite_decls(
         ));
     }
     stmts
-        .iter()
-        .map(|s| bynk_ts::print_stmt(s, 0))
-        .collect::<String>()
-        .lines()
-        .map(|l| format!("{}\n", l.strip_prefix("export ").unwrap_or(l)))
+        .into_iter()
+        .map(bynk_ts::TsStmt::without_export)
         .collect()
 }
 
@@ -11286,18 +11515,18 @@ fn suite_base_codec_roots(types: &[TypeDecl]) -> Vec<TypeRef> {
 /// ones ([`emit_suite_decls`]): a suite type under another generic (`Result`,
 /// a user generic, nested containers) at a `Json` boundary. `reached` is what
 /// the runner's lowering noted; only roots that name a suite type are served
-/// here (the module-level closure serves the rest). Returns printed function
-/// declarations, unindented, to be spliced ahead of the body; empty when the
-/// body reached nothing new.
+/// here (the module-level closure serves the rest). Returns the function
+/// declarations, with `export` dropped, to be spliced ahead of the body; empty
+/// when the body reached nothing new.
 pub fn emit_suite_late_codecs(
     types: &[TypeDecl],
     typed: &TypedCommons,
     qual: &std::collections::HashMap<String, String>,
     runtime_use: &RuntimeUse,
     reached: &[TyId],
-) -> String {
+) -> Vec<bynk_ts::TsStmt> {
     if types.is_empty() || reached.is_empty() {
-        return String::new();
+        return Vec::new();
     }
     let names: std::collections::HashSet<String> =
         types.iter().map(|t| t.name.name.clone()).collect();
@@ -11307,7 +11536,7 @@ pub fn emit_suite_late_codecs(
         .filter(|r| super::serialisation::root_names_any(r, &names))
         .collect();
     if extra.is_empty() {
-        return String::new();
+        return Vec::new();
     }
     let (base_names, base_insts) =
         super::serialisation::collect_codec_closure(&suite_base_codec_roots(types), &typed.types);
@@ -11341,11 +11570,8 @@ pub fn emit_suite_late_codecs(
         ),
     ));
     stmts
-        .iter()
-        .map(|s| bynk_ts::print_stmt(s, 0))
-        .collect::<String>()
-        .lines()
-        .map(|l| format!("{}\n", l.strip_prefix("export ").unwrap_or(l)))
+        .into_iter()
+        .map(bynk_ts::TsStmt::without_export)
         .collect()
 }
 

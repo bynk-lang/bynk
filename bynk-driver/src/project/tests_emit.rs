@@ -1012,6 +1012,11 @@ mod tests {
     // -- the unified emitter type-ref renderers -------------------------------
     use super::test_support::{base, named};
 
+    /// A type reference as the text of its `TsType` node.
+    fn ts_type_ref(r: &TypeRef) -> String {
+        bynk_ts::print_type(&emitter::ts_types::ts_type_of(r))
+    }
+
     fn faulted_use() -> RuntimeUse {
         let ru = RuntimeUse::default();
         ru.note_internal_fault(Span::new(1, 2), "receiver namespace".to_string());
@@ -1054,46 +1059,31 @@ mod tests {
 
     #[test]
     fn ts_type_ref_bases_and_generics() {
+        assert_eq!(ts_type_ref(&base(BaseType::Int)), "number");
+        assert_eq!(ts_type_ref(&base(BaseType::Float)), "number");
+        assert_eq!(ts_type_ref(&base(BaseType::String)), "string");
+        assert_eq!(ts_type_ref(&base(BaseType::Bool)), "boolean");
+        assert_eq!(ts_type_ref(&named("Order")), "Order");
         assert_eq!(
-            emitter::ts_types::ts_type_ref(&base(BaseType::Int)),
-            "number"
-        );
-        assert_eq!(
-            emitter::ts_types::ts_type_ref(&base(BaseType::Float)),
-            "number"
-        );
-        assert_eq!(
-            emitter::ts_types::ts_type_ref(&base(BaseType::String)),
-            "string"
-        );
-        assert_eq!(
-            emitter::ts_types::ts_type_ref(&base(BaseType::Bool)),
-            "boolean"
-        );
-        assert_eq!(emitter::ts_types::ts_type_ref(&named("Order")), "Order");
-        assert_eq!(
-            emitter::ts_types::ts_type_ref(&TypeRef::List(
-                Box::new(named("Order")),
-                Span::default()
-            )),
+            ts_type_ref(&TypeRef::List(Box::new(named("Order")), Span::default())),
             "readonly Order[]"
         );
         assert_eq!(
-            emitter::ts_types::ts_type_ref(&TypeRef::Option(
+            ts_type_ref(&TypeRef::Option(
                 Box::new(base(BaseType::Int)),
                 Span::default()
             )),
             "Option<number>"
         );
         assert_eq!(
-            emitter::ts_types::ts_type_ref(&TypeRef::Effect(
+            ts_type_ref(&TypeRef::Effect(
                 Box::new(TypeRef::Unit(Span::default())),
                 Span::default()
             )),
             "globalThis.Promise<void>"
         );
         assert_eq!(
-            emitter::ts_types::ts_type_ref(&TypeRef::Map(
+            ts_type_ref(&TypeRef::Map(
                 Box::new(base(BaseType::String)),
                 Box::new(named("V")),
                 Span::default()
@@ -1101,7 +1091,7 @@ mod tests {
             "ReadonlyMap<string, V>"
         );
         assert_eq!(
-            emitter::ts_types::ts_type_ref(&TypeRef::Result(
+            ts_type_ref(&TypeRef::Result(
                 Box::new(named("T")),
                 Box::new(named("E")),
                 Span::default()
@@ -1109,18 +1099,15 @@ mod tests {
             "Result<T, E>"
         );
         assert_eq!(
-            emitter::ts_types::ts_type_ref(&TypeRef::HttpResult(
-                Box::new(named("T")),
-                Span::default()
-            )),
+            ts_type_ref(&TypeRef::HttpResult(Box::new(named("T")), Span::default())),
             "HttpResult<T>"
         );
         assert_eq!(
-            emitter::ts_types::ts_type_ref(&TypeRef::ValidationError(Span::default())),
+            ts_type_ref(&TypeRef::ValidationError(Span::default())),
             "ValidationError"
         );
         assert_eq!(
-            emitter::ts_types::ts_type_ref(&TypeRef::DecodeError(Span::default())),
+            ts_type_ref(&TypeRef::DecodeError(Span::default())),
             "DecodeError"
         );
     }
@@ -1132,10 +1119,7 @@ mod tests {
             Box::new(TypeRef::Unit(Span::default())),
             Span::default(),
         );
-        assert_eq!(
-            emitter::ts_types::ts_type_ref(&f),
-            "(a0: number, a1: Order) => void"
-        );
+        assert_eq!(ts_type_ref(&f), "(a0: number, a1: Order) => void");
     }
 
     #[test]

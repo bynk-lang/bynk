@@ -548,7 +548,7 @@ pub(in super::super) fn eval_value_line(
     pre: &mut Pre,
     tail: &Expr,
     cx: &mut LowerCtx,
-) -> Option<String> {
+) -> Option<bynk_ts::TsStmt> {
     let ty = cx.commons().expr_types.get(&tail.id).map(|te| te.ty)?;
     let shown = bynk_check::symbols::display_type_names_in(&cx.commons().tys().display(ty));
     // `console.log('{"type":"eval-value","valueType":' + JSON.stringify(<type>)` …
@@ -557,10 +557,7 @@ pub(in super::super) fn eval_value_line(
         call(member(global("JSON"), "stringify"), vec![str_node(shown)]),
     );
     let log = |arg: TsExpr| {
-        format!(
-            "{};",
-            bynk_ts::print_expr(&call(member(global("console"), "log"), vec![arg]))
-        )
+        bynk_ts::TsStmt::expr_stmt(call(member(global("console"), "log"), vec![arg]), None)
     };
     // A value with no wire shape (a function, say) still reports its type, and
     // no value.
@@ -833,6 +830,19 @@ fn pg_row_pass(t: bynk_check::checker::TyId, cx: &LowerCtx) -> Vec<TsStmt> {
 mod tests {
     use super::*;
 
+    /// The hoisted statements of `pre`, printed at depth 0, one entry per line.
+    fn stmts_text(pre: &Pre) -> Vec<String> {
+        pre.ts_stmts()
+            .iter()
+            .flat_map(|s| {
+                bynk_ts::print_stmt(s, 0)
+                    .lines()
+                    .map(str::to_string)
+                    .collect::<Vec<_>>()
+            })
+            .collect()
+    }
+
     fn awaiting() -> TsExpr {
         TsExpr::Await(Box::new(call(ident_node("f"), vec![])))
     }
@@ -843,7 +853,10 @@ mod tests {
     fn an_awaiting_plain_argument_is_hoisted() {
         let mut pre = Pre::new();
         let iife = plain_iife(&mut pre, 7, awaiting(), ident_node("ser"));
-        assert_eq!(pre.stmts(), vec!["const __pj7 = await f();".to_string()]);
+        assert_eq!(
+            stmts_text(&pre),
+            vec!["const __pj7 = await f();".to_string()]
+        );
         let text = bynk_ts::print_expr(&iife);
         assert!(text.starts_with("((__pv = __pj7): string => {"), "{text}");
     }
@@ -857,7 +870,7 @@ mod tests {
             call(ident_node("g"), vec![]),
             ident_node("ser"),
         );
-        assert!(pre.stmts().is_empty());
+        assert!(stmts_text(&pre).is_empty());
         let text = bynk_ts::print_expr(&iife);
         assert!(text.starts_with("((__pv = g()): string => {"), "{text}");
     }

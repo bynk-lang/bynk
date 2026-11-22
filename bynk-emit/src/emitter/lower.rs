@@ -45,7 +45,7 @@ use super::lower_ctx::LowerCtx;
 use super::lower_stmt::{
     Body, Item, arms_contain_question, block_body, block_body_into, block_contains_question,
     emit_block_as_function_body_with_return, emit_statement, hoist_value_as_statement, if_tail,
-    match_dispatch, match_tail, ternary_shaped, write_line,
+    match_dispatch, match_tail, ternary_shaped,
 };
 use super::ts_types::{
     ts_base, ts_ty_to_ts_type, ts_type_ref_to_ts_type, unchecked_construct,
@@ -188,19 +188,13 @@ pub fn lower_test_case_body_reporting(
         cx.record_span(out.len(), block.tail.span);
         let mut pre = Pre::new();
         if report_value && let Some(line) = eval_value_line(&mut pre, &block.tail, &mut cx) {
-            for s in &pre.stmts() {
-                write_line(&mut out, 0, s);
-            }
-            write_line(&mut out, 0, &line);
+            let mut stmts = pre.ts_stmts();
+            stmts.push(line);
+            extend_printed_at(&mut out, stmts, 0);
             return (out, smb.into_inner());
         }
-        let tail = pre.lower(&block.tail, &mut cx);
-        for s in &pre.stmts() {
-            write_line(&mut out, 0, s);
-        }
-        if !tail.is_empty() && tail != "undefined" {
-            write_line(&mut out, 0, &format!("void ({tail});"));
-        }
+        let tail = pre.lower_node(&block.tail, &mut cx);
+        extend_printed_at(&mut out, discarded_tail(&pre, tail), 0);
     }
     (out, smb.into_inner())
 }
@@ -307,13 +301,8 @@ pub fn lower_integration_case_body(
         }
         cx.record_span(out.len(), block.tail.span);
         let mut pre = Pre::new();
-        let tail = pre.lower(&block.tail, &mut cx);
-        for s in &pre.stmts() {
-            write_line(&mut out, 0, s);
-        }
-        if !tail.is_empty() && tail != "undefined" {
-            write_line(&mut out, 0, &format!("void ({tail});"));
-        }
+        let tail = pre.lower_node(&block.tail, &mut cx);
+        extend_printed_at(&mut out, discarded_tail(&pre, tail), 0);
     }
     if settle {
         // The rewrite moves the text, so the source map no longer fits it; a
@@ -324,6 +313,24 @@ pub fn lower_integration_case_body(
         );
     }
     (out, smb.into_inner())
+}
+
+/// A test case's tail, evaluated and discarded: the statements it hoisted, then `void (<tail>);`.
+/// A tail that is just `undefined` (a `()`) adds no statement. Assertions inside the tail still
+/// take effect, through the `AssertionError`s they throw. The caller prints these straight into
+/// the case body, which records no source-map checkpoints for them.
+fn discarded_tail(pre: &Pre, tail: bynk_ts::TsExpr) -> Vec<bynk_ts::TsStmt> {
+    let mut stmts = pre.ts_stmts();
+    if !matches!(&tail, bynk_ts::TsExpr::Ident(name) if name.is_empty() || name == "undefined") {
+        stmts.push(bynk_ts::TsStmt::expr_stmt(
+            bynk_ts::TsExpr::Unary {
+                op: bynk_ts::TsUnaryOp::Void,
+                expr: Box::new(bynk_ts::TsExpr::Paren(Box::new(tail))),
+            },
+            None,
+        ));
+    }
+    stmts
 }
 
 /// #2138 (track §3.6): how a top-level case statement takes part in the
@@ -1060,14 +1067,6 @@ pub(super) fn stmt_item(stmt: &bynk_ts::TsStmt) -> Item {
     Item::Node(Box::new(stmt.clone()))
 }
 
-/// A statement printed at depth 0, one entry per line.
-fn stmt_lines(stmt: &bynk_ts::TsStmt) -> Vec<String> {
-    bynk_ts::print_stmt(stmt, 0)
-        .lines()
-        .map(str::to_string)
-        .collect()
-}
-
 /// T2.1 (R6.2): the statements an expression under construction has hoisted so
 /// far. This is the *owned* counterpart to the deleted sink: a `Pre` belongs to
 /// the one function assembling an expression, and leaves it only by being
@@ -1083,16 +1082,7 @@ impl Pre {
         Pre(Vec::new())
     }
 
-    /// Lower `e`, absorbing whatever it hoists, and hand back its text. A named print boundary
-    /// (1A.35b): for the callers that assemble a foreign statement or a text template around the
-    /// expression (the driver's `lower_block_to_async_body`, a constant's cache initialiser, an
-    /// agent's state zero value, the migration step function). A caller that builds a node uses
-    /// [`Pre::lower_node`].
-    pub(crate) fn lower(&mut self, e: &Expr, cx: &mut LowerCtx) -> String {
-        bynk_ts::print_expr(&self.lower_node(e, cx))
-    }
-
-    /// As [`Pre::lower`], handing back the expression's node without printing it.
+    /// Lower `e`, absorbing whatever it hoists, and hand back its node.
     pub(crate) fn lower_node(&mut self, e: &Expr, cx: &mut LowerCtx) -> bynk_ts::TsExpr {
         let lowered = lower_expr(e, cx);
         self.absorb_node(lowered)
@@ -1134,13 +1124,6 @@ impl Pre {
         let tmp = cx.fresh();
         self.0.push(binding_stmt(&tmp, value));
         ident_node(&tmp)
-    }
-
-    /// The accumulated statements as text, for a caller that is writing them
-    /// into a text statement position rather than hoisting them further. A named print boundary,
-    /// with [`Pre::lower`].
-    pub(crate) fn stmts(&self) -> Vec<String> {
-        self.0.iter().flat_map(stmt_lines).collect()
     }
 
     /// The accumulated statements as statement-body items (see
@@ -2927,7 +2910,7 @@ fn lower_if(
         // Effect-typing) rather than silently trusting it.
         let saved_await = std::mem::take(&mut cx.emitted_await);
         debug_assert!(
-            !bynk_ts::print_expr(&cond_lowered).contains("await "),
+            !bynk_ts::expr_contains_await(&cond_lowered),
             "cond lands inside this arrow; its awaits must feed `needs_async`, not `saved_await`"
         );
         // Inject is-binding declarations on the truthy side. #908: scoped to
@@ -3548,20 +3531,15 @@ fn short_circuit(op: BinOp, l: bynk_ts::TsExpr, r: bynk_ts::TsExpr) -> bynk_ts::
 
 /// `(() => { s1; s2; return r; })()`: a `Call` over a bracketed `Arrow`. The statements are an
 /// expression's own hoists (and an `is` test's bindings), which must run only when the operator
-/// reaches its right operand. When every statement and the value print on one line the body is
-/// the compact `Block`; otherwise it is the multi-line body, because the compact form cannot hold
-/// a statement that spans lines.
-fn compact_iife(mut body: Vec<bynk_ts::TsStmt>, ret: bynk_ts::TsExpr) -> bynk_ts::TsExpr {
-    let one_line = body
-        .iter()
-        .all(|s| !bynk_ts::print_stmt(s, 0).trim_end().contains('\n'))
-        && !bynk_ts::print_expr(&ret).contains('\n');
+/// reaches its right operand. The body is the compact `Block`; the printer falls back to the
+/// multi-line form when a statement or the value spans lines, because the compact form cannot hold
+/// one (1A.39a, Decision E).
+pub(crate) fn compact_iife(
+    mut body: Vec<bynk_ts::TsStmt>,
+    ret: bynk_ts::TsExpr,
+) -> bynk_ts::TsExpr {
     body.push(bynk_ts::TsStmt::return_stmt(Some(ret), None));
-    let body = if one_line {
-        bynk_ts::TsArrowBody::Block(body)
-    } else {
-        bynk_ts::TsArrowBody::Multiline(body)
-    };
+    let body = bynk_ts::TsArrowBody::Block(body);
     bynk_ts::TsExpr::Call {
         callee: Box::new(bynk_ts::TsExpr::Paren(Box::new(bynk_ts::TsExpr::Arrow {
             params: Vec::new(),
@@ -5990,6 +5968,20 @@ mod settle_tests {
 #[cfg(test)]
 mod bridge_tests {
     use super::*;
+    use crate::emitter::lower_stmt::write_line;
+
+    /// The hoisted statements of `pre`, printed at depth 0, one entry per line.
+    fn stmts_text(pre: &Pre) -> Vec<String> {
+        pre.ts_stmts()
+            .iter()
+            .flat_map(|s| {
+                bynk_ts::print_stmt(s, 0)
+                    .lines()
+                    .map(str::to_string)
+                    .collect::<Vec<_>>()
+            })
+            .collect()
+    }
 
     /// A plain `Set.remove`: its body is a comma expression node (1A.35a part B).
     fn removed(set: &str, key: &str) -> String {
@@ -6045,9 +6037,9 @@ mod bridge_tests {
             Some(bynk_ts::TsExpr::Ident(name)) => assert_eq!(name, "x"),
             other => panic!("expected a node, got {other:?}"),
         }
-        assert_eq!(pre.stmts(), ["t;"]);
+        assert_eq!(stmts_text(&pre), ["t;"]);
         assert!(pre.absorb_built(None).is_none());
-        assert_eq!(pre.stmts().len(), 1, "declining hoists nothing");
+        assert_eq!(stmts_text(&pre).len(), 1, "declining hoists nothing");
     }
 
     #[test]
@@ -6620,10 +6612,10 @@ fn minus(x: Int) -> Int { 5 - - -x }
     fn a_node_statement_indents_every_line() {
         let mut pre = Pre::new();
         pre.push_node(if_node());
-        assert_eq!(pre.stmts(), ["if (flag) {", "  done;", "}"]);
+        assert_eq!(stmts_text(&pre), ["if (flag) {", "  done;", "}"]);
         for indent in [0, 2, 6] {
             let mut n = String::new();
-            for s in &pre.stmts() {
+            for s in &stmts_text(&pre) {
                 write_line(&mut n, indent, s);
             }
             assert!(
@@ -6965,10 +6957,10 @@ fn minus(x: Int) -> Int { 5 - - -x }
             "  __r1 = b;".to_string(),
             "}".to_string(),
         ];
-        assert_eq!(pre.stmts(), text_lines);
+        assert_eq!(stmts_text(&pre), text_lines);
         // Written two levels (four columns) deep, as `write_line` indents each entry.
         let mut out = String::new();
-        for l in pre.stmts() {
+        for l in stmts_text(&pre) {
             write_line(&mut out, 4, &l);
         }
         assert_eq!(
