@@ -345,19 +345,9 @@ pub(super) fn emit_rejected_wrapper(sname: &str) -> TsObjectEntry {
     }
 }
 
-pub(super) fn emit_event_wrapper(
-    sname: &str,
-    h: &Handler,
-    protocol: &ServiceProtocol,
-) -> TsObjectEntry {
-    let wants_envelope = h.params.len() == 2
-        || matches!(
-            protocol,
-            ServiceProtocol::Events {
-                schema_dispatch: Some(_),
-                ..
-            }
-        );
+/// `wants_envelope` is the plan's decision for this subscriber (`EventSubscriberShape::
+/// wants_envelope`, 1B.1c): the wrapper only spells it.
+pub(super) fn emit_event_wrapper(sname: &str, wants_envelope: bool) -> TsObjectEntry {
     // P7.2: deferred, not narrowed. Two attempts: a bare `ts_type_ref` failed
     // ("Cannot find name" — the event's synthetic type needs the `handlers.`
     // prefix here), and qualifying it via `qualified_ts_type_ref` (the same

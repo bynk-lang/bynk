@@ -53,9 +53,9 @@ const TEXT_CLASSES: &[TextClass] = &[
         owner: OWNER,
     },
     TextClass {
-        name: "events fan-out block",
-        matches: is_fanout_block,
-        reason: "the events fan-out handler's block text (`{ for (const ev of events) { .. } }`, `{  }`)",
+        name: "empty deps object",
+        matches: is_empty_deps,
+        reason: "`{  }` (a double space): the `deps` of a unit with no entries, `compose::empty_deps`",
         owner: OWNER,
     },
     TextClass {
@@ -179,14 +179,16 @@ fn is_rendered_literal(t: &str) -> bool {
     true
 }
 
-fn is_fanout_block(t: &str) -> bool {
-    t == "{  }" || t.starts_with("{ for (const ev of events) {")
+/// The one text left of what the class named "events fan-out block" held: the Bundle's
+/// `__eventsDispatch` closure is built from nodes since 1B.1c, so only `{  }` remains.
+fn is_empty_deps(t: &str) -> bool {
+    t == "{  }"
 }
 
 /// Expression text that is not a literal: it carries an operator, a call, a cast or a ternary.
 fn is_rendered_expression(t: &str) -> bool {
     !is_rendered_literal(t)
-        && !is_fanout_block(t)
+        && !is_empty_deps(t)
         && !is_subscript(t)
         && !is_template_path(t)
         && ["(", " === ", " >= ", " + ", " as ", " ? ", " => "]
@@ -336,14 +338,12 @@ fn every_ident_in_the_built_trees_is_an_identifier_path() {
     );
     // `bynk_ts::expr_contains_await` treats an identifier path as never awaiting and searches any
     // other `Ident` as text. The audit enforces what keeps the node view sound: no text `Ident`
-    // in the corpus holds the word `await`, bar the events fan-out block. That block is a
-    // statement body of the generated `fanout` handler (it awaits each delivery by design), never
-    // an operand of the `lower_if` or `Json.encodePlain` hoists, and `expr_contains_await` still
-    // reports it as awaiting by its text search.
+    // in the corpus holds the word `await`. (The events fan-out block, which awaited each
+    // delivery by design, is built from nodes since 1B.1c.)
     let awaiting: Vec<&str> = found
         .iter()
         .map(|(_, t)| t.as_str())
-        .filter(|t| !is_fanout_block(t) && has_await_word(t))
+        .filter(|t| has_await_word(t))
         .collect();
     assert!(
         awaiting.is_empty(),
@@ -390,12 +390,12 @@ fn the_class_matchers_match_their_shapes_and_nothing_wider() {
     assert!(!is_rendered_literal("a === 1"));
     assert!(!is_rendered_literal("{ for (const ev of events) { } }"));
     assert!(!is_rendered_literal("depth + 1"));
-    // fan-out block
-    assert!(is_fanout_block("{  }"));
-    assert!(is_fanout_block(
+    // empty deps object
+    assert!(is_empty_deps("{  }"));
+    assert!(!is_empty_deps(
         "{ for (const ev of events) { switch (ev.type) { } } }"
     ));
-    assert!(!is_fanout_block("{ }"));
+    assert!(!is_empty_deps("{ }"));
     // predicate, call or cast text
     assert!(is_rendered_expression(
         "__bynkSchemaEnv.schemaVersion === 1"

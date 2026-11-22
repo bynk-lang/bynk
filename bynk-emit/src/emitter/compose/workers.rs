@@ -65,6 +65,36 @@ fn fanout_events(context: &str, layout: &bynk_project::worker_layout::WorkerLayo
     method_call(ident("events"), "map", vec![tagged])
 }
 
+/// Events track, slice 0 (spine #936, ADR 0284): a publishing handler's
+/// release-at-commit event batch is handed to this context's own fan-out DO
+/// (`env.<bind>` is typed by the `Env` interface, one instance per publishing
+/// context), as `deps.__eventsDispatch`.
+/// Divergence 7 of #3928, delivery: through the fan-out Durable Object (the
+/// Bundle dispatches in-process).
+fn events_dispatch_entry(
+    context: &str,
+    layout: &bynk_project::worker_layout::WorkerLayout,
+) -> TsObjectEntry {
+    let bind = events_fanout_binding().name;
+    let arrow = TsExpr::Arrow {
+        params: vec![TsParam::new(
+            "events".to_string(),
+            Some(TsType::named_with_args(
+                "globalThis.Array",
+                vec![TsType::named(crate::emitter::EVENTS_WIRE_EVENT_TS_TYPE)],
+            )),
+        )],
+        is_async: false,
+        generics: Vec::new(),
+        return_type: None,
+        body: Box::new(TsArrowBody::Expr(Box::new(call(
+            ident("__dispatchToEventsFanout"),
+            vec![member(ident("env"), bind), fanout_events(context, layout)],
+        )))),
+    };
+    TsObjectEntry::prop("__eventsDispatch".to_string(), arrow)
+}
+
 /// Divergence 1 of #3928, the Workers' entry order for the capability part of
 /// `deps`: a plain `String` sort, so `Db` comes before `Db2` (the Bundle sorts
 /// by `key + ":"`, which puts `Db2` first).
@@ -297,31 +327,8 @@ pub fn emit_worker_compose(
     if ctx_uses_send {
         deps_entries.push(TsObjectEntry::prop("__exec".to_string(), ident("exec")));
     }
-    // Events track, slice 0 (spine #936, ADR 0284): a publishing handler's
-    // release-at-commit event batch is handed to this context's own fan-out
-    // DO — `env.<bind>` is typed by the `Env` interface built above, one
-    // instance per publishing context.
-    // Divergence 7 of #3928, delivery: through this context's fan-out Durable
-    // Object (the Bundle dispatches in-process).
     if unit.publishes {
-        let bind = events_fanout_binding().name;
-        let arrow = TsExpr::Arrow {
-            params: vec![TsParam::new(
-                "events".to_string(),
-                Some(TsType::named_with_args(
-                    "globalThis.Array",
-                    vec![TsType::named(crate::emitter::EVENTS_WIRE_EVENT_TS_TYPE)],
-                )),
-            )],
-            is_async: false,
-            generics: Vec::new(),
-            return_type: None,
-            body: Box::new(TsArrowBody::Expr(Box::new(call(
-                ident("__dispatchToEventsFanout"),
-                vec![member(ident("env"), bind), fanout_events(context, layout)],
-            )))),
-        };
-        deps_entries.push(TsObjectEntry::prop("__eventsDispatch".to_string(), arrow));
+        deps_entries.push(events_dispatch_entry(context, layout));
     }
     // `{  }` for no entries: see `compose::empty_deps`.
     let deps_init = if deps_entries.is_empty() {
@@ -460,7 +467,13 @@ pub fn emit_worker_compose(
                 // no route table entry — just a plain wrapper like `on
                 // call`'s).
                 bynk_model::IrHandlerKind::Event => {
-                    return_entries.push(emit_event_wrapper(sname, h, &service.protocol));
+                    return_entries.push(emit_event_wrapper(
+                        sname,
+                        unit.subscriber_envelopes
+                            .get(*sname)
+                            .copied()
+                            .unwrap_or(false),
+                    ));
                 }
                 // #2341 (decision C): the router calls `rejected_<svc>(why)`
                 // to render a rejection of one of this service's requests.

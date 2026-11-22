@@ -20,7 +20,10 @@ use bynk_check::project_model::{
     self, composed_in_bundle_root, handler_cross_caps, provider_cross_caps,
 };
 use bynk_check::symbols::UnitTable;
+use bynk_model::EventSubscriberShape;
 use bynk_project::roots::UnitKind;
+
+use super::events::{EventPlan, EventSubscription};
 
 /// Whether a unit's service handlers hand work to the execution context
 /// (`detach`, `within` or `race`, #2719). The two targets read different
@@ -58,6 +61,8 @@ pub struct ComposeUnitFacts {
     pub handler_cross_caps: BTreeMap<String, String>,
     /// `deps_key -> consumed unit` for what own providers `given`.
     pub provider_cross_caps: BTreeMap<String, String>,
+    /// The shape of each `from Events` service the unit hosts, by service name.
+    pub event_shapes: BTreeMap<String, EventSubscriberShape>,
 }
 
 /// Everything [`ComposePlan::decide`] needs, as plain data.
@@ -68,6 +73,9 @@ pub struct ComposeFacts {
     /// Whether a Bundle build has a composition root at all
     /// (`composition_root_trigger`).
     pub bundle_root: bool,
+    /// `bynk_check::symbols::discover_event_subscribers`' table: each event's
+    /// subscribers as `(context, service)`, keyed `(publishing context, event)`.
+    pub event_subscribers: BTreeMap<(String, String), Vec<(String, String)>>,
 }
 
 impl ComposeFacts {
@@ -79,6 +87,8 @@ impl ComposeFacts {
         unit_tables: &HashMap<String, UnitTable>,
         unit_callees: &HashMap<String, HashMap<ExprId, Callee>>,
         unit_flattened: &HashMap<String, HashMap<String, String>>,
+        event_subscribers: &BTreeMap<(String, String), Vec<(String, String)>>,
+        unit_event_subscriber_shapes: &HashMap<String, HashMap<String, EventSubscriberShape>>,
     ) -> Self {
         let bundle_root = project_model::composition_root_trigger(
             kinds,
@@ -124,12 +134,25 @@ impl ComposeFacts {
                     provider_cross_caps: provider_cross_caps(
                         table, name, &consumes, &aliases, &flattened,
                     ),
+                    event_shapes: unit_event_subscriber_shapes
+                        .get(name)
+                        .map(|shapes| {
+                            shapes
+                                .iter()
+                                .map(|(s, shape)| (s.clone(), *shape))
+                                .collect()
+                        })
+                        .unwrap_or_default(),
                     consumes,
                     aliases,
                 },
             );
         }
-        Self { units, bundle_root }
+        Self {
+            units,
+            bundle_root,
+            event_subscribers: event_subscribers.clone(),
+        }
     }
 }
 
@@ -165,6 +188,9 @@ pub struct ComposeUnit {
     pub provider_cross_caps: BTreeMap<String, String>,
     /// Consumed contexts that have services, sorted by target.
     pub surfaces: Vec<ConsumedSurface>,
+    /// For each `from Events` service the unit hosts: whether its `on event`
+    /// handler is handed the event's envelope (`wants_envelope`).
+    pub subscriber_envelopes: BTreeMap<String, bool>,
 }
 
 impl ComposeUnit {
@@ -192,6 +218,8 @@ pub struct ComposePlan {
     pub bundle_order: Vec<String>,
     /// Whether a Bundle build has a composition root.
     pub bundle_root: bool,
+    /// Who subscribes to what, with each subscription's envelope decision.
+    pub events: EventPlan,
 }
 
 impl ComposePlan {
@@ -203,6 +231,8 @@ impl ComposePlan {
         unit_tables: &HashMap<String, UnitTable>,
         unit_callees: &HashMap<String, HashMap<ExprId, Callee>>,
         unit_flattened: &HashMap<String, HashMap<String, String>>,
+        event_subscribers: &BTreeMap<(String, String), Vec<(String, String)>>,
+        unit_event_subscriber_shapes: &HashMap<String, HashMap<String, EventSubscriberShape>>,
     ) -> Self {
         Self::decide(&ComposeFacts::from_tables(
             kinds,
@@ -211,6 +241,8 @@ impl ComposePlan {
             unit_tables,
             unit_callees,
             unit_flattened,
+            event_subscribers,
+            unit_event_subscriber_shapes,
         ))
     }
 
@@ -230,6 +262,7 @@ impl ComposePlan {
             units,
             bundle_order: bundle_order(facts),
             bundle_root: facts.bundle_root,
+            events: decide_events(facts),
         }
     }
 
@@ -247,8 +280,38 @@ impl ComposePlan {
             handler_cross_caps: f.handler_cross_caps.clone(),
             provider_cross_caps: f.provider_cross_caps.clone(),
             surfaces: surfaces(f, facts),
+            subscriber_envelopes: f
+                .event_shapes
+                .iter()
+                .map(|(service, shape)| (service.clone(), shape.wants_envelope()))
+                .collect(),
         }
     }
+}
+
+/// Each subscription takes the envelope its subscriber's shape wants. A
+/// subscriber with no shape recorded is not handed one.
+fn decide_events(facts: &ComposeFacts) -> EventPlan {
+    let subscriptions = facts
+        .event_subscribers
+        .iter()
+        .map(|(key, subs)| {
+            let subs = subs
+                .iter()
+                .map(|(context, service)| EventSubscription {
+                    context: context.clone(),
+                    service: service.clone(),
+                    wants_envelope: facts
+                        .units
+                        .get(context)
+                        .and_then(|u| u.event_shapes.get(service))
+                        .is_some_and(EventSubscriberShape::wants_envelope),
+                })
+                .collect();
+            (key.clone(), subs)
+        })
+        .collect();
+    EventPlan { subscriptions }
 }
 
 /// A consumed context that has services is a surface of the consumer's `deps`.
@@ -333,6 +396,7 @@ mod tests {
         ComposeFacts {
             units: units.into_iter().map(|(n, f)| (n.to_string(), f)).collect(),
             bundle_root: true,
+            ..ComposeFacts::default()
         }
     }
 
@@ -446,5 +510,52 @@ mod tests {
         assert_eq!(all.keys().collect::<Vec<_>>(), ["Audit", "Ledger"]);
         assert_eq!(all["Ledger"], "bank");
         assert_eq!(all["Audit"], "bank");
+    }
+
+    #[test]
+    fn a_subscription_takes_the_envelope_its_subscribers_shape_wants() {
+        let shaped = |two_param_handler, schema_dispatch| {
+            let mut unit = ctx(&[]);
+            unit.event_shapes.insert(
+                "On".to_string(),
+                EventSubscriberShape {
+                    two_param_handler,
+                    schema_dispatch,
+                },
+            );
+            unit
+        };
+        let mut f = facts(vec![
+            ("pub", ctx(&[])),
+            ("plain", shaped(false, false)),
+            ("two", shaped(true, false)),
+            ("schema", shaped(false, true)),
+        ]);
+        f.event_subscribers.insert(
+            ("pub".to_string(), "E".to_string()),
+            ["plain", "two", "schema", "unknown"]
+                .iter()
+                .map(|c| (c.to_string(), "On".to_string()))
+                .collect(),
+        );
+        let plan = ComposePlan::decide(&f);
+        let wants: Vec<(&str, bool)> = plan
+            .events
+            .published_by("pub")
+            .flat_map(|(_, subs)| subs)
+            .map(|s| (s.context.as_str(), s.wants_envelope))
+            .collect();
+        assert_eq!(
+            wants,
+            [
+                ("plain", false),
+                ("two", true),
+                ("schema", true),
+                ("unknown", false)
+            ]
+        );
+        // The unit's own table of its subscribers agrees (the Workers wrapper reads it).
+        assert!(plan.units["two"].subscriber_envelopes["On"]);
+        assert!(!plan.units["plain"].subscriber_envelopes["On"]);
     }
 }

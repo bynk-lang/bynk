@@ -3103,31 +3103,40 @@ pub(crate) fn emit_service(
         // `on event(e: E)` handler has no envelope in scope otherwise. When
         // missing, insert a synthetic parameter in the same position a real
         // `env` would occupy, under a name distinct from anything a user
-        // could write, so it can never collide with a declared one. The two
-        // envelope-forwarding call sites (`workers.rs`, `project.rs`) widen
-        // their own condition to match, so the value actually arrives here.
-        let schema_dispatch_env_binder = if handler_kind_ir == IrHandlerKind::Event
-            && let ProtocolIr::Events {
-                schema_dispatch: Some(_),
-                ..
-            } = protocol
-        {
-            match ir_params.get(1) {
-                Some((env_param_name, _)) => Some(ts_ident(env_param_name)),
-                None => {
-                    params.insert(
-                        1,
-                        bynk_ts::TsParam::new(
-                            "__bynkSchemaEnv".to_string(),
-                            Some(bynk_ts::TsType::named("EventEnvelope")),
-                        ),
-                    );
-                    Some("__bynkSchemaEnv".to_string())
+        // could write, so it can never collide with a declared one. Every
+        // envelope-forwarding call site reads `wants_envelope`, so the value
+        // actually arrives here.
+        // 1B.1c (Decision F of #3928): whether the envelope arrives is the
+        // one rule every delivery site reads, `EventSubscriberShape::
+        // wants_envelope`; this callee is the side that must line up with it.
+        let envelope_shape = bynk_model::EventSubscriberShape {
+            two_param_handler: ir_params.len() == 2,
+            schema_dispatch: matches!(
+                protocol,
+                ProtocolIr::Events {
+                    schema_dispatch: Some(_),
+                    ..
                 }
-            }
-        } else {
-            None
+            ),
         };
+        let schema_dispatch_env_binder =
+            if handler_kind_ir == IrHandlerKind::Event && envelope_shape.wants_envelope() {
+                match ir_params.get(1) {
+                    Some((env_param_name, _)) => Some(ts_ident(env_param_name)),
+                    None => {
+                        params.insert(
+                            1,
+                            bynk_ts::TsParam::new(
+                                "__bynkSchemaEnv".to_string(),
+                                Some(bynk_ts::TsType::named("EventEnvelope")),
+                            ),
+                        );
+                        Some("__bynkSchemaEnv".to_string())
+                    }
+                }
+            } else {
+                None
+            };
         // Lower the body first so we can detect cross-context usage and
         // adjust the deps shape accordingly.
         // v0.52: a multi-actor sum handler's resolved actor is threaded through
