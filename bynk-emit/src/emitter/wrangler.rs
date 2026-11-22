@@ -955,7 +955,7 @@ pub fn ratelimit_namespace_placeholder(binding: &str) -> String {
 /// The bare KV namespace binding the cloudflare adapter's `Kv` reads. Its one
 /// TypeScript read is the default of `WorkersKv`'s `binding` parameter in
 /// `bynk-std`'s `cloudflare.binding.ts`, pinned to `KV_BINDING_NAME` by a test.
-fn kv_binding() -> WorkerBinding {
+pub(crate) fn kv_binding() -> WorkerBinding {
     WorkerBinding {
         name: bynk_check::firstparty::KV_BINDING_NAME.to_string(),
         source: BindingSource::Kv,

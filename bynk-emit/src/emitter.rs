@@ -68,6 +68,7 @@ use bynk_syntax::ast::{
 use ctx::UnitFacts;
 use ts_types::{TyRender, asset_ts_type, ts_base};
 
+pub(crate) mod bindings;
 pub mod client;
 pub mod commons_barrel;
 pub(crate) mod compose;
@@ -84,7 +85,9 @@ pub(crate) mod workers_entry;
 pub mod workers_group;
 pub mod wrangler;
 
+pub use bindings::WorkerBindings;
 pub use compose::bundle::emit_composition_root;
+pub use compose::closure::{bare_singletons_of_context, native_platforms_of_context};
 pub use compose::workers::emit_worker_compose;
 pub use compose::{
     ComposeFacts, ComposePlan, ComposeUnit, ComposeUnitFacts, ConsumedSurface, EventPlan,
