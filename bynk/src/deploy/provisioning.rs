@@ -211,7 +211,7 @@ pub(crate) fn push(
 }
 
 /// The triggers a forgiven first deploy never got: `wrangler triggers deploy`.
-fn deploy_forgiven_triggers(
+pub(crate) fn deploy_forgiven_triggers(
     provenance: &Provenance,
     worker_dir: &Path,
     worker: &str,
