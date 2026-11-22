@@ -66,6 +66,15 @@ const TEXT_CLASSES: &[TextClass] = &[
     },
 ];
 
+/// Whether `text` has `await` as a whole word.
+fn has_await_word(text: &str) -> bool {
+    let word = |c: char| c.is_ascii_alphanumeric() || c == '_' || c == '$';
+    text.match_indices("await").any(|(i, m)| {
+        !text[..i].chars().next_back().is_some_and(word)
+            && !text[i + m.len()..].chars().next().is_some_and(word)
+    })
+}
+
 fn is_identifier(t: &str) -> bool {
     let mut c = t.chars();
     c.next()
@@ -325,6 +334,21 @@ fn every_ident_in_the_built_trees_is_an_identifier_path() {
             .collect::<Vec<_>>()
             .join("\n"),
     );
+    // `bynk_ts::expr_contains_await` treats an identifier path as never awaiting and searches any
+    // other `Ident` as text. The audit enforces what keeps the node view sound: no text `Ident`
+    // in the corpus holds the word `await`, bar the events fan-out block. That block is a
+    // statement body of the generated `fanout` handler (it awaits each delivery by design), never
+    // an operand of the `lower_if` or `Json.encodePlain` hoists, and `expr_contains_await` still
+    // reports it as awaiting by its text search.
+    let awaiting: Vec<&str> = found
+        .iter()
+        .map(|(_, t)| t.as_str())
+        .filter(|t| !is_fanout_block(t) && has_await_word(t))
+        .collect();
+    assert!(
+        awaiting.is_empty(),
+        "a text `Ident` holds the word `await` (an await hidden outside a node): {awaiting:?}"
+    );
     // The list can only shrink: a class that no longer occurs is deleted.
     let stale: Vec<&str> = TEXT_CLASSES
         .iter()
@@ -336,4 +360,54 @@ fn every_ident_in_the_built_trees_is_an_identifier_path() {
         stale.is_empty(),
         "these TEXT_CLASSES no longer occur anywhere; delete their entries: {stale:?}"
     );
+}
+
+#[test]
+fn the_class_matchers_match_their_shapes_and_nothing_wider() {
+    // subscript
+    assert!(is_subscript("obj[\"f\"]"));
+    assert!(is_subscript("argsObj[\"by_name\"]"));
+    assert!(!is_subscript("obj[f]"));
+    assert!(!is_subscript("a.b[\"f\"]"));
+    assert!(!is_subscript("obj[\"f\"].x"));
+    // template path
+    assert!(is_template_path("`${path}`"));
+    assert!(is_template_path("`${path}.after`"));
+    assert!(is_template_path("`${path}[${i}][0]`"));
+    assert!(is_template_path("`${path}[${i}]`"));
+    assert!(!is_template_path("`${other}.x`"));
+    assert!(!is_template_path("`${path}.`"));
+    assert!(!is_template_path("`${path} x`"));
+    assert!(!is_template_path("${path}.x"));
+    // rendered literal
+    assert!(is_rendered_literal("\"\""));
+    assert!(is_rendered_literal("-0.25"));
+    assert!(is_rendered_literal("[]"));
+    assert!(is_rendered_literal(
+        "{ kind: \"Some\", value: { kind: \"None\" } }"
+    ));
+    assert!(!is_rendered_literal("f(x)"));
+    assert!(!is_rendered_literal("a === 1"));
+    assert!(!is_rendered_literal("{ for (const ev of events) { } }"));
+    assert!(!is_rendered_literal("depth + 1"));
+    // fan-out block
+    assert!(is_fanout_block("{  }"));
+    assert!(is_fanout_block(
+        "{ for (const ev of events) { switch (ev.type) { } } }"
+    ));
+    assert!(!is_fanout_block("{ }"));
+    // predicate, call or cast text
+    assert!(is_rendered_expression(
+        "__bynkSchemaEnv.schemaVersion === 1"
+    ));
+    assert!(is_rendered_expression("(this as unknown as T)"));
+    assert!(is_rendered_expression("f(x)"));
+    assert!(!is_rendered_expression("plain"));
+    assert!(!is_rendered_expression("{  }"));
+    assert!(!is_rendered_expression("obj[\"f\"]"));
+    // the word check
+    assert!(has_await_word("(await x)"));
+    assert!(has_await_word("await"));
+    assert!(!has_await_word("awaiter"));
+    assert!(!has_await_word("this.awaited"));
 }

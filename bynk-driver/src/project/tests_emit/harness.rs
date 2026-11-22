@@ -18,6 +18,12 @@ use bynk_syntax::span::Span;
 use bynk_ts::{TsArrowBody, TsBindingName, TsDecl, TsExpr, TsStmt, TsType};
 use std::sync::Arc;
 
+/// A participant's `env_<ns>` binding in the integration harness: the one spelling its
+/// declaration and every reference use (1A.39b, Decision C).
+fn env_binding(ns: &str) -> String {
+    format!("env_{ns}")
+}
+
 /// Emit the `__makeHarness()` factory: an in-process env per participant whose
 /// Service Bindings call the sibling participants' real Worker `fetch` and whose
 /// Durable-Object namespaces back the participant's own agents in memory, plus a
@@ -42,12 +48,6 @@ use std::sync::Arc;
 /// participants and agent state. `exposed` names the participants whose own
 /// `env` the harness also returns, for a driver that calls that Worker's
 /// `scheduled` or `queue` entry directly.
-/// A participant's `env_<ns>` binding in the integration harness: the one spelling its
-/// declaration and every reference use (1A.39b, Decision C).
-fn env_binding(ns: &str) -> String {
-    format!("env_{ns}")
-}
-
 pub(super) fn emit_integration_harness<'a>(
     participants: &[String],
     bindings_of: &dyn Fn(&String) -> &'a Vec<WorkerBinding>,

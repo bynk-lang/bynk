@@ -468,7 +468,7 @@ fn is_identifier(text: &str) -> bool {
 
 /// Whether `text` is an identifier path: identifiers joined by single dots (`this.state`,
 /// `globalThis.Number`).
-fn is_identifier_path(text: &str) -> bool {
+pub(crate) fn is_identifier_path(text: &str) -> bool {
     text.split('.').all(is_identifier)
 }
 
