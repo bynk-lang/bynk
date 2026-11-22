@@ -100,11 +100,6 @@ pub(crate) fn build_facts(
         declared,
         &mut ids,
     );
-    for binding in &declared.ratelimits {
-        if let Some(id) = recorded_ratelimit(lock, worker, binding, environment) {
-            ids.insert(binding.clone(), id.to_string());
-        }
-    }
     let mut classes: Vec<String> = declared
         .durable_objects
         .iter()

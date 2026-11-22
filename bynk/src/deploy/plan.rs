@@ -148,10 +148,10 @@ pub(crate) struct ContextPlan<'a> {
     /// P3 (#2342): one line per rate limiter the Worker binds, in binding
     /// order.
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    ratelimits: Vec<PlanRateLimit<'a>>,
+    pub(crate) ratelimits: Vec<PlanRateLimit<'a>>,
     /// One line per queue this context consumes or (P2, #2578) sends to, in
     /// name order.
-    queues: Vec<PlanQueue>,
+    pub(crate) queues: Vec<PlanQueue>,
     /// P3b (#2582): one line per Analytics Engine dataset the Worker writes
     /// to, in binding order. No action: the platform creates a dataset on its
     /// first write, and Bynk never deletes one.
@@ -264,20 +264,6 @@ struct PlanForeignService<'a> {
     worker: &'a str,
 }
 
-/// P3 (#2342): one rate limiter. Its `namespace_id` is the ledger's to
-/// allocate, so the plan can only say whether one is recorded; the push
-/// allocates and records the missing ones.
-#[derive(Debug, Serialize)]
-struct PlanRateLimit<'a> {
-    /// `RATELIMIT_<SNAKE>`.
-    binding: &'a str,
-    /// `allocate` or `reuse`.
-    action: &'static str,
-    /// The recorded id, when `reuse`.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    namespace_id: Option<String>,
-}
-
 /// P3b (#2582): one Analytics Engine dataset.
 #[derive(Debug, Serialize)]
 struct PlanDataset<'a> {
@@ -285,19 +271,6 @@ struct PlanDataset<'a> {
     binding: &'a str,
     /// The dataset's account-facing name, [`analytics_dataset_name`]d.
     dataset: String,
-}
-
-#[derive(Debug, Serialize)]
-struct PlanQueue {
-    /// `create` when this project has never made the queue, `reuse` when the
-    /// ledger has it (or #3494 the account does), `create or reuse` for a queue
-    /// only sent to when the account was not asked. Either way the provision step attempts the create and
-    /// treats an existing queue as success, so `reuse` is a forecast — "expect
-    /// nothing new" — not a promise to stay silent (ADR 0194 D2).
-    action: &'static str,
-    /// The queue's account name, [`env_qualify`]d as the provision step
-    /// creates it (#2028).
-    queue: String,
 }
 
 /// One secret the run intends to set on one context.
@@ -1240,9 +1213,13 @@ pub fn run(
         },
     );
     // 1D.1 (#3929): what the run read once, for each kind.
+    // Shared across the loop: a queue two contexts consume is one queue, so it
+    // wants one create attempt per run, not one per consumer (ADR 0194 D2).
+    let attempted_queues = std::cell::RefCell::new(BTreeSet::new());
     let lives = Lives {
         kv: live_kv.as_ref(),
         hyperdrive: hyperdrive_run,
+        queues: Some(&attempted_queues),
     };
 
     // Provision → wire → push, per context, in dependency order. Each context's
@@ -1250,9 +1227,6 @@ pub fn run(
     // posture), so an interrupted multi-context run is resumable rather than
     // restartable — and never rolled back (D2): a half-deployed project is a
     // real state the next plan will show, not an error to unwind.
-    // Shared across the loop: a queue two contexts consume is one queue, so it
-    // wants one create attempt per run, not one per consumer (ADR 0194 D2).
-    let mut attempted_queues = BTreeSet::new();
     // I2 (#1971): each edge's key is decided over both its ends at once, so
     // each Worker's `secret list` is asked here, before anything is pushed,
     // and the per-context step reuses the answer. That covers every Worker
@@ -1353,7 +1327,6 @@ pub fn run(
             &resources,
             &mut lock,
             &lock_path,
-            &mut attempted_queues,
             &mut Secrets {
                 source: &secret_source,
                 force: opts.force,
@@ -1377,13 +1350,9 @@ pub fn run(
                     (&groups.members(worker), &groups.script(worker)),
                 );
                 record_pushed_tombstones(&mut lock, &opts.environment, worker, &resources[worker]);
-                // P3 (#2342): the pushed Worker no longer binds a rate limiter
-                // its source dropped, so that id is free again.
-                lock.forget_undeclared_ratelimits(
-                    &opts.environment,
-                    worker,
-                    &resources[worker].ratelimits,
-                );
+                // P3 (#2342): e.g. the pushed Worker no longer binds a rate
+                // limiter its source dropped, so that id is free again.
+                kinds_after_push(&mut lock, &opts.environment, worker, &resources[worker]);
                 // I3 (#1971): the secrets just minted for this context's
                 // foreign callers, handed to their operators.
                 for caller in &resources[worker].foreign_callers {
@@ -2295,42 +2264,26 @@ pub(crate) fn plan_report(plan: &Plan<'_>, format: DeployFormat) -> String {
             // fact about the account regardless of what this run is about to
             // do, and a reader should see it before the noise of what's being
             // pushed (slice 5).
-            short_kind_orphans(&plan.shown_orphans, &mut out);
-            for worker in &plan.shown_orphans.workers {
-                // #3562: a removed group's members, from the ledger.
-                let members = plan.shown_orphans.worker_contexts.get(worker);
-                match members {
-                    Some(contexts) => out.push_str(&format!(
-                        "orphan worker {worker} (contexts {})\n",
-                        contexts.join(", ")
-                    )),
-                    None => out.push_str(&format!("orphan worker {worker}\n")),
-                }
-                // #3562 (G5): it is not empty: it still holds an agent's state.
-                if let Some(state) = plan.shown_orphans.worker_agent_state.get(worker) {
-                    out.push_str(&agent_state_note(worker, state));
-                }
-            }
-            for queue in &plan.shown_orphans.queues {
-                out.push_str(&format!("orphan queue {queue}\n"));
-            }
-            for context in &plan.contexts {
-                short_kind_lines(context, &mut out);
-                for limiter in &context.ratelimits {
-                    match &limiter.namespace_id {
-                        Some(id) => out.push_str(&format!(
-                            "ratelimit {} {} (namespace {id})\n",
-                            limiter.action, limiter.binding
+            // The Worker block sits in the list between Hyperdrive's orphans and the queues.
+            short_kind_orphans(&plan.shown_orphans, &mut out, &mut |out| {
+                for worker in &plan.shown_orphans.workers {
+                    // #3562: a removed group's members, from the ledger.
+                    let members = plan.shown_orphans.worker_contexts.get(worker);
+                    match members {
+                        Some(contexts) => out.push_str(&format!(
+                            "orphan worker {worker} (contexts {})\n",
+                            contexts.join(", ")
                         )),
-                        None => out.push_str(&format!(
-                            "ratelimit {} {}\n",
-                            limiter.action, limiter.binding
-                        )),
+                        None => out.push_str(&format!("orphan worker {worker}\n")),
+                    }
+                    // #3562 (G5): it is not empty: it still holds an agent's state.
+                    if let Some(state) = plan.shown_orphans.worker_agent_state.get(worker) {
+                        out.push_str(&agent_state_note(worker, state));
                     }
                 }
-                for queue in &context.queues {
-                    out.push_str(&format!("queue {} {}\n", queue.action, queue.queue));
-                }
+            });
+            for context in &plan.contexts {
+                short_kind_lines(context, &mut out);
                 for dataset in &context.datasets {
                     out.push_str(&format!(
                         "dataset {} ({}; created on first write)\n",
@@ -2511,13 +2464,6 @@ fn unrecordable_in_ci(
         emsg!("{message}");
         return true;
     }
-    if let Some((worker, binding)) = first_unrecorded_ratelimit(order, resources, lock, environment)
-    {
-        emsg!(
-            "bynk: error: the rate limiter `{binding}` of `{worker}` is unrecorded; deploy locally first and commit {LOCK_FILE}"
-        );
-        return true;
-    }
     hyperdrive::refused_in_ci(order, resources, lock, environment, hyperdrive)
 }
 
@@ -2541,13 +2487,9 @@ impl<'a> Plan<'a> {
     /// #3494: the listings the account is asked for: one per kind (and R2
     /// jurisdiction) of which this plan would create something.
     pub(crate) fn account_listings(&self) -> BTreeSet<super::on_account::Listing> {
-        let creates = |action: &str| action == "create" || action == "create or reuse";
         let mut wanted = BTreeSet::new();
         for c in &self.contexts {
             kind_listings(c, &mut wanted);
-            if c.queues.iter().any(|q| creates(q.action)) {
-                wanted.insert((KindId::Queue, None));
-            }
         }
         wanted
     }
@@ -2561,9 +2503,6 @@ impl<'a> Plan<'a> {
     pub(crate) fn checked_against(mut self, on: &super::on_account::OnAccount) -> Self {
         self.account_notes.extend(on.notes.iter().cloned());
         for c in &mut self.contexts {
-            for q in &mut c.queues {
-                q.action = held_verb(q.action, on.holds(KindId::Queue, None, &q.queue));
-            }
             check_kind_lines(c, on, &mut self.account_notes);
         }
         self
@@ -2663,42 +2602,8 @@ pub(crate) fn derive_plan<'a>(
                     vectorize: Vec::new(),
                     d1: Vec::new(),
                     hyperdrive: Vec::new(),
-                    ratelimits: declared
-                        .ratelimits
-                        .iter()
-                        .map(|binding| {
-                            let recorded = recorded_ratelimit(lock, worker, binding, environment);
-                            PlanRateLimit {
-                                binding,
-                                action: if recorded.is_some() {
-                                    "reuse"
-                                } else {
-                                    "allocate"
-                                },
-                                namespace_id: recorded.map(str::to_string),
-                            }
-                        })
-                        .collect(),
-                    // P2 (#2578): the queues it sends to, with those it
-                    // consumes. An unrecorded consumed queue is `create`, a
-                    // forecast that the first deploy's record corrects. A
-                    // queue only sent to is recorded only if Bynk made it, so
-                    // an adopted one would read `create` forever: it is
-                    // `create or reuse` until a record says otherwise.
-                    queues: declared
-                        .all_queues()
-                        .iter()
-                        .map(|queue| PlanQueue {
-                            action: if lock.has_queue(environment, queue) {
-                                "reuse"
-                            } else if declared.queues.contains(queue) {
-                                "create"
-                            } else {
-                                "create or reuse"
-                            },
-                            queue: env_qualify(environment, queue),
-                        })
-                        .collect(),
+                    ratelimits: Vec::new(),
+                    queues: Vec::new(),
                     datasets: declared
                         .analytics_datasets
                         .iter()
@@ -2914,23 +2819,6 @@ pub(crate) fn analytics_dataset_problem(
         }
     }
     None
-}
-
-/// P3 (#2342): the first rate limiter in `order` with no recorded
-/// `namespace_id`, as `(worker, binding)`: what CI refuses to allocate.
-fn first_unrecorded_ratelimit<'a>(
-    order: &'a [String],
-    resources: &'a BTreeMap<String, Resources>,
-    lock: &DeployLock,
-    environment: &str,
-) -> Option<(&'a str, &'a str)> {
-    order.iter().find_map(|worker| {
-        resources[worker]
-            .ratelimits
-            .iter()
-            .find(|binding| recorded_ratelimit(lock, worker, binding, environment).is_none())
-            .map(|binding| (worker.as_str(), binding.as_str()))
-    })
 }
 
 pub(crate) fn requires_interactive_confirmation(yes: bool, stdin_is_terminal: bool) -> bool {
@@ -3415,12 +3303,19 @@ pub(crate) mod tests {
             "{report}"
         );
         assert_eq!(
-            first_unrecorded_ratelimit(&order, &declared, &DeployLock::default(), "default"),
-            Some(("shop", "RATELIMIT_LOGIN")),
+            RateLimit::unrecordable_in_ci(&ProjectCx {
+                ledger: LedgerView::of(&DeployLock::default(), "default"),
+                resources: &declared,
+                order: &order,
+            })
+            .as_deref(),
+            Some(
+                "bynk: error: the rate limiter `RATELIMIT_LOGIN` of `shop` is unrecorded; deploy locally first and commit bynk.deploy.lock"
+            ),
             "what CI refuses to allocate"
         );
         let mut lock = DeployLock::default();
-        lock.allocate_ratelimit("default", "shop", "RATELIMIT_LOGIN");
+        allocate_in(&mut lock, "default", "shop", "RATELIMIT_LOGIN");
         let again = plan_of(&order, &declared, &lock);
         let report = plan_report(&again, DeployFormat::Short);
         let id = crate::deploy::ledger::ratelimit_seed("default", "shop", "RATELIMIT_LOGIN");
@@ -3431,7 +3326,11 @@ pub(crate) mod tests {
             "{report}"
         );
         assert_eq!(
-            first_unrecorded_ratelimit(&order, &declared, &lock, "default"),
+            RateLimit::unrecordable_in_ci(&ProjectCx {
+                ledger: LedgerView::of(&lock, "default"),
+                resources: &declared,
+                order: &order,
+            }),
             None
         );
     }
@@ -3761,7 +3660,12 @@ pub(crate) mod tests {
         // once the ledger knows the project deploys to `staging`.
         let with_queue_in = |environment: &str| {
             let mut lock = DeployLock::default();
-            lock.record_queue(environment, "jobs");
+            QueueTable::created(
+                lock.environments
+                    .entry(String::from(environment))
+                    .or_default(),
+                "jobs",
+            );
             lock
         };
         let suffixed = project(vec![(
@@ -4228,8 +4132,16 @@ pub(crate) mod tests {
         assert_eq!(line(&with_queue(DeployLock::default(), "intake")), "reuse");
         // The name is keyed environment-wide, not per worker: a different
         // context consuming `intake` means the same queue.
-        assert!(with_queue(DeployLock::default(), "intake").has_queue("default", "intake"));
-        assert!(!with_queue(DeployLock::default(), "intake").has_queue("default", "other"));
+        assert!(
+            with_queue(DeployLock::default(), "intake")
+                .recorded::<Queue>("default", "", "intake")
+                .is_some()
+        );
+        assert!(
+            with_queue(DeployLock::default(), "intake")
+                .recorded::<Queue>("default", "", "other")
+                .is_none()
+        );
     }
 
     #[test]
@@ -4689,8 +4601,18 @@ pub(crate) mod tests {
         let mut lock = DeployLock::default();
         lock.record_deployed("staging", "payment", Some(Default::default()));
         lock.record_deployed("staging", "gone", Some(Default::default()));
-        lock.record_queue("staging", "jobs");
-        lock.record_queue("staging", "old-jobs");
+        QueueTable::created(
+            lock.environments
+                .entry(String::from("staging"))
+                .or_default(),
+            "jobs",
+        );
+        QueueTable::created(
+            lock.environments
+                .entry(String::from("staging"))
+                .or_default(),
+            "old-jobs",
+        );
         let plan = derive_plan(
             &order,
             &declared,

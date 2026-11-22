@@ -1270,7 +1270,12 @@ WITH_EQUALS=a=b
         const SENTINEL: &str = "sk_live_do_not_commit_me";
         let mut lock = DeployLock::default();
         lock.record_deployed("default", "api", Some(Default::default()));
-        lock.record_queue("default", "intake");
+        QueueTable::created(
+            lock.environments
+                .entry(String::from("default"))
+                .or_default(),
+            "intake",
+        );
         let text = toml::to_string_pretty(&lock).expect("the ledger serialises");
         assert!(!text.contains(SENTINEL));
         assert!(

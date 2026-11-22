@@ -107,7 +107,6 @@ pub(crate) fn deploy_one(
     project: &BTreeMap<String, Resources>,
     lock: &mut DeployLock,
     lock_path: &Path,
-    attempted_queues: &mut BTreeSet<String>,
     secrets: &mut Secrets<'_>,
     wrangler_args: &[String],
     environment: &str,
@@ -166,78 +165,16 @@ pub(crate) fn deploy_one(
     // its counters. One the source no longer declares is forgotten only once
     // the push has succeeded (`plan::run`): until then the live Worker still
     // binds its id, which must not be handed to another limiter.
-    let mut ratelimit_ids = BTreeMap::new();
-    let mut ledger_changed = false;
-    for binding in &declared.ratelimits {
-        let (id, allocated) = lock.allocate_ratelimit(environment, worker, binding);
-        ledger_changed |= allocated;
-        ratelimit_ids.insert(binding.clone(), id);
-    }
-    if ledger_changed {
-        write_lock(lock_path, lock).map_err(|e| {
-            DeployFailure::driver(format!(
-                "allocated `{worker}`'s rate limiter ids but could not record them in {}: {e}",
-                lock_path.display()
-            ))
-        })?;
-    }
-    if !ratelimit_ids.is_empty() && !materialise_ratelimit_ids(&config, &ratelimit_ids) {
-        return Err(DeployFailure::driver(format!(
-            "could not materialise the rate limiter ids into `{worker}`'s generated configuration"
-        )));
-    }
+    let ratelimit_ids = provision_kind::<RateLimit>(site, declared, lock, lock_path, lives)?;
+    RateLimit::materialise(&config, worker, &ratelimit_ids)?;
     Kv::materialise(&config, worker, &kv_ids)?;
-    // Reconciled against the account on every run, never against the ledger:
-    // the ledger's queue set is a planning aid, so trusting it to skip would
-    // leave a queue deleted out-of-band un-recreated and the push failing
-    // against a binding with nothing behind it (ADR 0194 D2). Once per run,
-    // not once per consuming context — a queue two contexts consume is one
-    // queue. `wrangler deploy` will not create it for us: it checks and fails
-    // with "To create it, run: wrangler queues create", so this step is the one
-    // that makes such a project deployable at all.
-    //
-    // The account-facing name is environment-qualified (slice 4, DECISION C):
-    // queues reconcile by bare name account-wide, so two environments sharing
-    // an account would otherwise create-or-reuse the same physical queue. The
-    // ledger still keys by the *logical* name — the outer `environments` map
-    // already separates `staging` from `default`, so no schema change is
-    // needed, only the wrangler-facing name changes.
-    //
-    // P2 (#2578): a producer's queue (`capability X = Queue @name("n")`) is
-    // created the same way, but recorded only when this run created it. A
-    // queue only producers name may belong to a Worker outside the project,
-    // and what the ledger records becomes an orphan `--prune` can delete once
-    // nothing names it; a queue the project consumes is recorded either way.
-    let mut created = BTreeSet::new();
-    for queue in unattempted_queues(declared, attempted_queues) {
-        let physical = env_qualify(environment, &queue);
-        if !queue_exists(provenance, &physical, project_root)
-            && create_queue(provenance, &physical, project_root).map_err(|e| {
-                DeployFailure::driver(format!("could not create the queue `{physical}`: {e}"))
-            })?
-        {
-            created.insert(queue);
-        }
-    }
-    // Recorded before the push, as KV is: what the ledger claims is only
-    // ever what it watched succeed. Recorded for a consumed queue that was
-    // already there, too — the set's use is the plan's `create`/`reuse`
-    // wording, and "we confirmed this exists" is exactly what makes `reuse` the
-    // true word — but marked as reused, so `--prune` never deletes a queue this
-    // run did not create (#2579). A consumed queue another context already
-    // checked this run is recorded here as well, so the order contexts deploy
-    // in changes nothing.
-    for queue in queues_to_record(declared, &created) {
-        if record_provisioned_queue(lock, environment, &queue, created.contains(&queue)) {
-            let physical = env_qualify(environment, &queue);
-            write_lock(lock_path, lock).map_err(|e| {
-                DeployFailure::driver(format!(
-                    "provisioned the queue `{physical}` but could not record it in {}: {e}",
-                    lock_path.display()
-                ))
-            })?;
-        }
-    }
+    // Reconciled against the account on every run, never against the ledger,
+    // once per run and not once per consuming context, environment-qualified,
+    // and recorded before the push ([`Queue`]'s `provision_all`). `wrangler
+    // deploy` will not create a queue for us: it checks and fails with "To
+    // create it, run: wrangler queues create", so this step is the one that
+    // makes such a project deployable at all.
+    provision_kind::<Queue>(site, declared, lock, lock_path, lives)?;
     // Slice 4 (DECISION B+C): Cloudflare does not inherit bindings into a named
     // environment, so a non-default `--env` needs its own `[env.<name>]` table —
     // synthesised here, not by the emitter, since the environment name is a
@@ -766,7 +703,11 @@ pub(crate) fn classify_worker_listing(success: bool, said: &str) -> WorkerPresen
 /// `from queue("n")` already gave it, so a successful create and an
 /// already-existing queue are the same end state and both return `Ok`
 /// (ADR 0194 D2).
-fn create_queue(provenance: &Provenance, name: &str, project_root: &Path) -> Result<bool, String> {
+pub(crate) fn create_queue(
+    provenance: &Provenance,
+    name: &str,
+    project_root: &Path,
+) -> Result<bool, String> {
     let Some(mut command) = workers::wrangler_command(provenance, "queues") else {
         return Err("wrangler not found".into());
     };
@@ -816,7 +757,7 @@ fn create_queue(provenance: &Provenance, name: &str, project_root: &Path) -> Res
 /// an auth or network failure produces, and the honest consequence is the right
 /// one: the create then fails too and surfaces wrangler's real complaint, rather
 /// than this call inventing a diagnosis of its own.
-fn queue_exists(provenance: &Provenance, name: &str, project_root: &Path) -> bool {
+pub(crate) fn queue_exists(provenance: &Provenance, name: &str, project_root: &Path) -> bool {
     let Some(mut command) = workers::wrangler_command(provenance, "queues") else {
         return false;
     };
@@ -864,7 +805,10 @@ pub(crate) fn wrangler_said(output: &std::process::Output) -> String {
 ///
 /// P2 (#2578): a context's producer queues are attempted with its consumed
 /// ones, in name order, each once.
-fn unattempted_queues(declared: &Resources, attempted: &mut BTreeSet<String>) -> Vec<String> {
+pub(crate) fn unattempted_queues(
+    declared: &Resources,
+    attempted: &mut BTreeSet<String>,
+) -> Vec<String> {
     declared
         .all_queues()
         .into_iter()
@@ -875,29 +819,12 @@ fn unattempted_queues(declared: &Resources, attempted: &mut BTreeSet<String>) ->
 /// P2 (#2578): the queues one context's deploy records in the ledger: every
 /// queue it consumes, and a queue it only produces to when this run `created`
 /// it. Pure, so the rule is tested without spawning wrangler.
-fn queues_to_record(declared: &Resources, created: &BTreeSet<String>) -> Vec<String> {
+pub(crate) fn queues_to_record(declared: &Resources, created: &BTreeSet<String>) -> Vec<String> {
     declared
         .all_queues()
         .into_iter()
         .filter(|queue| declared.queues.contains(queue) || created.contains(queue))
         .collect()
-}
-
-/// #2579: record one queue in the ledger, as Bynk's own when this run `created`
-/// it and as merely reused otherwise. Returns whether the ledger changed. Pure,
-/// so the decision that keeps `--prune` off another Worker's queue is tested
-/// without spawning wrangler.
-fn record_provisioned_queue(
-    lock: &mut DeployLock,
-    environment: &str,
-    queue: &str,
-    created: bool,
-) -> bool {
-    if created {
-        lock.record_queue(environment, queue)
-    } else {
-        lock.record_reused_queue(environment, queue)
-    }
 }
 
 /// Does this `wrangler queues create` failure just mean the queue is already
@@ -1322,9 +1249,19 @@ mod tests {
         let resources = BTreeMap::from([("orders".into(), Resources::default())]);
         let mut lock = DeployLock::default();
         assert!(record_provisioned_queue(
-            &mut lock, "default", "theirs", false
+            lock.environments
+                .entry(String::from("default"))
+                .or_default(),
+            "theirs",
+            false
         ));
-        assert!(record_provisioned_queue(&mut lock, "default", "ours", true));
+        assert!(record_provisioned_queue(
+            lock.environments
+                .entry(String::from("default"))
+                .or_default(),
+            "ours",
+            true
+        ));
         let orphans = crate::deploy::ledger::find_orphans(&lock, "default", &resources);
         assert_eq!(orphans.queues, vec!["ours".to_string()]);
     }
@@ -1333,9 +1270,19 @@ mod tests {
     fn a_queue_bynk_created_stays_prunable_when_a_redeploy_finds_it_there() {
         let resources = BTreeMap::from([("orders".into(), Resources::default())]);
         let mut lock = DeployLock::default();
-        record_provisioned_queue(&mut lock, "default", "ours", true);
+        record_provisioned_queue(
+            lock.environments
+                .entry(String::from("default"))
+                .or_default(),
+            "ours",
+            true,
+        );
         assert!(!record_provisioned_queue(
-            &mut lock, "default", "ours", false
+            lock.environments
+                .entry(String::from("default"))
+                .or_default(),
+            "ours",
+            false
         ));
         let orphans = crate::deploy::ledger::find_orphans(&lock, "default", &resources);
         assert_eq!(orphans.queues, vec!["ours".to_string()]);
@@ -1346,9 +1293,22 @@ mod tests {
         // The provision step writes the ledger only when the set actually
         // gained a name, so a re-run that provisions nothing writes nothing.
         let mut lock = DeployLock::default();
-        assert!(lock.record_queue("default", "intake"), "the first is new");
         assert!(
-            !lock.record_queue("default", "intake"),
+            QueueTable::created(
+                lock.environments
+                    .entry(String::from("default"))
+                    .or_default(),
+                "intake"
+            ),
+            "the first is new"
+        );
+        assert!(
+            !QueueTable::created(
+                lock.environments
+                    .entry(String::from("default"))
+                    .or_default(),
+                "intake"
+            ),
             "the second changes nothing, so the ledger must not be rewritten"
         );
     }
@@ -1490,7 +1450,6 @@ mod tests {
             &project,
             &mut lock,
             &root.join(LOCK_FILE),
-            &mut BTreeSet::new(),
             &mut Secrets {
                 source: &source,
                 force: false,
@@ -1709,10 +1668,15 @@ mod tests {
         assert!(calls.iter().all(|c| !c.contains("ratelimit")), "{calls:?}");
         let login = ratelimit_seed("default", "api", "RATELIMIT_LOGIN").to_string();
         assert_eq!(
-            recorded_ratelimit(&lock, "api", "RATELIMIT_LOGIN", "default"),
+            lock.recorded::<RateLimit>("default", "api", "RATELIMIT_LOGIN")
+                .map(|r| r.namespace_id.as_str()),
             Some(login.as_str())
         );
-        assert!(recorded_ratelimit(&lock, "api", "RATELIMIT_PUBLISH", "default").is_some());
+        assert!(
+            lock.recorded::<RateLimit>("default", "api", "RATELIMIT_PUBLISH")
+                .map(|r| r.namespace_id.as_str())
+                .is_some()
+        );
         assert!(
             config.contains(&format!("name = \"RATELIMIT_LOGIN\"\nnamespace_id = \"{login}\" # set at deploy time\nsimple = {{ limit = 20, period = 60 }}")),
             "{config}"
@@ -1738,12 +1702,17 @@ mod tests {
         assert_eq!(pushed, Ok(Pushed::Ok));
         let publish = ratelimit_seed("default", "api", "RATELIMIT_PUBLISH").to_string();
         assert_eq!(
-            recorded_ratelimit(&lock, "api", "RATELIMIT_PUBLISH", "default"),
+            lock.recorded::<RateLimit>("default", "api", "RATELIMIT_PUBLISH")
+                .map(|r| r.namespace_id.as_str()),
             Some(publish.as_str()),
             "a second deploy (a changed `@limit` is one) reuses the id"
         );
         // Forgotten by `plan::run` after the push succeeds, not here.
-        assert!(recorded_ratelimit(&lock, "api", "RATELIMIT_LOGIN", "default").is_some());
+        assert!(
+            lock.recorded::<RateLimit>("default", "api", "RATELIMIT_LOGIN")
+                .map(|r| r.namespace_id.as_str())
+                .is_some()
+        );
         assert!(
             config.contains(&format!("namespace_id = \"{publish}\"")),
             "{config}"
@@ -1767,12 +1736,15 @@ mod tests {
         );
         assert_eq!(pushed, Ok(Pushed::Ok));
         // Unique across environments, which may share an account.
-        let staging = recorded_ratelimit(&lock, "api", "RATELIMIT_LOGIN", "staging")
+        let staging = lock
+            .recorded::<RateLimit>("staging", "api", "RATELIMIT_LOGIN")
+            .map(|r| r.namespace_id.as_str())
             .unwrap()
             .to_string();
         assert_ne!(
             Some(staging.as_str()),
-            recorded_ratelimit(&lock, "api", "RATELIMIT_LOGIN", "default")
+            lock.recorded::<RateLimit>("default", "api", "RATELIMIT_LOGIN")
+                .map(|r| r.namespace_id.as_str())
         );
         let doc: toml::Table = config.parse().unwrap();
         let block = doc["env"]["staging"]["ratelimits"].as_array().unwrap();
@@ -2181,7 +2153,6 @@ mod tests {
             &project,
             &mut lock,
             &root.join(LOCK_FILE),
-            &mut BTreeSet::new(),
             &mut Secrets {
                 source: &source,
                 force: false,
