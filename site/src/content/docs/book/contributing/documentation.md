@@ -62,8 +62,12 @@ Highlighting for `bynk` fenced blocks comes from a TextMate grammar
 (`site/src/grammars/bynk.tmLanguage.json`), a copy of the VS Code extension's
 ([bynk-lang/vscode-bynk](https://github.com/bynk-lang/vscode-bynk)), so code on the page matches the editor.
 Refresh the copy from the extension when its grammar changes. The site theme
-ships the same grammar, and CI fails if the two copies differ, so refresh the
-theme's in the same change.
+ships the same grammar, and CI fails if the two copies differ. Since the theme
+lives in its own repository, a grammar change goes in this order: change the
+extension's grammar, release the theme with it, then in one pull request here
+bump `@bynk-lang/site-theme` and refresh `site/src/grammars/bynk.tmLanguage.json`.
+A Dependabot bump that brings a new theme grammar fails the same check until
+the site's copy is refreshed on that branch.
 
 ## The brand
 
