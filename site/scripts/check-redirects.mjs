@@ -17,8 +17,17 @@
 //! `/reference/api/` (the rustdoc, built only in the deploy workflow) is exempt
 //! as a target.
 //!
-//!   node scripts/check-redirects.mjs        report problems; non-zero if any
-//!   node scripts/check-redirects.mjs --dist <dir> --redirects <file>
+//! Those checks only know the pages that exist now. `src/data/published-routes.txt`
+//! remembers every page the site has published (#4010); it only grows. So that
+//! a move cannot quietly drop a page, it also asserts that
+//!
+//!   4. every published route is still a page, or is redirected (with and
+//!      without its trailing slash) to one;
+//!   5. every built page is in the list, so the list stays complete.
+//!
+//!   node scripts/check-redirects.mjs           report problems; non-zero if any
+//!   node scripts/check-redirects.mjs --update  add the built pages to the list
+//!   node scripts/check-redirects.mjs --dist <dir> --redirects <file> --published <file>
 //!
 //! The `site` CI job runs this after `astro build`; the matcher's tests are in
 //! check-redirects.test.mjs.
@@ -187,6 +196,84 @@ export function fillPattern(from, values, splat = "") {
 }
 
 /**
+ * The routes that are pages: every page Astro builds is a folder with an
+ * `index.html` (`/a/`). Assets (`/llms.txt`, Pagefind's fragments) and the
+ * `404` page are not.
+ * @param {Iterable<string>} routes
+ */
+export function pagesOf(routes) {
+  return [...routes].filter((r) => r.endsWith("/"));
+}
+
+/**
+ * Parse the published-routes list: one route per line; `#` comment lines and
+ * blank lines are ignored.
+ * @param {string} text
+ */
+export function parsePublished(text) {
+  return text
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l !== "" && !l.startsWith("#"));
+}
+
+export const PUBLISHED_HEADER = `# Every page bynk-lang.org has published (web presence track, link rule L2;
+# #4010). site/scripts/check-redirects.mjs fails CI if a route here is no
+# longer a page and _redirects does not send it to one, and if a built page is
+# missing here. The list only grows: after adding a page, run
+#
+#   npm run build && node scripts/check-redirects.mjs --update
+#
+# and commit the result. Remove a line only to retire a URL on purpose, with
+# nothing to send its readers to.
+`;
+
+/**
+ * Write the list: the routes, sorted, under the header.
+ * @param {Iterable<string>} routes
+ */
+export function formatPublished(routes) {
+  return `${PUBLISHED_HEADER}\n${[...new Set(routes)].sort().join("\n")}\n`;
+}
+
+/**
+ * Check the published routes against the build and the rules: each must still
+ * be a page or redirect to one, and each built page must be listed.
+ * @param {Rule[]} rules
+ * @param {Set<string>} routes
+ * @param {string[]} published
+ * @returns {{ problem: string }[]}
+ */
+export function checkPublished(rules, routes, published) {
+  /** @type {{ problem: string }[]} */
+  const problems = [];
+  const listed = new Set(published);
+  for (const route of published) {
+    if (routes.has(route)) continue;
+    const forms = route.endsWith("/") && route !== "/" ? [route, route.slice(0, -1)] : [route];
+    for (const form of forms) {
+      const hit = applyRedirects(rules, form);
+      if (hit === null) {
+        problems.push({ problem: `${form} was published, is no longer a page, and no rule redirects it` });
+      } else if (!resolves(routes, hit.target)) {
+        problems.push({
+          problem: `${form} was published, is no longer a page, and the rule on line ${hit.rule.line} (${hit.rule.from}) sends it to ${hit.target}, which is not a page`,
+        });
+      }
+    }
+  }
+  const unlisted = pagesOf(routes).filter((r) => !listed.has(r)).sort();
+  if (unlisted.length > 0) {
+    const shown = unlisted.slice(0, PER_RULE_LIMIT).join(", ");
+    const more = unlisted.length > PER_RULE_LIMIT ? ` and ${unlisted.length - PER_RULE_LIMIT} more` : "";
+    problems.push({
+      problem: `${unlisted.length} built page(s) missing from the published list (${shown}${more}); run \`node scripts/check-redirects.mjs --update\` and commit it`,
+    });
+  }
+  return problems;
+}
+
+/**
  * Check the rules against the routes a built site serves.
  * @param {Rule[]} rules
  * @param {Set<string>} routes
@@ -206,7 +293,7 @@ export function checkRedirects(rules, routes, options = {}) {
   // 1. A rule must not shadow a live page. A request for `/x` is redirected
   //    before Cloudflare's own `/x` → `/x/`, so a rule for the slashless form
   //    hides the page too.
-  const pages = [...routes].filter((r) => r.endsWith("/") || !/\.[a-z0-9]+$/i.test(r));
+  const pages = pagesOf(routes);
   /** @type {Map<Rule, number>} */
   const shadowed = new Map();
   for (const page of pages) {
@@ -316,6 +403,7 @@ function main() {
   };
   const dist = opt("--dist", path.join(HERE, "../dist"));
   const redirectsFile = opt("--redirects", path.join(HERE, "../public/_redirects"));
+  const publishedFile = opt("--published", path.join(HERE, "../src/data/published-routes.txt"));
   const diagnostics = path.join(HERE, "../src/generated/diagnostics.json");
 
   if (!fs.existsSync(dist)) {
@@ -324,17 +412,35 @@ function main() {
   }
   const { rules, malformed } = parseRedirects(fs.readFileSync(redirectsFile, "utf8"));
   const routes = distRoutes(dist);
+  const published = fs.existsSync(publishedFile) ? parsePublished(fs.readFileSync(publishedFile, "utf8")) : [];
+
+  if (args.includes("--update")) {
+    const before = new Set(published);
+    const next = [...published, ...pagesOf(routes)];
+    fs.writeFileSync(publishedFile, formatPublished(next));
+    const added = new Set(next).size - before.size;
+    console.log(`published-routes.txt: ${added} route(s) added, ${new Set(next).size} in all.`);
+    return;
+  }
+
+  /** @type {{ line?: number, rule?: string, problem: string }[]} */
   const problems = [
     ...malformed.map((m) => ({ line: m.line, rule: m.text.trim(), problem: m.reason })),
     ...checkRedirects(rules, routes, { samples: { code: sampleCodes(diagnostics) } }),
+    ...checkPublished(rules, routes, published),
   ];
 
   if (problems.length > 0) {
     console.error(`_redirects has ${problems.length} problem(s):`);
-    for (const p of problems) console.error(`  line ${p.line}: ${p.rule}\n    ${p.problem}`);
+    for (const p of problems) {
+      console.error(p.rule ? `  line ${p.line}: ${p.rule}\n    ${p.problem}` : `  ${p.problem}`);
+    }
     process.exit(1);
   }
-  console.log(`_redirects: ${rules.length} rules checked against ${routes.size} built routes; all resolve.`);
+  console.log(
+    `_redirects: ${rules.length} rules checked against ${routes.size} built routes; ` +
+      `${published.length} published routes all still reachable.`,
+  );
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

@@ -1544,7 +1544,10 @@ jobs:
         run: npm run build
       # public/_redirects (Cloudflare Pages) against the built dist/: no rule
       # shadows a live page or never applies, and every target (each page under
-      # a splat's folder, sample :code values) lands on a built page.
+      # a splat's folder, sample :code values) lands on a built page. Every
+      # route in src/data/published-routes.txt (each page the site has ever
+      # published) must still be a page or redirect to one, and every built
+      # page must be listed there (#4010).
       - name: Check _redirects against the build
         run: node scripts/check-redirects.mjs
 
