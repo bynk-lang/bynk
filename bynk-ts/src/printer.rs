@@ -1061,11 +1061,20 @@ fn render_inline_block(out: &mut String, stmts: &[TsStmt]) {
 
 /// [`TsArrowBody::Flat`]'s text: each statement printed at depth 0, split into lines, every line
 /// trimmed, the empty ones dropped, and all of it joined with single spaces.
+///
+/// Trimming rewrites a line's leading whitespace, so a statement whose printed form has a template
+/// literal spanning lines would be silently changed (the whitespace is part of the string). A
+/// debug build asserts there is none: a single-line template literal is fine.
 fn flatten_stmts(stmts: &[TsStmt]) -> String {
     stmts
         .iter()
         .map(|st| {
-            crate::print_stmt(st, 0)
+            let printed = crate::print_stmt(st, 0);
+            debug_assert!(
+                !has_multiline_template(&printed),
+                "a `Flat` arrow body holds a multi-line template literal; flattening would trim its text"
+            );
+            printed
                 .split('\n')
                 .map(str::trim)
                 .filter(|l| !l.is_empty())
@@ -1074,6 +1083,34 @@ fn flatten_stmts(stmts: &[TsStmt]) -> String {
         })
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+/// Whether printed code has a template literal (backtick to backtick) with a newline inside it.
+/// Backticks inside a `"..."` or `'...'` string are text, not delimiters, and `\`-escapes are
+/// skipped in both; inside a template literal quotes are text. Debug-assertion support only.
+fn has_multiline_template(printed: &str) -> bool {
+    #[derive(PartialEq)]
+    enum Mode {
+        Code,
+        Str(char),
+        Template,
+    }
+    let mut mode = Mode::Code;
+    let mut chars = printed.chars();
+    while let Some(c) = chars.next() {
+        match (&mode, c) {
+            (_, '\\') => {
+                chars.next();
+            }
+            (Mode::Code, '"' | '\'') => mode = Mode::Str(c),
+            (Mode::Code, '`') => mode = Mode::Template,
+            (Mode::Str(q), _) if c == *q => mode = Mode::Code,
+            (Mode::Template, '`') => mode = Mode::Code,
+            (Mode::Template, '\n') => return true,
+            _ => {}
+        }
+    }
+    false
 }
 
 /// `stmt1; stmt2; ...` — every statement in `stmts` rendered on the current
@@ -5928,6 +5965,54 @@ mod tests {
         assert_eq!(
             print_expr(&arrow_over(TsArrowBody::Flat(Vec::new()))),
             "(a) => {}"
+        );
+    }
+
+    /// 1A.39b: a single-line template literal flattens as any other text; a multi-line one is the
+    /// hazard the debug assertion names (flattening would trim the string's own whitespace).
+    #[test]
+    fn a_flat_body_allows_a_one_line_template_and_flags_a_multi_line_one() {
+        assert!(!has_multiline_template("return `a ${b} c`;"));
+        assert!(!has_multiline_template("if (c) {\n  return `x`;\n}"));
+        assert!(has_multiline_template("return `a\n  b`;"));
+        // A backtick inside a string literal is text: an odd one must not open a template.
+        assert!(!has_multiline_template(
+            "if (m) {\n  return \"press `Enter\";\n}"
+        ));
+        assert!(!has_multiline_template("if (m) {\n  return 'it`s';\n}"));
+        assert!(!has_multiline_template("return \"a\\\"`\";\nx;"));
+        let one_line = TsStmt::return_stmt(
+            Some(TsExpr::template_lit(
+                vec!["a".to_string(), "b".to_string()],
+                vec![TsExpr::Ident("x".to_string())],
+            )),
+            None,
+        );
+        assert_eq!(
+            print_expr(&arrow_over(TsArrowBody::Flat(vec![one_line]))),
+            "(a) => { return `a${x}b`; }"
+        );
+    }
+
+    /// 1A.39b (review): a message string holding an odd backtick (an ICU `select` arm's text,
+    /// which `escape_ts_literal` leaves as is), followed by the multi-line braced `if`, is a valid
+    /// `Flat` body: the backtick is string text, not a template delimiter.
+    #[test]
+    fn a_flat_body_with_a_backtick_in_a_string_literal_is_valid() {
+        let body = vec![TsStmt::if_stmt(
+            TsExpr::Ident("missing".to_string()),
+            TsStmt::block(
+                vec![TsStmt::return_stmt(
+                    Some(TsExpr::Lit(TsLit::Str("press `Enter".to_string()))),
+                    None,
+                )],
+                None,
+            ),
+            None,
+        )];
+        assert_eq!(
+            print_expr(&arrow_over(TsArrowBody::Flat(body))),
+            "(a) => { if (missing) { return \"press `Enter\"; } }"
         );
     }
 

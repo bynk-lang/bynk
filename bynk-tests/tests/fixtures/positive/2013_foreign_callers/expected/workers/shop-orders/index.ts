@@ -57,7 +57,7 @@ export default {
             const __from = request.headers.get("X-Bynk-Caller") as string;
             const __foreign = globalThis.Object.hasOwn(__FOREIGN_CALLERS, __from);
             if (!(!__foreign || __from === "Legacy" || __from === "Ledger")) return new globalThis.Response("Forbidden", { status: 403 });
-            const __who: { tag: "Caller", identity: string } | { tag: "Legacy" } | { tag: "Ledger" } = __from === "Legacy" ? { tag: "Legacy" } : __from === "Ledger" ? { tag: "Ledger" } : { tag: "Caller", identity: __from };
+            const __who: { tag: "Caller"; identity: string } | { tag: "Legacy" } | { tag: "Ledger" } = __from === "Legacy" ? { tag: "Legacy" } : __from === "Ledger" ? { tag: "Ledger" } : { tag: "Caller", identity: __from };
             const __contract = request.headers.get("X-Bynk-Contract");
             if (__contract !== "226b9939f85e69ea") {
               globalThis.console.error("ContractMismatch shop.orders call status", { service: "status", expected: "226b9939f85e69ea", actual: globalThis.String(__contract).slice(0, 16) });

@@ -99,6 +99,8 @@ mod integration {
     mod fuzz_smoke;
     #[path = "host_globals_qualified.rs"]
     mod host_globals_qualified;
+    #[path = "ident_audit.rs"]
+    mod ident_audit;
     #[path = "implementation_index.rs"]
     mod implementation_index;
     #[path = "import_closure.rs"]

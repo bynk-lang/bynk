@@ -28,7 +28,7 @@ export const api = {
   async http_GET_me(deps: { identity: UserId }): globalThis.Promise<HttpResult<string>> {
     return HttpResult.Ok(deps.identity);
   },
-  async http_POST_notify(body: string, deps: { who: { tag: "Processor" } | { tag: "User", identity: UserId } }): globalThis.Promise<HttpResult<string>> {
+  async http_POST_notify(body: string, deps: { who: { tag: "Processor" } | { tag: "User"; identity: UserId } }): globalThis.Promise<HttpResult<string>> {
     switch (deps.who.tag) {
       case "Processor": {
         return HttpResult.Ok(`signed ${String(body)}`);
