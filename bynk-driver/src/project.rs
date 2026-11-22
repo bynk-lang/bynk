@@ -3841,6 +3841,7 @@ struct WorkersEmit<'a> {
     context_singletons: &'a HashMap<String, Vec<String>>,
     contracts_lock: &'a bynk_project::contracts_lock::ContractsLock,
     d1_migrations: &'a BTreeMap<String, Vec<bynk_check::d1_migrations::MigrationFile>>,
+    compose_plan: &'a emitter::ComposePlan,
     event_subscribers: &'a BTreeMap<(String, String), Vec<(String, String)>>,
     groups: &'a BTreeMap<String, Vec<usize>>,
     harness_clock_contexts: &'a HashSet<String>,
@@ -3880,6 +3881,7 @@ impl WorkersEmit<'_> {
             container_root,
             context_bare_native,
             context_singletons,
+            compose_plan,
             contracts_lock,
             event_subscribers,
             groups,
@@ -3943,7 +3945,6 @@ impl WorkersEmit<'_> {
                 )
             })
             .collect();
-        let flattened = unit_flattened.get(ctx_name).cloned().unwrap_or_default();
         // v0.19 (C1): this Worker needs the KV namespace binding when
         // its in-process closure reaches the cloudflare adapter.
         let needs_kv = worker_bindings::needs_kv(context_bare_native, ctx_name);
@@ -3972,7 +3973,7 @@ impl WorkersEmit<'_> {
         };
         // #1187's slice 6 plumbing: computed once, reused by every
         // Workers-target emitter below that needs it.
-        let ctx_uses_emit = unit_table_uses_emit(table, unit_callees.get(ctx_name));
+        let ctx_uses_emit = planned_unit(compose_plan, ctx_name).publishes;
         // #1944: every binding this Worker declares, once — its
         // `Env` interface and its `wrangler.toml` are both built from
         // it, and the duplicate check read the same list.
@@ -4003,10 +4004,7 @@ impl WorkersEmit<'_> {
         worker_bindings::locate_container_builds(&mut bindings, container_root);
         // #2719: the context's handlers that hand work to the execution
         // context, from the checker's needs-context set.
-        let ctx_uses_exec = table
-            .services
-            .values()
-            .any(|s| s.handlers.iter().any(|h| table.exec_plan.handler_needs(h)));
+        let ctx_uses_exec = planned_unit(compose_plan, ctx_name).exec.any_handler;
         // #2969: the file of each used commons that declares each of its
         // functions and constants, so `compose.ts` imports a commons
         // constant from its declaring module, as `handlers.ts` does,
@@ -4023,22 +4021,18 @@ impl WorkersEmit<'_> {
             .collect();
         let (compose_ts, needs_locale_request) = emitter::emit_worker_compose(
             ctx_name,
+            compose_plan,
             self.layout,
             table,
-            &consumes_targets,
-            &aliases,
             unit_tables,
             &binding_modules,
-            &flattened,
             unit_consumes,
             unit_consumes_aliases,
             unit_flattened,
             locale_bundle_info,
             import_ext,
-            ctx_uses_emit,
             &bindings,
             harness_clock_contexts.contains(ctx_name),
-            ctx_uses_exec,
             unit_uses
                 .get(ctx_name)
                 .map(Vec::as_slice)
@@ -4691,6 +4685,69 @@ fn own_handles_events(table: &UnitTable) -> bool {
     })
 }
 
+/// The plan's unit for a context the driver is emitting. Every grouped context
+/// has a checked `UnitTable`, so the plan covers it.
+fn planned_unit<'a>(plan: &'a emitter::ComposePlan, context: &str) -> &'a emitter::ComposeUnit {
+    plan.units
+        .get(context)
+        .expect("the compose plan has a unit for every context with a checked table")
+}
+
+/// Makes that assumption explicit: the plan's contexts are the grouped ones.
+fn debug_assert_plan_covers_groups(
+    plan: &emitter::ComposePlan,
+    groups: &BTreeMap<String, Vec<usize>>,
+    kinds: &BTreeMap<String, UnitKind>,
+) {
+    debug_assert!(
+        plan.contexts().map(|(n, _)| n).eq(groups
+            .keys()
+            .filter(|n| kinds.get(*n) == Some(&UnitKind::Context))),
+        "the compose plan's contexts are the grouped contexts"
+    );
+}
+
+/// v0.6 §6.3: emit a composition root when the project has at least one
+/// context that consumes another context's service surface. The compose file
+/// imports each context, instantiates its providers, assembles its deps
+/// (capabilities + cross-context surfaces), and exports the top-level service
+/// surface.
+#[allow(clippy::too_many_arguments)]
+fn emit_bundle_compose_root(
+    compiled: &mut Vec<StagedFile>,
+    plan: &emitter::ComposePlan,
+    unit_consumes: &HashMap<String, Vec<String>>,
+    unit_consumes_aliases: &HashMap<String, HashMap<String, String>>,
+    unit_tables: &HashMap<String, UnitTable>,
+    unit_event_subscriber_shapes: &HashMap<
+        String,
+        HashMap<String, bynk_model::EventSubscriberShape>,
+    >,
+    adapter_bindings: &HashMap<String, AdapterBinding>,
+    unit_flattened: &HashMap<String, HashMap<String, String>>,
+    thread_env: bool,
+    event_subscribers: &BTreeMap<(String, String), Vec<(String, String)>>,
+) {
+    if let Some(compose_program) = emitter::emit_composition_root(
+        plan,
+        unit_consumes,
+        unit_consumes_aliases,
+        unit_tables,
+        unit_event_subscriber_shapes,
+        adapter_bindings,
+        unit_flattened,
+        thread_env,
+        event_subscribers,
+    ) {
+        compiled.push(StagedFile {
+            output_path: PathBuf::from("compose.ts"),
+            document: Document::Ts(compose_program),
+            source_map: None,
+            debug_metadata: None,
+        });
+    }
+}
+
 /// Build-success tail (region 3): emit the composition/worker/runtime files
 /// and assemble the final `ProjectOutput`. Reached only on build mode with a
 /// clean error sink. Moved verbatim from the old pipeline; only the locals it
@@ -4840,41 +4897,36 @@ fn build_output(
     let event_subscribers =
         bynk_check::symbols::discover_event_subscribers(&unit_tables, &unit_consumes);
 
+    // 1B.1b (#3928): what each unit composes, decided once for both targets.
+    let compose_plan = emitter::ComposePlan::build(
+        &kinds,
+        &unit_consumes,
+        &unit_consumes_aliases,
+        &unit_tables,
+        &unit_callees,
+        &unit_flattened,
+    );
+    debug_assert_plan_covers_groups(&compose_plan, &groups, &kinds);
     // #2137: the contexts a `system` harness stands up (test build only).
     let harness_clock_contexts =
         harness_clock_contexts(&parsed, &unit_tables, &unit_consumes, &kinds);
 
     match target {
-        BuildTarget::Bundle => {
-            // v0.6 §6.3: emit a composition root when the project has at
-            // least one context that consumes another context's service
-            // surface. The compose file imports each context, instantiates
-            // its providers, assembles its deps (capabilities + cross-
-            // context surfaces), and exports the top-level service surface.
-            if let Some(compose_program) = emitter::emit_composition_root(
-                &groups,
-                &kinds,
-                &unit_consumes,
-                &unit_consumes_aliases,
-                &unit_tables,
-                &unit_callees,
-                &unit_event_subscriber_shapes,
-                &adapter_bindings,
-                &unit_flattened,
-                // D1: thread `env` through composeApp only when a native
-                // resource is consumed, so native-free programs are
-                // byte-identical to v0.18 output.
-                !context_native.is_empty(),
-                &event_subscribers,
-            ) {
-                compiled.push(StagedFile {
-                    output_path: PathBuf::from("compose.ts"),
-                    document: Document::Ts(compose_program),
-                    source_map: None,
-                    debug_metadata: None,
-                });
-            }
-        }
+        BuildTarget::Bundle => emit_bundle_compose_root(
+            &mut compiled,
+            &compose_plan,
+            &unit_consumes,
+            &unit_consumes_aliases,
+            &unit_tables,
+            &unit_event_subscriber_shapes,
+            &adapter_bindings,
+            &unit_flattened,
+            // D1: thread `env` through composeApp only when a native
+            // resource is consumed, so native-free programs are
+            // byte-identical to v0.18 output.
+            !context_native.is_empty(),
+            &event_subscribers,
+        ),
         BuildTarget::Workers => {
             // v0.8 §2.3: per-Worker entry point, compose.ts, and wrangler
             // configuration. One Worker per context.
@@ -4884,6 +4936,7 @@ fn build_output(
                 asset_files,
                 asset_served: &asset_served,
                 compatibility_flags,
+                compose_plan: &compose_plan,
                 container_root,
                 context_bare_native: &context_bare_native,
                 context_singletons: &context_singletons,
@@ -5166,7 +5219,7 @@ fn referenced_units_of_context(
     let consumed = unit_consumes.get(ctx).cloned().unwrap_or_default();
     let aliases = unit_consumes_aliases.get(ctx).cloned().unwrap_or_default();
     let flattened = unit_flattened.get(ctx).cloned().unwrap_or_default();
-    for (key, cctx) in handler_cross_caps(table, &consumed, &aliases, &flattened) {
+    for (key, cctx) in handler_cross_caps(table, ctx, &consumed, &aliases, &flattened) {
         let _ = instantiate_provider_ts_expr(
             &cctx,
             &key,
