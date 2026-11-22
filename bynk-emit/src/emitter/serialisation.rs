@@ -10,6 +10,10 @@
 //! Helpers live in the *owning* module — commons modules emit helpers for
 //! commons types, context modules emit helpers for the types they declare.
 
+// 1A.37a: this file has no wildcard enum arm; the attribute keeps it that way until the
+// crate opts in to the workspace lints (1A.37b).
+#![deny(clippy::wildcard_enum_match_arm)]
+
 use std::sync::Arc;
 
 use bynk_syntax::ast::{BaseType, PredKind, TypeBody, TypeDecl, TypeRef};
@@ -1664,7 +1668,11 @@ fn emit_record_codec(
             match &field.shape {
                 WireRef::Base { base, .. } => Some(*base),
                 WireRef::Decimal => Some(BaseType::Decimal),
-                _ => None,
+                WireRef::Bytes
+                | WireRef::Named { .. }
+                | WireRef::Inst { .. }
+                | WireRef::Unit
+                | WireRef::Unchecked { .. } => None,
             },
             ru,
         ));
@@ -2655,7 +2663,29 @@ fn is_plain_key_ref(t: &TypeRef, types: &std::collections::HashMap<String, Arc<T
             Some(TypeBody::Refined { base, .. } | TypeBody::Opaque { base, .. })
                 if !matches!(base, BaseType::Bytes | BaseType::Decimal)
         ),
-        _ => false,
+        TypeRef::Result(..)
+        | TypeRef::Option(..)
+        | TypeRef::Effect(..)
+        | TypeRef::HttpResult(..)
+        | TypeRef::QueueResult(_)
+        | TypeRef::Asset(_)
+        | TypeRef::RequestHeaders(_)
+        | TypeRef::RequestQuery(_)
+        | TypeRef::RequestCookies(_)
+        | TypeRef::TokenClaims(_)
+        | TypeRef::BoundaryRejection(_)
+        | TypeRef::List(..)
+        | TypeRef::Map(..)
+        | TypeRef::Set(..)
+        | TypeRef::Query(..)
+        | TypeRef::Stream(..)
+        | TypeRef::Connection(..)
+        | TypeRef::History(..)
+        | TypeRef::ValidationError(_)
+        | TypeRef::DecodeError(_)
+        | TypeRef::Unit(_)
+        | TypeRef::Fn(..)
+        | TypeRef::App { .. } => false,
     }
 }
 
@@ -2699,7 +2729,24 @@ pub fn deserialise_ref_via(t: &TypeRef, ns: &str, ru: &RuntimeUse) -> TsExpr {
         | TypeRef::Set(..)
         | TypeRef::Map(..)
         | TypeRef::App { .. }) => ident(format!("{ns}__deserialise_{}", inner_ts_name(t))),
-        other => TsExpr::Arrow {
+        other @ TypeRef::Base(..)
+        | other @ TypeRef::Effect(..)
+        | other @ TypeRef::HttpResult(..)
+        | other @ TypeRef::QueueResult(_)
+        | other @ TypeRef::Asset(_)
+        | other @ TypeRef::RequestHeaders(_)
+        | other @ TypeRef::RequestQuery(_)
+        | other @ TypeRef::RequestCookies(_)
+        | other @ TypeRef::TokenClaims(_)
+        | other @ TypeRef::BoundaryRejection(_)
+        | other @ TypeRef::Query(..)
+        | other @ TypeRef::Stream(..)
+        | other @ TypeRef::Connection(..)
+        | other @ TypeRef::History(..)
+        | other @ TypeRef::ValidationError(_)
+        | other @ TypeRef::DecodeError(_)
+        | other @ TypeRef::Unit(_)
+        | other @ TypeRef::Fn(..) => TsExpr::Arrow {
             params: vec![TsParam::new(
                 "__j".to_string(),
                 Some(TsType::named("__JsonValue")),
@@ -2733,7 +2780,24 @@ pub(crate) fn serialise_ref_via(t: &TypeRef, ns: &str, ru: &RuntimeUse) -> TsExp
         | TypeRef::Set(..)
         | TypeRef::Map(..)
         | TypeRef::App { .. }) => ident(format!("{ns}__serialise_{}", inner_ts_name(t))),
-        other => TsExpr::Arrow {
+        other @ TypeRef::Base(..)
+        | other @ TypeRef::Effect(..)
+        | other @ TypeRef::HttpResult(..)
+        | other @ TypeRef::QueueResult(_)
+        | other @ TypeRef::Asset(_)
+        | other @ TypeRef::RequestHeaders(_)
+        | other @ TypeRef::RequestQuery(_)
+        | other @ TypeRef::RequestCookies(_)
+        | other @ TypeRef::TokenClaims(_)
+        | other @ TypeRef::BoundaryRejection(_)
+        | other @ TypeRef::Query(..)
+        | other @ TypeRef::Stream(..)
+        | other @ TypeRef::Connection(..)
+        | other @ TypeRef::History(..)
+        | other @ TypeRef::ValidationError(_)
+        | other @ TypeRef::DecodeError(_)
+        | other @ TypeRef::Unit(_)
+        | other @ TypeRef::Fn(..) => TsExpr::Arrow {
             params: vec![TsParam::new(
                 "__v".to_string(),
                 Some(TsType::named(crate::emitter::ts_types::ts_type_ref(other))),
@@ -2767,7 +2831,24 @@ pub(crate) fn witness_codec_expr(t: &TypeRef, ru: &RuntimeUse) -> TsExpr {
         | TypeRef::Set(..)
         | TypeRef::Map(..)
         | TypeRef::App { .. } => deserialise_ref_via(t, "", ru),
-        other => {
+        other @ TypeRef::Base(..)
+        | other @ TypeRef::Effect(..)
+        | other @ TypeRef::HttpResult(..)
+        | other @ TypeRef::QueueResult(_)
+        | other @ TypeRef::Asset(_)
+        | other @ TypeRef::RequestHeaders(_)
+        | other @ TypeRef::RequestQuery(_)
+        | other @ TypeRef::RequestCookies(_)
+        | other @ TypeRef::TokenClaims(_)
+        | other @ TypeRef::BoundaryRejection(_)
+        | other @ TypeRef::Query(..)
+        | other @ TypeRef::Stream(..)
+        | other @ TypeRef::Connection(..)
+        | other @ TypeRef::History(..)
+        | other @ TypeRef::ValidationError(_)
+        | other @ TypeRef::DecodeError(_)
+        | other @ TypeRef::Unit(_)
+        | other @ TypeRef::Fn(..) => {
             let mut body = emit_field_deserialise("v", other, "__j", "__p", None, ru);
             body.push(return_(call(
                 ident("Ok"),
@@ -2857,9 +2938,42 @@ pub(crate) fn agent_wire_passes_through(t: &TypeRef) -> bool {
 /// An `Effect[T]` in a handler signature wraps the *handler*, not the wire
 /// payload — the caller awaits the Promise, so the codec is `T`'s.
 fn strip_effect(t: &TypeRef) -> &TypeRef {
+    if let TypeRef::Effect(inner, _) = t {
+        strip_effect(inner)
+    } else {
+        t
+    }
+}
+
+/// A field's type with one `List` or `Option` wrapper peeled, and which wrapper it was:
+/// `(inner, is_list, is_option)`. Any other type is its own `inner` with neither flag.
+pub(crate) fn peel_list_option(t: &TypeRef) -> (&TypeRef, bool, bool) {
     match t {
-        TypeRef::Effect(inner, _) => strip_effect(inner),
-        other => other,
+        TypeRef::List(inner, _) => (inner.as_ref(), true, false),
+        TypeRef::Option(inner, _) => (inner.as_ref(), false, true),
+        TypeRef::Base(..)
+        | TypeRef::Named(_)
+        | TypeRef::Result(..)
+        | TypeRef::Effect(..)
+        | TypeRef::HttpResult(..)
+        | TypeRef::QueueResult(_)
+        | TypeRef::Asset(_)
+        | TypeRef::RequestHeaders(_)
+        | TypeRef::RequestQuery(_)
+        | TypeRef::RequestCookies(_)
+        | TypeRef::TokenClaims(_)
+        | TypeRef::BoundaryRejection(_)
+        | TypeRef::Map(..)
+        | TypeRef::Set(..)
+        | TypeRef::Query(..)
+        | TypeRef::Stream(..)
+        | TypeRef::Connection(..)
+        | TypeRef::History(..)
+        | TypeRef::ValidationError(_)
+        | TypeRef::DecodeError(_)
+        | TypeRef::Unit(_)
+        | TypeRef::Fn(..)
+        | TypeRef::App { .. } => (t, false, false),
     }
 }
 
@@ -3096,7 +3210,7 @@ pub(crate) fn deserialise_expr_via(
                     member(ident("globalThis.Number"), "isSafeInteger"),
                     vec![ident("__v")],
                 )),
-                _ => None,
+                BaseType::String | BaseType::Bool | BaseType::Bytes | BaseType::Decimal => None,
             };
             // v0.176 (#642): report what was *required*, not just the `typeof`
             // that was tested. For the arms carrying a `predicate` the two
@@ -3106,7 +3220,7 @@ pub(crate) fn deserialise_expr_via(
             let expected = match b {
                 BaseType::Int | BaseType::Duration | BaseType::Instant => "safe integer",
                 BaseType::Float => "finite number",
-                _ => typeof_str,
+                BaseType::String | BaseType::Bool | BaseType::Bytes | BaseType::Decimal => typeof_str,
             };
             let typeof_v = || TsExpr::Unary {
                 op: TsUnaryOp::Typeof,
@@ -3178,7 +3292,7 @@ pub(crate) fn deserialise_expr_via(
         // Everything else is rejected by the checker's codec-domain rule (the
         // `Json` path) or by the boundary rules (the workers path). Shared by
         // three callers, so the message names the type rather than one caller.
-        other => unreachable!("non-codable type reached a codec lowering: {other:?}"),
+        other @ TypeRef::RequestHeaders(_) | other @ TypeRef::RequestQuery(_) | other @ TypeRef::RequestCookies(_) | other @ TypeRef::TokenClaims(_) | other @ TypeRef::BoundaryRejection(_) | other @ TypeRef::Query(..) | other @ TypeRef::Stream(..) | other @ TypeRef::Connection(..) | other @ TypeRef::History(..) | other @ TypeRef::Fn(..) => unreachable!("non-codable type reached a codec lowering: {other:?}"),
     }
 }
 
@@ -3631,7 +3745,31 @@ pub(crate) fn codec_factory_name(t: &TypeRef) -> Option<&str> {
         {
             Some(&name.name)
         }
-        _ => None,
+        TypeRef::Base(..)
+        | TypeRef::Named(_)
+        | TypeRef::Result(..)
+        | TypeRef::Option(..)
+        | TypeRef::Effect(..)
+        | TypeRef::HttpResult(..)
+        | TypeRef::QueueResult(_)
+        | TypeRef::Asset(_)
+        | TypeRef::RequestHeaders(_)
+        | TypeRef::RequestQuery(_)
+        | TypeRef::RequestCookies(_)
+        | TypeRef::TokenClaims(_)
+        | TypeRef::BoundaryRejection(_)
+        | TypeRef::List(..)
+        | TypeRef::Map(..)
+        | TypeRef::Set(..)
+        | TypeRef::Query(..)
+        | TypeRef::Stream(..)
+        | TypeRef::Connection(..)
+        | TypeRef::History(..)
+        | TypeRef::ValidationError(_)
+        | TypeRef::DecodeError(_)
+        | TypeRef::Unit(_)
+        | TypeRef::Fn(..)
+        | TypeRef::App { .. } => None,
     }
 }
 
@@ -3645,7 +3783,24 @@ fn mentions_factory_param(t: &TypeRef) -> bool {
         TypeRef::Result(a, b, _) | TypeRef::Map(a, b, _) => {
             mentions_factory_param(a) || mentions_factory_param(b)
         }
-        _ => false,
+        TypeRef::Base(..)
+        | TypeRef::Effect(..)
+        | TypeRef::HttpResult(..)
+        | TypeRef::QueueResult(_)
+        | TypeRef::Asset(_)
+        | TypeRef::RequestHeaders(_)
+        | TypeRef::RequestQuery(_)
+        | TypeRef::RequestCookies(_)
+        | TypeRef::TokenClaims(_)
+        | TypeRef::BoundaryRejection(_)
+        | TypeRef::Query(..)
+        | TypeRef::Stream(..)
+        | TypeRef::Connection(..)
+        | TypeRef::History(..)
+        | TypeRef::ValidationError(_)
+        | TypeRef::DecodeError(_)
+        | TypeRef::Unit(_)
+        | TypeRef::Fn(..) => false,
     }
 }
 
@@ -3665,7 +3820,25 @@ fn factory_ground_parts(t: &TypeRef, out: &mut Vec<TypeRef>) {
             factory_ground_parts(a, out);
             factory_ground_parts(b, out);
         }
-        _ => {}
+        TypeRef::Base(..)
+        | TypeRef::Named(_)
+        | TypeRef::Effect(..)
+        | TypeRef::HttpResult(..)
+        | TypeRef::QueueResult(_)
+        | TypeRef::Asset(_)
+        | TypeRef::RequestHeaders(_)
+        | TypeRef::RequestQuery(_)
+        | TypeRef::RequestCookies(_)
+        | TypeRef::TokenClaims(_)
+        | TypeRef::BoundaryRejection(_)
+        | TypeRef::Query(..)
+        | TypeRef::Stream(..)
+        | TypeRef::Connection(..)
+        | TypeRef::History(..)
+        | TypeRef::ValidationError(_)
+        | TypeRef::DecodeError(_)
+        | TypeRef::Unit(_)
+        | TypeRef::Fn(..) => {}
     }
 }
 
@@ -3724,7 +3897,32 @@ pub(crate) fn emit_codec_factory(
         .iter()
         .map(|a| match a {
             TypeRef::Named(id) => id.name.clone(),
-            _ => unreachable!("bynk internal error: a codec factory root names its parameters"),
+            TypeRef::Base(..)
+            | TypeRef::Result(..)
+            | TypeRef::Option(..)
+            | TypeRef::Effect(..)
+            | TypeRef::HttpResult(..)
+            | TypeRef::QueueResult(_)
+            | TypeRef::Asset(_)
+            | TypeRef::RequestHeaders(_)
+            | TypeRef::RequestQuery(_)
+            | TypeRef::RequestCookies(_)
+            | TypeRef::TokenClaims(_)
+            | TypeRef::BoundaryRejection(_)
+            | TypeRef::List(..)
+            | TypeRef::Map(..)
+            | TypeRef::Set(..)
+            | TypeRef::Query(..)
+            | TypeRef::Stream(..)
+            | TypeRef::Connection(..)
+            | TypeRef::History(..)
+            | TypeRef::ValidationError(_)
+            | TypeRef::DecodeError(_)
+            | TypeRef::Unit(_)
+            | TypeRef::Fn(..)
+            | TypeRef::App { .. } => {
+                unreachable!("bynk internal error: a codec factory root names its parameters")
+            }
         })
         .collect();
     let (_, insts) = bynk_check::wire::collect_codec_closure(std::slice::from_ref(root), types);
@@ -3765,9 +3963,10 @@ pub(crate) fn emit_codec_factory(
         ));
     }
     for d in emit_generic_helpers(&nested, types, ru) {
-        let d = match d {
-            TsDecl::Export(inner) => *inner,
-            other => other,
+        let d = if let TsDecl::Export(inner) = d {
+            *inner
+        } else {
+            d
         };
         body.push(TsStmt::decl(d, None));
     }
@@ -4497,6 +4696,42 @@ pub fn emit_generic_helpers_qualified(
 }
 
 #[cfg(test)]
+mod peel_tests {
+    use super::*;
+    use bynk_syntax::span::Span;
+
+    fn int() -> TypeRef {
+        TypeRef::Base(BaseType::Int, Span::default())
+    }
+
+    #[test]
+    fn a_list_or_option_peels_one_layer_and_says_which() {
+        let list = TypeRef::List(Box::new(int()), Span::default());
+        let (inner, is_list, is_option) = peel_list_option(&list);
+        assert!(matches!(inner, TypeRef::Base(BaseType::Int, _)) && is_list && !is_option);
+        let option = TypeRef::Option(Box::new(int()), Span::default());
+        let (inner, is_list, is_option) = peel_list_option(&option);
+        assert!(matches!(inner, TypeRef::Base(BaseType::Int, _)) && !is_list && is_option);
+    }
+
+    #[test]
+    fn any_other_type_is_its_own_inner_and_one_layer_only_is_peeled() {
+        let plain = int();
+        let (inner, is_list, is_option) = peel_list_option(&plain);
+        assert!(matches!(inner, TypeRef::Base(BaseType::Int, _)) && !is_list && !is_option);
+        let nested = TypeRef::List(
+            Box::new(TypeRef::Option(Box::new(int()), Span::default())),
+            Span::default(),
+        );
+        let (inner, is_list, is_option) = peel_list_option(&nested);
+        assert!(matches!(inner, TypeRef::Option(..)) && is_list && !is_option);
+        let set = TypeRef::Set(Box::new(int()), Span::default());
+        let (inner, is_list, is_option) = peel_list_option(&set);
+        assert!(matches!(inner, TypeRef::Set(..)) && !is_list && !is_option);
+    }
+}
+
+#[cfg(test)]
 mod default_lowering_tests {
     use super::*;
     use bynk_syntax::ast::{CommonsItem, Expr, RecordField};
@@ -4515,7 +4750,9 @@ mod default_lowering_tests {
         let items: Vec<CommonsItem> = match unit {
             bynk_syntax::ast::SourceUnit::Context(ctx) => ctx.items,
             bynk_syntax::ast::SourceUnit::Commons(commons) => commons.items,
-            _ => panic!("expected a context or commons unit"),
+            bynk_syntax::ast::SourceUnit::Suite(_) | bynk_syntax::ast::SourceUnit::Adapter(_) => {
+                panic!("expected a context or commons unit")
+            }
         };
         let mut types: HashMap<String, Arc<TypeDecl>> = HashMap::new();
         let mut fields = None;
@@ -4535,7 +4772,16 @@ mod default_lowering_tests {
                     }
                     types.insert(e.name.name.clone(), Arc::new(e.as_type_decl()));
                 }
-                _ => {}
+                CommonsItem::Fn(_)
+                | CommonsItem::Capability(_)
+                | CommonsItem::Provider(_)
+                | CommonsItem::Service(_)
+                | CommonsItem::Agent(_)
+                | CommonsItem::Actor(_)
+                | CommonsItem::Messages(_)
+                | CommonsItem::Asset(_)
+                | CommonsItem::Embed(_)
+                | CommonsItem::Const(_) => {}
             }
         }
         (

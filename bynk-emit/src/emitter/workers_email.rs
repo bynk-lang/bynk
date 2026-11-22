@@ -11,6 +11,10 @@
 //! Kept out of `workers_entry.rs`, whose entry builder is near its length
 //! ceiling.
 
+// 1A.37a: this file has no wildcard enum arm; the attribute keeps it that way until the
+// crate opts in to the workspace lints (1A.37b).
+#![deny(clippy::wildcard_enum_match_arm)]
+
 use bynk_syntax::ast::ServiceProtocol;
 use bynk_ts::{TsArrowBody, TsBindingName, TsExpr, TsLit, TsParam, TsStmt, TsType};
 
@@ -30,12 +34,14 @@ pub(super) fn collect_routes(table: &UnitTable) -> Vec<EmailRoute> {
     let mut routes: Vec<EmailRoute> = table
         .services
         .iter()
-        .filter_map(|(name, s)| match &s.protocol {
-            ServiceProtocol::Email { address } => Some(EmailRoute {
+        .filter_map(|(name, s)| {
+            let ServiceProtocol::Email { address } = &s.protocol else {
+                return None;
+            };
+            Some(EmailRoute {
                 service: name.clone(),
                 address: address.clone(),
-            }),
-            _ => None,
+            })
         })
         .collect();
     routes.sort_by(|a, b| {

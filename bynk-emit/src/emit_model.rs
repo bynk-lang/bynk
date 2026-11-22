@@ -8,6 +8,10 @@
 //! this crate for `bynk-driver` without the emitter depending on it. `project`
 //! re-exports everything below at its old path until then.
 
+// 1A.37a: this file has no wildcard enum arm; the attribute keeps it that way until the
+// crate opts in to the workspace lints (1A.37b).
+#![deny(clippy::wildcard_enum_match_arm)]
+
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
@@ -617,16 +621,17 @@ pub fn instantiate_provider_ts_expr(
         // to would quietly read the default `KV`, so two instances would share
         // a namespace. The one other shape is a test module's placeholder for
         // a provider it cannot build, which has no binding to carry.
-        match &mut expr {
-            bynk_ts::TsExpr::New { args, .. } => args.push(bynk_ts::TsExpr::Lit(
-                bynk_ts::TsLit::Str(inst.binding.clone()),
-            )),
-            bynk_ts::TsExpr::As { .. } if matches!(namespaces, ProviderNamespaces::Test { .. }) => {
-            }
-            _ => panic!(
+        if let bynk_ts::TsExpr::New { args, .. } = &mut expr {
+            args.push(bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(
+                inst.binding.clone(),
+            )));
+        } else if !(matches!(expr, bynk_ts::TsExpr::As { .. })
+            && matches!(namespaces, ProviderNamespaces::Test { .. }))
+        {
+            panic!(
                 "derived capability `{cap}`: base `{}.{}` is not built by a construction, so binding `{}` has nowhere to go",
                 inst.base_unit, inst.base_cap, inst.binding
-            ),
+            );
         }
         return expr;
     }

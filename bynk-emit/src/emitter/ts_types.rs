@@ -1,5 +1,9 @@
 //! TypeScript type rendering: `ts_type_ref*`, `ts_ty`, and the `TsType` builders.
 
+// 1A.37a: this file has no wildcard enum arm; the attribute keeps it that way until the
+// crate opts in to the workspace lints (1A.37b).
+#![deny(clippy::wildcard_enum_match_arm)]
+
 use super::*;
 
 /// Unchecked construction of a branded value in emitted TypeScript.
@@ -752,10 +756,13 @@ pub(super) fn ts_ty_to_ts_type(t: TyId, tys: TyRender<'_>) -> TsType {
             vec![ts_ty_to_ts_type(*t, tys), ts_ty_to_ts_type(*e, tys)],
         ),
         Ty::Option(t) => TsType::named_with_args("Option", vec![ts_ty_to_ts_type(*t, tys)]),
-        Ty::Effect(t) => match &*tys.get(*t) {
-            Ty::Unit => TsType::named_with_args("globalThis.Promise", vec![TsType::named("void")]),
-            _ => TsType::named_with_args("globalThis.Promise", vec![ts_ty_to_ts_type(*t, tys)]),
-        },
+        Ty::Effect(t) => {
+            if matches!(&*tys.get(*t), Ty::Unit) {
+                TsType::named_with_args("globalThis.Promise", vec![TsType::named("void")])
+            } else {
+                TsType::named_with_args("globalThis.Promise", vec![ts_ty_to_ts_type(*t, tys)])
+            }
+        }
         Ty::HttpResult(t) => TsType::named_with_args("HttpResult", vec![ts_ty_to_ts_type(*t, tys)]),
         Ty::List(t) => TsType::readonly_array(ts_ty_to_ts_type(*t, tys)),
         Ty::Set(t) => TsType::named_with_args("ReadonlySet", vec![ts_ty_to_ts_type(*t, tys)]),
@@ -823,12 +830,15 @@ pub(super) fn ts_ty_to_ts_type(t: TyId, tys: TyRender<'_>) -> TsType {
         Ty::ActorSum(members) => TsType::union(
             members
                 .iter()
-                .map(|(name, id)| match &*tys.get(*id) {
-                    Ty::Unit => TsType::named(format!("{{ tag: \"{name}\" }}")),
-                    _ => TsType::named(format!(
-                        "{{ tag: \"{name}\", identity: {} }}",
-                        bynk_ts::print_type(&ts_ty_to_ts_type(*id, tys))
-                    )),
+                .map(|(name, id)| {
+                    if matches!(&*tys.get(*id), Ty::Unit) {
+                        TsType::named(format!("{{ tag: \"{name}\" }}"))
+                    } else {
+                        TsType::named(format!(
+                            "{{ tag: \"{name}\", identity: {} }}",
+                            bynk_ts::print_type(&ts_ty_to_ts_type(*id, tys))
+                        ))
+                    }
                 })
                 .collect(),
         ),

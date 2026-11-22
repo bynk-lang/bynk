@@ -17,6 +17,10 @@
 //!   factory (`serialisation::emit_codec_factory`) applied to the witnesses of
 //!   its arguments (#2792).
 
+// 1A.37a: this file has no wildcard enum arm; the attribute keeps it that way until the
+// crate opts in to the workspace lints (1A.37b).
+#![deny(clippy::wildcard_enum_match_arm)]
+
 use std::collections::HashMap;
 
 use bynk_check::checker::{Ty, TyId, TypedCommons};
@@ -39,7 +43,29 @@ pub(crate) fn has_var(ty: TyId, commons: &TypedCommons) -> bool {
         Ty::Option(a) | Ty::List(a) | Ty::Set(a) => has_var(*a, commons),
         Ty::Result(a, b) | Ty::Map(a, b) => has_var(*a, commons) || has_var(*b, commons),
         Ty::Named { args, .. } => args.iter().any(|a| has_var(*a, commons)),
-        _ => false,
+        Ty::Error
+        | Ty::Never
+        | Ty::Base(_)
+        | Ty::Effect(_)
+        | Ty::HttpResult(_)
+        | Ty::QueueResult
+        | Ty::HttpOutcome(_)
+        | Ty::BoundaryRejection
+        | Ty::Asset
+        | Ty::RequestHeaders
+        | Ty::RequestQuery
+        | Ty::RequestCookies
+        | Ty::TokenClaims
+        | Ty::Query(_)
+        | Ty::Stream(_)
+        | Ty::Connection(_)
+        | Ty::TestConnection(_)
+        | Ty::ValidationError
+        | Ty::DecodeError
+        | Ty::Unit
+        | Ty::Actor(_)
+        | Ty::ActorSum(_)
+        | Ty::Fn { .. } => false,
     }
 }
 
@@ -61,7 +87,30 @@ pub(crate) fn ground_parts(ty: TyId, commons: &TypedCommons, out: &mut Vec<TyId>
         // #2792: a user generic type over a type variable: its arguments' ground
         // parts, beside the factory `generic_factories` names.
         Ty::Named { args, .. } => args.iter().for_each(|a| ground_parts(*a, commons, out)),
-        _ => {}
+        Ty::Error
+        | Ty::Never
+        | Ty::Base(_)
+        | Ty::Effect(_)
+        | Ty::HttpResult(_)
+        | Ty::QueueResult
+        | Ty::HttpOutcome(_)
+        | Ty::BoundaryRejection
+        | Ty::Asset
+        | Ty::RequestHeaders
+        | Ty::RequestQuery
+        | Ty::RequestCookies
+        | Ty::TokenClaims
+        | Ty::Query(_)
+        | Ty::Stream(_)
+        | Ty::Connection(_)
+        | Ty::TestConnection(_)
+        | Ty::ValidationError
+        | Ty::DecodeError
+        | Ty::Unit
+        | Ty::Actor(_)
+        | Ty::ActorSum(_)
+        | Ty::Fn { .. }
+        | Ty::Var(_) => {}
     }
 }
 
@@ -83,7 +132,30 @@ pub(crate) fn generic_factories(ty: TyId, commons: &TypedCommons, out: &mut Vec<
             args.iter()
                 .for_each(|a| generic_factories(*a, commons, out));
         }
-        _ => {}
+        Ty::Error
+        | Ty::Never
+        | Ty::Base(_)
+        | Ty::Effect(_)
+        | Ty::HttpResult(_)
+        | Ty::QueueResult
+        | Ty::HttpOutcome(_)
+        | Ty::BoundaryRejection
+        | Ty::Asset
+        | Ty::RequestHeaders
+        | Ty::RequestQuery
+        | Ty::RequestCookies
+        | Ty::TokenClaims
+        | Ty::Query(_)
+        | Ty::Stream(_)
+        | Ty::Connection(_)
+        | Ty::TestConnection(_)
+        | Ty::ValidationError
+        | Ty::DecodeError
+        | Ty::Unit
+        | Ty::Actor(_)
+        | Ty::ActorSum(_)
+        | Ty::Fn { .. }
+        | Ty::Var(_) => {}
     }
 }
 
@@ -143,7 +215,29 @@ impl<'a> CodecGen<'a> {
                 &serialisation::codec_factory_ident(name),
                 args.iter().map(|a| self.for_ty_node(*a)).collect(),
             ),
-            other => {
+            other @ Ty::Error
+            | other @ Ty::Never
+            | other @ Ty::Base(_)
+            | other @ Ty::Effect(_)
+            | other @ Ty::HttpResult(_)
+            | other @ Ty::QueueResult
+            | other @ Ty::HttpOutcome(_)
+            | other @ Ty::BoundaryRejection
+            | other @ Ty::Asset
+            | other @ Ty::RequestHeaders
+            | other @ Ty::RequestQuery
+            | other @ Ty::RequestCookies
+            | other @ Ty::TokenClaims
+            | other @ Ty::Query(_)
+            | other @ Ty::Stream(_)
+            | other @ Ty::Connection(_)
+            | other @ Ty::TestConnection(_)
+            | other @ Ty::ValidationError
+            | other @ Ty::DecodeError
+            | other @ Ty::Unit
+            | other @ Ty::Actor(_)
+            | other @ Ty::ActorSum(_)
+            | other @ Ty::Fn { .. } => {
                 unreachable!("bynk internal error: no codec over a type variable in {other:?}")
             }
         }

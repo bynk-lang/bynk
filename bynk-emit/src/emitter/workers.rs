@@ -10,6 +10,10 @@
 //! `writeln!`-ing a `String` — this file's own conversion, closing the
 //! third Arc C slice (`events_fanout.rs` was the first, #1317).
 
+// 1A.37a: this file has no wildcard enum arm; the attribute keeps it that way until the
+// crate opts in to the workspace lints (1A.37b).
+#![deny(clippy::wildcard_enum_match_arm)]
+
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use super::internal_fault::undefined_node;
@@ -1243,6 +1247,50 @@ fn emit_queue_wrapper(
     }
 }
 
+/// The TypeScript literal of a `WebSocket` open key written as a literal
+/// (`classify_open_key` admits only a string, an integer or a boolean).
+fn open_key_literal(e: &bynk_syntax::ast::Expr) -> TsExpr {
+    match &e.kind {
+        ExprKind::StrLit(v) => str_lit(v.clone()),
+        ExprKind::IntLit { value, .. } => num_lit(value.to_string()),
+        ExprKind::BoolLit(b) => ident(b.to_string()),
+        ExprKind::FloatLit { .. }
+        | ExprKind::DecimalLit { .. }
+        | ExprKind::DurationLit { .. }
+        | ExprKind::InterpStr(_)
+        | ExprKind::Ident(_)
+        | ExprKind::Call { .. }
+        | ExprKind::Lambda(_)
+        | ExprKind::BinOp(..)
+        | ExprKind::UnaryOp(..)
+        | ExprKind::Paren(_)
+        | ExprKind::Block(_)
+        | ExprKind::If { .. }
+        | ExprKind::Ok(_)
+        | ExprKind::Err(_)
+        | ExprKind::Question(_)
+        | ExprKind::RecordConstruction { .. }
+        | ExprKind::FieldAccess { .. }
+        | ExprKind::MethodCall { .. }
+        | ExprKind::Match { .. }
+        | ExprKind::Is { .. }
+        | ExprKind::Some(_)
+        | ExprKind::None
+        | ExprKind::UnitLit
+        | ExprKind::RecordSpread { .. }
+        | ExprKind::EffectPure(_)
+        | ExprKind::Expect(_)
+        | ExprKind::Val { .. }
+        | ExprKind::Wire(_)
+        | ExprKind::ListLit(..)
+        | ExprKind::Observation(_)
+        | ExprKind::Faults(_)
+        | ExprKind::Trace { .. } => {
+            unreachable!("classify_open_key returns only these literals")
+        }
+    }
+}
+
 /// v0.104 (real-time track slice 3b): emit the WebSocket upgrade route — the
 /// edge half of DECISION A. The upgrade authenticates the actor **in the Worker,
 /// before any request reaches the Durable Object** (the safety boundary): it
@@ -1641,7 +1689,30 @@ fn emit_websocket_upgrade(
             }
             // A plain `String` param (or a shape the static check already rejected)
             // passes through unchanged.
-            _ => {
+            TypeRef::Base(..)
+            | TypeRef::Result(..)
+            | TypeRef::Option(..)
+            | TypeRef::Effect(..)
+            | TypeRef::HttpResult(..)
+            | TypeRef::QueueResult(_)
+            | TypeRef::Asset(_)
+            | TypeRef::RequestHeaders(_)
+            | TypeRef::RequestQuery(_)
+            | TypeRef::RequestCookies(_)
+            | TypeRef::TokenClaims(_)
+            | TypeRef::BoundaryRejection(_)
+            | TypeRef::List(..)
+            | TypeRef::Map(..)
+            | TypeRef::Set(..)
+            | TypeRef::Query(..)
+            | TypeRef::Stream(..)
+            | TypeRef::Connection(..)
+            | TypeRef::History(..)
+            | TypeRef::ValidationError(_)
+            | TypeRef::DecodeError(_)
+            | TypeRef::Unit(_)
+            | TypeRef::Fn(..)
+            | TypeRef::App { .. } => {
                 validated.insert(pn.clone(), ident(jn));
             }
         }
@@ -1666,12 +1737,7 @@ fn emit_websocket_upgrade(
                 call(ident(alias), vec![])
             }
         },
-        WsOpenKey::Literal(e) => match &e.kind {
-            ExprKind::StrLit(v) => str_lit(v.clone()),
-            ExprKind::IntLit { value, .. } => num_lit(value.to_string()),
-            ExprKind::BoolLit(b) => ident(b.to_string()),
-            _ => unreachable!("classify_open_key returns only these literals"),
-        },
+        WsOpenKey::Literal(e) => open_key_literal(e),
         WsOpenKey::Other => unreachable!("rejected above"),
     };
     let args_json: Vec<TsExpr> = h
@@ -2636,7 +2702,22 @@ pub(crate) fn named_types_in(r: &TypeRef) -> Vec<String> {
             | TypeRef::Set(a, _)
             | TypeRef::Effect(a, _)
             | TypeRef::HttpResult(a, _) => walk(a, out),
-            _ => {}
+            TypeRef::Base(..)
+            | TypeRef::QueueResult(_)
+            | TypeRef::Asset(_)
+            | TypeRef::RequestHeaders(_)
+            | TypeRef::RequestQuery(_)
+            | TypeRef::RequestCookies(_)
+            | TypeRef::TokenClaims(_)
+            | TypeRef::BoundaryRejection(_)
+            | TypeRef::Query(..)
+            | TypeRef::Stream(..)
+            | TypeRef::Connection(..)
+            | TypeRef::History(..)
+            | TypeRef::ValidationError(_)
+            | TypeRef::DecodeError(_)
+            | TypeRef::Unit(_)
+            | TypeRef::Fn(..) => {}
         }
     }
     walk(r, &mut out);

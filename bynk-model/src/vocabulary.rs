@@ -390,6 +390,54 @@ pub enum StoreKindIr {
     Log(TyId, Option<i64>),
 }
 
+impl StoreKindIr {
+    /// The value type of a `Map[K, V]` field; `None` for every other kind.
+    pub fn map_value(&self) -> Option<TyId> {
+        match self {
+            StoreKindIr::Map(_, value) => Some(*value),
+            StoreKindIr::Cell(_)
+            | StoreKindIr::Set(_)
+            | StoreKindIr::Cache(..)
+            | StoreKindIr::Log(..) => None,
+        }
+    }
+
+    /// The element type of a `Log[T]` field; `None` for every other kind.
+    pub fn log_element(&self) -> Option<TyId> {
+        match self {
+            StoreKindIr::Log(element, _) => Some(*element),
+            StoreKindIr::Cell(_)
+            | StoreKindIr::Map(..)
+            | StoreKindIr::Set(_)
+            | StoreKindIr::Cache(..) => None,
+        }
+    }
+}
+
+#[cfg(test)]
+mod store_kind_accessor_tests {
+    use super::*;
+    use bynk_check::checker::{Ty, Types};
+
+    #[test]
+    fn map_value_and_log_element_answer_for_their_own_kind_only() {
+        let tys = Types::new();
+        let k = tys.intern(Ty::Unit);
+        let v = tys.intern(Ty::Base(bynk_syntax::ast::BaseType::Int));
+        let kinds = [
+            StoreKindIr::Cell(v),
+            StoreKindIr::Map(k, v),
+            StoreKindIr::Set(v),
+            StoreKindIr::Cache(k, v, 1),
+            StoreKindIr::Log(v, None),
+        ];
+        let map_values: Vec<Option<TyId>> = kinds.iter().map(StoreKindIr::map_value).collect();
+        assert_eq!(map_values, vec![None, Some(v), None, None, None]);
+        let log_elements: Vec<Option<TyId>> = kinds.iter().map(StoreKindIr::log_element).collect();
+        assert_eq!(log_elements, vec![None, None, None, None, Some(v)]);
+    }
+}
+
 /// #1187's slice 3: a handler's resolved actor-verification seam, wrapping
 /// `bynk-check`'s own five already-resolved seam structs
 /// (`bynk-check/src/actors.rs`) by value — confirmed none carry any
