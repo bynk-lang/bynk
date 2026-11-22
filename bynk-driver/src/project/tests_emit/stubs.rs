@@ -619,12 +619,16 @@ pub(super) fn lower_stub_value_block(
             for c in items.consts {
                 typed.consts.insert(c.name.name.clone(), c.clone());
             }
-            suite_decls = emitter::emit_suite_decls(
-                items.types,
-                items.consts,
-                &typed,
-                &runtime_use.json_codec_qual(),
-                runtime_use,
+            emitter::extend_printed_at(
+                &mut suite_decls,
+                emitter::emit_suite_decls(
+                    items.types,
+                    items.consts,
+                    &typed,
+                    &runtime_use.json_codec_qual(),
+                    runtime_use,
+                ),
+                0,
             );
         }
         test_suites::add_suite_fns(

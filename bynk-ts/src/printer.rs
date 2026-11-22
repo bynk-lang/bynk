@@ -1059,6 +1059,23 @@ fn render_inline_block(out: &mut String, stmts: &[TsStmt]) {
     out.push_str(" }\n");
 }
 
+/// [`TsArrowBody::Flat`]'s text: each statement printed at depth 0, split into lines, every line
+/// trimmed, the empty ones dropped, and all of it joined with single spaces.
+fn flatten_stmts(stmts: &[TsStmt]) -> String {
+    stmts
+        .iter()
+        .map(|st| {
+            crate::print_stmt(st, 0)
+                .split('\n')
+                .map(str::trim)
+                .filter(|l| !l.is_empty())
+                .collect::<Vec<_>>()
+                .join(" ")
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 /// `stmt1; stmt2; ...` — every statement in `stmts` rendered on the current
 /// line, semicolon-and-space-separated, no leading/trailing space or
 /// surrounding braces of its own. The shared core both real compact shapes
@@ -2504,9 +2521,22 @@ fn render_arrow_body(
         }
         // An empty body is `{}`, not `{  }` (1A.35a part B: the no-op `settle`).
         TsArrowBody::Block(stmts) if stmts.is_empty() => out.push_str("{}"),
+        // A statement that prints over several lines cannot sit on the one line the compact form
+        // promises, so the body falls back to the multi-line form (1A.39a, Decision E): the
+        // printer decides, where the emitter used to print a statement to measure it.
+        TsArrowBody::Block(stmts) if !inline_block_fits_one_line(stmts) => {
+            render_arrow_body(out, &TsArrowBody::Multiline(stmts.clone()), depth, m);
+        }
         TsArrowBody::Block(stmts) => {
             out.push_str("{ ");
             render_compact_stmts(out, stmts, depth);
+            out.push_str(" }");
+        }
+        // Each statement printed on its own, its lines trimmed and joined by single spaces.
+        TsArrowBody::Flat(stmts) if stmts.is_empty() => out.push_str("{}"),
+        TsArrowBody::Flat(stmts) => {
+            out.push_str("{ ");
+            out.push_str(&flatten_stmts(stmts));
             out.push_str(" }");
         }
         // The multi-line form: `{`, each statement on its own line one level
@@ -3450,7 +3480,9 @@ fn render_decl_body(
                 out.push_str(": ");
                 render_type(out, rt);
             }
-            if *inline {
+            // `inline` asks for the one-line body; a statement that prints over several lines
+            // takes the ordinary multi-line one instead (1A.39a, Decision E).
+            if *inline && inline_block_fits_one_line(body) {
                 out.push(' ');
                 render_inline_block(out, body);
             } else {
@@ -5846,6 +5878,111 @@ mod tests {
         assert_eq!(
             printed.text,
             "return {\n  async foo(a: string) {\n    return a;\n  },\n};\n"
+        );
+    }
+
+    /// `(a) => { <stmts> }` with a braced `if` first, a `const` and a `return`: the shape of the ICU
+    /// `select` arm. A body none of the compact forms holds on one line.
+    fn flat_probe_body() -> Vec<TsStmt> {
+        let id = |n: &str| TsExpr::Ident(n.to_string());
+        vec![
+            TsStmt::if_stmt(
+                id("c"),
+                TsStmt::block(
+                    vec![TsStmt::return_stmt(
+                        Some(TsExpr::Lit(TsLit::Str("x".to_string()))),
+                        None,
+                    )],
+                    None,
+                ),
+                None,
+            ),
+            TsStmt::const_stmt(
+                TsBindingName::Ident("t".to_string()),
+                Some(TsType::named("string")),
+                id("a"),
+                None,
+            ),
+            TsStmt::return_stmt(Some(id("t")), None),
+        ]
+    }
+
+    fn arrow_over(body: TsArrowBody) -> TsExpr {
+        TsExpr::Arrow {
+            params: vec![TsParam::new("a".to_string(), None)],
+            is_async: false,
+            generics: Vec::new(),
+            return_type: None,
+            body: Box::new(body),
+        }
+    }
+
+    /// 1A.39a (Decision E): `TsArrowBody::Flat` prints each statement at depth 0 with its lines
+    /// trimmed and joined by single spaces, so a braced `if` sits on the one line.
+    #[test]
+    fn a_flat_body_joins_every_statement_onto_one_line() {
+        assert_eq!(
+            print_expr(&arrow_over(TsArrowBody::Flat(flat_probe_body()))),
+            "(a) => { if (c) { return \"x\"; } const t: string = a; return t; }"
+        );
+        assert_eq!(
+            print_expr(&arrow_over(TsArrowBody::Flat(Vec::new()))),
+            "(a) => {}"
+        );
+    }
+
+    /// 1A.39a (Decision E): a `Block` body whose statement spans lines prints as the multi-line
+    /// body, where it used to trip `render_compact_stmts`'s assertion. A `Block` whose statements
+    /// each fit on one line is unchanged.
+    #[test]
+    fn a_block_body_falls_back_to_multiline_when_a_statement_spans_lines() {
+        assert_eq!(
+            print_expr(&arrow_over(TsArrowBody::Block(flat_probe_body()))),
+            print_expr(&arrow_over(TsArrowBody::Multiline(flat_probe_body())))
+        );
+        let one_line = vec![
+            TsStmt::const_stmt(
+                TsBindingName::Ident("t".to_string()),
+                None,
+                TsExpr::Ident("a".to_string()),
+                None,
+            ),
+            TsStmt::return_stmt(Some(TsExpr::Ident("t".to_string())), None),
+        ];
+        assert_eq!(
+            print_expr(&arrow_over(TsArrowBody::Block(one_line))),
+            "(a) => { const t = a; return t; }"
+        );
+    }
+
+    /// 1A.39a (Decision E): `TsDecl::Function { inline: true }` is one line when its body fits,
+    /// and the ordinary multi-line function when a statement spans lines.
+    #[test]
+    fn an_inline_function_falls_back_to_multiline_when_its_body_spans_lines() {
+        let function = |body: Vec<TsStmt>, inline: bool| {
+            let mut program = TsProgram::new();
+            program.push(TsStmt::decl(
+                TsDecl::Function {
+                    name: "f".to_string(),
+                    generics: Vec::new(),
+                    params: Vec::new(),
+                    return_type: None,
+                    body,
+                    is_async: false,
+                    inline,
+                },
+                None,
+            ));
+            print(&program, "", "", "").text
+        };
+        let short = vec![TsStmt::return_stmt(
+            Some(TsExpr::Ident("a".to_string())),
+            None,
+        )];
+        assert_eq!(function(short, true), "function f() { return a; }\n");
+        assert_eq!(
+            function(flat_probe_body(), true),
+            function(flat_probe_body(), false)
         );
     }
 

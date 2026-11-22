@@ -64,7 +64,18 @@ export interface MeterState {
 }
 
 const __MeterRegistry = new __StateRegistry();
-function __zeroOfMeterState(): MeterState { return { totals: { hits: 0, bytes: 0 }, active: (() => { let __r1: boolean; if (true) {   const __r0 = 5;   __r1 = (globalThis.Number.isSafeInteger(__r0) && __r0 > 0); } else {   __r1 = false; } return __r1; })() }; }
+function __zeroOfMeterState(): MeterState {
+  return { totals: { hits: 0, bytes: 0 }, active: (() => {
+    let __r1: boolean;
+    if (true) {
+      const __r0 = 5;
+      __r1 = (globalThis.Number.isSafeInteger(__r0) && __r0 > 0);
+    } else {
+      __r1 = false;
+    }
+    return __r1;
+  })() };
+}
 
 const __entryFieldsOfMeter = [] as const;
 

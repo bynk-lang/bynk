@@ -43,16 +43,16 @@ export interface MeterState {
 const __MeterRegistry = new __StateRegistry();
 function __zeroOfMeterState(): MeterState {
   return { active: ((__d) => {
-  switch (__d) {
-    case true: {
-      return 1;
+    switch (__d) {
+      case true: {
+        return 1;
+      }
+      case false: {
+        return 0;
+      }
     }
-    case false: {
-      return 0;
-    }
-  }
-  throw new globalThis.Error("non-exhaustive match");
-})(true) };
+    throw new globalThis.Error("non-exhaustive match");
+  })(true) };
 }
 
 const __entryFieldsOfMeter = [] as const;
