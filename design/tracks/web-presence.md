@@ -1,7 +1,8 @@
 # Web presence — the Book reorganised, Reference consolidated, one brand across docs and blog
 
-- **Status:** Settling. The open questions were settled with the maintainer on
-  21 November 2026 (§14). Spine issue not yet opened. No slice is accepted.
+- **Status:** Settled in #3859; the open questions were settled with the
+  maintainer on 21 November 2026 (§14). Spine issue: #3861, which carries the
+  live slice status.
 - **Realises:** the brief of the retired documentation track and
   [ADR 0141](../decisions/0141-documentation-framework.md): *one coherent web
   presence under one domain and design system*. That track stood the site up;
@@ -260,11 +261,14 @@ page.
 
 ## 8. One brand
 
-- **A theme package** at `site/theme/`, published to GitHub Packages as
-  `@bynk-lang/site-theme`: CSS custom properties generated from the design
-  system's tokens (dark and light), the shared header and footer, the `<head>`
-  with fonts, and the Bynk TextMate grammar. The docs site uses it from the
-  workspace; the blog depends on a released version. The blog's CI reads it
+- **A theme package** in its own repository,
+  [bynk-lang/site-theme](https://github.com/bynk-lang/site-theme), published to
+  GitHub Packages as `@bynk-lang/site-theme`: CSS custom properties generated
+  from the design system's tokens (dark and light), the shared header, the
+  `<head>` with fonts, and the Bynk TextMate grammar, as a Starlight plugin.
+  The docs site and the blog both depend on a released version. (It was planned
+  at `site/theme/` in this repository; it moved out so it could ship while this
+  repository was busy.) The blog's CI reads it
   with its `GITHUB_TOKEN` (`packages: read`), and local installs need a token
   with `read:packages` in `~/.npmrc`; the blog's README says how.
 - **The reader's colour scheme decides.** The site follows
@@ -361,7 +365,7 @@ and 4 may be built before the freeze lifts is the maintainer's decision.
   code, and the code-to-section mapping belongs to the docs. Folder moves get
   splat redirects (L4); nothing promises a published URL forever before 1.0.
 
-Recorded in their slices: one theme package in this repo (slice 6); diagnostics
+Recorded in their slices: one theme package, in its own repository (slice 6); diagnostics
 pages generated from the registry (slice 4); one release page per tag
 (slice 3).
 
