@@ -7,6 +7,7 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.640.31** | `bynk revert` refuses a version bound to a Hyperdrive config that the ledger has since replaced or pruned, as it already did for KV, D1 and rate limiters (#3970) |
 | **v0.640.30** | The docs site now wears the Bynk design system, from the same `@bynk-lang/site-theme` package as the blog — amber and teal in place of the indigo accent, Instrument Sans and JetBrains Mono, the bento-blocks wordmark, and the blog's header — in light and dark, following the reader's setting (web presence track, slice 6, #4006). |
 | **v0.640.29** | Internal restructuring: the `BYNK_*` names the toolchain shares with generated TypeScript have one Rust definition; no name or emitted output changes |
 | **v0.640.28** | Internal restructuring of the code generator; the Bundle and Workers composition roots now read one composition plan, with no change to generated output |
