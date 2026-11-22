@@ -20,6 +20,36 @@ pub(crate) struct Hyperdrive;
 /// [`Hyperdrive`]'s records: `Environment::hyperdrive_instances`, by Worker and binding.
 pub(crate) struct HyperdriveTable;
 
+/// What provisioning and pruning change in [`Hyperdrive`]'s records.
+pub(crate) enum HyperdriveChange {
+    /// A config made, synced or adopted.
+    Record(TableChange<HyperdriveTable>),
+    /// Config `id` of `worker`'s `binding`, deleted by `--prune` ([`HyperdriveTable::forget_config`]).
+    ForgetConfig {
+        worker: String,
+        binding: String,
+        id: String,
+    },
+}
+
+impl LedgerChange for HyperdriveChange {
+    fn apply(self, lock: &mut DeployLock, environment: &str) -> bool {
+        match self {
+            HyperdriveChange::Record(change) => change.apply(lock, environment),
+            HyperdriveChange::ForgetConfig {
+                worker,
+                binding,
+                id,
+            } => {
+                if let Some(env) = lock.environments.get_mut(environment) {
+                    HyperdriveTable::forget_config(env, &worker, &binding, &id);
+                }
+                true
+            }
+        }
+    }
+}
+
 impl HyperdriveTable {
     /// Drop config `id` from `worker`'s `binding` once `--prune` deleted it, whether it was the
     /// live one (its Worker or capability is gone) or a superseded one, and the Worker's map once
@@ -103,6 +133,7 @@ impl ResourceKind for Hyperdrive {
     type Live<'a> = HyperdriveRun<'a>;
     /// The config's id, which the config binds it by.
     type Bound = String;
+    type Change = HyperdriveChange;
 
     fn declared(r: &Resources) -> Vec<&HyperdriveDecl> {
         r.hyperdrive.iter().collect()
@@ -238,11 +269,11 @@ impl ResourceKind for Hyperdrive {
     /// Deleted by its id, if the run holds an API (it does whenever there is one to delete), and
     /// stripped from the ledger. Already gone is success, as for a queue (DECISION E).
     fn prune(
-        cx: &mut ApplyCx<'_, '_, Hyperdrive>,
+        cx: &StepCx<'_, '_, Hyperdrive>,
         orphan: &OrphanHyperdrive,
-    ) -> Result<(), DeployFailure> {
+    ) -> Result<Option<Commit<HyperdriveChange>>, DeployFailure> {
         let Some(api) = cx.live.api else {
-            return Ok(());
+            return Ok(None);
         };
         api.delete(&orphan.id).map_err(|e| {
             DeployFailure::driver(format!(
@@ -250,27 +281,37 @@ impl ResourceKind for Hyperdrive {
                 orphan.config, orphan.worker, orphan.binding
             ))
         })?;
-        cx.change(
-            |env| HyperdriveTable::forget_config(env, &orphan.worker, &orphan.binding, &orphan.id),
+        Ok(Some(Commit::recorded(
+            HyperdriveChange::ForgetConfig {
+                worker: orphan.worker.clone(),
+                binding: orphan.binding.clone(),
+                id: orphan.id.clone(),
+            },
             &format!("deleted the orphaned Hyperdrive config `{}`", orphan.config),
-        )
+        )))
     }
 
     /// Make, update or adopt the config, record what was done before the push (an interrupted
     /// run never makes a second config), and bind it by its id.
-    fn provision(
-        cx: &mut ApplyCx<'_, '_, Hyperdrive>,
-        decl: &HyperdriveDecl,
-    ) -> Result<Provisioned<String>, DeployFailure> {
+    fn provision<'r>(
+        cx: &StepCx<'_, '_, Hyperdrive>,
+        decl: Self::Decl<'r>,
+    ) -> Result<Provisioned<'r, Hyperdrive>, DeployFailure> {
         let (worker, environment, run) = (cx.worker, cx.environment, cx.live);
         let binding = &decl.binding;
         let physical = config_name(environment, worker, decl);
         let want = run.wants.get(&(worker.to_string(), binding.clone()));
         let recorded = cx.ledger().recorded::<Hyperdrive>(worker, binding).cloned();
         let todo = action(recorded.as_ref(), &physical, want);
-        let id = match (todo, want) {
+        let record = |record: HyperdriveRecord, done: &str| {
+            Commit::recorded(
+                HyperdriveChange::Record(TableChange::insert(worker, binding, record)),
+                done,
+            )
+        };
+        let (id, commit) = match (todo, want) {
             ("reuse", _) => match &recorded {
-                Some(record) => record.id.clone(),
+                Some(record) => (record.id.clone(), None),
                 None => {
                     return Err(DeployFailure::driver(format!(
                         "no Hyperdrive config is recorded for `{worker}`'s `{binding}`"
@@ -292,8 +333,7 @@ impl ResourceKind for Hyperdrive {
                         ))
                     })?;
                 let done = format!("changed the Hyperdrive config `{name}`");
-                cx.record(
-                    binding,
+                let commit = record(
                     HyperdriveRecord {
                         name,
                         id: id.clone(),
@@ -301,8 +341,8 @@ impl ResourceKind for Hyperdrive {
                         superseded: Vec::new(),
                     },
                     &done,
-                )?;
-                id.clone()
+                );
+                (id.clone(), Some(commit))
             }
             ("create", Some(Want::Connection { origin, raw, .. })) => {
                 let api = need_api(&run, worker, binding)?;
@@ -312,8 +352,7 @@ impl ResourceKind for Hyperdrive {
                         scrub(&e, &[raw.expose(), origin.password.expose()])
                     ))
                 })?;
-                cx.record(
-                    binding,
+                let commit = record(
                     HyperdriveRecord {
                         name: physical.clone(),
                         id: id.clone(),
@@ -321,8 +360,8 @@ impl ResourceKind for Hyperdrive {
                         superseded: Vec::new(),
                     },
                     &format!("changed the Hyperdrive config `{physical}`"),
-                )?;
-                id
+                );
+                (id, Some(commit))
             }
             ("sync", Some(Want::Connection { origin, raw, .. })) => {
                 let api = need_api(&run, worker, binding)?;
@@ -339,8 +378,7 @@ impl ResourceKind for Hyperdrive {
                 })?;
                 let done = format!("changed the Hyperdrive config `{}`", old.name);
                 let id = old.id.clone();
-                cx.record(binding, old, &done)?;
-                id
+                (id, Some(record(old, &done)))
             }
             _ => {
                 return Err(DeployFailure::driver(format!(
@@ -348,8 +386,10 @@ impl ResourceKind for Hyperdrive {
                 )));
             }
         };
-        Ok(Provisioned {
-            bound: Some((binding.clone(), id)),
+        let provisioned = Provisioned::bound(binding, id);
+        Ok(match commit {
+            Some(commit) => provisioned.with(commit),
+            None => provisioned,
         })
     }
 
@@ -614,13 +654,12 @@ mod tests {
         let before = toml::to_string(&lock).unwrap();
         let provenance = Provenance::Path("/nonexistent/wrangler".into());
         let project = BTreeMap::new();
-        Hyperdrive::prune(
-            &mut ApplyCx {
+        let commit = Hyperdrive::prune(
+            &StepCx {
                 environment: "default",
                 worker: "gone",
                 project: &project,
-                lock: &mut lock,
-                lock_path: Path::new("/nonexistent/bynk.deploy.lock"),
+                lock: &lock,
                 live: HyperdriveRun::default(),
                 tools: Tools {
                     provenance: &provenance,
@@ -636,6 +675,7 @@ mod tests {
             },
         )
         .expect("nothing to do without an API");
+        assert!(commit.is_none(), "nothing deleted, so nothing forgotten");
         assert_eq!(toml::to_string(&lock).unwrap(), before);
     }
 

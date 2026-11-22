@@ -906,7 +906,12 @@ mod tests {
             linked: Some(linked),
             ..Lives::default()
         };
-        let bound = provision_kind::<K>(site, declared, lock, lock_path, lives)?;
+        let bound = provision_kind::<K>(
+            site,
+            declared,
+            &mut LedgerWriter::new(lock, lock_path),
+            lives,
+        )?;
         K::materialise(config, worker, &bound)
     }
 

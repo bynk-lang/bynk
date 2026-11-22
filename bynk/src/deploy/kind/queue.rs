@@ -37,6 +37,36 @@ impl QueueTable {
     }
 }
 
+/// What provisioning and pruning change in [`Queue`]'s environment-wide records.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum QueueChange {
+    /// The queue, provisioned: as Bynk's when this run `created` it, as reused otherwise
+    /// ([`record_provisioned_queue`]). Written only when that changed the ledger.
+    Provisioned { queue: String, created: bool },
+    /// The queue, deleted by `--prune`.
+    Forget(String),
+}
+
+impl LedgerChange for QueueChange {
+    fn apply(self, lock: &mut DeployLock, environment: &str) -> bool {
+        match self {
+            QueueChange::Provisioned { queue, created } => record_provisioned_queue(
+                lock.environments
+                    .entry(environment.to_string())
+                    .or_default(),
+                &queue,
+                created,
+            ),
+            QueueChange::Forget(queue) => {
+                if let Some(env) = lock.environments.get_mut(environment) {
+                    QueueTable::remove(env, "", &queue);
+                }
+                true
+            }
+        }
+    }
+}
+
 impl LedgerTable for QueueTable {
     /// The queue's name: the record is that the queue is there.
     type Record = String;
@@ -82,6 +112,7 @@ impl ResourceKind for Queue {
     type Live<'a> = Option<&'a std::cell::RefCell<BTreeSet<String>>>;
     /// Nothing: the config binds a queue by the name it already carries.
     type Bound = ();
+    type Change = QueueChange;
 
     /// Every queue the Worker consumes or sends to, in name order, each once
     /// ([`Resources::all_queues`]).
@@ -207,30 +238,34 @@ impl ResourceKind for Queue {
         )))
     }
 
-    fn prune(cx: &mut ApplyCx<'_, '_, Queue>, queue: &String) -> Result<(), DeployFailure> {
+    fn prune(
+        cx: &StepCx<'_, '_, Queue>,
+        queue: &String,
+    ) -> Result<Option<Commit<QueueChange>>, DeployFailure> {
         let physical = env_qualify(cx.environment, queue);
         delete_queue(cx.tools.provenance, &physical, cx.tools.project_root).map_err(|e| {
             DeployFailure::driver(format!(
                 "could not delete the orphaned queue `{physical}`: {e}"
             ))
         })?;
-        cx.change(
-            |env| QueueTable::remove(env, "", queue),
+        Ok(Some(Commit::recorded(
+            QueueChange::Forget(queue.clone()),
             &format!("deleted the orphaned queue `{physical}`"),
-        )
+        )))
     }
 
     /// One queue alone. The deploy provisions a Worker's queues together
     /// ([`ResourceKind::provision_all`]).
-    fn provision(
-        cx: &mut ApplyCx<'_, '_, Queue>,
-        decl: QueueDecl<'_>,
-    ) -> Result<Provisioned<()>, DeployFailure> {
+    fn provision<'r>(
+        cx: &StepCx<'_, '_, Queue>,
+        decl: Self::Decl<'r>,
+    ) -> Result<Provisioned<'r, Queue>, DeployFailure> {
         let created = attempt(cx, decl.name)?;
+        let mut provisioned = Provisioned::nothing();
         if decl.consumed || created {
-            record(cx, decl.name, created)?;
+            provisioned = provisioned.with(record(cx, decl.name, created));
         }
-        Ok(Provisioned { bound: None })
+        Ok(provisioned)
     }
 
     /// Reconciled against the account on every run, never against the ledger (ADR 0194 D2):
@@ -238,33 +273,44 @@ impl ResourceKind for Queue {
     /// is any recorded, as Bynk's when this run made it and as reused otherwise (#2579). A queue
     /// only sent to is recorded only when this run made it (P2, #2578). The account-facing name
     /// is environment-qualified (slice 4, DECISION C); the ledger keys by the logical name.
-    fn provision_all(
-        cx: &mut ApplyCx<'_, '_, Queue>,
-        declared: &Resources,
-    ) -> Result<BTreeMap<String, ()>, DeployFailure> {
-        let fresh = std::cell::RefCell::new(BTreeSet::new());
-        let attempted = cx.live.unwrap_or(&fresh);
-        let mut created = BTreeSet::new();
-        // Bound first, so the borrow of the run's attempts ends before any queue is made.
-        let todo = unattempted_queues(declared, &mut attempted.borrow_mut());
-        for queue in todo {
-            if attempt_create(cx, &queue)? {
-                created.insert(queue);
-            }
-        }
-        // Recorded before the push, as KV is: what the ledger claims is only ever what it
-        // watched succeed. A consumed queue another context already checked this run is
-        // recorded here as well, so the order contexts deploy in changes nothing.
-        for queue in queues_to_record(declared, &created) {
-            record(cx, &queue, created.contains(&queue))?;
-        }
-        Ok(BTreeMap::new())
+    fn provision_all<'r>(
+        cx: &StepCx<'_, '_, Queue>,
+        declared: &'r Resources,
+    ) -> Option<Result<Provisioned<'r, Queue>, DeployFailure>> {
+        Some(provision_queues(cx, declared))
     }
+}
+
+/// [`Queue`]'s `provision_all`: every queue the run has not yet attempted made first, then each
+/// recorded, each with its own write.
+fn provision_queues<'r>(
+    cx: &StepCx<'_, '_, Queue>,
+    declared: &'r Resources,
+) -> Result<Provisioned<'r, Queue>, DeployFailure> {
+    let fresh = std::cell::RefCell::new(BTreeSet::new());
+    let attempted = cx.live.unwrap_or(&fresh);
+    let mut created = BTreeSet::new();
+    // Bound first, so the borrow of the run's attempts ends before any queue is made.
+    let todo = unattempted_queues(declared, &mut attempted.borrow_mut());
+    for queue in todo {
+        if attempt_create(cx, &queue)? {
+            created.insert(queue);
+        }
+    }
+    // Recorded before the push, as KV is: what the ledger claims is only ever what it
+    // watched succeed. A consumed queue another context already checked this run is
+    // recorded here as well, so the order contexts deploy in changes nothing.
+    let mut provisioned = Provisioned::nothing();
+    for queue in queues_to_record(declared, &created) {
+        let made = created.contains(&queue);
+        provisioned = provisioned.with(record(cx, &queue, made));
+    }
+    Ok(provisioned)
 }
 
 /// Make `queue` if this run has not yet attempted it and the account lacks it. Whether this
 /// call made it.
-fn attempt(cx: &mut ApplyCx<'_, '_, Queue>, queue: &str) -> Result<bool, DeployFailure> {
+fn attempt(cx: &StepCx<'_, '_, Queue>, queue: &str) -> Result<bool, DeployFailure> {
     let fresh = std::cell::RefCell::new(BTreeSet::new());
     let attempted = cx.live.unwrap_or(&fresh);
     if !attempted.borrow_mut().insert(queue.to_string()) {
@@ -275,7 +321,7 @@ fn attempt(cx: &mut ApplyCx<'_, '_, Queue>, queue: &str) -> Result<bool, DeployF
 
 /// Make `queue` unless the account has it. Whether this call made it (a race-loser that finds it
 /// made in between did not).
-fn attempt_create(cx: &mut ApplyCx<'_, '_, Queue>, queue: &str) -> Result<bool, DeployFailure> {
+fn attempt_create(cx: &StepCx<'_, '_, Queue>, queue: &str) -> Result<bool, DeployFailure> {
     let physical = env_qualify(cx.environment, queue);
     let (provenance, project_root) = (cx.tools.provenance, cx.tools.project_root);
     if queue_exists(provenance, &physical, project_root) {
@@ -285,20 +331,17 @@ fn attempt_create(cx: &mut ApplyCx<'_, '_, Queue>, queue: &str) -> Result<bool, 
         .map_err(|e| DeployFailure::driver(format!("could not create the queue `{physical}`: {e}")))
 }
 
-/// Record `queue`, as Bynk's when this run `created` it and as reused otherwise, and write the
-/// ledger when that changed it.
-fn record(
-    cx: &mut ApplyCx<'_, '_, Queue>,
-    queue: &str,
-    created: bool,
-) -> Result<(), DeployFailure> {
-    if record_provisioned_queue(cx.env_mut(), queue, created) {
-        let physical = env_qualify(cx.environment, queue);
-        cx.commit(&format!(
-            "provisioned the queue `{physical}` but could not record it"
-        ))?;
-    }
-    Ok(())
+/// Record `queue`, as Bynk's when this run `created` it and as reused otherwise: written when that
+/// changes the ledger.
+fn record(cx: &StepCx<'_, '_, Queue>, queue: &str, created: bool) -> Commit<QueueChange> {
+    let physical = env_qualify(cx.environment, queue);
+    Commit::recorded(
+        QueueChange::Provisioned {
+            queue: queue.to_string(),
+            created,
+        },
+        &format!("provisioned the queue `{physical}`"),
+    )
 }
 
 /// #2579: record one queue in `env`, as Bynk's own when this run `created` it and as merely
@@ -425,24 +468,26 @@ mod tests {
                 "jobs".to_string(),
                 "outbound".to_string(),
             ]));
-            let mut cx = ApplyCx {
-                environment: "default",
-                worker: "shop",
-                project: &project,
-                lock,
-                lock_path: &path,
-                live: Some(&attempted),
+            let site = Site {
                 tools: Tools {
                     provenance: &provenance,
                     project_root: Path::new("/nonexistent"),
                 },
+                environment: "default",
+                worker: "shop",
+                project: &project,
             };
+            let lives = Lives {
+                queues: Some(&attempted),
+                ..Lives::default()
+            };
+            let mut writer = LedgerWriter::new(lock, &path);
             if alone {
                 for decl in Queue::declared(&declared) {
-                    Queue::provision(&mut cx, decl).unwrap();
+                    provision_one::<Queue>(site, decl, &mut writer, lives).unwrap();
                 }
             } else {
-                Queue::provision_all(&mut cx, &declared).unwrap();
+                provision_kind::<Queue>(site, &declared, &mut writer, lives).unwrap();
             }
         };
         let (mut alone, mut together) = (DeployLock::default(), DeployLock::default());

@@ -1264,6 +1264,7 @@ pub fn run(
     // once. Dropped with the run — nothing here is ever written (ADR 0195 D1).
     let mut resolved_secrets = BTreeMap::new();
     sweep_and_report_stale_uploads();
+    let mut writer = LedgerWriter::new(&mut lock, &lock_path);
     for (i, worker) in order.iter().enumerate() {
         if order.len() > 1 {
             eprint!(
@@ -1278,8 +1279,7 @@ pub fn run(
             worker,
             &resources[worker],
             &resources,
-            &mut lock,
-            &lock_path,
+            &mut writer,
             &mut Secrets {
                 source: &secret_source,
                 force: opts.force,
@@ -1295,16 +1295,11 @@ pub fn run(
             lives,
         ) {
             Ok(Pushed::Ok) => {
-                record_pushed_contracts(
-                    &mut lock,
-                    &opts.environment,
-                    (worker, &workers_dir.join(worker)),
-                    (&groups.members(worker), &groups.script(worker)),
-                );
-                record_pushed_tombstones(&mut lock, &opts.environment, worker, &resources[worker]);
-                // P3 (#2342): e.g. the pushed Worker no longer binds a rate
-                // limiter its source dropped, so that id is free again.
-                kinds_after_push(&mut lock, &opts.environment, worker, &resources[worker]);
+                // P3 (#2342): e.g. a rate limiter's id the source dropped is free again.
+                let pushed = PushedWorker::of(worker, &workers_dir, &groups, &resources[worker]);
+                let recorded = record_pushed(&mut writer, &opts.environment, &pushed, |lock| {
+                    record_fresh_moves(lock, opts, worker, &moves)
+                });
                 // I3 (#1971): the secrets just minted for this context's
                 // foreign callers, handed to their operators.
                 for caller in &resources[worker].foreign_callers {
@@ -1316,13 +1311,12 @@ pub fn run(
                         colour::eprint(&foreign_hand_off(env, worker, caller, value, runner));
                     }
                 }
-                record_fresh_moves(&mut lock, opts, worker, &moves);
-                if let Err(e) = write_lock(&lock_path, &lock) {
+                if let Err(e) = recorded {
                     colour::eprint(&unrecorded_deploy_failure(
                         &opts.environment,
                         worker,
-                        &lock_path.display().to_string(),
-                        &e.to_string(),
+                        &writer.path().display().to_string(),
+                        &e,
                     ));
                     return ExitCode::FAILURE;
                 }
@@ -1381,8 +1375,7 @@ pub fn run(
         if let Err(e) = prune_orphans(
             &probe.provenance,
             project_root,
-            &mut lock,
-            &lock_path,
+            &mut writer,
             &opts.environment,
             &plan.orphans,
             lives,

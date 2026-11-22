@@ -15,7 +15,8 @@
 //! A kind takes what it needs through the contexts here and reaches into nothing else
 //! (Decision B, and `design/tracks/back-half-paydown.md` §12): not `DeployOptions`, not
 //! `plan::run`'s locals, not the CLI's flags. It does not write the ledger: provisioning and
-//! pruning say what they recorded or forgot, and the caller writes the ledger at once, so a
+//! pruning return what they would record or forget as [`Commit`]s, and the apply's one
+//! [`LedgerWriter`] (`apply.rs`, 1D.2a) writes each before the kind's next account call, so a
 //! record still lands before the push (ADR 0180).
 //!
 //! Converted so far: KV (1D.1a), R2 and D1 (1D.1b), Vectorize and Hyperdrive (1D.1c), rate limiters
@@ -230,83 +231,214 @@ pub(crate) struct Tools<'a> {
     pub(crate) project_root: &'a Path,
 }
 
-/// What a kind's provisioning and pruning act in: one Worker of one environment, the ledger to
-/// record in (and, for an account-wide name, read across environments), the account state the
-/// run read once, and the tools.
+/// What a kind's provisioning and pruning act in: one Worker of one environment, the ledger as it
+/// stands (and, for an account-wide name, across environments), the account state the run read
+/// once, and the tools.
 ///
-/// A kind changes the ledger only through [`ApplyCx::record`] and [`ApplyCx::change`], which write
-/// it at once, before the kind's next account call: so a record still lands before the push, and
-/// before anything that could fail after it (ADR 0180). This is the one write site 1D.2 takes over.
-pub(crate) struct ApplyCx<'a, 'l, K: ResourceKind> {
+/// The ledger is read-only here (1D.2a, #4001): a kind says what it would record or forget as
+/// [`Commit`]s, and the apply's one [`LedgerWriter`] writes each before the kind's next account
+/// call, so a record still lands before the push, and before anything that could fail after it
+/// (ADR 0180).
+pub(crate) struct StepCx<'a, 'l, K: ResourceKind> {
     pub(crate) environment: &'a str,
     pub(crate) worker: &'a str,
     /// The whole project, for a check across it that a create re-runs.
     pub(crate) project: &'a BTreeMap<String, Resources>,
-    pub(crate) lock: &'a mut DeployLock,
-    pub(crate) lock_path: &'a Path,
+    pub(crate) lock: &'a DeployLock,
     pub(crate) live: K::Live<'l>,
     pub(crate) tools: Tools<'a>,
 }
 
-impl<K: ResourceKind> ApplyCx<'_, '_, K> {
+impl<K: ResourceKind> StepCx<'_, '_, K> {
     /// The ledger as it stands, for reading.
     pub(crate) fn ledger(&self) -> LedgerView<'_> {
         LedgerView::of(self.lock, self.environment)
     }
 
-    /// Record `record` for this Worker's `binding`, and write the ledger. `done` says what was
-    /// done to the account, for the message when the write fails: "{done} but could not record
-    /// it in …".
-    pub(crate) fn record(
-        &mut self,
+    /// The commit that records `record` for this Worker's `binding`. `done` says what was done to
+    /// the account, for the message when the write fails: "{done} but could not record it in …".
+    pub(crate) fn recording(
+        &self,
         binding: &str,
         record: K::Record,
         done: &str,
-    ) -> Result<(), DeployFailure> {
-        let worker = self.worker;
-        K::Table::insert(self.env_mut(), worker, binding, record);
-        self.write(done)
-    }
-
-    /// This environment's records, made if the ledger has none yet, to change before a
-    /// [`ApplyCx::commit`]: for a kind that writes several changes at once (rate limiters).
-    pub(crate) fn env_mut(&mut self) -> &mut Environment {
-        self.lock
-            .environments
-            .entry(self.environment.to_string())
-            .or_default()
-    }
-
-    /// Write the ledger. `failure` is the message when the write fails, before " in …".
-    pub(crate) fn commit(&mut self, failure: &str) -> Result<(), DeployFailure> {
-        write_lock(self.lock_path, self.lock).map_err(|e| {
-            DeployFailure::driver(format!("{failure} in {}: {e}", self.lock_path.display()))
-        })
-    }
-
-    /// Change this environment's records with `f`, if the ledger has the environment, and write
-    /// the ledger, as [`ApplyCx::record`] does.
-    pub(crate) fn change(
-        &mut self,
-        f: impl FnOnce(&mut Environment),
-        done: &str,
-    ) -> Result<(), DeployFailure> {
-        if let Some(env) = self.lock.environments.get_mut(self.environment) {
-            f(env);
-        }
-        self.write(done)
-    }
-
-    fn write(&mut self, done: &str) -> Result<(), DeployFailure> {
-        self.commit(&format!("{done} but could not record it"))
+    ) -> Commit<TableChange<K::Table>> {
+        Commit::recorded(TableChange::insert(self.worker, binding, record), done)
     }
 }
 
-/// What provisioning one declared instance did.
-#[derive(Debug, PartialEq, Eq)]
-pub(crate) struct Provisioned<B> {
-    /// The binding and what the push binds it to, written into the generated configuration.
-    pub(crate) bound: Option<(String, B)>,
+/// One change to one environment of the ledger, which the apply's [`LedgerWriter`] makes.
+pub(crate) trait LedgerChange {
+    /// Make the change in `environment` of `lock`. Whether the ledger is to be written for it: a
+    /// queue already recorded as it would be is not (a re-run that provisions nothing writes
+    /// nothing).
+    fn apply(self, lock: &mut DeployLock, environment: &str) -> bool;
+}
+
+/// A record put in, or taken out of, a kind's [`LedgerTable`].
+pub(crate) enum TableChange<T: LedgerTable> {
+    /// Record `record` for `worker`'s `binding`, replacing any, making the environment if the
+    /// ledger has none yet.
+    Insert {
+        worker: String,
+        binding: String,
+        record: T::Record,
+    },
+    /// Forget `worker`'s `binding`, if the ledger has the environment.
+    Remove { worker: String, binding: String },
+}
+
+impl<T: LedgerTable> TableChange<T> {
+    pub(crate) fn insert(worker: &str, binding: &str, record: T::Record) -> Self {
+        TableChange::Insert {
+            worker: worker.to_string(),
+            binding: binding.to_string(),
+            record,
+        }
+    }
+
+    pub(crate) fn remove(worker: &str, binding: &str) -> Self {
+        TableChange::Remove {
+            worker: worker.to_string(),
+            binding: binding.to_string(),
+        }
+    }
+}
+
+impl<T: LedgerTable> LedgerChange for TableChange<T> {
+    fn apply(self, lock: &mut DeployLock, environment: &str) -> bool {
+        match self {
+            TableChange::Insert {
+                worker,
+                binding,
+                record,
+            } => T::insert(
+                lock.environments
+                    .entry(environment.to_string())
+                    .or_default(),
+                &worker,
+                &binding,
+                record,
+            ),
+            TableChange::Remove { worker, binding } => {
+                if let Some(env) = lock.environments.get_mut(environment) {
+                    T::remove(env, &worker, &binding);
+                }
+            }
+        }
+        true
+    }
+}
+
+/// What one write of the ledger covers: its changes, made in order, and the message when the write
+/// fails, before " in {path}: {error}".
+pub(crate) struct Commit<C> {
+    pub(crate) changes: Vec<C>,
+    pub(crate) failure: String,
+}
+
+impl<C> Commit<C> {
+    /// `changes` in one write, failing with `failure`.
+    pub(crate) fn of(changes: Vec<C>, failure: String) -> Self {
+        Commit { changes, failure }
+    }
+
+    /// One change, for what `done` did to the account: "{done} but could not record it".
+    pub(crate) fn recorded(change: C, done: &str) -> Self {
+        Commit::of(vec![change], format!("{done} but could not record it"))
+    }
+}
+
+/// The links a Worker's instances of a linked kind (stored secrets, AI Search, mTLS certificates)
+/// make, recorded in one write only when one of them changes what the ledger holds.
+pub(crate) struct Links<K: ResourceKind> {
+    pending: BTreeMap<String, K::Record>,
+    changed: bool,
+}
+
+impl<K: ResourceKind> Links<K>
+where
+    K::Record: PartialEq,
+    K::Table: LedgerTable<Record = K::Record>,
+{
+    pub(crate) fn new() -> Self {
+        Links {
+            pending: BTreeMap::new(),
+            changed: false,
+        }
+    }
+
+    /// Record `link` for this Worker's `binding`, unless it is what the ledger (or an earlier link
+    /// of this Worker) already holds.
+    pub(crate) fn link(&mut self, cx: &StepCx<'_, '_, K>, binding: &str, link: K::Record) {
+        let held = self
+            .pending
+            .get(binding)
+            .or_else(|| cx.ledger().recorded::<K>(cx.worker, binding));
+        if held == Some(&link) {
+            return;
+        }
+        self.pending.insert(binding.to_string(), link);
+        self.changed = true;
+    }
+
+    /// The one write of `worker`'s links when any changed, failing with "{failure} in …".
+    pub(crate) fn commit(
+        self,
+        worker: &str,
+        failure: String,
+    ) -> Option<Commit<TableChange<K::Table>>> {
+        self.changed.then(|| {
+            Commit::of(
+                self.pending
+                    .into_iter()
+                    .map(|(binding, link)| TableChange::insert(worker, &binding, link))
+                    .collect(),
+                failure,
+            )
+        })
+    }
+}
+
+/// What the apply does once a step's commits are written, before the kind's next step: Vectorize
+/// makes an index's metadata indexes only once the index is recorded.
+pub(crate) type Then<'r, K> =
+    Box<dyn for<'a, 'l> FnOnce(&StepCx<'a, 'l, K>) -> Result<(), DeployFailure> + 'r>;
+
+/// What provisioning one declared instance, or (for a kind that works on them together) a
+/// Worker's instances, did.
+pub(crate) struct Provisioned<'r, K: ResourceKind> {
+    /// What the push binds, by binding, written into the generated configuration.
+    pub(crate) bound: Vec<(String, K::Bound)>,
+    /// What to record, each written in order before anything else is asked of the account.
+    pub(crate) commits: Vec<Commit<K::Change>>,
+    /// What to do once they are written.
+    pub(crate) then: Option<Then<'r, K>>,
+}
+
+impl<K: ResourceKind> Provisioned<'_, K> {
+    /// Nothing bound and nothing to record.
+    pub(crate) fn nothing() -> Self {
+        Provisioned {
+            bound: Vec::new(),
+            commits: Vec::new(),
+            then: None,
+        }
+    }
+
+    /// `binding` bound to `bound`, with nothing to record.
+    pub(crate) fn bound(binding: &str, bound: K::Bound) -> Self {
+        Provisioned {
+            bound: vec![(binding.to_string(), bound)],
+            ..Provisioned::nothing()
+        }
+    }
+
+    /// And `commit` to write.
+    pub(crate) fn with(mut self, commit: Commit<K::Change>) -> Self {
+        self.commits.push(commit);
+        self
+    }
 }
 
 /// The account state a run reads once, for every kind: each kind takes its own with
@@ -378,6 +510,9 @@ pub(crate) trait ResourceKind: Sized {
     /// What the push binds one instance to, written into the generated configuration (KV: its
     /// id; D1: its name and id; R2, bound by name already: nothing).
     type Bound;
+    /// One change provisioning or pruning makes to the kind's records, which the apply writes
+    /// (most kinds: a [`TableChange`] of their table).
+    type Change: LedgerChange;
 
     /// The Worker's declared instances, in the order they are planned and provisioned.
     fn declared(r: &Resources) -> Vec<Self::Decl<'_>>;
@@ -457,33 +592,29 @@ pub(crate) trait ResourceKind: Sized {
         None
     }
 
-    /// Delete `orphan` from the account and forget it, through [`ApplyCx::change`]. Only called
-    /// for a [`ResourceKind::prunable`] orphan; report-only by default.
-    fn prune(_cx: &mut ApplyCx<'_, '_, Self>, _orphan: &Self::Orphan) -> Result<(), DeployFailure> {
-        Ok(())
+    /// Delete `orphan` from the account, and what forgetting it changes. Only called for a
+    /// [`ResourceKind::prunable`] orphan; report-only by default.
+    fn prune(
+        _cx: &StepCx<'_, '_, Self>,
+        _orphan: &Self::Orphan,
+    ) -> Result<Option<Commit<Self::Change>>, DeployFailure> {
+        Ok(None)
     }
 
-    /// Create or reuse `decl` on the account, recording what it made through
-    /// [`ApplyCx::record`].
-    fn provision(
-        cx: &mut ApplyCx<'_, '_, Self>,
-        decl: Self::Decl<'_>,
-    ) -> Result<Provisioned<Self::Bound>, DeployFailure>;
+    /// Create or reuse `decl` on the account, and what to record of what it made.
+    fn provision<'r>(
+        cx: &StepCx<'_, '_, Self>,
+        decl: Self::Decl<'r>,
+    ) -> Result<Provisioned<'r, Self>, DeployFailure>;
 
-    /// Provision each of the Worker's declared instances, in order: one [`ResourceKind::provision`]
-    /// each, unless the kind works on them together (queues make every one before recording any;
-    /// rate limiters record their ids in one write). What the push binds, by binding.
-    fn provision_all(
-        cx: &mut ApplyCx<'_, '_, Self>,
-        declared: &Resources,
-    ) -> Result<BTreeMap<String, Self::Bound>, DeployFailure> {
-        let mut bound = BTreeMap::new();
-        for decl in Self::declared(declared) {
-            if let Some((binding, id)) = Self::provision(cx, decl)?.bound {
-                bound.insert(binding, id);
-            }
-        }
-        Ok(bound)
+    /// Provision the Worker's declared instances together, for a kind that does (queues make every
+    /// one before recording any; rate limiters and the linked kinds record theirs in one write).
+    /// `None`, the default, provisions each alone, in order, one [`ResourceKind::provision`] each.
+    fn provision_all<'r>(
+        _cx: &StepCx<'_, '_, Self>,
+        _declared: &'r Resources,
+    ) -> Option<Result<Provisioned<'r, Self>, DeployFailure>> {
+        None
     }
 
     /// Change the ledger once the Worker's push has succeeded: a rate limiter the source no
@@ -880,40 +1011,6 @@ pub(crate) fn recorded_bound_id(
     find.found
 }
 
-/// Where a kind is provisioned: one Worker of one environment, in the whole project, through
-/// the run's tools.
-#[derive(Clone, Copy)]
-pub(crate) struct Site<'a> {
-    pub(crate) tools: Tools<'a>,
-    pub(crate) environment: &'a str,
-    pub(crate) worker: &'a str,
-    pub(crate) project: &'a BTreeMap<String, Resources>,
-}
-
-/// Provision each of the declared instances of `K` at `site`, in order. Each records what it
-/// made, and the ledger is written, before the next is made (ADR 0180: an interrupted run never
-/// makes a second). What the push binds, by binding.
-pub(crate) fn provision_kind<K: ResourceKind>(
-    site: Site<'_>,
-    declared: &Resources,
-    lock: &mut DeployLock,
-    lock_path: &Path,
-    lives: Lives<'_>,
-) -> Result<BTreeMap<String, K::Bound>, DeployFailure> {
-    K::provision_all(
-        &mut ApplyCx {
-            environment: site.environment,
-            worker: site.worker,
-            project: site.project,
-            lock,
-            lock_path,
-            live: K::live_in(lives),
-            tools: site.tools,
-        },
-        declared,
-    )
-}
-
 /// Each kind's change to the ledger once `worker`'s push has succeeded
 /// ([`ResourceKind::after_push`]).
 pub(crate) fn kinds_after_push(
@@ -939,68 +1036,6 @@ pub(crate) fn kinds_after_push(
         worker,
         declared,
     });
-}
-
-/// Delete each kind's orphans `--prune` deletes, in the list's order, each forgotten and the
-/// ledger written as it goes, so a prune interrupted half-way is resumed rather than repeated.
-pub(crate) fn prune_kind_orphans(
-    tools: Tools<'_>,
-    lock: &mut DeployLock,
-    lock_path: &Path,
-    environment: &str,
-    orphans: &Orphans,
-    lives: Lives<'_>,
-) -> Result<(), DeployFailure> {
-    struct Prune<'p, 'v> {
-        tools: Tools<'p>,
-        lock: &'p mut DeployLock,
-        lock_path: &'p Path,
-        environment: &'p str,
-        orphans: &'p Orphans,
-        lives: Lives<'v>,
-        result: Result<(), DeployFailure>,
-    }
-    impl Prune<'_, '_> {
-        fn prune<K: ResourceKind>(&mut self) -> Result<(), DeployFailure> {
-            let project = BTreeMap::new();
-            for orphan in K::orphans_in(self.orphans)
-                .iter()
-                .filter(|o| K::prunable(o))
-            {
-                K::prune(
-                    &mut ApplyCx {
-                        environment: self.environment,
-                        worker: K::orphan_worker(orphan),
-                        project: &project,
-                        lock: self.lock,
-                        lock_path: self.lock_path,
-                        live: K::live_in(self.lives),
-                        tools: self.tools,
-                    },
-                    orphan,
-                )?;
-            }
-            Ok(())
-        }
-    }
-    impl KindVisitor for Prune<'_, '_> {
-        fn visit<K: ResourceKind>(&mut self) {
-            if self.result.is_ok() {
-                self.result = self.prune::<K>();
-            }
-        }
-    }
-    let mut prune = Prune {
-        tools,
-        lock,
-        lock_path,
-        environment,
-        orphans,
-        lives,
-        result: Ok(()),
-    };
-    for_each_kind(&mut prune);
-    prune.result
 }
 
 /// #3494: a plan action checked against whether the account holds the resource: a `create` of

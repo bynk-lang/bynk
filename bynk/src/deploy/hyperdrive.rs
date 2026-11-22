@@ -652,7 +652,12 @@ pub(crate) fn provision(
         hyperdrive: *run,
         ..Lives::default()
     };
-    let ids = provision_kind::<Hyperdrive>(site, declared, lock, lock_path, lives)?;
+    let ids = provision_kind::<Hyperdrive>(
+        site,
+        declared,
+        &mut LedgerWriter::new(lock, lock_path),
+        lives,
+    )?;
     Hyperdrive::materialise(config, worker, &ids)
 }
 
@@ -667,27 +672,21 @@ pub(crate) fn prune(
     orphans: &[OrphanHyperdrive],
 ) -> Result<(), DeployFailure> {
     let provenance = crate::probe::Provenance::Path("/nonexistent/wrangler".into());
-    let project = BTreeMap::new();
     let wants = Wants::new();
+    let mut writer = LedgerWriter::new(lock, lock_path);
+    let lives = Lives {
+        hyperdrive: HyperdriveRun {
+            wants: &wants,
+            api: Some(api),
+        },
+        ..Lives::default()
+    };
+    let tools = Tools {
+        provenance: &provenance,
+        project_root: Path::new("/nonexistent"),
+    };
     for orphan in orphans.iter().filter(|o| Hyperdrive::prunable(o)) {
-        Hyperdrive::prune(
-            &mut ApplyCx {
-                environment,
-                worker: &orphan.worker,
-                project: &project,
-                lock,
-                lock_path,
-                live: HyperdriveRun {
-                    wants: &wants,
-                    api: Some(api),
-                },
-                tools: Tools {
-                    provenance: &provenance,
-                    project_root: Path::new("/nonexistent"),
-                },
-            },
-            orphan,
-        )?;
+        prune_one::<Hyperdrive>(tools, &mut writer, environment, orphan, lives)?;
     }
     Ok(())
 }

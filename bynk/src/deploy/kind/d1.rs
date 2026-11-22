@@ -92,6 +92,7 @@ impl ResourceKind for D1 {
     type Live<'a> = ();
     /// The database's account-facing name and its id, which the config binds it by.
     type Bound = (String, String);
+    type Change = TableChange<D1Table>;
 
     fn declared(r: &Resources) -> Vec<&D1Decl> {
         r.d1_databases.iter().collect()
@@ -224,10 +225,10 @@ impl ResourceKind for D1 {
     /// derived from this project's, so it is this project's. A database the
     /// ledger already holds under this environment's name is not asked of
     /// the account again.
-    fn provision(
-        cx: &mut ApplyCx<'_, '_, D1>,
-        db: &D1Decl,
-    ) -> Result<Provisioned<(String, String)>, DeployFailure> {
+    fn provision<'r>(
+        cx: &StepCx<'_, '_, D1>,
+        db: Self::Decl<'r>,
+    ) -> Result<Provisioned<'r, D1>, DeployFailure> {
         let (worker, environment) = (cx.worker, cx.environment);
         let physical = d1_database_name(environment, &db.name);
         let recorded = cx
@@ -236,9 +237,7 @@ impl ResourceKind for D1 {
             .filter(|recorded| recorded.name == physical)
             .map(|recorded| recorded.id.clone());
         if let Some(id) = recorded {
-            return Ok(Provisioned {
-                bound: Some((db.binding.clone(), (physical, id))),
-            });
+            return Ok(Provisioned::bound(&db.binding, (physical, id)));
         }
         let id = create_d1(cx.tools.provenance, &physical, cx.tools.project_root).map_err(|e| {
             DeployFailure::driver(format!(
@@ -246,14 +245,12 @@ impl ResourceKind for D1 {
                 db.binding
             ))
         })?;
-        cx.record(
+        let record = cx.recording(
             &db.binding,
             D1Record::of(&physical, &id),
             &format!("created the D1 database `{physical}`"),
-        )?;
-        Ok(Provisioned {
-            bound: Some((db.binding.clone(), (physical, id))),
-        })
+        );
+        Ok(Provisioned::bound(&db.binding, (physical, id)).with(record))
     }
 
     fn materialise(
@@ -678,12 +675,11 @@ mod tests {
             migrations: Vec::new(),
         };
         let done = D1::provision(
-            &mut ApplyCx {
+            &StepCx {
                 environment: "default",
                 worker: "shop",
                 project: &project,
-                lock: &mut lock,
-                lock_path: Path::new("/nonexistent/bynk.deploy.lock"),
+                lock: &lock,
                 live: (),
                 tools: Tools {
                     provenance: &provenance,
@@ -694,14 +690,13 @@ mod tests {
         )
         .expect("nothing to create");
         assert_eq!(
-            done,
-            Provisioned {
-                bound: Some((
-                    "D1_ORDERS".to_string(),
-                    ("shop-orders".to_string(), "id-1".to_string())
-                ))
-            }
+            done.bound,
+            [(
+                "D1_ORDERS".to_string(),
+                ("shop-orders".to_string(), "id-1".to_string())
+            )]
         );
+        assert!(done.commits.is_empty(), "nothing to record");
     }
 
     #[test]

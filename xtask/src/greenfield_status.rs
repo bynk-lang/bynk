@@ -14,11 +14,11 @@
 //! crate-hygiene track's M-3 ratchet, `model_readers_beyond_emit` (B1, #2939), and its H-3 gate,
 //! `unused_deps` (A4, #2976).
 //!
-//! **Twenty-seven are gated**, committed and diffed: `workspace_lints`, `fs_below_driver`,
+//! **Twenty-eight are gated**, committed and diffed: `workspace_lints`, `fs_below_driver`,
 //! `options_sources`, `hoist_sinks`, `span_keyed_maps`, `emit_diagnostics`,
 //! `ide_emit_edge`, `ast_importers`, `emit_abi_shapes`, `ts_writes`, `ts_any`,
 //! `verbatim_origins`, `verbatim_sites`, `incremental_query_types`,
-//! `unconsumed_ir_items`, `diagnostic_coverage`, `model_readers_beyond_emit`, `unused_deps`, `explained_codes`, `ts_raw_sites_emit`, `ts_raw_sites_testgen`, `ts_text_idents`, `emit_thread_locals`, `emit_silent_fallbacks`, `emit_print_calls`, `import_prediction_fns`, `deploy_kind_accessors`. Ten of these are
+//! `unconsumed_ir_items`, `diagnostic_coverage`, `model_readers_beyond_emit`, `unused_deps`, `explained_codes`, `ts_raw_sites_emit`, `ts_raw_sites_testgen`, `ts_text_idents`, `emit_thread_locals`, `emit_silent_fallbacks`, `emit_print_calls`, `import_prediction_fns`, `deploy_kind_accessors`, `deploy_ledger_writes`. Ten of these are
 //! zero/closure-shaped — a boolean, or a count pinned at a small, argued floor
 //! (`ast_importers` = 5, `emit_abi_shapes` = 1). Phase 7's own four are the same shape:
 //! each converged toward an argued floor over dozens of slices, the same trajectory
@@ -42,7 +42,7 @@
 //! **Two kinds of gate** (#3679, amending ADR 0389/0390). Every gated probe is
 //! *exact-match*: a live reading that differs from its committed row fails unless a
 //! pending file names it in `probes:`. The [`GROWTH_PROBES`] (`ts_writes`, `ts_any`,
-//! `emit_abi_shapes`, `verbatim_sites`, `ts_raw_sites_emit`, `ts_raw_sites_testgen`, `ts_text_idents`, `span_keyed_maps`, `emit_thread_locals`, `emit_silent_fallbacks`, `emit_print_calls`, `import_prediction_fns`, `deploy_kind_accessors`) are also *directional*:
+//! `emit_abi_shapes`, `verbatim_sites`, `ts_raw_sites_emit`, `ts_raw_sites_testgen`, `ts_text_idents`, `span_keyed_maps`, `emit_thread_locals`, `emit_silent_fallbacks`, `emit_print_calls`, `import_prediction_fns`, `deploy_kind_accessors`, `deploy_ledger_writes`) are also *directional*:
 //! `growth_probes_never_rise` (`xtask/tests/greenfield_status.rs`) fails when the
 //! live leading count exceeds the committed one unless a pending file *raises* the
 //! probe with a reason (`raises:`), which the stamp then records in
@@ -117,7 +117,7 @@ pub fn run(root: &Path) -> Report {
 /// The gated probes' names, in [`run_gated`]'s order — what a pending file's
 /// `probes` key may cite. `greenfield_status_table_is_current` asserts this
 /// matches the probes [`run_gated`] actually returns, so the two cannot drift.
-pub const GATED_PROBES: [&str; 27] = [
+pub const GATED_PROBES: [&str; 28] = [
     "workspace_lints",
     "fs_below_driver",
     "options_sources",
@@ -139,6 +139,7 @@ pub const GATED_PROBES: [&str; 27] = [
     "emit_print_calls",
     "import_prediction_fns",
     "deploy_kind_accessors",
+    "deploy_ledger_writes",
     "incremental_query_types",
     "unconsumed_ir_items",
     "diagnostic_coverage",
@@ -149,12 +150,12 @@ pub const GATED_PROBES: [&str; 27] = [
 
 /// The gated probes that only a reasoned, recorded `raises:` may increase
 /// (#3679, ADR 0389/0390 amended): `ts_writes`, `ts_any`, `emit_abi_shapes`,
-/// `verbatim_sites`, `ts_raw_sites_emit` and `ts_raw_sites_testgen` (the split of `ts_raw_sites`, #3681), `ts_text_idents` (#3681), `span_keyed_maps`, `emit_thread_locals` (1A.19), `emit_silent_fallbacks` (1A.34), `emit_print_calls` (1A.35b), `import_prediction_fns` (1A.36a), `deploy_kind_accessors` (1D.1a). Probes already at a zero or closure
+/// `verbatim_sites`, `ts_raw_sites_emit` and `ts_raw_sites_testgen` (the split of `ts_raw_sites`, #3681), `ts_text_idents` (#3681), `span_keyed_maps`, `emit_thread_locals` (1A.19), `emit_silent_fallbacks` (1A.34), `emit_print_calls` (1A.35b), `import_prediction_fns` (1A.36a), `deploy_kind_accessors` (1D.1a), `deploy_ledger_writes` (1D.2a). Probes already at a zero or closure
 /// floor are excluded (their exact-match row pins them), as are
 /// `verbatim_origins` (an argued floor of 2) and `model_readers_beyond_emit`
 /// (which has the opposite direction). A subset of [`GATED_PROBES`], pinned by
 /// a unit test.
-pub const GROWTH_PROBES: [&str; 13] = [
+pub const GROWTH_PROBES: [&str; 14] = [
     "ts_writes",
     "ts_any",
     "emit_abi_shapes",
@@ -168,9 +169,10 @@ pub const GROWTH_PROBES: [&str; 13] = [
     "emit_print_calls",
     "import_prediction_fns",
     "deploy_kind_accessors",
+    "deploy_ledger_writes",
 ];
 
-/// The twenty-seven gated (zero/closure/ratchet) probes only — what [`gated_disagreements`] diffs.
+/// The twenty-eight gated (zero/closure/ratchet) probes only — what [`gated_disagreements`] diffs.
 pub fn run_gated(root: &Path) -> Vec<Probe> {
     vec![
         workspace_lints(root),
@@ -194,6 +196,7 @@ pub fn run_gated(root: &Path) -> Vec<Probe> {
         emit_print_calls(root),
         import_prediction_fns(root),
         deploy_kind_accessors(root),
+        deploy_ledger_writes(root),
         incremental_query_types(root),
         unconsumed_ir_items(root),
         diagnostic_coverage(root),
@@ -2635,6 +2638,57 @@ fn deploy_kind_accessors_violations(files: &[(PathBuf, String)]) -> usize {
     production_lines_matching(&production, |line| accessor.is_match(line))
 }
 
+/// 1D.2 (#4001, the ruling on 1D.2a): the production sites in `bynk/src/deploy/**` that write
+/// `bynk.deploy.lock` or ask a kind's context to: a call of `write_lock`, or of `cx.record`,
+/// `cx.change` or `cx.commit`, the 1D.1 context's writes. It read 25 on `main` before 1D.2a (the
+/// 23 kind sites, `ApplyCx::commit`'s own write and `run`'s post-push write) and 1 after it, the
+/// apply's one `LedgerWriter`. `revert.rs` is left out by path: its write, per rolled-back Worker,
+/// is `bynk revert`'s, not the apply's. A growth probe ([`GROWTH_PROBES`]): a second write site
+/// needs a pending file that `raises:` it with a reason.
+///
+/// Counts non-comment lines outside `#[cfg(test)]` modules and wholly-test files
+/// ([`is_whole_test_file`]) in `bynk/src/deploy` that match [`DEPLOY_LEDGER_WRITE`], less the line
+/// that defines `write_lock`.
+fn deploy_ledger_writes(root: &Path) -> Probe {
+    Probe {
+        name: "deploy_ledger_writes",
+        gated: true,
+        reads: deploy_ledger_writes_violations(&rust_files_relative(&root.join("bynk/src/deploy")))
+            .to_string(),
+    }
+}
+
+/// A ledger write, or a 1D.1 context's: #4001's "Probes and guards" pattern.
+const DEPLOY_LEDGER_WRITE: &str = r"\bwrite_lock\(|\bcx\.(record|change|commit)\(";
+
+/// [`deploy_ledger_writes`]'s counting logic over an explicit file list, paths relative to
+/// `bynk/src/deploy`.
+fn deploy_ledger_writes_violations(files: &[(PathBuf, String)]) -> usize {
+    let write = regex::Regex::new(DEPLOY_LEDGER_WRITE).expect("the write pattern compiles");
+    let definition = regex::Regex::new(r"\bfn write_lock\(").expect("the definition compiles");
+    // As for [`deploy_kind_accessors_violations`]: deploy's test modules are `pub(crate) mod tests`.
+    let production: Vec<(PathBuf, String)> = files
+        .iter()
+        .filter(|(path, _)| {
+            let path = path.to_string_lossy().replace('\\', "/");
+            !is_whole_test_file(&path) && path != "revert.rs"
+        })
+        .map(|(path, contents)| {
+            let contents: Vec<&str> = contents
+                .lines()
+                .map(|line| {
+                    line.strip_prefix("pub(crate) mod ")
+                        .map_or(line, |_| &line[11..])
+                })
+                .collect();
+            (path.clone(), contents.join("\n"))
+        })
+        .collect();
+    production_lines_matching(&production, |line| {
+        write.is_match(line) && !definition.is_match(line)
+    })
+}
+
 /// Named identifiers imported from the compiler-generated firstparty/runtime relative
 /// modules (`./bynk.js`, `./runtime.js`, `./bynk/locale/types.js`, `./cloudflare.js`,
 /// or their `../` forms) — `import type { A, B }`/`import { A, B }` braces, stripping
@@ -4219,7 +4273,8 @@ pub fn render_table(report: &Report) -> String {
          `ts_raw_sites` split into `ts_raw_sites_emit`/`ts_raw_sites_testgen` and `emit_thread_locals` \
          added by 1A.19; `emit_silent_fallbacks` added by 1A.34; `emit_print_calls` added by 1A.35b \
          (`lowering_text_bridge` and `stmt_text_lines`, added by #3694 and #3711, were retired at 0 by 1A.35b); \
-         `import_prediction_fns` added by 1A.36a; `deploy_kind_accessors` added by 1D.1a. Twenty-seven \
+         `import_prediction_fns` added by 1A.36a; `deploy_kind_accessors` added by 1D.1a; \
+         `deploy_ledger_writes` added by 1D.2a. Twenty-eight \
          probes are gated — a disagreement between this file and a fresh run fails \
          `greenfield_status_table_is_current` (`xtask/tests/greenfield_status.rs`). \
          Five are trend probes, reported only.\n\n",
@@ -4605,7 +4660,8 @@ mod tests {
         | `emit_silent_fallbacks` | yes | 15 |\n\
         | `emit_print_calls` | yes | 30 |\n\
         | `import_prediction_fns` | yes | 8 |\n\
-        | `deploy_kind_accessors` | yes | 68 |\n";
+        | `deploy_kind_accessors` | yes | 68 |\n\
+        | `deploy_ledger_writes` | yes | 25 |\n";
 
     fn growth_live(ts_writes: &str, abi: &str) -> Vec<Probe> {
         vec![
@@ -4622,6 +4678,7 @@ mod tests {
             gated("emit_print_calls", "30"),
             gated("import_prediction_fns", "8"),
             gated("deploy_kind_accessors", "68"),
+            gated("deploy_ledger_writes", "25"),
         ]
     }
 
@@ -4842,6 +4899,37 @@ mod tests {
                 ("hyperdrive.rs", "lock.record_hyperdrive(a);\n"),
             ])),
             1
+        );
+    }
+
+    #[test]
+    fn deploy_ledger_writes_counts_write_sites_outside_tests_comments_and_revert() {
+        let count = |src: &str| deploy_ledger_writes_violations(&files_of(&[("ledger.rs", src)]));
+        // A write, and each of the 1D.1 context's writes.
+        let src = "write_lock(self.path, self.lock)\n\
+                   cx.record(binding, record, &done)?;\n\
+                   cx.change(|env| f(env), &done)\n\
+                   cx.commit(&failure)?;\n";
+        assert_eq!(count(src), 4);
+        // The definition, a longer name, another receiver and a mention are not writes.
+        assert_eq!(
+            count(
+                "pub(crate) fn write_lock(path: &Path, lock: &DeployLock) {}\n\
+                 my_write_lock(p);\nwriter.commit(e, c)?;\ncx.recording(b, r, d);\nlet w = write_lock;\n"
+            ),
+            0
+        );
+        // A comment, a test module (deploy's are `pub(crate)`) and a wholly-test file do not count.
+        let src = "// write_lock(\n#[cfg(test)]\npub(crate) mod tests {\n    fn t() { write_lock(p, l).unwrap(); }\n}\n";
+        assert_eq!(count(src), 0);
+        assert_eq!(
+            deploy_ledger_writes_violations(&files_of(&[
+                ("apply_tests.rs", "write_lock(p, l);\n"),
+                ("revert.rs", "write_lock(lock_path, lock)\n"),
+                ("apply.rs", "write_lock(self.path, self.lock)\n"),
+            ])),
+            1,
+            "`bynk revert`'s write is not the apply's"
         );
     }
 

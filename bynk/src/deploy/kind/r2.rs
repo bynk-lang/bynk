@@ -91,6 +91,7 @@ impl ResourceKind for R2 {
     type Live<'a> = ();
     /// Nothing: the config binds a bucket by the name it already carries.
     type Bound = ();
+    type Change = TableChange<R2Table>;
 
     fn declared(r: &Resources) -> Vec<&R2Decl> {
         r.r2_buckets.iter().collect()
@@ -220,13 +221,13 @@ impl ResourceKind for R2 {
     /// account again. Buckets are named as `environment` names them in the config
     /// the push reads: the top level already carries the default environment's, and
     /// the synthesised `[env.<name>]` block the rest.
-    fn provision(
-        cx: &mut ApplyCx<'_, '_, R2>,
-        bucket: &R2Decl,
-    ) -> Result<Provisioned<()>, DeployFailure> {
+    fn provision<'r>(
+        cx: &StepCx<'_, '_, R2>,
+        bucket: Self::Decl<'r>,
+    ) -> Result<Provisioned<'r, R2>, DeployFailure> {
         let (worker, environment) = (cx.worker, cx.environment);
         if r2_action(cx.ledger(), worker, bucket) == "reuse" {
-            return Ok(Provisioned { bound: None });
+            return Ok(Provisioned::nothing());
         }
         let physical = r2_bucket_name(environment, &bucket.name);
         create_r2_bucket(
@@ -241,12 +242,11 @@ impl ResourceKind for R2 {
                 bucket.binding
             ))
         })?;
-        cx.record(
+        Ok(Provisioned::nothing().with(cx.recording(
             &bucket.binding,
             R2Bucket::of(&physical, bucket.jurisdiction.as_deref()),
             &format!("created the R2 bucket `{physical}`"),
-        )?;
-        Ok(Provisioned { bound: None })
+        )))
     }
 }
 
@@ -556,12 +556,11 @@ mod tests {
             jurisdiction: None,
         };
         let done = R2::provision(
-            &mut ApplyCx {
+            &StepCx {
                 environment: "default",
                 worker: "shop",
                 project: &project,
-                lock: &mut lock,
-                lock_path: Path::new("/nonexistent/bynk.deploy.lock"),
+                lock: &lock,
                 live: (),
                 tools: Tools {
                     provenance: &provenance,
@@ -571,6 +570,9 @@ mod tests {
             &bucket,
         )
         .expect("nothing to create");
-        assert_eq!(done, Provisioned { bound: None });
+        assert!(
+            done.bound.is_empty() && done.commits.is_empty(),
+            "nothing bound or recorded"
+        );
     }
 }

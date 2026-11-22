@@ -433,6 +433,7 @@ fn apply(environment: &str, fail_call: Option<usize>, fail_write: Option<usize>)
         })
     };
     let failure = write_watch::watching(watch, || {
+        let mut writer = LedgerWriter::new(&mut lock, &lock_path);
         for worker in &order {
             let pushed = deploy_one(
                 &provenance,
@@ -441,8 +442,7 @@ fn apply(environment: &str, fail_call: Option<usize>, fail_write: Option<usize>)
                 worker,
                 &resources[worker],
                 &resources,
-                &mut lock,
-                &lock_path,
+                &mut writer,
                 &mut Secrets {
                     source: &source,
                     force: false,
@@ -460,15 +460,9 @@ fn apply(environment: &str, fail_call: Option<usize>, fail_write: Option<usize>)
             match pushed {
                 // As `run` records a Worker that pushed (it has no agent moves to record).
                 Ok(Pushed::Ok) => {
-                    record_pushed_contracts(
-                        &mut lock,
-                        environment,
-                        (worker, &workers_dir.join(worker)),
-                        (&groups.members(worker), &groups.script(worker)),
-                    );
-                    record_pushed_tombstones(&mut lock, environment, worker, &resources[worker]);
-                    kinds_after_push(&mut lock, environment, worker, &resources[worker]);
-                    if let Err(e) = write_lock(&lock_path, &lock) {
+                    let pushed =
+                        PushedWorker::of(worker, &workers_dir, &groups, &resources[worker]);
+                    if let Err(e) = record_pushed(&mut writer, environment, &pushed, |_| {}) {
                         return Some(unrecorded_deploy_failure(
                             environment,
                             worker,
@@ -484,8 +478,7 @@ fn apply(environment: &str, fail_call: Option<usize>, fail_write: Option<usize>)
         prune_orphans(
             &provenance,
             &scratch.root,
-            &mut lock,
-            &lock_path,
+            &mut writer,
             environment,
             &plan.orphans,
             lives,

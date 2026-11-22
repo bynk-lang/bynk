@@ -510,13 +510,14 @@ pub(crate) fn materialise_adopted_vectorize(
 
 /// One `Vectorize` index (1D.1c: [`Vectorize`]'s provisioning): created when the account has
 /// none of that name, checked against the declaration when it has (a mismatch fails the deploy and
-/// changes nothing), recorded in the ledger before the push, then its metadata indexes made before
-/// any vector can be written. `pacing` is how long the metadata indexes are waited for.
-pub(crate) fn provision_vectorize_index(
-    cx: &mut ApplyCx<'_, '_, Vectorize>,
-    decl: &VectorizeDecl,
+/// changes nothing), recorded in the ledger before the push, then (once that record is written,
+/// 1D.2a) its metadata indexes made before any vector can be written. `pacing` is how long the
+/// metadata indexes are waited for.
+pub(crate) fn provision_vectorize_index<'r>(
+    cx: &StepCx<'_, '_, Vectorize>,
+    decl: &'r VectorizeDecl,
     pacing: Pacing,
-) -> Result<(), DeployFailure> {
+) -> Result<Provisioned<'r, Vectorize>, DeployFailure> {
     let (worker, environment) = (cx.worker, cx.environment);
     let (provenance, project_root) = (cx.tools.provenance, cx.tools.project_root);
     let physical = decl.physical_name(environment);
@@ -526,14 +527,16 @@ pub(crate) fn provision_vectorize_index(
             .ledger()
             .recorded::<Vectorize>(worker, &decl.binding)
             .is_some_and(|r| r.name == physical && r.adopted);
+        let mut adopted = Provisioned::nothing();
         if !already {
-            cx.record(
-                &decl.binding,
+            adopted = adopted.with(record(
+                cx,
+                decl,
                 VectorizeRecord::of(&physical, true),
                 &format!("adopted the Vectorize index `{physical}`"),
-            )?;
+            ));
         }
-        return Ok(());
+        return Ok(adopted);
     }
     let fail = |what: &str, e: String| {
         DeployFailure::driver(format!(
@@ -566,29 +569,67 @@ pub(crate) fn provision_vectorize_index(
         .ledger()
         .recorded::<Vectorize>(worker, &decl.binding)
         .is_some_and(|r| r.name == physical);
+    let mut provisioned = Provisioned::nothing();
     if !already {
         // An index already on the account was not made by this deploy, so
         // it is recorded as adopted: never pruned.
-        cx.record(
-            &decl.binding,
+        provisioned = provisioned.with(record(
+            cx,
+            decl,
             VectorizeRecord::of(&physical, existed),
             &format!("provisioned the Vectorize index `{physical}`"),
-        )?;
+        ));
     }
-    let existing = existing_metadata_indexes(provenance, &physical, project_root)
+    provisioned.then = Some(Box::new(move |cx| {
+        provision_metadata_indexes(cx, decl, &physical, existed, pacing)
+    }));
+    Ok(provisioned)
+}
+
+/// `decl`'s record of index `physical`, for the apply to write.
+fn record(
+    cx: &StepCx<'_, '_, Vectorize>,
+    decl: &VectorizeDecl,
+    record: VectorizeRecord,
+    done: &str,
+) -> Commit<VectorizeChange> {
+    Commit::recorded(
+        VectorizeChange::Record(TableChange::insert(cx.worker, &decl.binding, record)),
+        done,
+    )
+}
+
+/// The metadata indexes of index `physical` that `decl` lists and it lacks, made and waited for
+/// once the index is recorded. `existed`: whether the account had the index before this run.
+fn provision_metadata_indexes(
+    cx: &StepCx<'_, '_, Vectorize>,
+    decl: &VectorizeDecl,
+    physical: &str,
+    existed: bool,
+    pacing: Pacing,
+) -> Result<(), DeployFailure> {
+    let (worker, environment) = (cx.worker, cx.environment);
+    let (provenance, project_root) = (cx.tools.provenance, cx.tools.project_root);
+    let fail = |what: &str, e: String| {
+        DeployFailure::driver(format!(
+            "could not {what} the Vectorize index `{physical}` for `{worker}`'s `{}`: {e}",
+            decl.binding
+        ))
+    };
+    let existing = existing_metadata_indexes(provenance, physical, project_root)
         .map_err(|e| fail("read the metadata indexes of", e))?;
     let (missing, removed) = metadata_index_changes(&decl.indexed, &existing);
-    if let Some(message) = type_change_message(&physical, &missing, &removed) {
+    if let Some(message) = type_change_message(physical, &missing, &removed) {
         return Err(DeployFailure::driver(message));
     }
     for entry in &missing {
-        create_metadata_index(provenance, &physical, entry, project_root)
+        create_metadata_index(provenance, physical, entry, project_root)
             .map_err(|e| fail(&format!("create the metadata index `{entry}` on"), e))?;
     }
     if !missing.is_empty() {
         // Only now is the index safe to write to: a vector upserted before a
         // metadata index is listed is silently left out of it.
-        wait_for_metadata_indexes(provenance, &physical, &missing, project_root, pacing).map_err(
+        wait_for_metadata_indexes(provenance, physical, &missing, project_root, pacing).map_err(
             |e| {
                 DeployFailure::driver(format!(
                     "the Vectorize index `{physical}` for `{worker}`'s `{}`: {e}",
@@ -642,23 +683,19 @@ pub(crate) fn provision_vectorize_indexes_paced(
     pacing: Pacing,
 ) -> Result<(), DeployFailure> {
     let project = BTreeMap::new();
+    let site = Site {
+        tools: Tools {
+            provenance,
+            project_root,
+        },
+        environment,
+        worker,
+        project: &project,
+    };
+    let mut writer = LedgerWriter::new(lock, lock_path);
     for decl in &declared.vectorize_indexes {
-        provision_vectorize_index(
-            &mut ApplyCx {
-                environment,
-                worker,
-                project: &project,
-                lock,
-                lock_path,
-                live: (),
-                tools: Tools {
-                    provenance,
-                    project_root,
-                },
-            },
-            decl,
-            pacing,
-        )?;
+        let provisioned = provision_vectorize_index(&site.cx(writer.lock(), ()), decl, pacing)?;
+        complete(site, provisioned, &mut writer, ())?;
     }
     Ok(())
 }
