@@ -32,18 +32,6 @@ fn tool_exists(name: &str) -> bool {
     which::which(name).is_ok()
 }
 
-/// Route through `cmd /C` on Windows so npm's `npx.cmd` shim resolves
-/// (Rust's CreateProcess refuses batch scripts directly — BatBadBut).
-fn base_command(program: &str) -> Command {
-    if cfg!(windows) {
-        let mut c = Command::new("cmd");
-        c.arg("/C").arg(program);
-        c
-    } else {
-        Command::new(program)
-    }
-}
-
 /// Is this run required to actually reach workerd?
 ///
 /// Presence alone is not enough — empty counts as unset. The contract, and the
@@ -96,8 +84,8 @@ fn hello_world_serves_on_workerd() {
     // A pid-derived port keeps parallel test binaries off each other.
     let port = 20000 + (std::process::id() % 10000) as u16;
     let child = wrangler::Wrangler::spawn(
-        base_command("npx")
-            .args(["-y", WRANGLER, "dev", "--port", &port.to_string()])
+        wrangler::npx()
+            .args(["dev", "--port", &port.to_string()])
             .current_dir(&worker_dir)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped()),
@@ -900,8 +888,6 @@ fn serve_smoke_with_args(
     let port = port_base + (std::process::id() % 10000) as u16;
     let inspector_port = port + 1;
     let mut args: Vec<String> = [
-        "-y",
-        WRANGLER,
         "dev",
         "--port",
         &port.to_string(),
@@ -917,7 +903,7 @@ fn serve_smoke_with_args(
     }
     args.extend(extra.iter().cloned());
     let child = wrangler::Wrangler::spawn(
-        base_command("npx")
+        wrangler::npx()
             .args(&args)
             .current_dir(&worker_dir)
             .stdout(Stdio::piped())

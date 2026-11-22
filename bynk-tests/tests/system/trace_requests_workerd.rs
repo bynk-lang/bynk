@@ -21,7 +21,7 @@ use bynk_driver::project::BuildTarget;
 use std::fs;
 use std::io::{Read, Write};
 use std::path::Path;
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::time::{Duration, Instant};
 
 #[path = "../require/mod.rs"]
@@ -30,7 +30,6 @@ mod require;
 mod wrangler;
 
 const REQUIRE_ENV: &str = "BYNK_REQUIRE_WORKERD";
-const WRANGLER: &str = wrangler::SPEC;
 const PREFIX: &str = "__bynk_trace:";
 
 const SOURCE_CALLEE: &str = r#"context tr.callee
@@ -80,16 +79,6 @@ service api from http {
 
 fn tool_exists(name: &str) -> bool {
     which::which(name).is_ok()
-}
-
-fn base_command(program: &str) -> Command {
-    if cfg!(windows) {
-        let mut c = Command::new("cmd");
-        c.arg("/C").arg(program);
-        c
-    } else {
-        Command::new(program)
-    }
 }
 
 fn skip(reason: &str) -> bool {
@@ -186,8 +175,8 @@ fn serve(tmp: &Path, traced: bool, base: u16) -> Option<Run> {
         let out_log = fs::File::create(log)?;
         let err_log = out_log.try_clone()?;
         wrangler::Wrangler::spawn(
-            base_command("npx")
-                .args(["-y", WRANGLER, "dev"])
+            wrangler::npx()
+                .args(["dev"])
                 .args(wrangler::local_edge_vars(&[("tr.caller", "tr.callee")]))
                 .args([
                     "--port",

@@ -16,10 +16,11 @@ use super::super::harness_names::{
     SysdriveKind, route_with, sysdrive_name, wrong_method_driver_name,
 };
 use super::super::internal_fault::undefined_node;
-use super::super::lower::{Pre, settle_helper, settle_with, str_node};
+use super::super::lower::{Pre, settle_helper, settle_with};
 use super::super::lower_ctx::LowerCtx;
-use super::super::lower_list::{any_ty, arrow, call, id, member, param, paren, take};
+use super::super::lower_list::{any_ty, take};
 use super::super::{Expr, ExprKind, Ident, TypeRef};
+use crate::ts_build::{arrow, call, ident as id, member, param, paren, str_lit as str_node};
 
 // ---- Names ----
 

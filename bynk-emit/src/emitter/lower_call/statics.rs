@@ -15,52 +15,22 @@ use bynk_ts::{
 };
 
 use super::super::lower::{
-    Pre, call_built, ident_node, lower_http_variant_args, member_node, runtime_ctor_call,
-    settle_built,
+    Pre, lower_http_variant_args, member_node, runtime_ctor_call, settle_built,
 };
 use super::super::lower_ctx::LowerCtx;
-use super::super::lower_list::{id, key_is_plain, take};
+use super::super::lower_list::{key_is_plain, take};
 use super::super::ts_types::{ts_ty_to_ts_type, ts_type_ref_to_ts_type};
 use super::super::{Expr, ExprKind, Ident, TypeRef};
 use super::codec_statics::lower_json_codec_call;
 use super::kernel_scalar::identity;
 use super::query::stream_generator;
-
-/// `a.b`.
-fn member(object: TsExpr, property: &str) -> TsExpr {
-    TsExpr::Member {
-        object: Box::new(object),
-        property: property.to_string(),
-    }
-}
+use crate::ts_build::{
+    call, call as call_built, ident as id, ident, ident as ident_node, member, new, type_app,
+};
 
 /// `globalThis.<name>`.
 fn global(name: &str) -> TsExpr {
     member_node("globalThis", name)
-}
-
-/// `callee<A, B>`.
-fn type_app(callee: TsExpr, type_args: Vec<TsType>) -> TsExpr {
-    TsExpr::TypeApp {
-        callee: Box::new(callee),
-        type_args,
-    }
-}
-
-/// `new callee(args)`.
-fn new(callee: TsExpr, args: Vec<TsExpr>) -> TsExpr {
-    TsExpr::New {
-        callee: Box::new(callee),
-        args,
-    }
-}
-
-/// A call to a runtime helper's genuine identifier.
-fn call(helper: &str, args: Vec<TsExpr>) -> TsExpr {
-    TsExpr::Call {
-        callee: Box::new(ident_node(helper)),
-        args,
-    }
 }
 
 /// The type arguments written at a call (`Box.empty[Int]()`), as nodes: the same
@@ -187,7 +157,7 @@ fn parse_iife(is_int: bool, s: bynk_ts::TsExpr) -> bynk_ts::TsExpr {
             TsStmt::return_stmt(
                 Some(TsExpr::Conditional {
                     test: Box::new(guard),
-                    consequent: Box::new(call("Some", vec![ident_node("__n")])),
+                    consequent: Box::new(call(ident("Some"), vec![ident_node("__n")])),
                     alternate: Box::new(ident_node("None")),
                 }),
                 None,
@@ -507,7 +477,7 @@ pub(in crate::emitter) fn lower_runtime_value_static_call(
         }
         (StaticOp::RequestHeaders(RequestHeadersStatic::Empty), 0) => {
             cx.note_request_headers();
-            Some(call("__requestHeaders", vec![TsExpr::array(vec![])]))
+            Some(call(ident("__requestHeaders"), vec![TsExpr::array(vec![])]))
         }
         // #2854: `RequestQuery.of(pairs)` / `RequestQuery.empty()` build the
         // runtime's query view from `"name=value"` pairs.
@@ -518,7 +488,7 @@ pub(in crate::emitter) fn lower_runtime_value_static_call(
         }
         (StaticOp::RequestQuery(RequestQueryStatic::Empty), 0) => {
             cx.note_request_query();
-            Some(call("__requestQuery", vec![TsExpr::array(vec![])]))
+            Some(call(ident("__requestQuery"), vec![TsExpr::array(vec![])]))
         }
         // #3277: `RequestCookies.of(pairs)` / `RequestCookies.empty()` build the
         // runtime's cookies view from `"name=value"` pairs.
@@ -529,7 +499,7 @@ pub(in crate::emitter) fn lower_runtime_value_static_call(
         }
         (StaticOp::RequestCookies(RequestCookiesStatic::Empty), 0) => {
             cx.note_request_cookies();
-            Some(call("__requestCookies", vec![TsExpr::array(vec![])]))
+            Some(call(ident("__requestCookies"), vec![TsExpr::array(vec![])]))
         }
         // v0.100: `Stream.of(xs)` — the deterministic in-memory source. A `Stream`
         // lowers to a host async iterable; `of` wraps a list as an async generator.

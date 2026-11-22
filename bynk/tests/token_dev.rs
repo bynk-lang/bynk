@@ -155,6 +155,7 @@ fn a_minted_token_is_accepted_and_expired_or_not_yet_valid_ones_are_refused() {
 
     let dev_log = dir.join("bynk-dev.log");
     let (dev_stdout, dev_stderr) = dev_child::log_to(&dev_log);
+    dev_child::warm_wrangler();
     let mut cmd = Command::new(&bynk);
     std::os::unix::process::CommandExt::process_group(&mut cmd, 0);
     let mut dev = Group(

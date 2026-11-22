@@ -8,6 +8,11 @@
 // Each test binary includes this whole module and uses part of it.
 #![allow(dead_code)]
 
+/// The one cold-cache provisioning of the `npx` wrangler per machine, shared
+/// with `bynk-tests`'s smokes so both take the same lock (1D.3d, #4043).
+#[path = "../../../bynk-tests/tests/support/wrangler_warm.rs"]
+pub mod wrangler_warm;
+
 use std::fs::File;
 use std::path::Path;
 use std::process::{Child, Command, ExitStatus, Stdio};
@@ -31,6 +36,14 @@ pub fn exited_early(status: ExitStatus, log: &Path) -> String {
     format!(
         "bynk dev exited before it was ready: {status}\n--- its output (last {TAIL_LINES} lines) ---\n{tail}"
     )
+}
+
+/// Provision the `npx` wrangler for this machine before starting `bynk dev`,
+/// unless an installed one is what `bynk dev` will run. Without it, parallel
+/// test processes on a cold npx cache install into one directory at once and
+/// break each other's install.
+pub fn warm_wrangler() {
+    wrangler_warm::warm_unless_installed();
 }
 
 /// Whether `tool --version` runs.

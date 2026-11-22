@@ -31,7 +31,7 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -106,17 +106,6 @@ service api from http {{
 
 fn tool_exists(name: &str) -> bool {
     which::which(name).is_ok()
-}
-
-/// Route through `cmd /C` on Windows so npm's `npx.cmd` shim resolves.
-fn base_command(program: &str) -> Command {
-    if cfg!(windows) {
-        let mut c = Command::new("cmd");
-        c.arg("/C").arg(program);
-        c
-    } else {
-        Command::new(program)
-    }
 }
 
 fn skip(reason: &str) -> bool {
@@ -341,8 +330,8 @@ fn a_par_join_in_an_agent_handler_adds_no_interleaving() {
         let out_log = fs::File::create(&log_path)?;
         let err_log = out_log.try_clone()?;
         wrangler::Wrangler::spawn(
-            base_command("npx")
-                .args(["-y", WRANGLER, "dev"])
+            wrangler::npx()
+                .args(["dev"])
                 .args([
                     "--port",
                     &port.to_string(),

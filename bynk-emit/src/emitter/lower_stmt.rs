@@ -19,13 +19,13 @@ use super::ctx::TailSlot;
 use super::lower::{
     Lowered, PatPath, Pre, and_join, build_value_bin_op, call_site_principal,
     claim_scope_declaration, emit_pattern_bindings, expect_location_raw, expect_source_text_raw,
-    hoist_if_slot, literal_label_node, member_node, num_lit, pattern_tests, str_node,
-    ternary_built,
+    hoist_if_slot, literal_label_node, member_node, pattern_tests, ternary_built,
 };
 use super::lower_call::codec_statics::json_encode;
 use super::lower_ctx::LowerCtx;
 use super::ts_types::{ts_ty_to_ts_type, ts_type_ref_to_ts_type};
 use super::*;
+use crate::ts_build::{num_lit, str_lit as str_node};
 
 /// The statement emitter builds a [`Body`] — a list of [`Item`]s — instead of
 /// appending text to a caller's buffer; [`render`] is the one adapter that

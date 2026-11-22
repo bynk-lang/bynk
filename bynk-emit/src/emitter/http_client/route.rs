@@ -9,11 +9,14 @@ use bynk_check::contract;
 use bynk_check::project_model::TypeDecl;
 use bynk_check::wire::{TypeBody, TypeRef};
 use bynk_ts::{
-    TsArrowBody, TsBinaryOp, TsBindingName, TsDecl, TsExpr, TsLit, TsObjectEntry, TsParam, TsStmt,
-    TsType, TsTypeMember,
+    TsArrowBody, TsBinaryOp, TsDecl, TsExpr, TsLit, TsObjectEntry, TsParam, TsStmt, TsType,
+    TsTypeMember,
 };
 
 use super::*;
+use crate::ts_build::{
+    binary as compare, call, const_typed as const_of, ident as id, member, str_lit,
+};
 
 impl Gen {
     // -----------------------------------------------------------------
@@ -156,7 +159,7 @@ impl Gen {
                         arrow(
                             vec!["json"],
                             call(
-                                "__then",
+                                id("__then"),
                                 vec![
                                     TsExpr::Call {
                                         callee: Box::new(decode),
@@ -453,7 +456,7 @@ impl Gen {
                     let ident = super::super::ts_ident(name);
                     signature.push(TsParam::new(ident.clone(), Some(self.public_type(&ty)?)));
                     let checked = match &ty {
-                        TypeRef::Base(..) => call("globalThis.String", vec![id(&ident)]),
+                        TypeRef::Base(..) => call(id("globalThis.String"), vec![id(&ident)]),
                         TypeRef::Named(_)
                         | TypeRef::Result(..)
                         | TypeRef::Option(..)
@@ -483,7 +486,7 @@ impl Gen {
                             let de = serialisation::deserialise_ref_via(&ty, "", &self.ru);
                             let local = format!("__p_{ident}");
                             build.extend(checked_stmts(&local, ser, de, &format!("path.{name}")));
-                            call("globalThis.String", vec![member(id(&local), "value")])
+                            call(id("globalThis.String"), vec![member(id(&local), "value")])
                         }
                     };
                     params.push(TsObjectEntry::prop(format!("\"{name}\""), checked));
@@ -511,7 +514,7 @@ impl Gen {
                     entries.push(TsObjectEntry::prop(
                         "form",
                         call(
-                            "__formString",
+                            id("__formString"),
                             vec![id("__w_body"), TsExpr::array(arg.specs)],
                         ),
                     ));
@@ -551,7 +554,7 @@ impl Gen {
                     entries.push(TsObjectEntry::prop(
                         "query",
                         call(
-                            "__queryString",
+                            id("__queryString"),
                             vec![id("__w_query"), TsExpr::array(arg.specs.clone())],
                         ),
                     ));
@@ -569,7 +572,7 @@ impl Gen {
                     entries.push(TsObjectEntry::prop(
                         "cookies",
                         call(
-                            "__cookieString",
+                            id("__cookieString"),
                             vec![id("__w_cookies"), TsExpr::array(arg.specs.clone())],
                         ),
                     ));
@@ -583,7 +586,7 @@ impl Gen {
             TsObjectEntry::prop("params", TsExpr::object_entries(params)),
         );
         build.push(TsStmt::return_stmt(
-            Some(call("Ok", vec![TsExpr::object_entries(entries)])),
+            Some(call(id("Ok"), vec![TsExpr::object_entries(entries)])),
             None,
         ));
         Ok((signature, build, arg_types))
@@ -646,7 +649,11 @@ impl Gen {
                 TsStmt::expr_stmt(
                     TsExpr::Call {
                         callee: Box::new(member(id("__form"), "append")),
-                        args: vec![str_lit(&wire), part.clone(), call("__fileName", vec![part])],
+                        args: vec![
+                            str_lit(&wire),
+                            part.clone(),
+                            call(id("__fileName"), vec![part]),
+                        ],
                     },
                     None,
                 )
@@ -705,10 +712,13 @@ impl Gen {
         stmts.extend(checked_stmts("__c_body", id("__w_body"), de, "body"));
         stmts.push(TsStmt::expr_stmt(
             call(
-                "__appendText",
+                id("__appendText"),
                 vec![
                     id("__form"),
-                    call("__formString", vec![id("__w_body"), TsExpr::array(specs)]),
+                    call(
+                        id("__formString"),
+                        vec![id("__w_body"), TsExpr::array(specs)],
+                    ),
                 ],
             ),
             None,
@@ -772,7 +782,7 @@ impl Gen {
         let de = serialisation::deserialise_ref_via(record, "", &self.ru);
         stmts.extend(checked_stmts(
             &format!("__c_{arg}"),
-            id(&format!("__w_{arg}")),
+            id(format!("__w_{arg}")),
             de,
             at,
         ));
@@ -839,28 +849,6 @@ impl RecordArg {
 // Small node builders
 // ---------------------------------------------------------------------
 
-fn id(name: &str) -> TsExpr {
-    TsExpr::Ident(name.to_string())
-}
-
-fn str_lit(text: &str) -> TsExpr {
-    TsExpr::Lit(TsLit::Str(text.to_string()))
-}
-
-fn member(object: TsExpr, property: &str) -> TsExpr {
-    TsExpr::Member {
-        object: Box::new(object),
-        property: property.to_string(),
-    }
-}
-
-fn call(callee: &str, args: Vec<TsExpr>) -> TsExpr {
-    TsExpr::Call {
-        callee: Box::new(id(callee)),
-        args,
-    }
-}
-
 /// `(a, b) => body`.
 fn arrow(params: Vec<&str>, body: TsExpr) -> TsExpr {
     TsExpr::Arrow {
@@ -882,22 +870,10 @@ fn object_of(fields: Vec<(&str, TsExpr)>) -> TsExpr {
     )
 }
 
-fn compare(op: TsBinaryOp, left: TsExpr, right: TsExpr) -> TsExpr {
-    TsExpr::Binary {
-        op,
-        left: Box::new(left),
-        right: Box::new(right),
-    }
-}
-
-fn const_of(name: &str, ty: Option<TsType>, init: TsExpr) -> TsStmt {
-    TsStmt::const_stmt(TsBindingName::Ident(name.to_string()), ty, init, None)
-}
-
 /// `const __w_<arg>: { [k: string]: JsonValue } = {};`
 fn wire_object_stmt(arg: &str) -> TsStmt {
     const_of(
-        &format!("__w_{arg}"),
+        format!("__w_{arg}"),
         Some(TsType::Object(vec![TsTypeMember::index(
             "k",
             TsType::named("string"),
@@ -911,7 +887,7 @@ fn wire_object_stmt(arg: &str) -> TsStmt {
 fn wire_assign(arg: &str, field: &str, value: TsExpr) -> TsStmt {
     TsStmt::assign(
         TsExpr::Index {
-            object: Box::new(id(&format!("__w_{arg}"))),
+            object: Box::new(id(format!("__w_{arg}"))),
             index: Box::new(str_lit(field)),
         },
         value,
@@ -934,7 +910,7 @@ fn checked_stmts(local: &str, value: TsExpr, decoder: TsExpr, at: &str) -> Vec<T
         const_of(
             local,
             None,
-            call("__checked", vec![value, decoder, str_lit(at)]),
+            call(id("__checked"), vec![value, decoder, str_lit(at)]),
         ),
         TsStmt::if_stmt(
             compare(

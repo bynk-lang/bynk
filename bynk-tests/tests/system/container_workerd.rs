@@ -191,8 +191,8 @@ fn run(
     let out_log = fs::File::create(&log_path).unwrap();
     let err_log = out_log.try_clone().unwrap();
     let spawned = wrangler::Wrangler::spawn(
-        tools::base_command("npx")
-            .args(["-y", wrangler::SPEC, "dev", "--port", &port.to_string()])
+        wrangler::npx()
+            .args(["dev", "--port", &port.to_string()])
             .args(["--inspector-port", &inspector_port.to_string()])
             .args(extra)
             .current_dir(&dir)

@@ -14,43 +14,16 @@ use super::workers_entry::wire_ident;
 use crate::emitter::RuntimeUse;
 use crate::emitter::http_handler_method_name_ir;
 use crate::emitter::wrangler::agent_binding;
+use crate::ts_build::{
+    and_expr, as_expr, await_expr, binary, block, call, const_, expr_stmt, ident, if_, let_typed,
+    member, method_call, new, not_expr, null_lit, num_lit, or_expr, return_, str_lit, strict_eq,
+    strict_neq, typeof_expr,
+};
 use bynk_check::symbols::UnitTable;
 use bynk_syntax::ast::{ActorDecl, ExprKind, Handler, ServiceDecl, ServiceProtocol, TypeRef};
-use bynk_ts::{TsBindingName, TsExpr, TsLit, TsObjectEntry, TsParam, TsStmt, TsType, TsTypeMember};
+use bynk_ts::{TsBindingName, TsExpr, TsObjectEntry, TsParam, TsStmt, TsType, TsTypeMember};
 
-// -- Small tree-construction helpers (#1321) -----------------------------
-//
-// `workers.rs` is by far the largest single Arc C conversion so far (13
-// wrapper/helper functions, ~1000 lines of `writeln!` before this slice) —
-// these exist purely to keep the conversion below readable and to avoid
-// repeating the same `Box::new`/field-name boilerplate at dozens of call
-// sites, the same reason `bynk-ts`'s own `TsExpr`/`TsStmt` associated
-// constructors exist. Not part of the public node algebra — `bynk-ts` still
-// owns every real constructor; these just compose them for this file's own
-// repeated shapes.
-
-pub(super) fn ident(s: impl Into<String>) -> TsExpr {
-    TsExpr::Ident(s.into())
-}
-
-pub(super) fn str_lit(s: impl Into<String>) -> TsExpr {
-    TsExpr::Lit(TsLit::Str(s.into()))
-}
-
-pub(super) fn num_lit(n: impl Into<String>) -> TsExpr {
-    TsExpr::Lit(TsLit::Num(n.into()))
-}
-
-pub(super) fn null_lit() -> TsExpr {
-    TsExpr::Lit(TsLit::Null)
-}
-
-pub(super) fn member(object: TsExpr, property: impl Into<String>) -> TsExpr {
-    TsExpr::Member {
-        object: Box::new(object),
-        property: property.into(),
-    }
-}
+// -- Helpers over the shared builders (`crate::ts_build`) -----------------
 
 /// `base.a.b. …` — a left-associative chain of plain member accesses, e.g.
 /// `member_chain(ident("handlers"), &[sname, "call"])` for
@@ -59,107 +32,12 @@ pub(super) fn member_chain(base: TsExpr, properties: &[&str]) -> TsExpr {
     properties.iter().fold(base, |acc, p| member(acc, *p))
 }
 
-pub(super) fn call(callee: TsExpr, args: Vec<TsExpr>) -> TsExpr {
-    TsExpr::Call {
-        callee: Box::new(callee),
-        args,
-    }
-}
-
-pub(super) fn method_call(object: TsExpr, method: &str, args: Vec<TsExpr>) -> TsExpr {
-    call(member(object, method), args)
-}
-
-pub(super) fn new_expr(callee: &str, args: Vec<TsExpr>) -> TsExpr {
-    TsExpr::New {
-        callee: Box::new(ident(callee)),
-        args,
-    }
-}
-
-pub(super) fn as_expr(expr: TsExpr, ty: TsType) -> TsExpr {
-    TsExpr::As {
-        expr: Box::new(expr),
-        ty,
-    }
-}
-
-pub(super) fn await_expr(expr: TsExpr) -> TsExpr {
-    TsExpr::Await(Box::new(expr))
-}
-
-pub(super) fn not_expr(expr: TsExpr) -> TsExpr {
-    TsExpr::Unary {
-        op: bynk_ts::TsUnaryOp::Not,
-        expr: Box::new(expr),
-    }
-}
-
-pub(super) fn typeof_expr(expr: TsExpr) -> TsExpr {
-    TsExpr::Unary {
-        op: bynk_ts::TsUnaryOp::Typeof,
-        expr: Box::new(expr),
-    }
-}
-
-pub(super) fn binary(op: bynk_ts::TsBinaryOp, left: TsExpr, right: TsExpr) -> TsExpr {
-    TsExpr::Binary {
-        op,
-        left: Box::new(left),
-        right: Box::new(right),
-    }
-}
-
-pub(super) fn strict_eq(left: TsExpr, right: TsExpr) -> TsExpr {
-    binary(bynk_ts::TsBinaryOp::StrictEq, left, right)
-}
-
-pub(super) fn strict_neq(left: TsExpr, right: TsExpr) -> TsExpr {
-    binary(bynk_ts::TsBinaryOp::StrictNotEq, left, right)
-}
-
-pub(super) fn or_expr(left: TsExpr, right: TsExpr) -> TsExpr {
-    binary(bynk_ts::TsBinaryOp::Or, left, right)
-}
-
-pub(super) fn and_expr(left: TsExpr, right: TsExpr) -> TsExpr {
-    binary(bynk_ts::TsBinaryOp::And, left, right)
-}
-
-pub(super) fn nullish(left: TsExpr, right: TsExpr) -> TsExpr {
-    binary(bynk_ts::TsBinaryOp::NullishCoalescing, left, right)
-}
-
-pub(super) fn return_(expr: Option<TsExpr>) -> TsStmt {
-    TsStmt::return_stmt(expr, None)
-}
-
-pub(super) fn const_(name: impl Into<String>, init: TsExpr) -> TsStmt {
-    TsStmt::const_stmt(TsBindingName::Ident(name.into()), None, init, None)
-}
-
-pub(super) fn let_(name: impl Into<String>, ty: TsType) -> TsStmt {
-    TsStmt::let_stmt(TsBindingName::Ident(name.into()), Some(ty), None, None)
-}
-
-pub(super) fn expr_stmt(expr: TsExpr) -> TsStmt {
-    TsStmt::expr_stmt(expr, None)
-}
-
-pub(super) fn if_(cond: TsExpr, then_branch: TsStmt) -> TsStmt {
-    TsStmt::if_stmt(cond, then_branch, None)
-}
-
-pub(super) fn block(stmts: Vec<TsStmt>) -> TsStmt {
-    TsStmt::block(stmts, None)
-}
-
 pub(super) fn status_object(code: &str) -> TsExpr {
     TsExpr::object(vec![("status".to_string(), num_lit(code))])
 }
 
 pub(super) fn new_response(args: Vec<TsExpr>) -> TsExpr {
-    new_expr("globalThis.Response", args)
+    new(ident("globalThis.Response"), args)
 }
 
 /// `{ ...deps, <key>: <value> }` — the three real "spread `deps`, override
@@ -204,7 +82,11 @@ pub(super) fn secret_probe_expr(secret: &str) -> TsExpr {
         }),
         index: Box::new(str_lit(secret)),
     };
-    nullish(explicit, global_probe)
+    binary(
+        bynk_ts::TsBinaryOp::NullishCoalescing,
+        explicit,
+        global_probe,
+    )
 }
 
 /// v0.176 (#642, Decision E): an `on call` wrapper's parameters carry their real
@@ -1039,8 +921,8 @@ pub(super) fn emit_websocket_upgrade(
     ));
     stmts.push(const_(
         "__fwd",
-        new_expr(
-            "globalThis.Headers",
+        new(
+            ident("globalThis.Headers"),
             vec![member(ident("request"), "headers")],
         ),
     ));
@@ -1081,8 +963,8 @@ pub(super) fn emit_websocket_upgrade(
     stmts.push(return_(Some(method_call(
         ident("__stub"),
         "fetch",
-        vec![new_expr(
-            "globalThis.Request",
+        vec![new(
+            ident("globalThis.Request"),
             vec![
                 str_lit(format!("https://_bynk/_bynk/ws/open/{sname}")),
                 TsExpr::object(vec![
@@ -1673,7 +1555,7 @@ pub(super) fn emit_http_sum_wrapper(
         )))
     };
     if let Some(cap) = cap {
-        stmts.push(let_(
+        stmts.push(let_typed(
             "__bytes",
             TsType::named("globalThis.Uint8Array | undefined"),
         ));
@@ -1701,14 +1583,14 @@ pub(super) fn emit_http_sum_wrapper(
             stmts.push(const_(
                 "__raw",
                 method_call(
-                    new_expr("globalThis.TextDecoder", vec![]),
+                    new(ident("globalThis.TextDecoder"), vec![]),
                     "decode",
                     vec![ident("__bytes")],
                 ),
             ));
         }
     } else if needs_raw {
-        stmts.push(let_("__raw", TsType::named("string")));
+        stmts.push(let_typed("__raw", TsType::named("string")));
         stmts.push(TsStmt::try_catch(
             block(vec![TsStmt::assign(
                 ident("__raw"),
@@ -1881,7 +1763,7 @@ pub(super) fn emit_http_sum_wrapper(
         // The octets, untouched: no JSON, no base64.
         stmts.push(const_("body", ident("__bytes")));
     } else if let Some(body_param) = h.params.iter().find(|p| p.name.name == "body") {
-        stmts.push(let_("__body_json", TsType::named("__JsonValue")));
+        stmts.push(let_typed("__body_json", TsType::named("__JsonValue")));
         stmts.push(TsStmt::try_catch(
             block(vec![TsStmt::assign(
                 ident("__body_json"),

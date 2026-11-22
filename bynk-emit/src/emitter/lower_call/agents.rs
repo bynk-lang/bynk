@@ -6,10 +6,10 @@
 
 use bynk_check::checker::Callee;
 
-use super::super::lower::{Pre, str_node};
+use super::super::lower::Pre;
 use super::super::lower_ctx::LowerCtx;
-use super::super::lower_list::{call, id, member};
 use super::super::*;
+use crate::ts_build::{call, ident as id, member, str_lit as str_node};
 
 /// Lower an inline agent invocation, `Agent(<key>).method(args)`, or `None` when the call is not one. A node
 /// (`Call(Member(<construction>, method), args)`, wrapped in the trace step on a traced build).
@@ -163,10 +163,10 @@ pub(in crate::emitter) fn lower_agent_init(
 
 #[cfg(test)]
 mod tests {
-    use super::super::super::lower::ident_node;
     use super::*;
     use crate::emitter::ctx::{BodyMode, HandlerShared, ModuleCtx, UnitFacts};
     use crate::emitter::runtime_use::RuntimeUse;
+    use crate::ts_build::ident as ident_node;
     use bynk_check::checker::TypedCommons;
     use bynk_check::project_model::BuildTarget;
 

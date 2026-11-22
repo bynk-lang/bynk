@@ -46,7 +46,7 @@ use bynk_driver::project::BuildTarget;
 use std::fs;
 use std::io::{Read, Write};
 use std::path::Path;
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::time::{Duration, Instant};
 
 #[path = "../require/mod.rs"]
@@ -151,18 +151,6 @@ service traceApi from http {
 
 fn tool_exists(name: &str) -> bool {
     which::which(name).is_ok()
-}
-
-/// Route through `cmd /C` on Windows so npm's `npx.cmd` shim resolves
-/// (Rust's CreateProcess refuses batch scripts directly — BatBadBut).
-fn base_command(program: &str) -> Command {
-    if cfg!(windows) {
-        let mut c = Command::new("cmd");
-        c.arg("/C").arg(program);
-        c
-    } else {
-        Command::new(program)
-    }
 }
 
 /// Is this run required to actually reach workerd?
@@ -319,8 +307,8 @@ fn events_boundary_rejects_malformed_payload_and_envelope_on_workerd() {
     let out_log = fs::File::create(&log_path).unwrap();
     let err_log = out_log.try_clone().unwrap();
     let spawned = wrangler::Wrangler::spawn(
-        base_command("npx")
-            .args(["-y", WRANGLER, "dev"])
+        wrangler::npx()
+            .args(["dev"])
             // I2 (#1971): the key for the edge the test signs its deliveries
             // as, as under `bynk dev`.
             .args(wrangler::local_edge_vars(&[PROBE_EDGE]))
@@ -527,8 +515,8 @@ fn events_boundary_field_default_cross_context_on_workerd() {
     let out_log = fs::File::create(&log_path).unwrap();
     let err_log = out_log.try_clone().unwrap();
     let spawned = wrangler::Wrangler::spawn(
-        base_command("npx")
-            .args(["-y", WRANGLER, "dev"])
+        wrangler::npx()
+            .args(["dev"])
             .args(wrangler::local_edge_vars(&[NOTIFICATIONS_EDGE]))
             .args([
                 "--port",

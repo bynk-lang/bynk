@@ -10,9 +10,8 @@
 
 use std::collections::BTreeMap;
 
+use crate::ts_build::{call, ident, member, str_lit};
 use bynk_ts::{TsExpr, TsStmt};
-
-use crate::emit_model::{call, ident, member, str_lit};
 
 /// The message a failed delivery logs. The structural guard of Decision I
 /// (`xtask`'s `delivery_isolation_has_one_home`) counts this literal in

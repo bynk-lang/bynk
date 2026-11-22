@@ -11,14 +11,15 @@ use bynk_ts::{TsBinaryOp, TsExpr, TsLit, TsStmt, TsType, TsUnaryOp};
 
 use super::super::lower::{Lowered, Pre, member_node};
 use super::super::lower_ctx::LowerCtx;
-use super::super::lower_list::{
-    arrow, binary, block, block_arrow, call, const_, expr_stmt, id, iife_block, member,
-    method_call_bare, param, paren, ret, string_of, take,
-};
+use super::super::lower_list::{iife_block, string_of, take};
 use super::super::{BinOp, Expr, ExprKind, Ident, LambdaExpr};
 use super::query::{
     QueryShape, QuerySource, held_values_source, lower_query_by_name, note_par_fan_out,
     path_values_source, query_key_cmp, query_keyed, query_other_elem,
+};
+use crate::ts_build::{
+    arrow, binary, block, block_arrow, call, const_typed as const_, expr_stmt, ident as id, member,
+    method_call as method_call_bare, param, paren, ret, str_lit as lit_str, strict_neq as ne,
 };
 
 /// A store field's handle, `<var>.<field>`, as a node (the working-state variable and the
@@ -40,11 +41,6 @@ fn undefined() -> TsExpr {
     id("undefined")
 }
 
-/// `"text"`.
-fn lit_str(text: &str) -> TsExpr {
-    TsExpr::Lit(TsLit::Str(text.to_string()))
-}
-
 /// `return undefined;`, the end of every effectful operation.
 fn done() -> TsStmt {
     ret(undefined())
@@ -58,11 +54,6 @@ fn awaited(e: TsExpr) -> TsStmt {
 /// `recv.method(args)` over a handle.
 fn op(recv: &TsExpr, method: &str, args: Vec<TsExpr>) -> TsExpr {
     method_call_bare(recv.clone(), method, args)
-}
-
-/// `a !== b`.
-fn ne(a: TsExpr, b: TsExpr) -> TsExpr {
-    binary(TsBinaryOp::StrictNotEq, a, b)
 }
 
 /// `if (cond) { body }`.
@@ -481,8 +472,9 @@ fn lower_store_map_call(
             "update" => {
                 let c = a;
                 let [k, f] = take(c);
-                let modify = block_arrow_of(
+                let modify = block_arrow(
                     vec![param("__c", None), param("__p", None)],
+                    false,
                     vec![
                         if_then(
                             TsExpr::Unary {
@@ -731,8 +723,9 @@ fn lower_store_cache_call(
             "update" => {
                 let c_ = a;
                 let [k, f] = take(c_);
-                let modify = block_arrow_of(
+                let modify = block_arrow(
                     vec![param("__e", None)],
+                    false,
                     vec![
                         if_then(
                             TsExpr::Unary {
@@ -759,8 +752,9 @@ fn lower_store_cache_call(
                     consequent: Box::new(member(id("__e"), "v")),
                     alternate: Box::new(paren(default)),
                 };
-                let modify = block_arrow_of(
+                let modify = block_arrow(
                     vec![param("__e", None)],
+                    false,
                     vec![
                         const_("__cur", None, cur),
                         ret(stamped(apply(f, id("__cur")), ttl)),
@@ -1026,9 +1020,4 @@ fn param_independent(e: &Expr, pname: &str) -> bool {
         | ExprKind::Faults(..)
         | ExprKind::Trace { .. } => false,
     }
-}
-
-/// A non-async arrow with a multi-line block body, `(params) => { body }`.
-fn block_arrow_of(params: Vec<bynk_ts::TsParam>, body: Vec<TsStmt>) -> TsExpr {
-    block_arrow(params, false, body)
 }

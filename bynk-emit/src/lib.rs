@@ -31,6 +31,7 @@ struct ReadmeDoctests;
 pub mod emit_model;
 pub mod emitter;
 pub mod testgen;
+pub(crate) mod ts_build;
 
 #[cfg(test)]
 pub(crate) mod testkit;

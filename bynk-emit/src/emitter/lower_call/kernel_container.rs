@@ -10,14 +10,16 @@ use bynk_check::checker::{Ty, TyId};
 use bynk_check::kernel_op::{MapOp, OptionOp, ResultOp, SetOp};
 use bynk_ts::{TsBinaryOp, TsExpr, TsParam, TsType};
 
-use super::super::lower::{Lowered, Pre, str_node};
+use super::super::lower::{Lowered, Pre};
 use super::super::lower_ctx::LowerCtx;
-use super::super::lower_list::{
-    arrow, binary, call, fn_type, id, key_is_plain, member, param, paren, spread, take,
-};
+use super::super::lower_list::{fn_type, key_is_plain, take};
 use super::super::ts_types::ts_ty_to_ts_type;
 use super::super::*;
 use super::kernel::receiver_object;
+use crate::ts_build::{
+    arrow, as_expr as cast, binary, call, cond_expr as cond, ident as id, member, new, param,
+    paren, spread, str_lit as str_node, type_app,
+};
 
 /// The receiver and then each argument, lowered in order.
 fn operands(pre: &mut Pre, cx: &mut LowerCtx, parts: &[&Expr]) -> Vec<bynk_ts::TsExpr> {
@@ -54,42 +56,9 @@ fn tag_is(name: &str, tag: &str) -> TsExpr {
     binary(TsBinaryOp::StrictEq, field(name, "tag"), str_node(tag))
 }
 
-/// `test ? yes : no`.
-fn cond(test: TsExpr, yes: TsExpr, no: TsExpr) -> TsExpr {
-    TsExpr::Conditional {
-        test: Box::new(test),
-        consequent: Box::new(yes),
-        alternate: Box::new(no),
-    }
-}
-
 /// An immediately-invoked typed arrow over the lowered operands: the printer brackets the arrow.
 fn iife(params: Vec<TsParam>, body: TsExpr, args: Vec<TsExpr>) -> TsExpr {
     call(arrow(params, body), args)
-}
-
-/// `callee<A, B>`.
-fn type_app(callee: TsExpr, type_args: Vec<TsType>) -> TsExpr {
-    TsExpr::TypeApp {
-        callee: Box::new(callee),
-        type_args,
-    }
-}
-
-/// `new callee(args)`.
-fn new(callee: TsExpr, args: Vec<TsExpr>) -> TsExpr {
-    TsExpr::New {
-        callee: Box::new(callee),
-        args,
-    }
-}
-
-/// `expr as ty`.
-fn cast(expr: TsExpr, ty: TsType) -> TsExpr {
-    TsExpr::As {
-        expr: Box::new(expr),
-        ty,
-    }
 }
 
 /// `(recv.tag === "<tag>")`: the brackets stay, as the text wrote them, so the test still reads as
