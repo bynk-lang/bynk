@@ -110,7 +110,10 @@ while its file is under `tooling/`.
 ## Diagrams and callouts
 
 **Diagrams.** Write a fenced ` ```mermaid ` block. At build time `rehype-mermaid`
-renders it to **inline SVG** — offline, no client JS, no CDN. **Accessibility
+renders it to **inline SVG** — offline, no client JS, no CDN. The diagrams wear
+the design system in light and dark: `site/src/styles/mermaid.css` styles them
+with the `--bynk-*` tokens, so leave out `%%{init}%%` theme blocks and colour
+`classDef`s, and let every diagram look alike. **Accessibility
 rule — required:** every diagram carries a *caption* and a *text equivalent* in
 the surrounding prose. No information may live only in a picture; a reader who
 cannot see the diagram must still get the full meaning from the text.

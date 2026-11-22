@@ -1,4 +1,5 @@
 // @ts-check
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "astro/config";
 import starlight from "@astrojs/starlight";
@@ -32,6 +33,27 @@ import referenceSidebar from "./src/generated/reference-sidebar.json" with { typ
 // remark plugin resolves the `diagnostics/…` suffix against this base).
 const includeBase = fileURLToPath(new URL("./src", import.meta.url));
 
+// The diagrams wear the design system. Mermaid starts from its neutral `base`
+// theme, and src/styles/mermaid.css goes in as `themeCSS`: Mermaid scopes it to
+// each diagram and puts it after its own rules, and its values are the
+// `--bynk-*` tokens, so an inlined diagram follows the page's light or dark
+// theme, Starlight's toggle included. (rehype-mermaid's `dark` option would
+// emit a light and a dark image under a `prefers-color-scheme` media query,
+// which ignores the toggle, and only for the `img-*` strategies.)
+//
+// Mermaid sizes each box to its label in the headless browser at build time,
+// so it must measure in the face the page draws: Instrument Sans, loaded there
+// from the npm package (offline) rather than the page's Google Fonts link.
+const mermaid = {
+  strategy: "inline-svg",
+  css: import.meta.resolve("@fontsource-variable/instrument-sans/index.css"),
+  mermaidConfig: {
+    theme: "base",
+    fontFamily: '"Instrument Sans Variable", sans-serif',
+    themeCSS: readFileSync(new URL("./src/styles/mermaid.css", import.meta.url), "utf8"),
+  },
+};
+
 // https://astro.build/config
 export default defineConfig({
   site: "https://bynk-lang.org",
@@ -39,7 +61,7 @@ export default defineConfig({
   // public/_redirects, before the `/docs/*` splat that moved Developer Docs.
   markdown: {
     remarkPlugins: [[remarkBynkDirectives, { includeBase }]],
-    rehypePlugins: [[rehypeMermaid, { strategy: "inline-svg" }]],
+    rehypePlugins: [[rehypeMermaid, mermaid]],
   },
   integrations: [
     starlight({
