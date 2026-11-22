@@ -85,7 +85,7 @@ pub(super) fn default_value_node(value: &DefaultValue, slot: &Slot) -> TsExpr {
                 Slot::Unbranded => base,
             }
         }
-        DefaultValue::Record(fields) => object(entries(fields, slot)),
+        DefaultValue::Record(fields) => TsExpr::object_entries(entries(fields, slot)),
         DefaultValue::Sum { variant, fields } => {
             tagged(variant, entries(fields, &slot.variant(variant)))
         }
@@ -105,17 +105,12 @@ pub(super) fn default_value_node(value: &DefaultValue, slot: &Slot) -> TsExpr {
     }
 }
 
-/// A one-line object literal.
-fn object(entries: Vec<TsObjectEntry>) -> TsExpr {
-    TsExpr::object_entries(entries)
-}
-
 /// `{ tag: "<variant>" as const, …rest }`.
 fn tagged(variant: &str, rest: Vec<TsObjectEntry>) -> TsExpr {
     let tag = TsExpr::AsConst(Box::new(TsExpr::Lit(TsLit::Str(variant.to_string()))));
     let mut entries = vec![TsObjectEntry::prop("tag".to_string(), tag)];
     entries.extend(rest);
-    object(entries)
+    TsExpr::object_entries(entries)
 }
 
 /// `{ tag: "<variant>" as const, <key>: <value> }`, the value going into the variant's `key`.

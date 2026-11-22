@@ -888,13 +888,4 @@ mod tests {
         assert_eq!(sanitise_suite("!!!"), "suite"); // empty after trim -> fallback
         assert_eq!(sanitise_suite(""), "suite");
     }
-
-    // -- append_missing_bindings ----------------------------------------------
-    // #1486: ported from `emitter.rs`'s own retired `inject_runtime_imports_
-    // tests` — that module tested the pre-#1486 post-print text-splice
-    // mechanism directly; `append_missing_bindings` is its tree-level
-    // successor (this file's own copy of the dedup rule `emitter/workers.rs`'s
-    // identically-named function also carries), so the same cases apply,
-    // ported to operate on a `Vec<String>` of already-real import names
-    // instead of an `import { ... } from "...";` text line.
 }

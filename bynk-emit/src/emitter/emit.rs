@@ -35,6 +35,11 @@ use super::lower_ctx::LowerCtx;
 use super::lower_stmt::{Body, Item, block_body_with_return, claim_scoped, function_body_stmts};
 use super::ts_types::{ts_base, ts_ty_to_ts_type, ts_type_ref_to_ts_type};
 use super::*;
+use crate::ts_build::{
+    as_expr as persist_cast, await_expr as hist_await, binary as hist_binary, call as hist_call,
+    const_ as hist_const, ident as hist_id, let_decl as hist_let, member as hist_member,
+    num_lit as hist_num, str_lit as hist_str,
+};
 
 /// P6.x (#1188): reads `shape` — `t`'s already-lowered `bynk-emit::ir::TypeShape`
 /// — instead of walking `t.body` (the AST's own `TypeBody`) directly. Doesn't
@@ -5986,7 +5991,7 @@ struct MigrateNames<'a> {
 
 /// `["a", "b"]`: a list of names as an array literal.
 fn hist_str_array(names: &[String]) -> bynk_ts::TsExpr {
-    bynk_ts::TsExpr::array(names.iter().map(|n| hist_str(n)).collect())
+    bynk_ts::TsExpr::array(names.iter().map(hist_str).collect())
 }
 
 /// `stored["name"]`.
@@ -6450,14 +6455,6 @@ fn persist_global(path: &str) -> bynk_ts::TsExpr {
         })
 }
 
-/// `expr as ty`.
-fn persist_cast(expr: bynk_ts::TsExpr, ty: bynk_ts::TsType) -> bynk_ts::TsExpr {
-    bynk_ts::TsExpr::As {
-        expr: Box::new(expr),
-        ty,
-    }
-}
-
 /// `expr as unknown as ty`: the double cast that reinterprets a value at another type.
 fn persist_recast(expr: bynk_ts::TsExpr, ty: bynk_ts::TsType) -> bynk_ts::TsExpr {
     persist_cast(persist_cast(expr, bynk_ts::TsType::named("unknown")), ty)
@@ -6568,7 +6565,7 @@ fn persist_for_each(
     iter: bynk_ts::TsExpr,
     body: Vec<bynk_ts::TsStmt>,
 ) -> bynk_ts::TsStmt {
-    bynk_ts::TsStmt::for_of(binding, iter, bynk_ts::TsStmt::block(body, None), None)
+    crate::ts_build::for_of(binding, iter, crate::ts_build::block(body))
 }
 
 /// The function `loadState` calls to fill a record's collections into the zero state's handles
@@ -7732,7 +7729,7 @@ fn emit_agent_dispatch(
         let decoded_args = bynk_ts::TsExpr::Spread(Box::new(hist_call(
             hist_id("__decodeAgentArgs"),
             vec![
-                hist_id(&agent_wire_name(&a.name.name)),
+                hist_id(agent_wire_name(&a.name.name)),
                 hist_id("methodName"),
                 hist_id("args"),
             ],
@@ -8178,73 +8175,9 @@ fn history_any_ty() -> bynk_ts::TsType {
     bynk_ts::TsType::named("any")
 }
 
-fn hist_id(name: &str) -> bynk_ts::TsExpr {
-    bynk_ts::TsExpr::Ident(name.to_string())
-}
-
-fn hist_str(text: &str) -> bynk_ts::TsExpr {
-    bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(text.to_string()))
-}
-
-fn hist_num(n: impl ToString) -> bynk_ts::TsExpr {
-    bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Num(n.to_string()))
-}
-
-fn hist_member(object: bynk_ts::TsExpr, property: &str) -> bynk_ts::TsExpr {
-    bynk_ts::TsExpr::Member {
-        object: Box::new(object),
-        property: property.to_string(),
-    }
-}
-
-fn hist_call(callee: bynk_ts::TsExpr, args: Vec<bynk_ts::TsExpr>) -> bynk_ts::TsExpr {
-    bynk_ts::TsExpr::Call {
-        callee: Box::new(callee),
-        args,
-    }
-}
-
-fn hist_await(expr: bynk_ts::TsExpr) -> bynk_ts::TsExpr {
-    bynk_ts::TsExpr::Await(Box::new(expr))
-}
-
-fn hist_const(name: &str, init: bynk_ts::TsExpr) -> bynk_ts::TsStmt {
-    bynk_ts::TsStmt::const_stmt(
-        bynk_ts::TsBindingName::Ident(name.to_string()),
-        None,
-        init,
-        None,
-    )
-}
-
-fn hist_let(
-    name: &str,
-    ty: Option<bynk_ts::TsType>,
-    init: Option<bynk_ts::TsExpr>,
-) -> bynk_ts::TsStmt {
-    bynk_ts::TsStmt::let_stmt(
-        bynk_ts::TsBindingName::Ident(name.to_string()),
-        ty,
-        init,
-        None,
-    )
-}
-
 /// `globalThis.console.error`.
 fn hist_console_error() -> bynk_ts::TsExpr {
     hist_member(hist_member(hist_id("globalThis"), "console"), "error")
-}
-
-fn hist_binary(
-    op: bynk_ts::TsBinaryOp,
-    left: bynk_ts::TsExpr,
-    right: bynk_ts::TsExpr,
-) -> bynk_ts::TsExpr {
-    bynk_ts::TsExpr::Binary {
-        op,
-        left: Box::new(left),
-        right: Box::new(right),
-    }
 }
 
 /// `{ call: any, accepted: boolean, old: S, new: S, refusal?: unknown }`: one reached step.
@@ -8301,7 +8234,7 @@ fn history_inst_stmt(a: &AgentDecl, commons: &TypedCommons) -> bynk_ts::TsStmt {
         "__inst",
         bynk_ts::TsExpr::As {
             expr: Box::new(hist_call(
-                hist_id(&agent_factory_name(&a.name.name)),
+                hist_id(agent_factory_name(&a.name.name)),
                 vec![key],
             )),
             ty: history_any_ty(),

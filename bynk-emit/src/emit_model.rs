@@ -25,7 +25,6 @@ use bynk_model::lower_provider_given_ir;
 use bynk_project::discovery::*;
 use bynk_project::paths::*;
 use bynk_project::{AttributedError, UnitKind};
-use bynk_ts::{TsBindingName, TsExpr, TsLit, TsStmt};
 /// A project's output, as a keyed set of typed documents (R7.8, #1309) —
 /// replaces the old `ProjectOutput.files: Vec<CompiledFile>` outright, not
 /// alongside it ("Done when": `CompiledFile`/`ProjectOutput::files` are
@@ -924,42 +923,6 @@ pub fn unit_table_uses_idempotency(
         }
     });
     found
-}
-
-// -- Small tree-construction helpers (#1327) ------------------------------
-//
-// Mirrors `workers.rs`'s/`workers_entry.rs`'s/`tests_emit.rs`'s own local
-// helper sets (#1321/#1323/#1325) — this file's own private set, not
-// shared, matching this track's own established per-file scoping.
-
-pub fn ident(s: impl Into<String>) -> TsExpr {
-    TsExpr::Ident(s.into())
-}
-
-pub fn str_lit(s: impl Into<String>) -> TsExpr {
-    TsExpr::Lit(TsLit::Str(s.into()))
-}
-
-pub fn member(object: TsExpr, property: impl Into<String>) -> TsExpr {
-    TsExpr::Member {
-        object: Box::new(object),
-        property: property.into(),
-    }
-}
-
-pub fn call(callee: TsExpr, args: Vec<TsExpr>) -> TsExpr {
-    TsExpr::Call {
-        callee: Box::new(callee),
-        args,
-    }
-}
-
-pub fn method_call(object: TsExpr, method: &str, args: Vec<TsExpr>) -> TsExpr {
-    call(member(object, method), args)
-}
-
-pub fn const_(name: impl Into<String>, init: TsExpr) -> TsStmt {
-    TsStmt::const_stmt(TsBindingName::Ident(name.into()), None, init, None)
 }
 
 /// Context passed to the emitter so it can resolve cross-file and

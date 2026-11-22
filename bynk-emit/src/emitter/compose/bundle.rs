@@ -13,6 +13,7 @@ use crate::emit_model::*;
 use crate::emitter;
 use crate::emitter::compose::events::isolated_delivery;
 use crate::emitter::compose::{ComposePlan, empty_deps};
+use crate::ts_build::{call, const_, ident, member, method_call, str_lit};
 use bynk_check::project_model::AdapterBinding;
 use bynk_check::symbols::UnitTable;
 use bynk_project::paths::commons_dir_for;

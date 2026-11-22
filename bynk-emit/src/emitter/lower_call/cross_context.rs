@@ -13,8 +13,8 @@ use bynk_ts::{TsExpr, TsType};
 use super::super::emit::{flatten_emit_ident_chain, test_scaffold_ns};
 use super::super::lower::Pre;
 use super::super::lower_ctx::LowerCtx;
-use super::super::lower_list::{call, id, member, paren};
 use super::super::{TypeBody, TypeDecl, *};
+use crate::ts_build::{call, ident as id, member, paren};
 
 /// v0.6 cross-context service call: receiver is an alias or the dotted name
 /// of a consumed context. In bundle mode, lower to

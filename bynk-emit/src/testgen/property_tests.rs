@@ -597,7 +597,7 @@ pub(super) fn emit_test_history_property_function(
                     expr: Box::new(ident(target_ns)),
                     ty: TsType::named("any"),
                 },
-                &format!("__bynkDriveHistory_{agent_name}"),
+                format!("__bynkDriveHistory_{agent_name}"),
                 vec![ident("seq"), ident("deps")],
             )))),
         },

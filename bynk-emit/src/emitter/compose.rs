@@ -9,7 +9,7 @@
 //! #3928), so the seven target divergences stay renderer choices, each named
 //! where it is made.
 
-use crate::emit_model::ident;
+use crate::ts_build::ident;
 use bynk_ts::TsExpr;
 
 pub(crate) mod bundle;

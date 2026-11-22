@@ -2642,8 +2642,8 @@ fn import_prediction_fns_violations(files: &[(PathBuf, String)]) -> usize {
 ///
 /// A *definition* counts when it lies outside `ts_build.rs` and outside `#[cfg(test)]` modules,
 /// is a `fn` returning `TsExpr` or `TsStmt`, and has a body of at most eight lines that
-/// applies exactly one constructor: a `Ts*` variant or associated function (with any `Box::new`,
-/// `Some`, `vec![..]` around its arguments), or one call to a helper that is itself a builder
+/// applies exactly one constructor: a `Ts*` variant or associated function, or two for one shape
+/// (`TsExpr::Lit(TsLit::Str(..))`), with any `Box::new`, `Some`, `vec![..]` around its arguments, or one call to a helper that is itself a builder
 /// (`id` over `ident_node`, `ne` over `binary`). The body has no string literal, `self`, `let`,
 /// `match`, `if`, loop, iterator or `format!`, and no `.clone()`, so it is a function of its
 /// parameters alone; a path value must be a `Ts*` one (`TsBinaryOp::StrictEq`, not
@@ -2677,8 +2677,7 @@ fn node_builder_defs_found(files: &[(PathBuf, String)]) -> (Vec<(PathBuf, usize,
         helper_calls: Vec<String>,
         constructs: bool,
     }
-    let call =
-        regex::Regex::new(r"(?:^|[^\w.:])((?:\w+::)*\w+)\s*(?:\(|\{)").expect("call pattern");
+    let call = regex::Regex::new(r"((?:\w+::)*\w+)\s*[({]").expect("call pattern");
     let path_value = regex::Regex::new(r"(?:\w+::)+\w+").expect("path pattern");
     let forbidden = regex::Regex::new(
         r#""|\bself\b|\blet\b|\bmatch\b|\bif\b|\bfor\b|\bloop\b|\bwhile\b|format!|\.iter|\.map\(|\.collect|\.clone\(\)"#,
@@ -2796,14 +2795,27 @@ fn node_builder_defs_found(files: &[(PathBuf, String)]) -> (Vec<(PathBuf, usize,
             }
             let mut helper_calls = Vec::new();
             let mut constructs = false;
+            let mut ctor_tokens = 0usize;
             for c in call.captures_iter(&body) {
+                let at = c.get(1).map_or(0, |m| m.start());
+                // A method call (`s.into()`) is neither a constructor nor a helper.
+                if body[..at].ends_with('.') {
+                    continue;
+                }
                 let callee = &c[1];
                 let local = callee.trim_start_matches("bynk_ts::");
                 if local.starts_with("Ts") {
                     constructs = true;
+                    ctor_tokens += 1;
                 } else if !matches!(callee, "Box::new" | "Some" | "Ok" | "Vec::new" | "Box") {
                     helper_calls.push(callee.to_string());
                 }
+            }
+            // `TsExpr::Lit(TsLit::Str(..))` and `TsStmt::const_stmt(TsBindingName::Ident(..), ..)` are
+            // one shape; three or more nested constructors build a structure of their own.
+            if ctor_tokens > 2 {
+                i += 1;
+                continue;
             }
             candidates.push(Candidate {
                 file: path.clone(),

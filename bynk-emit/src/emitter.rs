@@ -3252,11 +3252,9 @@ pub const INT_RUNTIME_IMPORTS: &str = ", __bynkIntDiv, __bynkToInt, __bynkIntDiv
 /// arms — `Unit` and the runtime-owned error types — additionally annotate the
 /// result (`Ok(undefined) as Result<void, BoundaryError>`), which `compose.ts`'s
 /// structural list never carries; `Result` is in the group for those. The dedupe
-/// every real caller applies this group through (`emitter/workers.rs`'s own
-/// `append_missing_bindings`, `project/tests_emit.rs`'s own copy — #1486
-/// retired this doc's own `inject_runtime_imports`, the pre-conversion
-/// post-print-text-splice mechanism both are the tree-level successor to)
-/// makes it free wherever it is already imported.
+/// every real caller applies this group through (`testgen/imports.rs`'s
+/// `append_missing_bindings`, the one copy, which 1B.5 deletes) makes it free wherever it is
+/// already imported.
 pub const BOUNDARY_CODEC_RUNTIME_IMPORTS: &str = ", Ok, Err, type Result, type __BoundaryError";
 
 /// #914: the names the `Json.decode[T]` wrapper puts in the module — its own
