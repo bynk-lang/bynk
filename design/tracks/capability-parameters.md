@@ -208,6 +208,8 @@ already parses on context functions. An entry is one of two forms:
   caller's one capability of that kind, unbound (§6.2).
 
 ```bynk
+fn copyOne(key: String) -> Effect[()] given Src: Kv, Dst: Kv
+
 fn copyAll(prefix: Option[String]) -> Effect[Int] given From: Kv, To: Kv, Logger {
 	let keys <- From.list(prefix)
 	let _ <- keys.forEach((k) => copyOne(k, given Src = From, Dst = To))
@@ -215,6 +217,9 @@ fn copyAll(prefix: Option[String]) -> Effect[Int] given From: Kv, To: Kv, Logger
 	Effect.pure(keys.length())
 }
 ```
+
+`copyOne`'s body is elided; it returns `Effect[()]`, which is what
+`forEach` takes (`List.forEach(f: T -> Effect[()])`).
 
 The existing refusals still apply: only a free function returning
 `Effect[T]`, and never `Events` (ADR 0726 A).
@@ -247,6 +252,14 @@ warmUp(given Store = Sessions)
 - `given` cannot start an expression, so the parser knows the ordinary
   arguments have ended. Everything after it up to `)` is `Name = Capability`
   pairs separated by commas.
+- The argument list becomes
+  `( [args] [ (args ",")? "given" binding ("," binding)* ] )`, with
+  `binding = Name "=" CapRef`. The ordinary arguments may be empty, as in
+  `warmUp(given Store = Sessions)`; when there are some, a comma separates the
+  last from `given`. No trailing comma follows the last pair, matching
+  ordinary call arguments, which take none today (`parse_arg_list_body`,
+  `bynk-syntax/src/parser/expressions.rs`). If call arguments later gain a
+  trailing comma, the binding list gains it too.
 - Each capability parameter of the callee is bound exactly once. A missing,
   repeated or unknown name is an error, and a binding on a callee without
   parameters is an error. The pairs may come in any order; the formatter keeps
@@ -277,8 +290,8 @@ par {
 	let b <- cached[Price](sku, quote, given Store = PriceCache)
 }
 
-// a lambda
-let _ <- ids.parTraverse((id) => cached[Session](id, () => loadSession(id), given Store = Sessions))
+// a lambda (`parTraverse` takes `T -> Effect[()]`; `evict` returns `Effect[()]`)
+let _ <- ids.parTraverse((id) => evict(id, given Store = Sessions))
 
 // a method chain, which is Bynk's pipeline
 let r <- cached[Session](id, load, given Store = Sessions).within(2.seconds)
@@ -329,7 +342,12 @@ holds in its `given` that is one of:
 - the bare `K`, when the kind allows a bare use (`Instantiable::bare`; only
   `Kv` today);
 - the caller's own parameter bounded by `K` (forwarding, §7);
-- in a commons suite, a double of `K` (§9).
+- in a commons suite, the double of `K`, written `K`, or a suite-local
+  instance of `K` (§9).
+
+A commons suite case has no `given` of its own. For this rule, what a suite
+case holds is the double of every kind its commons selects, instantiable and
+shared alike, plus every suite-local instance the suite declares.
 
 The kind must match exactly. A `Kv` instance cannot bind a `D1` parameter,
 whatever their operations.
@@ -347,7 +365,10 @@ means shared.**
 
 - An instantiable kind named bare in a commons `given` (`given Kv`) is
   refused, with a fix that turns it into a parameter (`given Store: Kv`). The
-  caller may still bind its bare `Kv`: `given Store = Kv`. A library never
+  caller may still bind its bare `Kv`: `given Store = Kv`. On the right of a
+  binding in a context, `Kv` names the context's own bare `Kv` capability,
+  which must be in its `given` like any other argument; it is a choice the
+  caller writes, not a default the library falls back to. A library never
   silently means "the default namespace".
 - A non-instantiable kind used as a bound (`given L: Logger`) is refused.
   There is only one, so a binding would add a name and no choice.
@@ -362,17 +383,21 @@ A commons function calling another binds the callee's parameters to its own:
 fn refresh[T: Codable](key: String, load: () -> Effect[T]) -> Effect[T] given Store: Kv, Logger {
 	let v <- load()
 	let _ <- Store.put(key, Json.encode(v))
+	let _ <- Logger.info("refreshed \(key)")
 	Effect.pure(v)
 }
 ```
 
 and `cached` calls it with `given Store = Store`. The left `Store` is the
-callee's parameter; the right is the caller's.
+callee's parameter; the right is the caller's. `refresh` uses `Logger` itself;
+`cached` counts its `Logger` as used through the call, as a context function
+does today, so neither warns with `bynk.given.unused_capability`.
 
 The inclusion rule extends ADR 0726 B without changing its shape:
 
 - each binding's right-hand side must be in the caller's own `given`, and
-  counts as used there;
+  counts as used there. In a commons suite case, which has no `given`, it
+  must be one of the doubles the case holds (§6.1);
 - each shared capability of the callee must be in the caller's `given`, as
   today;
 - a commons body can bind only to its own parameters. It cannot name a
@@ -440,15 +465,18 @@ may each call theirs `Store`.
   call sees exactly what a direct call to `Sessions.get` would.
 - **In a commons suite.** A commons suite case binds a parameter to the
   kind's in-memory double, named by the kind:
-  `cached[Session](id, load, given Store = Kv)`. The suite stubs and observes
-  `Kv.get`. Each kind's double is fresh per case, as an instance's double is
+  `cached[Session](id, load, given Store = Kv)`. In a suite, a kind's name
+  on the right of a binding, or as the subject of `stub` or `expect …
+  called`, denotes that kind's double; in a bound, `Store: Kv`, it is still
+  the kind. The suite stubs and observes `Kv.get`. Each kind's double is fresh per case, as an instance's double is
   (`capabilities.md:418-419`). A shared capability the commons selects gets
   its double the same way, so `expect Logger.info called` works.
 - **Two doubles of one kind.** A function with `From: Kv, To: Kv` needs two
   distinct doubles to be tested honestly. A commons suite may declare a
   suite-local instance, `capability Archive = Kv`, which is a fresh double
   with no binding and no deploy effect. This lifts
-  `bynk.capability.derived_outside_context` for suites only.
+  `bynk.capability.derived_outside_context` for commons suites only; a commons
+  itself still cannot declare one.
 - **Effectful suite helpers.** #3983 proposes suite helpers with `given`. A
   helper in a commons suite could then take capability parameters too. This
   track does not depend on it.
@@ -478,7 +506,10 @@ may each call theirs `Store`.
 nothing the caller does not already hold. The inclusion rule makes every
 binding's right-hand side a capability in the caller's own `given`, and a
 commons can still declare no instance (ADR 0469 D4), so a library cannot
-reach a resource unless some context names it.
+reach a resource unless some context names it. The one exception is a
+commons suite's suite-local instance (§9). It is a fresh in-memory double
+with no binding and no deploy effect, and exists only under `bynk test`, so
+it reaches no resource.
 
 **The integrity risk is binding the wrong instance:** reading through
 `PriceCache` where `Sessions` was meant, or writing to the wrong D1 database.
@@ -505,7 +536,7 @@ distributed from a registry, this is the line to revisit.
 | 0 | Settle this doc; land D1 and D2 | — |
 | 1 | Declare, bind, call: braced first-party `consumes` in a commons; `given Name: Kind` and shared capabilities on a commons free function; in-body use; binding at a call from a context body or a provider; the inclusion rule; emission through `deps` | 0 |
 | 2 | Forwarding and generics: binding from one commons function to another, type parameters alongside, recursion, the refusal of an unbound function value | 1 |
-| 3 | Tests: kind doubles in a commons suite, suite-local instances, `stub` and `expect … called` through a bound instance, fixtures in both kinds of suite | 1 |
+| 3 | Tests: kind doubles in a commons suite, suite-local instances (lifting `bynk.capability.derived_outside_context` in a commons suite only), `stub` and `expect … called` through a bound instance, fixtures in both kinds of suite | 1 |
 | 4 | Tooling and the book: hover, completion of instances at a binding, the add-binding fix (§11), signature help, architecture model, the reference and spec, and a guide ("Write a library that uses a capability") | 1; 2 and 3 for the complete pages |
 
 ## 13. Decisions (ADRs to land up front)
@@ -519,11 +550,14 @@ distributed from a registry, this is the line to revisit.
 - **D2. Kinds and shared capabilities.** A commons may select first-party
   capabilities with a braced `consumes`, contract only. An instantiable kind
   is always a parameter; a non-instantiable one is always shared and named
-  bare; `Events` is refused (§6).
+  bare; `Events` is refused (§6). A commons still declares no capability or
+  instance; the suite-local instances of slice 3 are the only exception, and
+  only in a commons suite.
 
 Recorded in their slices: emission through `deps` (slice 1); forwarding
 (slice 2); tests name capabilities, never parameters, and suite-local
-instances (slice 3).
+instances, which lift `bynk.capability.derived_outside_context` in a commons
+suite only (slice 3).
 
 ## 14. Open questions — proposed answers
 
@@ -579,6 +613,9 @@ maintainer's input before then:
    refused. A parameter is never a value.
    *Why:* inside the body `Store.get` must mean one thing. A shadowed `Kv`
    would make `Kv.get` and `Store.get` silently different.
+   In a commons suite, a kind's name on the right of a binding is that
+   kind's double (§9); in a context, `given Store = Kv` binds the context's
+   own bare `Kv` (§6.2). Neither is a "default namespace" reading.
    *Rejected:* allowing shadowing with a warning.
 
 5. **Forwarding.**
