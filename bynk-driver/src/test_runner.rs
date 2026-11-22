@@ -20,28 +20,7 @@ use crate::project::{BuildTarget, ImportExt, ProjectOutput};
 use clap::ValueEnum;
 
 use crate::npm_install::PackageManager;
-use crate::probe::{DetectOpts, SystemToolbox};
 use crate::test_json::{Case, Location, Suite, TestRun};
-
-/// Where `name` is installed on `PATH`, if it is. #1758: callers spawn this
-/// path, not the bare name, so a Windows npm shim (`tsc.cmd`) that detection
-/// finds is also the program that runs.
-pub(crate) fn resolve_tool(name: &str) -> Option<PathBuf> {
-    crate::probe::detect(&SystemToolbox, name, DetectOpts::default())
-        .provenance
-        .path()
-        .map(Path::to_path_buf)
-}
-
-/// #1758: a runner that was found but would not start. Recorded instead of
-/// silently skipped, so a run with no working runner reports the real cause
-/// rather than advising an install of something already installed.
-pub(crate) fn start_failure(path: &Path, e: &std::io::Error) -> String {
-    format!(
-        "`{}` was found but could not be started: {e}",
-        path.display()
-    )
-}
 
 /// `test --format` selector, used by `bynk test` (review
 /// findings #40/#72): one enum both CLIs' `Test` subcommand uses, instead of
@@ -957,18 +936,11 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
     // toolchain/internal problem, surfaced as a `runtime` error.
     // #1672: the `npx` fallback provisions the TypeScript major the output is
     // verified against and users get, not an older pin.
-    let typescript_pkg = format!("typescript@{}", bynk_emit::TYPESCRIPT_MAJOR_TESTED);
     let manager = crate::npm_install::system_tool_manager(&input);
     let mut start_failures: Vec<String> = Vec::new();
-    let tsc_runners = crate::npm_install::system_tool_ladder("tsc", &typescript_pkg, manager);
-    for (prog, prefix) in &tsc_runners {
-        let Some(path) = resolve_tool(prog) else {
-            continue;
-        };
-        let mut cmd = ProcCommand::new(&path);
-        for p in prefix {
-            cmd.arg(p);
-        }
+    let tsc_runners = crate::tools::Ladder::tsc(manager);
+    for rung in tsc_runners.rungs() {
+        let mut cmd = rung.command();
         // `--pretty false`: the plain `file(line,col): error TSn:` records
         // `tsc_report` parses, whatever the terminal.
         cmd.arg("-p").arg(&tsconfig).args(["--pretty", "false"]);
@@ -1016,12 +988,12 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
                 return ExitCode::FAILURE;
             }
             Err(e) => {
-                start_failures.push(start_failure(&path, &e));
+                start_failures.push(rung.start_failure(&e));
                 continue;
             }
         };
         if tsc_ok {
-            let mut node_cmd = ProcCommand::new(crate::probe::program_path("node"));
+            let mut node_cmd = crate::tools::node_command();
             node_cmd.arg(&main_js);
             if smoke {
                 node_cmd.env(crate::smoke::STRICT_WIRE_ENV, "1");
@@ -1097,15 +1069,9 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
     }
 
     // tsx fallback chain.
-    let tsx_runners = crate::npm_install::system_tool_ladder("tsx", "tsx", manager);
-    for (prog, prefix) in &tsx_runners {
-        let Some(path) = resolve_tool(prog) else {
-            continue;
-        };
-        let mut cmd = ProcCommand::new(&path);
-        for p in prefix {
-            cmd.arg(p);
-        }
+    let tsx_runners = crate::tools::Ladder::tsx(manager);
+    for rung in tsx_runners.rungs() {
+        let mut cmd = rung.command();
         cmd.arg(&main_ts);
         if smoke {
             cmd.env(crate::smoke::STRICT_WIRE_ENV, "1");
@@ -1132,7 +1098,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
             Err(e) if e.kind() == std::io::ErrorKind::TimedOut => {
                 return report_timeout(program, json, stream, &e);
             }
-            Err(e) => start_failures.push(start_failure(&path, &e)),
+            Err(e) => start_failures.push(rung.start_failure(&e)),
         }
     }
 
@@ -1311,10 +1277,7 @@ fn report_start_failures(
 fn install_advice(manager: PackageManager, coverage: bool) -> String {
     let tsc = format!(
         "  - `{}` (provides tsc, which type-checks; requires Node.js to run output)",
-        manager.global_install(&format!(
-            "typescript@{}",
-            bynk_emit::TYPESCRIPT_MAJOR_TESTED
-        ))
+        manager.global_install(&crate::tools::pins::typescript_spec())
     );
     if coverage {
         return tsc;
@@ -1323,7 +1286,7 @@ fn install_advice(manager: PackageManager, coverage: bool) -> String {
     let runner = manager.runner_label().unwrap_or("npx");
     format!(
         "{tsc}\n  - `{}` (runs TypeScript in one step, without type-checking)\n  Or run inside a project where `{runner} tsc` / `{runner} tsx` resolves.",
-        manager.global_install("tsx")
+        manager.global_install(crate::tools::pins::TSX_SPEC)
     )
 }
 
@@ -1858,7 +1821,7 @@ fn run_inspect(
     filter: &crate::test_filter::TestFilter,
     smoke: bool,
 ) -> ExitCode {
-    let Some(node) = resolve_tool("node") else {
+    let Some(mut cmd) = crate::tools::resolved_node_command() else {
         emsg!("{program} test --inspect: error: `node` was not found on PATH");
         return ExitCode::FAILURE;
     };
@@ -1866,7 +1829,6 @@ fn run_inspect(
     eprintln!("  Attach a JavaScript debugger to the inspector URL below; breakpoints set");
     eprintln!("  in `.bynk` sources resolve through the emitted source maps.");
     eprintln!("  (Requires Node \u{2265} 22.6 for TypeScript type-stripping.)");
-    let mut cmd = ProcCommand::new(node);
     if let Some(hex) = seed_hex {
         cmd.env(env_protocol::TEST_SEED, hex);
     }

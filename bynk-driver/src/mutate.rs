@@ -72,7 +72,7 @@ fn changed_files(root: &Path, rev: &str) -> Result<BTreeSet<String>, String> {
         ));
     }
     let git = |args: &[&str]| -> Result<String, String> {
-        let out = std::process::Command::new("git")
+        let out = crate::tools::git_command()
             .arg("-C")
             .arg(root)
             .args(args)

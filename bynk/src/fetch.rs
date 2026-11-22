@@ -859,7 +859,7 @@ fn check_source(url: &str, rev: &str, declarer: Declarer) -> Result<(), FetchErr
 
 /// `git` with the hardening every invocation carries.
 fn git(allow_file: bool) -> Command {
-    let mut cmd = Command::new("git");
+    let mut cmd = bynk_driver::tools::git_command();
     cmd.args(["-c", "protocol.allow=never"])
         .args(["-c", "protocol.https.allow=always"])
         .args(["-c", "protocol.ssh.allow=always"])

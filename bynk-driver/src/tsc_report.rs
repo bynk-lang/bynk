@@ -291,17 +291,12 @@ enum Ran {
 /// fetching `typescript@<major>`), type-checking only. There is no `tsx` rung:
 /// it does not type-check.
 fn run_tsc(tsconfig: &Path, manager: PackageManager) -> Ran {
-    use std::process::{Command, Stdio};
-    let pkg = format!("typescript@{}", bynk_emit::TYPESCRIPT_MAJOR_TESTED);
-    let runners = crate::npm_install::system_tool_ladder("tsc", &pkg, manager);
+    use std::process::Stdio;
+    let runners = crate::tools::Ladder::tsc(manager);
     let mut failures = Vec::new();
-    for (prog, prefix) in &runners {
-        let Some(path) = crate::test_runner::resolve_tool(prog) else {
-            continue;
-        };
-        let mut cmd = Command::new(&path);
-        cmd.args(prefix)
-            .arg("-p")
+    for rung in runners.rungs() {
+        let mut cmd = rung.command();
+        cmd.arg("-p")
             .arg(tsconfig)
             .args(["--noEmit", "--pretty", "false"]);
         match cmd.stdout(Stdio::piped()).stderr(Stdio::piped()).output() {
@@ -315,7 +310,7 @@ fn run_tsc(tsconfig: &Path, manager: PackageManager) -> Ran {
                 }
                 return Ran::Failed(text);
             }
-            Err(e) => failures.push(crate::test_runner::start_failure(&path, &e)),
+            Err(e) => failures.push(rung.start_failure(&e)),
         }
     }
     Ran::Unavailable(failures)
@@ -398,10 +393,7 @@ pub fn check_emit(prog: &str, input: &Path, short: bool) -> bool {
                 }
                 eprintln!(
                     "  Install it with `{}`.",
-                    manager.global_install(&format!(
-                        "typescript@{}",
-                        bynk_emit::TYPESCRIPT_MAJOR_TESTED
-                    ))
+                    manager.global_install(&crate::tools::pins::typescript_spec())
                 );
                 false
             }

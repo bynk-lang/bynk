@@ -19,7 +19,6 @@
 //! `package.json` this reads only lists approved ones and the toolchain's own.
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use crate::probe::{SystemToolbox, Toolbox};
 
@@ -109,7 +108,8 @@ impl PackageManager {
     }
 
     /// The arguments after [`Self::runner_program`] that run `bin` from the
-    /// package `package` (which may be pinned, `typescript@5`), downloading it
+    /// package `package` (which may be pinned, as [`crate::tools::pins::typescript_spec`]
+    /// is), downloading it
     /// on first use. `npx` needs `--yes` to skip its prompt; `pnpm dlx` and
     /// `bunx` do not prompt.
     pub fn runner_args(self, package: &str, bin: &str) -> Vec<String> {
@@ -156,34 +156,6 @@ impl PackageManager {
             .into_iter()
             .find(|m| m.runner_program().is_some() && found(*m))
     }
-}
-
-/// The programs to try, in order, to run `tool` (a binary of `package`, which
-/// may be pinned): the tool itself, then the runner that fetches it on demand
-/// when `manager` (or `npx`, for a manager with no runner) is on PATH. Each is
-/// a program name with its leading arguments.
-pub fn tool_ladder(
-    tool: &str,
-    package: &str,
-    manager: PackageManager,
-    tb: &dyn Toolbox,
-) -> Vec<(String, Vec<String>)> {
-    let mut rungs = vec![(tool.to_string(), Vec::new())];
-    if let Some(runner) = manager.runner(tb)
-        && let Some(program) = runner.runner_program()
-    {
-        rungs.push((program.to_string(), runner.runner_args(package, tool)));
-    }
-    rungs
-}
-
-/// [`tool_ladder`] over the real PATH.
-pub fn system_tool_ladder(
-    tool: &str,
-    package: &str,
-    manager: PackageManager,
-) -> Vec<(String, Vec<String>)> {
-    tool_ladder(tool, package, manager, &SystemToolbox)
 }
 
 /// The package manager the toolchain's own tool fallbacks and install hints
@@ -567,21 +539,12 @@ pub trait Runner {
     fn run(&self, program: &Path, args: &[&str], dir: &Path) -> Result<(bool, String), String>;
 }
 
-/// [`Runner`] over [`std::process::Command`].
+/// [`Runner`] over the real tools ([`crate::tools::run_to_completion`]).
 pub struct SystemRunner;
 
 impl Runner for SystemRunner {
     fn run(&self, program: &Path, args: &[&str], dir: &Path) -> Result<(bool, String), String> {
-        let out = Command::new(program)
-            .args(args)
-            .current_dir(dir)
-            .output()
-            .map_err(|e| format!("could not run `{}`: {e}", program.display()))?;
-        let mut text = String::from_utf8_lossy(&out.stderr).into_owned();
-        if text.trim().is_empty() {
-            text = String::from_utf8_lossy(&out.stdout).into_owned();
-        }
-        Ok((out.status.success(), text))
+        crate::tools::run_to_completion(program, args, dir)
     }
 }
 
@@ -774,6 +737,7 @@ mod tests {
     use crate::probe::Version;
     use std::cell::RefCell;
     use std::collections::{BTreeMap, BTreeSet};
+    use std::process::Command;
 
     #[derive(Default)]
     struct Fake {
@@ -1346,18 +1310,19 @@ mod tests {
 
     #[test]
     fn each_manager_runs_a_pinned_package_binary_its_own_way() {
-        let args = |m: PackageManager| m.runner_args("typescript@5", "tsc");
+        let typescript = crate::tools::pins::typescript_spec();
+        let args = |m: PackageManager| m.runner_args(&typescript, "tsc");
         assert_eq!(
             args(PackageManager::Npm),
-            ["--yes", "-p", "typescript@5", "tsc"]
+            ["--yes", "-p", typescript.as_str(), "tsc"]
         );
         assert_eq!(
             args(PackageManager::Pnpm),
-            ["dlx", "--package", "typescript@5", "tsc"]
+            ["dlx", "--package", typescript.as_str(), "tsc"]
         );
         assert_eq!(
             args(PackageManager::Bun),
-            ["--package", "typescript@5", "tsc"]
+            ["--package", typescript.as_str(), "tsc"]
         );
         assert!(args(PackageManager::Yarn).is_empty());
         let programs = PackageManager::ALL.map(PackageManager::runner_program);
@@ -1423,40 +1388,6 @@ mod tests {
     }
 
     #[test]
-    fn the_tool_ladder_is_the_tool_then_the_runner() {
-        let tb = Tools {
-            path: &["pnpm"],
-            npx: true,
-        };
-        let rungs = tool_ladder("tsc", "typescript@5", PackageManager::Pnpm, &tb);
-        assert_eq!(
-            rungs,
-            [
-                ("tsc".to_string(), vec![]),
-                (
-                    "pnpm".to_string(),
-                    ["dlx", "--package", "typescript@5", "tsc"]
-                        .map(String::from)
-                        .to_vec()
-                )
-            ]
-        );
-        // Yarn classic goes through `npx`, as before.
-        let yarn = tool_ladder("tsx", "tsx", PackageManager::Yarn, &tb);
-        assert_eq!(yarn[1].0, "npx");
-        assert_eq!(yarn[1].1, ["--yes", "-p", "tsx", "tsx"]);
-        // With no runner at all, only the tool itself is tried.
-        let bare = Tools {
-            path: &[],
-            npx: false,
-        };
-        assert_eq!(
-            tool_ladder("tsx", "tsx", PackageManager::Yarn, &bare).len(),
-            1
-        );
-    }
-
-    #[test]
     fn tool_manager_reuses_detection_and_defaults_to_npm() {
         let pnpm = Fake {
             files: BTreeMap::from([("pnpm-lock.yaml", String::new())]),
@@ -1472,8 +1403,9 @@ mod tests {
         );
     }
 
-    /// The real tools, where installed: the flags in the issue run a pinned
-    /// `typescript@5` for real. Skips cleanly when the tool is absent.
+    /// The real tools, where installed: the flags in the issue run the pinned
+    /// TypeScript ([`crate::tools::pins::typescript_spec`]) for real. Skips
+    /// cleanly when the tool is absent.
     #[test]
     fn real_runners_run_a_pinned_tsc() {
         if std::env::var_os("BYNK_REAL_RUNNERS").is_none() {
@@ -1491,13 +1423,14 @@ mod tests {
                 continue;
             };
             let out = Command::new(path)
-                .args(manager.runner_args("typescript@5", "tsc"))
+                .args(manager.runner_args(&crate::tools::pins::typescript_spec(), "tsc"))
                 .arg("--version")
                 .output()
                 .expect("runs");
             let text = String::from_utf8_lossy(&out.stdout);
+            let version = format!("Version {}.", bynk_emit::TYPESCRIPT_MAJOR_TESTED);
             assert!(
-                out.status.success() && text.contains("Version 5."),
+                out.status.success() && text.contains(&version),
                 "{}: {text}",
                 manager.name()
             );
