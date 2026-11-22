@@ -7,9 +7,15 @@
 //!
 //! Arc C slice 3 (#1321): `emit_worker_compose` and its private helpers build
 //! a real `bynk_ts::TsProgram` directly instead of `writeln!`-ing a `String`.
-//! Back-half paydown 1B.1a moved them here from `workers.rs`, unchanged.
+//! Back-half paydown 1B.1a moved them here from `workers.rs`. Since 1B.1b the
+//! unit and its dependencies come from the [`ComposePlan`]; the order of the
+//! `deps` entries, the `const` per provider, the `__exec` condition, the
+//! cross-capability set, `env`, the session entry and the delivery through the
+//! fan-out are this renderer's own (divergences 1 to 7 of #3928).
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+
+use crate::emitter::compose::{ComposePlan, empty_deps};
 
 use crate::emit_model::{ImportExt, LocaleNegotiationArgs};
 use crate::emitter::RuntimeUse;
@@ -26,15 +32,10 @@ use bynk_ts::{
 /// Where `compose.ts` imports the runtime from — it sits two levels below the
 /// out root (`<out>/workers/<worker>/compose.ts`).
 ///
-/// Named because the emitted import line and the post-pass that injects into it
-/// (#914) must agree exactly: [`crate::emitter::inject_runtime_imports`]
-/// (the still-`String`-based post-pass every other module uses) anchors on
-/// the specifier verbatim — #1321's own [`append_missing_bindings`] below
-/// reimplements the same dedup directly over the built `TsDecl::Import`
-/// node's `names`, since this file's own import line is now a tree node,
-/// not text to splice into. Two drifting literals would silently stop
-/// injecting rather than fail loudly — the anchor-drift failure v0.176
-/// (#642) already hit once.
+/// The import is built from the finished tree (`derived_worker_runtime_names`)
+/// and inserted after the banner, so this is the one place the specifier is
+/// spelled. It is named so that it cannot drift from the layout the entry and
+/// the other per-Worker modules assume.
 const COMPOSE_RUNTIME_SPECIFIER: &str = "../../runtime.js";
 
 /// The events a publishing handler hands its fan-out. A group's one fan-out
@@ -64,20 +65,25 @@ fn fanout_events(context: &str, layout: &bynk_project::worker_layout::WorkerLayo
     method_call(ident("events"), "map", vec![tagged])
 }
 
+/// Divergence 1 of #3928, the Workers' entry order for the capability part of
+/// `deps`: a plain `String` sort, so `Db` comes before `Db2` (the Bundle sorts
+/// by `key + ":"`, which puts `Db2` first).
+fn deps_caps_in_order(mut caps: Vec<String>) -> Vec<String> {
+    caps.sort();
+    caps
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn emit_worker_compose(
     context: &str,
+    plan: &ComposePlan,
     layout: &bynk_project::worker_layout::WorkerLayout,
     table: &UnitTable,
-    consumes: &[String],
-    aliases: &HashMap<String, String>,
     unit_tables: &HashMap<String, UnitTable>,
     // v0.17: adapter unit name → its binding module path (relative to the out
     // root, `.js`). An adapter's external provider class lives in this module,
     // not in a `handlers.ts`.
     binding_modules: &HashMap<String, String>,
-    // v0.17: bare flattened capability → the unit it was flattened from.
-    flattened: &HashMap<String, String>,
     // v0.18: the whole-project consume/alias/flattening maps, so external
     // provider deps recurse across adapters (spec §4.5).
     unit_consumes: &HashMap<String, Vec<String>>,
@@ -88,25 +94,12 @@ pub fn emit_worker_compose(
     // the caller already resolved the cardinality, this function only acts).
     locale_bundle: Option<&MessageBundleInfo>,
     import_ext: ImportExt,
-    // #1187's slice 6 plumbing: `unit_table_uses_emit(table, callees)`,
-    // precomputed by the caller (`crate::project::RunChecks::Checked::
-    // unit_callees`'s own doc comment has the full grounding for what feeds
-    // it) — reads the checker's own already-resolved `Callee` classification
-    // instead of re-deriving `Events.emit` detection from raw AST syntax. A
-    // bare `bool`, not the `Callee` map itself: this function has exactly
-    // one use for it.
-    uses_emit: bool,
     // #1944: every binding this Worker declares (`wrangler::worker_bindings`),
     // the list its `wrangler.toml` is written from; `Env` types exactly it.
     bindings: &[WorkerBinding],
     // #2137: the test build of a context a `system` harness stands up — its
     // first-party `Clock` reads the harness clock (`ProviderNamespaces::Workers`).
     harness_clock: bool,
-    // #2719: whether any of this context's service handlers hands work to the
-    // execution context (`detach`, `within` or `race`, directly or through the
-    // functions it calls), so `compose` takes the request's and threads its
-    // `waitUntil` into `deps.__exec`. From the checker's needs-context set.
-    ctx_uses_send: bool,
     // #2967: the commons this context `uses`, whose public constants can key a
     // WebSocket `on open`'s transfer (`bynk_check::consts::visible_consts`).
     uses: &[String],
@@ -120,10 +113,17 @@ pub fn emit_worker_compose(
     // #2967: a used commons' constant keying an `on open`'s transfer, imported
     // into this module under an alias: alias → (owning commons, constant).
     let mut const_imports: BTreeMap<String, (String, String)> = BTreeMap::new();
+    let unit = plan
+        .units
+        .get(context)
+        .unwrap_or_else(|| panic!("the compose plan has no unit `{context}`"));
     // v0.15: cross-context capabilities this Worker uses (in handlers or in a
     // local provider's `given`) → `deps_key → consumed_context`. Their
-    // providers are instantiated locally (model A1).
-    let cross_caps = worker_cross_caps(context, table, consumes, aliases, flattened);
+    // providers are instantiated locally (model A1). Divergence 3 of #3928,
+    // the cross-capability set: the Workers `compose` lifts the providers'
+    // cross-context `given`s to the top level too (the Bundle root, the
+    // handlers' only).
+    let cross_caps = unit.cross_caps();
 
     // Locale capability track, slice 2 (#882, Decision C): only when this
     // Worker both consumes `bynk`'s `Locale` and has a uniquely-detected
@@ -188,9 +188,7 @@ pub fn emit_worker_compose(
     // S4a (#1966): each derived capability's instance, its base's platform
     // provider bound to the instance's own Worker binding (which also imports
     // the binding module).
-    let mut derived_keys: Vec<String> = table.derived.keys().cloned().collect();
-    derived_keys.sort();
-    for cap in &derived_keys {
+    for cap in &unit.derived {
         let expr = crate::emit_model::instantiate_provider_ts_expr(
             context,
             cap,
@@ -211,11 +209,10 @@ pub fn emit_worker_compose(
 
     // Only consumed *contexts* become Service Bindings — a consumed adapter is
     // not a Worker (its capability is provided in-process via the binding).
-    let mut sorted_consumes: Vec<&String> = consumes
+    let consumes_a_context = unit
+        .consumes
         .iter()
-        .filter(|t| !binding_modules.contains_key(*t))
-        .collect();
-    sorted_consumes.sort();
+        .any(|t| !binding_modules.contains_key(t));
 
     // v0.79: if any handler in this context uses `detach`, `compose` also takes the
     // request's execution context and threads its `waitUntil` into `deps.__exec`.
@@ -241,8 +238,10 @@ pub fn emit_worker_compose(
     // exist first) as local `const` bindings, injecting each provider's deps;
     // then assembled into the `deps` object. v0.15: a provider's `given` may
     // include cross-context capability keys (instantiated above).
-    let order = crate::emitter::topo_order_providers(&table.providers);
-    for cap in &order {
+    // Divergence 2 of #3928, provider spelling: one `const` per provider, in the
+    // plan's dependency order (the Bundle root builds each inline).
+    let order = &unit.providers;
+    for cap in order {
         let provider = table.providers.get(cap).unwrap();
         let provider_ts = provider.provider_name.name.clone();
         // #2355: a provider whose ops construct a local agent takes `env` in
@@ -270,19 +269,31 @@ pub fn emit_worker_compose(
         };
         body.push(const_(cap.clone(), init));
     }
+    // Divergence 1 of #3928, the entry order: capabilities by a plain sort,
+    // then `env`, the session, `__exec` and `__eventsDispatch` appended in that
+    // fixed order (the Bundle sorts every entry by `key + ":"`).
     let mut deps_entries: Vec<TsObjectEntry> = {
         let mut caps: Vec<String> = order.clone();
         caps.extend(cross_keys.iter().map(|k| (*k).clone()));
-        caps.extend(derived_keys.iter().cloned());
-        caps.sort();
-        caps.into_iter().map(TsObjectEntry::Shorthand).collect()
+        caps.extend(unit.derived.iter().cloned());
+        deps_caps_in_order(caps)
+            .into_iter()
+            .map(TsObjectEntry::Shorthand)
+            .collect()
     };
-    // env passes through for cross-context calls (Service Bindings) and agent instantiations (DOs).
-    if !sorted_consumes.is_empty() || !table.agents.is_empty() {
+    // Divergence 5 of #3928, `env`: it passes through for cross-context calls
+    // (Service Bindings) and agent instantiations (DOs); the Bundle threads it
+    // as a `composeApp` parameter into providers instead.
+    if consumes_a_context || unit.has_agents {
         deps_entries.push(TsObjectEntry::Shorthand("env".to_string()));
     }
+    // Divergence 6 of #3928: the session entry is the Workers' alone.
     deps_entries.extend(session_deps_entry(table));
     // v0.79: the execution context rides in `deps.__exec` for `detach` sends.
+    // Divergence 4 of #3928, the `__exec` gate and value: any handler that
+    // needs it, and the request's own `exec` (the Bundle: `call` handlers only,
+    // and `__bynkProcessExec()`).
+    let ctx_uses_send = unit.exec.any_handler;
     if ctx_uses_send {
         deps_entries.push(TsObjectEntry::prop("__exec".to_string(), ident("exec")));
     }
@@ -290,7 +301,9 @@ pub fn emit_worker_compose(
     // release-at-commit event batch is handed to this context's own fan-out
     // DO — `env.<bind>` is typed by the `Env` interface built above, one
     // instance per publishing context.
-    if uses_emit {
+    // Divergence 7 of #3928, delivery: through this context's fan-out Durable
+    // Object (the Bundle dispatches in-process).
+    if unit.publishes {
         let bind = events_fanout_binding().name;
         let arrow = TsExpr::Arrow {
             params: vec![TsParam::new(
@@ -310,23 +323,9 @@ pub fn emit_worker_compose(
         };
         deps_entries.push(TsObjectEntry::prop("__eventsDispatch".to_string(), arrow));
     }
-    // #1321: the pre-conversion `writeln!(out, "  const deps = {{ {} }};",
-    // deps_entries.join(", "))` template always has a space on each side of
-    // its `{}` slot — with zero entries that literally produces `"{  }"`
-    // (a *double* space, not the tight `"{}"` the ordinary single-line
-    // `TsExpr::Object` empty-entries shortcut renders), a real, reachable
-    // shape (a Worker with no providers/cross-caps/consumed services/agents,
-    // no `detach`, no events — `941_http_result_float_bytes_serialise` and
-    // several other real fixtures hit exactly this). The shortcut itself is
-    // correct and stays unchanged for every *other* real call site (e.g.
-    // `events_fanout.rs`'s own `(env ?? {})`, which genuinely wants the
-    // tight form) — this one site's own historical quirk is carried as
-    // opaque pre-rendered text instead, the same "existing textual variant
-    // for a fixed, non-generalizable literal shape" precedent used
-    // elsewhere in this file (`exec`'s type, `DurableObjectNamespace`'s
-    // type).
+    // `{  }` for no entries: see `compose::empty_deps`.
     let deps_init = if deps_entries.is_empty() {
-        ident("{  }")
+        empty_deps()
     } else {
         TsExpr::object_entries(deps_entries)
     };
@@ -674,64 +673,18 @@ pub fn emit_worker_compose(
     (program, needs_request)
 }
 
-/// v0.15: cross-context capabilities this Worker references in handlers or in
-/// a local provider's `given`, as `deps_key → consumed_context`.
-fn worker_cross_caps(
-    context: &str,
-    table: &UnitTable,
-    consumes: &[String],
-    aliases: &HashMap<String, String>,
-    flattened: &HashMap<String, String>,
-) -> std::collections::BTreeMap<String, String> {
-    fn resolve(
-        prefix: &str,
-        consumes: &[String],
-        aliases: &HashMap<String, String>,
-    ) -> Option<String> {
-        if let Some(q) = aliases.get(prefix) {
-            return Some(q.clone());
-        }
-        if consumes.iter().any(|c| c == prefix) {
-            return Some(prefix.to_string());
-        }
-        None
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Divergence 1 of #3928: the Workers sort capabilities plainly. A `Db`/`Db2`
+    /// pair therefore orders the other way round from the Bundle's
+    /// `deps_entry_sort_key` order, and unifying the two would change output.
+    #[test]
+    fn workers_order_capabilities_by_a_plain_sort() {
+        assert_eq!(
+            deps_caps_in_order(vec!["Db2".to_string(), "Db".to_string()]),
+            ["Db", "Db2"]
+        );
     }
-    let mut out = std::collections::BTreeMap::new();
-    let mut givens: Vec<bynk_model::CapRefIr> = Vec::new();
-    for s in table.services.values() {
-        for h in &s.handlers {
-            givens.extend(bynk_model::lower_handler_given_ir(h));
-        }
-    }
-    for a in table.agents.values() {
-        for h in &a.handlers {
-            givens.extend(bynk_model::lower_handler_given_ir(h));
-        }
-    }
-    for p in table.providers.values() {
-        givens.extend(bynk_model::lower_provider_given_ir(p));
-    }
-    for c in &givens {
-        // Events track, slice 0 (spine #936): `Events.emit` is
-        // intercepted entirely at the call site (release-at-commit
-        // buffering) and never calls through a constructed provider —
-        // see the matching skip in `bynk-emit/src/project.rs`'s
-        // `handler_cross_caps`. Without this, Workers-mode compose
-        // tries to construct a `bynk__binding.EventsProvider` that
-        // does not exist.
-        if bynk_check::firstparty::resolve(&c.name, context, flattened)
-            == Some(bynk_check::firstparty::FirstPartyCap::Events)
-        {
-            continue;
-        }
-        if let Some(p) = &c.context {
-            if let Some(ctx) = resolve(p, consumes, aliases) {
-                out.entry(c.name.clone()).or_insert(ctx);
-            }
-        } else if let Some(unit) = flattened.get(&c.name) {
-            // v0.17: a bare flattened capability is provided by its source unit.
-            out.entry(c.name.clone()).or_insert_with(|| unit.clone());
-        }
-    }
-    out
 }

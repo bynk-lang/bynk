@@ -5087,39 +5087,65 @@ pub fn handler_cross_caps(
     flattened: &HashMap<String, String>,
 ) -> BTreeMap<String, String> {
     let mut out = BTreeMap::new();
-    let mut scan = |given: &[CapRef]| {
-        for c in given {
-            // Events track, slice 0 (spine #936): `Events.emit` is
-            // intercepted entirely at the call site (release-at-commit
-            // buffering) and never calls through a constructed provider —
-            // there is no `EventsProvider` for compose to build, so the
-            // first-party `Events` must never become a compose deps entry.
-            if c.key() == "Events" && flattened.get(c.key()).map(String::as_str) == Some("bynk") {
-                continue;
-            }
-            if let Some(p) = c.prefix() {
-                if let Some(ctx) = resolve_consume_prefix(&p, consumed, aliases) {
-                    out.entry(c.key().to_string()).or_insert(ctx);
-                }
-            } else if let Some(unit) = flattened.get(c.key()) {
-                // v0.17: a bare flattened capability is provided by the unit it
-                // was flattened from.
-                out.entry(c.key().to_string())
-                    .or_insert_with(|| unit.clone());
-            }
-        }
-    };
     for s in table.services.values() {
         for h in &s.handlers {
-            scan(&h.given);
+            scan_cross_caps(&mut out, &h.given, consumed, aliases, flattened);
         }
     }
     for a in table.agents.values() {
         for h in &a.handlers {
-            scan(&h.given);
+            scan_cross_caps(&mut out, &h.given, consumed, aliases, flattened);
         }
     }
     out
+}
+
+/// The cross-context capabilities a context's **providers** reference in their
+/// own `given`, as `deps_key -> consumed_context` (1B.1b, `ComposePlan`). The
+/// Workers `compose.ts` instantiates these at the top level beside the
+/// handlers' ([`handler_cross_caps`]); the Bundle root reaches them only
+/// through a provider's own recursive instantiation.
+pub fn provider_cross_caps(
+    table: &UnitTable,
+    consumed: &[String],
+    aliases: &HashMap<String, String>,
+    flattened: &HashMap<String, String>,
+) -> BTreeMap<String, String> {
+    let mut out = BTreeMap::new();
+    for p in table.providers.values() {
+        scan_cross_caps(&mut out, &p.given, consumed, aliases, flattened);
+    }
+    out
+}
+
+/// One `given` list's cross-context capabilities, first reference winning.
+fn scan_cross_caps(
+    out: &mut BTreeMap<String, String>,
+    given: &[CapRef],
+    consumed: &[String],
+    aliases: &HashMap<String, String>,
+    flattened: &HashMap<String, String>,
+) {
+    for c in given {
+        // Events track, slice 0 (spine #936): `Events.emit` is
+        // intercepted entirely at the call site (release-at-commit
+        // buffering) and never calls through a constructed provider —
+        // there is no `EventsProvider` for compose to build, so the
+        // first-party `Events` must never become a compose deps entry.
+        if c.key() == "Events" && flattened.get(c.key()).map(String::as_str) == Some("bynk") {
+            continue;
+        }
+        if let Some(p) = c.prefix() {
+            if let Some(ctx) = resolve_consume_prefix(&p, consumed, aliases) {
+                out.entry(c.key().to_string()).or_insert(ctx);
+            }
+        } else if let Some(unit) = flattened.get(c.key()) {
+            // v0.17: a bare flattened capability is provided by the unit it
+            // was flattened from.
+            out.entry(c.key().to_string())
+                .or_insert_with(|| unit.clone());
+        }
+    }
 }
 
 /// The `(unit, capability)` pairs a provider capability's `given` closure
