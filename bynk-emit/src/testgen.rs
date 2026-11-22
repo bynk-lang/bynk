@@ -1,6 +1,7 @@
 //! Test-harness generation: `suite`/`test integration` processing, the test entry
-//! (`tests/main.ts`), the discovery manifest and the embedded test-runtime fragments
-//! (`testgen/test_runtime/*.ts`).
+//! (`tests/main.ts`), the discovery manifest and the embedded test-runtime fragments. The
+//! fragments are authored as modules under `bynk-emit/runtime/src/testing/` and reach the harness
+//! only through `runtime_splice` (1B.3a, #4047).
 //!
 //! 1B.2a (#4028, ADR "Where test generation lives"): moved here from the driver's
 //! `project/tests_emit{.rs,/}`, beside `emitter`. It reads no file, spawns no process and holds
@@ -70,6 +71,7 @@ mod integration_module;
 mod names;
 mod property_generators;
 mod property_tests;
+mod runtime_splice;
 mod stubs;
 mod system_jobs;
 mod system_support;
@@ -77,6 +79,7 @@ mod test_cases;
 mod test_deps;
 mod test_main;
 mod test_module;
+mod test_runtime_modules;
 pub use self::harness::RunnableTest;
 pub use self::harness::discovery_manifest;
 use self::harness::*;
@@ -85,6 +88,7 @@ use self::integration_module::*;
 use self::names::*;
 use self::property_generators::*;
 use self::property_tests::*;
+use self::runtime_splice::*;
 use self::stubs::*;
 use self::system_jobs::*;
 use self::system_support::*;
@@ -799,8 +803,9 @@ mod tests {
     /// module's `run.id` is `"local"` whatever the environment says.
     #[test]
     fn run_id_reads_the_environment_only_in_a_remote_build() {
-        assert!(run_id_helper(true).contains("BYNK_TEST_RUN_ID"));
-        let local = run_id_helper(false);
+        let remote = bynk_ts::print_stmt(&run_id_stmt(true), 0);
+        assert!(remote.contains("BYNK_TEST_RUN_ID"));
+        let local = bynk_ts::print_stmt(&run_id_stmt(false), 0);
         assert!(!local.contains("BYNK_TEST_RUN_ID"));
         assert!(local.contains("\"local\""));
     }

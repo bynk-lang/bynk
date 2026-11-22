@@ -14,7 +14,8 @@
 //!   prefix family that readers look up by name (the `BYNK_DEV_ACK_` five).
 //!
 //! The directories scanned are `env_protocol::ReaderDir::ALL`, so a reader that
-//! moves (1B.3 moves the test runtime into `bynk-emit`) changes one line there.
+//! moves changes one line there. The test runtime's readers are the `testing/` sources under
+//! `bynk-emit/runtime/src` (1B.3a, #4047), not the spliced artifacts.
 
 use bynk_project::env_protocol::{self, Entry, PROTOCOL, ReaderDir, Shape};
 use std::collections::BTreeSet;

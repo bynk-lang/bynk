@@ -229,7 +229,7 @@ pub(super) fn emit_integration_module(
     // ends in a blank line, so the harness statement right after it suppresses
     // the printer's own automatic lead-in blank (`no_blank_before`) rather than
     // stacking a second one on top.
-    stmts.push(TsStmt::raw(expectation_runtime_helpers(), None));
+    stmts.push(TestRuntimeModule::Expectation.splice());
     // #1883, slice 3: the embedded files and `__bynkAssetGet`, for an asset
     // fetch in a case.
     if let Some(text) = &asset_harness {
@@ -250,14 +250,14 @@ pub(super) fn emit_integration_module(
                 .is_some_and(|t| t.derived.values().any(|d| d.is_edge_cache()))
     };
     if harness_participants.iter().any(sends) {
-        stmts.push(TsStmt::raw(send_runtime_helpers(), None));
+        stmts.push(TestRuntimeModule::Send.splice());
     }
     // #2138: `run.id`, for a module whose cases read it.
     if cases.iter().any(|c| block_uses_run_id(&c.case.body)) {
-        stmts.push(TsStmt::raw(run_id_helper(remote.is_some()), None));
+        stmts.push(run_id_stmt(remote.is_some()));
     }
     // #2137: the harness clock every participant's `Clock` reads.
-    stmts.push(TsStmt::raw(clock_runtime_helpers(), None));
+    stmts.push(TestRuntimeModule::Clock.splice());
 
     // The env-graph harness: stand each participant up as an in-process Worker
     // and wire its Service Bindings to its siblings; the root env binds to all.
@@ -816,7 +816,7 @@ pub(super) fn emit_integration_module(
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_else(|| "module.ts".to_string());
-    let program = TsProgram { stmts };
+    let program = checked_program(stmts);
     let printed = bynk_ts::print_multi_source(&program, map, &module_file);
     Some((
         module_path.clone(),

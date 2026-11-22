@@ -7,6 +7,8 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.640.52** | Internal restructuring: the test runtime and the client runtime are authored as type-checked runtime modules and generated into the files bynk-emit embeds; no emitted output changes |
+| **v0.640.51** | Internal restructuring: the duplicate-binding check, the Workers build and the events fan-out read one binding model, and the old derivations are deleted; no emitted output changes |
 | **v0.640.50** | Internal restructuring: the codec emitter builds field subscripts and error paths as expression nodes, not text; no emitted output changes |
 | **v0.640.49** | Learn Bynk has a new chapter 8, [Split into contexts](/book/tutorials/contexts/) — the URL shortener becomes a `commons links`, a `registry` context that owns the links and codes, and an HTTP-only `shortener` that `consumes registry`, built as two Workers — and "Test it" now tests the `registry` context. The Book's example gate gains a `bynk,project=<name>` fence that compiles a page's files together as one project (web presence track, slice 11, #4062). |
 | **v0.640.48** | Internal test-harness change; the parallel test processes that run `wrangler` through `npx` provision it once per machine, under a lock, instead of racing on a cold npx cache |

@@ -356,7 +356,7 @@ pub(super) fn emit_test_module(
     // fires (property helpers, history helpers, observation helpers, stub
     // helpers, or — if this module has none of those — the deps factory,
     // always last in that chain and so the guaranteed fallback).
-    stmts.push(TsStmt::raw(expectation_runtime_helpers(), None));
+    stmts.push(TestRuntimeModule::Expectation.splice());
     // #1883, slice 3: the embedded files and `__bynkAssetGet`, for an asset
     // fetch in a case.
     if let Some(text) = &asset_harness {
@@ -377,7 +377,7 @@ pub(super) fn emit_test_module(
     // double its deps carry as `__exec`, and the settle helper that awaits
     // the collected `waitUntil` promises after each addressed call.
     if uses_send {
-        stmts.push(TsStmt::raw(send_runtime_helpers(), None));
+        stmts.push(TestRuntimeModule::Send.splice());
     }
     // #2137: a module whose cases `advance Clock` gets the harness clock, and
     // its `Clock` double reads it (fresh per case, from the epoch).
@@ -392,16 +392,16 @@ pub(super) fn emit_test_module(
             .test()
             .is_some_and(|t| t.cases.iter().any(|c| block_uses_run_id(&c.body)))
     }) {
-        stmts.push(TsStmt::raw(run_id_helper(false), None));
+        stmts.push(run_id_stmt(false));
     }
     // #2683: a module on virtual time takes the timer-queue clock; the plain
     // counter clock is only for one that `advance`s and has no timers.
     let virtual_time = module_is_virtual_time(target_name, target_kind, stubs, unit_tables);
     if virtual_time {
         runtime_use.note_virtual_time();
-        stmts.push(TsStmt::raw(virtual_time_runtime_helpers(), None));
+        stmts.push(TestRuntimeModule::VirtualTime.splice());
     } else if uses_advance {
-        stmts.push(TsStmt::raw(clock_runtime_helpers(), None));
+        stmts.push(TestRuntimeModule::Clock.splice());
     }
     let uses_advance = uses_advance || virtual_time;
     let mut suppress_next_blank = true;
@@ -433,7 +433,7 @@ pub(super) fn emit_test_module(
             .iter()
             .any(|&i| parsed[i].test().is_some_and(|t| !t.properties.is_empty()));
     if has_properties {
-        let mut stmt = TsStmt::raw(property_runtime_helpers(), None);
+        let mut stmt = TestRuntimeModule::Property.splice();
         if suppress_next_blank {
             stmt.no_blank_before = true;
             suppress_next_blank = false;
@@ -449,7 +449,7 @@ pub(super) fn emit_test_module(
             .is_some_and(|t| t.properties.iter().any(prop_is_history))
     });
     if has_history_properties {
-        let mut stmt = TsStmt::raw(history_runtime_helpers(), None);
+        let mut stmt = TestRuntimeModule::History.splice();
         if suppress_next_blank {
             stmt.no_blank_before = true;
             suppress_next_blank = false;
@@ -479,9 +479,9 @@ pub(super) fn emit_test_module(
         // blank before the first record type, matching the old single
         // `push('\n')` between them exactly.
         let helpers_text = if record_types.is_empty() {
-            format!("{}\n", observation_runtime_helpers())
+            format!("{}\n", TestRuntimeModule::Observation.source())
         } else {
-            observation_runtime_helpers()
+            TestRuntimeModule::Observation.source().to_string()
         };
         let mut stmt = TsStmt::raw(helpers_text, None);
         if suppress_next_blank {
@@ -955,7 +955,7 @@ pub(super) fn emit_test_module(
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_else(|| "module.ts".to_string());
-    let program = TsProgram { stmts };
+    let program = checked_program(stmts);
     let printed = bynk_ts::print_multi_source(&program, map, &module_file);
     Some((
         module_path.clone(),
@@ -995,18 +995,6 @@ pub(super) fn relative_import_for_test(target_dir: &Path) -> String {
     } else {
         format!("../{}", parts.join("/"))
     }
-}
-
-/// Finding #17: the source lives at `emitter/test_runtime/expectation.ts` —
-/// a real, syntax-highlighted `.ts` file rather than a Rust string built
-/// line-by-line via `push_str`. `ExpectationError`'s fields are declared and
-/// assigned explicitly rather than via TS parameter properties: parameter
-/// properties are a transform-only construct that Node's strip-only
-/// type-stripping rejects (`ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX`), and
-/// `bynk test --inspect` runs this `.ts` directly under strip-only Node
-/// (slice 2, ADR 0104). The explicit form is equivalent and strip-clean.
-pub(super) fn expectation_runtime_helpers() -> String {
-    include_str!("test_runtime/expectation.ts").to_string()
 }
 
 /// #2842: the snapshots each of the module's suite files takes, keyed by the
@@ -1049,7 +1037,7 @@ pub(super) fn snapshot_harness(
     keys: &BTreeMap<String, Vec<(String, String)>>,
     stored: Option<&BTreeMap<String, String>>,
 ) -> String {
-    let mut out = include_str!("test_runtime/snapshot.ts").to_string();
+    let mut out = TestRuntimeModule::Snapshot.source().to_string();
     out.push_str("const __bynkSnapshotFiles: globalThis.Record<string, __SnapshotFile> = {\n");
     for (file, pairs) in keys {
         let text = stored
@@ -1185,44 +1173,6 @@ pub(super) fn event_delivery_helpers(
         out.insert_str(0, "let __bynkEventSeq = 0;\n");
     }
     out
-}
-
-/// #1994: the test double for the Worker's `ExecutionContext` — a `waitUntil`
-/// that collects the promises a `detach` send hands it, and (L7, #2414) a `cache`
-/// that records each `EdgeCache` purge and accepts it unless `succeeds` is
-/// cleared — and `__bynkSettle`, which
-/// awaits them after an addressed handler call, so a case's expectations see
-/// the sends' effects. Source lives at `emitter/test_runtime/send.ts`.
-pub(super) fn send_runtime_helpers() -> String {
-    include_str!("test_runtime/send.ts").to_string()
-}
-
-/// #2137: the harness clock — `__bynkClockNow`, which `advance Clock by`
-/// moves (`__bynkAdvanceClock`, refusing a negative at run time), and the
-/// `Clock` that reads it. Source lives at `emitter/test_runtime/clock.ts`.
-pub(super) fn clock_runtime_helpers() -> String {
-    include_str!("test_runtime/clock.ts").to_string()
-}
-
-/// #2683: the harness clock on virtual time — the same `__bynkClockNow` and
-/// `__bynkAdvanceClock` (which now also fires the timers that fall due), plus
-/// the timer queue `within` registers its deadline on, the `after`/`never`
-/// stub waits, the in-flight count, and the auto-advance that drives a case's
-/// addressed calls. Source lives at `emitter/test_runtime/virtual_time.ts`.
-pub(super) fn virtual_time_runtime_helpers() -> String {
-    include_str!("test_runtime/virtual_time.ts").to_string()
-}
-
-/// #2138: `__bynkRunId`, the value `run.id` reads. A remote build's `system`
-/// module reads `BYNK_TEST_RUN_ID` (the runner sets a fresh one); every
-/// in-process module is the fixed `"local"`, even when the variable is set
-/// (an `--against` run's unit suites share its process environment).
-pub(super) fn run_id_helper(remote: bool) -> String {
-    if remote {
-        include_str!("test_runtime/run_id.ts").to_string()
-    } else {
-        "const __bynkRunId: string = \"local\";\n".to_string()
-    }
 }
 
 /// #2138: whether a case body reads `run.id` anywhere.
@@ -1361,19 +1311,6 @@ pub(super) fn target_uses_emit(
         && unit_tables
             .get(target_name)
             .is_some_and(|t| unit_table_uses_emit(t, unit_callees.get(target_name)))
-}
-
-/// #1485: the test-only HS256 JWT signer `emit_system_http_support`'s own
-/// `system` suite driver relies on to sign a `by User("bob")`-style actor's
-/// `Authorization: Bearer …` — `__bynkNow`/`__b64url`/`__bytesB64url`/
-/// `__bynkSignHs256`. Found by #1472's own callee-cascade read as a
-/// genuinely new gap (unlike every other permanent site in this arc, this
-/// one had no in-place argument for staying hand-written text): moved to
-/// `emitter/test_runtime/jwt_signer.ts`, the same committed-`.ts`-file
-/// treatment `expectation_runtime_helpers`/`stub_runtime_helpers` above
-/// already get, rather than a raw Rust string literal with `\`-continuations.
-pub(super) fn jwt_signer_runtime_helpers() -> String {
-    include_str!("test_runtime/jwt_signer.ts").to_string()
 }
 
 /// #3699: the synthetic call-record types (`__Cap_op_Call`) a `trace(Cap.op)`

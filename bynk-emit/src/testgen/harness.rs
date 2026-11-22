@@ -354,9 +354,9 @@ pub(super) fn emit_remote_harness(participants: &[String]) -> Vec<TsStmt> {
     text.push_str("  return { env: rootEnv };\n}\n");
     text.push_str("let __bynkHarness: ReturnType<typeof __buildHarness> | undefined;\nfunction __makeHarness() {\n  return (__bynkHarness ??= __buildHarness());\n}\n");
     vec![
-        TsStmt::raw(include_str!("test_runtime/remote.ts").to_string(), None),
+        TestRuntimeModule::Remote.splice(),
         // #2138 (track §3.6): the `--settle` retry the case bodies use.
-        TsStmt::raw(include_str!("test_runtime/settle.ts").to_string(), None),
+        TestRuntimeModule::Settle.splice(),
         TsStmt::raw(text, None),
     ]
 }
