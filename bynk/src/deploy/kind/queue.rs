@@ -113,6 +113,12 @@ impl ResourceKind for Queue {
     /// Nothing: the config binds a queue by the name it already carries.
     type Bound = ();
     type Change = QueueChange;
+    type Step<'r> = QueueStep<'r>;
+
+    const GUARDS: &'static [&'static str] = &[
+        "a queue this run has already attempted, for an earlier Worker, is not made again",
+        "a queue is made only when `queues info` finds no queue of its name on the account",
+    ];
 
     /// Every queue the Worker consumes or sends to, in name order, each once
     /// ([`Resources::all_queues`]).
@@ -254,18 +260,24 @@ impl ResourceKind for Queue {
         )))
     }
 
-    /// One queue alone. The deploy provisions a Worker's queues together
-    /// ([`ResourceKind::provision_all`]).
-    fn provision<'r>(
-        cx: &StepCx<'_, '_, Queue>,
-        decl: Self::Decl<'r>,
-    ) -> Result<Provisioned<'r, Queue>, DeployFailure> {
-        let created = attempt(cx, decl.name)?;
-        let mut provisioned = Provisioned::nothing();
-        if decl.consumed || created {
-            provisioned = provisioned.with(record(cx, decl.name, created));
+    /// One step for every queue the Worker names: each is made before any is recorded.
+    fn steps<'r>(
+        _cx: &PlanCx<'_>,
+        declared: &'r Resources,
+        _live: Self::Live<'_>,
+    ) -> Vec<QueueStep<'r>> {
+        if declared.all_queues().is_empty() {
+            return Vec::new();
         }
-        Ok(provisioned)
+        vec![QueueStep { declared }]
+    }
+
+    fn steps_of<'p, 'r>(steps: &'p WorkerSteps<'r>) -> &'p [QueueStep<'r>] {
+        &steps.queues
+    }
+
+    fn steps_mut<'p, 'r>(steps: &'p mut WorkerSteps<'r>) -> &'p mut Vec<QueueStep<'r>> {
+        &mut steps.queues
     }
 
     /// Reconciled against the account on every run, never against the ledger (ADR 0194 D2):
@@ -273,20 +285,27 @@ impl ResourceKind for Queue {
     /// is any recorded, as Bynk's when this run made it and as reused otherwise (#2579). A queue
     /// only sent to is recorded only when this run made it (P2, #2578). The account-facing name
     /// is environment-qualified (slice 4, DECISION C); the ledger keys by the logical name.
-    fn provision_all<'r>(
+    fn apply(
         cx: &StepCx<'_, '_, Queue>,
-        declared: &'r Resources,
-    ) -> Option<Result<Provisioned<'r, Queue>, DeployFailure>> {
-        Some(provision_queues(cx, declared))
+        step: &QueueStep<'_>,
+    ) -> Result<Applied<Queue>, DeployFailure> {
+        apply_queues(cx, step.declared)
     }
 }
 
-/// [`Queue`]'s `provision_all`: every queue the run has not yet attempted made first, then each
-/// recorded, each with its own write.
-fn provision_queues<'r>(
+/// A Worker's queues' step (1D.2b): every queue it consumes or sends to, read from its
+/// declarations, since whether each is made is the account's to say when the step is applied.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct QueueStep<'r> {
+    pub(crate) declared: &'r Resources,
+}
+
+/// [`Queue`]'s step: every queue the run has not yet attempted made first, then each recorded,
+/// each with its own write.
+fn apply_queues(
     cx: &StepCx<'_, '_, Queue>,
-    declared: &'r Resources,
-) -> Result<Provisioned<'r, Queue>, DeployFailure> {
+    declared: &Resources,
+) -> Result<Applied<Queue>, DeployFailure> {
     let fresh = std::cell::RefCell::new(BTreeSet::new());
     let attempted = cx.live.unwrap_or(&fresh);
     let mut created = BTreeSet::new();
@@ -300,23 +319,12 @@ fn provision_queues<'r>(
     // Recorded before the push, as KV is: what the ledger claims is only ever what it
     // watched succeed. A consumed queue another context already checked this run is
     // recorded here as well, so the order contexts deploy in changes nothing.
-    let mut provisioned = Provisioned::nothing();
+    let mut applied = Applied::nothing();
     for queue in queues_to_record(declared, &created) {
         let made = created.contains(&queue);
-        provisioned = provisioned.with(record(cx, &queue, made));
+        applied = applied.with(record(cx, &queue, made));
     }
-    Ok(provisioned)
-}
-
-/// Make `queue` if this run has not yet attempted it and the account lacks it. Whether this
-/// call made it.
-fn attempt(cx: &StepCx<'_, '_, Queue>, queue: &str) -> Result<bool, DeployFailure> {
-    let fresh = std::cell::RefCell::new(BTreeSet::new());
-    let attempted = cx.live.unwrap_or(&fresh);
-    if !attempted.borrow_mut().insert(queue.to_string()) {
-        return Ok(false);
-    }
-    attempt_create(cx, queue)
+    Ok(applied)
 }
 
 /// Make `queue` unless the account has it. Whether this call made it (a race-loser that finds it
@@ -450,10 +458,11 @@ mod tests {
         );
     }
 
-    /// The one-queue path the trait requires records what `provision_all` records, so the two
-    /// cannot drift. Each queue counts as attempted already this run, so nothing asks wrangler.
+    /// A Worker's queue step records a consumed queue another Worker already checked this run as
+    /// reused, and a queue only sent to that this run did not make not at all. Each queue counts
+    /// as attempted already this run, so nothing asks wrangler.
     #[test]
-    fn one_queue_alone_is_recorded_as_a_workers_queues_are() {
+    fn a_workers_queue_step_records_a_consumed_queue_and_not_an_unmade_produced_one() {
         let declared = Resources::default()
             .consumes(&["jobs"])
             .produces(&["outbound"]);
@@ -463,44 +472,33 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join(LOCK_FILE);
-        let run = |lock: &mut DeployLock, alone: bool| {
-            let attempted = std::cell::RefCell::new(BTreeSet::from([
-                "jobs".to_string(),
-                "outbound".to_string(),
-            ]));
-            let site = Site {
-                tools: Tools {
-                    provenance: &provenance,
-                    project_root: Path::new("/nonexistent"),
-                },
-                environment: "default",
-                worker: "shop",
-                project: &project,
-            };
-            let lives = Lives {
-                queues: Some(&attempted),
-                ..Lives::default()
-            };
-            let mut writer = LedgerWriter::new(lock, &path);
-            if alone {
-                for decl in Queue::declared(&declared) {
-                    provision_one::<Queue>(site, decl, &mut writer, lives).unwrap();
-                }
-            } else {
-                provision_kind::<Queue>(site, &declared, &mut writer, lives).unwrap();
-            }
+        let attempted =
+            std::cell::RefCell::new(BTreeSet::from(["jobs".to_string(), "outbound".to_string()]));
+        let site = Site {
+            tools: Tools {
+                provenance: &provenance,
+                project_root: Path::new("/nonexistent"),
+            },
+            environment: "default",
+            worker: "shop",
+            project: &project,
         };
-        let (mut alone, mut together) = (DeployLock::default(), DeployLock::default());
-        run(&mut alone, true);
-        run(&mut together, false);
-        let env = &alone.environments["default"];
+        let lives = Lives {
+            queues: Some(&attempted),
+            ..Lives::default()
+        };
+        let mut lock = DeployLock::default();
+        provision_kind::<Queue>(
+            site,
+            &declared,
+            &mut LedgerWriter::new(&mut lock, &path),
+            lives,
+        )
+        .unwrap();
+        let env = &lock.environments["default"];
         // Consumed and found: reused. Only sent to and not made by this run: not recorded.
         assert!(env.reused_queues.contains("jobs"));
         assert!(!env.queues.contains("outbound") && !env.reused_queues.contains("outbound"));
-        assert_eq!(
-            toml::to_string(&alone).unwrap(),
-            toml::to_string(&together).unwrap()
-        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

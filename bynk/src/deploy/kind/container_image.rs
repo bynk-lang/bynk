@@ -67,6 +67,7 @@ impl ResourceKind for ContainerImage {
     /// Nothing: the configuration names the image ([`materialise_adopted_containers`]).
     type Bound = ();
     type Change = TableChange<ContainerImageTable>;
+    type Step<'r> = ContainerImageStep<'r>;
 
     fn declared(r: &Resources) -> Vec<&ContainerDecl> {
         r.containers.iter().collect()
@@ -131,28 +132,42 @@ impl ResourceKind for ContainerImage {
         match *orphan {}
     }
 
-    /// One container's image alone, recorded at once. The deploy records a Worker's together
-    /// ([`ResourceKind::provision_all`]).
-    fn provision<'r>(
-        cx: &StepCx<'_, '_, ContainerImage>,
-        decl: Self::Decl<'r>,
-    ) -> Result<Provisioned<'r, ContainerImage>, DeployFailure> {
-        Ok(Provisioned::nothing().with(record_images(cx.worker, [decl])))
+    /// One step for all the Worker's containers, when it has any.
+    fn steps<'r>(
+        _cx: &PlanCx<'_>,
+        declared: &'r Resources,
+        _live: (),
+    ) -> Vec<ContainerImageStep<'r>> {
+        if declared.containers.is_empty() {
+            return Vec::new();
+        }
+        vec![ContainerImageStep {
+            containers: declared.containers.iter().collect(),
+        }]
+    }
+
+    fn steps_of<'p, 'r>(steps: &'p WorkerSteps<'r>) -> &'p [ContainerImageStep<'r>] {
+        &steps.containers
+    }
+
+    fn steps_mut<'p, 'r>(steps: &'p mut WorkerSteps<'r>) -> &'p mut Vec<ContainerImageStep<'r>> {
+        &mut steps.containers
     }
 
     /// Each adopted image recorded, and one whose adoption was dropped forgotten (its container
-    /// is built again), then the ledger written once, before the push, when the Worker has any
-    /// container.
-    fn provision_all<'r>(
+    /// is built again), then the ledger written once, before the push, whatever that changed.
+    fn apply(
         cx: &StepCx<'_, '_, ContainerImage>,
-        declared: &'r Resources,
-    ) -> Option<Result<Provisioned<'r, ContainerImage>, DeployFailure>> {
-        let mut provisioned = Provisioned::nothing();
-        if !declared.containers.is_empty() {
-            provisioned = provisioned.with(record_images(cx.worker, &declared.containers));
-        }
-        Some(Ok(provisioned))
+        step: &ContainerImageStep<'_>,
+    ) -> Result<Applied<ContainerImage>, DeployFailure> {
+        Ok(Applied::nothing().with(record_images(cx.worker, step.containers.iter().copied())))
     }
+}
+
+/// A Worker's containers' step (1D.2b): each container it declares.
+#[derive(Debug, Clone)]
+pub(crate) struct ContainerImageStep<'r> {
+    pub(crate) containers: Vec<&'r ContainerDecl>,
 }
 
 /// One write of `worker`'s container images, whatever it changes: each adopted image recorded, and

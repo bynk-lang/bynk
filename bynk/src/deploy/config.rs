@@ -2349,7 +2349,7 @@ max_batch_size = 10
 
     #[test]
     fn synthesise_environment_block_is_unchanged_for_the_default_environment() {
-        // `deploy_one` only calls this for a non-default environment, but the
+        // The apply only calls this for a non-default environment, but the
         // function itself staying a faithful no-op at the boundary is worth
         // pinning: "default" must never gain a synthesised block.
         let out = synthesise_environment_block(

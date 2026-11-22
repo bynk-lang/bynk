@@ -508,26 +508,25 @@ pub(crate) fn materialise_adopted_vectorize(
     })
 }
 
-/// One `Vectorize` index (1D.1c: [`Vectorize`]'s provisioning): created when the account has
-/// none of that name, checked against the declaration when it has (a mismatch fails the deploy and
-/// changes nothing), recorded in the ledger before the push, then (once that record is written,
-/// 1D.2a) its metadata indexes made before any vector can be written. `pacing` is how long the
-/// metadata indexes are waited for.
-pub(crate) fn provision_vectorize_index<'r>(
+/// One `Vectorize` index's `Index` step (1D.1c: [`Vectorize`]'s provisioning; 1D.2b its step):
+/// created when the account has none of that name, checked against the declaration when it has (a
+/// mismatch fails the deploy and changes nothing), and recorded in the ledger before the push. Its
+/// metadata indexes are the next step ([`apply_metadata_indexes`]), so the record is written
+/// first. These account checks are the kind's guards (#4001 Decision B).
+pub(crate) fn apply_vectorize_index(
     cx: &StepCx<'_, '_, Vectorize>,
-    decl: &'r VectorizeDecl,
-    pacing: Pacing,
-) -> Result<Provisioned<'r, Vectorize>, DeployFailure> {
-    let (worker, environment) = (cx.worker, cx.environment);
+    step: &VectorizeIndexStep<'_>,
+) -> Result<Applied<Vectorize>, DeployFailure> {
+    let (worker, decl) = (cx.worker, step.decl);
     let (provenance, project_root) = (cx.tools.provenance, cx.tools.project_root);
-    let physical = decl.physical_name(environment);
+    let physical = step.physical.clone();
     if decl.adopt.is_some() {
         adopt_index(provenance, project_root, worker, decl, &physical)?;
-        let already = cx
-            .ledger()
-            .recorded::<Vectorize>(worker, &decl.binding)
-            .is_some_and(|r| r.name == physical && r.adopted);
-        let mut adopted = Provisioned::nothing();
+        let already = step
+            .recorded
+            .as_ref()
+            .is_some_and(|(name, adopted)| *name == physical && *adopted);
+        let mut adopted = Applied::nothing();
         if !already {
             adopted = adopted.with(record(
                 cx,
@@ -565,25 +564,37 @@ pub(crate) fn provision_vectorize_index<'r>(
     }
     // Recorded before the push, as every created resource is: an
     // interrupted run never forgets an index it made.
-    let already = cx
-        .ledger()
-        .recorded::<Vectorize>(worker, &decl.binding)
-        .is_some_and(|r| r.name == physical);
-    let mut provisioned = Provisioned::nothing();
+    let already = step
+        .recorded
+        .as_ref()
+        .is_some_and(|(name, _)| *name == physical);
+    let mut applied = Applied::nothing();
     if !already {
         // An index already on the account was not made by this deploy, so
         // it is recorded as adopted: never pruned.
-        provisioned = provisioned.with(record(
+        applied = applied.with(record(
             cx,
             decl,
             VectorizeRecord::of(&physical, existed),
             &format!("provisioned the Vectorize index `{physical}`"),
         ));
     }
-    provisioned.then = Some(Box::new(move |cx| {
-        provision_metadata_indexes(cx, decl, &physical, existed, pacing)
-    }));
-    Ok(provisioned)
+    // For the `MetadataIndexes` step, which follows once this one's record is written.
+    step.existed.set(Some(existed));
+    Ok(applied)
+}
+
+/// One `Vectorize` index's `MetadataIndexes` step: the metadata indexes it lacks, made and waited
+/// for, now that the index is recorded. Nothing for an adopted index, whose `Index` step leaves
+/// no fact here, or one whose `Index` step did not run.
+pub(crate) fn apply_metadata_indexes(
+    cx: &StepCx<'_, '_, Vectorize>,
+    step: &VectorizeMetadataStep<'_>,
+) -> Result<Applied<Vectorize>, DeployFailure> {
+    if let Some(existed) = step.existed.get() {
+        provision_metadata_indexes(cx, step.decl, &step.physical, existed, step.pacing)?;
+    }
+    Ok(Applied::nothing())
 }
 
 /// `decl`'s record of index `physical`, for the apply to write.
@@ -693,10 +704,15 @@ pub(crate) fn provision_vectorize_indexes_paced(
         project: &project,
     };
     let mut writer = LedgerWriter::new(lock, lock_path);
-    for decl in &declared.vectorize_indexes {
-        let provisioned = provision_vectorize_index(&site.cx(writer.lock(), ()), decl, pacing)?;
-        complete(site, provisioned, &mut writer, ())?;
-    }
+    let steps = vectorize_steps(
+        &PlanCx {
+            ledger: LedgerView::of(writer.lock(), environment),
+            worker,
+        },
+        declared,
+        pacing,
+    );
+    apply_kind::<Vectorize>(site, &steps, &mut writer, Lives::default())?;
     Ok(())
 }
 

@@ -26,6 +26,12 @@
 //!
 //! `--prune` follows the list's order too, as the maintainer ruled for 1D.1c (22 November 2026):
 //! its notices and its deletes used to come in orders of their own.
+//!
+//! 1D.2b (#4001): a kind's apply is its typed [`ResourceKind::Step`]s, decided at plan time from
+//! the declarations and the ledger and held in the context's [`WorkerSteps`], and its
+//! [`ResourceKind::apply`] of one. Where a kind's plan line is a view of its step (KV, R2, D1,
+//! Hyperdrive, Vectorize), the line is rendered from the step, so the plan and the apply share one
+//! decision. The apply's order is [`for_each_apply_phase`], not [`for_each_kind`].
 
 use super::*;
 use bynk_driver::emsg;
@@ -400,37 +406,29 @@ where
     }
 }
 
-/// What the apply does once a step's commits are written, before the kind's next step: Vectorize
-/// makes an index's metadata indexes only once the index is recorded.
-pub(crate) type Then<'r, K> =
-    Box<dyn for<'a, 'l> FnOnce(&StepCx<'a, 'l, K>) -> Result<(), DeployFailure> + 'r>;
-
-/// What provisioning one declared instance, or (for a kind that works on them together) a
-/// Worker's instances, did.
-pub(crate) struct Provisioned<'r, K: ResourceKind> {
+/// What applying one step did (1D.2b, #4001 Decision A): what the push binds, and what to
+/// record, each [`Commit`] written in order before the next step is applied.
+pub(crate) struct Applied<K: ResourceKind> {
     /// What the push binds, by binding, written into the generated configuration.
     pub(crate) bound: Vec<(String, K::Bound)>,
     /// What to record, each written in order before anything else is asked of the account.
     pub(crate) commits: Vec<Commit<K::Change>>,
-    /// What to do once they are written.
-    pub(crate) then: Option<Then<'r, K>>,
 }
 
-impl<K: ResourceKind> Provisioned<'_, K> {
+impl<K: ResourceKind> Applied<K> {
     /// Nothing bound and nothing to record.
     pub(crate) fn nothing() -> Self {
-        Provisioned {
+        Applied {
             bound: Vec::new(),
             commits: Vec::new(),
-            then: None,
         }
     }
 
     /// `binding` bound to `bound`, with nothing to record.
     pub(crate) fn bound(binding: &str, bound: K::Bound) -> Self {
-        Provisioned {
+        Applied {
             bound: vec![(binding.to_string(), bound)],
-            ..Provisioned::nothing()
+            commits: Vec::new(),
         }
     }
 
@@ -438,6 +436,14 @@ impl<K: ResourceKind> Provisioned<'_, K> {
     pub(crate) fn with(mut self, commit: Commit<K::Change>) -> Self {
         self.commits.push(commit);
         self
+    }
+
+    /// And `commit` to write, if there is one.
+    pub(crate) fn with_any(self, commit: Option<Commit<K::Change>>) -> Self {
+        match commit {
+            Some(commit) => self.with(commit),
+            None => self,
+        }
     }
 }
 
@@ -509,10 +515,20 @@ pub(crate) trait ResourceKind: Sized {
     type Live<'a>: Copy;
     /// What the push binds one instance to, written into the generated configuration (KV: its
     /// id; D1: its name and id; R2, bound by name already: nothing).
-    type Bound;
+    type Bound: 'static;
     /// One change provisioning or pruning makes to the kind's records, which the apply writes
     /// (most kinds: a [`TableChange`] of their table).
     type Change: LedgerChange;
+    /// One unit of the apply (1D.2b, #4001 Decision A): what one write of the ledger covers, so
+    /// the write timing cannot move. Decided at plan time from the declarations and the ledger,
+    /// never from the account, and held in the context's [`WorkerSteps`].
+    type Step<'r>: std::fmt::Debug;
+
+    /// What the apply may still ask of the account on top of what a step decided (#4001
+    /// Decision B), each named. Pinned by a test, so a new one is a reviewed diff; nothing else
+    /// reads it.
+    #[cfg_attr(not(test), allow(dead_code))]
+    const GUARDS: &'static [&'static str] = &[];
 
     /// The Worker's declared instances, in the order they are planned and provisioned.
     fn declared(r: &Resources) -> Vec<Self::Decl<'_>>;
@@ -601,21 +617,23 @@ pub(crate) trait ResourceKind: Sized {
         Ok(None)
     }
 
-    /// Create or reuse `decl` on the account, and what to record of what it made.
-    fn provision<'r>(
-        cx: &StepCx<'_, '_, Self>,
-        decl: Self::Decl<'r>,
-    ) -> Result<Provisioned<'r, Self>, DeployFailure>;
+    /// The Worker's steps, in the order they are applied, decided from its declarations and the
+    /// ledger.
+    fn steps<'r>(
+        cx: &PlanCx<'_>,
+        declared: &'r Resources,
+        live: Self::Live<'_>,
+    ) -> Vec<Self::Step<'r>>;
 
-    /// Provision the Worker's declared instances together, for a kind that does (queues make every
-    /// one before recording any; rate limiters and the linked kinds record theirs in one write).
-    /// `None`, the default, provisions each alone, in order, one [`ResourceKind::provision`] each.
-    fn provision_all<'r>(
-        _cx: &StepCx<'_, '_, Self>,
-        _declared: &'r Resources,
-    ) -> Option<Result<Provisioned<'r, Self>, DeployFailure>> {
-        None
-    }
+    /// The kind's steps in a context's [`WorkerSteps`].
+    fn steps_of<'p, 'r>(steps: &'p WorkerSteps<'r>) -> &'p [Self::Step<'r>];
+    fn steps_mut<'p, 'r>(steps: &'p mut WorkerSteps<'r>) -> &'p mut Vec<Self::Step<'r>>;
+
+    /// Do `step` against the account. The ledger is read-only here; what to record is returned.
+    fn apply(
+        cx: &StepCx<'_, '_, Self>,
+        step: &Self::Step<'_>,
+    ) -> Result<Applied<Self>, DeployFailure>;
 
     /// Change the ledger once the Worker's push has succeeded: a rate limiter the source no
     /// longer declares is free again only then.
@@ -681,8 +699,84 @@ pub(crate) fn for_each_kind(v: &mut impl KindVisitor) {
     v.visit::<ContainerImage>();
 }
 
-/// Fill each kind's lines of `context`, for Worker `cx.worker`'s declarations `declared`, with what
-/// the run has read in `lives`.
+/// A context's steps (1D.2b, #4001): one list per kind, and the Worker the other apply phases
+/// work on. Held in its [`ContextPlan`], never printed: the plan's two formats cannot see them.
+#[derive(Debug, Default)]
+pub(crate) struct WorkerSteps<'r> {
+    pub(crate) kv: Vec<KvStep<'r>>,
+    pub(crate) r2: Vec<R2Step<'r>>,
+    pub(crate) vectorize: Vec<VectorizeStep<'r>>,
+    pub(crate) d1: Vec<D1Step<'r>>,
+    pub(crate) hyperdrive: Vec<HyperdriveStep<'r>>,
+    pub(crate) ratelimits: Vec<RateLimitStep<'r>>,
+    pub(crate) queues: Vec<QueueStep<'r>>,
+    pub(crate) stored_secrets: Vec<StoredSecretStep<'r>>,
+    pub(crate) ai_search: Vec<AiSearchStep<'r>>,
+    pub(crate) mtls_certificates: Vec<MtlsCertificateStep<'r>>,
+    pub(crate) containers: Vec<ContainerImageStep<'r>>,
+    /// The Worker these steps are for, by its name in the project, and what it declared: the
+    /// non-kind phases ([`ApplySlot`]) read it, since the push's secrets and deploy facts, the
+    /// `[env.<name>]` block and the migrations take a declaration (Decision D).
+    pub(crate) worker: Option<(&'r str, &'r Resources)>,
+}
+
+/// A phase of a Worker's apply that is not a kind's step ([`for_each_apply_phase`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ApplySlot {
+    /// A named environment's `[env.<name>]` block, synthesised into the generated configuration.
+    EnvironmentBlock,
+    /// An adopted Vectorize index's account name, written into the configuration.
+    AdoptedVectorize,
+    /// An adopted container image, written into the configuration.
+    AdoptedContainers,
+    /// Each D1 database's pending migrations.
+    Migrations,
+    /// The secrets, then `wrangler deploy`.
+    Push,
+}
+
+/// A pass over one Worker's apply, in [`for_each_apply_phase`]'s order.
+pub(crate) trait ApplyVisitor {
+    /// Apply each of the kind's steps.
+    fn apply<K: ResourceKind>(&mut self);
+    /// Write what the kind's steps bound into the generated configuration.
+    fn materialise<K: ResourceKind>(&mut self);
+    /// A phase that is not a kind's.
+    fn slot(&mut self, slot: ApplySlot);
+}
+
+/// The one order a Worker is applied in (#4001 Decision D), which is not [`for_each_kind`]'s:
+/// everything the push needs exists first, the linked kinds before the rate limiters and queues,
+/// and each kind's materialisation where it was (KV's after the rate limiters'). Which resources
+/// exist after a failure follows from it, so changing it is a ruled change, as `--prune`'s order
+/// was for 1D.1c. Pinned by a test.
+pub(crate) fn for_each_apply_phase(v: &mut impl ApplyVisitor) {
+    v.apply::<Kv>();
+    v.apply::<R2>();
+    v.apply::<Vectorize>();
+    v.apply::<D1>();
+    v.materialise::<D1>();
+    v.apply::<Hyperdrive>();
+    v.materialise::<Hyperdrive>();
+    v.apply::<StoredSecret>();
+    v.materialise::<StoredSecret>();
+    v.apply::<MtlsCertificate>();
+    v.materialise::<MtlsCertificate>();
+    v.apply::<AiSearch>();
+    v.apply::<RateLimit>();
+    v.materialise::<RateLimit>();
+    v.materialise::<Kv>();
+    v.apply::<Queue>();
+    v.slot(ApplySlot::EnvironmentBlock);
+    v.slot(ApplySlot::AdoptedVectorize);
+    v.slot(ApplySlot::AdoptedContainers);
+    v.apply::<ContainerImage>();
+    v.slot(ApplySlot::Migrations);
+    v.slot(ApplySlot::Push);
+}
+
+/// Fill each kind's lines and steps of `context`, for Worker `cx.worker`'s declarations
+/// `declared`, with what the run has read in `lives`.
 pub(crate) fn fill_kind_lines<'r>(
     context: &mut ContextPlan<'r>,
     declared: &'r Resources,
@@ -703,6 +797,7 @@ pub(crate) fn fill_kind_lines<'r>(
                 .map(|decl| K::plan_line(self.cx, decl, live))
                 .collect();
             *K::lines_mut(self.context) = lines;
+            *K::steps_mut(&mut self.context.steps) = K::steps(self.cx, self.declared, live);
         }
     }
     for_each_kind(&mut Fill {
@@ -1087,6 +1182,87 @@ mod tests {
                 "BindingsAndObjects",
                 "ContainerImage",
             ]
+        );
+    }
+
+    /// The apply's order (#4001 Decision D), today's `deploy_one` order exactly: the linked kinds
+    /// before the rate limiters and queues, mTLS before AI Search, KV materialised after the rate
+    /// limiters, and the push last. A change here changes what exists after a failure.
+    #[test]
+    fn the_apply_order_is_pinned() {
+        #[derive(Default)]
+        struct Order(Vec<String>);
+        impl ApplyVisitor for Order {
+            fn apply<K: ResourceKind>(&mut self) {
+                self.0.push(format!("{:?}", K::ID));
+            }
+            fn materialise<K: ResourceKind>(&mut self) {
+                self.0.push(format!("Materialise({:?})", K::ID));
+            }
+            fn slot(&mut self, slot: ApplySlot) {
+                self.0.push(format!("{slot:?}"));
+            }
+        }
+        let mut order = Order::default();
+        for_each_apply_phase(&mut order);
+        assert_eq!(
+            order.0,
+            [
+                "Kv",
+                "R2",
+                "Vectorize",
+                "D1",
+                "Materialise(D1)",
+                "Hyperdrive",
+                "Materialise(Hyperdrive)",
+                "StoredSecret",
+                "Materialise(StoredSecret)",
+                "MtlsCertificate",
+                "Materialise(MtlsCertificate)",
+                "AiSearch",
+                "RateLimit",
+                "Materialise(RateLimit)",
+                "Materialise(Kv)",
+                "Queue",
+                "EnvironmentBlock",
+                "AdoptedVectorize",
+                "AdoptedContainers",
+                "ContainerImage",
+                "Migrations",
+                "Push",
+            ]
+        );
+    }
+
+    /// Where the apply still asks the account on top of what a step decided (#4001 Decision B):
+    /// a new guard is a change to this list, so review sees it.
+    #[test]
+    fn the_apply_time_guards_are_named() {
+        #[derive(Default)]
+        struct Guards(Vec<(String, &'static str)>);
+        impl KindVisitor for Guards {
+            fn visit<K: ResourceKind>(&mut self) {
+                for guard in K::GUARDS {
+                    self.0.push((format!("{:?}", K::ID), guard));
+                }
+            }
+        }
+        let mut guards = Guards::default();
+        for_each_kind(&mut guards);
+        let kinds: Vec<&str> = guards.0.iter().map(|(kind, _)| kind.as_str()).collect();
+        assert_eq!(
+            kinds,
+            [
+                "Kv",
+                "Vectorize",
+                "Vectorize",
+                "Vectorize",
+                "RateLimit",
+                "Queue",
+                "Queue"
+            ],
+            "{:#?}",
+            guards.0
         );
     }
 

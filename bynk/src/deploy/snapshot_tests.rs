@@ -195,3 +195,79 @@ fn the_every_kind_plan_is_byte_identical_in_the_json_format() {
         "the JSON plan changed: 1D.1 must not change `bynk deploy --format json`"
     );
 }
+
+/// 1D.2b (#4001 Decision A): one decision for plan and apply. Each step of the every-kind plan
+/// decides what its line printed before the account check, and the account check, which only
+/// rewrites lines, never reaches a step: `shop`'s `R2_NEW`, which the account holds and the
+/// ledger lacks, prints `reuse` and is still made and recorded by the apply.
+#[test]
+fn each_step_decides_what_its_line_printed_and_the_account_check_reaches_no_step() {
+    let lock = ledger();
+    let resources = every_kind();
+    let order = order();
+    for environment in ["default", "staging"] {
+        let plan = derive_plan(
+            &order,
+            &resources,
+            &lock,
+            &SecretSource::default(),
+            false,
+            environment,
+        )
+        .with_lives(
+            &order,
+            &resources,
+            &lock,
+            Lives::for_plan(&hyperdrive_wants()),
+        );
+        for context in &plan.contexts {
+            let steps = context.steps();
+            let actions = |lines: Vec<&str>, steps: Vec<&str>| assert_eq!(lines, steps);
+            actions(
+                context.kv.iter().map(|l| l.action).collect(),
+                steps.kv.iter().map(KvStep::action).collect(),
+            );
+            actions(
+                context.r2.iter().map(|l| l.action).collect(),
+                steps.r2.iter().map(|s| s.decision.action()).collect(),
+            );
+            actions(
+                context.d1.iter().map(|l| l.action).collect(),
+                steps.d1.iter().map(D1Step::action).collect(),
+            );
+            actions(
+                context.hyperdrive.iter().map(|l| l.action).collect(),
+                steps.hyperdrive.iter().map(|s| s.action).collect(),
+            );
+            actions(
+                context.vectorize.iter().map(|l| l.action).collect(),
+                steps
+                    .vectorize
+                    .iter()
+                    .filter_map(|s| match s {
+                        VectorizeStep::Index(index) => Some(index.action()),
+                        VectorizeStep::MetadataIndexes(_) => None,
+                    })
+                    .collect(),
+            );
+        }
+        if environment != "default" {
+            continue;
+        }
+        // The account holds `shop-new`, the default environment's name for `R2_NEW`.
+        let on = on_account::OnAccount::read(&plan.account_listings(), &Account);
+        let plan = plan.checked_against(&on);
+        let shop = &plan.contexts[1];
+        let new = shop
+            .r2
+            .iter()
+            .position(|l| l.binding == "R2_NEW")
+            .expect("shop binds R2_NEW");
+        assert_eq!(shop.r2[new].action, "reuse", "the account holds the bucket");
+        assert_eq!(
+            shop.steps().r2[new].decision,
+            R2Decision::Create,
+            "the ledger lacks it, so the apply makes it and records it"
+        );
+    }
+}

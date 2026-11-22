@@ -9,6 +9,7 @@
 //! was adopted. The wrangler calls are in `deploy/vectorize.rs`, unchanged.
 
 use super::*;
+use std::rc::Rc;
 
 /// The Vectorize kind.
 pub(crate) struct Vectorize;
@@ -148,6 +149,13 @@ impl ResourceKind for Vectorize {
     /// the deploy ([`materialise_adopted_vectorize`]), from the declarations.
     type Bound = ();
     type Change = VectorizeChange;
+    type Step<'r> = VectorizeStep<'r>;
+
+    const GUARDS: &'static [&'static str] = &[
+        "an index is looked up on the account before it is made, and one already there is recorded as adopted",
+        "an index already there whose dimensions or metric differ from the source fails the deploy",
+        "an adopted index must exist and match the source",
+    ];
 
     fn declared(r: &Resources) -> Vec<&VectorizeDecl> {
         r.vectorize_indexes.iter().collect()
@@ -168,23 +176,27 @@ impl ResourceKind for Vectorize {
     fn live_in<'a>(_lives: Lives<'a>) -> Self::Live<'a> {}
 
     fn plan_line<'r>(cx: &PlanCx<'_>, v: Self::Decl<'r>, _live: ()) -> PlanVectorize<'r> {
-        let index = v.physical_name(cx.ledger.environment);
-        let recorded = cx.ledger.recorded::<Vectorize>(cx.worker, &v.binding);
+        let step = index_step(cx, v, Rc::default());
         PlanVectorize {
             binding: &v.binding,
-            action: if v.adopt.is_some() {
-                // Adopted stays `adopt` once recorded, as Hyperdrive's does.
-                "adopt"
-            } else if recorded.is_some_and(|r| r.name == index) {
-                "reuse"
-            } else {
-                "create"
-            },
-            index,
+            action: step.action(),
+            index: step.physical,
             dimensions: v.dimensions,
             metric: &v.metric,
             indexed: &v.indexed,
         }
+    }
+
+    fn steps<'r>(cx: &PlanCx<'_>, declared: &'r Resources, _live: ()) -> Vec<VectorizeStep<'r>> {
+        vectorize_steps(cx, declared, METADATA_INDEX_PACING)
+    }
+
+    fn steps_of<'p, 'r>(steps: &'p WorkerSteps<'r>) -> &'p [VectorizeStep<'r>] {
+        &steps.vectorize
+    }
+
+    fn steps_mut<'p, 'r>(steps: &'p mut WorkerSteps<'r>) -> &'p mut Vec<VectorizeStep<'r>> {
+        &mut steps.vectorize
     }
 
     fn short_line(v: &PlanVectorize<'_>, out: &mut String) {
@@ -311,12 +323,109 @@ impl ResourceKind for Vectorize {
         )))
     }
 
-    fn provision<'r>(
+    fn apply(
         cx: &StepCx<'_, '_, Vectorize>,
-        decl: Self::Decl<'r>,
-    ) -> Result<Provisioned<'r, Vectorize>, DeployFailure> {
-        provision_vectorize_index(cx, decl, METADATA_INDEX_PACING)
+        step: &VectorizeStep<'_>,
+    ) -> Result<Applied<Vectorize>, DeployFailure> {
+        match step {
+            VectorizeStep::Index(step) => apply_vectorize_index(cx, step),
+            VectorizeStep::MetadataIndexes(step) => apply_metadata_indexes(cx, step),
+        }
     }
+}
+
+/// One step of a Vectorize index (1D.2b, #4001 Decision A): two per index, so the index's record
+/// is written between them, before its metadata indexes are made (ADR 0180).
+#[derive(Debug, Clone)]
+pub(crate) enum VectorizeStep<'r> {
+    Index(VectorizeIndexStep<'r>),
+    MetadataIndexes(VectorizeMetadataStep<'r>),
+}
+
+/// Whether the account held the index before this run, which its `Index` step finds and its
+/// `MetadataIndexes` step reads.
+pub(crate) type Existed = Rc<std::cell::Cell<Option<bool>>>;
+
+/// Adopt, find or make one index, and record it.
+#[derive(Debug, Clone)]
+pub(crate) struct VectorizeIndexStep<'r> {
+    pub(crate) decl: &'r VectorizeDecl,
+    /// The index's name on the account.
+    pub(crate) physical: String,
+    /// What the ledger records for the binding: the index's name, and whether it was adopted.
+    pub(crate) recorded: Option<(String, bool)>,
+    pub(crate) existed: Existed,
+}
+
+impl VectorizeIndexStep<'_> {
+    /// The plan's word for the step.
+    pub(crate) fn action(&self) -> &'static str {
+        if self.decl.adopt.is_some() {
+            // Adopted stays `adopt` once recorded, as Hyperdrive's does.
+            "adopt"
+        } else if self
+            .recorded
+            .as_ref()
+            .is_some_and(|(name, _)| *name == self.physical)
+        {
+            "reuse"
+        } else {
+            "create"
+        }
+    }
+}
+
+/// Make and wait for one index's missing metadata indexes, once it is recorded.
+#[derive(Debug, Clone)]
+pub(crate) struct VectorizeMetadataStep<'r> {
+    pub(crate) decl: &'r VectorizeDecl,
+    pub(crate) physical: String,
+    pub(crate) existed: Existed,
+    /// How long the metadata indexes are waited for.
+    pub(crate) pacing: Pacing,
+}
+
+/// `cx.worker`'s `Index` step for `decl`, from the ledger.
+fn index_step<'r>(
+    cx: &PlanCx<'_>,
+    decl: &'r VectorizeDecl,
+    existed: Existed,
+) -> VectorizeIndexStep<'r> {
+    VectorizeIndexStep {
+        decl,
+        physical: decl.physical_name(cx.ledger.environment),
+        recorded: cx
+            .ledger
+            .recorded::<Vectorize>(cx.worker, &decl.binding)
+            .map(|r| (r.name.clone(), r.adopted)),
+        existed,
+    }
+}
+
+/// Each of `declared`'s indexes as its two steps, in binding order, waiting `pacing` for the
+/// metadata indexes.
+pub(crate) fn vectorize_steps<'r>(
+    cx: &PlanCx<'_>,
+    declared: &'r Resources,
+    pacing: Pacing,
+) -> Vec<VectorizeStep<'r>> {
+    declared
+        .vectorize_indexes
+        .iter()
+        .flat_map(|decl| {
+            let index = index_step(cx, decl, Existed::default());
+            let metadata = VectorizeMetadataStep {
+                decl,
+                physical: index.physical.clone(),
+                existed: Rc::clone(&index.existed),
+                pacing,
+            };
+            [
+                VectorizeStep::Index(index),
+                VectorizeStep::MetadataIndexes(metadata),
+            ]
+        })
+        .collect()
 }
 
 /// One recorded Vectorize index the build no longer declares (#3479): a
