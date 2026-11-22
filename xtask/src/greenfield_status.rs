@@ -2650,7 +2650,9 @@ fn import_prediction_fns_violations(files: &[(PathBuf, String)]) -> usize {
 /// `VerbatimOrigin::FormFieldSpecs`). A helper that composes two constructors (`if_then`,
 /// `applied`, `tag_const`) says something about a construct, not about TypeScript, and does
 /// not count. Text-level gaps, as for the other line scanners: a signature split over more than
-/// twelve lines is missed, and the helpers a body calls are known by name only.
+/// twelve lines is missed, the helpers a body calls are known by name only, a wrapper with a
+/// `where` clause or one returning `TsStmt` through a type alias is missed, and a rename inside a
+/// nested `use` tree (`use crate::{ts_build::{ident as id}, ..}`) is not matched by the alias scan.
 fn node_builder_defs(root: &Path) -> Probe {
     Probe {
         name: "node_builder_defs",

@@ -1787,7 +1787,7 @@ pub(super) fn emit_http_sum_wrapper(
         // result fits the context's optionally-branded parameter type.
         let dser = super::workers_entry::deserialise_call(
             &body_param.type_ref,
-            "__body_json",
+            &ident("__body_json"),
             "$",
             runtime_use,
         );

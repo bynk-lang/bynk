@@ -16,8 +16,8 @@ use bynk_syntax::ast::{BaseType, PredKind, TypeBody, TypeDecl, TypeRef};
 
 use crate::emitter::{RuntimeUse, payload_prop};
 use crate::ts_build::{
-    and_expr, as_expr, binary, block, call, const_, ident, if_, index, member, not_expr, or_expr,
-    ret, str_lit, strict_eq, strict_neq, switch_stmt, typeof_expr,
+    and_expr, arrow, as_expr, binary, block, call, const_, ident, if_, index, member, not_expr,
+    or_expr, param, ret, str_lit, strict_eq, strict_neq, switch_stmt, typeof_expr,
 };
 use bynk_check::wire_default::lower_field_default_wire;
 use bynk_ts::{
@@ -60,25 +60,68 @@ fn default_case(body: Vec<TsStmt>) -> TsSwitchCase {
     }
 }
 
-/// `Err({ kind: "StructuralMismatch", path: <path_expr>, expected:
-/// <expected>, actual: <actual> })` — the one wire-guard failure shape
-/// every real arm of [`emit_field_deserialise_wire`] returns. Distinct from
-/// `deserialise_expr_via`'s own `structural_mismatch` closure further down
-/// this file in two ways that matter: `path` here is spliced in as an
-/// already-rendered TS expression (`ident(path_expr)`), not a string
-/// literal (`str_lit`) — this function's own `path_expr` parameter is
-/// itself TS source text (a bare `path` identifier, or a template literal
-/// like `` `${path}.value` ``), never a bare string to quote; and the
-/// object is never cast `as BoundaryError` the way that closure's is (the
-/// pre-conversion `writeln!` output this replaces never added one either —
-/// only `deserialise_expr_via`'s own callers need the cast, since they
-/// build a whole `Result<T, BoundaryError>` return value directly).
-fn err_structural_mismatch(path_expr: &str, expected: &str, actual: TsExpr) -> TsExpr {
+/// `value.<prop>`: a property of the `Option` or `Result` value a generic serialiser holds.
+fn value_prop(prop: &str) -> TsExpr {
+    member(ident("value"), prop)
+}
+
+/// `obj["<key>"]`: a key of the decoded JSON object a generic deserialiser holds.
+fn obj_prop(key: &str) -> TsExpr {
+    index(ident("obj"), str_lit(key))
+}
+
+/// `(v) => <serialise v>`: the element serialiser a `List` or `Set` codec maps over.
+fn element_serialiser(elem: &TypeRef, depth: Option<Depth<'_>>, ru: &RuntimeUse) -> TsExpr {
+    arrow(
+        vec![param("v", None)],
+        serialise_field_expr(elem, &ident("v"), depth, ru),
+    )
+}
+
+/// `` `${path}.<segment>` ``: the path of a record or sum field, a template literal over the
+/// codec's own `path` parameter. Paths never nest across codecs (each codec has its own `path`
+/// parameter), so this and the two below cover every sub-path the serialise family builds.
+fn path_field(segment: &str) -> TsExpr {
+    TsExpr::template_lit(
+        vec![String::new(), [".", segment].concat()],
+        vec![ident("path")],
+    )
+}
+
+/// `` `${path}[${i}]` ``: the path of a `List` or `Set` element, or of a `Map` entry.
+fn path_elem() -> TsExpr {
+    TsExpr::template_lit(
+        vec![String::new(), "[".to_string(), "]".to_string()],
+        vec![ident("path"), ident("i")],
+    )
+}
+
+/// `` `${path}[${i}][<n>]` ``: the key (`0`) or the value (`1`) of a `Map` entry.
+fn path_entry(n: usize) -> TsExpr {
+    TsExpr::template_lit(
+        vec![
+            String::new(),
+            "[".to_string(),
+            ["][", &n.to_string(), "]"].concat(),
+        ],
+        vec![ident("path"), ident("i")],
+    )
+}
+
+/// `Err({ kind: "StructuralMismatch", path: <path>, expected: <expected>, actual: <actual> })`:
+/// the one wire-guard failure shape every real arm of [`emit_field_deserialise_wire`] returns.
+/// Distinct from `deserialise_expr_via`'s own `structural_mismatch` closure further down this
+/// file in two ways that matter: `path` here is spliced in as the expression it is (a bare
+/// `path` identifier, or a template literal like `` `${path}.value` ``), not a string literal to
+/// quote; and the object is never cast `as BoundaryError` the way that closure's is (only
+/// `deserialise_expr_via`'s own callers need the cast, since they build a whole
+/// `Result<T, BoundaryError>` return value directly).
+fn err_structural_mismatch(path: &TsExpr, expected: &str, actual: TsExpr) -> TsExpr {
     call(
         ident("Err"),
         vec![TsExpr::object(vec![
             ("kind".to_string(), str_lit("StructuralMismatch")),
-            ("path".to_string(), ident(path_expr)),
+            ("path".to_string(), path.clone()),
             ("expected".to_string(), str_lit(expected)),
             ("actual".to_string(), actual),
         ])],
@@ -90,10 +133,10 @@ fn err_structural_mismatch(path_expr: &str, expected: &str, actual: TsExpr) -> T
 /// top-level boundary-guard failure shape (#1441, Arc E slice 4).
 ///
 /// Deliberately a *second*, distinct helper rather than a call to
-/// [`err_structural_mismatch`] above: that one's own `path_expr` parameter
+/// [`err_structural_mismatch`] above: that one's own `path` parameter
 /// is real call-site-supplied TS source text (a bare `path` identifier or a
 /// template literal like `` `${path}.value` ``), rendered as an ordinary
-/// `path: <path_expr>` property because every one of its real callers
+/// `path: <path>` property because every one of its real callers
 /// (`emit_field_deserialise_wire`'s own field-level guards) passes a
 /// rendered *sub*-path template, never the bare top-level `path` parameter
 /// itself — confirmed empirically (no fixture anywhere renders the literal
@@ -1192,11 +1235,11 @@ fn emit_inline_refinement_checks(
 /// (`__<field>`, which a refined field's codec leaves as its erased base
 /// value). One `if (!…) return Err(RefinementViolation)` per predicate, in the
 /// same check order and with the same messages as a named refined type's, at
-/// the field's own path (`path_expr`, a template literal).
+/// the field's own path (`path`, a template literal).
 fn emit_field_refinement_checks(
     fname: &str,
     predicates: &[PredKind],
-    path_expr: &str,
+    path: &TsExpr,
     base: Option<BaseType>,
     ru: &RuntimeUse,
 ) -> Vec<TsStmt> {
@@ -1215,7 +1258,7 @@ fn emit_field_refinement_checks(
             ident("Err"),
             vec![TsExpr::object(vec![
                 ("kind".to_string(), str_lit("RefinementViolation")),
-                ("path".to_string(), ident(path_expr)),
+                ("path".to_string(), path.clone()),
                 (
                     "violation".to_string(),
                     TsExpr::object(vec![
@@ -1500,11 +1543,11 @@ fn emit_record_codec(
                 },
                 None,
             ));
-            d_name
+            ident(d_name)
         } else {
-            format!("obj[\"{fname}\"]")
+            index(ident("obj"), str_lit(fname.clone()))
         };
-        let sub_path = format!("`${{path}}.{}`", field.path_segment);
+        let sub_path = path_field(&field.path_segment);
         // #1439 (Arc E slice 3): `emit_field_deserialise_wire` returns a
         // real `Vec<bynk_ts::TsStmt>` — extended straight into this
         // function's own body, no `splice_stmts` (that boundary-print
@@ -1781,8 +1824,8 @@ fn emit_sum_codec(
             } else {
                 let mut stmts = Vec::new();
                 for field in &variant.payload {
-                    let access = format!("obj[\"{}\"]", field.name);
-                    let sub_path = format!("`${{path}}.{}`", field.path_segment);
+                    let access = index(ident("obj"), str_lit(field.name.clone()));
+                    let sub_path = path_field(&field.path_segment);
                     stmts.extend(emit_field_deserialise_wire(
                         &field.name,
                         &field.shape,
@@ -1936,12 +1979,12 @@ mod emit_sum_codec_tests {
 fn emit_field_deserialise(
     name: &str,
     t: &TypeRef,
-    json: &str,
-    path_expr: &str,
+    json: &TsExpr,
+    path: &TsExpr,
     depth: Option<Depth<'_>>,
     ru: &RuntimeUse,
 ) -> Vec<TsStmt> {
-    emit_field_deserialise_wire(name, &wire_ref_of(t), json, path_expr, depth, ru)
+    emit_field_deserialise_wire(name, &wire_ref_of(t), json, path, depth, ru)
 }
 
 /// The [`WireRef`]-driven body [`emit_field_deserialise`] delegates to,
@@ -1963,8 +2006,8 @@ fn emit_field_deserialise(
 fn emit_field_deserialise_wire(
     name: &str,
     wire: &WireRef,
-    json: &str,
-    path_expr: &str,
+    json: &TsExpr,
+    path: &TsExpr,
     depth: Option<Depth<'_>>,
     ru: &RuntimeUse,
 ) -> Vec<TsStmt> {
@@ -1977,21 +2020,21 @@ fn emit_field_deserialise_wire(
             ru.note_bytes();
             vec![
                 if_(
-                    strict_neq(typeof_expr(ident(json)), str_lit("string")),
+                    strict_neq(typeof_expr(json.clone()), str_lit("string")),
                     block(vec![ret(err_structural_mismatch(
-                        path_expr,
+                        path,
                         "base64 string",
-                        typeof_expr(ident(json)),
+                        typeof_expr(json.clone()),
                     ))]),
                 ),
                 const_(
                     format!("__b_{name}"),
-                    call(ident("__bynkBytesFromBase64"), vec![ident(json)]),
+                    call(ident("__bynkBytesFromBase64"), vec![json.clone()]),
                 ),
                 if_(
                     strict_eq(member(ident(format!("__b_{name}")), "tag"), str_lit("None")),
                     block(vec![ret(err_structural_mismatch(
-                        path_expr,
+                        path,
                         "base64 string",
                         str_lit("invalid base64"),
                     ))]),
@@ -2008,21 +2051,21 @@ fn emit_field_deserialise_wire(
             ru.note_decimal("__bynkDecimalParseWire");
             vec![
                 if_(
-                    strict_neq(typeof_expr(ident(json)), str_lit("string")),
+                    strict_neq(typeof_expr(json.clone()), str_lit("string")),
                     block(vec![ret(err_structural_mismatch(
-                        path_expr,
+                        path,
                         "decimal string",
-                        typeof_expr(ident(json)),
+                        typeof_expr(json.clone()),
                     ))]),
                 ),
                 const_(
                     format!("__b_{name}"),
-                    call(ident("__bynkDecimalParseWire"), vec![ident(json)]),
+                    call(ident("__bynkDecimalParseWire"), vec![json.clone()]),
                 ),
                 if_(
                     strict_eq(member(ident(format!("__b_{name}")), "tag"), str_lit("None")),
                     block(vec![ret(err_structural_mismatch(
-                        path_expr,
+                        path,
                         "decimal string",
                         str_lit("invalid decimal"),
                     ))]),
@@ -2038,11 +2081,11 @@ fn emit_field_deserialise_wire(
         } => {
             let typeof_str = json_kind_ts(*kind);
             let mut stmts = vec![if_(
-                strict_neq(typeof_expr(ident(json)), str_lit(typeof_str)),
+                strict_neq(typeof_expr(json.clone()), str_lit(typeof_str)),
                 block(vec![ret(err_structural_mismatch(
-                    path_expr,
+                    path,
                     typeof_str,
-                    typeof_expr(ident(json)),
+                    typeof_expr(json.clone()),
                 ))]),
             )];
             // v0.22b: bare `Int` fields validate integrality (ADR 0049) —
@@ -2061,16 +2104,16 @@ fn emit_field_deserialise_wire(
                 stmts.push(if_(
                     not_expr(call(
                         member(ident("globalThis.Number"), method),
-                        vec![ident(json)],
+                        vec![json.clone()],
                     )),
                     block(vec![ret(err_structural_mismatch(
-                        path_expr,
+                        path,
                         expected,
-                        call(ident("String"), vec![ident(json)]),
+                        call(ident("String"), vec![json.clone()]),
                     ))]),
                 ));
             }
-            stmts.push(const_(format!("__{name}"), ident(json)));
+            stmts.push(const_(format!("__{name}"), json.clone()));
             stmts
         }
         // Named type (own module or generic instantiation, both keyed the
@@ -2089,7 +2132,7 @@ fn emit_field_deserialise_wire(
                 format!("__r_{name}"),
                 call(
                     ident(format!("__deserialise_{type_name}")),
-                    [ident(json), ident(path_expr)]
+                    [json.clone(), path.clone()]
                         .into_iter()
                         .chain(depth_arg(depth, type_name))
                         .collect(),
@@ -2133,27 +2176,27 @@ fn emit_field_deserialise_wire(
         // 31, not drop to 30.
         WireRef::Unchecked { reason } => {
             let value = match reason {
-                UncheckedReason::Effect => as_expr(ident(json), TsType::named("any")),
+                UncheckedReason::Effect => as_expr(json.clone(), TsType::named("any")),
                 UncheckedReason::ValidationError => as_expr(
-                    as_expr(ident(json), TsType::named("unknown")),
+                    as_expr(json.clone(), TsType::named("unknown")),
                     TsType::named("ValidationError"),
                 ),
                 UncheckedReason::DecodeError => as_expr(
-                    as_expr(ident(json), TsType::named("unknown")),
+                    as_expr(json.clone(), TsType::named("unknown")),
                     TsType::named("DecodeError"),
                 ),
                 UncheckedReason::HttpResult => as_expr(
-                    as_expr(ident(json), TsType::named("unknown")),
+                    as_expr(json.clone(), TsType::named("unknown")),
                     TsType::named_with_args("HttpResult", vec![TsType::named("unknown")]),
                 ),
                 UncheckedReason::QueueResult => as_expr(
-                    as_expr(ident(json), TsType::named("unknown")),
+                    as_expr(json.clone(), TsType::named("unknown")),
                     TsType::named("QueueResult"),
                 ),
                 // #1883, slice 1a: unreachable in a checked program
                 // (`bynk.types.asset_at_boundary`); total for the model.
                 UncheckedReason::Asset => as_expr(
-                    as_expr(ident(json), TsType::named("unknown")),
+                    as_expr(json.clone(), TsType::named("unknown")),
                     crate::emitter::ts_types::asset_ts_type(),
                 ),
             };
@@ -2192,6 +2235,35 @@ mod emit_field_deserialise_wire_tests {
             .join("")
     }
 
+    /// The three path builders are the template literals the text spelled, and print as them.
+    #[test]
+    fn the_path_builders_are_template_literals_over_path_and_i() {
+        assert_eq!(
+            path_field("name"),
+            TsExpr::template_lit(
+                vec![String::new(), ".name".to_string()],
+                vec![ident("path")]
+            )
+        );
+        assert_eq!(
+            path_elem(),
+            TsExpr::template_lit(
+                vec![String::new(), "[".to_string(), "]".to_string()],
+                vec![ident("path"), ident("i")]
+            )
+        );
+        assert_eq!(
+            path_entry(1),
+            TsExpr::template_lit(
+                vec![String::new(), "[".to_string(), "][1]".to_string()],
+                vec![ident("path"), ident("i")]
+            )
+        );
+        assert_eq!(bynk_ts::print_expr(&path_field("name")), "`${path}.name`");
+        assert_eq!(bynk_ts::print_expr(&path_elem()), "`${path}[${i}]`");
+        assert_eq!(bynk_ts::print_expr(&path_entry(0)), "`${path}[${i}][0]`");
+    }
+
     #[test]
     fn unchecked_effect_casts_through_any() {
         let ru = RuntimeUse::default();
@@ -2200,8 +2272,8 @@ mod emit_field_deserialise_wire_tests {
             &WireRef::Unchecked {
                 reason: UncheckedReason::Effect,
             },
-            "json",
-            "path",
+            &ident("json"),
+            &ident("path"),
             None,
             &ru,
         );
@@ -2216,8 +2288,8 @@ mod emit_field_deserialise_wire_tests {
             &WireRef::Unchecked {
                 reason: UncheckedReason::ValidationError,
             },
-            "json",
-            "path",
+            &ident("json"),
+            &ident("path"),
             None,
             &ru,
         );
@@ -2235,8 +2307,8 @@ mod emit_field_deserialise_wire_tests {
             &WireRef::Unchecked {
                 reason: UncheckedReason::HttpResult,
             },
-            "json",
-            "path",
+            &ident("json"),
+            &ident("path"),
             None,
             &ru,
         );
@@ -2249,7 +2321,14 @@ mod emit_field_deserialise_wire_tests {
     #[test]
     fn unit_arm_binds_undefined() {
         let ru = RuntimeUse::default();
-        let stmts = emit_field_deserialise_wire("name", &WireRef::Unit, "json", "path", None, &ru);
+        let stmts = emit_field_deserialise_wire(
+            "name",
+            &WireRef::Unit,
+            &ident("json"),
+            &ident("path"),
+            None,
+            &ru,
+        );
         assert_eq!(render(stmts), "  const __name = undefined;\n");
     }
 
@@ -2261,8 +2340,8 @@ mod emit_field_deserialise_wire_tests {
             &WireRef::Named {
                 name: "Foo".to_string(),
             },
-            "json",
-            "path",
+            &ident("json"),
+            &ident("path"),
             None,
             &ru,
         );
@@ -2275,7 +2354,14 @@ mod emit_field_deserialise_wire_tests {
     #[test]
     fn bytes_arm_decodes_base64_with_two_guards() {
         let ru = RuntimeUse::default();
-        let stmts = emit_field_deserialise_wire("name", &WireRef::Bytes, "json", "path", None, &ru);
+        let stmts = emit_field_deserialise_wire(
+            "name",
+            &WireRef::Bytes,
+            &ident("json"),
+            &ident("path"),
+            None,
+            &ru,
+        );
         assert_eq!(
             render(stmts),
             "  if (typeof json !== \"string\") {\n    return Err({ kind: \"StructuralMismatch\", path: path, expected: \"base64 string\", actual: typeof json });\n  }\n  const __b_name = __bynkBytesFromBase64(json);\n  if (__b_name.tag === \"None\") {\n    return Err({ kind: \"StructuralMismatch\", path: path, expected: \"base64 string\", actual: \"invalid base64\" });\n  }\n  const __name = __b_name.value;\n"
@@ -2291,22 +2377,13 @@ mod emit_field_deserialise_wire_tests {
             guards: vec![BaseGuard::Integral, BaseGuard::Finite],
             expected: Expected::Json(JsonKind::Number),
         };
-        let stmts = emit_field_deserialise_wire("name", &wire, "json", "path", None, &ru);
+        let stmts =
+            emit_field_deserialise_wire("name", &wire, &ident("json"), &ident("path"), None, &ru);
         assert_eq!(
             render(stmts),
             "  if (typeof json !== \"number\") {\n    return Err({ kind: \"StructuralMismatch\", path: path, expected: \"number\", actual: typeof json });\n  }\n  if (!globalThis.Number.isSafeInteger(json)) {\n    return Err({ kind: \"StructuralMismatch\", path: path, expected: \"safe integer\", actual: String(json) });\n  }\n  if (!globalThis.Number.isFinite(json)) {\n    return Err({ kind: \"StructuralMismatch\", path: path, expected: \"finite number\", actual: String(json) });\n  }\n  const __name = json;\n"
         );
     }
-}
-
-/// [`serialise_field_expr`] over a value that is an identifier's text (`value.value`, `k`).
-fn serialise_field_ident(
-    t: &TypeRef,
-    value: &str,
-    depth: Option<Depth<'_>>,
-    ru: &RuntimeUse,
-) -> TsExpr {
-    serialise_field_expr(t, &ident(value), depth, ru)
 }
 
 fn serialise_field_expr(
@@ -2556,17 +2633,6 @@ pub(crate) fn serialise_expr(t: &TypeRef, value: &TsExpr, ru: &RuntimeUse) -> Ts
     serialise_field_expr(t, value, None, ru)
 }
 
-/// [`serialise_expr`] over a value that is an identifier's text (a parameter or a local), for the
-/// callers that hold its name.
-pub(crate) fn serialise_text(t: &TypeRef, value: &str, ru: &RuntimeUse) -> TsExpr {
-    serialise_expr(t, &ident(value), ru)
-}
-
-/// [`serialise_expr_via`] over a value that is an identifier's text.
-pub(crate) fn serialise_via_text(t: &TypeRef, value: &str, ns: &str, ru: &RuntimeUse) -> TsExpr {
-    serialise_expr_via(t, &ident(value), ns, ru)
-}
-
 /// v0.176 (#642): the one serialise dispatch for the workers cross-context
 /// boundary, reaching helpers through `ns`. Replaces the two parallel
 /// dispatches this boundary used to carry — `emit.rs`'s `workers_serialise_expr`
@@ -2710,7 +2776,8 @@ pub(crate) fn witness_codec_expr(t: &TypeRef, ru: &RuntimeUse) -> TsExpr {
         | other @ TypeRef::DecodeError(_)
         | other @ TypeRef::Unit(_)
         | other @ TypeRef::Fn(..) => {
-            let mut body = emit_field_deserialise("v", other, "__j", "__p", None, ru);
+            let mut body =
+                emit_field_deserialise("v", other, &ident("__j"), &ident("__p"), None, ru);
             body.push(ret(call(
                 ident("Ok"),
                 vec![as_expr(
@@ -3412,10 +3479,7 @@ fn lenient_option_decode_body(
                     "__t",
                     call(
                         ident(value_fn),
-                        value_args(
-                            index(ident("obj"), str_lit("value")),
-                            ident("`${path}.value`"),
-                        ),
+                        value_args(index(ident("obj"), str_lit("value")), path_field("value")),
                     ),
                 ),
                 if_(
@@ -3515,7 +3579,7 @@ fn option_value_decoder(
     depth: Option<Depth<'_>>,
     ru: &RuntimeUse,
 ) -> TsDecl {
-    let mut body = emit_field_deserialise("v", inner, "raw", "at", depth, ru);
+    let mut body = emit_field_deserialise("v", inner, &ident("raw"), &ident("at"), depth, ru);
     body.push(ret(call(ident("Ok"), vec![ident("__v")])));
     let mut params = vec![
         TsParam::new("raw".to_string(), Some(TsType::named("__JsonValue"))),
@@ -4057,7 +4121,7 @@ pub fn emit_generic_helpers_qualified(
                                 ("kind".to_string(), str_lit("Ok")),
                                 (
                                     "value".to_string(),
-                                    serialise_field_ident(ok, "value.value", depth, ru),
+                                    serialise_field_expr(ok, &value_prop("value"), depth, ru),
                                 ),
                             ])),
                         ),
@@ -4065,7 +4129,7 @@ pub fn emit_generic_helpers_qualified(
                             ("kind".to_string(), str_lit("Err")),
                             (
                                 "error".to_string(),
-                                serialise_field_ident(err, "value.error", depth, ru),
+                                serialise_field_expr(err, &value_prop("error"), depth, ru),
                             ),
                         ])),
                     ],
@@ -4076,7 +4140,14 @@ pub fn emit_generic_helpers_qualified(
                 let mut body = object_shape_guard();
                 body.push(wire_kind_dispatch(
                     "Ok",
-                    emit_field_deserialise("v", ok, "obj[\"value\"]", "`${path}.value`", depth, ru),
+                    emit_field_deserialise(
+                        "v",
+                        ok,
+                        &obj_prop("value"),
+                        &path_field("value"),
+                        depth,
+                        ru,
+                    ),
                     ret(call(
                         ident("Ok"),
                         vec![as_expr(
@@ -4088,8 +4159,8 @@ pub fn emit_generic_helpers_qualified(
                     emit_field_deserialise(
                         "e",
                         err,
-                        "obj[\"error\"]",
-                        "`${path}.error`",
+                        &obj_prop("error"),
+                        &path_field("error"),
                         depth,
                         ru,
                     ),
@@ -4131,7 +4202,8 @@ pub fn emit_generic_helpers_qualified(
                 // `__bynkPlainJson` set, `Some(v)` is `v` and `None` is `null`.
                 // Otherwise (and in every project without such a route) it is the
                 // tagged encoder alone.
-                let some_value = serialise_field_ident(inner, "value.value", depth, ru);
+                let some_value =
+                    serialise_field_expr(inner, &member(ident("value"), "value"), depth, ru);
                 let tagged_some = TsExpr::object(vec![
                     ("kind".to_string(), str_lit("Some")),
                     ("value".to_string(), some_value.clone()),
@@ -4206,15 +4278,7 @@ pub fn emit_generic_helpers_qualified(
                     return_type: Some(TsType::named("__JsonValue")),
                     body: vec![ret(call(
                         member(ident("value"), "map"),
-                        vec![TsExpr::Arrow {
-                            params: vec![TsParam::new("v".to_string(), None)],
-                            is_async: false,
-                            generics: Vec::new(),
-                            return_type: None,
-                            body: Box::new(TsArrowBody::Expr(Box::new(serialise_field_ident(
-                                elem, "v", depth, ru,
-                            )))),
-                        }],
+                        vec![element_serialiser(elem, depth, ru)],
                     ))],
                     is_async: false,
                     inline: false,
@@ -4226,8 +4290,8 @@ pub fn emit_generic_helpers_qualified(
                 loop_body.extend(emit_field_deserialise(
                     "el",
                     elem,
-                    "item",
-                    "`${path}[${i}]`",
+                    &ident("item"),
+                    &path_elem(),
                     depth,
                     ru,
                 ));
@@ -4309,15 +4373,7 @@ pub fn emit_generic_helpers_qualified(
                             call(ident("globalThis.Array.from"), vec![ident("value")]),
                             "map",
                         ),
-                        vec![TsExpr::Arrow {
-                            params: vec![TsParam::new("v".to_string(), None)],
-                            is_async: false,
-                            generics: Vec::new(),
-                            return_type: None,
-                            body: Box::new(TsArrowBody::Expr(Box::new(serialise_field_ident(
-                                elem, "v", depth, ru,
-                            )))),
-                        }],
+                        vec![element_serialiser(elem, depth, ru)],
                     ))],
                     is_async: false,
                     inline: false,
@@ -4327,8 +4383,8 @@ pub fn emit_generic_helpers_qualified(
                 loop_body.extend(emit_field_deserialise(
                     "el",
                     elem,
-                    "item",
-                    "`${path}[${i}]`",
+                    &ident("item"),
+                    &path_elem(),
                     depth,
                     ru,
                 ));
@@ -4338,7 +4394,7 @@ pub fn emit_generic_helpers_qualified(
                         vec![as_expr(ident("__el"), elem_ty.clone())],
                     ),
                     block(vec![ret(err_structural_mismatch(
-                        "`${path}[${i}]`",
+                        &path_elem(),
                         "a distinct set element",
                         str_lit("a duplicate"),
                     ))]),
@@ -4439,8 +4495,8 @@ pub fn emit_generic_helpers_qualified(
                                 call(
                                     member(ident("entries"), "push"),
                                     vec![TsExpr::array(vec![
-                                        serialise_field_ident(key, "k", depth, ru),
-                                        serialise_field_ident(val, "v", depth, ru),
+                                        serialise_field_expr(key, &ident("k"), depth, ru),
+                                        serialise_field_expr(val, &ident("v"), depth, ru),
                                     ])],
                                 ),
                                 None,
@@ -4467,7 +4523,7 @@ pub fn emit_generic_helpers_qualified(
                             ),
                         ),
                         block(vec![ret(err_structural_mismatch(
-                            "`${path}[${i}]`",
+                            &path_elem(),
                             "[key, value] entry",
                             typeof_expr(ident("entry")),
                         ))]),
@@ -4484,8 +4540,8 @@ pub fn emit_generic_helpers_qualified(
                 loop_body.extend(emit_field_deserialise(
                     "k",
                     key,
-                    "entryK",
-                    "`${path}[${i}][0]`",
+                    &ident("entryK"),
+                    &path_entry(0),
                     depth,
                     ru,
                 ));
@@ -4499,7 +4555,7 @@ pub fn emit_generic_helpers_qualified(
                         vec![as_expr(ident("__k"), key_ty.clone())],
                     ),
                     block(vec![ret(err_structural_mismatch(
-                        "`${path}[${i}][0]`",
+                        &path_entry(0),
                         "a distinct map key",
                         str_lit("a duplicate"),
                     ))]),
@@ -4507,8 +4563,8 @@ pub fn emit_generic_helpers_qualified(
                 loop_body.extend(emit_field_deserialise(
                     "v",
                     val,
-                    "entryV",
-                    "`${path}[${i}][1]`",
+                    &ident("entryV"),
+                    &path_entry(1),
                     depth,
                     ru,
                 ));
