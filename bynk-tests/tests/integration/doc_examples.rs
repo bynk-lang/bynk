@@ -23,6 +23,12 @@
 //!   body, a suite or a test case). For blocks that name types the page
 //!   declared elsewhere, or show a single member or statement; parsing still
 //!   catches syntax that has drifted from the grammar.
+//! - ```bynk,project=<name> → one file of a project: every block on a page with
+//!   the same `<name>` is written to its unit's file (`context a.b` →
+//!   `a/b.bynk`, likewise a `commons`) and the set is compiled **together** as
+//!   one project, the way a reader who copies them into a directory would. For
+//!   a page that splits a program over several units, where a context `uses` a
+//!   commons or `consumes` another context the page shows beside it (#4062).
 //! - ```bynk,ignore    → skipped. Only for pseudo-syntax that is not Bynk at all
 //!   (`<Name>` placeholders, `…` elisions, lines from different contexts set
 //!   side by side).
@@ -262,24 +268,42 @@ fn parses_as_fragment(body: &str) -> Result<(), String> {
     Err(best.map(|(_, e)| e).unwrap_or_default())
 }
 
-/// Compile a `context …` block as a one-file project under a unique temp dir.
-fn compile_context(body: &str, idx: usize) -> Result<(), String> {
+/// The unit a block declares, from its header line (`context a.b` or
+/// `commons a.b`), or `None` if it declares neither.
+fn unit_name(body: &str) -> Option<&str> {
     let first = header_line(body);
     let name = first
         .strip_prefix("context")
-        .unwrap_or("")
+        .or_else(|| first.strip_prefix("commons"))?
         .trim()
         .trim_end_matches('{')
         .trim();
-    if name.is_empty() {
-        return Err("could not parse context name".to_string());
-    }
-    let root = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("doc-ctx-{idx}"));
+    (!name.is_empty()).then_some(name)
+}
+
+/// Compile `files` (each a unit's source) together as one project under a
+/// unique temp dir, each written where its unit name puts it (`a.b` →
+/// `a/b.bynk`).
+fn compile_files(files: &[&str], tag: &str) -> Result<(), String> {
+    let root = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("doc-proj-{tag}"));
     let _ = fs::remove_dir_all(&root);
-    let rel: PathBuf = name.split('.').collect::<PathBuf>().with_extension("bynk");
-    let file = root.join(&rel);
-    fs::create_dir_all(file.parent().unwrap()).unwrap();
-    fs::write(&file, body).unwrap();
+    for body in files {
+        let Some(name) = unit_name(body) else {
+            let _ = fs::remove_dir_all(&root);
+            return Err(format!(
+                "a project file must start with `context …` or `commons …`, found `{}`",
+                first_line(body)
+            ));
+        };
+        let rel: PathBuf = name.split('.').collect::<PathBuf>().with_extension("bynk");
+        let file = root.join(&rel);
+        if file.exists() {
+            let _ = fs::remove_dir_all(&root);
+            return Err(format!("two files of the project declare `{name}`"));
+        }
+        fs::create_dir_all(file.parent().unwrap()).unwrap();
+        fs::write(&file, body).unwrap();
+    }
 
     let result =
         bynk_driver::project::compile_project(&bynk_testkit::compile_options_single(root.clone()))
@@ -295,6 +319,19 @@ fn compile_context(body: &str, idx: usize) -> Result<(), String> {
     result
 }
 
+/// Compile a `context …` block as a one-file project under a unique temp dir.
+fn compile_context(body: &str, idx: usize) -> Result<(), String> {
+    if unit_name(body).is_none() {
+        return Err("could not parse context name".to_string());
+    }
+    compile_files(&[body], &format!("ctx-{idx}"))
+}
+
+/// The `<name>` of a `bynk,project=<name>` fence, if the block has one.
+fn project_of(info: &str) -> Option<&str> {
+    info.split(',').find_map(|f| f.strip_prefix("project="))
+}
+
 #[test]
 fn every_doc_example_compiles() {
     let blocks = collect_blocks();
@@ -303,10 +340,20 @@ fn every_doc_example_compiles() {
     let (mut checked_ok, mut checked_fail, mut skip_ignored, mut parsed_fragment, mut skip_include) =
         (0, 0, 0, 0, 0);
     let mut failures: Vec<String> = Vec::new();
+    // `bynk,project=<name>` blocks, gathered per page and name, in page order.
+    let mut projects: std::collections::BTreeMap<(String, String), Vec<&Block>> =
+        std::collections::BTreeMap::new();
 
     for (idx, b) in blocks.iter().enumerate() {
         let loc = format!("{}:{} (`{}…`)", b.file, b.line, first_line(&b.body));
 
+        if let Some(name) = project_of(&b.info) {
+            projects
+                .entry((b.file.clone(), name.to_string()))
+                .or_default()
+                .push(b);
+            continue;
+        }
         if b.info.contains("ignore") {
             skip_ignored += 1;
             continue;
@@ -377,10 +424,30 @@ fn every_doc_example_compiles() {
         }
     }
 
+    let mut project_files = 0;
+    for ((file, name), members) in &projects {
+        let bodies: Vec<&str> = members.iter().map(|b| b.body.as_str()).collect();
+        project_files += bodies.len();
+        let tag = format!("{}-{name}", file.replace(['/', '.'], "-"));
+        if let Err(e) = compile_files(&bodies, &tag) {
+            let at = members
+                .iter()
+                .map(|b| b.line.to_string())
+                .collect::<Vec<_>>()
+                .join(", ");
+            failures.push(format!(
+                "{file} (lines {at}): project `{name}` doesn't compile: {e}"
+            ));
+        } else {
+            checked_ok += 1;
+        }
+    }
+
     eprintln!(
-        "doc examples: {checked_ok} compiled, {checked_fail} failed-as-expected, \
-         {parsed_fragment} fragments parsed, {skip_ignored} ignored, \
-         {skip_include} include-only skipped ({} total)",
+        "doc examples: {checked_ok} compiled ({} of them projects, from {project_files} files), \
+         {checked_fail} failed-as-expected, {parsed_fragment} fragments parsed, \
+         {skip_ignored} ignored, {skip_include} include-only skipped ({} total)",
+        projects.len(),
         blocks.len()
     );
 
@@ -442,4 +509,27 @@ fn book_examples_are_canonically_formatted() {
         "Book examples not canonically formatted (run the block through `bynk fmt -`):\n{}",
         dirty.join("\n")
     );
+}
+
+/// The `bynk,project=<name>` fence compiles a page's blocks together: a
+/// context that `uses` a commons and `consumes` another context compiles with
+/// them beside it, and fails without them (#4062).
+#[test]
+fn project_blocks_compile_together() {
+    let words = "commons words\n\nfn greet(name: String) -> String {\n\t\"hello, \\(name)\"\n}\n";
+    let inner = "context inner\n\nuses words\n\nservice hello {\n\ton call(name: String) -> Effect[String] {\n\t\tgreet(name)\n\t}\n}\n";
+    let outer = "context outer\n\nconsumes inner\n\nservice relay {\n\ton call(name: String) -> Effect[String] {\n\t\tlet said <- inner.hello(name)\n\t\tsaid\n\t}\n}\n";
+
+    assert_eq!(compile_files(&[words, inner, outer], "selftest-ok"), Ok(()));
+    assert!(
+        compile_files(&[inner, outer], "selftest-missing").is_err(),
+        "a context that uses a commons the project lacks must not compile"
+    );
+    assert!(
+        compile_files(&[inner, inner], "selftest-dup")
+            .is_err_and(|e| e.contains("two files of the project declare `inner`")),
+        "two blocks declaring the same unit are refused"
+    );
+    assert_eq!(project_of("project=shortener"), Some("shortener"));
+    assert_eq!(project_of("fragment"), None);
 }
