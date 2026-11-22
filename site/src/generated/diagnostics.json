@@ -6767,14 +6767,14 @@
     "summary": "`bynk revert` refused for one Worker because its deployment history cannot be placed: it has no earlier deployment, the live upload is outside the listed history, a gradual deployment is in progress, or the history could not be read."
   },
   {
-    "blurb": "The target version binds resources (KV namespaces, databases, limiters) by id. If the deploy lock no longer records the same id for a binding, the resource was re-provisioned since, and the older code would bind one that is no longer yours. `bynk revert` refuses. Redeploy forward.",
+    "blurb": "The target version binds resources (KV namespaces, databases, limiters, Hyperdrive configs) by id. If the deploy lock no longer records the same id for a binding, the resource was re-provisioned or replaced since, and the older code would bind one that is no longer yours, or one `--prune` has deleted. `bynk revert` refuses. Redeploy forward.",
     "category": "Other",
     "categoryAnchor": "other",
     "code": "bynk.revert.id_unrecorded",
     "constructs": [],
     "example": "bynk revert --dry-run\n  ids       shop-orders  refused: the target would bind a resource that has since been replaced\n\nbynk deploy   # redeploy forward",
     "severity": "error",
-    "summary": "`bynk revert` refused because the target binds a KV namespace, database or limiter that the deploy lock no longer records, usually because the resource was re-provisioned since."
+    "summary": "`bynk revert` refused because the target binds a KV namespace, database, limiter or Hyperdrive config that the deploy lock no longer records, usually because the resource was re-provisioned or replaced since."
   },
   {
     "blurb": "A layout is how an agent's state is placed in storage, and each version's deploy facts record which one it writes. Code that writes an older layout than the live version cannot read records in the newer one: a build with the layout check faults them as `NewerLayout`, and one without it would orphan their entries. `bynk revert` refuses while stored instances exist or are not known to be absent. Deploy a fix forward.",

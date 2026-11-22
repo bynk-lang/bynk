@@ -1815,6 +1815,57 @@ mod tests {
         assert!(refusals(&f.run()).is_empty());
     }
 
+    /// #3970: a version bound to a Hyperdrive config the ledger has since replaced is refused,
+    /// as a replaced KV namespace is.
+    #[test]
+    fn a_replaced_hyperdrive_config_id_is_refused() {
+        // The target version bound `id-1`, which `build_facts` recorded.
+        let target = facts(|f| {
+            f.ids.insert("HYPERDRIVE_MAIN".into(), "id-1".into());
+        });
+        let mut f = Fx::new(facts(|_| {}), target);
+        f.lock.record::<Hyperdrive>(
+            "default",
+            "shop",
+            "HYPERDRIVE_MAIN",
+            HyperdriveRecord {
+                name: "shop-main".into(),
+                id: "id-2".into(),
+                adopted: false,
+                superseded: Vec::new(),
+            },
+        );
+        assert!(f.run().iter().any(|x| x.check == "ids"
+            && x.code == Some("bynk.revert.id_unrecorded")
+            && x.is_refusal()
+            && x.detail.contains("id-1")
+            && x.detail.contains("id-2")));
+        // The config the ledger records now is the one the target bound: nothing to refuse.
+        let mut same = Fx::new(
+            facts(|_| {}),
+            facts(|f| {
+                f.ids.insert("HYPERDRIVE_MAIN".into(), "id-2".into());
+            }),
+        );
+        same.lock.record::<Hyperdrive>(
+            "default",
+            "shop",
+            "HYPERDRIVE_MAIN",
+            HyperdriveRecord {
+                name: "shop-main".into(),
+                id: "id-2".into(),
+                adopted: false,
+                superseded: Vec::new(),
+            },
+        );
+        assert!(
+            !same
+                .run()
+                .iter()
+                .any(|x| x.check == "ids" && x.is_refusal())
+        );
+    }
+
     #[test]
     fn a_replaced_resource_id_is_refused() {
         let target = facts(|f| {

@@ -4423,7 +4423,7 @@ bynk revert --context shop.orders --to <version>",
     },
     Explain {
         code: "bynk.revert.id_unrecorded",
-        blurb: "The target version binds resources (KV namespaces, databases, limiters) by id. If the deploy lock no longer records the same id for a binding, the resource was re-provisioned since, and the older code would bind one that is no longer yours. `bynk revert` refuses. Redeploy forward.",
+        blurb: "The target version binds resources (KV namespaces, databases, limiters, Hyperdrive configs) by id. If the deploy lock no longer records the same id for a binding, the resource was re-provisioned or replaced since, and the older code would bind one that is no longer yours, or one `--prune` has deleted. `bynk revert` refuses. Redeploy forward.",
         example: "bynk revert --dry-run\n\
 \x20\x20ids       shop-orders  refused: the target would bind a resource that has since been replaced\n\
 \n\
@@ -9415,7 +9415,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.revert.id_unrecorded",
-        "`bynk revert` refused because the target binds a KV namespace, database or limiter that the deploy lock no longer records, usually because the resource was re-provisioned since.",
+        "`bynk revert` refused because the target binds a KV namespace, database, limiter or Hyperdrive config that the deploy lock no longer records, usually because the resource was re-provisioned or replaced since.",
     ),
     d(
         "bynk.revert.layout_older",
