@@ -469,10 +469,7 @@ pub fn emit_worker_compose(
                 bynk_model::IrHandlerKind::Event => {
                     return_entries.push(emit_event_wrapper(
                         sname,
-                        unit.subscriber_envelopes
-                            .get(*sname)
-                            .copied()
-                            .unwrap_or(false),
+                        unit.hosted_wants_envelope(context, sname),
                     ));
                 }
                 // #2341 (decision C): the router calls `rejected_<svc>(why)`

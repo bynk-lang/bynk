@@ -764,6 +764,9 @@ pub fn lower_event_subscriber_shapes_ir(
                      ServiceProtocol::Events"
                 )
             };
+            // A `from Events` service has exactly one `on event` handler (the checker
+            // refuses a second: `bynk.event.duplicate_handler`, #1781, in
+            // `check_service_protocols`), so the first one found is the one.
             let two_param_handler = s
                 .handlers
                 .iter()

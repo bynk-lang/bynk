@@ -1378,6 +1378,25 @@ pub(super) fn snapshot_harness(
 /// a fresh `eventId` per call (`test-event-<n>`, counted across the module), the
 /// publishing context as `publisherId`, the test clock's reading (`0`, the
 /// epoch) as `emittedAt`, and the event's current schema version.
+/// Whether `svc`, an events service of `target_name`, is handed the envelope. A
+/// hosted events service always has a shape, so a miss is an internal error, not
+/// a `false` (the callee would still expect the envelope parameter).
+fn hosted_takes_envelope(
+    event_shapes: Option<&HashMap<String, bynk_model::EventSubscriberShape>>,
+    target_name: &str,
+    svc: &str,
+) -> bool {
+    event_shapes
+        .and_then(|shapes| shapes.get(svc))
+        .unwrap_or_else(|| {
+            panic!(
+                "bynk internal error: the events service `{svc}` of unit `{target_name}` has no \
+                 recorded subscriber shape"
+            )
+        })
+        .wants_envelope()
+}
+
 pub(super) fn event_delivery_helpers(
     target_name: &str,
     services: &[String],
@@ -1408,9 +1427,7 @@ pub(super) fn event_delivery_helpers(
             _ => continue,
         };
         // The one envelope rule (1B.1c, Decision F of #3928).
-        let takes_envelope = event_shapes
-            .and_then(|shapes| shapes.get(svc))
-            .is_some_and(bynk_model::EventSubscriberShape::wants_envelope);
+        let takes_envelope = hosted_takes_envelope(event_shapes, target_name, svc);
         // #2052 review: the publisher resolves as the service's header
         // resolves `E` (the target's own event, else the one consumed context
         // declaring it). With no unique one the checker refuses a default
@@ -1793,5 +1810,18 @@ mod tests {
         };
         let printed = bynk_ts::print(&program, "", "", "");
         assert_eq!(printed.text, expected);
+    }
+}
+
+#[cfg(test)]
+mod hosted_envelope_tests {
+    use super::*;
+
+    #[test]
+    #[should_panic(
+        expected = "the events service `On` of unit `shop` has no recorded subscriber shape"
+    )]
+    fn a_hosted_events_service_without_a_shape_is_an_internal_error() {
+        hosted_takes_envelope(Some(&HashMap::new()), "shop", "On");
     }
 }

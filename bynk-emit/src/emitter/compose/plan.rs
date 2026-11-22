@@ -195,6 +195,19 @@ pub struct ComposeUnit {
 }
 
 impl ComposeUnit {
+    /// Whether the `on event` handler of `service`, a `from Events` service this
+    /// unit hosts, is handed the envelope. Every hosted events service has a
+    /// shape, so a miss is an internal error and not a `false`: the callee would
+    /// still insert its positional envelope parameter and bind `deps` into it.
+    pub fn hosted_wants_envelope(&self, unit: &str, service: &str) -> bool {
+        *self.subscriber_envelopes.get(service).unwrap_or_else(|| {
+            panic!(
+                "bynk internal error: the events service `{service}` of unit `{unit}` has no \
+                 recorded subscriber shape"
+            )
+        })
+    }
+
     /// Every cross-context capability the unit uses, handlers' and providers'
     /// together; a key both name keeps the handlers' source. Which of the two
     /// sets a target instantiates at the top level is the renderer's choice
@@ -559,5 +572,14 @@ mod tests {
         // The unit's own table of its subscribers agrees (the Workers wrapper reads it).
         assert!(plan.units["two"].subscriber_envelopes["On"]);
         assert!(!plan.units["plain"].subscriber_envelopes["On"]);
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "the events service `On` of unit `shop` has no recorded subscriber shape"
+    )]
+    fn a_hosted_events_service_without_a_shape_is_an_internal_error() {
+        let plan = ComposePlan::decide(&facts(vec![("shop", ctx(&[]))]));
+        plan.units["shop"].hosted_wants_envelope("shop", "On");
     }
 }
