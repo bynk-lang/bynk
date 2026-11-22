@@ -2,6 +2,10 @@
 //! encodings the method needs. Split from `http_client.rs` (1A.38b) so each file
 //! stays under the module-size ceiling; the code is unchanged.
 
+// 1A.37a: this file has no wildcard enum arm; the attribute keeps it that way until the
+// crate opts in to the workspace lints (1A.37b).
+#![deny(clippy::wildcard_enum_match_arm)]
+
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -175,13 +179,25 @@ impl Gen {
                         ("decode", decode),
                     ])
                 }
-                other => {
+                other @ ReplyPayload::Message
+                | other @ ReplyPayload::Location
+                | other @ ReplyPayload::None
+                | other @ ReplyPayload::BoundaryError
+                | other @ ReplyPayload::BoundaryRefusal
+                | other @ ReplyPayload::Raw
+                | other @ ReplyPayload::RawEtag
+                | other @ ReplyPayload::RawTagged
+                | other @ ReplyPayload::Events => {
                     let body = match other {
                         ReplyPayload::Message => "message",
                         ReplyPayload::Location => "location",
                         ReplyPayload::BoundaryError | ReplyPayload::BoundaryRefusal => "boundary",
                         ReplyPayload::Events => "events",
-                        _ => "none",
+                        ReplyPayload::Value
+                        | ReplyPayload::None
+                        | ReplyPayload::Raw
+                        | ReplyPayload::RawEtag
+                        | ReplyPayload::RawTagged => "none",
                     };
                     object_of(vec![("kind", str_lit(variant)), ("body", str_lit(body))])
                 }
@@ -406,7 +422,16 @@ impl Gen {
         for reply in &r.replies {
             let payload = match reply.payload {
                 ReplyPayload::Value if success.is_none() => ReplyPayload::None,
-                p => p,
+                p @ ReplyPayload::Value
+                | p @ ReplyPayload::Message
+                | p @ ReplyPayload::Location
+                | p @ ReplyPayload::None
+                | p @ ReplyPayload::BoundaryError
+                | p @ ReplyPayload::BoundaryRefusal
+                | p @ ReplyPayload::Raw
+                | p @ ReplyPayload::RawEtag
+                | p @ ReplyPayload::RawTagged
+                | p @ ReplyPayload::Events => p,
             };
             let item = (reply.status, reply.variant.clone(), payload);
             if !out.contains(&item) {
@@ -433,7 +458,30 @@ impl Gen {
                     signature.push(TsParam::new(ident.clone(), Some(self.public_type(&ty)?)));
                     let checked = match &ty {
                         TypeRef::Base(..) => call("globalThis.String", vec![id(&ident)]),
-                        _ => {
+                        TypeRef::Named(_)
+                        | TypeRef::Result(..)
+                        | TypeRef::Option(..)
+                        | TypeRef::Effect(..)
+                        | TypeRef::HttpResult(..)
+                        | TypeRef::QueueResult(_)
+                        | TypeRef::Asset(_)
+                        | TypeRef::RequestHeaders(_)
+                        | TypeRef::RequestQuery(_)
+                        | TypeRef::RequestCookies(_)
+                        | TypeRef::TokenClaims(_)
+                        | TypeRef::BoundaryRejection(_)
+                        | TypeRef::List(..)
+                        | TypeRef::Map(..)
+                        | TypeRef::Set(..)
+                        | TypeRef::Query(..)
+                        | TypeRef::Stream(..)
+                        | TypeRef::Connection(..)
+                        | TypeRef::History(..)
+                        | TypeRef::ValidationError(_)
+                        | TypeRef::DecodeError(_)
+                        | TypeRef::Unit(_)
+                        | TypeRef::Fn(..)
+                        | TypeRef::App { .. } => {
                             let ser =
                                 serialisation::serialise_expr_via(&ty, &id(&ident), "", &self.ru);
                             let de = serialisation::deserialise_ref_via(&ty, "", &self.ru);
@@ -580,11 +628,7 @@ impl Gen {
         for f in &rec.fields {
             let fname = f.name.name.clone();
             let wire = f.wire_name().unwrap_or_else(|| fname.clone());
-            let (inner, list, option) = match &f.type_ref {
-                TypeRef::List(i, _) => (i.as_ref(), true, false),
-                TypeRef::Option(i, _) => (i.as_ref(), false, true),
-                other => (other, false, false),
-            };
+            let (inner, list, option) = serialisation::peel_list_option(&f.type_ref);
             let is_file = matches!(inner, TypeRef::Named(i) if self.is_file(&i.name));
             let field = || member(id("body"), &fname);
             if !is_file {

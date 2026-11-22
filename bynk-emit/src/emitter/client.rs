@@ -37,6 +37,10 @@
 //! context with no foreign caller has no one the client could sign as: an
 //! undeclared caller holds no secret (§8 D2, §11 Q5).
 
+// 1A.37a: this file has no wildcard enum arm; the attribute keeps it that way until the
+// crate opts in to the workspace lints (1A.37b).
+#![deny(clippy::wildcard_enum_match_arm)]
+
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::Arc;
 
@@ -585,9 +589,11 @@ fn service_params(
 
 /// A service's result, as the promise a client call returns.
 fn service_return(svc: &CrossContextService, renamed: &dyn Fn(&TypeRef) -> TypeRef) -> TsType {
-    let ret = match renamed(&svc.return_type) {
-        TypeRef::Effect(inner, _) => *inner,
-        other => other,
+    let ret = renamed(&svc.return_type);
+    let ret = if let TypeRef::Effect(inner, _) = ret {
+        *inner
+    } else {
+        ret
     };
     TsType::named_with_args("globalThis.Promise", vec![ts_type(&ret)])
 }

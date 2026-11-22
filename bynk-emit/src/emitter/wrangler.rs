@@ -4,6 +4,10 @@
 //! Service Bindings are declared for every consumed context. Durable
 //! Object bindings + `exports` entries are declared for every agent.
 
+// 1A.37a: this file has no wildcard enum arm; the attribute keeps it that way until the
+// crate opts in to the workspace lints (1A.37b).
+#![deny(clippy::wildcard_enum_match_arm)]
+
 use crate::emitter::toml_doc::{TomlBlock, TomlDocument, TomlEntry, TomlValue};
 pub use bynk_check::worker_bindings::{BindingSource, WorkerBinding};
 use bynk_project::worker_layout::WorkerLayout;
@@ -1274,13 +1278,16 @@ pub const VECTORIZE_MANIFEST_VERSION: u32 = 1;
 pub fn emit_vectorize_manifest(bindings: &[WorkerBinding]) -> Option<String> {
     let entries: Vec<String> = bindings
         .iter()
-        .filter_map(|b| match &b.source {
-            BindingSource::VectorizeIndex {
+        .filter_map(|b| {
+            let BindingSource::VectorizeIndex {
                 dimensions,
                 metric,
                 indexed,
                 ..
-            } => Some(format!(
+            } = &b.source else {
+                return None;
+            };
+            Some(format!(
                 "    {{ \"binding\": {}, \"dimensions\": {dimensions}, \"metric\": {}, \"indexed\": [{}] }}",
                 bynk_project::json_string(&b.name),
                 bynk_project::json_string(metric),
@@ -1289,8 +1296,7 @@ pub fn emit_vectorize_manifest(bindings: &[WorkerBinding]) -> Option<String> {
                     .map(|i| bynk_project::json_string(i))
                     .collect::<Vec<_>>()
                     .join(", "),
-            )),
-            _ => None,
+            ))
         })
         .collect();
     if entries.is_empty() {
@@ -1336,14 +1342,18 @@ pub const CONTAINERS_MANIFEST_VERSION: u32 = 1;
 pub fn emit_containers_manifest(bindings: &[WorkerBinding]) -> Option<String> {
     let entries: Vec<String> = bindings
         .iter()
-        .filter_map(|b| match &b.source {
-            BindingSource::ContainerInstance {
+        .filter_map(|b| {
+            let BindingSource::ContainerInstance {
                 capability,
                 class_name,
                 build,
                 instance_type,
                 ..
-            } => Some(format!(
+            } = &b.source
+            else {
+                return None;
+            };
+            Some(format!(
                 "    {{ \"capability\": {}, \"class\": {}, \"build\": {}, \"instance_type\": {} }}",
                 bynk_project::json_string(capability),
                 bynk_project::json_string(class_name),
@@ -1351,8 +1361,7 @@ pub fn emit_containers_manifest(bindings: &[WorkerBinding]) -> Option<String> {
                 instance_type
                     .as_deref()
                     .map_or_else(|| "null".to_string(), bynk_project::json_string),
-            )),
-            _ => None,
+            ))
         })
         .collect();
     if entries.is_empty() {
@@ -1513,13 +1522,15 @@ pub const HYPERDRIVE_MANIFEST_VERSION: u32 = 1;
 pub fn emit_hyperdrive_manifest(bindings: &[WorkerBinding]) -> Option<String> {
     let entries: Vec<String> = bindings
         .iter()
-        .filter_map(|b| match &b.source {
-            BindingSource::MySql { tls, .. } => Some(format!(
+        .filter_map(|b| {
+            let BindingSource::MySql { tls, .. } = &b.source else {
+                return None;
+            };
+            Some(format!(
                 "    {{ \"binding\": {}, \"kind\": \"mysql\", \"tls\": {} }}",
                 bynk_project::json_string(&b.name),
                 bynk_project::json_string(tls.as_deref().unwrap_or("required")),
-            )),
-            _ => None,
+            ))
         })
         .collect();
     if entries.is_empty() {

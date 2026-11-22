@@ -815,6 +815,97 @@ impl CommonsItem {
             CommonsItem::Const(c) => c.span,
         }
     }
+
+    /// The `service` declaration, when the item is one.
+    pub fn as_service(&self) -> Option<&ServiceDecl> {
+        match self {
+            CommonsItem::Service(s) => Some(s),
+            CommonsItem::Type(_)
+            | CommonsItem::Fn(_)
+            | CommonsItem::Capability(_)
+            | CommonsItem::Provider(_)
+            | CommonsItem::Agent(_)
+            | CommonsItem::Actor(_)
+            | CommonsItem::Messages(_)
+            | CommonsItem::Event(_)
+            | CommonsItem::Asset(_)
+            | CommonsItem::Embed(_)
+            | CommonsItem::Const(_) => None,
+        }
+    }
+
+    /// The `agent` declaration, when the item is one.
+    pub fn as_agent(&self) -> Option<&AgentDecl> {
+        match self {
+            CommonsItem::Agent(a) => Some(a),
+            CommonsItem::Type(_)
+            | CommonsItem::Fn(_)
+            | CommonsItem::Capability(_)
+            | CommonsItem::Provider(_)
+            | CommonsItem::Service(_)
+            | CommonsItem::Actor(_)
+            | CommonsItem::Messages(_)
+            | CommonsItem::Event(_)
+            | CommonsItem::Asset(_)
+            | CommonsItem::Embed(_)
+            | CommonsItem::Const(_) => None,
+        }
+    }
+
+    /// The `capability` declaration, when the item is one.
+    pub fn as_capability(&self) -> Option<&CapabilityDecl> {
+        match self {
+            CommonsItem::Capability(c) => Some(c),
+            CommonsItem::Type(_)
+            | CommonsItem::Fn(_)
+            | CommonsItem::Provider(_)
+            | CommonsItem::Service(_)
+            | CommonsItem::Agent(_)
+            | CommonsItem::Actor(_)
+            | CommonsItem::Messages(_)
+            | CommonsItem::Event(_)
+            | CommonsItem::Asset(_)
+            | CommonsItem::Embed(_)
+            | CommonsItem::Const(_) => None,
+        }
+    }
+
+    /// The `messages` block, when the item is one.
+    pub fn as_messages(&self) -> Option<&MessagesDecl> {
+        match self {
+            CommonsItem::Messages(m) => Some(m),
+            CommonsItem::Type(_)
+            | CommonsItem::Fn(_)
+            | CommonsItem::Capability(_)
+            | CommonsItem::Provider(_)
+            | CommonsItem::Service(_)
+            | CommonsItem::Agent(_)
+            | CommonsItem::Actor(_)
+            | CommonsItem::Event(_)
+            | CommonsItem::Asset(_)
+            | CommonsItem::Embed(_)
+            | CommonsItem::Const(_) => None,
+        }
+    }
+
+    /// The handlers the item declares: a service's or an agent's, and none for
+    /// any other kind.
+    pub fn handlers(&self) -> &[Handler] {
+        match self {
+            CommonsItem::Service(s) => &s.handlers,
+            CommonsItem::Agent(a) => &a.handlers,
+            CommonsItem::Type(_)
+            | CommonsItem::Fn(_)
+            | CommonsItem::Capability(_)
+            | CommonsItem::Provider(_)
+            | CommonsItem::Actor(_)
+            | CommonsItem::Messages(_)
+            | CommonsItem::Event(_)
+            | CommonsItem::Asset(_)
+            | CommonsItem::Embed(_)
+            | CommonsItem::Const(_) => &[],
+        }
+    }
 }
 
 /// `asset name = "path"` (#1883, slice 1a): one static file, served by the
@@ -5498,5 +5589,87 @@ mod stream_path_tests {
         ] {
             assert!(!is_iso_date(bad), "{bad:?}");
         }
+    }
+}
+
+#[cfg(test)]
+mod commons_item_accessor_tests {
+    use super::*;
+
+    /// Parses `src` as a commons and returns its items in source order.
+    fn items(src: &str) -> Vec<CommonsItem> {
+        let tokens = crate::lexer::tokenize(src).expect("tokenize");
+        match crate::parser::parse_unit(&tokens, src).expect("parse") {
+            SourceUnit::Commons(c) => c.items,
+            SourceUnit::Context(c) => c.items,
+            _ => panic!("expected a commons or a context"),
+        }
+    }
+
+    /// One item of each kind an accessor distinguishes, in a context so that
+    /// services and agents parse.
+    const SRC: &str = r#"context shop
+
+type Id = { n: Int }
+
+capability Clock {
+  fn now() -> Effect[Int]
+}
+
+service greeter {
+  on call(name: String) -> Effect[String] {
+    Effect.pure(name)
+  }
+}
+
+agent Counter {
+  key id: String
+  store hits: Cell[Int]
+  on call bump() -> Effect[()] {
+    Effect.pure(())
+  }
+}
+"#;
+
+    #[test]
+    fn each_accessor_answers_for_its_own_kind_only() {
+        let items = items(SRC);
+        let kinds: Vec<(bool, bool, bool, bool, usize)> = items
+            .iter()
+            .map(|i| {
+                (
+                    i.as_service().is_some(),
+                    i.as_agent().is_some(),
+                    i.as_capability().is_some(),
+                    i.as_messages().is_some(),
+                    i.handlers().len(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            kinds,
+            vec![
+                (false, false, false, false, 0), // type
+                (false, false, true, false, 0),  // capability
+                (true, false, false, false, 1),  // service
+                (false, true, false, false, 1),  // agent
+            ]
+        );
+    }
+
+    #[test]
+    fn a_messages_block_answers_as_messages_and_nothing_else() {
+        let items = items(
+            r#"commons m
+
+messages "en" @reference {
+  "a" => "b"
+}
+"#,
+        );
+        assert_eq!(items.len(), 1);
+        assert!(items[0].as_messages().is_some());
+        assert!(items[0].as_service().is_none() && items[0].as_agent().is_none());
+        assert!(items[0].as_capability().is_none() && items[0].handlers().is_empty());
     }
 }
