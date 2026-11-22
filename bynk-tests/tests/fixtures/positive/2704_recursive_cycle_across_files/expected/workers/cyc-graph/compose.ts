@@ -7,7 +7,7 @@ export interface Env {
 }
 
 export function compose(env: Env) {
-  const deps = {  };
+  const deps = {};
   return {
     async dirs(d: handlers.Dir) {
       return handlers.dirs.call(d, deps);

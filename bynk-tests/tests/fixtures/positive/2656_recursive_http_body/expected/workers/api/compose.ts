@@ -7,7 +7,7 @@ export interface Env {
 }
 
 export function compose(env: Env) {
-  const deps = {  };
+  const deps = {};
   return {
     async http_POST_chains(body: handlers.Chain) {
       return handlers.chains.http_POST_chains(body, deps);

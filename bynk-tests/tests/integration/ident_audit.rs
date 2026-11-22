@@ -33,20 +33,12 @@ struct TextClass {
 
 const OWNER: &str = "1A.40";
 
-const TEXT_CLASSES: &[TextClass] = &[
-    TextClass {
-        name: "rendered literal",
-        matches: is_rendered_literal,
-        reason: "a pre-rendered default, zero or wire literal (`\"\"`, `0`, `[]`, `{ kind: \"None\" }`)",
-        owner: OWNER,
-    },
-    TextClass {
-        name: "predicate, call or cast text",
-        matches: is_rendered_expression,
-        reason: "a rendered predicate, call, comparison or cast (`!(..)`, `f(x)`, `a === b`, `(x as T)`)",
-        owner: OWNER,
-    },
-];
+const TEXT_CLASSES: &[TextClass] = &[TextClass {
+    name: "predicate, call or cast text",
+    matches: is_rendered_expression,
+    reason: "a rendered predicate, call, comparison or cast (`!(..)`, `f(x)`, `a === b`, `(x as T)`)",
+    owner: OWNER,
+}];
 
 /// Whether `text` has `await` as a whole word.
 fn has_await_word(text: &str) -> bool {
@@ -112,6 +104,8 @@ fn is_rendered_literal(t: &str) -> bool {
 }
 
 /// Expression text that is not a literal: it carries an operator, a call, a cast or a ternary.
+/// (The literal shapes are no longer a class of their own, but this matcher still tells a literal
+/// from the text it is not, until 1A.40c deletes the class.)
 fn is_rendered_expression(t: &str) -> bool {
     !is_rendered_literal(t)
         && ["(", " === ", " >= ", " + ", " as ", " ? ", " => "]

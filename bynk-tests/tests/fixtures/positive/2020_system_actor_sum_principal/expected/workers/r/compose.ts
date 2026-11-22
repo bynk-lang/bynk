@@ -9,7 +9,7 @@ export interface Env {
 }
 
 export function compose(env: Env) {
-  const deps = {  };
+  const deps = {};
   return {
     async http_GET(request: globalThis.Request) {
       let __who: any = undefined;

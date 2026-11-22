@@ -8,7 +8,7 @@ export interface Env {
 }
 
 export function compose(env: Env) {
-  const deps = {  };
+  const deps = {};
   return {
     async lookup(o: Option<number>) {
       return handlers.lookup.call(o, deps);
