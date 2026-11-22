@@ -236,6 +236,12 @@ fn render(title: String, content: Html) -> Html {
 
 - `\(style)` sits in a stylesheet link, which loads code, so it names the
   asset `style` and is filled at compile time. It is not a field (§5.2).
+  A placeholder in a code-loading attribute names an asset in scope; anywhere
+  else it names a field. A name that is both a field and an asset in scope is
+  refused wherever it appears (`bynk.template.ambiguous_placeholder`), and an
+  asset name in an ordinary context is an unknown placeholder, with a note
+  naming the asset. So renaming an asset, or adding a field, can never
+  silently change what a placeholder binds to: it is a compile error instead.
 - `\(title)` appears twice, both times as element text, so `String` is
   accepted. `\(home)` is a URL attribute and takes `Href`. `\(content)` is
   element text and takes `Html` as is.
@@ -329,7 +335,7 @@ the tokeniser state at each placeholder. That state is the context:
 | Quoted URL attribute, whole value | `Href` | escaped with `escapeAttr` |
 | Quoted URL attribute, after a fixed relative or safe-scheme prefix | the scalars above | `percentEncode()`, then `escapeAttr` |
 | Code-loading attribute | an `Asset` (a name in scope; an `Asset` expression in a fragment) | its `.url`, filled at compile time in a template |
-| `<script type="application/json">` whole body | a codable value | JSON, with `<`, `>`, `&` as `<`, `>`, `&` (slice 6) |
+| `<script type="application/json">` whole body | a codable value | JSON, with `<`, `>`, `&` as `\u003c`, `\u003e`, `\u0026` (slice 6) |
 | Anything else | nothing: refused | |
 
 URL attributes are `href`, `src`, `action`, `formaction`, `poster`, `cite`,
@@ -337,8 +343,11 @@ URL attributes are `href`, `src`, `action`, `formaction`, `poster`, `cite`,
 the rest of the list Go's `html/template` uses for the same purpose.
 Code-loading attributes are `<script src>`, `<link href>` unless `rel` is
 literally a navigational value (`canonical`, `alternate`, `icon`, `prev`,
-`next`, `author`, `license`), `<base href>`, `<object data>` and
-`<embed src>`. They decide what code a page runs, so only code the service
+`next`, `author`, `license`), `<base href>`, `<object data>`,
+`<embed src>`, and SVG's `<script href>` and `<script xlink:href>`. The SVG
+entries cannot be reached while placeholders inside `<svg>` are refused; they
+are listed so that admitting foreign content later cannot open them by
+default. They decide what code a page runs, so only code the service
 ships may fill them.
 
 Refused, each with its own diagnostic and a note naming the fix:
@@ -349,7 +358,8 @@ Refused, each with its own diagnostic and a note naming the fix:
 - a placeholder in a tag name, an attribute name, a comment, a doctype or a
   CDATA section;
 - a placeholder in `<meta content>` when the element has `http-equiv`;
-- a placeholder inside `<svg>` or `<math>`;
+- a placeholder inside `<svg>` or `<math>`, or an `<svg>` or `<math>`
+  subtree left open at the end of a template or fragment (§5.3);
 - `srcset` and `imagesrcset`.
 
 A name used in several places must satisfy every context it appears in. A
@@ -363,7 +373,30 @@ tag, an attribute, a comment, or raw or RCDATA text. So an `Html` value can
 never leave a parent page in another state. Element balance is not required:
 `html"<ul>"` is a valid fragment, as the example in §4.2 needs.
 
-A template file follows the same rule.
+Foreign content is the exception, because it is tree-builder state, not
+tokeniser state. Inside `<svg>` or `<math>` the tree builder does not switch
+the tokeniser to raw text or RCDATA for `<script>`, `<style>` or `<title>`, it
+reads `<![CDATA[`, and SVG's `<script href>` loads code. A fragment checked
+from the data state cannot see that a parent opened `<svg>`, so
+`Html.join([html"<svg>", html"<script href=\"\(h)\"></script>", html"</svg>"])`
+would pass a rule about tokeniser state alone. So:
+
+- every `<svg>` or `<math>` a template or fragment opens must be closed in the
+  same template or fragment, and an `</svg>` or `</math>` with no opener in it
+  is refused;
+- inside such a subtree, the checker follows the foreign-content rules above
+  to find its end, and refuses any placeholder;
+- in the first version, a subtree may not contain `<foreignObject>`,
+  `<annotation-xml>`, `<desc>` or `<title>` in SVG, or any HTML element that
+  makes the tree builder leave foreign content (`<p>`, `<div>`, `<b>` and the
+  rest of the WHATWG list), so that counting open and close tags matches what
+  the tree builder does.
+
+An `Html` value can therefore never end inside foreign content, and composition
+cannot place one there. Static inline icons (`<svg>…</svg>` with no
+placeholders) keep working.
+
+A template file follows the same rules.
 
 ### 5.4 `Href`
 
@@ -380,10 +413,21 @@ A template file follows the same rule.
 - `Href.root` is `/`.
 
 A partial URL such as `href="/orders/\(id)"` is common. After a literal prefix
-that is relative (starts with `/` but not `//`, or with `./`, `?` or `#`) or
-starts with `http://` or `https://`, a scalar is accepted and percent-encoded
-with the existing `percentEncode()` (ADR 0659 A). That encodes `/`, so a value
-cannot turn `/` into `//evil.example`.
+that is relative (starts with `/` but not `//`, or with `./`, `?` or `#`), or
+that is `http://` or `https://` followed by a host and then `/`, `?` or `#`, a
+scalar is accepted and percent-encoded with the existing `percentEncode()`
+(ADR 0659 A). That encodes `/`, `:`, `@` and `%`, so a value cannot turn `/`
+into `//evil.example`, and the host is always the author's: a bare
+`https://\(x)` or `https://example.com\(x)` is refused, since the value would
+choose or extend the host.
+
+`percentEncode()` keeps `.`, so a value of `.` or `..` that fills a whole path
+segment is still a dot segment: `/orders/\(id)` with `id` = `..` resolves to
+`/`, and `/orders/\(id)/cancel` to `/cancel`. Encoding cannot fix this, since
+the URL standard also reads `%2e` as a dot. It stays on the same origin, so it
+is not XSS, but it can point a link or form at another of the service's paths.
+It is a known limit (§10); a field typed as `Int` or a refinement that excludes
+dots cannot produce it.
 
 ## 6. Emission
 
@@ -471,7 +515,7 @@ would surprise people, so it is never the default.
 | Quoted attribute | breaking out with `"` or `'` | `escapeAttr` (covers both, and `` ` ``) |
 | Unquoted attribute | breaking out with a space | refused |
 | URL attribute | `javascript:`, `data:`, `java\tscript:` | `Href` only; `Href.of` refuses |
-| Partial URL | `//evil.example`, `../` tricks | safe prefix required; value percent-encoded |
+| Partial URL | `//evil.example`, a host chosen by the value | safe prefix, with a fixed host when absolute, required; value percent-encoded (`.` and `..` segments are a known limit) |
 | Code-loading attribute | a script from the attacker's origin | `Asset` only |
 | `<script>`, `on*` | code injection | refused |
 | `<style>`, `style` | CSS injection, exfiltration | refused |
@@ -479,7 +523,7 @@ would surprise people, so it is never the default.
 | Comment, tag or attribute name | structure injection | refused |
 | `<meta http-equiv>` | refresh to `javascript:` | refused |
 | `srcdoc` | a nested document | refused |
-| SVG, MathML | different parsing rules | refused |
+| SVG, MathML | different parsing rules; SVG `<script href>` | a placeholder inside, or a subtree left open across fragments, refused |
 
 **Known limits, stated in the docs:**
 
@@ -491,13 +535,16 @@ would surprise people, so it is never the default.
   does not prevent it; it is noted, not solved.
 - `Href` allows any `https` host. That is not XSS, but a link to a hostile site
   is possible when a value chooses the host.
+- In a partial URL, a value of `.` or `..` filling a whole path segment moves
+  the URL to another path on the same origin (§5.4). Not XSS; typing the field
+  as `Int` or a refinement without dots avoids it.
 
 ## 11. Slices
 
 | # | Slice | Depends on |
 |---|---|---|
 | 0 | Settle this doc; land the four ADRs (§12) | — |
-| 1 | `Html` in `bynk.html`; the `template` declaration and `fill`; the tokeniser and the context model for element text, RCDATA and quoted attributes; every refusal; the editor reads template text | 0, #3924 |
+| 1 | `Html` in `bynk.html`; the `template` declaration and `fill`; placeholder recognition, including `\(` that is not a placeholder (Q1); the tokeniser and the context model for element text, RCDATA and quoted attributes; every refusal, including foreign-content balance (§5.3); the editor reads template text | 0, #3924 |
 | 2 | `Href`, URL and code-loading attributes, partial URLs | 1 |
 | 3 | `html"…"` and `html"""…"""` literals; `Html.join`, `Html.empty`, `Html.text`, `Html.trusted`, `toString` | 1 |
 | 4 | `Page` and `PageError`, with #3923's defaults | 1, #3923 |
@@ -537,6 +584,13 @@ It reads like a hole in an `html"…"` literal, so one rule covers both. `{{` is
 used by Vue, Alpine, Angular and Handlebars, which may share the file; `\(` is
 rare in HTML and appears mainly in inline scripts, where placeholders are
 refused anyway. A bare name keeps the file free of Bynk expressions.
+Only `\(` followed by a name and `)` is a placeholder, and only when its
+backslash does not follow another backslash. Any other `\(` is literal text,
+and the file has no other escapes, so MathJax's `\(x^2\)`, a regex such as
+`/\(/` in an inline script, and `\\(` all pass through unchanged. A literal
+`\(name)` in text or an attribute is written with a character reference,
+`&#92;(name)`. In raw text a placeholder-shaped `\(name)` is refused like any
+placeholder there, with a note to rewrite it.
 Rejected: `{{name}}`, which authors use today; migration is a find-and-replace
 either way, and the clash is permanent.
 
