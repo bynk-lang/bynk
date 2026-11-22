@@ -224,35 +224,44 @@ struct FakeHyperdrive<'s> {
 }
 
 impl FakeHyperdrive<'_> {
-    fn answer<T>(&self, line: String, ok: T) -> Result<T, String> {
+    fn answer<T>(&self, line: String, ok: T) -> Result<T, crate::cloudflare::CloudflareError> {
         if self.scratch.call(&line) {
             let n = self.scratch.calls_so_far();
-            return Err(format!("Cloudflare answered 500 to call {n}"));
+            return Err(format!("Cloudflare answered 500 to call {n}").into());
         }
         Ok(ok)
     }
 }
 
 impl hyperdrive::HyperdriveApi for FakeHyperdrive<'_> {
-    fn create(&self, name: &str, origin: &hyperdrive::Origin) -> Result<String, String> {
+    fn create(
+        &self,
+        name: &str,
+        origin: &hyperdrive::Origin,
+    ) -> Result<String, crate::cloudflare::CloudflareError> {
         self.answer(
             format!("hyperdrive create {name} {}", origin.host),
             format!("hd-{name}"),
         )
     }
 
-    fn update(&self, id: &str, name: &str, origin: &hyperdrive::Origin) -> Result<(), String> {
+    fn update(
+        &self,
+        id: &str,
+        name: &str,
+        origin: &hyperdrive::Origin,
+    ) -> Result<(), crate::cloudflare::CloudflareError> {
         self.answer(format!("hyperdrive update {id} {name} {}", origin.host), ())
     }
 
-    fn name_of(&self, id: &str) -> Result<Option<String>, String> {
+    fn name_of(&self, id: &str) -> Result<Option<String>, crate::cloudflare::CloudflareError> {
         self.answer(
             format!("hyperdrive get {id}"),
             Some(format!("{id}-on-account")),
         )
     }
 
-    fn delete(&self, id: &str) -> Result<(), String> {
+    fn delete(&self, id: &str) -> Result<(), crate::cloudflare::CloudflareError> {
         self.answer(format!("hyperdrive delete {id}"), ())
     }
 }

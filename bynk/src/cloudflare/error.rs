@@ -377,3 +377,81 @@ mod tests {
 
     use super::super::api::VectorizeOp;
 }
+
+/// Any failure of a call to Cloudflare (#4043, Decision E): a wrangler call, a REST call, or a
+/// missing credential. Its `Display` is the text bynk printed before 1D.3. Typed errors stop at
+/// the client boundary: above it, each caller's own `format!` and `DeployFailure` are unchanged.
+#[derive(Debug)]
+pub(crate) enum CloudflareError {
+    Wrangler(WranglerError),
+    Rest(super::rest::RestError),
+    /// A missing credential, in the words of the purpose that needed it.
+    Credentials(String),
+    /// A failure stated in words: an answer that succeeded but could not be used (`the account
+    /// has no workers.dev subdomain`), or the TLS roots that could not be loaded.
+    Other(String),
+}
+
+impl CloudflareError {
+    /// The REST failure, when it is one.
+    pub(crate) fn rest(&self) -> Option<&super::rest::RestError> {
+        match self {
+            CloudflareError::Rest(e) => Some(e),
+            _ => None,
+        }
+    }
+
+    /// The status Cloudflare answered with, when a REST call was answered.
+    pub(crate) fn status(&self) -> Option<u16> {
+        self.rest().and_then(super::rest::RestError::status)
+    }
+
+    /// Whether the token lacks the permission ([`super::rest::RestError::is_denied`]).
+    pub(crate) fn is_denied(&self) -> bool {
+        self.rest().is_some_and(super::rest::RestError::is_denied)
+    }
+}
+
+impl fmt::Display for CloudflareError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            CloudflareError::Wrangler(e) => e.fmt(f),
+            CloudflareError::Rest(e) => e.fmt(f),
+            CloudflareError::Credentials(s) | CloudflareError::Other(s) => f.write_str(s),
+        }
+    }
+}
+
+impl std::error::Error for CloudflareError {}
+
+impl From<WranglerError> for CloudflareError {
+    fn from(e: WranglerError) -> Self {
+        CloudflareError::Wrangler(e)
+    }
+}
+
+impl From<super::rest::RestError> for CloudflareError {
+    fn from(e: super::rest::RestError) -> Self {
+        CloudflareError::Rest(e)
+    }
+}
+
+impl From<String> for CloudflareError {
+    fn from(s: String) -> Self {
+        CloudflareError::Other(s)
+    }
+}
+
+/// Above the client boundary a caller's own error is still its text (`DeployFailure`, a
+/// revert's `String`): `?` carries a typed error up as exactly what it prints.
+impl From<CloudflareError> for String {
+    fn from(e: CloudflareError) -> Self {
+        e.to_string()
+    }
+}
+
+impl From<&str> for CloudflareError {
+    fn from(s: &str) -> Self {
+        CloudflareError::Other(s.to_string())
+    }
+}

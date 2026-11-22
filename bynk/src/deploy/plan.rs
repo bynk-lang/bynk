@@ -2568,7 +2568,7 @@ pub(crate) mod tests {
             &self,
             kind: KindId,
             jurisdiction: Option<&str>,
-        ) -> Result<BTreeSet<String>, String> {
+        ) -> Result<BTreeSet<String>, crate::cloudflare::CloudflareError> {
             self.asked
                 .borrow_mut()
                 .push((kind, jurisdiction.map(str::to_string)));

@@ -565,7 +565,11 @@ mod tests {
     fn a_database_on_the_account_is_reused_and_one_not_read_is_left_alone() {
         struct Holds;
         impl on_account::Listings for Holds {
-            fn names(&self, _: KindId, _: Option<&str>) -> Result<BTreeSet<String>, String> {
+            fn names(
+                &self,
+                _: KindId,
+                _: Option<&str>,
+            ) -> Result<BTreeSet<String>, crate::cloudflare::CloudflareError> {
                 Ok(BTreeSet::from(["shop-new".to_string()]))
             }
         }

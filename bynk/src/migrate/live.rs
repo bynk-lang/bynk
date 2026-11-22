@@ -1,229 +1,17 @@
 //! The live side of `bynk migrate sweep` (state-migrations S4, #2259
-//! Decisions B and D): Cloudflare's REST API and the deployed Workers over
-//! HTTPS, and `wrangler secret put`/`delete` for the run's key.
+//! Decisions B and D): the sweep's reads of Cloudflare's REST API, the
+//! deployed Workers over HTTPS, and `wrangler secret put`/`delete` for the
+//! run's key. The REST client itself is `cloudflare::rest` (1D.3c).
 
 use std::path::PathBuf;
-use std::sync::Arc;
-use std::time::Duration;
 
 use super::sweep::{Cloudflare, Namespace, Secrets, Wake};
-use crate::cloudflare::CloudflareApi;
+use crate::cloudflare::{CloudflareApi, CloudflareError};
 
-pub(crate) const API: &str = "https://api.cloudflare.com/client/v4";
-
-/// The credentials the REST calls need, from the variables Wrangler itself
-/// reads in CI. Wrangler's OAuth login cannot be reused here.
-pub(crate) struct Credentials {
-    pub token: String,
-    pub account: String,
-}
-
-impl Credentials {
-    /// Both variables, or a message naming whichever is missing.
-    pub(crate) fn from_env() -> Result<Self, String> {
-        Self::from_env_for(
-            "sweep",
-            "an API token with \"Workers Scripts: Edit\" (the listings need read access, \
-             and `wrangler` uses the same token to set and delete the sweep's key)",
-        )
-    }
-
-    /// [`Credentials::from_env`] for another use: `purpose` finishes "set … to"
-    /// and `needs` describes the token the use needs, in the message.
-    pub(crate) fn from_env_for(purpose: &str, needs: &str) -> Result<Self, String> {
-        let get = |name: &str| std::env::var(name).ok().filter(|v| !v.trim().is_empty());
-        match (get("CLOUDFLARE_API_TOKEN"), get("CLOUDFLARE_ACCOUNT_ID")) {
-            (Some(token), Some(account)) => Ok(Credentials { token, account }),
-            (token, account) => {
-                let missing: Vec<&str> = [
-                    token.is_none().then_some("CLOUDFLARE_API_TOKEN"),
-                    account.is_none().then_some("CLOUDFLARE_ACCOUNT_ID"),
-                ]
-                .into_iter()
-                .flatten()
-                .collect();
-                Err(format!(
-                    "set {} to {purpose}: {needs} and the account it belongs to",
-                    missing.join(" and ")
-                ))
-            }
-        }
-    }
-}
-
-/// An HTTPS agent over rustls (ring) with the operating system's roots.
-pub(crate) fn agent() -> Result<ureq::Agent, String> {
-    let roots = rustls_native_certs::load_native_certs();
-    let certs: Vec<ureq::tls::Certificate<'static>> = roots
-        .certs
-        .iter()
-        .map(|c| ureq::tls::Certificate::from_der(c.as_ref()).to_owned())
-        .collect();
-    if certs.is_empty() {
-        return Err(format!(
-            "could not load the system's TLS certificate roots{}",
-            roots
-                .errors
-                .first()
-                .map(|e| format!(": {e}"))
-                .unwrap_or_default()
-        ));
-    }
-    let tls = ureq::tls::TlsConfig::builder()
-        .provider(ureq::tls::TlsProvider::Rustls)
-        .root_certs(ureq::tls::RootCerts::new_with_certs(&certs))
-        .unversioned_rustls_crypto_provider(Arc::new(rustls::crypto::ring::default_provider()))
-        .build();
-    Ok(ureq::Agent::config_builder()
-        .tls_config(tls)
-        .http_status_as_error(false)
-        .timeout_global(Some(Duration::from_secs(60)))
-        .build()
-        .new_agent())
-}
-
-/// Cloudflare's REST API.
-pub(crate) struct Rest {
-    pub agent: ureq::Agent,
-    pub credentials: Credentials,
-    /// [`API`], or a local stub in tests.
-    pub base: String,
-}
-
-impl Rest {
-    pub(crate) fn get(&self, path: &str) -> Result<serde_json::Value, String> {
-        let url = format!("{}/accounts/{}{path}", self.base, self.credentials.account);
-        self.fetch(&url, path, None)
-    }
-
-    /// [`Rest::get`] with one more request header (#3494: an R2 listing names
-    /// its jurisdiction in `cf-r2-jurisdiction`).
-    pub(crate) fn get_with_header(
-        &self,
-        path: &str,
-        header: (&str, &str),
-    ) -> Result<serde_json::Value, String> {
-        let url = format!("{}/accounts/{}{path}", self.base, self.credentials.account);
-        self.fetch(&url, path, Some(header))
-    }
-
-    /// A `GET` of a path that is not under the account (`/zones/…`), answered
-    /// as [`Rest::get`] is (#3302: a zone's Email Sending subdomains).
-    pub(crate) fn get_global(&self, path: &str) -> Result<serde_json::Value, String> {
-        self.fetch(&format!("{}{path}", self.base), path, None)
-    }
-
-    fn fetch(
-        &self,
-        url: &str,
-        path: &str,
-        header: Option<(&str, &str)>,
-    ) -> Result<serde_json::Value, String> {
-        let mut request = self.agent.get(url).header(
-            "Authorization",
-            &format!("Bearer {}", self.credentials.token),
-        );
-        if let Some((name, value)) = header {
-            request = request.header(name, value);
-        }
-        let mut response = request.call().map_err(|e| format!("GET {path}: {e}"))?;
-        let status = response.status().as_u16();
-        let text = response
-            .body_mut()
-            .read_to_string()
-            .map_err(|e| format!("GET {path}: {e}"))?;
-        let body: serde_json::Value = serde_json::from_str(&text)
-            .map_err(|e| format!("GET {path}: unreadable answer ({e})"))?;
-        if status != 200 || body.get("success") != Some(&serde_json::Value::Bool(true)) {
-            let errors = body
-                .get("errors")
-                .map(serde_json::Value::to_string)
-                .unwrap_or_default();
-            return Err(format!("GET {path}: Cloudflare answered {status} {errors}"));
-        }
-        Ok(body)
-    }
-}
-
-impl Rest {
-    /// A `POST` with a JSON body, answered as [`Rest::get`] is (#3073: the D1
-    /// query that reads a database's applied migrations).
-    pub(crate) fn post(
-        &self,
-        path: &str,
-        body: &serde_json::Value,
-    ) -> Result<serde_json::Value, String> {
-        self.send("POST", path, Some(body))
-    }
-
-    /// A `PUT` with a JSON body, answered as [`Rest::get`] is (#3319: replacing
-    /// a Hyperdrive config).
-    pub(crate) fn put(
-        &self,
-        path: &str,
-        body: &serde_json::Value,
-    ) -> Result<serde_json::Value, String> {
-        self.send("PUT", path, Some(body))
-    }
-
-    /// A `DELETE`, answered as [`Rest::get`] is (#3319: pruning a Hyperdrive
-    /// config).
-    pub(crate) fn delete(&self, path: &str) -> Result<serde_json::Value, String> {
-        self.send("DELETE", path, None)
-    }
-
-    /// A write to an account path. Errors name the method and path and what
-    /// Cloudflare answered, never the request body: a body can carry a secret.
-    fn send(
-        &self,
-        method: &str,
-        path: &str,
-        body: Option<&serde_json::Value>,
-    ) -> Result<serde_json::Value, String> {
-        let url = format!("{}/accounts/{}{path}", self.base, self.credentials.account);
-        let auth = format!("Bearer {}", self.credentials.token);
-        let mut response = match (method, body) {
-            ("POST", Some(b)) => self
-                .agent
-                .post(&url)
-                .header("Authorization", &auth)
-                .header("Content-Type", "application/json")
-                .send(b.to_string()),
-            ("PUT", Some(b)) => self
-                .agent
-                .put(&url)
-                .header("Authorization", &auth)
-                .header("Content-Type", "application/json")
-                .send(b.to_string()),
-            _ => self
-                .agent
-                .delete(&url)
-                .header("Authorization", &auth)
-                .call(),
-        }
-        .map_err(|e| format!("{method} {path}: {e}"))?;
-        let status = response.status().as_u16();
-        let text = response
-            .body_mut()
-            .read_to_string()
-            .map_err(|e| format!("{method} {path}: {e}"))?;
-        let body: serde_json::Value = serde_json::from_str(&text)
-            .map_err(|e| format!("{method} {path}: unreadable answer ({e})"))?;
-        if status != 200 || body.get("success") != Some(&serde_json::Value::Bool(true)) {
-            let errors = body
-                .get("errors")
-                .map(serde_json::Value::to_string)
-                .unwrap_or_default();
-            return Err(format!(
-                "{method} {path}: Cloudflare answered {status} {errors}"
-            ));
-        }
-        Ok(body)
-    }
-}
+pub(crate) use crate::cloudflare::Rest;
 
 impl Cloudflare for Rest {
-    fn namespaces(&self) -> Result<Vec<Namespace>, String> {
+    fn namespaces(&self) -> Result<Vec<Namespace>, CloudflareError> {
         let mut out = Vec::new();
         for page in 1.. {
             let body = self.get(&format!(
@@ -246,7 +34,7 @@ impl Cloudflare for Rest {
         Ok(out)
     }
 
-    fn stored_objects(&self, namespace: &str) -> Result<Vec<String>, String> {
+    fn stored_objects(&self, namespace: &str) -> Result<Vec<String>, CloudflareError> {
         let mut out = Vec::new();
         let mut cursor = String::new();
         loop {
@@ -274,7 +62,7 @@ impl Cloudflare for Rest {
         Ok(out)
     }
 
-    fn workers_dev_url(&self, script: &str) -> Result<Option<String>, String> {
+    fn workers_dev_url(&self, script: &str) -> Result<Option<String>, CloudflareError> {
         let enabled =
             self.get(&format!("/workers/scripts/{script}/subdomain"))?["result"]["enabled"]
                 .as_bool()
@@ -289,7 +77,7 @@ impl Cloudflare for Rest {
         Ok(Some(format!("https://{script}.{subdomain}.workers.dev")))
     }
 
-    fn last_code_deployment(&self, script: &str) -> Result<std::time::SystemTime, String> {
+    fn last_code_deployment(&self, script: &str) -> Result<std::time::SystemTime, CloudflareError> {
         // The list is paged (10 a page by default), and each sweep adds two
         // `secret` deployments, so a few sweeps push the code deployment off
         // the first page (#2279 review). Page back until one is in view.
@@ -309,7 +97,7 @@ impl Cloudflare for Rest {
                 break;
             }
         }
-        last_code_deployment_in(&all)
+        Ok(last_code_deployment_in(&all)?)
     }
 }
 
@@ -374,21 +162,29 @@ pub(crate) struct WranglerSecrets<'a> {
 }
 
 impl WranglerSecrets<'_> {
-    fn run(&self, verb: &str, script: &str, name: &str, stdin: &str) -> Result<(), String> {
+    fn run(
+        &self,
+        verb: &str,
+        script: &str,
+        name: &str,
+        stdin: &str,
+    ) -> Result<(), CloudflareError> {
         // The value goes on stdin, never argv (ADR 0195 D1); a `delete` sends nothing, so its
         // confirmation takes Wrangler's non-interactive default.
         self.api
             .named_secret(&self.scratch, verb, script, name, stdin)
-            .map_err(|e| e.said_or(&format!("wrangler secret {verb} failed")))
+            .map_err(|e| {
+                CloudflareError::Other(e.said_or(&format!("wrangler secret {verb} failed")))
+            })
     }
 }
 
 impl Secrets for WranglerSecrets<'_> {
-    fn put(&self, script: &str, name: &str, value: &str) -> Result<(), String> {
+    fn put(&self, script: &str, name: &str, value: &str) -> Result<(), CloudflareError> {
         self.run("put", script, name, value)
     }
 
-    fn delete(&self, script: &str, name: &str) -> Result<(), String> {
+    fn delete(&self, script: &str, name: &str) -> Result<(), CloudflareError> {
         self.run("delete", script, name, "")
     }
 }
@@ -447,17 +243,7 @@ pub(crate) mod tests {
     }
 
     pub(crate) fn rest(base: String) -> Rest {
-        Rest {
-            agent: ureq::Agent::config_builder()
-                .http_status_as_error(false)
-                .build()
-                .new_agent(),
-            credentials: Credentials {
-                token: "tok".into(),
-                account: "acct".into(),
-            },
-            base,
-        }
+        crate::cloudflare::rest::tests::rest(base)
     }
 
     /// The key goes to `wrangler secret put` on stdin, never argv, against the
@@ -480,7 +266,7 @@ pub(crate) mod tests {
             .unwrap();
         secrets.delete("shop-staging", "BYNK_MIGRATE_KEY").unwrap();
         let err = secrets.put("shop", "BAD", "x").unwrap_err();
-        assert_eq!(err, "nope");
+        assert_eq!(err.to_string(), "nope");
         assert_eq!(
             api.calls(),
             [
@@ -588,7 +374,7 @@ pub(crate) mod tests {
             std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_792_598_400)
         );
         let err = api.stored_objects("missing").unwrap_err();
-        assert!(err.contains("7003"), "{err}");
+        assert!(err.rest().is_some_and(|e| e.has_code(7003)), "{err}");
         let seen = seen.lock().unwrap();
         assert!(
             seen[0].starts_with(

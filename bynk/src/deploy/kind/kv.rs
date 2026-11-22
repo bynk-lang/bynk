@@ -850,7 +850,11 @@ mod tests {
     fn a_namespace_to_create_that_the_account_holds_is_noted_not_reused() {
         struct Holds;
         impl on_account::Listings for Holds {
-            fn names(&self, _: KindId, _: Option<&str>) -> Result<BTreeSet<String>, String> {
+            fn names(
+                &self,
+                _: KindId,
+                _: Option<&str>,
+            ) -> Result<BTreeSet<String>, crate::cloudflare::CloudflareError> {
                 Ok(BTreeSet::from(["shop".to_string()]))
             }
         }

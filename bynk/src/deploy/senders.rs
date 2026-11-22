@@ -19,7 +19,7 @@
 //! offline, as for a linked Secrets Store secret.
 
 use super::*;
-use crate::migrate::live::{self, Credentials, Rest};
+use crate::cloudflare::{CloudflareError, Rest};
 use bynk_driver::emsg;
 
 /// The account's zones and their Email Sending subdomains, as far as the check
@@ -27,11 +27,11 @@ use bynk_driver::emsg;
 /// client against a stub.
 pub(crate) trait SendingDomains {
     /// The id of the zone named exactly `name` on the account, if it has one.
-    fn zone_id(&self, name: &str) -> Result<Option<String>, String>;
+    fn zone_id(&self, name: &str) -> Result<Option<String>, CloudflareError>;
     /// Whether Email Sending is enabled on `domain` in zone `zone_id`: by an
     /// enabled subdomain of exactly that name, or an enabled wildcard
     /// (`*.base`) covering it.
-    fn sending_enabled(&self, zone_id: &str, domain: &str) -> Result<bool, String>;
+    fn sending_enabled(&self, zone_id: &str, domain: &str) -> Result<bool, CloudflareError>;
 }
 
 /// Cloudflare's REST API, for the zone and Email Sending listings.
@@ -42,26 +42,21 @@ pub(crate) struct RestSendingDomains {
 impl RestSendingDomains {
     /// A client for the account in `CLOUDFLARE_ACCOUNT_ID`, or a message
     /// naming the missing variable and what the token needs.
-    pub(crate) fn from_env() -> Result<Self, String> {
-        let credentials = Credentials::from_env_for(
-            "check an email sender domain",
-            "an API token that can read the zone and its Email Sending settings (a `wrangler login` session is not enough: the lookup calls Cloudflare's API directly)",
-        )?;
+    pub(crate) fn from_env() -> Result<Self, CloudflareError> {
         Ok(Self {
-            rest: Rest {
-                agent: live::agent()?,
-                credentials,
-                base: live::API.to_string(),
-            },
+            rest: crate::cloudflare::rest::for_purpose(
+                "check an email sender domain",
+                "an API token that can read the zone and its Email Sending settings (a `wrangler login` session is not enough: the lookup calls Cloudflare's API directly)",
+            )?,
         })
     }
 }
 
 impl SendingDomains for RestSendingDomains {
-    fn zone_id(&self, name: &str) -> Result<Option<String>, String> {
+    fn zone_id(&self, name: &str) -> Result<Option<String>, CloudflareError> {
         let body = self.rest.get_global(&format!(
             "/zones?name={name}&account.id={}&per_page=50",
-            self.rest.credentials.account
+            self.rest.account()
         ))?;
         Ok(body["result"]
             .as_array()
@@ -72,7 +67,7 @@ impl SendingDomains for RestSendingDomains {
             }))
     }
 
-    fn sending_enabled(&self, zone_id: &str, domain: &str) -> Result<bool, String> {
+    fn sending_enabled(&self, zone_id: &str, domain: &str) -> Result<bool, CloudflareError> {
         for page in 1.. {
             let body = self.rest.get_global(&format!(
                 "/zones/{zone_id}/email/sending/subdomains?per_page=100&page={page}"
@@ -137,13 +132,13 @@ fn zone_candidates(domain: &str) -> Vec<&str> {
 
 /// What the account answered, for a message: a 401 or 403 is the token lacking
 /// the permission, which is the one thing worth naming rather than echoing.
-fn explain(said: String) -> String {
-    if said.contains("answered 401") || said.contains("answered 403") {
+fn explain(said: CloudflareError) -> String {
+    if matches!(said.status(), Some(401 | 403)) {
         format!(
             "{said} (the token needs permission, on this account, to read the zone and its Email Sending settings)"
         )
     } else {
-        said
+        said.to_string()
     }
 }
 
@@ -258,7 +253,7 @@ mod tests {
     struct Fake {
         zones: Vec<(&'static str, &'static str, Vec<&'static str>)>,
         asked: RefCell<Vec<String>>,
-        refuse: Option<&'static str>,
+        refuse: Option<crate::cloudflare::RestError>,
     }
 
     impl Fake {
@@ -272,10 +267,10 @@ mod tests {
     }
 
     impl SendingDomains for Fake {
-        fn zone_id(&self, name: &str) -> Result<Option<String>, String> {
+        fn zone_id(&self, name: &str) -> Result<Option<String>, CloudflareError> {
             self.asked.borrow_mut().push(format!("zone {name}"));
-            if let Some(said) = self.refuse {
-                return Err(said.to_string());
+            if let Some(said) = &self.refuse {
+                return Err(said.clone().into());
             }
             Ok(self
                 .zones
@@ -283,7 +278,7 @@ mod tests {
                 .find(|(n, ..)| *n == name)
                 .map(|(_, id, _)| id.to_string()))
         }
-        fn sending_enabled(&self, zone_id: &str, domain: &str) -> Result<bool, String> {
+        fn sending_enabled(&self, zone_id: &str, domain: &str) -> Result<bool, CloudflareError> {
             self.asked
                 .borrow_mut()
                 .push(format!("sending {zone_id}/{domain}"));
@@ -399,7 +394,12 @@ mod tests {
     fn a_refused_lookup_names_the_permission_the_token_needs() {
         let (order, resources) = project(&[("shop", &[("EMAIL_MAIL", &["a@shop.example"])])]);
         let mut account = Fake::new(Vec::new());
-        account.refuse = Some("GET /zones: Cloudflare answered 403 [{\"code\":10000}]");
+        account.refuse = Some(crate::cloudflare::RestError::answered(
+            "GET",
+            "/zones",
+            403,
+            "[{\"code\":10000}]",
+        ));
         let problems = check_sender_domains(&order, &resources, &account).unwrap_err();
         assert!(
             problems[0].contains("needs permission") && problems[0].contains("Email Sending"),

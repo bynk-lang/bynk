@@ -25,8 +25,8 @@ use bynk_driver::emsg;
 use std::cell::Cell;
 use std::path::Path;
 
+use crate::cloudflare::Rest;
 use crate::cloudflare::{CloudflareApi, Exit, Failure};
-use crate::migrate::live::{self, Credentials, Rest};
 
 /// What the account says about one script's versions.
 #[derive(Debug, PartialEq, Eq)]
@@ -56,17 +56,10 @@ impl ScriptVersions for RestVersions {
             ),
             // Cloudflare's own answer, by status or by code, never a bare number that
             // an id or a message could happen to contain.
-            Err(said) if is_not_found(&said) => ScriptState::Absent,
-            Err(said) => ScriptState::Unknown(said),
+            Err(said) if said.status() == Some(404) || said.has_code(10007) => ScriptState::Absent,
+            Err(said) => ScriptState::Unknown(said.to_string()),
         }
     }
-}
-
-/// Whether a REST error says the script does not exist: an HTTP 404 answer, or
-/// Cloudflare's code 10007 (as [`Rest::get`] words them: `Cloudflare answered 404
-/// [...]`, with the `errors` array as JSON).
-fn is_not_found(said: &str) -> bool {
-    said.contains("Cloudflare answered 404 ") || said.contains("\"code\":10007")
 }
 
 /// Wrangler's code for "the Worker does not exist".
@@ -92,16 +85,13 @@ impl Watch {
     /// in `worker_dir`, in `environment`. `None` when the account cannot be asked,
     /// or already has a script of that name: then a failure is never forgiven.
     pub(crate) fn begin(worker_dir: &Path, environment: &str) -> Option<Self> {
-        let credentials = Credentials::from_env_for(
-            "confirm a first upload",
-            "an API token with \"Workers Scripts: Read\"",
-        )
-        .ok()?;
-        let scripts = RestVersions(Rest {
-            agent: live::agent().ok()?,
-            credentials,
-            base: live::API.to_string(),
-        });
+        let scripts = RestVersions(
+            crate::cloudflare::rest::for_purpose(
+                "confirm a first upload",
+                "an API token with \"Workers Scripts: Read\"",
+            )
+            .ok()?,
+        );
         Self::with(worker_dir, environment, Box::new(scripts))
     }
 
@@ -280,20 +270,28 @@ mod tests {
 
     #[test]
     fn only_cloudflares_own_not_found_reads_as_absent() {
-        assert!(is_not_found(
-            "GET /workers/scripts/x/versions: Cloudflare answered 404 [{\"code\":10007,\"message\":\"x\"}]"
-        ));
-        assert!(is_not_found(
-            "GET /y: Cloudflare answered 200 [{\"code\":10007}]"
-        ));
+        use crate::cloudflare::RestError;
+        let absent = |e: RestError| e.status() == Some(404) || e.has_code(10007);
+        assert!(absent(RestError::answered(
+            "GET",
+            "/workers/scripts/x/versions",
+            404,
+            "[{\"code\":10007,\"message\":\"x\"}]"
+        )));
+        assert!(absent(RestError::answered(
+            "GET",
+            "/y",
+            200,
+            "[{\"code\":10007}]"
+        )));
         // A number that merely appears (an id, a Ray ID, another code) is not it.
-        assert!(!is_not_found(
-            "GET /y: Cloudflare answered 500 [{\"code\":10404}]"
-        ));
-        assert!(!is_not_found(
-            "GET /y: ray 4045-LHR: Cloudflare answered 403 []"
-        ));
-        assert!(!is_not_found("GET /y: connection reset"));
+        assert!(!absent(RestError::answered(
+            "GET",
+            "/y",
+            500,
+            "[{\"code\":10404}]"
+        )));
+        assert!(!absent(RestError::answered("GET", "/y", 403, "[]")));
     }
 
     /// `settle` of a failed push that said `10007`, on an account that shows the

@@ -898,7 +898,8 @@ const REST_SHAPES: &[(&str, Option<(u16, &str)>)] = &[
     ("200, unreadable", Some((200, "<html>not json</html>"))),
 ];
 
-type RestRun = fn(&crate::migrate::live::Rest) -> Result<serde_json::Value, String>;
+type RestRun =
+    fn(&crate::cloudflare::Rest) -> Result<serde_json::Value, crate::cloudflare::RestError>;
 
 /// Every request shape the REST client sends.
 const REST_METHODS: &[(&str, RestRun)] = &[
@@ -913,6 +914,7 @@ const REST_METHODS: &[(&str, RestRun)] = &[
         r.post(
             "/d1/database/d/query",
             &serde_json::json!({"sql": "SELECT 1"}),
+            crate::cloudflare::Idempotent::Yes,
         )
     }),
     ("PUT", |r| {
@@ -953,7 +955,10 @@ fn rest_messages() -> String {
             let result = match result {
                 Ok(value) => format!("ok {value}"),
                 // The OS's number for a refused connection differs (111 on Linux, 61 on macOS).
-                Err(e) => format!("error {}", os_error_number(&e.replace(&base, "<base>"))),
+                Err(e) => format!(
+                    "error {}",
+                    os_error_number(&e.to_string().replace(&base, "<base>"))
+                ),
             };
             for (i, line) in result.lines().enumerate() {
                 out.push_str(if i == 0 { "   -> " } else { "      " });
@@ -981,6 +986,11 @@ fn the_rest_client_keeps_its_messages() {
     );
 }
 
+/// The old destinations error's shape, for its pinned debug form.
+#[derive(Debug)]
+#[allow(dead_code)]
+struct Failed(String);
+
 /// What each REST consumer says when neither credential is set: the run's environment, so this
 /// is checked only where neither is set (CI, and a shell without them).
 #[test]
@@ -998,51 +1008,62 @@ fn each_rest_consumer_names_its_purpose_when_credentials_are_missing() {
     };
     said(
         "sweep (Credentials::from_env)",
-        crate::migrate::live::Credentials::from_env()
+        crate::cloudflare::rest::for_purpose("sweep", crate::migrate::SWEEP_TOKEN_NEEDS)
             .err()
+            .map(|e| e.to_string())
             .unwrap_or_default(),
     );
     said(
         "Hyperdrive",
         super::hyperdrive::RestHyperdrive::from_env()
             .err()
+            .map(|e| e.to_string())
             .unwrap_or_default(),
     );
     said(
         "email destinations",
+        // The fixture pinned the old `LookupError`'s debug form around the message; the message
+        // inside it is what a user reads.
         format!(
             "{:?}",
-            super::destinations::RestDestinations::from_env().err()
+            super::destinations::RestDestinations::from_env()
+                .err()
+                .map(|e| Failed(e.to_string()))
         ),
     );
     said(
         "account listings",
         super::on_account::RestListings::from_env()
             .err()
+            .map(|e| e.to_string())
             .unwrap_or_default(),
     );
     said(
         "email senders",
         super::senders::RestSendingDomains::from_env()
             .err()
+            .map(|e| e.to_string())
             .unwrap_or_default(),
     );
     said(
         "Secrets Store",
         super::linked::RestStores::from_env()
             .err()
+            .map(|e| e.to_string())
             .unwrap_or_default(),
     );
     said(
         "AI Search",
         super::linked::RestAiSearch::from_env()
             .err()
+            .map(|e| e.to_string())
             .unwrap_or_default(),
     );
     said(
         "mTLS certificates",
         super::linked::RestMtls::from_env()
             .err()
+            .map(|e| e.to_string())
             .unwrap_or_default(),
     );
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
