@@ -133,6 +133,7 @@ fn ready_json_names_each_context_once_it_answers_and_is_removed_on_stop() {
 
     let dev_log = dir.join("bynk-dev.log");
     let (dev_stdout, dev_stderr) = dev_child::log_to(&dev_log);
+    dev_child::warm_wrangler();
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_bynk"));
     std::os::unix::process::CommandExt::process_group(&mut cmd, 0);
     let mut dev = Group(

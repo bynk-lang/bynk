@@ -292,10 +292,8 @@ fn run_smoke_with(
     let out_log = fs::File::create(&log_path).unwrap();
     let err_log = out_log.try_clone().unwrap();
     let spawned = wrangler::Wrangler::spawn(
-        tools::base_command("npx")
+        wrangler::npx()
             .args([
-                "-y",
-                wrangler::SPEC,
                 "dev",
                 "--port",
                 &port.to_string(),
@@ -1100,10 +1098,8 @@ const LOCAL_SECRET_VALUE: &str = "workerd-smoke-secret";
 /// Worker reads in the local Secrets Store beside its configuration, where
 /// `wrangler dev` finds it. `None` on success.
 fn seed_local_secret(dir: &std::path::Path) -> Option<String> {
-    let created = tools::base_command("npx")
+    let created = wrangler::npx()
         .args([
-            "-y",
-            wrangler::SPEC,
             "secrets-store",
             "secret",
             "create",
@@ -1427,16 +1423,8 @@ fn d1_migrations_apply_to_the_emitted_config_on_workerd() {
         ),
     ];
     let apply = |dir: &std::path::Path| -> Option<String> {
-        let out = tools::base_command("npx")
-            .args([
-                "-y",
-                wrangler::SPEC,
-                "d1",
-                "migrations",
-                "apply",
-                "D1_ITEMS",
-                "--local",
-            ])
+        let out = wrangler::npx()
+            .args(["d1", "migrations", "apply", "D1_ITEMS", "--local"])
             .current_dir(dir)
             .stdin(Stdio::null())
             .output()
