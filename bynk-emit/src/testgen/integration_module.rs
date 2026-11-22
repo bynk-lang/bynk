@@ -815,8 +815,7 @@ pub(super) fn emit_integration_module(
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_else(|| "module.ts".to_string());
-    debug_assert_splice_order(&stmts);
-    let program = TsProgram { stmts };
+    let program = checked_program(stmts);
     let printed = bynk_ts::print_multi_source(&program, map, &module_file);
     Some((
         module_path.clone(),

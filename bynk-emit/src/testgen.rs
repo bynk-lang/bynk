@@ -1,7 +1,7 @@
 //! Test-harness generation: `suite`/`test integration` processing, the test entry
 //! (`tests/main.ts`), the discovery manifest and the embedded test-runtime fragments. The
 //! fragments are authored as modules under `bynk-emit/runtime/src/testing/` and reach the harness
-//! only through [`runtime_splice`] (1B.3a, #4047).
+//! only through `runtime_splice` (1B.3a, #4047).
 //!
 //! 1B.2a (#4028, ADR "Where test generation lives"): moved here from the driver's
 //! `project/tests_emit{.rs,/}`, beside `emitter`. It reads no file, spawns no process and holds

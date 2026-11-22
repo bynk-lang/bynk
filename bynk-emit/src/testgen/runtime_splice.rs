@@ -12,7 +12,7 @@
 //! byte-identical. Moving to imports is a change to [`splice`] once 1B.5 derives the test modules'
 //! imports.
 
-use bynk_ts::{TsBindingName, TsExpr, TsLit, TsStmt, TsType};
+use bynk_ts::{TsBindingName, TsExpr, TsLit, TsProgram, TsStmt, TsType};
 
 use super::test_runtime_modules::TEST_RUNTIME_MODULES;
 
@@ -132,7 +132,7 @@ pub(super) fn splice(module: TestRuntimeModule) -> TsStmt {
 /// Debug check (Decision C): every fragment spliced into `stmts` comes after each fragment it
 /// uses names from, and every such fragment is spliced at all. Today's order, "expectation first",
 /// was implicit in where each call sat; this makes it a checked rule.
-pub(super) fn debug_assert_splice_order(stmts: &[TsStmt]) {
+fn debug_assert_splice_order(stmts: &[TsStmt]) {
     if !cfg!(debug_assertions) {
         return;
     }
@@ -160,6 +160,12 @@ pub(super) fn debug_assert_splice_order(stmts: &[TsStmt]) {
             }
         }
     }
+}
+
+/// A program of `stmts`, after checking that its spliced fragments are in dependency order.
+pub(super) fn checked_program(stmts: Vec<TsStmt>) -> TsProgram {
+    debug_assert_splice_order(&stmts);
+    TsProgram { stmts }
 }
 
 /// #2138: `__bynkRunId`, the value `run.id` reads. A remote build's `system` module reads

@@ -497,7 +497,7 @@ mod tests {
         );
         assert_eq!(
             runtime("testing/property.ts").path(),
-            "bynk-emit/src/testgen/test_runtime/property.ts"
+            "bynk-emit/runtime/src/testing/property.ts"
         );
     }
 }
