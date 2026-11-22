@@ -110,6 +110,7 @@ impl ResourceKind for Kv {
     type Live<'a> = Option<&'a BTreeSet<String>>;
     /// The namespace id.
     type Bound = String;
+    type Change = TableChange<KvTable>;
 
     fn declared(r: &Resources) -> Vec<&str> {
         kv_bindings(r).collect()
@@ -281,14 +282,17 @@ impl ResourceKind for Kv {
 
     /// Deletes the namespace by its recorded id, and forgets it whether the delete removed it
     /// or found it gone (DECISION E). An orphan with no recorded id is left alone.
-    fn prune(cx: &mut ApplyCx<'_, '_, Kv>, orphan: &OrphanKv) -> Result<(), DeployFailure> {
+    fn prune(
+        cx: &StepCx<'_, '_, Kv>,
+        orphan: &OrphanKv,
+    ) -> Result<Option<Commit<Self::Change>>, DeployFailure> {
         let (worker, binding) = (orphan.worker.as_str(), orphan.binding());
         let Some(id) = cx
             .ledger()
             .recorded::<Kv>(worker, binding)
             .map(|kv| kv.id.clone())
         else {
-            return Ok(());
+            return Ok(None);
         };
         let what = match &orphan.binding {
             None => format!("the orphaned KV namespace for `{worker}`"),
@@ -296,18 +300,18 @@ impl ResourceKind for Kv {
         };
         delete_kv_namespace(cx.tools.provenance, &id, cx.tools.project_root)
             .map_err(|e| DeployFailure::driver(format!("could not delete {what}: {e}")))?;
-        cx.change(
-            |env| KvTable::remove(env, worker, binding),
+        Ok(Some(Commit::recorded(
+            TableChange::remove(worker, binding),
             &format!("deleted {what}"),
-        )
+        )))
     }
 
     /// Reuses the recorded id when [`should_trust_recorded_kv`]; otherwise creates the namespace
     /// under its current title and records it.
-    fn provision(
-        cx: &mut ApplyCx<'_, '_, Kv>,
-        binding: &str,
-    ) -> Result<Provisioned<String>, DeployFailure> {
+    fn provision<'r>(
+        cx: &StepCx<'_, '_, Kv>,
+        binding: Self::Decl<'r>,
+    ) -> Result<Provisioned<'r, Kv>, DeployFailure> {
         let (worker, environment) = (cx.worker, cx.environment);
         let recorded = cx
             .ledger()
@@ -315,9 +319,7 @@ impl ResourceKind for Kv {
             .map(|kv| kv.id.clone());
         if should_trust_recorded_kv(recorded.as_deref(), cx.live) {
             let id = recorded.expect("trust_recorded is only true when recorded is Some");
-            return Ok(Provisioned {
-                bound: Some((binding.to_string(), id)),
-            });
+            return Ok(Provisioned::bound(binding, id));
         }
         // #2059: the plan-time check covered only namespaces with no recorded id. One whose
         // recorded id has gone from the account is created again here, under its current title,
@@ -335,10 +337,8 @@ impl ResourceKind for Kv {
         )
         .map_err(|e| DeployFailure::driver(format!("could not create {what}: {e}")))?;
         // Recorded before the push, so an interrupted run never makes a second namespace.
-        cx.record(binding, KvNamespace::of(&id), &format!("created {what}"))?;
-        Ok(Provisioned {
-            bound: Some((binding.to_string(), id)),
-        })
+        let record = cx.recording(binding, KvNamespace::of(&id), &format!("created {what}"));
+        Ok(Provisioned::bound(binding, id).with(record))
     }
 
     fn materialise(
@@ -1025,7 +1025,7 @@ mod tests {
 
     #[test]
     fn a_trusted_recorded_namespace_is_bound_without_a_record_or_an_account_call() {
-        let mut lock = lock_of(&[("default", "shop", "KV", "bare")]);
+        let lock = lock_of(&[("default", "shop", "KV", "bare")]);
         let provenance = Provenance::Path("/nonexistent/wrangler".into());
         let tools = Tools {
             provenance: &provenance,
@@ -1035,40 +1035,36 @@ mod tests {
         // Unchecked (no live ids) and checked against an account that has it alike.
         for live in [None, Some(BTreeSet::from(["bare".to_string()]))] {
             let done = Kv::provision(
-                &mut ApplyCx {
+                &StepCx {
                     environment: "default",
                     worker: "shop",
                     project: &resources,
-                    lock: &mut lock,
-                    lock_path: Path::new("/nonexistent/bynk.deploy.lock"),
+                    lock: &lock,
                     live: live.as_ref(),
                     tools,
                 },
                 "KV",
             )
             .expect("nothing to create");
-            assert_eq!(
-                done,
-                Provisioned {
-                    bound: Some(("KV".to_string(), "bare".to_string()))
-                }
+            assert_eq!(done.bound, [("KV".to_string(), "bare".to_string())]);
+            assert!(
+                done.commits.is_empty() && done.then.is_none(),
+                "nothing to record"
             );
         }
     }
 
     #[test]
     fn pruning_an_orphan_with_no_recorded_id_does_nothing() {
-        let mut lock = DeployLock::default();
+        let lock = DeployLock::default();
         let provenance = Provenance::Path("/nonexistent/wrangler".into());
         let project = BTreeMap::new();
-        // The ledger path does not exist, so a write would fail the prune.
-        Kv::prune(
-            &mut ApplyCx {
+        let commit = Kv::prune(
+            &StepCx {
                 environment: "default",
                 worker: "gone",
                 project: &project,
-                lock: &mut lock,
-                lock_path: Path::new("/nonexistent/bynk.deploy.lock"),
+                lock: &lock,
                 live: None,
                 tools: Tools {
                     provenance: &provenance,
@@ -1080,8 +1076,8 @@ mod tests {
                 binding: None,
             },
         )
-        .expect("nothing to delete, so nothing is written");
-        assert_eq!(lock, DeployLock::default());
+        .expect("nothing to delete");
+        assert!(commit.is_none(), "so nothing is recorded");
     }
 
     #[test]
