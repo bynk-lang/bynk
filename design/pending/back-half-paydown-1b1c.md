@@ -1,5 +1,6 @@
 ---
 level: patch
+probes: ts_writes, ts_any
 changelog: Internal restructuring of the code generator; events, the envelope rule and subscriber failure isolation are decided once, and the Bundle root's event dispatch is laid out by the printer
 ---
 refactor(emit): events, the envelope and failure isolation get one home (1B.1c)
