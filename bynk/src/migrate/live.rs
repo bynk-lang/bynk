@@ -13,34 +13,32 @@ pub(crate) use crate::cloudflare::Rest;
 impl Cloudflare for Rest {
     fn namespaces(&self) -> Result<Vec<Namespace>, CloudflareError> {
         let mut out = Vec::new();
-        for page in 1.. {
-            let body = self.get(&format!(
-                "/workers/durable_objects/namespaces?per_page=1000&page={page}"
-            ))?;
-            let items = body["result"].as_array().cloned().unwrap_or_default();
-            let n = items.len();
-            out.extend(items.iter().filter_map(|ns| {
-                Some(Namespace {
-                    id: ns.get("id")?.as_str()?.to_string(),
-                    script: ns.get("script")?.as_str()?.to_string(),
-                    class: ns.get("class")?.as_str()?.to_string(),
-                })
-            }));
-            let pages = body["result_info"]["total_pages"].as_u64().unwrap_or(1);
-            if n == 0 || page >= pages {
-                break;
-            }
-        }
+        crate::cloudflare::paging::Numbered::TO_TOTAL.follow(
+            |page| -> Result<_, CloudflareError> {
+                let body = self.get(&format!(
+                    "/workers/durable_objects/namespaces?per_page=1000&page={page}"
+                ))?;
+                let items = body["result"].as_array().cloned().unwrap_or_default();
+                let n = items.len();
+                out.extend(items.iter().filter_map(|ns| {
+                    Some(Namespace {
+                        id: ns.get("id")?.as_str()?.to_string(),
+                        script: ns.get("script")?.as_str()?.to_string(),
+                        class: ns.get("class")?.as_str()?.to_string(),
+                    })
+                }));
+                Ok(crate::cloudflare::paging::Page::of(&body, n))
+            },
+        )?;
         Ok(out)
     }
 
     fn stored_objects(&self, namespace: &str) -> Result<Vec<String>, CloudflareError> {
         let mut out = Vec::new();
-        let mut cursor = String::new();
-        loop {
+        crate::cloudflare::paging::cursor(false, |cursor| -> Result<_, CloudflareError> {
             let mut path =
                 format!("/workers/durable_objects/namespaces/{namespace}/objects?limit=10000");
-            if !cursor.is_empty() {
+            if let Some(cursor) = cursor {
                 path.push_str(&format!("&cursor={cursor}"));
             }
             let body = self.get(&path)?;
@@ -51,14 +49,8 @@ impl Cloudflare for Rest {
                     out.push(id.to_string());
                 }
             }
-            cursor = body["result_info"]["cursor"]
-                .as_str()
-                .unwrap_or_default()
-                .to_string();
-            if cursor.is_empty() {
-                break;
-            }
-        }
+            Ok(body["result_info"]["cursor"].as_str().map(str::to_string))
+        })?;
         Ok(out)
     }
 
@@ -82,21 +74,21 @@ impl Cloudflare for Rest {
         // `secret` deployments, so a few sweeps push the code deployment off
         // the first page (#2279 review). Page back until one is in view.
         let mut all: Vec<serde_json::Value> = Vec::new();
-        for page in 1..=DEPLOYMENT_PAGES {
-            let body = self.get(&format!(
-                "/workers/scripts/{script}/deployments?per_page=50&page={page}"
-            ))?;
-            let items = body["result"]["deployments"]
-                .as_array()
-                .cloned()
-                .unwrap_or_default();
-            let n = items.len();
-            all.extend(items);
-            let pages = body["result_info"]["total_pages"].as_u64().unwrap_or(1);
-            if n == 0 || page >= pages || all.iter().any(|d| !is_secret_change(d)) {
-                break;
-            }
-        }
+        crate::cloudflare::paging::Numbered::capped(DEPLOYMENT_PAGES).follow(
+            |page| -> Result<_, CloudflareError> {
+                let body = self.get(&format!(
+                    "/workers/scripts/{script}/deployments?per_page=50&page={page}"
+                ))?;
+                let items = body["result"]["deployments"]
+                    .as_array()
+                    .cloned()
+                    .unwrap_or_default();
+                let n = items.len();
+                all.extend(items);
+                Ok(crate::cloudflare::paging::Page::of(&body, n)
+                    .done_if(all.iter().any(|d| !is_secret_change(d))))
+            },
+        )?;
         Ok(last_code_deployment_in(&all)?)
     }
 }

@@ -23,6 +23,7 @@ pub(crate) mod api;
 pub(crate) mod error;
 #[cfg(test)]
 pub(crate) mod fake;
+pub(crate) mod paging;
 pub(crate) mod process;
 pub(crate) mod rest;
 pub(crate) mod retry;

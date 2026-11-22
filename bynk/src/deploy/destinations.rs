@@ -104,14 +104,16 @@ pub(crate) fn list_all(
     account: &dyn DestinationAddresses,
 ) -> Result<Vec<Destination>, CloudflareError> {
     let mut out = Vec::new();
-    for page in 1.. {
+    crate::cloudflare::paging::Numbered::TO_TOTAL.follow(|page| -> Result<_, CloudflareError> {
         let got = account.page(page)?;
-        let empty = got.addresses.is_empty();
+        let read = crate::cloudflare::paging::Page {
+            entries: got.addresses.len(),
+            total_pages: Some(got.total_pages),
+            ..Default::default()
+        };
         out.extend(got.addresses);
-        if empty || page >= got.total_pages {
-            break;
-        }
-    }
+        Ok(read)
+    })?;
     Ok(out)
 }
 

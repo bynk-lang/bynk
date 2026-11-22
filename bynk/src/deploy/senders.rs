@@ -68,23 +68,21 @@ impl SendingDomains for RestSendingDomains {
     }
 
     fn sending_enabled(&self, zone_id: &str, domain: &str) -> Result<bool, CloudflareError> {
-        for page in 1.. {
-            let body = self.rest.get_global(&format!(
-                "/zones/{zone_id}/email/sending/subdomains?per_page=100&page={page}"
-            ))?;
-            let entries = body["result"].as_array().cloned().unwrap_or_default();
-            if entries.iter().any(|e| {
-                e["enabled"].as_bool() == Some(true)
-                    && e["name"].as_str().is_some_and(|n| covers(n, domain))
-            }) {
-                return Ok(true);
-            }
-            let pages = body["result_info"]["total_pages"].as_u64().unwrap_or(1);
-            if entries.is_empty() || page >= pages {
-                break;
-            }
-        }
-        Ok(false)
+        let mut found = false;
+        crate::cloudflare::paging::Numbered::TO_TOTAL.follow(
+            |page| -> Result<_, CloudflareError> {
+                let body = self.rest.get_global(&format!(
+                    "/zones/{zone_id}/email/sending/subdomains?per_page=100&page={page}"
+                ))?;
+                let entries = body["result"].as_array().cloned().unwrap_or_default();
+                found = entries.iter().any(|e| {
+                    e["enabled"].as_bool() == Some(true)
+                        && e["name"].as_str().is_some_and(|n| covers(n, domain))
+                });
+                Ok(crate::cloudflare::paging::Page::of(&body, entries.len()).done_if(found))
+            },
+        )?;
+        Ok(found)
     }
 }
 

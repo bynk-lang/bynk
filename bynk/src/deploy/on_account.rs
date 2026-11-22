@@ -97,7 +97,12 @@ impl RestListings {
     /// `field` of each entry of `result`.
     fn paged(&self, path: &str, field: &str) -> Result<BTreeSet<String>, CloudflareError> {
         let mut names = BTreeSet::new();
-        for page in 1.. {
+        let rule = crate::cloudflare::paging::Numbered {
+            cap: None,
+            missing_total: crate::cloudflare::paging::MissingTotal::WhileFull,
+            stop_on_empty: false,
+        };
+        rule.follow(|page| -> Result<_, CloudflareError> {
             let sep = if path.contains('?') { '&' } else { '?' };
             let body = self.0.get(&format!("{path}{sep}page={page}"))?;
             let entries = body["result"]
@@ -108,26 +113,16 @@ impl RestListings {
                     .iter()
                     .filter_map(|e| e[field].as_str().map(str::to_string)),
             );
-            let info = &body["result_info"];
-            let more = match info["total_pages"].as_u64() {
-                Some(total) => page < total,
-                None => info["per_page"]
-                    .as_u64()
-                    .is_some_and(|per| entries.len() as u64 >= per && !entries.is_empty()),
-            };
-            if !more {
-                break;
-            }
-        }
+            Ok(crate::cloudflare::paging::Page::of(&body, entries.len()))
+        })?;
         Ok(names)
     }
 
     /// Every bucket in `jurisdiction`, following the listing's cursor.
     fn buckets(&self, jurisdiction: Option<&str>) -> Result<BTreeSet<String>, CloudflareError> {
         let mut names = BTreeSet::new();
-        let mut cursor: Option<String> = None;
-        loop {
-            let path = match &cursor {
+        crate::cloudflare::paging::cursor(true, |cursor| -> Result<_, CloudflareError> {
+            let path = match cursor {
                 // The cursor is opaque: encoded, so a `+` or `=` in it survives.
                 Some(c) => format!(
                     "/r2/buckets?per_page=1000&cursor={}",
@@ -146,13 +141,8 @@ impl RestListings {
                     .iter()
                     .filter_map(|b| b["name"].as_str().map(str::to_string)),
             );
-            match body["result_info"]["cursor"].as_str() {
-                Some(next) if !next.is_empty() && cursor.as_deref() != Some(next) => {
-                    cursor = Some(next.to_string());
-                }
-                _ => break,
-            }
-        }
+            Ok(body["result_info"]["cursor"].as_str().map(str::to_string))
+        })?;
         Ok(names)
     }
 }

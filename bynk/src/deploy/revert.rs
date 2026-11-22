@@ -1044,42 +1044,41 @@ pub(crate) struct LiveAccount<'a> {
 impl Account for LiveAccount<'_> {
     fn deployments(&self, script: &str) -> Result<Vec<Deployment>, CloudflareError> {
         let mut out = Vec::new();
-        for page in 1..=20u64 {
-            let body = self.rest.get(&format!(
-                "/workers/scripts/{script}/deployments?per_page=50&page={page}"
-            ))?;
-            let items = body["result"]["deployments"]
-                .as_array()
-                .cloned()
-                .unwrap_or_default();
-            let n = items.len();
-            for d in items {
-                out.push(Deployment {
-                    id: d["id"].as_str().unwrap_or_default().to_string(),
-                    created_on: d["created_on"].as_str().unwrap_or_default().to_string(),
-                    trigger: d["annotations"]["workers/triggered_by"]
-                        .as_str()
-                        .map(str::to_string),
-                    versions: d["versions"]
-                        .as_array()
-                        .map(|vs| {
-                            vs.iter()
-                                .filter_map(|v| {
-                                    Some((
-                                        v["version_id"].as_str()?.to_string(),
-                                        v["percentage"].as_f64()?.round() as u32,
-                                    ))
-                                })
-                                .collect()
-                        })
-                        .unwrap_or_default(),
-                });
-            }
-            let pages = body["result_info"]["total_pages"].as_u64().unwrap_or(1);
-            if n == 0 || page >= pages {
-                break;
-            }
-        }
+        crate::cloudflare::paging::Numbered::capped(20).follow(
+            |page| -> Result<_, CloudflareError> {
+                let body = self.rest.get(&format!(
+                    "/workers/scripts/{script}/deployments?per_page=50&page={page}"
+                ))?;
+                let items = body["result"]["deployments"]
+                    .as_array()
+                    .cloned()
+                    .unwrap_or_default();
+                let n = items.len();
+                for d in items {
+                    out.push(Deployment {
+                        id: d["id"].as_str().unwrap_or_default().to_string(),
+                        created_on: d["created_on"].as_str().unwrap_or_default().to_string(),
+                        trigger: d["annotations"]["workers/triggered_by"]
+                            .as_str()
+                            .map(str::to_string),
+                        versions: d["versions"]
+                            .as_array()
+                            .map(|vs| {
+                                vs.iter()
+                                    .filter_map(|v| {
+                                        Some((
+                                            v["version_id"].as_str()?.to_string(),
+                                            v["percentage"].as_f64()?.round() as u32,
+                                        ))
+                                    })
+                                    .collect()
+                            })
+                            .unwrap_or_default(),
+                    });
+                }
+                Ok(crate::cloudflare::paging::Page::of(&body, n))
+            },
+        )?;
         Ok(out)
     }
 

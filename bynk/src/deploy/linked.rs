@@ -64,21 +64,19 @@ impl RestStores {
     /// Every entry of the paginated listing at `path`, as `(id, name)`.
     fn listing(&self, path: &str) -> Result<Vec<(String, String)>, CloudflareError> {
         let mut out = Vec::new();
-        for page in 1.. {
-            let body = self.rest.get(&format!("{path}?per_page=100&page={page}"))?;
-            let entries = body["result"].as_array().cloned().unwrap_or_default();
-            let n = entries.len();
-            out.extend(entries.iter().filter_map(|e| {
-                Some((
-                    e["id"].as_str()?.to_string(),
-                    e["name"].as_str()?.to_string(),
-                ))
-            }));
-            let pages = body["result_info"]["total_pages"].as_u64().unwrap_or(1);
-            if n == 0 || page >= pages {
-                break;
-            }
-        }
+        crate::cloudflare::paging::Numbered::TO_TOTAL.follow(
+            |page| -> Result<_, CloudflareError> {
+                let body = self.rest.get(&format!("{path}?per_page=100&page={page}"))?;
+                let entries = body["result"].as_array().cloned().unwrap_or_default();
+                out.extend(entries.iter().filter_map(|e| {
+                    Some((
+                        e["id"].as_str()?.to_string(),
+                        e["name"].as_str()?.to_string(),
+                    ))
+                }));
+                Ok(crate::cloudflare::paging::Page::of(&body, entries.len()))
+            },
+        )?;
         Ok(out)
     }
 }
@@ -414,7 +412,7 @@ fn mtls_records(body: &serde_json::Value) -> Vec<MtlsRecord> {
 impl MtlsCertificates for RestMtls {
     fn list(&self) -> Result<Vec<MtlsRecord>, CloudflareError> {
         let mut out = Vec::new();
-        for page in 1.. {
+        crate::cloudflare::paging::Numbered::TO_TOTAL.follow(|page| -> Result<_, CloudflareError> {
             let body = self
                 .rest
                 .get(&format!("/mtls_certificates?per_page=100&page={page}"))
@@ -429,13 +427,10 @@ impl MtlsCertificates for RestMtls {
                     }
                 })?;
             let records = mtls_records(&body);
-            let n = records.len();
+            let read = crate::cloudflare::paging::Page::of(&body, records.len());
             out.extend(records);
-            let pages = body["result_info"]["total_pages"].as_u64().unwrap_or(1);
-            if n == 0 || page >= pages {
-                break;
-            }
-        }
+            Ok(read)
+        })?;
         Ok(out)
     }
 }
