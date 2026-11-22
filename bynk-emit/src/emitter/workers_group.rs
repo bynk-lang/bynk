@@ -23,10 +23,14 @@
 //! runtime's `verifyCall` gives. Answering `404` for an unknown service while a
 //! known one answers `401` would let an unsigned caller list a group's services.
 
+use crate::ts_build::{
+    arrow_of as arrow, binary, block, call, const_typed as const_, expr_stmt, ident as id, if_,
+    index, member, method_call, new as new_, num_lit as num, param, paren, ret, str_lit as lit,
+};
 use bynk_check::wire_format as wf;
 use bynk_ts::{
-    TsArrowBody, TsBinaryOp, TsBindingName, TsDecl, TsExpr, TsLit, TsObjectEntry, TsParam,
-    TsProgram, TsStmt, TsSwitchCase, TsType, TsTypeMember, TsUnaryOp,
+    TsArrowBody, TsBinaryOp, TsDecl, TsExpr, TsLit, TsObjectEntry, TsParam, TsProgram, TsStmt,
+    TsSwitchCase, TsType, TsTypeMember, TsUnaryOp,
 };
 
 /// What the group's entry needs to know of one member.
@@ -69,82 +73,15 @@ pub struct GroupEntry<'a> {
 // The node builders of this file. Each is a one-line wrapper over a `bynk_ts`
 // constructor, so the entry below reads as the TypeScript it emits.
 
-fn id(name: &str) -> TsExpr {
-    TsExpr::Ident(name.to_string())
-}
-
-fn lit(text: &str) -> TsExpr {
-    TsExpr::Lit(TsLit::Str(text.to_string()))
-}
-
-fn num(n: u32) -> TsExpr {
-    TsExpr::Lit(TsLit::Num(n.to_string()))
-}
-
-fn member(object: TsExpr, property: &str) -> TsExpr {
-    TsExpr::Member {
-        object: Box::new(object),
-        property: property.to_string(),
-    }
-}
-
 /// `globalThis.<name>`.
 fn global(name: &str) -> TsExpr {
     member(id("globalThis"), name)
-}
-
-fn call(callee: TsExpr, args: Vec<TsExpr>) -> TsExpr {
-    TsExpr::Call {
-        callee: Box::new(callee),
-        args,
-    }
-}
-
-/// `object.method(args)`.
-fn method_call(object: TsExpr, method: &str, args: Vec<TsExpr>) -> TsExpr {
-    call(member(object, method), args)
-}
-
-fn new_(callee: TsExpr, args: Vec<TsExpr>) -> TsExpr {
-    TsExpr::New {
-        callee: Box::new(callee),
-        args,
-    }
 }
 
 fn as_never(expr: TsExpr) -> TsExpr {
     TsExpr::As {
         expr: Box::new(expr),
         ty: ty("never"),
-    }
-}
-
-fn binary(op: TsBinaryOp, left: TsExpr, right: TsExpr) -> TsExpr {
-    TsExpr::Binary {
-        op,
-        left: Box::new(left),
-        right: Box::new(right),
-    }
-}
-
-fn paren(expr: TsExpr) -> TsExpr {
-    TsExpr::Paren(Box::new(expr))
-}
-
-fn index(object: TsExpr, idx: TsExpr) -> TsExpr {
-    TsExpr::Index {
-        object: Box::new(object),
-        index: Box::new(idx),
-    }
-}
-
-fn arrow(params: Vec<TsParam>, is_async: bool, body: TsArrowBody) -> TsExpr {
-    TsExpr::Arrow {
-        params,
-        is_async,
-        generics: Vec::new(),
-        return_type: None,
-        body: Box::new(body),
     }
 }
 
@@ -170,22 +107,6 @@ fn response_ty() -> TsType {
     ty("globalThis.Response")
 }
 
-fn param(name: &str, ty: TsType) -> TsParam {
-    TsParam::new(name, Some(ty))
-}
-
-fn const_(name: &str, ty: Option<TsType>, init: TsExpr) -> TsStmt {
-    TsStmt::const_stmt(TsBindingName::Ident(name.to_string()), ty, init, None)
-}
-
-fn ret(expr: TsExpr) -> TsStmt {
-    TsStmt::return_stmt(Some(expr), None)
-}
-
-fn expr_stmt(expr: TsExpr) -> TsStmt {
-    TsStmt::expr_stmt(expr, None)
-}
-
 /// `stmt`, with no blank line before it: this entry keeps its re-exports, its handler
 /// types and its member constants in tight runs, as it always wrote them.
 fn tight(mut stmt: TsStmt) -> TsStmt {
@@ -196,11 +117,7 @@ fn tight(mut stmt: TsStmt) -> TsStmt {
 /// `if (cond) { body }` on one line: the braced form of the one-line guards
 /// this entry used to write without braces.
 fn guard(cond: TsExpr, body: TsStmt) -> TsStmt {
-    TsStmt::if_stmt(cond, TsStmt::inline_block(vec![body], None), None)
-}
-
-fn block(stmts: Vec<TsStmt>) -> TsStmt {
-    TsStmt::block(stmts, None)
+    if_(cond, TsStmt::inline_block(vec![body], None))
 }
 
 /// `new globalThis.Response(body, init)`.
@@ -236,7 +153,7 @@ fn function(
 
 /// `["a", "b"]`, as a TypeScript array literal of strings.
 fn array(items: &[String]) -> TsExpr {
-    TsExpr::array(items.iter().map(|i| lit(i)).collect())
+    TsExpr::array(items.iter().map(lit).collect())
 }
 
 /// `await __verifyCall(request, env, "")`.
@@ -646,7 +563,7 @@ fn readonly_string(name: &str) -> TsType {
 /// handler, run on the loopback env.
 fn run_member(member_index: usize, handler: &str, arg: &str) -> TsExpr {
     method_call(
-        id(&format!("__m{member_index}")),
+        id(format!("__m{member_index}")),
         handler,
         vec![
             as_never(id(arg)),
@@ -696,7 +613,7 @@ fn queue(members: &[(usize, &GroupMember)]) -> TsObjectEntry {
         .iter()
         .filter(|(_, m)| !m.queues.is_empty())
         .map(|(i, m)| TsSwitchCase {
-            labels: m.queues.iter().map(|q| lit(q)).collect(),
+            labels: m.queues.iter().map(lit).collect(),
             body: vec![ret(run_member(*i, "queue", "batch"))],
             default_braced: false,
             case_braced: false,
@@ -738,8 +655,8 @@ fn email(members: &[(usize, &GroupMember)]) -> TsObjectEntry {
         .flat_map(|(i, m)| {
             m.addresses.iter().map(move |a| {
                 TsExpr::object(vec![
-                    ("address".to_string(), lit(&a.to_lowercase())),
-                    ("member".to_string(), id(&format!("__m{i}"))),
+                    ("address".to_string(), lit(a.to_lowercase())),
+                    ("member".to_string(), id(format!("__m{i}"))),
                 ])
             })
         })
@@ -776,7 +693,7 @@ fn email(members: &[(usize, &GroupMember)]) -> TsObjectEntry {
             object: Box::new(id("claimant")),
             property: "member".to_string(),
         },
-        id(&format!("__m{first}")),
+        id(format!("__m{first}")),
     ));
     TsObjectEntry::method(
         "email",
@@ -946,9 +863,9 @@ fn member_table(members: &[(usize, &GroupMember)]) -> Vec<TsStmt> {
             handlers.push(ty("__Email"));
         }
         stmts.push(tight(const_(
-            &format!("__m{i}"),
+            format!("__m{i}"),
             Some(TsType::intersection(handlers)),
-            id(&format!("__entry{i}")),
+            id(format!("__entry{i}")),
         )));
     }
     let row_ty = TsType::readonly_array(TsType::Object(vec![
@@ -966,8 +883,8 @@ fn member_table(members: &[(usize, &GroupMember)]) -> Vec<TsStmt> {
         .iter()
         .map(|(i, _)| {
             TsExpr::object(vec![
-                ("entry".to_string(), id(&format!("__m{i}"))),
-                ("isMiss".to_string(), id(&format!("__miss{i}"))),
+                ("entry".to_string(), id(format!("__m{i}"))),
+                ("isMiss".to_string(), id(format!("__miss{i}"))),
             ])
         })
         .collect();

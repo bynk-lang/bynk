@@ -18,158 +18,16 @@ use bynk_check::symbols::UnitTable;
 use bynk_syntax::ast::{BaseType, Handler, LimitsPolicy, ServiceProtocol, TypeRef};
 
 use crate::emitter::RuntimeUse;
+use crate::ts_build::{
+    and_expr, as_expr, await_expr, binary, block, bool_lit, call, cond_expr, const_, const_typed,
+    expr_stmt, ident, if_, index as index_expr, let_typed, member, method_call, new, null_lit,
+    num_lit, or_expr, paren, return_, str_lit, strict_eq, strict_neq, switch_stmt,
+};
 use bynk_check::wire_format::{self as wf, CallCheck};
 use bynk_ts::{
-    TsBindingName, TsDecl, TsExpr, TsLit, TsObjectEntry, TsParam, TsProgram, TsStmt, TsSwitchCase,
-    TsType, TsTypeMember,
+    TsBindingName, TsDecl, TsExpr, TsObjectEntry, TsParam, TsProgram, TsStmt, TsSwitchCase, TsType,
+    TsTypeMember,
 };
-
-// -- Small tree-construction helpers (#1323) ------------------------------
-//
-// Mirrors `workers.rs`'s own local helper set (#1321) — not part of the
-// public node algebra, `bynk-ts` still owns every real constructor; these
-// just compose them for this file's own repeated shapes. Kept as this
-// file's own private set rather than shared with `workers.rs`'s, matching
-// this track's own established per-file scoping (each Arc C slice's own
-// helpers are added narrowly, not factored into a shared cross-file module).
-
-fn ident(s: impl Into<String>) -> TsExpr {
-    TsExpr::Ident(s.into())
-}
-
-fn str_lit(s: impl Into<String>) -> TsExpr {
-    TsExpr::Lit(TsLit::Str(s.into()))
-}
-
-fn num_lit(n: impl Into<String>) -> TsExpr {
-    TsExpr::Lit(TsLit::Num(n.into()))
-}
-
-fn null_lit() -> TsExpr {
-    TsExpr::Lit(TsLit::Null)
-}
-
-/// #1323's own real gap: `CorsPolicy.credentials`/`SecurityPolicy.nosniff`
-/// are real booleans — nothing in `workers.rs`'s own grounding ever needed
-/// one.
-fn bool_lit(b: bool) -> TsExpr {
-    TsExpr::Lit(TsLit::Bool(b))
-}
-
-fn member(object: TsExpr, property: impl Into<String>) -> TsExpr {
-    TsExpr::Member {
-        object: Box::new(object),
-        property: property.into(),
-    }
-}
-
-fn index_expr(object: TsExpr, idx: TsExpr) -> TsExpr {
-    TsExpr::Index {
-        object: Box::new(object),
-        index: Box::new(idx),
-    }
-}
-
-fn call(callee: TsExpr, args: Vec<TsExpr>) -> TsExpr {
-    TsExpr::Call {
-        callee: Box::new(callee),
-        args,
-    }
-}
-
-fn method_call(object: TsExpr, method: &str, args: Vec<TsExpr>) -> TsExpr {
-    call(member(object, method), args)
-}
-
-fn new_expr(callee: &str, args: Vec<TsExpr>) -> TsExpr {
-    TsExpr::New {
-        callee: Box::new(ident(callee)),
-        args,
-    }
-}
-
-fn as_expr(expr: TsExpr, ty: TsType) -> TsExpr {
-    TsExpr::As {
-        expr: Box::new(expr),
-        ty,
-    }
-}
-
-fn await_expr(expr: TsExpr) -> TsExpr {
-    TsExpr::Await(Box::new(expr))
-}
-
-fn binary(op: bynk_ts::TsBinaryOp, left: TsExpr, right: TsExpr) -> TsExpr {
-    TsExpr::Binary {
-        op,
-        left: Box::new(left),
-        right: Box::new(right),
-    }
-}
-
-fn strict_eq(left: TsExpr, right: TsExpr) -> TsExpr {
-    binary(bynk_ts::TsBinaryOp::StrictEq, left, right)
-}
-
-fn strict_neq(left: TsExpr, right: TsExpr) -> TsExpr {
-    binary(bynk_ts::TsBinaryOp::StrictNotEq, left, right)
-}
-
-fn or_expr(left: TsExpr, right: TsExpr) -> TsExpr {
-    binary(bynk_ts::TsBinaryOp::Or, left, right)
-}
-
-fn and_expr(left: TsExpr, right: TsExpr) -> TsExpr {
-    binary(bynk_ts::TsBinaryOp::And, left, right)
-}
-
-/// `test ? consequent : alternate`.
-fn cond_expr(test: TsExpr, consequent: TsExpr, alternate: TsExpr) -> TsExpr {
-    TsExpr::Conditional {
-        test: Box::new(test),
-        consequent: Box::new(consequent),
-        alternate: Box::new(alternate),
-    }
-}
-
-/// An explicit, printer-preserved `(<inner>)` — #1323's own real gap, the
-/// CORS-preflight guard's own unconditional grouping. See
-/// [`bynk_ts::TsExpr::Paren`]'s own doc for why this needs to be a distinct
-/// variant rather than relying on the printer's precedence-derived rules.
-fn paren(inner: TsExpr) -> TsExpr {
-    TsExpr::Paren(Box::new(inner))
-}
-
-fn return_(expr: Option<TsExpr>) -> TsStmt {
-    TsStmt::return_stmt(expr, None)
-}
-
-fn const_(name: impl Into<String>, init: TsExpr) -> TsStmt {
-    TsStmt::const_stmt(TsBindingName::Ident(name.into()), None, init, None)
-}
-
-fn const_typed(name: impl Into<String>, ty: TsType, init: TsExpr) -> TsStmt {
-    TsStmt::const_stmt(TsBindingName::Ident(name.into()), Some(ty), init, None)
-}
-
-/// `let name: ty;` — an uninitialised, typed `let`. `emit_http_route_dispatch`'s
-/// own `let __body_json: JsonValue;` and `emit_http_sum_wrapper`-adjacent
-/// `let __raw: string;` are the real, grounded sites.
-fn let_typed(name: impl Into<String>, ty: TsType) -> TsStmt {
-    TsStmt::let_stmt(TsBindingName::Ident(name.into()), Some(ty), None, None)
-}
-
-fn expr_stmt(expr: TsExpr) -> TsStmt {
-    TsStmt::expr_stmt(expr, None)
-}
-
-fn if_(cond: TsExpr, then_branch: TsStmt) -> TsStmt {
-    TsStmt::if_stmt(cond, then_branch, None)
-}
-
-fn block(stmts: Vec<TsStmt>) -> TsStmt {
-    TsStmt::block(stmts, None)
-}
 
 /// What `fetch`'s catch does with a fault (#1825): log it, report it, and answer
 /// the bare 500. #3580: a traced build also hands the fault to the request's record.
@@ -356,11 +214,6 @@ fn try_catch_stmt(
     TsStmt::try_catch(block(try_stmts), catch_param, block(catch_stmts), None)
 }
 
-/// `switch (<discriminant>) { <cases> }`.
-fn switch_stmt(discriminant: TsExpr, cases: Vec<TsSwitchCase>) -> TsStmt {
-    TsStmt::switch_stmt(discriminant, cases, None)
-}
-
 fn case_(test: TsExpr, body: Vec<TsStmt>) -> TsSwitchCase {
     TsSwitchCase {
         labels: vec![test],
@@ -384,7 +237,7 @@ fn default_case(body: Vec<TsStmt>) -> TsSwitchCase {
 }
 
 fn new_response(args: Vec<TsExpr>) -> TsExpr {
-    new_expr("globalThis.Response", args)
+    new(ident("globalThis.Response"), args)
 }
 
 fn json_stringify(expr: TsExpr) -> TsExpr {
@@ -1451,7 +1304,10 @@ pub fn emit_worker_entry(
     let mut fetch_body: Vec<TsStmt> = vec![
         const_(
             "url",
-            new_expr("globalThis.URL", vec![member(ident("request"), "url")]),
+            new(
+                ident("globalThis.URL"),
+                vec![member(ident("request"), "url")],
+            ),
         ),
         const_("path", member(ident("url"), "pathname")),
         const_("method", member(ident("request"), "method")),
@@ -3464,7 +3320,7 @@ fn emit_http_route_dispatch(
         let multipart = route.multipart.as_ref();
         let decoded = || {
             method_call(
-                new_expr("globalThis.TextDecoder", vec![]),
+                new(ident("globalThis.TextDecoder"), vec![]),
                 "decode",
                 vec![ident("__bytes")],
             )
@@ -4220,7 +4076,7 @@ fn emit_path_param_construction(
             let construct = if consumed {
                 method_call(
                     ident("handlers"),
-                    &format!("__deserialise_{}", id.name),
+                    format!("__deserialise_{}", id.name),
                     vec![ident(raw), wire_path.clone()],
                 )
             } else {

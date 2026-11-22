@@ -46,9 +46,9 @@ pub(super) fn emit_system_job_support(
         };
     };
     let ns = test_ns(target);
-    let worker = format!("worker_{ns}");
+    let worker = worker_binding_name(&ns);
     let env = format!("__h.env_{ns}");
-    let type_ns = format!("{ns}.");
+    let type_ns = ns_qualifier(&ns);
     let mut svc_names: Vec<&String> = table.services.keys().collect();
     svc_names.sort();
     for sname in svc_names {

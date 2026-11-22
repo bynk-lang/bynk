@@ -7,6 +7,9 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.640.46** | Internal restructuring: `bynk-emit` gets one definition of each small TypeScript node builder (`ident`, `str_lit`, `member`, `call` and the rest), in `ts_build`; no emitted output changes |
+| **v0.640.45** | Internal restructuring: the test harness and the case lowering share one spelling for each generated name, and `bynk_ts` gains a `bigint` literal node; no emitted output changes |
+| **v0.640.44** | Internal restructuring: one typed binding model, `WorkerBindings`, is derived once per build from the composition plan, beside the old derivation it is checked against; no emitted output changes |
 | **v0.640.43** | Learn Bynk has a new chapter 5, [Handle failure with `Result`](/book/tutorials/failure-and-result/) — the URL shortener gets a rule of its own, composes its fallible steps with `?` and `.mapErr`, and turns every `LinkError` into an HTTP response in one function — and "Add a stateful agent" now builds on it. Chapters link to each other by title, not number (web presence track, slice 9, #4041). |
 | **v0.640.42** | Internal restructuring: `bynk-emit` no longer depends on `bynk-driver`, not even for its tests, and the test-harness lowering entries move into `bynk-emit::testgen`; no emitted output changes |
 | **v0.640.41** | Internal restructuring of `bynk deploy`; no change to plans, provisioning or `bynk.deploy.lock` |

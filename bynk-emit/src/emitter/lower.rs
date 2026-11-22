@@ -47,6 +47,10 @@ use super::ts_types::{
     unchecked_construct_test_node,
 };
 use super::*;
+use crate::ts_build::{
+    arrow_of as lambda_node, bool_lit as bool_node, call as call_built, const_ as binding_stmt,
+    ident as ident_node, not_expr as negated, num_lit, str_lit as str_node,
+};
 
 /// v0.154 (ADR 0178): the `Err`-wrap a `?` on a `Result` operand needs, if the
 /// operand's error type differs from the enclosing return's and a declared
@@ -384,13 +388,6 @@ impl Lit<'_> {
     }
 }
 
-/// A numeric literal node: the digits are printed verbatim (`TsLit::Num`), so a
-/// big integer, a float lexeme (`1e10`) or a duration's milliseconds render
-/// exactly as the old hand-built text did.
-pub(super) fn num_lit(digits: String) -> bynk_ts::TsExpr {
-    bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Num(digits))
-}
-
 /// #2622: a `Decimal` literal as an object-literal node — the node twin of
 /// [`decimal_ts_literal`](crate::emitter::ts_types::decimal_ts_literal)
 /// (`{ coefficient: <signed>n, scale: <scale> }`, no runtime import).
@@ -398,7 +395,7 @@ pub(super) fn decimal_lit(coef: &str, scale: u32) -> bynk_ts::TsExpr {
     bynk_ts::TsExpr::object(vec![
         (
             "coefficient".to_string(),
-            num_lit(format!("{}n", decimal_signed_coef(coef))),
+            bynk_ts::TsExpr::bigint(decimal_signed_coef(coef)),
         ),
         ("scale".to_string(), num_lit(scale.to_string())),
     ])
@@ -537,11 +534,6 @@ pub(super) fn paren(child: bynk_ts::TsExpr) -> bynk_ts::TsExpr {
     bynk_ts::TsExpr::Paren(Box::new(one(c)))
 }
 
-/// A genuine identifier node. Never built from expression text.
-pub(super) fn ident_node(name: &str) -> bynk_ts::TsExpr {
-    bynk_ts::TsExpr::Ident(name.to_string())
-}
-
 /// `(test ? consequent : alternate)`: a `Paren(Conditional)` node, or today's
 /// text. Shared by the value-position ternary `if` and the statement emitter's
 /// ternary tail (1A.11), so both keep today's outer brackets.
@@ -589,20 +581,6 @@ pub(super) fn runtime_ctor_call(
         callee: Box::new(callee),
         args: vec![one(c)],
     }
-}
-
-/// `callee(a, b, …)` over a genuine callee node.
-pub(super) fn call_built(callee: bynk_ts::TsExpr, args: Vec<bynk_ts::TsExpr>) -> bynk_ts::TsExpr {
-    bynk_ts::TsExpr::Call {
-        callee: Box::new(callee),
-        args,
-    }
-}
-
-/// A string-literal node: the printer escapes it exactly as
-/// `escape_ts_string` does (they are one function, `escape_ts_literal`).
-pub(super) fn str_node(s: impl Into<String>) -> bynk_ts::TsExpr {
-    bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(s.into()))
 }
 
 /// The single element of a one-child builder's argument.
@@ -2152,16 +2130,6 @@ pub(super) fn gather_is_bindings_for_emit(
     }
 }
 
-/// `const <local> = <init>;` as a statement node.
-fn binding_stmt(local: &str, init: bynk_ts::TsExpr) -> bynk_ts::TsStmt {
-    bynk_ts::TsStmt::const_stmt(
-        bynk_ts::TsBindingName::Ident(local.to_string()),
-        None,
-        init,
-        None,
-    )
-}
-
 /// The `const name = …;` declarations for one matched `is` test, as statement nodes (a record
 /// field, a list element or rest, the refined narrowing cast, a variant payload read through its
 /// `Extract` cast, an or-pattern's `let a, b;` and `if`/`else` dispatch).
@@ -2198,7 +2166,7 @@ fn emit_is_test_bindings(
                     expr: Box::new(recv.node().clone()),
                     ty: bynk_ts::TsType::named(variant.name.clone()),
                 };
-                out.push(binding_stmt(&ts_ident(&id.name), cast));
+                out.push(binding_stmt(ts_ident(&id.name), cast));
                 cx.declare_binder(&id.name);
                 return;
             }
@@ -2601,7 +2569,7 @@ fn lower_ident(e: &Expr, id: &Ident, cx: &mut LowerCtx) -> bynk_ts::TsExpr {
     // checker has already ruled out a local or any other meaning of the name.
     if let Some(name) = cx.const_ref(e) {
         return bynk_ts::TsExpr::Call {
-            callee: Box::new(ident_node(&ts_ident(name))),
+            callee: Box::new(ident_node(ts_ident(name))),
             args: Vec::new(),
         };
     }
@@ -2652,7 +2620,7 @@ fn lower_ident(e: &Expr, id: &Ident, cx: &mut LowerCtx) -> bynk_ts::TsExpr {
             return_type: None,
             body: Box::new(bynk_ts::TsArrowBody::Expr(Box::new(
                 bynk_ts::TsExpr::Call {
-                    callee: Box::new(ident_node(&ts_ident(&id.name))),
+                    callee: Box::new(ident_node(ts_ident(&id.name))),
                     args,
                 },
             ))),
@@ -2771,7 +2739,7 @@ fn lower_ident(e: &Expr, id: &Ident, cx: &mut LowerCtx) -> bynk_ts::TsExpr {
     // its emitted binding — resolve to it rather than the natural
     // (now-shadowed) `ts_ident` name.
     ident_node(
-        &cx.resolved_local_name(&id.name)
+        cx.resolved_local_name(&id.name)
             .unwrap_or_else(|| ts_ident(&id.name)),
     )
 }
@@ -3031,16 +2999,11 @@ fn lower_call(e: &Expr, name: &Ident, args: &[Expr], cx: &mut LowerCtx) -> Lower
             needs_exec = true;
         }
     }
-    let mut built = call_built(ident_node(&ts_ident(&name.name)), args_lowered);
+    let mut built = call_built(ident_node(ts_ident(&name.name)), args_lowered);
     if needs_exec {
         built = settle_built(built, cx);
     }
     pre.finish(built)
-}
-
-/// `true` / `false` as a node.
-fn bool_node(value: bool) -> bynk_ts::TsExpr {
-    bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Bool(value))
 }
 
 /// `!(l)`: a `Unary(Not)` over an explicit `Paren` (Decision C of #3715: the
@@ -3430,14 +3393,6 @@ fn helper_call(helper: &'static str, children: Vec<bynk_ts::TsExpr>) -> bynk_ts:
     bynk_ts::TsExpr::Call {
         callee: Box::new(ident_node(helper)),
         args: vec![l, r],
-    }
-}
-
-/// `!call`: a `Unary(Not)` node over a call node, or today's `!{call}` text.
-fn negated(call: bynk_ts::TsExpr) -> bynk_ts::TsExpr {
-    bynk_ts::TsExpr::Unary {
-        op: bynk_ts::TsUnaryOp::Not,
-        expr: Box::new(call),
     }
 }
 
@@ -4240,21 +4195,6 @@ fn lower_lambda(e: &Expr, lambda: &LambdaExpr, cx: &mut LowerCtx) -> bynk_ts::Ts
     cx.lambda_depth -= 1;
     cx.shadow_scopes.pop();
     result
-}
-
-/// A lambda as an arrow node (1A.12).
-fn lambda_node(
-    params: Vec<bynk_ts::TsParam>,
-    is_async: bool,
-    body: bynk_ts::TsArrowBody,
-) -> bynk_ts::TsExpr {
-    bynk_ts::TsExpr::Arrow {
-        params,
-        is_async,
-        generics: Vec::new(),
-        return_type: None,
-        body: Box::new(body),
-    }
 }
 
 fn lower_record_spread(base: &Expr, overrides: &[FieldInit], cx: &mut LowerCtx) -> Lowered {
@@ -5676,7 +5616,7 @@ fn minus_neg() -> Int { 5 - -3 }
 
     #[test]
     fn constructor_calls_and_lists_are_nodes_over_node_children() {
-        let ok = t_runtime_ctor_call(None, "Ok", node(num_lit("1".into())));
+        let ok = t_runtime_ctor_call(None, "Ok", node(num_lit("1")));
         assert_eq!(ok.printed(), "Ok(1)");
         let http = t_runtime_ctor_call(Some("HttpResult"), "Ok", node(id("v")));
         let bynk_ts::TsExpr::Call { callee, .. } = &http else {
@@ -5692,7 +5632,7 @@ fn minus_neg() -> Int { 5 - -3 }
             t_runtime_ctor_call(None, "Some", node(id("s"))).printed(),
             "Some(s)"
         );
-        let list = array(vec![node(id("a")), node(num_lit("2".into()))]);
+        let list = array(vec![node(id("a")), node(num_lit("2"))]);
         assert_eq!(list.printed(), "[a, 2]");
     }
 

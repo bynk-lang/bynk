@@ -472,17 +472,17 @@ pub(super) fn emit_stub_rhs(
             let mut stmts = vec![TsStmt::const_stmt(
                 TsBindingName::Ident("__k".to_string()),
                 None,
-                member(ident("this"), format!("__seq_{clause_idx}")),
+                member(ident("this"), seq_field(clause_idx)),
                 None,
             )];
             if n > 1 {
                 stmts.push(if_(
                     TsExpr::Binary {
                         op: TsBinaryOp::LessThan,
-                        left: Box::new(member(ident("this"), format!("__seq_{clause_idx}"))),
+                        left: Box::new(member(ident("this"), seq_field(clause_idx))),
                         right: Box::new(num_lit((n - 1).to_string())),
                     },
-                    TsStmt::increment(member(ident("this"), format!("__seq_{clause_idx}")), None),
+                    TsStmt::increment(member(ident("this"), seq_field(clause_idx)), None),
                 ));
             }
             let outcome_body = |o: &SeqOutcome| match o {

@@ -164,13 +164,13 @@ pub(super) fn emit_integration_module(
                 TsDecl::ImportNamespace {
                     type_only: false,
                     alias: ns.clone(),
-                    from: format!("../workers/{dir}/handlers.js"),
+                    from: worker_specifier(&dir, "handlers"),
                 },
                 None,
             ));
         }
         stmts.push(TsStmt::decl(
-            TsDecl::import_default(format!("worker_{ns}"), format!("../workers/{dir}/index.js")),
+            TsDecl::import_default(worker_binding_name(&ns), worker_specifier(&dir, "index")),
             None,
         ));
         if bindings_of(p)
@@ -181,7 +181,7 @@ pub(super) fn emit_integration_module(
                 TsDecl::ImportNamespace {
                     type_only: false,
                     alias: fanout_alias(&ns),
-                    from: format!("../workers/{dir}/events_fanout.js"),
+                    from: worker_specifier(&dir, "events_fanout"),
                 },
                 None,
             ));
@@ -218,7 +218,7 @@ pub(super) fn emit_integration_module(
             TsDecl::ImportNamespace {
                 type_only: false,
                 alias: ns.clone(),
-                from: format!("./{path}.js"),
+                from: sibling_specifier(path, "js"),
             },
             None,
         ));
@@ -304,9 +304,9 @@ pub(super) fn emit_integration_module(
             TsDecl::ImportNamespace {
                 type_only: false,
                 alias: test_ns(cloudflare),
-                from: format!(
-                    "./{}.js",
-                    relative_import_for_test(&commons_dir_for(cloudflare))
+                from: sibling_specifier(
+                    &relative_import_for_test(&commons_dir_for(cloudflare)),
+                    "js",
                 ),
             },
             None,
@@ -315,9 +315,9 @@ pub(super) fn emit_integration_module(
             TsDecl::ImportNamespace {
                 type_only: false,
                 alias: "bynk_cloudflare__binding".to_string(),
-                from: format!(
-                    "../{}.js",
-                    bynk_check::firstparty::CLOUDFLARE_BINDING_FILENAME.trim_end_matches(".ts")
+                from: parent_specifier(
+                    bynk_check::firstparty::CLOUDFLARE_BINDING_FILENAME.trim_end_matches(".ts"),
+                    "js",
                 ),
             },
             None,
@@ -764,12 +764,12 @@ pub(super) fn emit_integration_module(
                 if let Some(table) = unit_tables.get(&u) {
                     let ns = test_ns(&u);
                     for n in table.types.keys() {
-                        qual.entry(n.clone()).or_insert_with(|| format!("{ns}."));
+                        qual.entry(n.clone()).or_insert_with(|| ns_qualifier(&ns));
                     }
                 }
             }
             for (n, owner) in &view.hidden {
-                qual.insert(n.clone(), format!("{}.", test_ns(owner)));
+                qual.insert(n.clone(), ns_qualifier(&test_ns(owner)));
             }
             stmts.extend(crate::emitter::serialisation::decls_as_stmts_block(
                 crate::emitter::serialisation::emit_helpers_for_owner_qualified(

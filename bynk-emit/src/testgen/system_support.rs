@@ -330,7 +330,7 @@ pub(super) fn emit_system_http_support(
     };
     let ns = test_ns(target);
     let binding = crate::emitter::bindings::service_binding(target).name;
-    let type_ns = format!("{ns}.");
+    let type_ns = ns_qualifier(&ns);
 
     let mut routes: Vec<TsStmt> = Vec::new();
     let mut secrets: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
@@ -423,7 +423,7 @@ pub(super) fn emit_system_http_support(
                 declared.insert((
                     sname.clone(),
                     method.as_str().to_string(),
-                    format!("{path}{}", emitter::EXTRA_HEADERS_ROUTE_SUFFIX),
+                    route_with(&path, emitter::EXTRA_HEADERS_ROUTE_SUFFIX),
                 ));
                 TsParam::new(
                     "__extraHeaders".to_string(),
@@ -479,9 +479,7 @@ pub(super) fn emit_system_http_support(
                             ),
                         );
                         // #3343: a renamed field is written under its `@name`.
-                        let table_arg = crate::emitter::renamed_specs_source(record, &table.types)
-                            .map(|t| format!(", {t}"))
-                            .unwrap_or_default();
+                        let table_arg = renamed_specs_arg(record, &table.types);
                         (
                             format!("${{__queryString({ser}{table_arg})}}"),
                             format!("${{{var}}}"),
@@ -499,7 +497,7 @@ pub(super) fn emit_system_http_support(
                 let key = (
                     sname.clone(),
                     method.as_str().to_string(),
-                    format!("{path}{}", emitter::COOKIES_ROUTE_SUFFIX),
+                    route_with(&path, emitter::COOKIES_ROUTE_SUFFIX),
                 );
                 register_param_route(&mut route_body, key, h, cp);
             }
@@ -515,7 +513,7 @@ pub(super) fn emit_system_http_support(
                     (
                         sname.clone(),
                         method.as_str().to_string(),
-                        format!("{path}{}", emitter::QUERY_ROUTE_SUFFIX),
+                        route_with(&path, emitter::QUERY_ROUTE_SUFFIX),
                     ),
                     (idx, qp.type_ref.clone()),
                 );
@@ -540,7 +538,7 @@ pub(super) fn emit_system_http_support(
                         (
                             sname.clone(),
                             method.as_str().to_string(),
-                            format!("{path}{}", emitter::FORM_ROUTE_SUFFIX),
+                            route_with(&path, emitter::FORM_ROUTE_SUFFIX),
                         ),
                         (idx, bp.type_ref.clone()),
                     );
@@ -905,7 +903,7 @@ pub(super) fn emit_system_http_support(
                 payload_deser.clone()
             };
             routes.push(sysdrive_driver(
-                "",
+                SysdriveKind::typed(""),
                 sname,
                 &key,
                 driver_params.clone(),
@@ -948,7 +946,7 @@ pub(super) fn emit_system_http_support(
                     method = method.as_str(),
                 ));
                 routes.push(sysdrive_driver(
-                    "raw_",
+                    SysdriveKind::raw(""),
                     sname,
                     &key,
                     raw_params.clone(),
@@ -978,7 +976,7 @@ pub(super) fn emit_system_http_support(
                     method = method.as_str(),
                 ));
                 routes.push(sysdrive_driver(
-                    "noauth_",
+                    SysdriveKind::typed("noauth"),
                     sname,
                     &key,
                     driver_params.clone(),
@@ -1010,7 +1008,7 @@ pub(super) fn emit_system_http_support(
                     method = method.as_str(),
                 ));
                 routes.push(sysdrive_driver(
-                    "rawnoauth_",
+                    SysdriveKind::raw("noauth"),
                     sname,
                     &key,
                     raw_params.clone(),
@@ -1040,7 +1038,7 @@ pub(super) fn emit_system_http_support(
                 }
                 for (name, variant) in variants {
                     routes.push(sysdrive_driver(
-                        &format!("{name}_"),
+                        SysdriveKind::typed(name),
                         sname,
                         &key,
                         driver_params.clone(),
@@ -1062,7 +1060,7 @@ pub(super) fn emit_system_http_support(
                             method = method.as_str(),
                         ));
                         routes.push(sysdrive_driver(
-                            &format!("raw{name}_"),
+                            SysdriveKind::raw(name),
                             sname,
                             &key,
                             raw_params.clone(),
@@ -1094,7 +1092,7 @@ pub(super) fn emit_system_http_support(
                     "{{ method: {method:?}, headers: {{ {headers_spread}{content_type}\"authorization\": __token, }}, {raw_body_init}}}",
                     method = method.as_str(),
                     raw_body_init = match body_ps.first() {
-                        Some(p) => format!("body: {}, ", crate::emitter::ts_ident(&p.name.name)),
+                        Some(p) => body_field(&crate::emitter::ts_ident(&p.name.name)),
                         None => String::new(),
                     },
                 ));
@@ -1113,7 +1111,7 @@ pub(super) fn emit_system_http_support(
                         None,
                     );
                     routes.push(sysdrive_driver(
-                        &format!("{name}_"),
+                        SysdriveKind::typed(name),
                         sname,
                         &key,
                         driver_params.clone(),
@@ -1129,7 +1127,7 @@ pub(super) fn emit_system_http_support(
                     ));
                     if !h.params.is_empty() {
                         routes.push(sysdrive_driver(
-                            &format!("raw{name}_"),
+                            SysdriveKind::raw(name),
                             sname,
                             &key,
                             raw_params.clone(),
@@ -1188,7 +1186,7 @@ pub(super) fn emit_system_http_support(
                     "{{ method: {method:?}, headers: {{ {headers_spread}{content_type}\"authorization\": __token, }}, {raw_body_init}}}",
                     method = method.as_str(),
                     raw_body_init = match body_ps.first() {
-                        Some(p) => format!("body: {}, ", crate::emitter::ts_ident(&p.name.name)),
+                        Some(p) => body_field(&crate::emitter::ts_ident(&p.name.name)),
                         None => String::new(),
                     },
                 ));
@@ -1213,7 +1211,7 @@ pub(super) fn emit_system_http_support(
                         None,
                     );
                     routes.push(sysdrive_driver(
-                        &format!("{name}_"),
+                        SysdriveKind::typed(name),
                         sname,
                         &key,
                         driver_params.clone(),
@@ -1229,7 +1227,7 @@ pub(super) fn emit_system_http_support(
                     ));
                     if !h.params.is_empty() {
                         routes.push(sysdrive_driver(
-                            &format!("raw{name}_"),
+                            SysdriveKind::raw(name),
                             sname,
                             &key,
                             raw_params.clone(),
@@ -1259,7 +1257,7 @@ pub(super) fn emit_system_http_support(
         // is built as a real node, not opaque text.
         let wrongmethod = TsStmt::decl(
             TsDecl::Function {
-                name: format!("__sysdrive_wrongmethod_{sname}"),
+                name: wrong_method_driver_name(sname),
                 generics: Vec::new(),
                 params: vec![
                     TsParam::new("method".to_string(), Some(TsType::named("string"))),
@@ -1479,7 +1477,7 @@ fn wire_body_init(body: Option<&bynk_syntax::ast::Param>, raw: bool) -> String {
             "body: new globalThis.ReadableStream<Uint8Array>({{ start(c) {{ c.enqueue(new globalThis.TextEncoder().encode({param})); c.close(); }} }}), ...({{ duplex: \"half\" }} as object), "
         )
     } else {
-        format!("body: {param}, ")
+        body_field(&param)
     }
 }
 
@@ -1598,12 +1596,6 @@ pub(super) fn foreign_service_double(binding: &str, worker: &str) -> TsExpr {
     }
 }
 
-/// #1959: the harness's import alias for participant `ns`'s events fan-out
-/// module, shared by the import and the binding that constructs from it.
-pub(super) fn fanout_alias(ns: &str) -> String {
-    format!("fanout_{ns}")
-}
-
 /// The name a system test case calls a participant as: its cases lower in a
 /// commons of this name ([`integration_typed_commons`]), and a cross-context
 /// call stamps the calling commons' name. I2 (#1971): the harness gives every
@@ -1640,9 +1632,7 @@ fn cookie_header_texts(
         runtime_use,
     ));
     // #3343: a renamed field is written under its `@name`.
-    let table_arg = crate::emitter::renamed_specs_source(&p.type_ref, types)
-        .map(|t| format!(", {t}"))
-        .unwrap_or_default();
+    let table_arg = renamed_specs_arg(&p.type_ref, types);
     (
         format!("\"cookie\": __cookieString({ser}{table_arg}), "),
         format!("\"cookie\": {var}, "),
@@ -1712,13 +1702,13 @@ fn sum_auth_for(
 /// one fails the case's `Rejected(Unauthorized)`; when every token is refused it returns that
 /// refusal. Typed and raw, like the others.
 fn push_two_token_principals(routes: &mut Vec<TsStmt>, sname: &str, key: &str, has_params: bool) {
-    let prefixes: &[&str] = if has_params { &["", "raw"] } else { &[""] };
+    let prefixes: &[bool] = if has_params { &[false, true] } else { &[false] };
     for (principal, tokens) in [
         ("wrongalgorithm", ["algnone", "alghs256"]),
         ("nosubject", ["emptysub", "nosub"]),
     ] {
-        for raw in prefixes {
-            let driver = |kind: &str| format!("__sysdrive_{raw}{kind}_{sname}_{key}");
+        for &raw in prefixes {
+            let driver = |kind: &str| sysdrive_name(SysdriveKind { raw, kind }, sname, key);
             routes.push(TsStmt::raw(
                 format!(
                     "async function {name}(...__a: Parameters<typeof {first}>) {{\n  const __first = await {first}(...__a);\n  if (__first.tag !== \"Rejected\" || __first.value.tag !== \"Unauthorized\") return __first;\n  return await {second}(...__a);\n}}",
@@ -1849,7 +1839,7 @@ fn push_session_refusal_drivers(
     };
     let options = make(body_init);
     let raw_body_init = body_name
-        .map(|n| format!("body: {}, ", crate::emitter::ts_ident(n)))
+        .map(|n| body_field(&crate::emitter::ts_ident(n)))
         .unwrap_or_default();
     let raw_options = make(&raw_body_init);
     let issued_before_ttl = format!("__bynkNow() - {} - 3600", session.ttl_secs);
@@ -1870,7 +1860,7 @@ fn push_session_refusal_drivers(
     for (name, pair) in variants {
         let sign_stmt = TsStmt::raw(format!("const __cookie = {pair};"), None);
         routes.push(sysdrive_driver(
-            &format!("{name}_"),
+            SysdriveKind::typed(name),
             sname,
             key,
             driver_params.to_vec(),
@@ -1886,7 +1876,7 @@ fn push_session_refusal_drivers(
         ));
         if req.has_params {
             routes.push(sysdrive_driver(
-                &format!("raw{name}_"),
+                SysdriveKind::raw(name),
                 sname,
                 key,
                 raw_params.to_vec(),

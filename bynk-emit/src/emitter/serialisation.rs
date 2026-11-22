@@ -15,160 +15,17 @@ use std::sync::Arc;
 use bynk_syntax::ast::{BaseType, PredKind, TypeBody, TypeDecl, TypeRef};
 
 use crate::emitter::{RuntimeUse, payload_prop};
+use crate::ts_build::{
+    and_expr, as_expr, binary, block, call, const_, ident, if_, index, member, not_expr, or_expr,
+    ret, str_lit, strict_eq, strict_neq, switch_stmt, typeof_expr,
+};
 use bynk_check::wire_default::lower_field_default_wire;
 use bynk_ts::{
     TsArrowBody, TsBinaryOp, TsBindingName, TsDecl, TsExpr, TsLit, TsObjectEntry, TsParam, TsStmt,
     TsSwitchCase, TsType, TsTypeMember, TsUnaryOp,
 };
 
-// #1435 (Arc E slice 1): this file's own local `TsExpr` builder set, the
-// same "compose the real node algebra for this file's own repeated shapes"
-// convention `workers.rs`/`workers_entry.rs` already established (#1321,
-// #1323) — not part of the public node algebra, `bynk-ts` still owns every
-// real constructor. Kept as this file's own private set rather than shared
-// cross-file, matching this track's own established per-file scoping.
-
-fn ident(s: impl Into<String>) -> TsExpr {
-    TsExpr::Ident(s.into())
-}
-
-fn str_lit(s: impl Into<String>) -> TsExpr {
-    TsExpr::Lit(TsLit::Str(s.into()))
-}
-
-fn member(object: TsExpr, property: impl Into<String>) -> TsExpr {
-    TsExpr::Member {
-        object: Box::new(object),
-        property: property.into(),
-    }
-}
-
-fn call(callee: TsExpr, args: Vec<TsExpr>) -> TsExpr {
-    TsExpr::Call {
-        callee: Box::new(callee),
-        args,
-    }
-}
-
-fn as_expr(expr: TsExpr, ty: TsType) -> TsExpr {
-    TsExpr::As {
-        expr: Box::new(expr),
-        ty,
-    }
-}
-
-// #1439 (Arc E slice 3): the statement-builder half of this file's own
-// local node-builder set — slices 1/2 (#1436/#1438) only ever needed the
-// `TsExpr` builders above (every prior conversion in this file returned one
-// expression); this slice's `emit_field_deserialise_wire` returns a real
-// `Vec<TsStmt>` per `WireRef` arm, so it needs the `TsStmt` half too. Same
-// naming/shape convention `workers.rs`/`workers_entry.rs` already
-// established for their own statement-builder sets (#1321/#1323).
-
-fn not_expr(expr: TsExpr) -> TsExpr {
-    TsExpr::Unary {
-        op: TsUnaryOp::Not,
-        expr: Box::new(expr),
-    }
-}
-
-fn typeof_expr(expr: TsExpr) -> TsExpr {
-    TsExpr::Unary {
-        op: TsUnaryOp::Typeof,
-        expr: Box::new(expr),
-    }
-}
-
-fn binary(op: TsBinaryOp, left: TsExpr, right: TsExpr) -> TsExpr {
-    TsExpr::Binary {
-        op,
-        left: Box::new(left),
-        right: Box::new(right),
-    }
-}
-
-fn strict_eq(left: TsExpr, right: TsExpr) -> TsExpr {
-    binary(TsBinaryOp::StrictEq, left, right)
-}
-
-fn strict_neq(left: TsExpr, right: TsExpr) -> TsExpr {
-    binary(TsBinaryOp::StrictNotEq, left, right)
-}
-
-/// `left || right` — #1443 (Arc E slice 5)'s own real gap:
-/// `emit_record_codec`'s structural-shape guard (`typeof json !== "object"
-/// || json === null || Array.isArray(json)`) is a genuine 3-term `Or`
-/// chain, this file's first (every prior `Or`/`And` use in this crate lives
-/// in `workers.rs`/`workers_entry.rs`, not here). Left-folding two calls
-/// (`or_expr(or_expr(a, b), c)`) prints flat with no parens — `||` is one
-/// of the two operators [`render_binary_operand`] (`bynk-ts/src/printer.rs`)
-/// already exempts from its "same-operator nesting still parenthesizes"
-/// rule, the exact precedent `workers_entry.rs`'s own
-/// `emit_call_handler_dispatch` 3-term chain established.
-fn or_expr(left: TsExpr, right: TsExpr) -> TsExpr {
-    binary(TsBinaryOp::Or, left, right)
-}
-
-/// `left in right` — #1443 (Arc E slice 5): the "is this wire key present
-/// at all" test `emit_record_codec`'s per-field default-value
-/// prevalidation line needs. See [`bynk_ts::TsBinaryOp::In`]'s own doc for
-/// why this is a new operator, not a re-derivation of an existing one.
-fn in_expr(left: TsExpr, right: TsExpr) -> TsExpr {
-    binary(TsBinaryOp::In, left, right)
-}
-
-/// `left < right` — Arc E slice 7 (#1447): `emit_generic_helpers_qualified`'s
-/// own `ListInst`/`MapInst` arms both need the loop-test half of a real
-/// `for (let i = 0; i < json.length; i++)` (see `bynk_ts::TsStmt::for_stmt`'s
-/// own doc, and `TsStmtKind::For`'s behind it, for why that construct exists
-/// at all). `TsBinaryOp::LessThan`
-/// itself already exists (Arc C slice 33, #1401) — this is this *file's*
-/// first real use of it, not a new operator.
-fn less_than(left: TsExpr, right: TsExpr) -> TsExpr {
-    binary(TsBinaryOp::LessThan, left, right)
-}
-
-/// `object[index]` — a computed member access, distinct from [`member`]'s
-/// dotted `object.property` form. #1443 (Arc E slice 5)'s own real gap:
-/// `emit_record_codec`'s default-value prevalidation ternary's own
-/// `obj["<field>"]` consequent is this *file's* first real computed-index
-/// access (`workers_entry.rs`'s own `index_expr` — an identical two-line
-/// builder — is the cross-file precedent for the shape; not shared here
-/// since this file already keeps its own private builder set per #1435's
-/// own doc).
-fn index(object: TsExpr, idx: TsExpr) -> TsExpr {
-    TsExpr::Index {
-        object: Box::new(object),
-        index: Box::new(idx),
-    }
-}
-
-fn const_(name: impl Into<String>, init: TsExpr) -> TsStmt {
-    TsStmt::const_stmt(TsBindingName::Ident(name.into()), None, init, None)
-}
-
-fn return_(expr: TsExpr) -> TsStmt {
-    TsStmt::return_stmt(Some(expr), None)
-}
-
-fn if_(cond: TsExpr, then_branch: TsStmt) -> TsStmt {
-    TsStmt::if_stmt(cond, then_branch, None)
-}
-
-fn block(stmts: Vec<TsStmt>) -> TsStmt {
-    TsStmt::block(stmts, None)
-}
-
-/// `switch (<discriminant>) { <cases> }` — Arc E slice 6 (#1445),
-/// [`emit_sum_codec`]'s own first real `switch` statement in this file
-/// (`TsStmt::Switch`/[`TsSwitchCase`] themselves are Arc C slice 4/#1323,
-/// `workers_entry.rs`). Kept as this file's own private wrapper (matching
-/// `const_`/`return_`/`if_`/`block` just above) rather than calling
-/// `TsStmt::switch_stmt` directly at each of `emit_sum_codec`'s two call
-/// sites.
-fn switch_stmt(discriminant: TsExpr, cases: Vec<TsSwitchCase>) -> TsStmt {
-    TsStmt::switch_stmt(discriminant, cases, None)
-}
+// -- Helpers over the shared builders (`crate::ts_build`) ----------------------
 
 /// `case <test>: <body>` — unlike `workers_entry.rs`'s own identically-named
 /// helper (which always braces, since every one of its real cases wants a
@@ -742,7 +599,7 @@ fn depth_expected() -> String {
 fn depth_guard_decode() -> TsStmt {
     if_(
         depth_exceeded(),
-        block(vec![return_(err_structural_mismatch_top(
+        block(vec![ret(err_structural_mismatch_top(
             &depth_expected(),
             str_lit("a value nested more deeply"),
         ))]),
@@ -812,7 +669,7 @@ fn emit_bytes_named_codec(name: &str, qual: &Qual, ru: &RuntimeUse) -> Vec<TsDec
             Some(TsType::named(ty.clone())),
         )],
         return_type: Some(TsType::named("__JsonValue")),
-        body: vec![return_(call(
+        body: vec![ret(call(
             ident("__bynkBytesToBase64"),
             vec![as_expr(
                 as_expr(ident("value"), TsType::named("unknown")),
@@ -834,7 +691,7 @@ fn emit_bytes_named_codec(name: &str, qual: &Qual, ru: &RuntimeUse) -> Vec<TsDec
         body: vec![
             if_(
                 strict_neq(typeof_expr(ident("json")), str_lit("string")),
-                block(vec![return_(err_structural_mismatch_top(
+                block(vec![ret(err_structural_mismatch_top(
                     "base64 string",
                     typeof_expr(ident("json")),
                 ))]),
@@ -845,12 +702,12 @@ fn emit_bytes_named_codec(name: &str, qual: &Qual, ru: &RuntimeUse) -> Vec<TsDec
             ),
             if_(
                 strict_eq(member(ident("__b"), "tag"), str_lit("None")),
-                block(vec![return_(err_structural_mismatch_top(
+                block(vec![ret(err_structural_mismatch_top(
                     "base64 string",
                     str_lit("invalid base64"),
                 ))]),
             ),
-            return_(call(
+            ret(call(
                 ident("Ok"),
                 vec![as_expr(
                     as_expr(member(ident("__b"), "value"), TsType::named("unknown")),
@@ -890,7 +747,7 @@ fn emit_decimal_named_codec(
             Some(TsType::named(ty.clone())),
         )],
         return_type: Some(TsType::named("__JsonValue")),
-        body: vec![return_(as_expr(
+        body: vec![ret(as_expr(
             call(
                 ident("__bynkDecimalToString"),
                 vec![as_expr(
@@ -907,7 +764,7 @@ fn emit_decimal_named_codec(
     let mut body = vec![
         if_(
             strict_neq(typeof_expr(ident("json")), str_lit("string")),
-            block(vec![return_(err_structural_mismatch_top(
+            block(vec![ret(err_structural_mismatch_top(
                 "decimal string",
                 typeof_expr(ident("json")),
             ))]),
@@ -918,14 +775,14 @@ fn emit_decimal_named_codec(
         ),
         if_(
             strict_eq(member(ident("__d"), "tag"), str_lit("None")),
-            block(vec![return_(err_structural_mismatch_top(
+            block(vec![ret(err_structural_mismatch_top(
                 "decimal string",
                 str_lit("invalid decimal"),
             ))]),
         ),
     ];
     let cast_ok = || {
-        return_(call(
+        ret(call(
             ident("Ok"),
             vec![as_expr(
                 as_expr(member(ident("__d"), "value"), TsType::named("unknown")),
@@ -940,7 +797,7 @@ fn emit_decimal_named_codec(
         body.push(of_probe(name, member(ident("__d"), "value")));
         body.push(if_(
             strict_eq(member(ident("validated"), "tag"), str_lit("Err")),
-            block(vec![return_(call(
+            block(vec![ret(call(
                 ident("Err"),
                 vec![TsExpr::object_entries(vec![
                     TsObjectEntry::prop("kind".to_string(), str_lit("RefinementViolation")),
@@ -952,7 +809,7 @@ fn emit_decimal_named_codec(
                 ])],
             ))]),
         ));
-        body.push(return_(call(
+        body.push(ret(call(
             ident("Ok"),
             vec![as_expr(
                 member(ident("validated"), "value"),
@@ -972,7 +829,7 @@ fn emit_decimal_named_codec(
             );
             body.push(if_(
                 not_expr(TsExpr::Paren(Box::new(cond))),
-                block(vec![return_(call(
+                block(vec![ret(call(
                     ident("Err"),
                     vec![TsExpr::object_entries(vec![
                         TsObjectEntry::prop("kind".to_string(), str_lit("RefinementViolation")),
@@ -1144,7 +1001,7 @@ fn emit_refined(
             Some(TsType::named(ty.clone())),
         )],
         return_type: Some(TsType::named("__JsonValue")),
-        body: vec![return_(as_expr(
+        body: vec![ret(as_expr(
             as_expr(ident("value"), TsType::named("unknown")),
             TsType::named(prim),
         ))],
@@ -1154,7 +1011,7 @@ fn emit_refined(
 
     let mut body = vec![if_(
         strict_neq(typeof_expr(ident("json")), str_lit(typeof_str)),
-        block(vec![return_(err_structural_mismatch_top(
+        block(vec![ret(err_structural_mismatch_top(
             typeof_str,
             typeof_expr(ident("json")),
         ))]),
@@ -1164,7 +1021,7 @@ fn emit_refined(
             // Decision C: structural cast only — never reach for the owner's
             // `.of`, which would resurrect the value import this increment
             // removes and leak the opaque predicate into the consumer.
-            body.push(return_(call(
+            body.push(ret(call(
                 ident("Ok"),
                 vec![as_expr(
                     as_expr(ident("json"), TsType::named("unknown")),
@@ -1187,7 +1044,7 @@ fn emit_refined(
                 &scalar.base_guards,
                 &scalar.predicates,
             ));
-            body.push(return_(call(
+            body.push(ret(call(
                 ident("Ok"),
                 vec![as_expr(
                     as_expr(ident("json"), TsType::named("unknown")),
@@ -1205,7 +1062,7 @@ fn emit_refined(
             body.push(of_probe(name, ident("json")));
             body.push(if_(
                 strict_eq(member(ident("validated"), "tag"), str_lit("Err")),
-                block(vec![return_(call(
+                block(vec![ret(call(
                     ident("Err"),
                     vec![TsExpr::object_entries(vec![
                         TsObjectEntry::prop("kind".to_string(), str_lit("RefinementViolation")),
@@ -1217,7 +1074,7 @@ fn emit_refined(
                     ])],
                 ))]),
             ));
-            body.push(return_(call(
+            body.push(ret(call(
                 ident("Ok"),
                 vec![as_expr(
                     member(ident("validated"), "value"),
@@ -1284,7 +1141,7 @@ fn emit_inline_refinement_checks(
     // `pred_condition_and_message`'s own contract exactly, and is a no-op
     // for the base-guard arms' own escaping-free text.
     let violation = |msg: &str| -> TsStmt {
-        return_(call(
+        ret(call(
             ident("Err"),
             vec![TsExpr::object_entries(vec![
                 TsObjectEntry::prop("kind".to_string(), str_lit("RefinementViolation")),
@@ -1354,7 +1211,7 @@ fn emit_field_refinement_checks(
         ident(value.clone())
     };
     let violation = |msg: &str| -> TsStmt {
-        return_(call(
+        ret(call(
             ident("Err"),
             vec![TsExpr::object(vec![
                 ("kind".to_string(), str_lit("RefinementViolation")),
@@ -1544,7 +1401,7 @@ fn emit_record_codec(
         serialise_params.push(depth_param());
         serialise_body.push(depth_guard_encode());
     }
-    serialise_body.push(return_(TsExpr::multiline_object(
+    serialise_body.push(ret(TsExpr::multiline_object(
         fields
             .iter()
             .map(|field| {
@@ -1587,7 +1444,7 @@ fn emit_record_codec(
                     vec![ident("json")],
                 ),
             ),
-            block(vec![return_(err_structural_mismatch_top(
+            block(vec![ret(err_structural_mismatch_top(
                 "object",
                 typeof_expr(ident("json")),
             ))]),
@@ -1637,7 +1494,7 @@ fn emit_record_codec(
                 TsBindingName::Ident(d_name.clone()),
                 Some(TsType::named("__JsonValue")),
                 TsExpr::Conditional {
-                    test: Box::new(in_expr(str_lit(fname.clone()), ident("obj"))),
+                    test: Box::new(binary(TsBinaryOp::In, str_lit(fname.clone()), ident("obj"))),
                     consequent: Box::new(index(ident("obj"), str_lit(fname.clone()))),
                     alternate: Box::new(ident(d.clone())),
                 },
@@ -1693,7 +1550,7 @@ fn emit_record_codec(
     // unreachable-today formatting hazard rather than fix it inline"
     // precedent P7.9's own `Array`-over-`Union` hazard already set (that one
     // since closed, #1898).
-    body.push(return_(call(
+    body.push(ret(call(
         ident("Ok"),
         vec![as_expr(
             TsExpr::object(
@@ -1820,7 +1677,7 @@ fn emit_sum_codec(
             if variant.payload.is_empty() {
                 case_(
                     str_lit(vname.clone()),
-                    vec![return_(TsExpr::object(vec![(
+                    vec![ret(TsExpr::object(vec![(
                         kind.to_string(),
                         str_lit(vname.clone()),
                     )]))],
@@ -1848,7 +1705,7 @@ fn emit_sum_codec(
                 }
                 case_(
                     str_lit(vname.clone()),
-                    vec![return_(TsExpr::object(entries))],
+                    vec![ret(TsExpr::object(entries))],
                     true,
                 )
             }
@@ -1888,7 +1745,7 @@ fn emit_sum_codec(
                     vec![ident("json")],
                 ),
             ),
-            block(vec![return_(err_structural_mismatch_top(
+            block(vec![ret(err_structural_mismatch_top(
                 "object",
                 typeof_expr(ident("json")),
             ))]),
@@ -1912,7 +1769,7 @@ fn emit_sum_codec(
             if variant.payload.is_empty() {
                 case_(
                     str_lit(vname.clone()),
-                    vec![return_(call(
+                    vec![ret(call(
                         ident("Ok"),
                         vec![as_expr(
                             TsExpr::object(vec![(tag.to_string(), str_lit(vname.clone()))]),
@@ -1942,7 +1799,7 @@ fn emit_sum_codec(
                         ident(format!("__{}", field.name)),
                     ));
                 }
-                stmts.push(return_(call(
+                stmts.push(ret(call(
                     ident("Ok"),
                     vec![as_expr(TsExpr::object(entries), ts_type.clone())],
                 )));
@@ -1950,7 +1807,7 @@ fn emit_sum_codec(
             }
         })
         .collect();
-    deserialise_cases.push(default_case(vec![return_(err_structural_mismatch_top(
+    deserialise_cases.push(default_case(vec![ret(err_structural_mismatch_top(
         "sum variant kind",
         call(ident("String"), vec![ident(kind)]),
     ))]));
@@ -2121,7 +1978,7 @@ fn emit_field_deserialise_wire(
             vec![
                 if_(
                     strict_neq(typeof_expr(ident(json)), str_lit("string")),
-                    block(vec![return_(err_structural_mismatch(
+                    block(vec![ret(err_structural_mismatch(
                         path_expr,
                         "base64 string",
                         typeof_expr(ident(json)),
@@ -2133,7 +1990,7 @@ fn emit_field_deserialise_wire(
                 ),
                 if_(
                     strict_eq(member(ident(format!("__b_{name}")), "tag"), str_lit("None")),
-                    block(vec![return_(err_structural_mismatch(
+                    block(vec![ret(err_structural_mismatch(
                         path_expr,
                         "base64 string",
                         str_lit("invalid base64"),
@@ -2152,7 +2009,7 @@ fn emit_field_deserialise_wire(
             vec![
                 if_(
                     strict_neq(typeof_expr(ident(json)), str_lit("string")),
-                    block(vec![return_(err_structural_mismatch(
+                    block(vec![ret(err_structural_mismatch(
                         path_expr,
                         "decimal string",
                         typeof_expr(ident(json)),
@@ -2164,7 +2021,7 @@ fn emit_field_deserialise_wire(
                 ),
                 if_(
                     strict_eq(member(ident(format!("__b_{name}")), "tag"), str_lit("None")),
-                    block(vec![return_(err_structural_mismatch(
+                    block(vec![ret(err_structural_mismatch(
                         path_expr,
                         "decimal string",
                         str_lit("invalid decimal"),
@@ -2182,7 +2039,7 @@ fn emit_field_deserialise_wire(
             let typeof_str = json_kind_ts(*kind);
             let mut stmts = vec![if_(
                 strict_neq(typeof_expr(ident(json)), str_lit(typeof_str)),
-                block(vec![return_(err_structural_mismatch(
+                block(vec![ret(err_structural_mismatch(
                     path_expr,
                     typeof_str,
                     typeof_expr(ident(json)),
@@ -2206,7 +2063,7 @@ fn emit_field_deserialise_wire(
                         member(ident("globalThis.Number"), method),
                         vec![ident(json)],
                     )),
-                    block(vec![return_(err_structural_mismatch(
+                    block(vec![ret(err_structural_mismatch(
                         path_expr,
                         expected,
                         call(ident("String"), vec![ident(json)]),
@@ -2240,7 +2097,7 @@ fn emit_field_deserialise_wire(
             ),
             if_(
                 strict_eq(member(ident(format!("__r_{name}")), "tag"), str_lit("Err")),
-                return_(ident(format!("__r_{name}"))),
+                ret(ident(format!("__r_{name}"))),
             ),
             const_(
                 format!("__{name}"),
@@ -2854,7 +2711,7 @@ pub(crate) fn witness_codec_expr(t: &TypeRef, ru: &RuntimeUse) -> TsExpr {
         | other @ TypeRef::Unit(_)
         | other @ TypeRef::Fn(..) => {
             let mut body = emit_field_deserialise("v", other, "__j", "__p", None, ru);
-            body.push(return_(call(
+            body.push(ret(call(
                 ident("Ok"),
                 vec![as_expr(
                     ident("__v"),
@@ -3393,7 +3250,7 @@ fn object_shape_guard() -> Vec<TsStmt> {
                     vec![ident("json")],
                 ),
             ),
-            block(vec![return_(err_structural_mismatch_top(
+            block(vec![ret(err_structural_mismatch_top(
                 "object",
                 typeof_expr(ident("json")),
             ))]),
@@ -3416,7 +3273,7 @@ fn array_shape_guard() -> TsStmt {
             member(ident("globalThis.Array"), "isArray"),
             vec![ident("json")],
         )),
-        block(vec![return_(err_structural_mismatch_top(
+        block(vec![ret(err_structural_mismatch_top(
             "array",
             typeof_expr(ident("json")),
         ))]),
@@ -3459,15 +3316,9 @@ fn wire_kind_dispatch(
 const OPTION_FORMS_SUFFIX: &str =
     " | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}";
 
-/// `left && right`, for the `Option` decoder's tagged-form recognition
-/// (#1887). Left-folding prints flat, as [`or_expr`] does.
-fn and_expr(left: TsExpr, right: TsExpr) -> TsExpr {
-    binary(TsBinaryOp::And, left, right)
-}
-
 /// `Ok(<value> as Option<U>)`: the `Option` decoder's one success shape.
 fn ok_option(value: TsExpr, option_ty: &TsType) -> TsStmt {
-    return_(call(ident("Ok"), vec![as_expr(value, option_ty.clone())]))
+    ret(call(ident("Ok"), vec![as_expr(value, option_ty.clone())]))
 }
 
 /// The body of `__deserialise_Option_<U>` (#1887, ADR amending 0045). The
@@ -3554,7 +3405,7 @@ fn lenient_option_decode_body(
         if_(
             and_expr(
                 and_expr(obj_kind_is("Some"), keys_len_is("2")),
-                in_expr(str_lit("value"), ident("obj")),
+                binary(TsBinaryOp::In, str_lit("value"), ident("obj")),
             ),
             block(vec![
                 const_(
@@ -3569,7 +3420,7 @@ fn lenient_option_decode_body(
                 ),
                 if_(
                     strict_eq(member(ident("__t"), "tag"), str_lit("Err")),
-                    block(vec![return_(ident("__t"))]),
+                    block(vec![ret(ident("__t"))]),
                 ),
                 ok_option(some_of("__t"), option_ty),
             ]),
@@ -3632,7 +3483,7 @@ fn lenient_option_decode_body(
         // decoder has already extended an error at this same path.
         if_(
             extend_cond,
-            block(vec![return_(call(
+            block(vec![ret(call(
                 ident("Err"),
                 vec![TsExpr::object_entries(vec![
                     TsObjectEntry::Spread(bare_error.clone()),
@@ -3647,7 +3498,7 @@ fn lenient_option_decode_body(
                 ])],
             ))]),
         ),
-        return_(ident("__b")),
+        ret(ident("__b")),
     ]
 }
 
@@ -3665,7 +3516,7 @@ fn option_value_decoder(
     ru: &RuntimeUse,
 ) -> TsDecl {
     let mut body = emit_field_deserialise("v", inner, "raw", "at", depth, ru);
-    body.push(return_(call(ident("Ok"), vec![ident("__v")])));
+    body.push(ret(call(ident("Ok"), vec![ident("__v")])));
     let mut params = vec![
         TsParam::new("raw".to_string(), Some(TsType::named("__JsonValue"))),
         TsParam::new("at".to_string(), Some(TsType::named("string"))),
@@ -3978,7 +3829,7 @@ pub(crate) fn emit_codec_factory(
     }
     let suffix = app_ts_name(&name.name, args);
     let ts_type = format!("{}<{}>", name.name, params.join(", "));
-    body.push(return_(TsExpr::object(vec![
+    body.push(ret(TsExpr::object(vec![
         ("encode".to_string(), ident(format!("__serialise_{suffix}"))),
         (
             "decode".to_string(),
@@ -4202,7 +4053,7 @@ pub fn emit_generic_helpers_qualified(
                     body: vec![
                         if_(
                             strict_eq(member(ident("value"), "tag"), str_lit("Ok")),
-                            return_(TsExpr::object(vec![
+                            ret(TsExpr::object(vec![
                                 ("kind".to_string(), str_lit("Ok")),
                                 (
                                     "value".to_string(),
@@ -4210,7 +4061,7 @@ pub fn emit_generic_helpers_qualified(
                                 ),
                             ])),
                         ),
-                        return_(TsExpr::object(vec![
+                        ret(TsExpr::object(vec![
                             ("kind".to_string(), str_lit("Err")),
                             (
                                 "error".to_string(),
@@ -4226,7 +4077,7 @@ pub fn emit_generic_helpers_qualified(
                 body.push(wire_kind_dispatch(
                     "Ok",
                     emit_field_deserialise("v", ok, "obj[\"value\"]", "`${path}.value`", depth, ru),
-                    return_(call(
+                    ret(call(
                         ident("Ok"),
                         vec![as_expr(
                             call(ident("Ok"), vec![ident("__v")]),
@@ -4242,7 +4093,7 @@ pub fn emit_generic_helpers_qualified(
                         depth,
                         ru,
                     ),
-                    return_(call(
+                    ret(call(
                         ident("Ok"),
                         vec![as_expr(
                             call(ident("Err"), vec![ident("__e")]),
@@ -4250,7 +4101,7 @@ pub fn emit_generic_helpers_qualified(
                         )],
                     )),
                 ));
-                body.push(return_(err_structural_mismatch_top(
+                body.push(ret(err_structural_mismatch_top(
                     "Ok | Err",
                     call(ident("String"), vec![index(ident("obj"), str_lit("kind"))]),
                 )));
@@ -4300,17 +4151,17 @@ pub fn emit_generic_helpers_qualified(
                     vec![
                         if_(
                             strict_eq(member(ident("value"), "tag"), str_lit("Some")),
-                            return_(pick(some_value, tagged_some)),
+                            ret(pick(some_value, tagged_some)),
                         ),
-                        return_(pick(ident("null"), tagged_none)),
+                        ret(pick(ident("null"), tagged_none)),
                     ]
                 } else {
                     vec![
                         if_(
                             strict_eq(member(ident("value"), "tag"), str_lit("Some")),
-                            return_(tagged_some),
+                            ret(tagged_some),
                         ),
-                        return_(tagged_none),
+                        ret(tagged_none),
                     ]
                 };
                 let serialise = TsDecl::Export(Box::new(TsDecl::Function {
@@ -4353,7 +4204,7 @@ pub fn emit_generic_helpers_qualified(
                     generics: Vec::new(),
                     params: serialise_params(readonly_elem_array.clone(), depth),
                     return_type: Some(TsType::named("__JsonValue")),
-                    body: vec![return_(call(
+                    body: vec![ret(call(
                         member(ident("value"), "map"),
                         vec![TsExpr::Arrow {
                             params: vec![TsParam::new("v".to_string(), None)],
@@ -4411,11 +4262,15 @@ pub fn emit_generic_helpers_qualified(
                         TsStmt::for_stmt(
                             "i",
                             TsExpr::Lit(TsLit::Num("0".to_string())),
-                            less_than(ident("i"), member(ident("json"), "length")),
+                            binary(
+                                TsBinaryOp::LessThan,
+                                ident("i"),
+                                member(ident("json"), "length"),
+                            ),
                             block(loop_body),
                             None,
                         ),
-                        return_(call(ident("Ok"), vec![ident("out")])),
+                        ret(call(ident("Ok"), vec![ident("out")])),
                     ],
                     is_async: false,
                     inline: false,
@@ -4449,7 +4304,7 @@ pub fn emit_generic_helpers_qualified(
                     generics: Vec::new(),
                     params: serialise_params(set_ty.clone(), depth),
                     return_type: Some(TsType::named("__JsonValue")),
-                    body: vec![return_(call(
+                    body: vec![ret(call(
                         member(
                             call(ident("globalThis.Array.from"), vec![ident("value")]),
                             "map",
@@ -4482,7 +4337,7 @@ pub fn emit_generic_helpers_qualified(
                         member(ident("out"), "has"),
                         vec![as_expr(ident("__el"), elem_ty.clone())],
                     ),
-                    block(vec![return_(err_structural_mismatch(
+                    block(vec![ret(err_structural_mismatch(
                         "`${path}[${i}]`",
                         "a distinct set element",
                         str_lit("a duplicate"),
@@ -4516,11 +4371,15 @@ pub fn emit_generic_helpers_qualified(
                         TsStmt::for_stmt(
                             "i",
                             TsExpr::Lit(TsLit::Num("0".to_string())),
-                            less_than(ident("i"), member(ident("json"), "length")),
+                            binary(
+                                TsBinaryOp::LessThan,
+                                ident("i"),
+                                member(ident("json"), "length"),
+                            ),
                             block(loop_body),
                             None,
                         ),
-                        return_(call(ident("Ok"), vec![ident("out")])),
+                        ret(call(ident("Ok"), vec![ident("out")])),
                     ],
                     is_async: false,
                     inline: false,
@@ -4588,7 +4447,7 @@ pub fn emit_generic_helpers_qualified(
                             )]),
                             None,
                         ),
-                        return_(ident("entries")),
+                        ret(ident("entries")),
                     ],
                     is_async: false,
                     inline: false,
@@ -4607,7 +4466,7 @@ pub fn emit_generic_helpers_qualified(
                                 TsExpr::Lit(TsLit::Num("2".to_string())),
                             ),
                         ),
-                        block(vec![return_(err_structural_mismatch(
+                        block(vec![ret(err_structural_mismatch(
                             "`${path}[${i}]`",
                             "[key, value] entry",
                             typeof_expr(ident("entry")),
@@ -4639,7 +4498,7 @@ pub fn emit_generic_helpers_qualified(
                         member(ident("out"), "has"),
                         vec![as_expr(ident("__k"), key_ty.clone())],
                     ),
-                    block(vec![return_(err_structural_mismatch(
+                    block(vec![ret(err_structural_mismatch(
                         "`${path}[${i}][0]`",
                         "a distinct map key",
                         str_lit("a duplicate"),
@@ -4684,11 +4543,15 @@ pub fn emit_generic_helpers_qualified(
                         TsStmt::for_stmt(
                             "i",
                             TsExpr::Lit(TsLit::Num("0".to_string())),
-                            less_than(ident("i"), member(ident("json"), "length")),
+                            binary(
+                                TsBinaryOp::LessThan,
+                                ident("i"),
+                                member(ident("json"), "length"),
+                            ),
                             block(loop_body),
                             None,
                         ),
-                        return_(call(ident("Ok"), vec![ident("out")])),
+                        ret(call(ident("Ok"), vec![ident("out")])),
                     ],
                     is_async: false,
                     inline: false,
@@ -5209,16 +5072,16 @@ mod converted_site_tests {
         let guard = |n: &str| {
             if_(
                 strict_eq(ident(n), str_lit("x")),
-                block(vec![return_(ident("fail"))]),
+                block(vec![ret(ident("fail"))]),
             )
         };
         let stmt = wire_kind_dispatch(
             "Ok",
             vec![guard("a")],
-            return_(ident("ra")),
+            ret(ident("ra")),
             "Err",
             vec![guard("b")],
-            return_(ident("rb")),
+            ret(ident("rb")),
         );
         assert_eq!(
             bynk_ts::print_stmt(&stmt, 1),

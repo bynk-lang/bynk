@@ -166,7 +166,7 @@ pub(super) fn emit_test_module(
         TsDecl::ImportNamespace {
             type_only: false,
             alias: target_ns.clone(),
-            from: format!("./{import_target}.{ext}"),
+            from: sibling_specifier(&import_target, ext),
         },
         None,
     ));
@@ -241,7 +241,7 @@ pub(super) fn emit_test_module(
             TsDecl::ImportNamespace {
                 type_only: false,
                 alias: ns.clone(),
-                from: format!("./{path}.{ext}"),
+                from: sibling_specifier(path, ext),
             },
             None,
         ));
@@ -288,7 +288,7 @@ pub(super) fn emit_test_module(
                 TsDecl::ImportNamespace {
                     type_only: false,
                     alias: format!("{}__binding", unit.replace('.', "_")),
-                    from: format!("../{module}.{ext}"),
+                    from: parent_specifier(module, ext),
                 },
                 None,
             ));
@@ -341,7 +341,7 @@ pub(super) fn emit_test_module(
             TsDecl::ImportNamespace {
                 type_only: false,
                 alias: ns.clone(),
-                from: format!("./{path}.{ext}"),
+                from: sibling_specifier(path, ext),
             },
             None,
         ));
@@ -721,7 +721,7 @@ pub(super) fn emit_test_module(
                 doc: false,
             });
             let mut idx = prop_runners.len();
-            let runner_name = format!("__prop_{}", sanitise_case_name(&prop.name, &mut idx));
+            let runner_name = prop_runner_name(&sanitise_case_name(&prop.name, &mut idx));
             let prop_ordinal = prop_runners.len();
             prop_runners.push(runner_name.clone());
             // v0.119: a `for all run: History[Agent]` property routes to the driven-
@@ -785,7 +785,7 @@ pub(super) fn emit_test_module(
         let FnName::Free(fname) = &f.name else {
             continue;
         };
-        let attack_name = format!("contract {}", fname.name);
+        let attack_name = contract_case_name(&fname.name);
         discovered.push(DiscoveredCase {
             name: attack_name.clone(),
             location: None,
@@ -794,7 +794,7 @@ pub(super) fn emit_test_module(
             doc: false,
         });
         let mut idx = prop_runners.len();
-        let runner_name = format!("__prop_{}", sanitise_case_name(&attack_name, &mut idx));
+        let runner_name = prop_runner_name(&sanitise_case_name(&attack_name, &mut idx));
         let prop_ordinal = prop_runners.len();
         prop_runners.push(runner_name.clone());
         let attack_stmt = emit_contract_attack_function(
@@ -934,7 +934,7 @@ pub(super) fn emit_test_module(
             continue;
         };
         let runner_name = &prop_runners[prop_index];
-        run_entries.push((format!("contract {}", fname.name), runner_name.clone()));
+        run_entries.push((contract_case_name(&fname.name), runner_name.clone()));
         prop_index += 1;
     }
     stmts.extend(build_run_function(&run_entries));

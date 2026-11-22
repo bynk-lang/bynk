@@ -11,7 +11,7 @@ mod emit_pipeline;
 use emit_pipeline::emit_project;
 
 /// The text a failed bare `Option` value appends to its `expected`. Pinned here as a literal;
-/// `serialisation::tests::option_forms_suffix_spelling` ties it to the emitter's own constant.
+/// `serialisation.rs`'s `mod option_forms_suffix_tests` ties it to the emitter's own constant.
 const OPTION_FORMS_SUFFIX: &str =
     " | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}";
 

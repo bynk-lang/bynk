@@ -22,6 +22,7 @@ use crate::emitter::RuntimeUse;
 use crate::emitter::bindings::{BindingSource, WorkerBinding, events_fanout_binding};
 use crate::emitter::workers::*;
 use crate::emitter::wrangler::binding_ts_type;
+use crate::ts_build::{as_expr, call, const_, ident, member, method_call, return_, str_lit};
 use bynk_check::symbols::MessageBundleInfo;
 use bynk_check::symbols::UnitTable;
 use bynk_ts::{
