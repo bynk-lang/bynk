@@ -317,10 +317,13 @@ Both are written through the same `EntryOverlay` as the handler's other writes
 
 ### 5.2 Which clock
 
-Due instants are **`Clock` instants**. `after(d)` reads the handler's `Clock`,
-as a `Cache` write does (ADR 0113 D4), and the alarm dispatch judges what is due
-by the agent's `Clock` (as ADR 0791 judges expiry by the clock the program
-read). On Cloudflare the first-party `Clock` is wall-clock time, so the platform
+Due instants are **`Clock` instants**, read from the **first-party `Clock`**,
+implied for every agent that declares a timer. Neither the scheduling handler nor
+the timer handler declares `given Clock` for it: `after(d)` reads the first-party
+clock to stamp the entry (`.at(t)` needs no clock at all), and the alarm
+dispatch reads the same clock to judge what is due (as ADR 0791 judges expiry by
+the clock the program read). A context's own `provides Clock` is not used for
+either, so stamping and dispatch can never read different clocks. On Cloudflare the first-party `Clock` is wall-clock time, so the platform
 alarm is set to the earliest due instant and the two agree. Under the test
 harness the `Clock` is the harness clock, so `advance Clock by` decides what is
 due (§8). This amends ADR 0523 C for agent timers: they move with the harness
@@ -348,11 +351,15 @@ pending).
 
 When the platform alarm fires, the emitted `alarm()`:
 
-1. reads the agent's `Clock` and lists entries due by then, in due order, at
+1. reads the first-party `Clock` and lists entries due by then, in due order, at
    most a batch per wake (proposed 64, matching ADR 0791's reaping budget);
-2. runs **each timer as its own handler**, through the instance's queue: load,
-   body, commit. The timer's entry is deleted **in that handler's commit**,
-   with its other writes;
+2. runs **each timer as its own handler**, through the instance's queue: lease
+   (§6.3), load, body, commit. The timer's entry is deleted **in that handler's
+   commit**, with its other writes. The deletion is staged **before** the body
+   runs, against the entry's old due key, so a body that schedules the same
+   timer again (`self.timers.tick().after(1.hours)`, the recurring pattern)
+   writes a fresh entry that survives the commit instead of being cancelled by
+   its own firing;
 3. re-arms the alarm to the next pending entry (immediately, if the batch left
    due entries behind).
 
@@ -392,6 +399,16 @@ the entry's attempt count and moves its due time back by a backoff.
   dead-letter: visible in logs and fault reports, not stored. A stored
   dead-letter list, or an author-declared `on timer … abandoned` hook, are
   follow-ons if logs prove not enough.
+- **Leasing, so a crash counts as an attempt.** A caught fault is not the only
+  way a timer fails: a handler that kills `alarm()` outright (a CPU or
+  wall-time limit, running out of memory) never reaches the catch. So before
+  running a timer's body, the dispatch writes a **lease**: it bumps the
+  entry's attempt count and moves its due time out by the next backoff, in a
+  write of its own that commits before the body starts. A commit then deletes
+  the entry; a caught fault needs no further write; a crash leaves the leased
+  entry due again after the backoff, with the attempt already counted. A
+  crash-looping timer therefore reaches `TimerAbandoned` like any other, and
+  cannot stall the instance's other timers once the platform stops retrying.
 - **The platform's retry still covers the runtime itself**: if `alarm()` dies
   outside a timer handler (an eviction, a storage failure), the platform runs it
   again and the stored schedule is unchanged.
@@ -436,9 +453,14 @@ then:
    same `advance`;
 4. sets the clock to the target.
 
-Ties go to schedule order. `advance` becomes an awaited statement in a module
-whose agents declare timers; every other module keeps today's synchronous
-lowering byte for byte, as virtual time does today (`testing.md:1141-1144`).
+Ties go to schedule order, across everything on the harness clock: one
+harness-wide sequence number stamps every timer, stub `after` and agent alarm
+when it is scheduled, so two instances' timers, or a timer and a stub, due at
+the same instant always run in the same order. `advance` becomes an awaited
+statement in a suite from which an agent that declares timers is **reachable**
+(through its target's agents and their calls), not merely one whose own module
+declares them; every other suite keeps today's synchronous lowering byte for
+byte, as virtual time does today (`testing.md:1141-1144`).
 
 ```bynk
 suite shop.basket {
@@ -531,7 +553,7 @@ depends on that decision (§14).
 - **Active `Cache` eviction.** The runtime schedules an internal sweep, not a
   user timer, at the earliest `Cache` expiry it knows of (the expiry keys of
   `entries.ts:104-109`), coalesced on the same platform alarm. The sweep runs
-  as a handler with no body: it reads the agent's `Clock` and deletes expired
+  as a handler with no body: it reads the first-party `Clock` and deletes expired
   entries through the ADR 0791 commit path, 64 at a time, then re-arms. It
   shares ADR 0791's guarantee that reaping is unobservable. It is on for every
   `Cache` field, with a minimum interval between sweeps (a named constant) so a
@@ -543,8 +565,13 @@ depends on that decision (§14).
   `timer expire`. Removing a timer is accepted with a warning
   (`bynk.timer.removed_with_pending`, proposed); a pending entry for a timer
   the build no longer declares is dropped when it falls due and logged by name.
-  To change a payload non-additively, declare a new timer and keep the old
-  handler until its entries have drained.
+  The lock keeps a **tombstone** for a removed timer's name and parameter types,
+  so re-declaring that name later is checked against them: an additive change
+  is accepted, and a non-additive one is refused
+  (`bynk.timer.redeclared_incompatible`, proposed) rather than turning old
+  pending entries into `RehydrationViolation` retries. To change a payload
+  non-additively, declare a new timer and keep the old handler until its
+  entries have drained.
 - **Sagas (#3185).** "A Durable Object with alarms" is one of its substrate
   candidates. This track provides the primitive; it does not choose.
 - **The durable-work pattern.** ADR 0122 D4 says agent-local deferred work is a
@@ -564,7 +591,7 @@ depends on that decision (§14).
 - **Largest delay:** no language limit. Any platform bound is to confirm (§2.4);
   if one exists, the runtime arms in chunks, as on `bundle`.
 - **Batch per wake:** proposed 64 timers (§6.1).
-- **Clock:** the agent's `Clock` (§5.2).
+- **Clock:** the first-party `Clock` (§5.2).
 
 ## 12. Risks
 
@@ -712,7 +739,7 @@ agrees.
    remove a timer that might have pending entries, since no build can know.
 10. **Limits.** *Proposed: a cap of 10,000 pending timers per instance
     (`TooManyTimers` at commit); a smallest delay of zero; no language maximum;
-    the clock is the agent's `Clock`, not wall-clock time.* The `Clock` choice
+    the clock is the first-party `Clock`, not wall-clock time.* The `Clock` choice
     keeps timers deterministic under the harness, for the reason ADR 0791 judges
     `Cache` expiry by the program's clock: a runtime clock disagrees with a fake
     one. On Cloudflare the first-party `Clock` is wall-clock time, so production
