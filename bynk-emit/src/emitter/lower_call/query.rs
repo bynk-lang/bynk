@@ -8,17 +8,21 @@ use bynk_check::kernel_op::{QueryOp, StreamOp};
 use bynk_ts::{TsArrowBody, TsBinaryOp, TsExpr, TsStmt, TsType};
 
 use super::super::internal_fault::FaultSite;
-use super::super::lower::{decimal_lit, str_node};
+use super::super::lower::decimal_lit;
 use super::super::lower_ctx::LowerCtx;
 use super::super::lower_list::{
-    JoinSides, applied, arrow, arrow_with, assign, awaited_apply, bail_on_err, binary, block, call,
-    clamped_at_zero, const_, distinct_by_body, expr_stmt, for_of, group_by_body, id, iife_block,
-    join_body, join_other_elem, kernel_key_comparator, key_fn_is_plain, key_is_plain, let_,
-    list_ok_elem, member, method_call_bare, method_sort, param, paren, push_value, ret, sort_order,
-    sort_plain_by, spread, take, with_comparator_node, zero,
+    JoinSides, applied, awaited_apply, bail_on_err, clamped_at_zero, distinct_by_body,
+    group_by_body, iife_block, join_body, join_other_elem, kernel_key_comparator, key_fn_is_plain,
+    key_is_plain, list_ok_elem, method_sort, push_value, sort_order, sort_plain_by, take,
+    with_comparator_node, zero,
 };
 use super::super::ts_types::{TyRender, ts_ty_to_ts_type};
 use super::super::{BaseType, Expr, Ident, RuntimeUse, TyId};
+use crate::ts_build::{
+    arrow, arrow_with, assign, binary, block, call, const_typed as const_, expr_stmt, for_await_of,
+    for_of, ident as id, let_init as let_, member, method_call as method_call_bare, param, paren,
+    ret, spread, str_lit as str_node,
+};
 
 /// Slice 0b (#2662): the `parTraverse` family joins through `__bynkSettleAll`,
 /// so a module using it needs the import even with no `par` block.
@@ -126,11 +130,6 @@ pub(in crate::emitter) fn lower_stream_method(
         }
         _ => return None,
     })
-}
-
-/// `for await (const <binding> of <iter>) <body>`.
-fn for_await_of(binding: &str, iter: TsExpr, body: TsStmt) -> TsStmt {
-    TsStmt::for_await_of(binding, iter, body, None)
 }
 
 /// `(async function* (__s) { <body> })(<source>)`, or with no source `(async function* () { … })()`:
@@ -1033,7 +1032,7 @@ mod tests {
     }
 
     fn arg_nodes(args: &[&str]) -> Vec<bynk_ts::TsExpr> {
-        args.iter().map(|a| id(a)).collect()
+        args.iter().map(|a| id(*a)).collect()
     }
 
     /// A comparator that is a bare identifier (substituted), and one that is built (bound

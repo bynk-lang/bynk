@@ -44,12 +44,11 @@ use bynk_check::project_model::TypeDecl;
 use bynk_check::resolver::{CrossContextService, cross_context_service_for};
 use bynk_check::symbols::UnitTable;
 use bynk_check::wire::{TypeBody, TypeRef};
-use bynk_ts::{
-    TsDecl, TsExpr, TsLit, TsObjectEntry, TsParam, TsProgram, TsStmt, TsType, TsTypeMember,
-};
+use bynk_ts::{TsDecl, TsExpr, TsObjectEntry, TsParam, TsProgram, TsStmt, TsType, TsTypeMember};
 
 use super::runtime_use::RuntimeUse;
 use super::serialisation;
+use crate::ts_build::str_lit;
 
 /// The file, beside the Worker's `bynk-contracts.json`. Hyphenated like the
 /// other compiler-written files there, so no Bynk unit can emit a module of
@@ -300,7 +299,7 @@ pub fn emit_client(
         "The wire format version this client was generated for. Typed by the\n`@bynk/wire-client` package's own version, so a package that speaks another\nwire version fails `tsc` here.",
         "WIRE_VERSION",
         Some(TsType::named("__WireVersion")),
-        str_lit(&bynk_check::wire_format::WIRE_VERSION.to_string()),
+        str_lit(bynk_check::wire_format::WIRE_VERSION.to_string()),
     ));
     let secret = bynk_check::wire_format::edge_key_to(ctx_name).unwrap_or_else(|| {
         panic!("bynk internal error: `{ctx_name}` is not an edge name, so it has no call key")
@@ -672,10 +671,6 @@ fn boundary_type(name: &str, decl: &TypeDecl) -> Vec<TsStmt> {
     stmt.no_blank_before = !out.is_empty();
     out.push(stmt);
     out
-}
-
-fn str_lit(s: &str) -> TsExpr {
-    TsExpr::Lit(TsLit::Str(s.to_string()))
 }
 
 /// `"name"`, a string literal type. Actor, variant and type names are

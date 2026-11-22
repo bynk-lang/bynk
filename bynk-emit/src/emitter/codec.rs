@@ -25,6 +25,7 @@ use bynk_ts::TsExpr;
 
 use super::runtime_use::RuntimeUse;
 use super::serialisation;
+use crate::ts_build::{call, ident};
 
 /// The hidden witness parameter's name for type parameter `param`.
 pub(crate) fn witness_ident(param: &str) -> String {
@@ -178,7 +179,7 @@ impl<'a> CodecGen<'a> {
 
     fn wrap(&self, helper: &'static str, parts: Vec<TsExpr>) -> TsExpr {
         self.runtime_use.note_cmp(helper);
-        call(helper, parts)
+        call(ident(helper), parts)
     }
 
     /// The `{ encode, decode }` witness for `ty`, as a node.
@@ -208,7 +209,7 @@ impl<'a> CodecGen<'a> {
             // #2792: a user generic type over a type variable is its declaration's
             // factory applied to the witnesses of its arguments.
             Ty::Named { name, args, .. } => call(
-                &serialisation::codec_factory_ident(name),
+                ident(serialisation::codec_factory_ident(name)),
                 args.iter().map(|a| self.for_ty_node(*a)).collect(),
             ),
             other @ Ty::Error
@@ -251,14 +252,6 @@ impl<'a> CodecGen<'a> {
         self.runtime_use.note_json_codec();
         self.runtime_use.note_boundary_codec();
         serialisation::witness_codec_expr(&tref, self.runtime_use)
-    }
-}
-
-/// `helper(args…)`.
-fn call(helper: &str, args: Vec<TsExpr>) -> TsExpr {
-    TsExpr::Call {
-        callee: Box::new(TsExpr::Ident(helper.to_string())),
-        args,
     }
 }
 

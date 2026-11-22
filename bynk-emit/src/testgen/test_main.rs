@@ -4,19 +4,15 @@
 
 use super::*;
 // #1759: every namespace a test module imports, from one definition.
+use crate::ts_build::{
+    and_expr, await_expr, binary, block, call, cond_expr, const_, expr_stmt, ident, if_, member,
+    method_call, num_lit, or_expr, str_lit, strict_eq,
+};
 use bynk_check::d1_migrations::MigrationFile;
 use bynk_ts::{
     TsArrowBody, TsBinaryOp, TsBindingName, TsDecl, TsExpr, TsLit, TsObjectEntry, TsParam,
     TsProgram, TsStmt, TsType, TsTypeMember,
 };
-
-pub(super) fn ident(s: impl Into<String>) -> TsExpr {
-    TsExpr::Ident(s.into())
-}
-
-pub(super) fn str_lit(s: impl Into<String>) -> TsExpr {
-    TsExpr::Lit(TsLit::Str(s.into()))
-}
 
 /// P4b (#2608): `__makeIntegrationD1`'s argument for a database's
 /// migrations, `[[name, sql], …]` in order, or none for a database without.
@@ -54,45 +50,6 @@ pub(super) fn d1_migrations_text(files: &[MigrationFile]) -> String {
     } else {
         format!("[{}]", pairs.join(", "))
     }
-}
-
-pub(super) fn num_lit(n: impl Into<String>) -> TsExpr {
-    TsExpr::Lit(TsLit::Num(n.into()))
-}
-
-pub(super) fn member(object: TsExpr, property: impl Into<String>) -> TsExpr {
-    TsExpr::Member {
-        object: Box::new(object),
-        property: property.into(),
-    }
-}
-
-pub(super) fn call(callee: TsExpr, args: Vec<TsExpr>) -> TsExpr {
-    TsExpr::Call {
-        callee: Box::new(callee),
-        args,
-    }
-}
-
-pub(super) fn method_call(object: TsExpr, method: &str, args: Vec<TsExpr>) -> TsExpr {
-    call(member(object, method), args)
-}
-
-pub(super) fn await_expr(expr: TsExpr) -> TsExpr {
-    TsExpr::Await(Box::new(expr))
-}
-
-/// A zero-substitution template literal — `` `<text>` `` with `text` already
-/// fully assembled (any `${...}` it contains is baked-in literal text, not a
-/// real substitution `bynk_ts` tracks). Slice F (#1407): `emit_system_http_
-/// support`'s own `concrete_path` (every `:name` path segment already
-/// resolved to `${paramIdent}` text at Rust-`format!` time, per its own doc)
-/// is the real site. Routes through the validated `TsExpr::template_lit`
-/// constructor rather than the bare `TsExpr::TemplateLit { .. }` variant, the
-/// same guard this file's own not-yet-refactored call sites already use
-/// (review of #1408, finding 1).
-pub(super) fn template(text: impl Into<String>) -> TsExpr {
-    TsExpr::template_lit(vec![text.into()], vec![])
 }
 
 /// One `async function __sysdrive_*` driver: an optional lead statement
@@ -195,38 +152,6 @@ pub(super) fn sysdrive_driver(
         },
         None,
     )
-}
-
-pub(super) fn and_expr(left: TsExpr, right: TsExpr) -> TsExpr {
-    TsExpr::Binary {
-        op: bynk_ts::TsBinaryOp::And,
-        left: Box::new(left),
-        right: Box::new(right),
-    }
-}
-
-pub(super) fn gt(left: TsExpr, right: TsExpr) -> TsExpr {
-    TsExpr::Binary {
-        op: bynk_ts::TsBinaryOp::GreaterThan,
-        left: Box::new(left),
-        right: Box::new(right),
-    }
-}
-
-pub(super) fn strict_eq(left: TsExpr, right: TsExpr) -> TsExpr {
-    TsExpr::Binary {
-        op: bynk_ts::TsBinaryOp::StrictEq,
-        left: Box::new(left),
-        right: Box::new(right),
-    }
-}
-
-pub(super) fn or_expr(left: TsExpr, right: TsExpr) -> TsExpr {
-    TsExpr::Binary {
-        op: bynk_ts::TsBinaryOp::Or,
-        left: Box::new(left),
-        right: Box::new(right),
-    }
 }
 
 /// The module's own runner, built from its real per-case/per-property/per-attack
@@ -370,33 +295,8 @@ const __bynkCasePerformance = (globalThis as unknown as { performance?: { now():
 const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
 const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;"#;
 
-/// `test ? consequent : alternate`.
-pub(super) fn cond_expr(test: TsExpr, consequent: TsExpr, alternate: TsExpr) -> TsExpr {
-    TsExpr::Conditional {
-        test: Box::new(test),
-        consequent: Box::new(consequent),
-        alternate: Box::new(alternate),
-    }
-}
-
 pub(super) fn console_log(arg: TsExpr) -> TsStmt {
     expr_stmt(method_call(ident("globalThis.console"), "log", vec![arg]))
-}
-
-pub(super) fn const_(name: impl Into<String>, init: TsExpr) -> TsStmt {
-    TsStmt::const_stmt(TsBindingName::Ident(name.into()), None, init, None)
-}
-
-pub(super) fn expr_stmt(expr: TsExpr) -> TsStmt {
-    TsStmt::expr_stmt(expr, None)
-}
-
-pub(super) fn block(stmts: Vec<TsStmt>) -> TsStmt {
-    TsStmt::block(stmts, None)
-}
-
-pub(super) fn if_(cond: TsExpr, then_branch: TsStmt) -> TsStmt {
-    TsStmt::if_stmt(cond, then_branch, None)
 }
 
 /// #3437: a build whose modules carry the execution-context double drains the
@@ -913,7 +813,7 @@ pub fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt, pg: bool) -
     // A filter value that selected nothing fails the run, as a failed case does.
     main_body.push(if_(
         or_expr(
-            gt(ident("failed"), num_lit("0")),
+            binary(TsBinaryOp::GreaterThan, ident("failed"), num_lit("0")),
             TsExpr::Binary {
                 op: TsBinaryOp::StrictNotEq,
                 left: Box::new(call(ident("unmatched"), vec![])),

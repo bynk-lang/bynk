@@ -54,6 +54,7 @@ use bynk_project::discovery::*;
 use bynk_project::paths::*;
 use bynk_syntax::error::CompileError;
 // #1759: every namespace a test module imports, from one definition.
+use crate::ts_build::*;
 use bynk_check::checker::Types;
 use bynk_check::d1_migrations::D1Migrations;
 use bynk_check::test_suites::{self};
@@ -92,7 +93,6 @@ pub use self::test_deps::TestAssetFiles;
 use self::test_deps::*;
 pub use self::test_main::emit_test_main;
 use self::test_main::*;
-use self::test_main::{call, ident, member, method_call, str_lit};
 use self::test_module::*;
 
 /// #2685: the tail of the synthesised smoke suite's file name (`<stem>.smoke.bynk`), which a

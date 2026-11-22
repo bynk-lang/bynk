@@ -8,12 +8,9 @@ use bynk_check::checker::{Callee, Ty, TyId};
 use bynk_check::kernel_op::{EffectOp, EffectResultOp, HttpResultOp, KernelOp, TestConnectionOp};
 use bynk_ts::{TsArrowBody, TsBinaryOp, TsExpr, TsLit, TsObjectEntry, TsType};
 
-use super::super::lower::{Pre, expect_location, str_node};
+use super::super::lower::{Pre, expect_location};
 use super::super::lower_ctx::LowerCtx;
-use super::super::lower_list::{
-    any_ty, arrow, binary, call, const_, fn_type, id, lower_list_kernel, member, param, paren,
-    promise, ret, spread, take,
-};
+use super::super::lower_list::{any_ty, fn_type, lower_list_kernel, promise, take};
 use super::super::ts_types::ts_ty_to_ts_type;
 use super::super::*;
 use super::kernel_container::{
@@ -26,6 +23,10 @@ use super::kernel_scalar::{
 use super::query::{
     QueryShape, QuerySource, lower_query_method, lower_stream_method, note_par_fan_out,
     query_key_cmp, query_keyed, query_other_elem,
+};
+use crate::ts_build::{
+    arrow, binary, call, const_typed as const_, ident as id, member, param, paren, ret, spread,
+    str_lit as str_node,
 };
 
 /// `within`, `race` and `detach` on an `Effect[T]` (#2683, #2711, #3437). `None`
@@ -597,10 +598,10 @@ fn lower_http_result(
 
 #[cfg(test)]
 mod tests {
-    use super::super::super::lower::ident_node;
     use super::*;
     use crate::emitter::ctx::{BodyMode, ModuleCtx, UnitFacts};
     use crate::emitter::runtime_use::RuntimeUse;
+    use crate::ts_build::ident as ident_node;
     use bynk_check::checker::{ExprId, TypedCommons, TypedExpr};
     use bynk_syntax::span::Span;
 
