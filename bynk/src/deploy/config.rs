@@ -1369,7 +1369,7 @@ pub(crate) fn vectorize_index_name_problem(name: &str) -> Option<&'static str> {
 /// P4a (#2602): materialise each `D1` database's environment's name and
 /// recorded id into the generated config at `path`, by binding, as
 /// [`materialise_kv_ids`] does KV ids. A named environment's block copies the
-/// stanza from here ([`synthesise_environment_block`]).
+/// stanza from here (`bynk_emit::emitter::wrangler::environment::render`).
 pub(crate) fn materialise_d1_databases(
     path: &Path,
     databases: &BTreeMap<String, (String, String)>,
@@ -1389,7 +1389,7 @@ pub(crate) fn materialise_d1_databases(
 
 /// #3319: materialise each `Postgres` binding's Hyperdrive config id into the
 /// generated config at `path`, by binding. A named environment's block copies
-/// the stanza from here ([`synthesise_environment_block`]). Only ids go in: the
+/// the stanza from here (`bynk_emit::emitter::wrangler::environment::render`). Only ids go in: the
 /// connection string never reaches a generated file.
 pub(crate) fn materialise_hyperdrive_ids(path: &Path, ids: &BTreeMap<String, String>) -> bool {
     let Ok(text) = std::fs::read_to_string(path) else {
@@ -1406,7 +1406,7 @@ pub(crate) fn materialise_hyperdrive_ids(path: &Path, ids: &BTreeMap<String, Str
 
 /// #3301: materialise each linked `StoredSecret`'s store id into the generated
 /// config at `path`, by binding. A named environment's block copies the stanza
-/// from here ([`synthesise_environment_block`]).
+/// from here (`bynk_emit::emitter::wrangler::environment::render`).
 pub(crate) fn materialise_stored_secret_stores(
     path: &Path,
     stores: &BTreeMap<String, String>,
@@ -1426,7 +1426,7 @@ pub(crate) fn materialise_stored_secret_stores(
 
 /// #3513 A: materialise each linked `MtlsCertificate`'s certificate id into the generated config at
 /// `path`, by binding. A named environment's block copies the stanza from here
-/// ([`synthesise_environment_block`]).
+/// (`bynk_emit::emitter::wrangler::environment::render`).
 pub(crate) fn materialise_mtls_certificates(
     path: &Path,
     certificates: &BTreeMap<String, String>,
@@ -1465,321 +1465,24 @@ pub(crate) fn r2_bucket_name_problem(name: &str) -> Option<&'static str> {
     None
 }
 
-/// Synthesise a `[env.<name>]` table covering every binding Wrangler does not
-/// inherit into a named environment, and append it to the generated config —
-/// slice 4, DECISIONs B and C combined.
-///
-/// **Why this exists at all.** Confirmed against Cloudflare's own docs:
-/// bindings (`kv_namespaces`, `queues.consumers`, `durable_objects`,
-/// `services`) are *non-inheritable* — a bare `--env staging` against the
-/// flat config `emit_wrangler_toml` writes would deploy with **zero**
-/// bindings. `emit_wrangler_toml` cannot fix this itself: it runs at compile
-/// time, before any `--env` is known (there is no `environment` concept
-/// anywhere in `bynk-syntax`/`bynk-check`), so the driver is the only place
-/// this can live.
-///
-/// **Why this appends rather than edits.** The top-level stanza must stay
-/// exactly as emitted — it continues to serve the plain, no-`--env`
-/// `bynk deploy`. So this parses the config only to *read* the values it
-/// needs (via `toml::Table`, not the narrow read-only `WranglerConfig`/
-/// `ServiceBinding`/`QueueConsumer` structs above, which drop fields — e.g.
-/// `ServiceBinding` has no `binding` — that must be copied byte-for-byte),
-/// builds a
-/// *separate* `{ env: { <name>: … } }` table, serialises only that
-/// fragment (so TOML string-escaping is the
-/// `toml` crate's job, not a hand-rolled duplicate of
-/// `bynk-emit`'s private `escape_toml_basic_string`), and appends the result
-/// as text. The original bytes are never touched.
-///
-/// The Worker's own `name` and the targets of Service Bindings to project
-/// contexts are [`deployed_worker_name`]s, and queue names are
-/// environment-qualified ([`env_qualify`]); a foreign Worker's is copied as
-/// declared, since Bynk did not name it (interop I5, #1972); each KV namespace gets its resolved id for this
-/// environment, by binding (S4b, #1967); each rate limiter is copied with the
-/// `namespace_id` already materialised for this environment (P3, #2342); Durable
-/// Object bindings, `exports`, and cron triggers carry no per-environment
-/// identity and are copied verbatim.
-///
-/// #1796: unlike the bindings, `exports` *is* inheritable — Wrangler 4.107's
-/// `normalizeAndValidateEnvironment` reads it with `inheritable(…)`, as it
-/// did `migrations` — so copying it is not what makes it apply. It is copied
-/// anyway, so the `[env.<name>]` block states every Durable Object fact its
-/// bindings rely on rather than leaning on an inheritance rule the bindings
-/// beside it don't follow. The two can't disagree: the copy is verbatim.
-///
-/// #1890: `compatibility_date` and `compatibility_flags` are inheritable too,
-/// and nothing here is environment-specific about them, so neither is copied:
-/// every environment runs under the top level's date and flags.
-pub(crate) fn synthesise_environment_block(
+/// The `[env.<name>]` block of a named-environment deploy, appended to `config_text` (a test
+/// stand-in for the one call `ApplyWorker::environment_block` makes). It is `bynk-emit`'s
+/// renderer (1C.2, Decision A of #4039).
+#[cfg(test)]
+pub(crate) fn environment_block(
     config_text: &str,
     environment: &str,
-    // The resolved id of each KV namespace, by binding. Empty for a context
-    // with no KV.
     kv_ids: &BTreeMap<String, String>,
-    // Interop I5 (#1972): the bindings of Service Bindings to foreign
-    // Workers, whose targets are copied as declared.
     foreign_bindings: &BTreeSet<String>,
 ) -> Result<String, String> {
-    let doc: toml::Table = config_text
-        .parse()
-        .map_err(|e| format!("generated configuration is not valid TOML: {e}"))?;
-
-    let mut env_block = toml::Table::new();
-
-    // #2028: the deployed name, from the function the plan prints it with.
-    if let Some(name) = doc.get("name").and_then(toml::Value::as_str) {
-        env_block.insert(
-            "name".to_string(),
-            toml::Value::String(deployed_worker_name(environment, name)),
-        );
-    }
-
-    if !kv_ids.is_empty()
-        && let Some(toml::Value::Array(namespaces)) = doc.get("kv_namespaces")
-    {
-        let mut namespaces = namespaces.clone();
-        for ns in &mut namespaces {
-            if let toml::Value::Table(t) = ns
-                && let Some(id) = t
-                    .get("binding")
-                    .and_then(toml::Value::as_str)
-                    .and_then(|b| kv_ids.get(b))
-            {
-                t.insert("id".to_string(), toml::Value::String(id.clone()));
-            }
-        }
-        env_block.insert("kv_namespaces".to_string(), toml::Value::Array(namespaces));
-    }
-
-    // P5 (#2323): each bucket under its environment-qualified name.
-    if let Some(toml::Value::Array(buckets)) = doc.get("r2_buckets") {
-        let mut buckets = buckets.clone();
-        for bucket in &mut buckets {
-            if let toml::Value::Table(t) = bucket
-                && let Some(name) = t
-                    .get("bucket_name")
-                    .and_then(toml::Value::as_str)
-                    .map(str::to_owned)
-            {
-                t.insert(
-                    "bucket_name".to_string(),
-                    toml::Value::String(r2_bucket_name(environment, &name)),
-                );
-            }
-        }
-        env_block.insert("r2_buckets".to_string(), toml::Value::Array(buckets));
-    }
-
-    // #3479: each index under its environment-qualified name.
-    if let Some(toml::Value::Array(indexes)) = doc.get("vectorize") {
-        let mut indexes = indexes.clone();
-        for index in &mut indexes {
-            if let toml::Value::Table(t) = index
-                && let Some(name) = t
-                    .get("index_name")
-                    .and_then(toml::Value::as_str)
-                    .map(str::to_owned)
-            {
-                t.insert(
-                    "index_name".to_string(),
-                    toml::Value::String(vectorize_index_name(environment, &name)),
-                );
-            }
-        }
-        env_block.insert("vectorize".to_string(), toml::Value::Array(indexes));
-    }
-
-    // #3477: each container's application as emitted (an adopted image already
-    // materialised by `materialise_adopted_container_images`). Like `exports`,
-    // it is copied so the `[env.<name>]` block states the container its class
-    // runs rather than leaning on an inheritance rule.
-    if let Some(containers) = doc.get("containers") {
-        env_block.insert("containers".to_string(), containers.clone());
-    }
-
-    // P4a (#2602): each database as the deploy materialised it, under this
-    // environment's name and id (`materialise_d1_databases` runs first).
-    if let Some(databases) = doc.get("d1_databases") {
-        env_block.insert("d1_databases".to_string(), databases.clone());
-    }
-
-    // #3319: each Hyperdrive config as the deploy materialised it, under this
-    // environment's id (`materialise_hyperdrive_ids` runs first). A named
-    // environment's block does not inherit the top level's bindings.
-    if let Some(configs) = doc.get("hyperdrive") {
-        env_block.insert("hyperdrive".to_string(), configs.clone());
-    }
-
-    // P3b (#2582): each dataset under its environment-qualified name, or
-    // staging would write into the default environment's dataset.
-    if let Some(toml::Value::Array(datasets)) = doc.get("analytics_engine_datasets") {
-        let mut datasets = datasets.clone();
-        for dataset in &mut datasets {
-            if let toml::Value::Table(t) = dataset
-                && let Some(name) = t
-                    .get("dataset")
-                    .and_then(toml::Value::as_str)
-                    .map(str::to_owned)
-            {
-                t.insert(
-                    "dataset".to_string(),
-                    toml::Value::String(analytics_dataset_name(environment, &name)),
-                );
-            }
-        }
-        env_block.insert(
-            "analytics_engine_datasets".to_string(),
-            toml::Value::Array(datasets),
-        );
-    }
-
-    // #3513 B: the `[vars]` the dataset names travel in (`Analytics.dataset()` reads them),
-    // each dataset var under the environment-qualified name its binding now has, or
-    // `dataset()` would name the default environment's table from a staging Worker. `vars` is
-    // not inherited by `[env.*]` either. Merged into any `vars` the block already has, never
-    // replacing a variable that is there.
-    if let Some(toml::Value::Table(vars)) = doc.get("vars") {
-        let prefix = "BYNK_DATASET_";
-        let mut carried = toml::Table::new();
-        for (key, value) in vars {
-            let value = match value {
-                toml::Value::String(name) if key.starts_with(prefix) => {
-                    toml::Value::String(analytics_dataset_name(environment, name))
-                }
-                other => other.clone(),
-            };
-            carried.insert(key.clone(), value);
-        }
-        match env_block.get_mut("vars") {
-            Some(toml::Value::Table(existing)) => {
-                for (key, value) in carried {
-                    existing.insert(key, value);
-                }
-            }
-            _ => {
-                env_block.insert("vars".to_string(), toml::Value::Table(carried));
-            }
-        }
-    }
-
-    // #3301: each stored secret as the deploy linked it, with the store's id
-    // (`materialise_stored_secret_stores` runs first). The store is the
-    // account's, so its name carries over as written, with no environment
-    // suffix; bindings are not inherited by `[env.*]`.
-    if let Some(secrets) = doc.get("secrets_store_secrets") {
-        env_block.insert("secrets_store_secrets".to_string(), secrets.clone());
-    }
-
-    // #3513 A: each mTLS certificate as written: the account's certificate, named the same in
-    // every environment, so it carries over with no environment suffix; the deploy slice
-    // resolves its id into the top level first. Bindings are not inherited by `[env.*]`, or a
-    // staging Worker has no `MTLS_*` to call through.
-    if let Some(certificates) = doc.get("mtls_certificates") {
-        env_block.insert("mtls_certificates".to_string(), certificates.clone());
-    }
-
-    // #3302: each email binding as written, restrictions included: it names
-    // no resource of the build, so it is the same in every environment, and
-    // bindings are not inherited by `[env.*]`, or a staging Worker has no
-    // `EMAIL_MAIL` to send through.
-    if let Some(send_email) = doc.get("send_email") {
-        env_block.insert("send_email".to_string(), send_email.clone());
-    }
-
-    // #3300: the Version metadata binding, which names no resource, so it is
-    // the same in every environment; bindings are not inherited by `[env.*]`.
-    if let Some(version_metadata) = doc.get("version_metadata") {
-        env_block.insert("version_metadata".to_string(), version_metadata.clone());
-    }
-
-    // #3577: Workers AI (#3478), AI Search (#3480) and Images (#3515), each as
-    // written: `[ai]` and `[images]` name no resource, and an `[[ai_search]]`
-    // entry names the account's instance as the declaration writes it, the
-    // same in every environment. Bindings are not inherited by `[env.*]`, or a
-    // staging Worker has no `AI`, `AI_SEARCH_*` or `IMAGES` to call. #3513 B: and
-    // the `[analytics]` Analytics SQL binding, which names no resource either.
-    for table in ["ai", "ai_search", "images", "analytics"] {
-        if let Some(value) = doc.get(table) {
-            env_block.insert(table.to_string(), value.clone());
-        }
-    }
-
-    // P3 (#2342): the rate limiters, copied as the top level has them. The
-    // push materialises this environment's `namespace_id`s into the top
-    // level before this block is synthesised from it, so they are already
-    // the right ones; the limit and window are the same in every environment.
-    if let Some(ratelimits) = doc.get("ratelimits") {
-        env_block.insert("ratelimits".to_string(), ratelimits.clone());
-    }
-
-    // P2 (#2578): a producer's queue is qualified as a consumer's is, or
-    // staging would send into the default environment's queue.
-    if let Some(mut queues) = doc.get("queues").cloned() {
-        if let toml::Value::Table(q) = &mut queues {
-            for side in ["consumers", "producers"] {
-                let Some(toml::Value::Array(entries)) = q.get_mut(side) else {
-                    continue;
-                };
-                for entry in entries.iter_mut() {
-                    if let toml::Value::Table(t) = entry
-                        && let Some(name) = t
-                            .get("queue")
-                            .and_then(toml::Value::as_str)
-                            .map(str::to_owned)
-                    {
-                        t.insert(
-                            "queue".to_string(),
-                            toml::Value::String(env_qualify(environment, &name)),
-                        );
-                    }
-                }
-            }
-        }
-        env_block.insert("queues".to_string(), queues);
-    }
-
-    if let Some(toml::Value::Array(services)) = doc.get("services") {
-        let mut services = services.clone();
-        for service in &mut services {
-            let foreign = matches!(service, toml::Value::Table(t)
-                if t.get("binding").and_then(toml::Value::as_str).is_some_and(|b| foreign_bindings.contains(b)));
-            if !foreign
-                && let toml::Value::Table(t) = service
-                && let Some(target) = t
-                    .get("service")
-                    .and_then(toml::Value::as_str)
-                    .map(str::to_owned)
-            {
-                t.insert(
-                    "service".to_string(),
-                    toml::Value::String(deployed_worker_name(environment, &target)),
-                );
-            }
-        }
-        env_block.insert("services".to_string(), toml::Value::Array(services));
-    }
-
-    for key in ["durable_objects", "exports", "triggers"] {
-        if let Some(value) = doc.get(key) {
-            env_block.insert(key.to_string(), value.clone());
-        }
-    }
-
-    if env_block.is_empty() {
-        // No name and nothing to bind (never true of a config `bynk build`
-        // emits, which always names its Worker) — leave the config exactly as
-        // emitted rather than appending an empty table.
-        return Ok(config_text.to_string());
-    }
-
-    let mut env_table = toml::Table::new();
-    env_table.insert(environment.to_string(), toml::Value::Table(env_block));
-    let mut wrapper = toml::Table::new();
-    wrapper.insert("env".to_string(), toml::Value::Table(env_table));
-
-    let appended = toml::to_string_pretty(&wrapper)
-        .map_err(|e| format!("could not serialise the `[env.{environment}]` block: {e}"))?;
-    Ok(format!("{config_text}\n{appended}"))
+    bynk_emit::emitter::wrangler::environment::render(
+        config_text,
+        environment,
+        &bynk_emit::emitter::wrangler::environment::Resolved {
+            kv_ids,
+            foreign_bindings,
+        },
+    )
 }
 
 #[cfg(test)]
@@ -2130,9 +1833,9 @@ max_batch_size = 10
     /// S4b (#1967): each namespace in the `[env.<name>]` block gets its own
     /// id, by binding, never another's.
     #[test]
-    fn synthesise_environment_block_gives_each_kv_namespace_its_own_id() {
+    fn the_environment_block_gives_each_kv_namespace_its_own_id() {
         let config = "name = \"shop-cart\"\n\n[[kv_namespaces]]\nbinding = \"KV\"\nid = \"<KV_NAMESPACE_ID>\"\n\n[[kv_namespaces]]\nbinding = \"KV_SESSIONS\"\nid = \"<KV_SESSIONS_ID>\"\n";
-        let out = synthesise_environment_block(
+        let out = environment_block(
             config,
             "staging",
             &kv_ids(&[("KV", "bare-staging"), ("KV_SESSIONS", "sessions-staging")]),
@@ -2152,8 +1855,8 @@ max_batch_size = 10
     }
 
     #[test]
-    fn synthesise_environment_block_covers_every_binding_kind() {
-        let out = synthesise_environment_block(
+    fn the_environment_block_covers_every_binding_kind() {
+        let out = environment_block(
             FULL_CONFIG,
             "staging",
             &kv_ids(&[("KV", "kv-staging-id")]),
@@ -2272,11 +1975,11 @@ max_batch_size = 10
     }
 
     #[test]
-    fn synthesise_environment_block_is_unchanged_for_the_default_environment() {
+    fn the_environment_block_is_unchanged_for_the_default_environment() {
         // The apply only calls this for a non-default environment, but the
         // function itself staying a faithful no-op at the boundary is worth
         // pinning: "default" must never gain a synthesised block.
-        let out = synthesise_environment_block(
+        let out = environment_block(
             FULL_CONFIG,
             "default",
             &kv_ids(&[("KV", "kv-id")]),
@@ -2292,12 +1995,11 @@ max_batch_size = 10
     }
 
     #[test]
-    fn synthesise_environment_block_names_the_worker_even_with_nothing_to_bind() {
+    fn the_environment_block_names_the_worker_even_with_nothing_to_bind() {
         // #2028: the deployed name is stated whether or not anything needs
         // binding, so the push never leans on Wrangler's default for it.
         let bare = "name = \"api\"\nmain = \"index.ts\"\n";
-        let out = synthesise_environment_block(bare, "staging", &BTreeMap::new(), &BTreeSet::new())
-            .unwrap();
+        let out = environment_block(bare, "staging", &BTreeMap::new(), &BTreeSet::new()).unwrap();
         assert!(out.starts_with(bare), "the top level is untouched: {out}");
         let doc: toml::Table = out.parse().unwrap();
         let block = doc["env"]["staging"].as_table().unwrap();
@@ -2496,7 +2198,7 @@ max_batch_size = 10
     /// singleton), so a new kind is held to the same rule without a list to
     /// update.
     #[test]
-    fn every_binding_table_the_emitter_writes_is_copied_into_the_environment() {
+    fn every_table_the_emitter_writes_has_an_environment_rule_and_reaches_the_block() {
         let mut bindings = one_binding_of_every_kind();
         let cloudflare = bynk_check::firstparty::unit(bynk_check::firstparty::CLOUDFLARE_UNIT)
             .expect("the Cloudflare unit is registered");
@@ -2527,7 +2229,7 @@ max_batch_size = 10
                 &Default::default(),
             ))
         };
-        let out = synthesise_environment_block(
+        let out = environment_block(
             &config,
             "staging",
             &kv_ids(&[("KV", "kv-id"), ("KV_X", "kv-x-id")]),
@@ -2591,7 +2293,7 @@ max_batch_size = 10
         for environment in ["staging", "eu-staging"] {
             out.push_str(&format!("# == {environment} ==\n"));
             out.push_str(
-                &synthesise_environment_block(
+                &environment_block(
                     &config,
                     environment,
                     &kv_ids(&[("KV", "kv-id"), ("KV_X", "kv-x-id")]),
@@ -2613,105 +2315,11 @@ max_batch_size = 10
         );
     }
 
-    /// 1C.2, commit 2 (Decision C of #4039): the renderer `bynk-emit` owns writes the bytes the
-    /// synthesiser does, over every generated `wrangler.toml` of the corpus, in a named
-    /// environment and in one whose name needs the dataset form, with a resolved id for every KV
-    /// binding the file names. Deleted with the synthesiser, in the commit that switches the
-    /// caller; the pin above stays.
     #[test]
-    fn the_emitters_renderer_matches_the_synthesiser_over_the_corpus() {
-        use bynk_emit::emitter::wrangler::environment::{Resolved, render};
-        fn walk(dir: &Path, out: &mut Vec<std::path::PathBuf>) {
-            for entry in std::fs::read_dir(dir).unwrap() {
-                let path = entry.unwrap().path();
-                if path.is_dir() {
-                    walk(&path, out);
-                } else if path.file_name().is_some_and(|n| n == "wrangler.toml") {
-                    out.push(path);
-                }
-            }
-        }
-        let mut files = Vec::new();
-        walk(
-            &Path::new(env!("CARGO_MANIFEST_DIR")).join("../bynk-tests/tests/fixtures"),
-            &mut files,
-        );
-        assert!(files.len() > 400, "the corpus: {} files", files.len());
-        let compare = |text: &str,
-                       environment: &str,
-                       ids: &BTreeMap<String, String>,
-                       foreign: &BTreeSet<String>| {
-            assert_eq!(
-                render(
-                    text,
-                    environment,
-                    &Resolved {
-                        kv_ids: ids,
-                        foreign_bindings: foreign
-                    }
-                ),
-                synthesise_environment_block(text, environment, ids, foreign),
-                "`{environment}` differs for:\n{text}"
-            );
-        };
-        for file in &files {
-            let text = std::fs::read_to_string(file).unwrap();
-            let doc: toml::Table = text.parse().unwrap();
-            let kv: Vec<String> = doc
-                .get("kv_namespaces")
-                .and_then(toml::Value::as_array)
-                .into_iter()
-                .flatten()
-                .filter_map(|n| n.get("binding")?.as_str().map(str::to_string))
-                .collect();
-            let ids: BTreeMap<String, String> =
-                kv.iter().map(|b| (b.clone(), format!("{b}-id"))).collect();
-            let services: BTreeSet<String> = doc
-                .get("services")
-                .and_then(toml::Value::as_array)
-                .into_iter()
-                .flatten()
-                .filter_map(|n| n.get("binding")?.as_str().map(str::to_string))
-                .collect();
-            for environment in ["staging", "eu-staging", "default"] {
-                compare(&text, environment, &ids, &BTreeSet::new());
-                compare(&text, environment, &BTreeMap::new(), &BTreeSet::new());
-                // Every Service Binding foreign, and the first only.
-                compare(&text, environment, &ids, &services);
-                compare(
-                    &text,
-                    environment,
-                    &ids,
-                    &services.iter().take(1).cloned().collect(),
-                );
-            }
-        }
-        // The edge cases: the every-kind config, a key the emitter does not write, a nameless
-        // config, and text that is not TOML.
-        let every = every_kind_config();
-        let unknown = format!("{every}\n[unknown_table]\nkey = \"value\"\n");
-        for text in [
-            every.as_str(),
-            unknown.as_str(),
-            "main = \"index.ts\"\n",
-            "not = valid = toml",
-        ] {
-            compare(
-                text,
-                "staging",
-                &kv_ids(&[("KV", "kv-id")]),
-                &["FOREIGN".to_string()].into_iter().collect(),
-            );
-            compare(text, "staging", &BTreeMap::new(), &BTreeSet::new());
-        }
-    }
-
-    #[test]
-    fn synthesise_environment_block_is_a_true_no_op_with_nothing_to_state() {
+    fn the_environment_block_is_a_true_no_op_with_nothing_to_state() {
         let nameless = "main = \"index.ts\"\n";
         let out =
-            synthesise_environment_block(nameless, "staging", &BTreeMap::new(), &BTreeSet::new())
-                .unwrap();
+            environment_block(nameless, "staging", &BTreeMap::new(), &BTreeSet::new()).unwrap();
         assert_eq!(
             out, nameless,
             "no name and no binding appends nothing, not an empty [env.staging]"
@@ -2719,9 +2327,9 @@ max_batch_size = 10
     }
 
     #[test]
-    fn synthesise_environment_block_rejects_unparseable_config() {
+    fn the_environment_block_rejects_unparseable_config() {
         assert!(
-            synthesise_environment_block(
+            environment_block(
                 "not = valid = toml = =",
                 "staging",
                 &BTreeMap::new(),
@@ -2819,12 +2427,11 @@ max_batch_size = 10
     }
 
     #[test]
-    fn synthesise_environment_block_qualifies_a_producer_queue() {
+    fn the_environment_block_qualifies_a_producer_queue() {
         // P2 (#2578): unqualified, staging would send into the default
         // environment's queue.
         let config = "name = \"shop\"\n\n[[queues.producers]]\nbinding = \"QUEUE_ORDER_EVENTS\"\nqueue = \"order-events\"\n";
-        let out = synthesise_environment_block(config, "staging", &kv_ids(&[]), &BTreeSet::new())
-            .unwrap();
+        let out = environment_block(config, "staging", &kv_ids(&[]), &BTreeSet::new()).unwrap();
         let doc: toml::Table = out.parse().unwrap();
         let producer = &doc["env"]["staging"]["queues"]["producers"][0];
         assert_eq!(producer["queue"].as_str(), Some("order-events-staging"));
@@ -3008,8 +2615,7 @@ state = "deleted"
             }]
         );
         let out =
-            synthesise_environment_block(config, "eu-staging", &BTreeMap::new(), &BTreeSet::new())
-                .unwrap();
+            environment_block(config, "eu-staging", &BTreeMap::new(), &BTreeSet::new()).unwrap();
         let doc: toml::Table = out.parse().unwrap();
         let datasets = doc["env"]["eu-staging"]["analytics_engine_datasets"]
             .as_array()
@@ -3030,9 +2636,7 @@ state = "deleted"
         // #3513 B: `Analytics.dataset()` reads `BYNK_DATASET_<BINDING>`, so a staging block
         // carries the staging name, beside any other variable the config has (kept as written).
         let config = "name = \"shop-cart\"\n\n[vars]\nBYNK_DATASET_ANALYTICS_SIGNUPS = \"shop_cart_signups\"\nGREETING = \"hello\"\n\n[[analytics_engine_datasets]]\nbinding = \"ANALYTICS_SIGNUPS\"\ndataset = \"shop_cart_signups\"\n";
-        let out =
-            synthesise_environment_block(config, "staging", &BTreeMap::new(), &BTreeSet::new())
-                .unwrap();
+        let out = environment_block(config, "staging", &BTreeMap::new(), &BTreeSet::new()).unwrap();
         let doc: toml::Table = out.parse().unwrap();
         let vars = &doc["env"]["staging"]["vars"];
         assert_eq!(
@@ -3134,13 +2738,8 @@ state = "deleted"
             )]),
         )
         .unwrap();
-        let out = synthesise_environment_block(
-            &materialised,
-            "staging",
-            &BTreeMap::new(),
-            &BTreeSet::new(),
-        )
-        .unwrap();
+        let out = environment_block(&materialised, "staging", &BTreeMap::new(), &BTreeSet::new())
+            .unwrap();
         let doc: toml::Table = out.parse().unwrap();
         let databases = doc["env"]["staging"]["d1_databases"].as_array().unwrap();
         assert_eq!(
@@ -3155,9 +2754,7 @@ state = "deleted"
     #[test]
     fn a_named_environment_qualifies_each_bucket_and_keeps_its_jurisdiction() {
         let config = "name = \"registry-store\"\n\n[[r2_buckets]]\nbinding = \"R2_INDEXES\"\nbucket_name = \"registry-store-indexes\"\njurisdiction = \"eu\"\n";
-        let out =
-            synthesise_environment_block(config, "staging", &BTreeMap::new(), &BTreeSet::new())
-                .unwrap();
+        let out = environment_block(config, "staging", &BTreeMap::new(), &BTreeSet::new()).unwrap();
         let doc: toml::Table = out.parse().unwrap();
         let buckets = doc["env"]["staging"]["r2_buckets"].as_array().unwrap();
         assert_eq!(
@@ -3312,8 +2909,7 @@ state = "deleted"
         );
 
         let synthesised =
-            synthesise_environment_block(text, "staging", &BTreeMap::new(), &BTreeSet::new())
-                .unwrap();
+            environment_block(text, "staging", &BTreeMap::new(), &BTreeSet::new()).unwrap();
         let doc: toml::Table = synthesised.parse().unwrap();
         let copied = &doc["env"]["staging"]["containers"][0];
         assert_eq!(copied["scheduling_policy"].as_str(), Some("durable_object"));
@@ -3369,8 +2965,7 @@ state = "deleted"
         );
 
         let synthesised =
-            synthesise_environment_block(text, "staging", &BTreeMap::new(), &BTreeSet::new())
-                .unwrap();
+            environment_block(text, "staging", &BTreeMap::new(), &BTreeSet::new()).unwrap();
         assert!(
             synthesised.contains("index_name = \"shop-docs-staging\""),
             "{synthesised}"
@@ -3547,13 +3142,12 @@ service = "legacy-billing"
     /// qualified and a foreign Worker's is copied as declared — Bynk did not
     /// name it, so `legacy-billing-staging` would be a Worker nobody made.
     #[test]
-    fn synthesise_environment_block_leaves_a_foreign_target_as_declared() {
+    fn the_environment_block_leaves_a_foreign_target_as_declared() {
         let foreign: BTreeSet<String> = ["SERVICE_BILLING", "SERVICE_LEDGER"]
             .iter()
             .map(|s| s.to_string())
             .collect();
-        let out = synthesise_environment_block(WITH_FOREIGN, "staging", &BTreeMap::new(), &foreign)
-            .unwrap();
+        let out = environment_block(WITH_FOREIGN, "staging", &BTreeMap::new(), &foreign).unwrap();
         let doc: toml::Table = out.parse().unwrap();
         let services: Vec<(&str, &str)> = doc["env"]["staging"]["services"]
             .as_array()
