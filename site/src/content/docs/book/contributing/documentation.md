@@ -52,11 +52,17 @@ imports. After editing `SUMMARY.md`, regenerate and commit:
 
 ```sh
 node site/scripts/generate-sidebar.mjs            # rewrite sidebar.json
-node site/scripts/generate-sidebar.mjs --check     # CI: fail if it drifted
+node site/scripts/generate-sidebar.mjs --check     # CI: fail if it drifted or a page is unlisted
 ```
 
 The `--check` mode runs in CI, so a `SUMMARY.md` edit that you forget to
 regenerate fails the build.
+
+**Every Book page must be listed in `SUMMARY.md`.** The sidebar comes from
+`SUMMARY.md`, not from the folders, so a page nobody lists exists but no
+sidebar shows it. When you add a page under `site/src/content/docs/book/`, add
+its entry to `SUMMARY.md` in the same change. `--check` fails naming any page
+that isn't listed, and any entry that names no page.
 
 ## Diagrams and callouts
 
@@ -234,7 +240,8 @@ rest are Rust drift-guard tests and Node `--check` scripts that CI runs.
 4. **Drift checks.** `node site/scripts/generate-sidebar.mjs --check` and
    `node site/scripts/build-llms-full.mjs --check` fail CI if the committed
    `sidebar.json` or `llms-full.txt` no longer matches its source (see
-   *Machine-readable Book*, below).
+   *Machine-readable Book*, below). The sidebar check also fails when a Book
+   page is missing from `SUMMARY.md`.
 
 5. **Version banners.** `xtask/tests/docs_consistency/doc_version.rs` checks the Book's
    current-version banners; `scripts/bump-version.sh` rewrites them, so there is
