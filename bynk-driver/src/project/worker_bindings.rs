@@ -13,13 +13,14 @@ use bynk_check::checker::{Callee, ExprId};
 use bynk_check::firstparty::{self, Platform};
 
 use super::{
-    BuildTarget, ErrorSink, ParsedFile, UnitKind, UnitTable, bare_singletons_of_context,
-    native_platforms_of_context, unit_table_uses_emit, unit_table_uses_idempotency,
+    BuildTarget, ErrorSink, ParsedFile, UnitKind, UnitTable, unit_table_uses_emit,
+    unit_table_uses_idempotency,
 };
 use bynk_emit::emitter::agent_cross_context_targets;
 use bynk_emit::emitter::wrangler::{
     BindingSource, WorkerBinding, singleton_binding, worker_bindings,
 };
+use bynk_emit::emitter::{bare_singletons_of_context, native_platforms_of_context};
 
 /// v0.19 (decision 0025): each context whose in-process closure reaches a
 /// platform-native unit, with those platforms. Drives env threading (bundle)

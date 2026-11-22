@@ -13,6 +13,7 @@ use crate::emit_model::ident;
 use bynk_ts::TsExpr;
 
 pub(crate) mod bundle;
+pub(crate) mod closure;
 pub(crate) mod events;
 pub(crate) mod plan;
 pub(crate) mod workers;

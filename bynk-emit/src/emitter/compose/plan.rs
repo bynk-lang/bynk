@@ -10,12 +10,17 @@
 //!
 //! The plan records the units, each unit's dependency edges and keys, which
 //! units need `__exec` or the caller, and the cross-capability facts. It holds
-//! no binding type (Decision D): the Workers renderer keeps taking its
-//! `&[WorkerBinding]`, and 1C.1 derives the bindings from the facts here.
+//! no binding type (Decision D of #3928). It does record the facts that imply
+//! a binding (1C.1a, Decision C of #4031): the contexts a unit calls, whether
+//! its closure reaches the bare KV namespace, the bare one-per-Worker
+//! capabilities it reaches, and whether it calls `Idempotency`.
+//! `WorkerBindings::derive` reads those facts and nothing else about the
+//! checked program's calls.
 
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use bynk_check::checker::{Callee, ExprId};
+use bynk_check::firstparty;
 use bynk_check::project_model::{
     self, composed_in_bundle_root, handler_cross_caps, provider_cross_caps,
 };
@@ -23,6 +28,7 @@ use bynk_check::symbols::UnitTable;
 use bynk_model::EventSubscriberShape;
 use bynk_project::roots::UnitKind;
 
+use super::closure::{bare_singletons_of_context, native_platforms_of_context};
 use super::events::{EventPlan, EventSubscription};
 
 /// Whether a unit's service handlers hand work to the execution context
@@ -63,6 +69,19 @@ pub struct ComposeUnitFacts {
     pub provider_cross_caps: BTreeMap<String, String>,
     /// The shape of each `from Events` service the unit hosts, by service name.
     pub event_shapes: BTreeMap<String, EventSubscriberShape>,
+    /// The consumed contexts its bodies and agents call, in name order. A
+    /// Service Binding exists for a context that is called, never merely
+    /// consumed (#1961).
+    pub called: Vec<String>,
+    /// Its closure reaches the bare KV namespace (the cloudflare adapter's
+    /// `Kv`), so its Worker declares `KV`. A named instance does not imply it.
+    pub bare_kv: bool,
+    /// The one-per-Worker `bynk.cloudflare` capabilities its closure reaches
+    /// bare (#3300), in name order.
+    pub bare_singletons: Vec<String>,
+    /// A body calls `Idempotency`, so its Worker declares the implicit
+    /// database that holds the claims (W30, #2840).
+    pub idempotency: bool,
 }
 
 /// Everything [`ComposePlan::decide`] needs, as plain data.
@@ -108,10 +127,28 @@ impl ComposeFacts {
             let mut derived: Vec<String> = table.derived.keys().cloned().collect();
             derived.sort();
             let handlers = || table.services.values().flat_map(|s| s.handlers.iter());
+            let is_context = kinds.get(name) == Some(&UnitKind::Context);
+            let (called, bare_kv, bare_singletons) = if is_context {
+                binding_facts(
+                    name,
+                    table,
+                    kinds,
+                    (&consumes, &aliases),
+                    (
+                        unit_tables,
+                        unit_consumes,
+                        unit_consumes_aliases,
+                        unit_flattened,
+                    ),
+                    unit_callees.get(name),
+                )
+            } else {
+                Default::default()
+            };
             units.insert(
                 name.clone(),
                 ComposeUnitFacts {
-                    is_context: kinds.get(name) == Some(&UnitKind::Context),
+                    is_context,
                     has_services: composed_in_bundle_root(table),
                     has_agents: !table.agents.is_empty(),
                     binds_caller: crate::emitter::any_service_binds_caller(
@@ -144,6 +181,13 @@ impl ComposeFacts {
                                 .collect()
                         })
                         .unwrap_or_default(),
+                    called,
+                    bare_kv,
+                    bare_singletons,
+                    idempotency: crate::emit_model::unit_table_uses_idempotency(
+                        table,
+                        unit_callees.get(name),
+                    ),
                     consumes,
                     aliases,
                 },
@@ -192,6 +236,15 @@ pub struct ComposeUnit {
     /// For each `from Events` service the unit hosts: whether its `on event`
     /// handler is handed the event's envelope (`wants_envelope`).
     pub subscriber_envelopes: BTreeMap<String, bool>,
+    /// The consumed contexts its bodies and agents call, in name order
+    /// ([`ComposeUnitFacts::called`]).
+    pub called: Vec<String>,
+    /// Its closure reaches the bare KV namespace.
+    pub bare_kv: bool,
+    /// The bare one-per-Worker capabilities its closure reaches.
+    pub bare_singletons: Vec<String>,
+    /// A body calls `Idempotency`.
+    pub idempotency: bool,
 }
 
 impl ComposeUnit {
@@ -300,8 +353,71 @@ impl ComposePlan {
                 .iter()
                 .map(|(service, shape)| (service.clone(), shape.wants_envelope()))
                 .collect(),
+            called: f.called.clone(),
+            bare_kv: f.bare_kv,
+            bare_singletons: f.bare_singletons.clone(),
+            idempotency: f.idempotency,
         }
     }
+}
+
+/// The binding facts of a context ([`ComposeUnitFacts::called`], `bare_kv` and
+/// `bare_singletons`). The last two walk the provider graph, so the plan is
+/// built only on a program whose earlier checks passed.
+#[allow(clippy::type_complexity)]
+fn binding_facts(
+    name: &str,
+    table: &UnitTable,
+    kinds: &BTreeMap<String, UnitKind>,
+    (consumes, aliases): (&[String], &HashMap<String, String>),
+    (unit_tables, unit_consumes, unit_consumes_aliases, unit_flattened): (
+        &HashMap<String, UnitTable>,
+        &HashMap<String, Vec<String>>,
+        &HashMap<String, HashMap<String, String>>,
+        &HashMap<String, HashMap<String, String>>,
+    ),
+    callees: Option<&HashMap<ExprId, Callee>>,
+) -> (Vec<String>, bool, Vec<String>) {
+    let mut called: BTreeSet<String> =
+        crate::emit_model::called_cross_context_services(table, consumes, callees)
+            .into_keys()
+            .collect();
+    // A handler constructing an agent hands it its own `deps`, whose `env` type
+    // names the contexts the agent calls (#1960, #1961).
+    called.extend(crate::emitter::agent_cross_context_targets(
+        table,
+        |chain| {
+            let target = aliases
+                .get(chain)
+                .cloned()
+                .or_else(|| consumes.iter().find(|c| *c == chain).cloned())?;
+            (kinds.get(&target) == Some(&UnitKind::Context)).then_some(target)
+        },
+    ));
+    let bare_kv = native_platforms_of_context(
+        name,
+        table,
+        unit_tables,
+        unit_consumes,
+        unit_consumes_aliases,
+        unit_flattened,
+        false,
+    )
+    .values()
+    .any(|u| u == firstparty::CLOUDFLARE_UNIT);
+    let bare_singletons = bare_singletons_of_context(
+        name,
+        table,
+        unit_tables,
+        unit_consumes,
+        unit_consumes_aliases,
+        unit_flattened,
+    )
+    .into_iter()
+    .filter(|(unit, _)| unit == firstparty::CLOUDFLARE_UNIT)
+    .map(|(_, cap)| cap)
+    .collect();
+    (called.into_iter().collect(), bare_kv, bare_singletons)
 }
 
 /// Each subscription takes the envelope its subscriber's shape wants. A
