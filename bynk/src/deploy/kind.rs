@@ -710,16 +710,27 @@ pub(crate) fn short_kind_orphans(
 
 /// How many of each kind's orphans `--prune` deletes, printing what it says of each.
 pub(crate) fn announce_prunable_kinds(orphans: &Orphans, environment: &str) -> usize {
+    let (notices, count) = prune_notices(orphans, environment);
+    for notice in &notices {
+        notice.print();
+    }
+    count
+}
+
+/// What `--prune` says before it asks, in the list's order (ruled for 1D.1c), and how many
+/// orphans it deletes.
+pub(crate) fn prune_notices(orphans: &Orphans, environment: &str) -> (Vec<Notice>, usize) {
     struct Announce<'p> {
         orphans: &'p Orphans,
         environment: &'p str,
+        notices: Vec<Notice>,
         count: usize,
     }
     impl KindVisitor for Announce<'_> {
         fn visit<K: ResourceKind>(&mut self) {
             for orphan in K::orphans_in(self.orphans) {
                 if let Some(notice) = K::prune_notice(orphan, self.environment) {
-                    notice.print();
+                    self.notices.push(notice);
                 }
                 self.count += usize::from(K::prunable(orphan));
             }
@@ -728,10 +739,11 @@ pub(crate) fn announce_prunable_kinds(orphans: &Orphans, environment: &str) -> u
     let mut announce = Announce {
         orphans,
         environment,
+        notices: Vec::new(),
         count: 0,
     };
     for_each_kind(&mut announce);
-    announce.count
+    (announce.notices, announce.count)
 }
 
 /// Whether any kind has an orphan `--prune` deletes.
@@ -953,5 +965,98 @@ pub(crate) fn held_verb(action: &'static str, held: Option<bool>) -> &'static st
         ("create" | "create or reuse", Some(true)) => "reuse",
         ("create or reuse", Some(false)) => "create",
         (other, _) => other,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The one list, whose order every pass follows: the plan's line order, and (ruled for 1D.1c)
+    /// `--prune`'s.
+    #[test]
+    fn the_kind_list_is_the_plans_order_with_the_worker_block_before_the_queues() {
+        #[derive(Default)]
+        struct Order(Vec<String>);
+        impl KindVisitor for Order {
+            fn visit<K: ResourceKind>(&mut self) {
+                self.0.push(format!("{:?}", K::ID));
+            }
+            fn slot(&mut self, slot: Slot) {
+                self.0.push(format!("{slot:?}"));
+            }
+        }
+        let mut order = Order::default();
+        for_each_kind(&mut order);
+        assert_eq!(
+            order.0,
+            [
+                "Kv",
+                "R2",
+                "Vectorize",
+                "D1",
+                "Hyperdrive",
+                "RateLimit",
+                "WorkerOrphans",
+                "Queue"
+            ]
+        );
+    }
+
+    /// The order the maintainer ruled for `--prune` (22 November 2026): KV, Vectorize, Hyperdrive,
+    /// then queues. R2 and D1 are reported, never deleted, and Workers are never pruned.
+    #[test]
+    fn prune_names_one_orphan_of_each_kind_in_the_ruled_order() {
+        let orphans = Orphans {
+            kv: vec![OrphanKv {
+                worker: "gone".to_string(),
+                binding: None,
+            }],
+            r2: vec![OrphanR2 {
+                worker: "gone".to_string(),
+                binding: "R2_FILES".to_string(),
+                bucket: "gone-files".to_string(),
+                jurisdiction: None,
+            }],
+            vectorize: vec![OrphanVectorize {
+                worker: "gone".to_string(),
+                binding: "VECTORIZE_DOCS".to_string(),
+                index: "gone-docs".to_string(),
+                adopted: false,
+            }],
+            d1: vec![OrphanD1 {
+                worker: "gone".to_string(),
+                binding: "D1_ORDERS".to_string(),
+                database: "gone-orders".to_string(),
+            }],
+            hyperdrive: vec![OrphanHyperdrive {
+                worker: "gone".to_string(),
+                binding: "HYPERDRIVE_MAIN".to_string(),
+                config: "gone-main".to_string(),
+                id: "id-1".to_string(),
+                adopted: false,
+            }],
+            workers: vec!["gone".to_string()],
+            queues: vec!["jobs".to_string()],
+            ..Orphans::default()
+        };
+        let (notices, count) = prune_notices(&orphans, "default");
+        let text: Vec<&str> = notices
+            .iter()
+            .map(|notice| match notice {
+                Notice::Styled(text) | Notice::Plain(text) => text.as_str(),
+            })
+            .collect();
+        assert_eq!(
+            text,
+            [
+                "bynk: will delete KV namespace for `gone`",
+                "bynk: will delete Vectorize index `gone-docs` of `gone`'s `VECTORIZE_DOCS`, and every vector in it",
+                "bynk: will delete Hyperdrive config `gone-main` of `gone`'s `HYPERDRIVE_MAIN`",
+                "bynk: will delete queue `jobs`",
+            ]
+        );
+        assert_eq!(count, 4);
+        assert!(orphans.has_prunable());
     }
 }
