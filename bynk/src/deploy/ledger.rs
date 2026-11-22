@@ -885,44 +885,6 @@ impl DeployLock {
             .and_then(|record| record.contracts.as_ref())
     }
 
-    /// P5 (#2323): record the bucket this project created for `worker`'s `R2`
-    /// `binding`.
-    pub(crate) fn record_r2(
-        &mut self,
-        environment: &str,
-        worker: &str,
-        binding: &str,
-        name: &str,
-        jurisdiction: Option<&str>,
-    ) {
-        let instances = self
-            .environments
-            .entry(environment.to_string())
-            .or_default()
-            .r2_instances
-            .entry(worker.to_string())
-            .or_default();
-        // A bucket this replaces is not forgotten: its objects are still there.
-        let mut superseded = Vec::new();
-        if let Some(old) = instances.remove(binding) {
-            superseded = old.superseded;
-            if old.name != name || old.jurisdiction.as_deref() != jurisdiction {
-                superseded.push(R2Past {
-                    name: old.name,
-                    jurisdiction: old.jurisdiction,
-                });
-            }
-        }
-        instances.insert(
-            binding.to_string(),
-            R2Bucket {
-                name: name.to_string(),
-                jurisdiction: jurisdiction.map(str::to_string),
-                superseded,
-            },
-        );
-    }
-
     /// #3479: record the index `worker`'s `Vectorize` `binding` is bound to.
     /// An index this replaces under another name is not forgotten: its vectors
     /// are still there (unless it was adopted, which was never the project's).
@@ -1024,44 +986,6 @@ impl DeployLock {
             let env = self.environments.get_mut(environment).expect("present");
             env.vectorize_instances.remove(worker);
         }
-    }
-
-    /// P4a (#2602): record the database this project created (or adopted, when
-    /// one of its name was already there) for `worker`'s `D1` `binding`.
-    pub(crate) fn record_d1(
-        &mut self,
-        environment: &str,
-        worker: &str,
-        binding: &str,
-        name: &str,
-        id: &str,
-    ) {
-        let instances = self
-            .environments
-            .entry(environment.to_string())
-            .or_default()
-            .d1_instances
-            .entry(worker.to_string())
-            .or_default();
-        // A database this replaces is not forgotten: its rows are still there.
-        let mut superseded = Vec::new();
-        if let Some(old) = instances.remove(binding) {
-            superseded = old.superseded;
-            if old.name != name || old.id != id {
-                superseded.push(D1Past {
-                    name: old.name,
-                    id: old.id,
-                });
-            }
-        }
-        instances.insert(
-            binding.to_string(),
-            D1Record {
-                name: name.to_string(),
-                id: id.to_string(),
-                superseded,
-            },
-        );
     }
 
     /// #3319: record the Hyperdrive config made (or adopted) for `worker`'s
@@ -1348,18 +1272,6 @@ pub(crate) struct Orphans {
     pub(crate) queues: Vec<String>,
 }
 
-/// One recorded R2 bucket the build no longer declares (P5, #2323): a
-/// capability removed or renamed, or a whole Worker gone.
-#[derive(Debug, PartialEq, Eq, Serialize)]
-pub(crate) struct OrphanR2 {
-    pub(crate) worker: String,
-    pub(crate) binding: String,
-    /// The bucket's name on the account, which stays there.
-    pub(crate) bucket: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) jurisdiction: Option<String>,
-}
-
 /// One recorded Vectorize index the build no longer declares (#3479): a
 /// capability removed or renamed, an index replaced, or a whole Worker gone.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -1370,16 +1282,6 @@ pub(crate) struct OrphanVectorize {
     pub(crate) index: String,
     /// An adopted index is not the project's to delete.
     pub(crate) adopted: bool,
-}
-
-/// One recorded D1 database the build no longer declares (P4a, #2602): a
-/// capability removed or renamed, or a whole Worker gone.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub(crate) struct OrphanD1 {
-    pub(crate) worker: String,
-    pub(crate) binding: String,
-    /// The database's name on the account, which stays there.
-    pub(crate) database: String,
 }
 
 /// One recorded Hyperdrive config the build no longer declares (#3319): a
@@ -1431,17 +1333,8 @@ impl Orphans {
     pub(crate) fn as_named_in(&self, environment: &str) -> Orphans {
         let mut shown = Orphans {
             kv: Vec::new(),
-            r2: self
-                .r2
-                .iter()
-                .map(|r2| OrphanR2 {
-                    worker: r2.worker.clone(),
-                    binding: r2.binding.clone(),
-                    bucket: r2.bucket.clone(),
-                    jurisdiction: r2.jurisdiction.clone(),
-                })
-                .collect(),
-            d1: self.d1.clone(),
+            r2: Vec::new(),
+            d1: Vec::new(),
             hyperdrive: self.hyperdrive.clone(),
             vectorize: self.vectorize.clone(),
             workers: self
@@ -1503,38 +1396,6 @@ pub(crate) fn find_orphans(
                 .map(String::as_str)
         })
         .collect();
-    // P5 (#2323): a bucket likewise, with its Worker or on its own.
-    let r2_orphans = env
-        .r2_instances
-        .iter()
-        .flat_map(|(worker, instances)| {
-            instances
-                .iter()
-                .filter(move |(binding, _)| {
-                    resources
-                        .get(worker)
-                        .is_none_or(|r| !r.r2_buckets.iter().any(|b| &b.binding == *binding))
-                })
-                .map(move |(binding, bucket)| OrphanR2 {
-                    worker: worker.clone(),
-                    binding: binding.clone(),
-                    bucket: bucket.name.clone(),
-                    jurisdiction: bucket.jurisdiction.clone(),
-                })
-        })
-        .chain(env.r2_instances.iter().flat_map(|(worker, instances)| {
-            // A bucket a changed jurisdiction left behind is an orphan while
-            // its binding is live, too.
-            instances.iter().flat_map(move |(binding, bucket)| {
-                bucket.superseded.iter().map(move |past| OrphanR2 {
-                    worker: worker.clone(),
-                    binding: binding.clone(),
-                    bucket: past.name.clone(),
-                    jurisdiction: past.jurisdiction.clone(),
-                })
-            })
-        }))
-        .collect();
     // #3479: an index likewise, with its Worker or on its own; one a changed
     // name left behind is an orphan while its binding is live, too.
     let vectorize_orphans = env
@@ -1560,36 +1421,6 @@ pub(crate) fn find_orphans(
                     }))
             })
         })
-        .collect();
-    // P4a (#2602): a database likewise, with its Worker or on its own.
-    let d1_orphans = env
-        .d1_instances
-        .iter()
-        .flat_map(|(worker, instances)| {
-            instances
-                .iter()
-                .filter(move |(binding, _)| {
-                    resources
-                        .get(worker)
-                        .is_none_or(|r| !r.d1_databases.iter().any(|d| &d.binding == *binding))
-                })
-                .map(move |(binding, db)| OrphanD1 {
-                    worker: worker.clone(),
-                    binding: binding.clone(),
-                    database: db.name.clone(),
-                })
-        })
-        .chain(env.d1_instances.iter().flat_map(|(worker, instances)| {
-            // A database a changed name left behind is an orphan while its
-            // binding is live, too.
-            instances.iter().flat_map(move |(binding, db)| {
-                db.superseded.iter().map(move |past| OrphanD1 {
-                    worker: worker.clone(),
-                    binding: binding.clone(),
-                    database: past.name.clone(),
-                })
-            })
-        }))
         .collect();
     // #3319: a Hyperdrive config likewise, with its Worker or on its own.
     let hyperdrive_orphans = env
@@ -1621,9 +1452,9 @@ pub(crate) fn find_orphans(
         })
         .collect();
     let mut orphans = Orphans {
-        r2: r2_orphans,
+        r2: Vec::new(),
         vectorize: vectorize_orphans,
-        d1: d1_orphans,
+        d1: Vec::new(),
         hyperdrive: hyperdrive_orphans,
         kv: Vec::new(),
         workers: env
@@ -1667,19 +1498,6 @@ pub(crate) fn find_orphans(
     orphans
 }
 
-/// The bucket recorded for `worker`'s `R2` `binding` (P5, #2323).
-pub(crate) fn recorded_r2<'a>(
-    lock: &'a DeployLock,
-    worker: &str,
-    binding: &str,
-    environment: &str,
-) -> Option<&'a R2Bucket> {
-    lock.environments
-        .get(environment)
-        .and_then(|env| env.r2_instances.get(worker))
-        .and_then(|instances| instances.get(binding))
-}
-
 /// The adopted image recorded for `worker`'s `Container` `capability` in
 /// `environment` (#3477).
 pub(crate) fn recorded_container_image<'a>(
@@ -1705,19 +1523,6 @@ pub(crate) fn recorded_vectorize<'a>(
     lock.environments
         .get(environment)
         .and_then(|env| env.vectorize_instances.get(worker))
-        .and_then(|instances| instances.get(binding))
-}
-
-/// The database recorded for `worker`'s `D1` `binding` (P4a, #2602).
-pub(crate) fn recorded_d1<'a>(
-    lock: &'a DeployLock,
-    worker: &str,
-    binding: &str,
-    environment: &str,
-) -> Option<&'a D1Record> {
-    lock.environments
-        .get(environment)
-        .and_then(|env| env.d1_instances.get(worker))
         .and_then(|instances| instances.get(binding))
 }
 
@@ -1998,7 +1803,7 @@ pub fn materialise_deploy_state(
     }
     let mut names = BTreeMap::new();
     for (binding, name, jurisdiction) in &buckets {
-        let Some(recorded) = recorded_r2(&lock, worker, binding, environment) else {
+        let Some(recorded) = lock.recorded::<R2>(environment, worker, binding) else {
             return Err(format!(
                 "remote R2 bucket `{binding}` for `{worker}` has not been provisioned under environment `{environment}`; run `bynk deploy --env {environment}` first"
             ));
@@ -2012,7 +1817,7 @@ pub fn materialise_deploy_state(
     }
     let mut d1 = BTreeMap::new();
     for (binding, _) in &databases {
-        let Some(recorded) = recorded_d1(&lock, worker, binding, environment) else {
+        let Some(recorded) = lock.recorded::<D1>(environment, worker, binding) else {
             return Err(format!(
                 "remote D1 database `{binding}` for `{worker}` has not been provisioned under environment `{environment}`; run `bynk deploy --env {environment}` first"
             ));
@@ -3373,8 +3178,18 @@ pub(crate) mod tests {
             version: 1,
             ..Default::default()
         };
-        lock.record_d1("default", "shop", "D1_ORDERS", "shop-orders", "id-1");
-        lock.record_d1("default", "shop", "D1_OLD", "shop-old", "id-2");
+        lock.record::<D1>(
+            "default",
+            "shop",
+            "D1_ORDERS",
+            D1Record::of("shop-orders", "id-1"),
+        );
+        lock.record::<D1>(
+            "default",
+            "shop",
+            "D1_OLD",
+            D1Record::of("shop-old", "id-2"),
+        );
         let resources = BTreeMap::from([(
             "shop".to_string(),
             Resources::default().d1_databases(&[("D1_ORDERS", "shop-orders")]),
@@ -3394,8 +3209,18 @@ pub(crate) mod tests {
         assert_eq!(find_orphans(&lock, "default", &BTreeMap::new()).d1.len(), 2);
         // A database a binding stopped using stays recorded and reported,
         // though the binding is live; recording the same one again does not.
-        lock.record_d1("default", "shop", "D1_ORDERS", "shop-orders", "id-1");
-        lock.record_d1("default", "shop", "D1_ORDERS", "shop-orders-v2", "id-3");
+        lock.record::<D1>(
+            "default",
+            "shop",
+            "D1_ORDERS",
+            D1Record::of("shop-orders", "id-1"),
+        );
+        lock.record::<D1>(
+            "default",
+            "shop",
+            "D1_ORDERS",
+            D1Record::of("shop-orders-v2", "id-3"),
+        );
         let orphans = find_orphans(&lock, "default", &resources);
         assert!(
             orphans
@@ -3405,7 +3230,7 @@ pub(crate) mod tests {
             "{orphans:?}"
         );
         assert_eq!(
-            recorded_d1(&lock, "shop", "D1_ORDERS", "default")
+            lock.recorded::<D1>("default", "shop", "D1_ORDERS")
                 .unwrap()
                 .superseded
                 .len(),
@@ -3418,8 +3243,18 @@ pub(crate) mod tests {
             version: 1,
             ..Default::default()
         };
-        lock.record_r2("default", "shop", "R2_ARCHIVES", "shop-archives", None);
-        lock.record_r2("default", "shop", "R2_OLD", "shop-old", Some("eu"));
+        lock.record::<R2>(
+            "default",
+            "shop",
+            "R2_ARCHIVES",
+            R2Bucket::of("shop-archives", None),
+        );
+        lock.record::<R2>(
+            "default",
+            "shop",
+            "R2_OLD",
+            R2Bucket::of("shop-old", Some("eu")),
+        );
         lock
     }
 
@@ -3458,14 +3293,14 @@ pub(crate) mod tests {
     fn a_bucket_is_recorded_under_the_environment_and_survives_the_file() {
         let lock = r2_lock();
         assert_eq!(
-            recorded_r2(&lock, "shop", "R2_OLD", "default"),
+            lock.recorded::<R2>("default", "shop", "R2_OLD"),
             Some(&R2Bucket {
                 name: "shop-old".into(),
                 jurisdiction: Some("eu".into()),
                 superseded: Vec::new()
             })
         );
-        assert!(recorded_r2(&lock, "shop", "R2_OLD", "staging").is_none());
+        assert!(lock.recorded::<R2>("staging", "shop", "R2_OLD").is_none());
         let text = toml::to_string_pretty(&lock).unwrap();
         assert!(text.contains("[environments.default.r2_instances.shop.R2_OLD]"));
         let back: DeployLock = toml::from_str(&text).unwrap();
@@ -3502,12 +3337,11 @@ pub(crate) mod tests {
             version: 1,
             ..Default::default()
         };
-        lock.record_r2(
+        lock.record::<R2>(
             "staging",
             "shop",
             "R2_ARCHIVES",
-            "shop-archives-staging",
-            None,
+            R2Bucket::of("shop-archives-staging", None),
         );
         let (root, config) = r2_project("staging", R2_CONFIG, &lock);
         assert_eq!(
@@ -3531,12 +3365,11 @@ pub(crate) mod tests {
             version: 1,
             ..Default::default()
         };
-        lock.record_d1(
+        lock.record::<D1>(
             "staging",
             "shop",
             "D1_ORDERS",
-            "shop-orders-staging",
-            "id-7",
+            D1Record::of("shop-orders-staging", "id-7"),
         );
         let (root, config) = r2_project("d1-staging", D1_CONFIG, &lock);
         assert_eq!(
@@ -3567,7 +3400,12 @@ pub(crate) mod tests {
             version: 1,
             ..Default::default()
         };
-        lock.record_r2("default", "shop", "R2_ARCHIVES", "shop-archives", None);
+        lock.record::<R2>(
+            "default",
+            "shop",
+            "R2_ARCHIVES",
+            R2Bucket::of("shop-archives", None),
+        );
         let (root, config) = r2_project("default", R2_CONFIG, &lock);
         assert_eq!(
             materialise_deploy_state(&root, "shop", &config, "default"),
@@ -3583,21 +3421,30 @@ pub(crate) mod tests {
             version: 1,
             ..Default::default()
         };
-        lock.record_r2("default", "shop", "R2_ARCHIVES", "shop-archives", None);
+        lock.record::<R2>(
+            "default",
+            "shop",
+            "R2_ARCHIVES",
+            R2Bucket::of("shop-archives", None),
+        );
         // Recording the same bucket again changes nothing.
-        lock.record_r2("default", "shop", "R2_ARCHIVES", "shop-archives", None);
+        lock.record::<R2>(
+            "default",
+            "shop",
+            "R2_ARCHIVES",
+            R2Bucket::of("shop-archives", None),
+        );
         assert!(
-            recorded_r2(&lock, "shop", "R2_ARCHIVES", "default")
+            lock.recorded::<R2>("default", "shop", "R2_ARCHIVES")
                 .unwrap()
                 .superseded
                 .is_empty()
         );
-        lock.record_r2(
+        lock.record::<R2>(
             "default",
             "shop",
             "R2_ARCHIVES",
-            "shop-archives",
-            Some("eu"),
+            R2Bucket::of("shop-archives", Some("eu")),
         );
         let resources = BTreeMap::from([(
             "shop".to_string(),
@@ -3622,12 +3469,11 @@ pub(crate) mod tests {
             version: 1,
             ..Default::default()
         };
-        lock.record_r2(
+        lock.record::<R2>(
             "default",
             "shop",
             "R2_ARCHIVES",
-            "shop-archives",
-            Some("eu"),
+            R2Bucket::of("shop-archives", Some("eu")),
         );
         let (root, config) = r2_project("jurisdiction", R2_CONFIG, &lock);
         let error = materialise_deploy_state(&root, "shop", &config, "default").unwrap_err();

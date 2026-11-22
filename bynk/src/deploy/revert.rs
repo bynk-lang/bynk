@@ -292,7 +292,6 @@ fn recorded_id(
 ) -> Option<String> {
     // 1D.1 (#3929): each converted kind's, first.
     recorded_bound_id(LedgerView::of(lock, environment), worker, binding)
-        .or_else(|| recorded_d1(lock, worker, binding, environment).map(|d| d.id.clone()))
         .or_else(|| recorded_ratelimit(lock, worker, binding, environment).map(str::to_string))
 }
 
@@ -1644,8 +1643,12 @@ mod tests {
             "D1_ORDERS".into(),
             Ok(vec!["0001_a.sql".into(), "0002_b.sql".into()]),
         );
-        f.lock
-            .record_d1("default", "shop", "D1_ORDERS", "shop-orders", "db-1");
+        f.lock.record::<D1>(
+            "default",
+            "shop",
+            "D1_ORDERS",
+            D1Record::of("shop-orders", "db-1"),
+        );
         let r = f.run();
         let d1 = refusals(&r)
             .into_iter()

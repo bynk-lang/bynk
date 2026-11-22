@@ -128,16 +128,17 @@ pub(crate) struct ContextPlan<'a> {
     /// each derived instance in binding order (S4b, #1967). Empty for a
     /// context with no KV. Filled by [`Kv`] (1D.1a, #3929).
     pub(crate) kv: Vec<PlanKv<'a>>,
-    /// P5 (#2323): one line per R2 bucket the Worker binds, in binding order.
+    /// P5 (#2323): one line per R2 bucket the Worker binds, in binding order. Filled by [`R2`]
+    /// (1D.1b, #3929).
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    r2: Vec<PlanR2<'a>>,
+    pub(crate) r2: Vec<PlanR2<'a>>,
     /// #3479: one line per Vectorize index the Worker binds, in binding order.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     vectorize: Vec<PlanVectorize<'a>>,
     /// P4a (#2602): one line per D1 database the Worker binds, in binding
-    /// order.
+    /// order. Filled by [`D1`] (1D.1b, #3929).
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    d1: Vec<PlanD1<'a>>,
+    pub(crate) d1: Vec<PlanD1<'a>>,
     /// #3319: one line per Hyperdrive config the Worker binds (a `Postgres`
     /// instance), in binding order. Never the connection string.
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -275,22 +276,6 @@ struct PlanRateLimit<'a> {
     namespace_id: Option<String>,
 }
 
-/// P5 (#2323): one R2 bucket. The name is the identity, so there is no id to
-/// mint and `reuse` is a plain statement of the ledger.
-#[derive(Debug, Serialize)]
-struct PlanR2<'a> {
-    /// `R2_<SNAKE>`.
-    binding: &'a str,
-    /// `create`, `reuse`, or `recreate`: a changed `@jurisdiction` makes a new
-    /// bucket, and the objects of the old one do not move (see [`r2_action`]).
-    /// #3494: a bucket of its name the account already holds is `reuse`.
-    action: &'static str,
-    /// The bucket's account-facing name, [`r2_bucket_name`]d.
-    bucket: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    jurisdiction: Option<&'a str>,
-}
-
 /// #3479: one Vectorize index. The name is the identity and the configuration
 /// is fixed at creation, so `reuse` states that an index of the name is there;
 /// whether it still matches is checked by the deploy, which fails on a
@@ -311,23 +296,6 @@ struct PlanVectorize<'a> {
     /// The metadata indexes created before any vector.
     #[serde(skip_serializing_if = "<[_]>::is_empty")]
     indexed: &'a [String],
-}
-
-/// P4a (#2602): one D1 database.
-#[derive(Debug, Serialize)]
-struct PlanD1<'a> {
-    /// `D1_<SNAKE>`.
-    binding: &'a str,
-    /// `create` or `reuse` (the one the ledger recorded, by its id, or #3494
-    /// one of its name the account already holds, which the deploy adopts).
-    action: &'static str,
-    /// The database's account-facing name, [`d1_database_name`]d.
-    database: String,
-    /// P4b (#2608): its migration files. `bynk deploy` applies the ones the
-    /// database hasn't recorded before the push; the plan does not read the
-    /// databases, so it can't say which those are.
-    #[serde(skip_serializing_if = "<[_]>::is_empty")]
-    migrations: &'a [String],
 }
 
 /// #3319: one Hyperdrive config.
@@ -2368,38 +2336,23 @@ pub(crate) fn plan_report(plan: &Plan<'_>, format: DeployFormat) -> String {
             // fact about the account regardless of what this run is about to
             // do, and a reader should see it before the noise of what's being
             // pushed (slice 5).
-            short_kind_orphans(&plan.shown_orphans, &mut out);
-            for r2 in &plan.shown_orphans.r2 {
-                out.push_str(&format!(
-                    "orphan r2 {} {} ({}{}; not deleted)\n",
-                    r2.worker,
-                    r2.binding,
-                    r2.bucket,
-                    r2.jurisdiction
-                        .as_deref()
-                        .map(|j| format!(", jurisdiction {j}"))
-                        .unwrap_or_default()
-                ));
-            }
-            for v in &plan.shown_orphans.vectorize {
-                out.push_str(&format!(
-                    "orphan vectorize {} {} ({}{})\n",
-                    v.worker,
-                    v.binding,
-                    v.index,
-                    if v.adopted {
-                        "; adopted, never deleted"
-                    } else {
-                        "; deleted by --prune"
+            short_kind_orphans(&plan.shown_orphans, &mut out, &mut |slot, out| match slot {
+                Legacy::Vectorize => {
+                    for v in &plan.shown_orphans.vectorize {
+                        out.push_str(&format!(
+                            "orphan vectorize {} {} ({}{})\n",
+                            v.worker,
+                            v.binding,
+                            v.index,
+                            if v.adopted {
+                                "; adopted, never deleted"
+                            } else {
+                                "; deleted by --prune"
+                            }
+                        ));
                     }
-                ));
-            }
-            for d1 in &plan.shown_orphans.d1 {
-                out.push_str(&format!(
-                    "orphan d1 {} {} ({}; not deleted)\n",
-                    d1.worker, d1.binding, d1.database
-                ));
-            }
+                }
+            });
             for h in &plan.shown_orphans.hyperdrive {
                 out.push_str(&format!(
                     "orphan hyperdrive {} {} ({}{})\n",
@@ -2432,43 +2385,23 @@ pub(crate) fn plan_report(plan: &Plan<'_>, format: DeployFormat) -> String {
                 out.push_str(&format!("orphan queue {queue}\n"));
             }
             for context in &plan.contexts {
-                short_kind_lines(context, &mut out);
-                for r2 in &context.r2 {
-                    out.push_str(&format!("r2 {} {} ({})", r2.action, r2.bucket, r2.binding));
-                    if let Some(jurisdiction) = r2.jurisdiction {
-                        out.push_str(&format!(" in jurisdiction {jurisdiction}"));
+                short_kind_lines(context, &mut out, &mut |slot, out| match slot {
+                    Legacy::Vectorize => {
+                        for v in &context.vectorize {
+                            out.push_str(&format!(
+                                "vectorize {} {} ({}, {}, {}",
+                                v.action, v.index, v.binding, v.dimensions, v.metric
+                            ));
+                            if !v.indexed.is_empty() {
+                                out.push_str(&format!(
+                                    "; metadata indexes {}",
+                                    v.indexed.join(", ")
+                                ));
+                            }
+                            out.push_str(")\n");
+                        }
                     }
-                    if r2.action == "recreate" {
-                        out.push_str(" — the old bucket and its objects stay where they are");
-                    }
-                    out.push('\n');
-                }
-                for v in &context.vectorize {
-                    out.push_str(&format!(
-                        "vectorize {} {} ({}, {}, {}",
-                        v.action, v.index, v.binding, v.dimensions, v.metric
-                    ));
-                    if !v.indexed.is_empty() {
-                        out.push_str(&format!("; metadata indexes {}", v.indexed.join(", ")));
-                    }
-                    out.push_str(")\n");
-                }
-                for d1 in &context.d1 {
-                    out.push_str(&format!(
-                        "d1 {} {} ({})\n",
-                        d1.action, d1.database, d1.binding
-                    ));
-                    // P4b (#2608): applied after the database is bound and
-                    // before the push.
-                    if !d1.migrations.is_empty() {
-                        let n = d1.migrations.len();
-                        out.push_str(&format!(
-                            "d1 migrate {} ({n} file{}; pending ones applied before the push)\n",
-                            d1.database,
-                            if n == 1 { "" } else { "s" }
-                        ));
-                    }
-                }
+                });
                 for h in &context.hyperdrive {
                     out.push_str(&format!(
                         "hyperdrive {} {} ({}",
@@ -2692,14 +2625,16 @@ fn account_name_problem(
     lock: &DeployLock,
     environment: &str,
 ) -> Option<String> {
-    kind_name_problem(&ProjectCx {
-        ledger: LedgerView::of(lock, environment),
-        resources,
-        order: &[],
-    })
-    .or_else(|| r2_bucket_problem(resources, lock, environment))
-    .or_else(|| vectorize_index_problem(resources, lock, environment))
-    .or_else(|| d1_database_problem(resources, lock, environment))
+    kind_name_problem(
+        &ProjectCx {
+            ledger: LedgerView::of(lock, environment),
+            resources,
+            order: &[],
+        },
+        &|slot| match slot {
+            Legacy::Vectorize => vectorize_index_problem(resources, lock, environment),
+        },
+    )
     .or_else(|| analytics_dataset_problem(resources, lock, environment))
 }
 
@@ -2744,12 +2679,6 @@ impl<'a> Plan<'a> {
         let mut wanted = BTreeSet::new();
         for c in &self.contexts {
             kind_listings(c, &mut wanted);
-            for r2 in c.r2.iter().filter(|r2| creates(r2.action)) {
-                wanted.insert((KindId::R2, r2.jurisdiction.map(str::to_string)));
-            }
-            if c.d1.iter().any(|d1| creates(d1.action)) {
-                wanted.insert((KindId::D1, None));
-            }
             if c.queues.iter().any(|q| creates(q.action)) {
                 wanted.insert((KindId::Queue, None));
             }
@@ -2767,25 +2696,13 @@ impl<'a> Plan<'a> {
     /// A KV namespace is noted instead: Cloudflare refuses a second namespace of
     /// one title, so the deploy cannot create it.
     pub(crate) fn checked_against(mut self, on: &super::on_account::OnAccount) -> Self {
-        // A listing not read changes nothing: the ledger's word stands.
-        let verb = |action: &'static str, held: Option<bool>| match (action, held) {
-            ("create" | "create or reuse", Some(true)) => "reuse",
-            ("create or reuse", Some(false)) => "create",
-            (other, _) => other,
-        };
         self.account_notes.extend(on.notes.iter().cloned());
         for c in &mut self.contexts {
-            for r2 in &mut c.r2 {
-                r2.action = verb(r2.action, on.holds(KindId::R2, r2.jurisdiction, &r2.bucket));
-            }
-            for d1 in &mut c.d1 {
-                d1.action = verb(d1.action, on.holds(KindId::D1, None, &d1.database));
-            }
             for q in &mut c.queues {
-                q.action = verb(q.action, on.holds(KindId::Queue, None, &q.queue));
+                q.action = held_verb(q.action, on.holds(KindId::Queue, None, &q.queue));
             }
             for v in &mut c.vectorize {
-                v.action = verb(v.action, on.holds(KindId::Vectorize, None, &v.index));
+                v.action = held_verb(v.action, on.holds(KindId::Vectorize, None, &v.index));
             }
             check_kind_lines(c, on, &mut self.account_notes);
         }
@@ -2878,16 +2795,7 @@ pub(crate) fn derive_plan<'a>(
                 let mut context = ContextPlan {
                     worker: deployed_worker_name(environment, worker),
                     kv: Vec::new(),
-                    r2: declared
-                        .r2_buckets
-                        .iter()
-                        .map(|bucket| PlanR2 {
-                            binding: &bucket.binding,
-                            action: r2_action(lock, worker, bucket, environment),
-                            bucket: r2_bucket_name(environment, &bucket.name),
-                            jurisdiction: bucket.jurisdiction.as_deref(),
-                        })
-                        .collect(),
+                    r2: Vec::new(),
                     vectorize: declared
                         .vectorize_indexes
                         .iter()
@@ -2912,24 +2820,7 @@ pub(crate) fn derive_plan<'a>(
                             }
                         })
                         .collect(),
-                    d1: declared
-                        .d1_databases
-                        .iter()
-                        .map(|db| {
-                            let database = d1_database_name(environment, &db.name);
-                            let recorded = recorded_d1(lock, worker, &db.binding, environment);
-                            PlanD1 {
-                                binding: &db.binding,
-                                action: if recorded.is_some_and(|r| r.name == database) {
-                                    "reuse"
-                                } else {
-                                    "create"
-                                },
-                                database,
-                                migrations: &db.migrations,
-                            }
-                        })
-                        .collect(),
+                    d1: Vec::new(),
                     hyperdrive: hyperdrive_plan(
                         worker,
                         declared,
@@ -3141,81 +3032,6 @@ pub(crate) fn recreate_refusal(plan: &Plan<'_>, yes: bool) -> Option<&'static st
         .then_some("a changed `@jurisdiction` makes a new R2 bucket and leaves the old one, with its objects, where it is (the plan reports it as an orphan); move the data, then re-run with --yes")
 }
 
-/// P5 (#2323): what a deploy will do about `worker`'s R2 bucket `bucket` in
-/// `environment`. The name is the identity, so a recorded bucket under the
-/// same jurisdiction is `reuse`; one recorded under another is `recreate`,
-/// since a bucket's jurisdiction is fixed when it is made.
-pub(crate) fn r2_action(
-    lock: &DeployLock,
-    worker: &str,
-    bucket: &R2Decl,
-    environment: &str,
-) -> &'static str {
-    match recorded_r2(lock, worker, &bucket.binding, environment) {
-        None => "create",
-        Some(recorded)
-            if recorded.name == r2_bucket_name(environment, &bucket.name)
-                && recorded.jurisdiction == bucket.jurisdiction =>
-        {
-            "reuse"
-        }
-        Some(recorded) if recorded.name == r2_bucket_name(environment, &bucket.name) => "recreate",
-        Some(_) => "create",
-    }
-}
-
-/// P4a (#2602): why the databases the build declares cannot all be made in
-/// `environment`, or `None`. Deploy adopts a database whose name is already on
-/// the account, so two instances sharing a derived name would silently share
-/// one database: `shop.cart`'s `Orders` and `shop`'s `CartOrders` are both
-/// `shop-cart-orders`, and `shop`'s `OrdersStaging` by default is `shop`'s
-/// `Orders` under `--env staging`. Checked within the build, and against
-/// every database the ledger records in any environment.
-pub(crate) fn d1_database_problem(
-    resources: &BTreeMap<String, Resources>,
-    lock: &DeployLock,
-    environment: &str,
-) -> Option<String> {
-    let mut seen: BTreeMap<String, (&str, &str)> = BTreeMap::new();
-    for (worker, declared) in resources {
-        for db in &declared.d1_databases {
-            let name = d1_database_name(environment, &db.name);
-            if let Some((other_worker, other_binding)) =
-                seen.insert(name.clone(), (worker, &db.binding))
-            {
-                return Some(format!(
-                    "`{}` of `{worker}` and `{other_binding}` of `{other_worker}` would both be the D1 database `{name}`; database names are scoped to the account, so rename one capability",
-                    db.binding
-                ));
-            }
-            for (other_env, env) in &lock.environments {
-                let clash = env
-                    .d1_instances
-                    .iter()
-                    .flat_map(|(w, instances)| instances.iter().map(move |(b, r)| (w, b, r)))
-                    .find(|(w, b, r)| {
-                        r.name == name
-                            && (other_env != environment
-                                || w.as_str() != worker
-                                || **b != db.binding)
-                    });
-                if let Some((other_worker, other_binding, _)) = clash {
-                    return Some(format!(
-                        "`{}` of `{worker}` would be the D1 database `{name}`, which `{other_binding}` of `{other_worker}` already holds in environment `{other_env}`; database names are scoped to the account, so rename one capability",
-                        db.binding
-                    ));
-                }
-            }
-        }
-    }
-    None
-}
-
-/// P5 (#2323): why the buckets the build declares cannot all be made in
-/// `environment`, or `None`. A derived name that breaks R2's rules is an error
-/// at plan time, naming the instance, never a failed push; and two instances
-/// (or one here and one another environment's) must not share a name, since
-/// R2 scopes bucket names to the account.
 /// P3b (#2582): why the datasets the build declares would mix, or `None`.
 /// The derived name flattens both a context's `.` and a capability's word
 /// breaks to `_`, so `shop.cart`'s `Signups` and `shop`'s `CartSignups` are
@@ -3320,52 +3136,6 @@ pub(crate) fn vectorize_index_problem(
                     return Some(format!(
                         "`{}` of `{worker}` would be the Vectorize index `{name}`, which `{other_binding}` of `{other_worker}` already holds in environment `{other_env}`; index names are scoped to the account, so rename one capability, or adopt the index for both in `[deploy.vectorize]`",
                         index.binding
-                    ));
-                }
-            }
-        }
-    }
-    None
-}
-
-pub(crate) fn r2_bucket_problem(
-    resources: &BTreeMap<String, Resources>,
-    lock: &DeployLock,
-    environment: &str,
-) -> Option<String> {
-    let mut seen: BTreeMap<String, (&str, &str)> = BTreeMap::new();
-    for (worker, declared) in resources {
-        for bucket in &declared.r2_buckets {
-            let name = r2_bucket_name(environment, &bucket.name);
-            if let Some(why) = r2_bucket_name_problem(&name) {
-                return Some(format!(
-                    "R2 bucket `{name}` (`{}` of `{worker}`) cannot be created: {why}; rename the capability or the context",
-                    bucket.binding
-                ));
-            }
-            if let Some((other_worker, other_binding)) =
-                seen.insert(name.clone(), (worker, &bucket.binding))
-            {
-                return Some(format!(
-                    "`{}` of `{worker}` and `{other_binding}` of `{other_worker}` would both be the R2 bucket `{name}`; bucket names are scoped to the account, so rename one capability",
-                    bucket.binding
-                ));
-            }
-            for (other_env, env) in &lock.environments {
-                let clash = env
-                    .r2_instances
-                    .iter()
-                    .flat_map(|(w, instances)| instances.iter().map(move |(b, r)| (w, b, r)))
-                    .find(|(w, b, r)| {
-                        r.name == name
-                            && (other_env != environment
-                                || w.as_str() != worker
-                                || **b != bucket.binding)
-                    });
-                if let Some((other_worker, other_binding, _)) = clash {
-                    return Some(format!(
-                        "`{}` of `{worker}` would be the R2 bucket `{name}`, which `{other_binding}` of `{other_worker}` already holds in environment `{other_env}`; bucket names are scoped to the account, so rename one capability",
-                        bucket.binding
                     ));
                 }
             }
@@ -3902,8 +3672,18 @@ pub(crate) mod tests {
             ]
         );
         let mut lock = DeployLock::default();
-        lock.record_r2("default", "shop", "R2_ARCHIVES", "shop-archives", None);
-        lock.record_r2("default", "shop", "R2_INDEXES", "shop-indexes", Some("eu"));
+        lock.record::<R2>(
+            "default",
+            "shop",
+            "R2_ARCHIVES",
+            R2Bucket::of("shop-archives", None),
+        );
+        lock.record::<R2>(
+            "default",
+            "shop",
+            "R2_INDEXES",
+            R2Bucket::of("shop-indexes", Some("eu")),
+        );
         let again = plan_of(&order, &declared, &lock);
         assert!(again.contexts[0].r2.iter().all(|b| b.action == "reuse"));
     }
@@ -3936,13 +3716,17 @@ pub(crate) mod tests {
     fn a_changed_jurisdiction_is_a_recreate_that_says_the_old_bucket_stays() {
         let declared = shop_with_buckets();
         let mut lock = DeployLock::default();
-        lock.record_r2("default", "shop", "R2_ARCHIVES", "shop-archives", None);
-        lock.record_r2(
+        lock.record::<R2>(
+            "default",
+            "shop",
+            "R2_ARCHIVES",
+            R2Bucket::of("shop-archives", None),
+        );
+        lock.record::<R2>(
             "default",
             "shop",
             "R2_INDEXES",
-            "shop-indexes",
-            Some("fedramp"),
+            R2Bucket::of("shop-indexes", Some("fedramp")),
         );
         let order = names(&["shop"]);
         let plan = plan_of(&order, &declared, &lock);
@@ -3971,8 +3755,18 @@ pub(crate) mod tests {
             "{report}"
         );
         let mut lock = DeployLock::default();
-        lock.record_d1("default", "shop", "D1_ORDERS", "shop-orders", "id-1");
-        lock.record_d1("default", "shop", "D1_GONE", "shop-gone", "id-2");
+        lock.record::<D1>(
+            "default",
+            "shop",
+            "D1_ORDERS",
+            D1Record::of("shop-orders", "id-1"),
+        );
+        lock.record::<D1>(
+            "default",
+            "shop",
+            "D1_GONE",
+            D1Record::of("shop-gone", "id-2"),
+        );
         let again = plan_of(&order, &declared, &lock);
         assert_eq!(again.contexts[0].d1[0].action, "reuse");
         let report = plan_report(&again, DeployFormat::Short);
@@ -4022,7 +3816,11 @@ pub(crate) mod tests {
                 Resources::default().d1_databases(&[("D1_CART_ORDERS", "shop-cart-orders")]),
             ),
         ]);
-        let message = d1_database_problem(&colliding, &DeployLock::default(), "default").unwrap();
+        let message = d1_database_problem(
+            &colliding,
+            LedgerView::of(&DeployLock::default(), "default"),
+        )
+        .unwrap();
         assert!(message.contains("`shop-cart-orders`"), "{message}");
         // Across environments: `OrdersStaging` by default is `Orders` under
         // `--env staging`, which the ledger holds.
@@ -4031,34 +3829,40 @@ pub(crate) mod tests {
             Resources::default().d1_databases(&[("D1_ORDERS_STAGING", "shop-orders-staging")]),
         )]);
         let mut lock = DeployLock::default();
-        lock.record_d1(
+        lock.record::<D1>(
             "staging",
             "shop",
             "D1_ORDERS",
-            "shop-orders-staging",
-            "id-1",
+            D1Record::of("shop-orders-staging", "id-1"),
         );
-        let message = d1_database_problem(&suffixed, &lock, "default").unwrap();
+        let message = d1_database_problem(&suffixed, LedgerView::of(&lock, "default")).unwrap();
         assert!(message.contains("environment `staging`"), "{message}");
         // The database's own record is no clash.
         let own = project(vec![(
             "shop",
             Resources::default().d1_databases(&[("D1_ORDERS", "shop-orders")]),
         )]);
-        assert_eq!(d1_database_problem(&own, &lock, "staging"), None);
+        assert_eq!(
+            d1_database_problem(&own, LedgerView::of(&lock, "staging")),
+            None
+        );
     }
 
     #[test]
     fn a_recreate_without_yes_is_refused_and_with_yes_is_not() {
         let declared = shop_with_buckets();
         let mut lock = DeployLock::default();
-        lock.record_r2("default", "shop", "R2_ARCHIVES", "shop-archives", None);
-        lock.record_r2(
+        lock.record::<R2>(
+            "default",
+            "shop",
+            "R2_ARCHIVES",
+            R2Bucket::of("shop-archives", None),
+        );
+        lock.record::<R2>(
             "default",
             "shop",
             "R2_INDEXES",
-            "shop-indexes",
-            Some("fedramp"),
+            R2Bucket::of("shop-indexes", Some("fedramp")),
         );
         let order = names(&["shop"]);
         let plan = plan_of(&order, &declared, &lock);
@@ -4073,14 +3877,18 @@ pub(crate) mod tests {
     fn a_bucket_a_changed_jurisdiction_left_behind_is_reported_as_an_orphan() {
         let declared = shop_with_buckets();
         let mut lock = DeployLock::default();
-        lock.record_r2(
+        lock.record::<R2>(
             "default",
             "shop",
             "R2_INDEXES",
-            "shop-indexes",
-            Some("fedramp"),
+            R2Bucket::of("shop-indexes", Some("fedramp")),
         );
-        lock.record_r2("default", "shop", "R2_INDEXES", "shop-indexes", Some("eu"));
+        lock.record::<R2>(
+            "default",
+            "shop",
+            "R2_INDEXES",
+            R2Bucket::of("shop-indexes", Some("eu")),
+        );
         let order = names(&["shop"]);
         let report = plan_report(&plan_of(&order, &declared, &lock), DeployFormat::Short);
         assert!(
@@ -4095,7 +3903,7 @@ pub(crate) mod tests {
     fn an_orphaned_bucket_is_shown_with_its_name_and_kept() {
         let declared = project(vec![("shop", Resources::default())]);
         let mut lock = DeployLock::default();
-        lock.record_r2("default", "shop", "R2_OLD", "shop-old", None);
+        lock.record::<R2>("default", "shop", "R2_OLD", R2Bucket::of("shop-old", None));
         let order = names(&["shop"]);
         let plan = plan_of(&order, &declared, &lock);
         let report = plan_report(&plan, DeployFormat::Short);
@@ -4117,7 +3925,7 @@ pub(crate) mod tests {
                 None,
             )]),
         )]);
-        let message = r2_bucket_problem(&long, &lock, "default").expect("too long");
+        let message = r2_bucket_problem(&long, LedgerView::of(&lock, "default")).expect("too long");
         assert!(
             message.contains("`R2_SOME_RATHER_LONG_CAPABILITY_NAME`"),
             "{message}"
@@ -4128,14 +3936,14 @@ pub(crate) mod tests {
             "shop",
             Resources::default().r2_buckets(&[("R2_X", &"a".repeat(60), None)]),
         )]);
-        assert!(r2_bucket_problem(&edge, &lock, "default").is_none());
-        assert!(r2_bucket_problem(&edge, &lock, "production").is_some());
+        assert!(r2_bucket_problem(&edge, LedgerView::of(&lock, "default")).is_none());
+        assert!(r2_bucket_problem(&edge, LedgerView::of(&lock, "production")).is_some());
         let underscore = project(vec![(
             "shop_front",
             Resources::default().r2_buckets(&[("R2_X", "shop_front-x", None)]),
         )]);
         assert!(
-            r2_bucket_problem(&underscore, &lock, "default")
+            r2_bucket_problem(&underscore, LedgerView::of(&lock, "default"))
                 .unwrap()
                 .contains("lowercase letters, digits and hyphens")
         );
@@ -4201,24 +4009,26 @@ pub(crate) mod tests {
                 Resources::default().r2_buckets(&[("R2_CART_A", "shop-cart-a", None)]),
             ),
         ]);
-        let message =
-            r2_bucket_problem(&colliding, &DeployLock::default(), "default").expect("a collision");
+        let message = r2_bucket_problem(
+            &colliding,
+            LedgerView::of(&DeployLock::default(), "default"),
+        )
+        .expect("a collision");
         assert!(message.contains("`shop-cart-a`"), "{message}");
         // Another environment's bucket holding the name is the same clash.
         let mut lock = DeployLock::default();
-        lock.record_r2(
+        lock.record::<R2>(
             "production",
             "shop",
             "R2_OTHER",
-            "shop-archives-staging",
-            None,
+            R2Bucket::of("shop-archives-staging", None),
         );
         let staging = project(vec![(
             "shop",
             Resources::default().r2_buckets(&[("R2_ARCHIVES", "shop-archives", None)]),
         )]);
-        assert!(r2_bucket_problem(&staging, &lock, "staging").is_some());
-        assert!(r2_bucket_problem(&staging, &lock, "default").is_none());
+        assert!(r2_bucket_problem(&staging, LedgerView::of(&lock, "staging")).is_some());
+        assert!(r2_bucket_problem(&staging, LedgerView::of(&lock, "default")).is_none());
     }
 
     // ---- #3301: Secrets Store secrets are linked, never created ----
