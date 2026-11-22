@@ -88,6 +88,10 @@
             "link": "/book/guides/type-system/decode-json/"
           },
           {
+            "label": "Read a YAML settings file into a typed value",
+            "link": "/book/guides/type-system/decode-yaml/"
+          },
+          {
             "label": "Use a literal where a refined type is expected",
             "link": "/book/guides/type-system/use-a-literal/"
           },
@@ -96,8 +100,16 @@
             "link": "/book/guides/type-system/define-types/"
           },
           {
+            "label": "Handle money correctly",
+            "link": "/book/guides/type-system/handle-money-correctly/"
+          },
+          {
             "label": "Work with Result and optional values",
             "link": "/book/guides/type-system/result-and-optionals/"
+          },
+          {
+            "label": "Fault on the impossible or the unfinished",
+            "link": "/book/guides/type-system/fault-on-the-impossible/"
           },
           {
             "label": "Pattern-match with match",
@@ -146,6 +158,10 @@
           {
             "label": "Constructors for generic types",
             "link": "/book/guides/type-system/constructors-for-generic-types/"
+          },
+          {
+            "label": "Recursive generic types",
+            "link": "/book/guides/type-system/recursive-generic-types/"
           }
         ]
       },
@@ -218,6 +234,10 @@
             "link": "/book/guides/effects-and-capabilities/compose-a-provider/"
           },
           {
+            "label": "Share a handler step that logs or queries",
+            "link": "/book/guides/effects-and-capabilities/share-a-handler-step/"
+          },
+          {
             "label": "Share a capability across contexts",
             "link": "/book/guides/effects-and-capabilities/share-across-contexts/"
           },
@@ -240,6 +260,10 @@
           {
             "label": "Search by meaning with Vectorize and Workers AI",
             "link": "/book/guides/effects-and-capabilities/search-by-meaning-with-vectorize/"
+          },
+          {
+            "label": "Answer questions from your documents with AI Search",
+            "link": "/book/guides/effects-and-capabilities/answer-questions-from-your-documents/"
           },
           {
             "label": "Use more than one KV namespace",
@@ -336,6 +360,26 @@
             "link": "/book/guides/entry-points/http/"
           },
           {
+            "label": "Accept an HTML form",
+            "link": "/book/guides/entry-points/accept-a-form/"
+          },
+          {
+            "label": "Accept a file upload",
+            "link": "/book/guides/entry-points/accept-a-file-upload/"
+          },
+          {
+            "label": "Stream a large upload",
+            "link": "/book/guides/entry-points/stream-a-large-upload/"
+          },
+          {
+            "label": "Call your API from a front end",
+            "link": "/book/guides/entry-points/call-from-a-front-end/"
+          },
+          {
+            "label": "Branch on the caller's country",
+            "link": "/book/guides/entry-points/branch-on-the-callers-country/"
+          },
+          {
             "label": "Run a task on a schedule (cron)",
             "link": "/book/guides/entry-points/cron/"
           },
@@ -371,6 +415,10 @@
           {
             "label": "Authenticate with OIDC / JWKS",
             "link": "/book/guides/actors/authenticate-with-oidc/"
+          },
+          {
+            "label": "Authenticate a browser with a signed cookie",
+            "link": "/book/guides/actors/authenticate-with-a-signed-cookie/"
           },
           {
             "label": "Verify an inbound webhook",
@@ -499,6 +547,14 @@
           {
             "label": "Deploy to Cloudflare",
             "link": "/book/guides/projects-build-and-deployment/deploy-to-cloudflare/"
+          },
+          {
+            "label": "Roll back a deployment",
+            "link": "/book/guides/projects-build-and-deployment/roll-back-a-deployment/"
+          },
+          {
+            "label": "Contract skew across independently deployed contexts",
+            "link": "/book/guides/projects-build-and-deployment/contract-skew/"
           },
           {
             "label": "Target Cloudflare Workers",
@@ -807,6 +863,22 @@
       {
         "label": "bynk.integration.* errors",
         "link": "/book/troubleshooting/integration-errors/"
+      },
+      {
+        "label": "bynk.contract.* errors",
+        "link": "/book/troubleshooting/contract-errors/"
+      },
+      {
+        "label": "bynk.history.* errors",
+        "link": "/book/troubleshooting/history-errors/"
+      },
+      {
+        "label": "bynk.observe.* errors",
+        "link": "/book/troubleshooting/observation-errors/"
+      },
+      {
+        "label": "bynk.transition.* errors",
+        "link": "/book/troubleshooting/transition-errors/"
       }
     ]
   },

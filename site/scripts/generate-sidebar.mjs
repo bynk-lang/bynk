@@ -6,10 +6,17 @@
 //! and grouping rather than directory structure.
 //!
 //!   node scripts/generate-sidebar.mjs            regenerate sidebar.json
-//!   node scripts/generate-sidebar.mjs --check     fail (non-zero) if out of date
+//!   node scripts/generate-sidebar.mjs --check     fail (non-zero) if out of date,
+//!                                                 or if the contents are incomplete
 //!
 //! The `site` CI job runs `--check`; a `SUMMARY.md` edit that isn't regenerated
 //! fails the build. Mirrors the repo's generate→commit→drift-guard pattern.
+//!
+//! The contents must also be complete (web presence track, slice 1): every page
+//! under `src/content/docs/book/` is listed in `SUMMARY.md`, and every entry
+//! names a page. The sidebar comes from `SUMMARY.md`, not the folders, so a page
+//! nobody lists exists but no sidebar shows it. `--check` fails naming each one;
+//! a plain run warns.
 
 import fs from "node:fs";
 import path from "node:path";
@@ -18,6 +25,7 @@ import { fileURLToPath } from "node:url";
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SUMMARY = path.join(HERE, "../src/SUMMARY.md");
 const OUT = path.join(HERE, "../src/generated/sidebar.json");
+const BOOK = path.join(HERE, "../src/content/docs/book");
 
 /** Sidebar labels are plain text, so drop the inline-code backticks the Book's
  *  SUMMARY uses (e.g. "`bynk.toml` manifest" → "bynk.toml manifest"). */
@@ -108,21 +116,74 @@ function buildSidebar(text) {
   return sidebar;
 }
 
+/** Every page under the Book's content directory, as paths relative to it. */
+function bookPages(dir = BOOK, rel = "") {
+  return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const sub = rel ? `${rel}/${entry.name}` : entry.name;
+    if (entry.isDirectory()) return bookPages(path.join(dir, entry.name), sub);
+    return /\.mdx?$/.test(entry.name) ? [sub] : [];
+  });
+}
+
+/** A page's route, whatever its extension: SUMMARY names `01-first-program.md`
+ *  for a page written as `.mdx`, and both are the same route. */
+const routeOf = (pagePath) => slugFor(pagePath.replace(/\.mdx$/, ".md"));
+
+/**
+ * Compare SUMMARY.md with the pages on disk (web presence track, slice 1).
+ * Returns the pages no contents lists (`unlisted`) and the SUMMARY entries
+ * with no page (`missing`). The prefix chapter is the Book root, `index.md`,
+ * whatever file name SUMMARY gives it.
+ */
+function completeness(text, pages = bookPages()) {
+  const { prefix, parts } = parseSummary(text);
+  const entries = parts.flatMap((p) => p.entries.map((e) => e.path));
+  const listed = new Set(entries.map(routeOf));
+  if (prefix) listed.add("/book/");
+  const onDisk = new Map(pages.map((p) => [routeOf(p), p]));
+  return {
+    unlisted: [...onDisk].filter(([route]) => !listed.has(route)).map(([, p]) => p).sort(),
+    missing: entries.filter((e) => !onDisk.has(routeOf(e))),
+  };
+}
+
+function reportCompleteness(text) {
+  const { unlisted, missing } = completeness(text);
+  const problems = [];
+  if (unlisted.length)
+    problems.push(
+      "These Book pages are in no contents, so no sidebar shows them. List each in\n" +
+        "site/src/SUMMARY.md:\n" +
+        unlisted.map((p) => `  site/src/content/docs/book/${p}`).join("\n"),
+    );
+  if (missing.length)
+    problems.push(
+      "These site/src/SUMMARY.md entries name no page:\n" + missing.map((p) => `  ${p}`).join("\n"),
+    );
+  return problems;
+}
+
 function main(argv) {
   const check = argv.includes("--check");
-  const rendered = JSON.stringify(buildSidebar(fs.readFileSync(SUMMARY, "utf8")), null, 2) + "\n";
+  const text = fs.readFileSync(SUMMARY, "utf8");
+  const rendered = JSON.stringify(buildSidebar(text), null, 2) + "\n";
+  const problems = reportCompleteness(text);
   if (check) {
     const current = fs.existsSync(OUT) ? fs.readFileSync(OUT, "utf8") : "";
     if (current !== rendered) {
-      console.error(
+      problems.unshift(
         "site/src/generated/sidebar.json is out of date with site/src/SUMMARY.md.\n" +
           "Regenerate with: node site/scripts/generate-sidebar.mjs",
       );
+    }
+    if (problems.length) {
+      console.error(problems.join("\n\n"));
       process.exit(1);
     }
-    console.log("sidebar.json is up to date.");
+    console.log("sidebar.json is up to date, and every Book page is in SUMMARY.md.");
     return;
   }
+  if (problems.length) console.warn(problems.join("\n\n") + "\n");
   fs.mkdirSync(path.dirname(OUT), { recursive: true });
   fs.writeFileSync(OUT, rendered);
   console.log(`wrote sidebar.json (${buildSidebar(fs.readFileSync(SUMMARY, "utf8")).length} top-level entries).`);
