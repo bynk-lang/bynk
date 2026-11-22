@@ -53,6 +53,7 @@ mod facts;
 mod first_deploy;
 mod graph;
 mod hyperdrive;
+mod kind;
 mod ledger;
 mod linked;
 mod on_account;
@@ -69,6 +70,7 @@ use config::*;
 use containers::*;
 use destinations::*;
 use graph::*;
+use kind::*;
 use ledger::*;
 use linked::*;
 use pins::*;
@@ -486,9 +488,19 @@ mod tests {
         out.push_str("\n# S4b: an instance renamed, under --env staging\n");
         let mut staged = DeployLock::default();
         staged.record_deployed("staging", "shop-cart", Some(Default::default()));
-        staged.record_kv("staging", "shop-cart", "KV", "bare-id");
-        staged.record_kv("staging", "shop-cart", "KV_SESSIONS", "sessions-id");
-        staged.record_kv("staging", "shop-cart", "KV_CARTS", "carts-id");
+        staged.record::<Kv>("staging", "shop-cart", "KV", KvNamespace::of("bare-id"));
+        staged.record::<Kv>(
+            "staging",
+            "shop-cart",
+            "KV_SESSIONS",
+            KvNamespace::of("sessions-id"),
+        );
+        staged.record::<Kv>(
+            "staging",
+            "shop-cart",
+            "KV_CARTS",
+            KvNamespace::of("carts-id"),
+        );
         let cart_order = names(&["shop-cart"]);
         let cart_resources = cart();
         let renamed = derive_plan(

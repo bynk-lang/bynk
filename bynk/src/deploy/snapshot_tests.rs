@@ -113,18 +113,13 @@ fn hyperdrive_wants() -> hyperdrive::Wants {
 struct Account;
 
 impl on_account::Listings for Account {
-    fn names(
-        &self,
-        kind: on_account::Kind,
-        jurisdiction: Option<&str>,
-    ) -> Result<BTreeSet<String>, String> {
-        use on_account::Kind;
+    fn names(&self, kind: KindId, jurisdiction: Option<&str>) -> Result<BTreeSet<String>, String> {
         let names: &[&str] = match (kind, jurisdiction) {
-            (Kind::Kv, None) => &["shop-cart"],
-            (Kind::R2, None) => &["shop-new"],
-            (Kind::D1, None) => &["shop-new"],
-            (Kind::Vectorize, None) => &["shop-new"],
-            (Kind::Queue, None) => &["outbound"],
+            (KindId::Kv, None) => &["shop-cart"],
+            (KindId::R2, None) => &["shop-new"],
+            (KindId::D1, None) => &["shop-new"],
+            (KindId::Vectorize, None) => &["shop-new"],
+            (KindId::Queue, None) => &["outbound"],
             (_, Some(_)) => return Err("Cloudflare answered 403".to_string()),
         };
         Ok(names.iter().map(|n| n.to_string()).collect())
