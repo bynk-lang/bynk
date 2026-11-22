@@ -7,6 +7,7 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.640.33** | Internal restructuring: npm, pnpm, bun, yarn, `tsc`, `tsx`, `node` and `git` are spawned from one module; no lookup, message or fetched package changes |
 | **v0.640.32** | The Book's diagrams wear the Bynk design system. Hairline panels, muted lines and Instrument Sans replace Mermaid's lilac default, in light and dark, and they follow the site's theme toggle. |
 | **v0.640.31** | `bynk revert` refuses a version bound to a Hyperdrive config that the ledger has since replaced or pruned, as it already did for KV, D1 and rate limiters (#3970) |
 | **v0.640.30** | The docs site now wears the Bynk design system, from the same `@bynk-lang/site-theme` package as the blog — amber and teal in place of the indigo accent, Instrument Sans and JetBrains Mono, the bento-blocks wordmark, and the blog's header — in light and dark, following the reader's setting (web presence track, slice 6, #4006). |
