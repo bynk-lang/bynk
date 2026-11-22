@@ -27,7 +27,7 @@ Every fenced `bynk` block is compiled by the `doc_examples` gate in `bynk-tests/
 
 ## Deploy
 
-The deploy is automated by `.github/workflows/deploy-site.yml`. It builds `site/dist/` and uploads it with `wrangler pages deploy` to a single Cloudflare Pages project. It runs on push to `main` (when `site/**` or the tmLanguage grammar changes) and on manual `workflow_dispatch` (Actions tab → "Deploy the docs site" → Run workflow).
+The deploy is automated by `.github/workflows/deploy-site.yml`. It builds `site/dist/` and uploads it with `wrangler pages deploy` to a single Cloudflare Pages project. It deploys only a commit whose CI passed: a merge through the queue as soon as it lands on `main` (its merge-queue run already passed), and any other commit on `main` when its own CI run passes. Each deploy ships the newest such commit, and only when something the site uses (`site/**`, the Rust sources behind the API docs, the manifests) changed since the previous one. A manual `workflow_dispatch` (Actions tab → "Deploy the docs site" → Run workflow) deploys regardless. The comments at the top of the workflow explain why.
 
 The maintainer does a one-time account setup:
 
