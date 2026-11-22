@@ -166,9 +166,9 @@ feature before them.
 
 ## Compatibility during 0.x
 
-While Bynk is pre-1.0, increments may change behaviour. The reference
-[changelog](/book/reference/changelog/) records what changed in each increment and
-notes breaking changes. Full multi-version documentation is itself deferred until
+While Bynk is pre-1.0, increments may change behaviour. The
+[releases](/book/reference/releases/) record what changed in each increment, one
+page per release, and [Upgrading](/book/reference/upgrading/) notes breaking changes. Full multi-version documentation is itself deferred until
 the run-up to 1.0, when stability makes it worthwhile; until then the book tracks
 a single current version.
 
@@ -176,4 +176,4 @@ a single current version.
 
 - [Why Bynk exists](/book/about/why-bynk-exists/) — the motivation behind the design these
   increments are building toward.
-- Reference: [version compatibility & changelog](/book/reference/changelog/).
+- Reference: [releases](/book/reference/releases/).

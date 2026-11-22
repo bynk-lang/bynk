@@ -360,7 +360,10 @@ Treat docs as part of an increment's definition of done (see
 [Testing & fixtures](/book/contributing/testing/)): update the affected reference
 (regenerating the generated pages), update the affected
 [specification](/book/spec/) chapters (per *Keeping the spec current* above), and
-add a changelog entry. The Book's current-version banners are single-sourced —
+write the changelog line in your `design/pending/` file: the stamp adds it to
+[Unreleased](/book/reference/releases/unreleased/) when the increment merges,
+and cutting a release moves it to that release's page. The Book's
+current-version banners are single-sourced —
 `scripts/bump-version.sh` rewrites them (and regenerates `llms-full.txt`) and
 `xtask/tests/docs_consistency/doc_version.rs` fails CI on drift, so there is no manual
 version-bump step. Finally, check that any touched tutorial or guide still

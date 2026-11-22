@@ -215,7 +215,9 @@ pub fn apply(
     }
 
     let decisions = root.join("design/decisions");
-    let changelog_path = root.join("site/src/content/docs/book/reference/changelog.md");
+    // The changelog rows go to the Book's Unreleased page; `cargo xtask
+    // release-page` later cuts them into a release's page (#3868).
+    let changelog_path = root.join(crate::release_pages::UNRELEASED_PAGE);
     let readme_path = decisions.join("README.md");
     let rule_ledger_path = root.join("design/greenfield-status-rules.md");
     let raise_ledger_path = root.join(RAISE_LEDGER_PATH);

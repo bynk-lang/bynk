@@ -10,7 +10,7 @@ versions. Each [GitHub release](https://github.com/bynk-lang/bynk/releases)
 repeats the entries since the previous release under **Upgrading from vX**, so
 the release you are moving to tells you what to change.
 
-The [changelog](/book/reference/changelog/) is the history of *every* increment;
+The [releases](/book/reference/releases/) are the history of *every* increment;
 this page is only the ones that break something. An increment that is missing
 here broke nothing, or its author did not say so: please
 [open an issue](https://github.com/bynk-lang/bynk/issues/new?template=bug_report.yml).

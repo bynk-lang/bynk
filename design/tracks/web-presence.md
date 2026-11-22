@@ -104,7 +104,7 @@ Moving pages is not only a site change. These read or emit Book paths:
 | `bynk/src/book.rs`, `bynk/src/mcp/tools.rs` | `bynk book` builds page URLs from the Book bundled at build time, so they follow the content; the MCP tools hard-code the diagnostic index URL |
 | `bynk-syntax/src/keywords.rs` | `reference/keywords.md` |
 | `bynk-ide/src/first_party_docs.rs` | `reference/bynk-capabilities.md` and its URL |
-| `xtask` (`stamp`, `release_notes`, `grammar`, `site_page`) | `reference/changelog.md`, `reference/upgrading.md`, `reference/grammar-appendix.md`, `/book/` |
+| `xtask` (`stamp`, `release_notes`, `grammar`, `site_page`) | `reference/releases/unreleased.md` (`reference/changelog.md` until slice 3), `reference/upgrading.md`, `reference/grammar-appendix.md`, `/book/` |
 | `xtask/tests/docs_consistency/*`, `xtask/tests/upgrading_page.rs` | diagnostics, keywords and grammar reference pages |
 | `bynk-tests` (`doc_examples`, `types_reference_methods`, `wire_reference`) | the Book's code blocks and named reference pages |
 | `site/scripts/*` | sidebar generation, `llms-full`, glossary, spec-section and British-English checks |

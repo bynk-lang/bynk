@@ -63,7 +63,7 @@ sed -i.bak -E "s/currently v[0-9]+\.[0-9]+/currently v$mm/" \
 sed -i.bak -E "s/written against v[0-9]+\.[0-9]+/written against v$mm/" \
 	"$book/about/versioning-and-roadmap.md"
 sed -i.bak -E "s/written against \*\*v[0-9]+\.[0-9]+\*\*/written against **v$mm**/" \
-	"$book/reference/changelog.md"
+	"$book/reference/releases/index.md"
 sed -i.bak -E "s/current version, v[0-9]+\.[0-9]+/current version, v$mm/" \
 	"$book/spec/scope.md" "$book/spec/appendix-version-history.md" "$book/spec/index.md"
 find "$book" "$docs" -name '*.bak' -delete

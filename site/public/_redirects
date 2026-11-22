@@ -5,3 +5,7 @@
 # Retired in slice 2 (#3865); the Book's front page now says how the Book is laid out.
 /book/introduction/how-these-docs-are-organised/ /book/ 301
 /book/introduction/how-these-docs-are-organised /book/ 301
+
+# The changelog became one page per release in slice 3 (#3868).
+/book/reference/changelog/ /book/reference/releases/ 301
+/book/reference/changelog /book/reference/releases/ 301

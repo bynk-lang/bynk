@@ -102,6 +102,22 @@ jobs:
             echo "::notice::manual dispatch from $GITHUB_REF_NAME — will publish manifest version $ver"
           fi
           exit "$fail"
+      - name: The release has its page in the Book
+        # A release is cut before it is tagged (#3868): `cargo xtask
+        # release-page --apply` turns the Book's Unreleased page into this
+        # version's page, and that commit is the one tagged. Every publish job
+        # waits on `verify`, so a tag without its page fails here, before
+        # anything is built or published.
+        run: |
+          ver="$(grep -m1 '^version' Cargo.toml | sed 's/.*"\(.*\)".*/\1/')"
+          # Release pages use dashes (v0-639-1.md): Astro drops dots from URLs.
+          page="site/src/content/docs/book/reference/releases/v${ver//./-}.md"
+          if [ -f "$page" ]; then
+            echo "::notice::$page is present"
+          else
+            echo "::error::$page is missing. Cut the release before tagging: run \`cargo xtask release-page --apply\` and merge it in a PR with no design/pending/ file (so the stamp doesn't bump the version), then tag that merge commit v${ver}."
+            exit 1
+          fi
       - name: Commit under release must be on main (reviewed)
         # `v*` tags are NOT covered by the `main` ruleset, so a tag can be pushed
         # at ANY commit on ANY branch, and a manual dispatch can run from a branch

@@ -120,7 +120,8 @@ cargo install --path bynk-lsp
 
 This puts the binaries on your `PATH` (under `~/.cargo/bin` by default). Then
 run `bynk doctor` as above. A build from `main` includes unreleased changes;
-the [changelog](/book/reference/changelog/) lists what each version adds.
+[Unreleased](/book/reference/releases/unreleased/) lists what has changed since
+the latest release.
 
 ## Dev Containers / Codespaces
 

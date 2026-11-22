@@ -24,6 +24,7 @@ pub mod grammar;
 pub mod greenfield_status;
 pub mod manifest_schema;
 pub mod release_notes;
+pub mod release_pages;
 pub mod site_page;
 pub mod stamp;
 pub mod tiers;
@@ -756,8 +757,8 @@ fn looks_like_version_prefix(changelog: &str) -> bool {
 /// The destination of the first Markdown inline link in `blurb` that resolves
 /// *relatively*, if there is one.
 ///
-/// The blurb is inserted verbatim into a table row in the Book's
-/// `reference/changelog.md`, so `[…](…)` in prose is a real link once it lands —
+/// The blurb is inserted verbatim into a table row on the Book's
+/// `reference/releases/unreleased.md`, so `[…](…)` in prose is a real link once it lands —
 /// and an unbackticked generic call like `Events.emit[E](event)` is exactly that
 /// shape, a link to a relative `event`. The docs site's own link-checker
 /// (starlight-links-validator, the `Docs site (astro build)` gate) rejects those,

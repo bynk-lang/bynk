@@ -87,7 +87,8 @@ Concretely, the implementing PR must, *where the increment touches them*:
   for a genuinely new *concept*, the "Understand" on-ramp, not just a "Do"
   recipe. The spec is for lookup; the guides are the learning path.
 - **Keep currency claims true.** Advance the "written against vX.Y" banner and
-  `spec/appendix-version-history.md`; add the `reference/changelog.md` entry. The
+  `spec/appendix-version-history.md`; the stamp adds the changelog row to
+  `reference/releases/unreleased.md` from your pending file. The
   version the book *claims* to describe and the version it *does* describe must
   match.
 - **Keep the roadmap honest in both directions.** Shipped behaviour must never be
