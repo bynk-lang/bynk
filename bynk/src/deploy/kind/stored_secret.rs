@@ -63,6 +63,7 @@ impl ResourceKind for StoredSecret {
     type Live<'a> = Option<&'a BTreeMap<(String, String), String>>;
     /// The store's id, which the config binds the secret by.
     type Bound = String;
+    type Change = TableChange<StoredSecretTable>;
 
     fn declared(r: &Resources) -> Vec<&StoredSecretDecl> {
         r.stored_secrets.iter().collect()
@@ -118,41 +119,32 @@ impl ResourceKind for StoredSecret {
 
     /// One link alone, recorded at once. The deploy links a Worker's together
     /// ([`ResourceKind::provision_all`]).
-    fn provision(
-        cx: &mut ApplyCx<'_, '_, StoredSecret>,
-        decl: &StoredSecretDecl,
-    ) -> Result<Provisioned<String>, DeployFailure> {
+    fn provision<'r>(
+        cx: &StepCx<'_, '_, StoredSecret>,
+        decl: Self::Decl<'r>,
+    ) -> Result<Provisioned<'r, StoredSecret>, DeployFailure> {
         let worker = cx.worker;
         let (link, bound) = link(cx, decl)?;
-        if record_link(cx, &decl.binding, link) {
-            cx.commit(&format!(
-                "linked `{worker}`'s Secrets Store secrets but could not record them"
-            ))?;
-        }
-        Ok(Provisioned {
-            bound: Some((decl.binding.clone(), bound)),
-        })
+        let mut links = Links::new();
+        links.link(cx, &decl.binding, link);
+        let provisioned = Provisioned::bound(&decl.binding, bound);
+        Ok(
+            match links.commit(
+                worker,
+                format!("linked `{worker}`'s Secrets Store secrets but could not record them"),
+            ) {
+                Some(commit) => provisioned.with(commit),
+                None => provisioned,
+            },
+        )
     }
 
     /// Each link recorded, the ledger written once when any changed, before the push.
-    fn provision_all(
-        cx: &mut ApplyCx<'_, '_, StoredSecret>,
-        declared: &Resources,
-    ) -> Result<BTreeMap<String, String>, DeployFailure> {
-        let worker = cx.worker;
-        let mut bound = BTreeMap::new();
-        let mut changed = false;
-        for decl in &declared.stored_secrets {
-            let (link, id) = link(cx, decl)?;
-            changed |= record_link(cx, &decl.binding, link);
-            bound.insert(decl.binding.clone(), id);
-        }
-        if changed {
-            cx.commit(&format!(
-                "linked `{worker}`'s Secrets Store secrets but could not record them"
-            ))?;
-        }
-        Ok(bound)
+    fn provision_all<'r>(
+        cx: &StepCx<'_, '_, StoredSecret>,
+        declared: &'r Resources,
+    ) -> Option<Result<Provisioned<'r, StoredSecret>, DeployFailure>> {
+        Some(provision_links(cx, declared))
     }
 
     fn materialise(
@@ -169,26 +161,32 @@ impl ResourceKind for StoredSecret {
     }
 }
 
-/// Record `link` for this Worker's `binding` unless it is already what the ledger holds. Whether
-/// the ledger changed.
-fn record_link(
-    cx: &mut ApplyCx<'_, '_, StoredSecret>,
-    binding: &str,
-    link: StoredSecretLink,
-) -> bool {
+/// [`StoredSecret`]'s `provision_all`: each of the Worker's links, written once when any changed.
+fn provision_links<'r>(
+    cx: &StepCx<'_, '_, StoredSecret>,
+    declared: &'r Resources,
+) -> Result<Provisioned<'r, StoredSecret>, DeployFailure> {
     let worker = cx.worker;
-    let env = cx.env_mut();
-    if StoredSecretTable::get(env, worker, binding) == Some(&link) {
-        return false;
+    let mut provisioned = Provisioned::nothing();
+    let mut links = Links::new();
+    for decl in &declared.stored_secrets {
+        let (link, id) = link(cx, decl)?;
+        links.link(cx, &decl.binding, link);
+        provisioned.bound.push((decl.binding.clone(), id));
     }
-    StoredSecretTable::insert(env, worker, binding, link);
-    true
+    if let Some(commit) = links.commit(
+        worker,
+        format!("linked `{worker}`'s Secrets Store secrets but could not record them"),
+    ) {
+        provisioned = provisioned.with(commit);
+    }
+    Ok(provisioned)
 }
 
 /// What `decl` was linked to, as the ledger records it, and the store id. Linked before the run
 /// confirmed ([`link_for_run`]), so a binding with no id here is a bug, not a user error.
 fn link(
-    cx: &ApplyCx<'_, '_, StoredSecret>,
+    cx: &StepCx<'_, '_, StoredSecret>,
     decl: &StoredSecretDecl,
 ) -> Result<(StoredSecretLink, String), DeployFailure> {
     let worker = cx.worker;
@@ -241,23 +239,22 @@ mod tests {
     ) -> Result<BTreeMap<String, String>, DeployFailure> {
         let provenance = Provenance::Path("/nonexistent/wrangler".into());
         let project = BTreeMap::new();
-        StoredSecret::provision_all(
-            &mut ApplyCx {
-                environment: "production",
-                worker: "shop",
-                project: &project,
-                lock,
-                lock_path,
-                live: StoredSecret::live_in(Lives {
-                    linked: Some(linked),
-                    ..Lives::default()
-                }),
+        provision_kind::<StoredSecret>(
+            Site {
                 tools: Tools {
                     provenance: &provenance,
                     project_root: Path::new("/nonexistent"),
                 },
+                environment: "production",
+                worker: "shop",
+                project: &project,
             },
             declared,
+            &mut LedgerWriter::new(lock, lock_path),
+            Lives {
+                linked: Some(linked),
+                ..Lives::default()
+            },
         )
     }
 

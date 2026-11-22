@@ -145,6 +145,12 @@ pub(crate) fn process_tests(
     schema_versions: &HashMap<String, i64>,
     // #2050: each unit's resolved callees, for [`target_uses_emit`].
     unit_callees: &HashMap<String, HashMap<ExprId, bynk_check::checker::Callee>>,
+    // #2052: each events service's shape, for whether `svc.event(e)` forwards the
+    // envelope (`EventSubscriberShape::wants_envelope`).
+    unit_event_subscriber_shapes: &HashMap<
+        String,
+        HashMap<String, bynk_model::EventSubscriberShape>,
+    >,
     errors: &mut Vec<CompileError>,
     refs: &mut RefSink,
     tys: &Arc<Types>,
@@ -214,6 +220,7 @@ pub(crate) fn process_tests(
             fixture_consts(indices, parsed, asset_files),
             binding_modules,
             schema_versions,
+            unit_event_subscriber_shapes.get(target_name),
             target_uses_emit(
                 target_name,
                 target_kind,

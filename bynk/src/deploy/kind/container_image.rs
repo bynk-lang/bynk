@@ -66,6 +66,7 @@ impl ResourceKind for ContainerImage {
     type Live<'a> = ();
     /// Nothing: the configuration names the image ([`materialise_adopted_containers`]).
     type Bound = ();
+    type Change = TableChange<ContainerImageTable>;
 
     fn declared(r: &Resources) -> Vec<&ContainerDecl> {
         r.containers.iter().collect()
@@ -132,53 +133,45 @@ impl ResourceKind for ContainerImage {
 
     /// One container's image alone, recorded at once. The deploy records a Worker's together
     /// ([`ResourceKind::provision_all`]).
-    fn provision(
-        cx: &mut ApplyCx<'_, '_, ContainerImage>,
-        decl: &ContainerDecl,
-    ) -> Result<Provisioned<()>, DeployFailure> {
-        record_image(cx, decl);
-        let worker = cx.worker;
-        cx.commit(&format!(
-            "could not record the container images of `{worker}`"
-        ))?;
-        Ok(Provisioned { bound: None })
+    fn provision<'r>(
+        cx: &StepCx<'_, '_, ContainerImage>,
+        decl: Self::Decl<'r>,
+    ) -> Result<Provisioned<'r, ContainerImage>, DeployFailure> {
+        Ok(Provisioned::nothing().with(record_images(cx.worker, [decl])))
     }
 
     /// Each adopted image recorded, and one whose adoption was dropped forgotten (its container
     /// is built again), then the ledger written once, before the push, when the Worker has any
     /// container.
-    fn provision_all(
-        cx: &mut ApplyCx<'_, '_, ContainerImage>,
-        declared: &Resources,
-    ) -> Result<BTreeMap<String, ()>, DeployFailure> {
-        if declared.containers.is_empty() {
-            return Ok(BTreeMap::new());
+    fn provision_all<'r>(
+        cx: &StepCx<'_, '_, ContainerImage>,
+        declared: &'r Resources,
+    ) -> Option<Result<Provisioned<'r, ContainerImage>, DeployFailure>> {
+        let mut provisioned = Provisioned::nothing();
+        if !declared.containers.is_empty() {
+            provisioned = provisioned.with(record_images(cx.worker, &declared.containers));
         }
-        for decl in &declared.containers {
-            record_image(cx, decl);
-        }
-        let worker = cx.worker;
-        cx.commit(&format!(
-            "could not record the container images of `{worker}`"
-        ))?;
-        Ok(BTreeMap::new())
+        Some(Ok(provisioned))
     }
 }
 
-/// Record `decl`'s adopted image, or forget the one recorded when it is built instead. Forgetting
-/// leaves an environment the ledger does not have alone.
-fn record_image(cx: &mut ApplyCx<'_, '_, ContainerImage>, decl: &ContainerDecl) {
-    let worker = cx.worker;
-    match &decl.adopt {
-        Some(image) => {
-            ContainerImageTable::insert(cx.env_mut(), worker, &decl.capability, image.clone())
-        }
-        None => {
-            if let Some(env) = cx.lock.environments.get_mut(cx.environment) {
-                ContainerImageTable::remove(env, worker, &decl.capability);
-            }
-        }
-    }
+/// One write of `worker`'s container images, whatever it changes: each adopted image recorded, and
+/// the one recorded for a container built instead forgotten (which leaves an environment the
+/// ledger does not have alone).
+fn record_images<'d>(
+    worker: &str,
+    containers: impl IntoIterator<Item = &'d ContainerDecl>,
+) -> Commit<TableChange<ContainerImageTable>> {
+    Commit::of(
+        containers
+            .into_iter()
+            .map(|decl| match &decl.adopt {
+                Some(image) => TableChange::insert(worker, &decl.capability, image.clone()),
+                None => TableChange::remove(worker, &decl.capability),
+            })
+            .collect(),
+        format!("could not record the container images of `{worker}`"),
+    )
 }
 
 /// #3477: one container the push declares.
@@ -241,8 +234,13 @@ mod tests {
             worker: "shop-render",
             project: &project,
         };
-        provision_kind::<ContainerImage>(site, declared, lock, lock_path, Lives::default())
-            .map(|_| ())
+        provision_kind::<ContainerImage>(
+            site,
+            declared,
+            &mut LedgerWriter::new(lock, lock_path),
+            Lives::default(),
+        )
+        .map(|_| ())
     }
 
     #[test]

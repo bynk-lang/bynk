@@ -62,6 +62,7 @@ impl ResourceKind for AiSearch {
     type Live<'a> = ();
     /// Nothing: the config binds the instance by the name it already carries.
     type Bound = ();
+    type Change = TableChange<AiSearchTable>;
 
     fn declared(r: &Resources) -> Vec<&AiSearchDecl> {
         r.ai_search.iter().collect()
@@ -117,60 +118,61 @@ impl ResourceKind for AiSearch {
 
     /// One link alone, recorded at once. The deploy links a Worker's together
     /// ([`ResourceKind::provision_all`]).
-    fn provision(
-        cx: &mut ApplyCx<'_, '_, AiSearch>,
-        decl: &AiSearchDecl,
-    ) -> Result<Provisioned<()>, DeployFailure> {
+    fn provision<'r>(
+        cx: &StepCx<'_, '_, AiSearch>,
+        decl: Self::Decl<'r>,
+    ) -> Result<Provisioned<'r, AiSearch>, DeployFailure> {
         let worker = cx.worker;
         let (link, bound) = link(cx, decl)?;
-        if record_link(cx, &decl.binding, link) {
-            cx.commit(&format!(
-                "linked `{worker}`'s AI Search instances but could not record them"
-            ))?;
-        }
-        Ok(Provisioned {
-            bound: Some((decl.binding.clone(), bound)),
-        })
+        let mut links = Links::new();
+        links.link(cx, &decl.binding, link);
+        let provisioned = Provisioned::bound(&decl.binding, bound);
+        Ok(
+            match links.commit(
+                worker,
+                format!("linked `{worker}`'s AI Search instances but could not record them"),
+            ) {
+                Some(commit) => provisioned.with(commit),
+                None => provisioned,
+            },
+        )
     }
 
     /// Each link recorded, the ledger written once when any changed, before the push.
-    fn provision_all(
-        cx: &mut ApplyCx<'_, '_, AiSearch>,
-        declared: &Resources,
-    ) -> Result<BTreeMap<String, ()>, DeployFailure> {
-        let worker = cx.worker;
-        let mut bound = BTreeMap::new();
-        let mut changed = false;
-        for decl in &declared.ai_search {
-            let (link, id) = link(cx, decl)?;
-            changed |= record_link(cx, &decl.binding, link);
-            bound.insert(decl.binding.clone(), id);
-        }
-        if changed {
-            cx.commit(&format!(
-                "linked `{worker}`'s AI Search instances but could not record them"
-            ))?;
-        }
-        Ok(bound)
+    fn provision_all<'r>(
+        cx: &StepCx<'_, '_, AiSearch>,
+        declared: &'r Resources,
+    ) -> Option<Result<Provisioned<'r, AiSearch>, DeployFailure>> {
+        Some(provision_links(cx, declared))
     }
 }
 
-/// Record `link` for this Worker's `binding` unless it is already what the ledger holds. Whether
-/// the ledger changed.
-fn record_link(cx: &mut ApplyCx<'_, '_, AiSearch>, binding: &str, link: AiSearchLink) -> bool {
+/// [`AiSearch`]'s `provision_all`: each of the Worker's links, written once when any changed.
+fn provision_links<'r>(
+    cx: &StepCx<'_, '_, AiSearch>,
+    declared: &'r Resources,
+) -> Result<Provisioned<'r, AiSearch>, DeployFailure> {
     let worker = cx.worker;
-    let env = cx.env_mut();
-    if AiSearchTable::get(env, worker, binding) == Some(&link) {
-        return false;
+    let mut provisioned = Provisioned::nothing();
+    let mut links = Links::new();
+    for decl in &declared.ai_search {
+        let (link, id) = link(cx, decl)?;
+        links.link(cx, &decl.binding, link);
+        provisioned.bound.push((decl.binding.clone(), id));
     }
-    AiSearchTable::insert(env, worker, binding, link);
-    true
+    if let Some(commit) = links.commit(
+        worker,
+        format!("linked `{worker}`'s AI Search instances but could not record them"),
+    ) {
+        provisioned = provisioned.with(commit);
+    }
+    Ok(provisioned)
 }
 
 /// What `decl` was linked to, as the ledger records it. Looked up before the run confirmed
 /// ([`link_ai_search_for_run`]), which stops the run when one is missing.
 fn link(
-    _cx: &ApplyCx<'_, '_, AiSearch>,
+    _cx: &StepCx<'_, '_, AiSearch>,
     decl: &AiSearchDecl,
 ) -> Result<(AiSearchLink, ()), DeployFailure> {
     Ok((
@@ -208,23 +210,22 @@ mod tests {
     ) -> Result<BTreeMap<String, ()>, DeployFailure> {
         let provenance = Provenance::Path("/nonexistent/wrangler".into());
         let project = BTreeMap::new();
-        AiSearch::provision_all(
-            &mut ApplyCx {
-                environment: "production",
-                worker: "shop",
-                project: &project,
-                lock,
-                lock_path,
-                live: AiSearch::live_in(Lives {
-                    linked: Some(linked),
-                    ..Lives::default()
-                }),
+        provision_kind::<AiSearch>(
+            Site {
                 tools: Tools {
                     provenance: &provenance,
                     project_root: Path::new("/nonexistent"),
                 },
+                environment: "production",
+                worker: "shop",
+                project: &project,
             },
             declared,
+            &mut LedgerWriter::new(lock, lock_path),
+            Lives {
+                linked: Some(linked),
+                ..Lives::default()
+            },
         )
     }
 

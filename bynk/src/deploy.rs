@@ -46,6 +46,7 @@ const LOCK_FILE: &str = "bynk.deploy.lock";
 use bynk_emit::emitter::wrangler::KV_NAMESPACE_ID_PLACEHOLDER;
 
 mod agent_move;
+mod apply;
 mod config;
 pub(crate) mod containers;
 mod destinations;
@@ -66,6 +67,7 @@ mod senders;
 mod vectorize;
 
 use agent_move::*;
+use apply::*;
 use config::*;
 use containers::*;
 use destinations::*;
@@ -169,6 +171,8 @@ pub(crate) fn local_session_key(binding: &str) -> String {
     secrets::local_session_key(binding)
 }
 
+#[cfg(all(test, unix))]
+mod apply_tests;
 #[cfg(test)]
 mod snapshot_tests;
 #[cfg(test)]

@@ -1096,6 +1096,8 @@ pub(crate) fn read_lock(path: &Path) -> Result<DeployLock, String> {
 static TMP_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 pub(crate) fn write_lock(path: &Path, lock: &DeployLock) -> Result<(), String> {
+    #[cfg(test)]
+    write_watch::observe(path, lock)?;
     let body = toml::to_string_pretty(lock).map_err(|e| e.to_string())?;
     // Atomic, durable replace: write a sibling temp file, fsync it, then rename
     // it over the ledger. A power loss or kill can then only leave the intact old
@@ -1156,6 +1158,37 @@ pub(crate) fn write_lock(path: &Path, lock: &DeployLock) -> Result<(), String> {
         let _ = dir_file.sync_all();
     }
     Ok(())
+}
+
+/// 1D.2 (#4001): a test's view of every [`write_lock`] on its thread, which may also refuse
+/// one, so the apply fixtures (`apply_tests.rs`) can pin the ledger after each write and the
+/// message when a write fails. Nothing watches outside a test.
+#[cfg(test)]
+pub(crate) mod write_watch {
+    use super::*;
+    use std::cell::RefCell;
+
+    /// Called with each ledger about to be written; an `Err` is the write's failure.
+    pub(crate) type Watch = Box<dyn FnMut(&Path, &DeployLock) -> Result<(), String>>;
+
+    thread_local! {
+        static WATCH: RefCell<Option<Watch>> = const { RefCell::new(None) };
+    }
+
+    /// Run `f` with `watch` seeing every ledger write on this thread.
+    pub(crate) fn watching<T>(watch: Watch, f: impl FnOnce() -> T) -> T {
+        WATCH.with(|w| *w.borrow_mut() = Some(watch));
+        let result = f();
+        WATCH.with(|w| *w.borrow_mut() = None);
+        result
+    }
+
+    pub(super) fn observe(path: &Path, lock: &DeployLock) -> Result<(), String> {
+        WATCH.with(|w| match w.borrow_mut().as_mut() {
+            Some(watch) => watch(path, lock),
+            None => Ok(()),
+        })
+    }
 }
 
 /// #3513 A: bind a served Worker's `[[mtls_certificates]]` by the ids the last deploy of
@@ -1419,8 +1452,7 @@ pub(crate) fn confirm_deletion_prompt(yes: bool, count: usize) -> bool {
 pub(crate) fn prune_orphans(
     provenance: &Provenance,
     project_root: &Path,
-    lock: &mut DeployLock,
-    lock_path: &Path,
+    writer: &mut LedgerWriter<'_>,
     environment: &str,
     orphans: &Orphans,
     lives: Lives<'_>,
@@ -1431,8 +1463,7 @@ pub(crate) fn prune_orphans(
             provenance,
             project_root,
         },
-        lock,
-        lock_path,
+        writer,
         environment,
         orphans,
         lives,

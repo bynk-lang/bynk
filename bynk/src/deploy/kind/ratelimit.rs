@@ -66,12 +66,20 @@ impl LedgerTable for RateLimitTable {
     }
 }
 
-/// The `namespace_id` for `worker`'s rate limiter `binding`: the recorded one, else a new one —
-/// the first id from its [`ratelimit_seed`] upward (wrapping within the span) that no rate limiter
-/// in any environment of the ledger holds — put in the ledger (not yet written). `true` when it
-/// was allocated.
-fn allocate(cx: &mut ApplyCx<'_, '_, RateLimit>, binding: &str) -> (String, bool) {
+/// The `namespace_id` for `worker`'s rate limiter `binding`: the recorded one (or the one
+/// `pending`, the ids this Worker has allocated and not yet written, holds), else a new one — the
+/// first id from its [`ratelimit_seed`] upward (wrapping within the span) that no rate limiter in
+/// any environment of the ledger, nor any pending, holds — added to `pending`. `true` when it was
+/// allocated.
+fn allocate(
+    cx: &StepCx<'_, '_, RateLimit>,
+    pending: &mut BTreeMap<String, String>,
+    binding: &str,
+) -> (String, bool) {
     let worker = cx.worker;
+    if let Some(id) = pending.get(binding) {
+        return (id.clone(), false);
+    }
     if let Some(recorded) = cx.ledger().recorded::<RateLimit>(worker, binding) {
         return (recorded.namespace_id.clone(), false);
     }
@@ -81,6 +89,7 @@ fn allocate(cx: &mut ApplyCx<'_, '_, RateLimit>, binding: &str) -> (String, bool
             .all()
             .flat_map(|(_, env)| RateLimitTable::entries(env))
             .map(|(_, _, r)| r.namespace_id.as_str())
+            .chain(pending.values().map(String::as_str))
             .collect();
         let seed = ratelimit_seed(cx.environment, worker, binding) - FIRST_RATELIMIT_NAMESPACE;
         (0..RATELIMIT_NAMESPACE_SPAN)
@@ -90,8 +99,22 @@ fn allocate(cx: &mut ApplyCx<'_, '_, RateLimit>, binding: &str) -> (String, bool
             .find(|n| !taken.contains(n.as_str()))
             .expect("an unused id")
     };
-    RateLimitTable::insert(cx.env_mut(), worker, binding, RateLimitNamespace::of(&id));
+    pending.insert(binding.to_string(), id.clone());
     (id, true)
+}
+
+/// The commit that records `pending`, the ids `worker` allocated, in one write.
+fn record_allocated(
+    worker: &str,
+    pending: BTreeMap<String, String>,
+) -> Commit<TableChange<RateLimitTable>> {
+    Commit::of(
+        pending
+            .into_iter()
+            .map(|(binding, id)| TableChange::insert(worker, &binding, RateLimitNamespace::of(&id)))
+            .collect(),
+        format!("allocated `{worker}`'s rate limiter ids but could not record them"),
+    )
 }
 
 /// [`allocate`] in `lock`, without writing it: what the ledger tests drive.
@@ -104,21 +127,26 @@ pub(crate) fn allocate_in(
 ) -> (String, bool) {
     let provenance = Provenance::Path("/nonexistent/wrangler".into());
     let project = BTreeMap::new();
-    allocate(
-        &mut ApplyCx {
+    let mut pending = BTreeMap::new();
+    let allocated = allocate(
+        &StepCx {
             environment,
             worker,
             project: &project,
             lock,
-            lock_path: Path::new("/nonexistent/bynk.deploy.lock"),
             live: (),
             tools: Tools {
                 provenance: &provenance,
                 project_root: Path::new("/nonexistent"),
             },
         },
+        &mut pending,
         binding,
-    )
+    );
+    for change in record_allocated(worker, pending).changes {
+        change.apply(lock, environment);
+    }
+    allocated
 }
 
 impl ResourceKind for RateLimit {
@@ -133,6 +161,7 @@ impl ResourceKind for RateLimit {
     type Live<'a> = ();
     /// The `namespace_id`.
     type Bound = String;
+    type Change = TableChange<RateLimitTable>;
 
     fn declared(r: &Resources) -> Vec<&str> {
         r.ratelimits.iter().map(String::as_str).collect()
@@ -208,42 +237,38 @@ impl ResourceKind for RateLimit {
 
     /// One limiter alone, recorded at once. The deploy provisions a Worker's limiters together
     /// ([`ResourceKind::provision_all`]).
-    fn provision(
-        cx: &mut ApplyCx<'_, '_, RateLimit>,
-        binding: &str,
-    ) -> Result<Provisioned<String>, DeployFailure> {
-        let worker = cx.worker;
-        let (id, allocated) = allocate(cx, binding);
-        if allocated {
-            cx.commit(&format!(
-                "allocated `{worker}`'s rate limiter ids but could not record them"
-            ))?;
-        }
-        Ok(Provisioned {
-            bound: Some((binding.to_string(), id)),
+    fn provision<'r>(
+        cx: &StepCx<'_, '_, RateLimit>,
+        binding: Self::Decl<'r>,
+    ) -> Result<Provisioned<'r, RateLimit>, DeployFailure> {
+        let mut pending = BTreeMap::new();
+        let (id, allocated) = allocate(cx, &mut pending, binding);
+        let provisioned = Provisioned::bound(binding, id);
+        Ok(if allocated {
+            provisioned.with(record_allocated(cx.worker, pending))
+        } else {
+            provisioned
         })
     }
 
     /// Every limiter's id allocated (no account call: the id is ours to choose), then recorded in
     /// one write before the push.
-    fn provision_all(
-        cx: &mut ApplyCx<'_, '_, RateLimit>,
-        declared: &Resources,
-    ) -> Result<BTreeMap<String, String>, DeployFailure> {
-        let worker = cx.worker;
-        let mut ids = BTreeMap::new();
+    fn provision_all<'r>(
+        cx: &StepCx<'_, '_, RateLimit>,
+        declared: &'r Resources,
+    ) -> Option<Result<Provisioned<'r, RateLimit>, DeployFailure>> {
+        let mut pending = BTreeMap::new();
+        let mut provisioned = Provisioned::nothing();
         let mut ledger_changed = false;
         for binding in &declared.ratelimits {
-            let (id, allocated) = allocate(cx, binding);
+            let (id, allocated) = allocate(cx, &mut pending, binding);
             ledger_changed |= allocated;
-            ids.insert(binding.clone(), id);
+            provisioned.bound.push((binding.clone(), id));
         }
         if ledger_changed {
-            cx.commit(&format!(
-                "allocated `{worker}`'s rate limiter ids but could not record them"
-            ))?;
+            provisioned = provisioned.with(record_allocated(cx.worker, pending));
         }
-        Ok(ids)
+        Some(Ok(provisioned))
     }
 
     /// A limiter holds no data and has no account resource, so a removed instance needs nothing
@@ -378,20 +403,19 @@ mod tests {
         let mut lock = DeployLock::default();
         let provenance = Provenance::Path("/nonexistent/wrangler".into());
         let project = BTreeMap::new();
-        let e = RateLimit::provision_all(
-            &mut ApplyCx {
-                environment: "default",
-                worker: "shop",
-                project: &project,
-                lock: &mut lock,
-                lock_path: Path::new("/nonexistent/bynk.deploy.lock"),
-                live: (),
+        let e = provision_kind::<RateLimit>(
+            Site {
                 tools: Tools {
                     provenance: &provenance,
                     project_root: Path::new("/nonexistent"),
                 },
+                environment: "default",
+                worker: "shop",
+                project: &project,
             },
             &Resources::default().ratelimits(&["RATELIMIT_A", "RATELIMIT_B"]),
+            &mut LedgerWriter::new(&mut lock, Path::new("/nonexistent/bynk.deploy.lock")),
+            Lives::default(),
         )
         .unwrap_err();
         assert!(

@@ -13,9 +13,11 @@ use crate::emit_model::ident;
 use bynk_ts::TsExpr;
 
 pub(crate) mod bundle;
+pub(crate) mod events;
 pub(crate) mod plan;
 pub(crate) mod workers;
 
+pub use events::{EventPlan, EventSubscription};
 pub use plan::{
     ComposeFacts, ComposePlan, ComposeUnit, ComposeUnitFacts, ConsumedSurface, ExecNeeds,
 };

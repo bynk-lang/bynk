@@ -335,7 +335,9 @@ rest are Rust drift-guard tests and Node `--check` scripts that CI runs.
    guards like the index page. A page lists the Book pages that explain its
    code from `site/src/data/diagnostic-links.json`; when you write a section
    that explains a code, add its link there. The same test checks that every
-   entry names a registry code and a heading that exists.
+   entry names a registry code and a heading that exists. A new code also adds
+   its `/reference/diagnostics/<code>/` route to
+   `site/src/data/published-routes.txt` (see *Link checking*, below).
 
 3. **Link checking.** `starlight-links-validator` validates internal links on
    every `astro build`. Separately, `site/scripts/check-llms-links.mjs` confirms
@@ -347,11 +349,19 @@ rest are Rust drift-guard tests and Node `--check` scripts that CI runs.
    still exists, can never apply because an earlier rule catches its paths, or
    sends a reader to a page that does not exist. For a `/*` splat it maps every
    page under the target folder back to its old path, with and without the
-   trailing slash; for `/d/:code` it tries a few registry codes. It knows only
-   the pages that exist now, not the old ones, so it cannot tell that a page
-   which used to be under a moved folder has no counterpart at the new
-   address; check that by hand when a move also renames or drops pages. Run it
-   after `npm run build` whenever you move or retire a page.
+   trailing slash; for `/d/:code` it tries a few registry codes.
+
+   The same script remembers every page the site has published, in
+   `site/src/data/published-routes.txt`, and fails if one of them is no longer
+   a page and `_redirects` doesn't send it to one. That catches a move that
+   renames or drops a page, which the checks above can't see because they only
+   know the pages that exist now. The list only grows, and CI fails if a built
+   page is missing from it, naming the routes. A PR that adds a page (a new
+   diagnostic code is one) adds its route there: run
+   `node site/scripts/check-redirects.mjs --update` after `npm run build`, or
+   add the lines the failure names by hand. Remove a line only to retire a URL
+   on purpose, with nowhere to send its readers. Run the check after
+   `npm run build` whenever you move or retire a page.
 
 4. **Drift checks.** `node site/scripts/generate-sidebar.mjs --check` and
    `node site/scripts/build-llms-full.mjs --check` fail CI if the committed

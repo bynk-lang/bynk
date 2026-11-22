@@ -16,6 +16,36 @@ pub(crate) struct Vectorize;
 /// [`Vectorize`]'s records: `Environment::vectorize_instances`, by Worker and binding.
 pub(crate) struct VectorizeTable;
 
+/// What provisioning and pruning change in [`Vectorize`]'s records.
+pub(crate) enum VectorizeChange {
+    /// An index made, found or adopted.
+    Record(TableChange<VectorizeTable>),
+    /// Index `name` of `worker`'s `binding`, deleted by `--prune` ([`VectorizeTable::forget_index`]).
+    ForgetIndex {
+        worker: String,
+        binding: String,
+        name: String,
+    },
+}
+
+impl LedgerChange for VectorizeChange {
+    fn apply(self, lock: &mut DeployLock, environment: &str) -> bool {
+        match self {
+            VectorizeChange::Record(change) => change.apply(lock, environment),
+            VectorizeChange::ForgetIndex {
+                worker,
+                binding,
+                name,
+            } => {
+                if let Some(env) = lock.environments.get_mut(environment) {
+                    VectorizeTable::forget_index(env, &worker, &binding, &name);
+                }
+                true
+            }
+        }
+    }
+}
+
 impl VectorizeRecord {
     /// The record of index `name`, adopted or made by the deploy, with nothing superseded yet.
     pub(crate) fn of(name: &str, adopted: bool) -> Self {
@@ -117,6 +147,7 @@ impl ResourceKind for Vectorize {
     /// Nothing from provisioning: an adopted index's name is written into the config later in
     /// the deploy ([`materialise_adopted_vectorize`]), from the declarations.
     type Bound = ();
+    type Change = VectorizeChange;
 
     fn declared(r: &Resources) -> Vec<&VectorizeDecl> {
         r.vectorize_indexes.iter().collect()
@@ -259,9 +290,9 @@ impl ResourceKind for Vectorize {
 
     /// Named as the account has it; gone already is success, as for a queue.
     fn prune(
-        cx: &mut ApplyCx<'_, '_, Vectorize>,
+        cx: &StepCx<'_, '_, Vectorize>,
         orphan: &OrphanVectorize,
-    ) -> Result<(), DeployFailure> {
+    ) -> Result<Option<Commit<VectorizeChange>>, DeployFailure> {
         delete_vectorize_index(cx.tools.provenance, &orphan.index, cx.tools.project_root).map_err(
             |e| {
                 DeployFailure::driver(format!(
@@ -270,18 +301,21 @@ impl ResourceKind for Vectorize {
                 ))
             },
         )?;
-        cx.change(
-            |env| VectorizeTable::forget_index(env, &orphan.worker, &orphan.binding, &orphan.index),
+        Ok(Some(Commit::recorded(
+            VectorizeChange::ForgetIndex {
+                worker: orphan.worker.clone(),
+                binding: orphan.binding.clone(),
+                name: orphan.index.clone(),
+            },
             &format!("deleted the orphaned Vectorize index `{}`", orphan.index),
-        )
+        )))
     }
 
-    fn provision(
-        cx: &mut ApplyCx<'_, '_, Vectorize>,
-        decl: &VectorizeDecl,
-    ) -> Result<Provisioned<()>, DeployFailure> {
-        provision_vectorize_index(cx, decl, METADATA_INDEX_PACING)?;
-        Ok(Provisioned { bound: None })
+    fn provision<'r>(
+        cx: &StepCx<'_, '_, Vectorize>,
+        decl: Self::Decl<'r>,
+    ) -> Result<Provisioned<'r, Vectorize>, DeployFailure> {
+        provision_vectorize_index(cx, decl, METADATA_INDEX_PACING)
     }
 }
 

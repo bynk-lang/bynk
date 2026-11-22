@@ -105,8 +105,8 @@ pub(crate) fn deploy_one(
     // #2059: the whole project, for the cross-environment title check a
     // create re-runs ([`cross_environment_title_clash`]).
     project: &BTreeMap<String, Resources>,
-    lock: &mut DeployLock,
-    lock_path: &Path,
+    // 1D.2a (#4001): the ledger, through the deploy's one writer.
+    writer: &mut LedgerWriter<'_>,
     secrets: &mut Secrets<'_>,
     wrangler_args: &[String],
     environment: &str,
@@ -134,33 +134,33 @@ pub(crate) fn deploy_one(
         worker,
         project,
     };
-    let kv_ids = provision_kind::<Kv>(site, declared, lock, lock_path, lives)?;
+    let kv_ids = provision_kind::<Kv>(site, declared, writer, lives)?;
     // P5 (#2323): each `R2` bucket, made by name and recorded before the push.
-    provision_kind::<R2>(site, declared, lock, lock_path, lives)?;
+    provision_kind::<R2>(site, declared, writer, lives)?;
     // #3479: each `Vectorize` index, created with its fixed configuration or
     // checked against it, and its metadata indexes made before any vector.
-    provision_kind::<Vectorize>(site, declared, lock, lock_path, lives)?;
+    provision_kind::<Vectorize>(site, declared, writer, lives)?;
     // P4a (#2602): each `D1` database, its minted id recorded before the push, then bound.
-    let d1 = provision_kind::<D1>(site, declared, lock, lock_path, lives)?;
+    let d1 = provision_kind::<D1>(site, declared, writer, lives)?;
     D1::materialise(&config, worker, &d1)?;
     // #3319: each `Postgres` binding's Hyperdrive config, bound by its id.
-    let hyperdrive_ids = provision_kind::<Hyperdrive>(site, declared, lock, lock_path, lives)?;
+    let hyperdrive_ids = provision_kind::<Hyperdrive>(site, declared, writer, lives)?;
     Hyperdrive::materialise(&config, worker, &hyperdrive_ids)?;
     // #3301, #3513 A, #3480: each stored secret's store, mTLS certificate and AI Search instance,
     // found before the run, recorded and (the first two) bound by their ids. Nothing is created or
     // uploaded here: the account owns them.
-    let stores = provision_kind::<StoredSecret>(site, declared, lock, lock_path, lives)?;
+    let stores = provision_kind::<StoredSecret>(site, declared, writer, lives)?;
     StoredSecret::materialise(&config, worker, &stores)?;
-    let certificates = provision_kind::<MtlsCertificate>(site, declared, lock, lock_path, lives)?;
+    let certificates = provision_kind::<MtlsCertificate>(site, declared, writer, lives)?;
     MtlsCertificate::materialise(&config, worker, &certificates)?;
-    provision_kind::<AiSearch>(site, declared, lock, lock_path, lives)?;
+    provision_kind::<AiSearch>(site, declared, writer, lives)?;
     // P3 (#2342): each rate limiter's `namespace_id`, allocated in the ledger
     // (no account call: the id is ours to choose) and recorded before the
     // push, so an interrupted run never allocates a second one and resets
     // its counters. One the source no longer declares is forgotten only once
     // the push has succeeded (`plan::run`): until then the live Worker still
     // binds its id, which must not be handed to another limiter.
-    let ratelimit_ids = provision_kind::<RateLimit>(site, declared, lock, lock_path, lives)?;
+    let ratelimit_ids = provision_kind::<RateLimit>(site, declared, writer, lives)?;
     RateLimit::materialise(&config, worker, &ratelimit_ids)?;
     Kv::materialise(&config, worker, &kv_ids)?;
     // Reconciled against the account on every run, never against the ledger,
@@ -169,7 +169,7 @@ pub(crate) fn deploy_one(
     // deploy` will not create a queue for us: it checks and fails with "To
     // create it, run: wrangler queues create", so this step is the one that
     // makes such a project deployable at all.
-    provision_kind::<Queue>(site, declared, lock, lock_path, lives)?;
+    provision_kind::<Queue>(site, declared, writer, lives)?;
     // Slice 4 (DECISION B+C): Cloudflare does not inherit bindings into a named
     // environment, so a non-default `--env` needs its own `[env.<name>]` table —
     // synthesised here, not by the emitter, since the environment name is a
@@ -208,7 +208,7 @@ pub(crate) fn deploy_one(
     // #3477: an adopted container image replaces the Dockerfile `wrangler` would build, in the
     // configuration it is about to read, and is recorded before the push.
     materialise_adopted_containers(&config, worker, declared, environment)?;
-    provision_kind::<ContainerImage>(site, declared, lock, lock_path, lives)?;
+    provision_kind::<ContainerImage>(site, declared, writer, lives)?;
     // P4b (#2608): each database's pending migrations, applied once it is
     // bound (and, for a named environment, once `[env.<name>]` binds it) and
     // before the push, so the new code never meets the old schema. Wrangler
@@ -254,7 +254,7 @@ pub(crate) fn deploy_one(
     // What does **not** straddle is the deciding and resolving: `prepare_bindings`
     // runs before the push on *both* paths, so a missing value is found before
     // anything is uploaded.
-    let first_deploy = !lock.is_deployed(environment, worker);
+    let first_deploy = !writer.lock().is_deployed(environment, worker);
     let prepared = prepare_bindings(
         provenance,
         &worker_dir,
@@ -271,7 +271,7 @@ pub(crate) fn deploy_one(
         worker,
         environment,
         declared,
-        lock,
+        writer.lock(),
     );
     let wrangler_args: Vec<String> = wrangler_args.iter().cloned().chain(facts_args).collect();
     let wrangler_args = wrangler_args.as_slice();
@@ -1446,8 +1446,7 @@ mod tests {
             "api",
             &project["api"],
             &project,
-            &mut lock,
-            &root.join(LOCK_FILE),
+            &mut LedgerWriter::new(&mut lock, &root.join(LOCK_FILE)),
             &mut Secrets {
                 source: &source,
                 force: false,
@@ -2148,8 +2147,7 @@ mod tests {
             "api",
             &project["api"],
             &project,
-            &mut lock,
-            &root.join(LOCK_FILE),
+            &mut LedgerWriter::new(&mut lock, &root.join(LOCK_FILE)),
             &mut Secrets {
                 source: &source,
                 force: false,

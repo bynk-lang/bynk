@@ -83,12 +83,21 @@ on:
 # completed a run, and validation was silently deferred to the stamp commit and
 # made conditional on the stamp firing and succeeding. It does not always: a
 # stamp run went red on Windows on 2026-07-28, leaving neither commit validated.
-# Every commit on `main` now completes its own run. The cost is that an increment
-# merge completes two runs (the merge and the stamp) rather than one-and-a-stub;
-# that is what validating every commit costs, and it is the intended trade.
+# No run on `main` is now cancelled once it has STARTED. Not every commit on
+# `main` gets a run of its own, though: the group still runs `main`'s pushes
+# one at a time, and GitHub keeps only one PENDING run per group, so a newer
+# push cancels the run still waiting. When merges and stamps arrive faster than
+# a run takes, most commits' runs are cancelled before they start (on 22
+# November 2026, every push from 14:48 to 15:40 UTC). The newest commit is still
+# validated, and it contains the ones cancelled. Letting `main`'s runs go in
+# parallel instead (a group per SHA) was weighed and rejected: it runs a
+# backstop for every commit, two per merge, in parallel on a hosted pool the
+# queue already waits on.
 #
-# The deploy pipeline (deploy-site.yml) has its own non-cancelling concurrency
-# group.
+# Nothing downstream waits on a particular commit's push run: deploy-site.yml
+# deploys a queue merge from its `merge_group` run, and anything else from
+# whichever push run on `main` passes next. It has its own non-cancelling
+# concurrency group.
 #
 # The nightly gets a group of its own. A concurrency group keeps only one
 # PENDING run, so sharing `main`'s group would let the next push to `main`
@@ -1572,7 +1581,10 @@ jobs:
           fi
       # public/_redirects (Cloudflare Pages) against the built dist/: no rule
       # shadows a live page or never applies, and every target (each page under
-      # a splat's folder, sample :code values) lands on a built page.
+      # a splat's folder, sample :code values) lands on a built page. Every
+      # route in src/data/published-routes.txt (each page the site has ever
+      # published) must still be a page or redirect to one, and every built
+      # page must be listed there (#4010).
       - name: Check _redirects against the build
         run: node scripts/check-redirects.mjs
 
