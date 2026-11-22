@@ -89,7 +89,7 @@ impl ResourceKind for D1 {
     type Table = D1Table;
     type Line<'r> = PlanD1<'r>;
     type Orphan = OrphanD1;
-    type Live = ();
+    type Live<'a> = ();
     /// The database's account-facing name and its id, which the config binds it by.
     type Bound = (String, String);
 
@@ -109,7 +109,9 @@ impl ResourceKind for D1 {
         &mut context.d1
     }
 
-    fn plan_line<'r>(cx: &PlanCx<'_>, db: Self::Decl<'r>) -> PlanD1<'r> {
+    fn live_in<'a>(_lives: Lives<'a>) -> Self::Live<'a> {}
+
+    fn plan_line<'r>(cx: &PlanCx<'_>, db: Self::Decl<'r>, _live: ()) -> PlanD1<'r> {
         let database = d1_database_name(cx.ledger.environment, &db.name);
         let recorded = cx.ledger.recorded::<D1>(cx.worker, &db.binding);
         PlanD1 {
@@ -223,7 +225,7 @@ impl ResourceKind for D1 {
     /// ledger already holds under this environment's name is not asked of
     /// the account again.
     fn provision(
-        cx: &mut ApplyCx<'_, D1>,
+        cx: &mut ApplyCx<'_, '_, D1>,
         db: &D1Decl,
     ) -> Result<Provisioned<(String, String)>, DeployFailure> {
         let (worker, environment) = (cx.worker, cx.environment);
@@ -236,7 +238,6 @@ impl ResourceKind for D1 {
         if let Some(id) = recorded {
             return Ok(Provisioned {
                 bound: Some((db.binding.clone(), (physical, id))),
-                recorded: None,
             });
         }
         let id = create_d1(cx.tools.provenance, &physical, cx.tools.project_root).map_err(|e| {
@@ -245,9 +246,12 @@ impl ResourceKind for D1 {
                 db.binding
             ))
         })?;
-        cx.record(&db.binding, D1Record::of(&physical, &id));
+        cx.record(
+            &db.binding,
+            D1Record::of(&physical, &id),
+            &format!("created the D1 database `{physical}`"),
+        )?;
         Ok(Provisioned {
-            recorded: Some(format!("the D1 database `{physical}`")),
             bound: Some((db.binding.clone(), (physical, id))),
         })
     }
@@ -556,7 +560,7 @@ mod tests {
         };
         let lines: Vec<_> = D1::declared(&declared)
             .into_iter()
-            .map(|decl| D1::plan_line(&cx, decl))
+            .map(|decl| D1::plan_line(&cx, decl, ()))
             .collect();
         let mut out = String::new();
         for line in &lines {
@@ -576,7 +580,7 @@ mod tests {
             worker: "shop",
         };
         assert_eq!(
-            D1::plan_line(&staging, &declared.d1_databases[1]).action,
+            D1::plan_line(&staging, &declared.d1_databases[1], ()).action,
             "create"
         );
     }
@@ -678,8 +682,9 @@ mod tests {
                 environment: "default",
                 worker: "shop",
                 project: &project,
-                environments: &mut lock.environments,
-                live: &(),
+                lock: &mut lock,
+                lock_path: Path::new("/nonexistent/bynk.deploy.lock"),
+                live: (),
                 tools: Tools {
                     provenance: &provenance,
                     project_root: Path::new("/nonexistent"),
@@ -694,9 +699,27 @@ mod tests {
                 bound: Some((
                     "D1_ORDERS".to_string(),
                     ("shop-orders".to_string(), "id-1".to_string())
-                )),
-                recorded: None
+                ))
             }
+        );
+    }
+
+    #[test]
+    fn materialising_into_a_missing_configuration_fails_with_its_worker() {
+        let e = D1::materialise(
+            Path::new("/nonexistent/wrangler.toml"),
+            "shop",
+            &BTreeMap::from([(
+                "D1_ORDERS".to_string(),
+                ("shop-orders".to_string(), "id-1".to_string()),
+            )]),
+        )
+        .unwrap_err();
+        assert!(
+            e.message
+                .contains("could not materialise the D1 database ids into `shop`'s"),
+            "{}",
+            e.message
         );
     }
 }

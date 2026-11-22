@@ -111,17 +111,17 @@ pub(crate) fn deploy_one(
     secrets: &mut Secrets<'_>,
     wrangler_args: &[String],
     environment: &str,
-    // Slice 5, DECISION B: `Some` when `run()` fetched the account's live KV
-    // namespace ids once, up front ([`Kv`]'s `live`). A recorded id absent from
-    // this set is exactly as untrustworthy as no record at all — re-provision
-    // rather than inject a dead id. `None` means the fetch was skipped or
-    // failed; the recorded id is trusted unconditionally, as it always was
-    // pre-slice-5, rather than blocking a deploy on a fetch that didn't happen.
-    live_kv: &<Kv as ResourceKind>::Live,
+    // Slice 5, DECISION B: `lives.kv` is `Some` when `run()` fetched the
+    // account's live KV namespace ids once, up front ([`Kv::read_live`]). A
+    // recorded id absent from that set is exactly as untrustworthy as no record
+    // at all — re-provision rather than inject a dead id. `None` means the fetch
+    // was skipped or failed; the recorded id is trusted unconditionally, as it
+    // always was pre-slice-5. `lives.hyperdrive` is what each `Postgres` binding
+    // wants (#3319), and the API to ask.
+    lives: Lives<'_>,
     // #3301: the Secrets Store each `(worker, binding)` linked to, as its id,
     // found before anything was pushed ([`link_for_run`]).
     linked_stores: &BTreeMap<(String, String), String>,
-    hyperdrive: &hyperdrive::HyperdriveRun<'_>,
 ) -> Result<Pushed, DeployFailure> {
     let worker_dir = workers_dir.join(worker);
     let config = worker_dir.join("wrangler.toml");
@@ -136,25 +136,18 @@ pub(crate) fn deploy_one(
         worker,
         project,
     };
-    let kv_ids = provision_kind::<Kv>(site, declared, lock, lock_path, live_kv)?;
+    let kv_ids = provision_kind::<Kv>(site, declared, lock, lock_path, lives)?;
     // P5 (#2323): each `R2` bucket, made by name and recorded before the push.
-    provision_kind::<R2>(site, declared, lock, lock_path, &())?;
+    provision_kind::<R2>(site, declared, lock, lock_path, lives)?;
     // #3479: each `Vectorize` index, created with its fixed configuration or
     // checked against it, and its metadata indexes made before any vector.
-    provision_vectorize_indexes(
-        provenance,
-        project_root,
-        worker,
-        declared,
-        lock,
-        lock_path,
-        environment,
-    )?;
+    provision_kind::<Vectorize>(site, declared, lock, lock_path, lives)?;
     // P4a (#2602): each `D1` database, its minted id recorded before the push, then bound.
-    let d1 = provision_kind::<D1>(site, declared, lock, lock_path, &())?;
+    let d1 = provision_kind::<D1>(site, declared, lock, lock_path, lives)?;
     D1::materialise(&config, worker, &d1)?;
     // #3319: each `Postgres` binding's Hyperdrive config, bound by its id.
-    hyperdrive.provision(worker, declared, lock, lock_path, &config, environment)?;
+    let hyperdrive_ids = provision_kind::<Hyperdrive>(site, declared, lock, lock_path, lives)?;
+    Hyperdrive::materialise(&config, worker, &hyperdrive_ids)?;
     // #3301, #3513 A, #3480: each stored secret's store, mTLS certificate and AI Search instance,
     // found before the run, recorded and (the first two) bound by their ids. Nothing is created or
     // uploaded here: the account owns them.
@@ -1510,9 +1503,11 @@ mod tests {
             },
             &[],
             environment,
-            &live_kv_ids,
+            Lives {
+                kv: live_kv_ids.as_ref(),
+                ..Lives::default()
+            },
             &BTreeMap::new(),
-            &hyperdrive::HyperdriveRun::none(),
         );
         let calls = std::fs::read_to_string(&log)
             .unwrap_or_default()
@@ -2199,9 +2194,8 @@ mod tests {
             },
             &[],
             environment,
-            &None,
+            Lives::default(),
             &BTreeMap::new(),
-            &hyperdrive::HyperdriveRun::none(),
         );
         let read = |path: &Path| -> Vec<String> {
             std::fs::read_to_string(path)
