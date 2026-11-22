@@ -25,7 +25,7 @@ use std::fs;
 use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::path::Path;
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::time::{Duration, Instant};
 
 #[path = "../require/mod.rs"]
@@ -193,17 +193,6 @@ fn tool_exists(name: &str) -> bool {
     which::which(name).is_ok()
 }
 
-/// Route through `cmd /C` on Windows so npm's `npx.cmd` shim resolves.
-fn base_command(program: &str) -> Command {
-    if cfg!(windows) {
-        let mut c = Command::new("cmd");
-        c.arg("/C").arg(program);
-        c
-    } else {
-        Command::new(program)
-    }
-}
-
 fn skip(reason: &str) -> bool {
     eprintln!("\n!!! SIGNED COOKIE LOOP (WORKERD) SKIPPED !!!\n{reason}\n");
     if require::is_required(REQUIRE_ENV) {
@@ -247,8 +236,8 @@ fn spawn_worker(
     let out_log = fs::File::create(&log_path).map_err(|e| e.to_string())?;
     let err_log = out_log.try_clone().map_err(|e| e.to_string())?;
     let child = wrangler::Wrangler::spawn(
-        base_command("npx")
-            .args(["-y", WRANGLER, "dev"])
+        wrangler::npx()
+            .args(["dev"])
             .args([
                 "--port",
                 &port.to_string(),

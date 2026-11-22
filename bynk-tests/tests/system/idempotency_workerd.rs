@@ -96,8 +96,7 @@ fn get(port: u16, path: &str) -> Result<(u16, String), String> {
 /// `wrangler <args>` from `dir`, with stdin closed; its combined output, or `Err`
 /// when it failed.
 fn wrangler_run(dir: &Path, args: &[&str]) -> Result<String, String> {
-    let out = tools::base_command("npx")
-        .args(["-y", wrangler::SPEC])
+    let out = wrangler::npx()
         .args(args)
         .current_dir(dir)
         .stdin(Stdio::null())
@@ -123,10 +122,8 @@ fn serve(dir: &Path, tmp: &Path, log: &str) -> Option<(wrangler::Wrangler, u16)>
     let out_log = fs::File::create(&log_path).unwrap();
     let err_log = out_log.try_clone().unwrap();
     let spawned = wrangler::Wrangler::spawn(
-        tools::base_command("npx")
+        wrangler::npx()
             .args([
-                "-y",
-                wrangler::SPEC,
                 "dev",
                 "--port",
                 &port.to_string(),
