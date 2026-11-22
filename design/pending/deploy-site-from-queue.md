@@ -1,0 +1,28 @@
+---
+level: patch
+changelog: The docs site deploys a merge within minutes, from the merge queue's passed run, instead of waiting for the next CI run on `main` to pass
+---
+
+## ADR: deploy-site-from-queue
+title: The docs site deploys from the merge queue's passed run, and always ships the newest green commit
+summary: A queue merge deploys when it lands; other commits wait for their own run on main; every deploy ships the newest green commit
+
+**Context.** `deploy-site.yml` ran only when a CI push run on `main` passed, and it deployed the commit that run tested. CI on `main` shares one concurrency group. `cancel-in-progress` is already off for `main`, but GitHub keeps only one *pending* run per group, and a newer push cancels the run still waiting. Each merge through the queue is followed about 60 s later by the `bynk-stamp` bot's commit, and a push run takes 25 to 60 minutes. So on a busy day most of `main`'s runs are cancelled before they start, and the site waits for whichever run next manages to finish. On 22 November 2026, every push run on `main` from 14:48 to 15:40 UTC was cancelled this way. Web presence slice 6 (#4012, f647e57d) landed at 14:45, and the site served the old build until 56012501's run passed at 15:50. The queue had passed f647e57d itself at 14:45:29.
+
+The same displacement hid a second gap. `decide` judged only the triggering commit's own diff. A site change whose run was cancelled was then never deployed if the next green commit touched nothing the site uses. The stamp touches the changelog page, which usually hid this, but not every merge has a stamp.
+
+**Decision.** A commit is *green* when a CI run on that exact commit, from this repository, concluded `success`: either the push run on `main`, or the merge queue's `merge_group` run. Only a green commit that is on `main` is deployed. A manual dispatch is the exception, as before.
+
+- **Fast path.** `deploy-site.yml` also runs on `push` to `main`. It deploys only if the pushed commit has a passed `merge_group` run. The queue merges only once the required `CI green` check has passed on that commit, so this is the run the commit was admitted on. If that run still reads as in progress, `decide` waits up to 10 minutes, then fails rather than skips.
+- **Backstop.** The existing `workflow_run` trigger still deploys a commit when its push run on `main` passes. It skips a commit the queue passed, because the fast path already handled that commit. This covers the stamp commit and any direct push.
+- **Range.** `decide` judges every change since the previous green commit, not just the triggering commit's own diff. Every green commit gets a decision of its own, so these ranges together cover all of `main`.
+- **Newest green.** The `deploy` job holds the `deploy-site` lock, then picks the newest green commit on `main` and ships that. The two paths finish out of order: a merge's fast path takes minutes, and the previous stamp's run can pass half an hour later. Shipping each trigger's own commit would then roll the site back. The lock moved from the workflow to the `deploy` job. A cancelled pending deploy is then harmless, and no `decide` is lost to one.
+
+The pwn-request guard is unchanged: `workflow_run` still requires `event == 'push'` and this repository as the head repository. `merge_group` stays excluded there, because a queue commit is not on `main` yet and may never land. Groups rebuilt after an ejection pass on commits that never land; on 22 November 94534c46, d85649e4, be6e10b6 and 7b7493f5 did so. The queue's result reaches the deploy only through `push`, when the commit is on `main`. `github.sha` is still never used on `workflow_run`. `decide` and the `target` step hold no working tree. The single checkout names the chosen SHA.
+
+Options rejected:
+
+- **Don't cancel on `main`.** This is already the case for runs that have started. Ending pending-run displacement as well needs a concurrency group per SHA. That runs a full backstop for every commit, two per merge, in parallel on a hosted pool that already makes the queue wait (p95 runner waits of about 8 minutes). Even then, a merge would deploy 25 to 60 minutes after landing, not minutes.
+- **A scheduled fallback** that deploys the newest green commit. On 22 November there was no newer green commit to deploy until 15:50, so a schedule would not have helped. Without a record of what is live, it would also rebuild blindly on every tick.
+
+**Consequences.** A queue merge reaches bynk-lang.org about as long after landing as a site build takes (4 to 8 minutes), however busy `main` is. A queue merge is deployed on the queue's run, which is the draft set (Linux, including the site build and its link check). The push run's backstop (the ready set on the merged tree, macOS, the system tier) may still fail on `main` after the site is live. That is the same admission the merge itself gets, and the deploy re-runs `astro build` anyway. The stamp's version bump and changelog row still wait for the stamp's own run, so for up to about an hour the site can show a merge's content without its changelog row. Every push to `main` now starts a `decide` job that takes about 10 seconds. A stamp redeploys the whole site when its run passes, as before. A deploy that fails, for example on a Cloudflare error, is not retried by a later trigger unless that trigger's range also touches the site, so re-run the failed run, as before.

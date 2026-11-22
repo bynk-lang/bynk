@@ -13,10 +13,41 @@ name: Deploy the docs site (Cloudflare Pages)
 # `workflow_run` accepts no path filters, so the "did anything I care about
 # change?" decision moved into the `decide` job, where it is stated ONCE rather
 # than duplicated between trigger and job.
+#
+# "Green" below means: a CI run on that EXACT commit concluded `success`, either
+# as the push run on `main` or as the merge queue's `merge_group` run, which
+# tested the very commit the queue then put on `main`. Only a green commit that
+# is on `main` is ever deployed (manual dispatch aside).
+#
+# Two ways a commit gets here (the deploy-latency fix, November 2026):
+#
+#   - The FAST PATH (`push`). A merge through the queue lands a commit whose
+#     `merge_group` run has already passed; the queue merges only once the
+#     required `CI green` check is green. So the push that lands it can deploy
+#     at once, instead of waiting for `main`'s own CI run.
+#   - The BACKSTOP (`workflow_run`). Commits the queue did not test (the
+#     `bynk-stamp` bot's commit ~60s after each merge, an admin's direct push)
+#     deploy when their own push run on `main` passes, as before.
+#
+# Why the fast path exists: CI on `main` shares one concurrency group, and
+# GitHub keeps only one PENDING run per group. A newer push cancels the pending
+# run before it starts (`cancel-in-progress` is already off for `main`; this
+# is a different mechanism). Merges plus stamps arrive faster than a 25-60 min
+# run, so on 22 November 2026 every push run on `main` from 14:48 to 15:40 UTC
+# was cancelled this way. Web presence slice 6 (#4012) landed at 14:45, and
+# the site served the old build until 56012501's run finished at 15:50.
+# The queue had passed that exact commit (f647e57d) at 14:45:29.
+# See design/pending/deploy-site-from-queue.md for the options weighed (letting
+# `main`'s runs go in parallel, a scheduled deploy) and why they lost.
 on:
   workflow_run:
     workflows: ["CI"]
     types: [completed]
+    branches: [main]
+  # The fast path. Runs on EVERY push to `main`, but `decide` deploys only when
+  # the pushed commit has a green `merge_group` run, so the stamp's push (and any
+  # other untested push) is a ~10s no-op here and waits for the backstop.
+  push:
     branches: [main]
   # Manual run — the first deploy (after the Pages project + DNS exist) and any
   # redeploy without a code change.
@@ -25,10 +56,10 @@ on:
 permissions:
   contents: read
 
-# One deploy at a time; don't cancel an in-progress one.
-concurrency:
-  group: deploy-site
-  cancel-in-progress: false
+# No workflow-level concurrency: the lock is on the `deploy` job (see there).
+# Every `decide` must run, because each one judges its own range of commits.
+# GitHub cancels a superseded PENDING run in a group, so a workflow-level group
+# would silently drop the decision of a run that was waiting.
 
 jobs:
   # A separate job so the whole expensive build below is gated ONCE by
@@ -53,20 +84,36 @@ jobs:
     #
     # `event == 'push'` is the load-bearing guard: a push to this repository's
     # `main` requires write access, whereas anyone can open a pull request. It
-    # also correctly excludes the weekly `schedule` run and `merge_group`,
-    # neither of which is a new commit on `main` worth redeploying. The
+    # also correctly excludes the nightly `schedule` run, which is not a new
+    # commit, and `merge_group`. A queue run's commit is not on `main` yet, and
+    # may never be: when an entry ahead is ejected, the groups behind it are
+    # rebuilt on new commits, and their passed runs belong to commits that never
+    # land. The queue's result reaches this workflow through the `push` trigger
+    # instead, once the commit IS on `main` (see the fast path above). The
     # `head_repository` check closes the same door from the other side and keeps
     # the guarantee legible without reasoning about branch-name collisions.
+    #
+    # The `push` trigger needs no such guard: a push event exists only for a
+    # push to this repository, it runs this file as it stands in the pushed
+    # commit, and pushing to `main` requires write access. The `ref` check only
+    # keeps that legible.
     #
     # (This note used to live in deploy-playground.yml, which carried the same
     # guard; the playground now deploys from bynk-lang/playground.)
     if: >-
       github.event_name == 'workflow_dispatch'
+      || (github.event_name == 'push' && github.ref == 'refs/heads/main')
       || (github.event.workflow_run.conclusion == 'success'
       && github.event.workflow_run.event == 'push'
       && github.event.workflow_run.head_repository.full_name == github.repository)
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # The fast path may wait up to 10 min for the queue's run to report
+    # `completed` (see the step). In practice it already has.
+    timeout-minutes: 15
+    # `actions: read` lists CI's runs, to tell which commits are green.
+    permissions:
+      contents: read
+      actions: read
     outputs:
       changed: ${{ steps.changed.outputs.value }}
       sha: ${{ steps.changed.outputs.sha }}
@@ -80,23 +127,25 @@ jobs:
       # refresh into its own job would fix that, and is deliberately left alone
       # here so this change stays about the CI gate.
       #
-      # The file list comes from the commits API rather than `git diff HEAD^ HEAD`
-      # over a checkout, so this job deliberately holds NO WORKING TREE. A checkout
+      # The file list comes from the compare API rather than `git diff` over a
+      # checkout, so this job deliberately holds NO WORKING TREE. A checkout
       # here would mean `ref:` naming the triggering run's head SHA — the literal
       # form OpenSSF Scorecard reports as an untrusted code checkout. The `if:`
       # guard above is what actually closes that hole, but a job that only needs
       # a LIST OF FILENAMES has no business materialising the commit at all. The
-      # one checkout is in the build job, which reaches the SHA through this
-      # job's output.
+      # one checkout is in the build job, which reaches its SHA through its
+      # `target` step. On a dispatch that is this job's output; otherwise it is
+      # the newest green commit on `main`.
       - name: Does this commit affect the site?
         id: changed
         env:
           GH_TOKEN: ${{ github.token }}
-          # `github.sha` is the right SHA only on a manual dispatch. On
-          # `workflow_run` it is the default-branch tip at fire time, NOT the
-          # commit the triggering run tested — with the stamp pushing ~60s after
-          # every merge those are routinely different commits.
-          SHA: ${{ github.event_name == 'workflow_dispatch' && github.sha || github.event.workflow_run.head_sha }}
+          # `github.sha` is the right SHA on a manual dispatch and on `push`,
+          # where it is the pushed commit. On `workflow_run` it is the
+          # default-branch tip at fire time, NOT the commit the triggering run
+          # tested. With the stamp pushing ~60s after every merge, those are
+          # routinely different commits.
+          SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
           EVENT_NAME: ${{ github.event_name }}
         run: |
           # `set -e` (so a failed `gh api` fails the job) but deliberately NOT
@@ -115,18 +164,90 @@ jobs:
             echo "value=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          # `.files` is the commit's diff against its first parent — the same
-          # comparison `git diff HEAD^ HEAD` makes. It is capped at 300 entries,
-          # and the API omits the key entirely on some very large commits. Both
-          # cases mean "the list is not trustworthy", so both deploy rather than
-          # silently lose the entry that would have triggered it. `jq length` of a
-          # missing key is 0, so the two collapse into one test — and 0 must not
-          # fall through: iterating a null `.files` fails, and without `pipefail`
-          # that reads as "no match" and skips the deploy.
-          resp=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${SHA}")
+          runs="repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs"
+          # This commit's merge-queue runs from this repository, as JSON
+          # [{status, conclusion}].
+          queue_runs() {
+            gh api "$runs?head_sha=$SHA&event=merge_group&per_page=20" \
+              | jq -c --arg repo "$GITHUB_REPOSITORY" \
+                  '[.workflow_runs[] | select(.head_repository.full_name == $repo) | {status, conclusion}]'
+          }
+
+          if [ "$EVENT_NAME" = "push" ]; then
+            # The fast path: deploy only if the queue's run passed THIS commit.
+            # The queue merges once the required `CI green` job passes, and that
+            # job is the last in the run, so the run normally reads `completed`
+            # by the time the push arrives (f647e57d: run done 14:45:29, push
+            # 14:45:48). Still, wait while one is in progress, rather than skip
+            # a commit that the backstop below will then also skip.
+            for _ in $(seq 1 30); do
+              q=$(queue_runs)
+              if [ "$(printf '%s' "$q" | jq 'any(.[]; .conclusion == "success")')" = true ]; then
+                break
+              fi
+              if [ "$(printf '%s' "$q" | jq 'any(.[]; .status != "completed")')" != true ]; then
+                echo "::notice::no passed merge-queue run for $SHA (a stamp or a direct push), so its own CI run on main deploys it"
+                echo "value=false" >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+              sleep 20
+            done
+            if [ "$(printf '%s' "$q" | jq 'any(.[]; .conclusion == "success")')" != true ]; then
+              # Red, not a skip: the backstop also skips a commit the queue
+              # passed, so a silent skip here could lose this commit's changes.
+              echo "::error::the merge-queue run for $SHA was still running after 10 min; re-run this workflow once it passes"
+              exit 1
+            fi
+          else
+            # The backstop. A commit the queue passed already had its turn on
+            # the fast path when it landed; deploying it again would only repeat
+            # that build.
+            if [ "$(queue_runs | jq 'any(.[]; .conclusion == "success")')" = true ]; then
+              echo "::notice::the merge queue passed $SHA, so the fast path already handled it"
+              echo "value=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+
+          # Which commits to look at: everything since the previous green
+          # commit, not just this commit's own diff. A green commit's run
+          # stands for every commit between the last green one and it, including
+          # those whose own run was cancelled while pending. Judging only this
+          # commit's diff used to skip a site change whose run was cancelled
+          # whenever the next green commit happened to touch nothing the site
+          # uses. (The stamp touches the changelog page, so it usually hid this.)
+          # Every green commit gets a decision of its own (a `push` or a
+          # `workflow_run`), so these ranges together cover all of `main`.
+          main_green=$(gh api "$runs?branch=main&event=push&status=success&per_page=100" \
+            --jq ".workflow_runs[] | select(.head_repository.full_name == \"$GITHUB_REPOSITORY\") | .head_sha")
+          queue_green=$(gh api "$runs?event=merge_group&status=success&per_page=100" \
+            --jq ".workflow_runs[] | select(.head_repository.full_name == \"$GITHUB_REPOSITORY\") | .head_sha")
+          # This commit and its ancestors, newest first. History on `main` is
+          # linear (squash merges), so the first green one after this commit
+          # is the previous green commit.
+          history=$(gh api "repos/${GITHUB_REPOSITORY}/commits?sha=$SHA&per_page=100" --jq '.[].sha')
+          prev=$(printf '%s\n' "$history" | tail -n +2 \
+            | grep -Fx -f <(printf '%s\n%s\n' "$main_green" "$queue_green") | head -n 1 || true)
+          if [ -z "$prev" ]; then
+            echo "::notice::no green commit in the 100 before $SHA, so the changed paths cannot be bounded: deploying"
+            echo "value=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "judging the changes in $prev..$SHA"
+
+          # `.files` is the range's diff, the same comparison `git diff A B`
+          # makes (and, when `prev` is the parent, `git diff HEAD^ HEAD`). It is
+          # capped at 300 entries, and the API omits the key entirely on some
+          # very large diffs. Both cases mean "the list is not trustworthy", so
+          # both deploy rather than silently lose the entry that would have
+          # triggered it. `jq length` of a missing key is 0, so the two collapse
+          # into one test — and 0 must not fall through: iterating a null
+          # `.files` fails, and without `pipefail` that reads as "no match" and
+          # skips the deploy.
+          resp=$(gh api "repos/${GITHUB_REPOSITORY}/compare/${prev}...${SHA}")
           count=$(printf '%s' "$resp" | jq '.files | length')
           if [ "$count" -eq 0 ] || [ "$count" -ge 300 ]; then
-            echo "::notice::commit reports $count changed files — the API list is absent or truncated, so deploying rather than risk a false skip"
+            echo "::notice::the range reports $count changed files — the API list is absent or truncated, so deploying rather than risk a false skip"
             echo "value=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -144,10 +265,22 @@ jobs:
     if: needs.decide.outputs.changed == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    # One deploy at a time; don't cancel an in-progress one. The lock is on
+    # this job, not the workflow, so every `decide` still runs (see the top).
+    # GitHub keeps one PENDING job per group, so a burst of deploys cancels the
+    # ones waiting in between. That is harmless, because each deploy picks
+    # what to ship only once it holds the lock (the `target` step), and picks
+    # the newest green commit, which includes whatever the cancelled one
+    # would have shipped.
+    concurrency:
+      group: deploy-site
+      cancel-in-progress: false
     # `packages: read` lets `npm ci` fetch the site theme from GitHub Packages.
+    # `actions: read` lists CI's runs for the `target` step.
     permissions:
       contents: read
       packages: read
+      actions: read
     defaults:
       run:
         working-directory: site
@@ -171,10 +304,50 @@ jobs:
           else
             echo "present=false" >> "$GITHUB_OUTPUT"
           fi
-      # The exact SHA `decide` resolved and validated — never `github.sha`.
+      # What to ship: the NEWEST green commit on `main`, not necessarily the
+      # one `decide` judged. The two paths finish out of order. A merge's fast
+      # path deploys within minutes, while the previous stamp's push run can
+      # finish half an hour later. Shipping each trigger's own commit would
+      # then roll the site back to the older one. The newest green commit
+      # includes the commit `decide` judged (main is linear and never rewound),
+      # so nothing `decide` wanted shipped is lost. Its choice is just as safe:
+      # it is green by the same rule, and it is on `main`. Still no working
+      # tree here, as in `decide`.
+      - name: Pick the newest green commit on main
+        id: target
+        working-directory: ${{ github.workspace }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ needs.decide.outputs.sha }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -eu
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          runs="repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs"
+          main_green=$(gh api "$runs?branch=main&event=push&status=success&per_page=100" \
+            --jq ".workflow_runs[] | select(.head_repository.full_name == \"$GITHUB_REPOSITORY\") | .head_sha")
+          queue_green=$(gh api "$runs?event=merge_group&status=success&per_page=100" \
+            --jq ".workflow_runs[] | select(.head_repository.full_name == \"$GITHUB_REPOSITORY\") | .head_sha")
+          # Read `main` only now, holding the lock, so a newer green commit
+          # that landed while this job waited is the one shipped.
+          history=$(gh api "repos/${GITHUB_REPOSITORY}/commits?sha=main&per_page=100" --jq '.[].sha')
+          target=$(printf '%s\n' "$history" \
+            | grep -Fx -f <(printf '%s\n%s\n' "$main_green" "$queue_green") | head -n 1 || true)
+          if [ -z "$target" ]; then
+            # Cannot happen while `decide`'s commit is among main's newest 100.
+            # `decide` checked that commit itself, so it is the safe fallback.
+            echo "::warning::no green commit among main's newest 100; deploying $SHA, which decide checked"
+            target="$SHA"
+          elif [ "$target" != "$SHA" ]; then
+            echo "::notice::deploying $target, the newest green commit on main (this run was started for $SHA)"
+          fi
+          echo "sha=$target" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ needs.decide.outputs.sha }}
+          ref: ${{ steps.target.outputs.sha }}
           persist-credentials: false
       # Node 22: Astro 7 floors Node at 22.12.
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
