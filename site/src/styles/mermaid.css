@@ -17,9 +17,11 @@
 
 /* Type: the interface face, in ink. Mermaid sizes the boxes at build time in
  * the same face (the config loads it into Mermaid's page), so a label fits its
- * box. */
+ * box. That page has no `--bynk-*` tokens, so the fallback is the face it
+ * measures in; without it the text would be measured in the browser's default
+ * face. */
 & {
-  font-family: var(--bynk-font-sans);
+  font-family: var(--bynk-font-sans, "Instrument Sans Variable", sans-serif);
   fill: var(--bynk-ink);
 }
 .label,
@@ -30,7 +32,7 @@ p,
 .cluster-label,
 .edgeLabel,
 .label div .edgeLabel {
-  font-family: var(--bynk-font-sans);
+  font-family: var(--bynk-font-sans, "Instrument Sans Variable", sans-serif);
   fill: var(--bynk-ink);
   color: var(--bynk-ink);
 }
