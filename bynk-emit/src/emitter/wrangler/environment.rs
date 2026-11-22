@@ -140,7 +140,13 @@ fn apply(
                         toml::Value::String(name) if key.starts_with(prefix) => {
                             toml::Value::String(analytics_dataset_name(environment, name))
                         }
-                        other => other.clone(),
+                        toml::Value::String(_)
+                        | toml::Value::Integer(_)
+                        | toml::Value::Float(_)
+                        | toml::Value::Boolean(_)
+                        | toml::Value::Datetime(_)
+                        | toml::Value::Array(_)
+                        | toml::Value::Table(_) => value.clone(),
                     };
                     (key.clone(), value)
                 })
@@ -183,10 +189,7 @@ fn apply(
 
 /// `value`'s entries, when it is an array.
 fn array_of(value: &toml::Value) -> Option<Vec<toml::Value>> {
-    match value {
-        toml::Value::Array(entries) => Some(entries.clone()),
-        _ => None,
-    }
+    value.as_array().cloned()
 }
 
 /// Replace `entry`'s string field `field` with `qualify` of it, if the entry is a table with one.
