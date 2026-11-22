@@ -162,8 +162,6 @@ struct Shadow {
     in_text: Vec<String>,
     /// For each `in_text` name, the first printed body line that spells it.
     spelled: Vec<String>,
-    /// The names the module imports from the runtime (`__bynk_runtime/…`).
-    from_runtime: BTreeSet<String>,
     /// Runtime exports the printed body spells as code that the module neither imports nor
     /// declares: text the tree cannot see, using a name nothing imported (1A.36b-2).
     unimported_runtime: Vec<String>,
@@ -186,7 +184,6 @@ fn compare(program: &TsProgram) -> Shadow {
     let in_body = words(&printed);
     let mut shadow = Shadow {
         under: tree.difference(&imported).cloned().collect(),
-        from_runtime: program.names_imported_from(|from| from.contains("__bynk_runtime/")),
         ..Shadow::default()
     };
     let runtime: BTreeSet<&str> =

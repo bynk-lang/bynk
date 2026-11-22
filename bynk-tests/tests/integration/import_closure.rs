@@ -353,3 +353,34 @@ fn every_emitted_module_binds_every_name_it_uses() {
         fixed.join("\n"),
     );
 }
+
+/// #3807 (1A.36b-2): on the bundle target, a service handler's boundary cast
+/// (`x as unknown as lib.Code`) names the consumed context's namespace, and the module imports
+/// that namespace because its tree uses it. The module used to import it only where a prediction
+/// said so, and the cast's `lib` went unbound (TS2304).
+#[test]
+fn a_boundary_cast_binds_the_namespace_it_names_on_the_bundle_target() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/positive/2901_alias_caller_plain");
+    let out = compile_project_fixture(&dir, BuildTarget::Bundle).expect("compiles for bundle");
+    let edge = out
+        .artefacts
+        .docs
+        .iter()
+        .find_map(|(path, doc)| match doc {
+            bynk_driver::project::Document::Ts(p) if module_key(path) == "edge.ts" => Some(p),
+            _ => None,
+        })
+        .expect("edge.ts is emitted");
+    assert!(
+        bynk_ts::print(edge, "", "", "")
+            .text
+            .contains("as unknown as lib.Code"),
+        "the boundary cast this test is about is gone"
+    );
+    assert!(
+        edge.imported_names().contains("lib"),
+        "edge.ts uses `lib` and must import it: {:?}",
+        edge.imported_names()
+    );
+}
