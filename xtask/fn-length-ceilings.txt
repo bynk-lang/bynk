@@ -6,7 +6,7 @@
 # rewrites this file from the tree (lowering ceilings after a function shrinks).
 bynk-emit/src/testgen/system_support.rs::emit_system_http_support = 1137
 bynk-emit/src/emitter/workers_entry.rs::emit_worker_entry = 1109
-bynk-driver/src/project.rs::run_checks = 937
+bynk-driver/src/project.rs::run_checks = 934
 bynk-emit/src/testgen/test_module.rs::emit_test_module = 930
 bynk-check/src/checker/calls.rs::check_method_call = 874
 bynk-emit/src/emitter/compose/workers.rs::emit_worker_compose = 581
@@ -45,7 +45,7 @@ bynk-syntax/src/parser/declarations.rs::parse_adapter_body = 378
 bynk-check/src/checker/expressions.rs::check_field_access = 363
 bynk/src/registry/conformance.rs::publishing = 363
 bynk-syntax/src/parser/types.rs::parse_type_atom = 362
-bynk-driver/src/project.rs::build_output = 356
+bynk-driver/src/project.rs::build_output = 332
 bynk-emit/src/testgen/test_deps.rs::emit_test_deps = 350
 bynk-emit/src/emitter.rs::emit_boundary_helpers = 344
 bynk-syntax/src/parser/declarations.rs::parse_commons_body = 342

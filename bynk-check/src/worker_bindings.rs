@@ -16,7 +16,7 @@
 //! worker_bindings`, the list `wrangler.toml` is written from); this module
 //! owns the check over them and the diagnostic.
 
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::PathBuf;
 
 use bynk_project::ParsedFile;
@@ -53,7 +53,7 @@ pub fn instance_binding_name(prefix: &str, capability: &str) -> String {
 /// `bynk.context.duplicate_binding` diagnostic names.
 ///
 /// Each variant's doc also says whether a handler's `deps.env` type exposes
-/// it on Workers (#1950, `bynk_emit::emitter::wrangler::handler_bindings`).
+/// it on Workers (#1950, `bynk_emit::emitter::bindings::handler_bindings`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BindingSource {
     /// A `[[services]]` Service Binding to another context's Worker: a
@@ -393,26 +393,6 @@ pub fn phase_duplicate_bindings(
 /// that declares it, so two members' agents of one name are two classes.
 fn shareable(source: &BindingSource) -> bool {
     !matches!(source, BindingSource::Agent { .. })
-}
-
-/// The bindings of one Worker from its members' (#3562): each name once, at its
-/// first declaration. Two members declaring one name is one binding when the
-/// declarations are identical; when they differ it is the error
-/// [`phase_group_binding_collisions`] reports, so a build that reaches the emit
-/// has none.
-pub fn merge_group_bindings<'a>(
-    members: impl IntoIterator<Item = &'a [WorkerBinding]>,
-) -> Vec<WorkerBinding> {
-    let mut seen: HashSet<&str> = HashSet::new();
-    let mut merged: Vec<WorkerBinding> = Vec::new();
-    for bindings in members {
-        for binding in bindings {
-            if seen.insert(binding.name.as_str()) {
-                merged.push(binding.clone());
-            }
-        }
-    }
-    merged
 }
 
 /// `bynk.deploy.binding_collision` (#3562): the members of a Worker group share

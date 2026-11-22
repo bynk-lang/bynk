@@ -10,7 +10,7 @@
 use bynk_check::worker_bindings::BindingSource;
 use bynk_ts::{TsDecl, TsExpr, TsLit, TsProgram, TsStmt};
 
-use crate::emitter::wrangler::WorkerBinding;
+use crate::emitter::bindings::WorkerBinding;
 
 /// The Worker-relative specifier the runtime is imported from: the same depth
 /// as `compose.ts` (`workers/<worker>/containers.ts`).

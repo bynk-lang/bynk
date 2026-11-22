@@ -36,10 +36,10 @@ use std::sync::Arc;
 use crate::emit_model::*;
 use crate::emitter;
 use crate::emitter::RuntimeUse;
+use crate::emitter::bindings::WorkerBinding;
 use crate::emitter::harness_names::{
     SysdriveKind, route_with, sysdrive_name, wrong_method_driver_name,
 };
-use crate::emitter::wrangler::WorkerBinding;
 use bynk_check::checker;
 use bynk_check::checker::ExprId;
 use bynk_check::hints::HintSink;

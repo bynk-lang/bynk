@@ -515,7 +515,7 @@ type Discovered = Vec<Vec<PathBuf>>;
 /// and Hyperdrive H5 (#3322) which Hyperdrive bindings are MySQL and their TLS
 /// modes, for `bynk deploy` (a Worker with no `MySql` instance gets no file).
 fn stage_binding_files(
-    bindings: &[emitter::wrangler::WorkerBinding],
+    bindings: &[emitter::bindings::WorkerBinding],
     layout: &WorkerLayout,
     context: &str,
     d1_migrations: &bynk_check::d1_migrations::D1Migrations,
@@ -556,7 +556,7 @@ fn stage_binding_files(
     for binding in bindings {
         if !matches!(
             binding.source,
-            emitter::wrangler::BindingSource::D1Database { .. }
+            emitter::bindings::BindingSource::D1Database { .. }
         ) {
             continue;
         }
@@ -3628,11 +3628,10 @@ fn run_checks(
     // cross-context call from a synthetic harness root that consumes every
     // participant, and emits a TypeScript module that stands the participants
     // up as in-process Workers and exercises the flow across the real wire.
-    // #1959: each context's bindings, once: the integration harness binds them
-    // on each participant's `env`, and the duplicate check reads them.
+    // #1959: each context's bindings, once (1C.1): the integration harness binds
+    // them on each participant's `env`, the duplicate check and `build_output` read them.
     let event_subscribers =
         bynk_check::symbols::discover_event_subscribers(&unit_tables, &unit_consumes);
-    // 1C.1a: the plan and the binding model, once; `build_output` takes them.
     let derived = errors.is_empty().then(|| {
         derive_bindings(
             (&kinds, &unit_tables, &unit_consumes, &unit_consumes_aliases),
@@ -3658,7 +3657,7 @@ fn run_checks(
         &mut emitted_barrels,
         &test_asset_files,
         IntegrationD1::new(&d1_migrations, d1_sql.as_deref()),
-        derived.as_ref().map(|d| &d.0),
+        derived.as_ref().map(|d| d.bindings.by_context()),
         &event_subscribers,
         remote_tests,
         project_mentions_encode_plain(&parsed),
@@ -3697,16 +3696,14 @@ fn run_checks(
     );
     // On Workers, each Worker's binding names are unique. Gated the same way:
     // the KV input walks the same provider graph.
-    if let Some((bindings, _)) = derived.as_ref().filter(|_| errors.is_empty()) {
-        worker_bindings::phase_duplicate_bindings(
-            target,
-            (project_root, overlay),
-            &parsed,
-            &groups,
-            bindings,
-            &mut errors,
-        );
-    }
+    worker_bindings::phase_duplicate_bindings(
+        target,
+        (project_root, overlay),
+        &parsed,
+        &groups,
+        derived.as_ref().map(|d| d.bindings.by_context()),
+        &mut errors,
+    );
 
     // v0.176 (#642): the `Bytes`-at-a-workers-boundary guard (ADR 0142 D8) is
     // retired here. It existed because the workers boundary carried its own
@@ -3746,7 +3743,7 @@ fn run_checks(
         agent_versions: schema_effective_versions.agents,
         d1_migrations,
         layout,
-        composed: derived.map(|d| d.1),
+        composed: derived,
     }
 }
 
@@ -3827,13 +3824,9 @@ struct WorkersEmit<'a> {
     asset_served: &'a BTreeMap<String, String>,
     bindings: &'a emitter::WorkerBindings,
     compatibility_flags: &'a [String],
-    container_root: &'a str,
-    context_bare_native: &'a HashMap<String, BTreeMap<Platform, String>>,
-    context_singletons: &'a HashMap<String, Vec<String>>,
     contracts_lock: &'a bynk_project::contracts_lock::ContractsLock,
     d1_migrations: &'a BTreeMap<String, Vec<bynk_check::d1_migrations::MigrationFile>>,
     compose_plan: &'a emitter::ComposePlan,
-    event_subscribers: &'a BTreeMap<(String, String), Vec<(String, String)>>,
     groups: &'a BTreeMap<String, Vec<usize>>,
     harness_clock_contexts: &'a HashSet<String>,
     import_ext: bynk_emit::emit_model::ImportExt,
@@ -3870,12 +3863,8 @@ impl WorkersEmit<'_> {
             adapter_bindings,
             agent_versions,
             bindings: model,
-            container_root,
-            context_bare_native,
-            context_singletons,
             compose_plan,
             contracts_lock,
-            event_subscribers,
             groups,
             harness_clock_contexts,
             import_ext,
@@ -3894,10 +3883,6 @@ impl WorkersEmit<'_> {
             ..
         } = *self;
         let consumes_targets = unit_consumes.get(ctx_name).cloned().unwrap_or_default();
-        let aliases = unit_consumes_aliases
-            .get(ctx_name)
-            .cloned()
-            .unwrap_or_default();
         // v0.177 (#643): the callee's own view of each of its `on call`
         // contracts, hashed from *its own* namespace — the same table
         // (`contract_types_for`) a caller reaches through
@@ -3937,9 +3922,6 @@ impl WorkersEmit<'_> {
                 )
             })
             .collect();
-        // v0.19 (C1): this Worker needs the KV namespace binding when
-        // its in-process closure reaches the cloudflare adapter.
-        let needs_kv = worker_bindings::needs_kv(context_bare_native, ctx_name);
         // Locale capability track, slice 2 (#882, Decision A): real
         // negotiation is Cloudflare-only — `BuildTarget::Workers`
         // isn't itself restricted to `Platform::Cloudflare`, so a
@@ -3966,41 +3948,14 @@ impl WorkersEmit<'_> {
         // #1187's slice 6 plumbing: computed once, reused by every
         // Workers-target emitter below that needs it.
         let ctx_uses_emit = planned_unit(compose_plan, ctx_name).publishes;
-        // #1944: every binding this Worker declares, once — its
-        // `Env` interface and its `wrangler.toml` are both built from
-        // it, and the duplicate check read the same list.
-        let own_event_routes = worker_bindings::own_event_routes(ctx_name, event_subscribers);
-        // What this context calls on each dependency (#1961): its
-        // Service Bindings, and below, its contracts manifest.
+        // #1944: every binding this Worker declares, once — its `Env`
+        // interface and its `wrangler.toml` are both built from it, and the
+        // duplicate check reads the same list (1C.1b).
+        let bindings = model.of(ctx_name);
+        // What this context calls on each dependency (#1961): its contracts
+        // manifest, below.
         let called =
             called_cross_context_services(table, &consumes_targets, unit_callees.get(ctx_name));
-        let called_contexts = worker_bindings::called_contexts(
-            table,
-            &consumes_targets,
-            Some(&aliases),
-            kinds,
-            unit_callees.get(ctx_name),
-        );
-        let mut bindings = worker_bindings::context_bindings(
-            table,
-            &called_contexts,
-            &own_event_routes,
-            needs_kv,
-            worker_bindings::singletons_of(context_singletons, ctx_name),
-            ctx_uses_emit,
-            unit_table_uses_idempotency(table, unit_callees.get(ctx_name)),
-        );
-        // #3477: a container's image is built from a directory of the
-        // project, which `wrangler` reaches from the Worker's output
-        // directory.
-        worker_bindings::locate_container_builds(&mut bindings, container_root);
-        // 1C.1a: the model, derived once, is what the build's old derivation
-        // would write, for every fixture, until 1C.1b switches to it.
-        debug_assert_eq!(
-            model.of(ctx_name),
-            bindings.as_slice(),
-            "the binding model of `{ctx_name}` differs from the build's derivation"
-        );
         // #2719: the context's handlers that hand work to the execution
         // context, from the checker's needs-context set.
         let ctx_uses_exec = planned_unit(compose_plan, ctx_name).exec.any_handler;
@@ -4030,7 +3985,7 @@ impl WorkersEmit<'_> {
             unit_flattened,
             locale_bundle_info,
             import_ext,
-            &bindings,
+            bindings,
             harness_clock_contexts.contains(ctx_name),
             unit_uses
                 .get(ctx_name)
@@ -4104,7 +4059,7 @@ impl WorkersEmit<'_> {
             // `emit_events_fanout_do` returns a real `TsProgram`
             // directly — the first `bynk-emit` construction site
             // that reaches `Document::Ts` with no `Verbatim` wrap.
-            let fanout_program = emitter::emit_events_fanout_do(ctx_name, &own_event_routes);
+            let fanout_program = emitter::emit_events_fanout_do(ctx_name, &compose_plan.events);
             compiled.push(StagedFile {
                 output_path: layout.member_file(ctx_name, "events_fanout.ts"),
                 document: Document::Ts(fanout_program),
@@ -4133,7 +4088,6 @@ impl WorkersEmit<'_> {
             self.emit_contract_manifests(ctx_name, table, &called, &own_types, &accepted, compiled);
         MemberParts {
             context: ctx_name.clone(),
-            bindings,
             crons,
             queues,
             addresses: bynk_check::email::routed_addresses(table),
@@ -4144,7 +4098,7 @@ impl WorkersEmit<'_> {
             classes,
             contracts,
             secrets,
-            publishes: (ctx_uses_emit && in_group).then_some(own_event_routes),
+            publishes: ctx_uses_emit && in_group,
         }
     }
 
@@ -4240,14 +4194,7 @@ impl WorkersEmit<'_> {
             ..
         } = *self;
         let first = members[0].0.context.as_str();
-        let bindings = bynk_check::worker_bindings::merge_group_bindings(
-            members.iter().map(|(parts, _)| parts.bindings.as_slice()),
-        );
-        debug_assert_eq!(
-            self.bindings.of_worker(&layout.dir(first)),
-            bindings.as_slice(),
-            "the binding model of Worker `{first}` differs from its members' merge"
-        );
+        let bindings = self.bindings.of_worker(&layout.dir(first));
         let union = |of: fn(&MemberParts) -> &Vec<String>| -> Vec<String> {
             let mut all: Vec<String> = members.iter().flat_map(|(p, _)| of(p).clone()).collect();
             all.sort();
@@ -4266,7 +4213,7 @@ impl WorkersEmit<'_> {
         let mut wrangler_doc = emitter::emit_wrangler_toml(
             first,
             layout,
-            &bindings,
+            bindings,
             &union(|p| &p.crons),
             &union(|p| &p.queues),
             &union(|p| &p.addresses),
@@ -4275,14 +4222,14 @@ impl WorkersEmit<'_> {
             &tombstones,
             d1_migrations,
         );
-        stage_binding_files(&bindings, layout, first, d1_migrations, compiled);
+        stage_binding_files(bindings, layout, first, d1_migrations, compiled);
         let tables: Vec<(&str, &UnitTable)> = members
             .iter()
             .map(|(parts, table)| (parts.context.as_str(), *table))
             .collect();
         self.stage_worker_extras(&tables, &mut wrangler_doc, staged_assets);
         // #3477: the Durable Object classes of this Worker's containers.
-        if let Some(program) = emitter::emit_containers_ts(&bindings) {
+        if let Some(program) = emitter::emit_containers_ts(bindings) {
             compiled.push(StagedFile {
                 output_path: layout.worker_file(first, "containers.ts"),
                 document: Document::Ts(program),
@@ -4308,9 +4255,10 @@ impl WorkersEmit<'_> {
             self.stage_group_manifests(first, members, compiled);
             // #3562 (G3-1): the group's one events fan-out, for every member that
             // publishes, in declaration order.
-            let publishers: Vec<emitter::Publisher> = members
+            let publishers: Vec<&str> = members
                 .iter()
-                .filter_map(|(parts, _)| Some((parts.context.clone(), parts.publishes.clone()?)))
+                .filter(|(parts, _)| parts.publishes)
+                .map(|(parts, _)| parts.context.as_str())
                 .collect();
             if !publishers.is_empty() {
                 compiled.push(StagedFile {
@@ -4318,6 +4266,7 @@ impl WorkersEmit<'_> {
                     document: Document::Ts(emitter::emit_group_events_fanout_do(
                         &layout.dir(first),
                         &publishers,
+                        &self.compose_plan.events,
                     )),
                     source_map: None,
                     debug_metadata: None,
@@ -4331,7 +4280,7 @@ impl WorkersEmit<'_> {
                     debug_metadata: None,
                 });
             }
-            let entry = self.group_entry(first, members, &bindings);
+            let entry = self.group_entry(first, members, bindings);
             compiled.push(StagedFile {
                 output_path: layout.worker_file(first, "index.ts"),
                 document: Document::Ts(entry),
@@ -4376,7 +4325,7 @@ impl WorkersEmit<'_> {
         &self,
         first: &str,
         members: &[(&MemberParts, &UnitTable)],
-        bindings: &[emitter::wrangler::WorkerBinding],
+        bindings: &[emitter::bindings::WorkerBinding],
     ) -> bynk_ts::TsProgram {
         let layout = self.layout;
         let facts: Vec<emitter::GroupMember> = members
@@ -4394,7 +4343,7 @@ impl WorkersEmit<'_> {
             key: &layout.dir(first),
             members: &facts,
             container_classes: &emitter::container_class_names(bindings),
-            has_fanout: members.iter().any(|(parts, _)| parts.publishes.is_some()),
+            has_fanout: members.iter().any(|(parts, _)| parts.publishes),
             has_events: members.iter().any(|(parts, _)| parts.has_events),
             has_migrate: members.iter().any(|(parts, _)| parts.has_migrate),
             has_inspect: members.iter().any(|(parts, _)| parts.has_inspect),
@@ -4618,7 +4567,6 @@ impl WorkersEmit<'_> {
 /// group, to the group's entry ([`WorkersEmit::emit_member`]).
 struct MemberParts {
     context: String,
-    bindings: Vec<emitter::wrangler::WorkerBinding>,
     crons: Vec<String>,
     queues: Vec<String>,
     addresses: Vec<String>,
@@ -4636,9 +4584,9 @@ struct MemberParts {
     /// in a group (#3562).
     contracts: emitter::contracts::ContractParts,
     secrets: emitter::secrets::SecretsParts,
-    /// For a group member that publishes, its events' subscribers, which the
-    /// group's one fan-out routes (#3562).
-    publishes: Option<BTreeMap<String, Vec<(String, String)>>>,
+    /// Whether a group member publishes, so the group's one fan-out routes its
+    /// events (#3562).
+    publishes: bool,
 }
 
 /// #3562 (G6): which member owns which agent class in a `bynk dev` group, for
@@ -4698,20 +4646,16 @@ fn planned_unit<'a>(plan: &'a emitter::ComposePlan, context: &str) -> &'a emitte
 }
 
 /// What `run_checks` derives once for the build (1C.1a, Decision C of #4031):
-/// the event subscribers, the composition plan decided from them, and every
-/// Worker's bindings decided from the plan.
+/// the composition plan, and every Worker's bindings decided from it. The
+/// duplicate check, the integration harness and the Workers build all read
+/// them, so the check sees exactly the bindings the build writes.
 struct ComposedBuild {
-    event_subscribers: BTreeMap<(String, String), Vec<(String, String)>>,
     plan: emitter::ComposePlan,
     bindings: emitter::WorkerBindings,
 }
 
-/// The build's [`ComposedBuild`], with the bindings the checks still read from
-/// their old derivation ([`worker_bindings::all_context_bindings`], deleted in
-/// 1C.1b). The old derivation is compared with the model: every fixture that
-/// reaches here checks that the model is what the checks and the build have
-/// been using. Only on an otherwise clean program: the plan walks the provider
-/// graph, whose acyclicity the earlier checks establish.
+/// The build's [`ComposedBuild`]. Only on an otherwise clean program: the plan
+/// walks the provider graph, whose acyclicity the earlier checks establish.
 #[allow(clippy::type_complexity)]
 fn derive_bindings(
     (kinds, unit_tables, unit_consumes, unit_consumes_aliases): (
@@ -4730,10 +4674,7 @@ fn derive_bindings(
         &WorkerLayout,
         &BTreeMap<String, Vec<usize>>,
     ),
-) -> (
-    BTreeMap<String, Vec<emitter::wrangler::WorkerBinding>>,
-    ComposedBuild,
-) {
+) -> ComposedBuild {
     let plan = emitter::ComposePlan::build(
         kinds,
         unit_consumes,
@@ -4746,26 +4687,7 @@ fn derive_bindings(
     );
     debug_assert_plan_covers_groups(&plan, groups, kinds);
     let bindings = emitter::WorkerBindings::derive(&plan, unit_tables, layout);
-    let old = worker_bindings::all_context_bindings(
-        kinds,
-        unit_tables,
-        unit_consumes,
-        unit_consumes_aliases,
-        unit_flattened,
-        unit_callees,
-        event_subscribers,
-    );
-    debug_assert_eq!(
-        bindings.by_context(),
-        &old,
-        "the binding model differs from the checks' derivation"
-    );
-    let composed = ComposedBuild {
-        event_subscribers: event_subscribers.clone(),
-        plan,
-        bindings,
-    };
-    (old, composed)
+    ComposedBuild { plan, bindings }
 }
 
 /// Makes that assumption explicit: the plan's contexts are the grouped ones.
@@ -4945,16 +4867,6 @@ fn build_output(
         &unit_consumes,
         &unit_consumes_aliases,
         &unit_flattened,
-        true,
-    );
-    // S4a (#1966): the bare resources only, so a named instance never brings
-    // in an unreachable bare `KV`; #3300: and the singletons reached bare.
-    let (context_bare_native, context_singletons) = worker_bindings::bare_resources(
-        &kinds,
-        &unit_tables,
-        &unit_consumes,
-        &unit_consumes_aliases,
-        &unit_flattened,
     );
 
     // Events track, slice 0 (spine #936): project-wide "who subscribes to
@@ -4962,7 +4874,6 @@ fn build_output(
     // `run_checks` for both targets; 1C.1a (#4031) adds each Worker's bindings,
     // with a container's build path from the project root set once (#3477).
     let ComposedBuild {
-        event_subscribers,
         plan: compose_plan,
         mut bindings,
     } = composed;
@@ -4996,12 +4907,8 @@ fn build_output(
                 bindings: &bindings,
                 compatibility_flags,
                 compose_plan: &compose_plan,
-                container_root,
-                context_bare_native: &context_bare_native,
-                context_singletons: &context_singletons,
                 contracts_lock,
                 d1_migrations,
-                event_subscribers: &event_subscribers,
                 groups: &groups,
                 harness_clock_contexts: &harness_clock_contexts,
                 import_ext,
@@ -5466,9 +5373,9 @@ mod tests {
             },
         )]);
         let layout = bynk_project::worker_layout::WorkerLayout::from_groups(&groups);
-        let bindings = vec![emitter::wrangler::WorkerBinding {
+        let bindings = vec![emitter::bindings::WorkerBinding {
             name: "D1_ORDERS".to_string(),
-            source: emitter::wrangler::BindingSource::D1Database {
+            source: emitter::bindings::BindingSource::D1Database {
                 capability: "Orders".to_string(),
             },
         }];
