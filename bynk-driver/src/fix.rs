@@ -74,8 +74,8 @@ impl Scope {
                         format!("unknown diagnostic code `{code}`; did you mean `{real}`?")
                     }
                     None => format!(
-                        "unknown diagnostic code `{code}`; every code is listed at {}/book/reference/diagnostics/",
-                        bynk_syntax::diagnostics::BOOK_BASE_URL
+                        "unknown diagnostic code `{code}`; every code is listed at {}",
+                        bynk_syntax::diagnostics::href("")
                     ),
                 });
             }

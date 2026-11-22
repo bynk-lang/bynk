@@ -33,7 +33,7 @@ and bynk_describe_symbol, bynk_get_documentation, bynk_get_architecture and \
 bynk_get_wire_contract to learn a project before changing it, and bynk_search_book for the Book. Positions are 1-based and paths \
 are relative to the workspace.";
 
-const DIAGNOSTIC_INDEX: &str = "https://bynk-lang.org/book/reference/diagnostics/";
+const DIAGNOSTIC_INDEX: &str = "https://bynk-lang.org/d/";
 const BOOK_URL: &str = "https://bynk-lang.org";
 
 fn tool(name: &str, title: &str, description: &str, properties: Value, required: &[&str]) -> Value {

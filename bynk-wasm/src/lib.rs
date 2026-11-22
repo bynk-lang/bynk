@@ -1194,11 +1194,7 @@ mod tests {
         assert!(!r.diagnostics.is_empty());
         for d in &r.diagnostics {
             assert!(d.summary.is_some(), "no summary for {}", d.category);
-            assert!(
-                d.href.starts_with("https://bynk-lang.org/book/"),
-                "{}",
-                d.href
-            );
+            assert_eq!(d.href, format!("https://bynk-lang.org/d/{}", d.category));
         }
         // Also present on the serialised wire shape (additive fields).
         let json: serde_json::Value = serde_json::from_str(&analyze_to_json(
@@ -1216,15 +1212,12 @@ mod tests {
     fn a_synthetic_code_resolves_from_the_registry() {
         let d = panic_diagnostic(Box::new("boom"));
         assert!(d.summary.is_some());
-        assert!(
-            d.href
-                .starts_with("https://bynk-lang.org/book/reference/diagnostics/")
-        );
+        assert_eq!(d.href, "https://bynk-lang.org/d/bynk.wasm.panic");
     }
 
-    /// #2679: the href is the curated page when one exists, else the category section.
+    /// #3876: every registered code links to its own page, curated or not.
     #[test]
-    fn href_is_curated_else_the_index_category_section() {
+    fn href_is_the_code_page_for_every_registered_code() {
         let curated = bynk_syntax::diagnostics::EXPLANATIONS
             .first()
             .expect("at least one curated code");
@@ -1233,57 +1226,10 @@ mod tests {
             .iter()
             .find(|d| bynk_syntax::diagnostics::explain(d.code).is_none())
             .expect("an uncurated code");
-        let h = explain(plain.code).href;
-        assert!(
-            h.starts_with("https://bynk-lang.org/book/reference/diagnostics/#"),
-            "{h}"
+        assert_eq!(
+            explain(plain.code).href,
+            format!("https://bynk-lang.org/d/{}", plain.code)
         );
-    }
-
-    /// #2679: hard-coded anchors, independent of the slug code under test.
-    #[test]
-    fn index_anchors_are_the_expected_slugs() {
-        let anchor = |prefix: &str| {
-            let d = bynk_syntax::diagnostics::REGISTRY
-                .iter()
-                .find(|d| {
-                    d.code.starts_with(prefix)
-                        && bynk_syntax::diagnostics::explain(d.code).is_none()
-                })
-                .unwrap();
-            explain(d.code).href
-        };
-        // No `bynk.mock.*` code is registered today; `property` and `transition`
-        // exercise the parenthesised-title slug the same way.
-        assert!(anchor("bynk.property.").ends_with("#properties-generative-tests"));
-        assert!(anchor("bynk.transition.").ends_with("#transitions-step-invariants"));
-        assert!(anchor("bynk.types.").ends_with("#type-checking"));
-    }
-
-    /// #2679: every index deep-link lands on a real section of the generated page.
-    #[test]
-    fn index_anchors_match_the_generated_headings() {
-        let md = bynk_syntax::diagnostics::render_markdown();
-        let slug = |t: &str| -> String {
-            t.chars()
-                .filter_map(|c| match c {
-                    ' ' => Some('-'),
-                    c if c.is_alphanumeric() || c == '-' => Some(c.to_ascii_lowercase()),
-                    _ => None,
-                })
-                .collect()
-        };
-        let anchors: Vec<String> = md
-            .lines()
-            .filter_map(|l| l.strip_prefix("## "))
-            .map(slug)
-            .collect();
-        for d in bynk_syntax::diagnostics::REGISTRY {
-            let h = bynk_syntax::diagnostics::href(d.code);
-            if let Some((_, frag)) = h.split_once("/reference/diagnostics/#") {
-                assert!(anchors.iter().any(|a| a == frag), "{}: #{frag}", d.code);
-            }
-        }
     }
 
     #[test]
@@ -1309,10 +1255,7 @@ mod tests {
         let u: serde_json::Value = serde_json::from_str(&explain_to_json("nope")).unwrap();
         assert_eq!(u["code"], "nope");
         assert!(u["summary"].is_null());
-        assert_eq!(
-            u["href"],
-            "https://bynk-lang.org/book/reference/diagnostics/"
-        );
+        assert_eq!(u["href"], "https://bynk-lang.org/d/");
     }
 
     #[test]

@@ -615,7 +615,7 @@ fn an_unknown_code_with_no_near_match_points_at_the_diagnostics_index() {
     assert_ne!(code, 0, "{err}");
     assert!(
         err.contains("unknown diagnostic code `nope`")
-            && err.contains("/book/reference/diagnostics/")
+            && err.contains("https://bynk-lang.org/d/")
             && !err.contains("bynk explain"),
         "{err}"
     );

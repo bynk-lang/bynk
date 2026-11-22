@@ -5,8 +5,9 @@
 //!    appear in `bynk_syntax::diagnostics::REGISTRY`, and vice versa. "Compiler
 //!    source" is the `src/` of every workspace member (#1662), since emit sites
 //!    are spread across crates.
-//! 2. `site/src/content/docs/book/reference/diagnostics.md` must match what the
-//!    registry renders.
+//! 2. `site/src/content/docs/book/reference/diagnostics.md` and
+//!    `site/src/generated/diagnostics.json` must match what the registry
+//!    renders.
 //!
 //! Regenerate the docs page after changing the registry with:
 //!     BYNK_BLESS=1 cargo test -p xtask --test docs_consistency diagnostics_registry::
@@ -335,43 +336,77 @@ fn blurb_codes_are_read_from_backtick_spans_only() {
     );
 }
 
-/// The code→page mapping is guarded against Book-page moves and anchor renames:
-/// each explanation's target page must exist on disk and, when an anchor is
-/// given, a heading with that slug must be present. (The generated diagnostics
-/// page also links these in-site, so `astro build`'s link checker is a second,
+/// A code's links (#3876): `site/src/data/diagnostic-links.json` maps codes to
+/// the Book pages that explain them, which the code's page lists. Every key
+/// must be a registry code, and every link a page on disk with, where it names
+/// one, a heading of that slug. (`astro build`'s link checker is a second,
 /// independent guard.)
 #[test]
-fn explanation_pages_and_anchors_exist() {
-    let docs_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../site/src/content/docs");
-    for e in EXPLANATIONS {
+fn diagnostic_links_name_registry_codes_and_real_pages() {
+    let site = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../site");
+    let text = fs::read_to_string(site.join("src/data/diagnostic-links.json"))
+        .expect("read site/src/data/diagnostic-links.json");
+    let links: std::collections::BTreeMap<String, Vec<String>> =
+        serde_json::from_str(&text).expect("diagnostic-links.json is a map of code to links");
+    let docs_root = site.join("src/content/docs");
+    for (code, targets) in &links {
         assert!(
-            e.page.starts_with('/') && !e.page.ends_with('/'),
-            "EXPLANATIONS `{}` page `{}` must be a root-relative path with no trailing slash",
-            e.code,
-            e.page
+            REGISTRY.iter().any(|d| d.code == code),
+            "diagnostic-links.json names `{code}`, which is not in REGISTRY \
+             (bynk-syntax/src/diagnostics.rs). Remove or rename the entry."
         );
-        // `/book/reference/types` → `<docs>/book/reference/types.md`
-        let file = docs_root.join(format!("{}.md", e.page.trim_start_matches('/')));
-        let markdown = fs::read_to_string(&file).unwrap_or_else(|_| {
-            panic!(
-                "EXPLANATIONS `{}` points at Book page `{}`, but {} does not exist. \
-                 Update the mapping in bynk-syntax/src/diagnostics.rs if the page moved.",
-                e.code,
-                e.page,
-                file.display()
-            )
-        });
-        if !e.anchor.is_empty() {
-            let slugs = heading_slugs(&markdown);
+        assert!(
+            !targets.is_empty(),
+            "diagnostic-links.json `{code}` has no links"
+        );
+        for target in targets {
+            let (path, anchor) = target.split_once('#').unwrap_or((target, ""));
             assert!(
-                slugs.contains(e.anchor),
-                "EXPLANATIONS `{}` anchors at `#{}`, but {} has no heading with that slug. \
-                 Present slugs: {:?}",
-                e.code,
-                e.anchor,
-                file.display(),
-                slugs
+                path.starts_with('/') && path.ends_with('/'),
+                "diagnostic-links.json `{code}`: `{target}` must be a root-relative `/…/` path"
             );
+            let stem = path.trim_start_matches('/').trim_end_matches('/');
+            let file = ["md", "mdx"]
+                .iter()
+                .map(|x| docs_root.join(format!("{stem}.{x}")))
+                .chain(
+                    ["md", "mdx"]
+                        .iter()
+                        .map(|x| docs_root.join(format!("{stem}/index.{x}"))),
+                )
+                .find(|f| f.exists())
+                .unwrap_or_else(|| {
+                    panic!("diagnostic-links.json `{code}` links `{target}`, which has no page")
+                });
+            if !anchor.is_empty() {
+                let slugs = heading_slugs(&fs::read_to_string(&file).unwrap());
+                assert!(
+                    slugs.contains(anchor),
+                    "diagnostic-links.json `{code}` links `{target}`, but {} has no heading \
+                     with that slug. Present slugs: {slugs:?}",
+                    file.display()
+                );
+            }
         }
     }
+}
+
+/// `site/src/generated/diagnostics.json`, the data behind each code's page
+/// (#3876), must match what the registry renders.
+#[test]
+fn generated_diagnostics_json_is_up_to_date() {
+    let path =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../site/src/generated/diagnostics.json");
+    let rendered = bynk_syntax::diagnostics::render_json();
+    if std::env::var_os("BYNK_BLESS").is_some() {
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(&path, &rendered).unwrap();
+        return;
+    }
+    let current = fs::read_to_string(&path).unwrap_or_default();
+    assert!(
+        current == rendered,
+        "site/src/generated/diagnostics.json is out of date with the registry.\n\
+         Regenerate with: BYNK_BLESS=1 cargo test -p xtask --test docs_consistency diagnostics_registry::"
+    );
 }

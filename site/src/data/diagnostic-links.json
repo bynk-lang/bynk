@@ -1,0 +1,2481 @@
+{
+  "bynk.actor.bearer_identity_not_string_constructible": [
+    "/book/reference/actors/#schemes"
+  ],
+  "bynk.actor.bearer_missing_secret": [
+    "/book/reference/actors/#schemes"
+  ],
+  "bynk.actor.binder_shadows_param": [
+    "/book/reference/actors/#the-by-clause"
+  ],
+  "bynk.actor.by_on_agent": [
+    "/book/reference/actors/#the-by-clause"
+  ],
+  "bynk.actor.duplicate_sum_scheme": [
+    "/book/reference/actors/#the-by-clause"
+  ],
+  "bynk.actor.foreign_context_name_unkeyable": [
+    "/book/reference/actors/#schemes"
+  ],
+  "bynk.actor.foreign_duplicate_secret": [
+    "/book/reference/actors/#schemes"
+  ],
+  "bynk.actor.foreign_identity_unsupported": [
+    "/book/reference/actors/#schemes"
+  ],
+  "bynk.actor.foreign_missing_secret": [
+    "/book/reference/actors/#schemes"
+  ],
+  "bynk.actor.foreign_name_is_context_name": [
+    "/book/reference/actors/#schemes"
+  ],
+  "bynk.actor.foreign_reserved_secret": [
+    "/book/reference/actors/#schemes"
+  ],
+  "bynk.actor.foreign_secret_not_string": [
+    "/book/reference/actors/#schemes"
+  ],
+  "bynk.actor.identity_not_sealed": [
+    "/book/reference/actors/#schemes"
+  ],
+  "bynk.actor.missing_by_on_http": [
+    "/book/reference/actors/#the-by-clause"
+  ],
+  "bynk.actor.oidc_identity_not_string_constructible": [
+    "/book/reference/actors/#schemes"
+  ],
+  "bynk.actor.oidc_missing_audience": [
+    "/book/reference/actors/#schemes"
+  ],
+  "bynk.actor.oidc_missing_issuer": [
+    "/book/reference/actors/#schemes"
+  ],
+  "bynk.actor.oidc_missing_jwks": [
+    "/book/reference/actors/#schemes"
+  ],
+  "bynk.actor.oidc_not_in_sum": [
+    "/book/reference/actors/#the-by-clause"
+  ],
+  "bynk.actor.oidc_trust_from_is_secret": [
+    "/book/reference/actors/#trust-roots-from-the-environment"
+  ],
+  "bynk.actor.oidc_trust_from_not_string": [
+    "/book/reference/actors/#trust-roots-from-the-environment"
+  ],
+  "bynk.actor.outside_context": [
+    "/book/reference/actors/#declaration"
+  ],
+  "bynk.actor.refinement_base_unsupported": [
+    "/book/reference/actors/#the-by-clause"
+  ],
+  "bynk.actor.refinement_in_sum": [
+    "/book/reference/actors/#the-by-clause"
+  ],
+  "bynk.actor.refinement_predicate_unsupported": [
+    "/book/reference/actors/#the-by-clause"
+  ],
+  "bynk.actor.scheme_arg_kind": [
+    "/book/reference/actors/#schemes"
+  ],
+  "bynk.actor.scheme_not_admissible": [
+    "/book/reference/actors/#schemes"
+  ],
+  "bynk.actor.signature_identity_unsupported": [
+    "/book/reference/actors/#schemes"
+  ],
+  "bynk.actor.signature_missing_header": [
+    "/book/reference/actors/#schemes"
+  ],
+  "bynk.actor.signature_missing_secret": [
+    "/book/reference/actors/#schemes"
+  ],
+  "bynk.actor.signature_requires_body": [
+    "/book/reference/actors/#schemes"
+  ],
+  "bynk.actor.signature_tolerance_without_timestamp": [
+    "/book/reference/actors/#schemes"
+  ],
+  "bynk.actor.signed_cookie_bad_arg": [
+    "/book/reference/actors/#signed-cookies"
+  ],
+  "bynk.actor.signed_cookie_bad_name": [
+    "/book/reference/actors/#signed-cookies"
+  ],
+  "bynk.actor.signed_cookie_bad_ttl": [
+    "/book/reference/actors/#signed-cookies"
+  ],
+  "bynk.actor.signed_cookie_duplicate_key": [
+    "/book/reference/actors/#signed-cookies"
+  ],
+  "bynk.actor.signed_cookie_identity_not_string_constructible": [
+    "/book/reference/actors/#signed-cookies"
+  ],
+  "bynk.actor.signed_cookie_issue_needs_clock": [
+    "/book/reference/actors/#signed-cookies"
+  ],
+  "bynk.actor.signed_cookie_issue_outside_handler": [
+    "/book/reference/actors/#signed-cookies"
+  ],
+  "bynk.actor.signed_cookie_missing_secret": [
+    "/book/reference/actors/#signed-cookies"
+  ],
+  "bynk.actor.signed_cookie_missing_ttl": [
+    "/book/reference/actors/#signed-cookies"
+  ],
+  "bynk.actor.signed_cookie_not_in_sum": [
+    "/book/reference/actors/#signed-cookies"
+  ],
+  "bynk.actor.signed_cookie_public_cache": [
+    "/book/reference/actors/#signed-cookies"
+  ],
+  "bynk.actor.signed_cookie_read_directly": [
+    "/book/reference/actors/#signed-cookies"
+  ],
+  "bynk.actor.signed_cookie_secret_shared": [
+    "/book/reference/actors/#signed-cookies"
+  ],
+  "bynk.actor.signed_cookie_ttl_long": [
+    "/book/reference/actors/#signed-cookies"
+  ],
+  "bynk.actor.signed_cookie_unknown_key": [
+    "/book/reference/actors/#signed-cookies"
+  ],
+  "bynk.actor.signed_cookie_unprefixed": [
+    "/book/reference/actors/#signed-cookies"
+  ],
+  "bynk.actor.signed_cookie_write_directly": [
+    "/book/reference/actors/#signed-cookies"
+  ],
+  "bynk.actor.signed_cookie_write_literal": [
+    "/book/reference/actors/#signed-cookies"
+  ],
+  "bynk.actor.sum_requires_binder": [
+    "/book/reference/actors/#the-by-clause"
+  ],
+  "bynk.actor.unknown_actor": [
+    "/book/reference/actors/#prelude-actors"
+  ],
+  "bynk.actor.unknown_scheme": [
+    "/book/reference/actors/#schemes"
+  ],
+  "bynk.actor.unreachable_sum_arm": [
+    "/book/reference/actors/#the-by-clause"
+  ],
+  "bynk.adapter.consumes_context": [
+    "/book/reference/adapters/#adapter-dependencies"
+  ],
+  "bynk.adapter.consumes_requires_selection": [
+    "/book/reference/adapters/#adapter-dependencies"
+  ],
+  "bynk.adapter.disallowed_item": [
+    "/book/reference/adapters/#anatomy",
+    "/book/troubleshooting/adapter-errors/"
+  ],
+  "bynk.adapter.duplicate_binding": [
+    "/book/reference/adapters/#anatomy"
+  ],
+  "bynk.adapter.include_duplicate": [
+    "/book/reference/adapters/#anatomy"
+  ],
+  "bynk.adapter.include_kind": [
+    "/book/reference/adapters/#anatomy"
+  ],
+  "bynk.adapter.include_missing": [
+    "/book/reference/adapters/#anatomy"
+  ],
+  "bynk.adapter.include_outside": [
+    "/book/reference/adapters/#anatomy"
+  ],
+  "bynk.adapter.no_binding": [
+    "/book/reference/adapters/#anatomy",
+    "/book/troubleshooting/adapter-errors/"
+  ],
+  "bynk.adapter.provider_has_body": [
+    "/book/reference/adapters/#anatomy",
+    "/book/troubleshooting/adapter-errors/"
+  ],
+  "bynk.agent.class_conflict": [
+    "/book/reference/agents/#renaming-and-removing-an-agent"
+  ],
+  "bynk.agent.construction_arity": [
+    "/book/reference/agents/#addressing-and-calling"
+  ],
+  "bynk.agent.handler_arity": [
+    "/book/reference/agents/#addressing-and-calling"
+  ],
+  "bynk.agent.handler_not_found": [
+    "/book/reference/agents/#addressing-and-calling"
+  ],
+  "bynk.agent.key_mismatch": [
+    "/book/reference/agents/#addressing-and-calling"
+  ],
+  "bynk.agent.migrate_duplicate": [
+    "/book/reference/agents/#migrations"
+  ],
+  "bynk.agent.migrate_duplicate_assignment": [
+    "/book/reference/agents/#migrations"
+  ],
+  "bynk.agent.migrate_impure": [
+    "/book/reference/agents/#migrations"
+  ],
+  "bynk.agent.migrate_incomplete": [
+    "/book/reference/agents/#migrations"
+  ],
+  "bynk.agent.migrate_shape_mismatch": [
+    "/book/reference/agents/#migrations"
+  ],
+  "bynk.agent.migrate_unknown_version": [
+    "/book/reference/agents/#migrations"
+  ],
+  "bynk.agent.non_additive_state_change": [
+    "/book/reference/agents/#migrations",
+    "/book/troubleshooting/agent-non-additive-state-change/"
+  ],
+  "bynk.agent.outside_context": [
+    "/book/reference/agents/#declaration"
+  ],
+  "bynk.agent.removed_live": [
+    "/book/reference/agents/#renaming-and-removing-an-agent"
+  ],
+  "bynk.agent.replaces_live": [
+    "/book/reference/agents/#renaming-and-removing-an-agent"
+  ],
+  "bynk.agent.replaces_unknown": [
+    "/book/reference/agents/#renaming-and-removing-an-agent"
+  ],
+  "bynk.agent.return_not_effect": [
+    "/book/reference/agents/#declaration"
+  ],
+  "bynk.agent.state_name_conflict": [
+    "/book/reference/agents/#reading-and-writing-state"
+  ],
+  "bynk.agents.bad_state_initialiser": [
+    "/book/reference/agents/#state-initialisation",
+    "/book/troubleshooting/agents-bad-state-initialiser/",
+    "/book/troubleshooting/agents-non-zeroable-state-field/"
+  ],
+  "bynk.agents.non_zeroable_state_field": [
+    "/book/reference/agents/#state-initialisation",
+    "/book/troubleshooting/agents-non-zeroable-state-field/"
+  ],
+  "bynk.asset.duplicate": [
+    "/book/reference/assets/#declaring-an-asset"
+  ],
+  "bynk.asset.invalid_at_path": [
+    "/book/reference/assets/#fixed-paths"
+  ],
+  "bynk.asset.missing_file": [
+    "/book/reference/assets/#declaring-an-asset"
+  ],
+  "bynk.asset.outside_assets_dir": [
+    "/book/reference/assets/#declaring-an-asset"
+  ],
+  "bynk.asset.outside_context_or_commons": [
+    "/book/reference/assets/#declaring-an-asset"
+  ],
+  "bynk.asset.path_conflict": [
+    "/book/reference/assets/#fixed-paths"
+  ],
+  "bynk.asset.shadows_route": [
+    "/book/reference/assets/#fixed-paths"
+  ],
+  "bynk.asset.unsafe_path": [
+    "/book/reference/assets/#declaring-an-asset"
+  ],
+  "bynk.boundary.ambiguous_type": [
+    "/book/guides/program-structure/consume-services/#rename-an-exported-type-that-clashes-with-one-of-yours"
+  ],
+  "bynk.boundary.structural_mismatch": [
+    "/book/reference/refined-types/#across-a-context-boundary"
+  ],
+  "bynk.capability.base_not_instantiable": [
+    "/book/reference/capabilities/#derived-capabilities"
+  ],
+  "bynk.capability.derived_outside_context": [
+    "/book/reference/capabilities/#derived-capabilities"
+  ],
+  "bynk.capability.instance_only": [
+    "/book/reference/capabilities/#derived-capabilities"
+  ],
+  "bynk.capability.invalid_option": [
+    "/book/reference/capabilities/#derived-capabilities"
+  ],
+  "bynk.capability.missing_option": [
+    "/book/reference/capabilities/#derived-capabilities"
+  ],
+  "bynk.capability.not_provided": [
+    "/book/reference/capabilities/#providing-a-capability"
+  ],
+  "bynk.capability.op_arity": [
+    "/book/reference/capabilities/#declaring-a-capability"
+  ],
+  "bynk.capability.outside_context": [
+    "/book/reference/capabilities/#declaring-a-capability"
+  ],
+  "bynk.capability.provider_agent_cross_context": [
+    "/book/reference/capabilities/#cross-context-capabilities-exports-capability"
+  ],
+  "bynk.capability.unknown_base": [
+    "/book/reference/capabilities/#derived-capabilities"
+  ],
+  "bynk.capability.unknown_operation": [
+    "/book/reference/capabilities/#declaring-a-capability"
+  ],
+  "bynk.capability.unknown_option": [
+    "/book/reference/capabilities/#derived-capabilities"
+  ],
+  "bynk.cell.invalid_target": [
+    "/book/reference/agents/#reading-and-writing-state"
+  ],
+  "bynk.cell.self_reference": [
+    "/book/reference/agents/#reading-and-writing-state"
+  ],
+  "bynk.cloudflare.edge_cache_duplicate": [
+    "/book/guides/effects-and-capabilities/cache-at-the-edge/#turn-the-cache-on"
+  ],
+  "bynk.cloudflare.edge_cache_exported": [
+    "/book/guides/effects-and-capabilities/cache-at-the-edge/#purge-after-a-change"
+  ],
+  "bynk.cloudflare.edge_cache_in_agent": [
+    "/book/guides/effects-and-capabilities/cache-at-the-edge/#purge-after-a-change"
+  ],
+  "bynk.cloudflare.edge_cache_in_queue": [
+    "/book/guides/effects-and-capabilities/cache-at-the-edge/#purge-after-a-change"
+  ],
+  "bynk.cloudflare.edge_cache_in_schedule": [
+    "/book/guides/effects-and-capabilities/cache-at-the-edge/#purge-after-a-change"
+  ],
+  "bynk.cloudflare.edge_cache_public_authenticated": [
+    "/book/guides/effects-and-capabilities/cache-at-the-edge/#mark-what-may-be-cached"
+  ],
+  "bynk.consumes.alias_conflict": [
+    "/book/guides/program-structure/consume-services/#use-an-alias"
+  ],
+  "bynk.consumes.capability_name_clash": [
+    "/book/guides/effects-and-capabilities/share-across-contexts/#consume-it-with-a-qualified-given",
+    "/book/troubleshooting/adapter-errors/"
+  ],
+  "bynk.consumes.capability_not_selected": [
+    "/book/guides/program-structure/consume-services/#rename-an-exported-type-that-clashes-with-one-of-yours"
+  ],
+  "bynk.consumes.name_conflict": [
+    "/book/guides/program-structure/consume-services/#rename-an-exported-type-that-clashes-with-one-of-yours"
+  ],
+  "bynk.consumes.self_reference": [
+    "/book/guides/program-structure/consume-services/#declare-the-dependency-and-call-the-service"
+  ],
+  "bynk.consumes.service_arity": [
+    "/book/guides/program-structure/consume-services/#declare-the-dependency-and-call-the-service"
+  ],
+  "bynk.consumes.signature_type_unconsumed": [
+    "/book/guides/program-structure/consume-services/"
+  ],
+  "bynk.consumes.target_is_commons": [
+    "/book/guides/program-structure/how-a-program-is-shaped/#the-two-kinds-of-module"
+  ],
+  "bynk.consumes.type_alias_capability": [
+    "/book/guides/program-structure/consume-services/#rename-an-exported-type-that-clashes-with-one-of-yours"
+  ],
+  "bynk.consumes.type_alias_conflict": [
+    "/book/guides/program-structure/consume-services/#rename-an-exported-type-that-clashes-with-one-of-yours"
+  ],
+  "bynk.consumes.type_alias_repeated": [
+    "/book/guides/program-structure/consume-services/#rename-an-exported-type-that-clashes-with-one-of-yours"
+  ],
+  "bynk.consumes.type_alias_unknown_export": [
+    "/book/guides/program-structure/consume-services/#rename-an-exported-type-that-clashes-with-one-of-yours"
+  ],
+  "bynk.consumes.type_not_selected": [
+    "/book/guides/program-structure/consume-services/#rename-an-exported-type-that-clashes-with-one-of-yours"
+  ],
+  "bynk.consumes.unit_not_consumed": [
+    "/book/guides/program-structure/consume-services/#declare-the-dependency-and-call-the-service"
+  ],
+  "bynk.consumes.unknown_context": [
+    "/book/guides/program-structure/consume-services/#declare-the-dependency-and-call-the-service"
+  ],
+  "bynk.consumes.unknown_service": [
+    "/book/guides/program-structure/consume-services/#declare-the-dependency-and-call-the-service"
+  ],
+  "bynk.container.build_missing": [
+    "/book/reference/capabilities/#derived-capabilities"
+  ],
+  "bynk.container.build_path": [
+    "/book/reference/capabilities/#derived-capabilities"
+  ],
+  "bynk.container.output_outside_project": [
+    "/book/reference/capabilities/#derived-capabilities"
+  ],
+  "bynk.context.consumes_cycle": [
+    "/book/guides/projects-build-and-deployment/deploy-to-cloudflare/"
+  ],
+  "bynk.context.duplicate_binding": [
+    "/book/guides/projects-build-and-deployment/cloudflare-workers/#workers"
+  ],
+  "bynk.context.external_construction": [
+    "/book/reference/types/#opaque-types"
+  ],
+  "bynk.context.external_decode": [
+    "/book/reference/types/#opaque-types"
+  ],
+  "bynk.context.external_provider": [
+    "/book/reference/capabilities/#providing-a-capability",
+    "/book/troubleshooting/adapter-errors/"
+  ],
+  "bynk.context.opaque_inspection": [
+    "/book/reference/types/#opaque-types"
+  ],
+  "bynk.context.rebrand_construction": [
+    "/book/reference/types/"
+  ],
+  "bynk.contract.duplicate_name": [
+    "/book/reference/testing/#contracts",
+    "/book/troubleshooting/contract-errors/"
+  ],
+  "bynk.contract.impure_predicate": [
+    "/book/reference/testing/#contracts",
+    "/book/troubleshooting/contract-errors/"
+  ],
+  "bynk.contract.not_bool": [
+    "/book/reference/testing/#contracts",
+    "/book/troubleshooting/contract-errors/"
+  ],
+  "bynk.contract.restated_by_test": [
+    "/book/reference/testing/#contracts",
+    "/book/troubleshooting/contract-errors/"
+  ],
+  "bynk.contract.result_in_requires": [
+    "/book/reference/testing/#contracts",
+    "/book/troubleshooting/contract-errors/"
+  ],
+  "bynk.cron.bad_params": [
+    "/book/reference/cron/#handler-form",
+    "/book/troubleshooting/cron-errors/"
+  ],
+  "bynk.cron.duplicate_schedule": [
+    "/book/reference/cron/#handler-form",
+    "/book/troubleshooting/cron-errors/"
+  ],
+  "bynk.cron.invalid_schedule": [
+    "/book/reference/cron/#handler-form",
+    "/book/troubleshooting/cron-errors/"
+  ],
+  "bynk.cron.return_not_effect_result": [
+    "/book/reference/cron/#handler-form",
+    "/book/troubleshooting/cron-errors/"
+  ],
+  "bynk.d1.migration_name": [
+    "/book/reference/bynk-capabilities/#schema-migrations"
+  ],
+  "bynk.d1.select_field_missing": [
+    "/book/reference/bynk-capabilities/#sql-checked-against-the-migrations"
+  ],
+  "bynk.d1.sql_invalid": [
+    "/book/reference/bynk-capabilities/#sql-checked-against-the-migrations"
+  ],
+  "bynk.d1.sql_param_count": [
+    "/book/reference/bynk-capabilities/#sql-checked-against-the-migrations"
+  ],
+  "bynk.dependency.path_outside_root": [
+    "/book/guides/projects-build-and-deployment/share-code-between-projects/#what-the-checks-catch"
+  ],
+  "bynk.deploy.asset_path_conflict": [
+    "/docs/manifest/#worker-groups"
+  ],
+  "bynk.deploy.binding_collision": [
+    "/docs/manifest/#worker-groups"
+  ],
+  "bynk.deploy.context_in_two_groups": [
+    "/docs/manifest/#worker-groups"
+  ],
+  "bynk.deploy.duplicate_hostname": [
+    "/docs/manifest/#worker-groups"
+  ],
+  "bynk.deploy.empty_group": [
+    "/docs/manifest/#worker-groups"
+  ],
+  "bynk.deploy.group_name_conflict": [
+    "/docs/manifest/#worker-groups"
+  ],
+  "bynk.deploy.multiple_websocket_members": [
+    "/docs/manifest/#worker-groups"
+  ],
+  "bynk.deploy.not_a_context": [
+    "/docs/manifest/#worker-groups"
+  ],
+  "bynk.deploy.route_conflict": [
+    "/docs/manifest/#worker-groups"
+  ],
+  "bynk.deploy.service_name_conflict": [
+    "/docs/manifest/#worker-groups"
+  ],
+  "bynk.deploy.unknown_context": [
+    "/docs/manifest/#worker-groups"
+  ],
+  "bynk.deploy.worker_cycle": [
+    "/docs/manifest/#worker-groups"
+  ],
+  "bynk.detach.in_agent_handler": [
+    "/book/reference/capabilities/#detach"
+  ],
+  "bynk.detach.in_pure_context": [
+    "/book/reference/capabilities/#detach"
+  ],
+  "bynk.detach.store_op": [
+    "/book/reference/capabilities/#detach"
+  ],
+  "bynk.duration.literal_overflow": [
+    "/book/reference/types/#duration"
+  ],
+  "bynk.effect.bind_in_pure_context": [
+    "/book/guides/effects-and-capabilities/understand-the-capability-model/"
+  ],
+  "bynk.effect.bind_on_non_effect": [
+    "/book/guides/effects-and-capabilities/understand-the-capability-model/#why-effects-are-gated"
+  ],
+  "bynk.effect.capability_in_pure_context": [
+    "/book/guides/effects-and-capabilities/understand-the-capability-model/#why-effects-are-gated"
+  ],
+  "bynk.effect.cross_context_in_pure_context": [
+    "/book/guides/effects-and-capabilities/understand-the-capability-model/#why-effects-are-gated"
+  ],
+  "bynk.effect.do_discards_result": [
+    "/book/guides/effects-and-capabilities/understand-the-capability-model/#why-effects-are-gated"
+  ],
+  "bynk.effect.do_in_pure_context": [
+    "/book/guides/effects-and-capabilities/understand-the-capability-model/#why-effects-are-gated"
+  ],
+  "bynk.effect.do_on_non_effect": [
+    "/book/guides/effects-and-capabilities/understand-the-capability-model/#why-effects-are-gated"
+  ],
+  "bynk.effect.fn_value_in_pure_context": [
+    "/book/guides/effects-and-capabilities/understand-the-capability-model/"
+  ],
+  "bynk.effect.unbound_effect": [
+    "/book/guides/effects-and-capabilities/understand-the-capability-model/"
+  ],
+  "bynk.email.bad_params": [
+    "/book/reference/inbound-email/#handler-form"
+  ],
+  "bynk.email.duplicate_address": [
+    "/book/reference/inbound-email/#addresses"
+  ],
+  "bynk.email.duplicate_handler": [
+    "/book/reference/inbound-email/#handler-form"
+  ],
+  "bynk.email.invalid_address": [
+    "/book/reference/inbound-email/#addresses"
+  ],
+  "bynk.email.return_not_email_verdict": [
+    "/book/reference/inbound-email/#the-verdict"
+  ],
+  "bynk.embed.binary_content": [
+    "/book/reference/embeds/#what-the-text-is"
+  ],
+  "bynk.embed.duplicate": [
+    "/book/reference/embeds/#declaring-an-embed"
+  ],
+  "bynk.embed.invalid_encoding": [
+    "/book/reference/embeds/#what-the-text-is"
+  ],
+  "bynk.embed.missing_file": [
+    "/book/reference/embeds/#declaring-an-embed"
+  ],
+  "bynk.embed.outside_context_or_commons": [
+    "/book/reference/embeds/#declaring-an-embed"
+  ],
+  "bynk.embed.outside_embeds_dir": [
+    "/book/reference/embeds/#declaring-an-embed"
+  ],
+  "bynk.embed.unsafe_path": [
+    "/book/reference/embeds/#declaring-an-embed"
+  ],
+  "bynk.event.bad_params": [
+    "/book/guides/events/understand-events/#the-envelope-and-idempotent-handling"
+  ],
+  "bynk.event.bad_schema_dispatch": [
+    "/book/guides/events/understand-events/#dispatching-by-version-with-via-scheman"
+  ],
+  "bynk.event.bad_schema_version": [
+    "/book/guides/events/understand-events/#asserting-a-schema-version-with-scheman"
+  ],
+  "bynk.event.duplicate_handler": [
+    "/book/guides/events/understand-events/#the-three-pieces"
+  ],
+  "bynk.event.emit_not_an_event": [
+    "/book/guides/events/understand-events/#only-the-declaring-context-may-emit"
+  ],
+  "bynk.event.emit_outside_owner": [
+    "/book/guides/events/understand-events/#only-the-declaring-context-may-emit"
+  ],
+  "bynk.event.handler_param_type_mismatch": [
+    "/book/guides/events/understand-events/#the-three-pieces"
+  ],
+  "bynk.event.outside_context": [
+    "/book/guides/events/understand-events/#the-three-pieces"
+  ],
+  "bynk.event.pattern_duplicate_field": [
+    "/book/guides/events/understand-events/#filtering-delivery-with-a-pattern"
+  ],
+  "bynk.event.pattern_type_mismatch": [
+    "/book/guides/events/understand-events/#filtering-delivery-with-a-pattern"
+  ],
+  "bynk.event.pattern_unknown_field": [
+    "/book/guides/events/understand-events/#filtering-delivery-with-a-pattern"
+  ],
+  "bynk.event.pattern_unknown_variant": [
+    "/book/guides/events/understand-events/#filtering-delivery-with-a-pattern"
+  ],
+  "bynk.event.pattern_variant_payload": [
+    "/book/guides/events/understand-events/#filtering-delivery-with-a-pattern"
+  ],
+  "bynk.event.return_not_effect_unit": [
+    "/book/guides/events/understand-events/#emission-is-fire-and-forget-and-release-at-commit"
+  ],
+  "bynk.event.unknown_annotation": [
+    "/book/guides/events/understand-events/#asserting-a-schema-version-with-scheman"
+  ],
+  "bynk.event.unknown_subscription": [
+    "/book/guides/events/understand-events/#the-three-pieces"
+  ],
+  "bynk.exec.unavailable": [
+    "/book/reference/capabilities/#within"
+  ],
+  "bynk.expect.faults_not_effect": [
+    "/book/reference/testing/#faults"
+  ],
+  "bynk.expect.impure_predicate": [
+    "/book/reference/testing/#expect"
+  ],
+  "bynk.expect.not_bool": [
+    "/book/reference/testing/#expect"
+  ],
+  "bynk.expect.outside_case": [
+    "/book/reference/testing/#expect",
+    "/book/troubleshooting/observation-errors/"
+  ],
+  "bynk.exports.capability_not_provided": [
+    "/book/guides/effects-and-capabilities/share-across-contexts/#export-the-capability-from-the-providing-context",
+    "/book/troubleshooting/exports-capability-errors/"
+  ],
+  "bynk.exports.conflicting_visibility": [
+    "/book/reference/types/#opaque-types"
+  ],
+  "bynk.exports.derived_capability": [
+    "/book/reference/capabilities/#derived-capabilities"
+  ],
+  "bynk.exports.duplicate_export": [
+    "/book/reference/types/#opaque-types"
+  ],
+  "bynk.exports.duplicate_in_clause": [
+    "/book/reference/types/#opaque-types"
+  ],
+  "bynk.exports.undeclared_capability": [
+    "/book/guides/effects-and-capabilities/share-across-contexts/#export-the-capability-from-the-providing-context",
+    "/book/troubleshooting/exports-capability-errors/"
+  ],
+  "bynk.exports.undeclared_type": [
+    "/book/reference/types/#opaque-types"
+  ],
+  "bynk.fixture.binary_content": [
+    "/book/reference/fixtures/#what-the-text-is"
+  ],
+  "bynk.fixture.duplicate": [
+    "/book/reference/fixtures/#declaring-a-fixture"
+  ],
+  "bynk.fixture.invalid_encoding": [
+    "/book/reference/fixtures/#what-the-text-is"
+  ],
+  "bynk.fixture.missing_file": [
+    "/book/reference/fixtures/#declaring-a-fixture"
+  ],
+  "bynk.fixture.outside_fixtures_dir": [
+    "/book/reference/fixtures/#declaring-a-fixture"
+  ],
+  "bynk.fixture.unsafe_path": [
+    "/book/reference/fixtures/#declaring-a-fixture"
+  ],
+  "bynk.generics.ambiguous_instantiation": [
+    "/book/reference/generics/#ord"
+  ],
+  "bynk.generics.bound_on_capability_op": [
+    "/book/reference/generics/#capability-operations-take-key-and-codable"
+  ],
+  "bynk.generics.codable_op_return_not_first_party": [
+    "/book/reference/generics/#capability-operations-take-key-and-codable"
+  ],
+  "bynk.generics.duplicate_type_param": [
+    "/book/reference/generics/#type-parameters"
+  ],
+  "bynk.generics.generic_non_record": [
+    "/book/reference/types/#generic-record-types"
+  ],
+  "bynk.generics.generic_sum_embeds": [
+    "/book/reference/types/#generic-sums"
+  ],
+  "bynk.generics.internal_op_annotation": [
+    "/book/reference/generics/#capability-operations-take-key-and-codable"
+  ],
+  "bynk.generics.method_on_generic_type": [
+    "/book/reference/generics/#static-methods-on-generic-types"
+  ],
+  "bynk.generics.missing_codable_bound": [
+    "/book/reference/generics/#codable",
+    "/book/troubleshooting/generics-missing-codable-bound/"
+  ],
+  "bynk.generics.missing_eq_bound": [
+    "/book/reference/generics/#bounds",
+    "/book/troubleshooting/generics-missing-eq-bound/"
+  ],
+  "bynk.generics.missing_key_bound": [
+    "/book/reference/generics/#key",
+    "/book/troubleshooting/generics-missing-key-bound/"
+  ],
+  "bynk.generics.missing_ord_bound": [
+    "/book/reference/generics/#ord",
+    "/book/troubleshooting/generics-missing-ord-bound/"
+  ],
+  "bynk.generics.polymorphic_recursion": [
+    "/book/guides/type-system/recursive-generic-types/"
+  ],
+  "bynk.generics.recursive_generic_at_boundary": [
+    "/book/guides/type-system/recursive-generic-types/#where-it-cannot-go-yet"
+  ],
+  "bynk.generics.redundant_eq_bound": [
+    "/book/troubleshooting/generics-missing-key-bound/",
+    "/book/troubleshooting/generics-missing-ord-bound/"
+  ],
+  "bynk.generics.type_arg_count": [
+    "/book/reference/generics/#type-parameters"
+  ],
+  "bynk.generics.type_arg_mismatch": [
+    "/book/reference/generics/#type-parameters"
+  ],
+  "bynk.generics.uninferable_type_arg": [
+    "/book/reference/generics/#the-expected-type-for-every-generic-call"
+  ],
+  "bynk.generics.unknown_constraint": [
+    "/book/reference/generics/#bounds"
+  ],
+  "bynk.generics.unknown_where_param": [
+    "/book/reference/generics/#bounds"
+  ],
+  "bynk.given.cross_context_unknown_capability": [
+    "/book/reference/capabilities/",
+    "/book/troubleshooting/exports-capability-errors/"
+  ],
+  "bynk.given.fn_outside_context": [
+    "/book/reference/capabilities/#capabilities-in-functions"
+  ],
+  "bynk.given.fn_unsupported": [
+    "/book/reference/capabilities/#capabilities-in-functions"
+  ],
+  "bynk.given.missing_for_call": [
+    "/book/reference/capabilities/#capabilities-in-functions"
+  ],
+  "bynk.given.undeclared_capability": [
+    "/book/guides/effects-and-capabilities/understand-the-capability-model/"
+  ],
+  "bynk.given.unknown_capability": [
+    "/book/reference/capabilities/#declaring-a-capability"
+  ],
+  "bynk.held.branch_divergence": [
+    "/book/reference/websocket/#sending-and-broadcasting"
+  ],
+  "bynk.held.consume_on_borrow": [
+    "/book/reference/websocket/#sending-and-broadcasting"
+  ],
+  "bynk.held.leak": [
+    "/book/reference/websocket/#service-form"
+  ],
+  "bynk.held.query_accessor_on_held_map": [
+    "/book/reference/websocket/#sending-and-broadcasting"
+  ],
+  "bynk.held.unsupported_map_op": [
+    "/book/reference/websocket/#sending-and-broadcasting"
+  ],
+  "bynk.held.unsupported_storage": [
+    "/book/reference/types/#connection"
+  ],
+  "bynk.held.use_after_consume": [
+    "/book/reference/websocket/#sending-and-broadcasting"
+  ],
+  "bynk.history.not_an_agent": [
+    "/book/reference/testing/#history-properties",
+    "/book/troubleshooting/history-errors/"
+  ],
+  "bynk.history.not_generable": [
+    "/book/reference/testing/#history-properties",
+    "/book/troubleshooting/history-errors/"
+  ],
+  "bynk.history.outside_property": [
+    "/book/reference/testing/#history-properties",
+    "/book/troubleshooting/history-errors/"
+  ],
+  "bynk.history.restates_invariant": [
+    "/book/reference/testing/#history-properties",
+    "/book/troubleshooting/history-errors/"
+  ],
+  "bynk.http.body_kind_conflict": [
+    "/book/reference/http/#raw-request-bodies"
+  ],
+  "bynk.http.body_on_get_or_delete": [
+    "/book/reference/http/#handler-form"
+  ],
+  "bynk.http.cache_bad_immutable": [
+    "/book/reference/http/#caching"
+  ],
+  "bynk.http.cache_bad_max_age": [
+    "/book/reference/http/#caching"
+  ],
+  "bynk.http.cache_bad_scope": [
+    "/book/reference/http/#caching"
+  ],
+  "bynk.http.cache_duplicate": [
+    "/book/reference/http/#caching"
+  ],
+  "bynk.http.cache_max_age_fractional_seconds": [
+    "/book/reference/http/#caching"
+  ],
+  "bynk.http.cache_on_non_get": [
+    "/book/reference/http/#caching"
+  ],
+  "bynk.http.cache_public_reads_cookies": [
+    "/book/reference/http/#caching"
+  ],
+  "bynk.http.cache_unknown_arg": [
+    "/book/reference/http/#caching"
+  ],
+  "bynk.http.cf_wrong_type": [
+    "/book/reference/http/#request-cf"
+  ],
+  "bynk.http.cookie_cross_site_without_credentials": [
+    "/book/reference/http/#setting-cookies"
+  ],
+  "bynk.http.cookie_domain_widens": [
+    "/book/reference/http/#setting-cookies"
+  ],
+  "bynk.http.cookie_field_arity": [
+    "/book/reference/http/#setting-cookies"
+  ],
+  "bynk.http.cookie_field_list": [
+    "/book/reference/http/#setting-cookies"
+  ],
+  "bynk.http.cookie_field_not_cookie_record": [
+    "/book/reference/http/#setting-cookies"
+  ],
+  "bynk.http.cookie_field_unknown": [
+    "/book/reference/http/#setting-cookies"
+  ],
+  "bynk.http.cookie_host_prefix": [
+    "/book/reference/http/#setting-cookies"
+  ],
+  "bynk.http.cookie_partitioned_insecure": [
+    "/book/reference/http/#setting-cookies"
+  ],
+  "bynk.http.cookie_samesite_none_insecure": [
+    "/book/reference/http/#setting-cookies"
+  ],
+  "bynk.http.cookie_secure_prefix": [
+    "/book/reference/http/#setting-cookies"
+  ],
+  "bynk.http.cookie_untyped_has_field": [
+    "/book/reference/http/#typed-cookie-write"
+  ],
+  "bynk.http.cookie_value_undecodable": [
+    "/book/reference/http/#typed-cookie-write"
+  ],
+  "bynk.http.cookies_field_not_stringy": [
+    "/book/reference/http/#cookies"
+  ],
+  "bynk.http.cookies_not_http": [
+    "/book/reference/http/#request-cookies"
+  ],
+  "bynk.http.cookies_wrong_type": [
+    "/book/reference/http/#cookies"
+  ],
+  "bynk.http.cors_invalid_field": [
+    "/book/reference/http/#cors"
+  ],
+  "bynk.http.cors_invalid_origins": [
+    "/book/reference/http/#cors"
+  ],
+  "bynk.http.cors_not_http": [
+    "/book/reference/http/#cors"
+  ],
+  "bynk.http.cors_unknown_field": [
+    "/book/reference/http/#cors"
+  ],
+  "bynk.http.cors_wildcard_credentials": [
+    "/book/reference/http/#cors"
+  ],
+  "bynk.http.duplicate_rejected": [
+    "/book/reference/http/#rendering-rejections"
+  ],
+  "bynk.http.duplicate_route": [
+    "/book/reference/http/#handler-form"
+  ],
+  "bynk.http.error_status_position": [
+    "/book/reference/http/#error-bodies"
+  ],
+  "bynk.http.extra_param": [
+    "/book/reference/http/#handler-form"
+  ],
+  "bynk.http.form_body_not_record": [
+    "/book/reference/http/#form-bodies"
+  ],
+  "bynk.http.form_duplicate": [
+    "/book/reference/http/#form-bodies"
+  ],
+  "bynk.http.form_field_not_stringy": [
+    "/book/reference/http/#form-bodies"
+  ],
+  "bynk.http.form_on_bodyless": [
+    "/book/reference/http/#form-bodies"
+  ],
+  "bynk.http.form_on_sum_route": [
+    "/book/reference/http/#form-bodies"
+  ],
+  "bynk.http.form_unknown_arg": [
+    "/book/reference/http/#form-bodies"
+  ],
+  "bynk.http.headers_wrong_type": [
+    "/book/reference/http/#request-headers"
+  ],
+  "bynk.http.invalid_path": [
+    "/book/reference/http/#handler-form"
+  ],
+  "bynk.http.json_duplicate": [
+    "/book/reference/http/#json-for-non-bynk-clients"
+  ],
+  "bynk.http.json_invalid_arg": [
+    "/book/reference/http/#json-for-non-bynk-clients"
+  ],
+  "bynk.http.json_invalid_field": [
+    "/book/reference/http/#json-for-non-bynk-clients"
+  ],
+  "bynk.http.json_not_http": [
+    "/book/reference/http/#json-for-non-bynk-clients"
+  ],
+  "bynk.http.json_on_non_http": [
+    "/book/reference/http/#json-for-non-bynk-clients"
+  ],
+  "bynk.http.json_unknown_arg": [
+    "/book/reference/http/#json-for-non-bynk-clients"
+  ],
+  "bynk.http.json_unknown_field": [
+    "/book/reference/http/#json-for-non-bynk-clients"
+  ],
+  "bynk.http.limit_bad_max_body": [
+    "/book/reference/http/#request-body-limits"
+  ],
+  "bynk.http.limit_bad_max_file": [
+    "/book/reference/http/#request-body-limits"
+  ],
+  "bynk.http.limit_duplicate": [
+    "/book/reference/http/#request-body-limits"
+  ],
+  "bynk.http.limit_on_bodyless": [
+    "/book/reference/http/#request-body-limits"
+  ],
+  "bynk.http.limit_on_non_multipart": [
+    "/book/reference/http/#request-body-limits"
+  ],
+  "bynk.http.limit_unknown_arg": [
+    "/book/reference/http/#request-body-limits"
+  ],
+  "bynk.http.limits_invalid_field": [
+    "/book/reference/http/#request-body-limits"
+  ],
+  "bynk.http.limits_not_http": [
+    "/book/reference/http/#request-body-limits"
+  ],
+  "bynk.http.limits_unknown_field": [
+    "/book/reference/http/#request-body-limits"
+  ],
+  "bynk.http.multipart_body_unbounded": [
+    "/book/reference/http/#multipart-bodies"
+  ],
+  "bynk.http.path_param_not_stringy": [
+    "/book/reference/http/#handler-form"
+  ],
+  "bynk.http.query_field_not_stringy": [
+    "/book/reference/http/#typed-query"
+  ],
+  "bynk.http.query_not_http": [
+    "/book/reference/http/#request-query"
+  ],
+  "bynk.http.query_wrong_type": [
+    "/book/reference/http/#typed-query"
+  ],
+  "bynk.http.raw_bad_content_type": [
+    "/book/reference/http/#raw-request-bodies"
+  ],
+  "bynk.http.raw_body_not_bytes": [
+    "/book/reference/http/#raw-request-bodies"
+  ],
+  "bynk.http.raw_body_unbounded": [
+    "/book/reference/http/#raw-request-bodies"
+  ],
+  "bynk.http.raw_duplicate": [
+    "/book/reference/http/#raw-request-bodies"
+  ],
+  "bynk.http.raw_error_status": [
+    "/book/reference/http/#error-bodies"
+  ],
+  "bynk.http.raw_on_bodyless": [
+    "/book/reference/http/#raw-request-bodies"
+  ],
+  "bynk.http.raw_unknown_arg": [
+    "/book/reference/http/#raw-request-bodies"
+  ],
+  "bynk.http.rejected_signature": [
+    "/book/reference/http/#rendering-rejections"
+  ],
+  "bynk.http.reserved_prefix": [
+    "/book/reference/http/#handler-form"
+  ],
+  "bynk.http.reserved_route_syntax": [
+    "/book/reference/http/#handler-form"
+  ],
+  "bynk.http.return_not_effect_http_result": [
+    "/book/reference/http/#handler-form"
+  ],
+  "bynk.http.security_invalid_field": [
+    "/book/reference/http/#security-headers"
+  ],
+  "bynk.http.security_not_http": [
+    "/book/reference/http/#security-headers"
+  ],
+  "bynk.http.security_unknown_field": [
+    "/book/reference/http/#security-headers"
+  ],
+  "bynk.http.stream_body_not_raw": [
+    "/book/reference/http/#streamed-request-bodies"
+  ],
+  "bynk.http.stream_body_on_sum_route": [
+    "/book/reference/http/#streamed-request-bodies"
+  ],
+  "bynk.http.stream_body_signature": [
+    "/book/reference/http/#streamed-request-bodies"
+  ],
+  "bynk.http.unbound_path_param": [
+    "/book/reference/http/#handler-form"
+  ],
+  "bynk.http.unknown_handler_annotation": [
+    "/book/reference/http/#handler-form"
+  ],
+  "bynk.index.bad_argument": [
+    "/book/reference/agents/#storage-annotations"
+  ],
+  "bynk.index.unkeyable_key": [
+    "/book/reference/agents/#storage-annotations"
+  ],
+  "bynk.internal.missing_checker_fact": [
+    "/book/reference/diagnostics/#internal-errors"
+  ],
+  "bynk.invariant.cross_agent_reference": [
+    "/book/reference/agent-invariants/#the-predicate-surface"
+  ],
+  "bynk.invariant.duplicate_name": [
+    "/book/reference/agent-invariants/#the-predicate-surface"
+  ],
+  "bynk.invariant.impure_predicate": [
+    "/book/reference/agent-invariants/#the-predicate-surface"
+  ],
+  "bynk.invariant.not_bool": [
+    "/book/reference/agent-invariants/#the-predicate-surface"
+  ],
+  "bynk.json.encode_plain_generic": [
+    "/book/reference/types/#plain-json"
+  ],
+  "bynk.json.nested_option_plain": [
+    "/book/reference/types/#plain-json"
+  ],
+  "bynk.lambda.unannotated_param": [
+    "/book/spec/static-semantics/"
+  ],
+  "bynk.lex.bad_escape": [
+    "/book/spec/lexical-grammar/#32-literals"
+  ],
+  "bynk.lex.bad_unicode_escape": [
+    "/book/spec/lexical-grammar/#322-string_literal"
+  ],
+  "bynk.lex.float_literal_overflow": [
+    "/book/spec/lexical-grammar/#321a-float_literal"
+  ],
+  "bynk.lex.integer_overflow": [
+    "/book/spec/lexical-grammar/#32-literals"
+  ],
+  "bynk.lex.legacy_comment": [
+    "/book/spec/lexical-grammar/#333-retired-spellings"
+  ],
+  "bynk.lex.legacy_doc_line": [
+    "/book/spec/lexical-grammar/#333-retired-spellings"
+  ],
+  "bynk.lex.slash_doc": [
+    "/book/spec/lexical-grammar/#333-retired-spellings"
+  ],
+  "bynk.lex.unclosed_doc_block": [
+    "/book/spec/lexical-grammar/#332-doc-blocks"
+  ],
+  "bynk.lex.unexpected_character": [
+    "/book/spec/lexical-grammar/#35-lexical-errors"
+  ],
+  "bynk.lex.unterminated_string": [
+    "/book/spec/lexical-grammar/#32-literals"
+  ],
+  "bynk.messages.format_mismatch": [
+    "/book/guides/localisation/format-with-icu/#what-the-compiler-checks"
+  ],
+  "bynk.messages.incomplete": [
+    "/book/guides/localisation/declare-a-message-bundle/#adding-a-locale"
+  ],
+  "bynk.messages.invalid_locale_tag": [
+    "/book/guides/localisation/declare-a-message-bundle/#adding-a-locale"
+  ],
+  "bynk.messages.malformed_icu_syntax": [
+    "/book/guides/localisation/format-with-icu/#what-the-compiler-checks"
+  ],
+  "bynk.messages.missing_locale_dependency": [
+    "/book/guides/localisation/declare-a-message-bundle/#the-smallest-bundle"
+  ],
+  "bynk.messages.missing_reference": [
+    "/book/guides/localisation/declare-a-message-bundle/#the-smallest-bundle"
+  ],
+  "bynk.messages.multiple_reference": [
+    "/book/guides/localisation/declare-a-message-bundle/#the-smallest-bundle"
+  ],
+  "bynk.messages.outside_commons": [
+    "/book/guides/localisation/declare-a-message-bundle/#the-smallest-bundle"
+  ],
+  "bynk.messages.placeholder_mismatch": [
+    "/book/guides/localisation/declare-a-message-bundle/#adding-a-locale"
+  ],
+  "bynk.mysql.sql_invalid": [
+    "/book/reference/bynk-capabilities/#mysql-sql-checked-for-syntax"
+  ],
+  "bynk.mysql.sql_param_count": [
+    "/book/reference/bynk-capabilities/#mysql-sql-checked-for-syntax"
+  ],
+  "bynk.namespace.reserved": [
+    "/book/spec/static-semantics/",
+    "/book/troubleshooting/adapter-errors/"
+  ],
+  "bynk.observe.impure_with": [
+    "/book/reference/testing/#observation",
+    "/book/troubleshooting/observation-errors/"
+  ],
+  "bynk.observe.not_a_seam": [
+    "/book/reference/testing/#observation",
+    "/book/troubleshooting/observation-errors/"
+  ],
+  "bynk.observe.trace_outside_test": [
+    "/book/reference/testing/#observation",
+    "/book/troubleshooting/observation-errors/"
+  ],
+  "bynk.observe.unknown_op": [
+    "/book/reference/testing/#observation",
+    "/book/troubleshooting/observation-errors/"
+  ],
+  "bynk.observe.with_not_bool": [
+    "/book/reference/testing/#observation",
+    "/book/troubleshooting/observation-errors/"
+  ],
+  "bynk.package.alias_shadows_unit": [
+    "/book/guides/projects-build-and-deployment/share-code-between-projects/#what-the-checks-catch"
+  ],
+  "bynk.package.dependency_cycle": [
+    "/book/guides/projects-build-and-deployment/share-code-between-projects/#what-the-checks-catch"
+  ],
+  "bynk.package.dependency_not_found": [
+    "/book/guides/projects-build-and-deployment/share-code-between-projects/#depend-on-it"
+  ],
+  "bynk.package.dev_dependency_in_source": [
+    "/book/guides/projects-build-and-deployment/share-code-between-projects/#dependencies-only-tests-use"
+  ],
+  "bynk.package.duplicate_source": [
+    "/book/guides/projects-build-and-deployment/share-code-between-projects/#what-the-checks-catch"
+  ],
+  "bynk.package.name_mismatch": [
+    "/book/guides/projects-build-and-deployment/share-code-between-projects/#what-the-checks-catch"
+  ],
+  "bynk.package.unit_not_exported": [
+    "/book/guides/projects-build-and-deployment/share-code-between-projects/#what-the-checks-catch"
+  ],
+  "bynk.package.unknown_unit": [
+    "/book/guides/projects-build-and-deployment/share-code-between-projects/#what-the-checks-catch"
+  ],
+  "bynk.package.unsupported_in_dependency": [
+    "/book/reference/assets/#declaring-an-asset"
+  ],
+  "bynk.par.invalid_statement": [
+    "/book/reference/capabilities/#par"
+  ],
+  "bynk.par.question_in_join": [
+    "/book/reference/capabilities/#par"
+  ],
+  "bynk.par.sibling_name": [
+    "/book/reference/capabilities/#par"
+  ],
+  "bynk.par.store_write_in_closure": [
+    "/book/reference/capabilities/#par"
+  ],
+  "bynk.parse.bare_expression_statement": [
+    "/book/spec/syntactic-grammar/"
+  ],
+  "bynk.parse.clause_after_statement": [
+    "/book/reference/testing/"
+  ],
+  "bynk.parse.const_missing_type": [
+    "/book/reference/constants/#declaring-a-constant"
+  ],
+  "bynk.parse.consumes_after_decls": [
+    "/book/spec/syntactic-grammar/"
+  ],
+  "bynk.parse.dangling_handler_annotation": [
+    "/book/spec/static-semantics/#cache"
+  ],
+  "bynk.parse.doc_block_contains_code": [
+    "/book/spec/lexical-grammar/#332-doc-blocks"
+  ],
+  "bynk.parse.duplicate_cors": [
+    "/book/reference/http/#cors"
+  ],
+  "bynk.parse.duplicate_json": [
+    "/book/reference/http/#json-for-non-bynk-clients"
+  ],
+  "bynk.parse.duplicate_limits": [
+    "/book/reference/http/#request-body-limits"
+  ],
+  "bynk.parse.duplicate_security": [
+    "/book/reference/http/#security-headers"
+  ],
+  "bynk.parse.empty_agent": [
+    "/book/reference/agents/#declaration"
+  ],
+  "bynk.parse.empty_capability": [
+    "/book/reference/capabilities/#declaring-a-capability"
+  ],
+  "bynk.parse.empty_interpolation": [
+    "/book/spec/lexical-grammar/#322a-string_interpolation"
+  ],
+  "bynk.parse.empty_match": [
+    "/book/reference/types/#matching"
+  ],
+  "bynk.parse.empty_service": [
+    "/book/spec/syntactic-grammar/#441-service_decl"
+  ],
+  "bynk.parse.event_pattern_empty": [
+    "/book/guides/events/understand-events/#filtering-delivery-with-a-pattern"
+  ],
+  "bynk.parse.expected_agent_key": [
+    "/book/reference/agents/#declaration"
+  ],
+  "bynk.parse.expected_agent_storage": [
+    "/book/reference/agents/#declaration"
+  ],
+  "bynk.parse.expected_base_type": [
+    "/book/reference/grammar/#rule-sum_type"
+  ],
+  "bynk.parse.expected_capability_op": [
+    "/book/reference/grammar/#rule-capability_op"
+  ],
+  "bynk.parse.expected_expression": [
+    "/book/reference/grammar/#rule-record_construction"
+  ],
+  "bynk.parse.expected_handler": [
+    "/book/reference/grammar/#rule-handler"
+  ],
+  "bynk.parse.expected_item": [
+    "/book/reference/grammar/#rule-source_file"
+  ],
+  "bynk.parse.expected_predicate": [
+    "/book/reference/refined-types/#predicates"
+  ],
+  "bynk.parse.expected_provider_op": [
+    "/book/reference/grammar/#rule-provider_op"
+  ],
+  "bynk.parse.expected_token": [
+    "/book/reference/grammar/#rule-fn_decl",
+    "/book/troubleshooting/integration-errors/"
+  ],
+  "bynk.parse.expected_type": [
+    "/book/reference/grammar/#rule-_type_ref"
+  ],
+  "bynk.parse.expected_visibility": [
+    "/book/reference/grammar/#rule-exports_decl"
+  ],
+  "bynk.parse.exports_after_decls": [
+    "/book/spec/syntactic-grammar/"
+  ],
+  "bynk.parse.extra_tokens": [
+    "/book/reference/grammar/#rule-source_file"
+  ],
+  "bynk.parse.generic_arg_count": [
+    "/book/reference/types/#built-in-generic-types"
+  ],
+  "bynk.parse.handler_in_agent": [
+    "/book/reference/agents/#declaration",
+    "/book/troubleshooting/cron-errors/",
+    "/book/troubleshooting/queue-errors/"
+  ],
+  "bynk.parse.invariant_after_handler": [
+    "/book/reference/agent-invariants/#declaration"
+  ],
+  "bynk.parse.keyword_field_shorthand": [
+    "/book/reference/types/#keyword-field-names"
+  ],
+  "bynk.parse.lambda_pattern_annotation": [
+    "/book/spec/syntactic-grammar/#469b-lambda_param"
+  ],
+  "bynk.parse.lambda_pattern_not_record": [
+    "/book/spec/syntactic-grammar/#469b-lambda_param"
+  ],
+  "bynk.parse.lambda_pattern_refutable": [
+    "/book/spec/syntactic-grammar/#469b-lambda_param"
+  ],
+  "bynk.parse.let_else_on_binding": [
+    "/book/spec/syntactic-grammar/#484a-let_else_stmt-2010"
+  ],
+  "bynk.parse.let_pattern_annotation": [
+    "/book/spec/syntactic-grammar/#484a-let_else_stmt-2010"
+  ],
+  "bynk.parse.let_pattern_without_else": [
+    "/book/guides/type-system/destructure-a-record-with-let/#when-a-field-must-match"
+  ],
+  "bynk.parse.list_rest_not_last": [
+    "/book/reference/types/#list-patterns"
+  ],
+  "bynk.parse.malformed_float_literal": [
+    "/book/spec/lexical-grammar/#321a-float_literal"
+  ],
+  "bynk.parse.match_ends_block": [
+    "/book/guides/type-system/match/#flatten-a-staircase"
+  ],
+  "bynk.parse.migrate_after_handler": [
+    "/book/reference/agents/#migrations"
+  ],
+  "bynk.parse.migrate_item": [
+    "/book/reference/agents/#migrations"
+  ],
+  "bynk.parse.multiple_docs": [
+    "/book/spec/static-semantics/#one-doc-per-target"
+  ],
+  "bynk.parse.no_remainder_operator": [
+    "/book/reference/operators/#remainder"
+  ],
+  "bynk.parse.non_associative": [
+    "/book/reference/operators/#precedence"
+  ],
+  "bynk.parse.policy_order": [
+    "/book/reference/http/#cors"
+  ],
+  "bynk.parse.record_pattern_in_is_unparenthesised": [
+    "/book/spec/syntactic-grammar/#4711-record_pattern"
+  ],
+  "bynk.parse.record_pattern_without_rest": [
+    "/book/reference/types/#record-patterns"
+  ],
+  "bynk.parse.refined_pattern_inner": [
+    "/book/spec/syntactic-grammar/#4710-refined_pattern"
+  ],
+  "bynk.parse.removed_send_arrow": [
+    "/book/reference/capabilities/#detach"
+  ],
+  "bynk.parse.reserved_keyword": [
+    "/book/reference/keywords/#hard-keywords"
+  ],
+  "bynk.parse.self_outside_method": [
+    "/book/spec/syntactic-grammar/"
+  ],
+  "bynk.parse.storage_after_phase": [
+    "/book/reference/agents/#declaration"
+  ],
+  "bynk.parse.transition_after_handler": [
+    "/book/reference/agent-invariants/#step-invariants",
+    "/book/troubleshooting/transition-errors/"
+  ],
+  "bynk.parse.unexpected_eof": [
+    "/book/reference/grammar/#rule-commons_decl"
+  ],
+  "bynk.parse.unknown_effect_method": [
+    "/book/spec/syntactic-grammar/#4619-effect_pure_expr"
+  ],
+  "bynk.parse.unknown_handler_kind": [
+    "/book/spec/syntactic-grammar/#442a-handler"
+  ],
+  "bynk.parse.unknown_predicate": [
+    "/book/spec/type-system/#63-refinement-predicates"
+  ],
+  "bynk.parse.unknown_tier": [
+    "/book/reference/testing/#tiers-the-as-tier-clause"
+  ],
+  "bynk.parse.uses_after_decls": [
+    "/book/spec/syntactic-grammar/"
+  ],
+  "bynk.parse.variant_name_case": [
+    "/book/reference/types/#sum-types"
+  ],
+  "bynk.postgres.sql_invalid": [
+    "/book/reference/bynk-capabilities/#postgres-sql-checked-for-syntax"
+  ],
+  "bynk.postgres.sql_param_count": [
+    "/book/reference/bynk-capabilities/#postgres-sql-checked-for-syntax"
+  ],
+  "bynk.project.duplicate_module_doc": [
+    "/book/guides/program-structure/document-your-code/#one-module-doc-per-unit"
+  ],
+  "bynk.project.export_context": [
+    "/book/guides/projects-build-and-deployment/share-code-between-projects/#make-a-package"
+  ],
+  "bynk.project.export_unknown": [
+    "/book/guides/projects-build-and-deployment/share-code-between-projects/#make-a-package"
+  ],
+  "bynk.project.file_and_directory": [
+    "/book/guides/projects-build-and-deployment/layout/#path-identity"
+  ],
+  "bynk.project.inconsistent_commons_name": [
+    "/book/guides/projects-build-and-deployment/layout/#path-identity"
+  ],
+  "bynk.project.kind_conflict": [
+    "/book/spec/compilation-model/#83-source-layout-and-test-ness"
+  ],
+  "bynk.project.no_sources": [
+    "/book/guides/projects-build-and-deployment/layout/#the-manifest"
+  ],
+  "bynk.project.unstable_unknown_item": [
+    "/docs/manifest/#unstable"
+  ],
+  "bynk.property.restates_refinement": [
+    "/book/troubleshooting/val-errors/"
+  ],
+  "bynk.property.where_not_bool": [
+    "/book/reference/testing/#properties",
+    "/book/troubleshooting/val-errors/"
+  ],
+  "bynk.provider.agent_call_undeclared_capability": [
+    "/book/guides/effects-and-capabilities/compose-a-provider/#the-rules"
+  ],
+  "bynk.provider.dependency_cycle": [
+    "/book/guides/effects-and-capabilities/compose-a-provider/#the-rules",
+    "/book/troubleshooting/provider-dependency-cycle/"
+  ],
+  "bynk.provider.extra_operation": [
+    "/book/reference/capabilities/#providing-a-capability"
+  ],
+  "bynk.provider.generic_op_requires_external": [
+    "/book/reference/capabilities/#generic-operations"
+  ],
+  "bynk.provider.missing_operation": [
+    "/book/reference/capabilities/#providing-a-capability"
+  ],
+  "bynk.provider.outside_context": [
+    "/book/reference/capabilities/#providing-a-capability"
+  ],
+  "bynk.provider.signature_mismatch": [
+    "/book/reference/capabilities/#providing-a-capability"
+  ],
+  "bynk.provider.unknown_capability": [
+    "/book/reference/capabilities/#providing-a-capability"
+  ],
+  "bynk.query.join_key_mismatch": [
+    "/book/reference/types/#joins-and-grouping"
+  ],
+  "bynk.query.sum_needs_numeric": [
+    "/book/reference/types/#query"
+  ],
+  "bynk.queue.bad_params": [
+    "/book/reference/queue/#handler-form",
+    "/book/troubleshooting/queue-errors/"
+  ],
+  "bynk.queue.duplicate_consumer": [
+    "/book/reference/queue/#handler-form",
+    "/book/troubleshooting/queue-errors/"
+  ],
+  "bynk.queue.invalid_name": [
+    "/book/reference/queue/#handler-form",
+    "/book/troubleshooting/queue-errors/"
+  ],
+  "bynk.queue.return_not_queue_result": [
+    "/book/reference/queue/#handler-form",
+    "/book/troubleshooting/queue-errors/"
+  ],
+  "bynk.race.in_agent_handler": [
+    "/book/reference/capabilities/#race"
+  ],
+  "bynk.race.in_pure_context": [
+    "/book/reference/capabilities/#race"
+  ],
+  "bynk.race.outside_handler": [
+    "/book/reference/capabilities/#race"
+  ],
+  "bynk.record_spread.field_type_mismatch": [
+    "/book/reference/types/#record-types"
+  ],
+  "bynk.record_spread.non_record_base": [
+    "/book/reference/types/#record-types"
+  ],
+  "bynk.record_spread.type_mismatch": [
+    "/book/reference/types/#record-types"
+  ],
+  "bynk.record_spread.unknown_field": [
+    "/book/reference/types/#record-types"
+  ],
+  "bynk.refine.literal_violates": [
+    "/book/reference/refined-types/#literal-admission",
+    "/book/troubleshooting/refine-literal-violates/",
+    "/book/troubleshooting/val-errors/"
+  ],
+  "bynk.registry.withdrawn": [
+    "/book/guides/projects-build-and-deployment/run-a-private-registry/#withdraw-a-version"
+  ],
+  "bynk.requires.conflicting_range": [
+    "/book/guides/projects-build-and-deployment/share-code-between-projects/#a-dependency-that-wraps-an-npm-library",
+    "/book/troubleshooting/adapter-errors/"
+  ],
+  "bynk.requires.unapproved": [
+    "/book/guides/projects-build-and-deployment/share-code-between-projects/#approve-a-dependencys-npm-packages",
+    "/book/troubleshooting/adapter-errors/"
+  ],
+  "bynk.requires.unpinned_dependency": [
+    "/book/reference/adapters/#anatomy",
+    "/book/troubleshooting/adapter-errors/"
+  ],
+  "bynk.resolve.ambiguous_variant": [
+    "/book/reference/types/#shared-variant-names"
+  ],
+  "bynk.resolve.arity_mismatch": [
+    "/book/spec/static-semantics/"
+  ],
+  "bynk.resolve.bad_const_initialiser": [
+    "/book/reference/constants/#what-an-initialiser-may-be"
+  ],
+  "bynk.resolve.const_cycle": [
+    "/book/reference/constants/#what-an-initialiser-may-be"
+  ],
+  "bynk.resolve.const_name_case": [
+    "/book/reference/constants/#declaring-a-constant"
+  ],
+  "bynk.resolve.const_outside_context_or_commons": [
+    "/book/reference/constants/#declaring-a-constant"
+  ],
+  "bynk.resolve.duplicate_actor": [
+    "/book/reference/actors/#declaration"
+  ],
+  "bynk.resolve.duplicate_agent": [
+    "/book/reference/agents/#declaration"
+  ],
+  "bynk.resolve.duplicate_capability": [
+    "/book/reference/capabilities/#declaring-a-capability"
+  ],
+  "bynk.resolve.duplicate_const": [
+    "/book/reference/constants/#declaring-a-constant"
+  ],
+  "bynk.resolve.duplicate_field": [
+    "/book/reference/types/#record-types"
+  ],
+  "bynk.resolve.duplicate_field_init": [
+    "/book/reference/types/#record-types"
+  ],
+  "bynk.resolve.duplicate_fn": [
+    "/book/spec/static-semantics/"
+  ],
+  "bynk.resolve.duplicate_message_code": [
+    "/book/guides/localisation/declare-a-message-bundle/#the-smallest-bundle"
+  ],
+  "bynk.resolve.duplicate_message_locale": [
+    "/book/guides/localisation/declare-a-message-bundle/#adding-a-locale"
+  ],
+  "bynk.resolve.duplicate_method": [
+    "/book/spec/static-semantics/"
+  ],
+  "bynk.resolve.duplicate_param": [
+    "/book/spec/static-semantics/"
+  ],
+  "bynk.resolve.duplicate_provider": [
+    "/book/reference/capabilities/#providing-a-capability"
+  ],
+  "bynk.resolve.duplicate_service": [
+    "/book/spec/static-semantics/"
+  ],
+  "bynk.resolve.duplicate_type": [
+    "/book/spec/static-semantics/"
+  ],
+  "bynk.resolve.duplicate_variant": [
+    "/book/reference/types/#sum-types"
+  ],
+  "bynk.resolve.fn_without_call": [
+    "/book/spec/static-semantics/"
+  ],
+  "bynk.resolve.let_shadows_fn": [
+    "/book/guides/program-structure/how-a-program-is-shaped/"
+  ],
+  "bynk.resolve.let_shadows_type": [
+    "/book/guides/program-structure/how-a-program-is-shaped/"
+  ],
+  "bynk.resolve.method_unknown_type": [
+    "/book/spec/static-semantics/"
+  ],
+  "bynk.resolve.missing_field": [
+    "/book/reference/types/#record-types"
+  ],
+  "bynk.resolve.name_conflict": [
+    "/book/spec/static-semantics/"
+  ],
+  "bynk.resolve.not_a_record_type": [
+    "/book/reference/types/#sum-types"
+  ],
+  "bynk.resolve.opaque_record_construction": [
+    "/book/reference/types/#opaque-types"
+  ],
+  "bynk.resolve.param_as_function": [
+    "/book/guides/program-structure/how-a-program-is-shaped/"
+  ],
+  "bynk.resolve.recursive_record_field": [
+    "/book/reference/types/#record-types"
+  ],
+  "bynk.resolve.reserved_builtin_type": [
+    "/book/reference/keywords/#built-in-type-names"
+  ],
+  "bynk.resolve.reserved_host_name": [
+    "/book/spec/emission/"
+  ],
+  "bynk.resolve.reserved_payload_field": [
+    "/book/reference/types/#sum-types"
+  ],
+  "bynk.resolve.self_outside_method": [
+    "/book/spec/static-semantics/"
+  ],
+  "bynk.resolve.type_as_function": [
+    "/book/reference/types/#record-types"
+  ],
+  "bynk.resolve.type_in_expr": [
+    "/book/spec/static-semantics/"
+  ],
+  "bynk.resolve.unconsumed_context": [
+    "/book/guides/program-structure/consume-services/#declare-the-dependency-and-call-the-service",
+    "/book/troubleshooting/exports-capability-errors/"
+  ],
+  "bynk.resolve.unknown_field": [
+    "/book/reference/types/#record-types"
+  ],
+  "bynk.resolve.unknown_function": [
+    "/book/guides/program-structure/how-a-program-is-shaped/"
+  ],
+  "bynk.resolve.unknown_name": [
+    "/book/guides/program-structure/how-a-program-is-shaped/"
+  ],
+  "bynk.resolve.unknown_static_member": [
+    "/book/reference/types/#sum-types"
+  ],
+  "bynk.resolve.unknown_type": [
+    "/book/reference/types/"
+  ],
+  "bynk.revert.agent_schema_older": [
+    "/book/guides/projects-build-and-deployment/roll-back-a-deployment/#what-it-refuses"
+  ],
+  "bynk.revert.class_changed": [
+    "/book/guides/projects-build-and-deployment/roll-back-a-deployment/#what-it-refuses"
+  ],
+  "bynk.revert.contract_skew": [
+    "/book/guides/projects-build-and-deployment/roll-back-a-deployment/#what-it-refuses"
+  ],
+  "bynk.revert.database_schema_ahead": [
+    "/book/guides/projects-build-and-deployment/roll-back-a-deployment/#what-it-refuses"
+  ],
+  "bynk.revert.facts_missing": [
+    "/book/guides/projects-build-and-deployment/roll-back-a-deployment/#what-it-refuses"
+  ],
+  "bynk.revert.history_unplaceable": [
+    "/book/guides/projects-build-and-deployment/roll-back-a-deployment/#what-it-refuses"
+  ],
+  "bynk.revert.id_unrecorded": [
+    "/book/guides/projects-build-and-deployment/roll-back-a-deployment/#what-it-refuses"
+  ],
+  "bynk.revert.layout_older": [
+    "/book/guides/projects-build-and-deployment/roll-back-a-deployment/#what-it-refuses"
+  ],
+  "bynk.revert.membership_changed": [
+    "/book/guides/projects-build-and-deployment/roll-back-a-deployment/#what-it-refuses"
+  ],
+  "bynk.revert.secret_changed": [
+    "/book/guides/projects-build-and-deployment/roll-back-a-deployment/#what-it-refuses"
+  ],
+  "bynk.service.duplicate_call_handler": [
+    "/book/spec/static-semantics/#57-handlers"
+  ],
+  "bynk.service.missing_from": [
+    "/book/reference/grammar/#rule-service_protocol"
+  ],
+  "bynk.service.mixed_protocols": [
+    "/book/reference/grammar/#rule-service_protocol"
+  ],
+  "bynk.service.outside_context": [
+    "/book/reference/grammar/#rule-service_decl"
+  ],
+  "bynk.service.return_not_effect": [
+    "/book/reference/grammar/#rule-service_decl"
+  ],
+  "bynk.service.unknown_protocol": [
+    "/book/reference/grammar/#rule-service_protocol"
+  ],
+  "bynk.service.unknown_via_clause": [
+    "/book/guides/events/understand-events/#dispatching-by-version-with-via-scheman"
+  ],
+  "bynk.service.websocket_header": [
+    "/book/reference/websocket/#service-form"
+  ],
+  "bynk.service.websocket_multiple": [
+    "/book/reference/websocket/#service-form"
+  ],
+  "bynk.service.websocket_open_arity": [
+    "/book/reference/websocket/#service-form"
+  ],
+  "bynk.service.websocket_param_not_stringy": [
+    "/book/reference/websocket/#service-form"
+  ],
+  "bynk.stability.experimental": [
+    "/book/reference/bynk-capabilities/#stability"
+  ],
+  "bynk.store.annotation_kind_mismatch": [
+    "/book/reference/agents/#storage-annotations"
+  ],
+  "bynk.store.annotation_unsupported": [
+    "/book/reference/agents/#storage-annotations"
+  ],
+  "bynk.store.cache_needs_clock": [
+    "/book/reference/agents/#storage-kinds-and-their-operations"
+  ],
+  "bynk.store.cache_ttl_required": [
+    "/book/reference/agents/#storage-annotations"
+  ],
+  "bynk.store.kind_arity": [
+    "/book/reference/agents/#storage-kinds-and-their-operations"
+  ],
+  "bynk.store.kind_unsupported": [
+    "/book/reference/agents/#storage-kinds-and-their-operations"
+  ],
+  "bynk.store.log_needs_clock": [
+    "/book/reference/agents/#storage-kinds-and-their-operations"
+  ],
+  "bynk.store.unkeyable_key": [
+    "/book/reference/agents/#storage-kinds-and-their-operations"
+  ],
+  "bynk.store.unknown_annotation": [
+    "/book/reference/agents/#storage-annotations"
+  ],
+  "bynk.store.unknown_kind": [
+    "/book/reference/agents/#storage-kinds-and-their-operations"
+  ],
+  "bynk.store.unknown_map_accessor": [
+    "/book/reference/types/#map-key-accessors"
+  ],
+  "bynk.store.unknown_op": [
+    "/book/reference/agents/#storage-kinds-and-their-operations"
+  ],
+  "bynk.stub.after_type": [
+    "/book/reference/testing/#stub-latency"
+  ],
+  "bynk.stub.at_system": [
+    "/book/reference/testing/#stub",
+    "/book/troubleshooting/integration-errors/"
+  ],
+  "bynk.stub.bad_sequence": [
+    "/book/reference/testing/#stub",
+    "/book/troubleshooting/integration-errors/"
+  ],
+  "bynk.stub.generic_op": [
+    "/book/reference/capabilities/#generic-operations"
+  ],
+  "bynk.stub.not_a_seam": [
+    "/book/reference/testing/#stub",
+    "/book/troubleshooting/integration-errors/"
+  ],
+  "bynk.stub.rhs_type": [
+    "/book/reference/testing/#stub",
+    "/book/troubleshooting/integration-errors/"
+  ],
+  "bynk.stub.unknown_op": [
+    "/book/reference/testing/#stub",
+    "/book/troubleshooting/integration-errors/"
+  ],
+  "bynk.suite.const_name_clash": [
+    "/book/reference/testing/#suite-types-consts"
+  ],
+  "bynk.suite.duplicate_case_name": [
+    "/book/reference/testing/#suite-blocks"
+  ],
+  "bynk.suite.duplicate_const": [
+    "/book/reference/testing/#suite-types-consts"
+  ],
+  "bynk.suite.duplicate_env": [
+    "/book/reference/testing/#env"
+  ],
+  "bynk.suite.duplicate_fn": [
+    "/book/reference/testing/#helpers"
+  ],
+  "bynk.suite.duplicate_type": [
+    "/book/reference/testing/#suite-types-consts"
+  ],
+  "bynk.suite.env_binding_clash": [
+    "/book/reference/testing/#env"
+  ],
+  "bynk.suite.env_not_literal": [
+    "/book/reference/testing/#env"
+  ],
+  "bynk.suite.fn_effectful": [
+    "/book/reference/testing/#helpers"
+  ],
+  "bynk.suite.fn_method": [
+    "/book/reference/testing/#helpers"
+  ],
+  "bynk.suite.fn_name_clash": [
+    "/book/reference/testing/#helpers"
+  ],
+  "bynk.suite.type_generic": [
+    "/book/reference/testing/#suite-types-consts"
+  ],
+  "bynk.suite.type_name_clash": [
+    "/book/reference/testing/#suite-types-consts"
+  ],
+  "bynk.suite.unknown_target": [
+    "/book/reference/testing/#suite-blocks"
+  ],
+  "bynk.target.browser_bundle_only": [
+    "/docs/bynk-cli/#bynk-build"
+  ],
+  "bynk.test.actor_identity_required": [
+    "/book/reference/testing/#call-site-by"
+  ],
+  "bynk.test.actor_no_identity": [
+    "/book/reference/testing/#failure-principals"
+  ],
+  "bynk.test.advance_not_clock": [
+    "/book/reference/testing/#time-in-tests"
+  ],
+  "bynk.test.advance_not_duration": [
+    "/book/reference/testing/#time-in-tests"
+  ],
+  "bynk.test.advance_outside_case": [
+    "/book/reference/testing/#time-in-tests"
+  ],
+  "bynk.test.asset_address_method": [
+    "/book/reference/testing/#assets"
+  ],
+  "bynk.test.call_needs_in_process": [
+    "/book/reference/testing/#suite-blocks"
+  ],
+  "bynk.test.event_needs_in_process": [
+    "/book/reference/testing/#event-address"
+  ],
+  "bynk.test.event_not_subscribed": [
+    "/book/reference/testing/#event-address"
+  ],
+  "bynk.test.event_publisher_ambiguous": [
+    "/book/reference/testing/#event-address"
+  ],
+  "bynk.test.expired_needs_bearer_route": [
+    "/book/reference/testing/#failure-principals"
+  ],
+  "bynk.test.extra_headers_authorization": [
+    "/book/reference/testing/#request-headers"
+  ],
+  "bynk.test.faults_needs_in_process": [
+    "/book/reference/testing/#faults"
+  ],
+  "bynk.test.forged_needs_signature_route": [
+    "/book/reference/testing/#failure-principals"
+  ],
+  "bynk.test.forged_needs_system": [
+    "/book/reference/testing/#failure-principals"
+  ],
+  "bynk.test.no_subject_needs_oidc_route": [
+    "/book/reference/testing/#failure-principals"
+  ],
+  "bynk.test.nobody_needs_secured_route": [
+    "/book/reference/testing/#failure-principals"
+  ],
+  "bynk.test.peek_not_a_database": [
+    "/book/reference/testing/#peek-a-database"
+  ],
+  "bynk.test.peek_not_bound": [
+    "/book/reference/testing/#peek-a-database"
+  ],
+  "bynk.test.peek_outside_case": [
+    "/book/reference/testing/#peek-a-database"
+  ],
+  "bynk.test.peek_unknown_capability": [
+    "/book/reference/testing/#peek-a-database"
+  ],
+  "bynk.test.peek_write": [
+    "/book/reference/testing/#peek-a-database"
+  ],
+  "bynk.test.principal_claims_not_oidc": [
+    "/book/reference/testing/#token-claims"
+  ],
+  "bynk.test.principal_identity_mismatch": [
+    "/book/reference/testing/#call-site-by"
+  ],
+  "bynk.test.principal_on_asset": [
+    "/book/reference/testing/#assets"
+  ],
+  "bynk.test.principal_on_wrong_method": [
+    "/book/reference/testing/#wrong-method"
+  ],
+  "bynk.test.principal_required": [
+    "/book/reference/testing/#call-site-by"
+  ],
+  "bynk.test.service_bad_address": [
+    "/book/reference/testing/#suite-blocks"
+  ],
+  "bynk.test.service_call_arity": [
+    "/book/reference/testing/#suite-blocks"
+  ],
+  "bynk.test.service_no_call_handler": [
+    "/book/reference/testing/#suite-blocks"
+  ],
+  "bynk.test.service_unknown_route": [
+    "/book/reference/testing/#suite-blocks"
+  ],
+  "bynk.test.snapshot_duplicate_name": [
+    "/book/reference/testing/#snapshots"
+  ],
+  "bynk.test.snapshot_in_property": [
+    "/book/reference/testing/#snapshots"
+  ],
+  "bynk.test.snapshot_name_not_literal": [
+    "/book/reference/testing/#snapshots"
+  ],
+  "bynk.test.snapshot_needs_unit_suite": [
+    "/book/reference/testing/#snapshots"
+  ],
+  "bynk.test.snapshot_not_codable": [
+    "/book/reference/testing/#snapshots"
+  ],
+  "bynk.test.stale_needs_timestamp": [
+    "/book/reference/testing/#failure-principals"
+  ],
+  "bynk.test.system_claims_need_literal": [
+    "/book/reference/testing/#token-claims"
+  ],
+  "bynk.test.unknown_actor": [
+    "/book/reference/testing/#call-site-by"
+  ],
+  "bynk.test.wire_http_only": [
+    "/book/reference/testing/#driving-a-rejection-with-wire"
+  ],
+  "bynk.test.wire_needs_system": [
+    "/book/reference/testing/#driving-a-rejection-with-wire"
+  ],
+  "bynk.test.wrong_algorithm_needs_oidc_route": [
+    "/book/reference/testing/#failure-principals"
+  ],
+  "bynk.test.wrong_audience_needs_oidc_route": [
+    "/book/reference/testing/#failure-principals"
+  ],
+  "bynk.test.wrong_issuer_needs_oidc_route": [
+    "/book/reference/testing/#failure-principals"
+  ],
+  "bynk.test.ws_lifecycle_by": [
+    "/book/reference/testing/#websocket-address"
+  ],
+  "bynk.test.ws_needs_in_process": [
+    "/book/reference/testing/#websocket-address"
+  ],
+  "bynk.tier.cross_context_needs_system": [
+    "/book/reference/testing/#tiers-the-as-tier-clause",
+    "/book/troubleshooting/integration-errors/"
+  ],
+  "bynk.tier.mixed_system_suite": [
+    "/book/reference/testing/#tiers-the-as-tier-clause",
+    "/book/troubleshooting/integration-errors/"
+  ],
+  "bynk.tier.system_needs_wire": [
+    "/book/reference/testing/#tiers-the-as-tier-clause",
+    "/book/troubleshooting/integration-errors/"
+  ],
+  "bynk.transition.cross_agent_reference": [
+    "/book/reference/agent-invariants/#step-invariants",
+    "/book/troubleshooting/transition-errors/"
+  ],
+  "bynk.transition.duplicate_name": [
+    "/book/reference/agent-invariants/#step-invariants",
+    "/book/troubleshooting/transition-errors/"
+  ],
+  "bynk.transition.impure_predicate": [
+    "/book/reference/agent-invariants/#step-invariants",
+    "/book/troubleshooting/transition-errors/"
+  ],
+  "bynk.transition.no_step_reference": [
+    "/book/reference/agent-invariants/#step-invariants",
+    "/book/troubleshooting/transition-errors/"
+  ],
+  "bynk.transition.not_bool": [
+    "/book/reference/agent-invariants/#step-invariants",
+    "/book/troubleshooting/transition-errors/"
+  ],
+  "bynk.types.argument_mismatch": [
+    "/book/reference/types/"
+  ],
+  "bynk.types.asset_at_boundary": [
+    "/book/reference/assets/#the-url"
+  ],
+  "bynk.types.bad_field_default": [
+    "/book/reference/types/#field-defaults"
+  ],
+  "bynk.types.call_arity": [
+    "/book/reference/types/"
+  ],
+  "bynk.types.cannot_infer_option_type_param": [
+    "/book/guides/type-system/result-and-optionals/#construct-values"
+  ],
+  "bynk.types.cannot_infer_result_type_params": [
+    "/book/guides/type-system/result-and-optionals/#construct-values"
+  ],
+  "bynk.types.catastrophic_regex": [
+    "/book/reference/types/#regular-expressions"
+  ],
+  "bynk.types.claims_at_boundary": [
+    "/book/reference/actors/#reading-claims"
+  ],
+  "bynk.types.combinator_return_mismatch": [
+    "/book/reference/types/#built-in-generic-types"
+  ],
+  "bynk.types.constructor_arity": [
+    "/book/reference/refined-types/"
+  ],
+  "bynk.types.constructor_base_mismatch": [
+    "/book/guides/type-system/define-and-validate/#validate-with-of"
+  ],
+  "bynk.types.decimal_division_unscaled": [
+    "/book/reference/types/#decimal"
+  ],
+  "bynk.types.derives_automatic": [
+    "/book/reference/types/#ordering-your-own-types"
+  ],
+  "bynk.types.derives_field_not_orderable": [
+    "/book/reference/types/#ordering-your-own-types"
+  ],
+  "bynk.types.duplicate_example": [
+    "/book/reference/testing/#val-example"
+  ],
+  "bynk.types.duplicate_literal_arm": [
+    "/book/reference/types/#exhaustiveness-and-reachability"
+  ],
+  "bynk.types.duplicate_pattern_field": [
+    "/book/reference/types/#record-patterns"
+  ],
+  "bynk.types.duplicate_variant_arm": [
+    "/book/reference/types/#exhaustiveness-and-reachability"
+  ],
+  "bynk.types.embeds_ambiguous": [
+    "/book/reference/types/#error-embeddings"
+  ],
+  "bynk.types.embeds_unknown_variant": [
+    "/book/reference/types/#error-embeddings"
+  ],
+  "bynk.types.embeds_variant_shape": [
+    "/book/reference/types/#error-embeddings"
+  ],
+  "bynk.types.empty_range_pattern": [
+    "/book/reference/types/#range-patterns"
+  ],
+  "bynk.types.empty_refinement": [
+    "/book/reference/refined-types/#predicates"
+  ],
+  "bynk.types.err_value_mismatch": [
+    "/book/guides/type-system/result-and-optionals/#construct-values"
+  ],
+  "bynk.types.example_not_literal": [
+    "/book/reference/testing/#val-example"
+  ],
+  "bynk.types.example_on_named_field": [
+    "/book/reference/testing/#val-example"
+  ],
+  "bynk.types.example_unneeded": [
+    "/book/reference/testing/#val-example"
+  ],
+  "bynk.types.example_violates": [
+    "/book/reference/testing/#val-example"
+  ],
+  "bynk.types.extensible_match_needs_wildcard": [
+    "/book/reference/bynk-capabilities/#extensible-enums"
+  ],
+  "bynk.types.field_access_on_non_record": [
+    "/book/reference/types/#record-types"
+  ],
+  "bynk.types.field_annotation_unknown": [
+    "/book/reference/types/#field-name"
+  ],
+  "bynk.types.field_default_on_variant": [
+    "/book/reference/types/#field-defaults"
+  ],
+  "bynk.types.field_name_bad_arg": [
+    "/book/reference/types/#field-name"
+  ],
+  "bynk.types.field_name_case_conflict": [
+    "/book/reference/types/#field-name"
+  ],
+  "bynk.types.field_name_duplicate": [
+    "/book/reference/types/#field-name"
+  ],
+  "bynk.types.field_name_invalid": [
+    "/book/reference/types/#field-name"
+  ],
+  "bynk.types.field_name_not_request_record": [
+    "/book/reference/types/#field-name"
+  ],
+  "bynk.types.field_name_record_not_boundary": [
+    "/book/reference/types/#field-name"
+  ],
+  "bynk.types.field_refinement_not_base": [
+    "/book/reference/types/#record-types"
+  ],
+  "bynk.types.field_value_mismatch": [
+    "/book/reference/types/#record-types"
+  ],
+  "bynk.types.file_at_boundary": [
+    "/book/reference/types/#file"
+  ],
+  "bynk.types.form_uncodable": [
+    "/book/reference/types/#form-codec"
+  ],
+  "bynk.types.function_at_boundary": [
+    "/book/reference/types/"
+  ],
+  "bynk.types.guard_not_bool": [
+    "/book/reference/types/#matching"
+  ],
+  "bynk.types.headers_at_boundary": [
+    "/book/reference/http/#request-headers"
+  ],
+  "bynk.types.held_at_boundary": [
+    "/book/reference/types/#connection"
+  ],
+  "bynk.types.held_not_comparable": [
+    "/book/reference/types/#connection"
+  ],
+  "bynk.types.if_branch_mismatch": [
+    "/book/spec/static-semantics/"
+  ],
+  "bynk.types.if_non_bool_cond": [
+    "/book/spec/static-semantics/"
+  ],
+  "bynk.types.if_without_else_requires_unit": [
+    "/book/spec/static-semantics/"
+  ],
+  "bynk.types.interpolation_non_scalar": [
+    "/book/reference/grammar/#rule-string_interpolation"
+  ],
+  "bynk.types.invalid_regex": [
+    "/book/reference/types/#regular-expressions"
+  ],
+  "bynk.types.inverted_range": [
+    "/book/reference/refined-types/#predicates"
+  ],
+  "bynk.types.is_base_mismatch": [
+    "/book/reference/refined-types/#narrowing-with-is",
+    "/book/troubleshooting/is-base-mismatch/"
+  ],
+  "bynk.types.is_literal_pattern": [
+    "/book/guides/type-system/narrow-with-is/"
+  ],
+  "bynk.types.is_non_sum": [
+    "/book/guides/type-system/narrow-with-is/#test-a-variant"
+  ],
+  "bynk.types.is_range_pattern": [
+    "/book/guides/type-system/narrow-with-is/"
+  ],
+  "bynk.types.is_refined_pattern": [
+    "/book/reference/refined-types/#narrowing-with-is"
+  ],
+  "bynk.types.is_unknown_variant": [
+    "/book/guides/type-system/narrow-with-is/#test-a-variant"
+  ],
+  "bynk.types.json_uncodable": [
+    "/book/reference/types/#the-json-codec"
+  ],
+  "bynk.types.key_at_boundary": [
+    "/book/reference/bynk-capabilities/"
+  ],
+  "bynk.types.key_not_orderable": [
+    "/book/reference/types/#ordering-your-own-types"
+  ],
+  "bynk.types.lambda_mismatch": [
+    "/book/reference/grammar/#rule-lambda_expr"
+  ],
+  "bynk.types.let_annotation_mismatch": [
+    "/book/reference/types/"
+  ],
+  "bynk.types.list_element_mismatch": [
+    "/book/reference/types/#built-in-generic-types"
+  ],
+  "bynk.types.list_pattern_on_non_list": [
+    "/book/reference/types/#list-patterns"
+  ],
+  "bynk.types.match_arm_mismatch": [
+    "/book/reference/types/#matching"
+  ],
+  "bynk.types.match_non_sum_discriminant": [
+    "/book/reference/types/#matching"
+  ],
+  "bynk.types.method_arity": [
+    "/book/reference/types/"
+  ],
+  "bynk.types.method_not_found": [
+    "/book/reference/types/"
+  ],
+  "bynk.types.method_on_non_named_type": [
+    "/book/reference/types/"
+  ],
+  "bynk.types.mixed_pattern_bindings": [
+    "/book/reference/types/#matching"
+  ],
+  "bynk.types.negative_length": [
+    "/book/reference/refined-types/#string"
+  ],
+  "bynk.types.never_inferred": [
+    "/book/reference/types/#faults"
+  ],
+  "bynk.types.no_numeric_coercion": [
+    "/book/reference/operators/"
+  ],
+  "bynk.types.non_exhaustive_match": [
+    "/book/reference/types/#exhaustiveness-and-reachability"
+  ],
+  "bynk.types.not_codable": [
+    "/book/reference/generics/#bounds",
+    "/book/troubleshooting/generics-missing-codable-bound/"
+  ],
+  "bynk.types.not_comparable": [
+    "/book/reference/operators/"
+  ],
+  "bynk.types.not_keyable": [
+    "/book/reference/types/#keys",
+    "/book/troubleshooting/generics-missing-key-bound/"
+  ],
+  "bynk.types.not_orderable": [
+    "/book/reference/types/#ordering-your-own-types",
+    "/book/troubleshooting/generics-missing-ord-bound/"
+  ],
+  "bynk.types.ok_value_mismatch": [
+    "/book/guides/type-system/result-and-optionals/#construct-values"
+  ],
+  "bynk.types.opaque_raw_outside": [
+    "/book/reference/types/#opaque-types"
+  ],
+  "bynk.types.opaque_unsafe_outside": [
+    "/book/reference/types/#opaque-types"
+  ],
+  "bynk.types.or_pattern_binding_mismatch": [
+    "/book/guides/type-system/match/"
+  ],
+  "bynk.types.or_pattern_type_mismatch": [
+    "/book/guides/type-system/match/"
+  ],
+  "bynk.types.pattern_arity": [
+    "/book/reference/types/#matching"
+  ],
+  "bynk.types.pattern_type_mismatch": [
+    "/book/reference/types/#matching"
+  ],
+  "bynk.types.polynomial_regex": [
+    "/book/reference/types/#regular-expressions"
+  ],
+  "bynk.types.predicate_base_mismatch": [
+    "/book/reference/refined-types/#predicates"
+  ],
+  "bynk.types.query_at_boundary": [
+    "/book/reference/types/#query"
+  ],
+  "bynk.types.question_error_mismatch": [
+    "/book/guides/type-system/result-and-optionals/"
+  ],
+  "bynk.types.question_on_non_result": [
+    "/book/guides/type-system/result-and-optionals/"
+  ],
+  "bynk.types.question_option_outside_http": [
+    "/book/guides/type-system/result-and-optionals/#methods"
+  ],
+  "bynk.types.question_outside_result": [
+    "/book/guides/type-system/result-and-optionals/"
+  ],
+  "bynk.types.range_pattern_on_non_int": [
+    "/book/reference/types/#range-patterns"
+  ],
+  "bynk.types.record_pattern_on_non_record": [
+    "/book/reference/types/#record-patterns"
+  ],
+  "bynk.types.regex_not_literal": [
+    "/book/reference/types/#regular-expressions"
+  ],
+  "bynk.types.rejection_at_boundary": [
+    "/book/reference/http/#rendering-rejections"
+  ],
+  "bynk.types.request_cookies_at_boundary": [
+    "/book/reference/http/#request-cookies"
+  ],
+  "bynk.types.request_query_at_boundary": [
+    "/book/reference/http/#request-query"
+  ],
+  "bynk.types.return_mismatch": [
+    "/book/reference/types/"
+  ],
+  "bynk.types.rounding_mode_position": [
+    "/book/reference/types/#decimal"
+  ],
+  "bynk.types.select_tail_has_select": [
+    "/book/reference/bynk-capabilities/#d1-typed-reads"
+  ],
+  "bynk.types.sequence_needs_result": [
+    "/book/reference/types/#list-methods"
+  ],
+  "bynk.types.some_value_mismatch": [
+    "/book/guides/type-system/result-and-optionals/#construct-values"
+  ],
+  "bynk.types.sql_not_literal": [
+    "/book/reference/bynk-capabilities/#sql-databases-d1"
+  ],
+  "bynk.types.sql_row_shape": [
+    "/book/reference/bynk-capabilities/#d1-typed-reads"
+  ],
+  "bynk.types.sql_statement_at_boundary": [
+    "/book/reference/bynk-capabilities/#sql-databases-d1"
+  ],
+  "bynk.types.stream_at_boundary": [
+    "/book/reference/types/#stream"
+  ],
+  "bynk.types.stream_not_comparable": [
+    "/book/reference/types/#stream"
+  ],
+  "bynk.types.type_mismatch": [
+    "/book/reference/operators/"
+  ],
+  "bynk.types.uninferable_element_type": [
+    "/book/reference/types/#built-in-generic-types"
+  ],
+  "bynk.types.unknown_annotation": [
+    "/book/reference/refined-types/#predicates"
+  ],
+  "bynk.types.unknown_field": [
+    "/book/reference/types/#record-types"
+  ],
+  "bynk.types.unknown_pattern_field": [
+    "/book/reference/types/#matching"
+  ],
+  "bynk.types.unknown_rounding_mode": [
+    "/book/reference/types/#decimal"
+  ],
+  "bynk.types.unknown_static_member": [
+    "/book/reference/http/#httpresult-variants"
+  ],
+  "bynk.types.unknown_variant_in_pattern": [
+    "/book/reference/types/#matching"
+  ],
+  "bynk.types.unreachable_arm": [
+    "/book/reference/types/#exhaustiveness-and-reachability"
+  ],
+  "bynk.types.variant_arity": [
+    "/book/reference/types/#sum-types"
+  ],
+  "bynk.types.variant_missing_payload": [
+    "/book/reference/types/#sum-types"
+  ],
+  "bynk.types.variant_payload_mismatch": [
+    "/book/reference/types/#sum-types"
+  ],
+  "bynk.uses.name_conflict": [
+    "/book/guides/program-structure/how-a-program-is-shaped/"
+  ],
+  "bynk.uses.self_reference": [
+    "/book/guides/program-structure/how-a-program-is-shaped/#the-two-kinds-of-module"
+  ],
+  "bynk.uses.target_is_context": [
+    "/book/guides/program-structure/how-a-program-is-shaped/#the-two-kinds-of-module"
+  ],
+  "bynk.uses.unknown_commons": [
+    "/book/guides/program-structure/how-a-program-is-shaped/#the-two-kinds-of-module"
+  ],
+  "bynk.val.agent_not_generable": [
+    "/book/reference/testing/#properties",
+    "/book/troubleshooting/val-errors/"
+  ],
+  "bynk.val.arity": [
+    "/book/reference/testing/#val",
+    "/book/troubleshooting/val-errors/"
+  ],
+  "bynk.val.generic_type": [
+    "/book/reference/testing/#val"
+  ],
+  "bynk.val.literal_violates": [
+    "/book/reference/testing/#val",
+    "/book/troubleshooting/val-errors/"
+  ],
+  "bynk.val.needs_pin": [
+    "/book/reference/testing/#val",
+    "/book/troubleshooting/val-errors/"
+  ],
+  "bynk.val.outside_test": [
+    "/book/reference/testing/#val",
+    "/book/troubleshooting/val-errors/"
+  ],
+  "bynk.val.pin_not_literal": [
+    "/book/reference/testing/#val",
+    "/book/troubleshooting/val-errors/"
+  ],
+  "bynk.val.pin_unsupported": [
+    "/book/reference/testing/#val",
+    "/book/troubleshooting/val-errors/"
+  ],
+  "bynk.val.unknown_type": [
+    "/book/reference/testing/#val",
+    "/book/troubleshooting/val-errors/"
+  ],
+  "bynk.val.unsupported_kind": [
+    "/book/reference/testing/#val",
+    "/book/troubleshooting/val-errors/"
+  ],
+  "bynk.visibility.private_in_public": [
+    "/book/guides/program-structure/design-a-public-surface/#keep-private-types-out-of-public-signatures"
+  ],
+  "bynk.visibility.private_item": [
+    "/book/guides/program-structure/design-a-public-surface/"
+  ],
+  "bynk.visibility.private_not_allowed": [
+    "/book/guides/program-structure/design-a-public-surface/"
+  ],
+  "bynk.within.in_agent_handler": [
+    "/book/reference/capabilities/#within"
+  ],
+  "bynk.within.in_pure_context": [
+    "/book/reference/capabilities/#within"
+  ],
+  "bynk.within.outside_handler": [
+    "/book/reference/capabilities/#within"
+  ],
+  "bynk.within.timed_out_not_in_scope": [
+    "/book/reference/capabilities/#within"
+  ],
+  "bynk.ws.lifecycle_by_mismatch": [
+    "/book/reference/websocket/#service-form"
+  ],
+  "bynk.ws.message_frame_param": [
+    "/book/reference/websocket/#service-form"
+  ],
+  "bynk.ws.open_given_unsupported": [
+    "/book/reference/websocket/#service-form"
+  ],
+  "bynk.ws.open_transfer_cross_file": [
+    "/book/reference/websocket/#platform-mapping"
+  ],
+  "bynk.ws.open_transfer_key": [
+    "/book/reference/websocket/#platform-mapping"
+  ],
+  "bynk.ws.open_transfer_shape": [
+    "/book/reference/websocket/#service-form"
+  ],
+  "bynk.ws.route_param_mismatch": [
+    "/book/reference/websocket/#service-form"
+  ]
+}

@@ -236,6 +236,17 @@ rest are Rust drift-guard tests and Node `--check` scripts that CI runs.
    the same way (`xtask`'s `generated_grammar_json` and
    `generated_site_json`); re-bless them with `BYNK_BLESS=1` too.
 
+   Each diagnostic code also has a page of its own, at
+   `/book/reference/diagnostics/<code>/`, which `/d/<code>` redirects to and
+   which every tool links (the editor, `bynk explain`, the MCP tools and the
+   playground). The pages are rendered by
+   `site/src/pages/book/reference/diagnostics/[code].astro` from
+   `site/src/generated/diagnostics.json`, which `diagnostics_registry.rs`
+   guards like the index page. A page lists the Book pages that explain its
+   code from `site/src/data/diagnostic-links.json`; when you write a section
+   that explains a code, add its link there. The same test checks that every
+   entry names a registry code and a heading that exists.
+
 3. **Link checking.** `starlight-links-validator` validates internal links on
    every `astro build`. Separately, `site/scripts/check-llms-links.mjs` confirms
    each `/book/` route named in the hand-authored `llms.txt` index still maps to

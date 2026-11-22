@@ -147,7 +147,11 @@ function semanticsNodes(name) {
       {
         type: "paragraph",
         children: [
-          { type: "inlineCode", value: diagnostic.code },
+          {
+            type: "link",
+            url: `/book/reference/diagnostics/${diagnostic.code}/`,
+            children: [{ type: "inlineCode", value: diagnostic.code }],
+          },
           text(` — ${diagnostic.summary}`),
         ],
       },

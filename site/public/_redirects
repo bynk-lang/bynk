@@ -9,3 +9,9 @@
 # The changelog became one page per release in slice 3 (#3868).
 /book/reference/changelog/ /book/reference/releases/ 301
 /book/reference/changelog /book/reference/releases/ 301
+
+# Every tool links a diagnostic code as /d/<code> (slice 4, #3876); the page it
+# names may move, so the link stays a 302.
+/d /book/reference/diagnostics/ 302
+/d/ /book/reference/diagnostics/ 302
+/d/* /book/reference/diagnostics/:splat/ 302
