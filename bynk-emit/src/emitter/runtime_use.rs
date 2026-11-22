@@ -4,8 +4,8 @@
 //! since 1A.36b-1 (`runtime_header`), the Worker `index.ts` and `compose.ts` since 1A.36b-2.
 //! So nothing here decides an import the emitter writes. What these notes still serve:
 //!
-//! - the driver's test modules (`tests_emit`, `system_support.rs` above all), whose imports stay
-//!   predicted until 1B.2: every flag below with a reader is read there;
+//! - the test harness's modules (`testgen`, `system_support.rs` above all), whose imports stay
+//!   predicted until 1B.5: every flag below with a reader is read there;
 //! - emission itself: `plain_json`, `virtual_time` and the codec roots decide what is
 //!   *emitted*, not what is imported.
 //!

@@ -3,9 +3,9 @@
 //! Crate-hygiene D1 (#2982, PR 2): split out of `tests_emit.rs`.
 
 use super::*;
-use bynk_emit::emitter::RuntimeUse;
+use crate::emitter::RuntimeUse;
 // #1759: every namespace a test module imports, from one definition.
-use bynk_emit::emitter::emit::test_scaffold_ns as test_ns;
+use crate::emitter::emit::test_scaffold_ns as test_ns;
 use bynk_ts::{
     TsArrowBody, TsBinaryOp, TsBindingName, TsDecl, TsExpr, TsLit, TsObjectEntry, TsParam, TsStmt,
     TsType, TsTypeMember,
@@ -102,36 +102,6 @@ pub(super) fn names_ident(src: &str, name: &str) -> bool {
         let after = code[i + name.len()..].chars().next();
         !before.is_some_and(|c| is_ident(c) || c == '.') && !after.is_some_and(is_ident)
     })
-}
-
-/// #1486: `emitter/workers.rs`'s own `append_missing_bindings`'s sibling
-/// duplicate — same reason that one and `emitter/workers_entry.rs`'s own copy
-/// don't share a single implementation (each doc comment explains why for its
-/// own file): folds `extra`'s comma-separated bindings (e.g.
-/// [`bynk_emit::emitter::BOUNDARY_CODEC_RUNTIME_IMPORTS`]) into `names` directly,
-/// skipping anything already present under the same "strip an optional `type
-/// ` prefix, compare bare names" dedup rule. `emit_test_module`/
-/// `emit_integration_module`'s own runtime-import statement is now a real
-/// `TsDecl::Import` built once every case has lowered (deferred, not spliced
-/// into already-printed text the way the pre-#1486 code's own
-/// `emitter::inject_runtime_imports` post-pass did — see each caller's own
-/// doc comment) — this is that deferred construction's own merge step.
-pub(super) fn append_missing_bindings(names: &mut Vec<String>, extra: &str) {
-    fn bare(binding: &str) -> &str {
-        binding
-            .trim()
-            .strip_prefix("type ")
-            .unwrap_or(binding.trim())
-    }
-    let present: std::collections::HashSet<&str> = names.iter().map(|s| bare(s)).collect();
-    let mut to_add: Vec<String> = Vec::new();
-    for b in extra.split(',').map(str::trim) {
-        if !b.is_empty() && !present.contains(bare(b)) && !to_add.iter().any(|a| bare(a) == bare(b))
-        {
-            to_add.push(b.to_string());
-        }
-    }
-    names.extend(to_add);
 }
 
 /// testing-the-boundary Slice B: for a `system` suite whose target exposes an
@@ -359,7 +329,7 @@ pub(super) fn emit_system_http_support(
         };
     };
     let ns = test_ns(target);
-    let binding = bynk_emit::emitter::wrangler::service_binding(target).name;
+    let binding = crate::emitter::wrangler::service_binding(target).name;
     let type_ns = format!("{ns}.");
 
     let mut routes: Vec<TsStmt> = Vec::new();
@@ -424,7 +394,7 @@ pub(super) fn emit_system_http_support(
                 continue;
             };
             declared.insert((sname.clone(), method.as_str().to_string(), path.clone()));
-            let key = bynk_emit::emitter::http_handler_method_name_ir(method, &path);
+            let key = crate::emitter::http_handler_method_name_ir(method, &path);
             // Split the handler's params into path params (matching `:name` in
             // the pattern, in order) and the optional body (the remaining param).
             let path_params: Vec<&str> = path
@@ -458,7 +428,7 @@ pub(super) fn emit_system_http_support(
                 TsParam::new(
                     "__extraHeaders".to_string(),
                     Some(TsType::union(vec![
-                        bynk_emit::emitter::ts_types::ts_type_of(
+                        crate::emitter::ts_types::ts_type_of(
                             &bynk_syntax::ast::TypeRef::RequestHeaders(Default::default()),
                         ),
                         TsType::named("undefined"),
@@ -492,33 +462,30 @@ pub(super) fn emit_system_http_support(
             // the raw drivers append (a `Wire("?…")` text, or a `RequestQuery`).
             let (typed_query, raw_query) = match h.params.iter().find(|p| is_query(p)) {
                 Some(p) => {
-                    let var = bynk_emit::emitter::ts_ident(&p.name.name);
-                    match &p.type_ref {
-                        bynk_syntax::ast::TypeRef::RequestQuery(_) => {
-                            runtime_use.note_request_query_search();
-                            let s = format!("${{__requestQuerySearch({var})}}");
-                            (s.clone(), s)
-                        }
-                        record => {
-                            runtime_use.note_query_string();
-                            let ser = bynk_ts::print_expr(
-                                &bynk_emit::emitter::serialisation::serialise_expr_via(
-                                    record,
-                                    &bynk_ts::TsExpr::Ident(var.clone()),
-                                    &type_ns,
-                                    runtime_use,
-                                ),
-                            );
-                            // #3343: a renamed field is written under its `@name`.
-                            let table_arg =
-                                bynk_emit::emitter::renamed_specs_source(record, &table.types)
-                                    .map(|t| format!(", {t}"))
-                                    .unwrap_or_default();
-                            (
-                                format!("${{__queryString({ser}{table_arg})}}"),
-                                format!("${{{var}}}"),
-                            )
-                        }
+                    let var = crate::emitter::ts_ident(&p.name.name);
+                    if let bynk_syntax::ast::TypeRef::RequestQuery(_) = &p.type_ref {
+                        runtime_use.note_request_query_search();
+                        let s = format!("${{__requestQuerySearch({var})}}");
+                        (s.clone(), s)
+                    } else {
+                        let record = &p.type_ref;
+                        runtime_use.note_query_string();
+                        let ser = bynk_ts::print_expr(
+                            &crate::emitter::serialisation::serialise_expr_via(
+                                record,
+                                &bynk_ts::TsExpr::Ident(var.clone()),
+                                &type_ns,
+                                runtime_use,
+                            ),
+                        );
+                        // #3343: a renamed field is written under its `@name`.
+                        let table_arg = crate::emitter::renamed_specs_source(record, &table.types)
+                            .map(|t| format!(", {t}"))
+                            .unwrap_or_default();
+                        (
+                            format!("${{__queryString({ser}{table_arg})}}"),
+                            format!("${{{var}}}"),
+                        )
                     }
                 }
                 None => (String::new(), String::new()),
@@ -585,7 +552,7 @@ pub(super) fn emit_system_http_support(
                 for seg in path.split('/').filter(|x| !x.is_empty()) {
                     s.push('/');
                     if let Some(name) = seg.strip_prefix(':') {
-                        s.push_str(&format!("${{{}}}", bynk_emit::emitter::ts_ident(name)));
+                        s.push_str(&format!("${{{}}}", crate::emitter::ts_ident(name)));
                     } else {
                         s.push_str(seg);
                     }
@@ -752,18 +719,17 @@ pub(super) fn emit_system_http_support(
             let (body_stmt, body_init): (Option<TsStmt>, &str) = match body_arg {
                 Some(p) if is_multipart => {
                     runtime_use.note_multipart_form();
-                    let ser = bynk_ts::print_expr(
-                        &bynk_emit::emitter::serialisation::serialise_expr_via(
+                    let ser =
+                        bynk_ts::print_expr(&crate::emitter::serialisation::serialise_expr_via(
                             &p.type_ref,
-                            &bynk_ts::TsExpr::Ident(bynk_emit::emitter::ts_ident(&p.name.name)),
+                            &bynk_ts::TsExpr::Ident(crate::emitter::ts_ident(&p.name.name)),
                             &type_ns,
                             runtime_use,
-                        ),
-                    );
-                    let specs = bynk_emit::emitter::form_body_specs(h, &table.types)
+                        ));
+                    let specs = crate::emitter::form_body_specs(h, &table.types)
                         .unwrap_or_default()
                         .iter()
-                        .map(bynk_emit::emitter::field_spec_source)
+                        .map(crate::emitter::field_spec_source)
                         .collect::<Vec<_>>()
                         .join(", ");
                     let stmt = TsStmt::const_stmt(
@@ -779,14 +745,13 @@ pub(super) fn emit_system_http_support(
                 }
                 Some(p) if is_form => {
                     runtime_use.note_query_string();
-                    let ser = bynk_ts::print_expr(
-                        &bynk_emit::emitter::serialisation::serialise_expr_via(
+                    let ser =
+                        bynk_ts::print_expr(&crate::emitter::serialisation::serialise_expr_via(
                             &p.type_ref,
-                            &bynk_ts::TsExpr::Ident(bynk_emit::emitter::ts_ident(&p.name.name)),
+                            &bynk_ts::TsExpr::Ident(crate::emitter::ts_ident(&p.name.name)),
                             &type_ns,
                             runtime_use,
-                        ),
-                    );
+                        ));
                     let stmt = TsStmt::const_stmt(
                         TsBindingName::Ident("__body".to_string()),
                         None,
@@ -803,13 +768,13 @@ pub(super) fn emit_system_http_support(
                     (Some(stmt), "body: __body, ")
                 }
                 Some(p) if raw_type.is_some() && is_stream(&p.type_ref) => {
-                    streamed_typed_body(&bynk_emit::emitter::ts_ident(&p.name.name))
+                    streamed_typed_body(&crate::emitter::ts_ident(&p.name.name))
                 }
                 Some(p) if raw_type.is_some() => {
                     let stmt = TsStmt::const_stmt(
                         TsBindingName::Ident("__body".to_string()),
                         None,
-                        ident(bynk_emit::emitter::ts_ident(&p.name.name)),
+                        ident(crate::emitter::ts_ident(&p.name.name)),
                         None,
                     );
                     (Some(stmt), "body: __body as BufferSource, ")
@@ -821,14 +786,13 @@ pub(super) fn emit_system_http_support(
                     // slice's scope), so it prints at the boundary
                     // (`bynk_ts::print_expr`), the same treatment
                     // `lower.rs`'s own call sites use.
-                    let ser = bynk_ts::print_expr(
-                        &bynk_emit::emitter::serialisation::serialise_expr_via(
+                    let ser =
+                        bynk_ts::print_expr(&crate::emitter::serialisation::serialise_expr_via(
                             &p.type_ref,
-                            &bynk_ts::TsExpr::Ident(bynk_emit::emitter::ts_ident(&p.name.name)),
+                            &bynk_ts::TsExpr::Ident(crate::emitter::ts_ident(&p.name.name)),
                             &type_ns,
                             runtime_use,
-                        ),
-                    );
+                        ));
                     let stmt = TsStmt::const_stmt(
                         TsBindingName::Ident("__body".to_string()),
                         None,
@@ -847,7 +811,7 @@ pub(super) fn emit_system_http_support(
                 // #1435 (Arc E slice 1): boundary-print, same treatment as
                 // `ser` above.
                 Some(inner) => {
-                    bynk_ts::print_expr(&bynk_emit::emitter::serialisation::deserialise_ref_via(
+                    bynk_ts::print_expr(&crate::emitter::serialisation::deserialise_ref_via(
                         inner,
                         &type_ns,
                         runtime_use,
@@ -861,7 +825,7 @@ pub(super) fn emit_system_http_support(
                 .iter()
                 .map(|p| {
                     TsParam::new(
-                        bynk_emit::emitter::ts_ident(&p.name.name),
+                        crate::emitter::ts_ident(&p.name.name),
                         Some(TsType::named(driver_param_ty(&p.type_ref, &ns))),
                     )
                 })
@@ -872,7 +836,7 @@ pub(super) fn emit_system_http_support(
                 .iter()
                 .map(|p| {
                     TsParam::new(
-                        bynk_emit::emitter::ts_ident(&p.name.name),
+                        crate::emitter::ts_ident(&p.name.name),
                         Some(TsType::named(
                             if is_headers(&p)
                                 || matches!(p.type_ref, bynk_syntax::ast::TypeRef::RequestQuery(_))
@@ -925,7 +889,7 @@ pub(super) fn emit_system_http_support(
             // #2135: the bytes a signing driver signs: what it sends.
             let typed_body = if body_arg.is_some() { "__body" } else { "\"\"" };
             let raw_body = match body_ps.first() {
-                Some(p) => bynk_emit::emitter::ts_ident(&p.name.name),
+                Some(p) => crate::emitter::ts_ident(&p.name.name),
                 None => "\"\"".to_string(),
             };
             // #2685: the typed driver names its route to the decoder, which a
@@ -1130,8 +1094,7 @@ pub(super) fn emit_system_http_support(
                     "{{ method: {method:?}, headers: {{ {headers_spread}{content_type}\"authorization\": __token, }}, {raw_body_init}}}",
                     method = method.as_str(),
                     raw_body_init = match body_ps.first() {
-                        Some(p) =>
-                            format!("body: {}, ", bynk_emit::emitter::ts_ident(&p.name.name)),
+                        Some(p) => format!("body: {}, ", crate::emitter::ts_ident(&p.name.name)),
                         None => String::new(),
                     },
                 ));
@@ -1225,8 +1188,7 @@ pub(super) fn emit_system_http_support(
                     "{{ method: {method:?}, headers: {{ {headers_spread}{content_type}\"authorization\": __token, }}, {raw_body_init}}}",
                     method = method.as_str(),
                     raw_body_init = match body_ps.first() {
-                        Some(p) =>
-                            format!("body: {}, ", bynk_emit::emitter::ts_ident(&p.name.name)),
+                        Some(p) => format!("body: {}, ", crate::emitter::ts_ident(&p.name.name)),
                         None => String::new(),
                     },
                 ));
@@ -1395,7 +1357,7 @@ pub(super) fn emit_system_http_support(
         let mut issuer = TsStmt::raw(
             format!(
                 "const __bynkOidcRemote: boolean = {remote};\n{}",
-                include_str!("../test_runtime/oidc_issuer.ts")
+                include_str!("test_runtime/oidc_issuer.ts")
             ),
             None,
         );
@@ -1404,7 +1366,7 @@ pub(super) fn emit_system_http_support(
     }
     if signs_hmac {
         let mut signer = TsStmt::raw(
-            include_str!("../test_runtime/hmac_signer.ts").to_string(),
+            include_str!("test_runtime/hmac_signer.ts").to_string(),
             None,
         );
         signer.no_blank_before = true;
@@ -1458,7 +1420,7 @@ pub(super) fn emit_system_http_support(
                 index: Box::new(str_lit(s.clone())),
             },
             str_lit(if session_secrets.contains(s) {
-                crate::dev_run::TEST_SESSION_KEY
+                crate::testgen::TEST_SESSION_KEY
             } else {
                 "__bynk_test_secret"
             }),
@@ -1476,154 +1438,6 @@ pub(super) fn emit_system_http_support(
         type_ns,
         claims,
     }
-}
-
-/// #2136: the cron and queue drivers of a `system` suite's target, and the
-/// services they cover ([`emitter::ctx::SystemJobServices`]).
-pub(super) struct SystemJobSupport {
-    pub(super) code: Vec<TsStmt>,
-    pub(super) services: emitter::ctx::SystemJobServices,
-}
-
-/// #2136: one driver per cron handler and per queue service of the `system`
-/// target, calling the participant Worker's real entry point with a
-/// platform-shaped event and the harness's execution-context double, which it
-/// settles (ADR 0478). The runtime half lives at `emitter/test_runtime/jobs.ts`.
-///
-/// - `__sysdrive_schedule_<svc>_<index>(at?)` calls `scheduled({ cron,
-///   scheduledTime }, env, ctx)` and yields the `Result` the test build's
-///   entry stored on `ctx` (`scheduled_result_hook`). A handler without the
-///   scheduled-time parameter is fired at `0`. A handler that throws fails the
-///   case, as it would at `unit`.
-/// - `__sysdrive_message_<q>(m)` serialises `m` as the producer does, sends it
-///   through a JSON round trip, and calls `queue(batch, env)` with a
-///   one-message batch whose `ack()` / `retry()` the double records, yielding
-///   `Ack` or `Retry(reason)` (the reason the entry logs).
-pub(super) fn emit_system_job_support(
-    target: &str,
-    unit_tables: &HashMap<String, UnitTable>,
-    runtime_use: &RuntimeUse,
-    target_sends: bool,
-) -> SystemJobSupport {
-    use bynk_model::{IrHandlerKind, lower_handler_kind_ir};
-    use bynk_syntax::ast::ServiceProtocol;
-    let mut services = emitter::ctx::SystemJobServices::default();
-    let mut drivers: Vec<TsStmt> = Vec::new();
-    let Some(table) = unit_tables.get(target) else {
-        return SystemJobSupport {
-            code: drivers,
-            services,
-        };
-    };
-    let ns = test_ns(target);
-    let worker = format!("worker_{ns}");
-    let env = format!("__h.env_{ns}");
-    let type_ns = format!("{ns}.");
-    let mut svc_names: Vec<&String> = table.services.keys().collect();
-    svc_names.sort();
-    for sname in svc_names {
-        let decl = &table.services[sname];
-        // M-1's domain clause (ADR 0735; crate-hygiene B4, #3012): this
-        // function holds the target's symbol table, not its `TypedCommons`, so it
-        // doesn't hold `bynk_model::lower_protocol_ir`'s input.
-        match &decl.protocol {
-            ServiceProtocol::Cron => {
-                let mut exprs = Vec::new();
-                for h in &decl.handlers {
-                    let IrHandlerKind::Cron { expr } = lower_handler_kind_ir(&h.kind) else {
-                        continue;
-                    };
-                    let idx = exprs.len();
-                    let key = bynk_emit::emitter::cron_handler_method_name(sname, idx);
-                    let (params, at) = match h.params.first() {
-                        Some(p) => (
-                            format!("at: {}", driver_param_ty(&p.type_ref, &ns)),
-                            "at".to_string(),
-                        ),
-                        None => (String::new(), "0".to_string()),
-                    };
-                    drivers.push(TsStmt::raw(
-                        format!(
-                            "async function __sysdrive_schedule_{sname}_{idx}({params}) {{\n  const __h = __makeHarness();\n  return __bynkScheduled<Awaited<ReturnType<typeof {ns}.{sname}.{key}>>>({expr:?}, (exec) => {worker}.scheduled({{ cron: {expr:?}, scheduledTime: {at} }}, {env}, exec));\n}}\n"
-                        ),
-                        None,
-                    ));
-                    exprs.push(expr);
-                }
-                services.cron.insert(sname.clone(), exprs);
-            }
-            ServiceProtocol::Queue { name } => {
-                let Some(h) = decl
-                    .handlers
-                    .iter()
-                    .find(|h| matches!(lower_handler_kind_ir(&h.kind), IrHandlerKind::Message))
-                else {
-                    continue;
-                };
-                let Some(p) = h.params.first() else {
-                    continue;
-                };
-                let key = bynk_emit::emitter::queue_handler_method_name(sname, 0);
-                let param = bynk_emit::emitter::ts_ident(&p.name.name);
-                let body =
-                    bynk_ts::print_expr(&bynk_emit::emitter::serialisation::serialise_expr_via(
-                        &p.type_ref,
-                        &bynk_ts::TsExpr::Ident(param.clone()),
-                        &type_ns,
-                        runtime_use,
-                    ));
-                let exec_arg = if target_sends { ", exec" } else { "" };
-                drivers.push(TsStmt::raw(
-                    format!(
-                        "async function __sysdrive_message_{sname}({param}: {ty}) {{\n  const __h = __makeHarness();\n  return __bynkDeliver<Awaited<ReturnType<typeof {ns}.{sname}.{key}>>>({name:?}, {body}, (batch, exec) => {worker}.queue(batch, {env}{exec_arg}));\n}}\n",
-                        ty = driver_param_ty(&p.type_ref, &ns),
-                    ),
-                    None,
-                ));
-                services.queue.insert(sname.clone());
-            }
-            // #3328: an email service is driven as raw MIME through the Worker's
-            // real `email()` entry, which parses it; the case reads back the
-            // verdict the entry applied (`__bynkDeliverEmail`).
-            ServiceProtocol::Email { .. } => {
-                let Some(h) = decl
-                    .handlers
-                    .iter()
-                    .find(|h| matches!(lower_handler_kind_ir(&h.kind), IrHandlerKind::Message))
-                else {
-                    continue;
-                };
-                let key = bynk_emit::emitter::queue_handler_method_name(sname, 0);
-                let param = h.params.first().map_or("mail".to_string(), |p| {
-                    bynk_emit::emitter::ts_ident(&p.name.name)
-                });
-                drivers.push(TsStmt::raw(
-                    format!(
-                        "async function __sysdrive_message_{sname}({param}: any) {{\n  const __h = __makeHarness();\n  return __bynkDeliverEmail<Awaited<ReturnType<typeof {ns}.{sname}.{key}>>>({param}, (message, exec) => {worker}.email(message, {env}, exec));\n}}\n"
-                    ),
-                    None,
-                ));
-                services.email.insert(sname.clone());
-            }
-            _ => {}
-        }
-    }
-    let mut code = Vec::new();
-    if !drivers.is_empty() {
-        code.push(TsStmt::raw(
-            include_str!("../test_runtime/jobs.ts").to_string(),
-            None,
-        ));
-        // #3328: only a target with an email service carries the email driver.
-        if !services.email.is_empty() {
-            code.push(TsStmt::raw(
-                include_str!("../test_runtime/jobs_email.ts").to_string(),
-                None,
-            ));
-        }
-        code.extend(drivers);
-    }
-    SystemJobSupport { code, services }
 }
 
 /// #3380: whether a handler parameter is a `Stream`, so a `@raw` route's `body` is
@@ -1659,7 +1473,7 @@ fn wire_body_init(body: Option<&bynk_syntax::ast::Param>, raw: bool) -> String {
     let Some(p) = body else {
         return String::new();
     };
-    let param = bynk_emit::emitter::ts_ident(&p.name.name);
+    let param = crate::emitter::ts_ident(&p.name.name);
     if raw && is_stream(&p.type_ref) {
         format!(
             "body: new globalThis.ReadableStream<Uint8Array>({{ start(c) {{ c.enqueue(new globalThis.TextEncoder().encode({param})); c.close(); }} }}), ...({{ duplex: \"half\" }} as object), "
@@ -1675,15 +1489,16 @@ fn wire_body_init(body: Option<&bynk_syntax::ast::Param>, raw: bool) -> String {
 /// to the namespace's `serialise_*`, and the Bynk checker already typed the call.
 pub(super) fn driver_param_ty(t: &bynk_syntax::ast::TypeRef, _ns: &str) -> String {
     use bynk_syntax::ast::TypeRef;
-    match t {
+    if let TypeRef::Named(_) = t {
         // A named type may embed a branded refined field (`AddRequest.title:
         // Title`), and the case body passes a plain object literal — the Bynk
         // checker already type-checked the call's args against the handler
         // (Slice A), so the driver forwards the value to the namespace's
         // `serialise_*`. Primitives stay precise.
-        TypeRef::Named(_) => "any".to_string(),
+        "any".to_string()
+    } else {
         // The driver prints the node itself: this is test-harness text (1B.5's).
-        other => bynk_ts::print_type(&bynk_emit::emitter::ts_types::ts_type_of(other)),
+        bynk_ts::print_type(&crate::emitter::ts_types::ts_type_of(t))
     }
 }
 
@@ -1692,13 +1507,15 @@ pub(super) fn strip_effect_httpresult(
     t: &bynk_syntax::ast::TypeRef,
 ) -> Option<&bynk_syntax::ast::TypeRef> {
     use bynk_syntax::ast::TypeRef;
-    let inner = match t {
-        TypeRef::Effect(b, _) => b.as_ref(),
-        other => other,
+    let inner = if let TypeRef::Effect(b, _) = t {
+        b.as_ref()
+    } else {
+        t
     };
-    match inner {
-        TypeRef::HttpResult(payload, _) => Some(payload.as_ref()),
-        _ => None,
+    if let TypeRef::HttpResult(payload, _) = inner {
+        Some(payload.as_ref())
+    } else {
+        None
     }
 }
 
@@ -1750,19 +1567,19 @@ pub(super) fn service_binding_forward(worker_ident: &str, env_ident: &str, sends
 
 /// Interop I5 (#1972): a Service Binding standing in for a foreign Worker in
 /// the integration harness, answering every request with
-/// [`bynk_emit::emitter::wrangler::foreign_service_double_body`]'s 503, as the
+/// [`crate::emitter::wrangler::foreign_service_double_body`]'s 503, as the
 /// double `bynk dev` binds by default does. A case that needs another answer
 /// stubs the instance's `send`.
 pub(super) fn foreign_service_double(binding: &str, worker: &str) -> TsExpr {
     let response = TsExpr::New {
         callee: Box::new(ident("globalThis.Response")),
         args: vec![
-            str_lit(bynk_emit::emitter::wrangler::foreign_service_double_body(
+            str_lit(crate::emitter::wrangler::foreign_service_double_body(
                 binding, worker,
             )),
             TsExpr::object(vec![(
                 "status".to_string(),
-                num_lit(bynk_emit::emitter::wrangler::FOREIGN_SERVICE_DOUBLE_STATUS.to_string()),
+                num_lit(crate::emitter::wrangler::FOREIGN_SERVICE_DOUBLE_STATUS.to_string()),
             )]),
         ],
     };
@@ -1805,7 +1622,7 @@ fn cookie_header_texts(
     let Some(p) = param else {
         return (String::new(), String::new());
     };
-    let var = bynk_emit::emitter::ts_ident(&p.name.name);
+    let var = crate::emitter::ts_ident(&p.name.name);
     // #3277: the raw view sends the header text it was built from (a `Wire`
     // string is the header text itself).
     if matches!(p.type_ref, bynk_syntax::ast::TypeRef::RequestCookies(_)) {
@@ -1816,14 +1633,14 @@ fn cookie_header_texts(
         return (text.clone(), text);
     }
     runtime_use.note_cookie_string();
-    let ser = bynk_ts::print_expr(&bynk_emit::emitter::serialisation::serialise_expr_via(
+    let ser = bynk_ts::print_expr(&crate::emitter::serialisation::serialise_expr_via(
         &p.type_ref,
         &bynk_ts::TsExpr::Ident(var.clone()),
         type_ns,
         runtime_use,
     ));
     // #3343: a renamed field is written under its `@name`.
-    let table_arg = bynk_emit::emitter::renamed_specs_source(&p.type_ref, types)
+    let table_arg = crate::emitter::renamed_specs_source(&p.type_ref, types)
         .map(|t| format!(", {t}"))
         .unwrap_or_default();
     (
@@ -1856,7 +1673,7 @@ fn query_string_args(
     types: &std::collections::HashMap<String, std::sync::Arc<bynk_syntax::ast::TypeDecl>>,
 ) -> Vec<TsExpr> {
     let mut args = vec![ident(ser)];
-    if let Some(table) = bynk_emit::emitter::renamed_specs_source(type_ref, types) {
+    if let Some(table) = crate::emitter::renamed_specs_source(type_ref, types) {
         args.push(ident(table));
     }
     args
@@ -2032,7 +1849,7 @@ fn push_session_refusal_drivers(
     };
     let options = make(body_init);
     let raw_body_init = body_name
-        .map(|n| format!("body: {}, ", bynk_emit::emitter::ts_ident(n)))
+        .map(|n| format!("body: {}, ", crate::emitter::ts_ident(n)))
         .unwrap_or_default();
     let raw_options = make(&raw_body_init);
     let issued_before_ttl = format!("__bynkNow() - {} - 3600", session.ttl_secs);
@@ -2087,189 +1904,9 @@ fn push_session_refusal_drivers(
     }
 }
 
-/// Fold every conditional runtime helper a test module's lowered bodies reached
-/// for (as recorded on `ru`) into its runtime import's `names`.
-///
-/// The one list behind both the unit-suite and the integration-suite modules
-/// (#3398): each used to carry its own copy, and a helper added to one flag
-/// chain only (`__bynkPgRow`, for the typed `Postgres` reads) left the other
-/// without it. A new `RuntimeUse` flag that a test body can set is added here.
-pub(super) fn append_runtime_use_imports(names: &mut Vec<String>, ru: &RuntimeUse) {
-    if ru.boundary_codec() {
-        append_missing_bindings(names, emitter::BOUNDARY_CODEC_RUNTIME_IMPORTS);
-    }
-    if ru.json_codec() {
-        append_missing_bindings(names, emitter::JSON_CODEC_RUNTIME_IMPORTS);
-    }
-    if ru.bytes() {
-        append_missing_bindings(names, emitter::BYTES_RUNTIME_IMPORTS);
-    }
-    if ru.bytes_ops() {
-        append_missing_bindings(names, emitter::BYTES_OPS_RUNTIME_IMPORTS);
-    }
-    if ru.time_ops() || ru.pg_rows() {
-        append_missing_bindings(names, &emitter::time_runtime_imports(ru));
-    }
-    if ru.iso_date() {
-        append_missing_bindings(names, emitter::ISO_DATE_RUNTIME_IMPORTS);
-    }
-    if ru.yaml() {
-        append_missing_bindings(names, emitter::YAML_RUNTIME_IMPORTS);
-    }
-    if ru.settle_all() {
-        append_missing_bindings(names, emitter::SETTLE_ALL_RUNTIME_IMPORTS);
-    }
-    append_missing_bindings(names, emitter::effect_runtime_imports(ru));
-    if ru.fault() {
-        append_missing_bindings(names, emitter::FAULT_RUNTIME_IMPORTS);
-    }
-    if ru.url_ops() {
-        append_missing_bindings(names, emitter::URL_OPS_RUNTIME_IMPORTS);
-    }
-    if ru.request_headers() {
-        append_missing_bindings(names, emitter::REQUEST_HEADERS_RUNTIME_IMPORTS);
-    }
-    if ru.request_cookies() {
-        append_missing_bindings(names, emitter::REQUEST_COOKIES_RUNTIME_IMPORTS);
-    }
-    if ru.session_signing() {
-        append_missing_bindings(names, emitter::SESSION_SIGNING_RUNTIME_IMPORTS);
-    }
-    if ru.request_query() {
-        append_missing_bindings(names, emitter::REQUEST_QUERY_RUNTIME_IMPORTS);
-    }
-    if ru.query_string() {
-        append_missing_bindings(names, emitter::QUERY_STRING_RUNTIME_IMPORTS);
-    }
-    if ru.form_codec() {
-        append_missing_bindings(names, emitter::FORM_CODEC_RUNTIME_IMPORTS);
-    }
-    if ru.multipart_form() {
-        append_missing_bindings(names, emitter::MULTIPART_FORM_RUNTIME_IMPORTS);
-    }
-    if ru.cookie_string() {
-        append_missing_bindings(names, emitter::COOKIE_STRING_RUNTIME_IMPORTS);
-    }
-    if ru.request_header_pairs() {
-        append_missing_bindings(names, ", __requestHeaderPairs");
-    }
-    if ru.request_query_search() {
-        append_missing_bindings(names, ", __requestQuerySearch");
-    }
-    if ru.token_claims() {
-        append_missing_bindings(names, ", __tokenClaims");
-    }
-    if ru.test_connection() {
-        append_missing_bindings(names, ", TestConnection");
-    }
-    if ru.eq() {
-        append_missing_bindings(names, emitter::EQ_RUNTIME_IMPORTS);
-    }
-    // #1934: a case that compares a typed http outcome with `Ok(…)`.
-    if ru.http_result() {
-        append_missing_bindings(names, "HttpResult");
-    }
-    // #2839: a case that compares a queue verdict with a bare variant.
-    if ru.queue_result() {
-        append_missing_bindings(names, "QueueResult");
-    }
-    if ru.int() {
-        append_missing_bindings(names, emitter::INT_RUNTIME_IMPORTS);
-    }
-    append_missing_bindings(names, &ru.cmp_imports());
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn appends_bindings_that_are_absent() {
-        let mut names = vec!["Ok".to_string(), "Err".to_string()];
-        append_missing_bindings(&mut names, emitter::BYTES_RUNTIME_IMPORTS);
-        assert!(names.iter().any(|n| n == "__bynkBytesEqual"), "{names:?}");
-        assert!(
-            names.iter().any(|n| n == "__bynkBytesDecodeUtf8"),
-            "{names:?}"
-        );
-    }
-
-    #[test]
-    fn skips_bindings_already_present() {
-        let mut names = vec![
-            "Ok".to_string(),
-            "Err".to_string(),
-            "type Result".to_string(),
-        ];
-        append_missing_bindings(&mut names, emitter::BOUNDARY_CODEC_RUNTIME_IMPORTS);
-        assert_eq!(
-            names.iter().filter(|n| n.as_str() == "Ok").count(),
-            1,
-            "`Ok` was already present and must not repeat: {names:?}"
-        );
-        assert_eq!(
-            names,
-            vec!["Ok", "Err", "type Result", "type __BoundaryError"],
-        );
-    }
-
-    /// The bare name is what collides, so `type BoundaryError` must match an
-    /// existing `BoundaryError`.
-    #[test]
-    fn matches_a_type_prefixed_group_binding_against_a_bare_one() {
-        let mut names = vec![
-            "Ok".to_string(),
-            "Err".to_string(),
-            "type Result".to_string(),
-            "__BoundaryError".to_string(),
-        ];
-        let before = names.clone();
-        append_missing_bindings(&mut names, emitter::BOUNDARY_CODEC_RUNTIME_IMPORTS);
-        assert_eq!(
-            names, before,
-            "every binding was already present, so `names` is untouched"
-        );
-    }
-
-    /// …and the other direction: a bare group binding against an existing
-    /// `type`-prefixed one. This is the case that would regress if `bare`
-    /// were applied to only one side of the comparison.
-    #[test]
-    fn matches_a_bare_group_binding_against_a_type_prefixed_one() {
-        let mut names = vec!["type Ok".to_string(), "type Err".to_string()];
-        let before = names.clone();
-        append_missing_bindings(&mut names, ", Ok, Err");
-        assert_eq!(
-            names, before,
-            "a bare binding must match an existing `type`-prefixed one: {names:?}"
-        );
-    }
-
-    /// The two calls run back to back over the same `names`, so the second
-    /// sees the first's own output as `present` — the overlap between the
-    /// groups (`Ok`, `Err`, `type Result`) must not double up.
-    #[test]
-    fn composes_across_two_sequential_calls() {
-        let mut names = vec![
-            "Ok".to_string(),
-            "Err".to_string(),
-            "type Result".to_string(),
-        ];
-        append_missing_bindings(&mut names, emitter::BOUNDARY_CODEC_RUNTIME_IMPORTS);
-        append_missing_bindings(&mut names, emitter::JSON_CODEC_RUNTIME_IMPORTS);
-        assert_eq!(
-            names,
-            vec![
-                "Ok",
-                "Err",
-                "type Result",
-                "type __BoundaryError",
-                "type __JsonValue",
-                "type DecodeError",
-            ],
-            "the shared bindings must be added once: {names:?}"
-        );
-    }
 
     #[test]
     fn names_ident_ignores_literals_and_members_but_reads_template_holes() {

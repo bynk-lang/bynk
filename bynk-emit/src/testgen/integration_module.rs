@@ -3,13 +3,13 @@
 //! Crate-hygiene D1 (#2982, PR 2): split out of `tests_emit.rs`.
 
 use super::*;
-use bynk_emit::emitter::RuntimeUse;
-use bynk_emit::emitter::wrangler::{BindingSource, WorkerBinding, singleton_is};
+use crate::emitter::RuntimeUse;
+use crate::emitter::wrangler::{BindingSource, WorkerBinding, singleton_is};
 // #1759: every namespace a test module imports, from one definition.
+use crate::emitter::emit::test_scaffold_ns as test_ns;
 use bynk_check::checker::Types;
 use bynk_check::d1_migrations::{D1Migrations, pglite_on};
 use bynk_check::test_suites::{self};
-use bynk_emit::emitter::emit::test_scaffold_ns as test_ns;
 use bynk_ts::{SourceMapBuilder, TsDecl, TsExpr, TsProgram, TsStmt};
 use std::sync::Arc;
 
@@ -38,7 +38,7 @@ pub(super) fn emit_integration_module(
     fixture_consts: Option<String>,
     // #2138: a remote test build — drivers reach the target's URLs, and a case
     // a remote run can't honour is refused (into `errors`) or skipped.
-    remote: Option<&crate::project::RemoteTests>,
+    remote: Option<&crate::emit_model::RemoteTests>,
     // P4b (#2608): each `D1` database's migrations.
     d1_migrations: &D1Migrations,
     errors: &mut Vec<CompileError>,
@@ -363,7 +363,7 @@ pub(super) fn emit_integration_module(
     // declares. No other build is changed by it.
     let smoke = cases
         .iter()
-        .any(|c| c.map_source.ends_with(crate::project::SMOKE_SUITE_SUFFIX));
+        .any(|c| c.map_source.ends_with(crate::testgen::SMOKE_SUITE_SUFFIX));
     let http_support = emit_system_http_support(
         suite,
         unit_tables,
@@ -393,7 +393,7 @@ pub(super) fn emit_integration_module(
     // #2138: under a remote run, a case that uses what a real runtime can't
     // honour is refused, or, under `--skip-unsupported`, skipped with its
     // reason (`RunnableTest::skipped`).
-    let mut skipped: Vec<crate::project::RemoteSkip> = Vec::new();
+    let mut skipped: Vec<crate::emit_model::RemoteSkip> = Vec::new();
     let mut envs: Vec<BTreeMap<String, String>> = Vec::new();
     let cases: Vec<&SystemCaseInput> = cases
         .iter()
@@ -447,7 +447,7 @@ pub(super) fn emit_integration_module(
                 return true;
             };
             if remote.skip_unsupported {
-                skipped.push(crate::project::RemoteSkip {
+                skipped.push(crate::emit_model::RemoteSkip {
                     case: input.case.name.clone(),
                     code: refusal.category.to_string(),
                     reason: refusal.message.clone(),
@@ -491,7 +491,7 @@ pub(super) fn emit_integration_module(
         case_out.push_str("  try {\n");
         if with_env {
             let entries = env_entries(&input.env_values);
-            bynk_emit::emitter::extend_printed_at(
+            crate::emitter::extend_printed_at(
                 &mut case_out,
                 vec![TsStmt::assign(
                     ident("__bynkEnv"),
@@ -529,7 +529,7 @@ pub(super) fn emit_integration_module(
                 names.dedup();
                 let type_names = aliased_types(table, |n| is_public_type(table, n));
                 harness_bound.extend(names.iter().cloned());
-                bynk_emit::emitter::extend_printed_at(
+                crate::emitter::extend_printed_at(
                     &mut case_out,
                     emit_ns_destructure(&ns, &names, &type_names),
                     2,
@@ -541,7 +541,7 @@ pub(super) fn emit_integration_module(
         // #1883, slice 3: the assets a case may name, from their owners.
         for (owner, names) in &asset_owners {
             harness_bound.extend(names.iter().cloned());
-            bynk_emit::emitter::extend_printed_at(
+            crate::emitter::extend_printed_at(
                 &mut case_out,
                 emit_ns_destructure(&test_ns(owner), names, &[]),
                 2,
@@ -682,7 +682,7 @@ pub(super) fn emit_integration_module(
                 continue;
             };
             let type_names = aliased_types(t, |n| named.contains(n));
-            bynk_emit::emitter::extend_printed_at(
+            crate::emitter::extend_printed_at(
                 &mut case_out,
                 emit_ns_destructure(&test_ns(p), &named, &type_names),
                 2,
@@ -742,14 +742,12 @@ pub(super) fn emit_integration_module(
     let json_codec_roots: Vec<bynk_syntax::ast::TypeRef> = runtime_use
         .take_json_codec_roots()
         .into_iter()
-        .filter_map(|ty| bynk_emit::emitter::ty_to_type_ref(ty, tys))
-        .filter(|r| !bynk_emit::emitter::serialisation::root_names_any(r, &suite_type_names))
+        .filter_map(|ty| crate::emitter::ty_to_type_ref(ty, tys))
+        .filter(|r| !crate::emitter::serialisation::root_names_any(r, &suite_type_names))
         .collect();
     if !json_codec_roots.is_empty() {
-        let (codec_names, codec_insts) = bynk_emit::emitter::serialisation::collect_codec_closure(
-            &json_codec_roots,
-            &view.types,
-        );
+        let (codec_names, codec_insts) =
+            crate::emitter::serialisation::collect_codec_closure(&json_codec_roots, &view.types);
         if !codec_names.is_empty() || !codec_insts.is_empty() {
             runtime_use.note_json_codec();
             runtime_use.note_boundary_codec();
@@ -772,8 +770,8 @@ pub(super) fn emit_integration_module(
             for (n, owner) in &view.hidden {
                 qual.insert(n.clone(), format!("{}.", test_ns(owner)));
             }
-            stmts.extend(bynk_emit::emitter::serialisation::decls_as_stmts_block(
-                bynk_emit::emitter::serialisation::emit_helpers_for_owner_qualified(
+            stmts.extend(crate::emitter::serialisation::decls_as_stmts_block(
+                crate::emitter::serialisation::emit_helpers_for_owner_qualified(
                     &codec_names,
                     &view.types,
                     "",
@@ -781,8 +779,8 @@ pub(super) fn emit_integration_module(
                     runtime_use,
                 ),
             ));
-            stmts.extend(bynk_emit::emitter::serialisation::decls_as_stmts(
-                bynk_emit::emitter::serialisation::emit_generic_helpers_qualified(
+            stmts.extend(crate::emitter::serialisation::decls_as_stmts(
+                crate::emitter::serialisation::emit_generic_helpers_qualified(
                     &codec_insts,
                     &view.types,
                     &qual,
@@ -849,7 +847,7 @@ fn platform_binding_factories(
     binds: &dyn Fn(fn(&BindingSource) -> bool) -> bool,
     pglite: bool,
 ) -> Vec<String> {
-    let kinds: [(bynk_emit::emitter::wrangler::BindingKind, &str); 17] = [
+    let kinds: [(crate::emitter::wrangler::BindingKind, &str); 17] = [
         (
             |s| matches!(s, BindingSource::Kv | BindingSource::KvInstance { .. }),
             "__makeIntegrationKv",

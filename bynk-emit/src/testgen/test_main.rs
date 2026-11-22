@@ -317,7 +317,7 @@ pub(super) fn build_run_function(entries: &[(String, String)]) -> Vec<TsStmt> {
     body.push(TsStmt::return_stmt(Some(ident("results")), None));
     let names = entries
         .iter()
-        .map(|(name, _)| format!("\"{}\"", bynk_emit::emitter::escape_ts_string(name)))
+        .map(|(name, _)| format!("\"{}\"", crate::emitter::escape_ts_string(name)))
         .collect::<Vec<_>>()
         .join(", ");
     vec![
@@ -458,7 +458,7 @@ impl DetachReports {
     }
 }
 
-pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt, pg: bool) -> TsProgram {
+pub fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt, pg: bool) -> TsProgram {
     let ext = import_ext.as_str();
     let mut program = TsProgram::new();
     program.push(TsStmt::comment(
@@ -1166,7 +1166,7 @@ mod tests {
     #[test]
     fn matches_the_real_fixtures_own_tests_main_ts_byte_for_byte() {
         let expected = include_str!(
-            "../../../../bynk-tests/tests/fixtures/positive/109_test_with_opaque_construction/\
+            "../../../bynk-tests/tests/fixtures/positive/109_test_with_opaque_construction/\
              expected/tests/main.ts"
         );
         let tests = vec![RunnableTest {

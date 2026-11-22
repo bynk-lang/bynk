@@ -4,9 +4,9 @@
 
 use super::*;
 // #1759: every namespace a test module imports, from one definition.
-use crate::dev_run::TEST_SESSION_KEY;
+use crate::emitter::emit::test_scaffold_ns as test_ns;
+use crate::testgen::TEST_SESSION_KEY;
 use bynk_check::test_suites::{self, ResolvedStub};
-use bynk_emit::emitter::emit::test_scaffold_ns as test_ns;
 use bynk_ts::{TsBindingName, TsDecl, TsExpr, TsLit, TsObjectEntry, TsParam, TsStmt, TsType};
 
 /// The arguments a derived capability's test double is built with: P3 (#2342) a
@@ -145,8 +145,8 @@ pub(super) fn emit_test_deps(
                 continue;
             }
             let how = match platform_or_placeholder(&owner, &cap) {
-                TopDep::Placeholder => TopDep::Provider,
-                double => double,
+                TopDep::Placeholder | TopDep::Provider => TopDep::Provider,
+                TopDep::Double => TopDep::Double,
             };
             tops.push((cap.clone(), (owner, cap), how));
         }
@@ -323,7 +323,7 @@ pub(super) fn emit_test_deps(
                     "events".to_string(),
                     Some(TsType::named_with_args(
                         "globalThis.Array",
-                        vec![TsType::named(bynk_emit::emitter::EVENTS_WIRE_EVENT_TS_TYPE)],
+                        vec![TsType::named(crate::emitter::EVENTS_WIRE_EVENT_TS_TYPE)],
                     )),
                 )],
                 None,
@@ -458,7 +458,7 @@ pub(super) fn platform_or_placeholder(owner: &str, cap: &str) -> TopDep {
 /// checked. `type_names` (a subset of `value_names`) gets the alias;
 /// `value_names` is unconditionally destructured with no cast.
 /// #1479: returns real [`TsStmt`]s (was `out: &mut String`) — every caller
-/// now appends via `bynk_emit::emitter::extend_printed_at(out, stmts, 2)`, the
+/// now appends via `crate::emitter::extend_printed_at(out, stmts, 2)`, the
 /// same depth-2 this scaffold body's own statements always printed at.
 /// #1703: each type name carries its type parameters, so a generic type's
 /// alias is generic too (`type Box<A> = ns.Box<A>;`). A bare alias of a generic
@@ -727,7 +727,7 @@ pub(super) fn extend_hidden_destructures(
             continue;
         };
         let type_names = aliased_types(table, |n| names.contains(n));
-        bynk_emit::emitter::extend_printed_at(
+        crate::emitter::extend_printed_at(
             out,
             emit_ns_destructure(&test_ns(owner), names, &type_names),
             2,
@@ -754,11 +754,11 @@ pub(super) fn sanitise_case_name(name: &str, index: &mut usize) -> String {
 /// #1883, slice 3: the project's declared assets, for the test passes — each
 /// declaration's served path ([`bynk_check::assets::declared_served_paths`])
 /// and each declared file's bytes. Empty when no `assets/` folder was read.
-pub(crate) struct TestAssetFiles<'a> {
-    pub(crate) served: &'a BTreeMap<String, String>,
-    pub(crate) bytes: &'a BTreeMap<String, Vec<u8>>,
+pub struct TestAssetFiles<'a> {
+    pub served: &'a BTreeMap<String, String>,
+    pub bytes: &'a BTreeMap<String, Vec<u8>>,
     /// #2841: the text of each declared suite `fixture` file, by normalised path.
-    pub(crate) fixtures: &'a BTreeMap<String, String>,
+    pub fixtures: &'a BTreeMap<String, String>,
 }
 
 /// #2134/#2956: a case's `env` entries as the object `__bynkEnv` is set to: a
@@ -782,7 +782,7 @@ pub(super) fn env_entries(
 /// fixture file's text — a function of the normalised path alone, so suites that
 /// name one file share one constant and a runner can name it without state.
 pub(super) fn fixture_ident(path: &str) -> String {
-    let key = crate::project::assets::normalise_asset_path(path);
+    let key = bynk_project::assets::normalise_asset_path(path);
     let mut out = String::from("__fixture_");
     for b in key.bytes() {
         if b.is_ascii_alphanumeric() {
@@ -808,7 +808,7 @@ pub(super) fn fixture_consts(
     for &i in indices {
         if let bynk_syntax::ast::SourceUnit::Suite(s) = parsed[i].unit() {
             for f in &s.fixtures {
-                paths.insert(crate::project::assets::normalise_asset_path(&f.path));
+                paths.insert(bynk_project::assets::normalise_asset_path(&f.path));
             }
         }
     }

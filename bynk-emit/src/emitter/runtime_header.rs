@@ -25,7 +25,7 @@
 //! [`derives_runtime_imports`] is the one place that says which modules this
 //! applies to. The driver's `tests/*.test.ts` modules are opaque test text whose
 //! header the driver curates from the same [`RuntimeUse`](super::runtime_use)
-//! notes the emitter once read, so they keep their predicted imports until 1B.2.
+//! notes the emitter once read, so they keep their predicted imports until 1B.5.
 //!
 //! [`split_runtime_import`]: super::runtime_files::split_runtime_import
 
@@ -37,8 +37,8 @@ use super::runtime_files::{is_runtime_export, is_type_only_export};
 /// Whether a unit of `kind` takes its runtime import from its tree.
 ///
 /// Every kind is listed, so a new one has to be decided. A `Test` or
-/// `Integration` unit is built by the driver (`tests_emit`), not through the
-/// emitter's header at all; it keeps its predicted imports until 1B.2 and must
+/// `Integration` unit is built by `bynk-emit::testgen`, not through the
+/// emitter's header at all; it keeps its predicted imports until 1B.5 and must
 /// not be derived here.
 pub(crate) fn derives_runtime_imports(kind: UnitKind) -> bool {
     match kind {

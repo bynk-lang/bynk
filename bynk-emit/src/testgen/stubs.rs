@@ -3,13 +3,13 @@
 //! Crate-hygiene D1 (#2982, PR 2): split out of `tests_emit.rs`.
 
 use super::*;
-use bynk_emit::emitter::RuntimeUse;
-use bynk_emit::emitter::ts_types::ts_type_ref_qualified_multi_ts_type;
+use crate::emitter::RuntimeUse;
+use crate::emitter::ts_types::ts_type_ref_qualified_multi_ts_type;
 // #1759: every namespace a test module imports, from one definition.
+use crate::emitter::emit::test_scaffold_ns as test_ns;
 use bynk_check::checker::Types;
 use bynk_check::d1_migrations::MigrationFile;
 use bynk_check::test_suites::{self, ResolvedStub, StubScope};
-use bynk_emit::emitter::emit::test_scaffold_ns as test_ns;
 use bynk_syntax::ast::{
     ArgPattern, BaseType, CapabilityOp, Commons, CommonsForm, CommonsItem, Expr, Ident, Param,
     QualifiedName, SeqOutcome, StubClause, StubRhs, Trivia, TypeRef,
@@ -239,7 +239,7 @@ pub(super) fn emit_stub_class(
         let return_ty = ts_type_ref_qualified_multi_ts_type(&op.return_type, &sig_type_ns);
 
         let mut body_text = String::new();
-        bynk_emit::emitter::extend_printed_at(
+        crate::emitter::extend_printed_at(
             &mut body_text,
             emit_ns_destructure(&scope_ns, &scope_names, &scope_type_names),
             2,
@@ -254,7 +254,7 @@ pub(super) fn emit_stub_class(
                 used_commons_destructures(&owning_unit, unit_tables, unit_uses, &mut HashSet::new())
             {
                 taken.extend(names.iter().chain(types.iter().map(|(n, _)| n)).cloned());
-                bynk_emit::emitter::extend_printed_at(
+                crate::emitter::extend_printed_at(
                     &mut body_text,
                     emit_ns_destructure(&ns, &names, &types),
                     2,
@@ -286,7 +286,7 @@ pub(super) fn emit_stub_class(
                 .filter(|o| names.contains(*o) && taken.insert((*o).clone()))
                 .cloned()
                 .collect();
-            bynk_emit::emitter::extend_printed_at(
+            crate::emitter::extend_printed_at(
                 &mut body_text,
                 emit_ns_destructure_renamed(&test_ns(u), &names, &types, &renames, &declared),
                 2,

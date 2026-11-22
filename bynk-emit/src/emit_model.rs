@@ -1261,6 +1261,29 @@ pub struct RemoteSkip {
     pub reason: String,
 }
 
+/// #2138: how a remote test build treats a `system` case it can't run
+/// against a real runtime (`CompileOptions::remote_tests` in the driver).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct RemoteTests {
+    /// `--skip-unsupported`: skip such a case, recording why
+    /// ([`DiscoveredSuite::skipped`]), instead of refusing it.
+    pub skip_unsupported: bool,
+    /// The named target's declared `vars`, which each case's `env` must agree
+    /// with (`bynk_check::test_env::remote_env_disagreement`).
+    pub vars: BTreeMap<String, String>,
+    /// The names of the named target's secrets, which a case's `env` may not
+    /// set.
+    pub secrets: Vec<String>,
+    /// `--against dev`: the runner starts the Workers itself and applies each
+    /// case's `env` to them, so `env` is not checked against `vars`; each
+    /// suite instead reports the distinct `env` maps its cases run with
+    /// ([`DiscoveredSuite::envs`]), one `bynk dev` per map.
+    pub dev: bool,
+    /// Under `dev`, build only the cases whose `env` is exactly this map: the
+    /// group one `bynk dev` serves.
+    pub only_env: Option<BTreeMap<String, String>>,
+}
+
 /// `<name>.<suffix>`, matching `bynk-driver::output.rs`'s own sibling-name
 /// derivation for `.map`/`.bynkdbg.json` files exactly (P7.6, #1309).
 pub fn sibling_path(output_path: &Path, suffix: &str) -> PathBuf {

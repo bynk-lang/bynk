@@ -69,6 +69,7 @@ use ctx::UnitFacts;
 use ts_types::{TyRender, asset_ts_type, ts_base};
 
 pub mod client;
+pub mod commons_barrel;
 pub(crate) mod compose;
 pub mod containers;
 pub mod contracts;

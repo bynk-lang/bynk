@@ -14,11 +14,11 @@
 //! crate-hygiene track's M-3 ratchet, `model_readers_beyond_emit` (B1, #2939), and its H-3 gate,
 //! `unused_deps` (A4, #2976).
 //!
-//! **Thirty are gated**, committed and diffed: `workspace_lints`, `fs_below_driver`,
+//! **Thirty-one are gated**, committed and diffed: `workspace_lints`, `fs_below_driver`,
 //! `options_sources`, `hoist_sinks`, `span_keyed_maps`, `emit_diagnostics`,
 //! `ide_emit_edge`, `ast_importers`, `emit_abi_shapes`, `ts_writes`, `ts_any`,
 //! `verbatim_origins`, `verbatim_sites`, `incremental_query_types`,
-//! `unconsumed_ir_items`, `diagnostic_coverage`, `model_readers_beyond_emit`, `unused_deps`, `explained_codes`, `ts_raw_sites_emit`, `ts_raw_sites_testgen`, `ts_text_idents`, `emit_thread_locals`, `emit_silent_fallbacks`, `emit_print_calls`, `import_prediction_fns`, `deploy_kind_accessors`, `env_protocol_literals`, `tool_spawn_sites`, `deploy_ledger_writes`. Ten of these are
+//! `unconsumed_ir_items`, `diagnostic_coverage`, `model_readers_beyond_emit`, `unused_deps`, `explained_codes`, `ts_raw_sites_emit`, `ts_raw_sites_testgen`, `ts_text_idents`, `emit_thread_locals`, `emit_silent_fallbacks`, `emit_print_calls`, `testgen_print_calls`, `import_prediction_fns`, `deploy_kind_accessors`, `env_protocol_literals`, `tool_spawn_sites`, `deploy_ledger_writes`. Ten of these are
 //! zero/closure-shaped — a boolean, or a count pinned at a small, argued floor
 //! (`ast_importers` = 5, `emit_abi_shapes` = 1). Phase 7's own four are the same shape:
 //! each converged toward an argued floor over dozens of slices, the same trajectory
@@ -42,7 +42,7 @@
 //! **Two kinds of gate** (#3679, amending ADR 0389/0390). Every gated probe is
 //! *exact-match*: a live reading that differs from its committed row fails unless a
 //! pending file names it in `probes:`. The [`GROWTH_PROBES`] (`ts_writes`, `ts_any`,
-//! `emit_abi_shapes`, `verbatim_sites`, `ts_raw_sites_emit`, `ts_raw_sites_testgen`, `ts_text_idents`, `span_keyed_maps`, `emit_thread_locals`, `emit_silent_fallbacks`, `emit_print_calls`, `import_prediction_fns`, `deploy_kind_accessors`, `env_protocol_literals`, `tool_spawn_sites`, `deploy_ledger_writes`) are also *directional*:
+//! `emit_abi_shapes`, `verbatim_sites`, `ts_raw_sites_emit`, `ts_raw_sites_testgen`, `ts_text_idents`, `span_keyed_maps`, `emit_thread_locals`, `emit_silent_fallbacks`, `emit_print_calls`, `testgen_print_calls`, `import_prediction_fns`, `deploy_kind_accessors`, `env_protocol_literals`, `tool_spawn_sites`, `deploy_ledger_writes`) are also *directional*:
 //! `growth_probes_never_rise` (`xtask/tests/greenfield_status.rs`) fails when the
 //! live leading count exceeds the committed one unless a pending file *raises* the
 //! probe with a reason (`raises:`), which the stamp then records in
@@ -117,7 +117,7 @@ pub fn run(root: &Path) -> Report {
 /// The gated probes' names, in [`run_gated`]'s order — what a pending file's
 /// `probes` key may cite. `greenfield_status_table_is_current` asserts this
 /// matches the probes [`run_gated`] actually returns, so the two cannot drift.
-pub const GATED_PROBES: [&str; 30] = [
+pub const GATED_PROBES: [&str; 31] = [
     "workspace_lints",
     "fs_below_driver",
     "options_sources",
@@ -137,6 +137,7 @@ pub const GATED_PROBES: [&str; 30] = [
     "emit_thread_locals",
     "emit_silent_fallbacks",
     "emit_print_calls",
+    "testgen_print_calls",
     "import_prediction_fns",
     "deploy_kind_accessors",
     "env_protocol_literals",
@@ -152,12 +153,12 @@ pub const GATED_PROBES: [&str; 30] = [
 
 /// The gated probes that only a reasoned, recorded `raises:` may increase
 /// (#3679, ADR 0389/0390 amended): `ts_writes`, `ts_any`, `emit_abi_shapes`,
-/// `verbatim_sites`, `ts_raw_sites_emit` and `ts_raw_sites_testgen` (the split of `ts_raw_sites`, #3681), `ts_text_idents` (#3681), `span_keyed_maps`, `emit_thread_locals` (1A.19), `emit_silent_fallbacks` (1A.34), `emit_print_calls` (1A.35b), `import_prediction_fns` (1A.36a), `deploy_kind_accessors` (1D.1a), `env_protocol_literals` (1D.5a), `tool_spawn_sites` (1D.5b), `deploy_ledger_writes` (1D.2a). Probes already at a zero or closure
+/// `verbatim_sites`, `ts_raw_sites_emit` and `ts_raw_sites_testgen` (the split of `ts_raw_sites`, #3681), `ts_text_idents` (#3681), `span_keyed_maps`, `emit_thread_locals` (1A.19), `emit_silent_fallbacks` (1A.34), `emit_print_calls` (1A.35b), `testgen_print_calls` (1B.2a), `import_prediction_fns` (1A.36a), `deploy_kind_accessors` (1D.1a), `env_protocol_literals` (1D.5a), `tool_spawn_sites` (1D.5b), `deploy_ledger_writes` (1D.2a). Probes already at a zero or closure
 /// floor are excluded (their exact-match row pins them), as are
 /// `verbatim_origins` (an argued floor of 2) and `model_readers_beyond_emit`
 /// (which has the opposite direction). A subset of [`GATED_PROBES`], pinned by
 /// a unit test.
-pub const GROWTH_PROBES: [&str; 16] = [
+pub const GROWTH_PROBES: [&str; 17] = [
     "ts_writes",
     "ts_any",
     "emit_abi_shapes",
@@ -169,6 +170,7 @@ pub const GROWTH_PROBES: [&str; 16] = [
     "emit_thread_locals",
     "emit_silent_fallbacks",
     "emit_print_calls",
+    "testgen_print_calls",
     "import_prediction_fns",
     "deploy_kind_accessors",
     "env_protocol_literals",
@@ -176,7 +178,7 @@ pub const GROWTH_PROBES: [&str; 16] = [
     "deploy_ledger_writes",
 ];
 
-/// The thirty gated (zero/closure/ratchet) probes only — what [`gated_disagreements`] diffs.
+/// The thirty-one gated (zero/closure/ratchet) probes only — what [`gated_disagreements`] diffs.
 pub fn run_gated(root: &Path) -> Vec<Probe> {
     vec![
         workspace_lints(root),
@@ -198,6 +200,7 @@ pub fn run_gated(root: &Path) -> Vec<Probe> {
         emit_thread_locals(root),
         emit_silent_fallbacks(root),
         emit_print_calls(root),
+        testgen_print_calls(root),
         import_prediction_fns(root),
         deploy_kind_accessors(root),
         env_protocol_literals(root),
@@ -1698,6 +1701,8 @@ fn ast_importer_files(root: &Path) -> Vec<PathBuf> {
                         .unwrap_or(false))
         })
         .filter(|(path, _)| !is_named_ast_importer(path.strip_prefix(&dir).unwrap_or(path)))
+        // 1B.2a (Decision D of #4028): the harness is not production emission.
+        .filter(|(path, _)| !is_testgen_path(path.strip_prefix(&dir).unwrap_or(path)))
         .map(|(path, _)| path)
         .collect()
 }
@@ -1888,7 +1893,8 @@ fn is_moved_project_file(rel: &Path) -> bool {
 }
 
 /// The code-generation family's source files, relative to the crate `src/` each lives
-/// in: all of `bynk-emit/src`, plus the orchestration that used to be `bynk-emit`'s
+/// in: all of `bynk-emit/src` (the test-harness generation, `testgen`, included since 1B.2a moved
+/// it there from the driver; [`is_testgen_path`] still tells the two apart), plus the orchestration that used to be `bynk-emit`'s
 /// `project` module and now lives at `bynk-driver/src/project{.rs,/}` (crate-hygiene D1,
 /// #2982). The probes that read "the emitter's source" ([`ts_writes`], [`ts_any`],
 /// [`verbatim_origins`], [`verbatim_sites`]) are re-pointed here so moving `project` to
@@ -2296,14 +2302,26 @@ fn ts_raw_sites_testgen(root: &Path) -> Probe {
 
 /// Whether `rel` (relative to the `src/` of the crate it lives in, as
 /// [`codegen_family_files`] gives it) generates the *test harness* rather than
-/// production emission: the driver's `project/tests_emit/**` today, and a
-/// `testgen` module or directory in `bynk-emit` once 1B.2 moves it there.
+/// production emission: `bynk-emit::testgen` (`testgen.rs`, `testgen/**`), which 1B.2a moved
+/// there from the driver's `project/tests_emit/**`.
 fn is_testgen_path(rel: &Path) -> bool {
-    rel.starts_with("project/tests_emit")
-        || rel.starts_with("project/tests_emit.rs")
-        || rel
-            .components()
-            .any(|c| c.as_os_str().to_string_lossy().starts_with("testgen"))
+    rel.components()
+        .any(|c| c.as_os_str().to_string_lossy().starts_with("testgen"))
+}
+
+/// `bynk-emit/src`'s files, split by [`is_testgen_path`] (1B.2a, Decision D of #4028): the
+/// production emission the Phase 1 exit rows are about when `testgen` is false, the test
+/// harness's own files (`testgen.rs`, `testgen/**`) when it is true. The probes that read
+/// `bynk-emit/src` alone ([`emit_print_calls`], [`import_prediction_fns`],
+/// [`emit_silent_fallbacks`], [`ast_importers`]) take the first, as [`ts_raw_sites_emit`] does;
+/// [`testgen_print_calls`] takes the second. The zero-reading rules ([`fs_below_driver`],
+/// [`emit_thread_locals`], [`hoist_sinks`]) keep scanning every file, so the harness can never
+/// do I/O or hold a thread-local.
+fn emit_files_by_origin(root: &Path, testgen: bool) -> Vec<(PathBuf, String)> {
+    rust_files_relative(&root.join("bynk-emit/src"))
+        .into_iter()
+        .filter(|(p, _)| is_testgen_path(p) == testgen)
+        .collect()
 }
 
 /// [`ts_raw_sites_emit`]'s and [`ts_raw_sites_testgen`]'s counting logic over an
@@ -2395,8 +2413,7 @@ fn emit_silent_fallbacks(root: &Path) -> Probe {
     Probe {
         name: "emit_silent_fallbacks",
         gated: true,
-        reads: emit_silent_fallbacks_violations(&rust_files_relative(&root.join("bynk-emit/src")))
-            .to_string(),
+        reads: emit_silent_fallbacks_violations(&emit_files_by_origin(root, false)).to_string(),
     }
 }
 
@@ -2496,9 +2513,11 @@ fn ts_text_idents_violations(files: &[(PathBuf, String)]) -> usize {
 /// file `raises:` it with a reason, so a round trip cannot creep back in.
 ///
 /// **End state (1A.39a):** the probe reads 1. The one line is `extend_printed_at` in `emitter.rs`,
-/// the driver's test-harness entry: it prints the statements the driver asks for, at a depth. It
-/// stays until 1B.2 moves `tests_emit` into `bynk-emit`, and the probe then reads 0. The final
-/// program print (`bynk_ts::print`) and `lower_block_to_async_body` count no line.
+/// the driver's test-harness entry: it prints the statements the driver asks for, at a depth.
+/// 1B.2a moved the harness into `bynk-emit::testgen` and the probe skips that module
+/// ([`emit_files_by_origin`]), as [`ts_raw_sites_emit`] does; the harness's own 43 are read by
+/// [`testgen_print_calls`]. 1B.2b moves `extend_printed_at` there too, and this probe then reads 0.
+/// The final program print (`bynk_ts::print`) and `lower_block_to_async_body` count no line.
 ///
 /// Counts non-comment lines outside `#[cfg(test)]` modules in `bynk-emit/src` that contain
 /// `print_expr(`, `print_stmt(` or `print_type(` (a call), or the same name as a path
@@ -2511,8 +2530,22 @@ fn emit_print_calls(root: &Path) -> Probe {
     Probe {
         name: "emit_print_calls",
         gated: true,
-        reads: emit_print_calls_violations(&rust_files_relative(&root.join("bynk-emit/src")))
-            .to_string(),
+        reads: emit_print_calls_violations(&emit_files_by_origin(root, false)).to_string(),
+    }
+}
+
+/// 1B.2a (#4028, Decision D): [`emit_print_calls`]'s count over `bynk-emit::testgen`, the
+/// test-harness generation (`testgen.rs`, `testgen/**`). It starts at the 43 the harness
+/// carried in the driver (`print_stmt`, `print_expr` and `print_type`), and is the half of the
+/// old reading the move reclassifies, as `ts_raw_sites_testgen` is of `ts_raw_sites`: the two
+/// readings sum to what one probe over `bynk-emit/src` would read. A growth probe
+/// ([`GROWTH_PROBES`]): it may only fall unless a pending file `raises:` it with a reason.
+/// 1B.5 converts the harness to nodes and takes it to its argued floor.
+fn testgen_print_calls(root: &Path) -> Probe {
+    Probe {
+        name: "testgen_print_calls",
+        gated: true,
+        reads: emit_print_calls_violations(&emit_files_by_origin(root, true)).to_string(),
     }
 }
 
@@ -2550,8 +2583,7 @@ fn import_prediction_fns(root: &Path) -> Probe {
     Probe {
         name: "import_prediction_fns",
         gated: true,
-        reads: import_prediction_fns_violations(&rust_files_relative(&root.join("bynk-emit/src")))
-            .to_string(),
+        reads: import_prediction_fns_violations(&emit_files_by_origin(root, false)).to_string(),
     }
 }
 
@@ -2705,8 +2737,8 @@ fn deploy_ledger_writes_violations(files: &[(PathBuf, String)]) -> usize {
 /// cannot drift from it.
 ///
 /// It read 36 on `main` before 1D.5a. After it, the residual is named: the three literals in
-/// `bynk-driver/src/project/tests_emit/test_main.rs`, which 1B.2 moves into `bynk-emit::testgen`
-/// untouched (a follow-up replaces them there), and `bynk/src/deploy/config.rs`'s
+/// `bynk-emit/src/testgen/test_main.rs`, which 1B.2a moved there from the driver untouched
+/// (a follow-up replaces them there), and `bynk/src/deploy/config.rs`'s
 /// `BYNK_DATASET_`, inside `synthesise_environment_block`, which 1C.2 deletes. A growth probe
 /// ([`GROWTH_PROBES`]): it may only fall unless a pending file `raises:` it with a reason, so a
 /// new bare protocol literal fails the gate.
@@ -4448,7 +4480,7 @@ pub fn render_table(report: &Report) -> String {
          (`lowering_text_bridge` and `stmt_text_lines`, added by #3694 and #3711, were retired at 0 by 1A.35b); \
          `import_prediction_fns` added by 1A.36a; `deploy_kind_accessors` added by 1D.1a; \
          `env_protocol_literals` added by 1D.5a; `tool_spawn_sites` added by 1D.5b; \
-         `deploy_ledger_writes` added by 1D.2a. Thirty \
+         `deploy_ledger_writes` added by 1D.2a; `testgen_print_calls` added by 1B.2a. Thirty-one \
          probes are gated — a disagreement between this file and a fresh run fails \
          `greenfield_status_table_is_current` (`xtask/tests/greenfield_status.rs`). \
          Five are trend probes, reported only.\n\n",
@@ -4833,6 +4865,7 @@ mod tests {
         | `emit_thread_locals` | yes | 2 |\n\
         | `emit_silent_fallbacks` | yes | 15 |\n\
         | `emit_print_calls` | yes | 30 |\n\
+        | `testgen_print_calls` | yes | 43 |\n\
         | `import_prediction_fns` | yes | 8 |\n\
         | `deploy_kind_accessors` | yes | 68 |\n\
         | `env_protocol_literals` | yes | 36 |\n\
@@ -4852,6 +4885,7 @@ mod tests {
             gated("emit_thread_locals", "2"),
             gated("emit_silent_fallbacks", "15"),
             gated("emit_print_calls", "30"),
+            gated("testgen_print_calls", "43"),
             gated("import_prediction_fns", "8"),
             gated("deploy_kind_accessors", "68"),
             gated("env_protocol_literals", "36"),
@@ -5250,22 +5284,81 @@ mod tests {
         let files = files_of(&[
             ("emitter/emit.rs", src),
             ("emitter/http_client.rs", src),
-            ("project/tests_emit/test_module.rs", src),
-            ("project/tests_emit.rs", src),
-            ("project/tests_emit/harness.rs", src),
+            ("testgen/test_module.rs", src),
+            ("testgen/test_runtime/x.rs", src),
+            ("testgen/harness.rs", src),
             ("emitter/testgen/stubs.rs", src),
             ("testgen.rs", src),
+            ("emitter/commons_barrel.rs", src),
             ("project.rs", src),
         ]);
-        // A driver `tests_emit` file and a `testgen` module or file are the harness.
+        // A `testgen` module or file is the harness (1B.2a moved it from the driver's
+        // `project/tests_emit/**`, which is no longer a harness path).
         assert_eq!(ts_raw_sites_violations(&files, true), 5);
-        // Everything else, the driver's `project.rs` orchestration included, is emission.
-        assert_eq!(ts_raw_sites_violations(&files, false), 3);
+        // Everything else, the commons barrel and the driver's `project.rs` orchestration
+        // included, is emission.
+        assert_eq!(ts_raw_sites_violations(&files, false), 4);
         // Together they are the old combined probe: a reclassification, not a fall.
         assert_eq!(
             ts_raw_sites_violations(&files, true) + ts_raw_sites_violations(&files, false),
             files.len()
         );
+    }
+
+    /// 1B.2a (Decision D of #4028): the four production probes that read `bynk-emit/src` skip
+    /// the harness, and `testgen_print_calls` reads it alone, so their sum is what one probe
+    /// over the crate would read.
+    #[test]
+    fn the_harness_is_read_apart_from_production_emission() {
+        let dir = std::env::temp_dir().join(format!("bynk-testgen-split-{}", std::process::id()));
+        let src = dir.join("bynk-emit/src");
+        for (rel, text) in [
+            ("emitter/emit.rs", "fn f() { print_stmt(&s); }\n"),
+            (
+                "testgen.rs",
+                "fn g() {\n print_expr(&e);\n print_type(&t);\n}\n",
+            ),
+            ("testgen/harness.rs", "fn h() { print_stmt(&s); }\n"),
+        ] {
+            let path = src.join(rel);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, text).unwrap();
+        }
+        assert_eq!(emit_print_calls(&dir).reads, "1");
+        assert_eq!(testgen_print_calls(&dir).reads, "3");
+        assert_eq!(emit_files_by_origin(&dir, false).len(), 1);
+        assert_eq!(emit_files_by_origin(&dir, true).len(), 2);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The harness's prediction functions, silent fallbacks and AST imports are not production
+    /// emission (1B.2a), so `import_prediction_fns`, `emit_silent_fallbacks` and `ast_importers`
+    /// skip it.
+    #[test]
+    fn production_probes_skip_testgen_files() {
+        let dir = std::env::temp_dir().join(format!("bynk-testgen-skip-{}", std::process::id()));
+        let src = dir.join("bynk-emit/src");
+        let body = "use bynk_syntax::ast::Expr;\nfn block_uses_run_id() {}\n\
+                    fn f() { x.unwrap_or_else(|| ident(\"undefined\")); }\n";
+        for rel in ["emitter/emit.rs", "testgen/stubs.rs", "testgen.rs"] {
+            let path = src.join(rel);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, body).unwrap();
+        }
+        assert_eq!(import_prediction_fns(&dir).reads, "1");
+        assert_eq!(emit_silent_fallbacks(&dir).reads, "1");
+        assert_eq!(ast_importer_files(&dir).len(), 1);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn is_testgen_path_names_the_module_not_the_old_driver_directory() {
+        assert!(is_testgen_path(Path::new("testgen.rs")));
+        assert!(is_testgen_path(Path::new("testgen/system_support.rs")));
+        assert!(is_testgen_path(Path::new("testgen/test_runtime/x.rs")));
+        assert!(!is_testgen_path(Path::new("emitter/commons_barrel.rs")));
+        assert!(!is_testgen_path(Path::new("project/tests_emit/harness.rs")));
+        assert!(!is_testgen_path(Path::new("project/tests_emit.rs")));
     }
 
     #[test]

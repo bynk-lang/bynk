@@ -7,8 +7,8 @@
 //! the printer, whatever built it; the `ts_text_idents` line probe cannot see an `Ident(` fed from
 //! a variable or a helper, and this test does. It changes no output.
 //!
-//! Every module the emitter or the driver builds is covered bar the driver's `tests/*.test.ts`
-//! modules, whose text stays predicted until 1B.2 and is 1B.5's. What is still text is accounted by
+//! Every module the emitter or the driver builds is covered bar the test harness's `tests/*.test.ts`
+//! modules, whose text stays predicted until 1B.5 converts it. What is still text is accounted by
 //! class in [`TEXT_CLASSES`], each with a reason and an owner; the list can only shrink.
 
 use std::collections::BTreeMap;

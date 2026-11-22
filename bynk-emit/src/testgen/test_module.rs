@@ -3,15 +3,13 @@
 //! Crate-hygiene D1 (#2982, PR 2): split out of `tests_emit.rs`.
 
 use super::*;
-use bynk_emit::emitter::RuntimeUse;
+use crate::emitter::RuntimeUse;
 // #1759: every namespace a test module imports, from one definition.
+use crate::emitter::emit::test_scaffold_ns as test_ns;
 use bynk_check::checker::Types;
 use bynk_check::d1_migrations::{D1Migrations, d1_database_name, double_files, pglite_on};
 use bynk_check::test_suites::{self, ResolvedStub};
-use bynk_emit::emitter::emit::test_scaffold_ns as test_ns;
-use bynk_syntax::ast::{
-    Block, CommonsItem, Expr, ExprKind, FnName, StubClause, StubRhs, TypeRef, Visibility,
-};
+use bynk_syntax::ast::{Block, Expr, ExprKind, FnName, StubClause, StubRhs, TypeRef, Visibility};
 use bynk_ts::{SourceMapBuilder, TsDecl, TsProgram, TsStmt};
 use std::sync::Arc;
 
@@ -78,6 +76,7 @@ pub(super) fn emit_test_module(
     d1_migrations: &D1Migrations,
     // #2842: the stored snapshot files, inlined for the suites that take one.
     snapshot_files: Option<&BTreeMap<String, String>>,
+    plain_json: bool,
     runtime_use: &RuntimeUse,
     tys: &Arc<Types>,
 ) -> Option<(PathBuf, TsProgram, Option<String>, RunnableTest)> {
@@ -95,7 +94,7 @@ pub(super) fn emit_test_module(
         .collect();
     // #2991: a suite calling `Json.encodePlain` needs its own `Option` encoders to
     // carry the plain branch.
-    runtime_use.set_plain_json(super::super::project_mentions_encode_plain(parsed));
+    runtime_use.set_plain_json(plain_json);
     runtime_use.set_json_codec_qual(json_codec_qual_for_target(
         target_name,
         unit_tables,
@@ -194,7 +193,7 @@ pub(super) fn emit_test_module(
         parsed[i].test().is_some_and(|t| {
             t.cases
                 .iter()
-                .any(|c| super::case_effective_tier(c, t) != bynk_syntax::ast::TestTier::Unit)
+                .any(|c| case_effective_tier(c, t) != bynk_syntax::ast::TestTier::Unit)
         })
     });
     let integration_factory = |name: &str| {
@@ -625,7 +624,7 @@ pub(super) fn emit_test_module(
                     &rel_path,
                     case.name_span,
                 )),
-                tier: Some(super::case_effective_tier(case, test_decl).as_str()),
+                tier: Some(case_effective_tier(case, test_decl).as_str()),
                 generative: None,
                 doc: false,
             });
@@ -637,11 +636,11 @@ pub(super) fn emit_test_module(
             stmts.push(TsStmt::comment(
                 format!(
                     "case tier: {}",
-                    super::case_effective_tier(case, test_decl).as_str()
+                    case_effective_tier(case, test_decl).as_str()
                 ),
                 None,
             ));
-            let tier = super::case_effective_tier(case, test_decl);
+            let tier = case_effective_tier(case, test_decl);
             let deps_factory =
                 // Every tier above `unit` runs real collaborators. (A `system`
                 // case sits in a `system` suite, emitted through the Worker
@@ -859,8 +858,8 @@ pub(super) fn emit_test_module(
     let json_codec_roots: Vec<TypeRef> = runtime_use
         .take_json_codec_roots()
         .into_iter()
-        .filter_map(|ty| bynk_emit::emitter::ty_to_type_ref(ty, tys))
-        .filter(|r| !bynk_emit::emitter::serialisation::root_names_any(r, &suite_type_names))
+        .filter_map(|ty| crate::emitter::ty_to_type_ref(ty, tys))
+        .filter(|r| !crate::emitter::serialisation::root_names_any(r, &suite_type_names))
         .collect();
     if !json_codec_roots.is_empty() {
         // #3699: a `trace(Cap.op)` list's elements are the synthetic call-record
@@ -978,306 +977,17 @@ pub(super) fn emit_test_module(
     ))
 }
 
-/// v0.132: an aggregating barrel for a commons split across a directory.
-///
-/// Production emits a multi-file commons per file (`out/<name>/*.ts`) and never
-/// an aggregate `out/<name>.ts`, but every test/integration import references the
-/// commons as one namespace (`import * as ns from "./<name>.js"`). Emit
-/// `out/<name>.ts` that `export *`s each of the commons' source files so that
-/// namespace import resolves for the directory layout exactly as it does for a
-/// single file. The flat merge cannot collide: intra-commons symbol names are
-/// already unique across every kind (`bynk.resolve.duplicate_type`/`_fn`/
-/// `_method`), so no two files re-export the same name.
-///
-/// Returns `None` — no barrel — when the commons is *not* multi-file (a
-/// single-file commons already owns `out/<name>.ts`; a barrel would collide), or
-/// when this barrel path was already emitted (`emitted` dedups across the several
-/// test/integration modules that may import the same commons).
-///
-/// `groups` maps each production unit name to the `parsed` indices of its files;
-/// the multi-file predicate and the re-exported file set both read from there, so
-/// the barrel can never drop a file that declares nothing type/fn/method-shaped
-/// (which `FileDeclIndex` would omit).
-///
-/// #1820: a multi-file *context*'s barrel is also part of a production bundle
-/// build, emitted by `run_checks` ahead of the test passes, since its
-/// composition root imports the context from `out/<name>.ts` too; on workers,
-/// `run_checks` claims its path, since the context's modules are the Worker's.
-/// `run_checks` alone passes `modules_out`, this unit's staged modules, for
-/// [`duplicated_export_reexports`]; the test passes, which only ever reach a
-/// commons here, pass none. A commons' files repeat no generated export: it
-/// has no boundary codecs, and only a context rebrands a `uses`d type.
-pub(in crate::project) fn emit_commons_barrel(
-    name: &str,
-    groups: &BTreeMap<String, Vec<usize>>,
-    parsed: &[ParsedFile],
-    import_ext: ImportExt,
-    emitted: &mut HashSet<PathBuf>,
-    modules_out: &[StagedFile],
-) -> Option<StagedFile> {
-    let indices = groups.get(name)?;
-    // Multi-file only: *every* file must sit under a `<name>/` directory, the
-    // layout where no `out/<name>.ts` is otherwise produced. A unit with any file
-    // at `<name>.bynk` already owns `out/<name>.ts`, so it must not get a barrel.
-    if indices.is_empty()
-        || !indices
-            .iter()
-            .all(|&i| is_multi_file_layout(&parsed[i].source_path(), name))
-    {
-        return None;
-    }
-    let output_path = commons_dir_for(name).with_extension("ts");
-    if !emitted.insert(output_path.clone()) {
-        return None; // already emitted for an earlier importing module
-    }
-    // Barrel body: `export *` per distinct source file, sorted for determinism.
-    // Specifiers run through the emitter's cross-commons machinery so the path is
-    // correct for dotted names (`commons a.b` sits at `out/a/b.ts`, re-exporting
-    // `./b/<file>.js`) and forward-slash-normalised on Windows. `commons_dir_for`
-    // stands in for the barrel's own location — its parent is the directory the
-    // barrel lives in, which is all the relative computation needs.
-    let barrel_loc = commons_dir_for(name);
-    let mut files: Vec<PathBuf> = indices.iter().map(|&i| parsed[i].source_path()).collect();
-    files.sort();
-    files.dedup();
-    let mut stmts = vec![TsStmt::comment(
-        "Generated by bynk — do not edit by hand.",
-        None,
-    )];
-    for file in &files {
-        let spec = emitter::cross_commons_import_specifier_for_path(&barrel_loc, file, import_ext);
-        stmts.push(TsStmt::decl(TsDecl::ReExportAll { from: spec }, None));
-    }
-    let (merged, defined) = merged_unit_helpers(
-        name,
-        indices,
-        parsed,
-        &barrel_loc,
-        import_ext,
-        |file| file.to_path_buf(),
-        true,
-    );
-    stmts.extend(duplicated_export_reexports(
-        &files,
-        modules_out,
-        &defined,
-        &barrel_loc,
-        import_ext,
-    ));
-    stmts.extend(merged);
-    Some(StagedFile {
-        output_path,
-        document: Document::Ts(TsProgram { stmts }),
-        source_map: None,
-        debug_metadata: None,
-    })
-}
-
-/// #1844 review: the barrel's own definitions of the helpers every file of a
-/// multi-file *context* generates for itself. User names are unique across a
-/// unit, but these are not: each file with agents exports `__resetAgents`
-/// (over its own agents), and each file with services exports `__makeSurface`
-/// and the context's `__<Ctx>Deps` (over its own services). Two files of
-/// either kind made the barrel's `export *` ambiguous (TS2308), and at
-/// runtime the ambiguous name is dropped from the namespace, so a test's
-/// `__resetAgents()` was `undefined`. Where two or more files contribute one,
-/// the barrel exports a merged definition, which takes precedence over the
-/// star exports: reset every file's agents; combine every file's surface over
-/// the intersection of their deps.
-///
-/// `module_of` maps a file's source path to the path its module is emitted
-/// at, relative to which `barrel_loc` imports it: the identity for a bundle
-/// barrel, the file's own module under `handlers/` for a Worker's
-/// `handlers.ts` (#1820). `surface` says whether each file exports a
-/// surface at all: a Worker's files do not, since its composition root
-/// (`compose.ts`) builds the surface over the whole context.
-pub(in crate::project) fn merged_unit_helpers(
-    name: &str,
-    indices: &[usize],
-    parsed: &[ParsedFile],
-    barrel_loc: &Path,
-    import_ext: ImportExt,
-    module_of: impl Fn(&Path) -> PathBuf,
-    surface: bool,
-) -> (Vec<TsStmt>, Vec<String>) {
-    let mut with_agents: Vec<PathBuf> = Vec::new();
-    let mut with_services: Vec<PathBuf> = Vec::new();
-    for &i in indices {
-        let pf = &parsed[i];
-        if pf.kind() != UnitKind::Context {
-            continue;
-        }
-        let items = pf.items();
-        if items.iter().any(|it| matches!(it, CommonsItem::Agent(_))) {
-            with_agents.push(module_of(&pf.source_path()));
-        }
-        if items.iter().any(|it| matches!(it, CommonsItem::Service(_))) {
-            with_services.push(module_of(&pf.source_path()));
-        }
-    }
-    with_agents.sort();
-    with_services.sort();
-    let mut stmts = Vec::new();
-    // The names defined below, pushed in the branch that defines each, so
-    // `duplicated_export_reexports` never also re-exports one file's copy.
-    // Unlike a codec or a rebrand, each file's copy differs (it covers that
-    // file's agents or services), so re-exporting one would be wrong.
-    let mut defined = Vec::new();
-    let mut aliases: BTreeMap<PathBuf, String> = BTreeMap::new();
-    let mut alias_of = |file: &PathBuf, stmts: &mut Vec<TsStmt>| -> String {
-        if let Some(a) = aliases.get(file) {
-            return a.clone();
-        }
-        let alias = format!("__file{}", aliases.len());
-        stmts.push(TsStmt::decl(
-            TsDecl::ImportNamespace {
-                type_only: false,
-                alias: alias.clone(),
-                from: emitter::cross_commons_import_specifier_for_path(
-                    barrel_loc, file, import_ext,
-                ),
-            },
-            None,
-        ));
-        aliases.insert(file.clone(), alias.clone());
-        alias
-    };
-    if with_agents.len() > 1 {
-        let files: Vec<String> = with_agents
-            .iter()
-            .map(|f| alias_of(f, &mut stmts))
-            .collect();
-        let calls: Vec<String> = files
-            .iter()
-            .map(|alias| format!("  {alias}.__resetAgents();"))
-            .collect();
-        // The text spells each file's namespace; they are declared with it.
-        let names: Vec<&str> = files.iter().map(String::as_str).collect();
-        stmts.push(TsStmt::raw_using(
-            format!(
-                "export function __resetAgents(): void {{\n{}\n}}\n",
-                calls.join("\n")
-            ),
-            &names,
-        ));
-        defined.push("__resetAgents".to_string());
-    }
-    if surface && with_services.len() > 1 {
-        let deps = format!("__{}Deps", emitter::emit::context_pascal(name));
-        let files: Vec<String> = with_services
-            .iter()
-            .map(|f| alias_of(f, &mut stmts))
-            .collect();
-        let intersection = files
-            .iter()
-            .map(|a| format!("{a}.{deps}"))
-            .collect::<Vec<_>>()
-            .join(" & ");
-        let spreads = files
-            .iter()
-            .map(|a| format!("...{a}.__makeSurface(deps)"))
-            .collect::<Vec<_>>()
-            .join(", ");
-        let names: Vec<&str> = files.iter().map(String::as_str).collect();
-        stmts.push(TsStmt::raw_using(
-            format!(
-                "export type {deps} = {intersection};\n\
-                 export function __makeSurface(deps: {deps}) {{\n  return {{ {spreads} }};\n}}\n"
-            ),
-            &names,
-        ));
-        defined.push("__makeSurface".to_string());
-        defined.push(deps);
-    }
-    (stmts, defined)
-}
-
-/// #1820: the explicit re-exports a multi-file context's barrel needs where
-/// two or more of its files' modules export one name. User names are unique
-/// across a unit, but each file emits its own copy of what its declarations
-/// need from outside it: the context's rebrand of a `uses`d commons type, that
-/// commons type's codecs re-exported, a boundary type's codecs (wherever the
-/// type is declared). Each copy is a function of the type alone, so the
-/// barrel re-exports the name from the first module (sorted by path) that
-/// exports it, which takes precedence over `export *`; without it, `export *`
-/// is ambiguous (TS2308) and drops the name at runtime. `merged` names the
-/// helpers the barrel defines itself (`merged_unit_helpers`), which are
-/// skipped.
-///
-/// `modules` is each file's module path; `emitted`, the staged output in
-/// which each is found at its [`ts_output_path`]. What a module exports is
-/// read with [`TsStmt::exported_names`], which sees structured exports only;
-/// every generated name that repeats across files is exported structurally
-/// (the commons codec re-export is [`TsDecl::ExportNames`] for this reason).
-/// A name the chosen module exports only as a type (a rebrand of a commons
-/// type with no `of` constructor is a bare `type` alias) is re-exported as
-/// `type X`: under the build's `isolatedModules`, `export { X }` of a
-/// type-only name is TS1205 (#1862 review).
-pub(in crate::project) fn duplicated_export_reexports(
-    modules: &[PathBuf],
-    emitted: &[StagedFile],
-    merged: &[String],
-    barrel_loc: &Path,
-    import_ext: ImportExt,
-) -> Vec<TsStmt> {
-    // Per name, each exporting module and whether it exports a value under
-    // the name.
-    let mut exporters: BTreeMap<&str, Vec<(&PathBuf, bool)>> = BTreeMap::new();
-    for module in modules {
-        let output = ts_output_path(module);
-        let Some(Document::Ts(program)) = emitted
-            .iter()
-            .find(|f| f.output_path == output)
-            .map(|f| &f.document)
-        else {
-            continue;
-        };
-        for stmt in &program.stmts {
-            for exported in stmt.exported_names() {
-                // A type is often both an `interface` and a `const` of one
-                // name: one module, counted once, with a value if either
-                // statement exports one. This loop visits one module's
-                // statements at a time, so a module's earlier entry for the
-                // name, if any, is the last one.
-                let modules = exporters.entry(exported.name).or_default();
-                match modules.last_mut() {
-                    Some((m, has_value)) if *m == module => *has_value |= exported.has_value,
-                    _ => modules.push((module, exported.has_value)),
-                }
-            }
-        }
-    }
-    let mut chosen: BTreeMap<&PathBuf, Vec<String>> = BTreeMap::new();
-    for (name, modules) in &exporters {
-        if let [(first, has_value), _, ..] = modules.as_slice()
-            && !merged.iter().any(|m| m == name)
-        {
-            let spec = if *has_value {
-                name.to_string()
-            } else {
-                format!("type {name}")
-            };
-            chosen.entry(first).or_default().push(spec);
-        }
-    }
-    chosen
-        .into_iter()
-        .map(|(module, names)| {
-            let from =
-                emitter::cross_commons_import_specifier_for_path(barrel_loc, module, import_ext);
-            TsStmt::decl(TsDecl::ReExport { names, from }, None)
-        })
-        .collect()
-}
-
 /// Render the relative import path from the `tests/` output directory to the
 /// directory holding a target unit's TypeScript output.
 pub(super) fn relative_import_for_test(target_dir: &Path) -> String {
     let parts: Vec<String> = target_dir
         .components()
-        .filter_map(|c| match c {
-            Component::Normal(s) => Some(s.to_string_lossy().to_string()),
-            _ => None,
+        .filter_map(|c| {
+            if let Component::Normal(s) = c {
+                Some(s.to_string_lossy().to_string())
+            } else {
+                None
+            }
         })
         .collect();
     if parts.is_empty() {
@@ -1296,7 +1006,7 @@ pub(super) fn relative_import_for_test(target_dir: &Path) -> String {
 /// `bynk test --inspect` runs this `.ts` directly under strip-only Node
 /// (slice 2, ADR 0104). The explicit form is equivalent and strip-clean.
 pub(super) fn expectation_runtime_helpers() -> String {
-    include_str!("../test_runtime/expectation.ts").to_string()
+    include_str!("test_runtime/expectation.ts").to_string()
 }
 
 /// #2842: the snapshots each of the module's suite files takes, keyed by the
@@ -1339,7 +1049,7 @@ pub(super) fn snapshot_harness(
     keys: &BTreeMap<String, Vec<(String, String)>>,
     stored: Option<&BTreeMap<String, String>>,
 ) -> String {
-    let mut out = include_str!("../test_runtime/snapshot.ts").to_string();
+    let mut out = include_str!("test_runtime/snapshot.ts").to_string();
     out.push_str("const __bynkSnapshotFiles: globalThis.Record<string, __SnapshotFile> = {\n");
     for (file, pairs) in keys {
         let text = stored
@@ -1422,10 +1132,10 @@ pub(super) fn event_delivery_helpers(
         let ServiceProtocol::Events { event_type, .. } = &decl.protocol else {
             continue;
         };
-        let event = match event_type {
-            TypeRef::Named(id) => id.name.clone(),
-            _ => continue,
+        let TypeRef::Named(id) = event_type else {
+            continue;
         };
+        let event = id.name.clone();
         // The one envelope rule (1B.1c, Decision F of #3928).
         let takes_envelope = hosted_takes_envelope(event_shapes, target_name, svc);
         // #2052 review: the publisher resolves as the service's header
@@ -1456,7 +1166,7 @@ pub(super) fn event_delivery_helpers(
                     counts = true;
                     format!(
                         "envelope ?? {{ eventId: `test-event-${{++__bynkEventSeq}}`, publisherId: \"{}\", emittedAt: 0, schemaVersion: {version} }}",
-                        bynk_emit::emitter::escape_ts_string(owner)
+                        crate::emitter::escape_ts_string(owner)
                     )
                 }
                 None => "envelope".to_string(),
@@ -1484,14 +1194,14 @@ pub(super) fn event_delivery_helpers(
 /// awaits them after an addressed handler call, so a case's expectations see
 /// the sends' effects. Source lives at `emitter/test_runtime/send.ts`.
 pub(super) fn send_runtime_helpers() -> String {
-    include_str!("../test_runtime/send.ts").to_string()
+    include_str!("test_runtime/send.ts").to_string()
 }
 
 /// #2137: the harness clock — `__bynkClockNow`, which `advance Clock by`
 /// moves (`__bynkAdvanceClock`, refusing a negative at run time), and the
 /// `Clock` that reads it. Source lives at `emitter/test_runtime/clock.ts`.
 pub(super) fn clock_runtime_helpers() -> String {
-    include_str!("../test_runtime/clock.ts").to_string()
+    include_str!("test_runtime/clock.ts").to_string()
 }
 
 /// #2683: the harness clock on virtual time — the same `__bynkClockNow` and
@@ -1500,7 +1210,7 @@ pub(super) fn clock_runtime_helpers() -> String {
 /// stub waits, the in-flight count, and the auto-advance that drives a case's
 /// addressed calls. Source lives at `emitter/test_runtime/virtual_time.ts`.
 pub(super) fn virtual_time_runtime_helpers() -> String {
-    include_str!("../test_runtime/virtual_time.ts").to_string()
+    include_str!("test_runtime/virtual_time.ts").to_string()
 }
 
 /// #2138: `__bynkRunId`, the value `run.id` reads. A remote build's `system`
@@ -1509,7 +1219,7 @@ pub(super) fn virtual_time_runtime_helpers() -> String {
 /// (an `--against` run's unit suites share its process environment).
 pub(super) fn run_id_helper(remote: bool) -> String {
     if remote {
-        include_str!("../test_runtime/run_id.ts").to_string()
+        include_str!("test_runtime/run_id.ts").to_string()
     } else {
         "const __bynkRunId: string = \"local\";\n".to_string()
     }
@@ -1563,7 +1273,7 @@ pub(super) fn block_uses_advance(b: &Block) -> bool {
                 ExprKind::Match { arms, .. } => arms.iter().any(|a| {
                     matches!(&a.body, bynk_syntax::ast::MatchBody::Block(b) if block_uses_advance(b))
                 }),
-                _ => false,
+                ExprKind::IntLit { .. } | ExprKind::FloatLit { .. } | ExprKind::DecimalLit { .. } | ExprKind::DurationLit { .. } | ExprKind::StrLit(..) | ExprKind::InterpStr(..) | ExprKind::BoolLit(..) | ExprKind::Ident(..) | ExprKind::Call { .. } | ExprKind::Lambda(..) | ExprKind::BinOp(..) | ExprKind::UnaryOp(..) | ExprKind::Paren(..) | ExprKind::Ok(..) | ExprKind::Err(..) | ExprKind::Question(..) | ExprKind::RecordConstruction { .. } | ExprKind::FieldAccess { .. } | ExprKind::MethodCall { .. } | ExprKind::Is { .. } | ExprKind::Some(..) | ExprKind::None | ExprKind::UnitLit | ExprKind::RecordSpread { .. } | ExprKind::EffectPure(..) | ExprKind::Expect(..) | ExprKind::Val { .. } | ExprKind::Wire(..) | ExprKind::ListLit(..) | ExprKind::Observation(..) | ExprKind::Faults(..) | ExprKind::Trace { .. } => false,
             };
         });
     }
@@ -1663,7 +1373,7 @@ pub(super) fn target_uses_emit(
 /// treatment `expectation_runtime_helpers`/`stub_runtime_helpers` above
 /// already get, rather than a raw Rust string literal with `\`-continuations.
 pub(super) fn jwt_signer_runtime_helpers() -> String {
-    include_str!("../test_runtime/jwt_signer.ts").to_string()
+    include_str!("test_runtime/jwt_signer.ts").to_string()
 }
 
 /// #3699: the synthetic call-record types (`__Cap_op_Call`) a `trace(Cap.op)`
@@ -1705,7 +1415,7 @@ fn codec_closure_stmts(
     target_name: &str,
     runtime_use: &RuntimeUse,
 ) -> Vec<TsStmt> {
-    use bynk_emit::emitter::serialisation as ser;
+    use crate::emitter::serialisation as ser;
     let (codec_names, codec_insts) = ser::collect_codec_closure(roots, types);
     if codec_names.is_empty() && codec_insts.is_empty() {
         return Vec::new();
@@ -1735,11 +1445,16 @@ fn codec_closure_stmts(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::emitter::commons_barrel::emit_commons_barrel;
     use bynk_syntax::ast::Ident;
     use bynk_syntax::ast::{Commons, CommonsForm, QualifiedName, Trivia};
     use bynk_syntax::span::Span;
-    use std::collections::HashSet;
+    use std::collections::{BTreeMap, HashSet};
+    use std::path::PathBuf;
 
+    /// This test names AST types, so it lives under `testgen`, which the `ast_importers` probe does
+    /// not count, though it tests the production barrel (`emitter::commons_barrel`).
+    ///
     /// #1329's own direct fixture test — `emit_commons_barrel`'s inputs
     /// (`groups`/`parsed`/`import_ext`/`emitted`) are hand-constructible via
     /// `ParsedFile::new`'s own documented "general constructor — `bynk-emit`'s
@@ -1755,7 +1470,7 @@ mod tests {
         use bynk_syntax::ast::SourceUnit;
 
         let expected = include_str!(
-            "../../../../bynk-tests/tests/fixtures/positive/251_multi_file_commons_test/\
+            "../../../bynk-tests/tests/fixtures/positive/251_multi_file_commons_test/\
              expected/thing.ts"
         );
         let commons = |name: &str| {
