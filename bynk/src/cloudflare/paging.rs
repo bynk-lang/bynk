@@ -114,12 +114,18 @@ pub(crate) fn cursor<E>(
     let mut at: Option<String> = None;
     loop {
         match each(at.as_deref())? {
-            Some(next) if !next.is_empty() && !(stop_on_repeat && at.as_deref() == Some(&next)) => {
+            Some(next) if !ends(at.as_deref(), &next, stop_on_repeat) => {
                 at = Some(next);
             }
             _ => return Ok(()),
         }
     }
+}
+
+/// Whether a cursor listing at `at` ends when Cloudflare sends `next`: an empty cursor, or
+/// (when `stop_on_repeat`) the one it is already at.
+fn ends(at: Option<&str>, next: &str, stop_on_repeat: bool) -> bool {
+    next.is_empty() || (stop_on_repeat && at == Some(next))
 }
 
 #[cfg(test)]
