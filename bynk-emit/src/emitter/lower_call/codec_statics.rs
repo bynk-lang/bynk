@@ -544,7 +544,7 @@ fn add(left: TsExpr, right: TsExpr) -> TsExpr {
 /// #3585: the statement that reports a `bynk eval` case's tail value: its
 /// `Json.encode` text and its type, as one NDJSON line. `None` when the value's
 /// type is unknown to the lowering, so the case runs without reporting.
-pub(in super::super) fn eval_value_line(
+pub(crate) fn eval_value_line(
     pre: &mut Pre,
     tail: &Expr,
     cx: &mut LowerCtx,

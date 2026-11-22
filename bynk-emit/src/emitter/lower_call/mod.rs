@@ -3,7 +3,7 @@
 //! dispatchers of one family, moved byte for byte before they convert to nodes.
 
 pub(super) mod agents;
-pub(super) mod codec_statics;
+pub(crate) mod codec_statics;
 pub(super) mod cross_context;
 pub(super) mod kernel;
 pub(super) mod kernel_container;

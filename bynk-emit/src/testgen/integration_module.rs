@@ -491,7 +491,7 @@ pub(super) fn emit_integration_module(
         case_out.push_str("  try {\n");
         if with_env {
             let entries = env_entries(&input.env_values);
-            crate::emitter::extend_printed_at(
+            crate::testgen::case_body::extend_printed_at(
                 &mut case_out,
                 vec![TsStmt::assign(
                     ident("__bynkEnv"),
@@ -529,7 +529,7 @@ pub(super) fn emit_integration_module(
                 names.dedup();
                 let type_names = aliased_types(table, |n| is_public_type(table, n));
                 harness_bound.extend(names.iter().cloned());
-                crate::emitter::extend_printed_at(
+                crate::testgen::case_body::extend_printed_at(
                     &mut case_out,
                     emit_ns_destructure(&ns, &names, &type_names),
                     2,
@@ -541,7 +541,7 @@ pub(super) fn emit_integration_module(
         // #1883, slice 3: the assets a case may name, from their owners.
         for (owner, names) in &asset_owners {
             harness_bound.extend(names.iter().cloned());
-            crate::emitter::extend_printed_at(
+            crate::testgen::case_body::extend_printed_at(
                 &mut case_out,
                 emit_ns_destructure(&test_ns(owner), names, &[]),
                 2,
@@ -646,7 +646,7 @@ pub(super) fn emit_integration_module(
                 1,
             );
         }
-        let (body_src, body_smb) = emitter::lower_integration_case_body(
+        let (body_src, body_smb) = case_body::lower_integration_case_body(
             &case.body,
             &mut typed,
             cross_context,
@@ -682,7 +682,7 @@ pub(super) fn emit_integration_module(
                 continue;
             };
             let type_names = aliased_types(t, |n| named.contains(n));
-            crate::emitter::extend_printed_at(
+            crate::testgen::case_body::extend_printed_at(
                 &mut case_out,
                 emit_ns_destructure(&test_ns(p), &named, &type_names),
                 2,

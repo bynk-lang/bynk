@@ -181,7 +181,7 @@ pub(super) fn emit_test_scope_setup(
         let names = target_scope_names(table);
         let type_names = aliased_types(table, |_| true);
         bound.extend(names.iter().cloned());
-        crate::emitter::extend_printed_at(
+        crate::testgen::case_body::extend_printed_at(
             out,
             emit_ns_destructure(&target_ns, &names, &type_names),
             2,
@@ -194,7 +194,11 @@ pub(super) fn emit_test_scope_setup(
         used_commons_destructures(target_name, unit_tables, unit_uses, &mut seen_assets)
     {
         bound.extend(names.iter().cloned());
-        crate::emitter::extend_printed_at(out, emit_ns_destructure(&ns, &names, &type_names), 2);
+        crate::testgen::case_body::extend_printed_at(
+            out,
+            emit_ns_destructure(&ns, &names, &type_names),
+            2,
+        );
     }
     // #1814: the types the target's view reaches but does not import, from
     // their owning commons (imported by `emit_test_module`).
@@ -241,7 +245,7 @@ pub(super) fn emit_test_scope_setup(
                     .cloned()
                     .collect();
                 bound.extend(declared.iter().cloned());
-                crate::emitter::extend_printed_at(
+                crate::testgen::case_body::extend_printed_at(
                     out,
                     emit_ns_destructure_renamed(&ns, &names, &types, &renames, &declared),
                     2,
@@ -259,7 +263,7 @@ pub(super) fn emit_test_scope_setup(
                 hashed.sort();
                 bound.extend(hashed.iter().cloned());
                 if !hashed.is_empty() {
-                    crate::emitter::extend_printed_at(
+                    crate::testgen::case_body::extend_printed_at(
                         out,
                         emit_ns_destructure(&ns, &hashed, &[]),
                         2,
@@ -419,7 +423,7 @@ pub(super) fn suite_late_codecs(
         &runtime_use.json_codec_roots_since(mark),
     );
     let mut printed = String::new();
-    emitter::extend_printed_at(&mut printed, late, 0);
+    case_body::extend_printed_at(&mut printed, late, 0);
     reindent_by(&printed, "    ")
 }
 
@@ -501,7 +505,7 @@ pub(super) fn suite_fn_decls(
             runtime_use,
         );
         let mut printed = String::new();
-        emitter::extend_printed_at(&mut printed, decls, 0);
+        case_body::extend_printed_at(&mut printed, decls, 0);
         out.push_str(&reindent_by(&printed, "    "));
     }
     // #2841: each fixture is a local name for its file's module-level constant.
@@ -671,7 +675,7 @@ pub(super) fn emit_test_case_function(
         .map(|t| t.agents.keys().cloned().collect())
         .unwrap_or_default();
     // #3585: a `bynk eval` snippet's case reports its tail's value.
-    let (body_src, body_smb) = emitter::lower_test_case_body_reporting(
+    let (body_src, body_smb) = case_body::lower_test_case_body_reporting(
         &case.body,
         &mut typed,
         &cross,
@@ -777,7 +781,7 @@ pub(super) fn emit_test_case_function(
 /// [`checker::call_record_type_name`]. Ordered by capability then operation for
 /// deterministic output.
 /// #1479: returns real [`TsStmt`]s (was `String`) — its one caller now
-/// appends via `crate::emitter::extend_printed_at(out, stmts, 0)`, the same
+/// appends via `crate::testgen::case_body::extend_printed_at(out, stmts, 0)`, the same
 /// depth-0 top-level shape these type aliases always printed at.
 pub(super) fn observation_call_record_types(
     target_name: &str,

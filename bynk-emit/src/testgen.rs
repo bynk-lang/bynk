@@ -59,6 +59,7 @@ use bynk_syntax::ast::{Case, Visibility};
 
 // -- v0.7 / v0.118: test declaration processing --
 
+mod case_body;
 mod harness;
 mod imports;
 mod integration_module;
