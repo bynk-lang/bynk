@@ -144,41 +144,29 @@ Durable Object instead, but the handler logic you wrote is identical.
 
 ## Wire it into the API
 
-Now the API can do real work. A small `CodeGen` capability mints new codes, and
-the handlers store and resolve through the `Link` agent:
+Now the API can do real work: the handlers store and resolve through the
+`Link` agent. The `CodeGen` capability from
+[Reach out with capabilities](/book/tutorials/capabilities/) still mints each
+code, and `Logger` records each link once it is stored.
 
-```bynk
-capability CodeGen {
-  fn next() -> Effect[String]
-}
-
-provides CodeGen = FixedCodeGen {
-  fn next() -> Effect[String] {
-    "abc123"
-  }
-}
-```
-
-A **capability** is a dependency a handler asks for with `given`; a **provider**
-supplies it. They are a topic in their own right — see
-[Compose a provider](/book/guides/effects-and-capabilities/compose-a-provider/) — but the shape
-above is all we need: mint a raw string, then validate it into a `ShortCode`.
-
-The handlers reuse what the last chapter built. `newLink` checks the target and
+The handlers also reuse what [Handle failure with `Result`](/book/tutorials/failure-and-result/) built. `newLink` checks the target and
 validates the code, `failure` turns any `LinkError` into a response, and the
 agent's own errors are `LinkError`s too, so they go through the same function:
 
 ```bynk,fragment
 on POST("/links") (
 	body: CreateLinkRequest
-) -> Effect[HttpResult[CreatedView]] by Visitor given CodeGen {
+) -> Effect[HttpResult[CreatedView]] by Visitor given CodeGen, Logger {
 	let raw <- CodeGen.next()
 	let Ok(view) = newLink(raw, body.target) else match {
 		Err(error) => failure[CreatedView](error),
 	}
 	let registered <- Link(view.code).register(view.target)
 	match registered {
-		Ok(_) => Created(view),
+		Ok(_) => {
+			let _ <- Logger.info("created \(view.code)")
+			Created(view)
+		},
 		Err(error) => failure[CreatedView](error),
 	}
 }
@@ -187,12 +175,20 @@ on POST("/links") (
 `let Ok(view) = … else match { … }` keeps the good path flat: when `newLink`
 fails, the `else match` works out the answer from the error, and the handler
 ends there. A link whose code is already taken is answered by `failure` with
-`409 Conflict`, as the last chapter decided.
+`409 Conflict`, as [Handle failure with `Result`](/book/tutorials/failure-and-result/) decided.
+
+The `create` service does the same work for callers inside the context, and
+passes `register`'s error straight on with `?`. Its value is `()`, so it is
+bound to `_`: `let _ = registered?`. Bynk won't let `registered?` stand alone
+as a statement, because a value it produces would be silently thrown away
+(`bynk.parse.bare_expression_statement`), so `let _ =` says you meant to.
 
 ## The whole file
 
 ```bynk
 context shortener
+
+consumes bynk { Random, Logger }
 
 type ShortCode = String where MinLength(6) && MaxLength(8)
 
@@ -248,9 +244,10 @@ capability CodeGen {
 	fn next() -> Effect[String]
 }
 
-provides CodeGen = FixedCodeGen {
+provides CodeGen = RandomCodeGen given Random {
 	fn next() -> Effect[String] {
-		"abc123"
+		let id <- Random.uuid()
+		"\(id)".slice(0, 8)
 	}
 }
 
@@ -291,14 +288,17 @@ service create {
 service api from http {
 	on POST("/links") (
 		body: CreateLinkRequest
-	) -> Effect[HttpResult[CreatedView]] by Visitor given CodeGen {
+	) -> Effect[HttpResult[CreatedView]] by Visitor given CodeGen, Logger {
 		let raw <- CodeGen.next()
 		let Ok(view) = newLink(raw, body.target) else match {
 			Err(error) => failure[CreatedView](error),
 		}
 		let registered <- Link(view.code).register(view.target)
 		match registered {
-			Ok(_) => Created(view),
+			Ok(_) => {
+				let _ <- Logger.info("created \(view.code)")
+				Created(view)
+			},
 			Err(error) => failure[CreatedView](error),
 		}
 	}

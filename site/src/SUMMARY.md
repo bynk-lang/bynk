@@ -17,8 +17,9 @@
 - [3. Model your data with types](tutorials/03-modelling-data.md)
 - [4. Make illegal states unrepresentable](tutorials/04-refined-types.md)
 - [5. Handle failure with `Result`](tutorials/failure-and-result.md)
-- [6. Add a stateful agent](tutorials/05-stateful-agent.md)
-- [7. Test it](tutorials/06-testing.md)
+- [6. Reach out with capabilities](tutorials/capabilities.md)
+- [7. Add a stateful agent](tutorials/05-stateful-agent.md)
+- [8. Test it](tutorials/06-testing.md)
 
 # Concepts
 

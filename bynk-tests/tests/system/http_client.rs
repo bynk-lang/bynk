@@ -604,8 +604,8 @@ fn boot_workerd(dir: &Path, worker: &str, probe: &str) -> Option<(Vec<wrangler::
     let out_log = fs::File::create(&log).unwrap();
     let err_log = out_log.try_clone().unwrap();
     let spawned = wrangler::Wrangler::spawn(
-        tools::base_command("npx")
-            .args(["-y", wrangler::SPEC, "dev"])
+        wrangler::npx()
+            .args(["dev"])
             .args([
                 "--port",
                 &port.to_string(),
@@ -879,8 +879,8 @@ fn a_worker_hosted_server_can_set_origin_through_the_client() {
         let out_log = fs::File::create(dir.join(log)).unwrap();
         let err_log = out_log.try_clone().unwrap();
         wrangler::Wrangler::spawn(
-            tools::base_command("npx")
-                .args(["-y", wrangler::SPEC, "dev"])
+            wrangler::npx()
+                .args(["dev"])
                 .args([
                     "--port",
                     &port.to_string(),
@@ -1279,8 +1279,8 @@ fn the_client_calls_a_bynk_worker_through_a_service_binding() {
         let out_log = fs::File::create(dir.join(log)).unwrap();
         let err_log = out_log.try_clone().unwrap();
         wrangler::Wrangler::spawn(
-            tools::base_command("npx")
-                .args(["-y", wrangler::SPEC, "dev"])
+            wrangler::npx()
+                .args(["dev"])
                 .args([
                     "--port",
                     &port.to_string(),

@@ -1219,6 +1219,7 @@
 /book/tutorials/04-refined-types/
 /book/tutorials/05-stateful-agent/
 /book/tutorials/06-testing/
+/book/tutorials/capabilities/
 /book/tutorials/failure-and-result/
 /by-example/
 /by-example/projects/event-log/

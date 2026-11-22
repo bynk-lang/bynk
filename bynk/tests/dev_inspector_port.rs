@@ -60,6 +60,7 @@ fn start(proj: &Path, extra: &[String]) -> Session {
     let ready = proj.join("ready.json");
     let log = proj.join("bynk-dev.log");
     let (out, err) = dev_child::log_to(&log);
+    dev_child::warm_wrangler();
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_bynk"));
     std::os::unix::process::CommandExt::process_group(&mut cmd, 0);
     let dev = Group(
