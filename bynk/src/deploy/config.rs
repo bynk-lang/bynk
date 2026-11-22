@@ -2624,6 +2624,71 @@ max_batch_size = 10
         );
     }
 
+    /// The text of every-kind emission: one binding of every kind and every singleton, with
+    /// crons, a queue consumer, a dataset `[vars]` entry, and the inherited tables a named
+    /// environment leaves out (`[assets]`, `[cache]`, `[[rules]]`), as `bynk build` leaves it.
+    fn every_kind_config() -> String {
+        use bynk_emit::emitter::{toml_doc::print_toml_document, wrangler::emit_wrangler_toml};
+        let mut bindings = one_binding_of_every_kind();
+        let cloudflare = bynk_check::firstparty::unit(bynk_check::firstparty::CLOUDFLARE_UNIT)
+            .expect("the Cloudflare unit is registered");
+        bindings.extend(cloudflare.singletons.iter().map(|s| WorkerBinding {
+            name: s.binding.to_string(),
+            source: BindingSource::Singleton {
+                capability: s.capability.to_string(),
+            },
+        }));
+        let mut config = print_toml_document(&emit_wrangler_toml(
+            "shop",
+            &bynk_project::worker_layout::WorkerLayout::identity(),
+            &bindings,
+            &["0 * * * *".to_string()],
+            &["jobs".to_string()],
+            &[],
+            &[],
+            None,
+            &Default::default(),
+            &Default::default(),
+        ));
+        config.push_str(
+            "\n[assets]\ndirectory = \"assets\"\n\n[cache]\nenabled = true\n\n[[rules]]\ntype = \"CompiledWasm\"\nglobs = [\"**/*.wasm\"]\n",
+        );
+        config
+    }
+
+    /// Back-half paydown 1C.2, Decision C of #4039: the `[env.*]` block's bytes are pinned before
+    /// anything moves. The config and the block `staging` and `eu-staging` append to it (the
+    /// second for the dataset form), with a KV id resolved for each KV binding and `FOREIGN` a
+    /// foreign Service Binding. A diff here is a stop-and-report, never a bless.
+    #[test]
+    fn the_environment_block_bytes_are_pinned() {
+        let config = every_kind_config();
+        let mut out = String::new();
+        for environment in ["staging", "eu-staging"] {
+            out.push_str(&format!("# == {environment} ==\n"));
+            out.push_str(
+                &synthesise_environment_block(
+                    &config,
+                    environment,
+                    &kv_ids(&[("KV", "kv-id"), ("KV_X", "kv-x-id")]),
+                    &["FOREIGN".to_string()].into_iter().collect(),
+                )
+                .expect("valid TOML in, valid TOML out"),
+            );
+        }
+        let path =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("src/deploy/fixtures/every_kind.env.toml");
+        if std::env::var_os("BYNK_WRITE_ENV_FIXTURE").is_some() {
+            std::fs::write(&path, &out).unwrap();
+            return;
+        }
+        assert_eq!(
+            out,
+            include_str!("fixtures/every_kind.env.toml"),
+            "the `[env.*]` block's bytes changed: 1C.2 must not change what `bynk deploy` hands Wrangler"
+        );
+    }
+
     #[test]
     fn synthesise_environment_block_is_a_true_no_op_with_nothing_to_state() {
         let nameless = "main = \"index.ts\"\n";
