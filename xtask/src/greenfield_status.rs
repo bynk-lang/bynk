@@ -14,11 +14,11 @@
 //! crate-hygiene track's M-3 ratchet, `model_readers_beyond_emit` (B1, #2939), and its H-3 gate,
 //! `unused_deps` (A4, #2976).
 //!
-//! **Twenty-seven are gated**, committed and diffed: `workspace_lints`, `fs_below_driver`,
+//! **Twenty-eight are gated**, committed and diffed: `workspace_lints`, `fs_below_driver`,
 //! `options_sources`, `hoist_sinks`, `span_keyed_maps`, `emit_diagnostics`,
 //! `ide_emit_edge`, `ast_importers`, `emit_abi_shapes`, `ts_writes`, `ts_any`,
 //! `verbatim_origins`, `verbatim_sites`, `incremental_query_types`,
-//! `unconsumed_ir_items`, `diagnostic_coverage`, `model_readers_beyond_emit`, `unused_deps`, `explained_codes`, `ts_raw_sites_emit`, `ts_raw_sites_testgen`, `ts_text_idents`, `emit_thread_locals`, `emit_silent_fallbacks`, `emit_print_calls`, `import_prediction_fns`, `deploy_kind_accessors`. Ten of these are
+//! `unconsumed_ir_items`, `diagnostic_coverage`, `model_readers_beyond_emit`, `unused_deps`, `explained_codes`, `ts_raw_sites_emit`, `ts_raw_sites_testgen`, `ts_text_idents`, `emit_thread_locals`, `emit_silent_fallbacks`, `emit_print_calls`, `import_prediction_fns`, `deploy_kind_accessors`, `tool_spawn_sites`. Ten of these are
 //! zero/closure-shaped — a boolean, or a count pinned at a small, argued floor
 //! (`ast_importers` = 5, `emit_abi_shapes` = 1). Phase 7's own four are the same shape:
 //! each converged toward an argued floor over dozens of slices, the same trajectory
@@ -42,7 +42,7 @@
 //! **Two kinds of gate** (#3679, amending ADR 0389/0390). Every gated probe is
 //! *exact-match*: a live reading that differs from its committed row fails unless a
 //! pending file names it in `probes:`. The [`GROWTH_PROBES`] (`ts_writes`, `ts_any`,
-//! `emit_abi_shapes`, `verbatim_sites`, `ts_raw_sites_emit`, `ts_raw_sites_testgen`, `ts_text_idents`, `span_keyed_maps`, `emit_thread_locals`, `emit_silent_fallbacks`, `emit_print_calls`, `import_prediction_fns`, `deploy_kind_accessors`) are also *directional*:
+//! `emit_abi_shapes`, `verbatim_sites`, `ts_raw_sites_emit`, `ts_raw_sites_testgen`, `ts_text_idents`, `span_keyed_maps`, `emit_thread_locals`, `emit_silent_fallbacks`, `emit_print_calls`, `import_prediction_fns`, `deploy_kind_accessors`, `tool_spawn_sites`) are also *directional*:
 //! `growth_probes_never_rise` (`xtask/tests/greenfield_status.rs`) fails when the
 //! live leading count exceeds the committed one unless a pending file *raises* the
 //! probe with a reason (`raises:`), which the stamp then records in
@@ -117,7 +117,7 @@ pub fn run(root: &Path) -> Report {
 /// The gated probes' names, in [`run_gated`]'s order — what a pending file's
 /// `probes` key may cite. `greenfield_status_table_is_current` asserts this
 /// matches the probes [`run_gated`] actually returns, so the two cannot drift.
-pub const GATED_PROBES: [&str; 27] = [
+pub const GATED_PROBES: [&str; 28] = [
     "workspace_lints",
     "fs_below_driver",
     "options_sources",
@@ -139,6 +139,7 @@ pub const GATED_PROBES: [&str; 27] = [
     "emit_print_calls",
     "import_prediction_fns",
     "deploy_kind_accessors",
+    "tool_spawn_sites",
     "incremental_query_types",
     "unconsumed_ir_items",
     "diagnostic_coverage",
@@ -149,12 +150,12 @@ pub const GATED_PROBES: [&str; 27] = [
 
 /// The gated probes that only a reasoned, recorded `raises:` may increase
 /// (#3679, ADR 0389/0390 amended): `ts_writes`, `ts_any`, `emit_abi_shapes`,
-/// `verbatim_sites`, `ts_raw_sites_emit` and `ts_raw_sites_testgen` (the split of `ts_raw_sites`, #3681), `ts_text_idents` (#3681), `span_keyed_maps`, `emit_thread_locals` (1A.19), `emit_silent_fallbacks` (1A.34), `emit_print_calls` (1A.35b), `import_prediction_fns` (1A.36a), `deploy_kind_accessors` (1D.1a). Probes already at a zero or closure
+/// `verbatim_sites`, `ts_raw_sites_emit` and `ts_raw_sites_testgen` (the split of `ts_raw_sites`, #3681), `ts_text_idents` (#3681), `span_keyed_maps`, `emit_thread_locals` (1A.19), `emit_silent_fallbacks` (1A.34), `emit_print_calls` (1A.35b), `import_prediction_fns` (1A.36a), `deploy_kind_accessors` (1D.1a), `tool_spawn_sites` (1D.5b). Probes already at a zero or closure
 /// floor are excluded (their exact-match row pins them), as are
 /// `verbatim_origins` (an argued floor of 2) and `model_readers_beyond_emit`
 /// (which has the opposite direction). A subset of [`GATED_PROBES`], pinned by
 /// a unit test.
-pub const GROWTH_PROBES: [&str; 13] = [
+pub const GROWTH_PROBES: [&str; 14] = [
     "ts_writes",
     "ts_any",
     "emit_abi_shapes",
@@ -168,9 +169,10 @@ pub const GROWTH_PROBES: [&str; 13] = [
     "emit_print_calls",
     "import_prediction_fns",
     "deploy_kind_accessors",
+    "tool_spawn_sites",
 ];
 
-/// The twenty-seven gated (zero/closure/ratchet) probes only — what [`gated_disagreements`] diffs.
+/// The twenty-eight gated (zero/closure/ratchet) probes only — what [`gated_disagreements`] diffs.
 pub fn run_gated(root: &Path) -> Vec<Probe> {
     vec![
         workspace_lints(root),
@@ -194,6 +196,7 @@ pub fn run_gated(root: &Path) -> Vec<Probe> {
         emit_print_calls(root),
         import_prediction_fns(root),
         deploy_kind_accessors(root),
+        tool_spawn_sites(root),
         incremental_query_types(root),
         unconsumed_ir_items(root),
         diagnostic_coverage(root),
@@ -2635,6 +2638,102 @@ fn deploy_kind_accessors_violations(files: &[(PathBuf, String)]) -> usize {
     production_lines_matching(&production, |line| accessor.is_match(line))
 }
 
+// --- Gated probe: tool_spawn_sites (1D.5b) ---------------------------------------------------
+
+/// Back-half paydown 1D.5b (#4003, Decision H): production process spawns in `bynk` and
+/// `bynk-driver` that do not go through `bynk-driver/src/tools/` (npm, pnpm, bun, yarn, `tsc`,
+/// `tsx`, `node`, `git`) or the detection layer, `bynk-driver/src/probe.rs`.
+///
+/// It read 20 on `main` before 1D.5b and reads 12 after it. The residual is listed by reason in
+/// the reading ([`spawn_reason`]): wrangler (`bynk/src/workers.rs::wrangler_command`, which
+/// 1D.3's client replaces, taking the probe to 10), process control (`kill`, `ps`, `lsof`,
+/// `taskkill` and the Windows junction's `cmd`) and self re-execution (`dev_run.rs`). Any other
+/// spawn reads as `other`. A growth probe ([`GROWTH_PROBES`]): it may only fall unless a pending
+/// file `raises:` it with a reason, so a new tool spawn goes through `tools`.
+///
+/// Counts non-comment lines matching `Command::new(` or `ProcCommand::new(` (a word boundary
+/// before) outside `#[cfg(test)]` modules (deploy's `pub(crate) mod tests` included),
+/// wholly-test files ([`is_whole_test_file`]) and the test-only `test_support.rs`. Text-level gaps, as for the other line scanners:
+/// two spawns on one line count once, and a `Command` imported under another name is missed.
+fn tool_spawn_sites(root: &Path) -> Probe {
+    let mut files = Vec::new();
+    for krate in ["bynk", "bynk-driver"] {
+        for (path, contents) in rust_files_relative(&root.join(krate).join("src")) {
+            files.push((Path::new(krate).join("src").join(path), contents));
+        }
+    }
+    Probe {
+        name: "tool_spawn_sites",
+        gated: true,
+        reads: tool_spawn_sites_reading(&files),
+    }
+}
+
+/// What a spawn outside `tools` is for, from its file and line.
+fn spawn_reason(rel: &str, line: &str) -> &'static str {
+    const PROCESS_CONTROL: [&str; 5] =
+        ["\"kill\"", "\"ps\"", "\"lsof\"", "\"taskkill\"", "\"cmd\""];
+    if PROCESS_CONTROL
+        .iter()
+        .any(|p| line.contains(&format!("::new({p}")))
+    {
+        "process control"
+    } else if rel == "bynk/src/workers.rs" {
+        "wrangler"
+    } else if rel == "bynk-driver/src/dev_run.rs" {
+        "self re-execution"
+    } else {
+        "other"
+    }
+}
+
+/// [`tool_spawn_sites`]'s reading over an explicit file list, paths from the repo root:
+/// the count, then the count per [`spawn_reason`].
+fn tool_spawn_sites_reading(files: &[(PathBuf, String)]) -> String {
+    let spawn =
+        regex::Regex::new(r"\b(Command|ProcCommand)::new\(").expect("the spawn pattern compiles");
+    let mut by_reason: std::collections::BTreeMap<&'static str, usize> =
+        ["wrangler", "process control", "self re-execution", "other"]
+            .into_iter()
+            .map(|r| (r, 0))
+            .collect();
+    let mut total = 0usize;
+    for (path, contents) in files {
+        let rel = path.to_string_lossy().replace('\\', "/");
+        // `bynk/src/test_support.rs` is declared `#[cfg(test)] mod test_support;`.
+        if is_whole_test_file(&rel)
+            || rel.ends_with("/test_support.rs")
+            || rel.starts_with("bynk-driver/src/tools/")
+            || rel == "bynk-driver/src/probe.rs"
+        {
+            continue;
+        }
+        // As in [`deploy_kind_accessors_violations`]: a `pub(crate) mod tests` is a test module.
+        let lines: Vec<&str> = contents
+            .lines()
+            .map(|line| {
+                line.strip_prefix("pub(crate) mod ")
+                    .map_or(line, |_| &line[11..])
+            })
+            .collect();
+        let ranges = test_mod_ranges(&lines);
+        for (i, line) in lines.iter().enumerate() {
+            if in_test_range(i, &ranges) || is_line_comment(line) || !spawn.is_match(line) {
+                continue;
+            }
+            total += 1;
+            *by_reason.entry(spawn_reason(&rel, line)).or_default() += 1;
+        }
+    }
+    format!(
+        "{total} (wrangler {}, process control {}, self re-execution {}, other {})",
+        by_reason["wrangler"],
+        by_reason["process control"],
+        by_reason["self re-execution"],
+        by_reason["other"]
+    )
+}
+
 /// Named identifiers imported from the compiler-generated firstparty/runtime relative
 /// modules (`./bynk.js`, `./runtime.js`, `./bynk/locale/types.js`, `./cloudflare.js`,
 /// or their `../` forms) — `import type { A, B }`/`import { A, B }` braces, stripping
@@ -4219,7 +4318,8 @@ pub fn render_table(report: &Report) -> String {
          `ts_raw_sites` split into `ts_raw_sites_emit`/`ts_raw_sites_testgen` and `emit_thread_locals` \
          added by 1A.19; `emit_silent_fallbacks` added by 1A.34; `emit_print_calls` added by 1A.35b \
          (`lowering_text_bridge` and `stmt_text_lines`, added by #3694 and #3711, were retired at 0 by 1A.35b); \
-         `import_prediction_fns` added by 1A.36a; `deploy_kind_accessors` added by 1D.1a. Twenty-seven \
+         `import_prediction_fns` added by 1A.36a; `deploy_kind_accessors` added by 1D.1a; \
+         `tool_spawn_sites` added by 1D.5b. Twenty-eight \
          probes are gated — a disagreement between this file and a fresh run fails \
          `greenfield_status_table_is_current` (`xtask/tests/greenfield_status.rs`). \
          Five are trend probes, reported only.\n\n",
@@ -4605,7 +4705,8 @@ mod tests {
         | `emit_silent_fallbacks` | yes | 15 |\n\
         | `emit_print_calls` | yes | 30 |\n\
         | `import_prediction_fns` | yes | 8 |\n\
-        | `deploy_kind_accessors` | yes | 68 |\n";
+        | `deploy_kind_accessors` | yes | 68 |\n\
+        | `tool_spawn_sites` | yes | 20 |\n";
 
     fn growth_live(ts_writes: &str, abi: &str) -> Vec<Probe> {
         vec![
@@ -4622,6 +4723,7 @@ mod tests {
             gated("emit_print_calls", "30"),
             gated("import_prediction_fns", "8"),
             gated("deploy_kind_accessors", "68"),
+            gated("tool_spawn_sites", "20"),
         ]
     }
 
@@ -4842,6 +4944,57 @@ mod tests {
                 ("hyperdrive.rs", "lock.record_hyperdrive(a);\n"),
             ])),
             1
+        );
+    }
+
+    #[test]
+    fn tool_spawn_sites_counts_spawns_outside_tools_probe_and_tests_by_reason() {
+        let reading = |files: &[(&str, &str)]| tool_spawn_sites_reading(&files_of(files));
+        let src = "let mut cmd = Command::new(p);\n\
+                   let mut cmd = std::process::Command::new(\"git\");\n\
+                   let _ = ProcCommand::new(\"taskkill\")\n";
+        assert_eq!(
+            reading(&[("bynk/src/workers.rs", src)]),
+            "3 (wrangler 2, process control 1, self re-execution 0, other 0)"
+        );
+        assert_eq!(
+            reading(&[
+                (
+                    "bynk-driver/src/dev_run.rs",
+                    "Command::new(me)\nCommand::new(\"kill\")\n"
+                ),
+                (
+                    "bynk-driver/src/mutate.rs",
+                    "std::process::Command::new(\"git\")\n"
+                ),
+            ]),
+            "3 (wrangler 0, process control 1, self re-execution 1, other 1)"
+        );
+        // The tools module, detection, comments, test modules (deploy's are `pub(crate)`),
+        // wholly-test files and a longer name do not count.
+        let none = "0 (wrangler 0, process control 0, self re-execution 0, other 0)";
+        assert_eq!(
+            reading(&[
+                ("bynk-driver/src/tools/mod.rs", "Command::new(\"git\")\n"),
+                (
+                    "bynk-driver/src/tools/ladder.rs",
+                    "Command::new(&self.path)\n"
+                ),
+                ("bynk-driver/src/probe.rs", "Command::new(path)\n"),
+                ("bynk/src/a.rs", "// Command::new(\"git\")\n"),
+                (
+                    "bynk/src/b.rs",
+                    "#[cfg(test)]\nmod tests {\n    fn t() { Command::new(\"sh\"); }\n}\n",
+                ),
+                (
+                    "bynk/src/c.rs",
+                    "#[cfg(test)]\npub(crate) mod tests {\n    fn t() { Command::new(\"sh\"); }\n}\n",
+                ),
+                ("bynk/src/deploy/tests.rs", "Command::new(\"sh\")\n"),
+                ("bynk/src/test_support.rs", "Command::new(\"sh\")\n"),
+                ("bynk/src/d.rs", "MyCommand::new(x)\n"),
+            ]),
+            none
         );
     }
 
