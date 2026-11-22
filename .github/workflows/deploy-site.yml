@@ -229,13 +229,15 @@ jobs:
       - name: Decide whether search merges the blog's index
         id: merge
         run: |
-          here=$(node -p "require('./node_modules/pagefind/package.json').version")
+          # Pagefind comes in through Starlight, so it is only here because npm
+          # hoists it; a missing copy warns rather than failing the step.
+          here=$(node -p "require('./node_modules/pagefind/package.json').version" 2>/dev/null || echo unknown)
           url=https://bynk-lang.org/blog/pagefind/pagefind-entry.json
           if ! there=$(curl -fsS --max-time 20 "$url" | node -pe "JSON.parse(require('fs').readFileSync(0)).version"); then
             echo "::warning::Could not read the blog's Pagefind version from $url: search will cover the docs alone."
             echo "flag=" >> "$GITHUB_OUTPUT"
           elif [ "$(echo "$here" | cut -d. -f1,2)" != "$(echo "$there" | cut -d. -f1,2)" ]; then
-            echo "::warning::Pagefind here is $here, the blog's is $there: search will cover the docs alone until they match."
+            echo "::warning::Pagefind here is $here, the blog's is $there: search will cover the docs alone until they match (update the older site's Starlight, or npm update pagefind)."
             echo "flag=" >> "$GITHUB_OUTPUT"
           else
             echo "Pagefind $here here, $there on the blog: search covers both."

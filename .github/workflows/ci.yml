@@ -1558,11 +1558,13 @@ jobs:
       # minor version. A warning, not a failure: the blog deploys on its own.
       - name: Pagefind matches the blog's (warning only)
         run: |
-          here=$(node -p "require('./node_modules/pagefind/package.json').version")
+          # Pagefind comes in through Starlight, so it is only here because npm
+          # hoists it; a missing copy warns rather than failing the step.
+          here=$(node -p "require('./node_modules/pagefind/package.json').version" 2>/dev/null || echo unknown)
           if ! there=$(curl -fsS --max-time 20 https://bynk-lang.org/blog/pagefind/pagefind-entry.json | node -pe "JSON.parse(require('fs').readFileSync(0)).version"); then
             echo "::warning::Could not read the blog's Pagefind version from https://bynk-lang.org/blog/pagefind/pagefind-entry.json"
           elif [ "$(echo "$here" | cut -d. -f1,2)" != "$(echo "$there" | cut -d. -f1,2)" ]; then
-            echo "::warning::Pagefind here is $here, the blog's is $there. Merged search needs the same minor version: bump the older site."
+            echo "::warning::Pagefind here is $here, the blog's is $there. Merged search needs the same minor version: update the older site's Starlight (or npm update pagefind)."
           else
             echo "Pagefind $here here, $there on the blog."
           fi
