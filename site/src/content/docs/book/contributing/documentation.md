@@ -265,7 +265,15 @@ rest are Rust drift-guard tests and Node `--check` scripts that CI runs.
 3. **Link checking.** `starlight-links-validator` validates internal links on
    every `astro build`. Separately, `site/scripts/check-llms-links.mjs` confirms
    each `/book/` route named in the hand-authored `llms.txt` index still maps to
-   a real page.
+   a real page, and `site/scripts/check-redirects.mjs` checks
+   `site/public/_redirects` (the Cloudflare Pages redirects that keep moved
+   pages working) against the built `site/dist/`. It applies the rules first
+   match wins, as Cloudflare does, and fails if a rule redirects a page that
+   still exists, can never apply because an earlier rule catches its paths, or
+   sends a reader to a page that does not exist. For a `/*` splat it maps every
+   page under the target folder back to its old path, with and without the
+   trailing slash; for `/d/:code` it tries a few registry codes. Run it after
+   `npm run build` whenever you move or retire a page.
 
 4. **Drift checks.** `node site/scripts/generate-sidebar.mjs --check` and
    `node site/scripts/build-llms-full.mjs --check` fail CI if the committed
