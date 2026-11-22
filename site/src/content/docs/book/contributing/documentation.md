@@ -83,14 +83,43 @@ the site's copy is refreshed on that branch.
 
 ## The brand
 
-The colours, fonts, header, wordmark and code themes are not in this
+The colours, fonts, header, footer, wordmark and code themes are not in this
 repository. They come from
 [`@bynk-lang/site-theme`](https://github.com/bynk-lang/site-theme), a
-Starlight plugin the blog uses too, so the two sites cannot drift apart. A
-brand change is made there, released, and taken here by bumping the version
-in `site/package.json`. What is particular to this site stays here: the
-`Sidebar` override, scoped to the surface being viewed, and
-`site/src/styles/site.css`, for the landing hero. Both win over the theme's.
+Starlight plugin the blog uses too, so the two sites cannot drift apart. That
+includes the page shell: the header's sections (Book, Examples, Reference,
+Blog), the footer strip at the end of every page, and the site map at the end
+of the home page. A change to any of them is made in the theme, released, and
+taken here by bumping the version in `site/package.json`. The footer's licence
+line is set here, in `astro.config.mjs`.
+
+What is particular to this site stays here, and wins over the theme's:
+
+- the `Sidebar` override, scoped to the surface being viewed;
+- the home page: `src/content/docs/index.mdx`, whose frontmatter `hero` holds
+  the hero's words; `src/components/home/`, which draws the hero, the "Four
+  ways in" cards, "What Bynk checks for you" and "From the blog"; and
+  `src/snippets/home/greeter.bynk`, the hero's program, which the snippets
+  gate compiles;
+- `src/styles/site.css`, for the home page's sections.
+
+"From the blog" lists the newest three posts from the blog's
+`/blog/posts.json`, read when the site builds. Offline, or if the blog is
+down, the section shows only its link to the blog and the build carries on.
+`BYNK_BLOG_POSTS` points the build at another URL or a local JSON file.
+
+The links these components draw aren't in Markdown, so the link validator
+doesn't see them. After the build, CI runs `scripts/check-shell-links.mjs`,
+which checks every site link on the home page and a Book page against the
+built pages.
+
+## Licences
+
+The pages' prose is [CC BY 4.0](https://github.com/bynk-lang/bynk/blob/main/LICENSE-CC-BY-4.0.md),
+and the code snippets in them (code blocks, and `site/src/snippets/`) are
+[MIT](https://github.com/bynk-lang/bynk/blob/main/LICENSE-MIT), as the blog's
+are. Bynk itself stays MIT or Apache-2.0. A contribution to the docs is taken
+on the same terms; the README's "Licence" section has the details.
 
 ## The sidebar
 

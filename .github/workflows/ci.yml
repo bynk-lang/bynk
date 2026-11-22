@@ -1557,16 +1557,25 @@ jobs:
         # exist.
         env:
           BYNK_MERGE_SEARCH: "1"
+      # The header, the site map and the home page draw their links from
+      # components, which the link validator above doesn't see (web presence
+      # slice 8): check them against the built pages.
+      - name: Check the shell's and home page's links resolve
+        run: node scripts/check-shell-links.mjs
       # Search merges the blog's Pagefind index (web presence slice 7), and
       # Pagefind loads it with this site's code, so the two should share a
       # minor version. A warning, not a failure: the blog deploys on its own.
       - name: Pagefind matches the blog's (warning only)
         run: |
-          here=$(node -p "require('./node_modules/pagefind/package.json').version")
-          if ! there=$(curl -fsS --max-time 20 https://bynk-lang.org/blog/pagefind/pagefind-entry.json | node -pe "JSON.parse(require('fs').readFileSync(0)).version"); then
+          # Pagefind comes in through Starlight, so it is only here because npm
+          # hoists it; a missing copy warns rather than failing the step.
+          here=$(node -p "require('./node_modules/pagefind/package.json').version" 2>/dev/null || echo unknown)
+          if [ "$here" = unknown ]; then
+            echo "::warning::Pagefind isn't in node_modules (npm didn't hoist Starlight's copy), so its version can't be compared."
+          elif ! there=$(curl -fsS --max-time 20 https://bynk-lang.org/blog/pagefind/pagefind-entry.json | node -pe "JSON.parse(require('fs').readFileSync(0)).version"); then
             echo "::warning::Could not read the blog's Pagefind version from https://bynk-lang.org/blog/pagefind/pagefind-entry.json"
           elif [ "$(echo "$here" | cut -d. -f1,2)" != "$(echo "$there" | cut -d. -f1,2)" ]; then
-            echo "::warning::Pagefind here is $here, the blog's is $there. Merged search needs the same minor version: bump the older site."
+            echo "::warning::Pagefind here is $here, the blog's is $there. Merged search needs the same minor version: update the older site's Starlight (or npm update pagefind)."
           else
             echo "Pagefind $here here, $there on the blog."
           fi
