@@ -18,15 +18,20 @@
 //! pruning say what they recorded or forgot, and the caller writes the ledger at once, so a
 //! record still lands before the push (ADR 0180).
 //!
-//! Converted so far: KV (1D.1a). The others follow in 1D.1b–e, and until then keep their own
-//! code beside the loops.
+//! Converted so far: KV (1D.1a), R2 and D1 (1D.1b). The others follow in 1D.1c–e, and until then
+//! keep their own code beside the loops; where one sits between converted kinds in the plan's order,
+//! the list holds a [`Legacy`] slot for it, so a loop that prints keeps today's order.
 
 use super::*;
 use bynk_driver::emsg;
 
+mod d1;
 mod kv;
+mod r2;
 
+pub(crate) use d1::*;
 pub(crate) use kv::*;
+pub(crate) use r2::*;
 
 /// Each kind of resource the deploy names on the account. Field-less, matched exhaustively.
 ///
@@ -92,6 +97,13 @@ impl<'l> LedgerView<'l> {
     /// This environment's records, if the ledger has any.
     pub(crate) fn this(&self) -> Option<&'l Environment> {
         self.environments.get(self.environment)
+    }
+
+    /// Every environment the ledger knows, this one included, in name order.
+    pub(crate) fn all(&self) -> impl Iterator<Item = (&'l str, &'l Environment)> + use<'l> {
+        self.environments
+            .iter()
+            .map(|(name, env)| (name.as_str(), env))
     }
 
     /// Every other environment the ledger knows, in name order.
@@ -226,10 +238,10 @@ impl<K: ResourceKind> ApplyCx<'_, K> {
 }
 
 /// What provisioning one declared instance did.
-#[derive(Debug, Default, PartialEq, Eq)]
-pub(crate) struct Provisioned {
-    /// The `(binding, id)` the push binds, written into the generated configuration.
-    pub(crate) bound: Option<(String, String)>,
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct Provisioned<B> {
+    /// The binding and what the push binds it to, written into the generated configuration.
+    pub(crate) bound: Option<(String, B)>,
     /// `Some(what)` when a record was made: the caller writes the ledger before anything else
     /// happens (ADR 0180), and a failure to says "created {what} but could not record it".
     pub(crate) recorded: Option<String>,
@@ -272,6 +284,9 @@ pub(crate) trait ResourceKind: Sized {
     type Orphan: Serialize;
     /// Account state the run reads once, before any Worker is provisioned.
     type Live: Default;
+    /// What the push binds one instance to, written into the generated configuration (KV: its
+    /// id; D1: its name and id; R2, bound by name already: nothing).
+    type Bound;
 
     /// The Worker's declared instances, in the order they are planned and provisioned.
     fn declared(r: &Resources) -> Vec<Self::Decl<'_>>;
@@ -359,13 +374,13 @@ pub(crate) trait ResourceKind: Sized {
     fn provision(
         cx: &mut ApplyCx<'_, Self>,
         decl: Self::Decl<'_>,
-    ) -> Result<Provisioned, DeployFailure>;
+    ) -> Result<Provisioned<Self::Bound>, DeployFailure>;
 
     /// Write the ids provisioning bound, by binding, into the generated configuration.
     fn materialise(
         _config: &Path,
         _worker: &str,
-        _bound: &BTreeMap<String, String>,
+        _bound: &BTreeMap<String, Self::Bound>,
     ) -> Result<(), DeployFailure> {
         Ok(())
     }
@@ -377,14 +392,30 @@ pub(crate) trait ResourceKind: Sized {
     }
 }
 
+/// A kind not yet converted that sits between converted ones in the plan's order. A pass that
+/// prints, or that stops at the first answer, handles it where it sits; every other pass ignores
+/// it. A slot goes when its kind is converted.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Legacy {
+    /// Vectorize (1D.1c): its lines and orphans print between R2's and D1's, and its name
+    /// problem is checked between theirs.
+    Vectorize,
+}
+
 /// A pass over every kind: one stage of the deploy, generic in the kind.
 pub(crate) trait KindVisitor {
     fn visit<K: ResourceKind>(&mut self);
+
+    /// The place of a kind not yet converted.
+    fn legacy(&mut self, _slot: Legacy) {}
 }
 
 /// The one list of kinds, in the plan's line order (the same in both formats).
 pub(crate) fn for_each_kind(v: &mut impl KindVisitor) {
     v.visit::<Kv>();
+    v.visit::<R2>();
+    v.legacy(Legacy::Vectorize);
+    v.visit::<D1>();
 }
 
 /// Fill each kind's lines of `context`, for Worker `worker`'s declarations `declared`.
@@ -415,10 +446,16 @@ pub(crate) fn fill_kind_lines<'r>(
 }
 
 /// Each kind's lines of `context` in the short format.
-pub(crate) fn short_kind_lines(context: &ContextPlan<'_>, out: &mut String) {
+/// `legacy` prints the lines of a kind not yet converted, at its [`Legacy`] slot.
+pub(crate) fn short_kind_lines(
+    context: &ContextPlan<'_>,
+    out: &mut String,
+    legacy: &mut dyn FnMut(Legacy, &mut String),
+) {
     struct Short<'p, 'r> {
         context: &'p ContextPlan<'r>,
         out: &'p mut String,
+        legacy: &'p mut dyn FnMut(Legacy, &mut String),
     }
     impl KindVisitor for Short<'_, '_> {
         fn visit<K: ResourceKind>(&mut self) {
@@ -426,8 +463,15 @@ pub(crate) fn short_kind_lines(context: &ContextPlan<'_>, out: &mut String) {
                 K::short_line(line, self.out);
             }
         }
+        fn legacy(&mut self, slot: Legacy) {
+            (self.legacy)(slot, self.out);
+        }
     }
-    for_each_kind(&mut Short { context, out });
+    for_each_kind(&mut Short {
+        context,
+        out,
+        legacy,
+    });
 }
 
 /// The listings each kind's lines of `context` ask of the account.
@@ -468,9 +512,14 @@ pub(crate) fn check_kind_lines(
 }
 
 /// The first kind's account-name problem, in list order.
-pub(crate) fn kind_name_problem(cx: &ProjectCx<'_>) -> Option<String> {
+/// `legacy` checks a kind not yet converted, at its [`Legacy`] slot.
+pub(crate) fn kind_name_problem(
+    cx: &ProjectCx<'_>,
+    legacy: &dyn Fn(Legacy) -> Option<String>,
+) -> Option<String> {
     struct First<'p, 'l> {
         cx: &'p ProjectCx<'l>,
+        legacy: &'p dyn Fn(Legacy) -> Option<String>,
         found: Option<String>,
     }
     impl KindVisitor for First<'_, '_> {
@@ -479,8 +528,17 @@ pub(crate) fn kind_name_problem(cx: &ProjectCx<'_>) -> Option<String> {
                 self.found = K::name_problem(self.cx);
             }
         }
+        fn legacy(&mut self, slot: Legacy) {
+            if self.found.is_none() {
+                self.found = (self.legacy)(slot);
+            }
+        }
     }
-    let mut first = First { cx, found: None };
+    let mut first = First {
+        cx,
+        legacy,
+        found: None,
+    };
     for_each_kind(&mut first);
     first.found
 }
@@ -540,10 +598,16 @@ pub(crate) fn show_kind_orphans(from: &Orphans, environment: &str, to: &mut Orph
 }
 
 /// Each kind's orphans of `orphans` in the short format.
-pub(crate) fn short_kind_orphans(orphans: &Orphans, out: &mut String) {
+/// `legacy` prints the orphans of a kind not yet converted, at its [`Legacy`] slot.
+pub(crate) fn short_kind_orphans(
+    orphans: &Orphans,
+    out: &mut String,
+    legacy: &mut dyn FnMut(Legacy, &mut String),
+) {
     struct Short<'p> {
         orphans: &'p Orphans,
         out: &'p mut String,
+        legacy: &'p mut dyn FnMut(Legacy, &mut String),
     }
     impl KindVisitor for Short<'_> {
         fn visit<K: ResourceKind>(&mut self) {
@@ -551,8 +615,15 @@ pub(crate) fn short_kind_orphans(orphans: &Orphans, out: &mut String) {
                 K::short_orphan(orphan, self.out);
             }
         }
+        fn legacy(&mut self, slot: Legacy) {
+            (self.legacy)(slot, self.out);
+        }
     }
-    for_each_kind(&mut Short { orphans, out });
+    for_each_kind(&mut Short {
+        orphans,
+        out,
+        legacy,
+    });
 }
 
 /// How many of each kind's orphans `--prune` deletes, printing what it says of each.
@@ -688,7 +759,7 @@ pub(crate) fn provision_kind<K: ResourceKind>(
     lock: &mut DeployLock,
     lock_path: &Path,
     live: &K::Live,
-) -> Result<BTreeMap<String, String>, DeployFailure> {
+) -> Result<BTreeMap<String, K::Bound>, DeployFailure> {
     let mut bound = BTreeMap::new();
     for decl in K::declared(declared) {
         let done = K::provision(
@@ -782,4 +853,15 @@ pub(crate) fn prune_kind_orphans(
     };
     for_each_kind(&mut prune);
     prune.result
+}
+
+/// #3494: a plan action checked against whether the account holds the resource: a `create` of
+/// one already there is `reuse`, since the deploy adopts it, and a `create or reuse` is decided
+/// either way. A listing not read (`None`) changes nothing: the ledger's word stands.
+pub(crate) fn held_verb(action: &'static str, held: Option<bool>) -> &'static str {
+    match (action, held) {
+        ("create" | "create or reuse", Some(true)) => "reuse",
+        ("create or reuse", Some(false)) => "create",
+        (other, _) => other,
+    }
 }

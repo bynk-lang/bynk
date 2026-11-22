@@ -137,15 +137,8 @@ pub(crate) fn deploy_one(
         project,
     };
     let kv_ids = provision_kind::<Kv>(site, declared, lock, lock_path, live_kv)?;
-    provision_r2_buckets(
-        provenance,
-        project_root,
-        worker,
-        declared,
-        lock,
-        lock_path,
-        environment,
-    )?;
+    // P5 (#2323): each `R2` bucket, made by name and recorded before the push.
+    provision_kind::<R2>(site, declared, lock, lock_path, &())?;
     // #3479: each `Vectorize` index, created with its fixed configuration or
     // checked against it, and its metadata indexes made before any vector.
     provision_vectorize_indexes(
@@ -157,16 +150,9 @@ pub(crate) fn deploy_one(
         lock_path,
         environment,
     )?;
-    provision_d1_databases(
-        provenance,
-        project_root,
-        worker,
-        declared,
-        lock,
-        lock_path,
-        &config,
-        environment,
-    )?;
+    // P4a (#2602): each `D1` database, its minted id recorded before the push, then bound.
+    let d1 = provision_kind::<D1>(site, declared, lock, lock_path, &())?;
+    D1::materialise(&config, worker, &d1)?;
     // #3319: each `Postgres` binding's Hyperdrive config, bound by its id.
     hyperdrive.provision(worker, declared, lock, lock_path, &config, environment)?;
     // #3301, #3513 A, #3480: each stored secret's store, mTLS certificate and AI Search instance,
@@ -819,255 +805,6 @@ fn create_queue(provenance: &Provenance, name: &str, project_root: &Path) -> Res
         return Ok(false);
     }
     Err(said)
-}
-
-/// P5 (#2323): each `R2` bucket, made by name (the name is the identity, so an
-/// existing one is the same end state) and recorded before the push. A bucket
-/// the ledger already holds under the same jurisdiction is not asked of the
-/// account again. Buckets are named as `environment` names them in the config
-/// the push reads: the top level already carries the default environment's, and
-/// the synthesised `[env.<name>]` block the rest.
-fn provision_r2_buckets(
-    provenance: &Provenance,
-    project_root: &Path,
-    worker: &str,
-    declared: &Resources,
-    lock: &mut DeployLock,
-    lock_path: &Path,
-    environment: &str,
-) -> Result<(), DeployFailure> {
-    for bucket in &declared.r2_buckets {
-        if r2_action(lock, worker, bucket, environment) == "reuse" {
-            continue;
-        }
-        let physical = r2_bucket_name(environment, &bucket.name);
-        create_r2_bucket(
-            provenance,
-            &physical,
-            bucket.jurisdiction.as_deref(),
-            project_root,
-        )
-        .map_err(|e| {
-            DeployFailure::driver(format!(
-                "could not create the R2 bucket `{physical}` for `{worker}`'s `{}`: {e}",
-                bucket.binding
-            ))
-        })?;
-        lock.record_r2(
-            environment,
-            worker,
-            &bucket.binding,
-            &physical,
-            bucket.jurisdiction.as_deref(),
-        );
-        write_lock(lock_path, lock).map_err(|e| {
-            DeployFailure::driver(format!(
-                "created the R2 bucket `{physical}` but could not record it in {}: {e}",
-                lock_path.display()
-            ))
-        })?;
-    }
-    Ok(())
-}
-
-/// P4a (#2602): each `D1` database, created by name with the id Cloudflare
-/// mints recorded before the push (an interrupted run never makes a second
-/// one), then bound by that name and id. One of the same name already on
-/// the account is adopted, as a bucket is: the name is account-unique and
-/// derived from this project's, so it is this project's. A database the
-/// ledger already holds under this environment's name is not asked of
-/// the account again.
-#[allow(clippy::too_many_arguments)]
-fn provision_d1_databases(
-    provenance: &Provenance,
-    project_root: &Path,
-    worker: &str,
-    declared: &Resources,
-    lock: &mut DeployLock,
-    lock_path: &Path,
-    config: &Path,
-    environment: &str,
-) -> Result<(), DeployFailure> {
-    let mut d1_databases = BTreeMap::new();
-    for db in &declared.d1_databases {
-        let physical = d1_database_name(environment, &db.name);
-        let id = match recorded_d1(lock, worker, &db.binding, environment) {
-            Some(recorded) if recorded.name == physical => recorded.id.clone(),
-            _ => {
-                let id = create_d1(provenance, &physical, project_root).map_err(|e| {
-                    DeployFailure::driver(format!(
-                        "could not create the D1 database `{physical}` for `{worker}`'s `{}`: {e}",
-                        db.binding
-                    ))
-                })?;
-                lock.record_d1(environment, worker, &db.binding, &physical, &id);
-                write_lock(lock_path, lock).map_err(|e| {
-                    DeployFailure::driver(format!(
-                        "created the D1 database `{physical}` but could not record it in {}: {e}",
-                        lock_path.display()
-                    ))
-                })?;
-                id
-            }
-        };
-        d1_databases.insert(db.binding.clone(), (physical, id));
-    }
-    if !d1_databases.is_empty() && !materialise_d1_databases(config, &d1_databases) {
-        return Err(DeployFailure::driver(format!(
-            "could not materialise the D1 database ids into `{worker}`'s generated configuration"
-        )));
-    }
-    Ok(())
-}
-
-/// P4b (#2608): `wrangler d1 migrations apply <binding> --remote` from the
-/// Worker's directory, which applies the files of the entry's
-/// `migrations_dir` that the database hasn't recorded, each in its own
-/// transaction. The binding names the entry in every environment, where the
-/// database's name doesn't. Stdin is closed, so wrangler takes its "yes"
-/// fallback instead of asking: the deploy's own confirmation already covered
-/// this.
-fn apply_d1_migrations(
-    provenance: &Provenance,
-    worker_dir: &Path,
-    binding: &str,
-    environment: &str,
-) -> Result<(), String> {
-    let Some(mut command) = workers::wrangler_command(provenance, "d1") else {
-        return Err("wrangler not found".into());
-    };
-    command
-        .args(["migrations", "apply", binding, "--remote"])
-        .current_dir(worker_dir)
-        .stdin(std::process::Stdio::null());
-    if environment != "default" {
-        command.args(["--env", environment]);
-    }
-    let output = command.output().map_err(|e| e.to_string())?;
-    if output.status.success() {
-        Ok(())
-    } else {
-        Err(wrangler_said(&output))
-    }
-}
-
-/// Create the D1 database `name` and return its `database_id`, or adopt the
-/// one already there under that name (P4a, #2602). Run from the project root,
-/// as KV and buckets are.
-fn create_d1(provenance: &Provenance, name: &str, project_root: &Path) -> Result<String, String> {
-    let Some(mut command) = workers::wrangler_command(provenance, "d1") else {
-        return Err("wrangler not found".into());
-    };
-    let output = command
-        .arg("create")
-        .arg(name)
-        .current_dir(project_root)
-        .output()
-        .map_err(|e| e.to_string())?;
-    if output.status.success() {
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        return parse_d1_id(&stdout).ok_or_else(|| {
-            format!("`wrangler d1 create` succeeded but printed no `database_id`:\n{stdout}")
-        });
-    }
-    let said = wrangler_said(&output);
-    if !d1_database_already_exists(&said) {
-        return Err(said);
-    }
-    let Some(mut list) = workers::wrangler_command(provenance, "d1") else {
-        return Err("wrangler not found".into());
-    };
-    let listed = list
-        .args(["list", "--json"])
-        .current_dir(project_root)
-        .output()
-        .map_err(|e| e.to_string())?;
-    if !listed.status.success() {
-        return Err(format!(
-            "it already exists, and listing the account's databases failed: {}",
-            wrangler_said(&listed)
-        ));
-    }
-    parse_d1_listed_id(&String::from_utf8_lossy(&listed.stdout), name)
-        .ok_or_else(|| "it already exists, but `wrangler d1 list` does not show it".to_string())
-}
-
-/// The `database_id` in `wrangler d1 create`'s output: the config snippet it
-/// prints, as TOML (`database_id = "…"`) or JSON (`"database_id": "…"`).
-fn parse_d1_id(output: &str) -> Option<String> {
-    let at = output.find("database_id")?;
-    let rest = &output[at + "database_id".len()..];
-    let rest = rest.trim_start_matches('"').trim_start();
-    let rest = rest.strip_prefix(['=', ':'])?.trim_start();
-    let id = rest.strip_prefix('"')?.split('"').next()?;
-    (!id.is_empty() && id.chars().all(|c| c.is_ascii_hexdigit() || c == '-'))
-        .then(|| id.to_string())
-}
-
-/// The `uuid` of database `name` in `wrangler d1 list --json`'s array.
-fn parse_d1_listed_id(json: &str, name: &str) -> Option<String> {
-    // From the first line starting with `[` that the rest parses from, so a
-    // bracketed banner line (`[WARNING] …`) before the array is skipped.
-    let listed: Vec<serde_json::Value> = std::iter::once(0)
-        .chain(json.match_indices('\n').map(|(i, _)| i + 1))
-        .map(|i| json[i..].trim_start())
-        .filter(|rest| rest.starts_with('['))
-        .find_map(|rest| serde_json::from_str(rest).ok())?;
-    listed
-        .iter()
-        .find(|db| db.get("name").and_then(|n| n.as_str()) == Some(name))?
-        .get("uuid")?
-        .as_str()
-        .map(str::to_string)
-}
-
-/// Does this `wrangler d1 create` failure just mean a database of that name
-/// is already on the account? Wrangler says "A database with that name
-/// already exists".
-fn d1_database_already_exists(said: &str) -> bool {
-    said.to_ascii_lowercase()
-        .contains("database with that name already exists")
-}
-
-/// Create the R2 bucket `name`, in `jurisdiction` when given, or accept that it
-/// is already there (P5, #2323): as for a queue, Cloudflare addresses a bucket
-/// by the name the config binds, so a created bucket and an existing one are
-/// the same end state. Run from the project root, as KV and queues are, so
-/// wrangler cannot load and reject an incomplete config.
-fn create_r2_bucket(
-    provenance: &Provenance,
-    name: &str,
-    jurisdiction: Option<&str>,
-    project_root: &Path,
-) -> Result<(), String> {
-    let Some(mut command) = workers::wrangler_command(provenance, "r2") else {
-        return Err("wrangler not found".into());
-    };
-    command.arg("bucket").arg("create").arg(name);
-    if let Some(jurisdiction) = jurisdiction {
-        command.arg("--jurisdiction").arg(jurisdiction);
-    }
-    let output = command
-        .current_dir(project_root)
-        .output()
-        .map_err(|e| e.to_string())?;
-    if output.status.success() {
-        return Ok(());
-    }
-    let said = wrangler_said(&output);
-    if r2_bucket_already_exists(&said) {
-        return Ok(());
-    }
-    Err(said)
-}
-
-/// Does this `wrangler r2 bucket create` failure just mean the bucket is
-/// already there (and ours)? Cloudflare answers "The bucket you tried to
-/// create already exists, and you own it." (code 10004); a bucket another
-/// account owns says it is "not available" instead, and stays a failure.
-fn r2_bucket_already_exists(said: &str) -> bool {
-    let said = said.to_ascii_lowercase();
-    said.contains("already exists") && said.contains("you own it")
 }
 
 /// Is `name` already on the account?
@@ -1809,7 +1546,7 @@ mod tests {
         );
         assert_eq!(pushed, Ok(Pushed::Ok));
         assert_eq!(d1_calls(&calls), ["d1 create api-orders"]);
-        let recorded = recorded_d1(&lock, "api", "D1_ORDERS", "default").unwrap();
+        let recorded = lock.recorded::<D1>("default", "api", "D1_ORDERS").unwrap();
         assert_eq!(recorded.name, "api-orders");
         assert_eq!(recorded.id, "0d1d0000-0000-4000-8000-0000000000010");
         assert!(
@@ -1838,12 +1575,12 @@ mod tests {
         );
         assert_eq!(d1_calls(&calls), ["d1 create api-orders-staging"]);
         assert_eq!(
-            recorded_d1(&lock, "api", "D1_ORDERS", "staging")
+            lock.recorded::<D1>("staging", "api", "D1_ORDERS")
                 .unwrap()
                 .name,
             "api-orders-staging"
         );
-        assert!(recorded_d1(&lock, "api", "D1_ORDERS", "default").is_none());
+        assert!(lock.recorded::<D1>("default", "api", "D1_ORDERS").is_none());
         let doc: toml::Table = config.parse().unwrap();
         let block = &doc["env"]["staging"]["d1_databases"][0];
         assert_eq!(block["database_name"].as_str(), Some("api-orders-staging"));
@@ -1865,7 +1602,9 @@ mod tests {
         assert_eq!(pushed, Ok(Pushed::Ok));
         assert_eq!(d1_calls(&calls), ["d1 create api-taken", "d1 list --json"]);
         assert_eq!(
-            recorded_d1(&lock, "api", "D1_TAKEN", "default").unwrap().id,
+            lock.recorded::<D1>("default", "api", "D1_TAKEN")
+                .unwrap()
+                .id,
             "adadadad-0000-4000-8000-000000000000"
         );
     }
@@ -1952,45 +1691,6 @@ mod tests {
             "{message}"
         );
         assert!(!calls.iter().any(|c| c.starts_with("deploy")), "{calls:?}");
-    }
-
-    #[test]
-    fn the_d1_id_is_read_from_either_snippet_format() {
-        let toml = "✅ Successfully created DB 'shop-orders' in region WEUR\nCreated your new D1 database.\n\n[[d1_databases]]\nbinding = \"shop_orders\"\ndatabase_name = \"shop-orders\"\ndatabase_id = \"9b3c2a1e-0000-4000-8000-0123456789ab\"\n";
-        assert_eq!(
-            parse_d1_id(toml).as_deref(),
-            Some("9b3c2a1e-0000-4000-8000-0123456789ab")
-        );
-        let json = "{\n  \"d1_databases\": [\n    {\n      \"binding\": \"DB\",\n      \"database_name\": \"shop-orders\",\n      \"database_id\": \"9b3c2a1e-0000-4000-8000-0123456789ab\"\n    }\n  ]\n}";
-        assert_eq!(
-            parse_d1_id(json).as_deref(),
-            Some("9b3c2a1e-0000-4000-8000-0123456789ab")
-        );
-        assert_eq!(parse_d1_id("Created your new D1 database."), None);
-        assert!(d1_database_already_exists(
-            "✘ [ERROR] A database with that name already exists"
-        ));
-        assert!(!d1_database_already_exists(
-            "✘ [ERROR] Authentication error"
-        ));
-        assert_eq!(
-            parse_d1_listed_id(
-                "[{\"uuid\": \"u-1\", \"name\": \"a\"}, {\"uuid\": \"u-2\", \"name\": \"b\"}]",
-                "b"
-            )
-            .as_deref(),
-            Some("u-2")
-        );
-        assert_eq!(parse_d1_listed_id("[]", "b"), None);
-        // A bracketed banner before the array is skipped.
-        assert_eq!(
-            parse_d1_listed_id(
-                "[WARNING] a newer wrangler is available\n[\n  {\"uuid\": \"u-3\", \"name\": \"c\"}\n]\n",
-                "c"
-            )
-            .as_deref(),
-            Some("u-3")
-        );
     }
 
     // ---- P3 (#2342): rate limiter ids are allocated in the ledger ----
@@ -2120,10 +1820,12 @@ mod tests {
                 "r2 bucket create api-indexes --jurisdiction eu"
             ]
         );
-        let archives = recorded_r2(&lock, "api", "R2_ARCHIVES", "default").unwrap();
+        let archives = lock
+            .recorded::<R2>("default", "api", "R2_ARCHIVES")
+            .unwrap();
         assert_eq!(archives.name, "api-archives");
         assert_eq!(archives.jurisdiction, None);
-        let indexes = recorded_r2(&lock, "api", "R2_INDEXES", "default").unwrap();
+        let indexes = lock.recorded::<R2>("default", "api", "R2_INDEXES").unwrap();
         assert_eq!(indexes.name, "api-indexes");
         assert_eq!(indexes.jurisdiction.as_deref(), Some("eu"));
     }
@@ -2151,12 +1853,15 @@ mod tests {
             ]
         );
         assert_eq!(
-            recorded_r2(&lock, "api", "R2_ARCHIVES", "staging")
+            lock.recorded::<R2>("staging", "api", "R2_ARCHIVES")
                 .unwrap()
                 .name,
             "api-archives-staging"
         );
-        assert!(recorded_r2(&lock, "api", "R2_ARCHIVES", "default").is_none());
+        assert!(
+            lock.recorded::<R2>("default", "api", "R2_ARCHIVES")
+                .is_none()
+        );
     }
 
     #[cfg(unix)]
@@ -2174,29 +1879,19 @@ mod tests {
             ["r2 bucket create api-archives --jurisdiction fedramp"]
         );
         assert_eq!(
-            recorded_r2(&lock, "api", "R2_ARCHIVES", "default")
+            lock.recorded::<R2>("default", "api", "R2_ARCHIVES")
                 .unwrap()
                 .jurisdiction
                 .as_deref(),
             Some("fedramp")
         );
         // The bucket it replaces is still recorded, for the plan to report.
-        let kept = &recorded_r2(&lock, "api", "R2_ARCHIVES", "default")
+        let kept = &lock
+            .recorded::<R2>("default", "api", "R2_ARCHIVES")
             .unwrap()
             .superseded;
         assert_eq!(kept.len(), 1);
         assert_eq!(kept[0].jurisdiction, None);
-    }
-
-    #[test]
-    fn an_existing_bucket_you_own_is_success_and_anothers_is_not() {
-        assert!(r2_bucket_already_exists(
-            "The bucket you tried to create already exists, and you own it. [code: 10004]"
-        ));
-        assert!(!r2_bucket_already_exists(
-            "The requested bucket name is not available. [code: 10006]"
-        ));
-        assert!(!r2_bucket_already_exists("authentication error"));
     }
 
     // ---- #2059: a namespace created again re-runs the cross-environment
