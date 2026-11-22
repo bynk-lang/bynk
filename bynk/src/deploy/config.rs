@@ -2208,6 +2208,27 @@ max_batch_size = 10
                 capability: s.capability.to_string(),
             },
         }));
+        // Every top-level key of the emission has an environment rule: a key outside the
+        // vocabulary would be dropped from `[env.*]` without a word (#3577, #3586).
+        {
+            let cloudflare = bynk_check::firstparty::unit(bynk_check::firstparty::CLOUDFLARE_UNIT)
+                .expect("the Cloudflare unit is registered");
+            let emitted: toml::Table = every_kind_config().parse().expect("valid TOML");
+            let unruled: Vec<&String> = emitted
+                .keys()
+                .filter(|key| {
+                    bynk_project::wrangler_keys::WranglerKey::from_top_key(key).is_none()
+                        && !cloudflare
+                            .singletons
+                            .iter()
+                            .any(|s| s.wrangler_table == key.as_str())
+                })
+                .collect();
+            assert!(
+                unruled.is_empty(),
+                "the emitter writes these top-level keys, but `WranglerKey` has no environment rule for them: {unruled:?}"
+            );
+        }
         let tables = emitted_binding_tables(&bindings);
         assert!(
             tables.len() >= 10 && tables.contains("ai") && tables.contains("version_metadata"),

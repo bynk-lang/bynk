@@ -3147,7 +3147,7 @@ fn binding_kind_homes_files(files: &[(PathBuf, String)]) -> Vec<String> {
 /// different position (a wrangler subcommand, a runtime module name) is not a key. The pattern
 /// is the vocabulary, so a key added to it is measured at once.
 ///
-/// It read 97 on `main` before 1C.2 and reads 0 after it. A growth probe ([`GROWTH_PROBES`]):
+/// It read 91 on `main` before 1C.2 by this pattern (the proposal's 97 counted by hand) and reads 0 after it. A growth probe ([`GROWTH_PROBES`]):
 /// it may only fall unless a pending file `raises:` it with a reason, so a new table written as a
 /// raw literal in a patcher fails the gate.
 ///
