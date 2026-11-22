@@ -88,7 +88,7 @@ impl ResourceKind for R2 {
     type Table = R2Table;
     type Line<'r> = PlanR2<'r>;
     type Orphan = OrphanR2;
-    type Live = ();
+    type Live<'a> = ();
     /// Nothing: the config binds a bucket by the name it already carries.
     type Bound = ();
 
@@ -108,7 +108,9 @@ impl ResourceKind for R2 {
         &mut context.r2
     }
 
-    fn plan_line<'r>(cx: &PlanCx<'_>, bucket: Self::Decl<'r>) -> PlanR2<'r> {
+    fn live_in<'a>(_lives: Lives<'a>) -> Self::Live<'a> {}
+
+    fn plan_line<'r>(cx: &PlanCx<'_>, bucket: Self::Decl<'r>, _live: ()) -> PlanR2<'r> {
         PlanR2 {
             binding: &bucket.binding,
             action: r2_action(cx.ledger, cx.worker, bucket),
@@ -219,15 +221,12 @@ impl ResourceKind for R2 {
     /// the push reads: the top level already carries the default environment's, and
     /// the synthesised `[env.<name>]` block the rest.
     fn provision(
-        cx: &mut ApplyCx<'_, R2>,
+        cx: &mut ApplyCx<'_, '_, R2>,
         bucket: &R2Decl,
     ) -> Result<Provisioned<()>, DeployFailure> {
         let (worker, environment) = (cx.worker, cx.environment);
         if r2_action(cx.ledger(), worker, bucket) == "reuse" {
-            return Ok(Provisioned {
-                bound: None,
-                recorded: None,
-            });
+            return Ok(Provisioned { bound: None });
         }
         let physical = r2_bucket_name(environment, &bucket.name);
         create_r2_bucket(
@@ -245,11 +244,9 @@ impl ResourceKind for R2 {
         cx.record(
             &bucket.binding,
             R2Bucket::of(&physical, bucket.jurisdiction.as_deref()),
-        );
-        Ok(Provisioned {
-            bound: None,
-            recorded: Some(format!("the R2 bucket `{physical}`")),
-        })
+            &format!("created the R2 bucket `{physical}`"),
+        )?;
+        Ok(Provisioned { bound: None })
     }
 }
 
@@ -474,7 +471,7 @@ mod tests {
         };
         let lines: Vec<_> = R2::declared(&declared)
             .into_iter()
-            .map(|decl| R2::plan_line(&cx, decl))
+            .map(|decl| R2::plan_line(&cx, decl, ()))
             .collect();
         let mut out = String::new();
         for line in &lines {
@@ -563,8 +560,9 @@ mod tests {
                 environment: "default",
                 worker: "shop",
                 project: &project,
-                environments: &mut lock.environments,
-                live: &(),
+                lock: &mut lock,
+                lock_path: Path::new("/nonexistent/bynk.deploy.lock"),
+                live: (),
                 tools: Tools {
                     provenance: &provenance,
                     project_root: Path::new("/nonexistent"),
@@ -573,12 +571,6 @@ mod tests {
             &bucket,
         )
         .expect("nothing to create");
-        assert_eq!(
-            done,
-            Provisioned {
-                bound: None,
-                recorded: None
-            }
-        );
+        assert_eq!(done, Provisioned { bound: None });
     }
 }

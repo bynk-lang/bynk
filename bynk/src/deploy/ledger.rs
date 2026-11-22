@@ -885,47 +885,6 @@ impl DeployLock {
             .and_then(|record| record.contracts.as_ref())
     }
 
-    /// #3479: record the index `worker`'s `Vectorize` `binding` is bound to.
-    /// An index this replaces under another name is not forgotten: its vectors
-    /// are still there (unless it was adopted, which was never the project's).
-    pub(crate) fn record_vectorize(
-        &mut self,
-        environment: &str,
-        worker: &str,
-        binding: &str,
-        name: &str,
-        adopted: bool,
-    ) {
-        let instances = self
-            .environments
-            .entry(environment.to_string())
-            .or_default()
-            .vectorize_instances
-            .entry(worker.to_string())
-            .or_default();
-        let mut superseded = Vec::new();
-        if let Some(old) = instances.remove(binding) {
-            superseded = old.superseded;
-            // A binding that moves back to an index it left (A, B, A) must
-            // not list the live index as an orphan: `--prune` would delete it.
-            superseded.retain(|past| past.name != name);
-            if old.name != name && !old.adopted {
-                superseded.push(VectorizePast {
-                    name: old.name,
-                    adopted: old.adopted,
-                });
-            }
-        }
-        instances.insert(
-            binding.to_string(),
-            VectorizeRecord {
-                name: name.to_string(),
-                adopted,
-                superseded,
-            },
-        );
-    }
-
     /// #3477: record that `worker`'s `Container` `capability` runs the adopted
     /// `image` in `environment`, or, with `None`, that it is built again (the
     /// adoption was dropped).
@@ -957,95 +916,6 @@ impl DeployLock {
                     }
                 }
             }
-        }
-    }
-
-    /// #3479: drop an index from the ledger once `--prune` deleted it, whether
-    /// it was the live one (its Worker or capability is gone) or a superseded
-    /// one.
-    pub(crate) fn forget_vectorize(
-        &mut self,
-        environment: &str,
-        worker: &str,
-        binding: &str,
-        name: &str,
-    ) {
-        let Some(instances) = self
-            .environments
-            .get_mut(environment)
-            .and_then(|env| env.vectorize_instances.get_mut(worker))
-        else {
-            return;
-        };
-        if instances.get(binding).is_some_and(|r| r.name == name) {
-            instances.remove(binding);
-        } else if let Some(record) = instances.get_mut(binding) {
-            record.superseded.retain(|past| past.name != name);
-        }
-        if instances.is_empty() {
-            let env = self.environments.get_mut(environment).expect("present");
-            env.vectorize_instances.remove(worker);
-        }
-    }
-
-    /// #3319: record the Hyperdrive config made (or adopted) for `worker`'s
-    /// `Postgres` `binding`. A config this replaces is not forgotten: it
-    /// stays as a superseded one, reported as an orphan.
-    pub(crate) fn record_hyperdrive(
-        &mut self,
-        environment: &str,
-        worker: &str,
-        binding: &str,
-        record: HyperdriveRecord,
-    ) {
-        let instances = self
-            .environments
-            .entry(environment.to_string())
-            .or_default()
-            .hyperdrive_instances
-            .entry(worker.to_string())
-            .or_default();
-        let mut record = record;
-        if let Some(old) = instances.remove(binding) {
-            record.superseded = old.superseded;
-            // A config the project adopted was never its own to delete, so
-            // moving off it leaves nothing to report.
-            if old.id != record.id && !old.adopted {
-                record.superseded.push(HyperdrivePast {
-                    name: old.name,
-                    id: old.id,
-                    adopted: old.adopted,
-                });
-            }
-        }
-        instances.insert(binding.to_string(), record);
-    }
-
-    /// #3319: drop a config from the ledger once `--prune` deleted it, whether
-    /// it was the live one (its Worker or capability is gone) or a superseded
-    /// one.
-    pub(crate) fn forget_hyperdrive(
-        &mut self,
-        environment: &str,
-        worker: &str,
-        binding: &str,
-        id: &str,
-    ) {
-        let Some(instances) = self
-            .environments
-            .get_mut(environment)
-            .and_then(|env| env.hyperdrive_instances.get_mut(worker))
-        else {
-            return;
-        };
-        if instances.get(binding).is_some_and(|r| r.id == id) {
-            instances.remove(binding);
-        } else if let Some(record) = instances.get_mut(binding) {
-            record.superseded.retain(|past| past.id != id);
-        }
-        if instances.is_empty() {
-            let env = self.environments.get_mut(environment).expect("present");
-            env.hyperdrive_instances.remove(worker);
         }
     }
 
@@ -1272,34 +1142,6 @@ pub(crate) struct Orphans {
     pub(crate) queues: Vec<String>,
 }
 
-/// One recorded Vectorize index the build no longer declares (#3479): a
-/// capability removed or renamed, an index replaced, or a whole Worker gone.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub(crate) struct OrphanVectorize {
-    pub(crate) worker: String,
-    pub(crate) binding: String,
-    /// The index's name on the account.
-    pub(crate) index: String,
-    /// An adopted index is not the project's to delete.
-    pub(crate) adopted: bool,
-}
-
-/// One recorded Hyperdrive config the build no longer declares (#3319): a
-/// capability removed or renamed, a config replaced, or a whole Worker gone.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub(crate) struct OrphanHyperdrive {
-    pub(crate) worker: String,
-    pub(crate) binding: String,
-    /// The config's name on the account.
-    pub(crate) config: String,
-    /// Its id, which `--prune` deletes it by. Not serialised: the plan names
-    /// the config, and an id is not for the reader.
-    #[serde(skip)]
-    pub(crate) id: String,
-    /// An adopted config is reported and never deleted.
-    pub(crate) adopted: bool,
-}
-
 impl Orphans {
     /// Whether `--prune` would actually delete anything. **Not** the same as
     /// checking whether every field is empty (review, #840): `workers`
@@ -1308,10 +1150,7 @@ impl Orphans {
     /// `confirm_prune`'s prompt at all — `Delete 0 resource(s)?` is a bug,
     /// not a valid state.
     pub(crate) fn has_prunable(&self) -> bool {
-        kinds_have_prunable(self)
-            || !self.queues.is_empty()
-            || self.hyperdrive.iter().any(|h| !h.adopted)
-            || self.vectorize.iter().any(|v| !v.adopted)
+        kinds_have_prunable(self) || !self.queues.is_empty()
     }
 
     /// These orphans as the account names them under `environment`, for the
@@ -1335,8 +1174,8 @@ impl Orphans {
             kv: Vec::new(),
             r2: Vec::new(),
             d1: Vec::new(),
-            hyperdrive: self.hyperdrive.clone(),
-            vectorize: self.vectorize.clone(),
+            hyperdrive: Vec::new(),
+            vectorize: Vec::new(),
             workers: self
                 .workers
                 .iter()
@@ -1396,66 +1235,11 @@ pub(crate) fn find_orphans(
                 .map(String::as_str)
         })
         .collect();
-    // #3479: an index likewise, with its Worker or on its own; one a changed
-    // name left behind is an orphan while its binding is live, too.
-    let vectorize_orphans = env
-        .vectorize_instances
-        .iter()
-        .flat_map(|(worker, instances)| {
-            instances.iter().flat_map(move |(binding, record)| {
-                let live = resources
-                    .get(worker)
-                    .is_some_and(|r| r.vectorize_indexes.iter().any(|v| &v.binding == binding));
-                let main = (!live).then(|| OrphanVectorize {
-                    worker: worker.clone(),
-                    binding: binding.clone(),
-                    index: record.name.clone(),
-                    adopted: record.adopted,
-                });
-                main.into_iter()
-                    .chain(record.superseded.iter().map(move |past| OrphanVectorize {
-                        worker: worker.clone(),
-                        binding: binding.clone(),
-                        index: past.name.clone(),
-                        adopted: past.adopted,
-                    }))
-            })
-        })
-        .collect();
-    // #3319: a Hyperdrive config likewise, with its Worker or on its own.
-    let hyperdrive_orphans = env
-        .hyperdrive_instances
-        .iter()
-        .flat_map(|(worker, instances)| {
-            instances.iter().flat_map(move |(binding, record)| {
-                let live = resources
-                    .get(worker)
-                    .is_some_and(|r| r.hyperdrive.iter().any(|h| &h.binding == binding));
-                let own = (!live).then(|| OrphanHyperdrive {
-                    worker: worker.clone(),
-                    binding: binding.clone(),
-                    config: record.name.clone(),
-                    id: record.id.clone(),
-                    adopted: record.adopted,
-                });
-                // A config a replacement left behind is an orphan while its
-                // binding is live, too.
-                own.into_iter()
-                    .chain(record.superseded.iter().map(move |past| OrphanHyperdrive {
-                        worker: worker.clone(),
-                        binding: binding.clone(),
-                        config: past.name.clone(),
-                        id: past.id.clone(),
-                        adopted: past.adopted,
-                    }))
-            })
-        })
-        .collect();
     let mut orphans = Orphans {
         r2: Vec::new(),
-        vectorize: vectorize_orphans,
+        vectorize: Vec::new(),
         d1: Vec::new(),
-        hyperdrive: hyperdrive_orphans,
+        hyperdrive: Vec::new(),
         kv: Vec::new(),
         workers: env
             .workers
@@ -1511,32 +1295,6 @@ pub(crate) fn recorded_container_image<'a>(
         .and_then(|env| env.container_images.get(worker))
         .and_then(|images| images.get(capability))
         .map(String::as_str)
-}
-
-/// The index recorded for `worker`'s `Vectorize` `binding` (#3479).
-pub(crate) fn recorded_vectorize<'a>(
-    lock: &'a DeployLock,
-    worker: &str,
-    binding: &str,
-    environment: &str,
-) -> Option<&'a VectorizeRecord> {
-    lock.environments
-        .get(environment)
-        .and_then(|env| env.vectorize_instances.get(worker))
-        .and_then(|instances| instances.get(binding))
-}
-
-/// The Hyperdrive config recorded for `worker`'s `Postgres` `binding` (#3319).
-pub(crate) fn recorded_hyperdrive<'a>(
-    lock: &'a DeployLock,
-    worker: &str,
-    binding: &str,
-    environment: &str,
-) -> Option<&'a HyperdriveRecord> {
-    lock.environments
-        .get(environment)
-        .and_then(|env| env.hyperdrive_instances.get(worker))
-        .and_then(|instances| instances.get(binding))
 }
 
 /// The store recorded for `worker`'s `StoredSecret` `binding` (#3301).
@@ -1838,7 +1596,7 @@ pub fn materialise_deploy_state(
     }
     let mut hyperdrive_ids = BTreeMap::new();
     for (binding, _) in &hyperdrive {
-        let Some(recorded) = recorded_hyperdrive(&lock, worker, binding, environment) else {
+        let Some(recorded) = lock.recorded::<Hyperdrive>(environment, worker, binding) else {
             return Err(format!(
                 "remote Hyperdrive config `{binding}` for `{worker}` has not been provisioned under environment `{environment}`; run `bynk deploy --env {environment}` first"
             ));
@@ -1917,7 +1675,7 @@ pub fn materialise_deploy_state(
 /// [`confirm`] already uses, just with its own prompt so a script that only
 /// meant to authorise *creation* cannot accidentally also authorise deletion.
 pub(crate) fn confirm_prune(yes: bool, orphans: &Orphans, environment: &str) -> bool {
-    // 1D.1 (#3929): each converted kind's, first.
+    // 1D.1 (#3929): each converted kind's, in the list's order (ruled for 1D.1c), first.
     let kinds = announce_prunable_kinds(orphans, environment);
     for queue in &orphans.queues {
         // The name `prune_orphans` deletes, not the ledger key (#2028).
@@ -1926,28 +1684,7 @@ pub(crate) fn confirm_prune(yes: bool, orphans: &Orphans, environment: &str) -> 
             env_qualify(environment, queue)
         );
     }
-    // #3319: a Hyperdrive config the deploy made, by the name it has on the
-    // account. An adopted one is not the project's to delete.
-    let hyperdrive: Vec<_> = orphans.hyperdrive.iter().filter(|h| !h.adopted).collect();
-    for h in &hyperdrive {
-        eprintln!(
-            "bynk: will delete Hyperdrive config `{}` of `{}`'s `{}`",
-            h.config, h.worker, h.binding
-        );
-    }
-    // #3479: an index the deploy made, with its vectors; an adopted one is not
-    // the project's to delete.
-    let vectorize: Vec<_> = orphans.vectorize.iter().filter(|v| !v.adopted).collect();
-    for v in &vectorize {
-        eprintln!(
-            "bynk: will delete Vectorize index `{}` of `{}`'s `{}`, and every vector in it",
-            v.index, v.worker, v.binding
-        );
-    }
-    confirm_deletion_prompt(
-        yes,
-        kinds + orphans.queues.len() + hyperdrive.len() + vectorize.len(),
-    )
+    confirm_deletion_prompt(yes, kinds + orphans.queues.len())
 }
 
 /// The `--yes`-or-ask tail of [`confirm_prune`], shared with the Email Routing
@@ -1967,7 +1704,8 @@ pub(crate) fn confirm_deletion_prompt(yes: bool, count: usize) -> bool {
         && matches!(answer.trim().to_ascii_lowercase().as_str(), "y" | "yes")
 }
 
-/// Delete every KV and queue orphan `confirm_prune` just named — never a
+/// Delete every orphan `confirm_prune` just named: each converted kind's (1D.1),
+/// then each queue — never a
 /// worker (DECISION C: `wrangler delete`'s blast radius, routes/domains/crons
 /// along with the script, is categorically larger than a namespace or a
 /// queue, and pruning a whole Worker is explicitly out of this slice).
@@ -1985,8 +1723,9 @@ pub(crate) fn prune_orphans(
     lock_path: &Path,
     environment: &str,
     orphans: &Orphans,
+    lives: Lives<'_>,
 ) -> Result<(), DeployFailure> {
-    // 1D.1 (#3929): each converted kind's, first.
+    // 1D.1 (#3929): each converted kind's, in the list's order (ruled for 1D.1c), first.
     prune_kind_orphans(
         Tools {
             provenance,
@@ -1996,25 +1735,8 @@ pub(crate) fn prune_orphans(
         lock_path,
         environment,
         orphans,
+        lives,
     )?;
-    // #3479: each orphaned index the deploy made (never an adopted one), named
-    // as the account has it; gone already is success, as for a queue.
-    for orphan in orphans.vectorize.iter().filter(|o| !o.adopted) {
-        delete_vectorize_index(provenance, &orphan.index, project_root).map_err(|e| {
-            DeployFailure::driver(format!(
-                "could not delete the orphaned Vectorize index `{}` of `{}`'s `{}`: {e}",
-                orphan.index, orphan.worker, orphan.binding
-            ))
-        })?;
-        lock.forget_vectorize(environment, &orphan.worker, &orphan.binding, &orphan.index);
-        write_lock(lock_path, lock).map_err(|e| {
-            DeployFailure::driver(format!(
-                "deleted the orphaned Vectorize index `{}` but could not record it in {}: {e}",
-                orphan.index,
-                lock_path.display()
-            ))
-        })?;
-    }
     for queue in &orphans.queues {
         let physical = env_qualify(environment, queue);
         delete_queue(provenance, &physical, project_root).map_err(|e| {

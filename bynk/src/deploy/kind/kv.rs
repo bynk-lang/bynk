@@ -12,6 +12,23 @@ use super::*;
 /// The KV kind.
 pub(crate) struct Kv;
 
+impl Kv {
+    /// Slice 5, DECISION B: once per run, not once per context (an account-wide list), and only
+    /// when it could change an outcome: a Worker of `cx.order` binds a namespace whose id is
+    /// recorded (a first deploy has nothing to check drift against). `None` (no wrangler, or
+    /// the call failed) trusts the ledger unconditionally, as every deploy before that slice did.
+    pub(crate) fn read_live(tools: Tools<'_>, cx: &ProjectCx<'_>) -> Option<BTreeSet<String>> {
+        if cx.order.iter().any(|worker| {
+            kv_bindings(&cx.resources[worker])
+                .any(|binding| cx.ledger.recorded::<Kv>(worker, binding).is_some())
+        }) {
+            live_kv_namespace_ids(tools.provenance, tools.project_root)
+        } else {
+            None
+        }
+    }
+}
+
 /// [`Kv`]'s records: the bare namespace in `Environment::kv`, by Worker, and each instance in
 /// `Environment::kv_instances`, by Worker and binding.
 pub(crate) struct KvTable;
@@ -89,8 +106,8 @@ impl ResourceKind for Kv {
     type Table = KvTable;
     type Line<'r> = PlanKv<'r>;
     type Orphan = OrphanKv;
-    /// The account's namespace ids, when they were read ([`live_kv_namespace_ids`]).
-    type Live = Option<BTreeSet<String>>;
+    /// The account's namespace ids, when they were read ([`Kv::read_live`]).
+    type Live<'a> = Option<&'a BTreeSet<String>>;
     /// The namespace id.
     type Bound = String;
 
@@ -110,7 +127,15 @@ impl ResourceKind for Kv {
         &mut context.kv
     }
 
-    fn plan_line<'r>(cx: &PlanCx<'_>, binding: Self::Decl<'r>) -> PlanKv<'r> {
+    fn live_in<'a>(lives: Lives<'a>) -> Option<&'a BTreeSet<String>> {
+        lives.kv
+    }
+
+    fn plan_line<'r>(
+        cx: &PlanCx<'_>,
+        binding: Self::Decl<'r>,
+        _live: Option<&BTreeSet<String>>,
+    ) -> PlanKv<'r> {
         PlanKv {
             binding,
             action: if cx.ledger.recorded::<Kv>(cx.worker, binding).is_some() {
@@ -256,14 +281,14 @@ impl ResourceKind for Kv {
 
     /// Deletes the namespace by its recorded id, and forgets it whether the delete removed it
     /// or found it gone (DECISION E). An orphan with no recorded id is left alone.
-    fn prune(cx: &mut ApplyCx<'_, Kv>, orphan: &OrphanKv) -> Result<Option<String>, DeployFailure> {
+    fn prune(cx: &mut ApplyCx<'_, '_, Kv>, orphan: &OrphanKv) -> Result<(), DeployFailure> {
         let (worker, binding) = (orphan.worker.as_str(), orphan.binding());
         let Some(id) = cx
             .ledger()
             .recorded::<Kv>(worker, binding)
             .map(|kv| kv.id.clone())
         else {
-            return Ok(None);
+            return Ok(());
         };
         let what = match &orphan.binding {
             None => format!("the orphaned KV namespace for `{worker}`"),
@@ -271,29 +296,16 @@ impl ResourceKind for Kv {
         };
         delete_kv_namespace(cx.tools.provenance, &id, cx.tools.project_root)
             .map_err(|e| DeployFailure::driver(format!("could not delete {what}: {e}")))?;
-        cx.forget(binding);
-        Ok(Some(what))
-    }
-
-    /// Slice 5, DECISION B: once per run, not once per context (an account-wide list), and only
-    /// when it could change an outcome: a Worker of `cx.order` binds a namespace whose id is
-    /// recorded (a first deploy has nothing to check drift against). `None` (no wrangler, or
-    /// the call failed) trusts the ledger unconditionally, as every deploy before that slice did.
-    fn live(tools: Tools<'_>, cx: &ProjectCx<'_>) -> Option<BTreeSet<String>> {
-        if cx.order.iter().any(|worker| {
-            kv_bindings(&cx.resources[worker])
-                .any(|binding| cx.ledger.recorded::<Kv>(worker, binding).is_some())
-        }) {
-            live_kv_namespace_ids(tools.provenance, tools.project_root)
-        } else {
-            None
-        }
+        cx.change(
+            |env| KvTable::remove(env, worker, binding),
+            &format!("deleted {what}"),
+        )
     }
 
     /// Reuses the recorded id when [`should_trust_recorded_kv`]; otherwise creates the namespace
     /// under its current title and records it.
     fn provision(
-        cx: &mut ApplyCx<'_, Kv>,
+        cx: &mut ApplyCx<'_, '_, Kv>,
         binding: &str,
     ) -> Result<Provisioned<String>, DeployFailure> {
         let (worker, environment) = (cx.worker, cx.environment);
@@ -301,22 +313,18 @@ impl ResourceKind for Kv {
             .ledger()
             .recorded::<Kv>(worker, binding)
             .map(|kv| kv.id.clone());
-        if should_trust_recorded_kv(recorded.as_deref(), cx.live.as_ref()) {
+        if should_trust_recorded_kv(recorded.as_deref(), cx.live) {
             let id = recorded.expect("trust_recorded is only true when recorded is Some");
             return Ok(Provisioned {
                 bound: Some((binding.to_string(), id)),
-                recorded: None,
             });
         }
         // #2059: the plan-time check covered only namespaces with no recorded id. One whose
         // recorded id has gone from the account is created again here, under its current title,
         // so compare that title across environments now, before `kv namespace create`.
-        if let Some(message) = cross_environment_title_clash(
-            cx.project,
-            cx.ledger(),
-            &[(worker, binding)],
-            cx.live.as_ref(),
-        ) {
+        if let Some(message) =
+            cross_environment_title_clash(cx.project, cx.ledger(), &[(worker, binding)], cx.live)
+        {
             return Err(DeployFailure::driver(message));
         }
         let what = kv_namespace_noun(worker, binding);
@@ -326,10 +334,10 @@ impl ResourceKind for Kv {
             cx.tools.project_root,
         )
         .map_err(|e| DeployFailure::driver(format!("could not create {what}: {e}")))?;
-        cx.record(binding, KvNamespace::of(&id));
+        // Recorded before the push, so an interrupted run never makes a second namespace.
+        cx.record(binding, KvNamespace::of(&id), &format!("created {what}"))?;
         Ok(Provisioned {
             bound: Some((binding.to_string(), id)),
-            recorded: Some(what),
         })
     }
 
@@ -864,7 +872,7 @@ mod tests {
             .kv_instances(&["KV_SESSIONS"]);
         let lines: Vec<_> = Kv::declared(&declared)
             .into_iter()
-            .map(|decl| Kv::plan_line(&cx, decl))
+            .map(|decl| Kv::plan_line(&cx, decl, None))
             .collect();
         let mut out = String::new();
         for line in &lines {
@@ -1031,8 +1039,9 @@ mod tests {
                     environment: "default",
                     worker: "shop",
                     project: &resources,
-                    environments: &mut lock.environments,
-                    live: &live,
+                    lock: &mut lock,
+                    lock_path: Path::new("/nonexistent/bynk.deploy.lock"),
+                    live: live.as_ref(),
                     tools,
                 },
                 "KV",
@@ -1041,8 +1050,7 @@ mod tests {
             assert_eq!(
                 done,
                 Provisioned {
-                    bound: Some(("KV".to_string(), "bare".to_string())),
-                    recorded: None,
+                    bound: Some(("KV".to_string(), "bare".to_string()))
                 }
             );
         }
@@ -1053,13 +1061,15 @@ mod tests {
         let mut lock = DeployLock::default();
         let provenance = Provenance::Path("/nonexistent/wrangler".into());
         let project = BTreeMap::new();
-        let forgot = Kv::prune(
+        // The ledger path does not exist, so a write would fail the prune.
+        Kv::prune(
             &mut ApplyCx {
                 environment: "default",
                 worker: "gone",
                 project: &project,
-                environments: &mut lock.environments,
-                live: &None,
+                lock: &mut lock,
+                lock_path: Path::new("/nonexistent/bynk.deploy.lock"),
+                live: None,
                 tools: Tools {
                     provenance: &provenance,
                     project_root: Path::new("/nonexistent"),
@@ -1070,8 +1080,7 @@ mod tests {
                 binding: None,
             },
         )
-        .expect("nothing to delete");
-        assert_eq!(forgot, None);
+        .expect("nothing to delete, so nothing is written");
         assert_eq!(lock, DeployLock::default());
     }
 
@@ -1084,6 +1093,22 @@ mod tests {
                 &BTreeMap::new()
             )
             .is_ok()
+        );
+    }
+
+    #[test]
+    fn materialising_into_a_missing_configuration_fails_with_its_worker() {
+        let e = Kv::materialise(
+            Path::new("/nonexistent/wrangler.toml"),
+            "shop",
+            &BTreeMap::from([("KV".to_string(), "id-1".to_string())]),
+        )
+        .unwrap_err();
+        assert!(
+            e.message
+                .contains("could not materialise the KV namespace ids into `shop`'s"),
+            "{}",
+            e.message
         );
     }
 }

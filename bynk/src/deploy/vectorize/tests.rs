@@ -182,7 +182,9 @@ fn a_missing_index_is_created_with_its_configuration_then_its_metadata_indexes()
             "vectorize list-metadata-index shop-docs --json",
         ]
     );
-    let recorded = recorded_vectorize(&lock, "shop", "VECTORIZE_DOCS", "default").unwrap();
+    let recorded = lock
+        .recorded::<Vectorize>("default", "shop", "VECTORIZE_DOCS")
+        .unwrap();
     assert_eq!(
         (recorded.name.as_str(), recorded.adopted),
         ("shop-docs", false)
@@ -207,7 +209,7 @@ fn a_matching_index_is_reused_and_never_created_again() {
         fake.calls()
     );
     assert_eq!(
-        recorded_vectorize(&lock, "shop", "VECTORIZE_DOCS", "staging")
+        lock.recorded::<Vectorize>("staging", "shop", "VECTORIZE_DOCS")
             .unwrap()
             .name,
         "shop-docs-staging"
@@ -244,7 +246,10 @@ fn a_dimension_or_metric_mismatch_fails_and_changes_nothing() {
                 .all(|c| !c.contains("create") && !c.contains("delete")),
             "{calls:?}"
         );
-        assert!(recorded_vectorize(&lock, "shop", "VECTORIZE_DOCS", "default").is_none());
+        assert!(
+            lock.recorded::<Vectorize>("default", "shop", "VECTORIZE_DOCS")
+                .is_none()
+        );
     }
 }
 
@@ -305,27 +310,55 @@ fn pruning_deletes_an_existing_index_and_is_quiet_about_one_already_gone() {
 #[test]
 fn the_ledger_records_supersedes_orphans_and_forgets() {
     let mut lock = DeployLock::default();
-    lock.record_vectorize("default", "shop", "VECTORIZE_DOCS", "shop-docs", false);
+    lock.record::<Vectorize>(
+        "default",
+        "shop",
+        "VECTORIZE_DOCS",
+        VectorizeRecord::of("shop-docs", false),
+    );
     // Live and declared: no orphan.
     let live = BTreeMap::from([("shop".to_string(), resources(&[]))]);
     assert!(find_orphans(&lock, "default", &live).vectorize.is_empty());
     // A renamed instance leaves the old index recorded and reported.
-    lock.record_vectorize("default", "shop", "VECTORIZE_DOCS", "shop-docs-v2", false);
+    lock.record::<Vectorize>(
+        "default",
+        "shop",
+        "VECTORIZE_DOCS",
+        VectorizeRecord::of("shop-docs-v2", false),
+    );
     let orphans = find_orphans(&lock, "default", &BTreeMap::new());
     assert_eq!(orphans.vectorize.len(), 2);
     assert!(orphans.has_prunable());
     // Forgetting the superseded one leaves the live record.
-    lock.forget_vectorize("default", "shop", "VECTORIZE_DOCS", "shop-docs");
+    VectorizeTable::forget_index(
+        lock.environments.get_mut("default").unwrap(),
+        "shop",
+        "VECTORIZE_DOCS",
+        "shop-docs",
+    );
     assert_eq!(
-        recorded_vectorize(&lock, "shop", "VECTORIZE_DOCS", "default")
+        lock.recorded::<Vectorize>("default", "shop", "VECTORIZE_DOCS")
             .unwrap()
             .superseded,
         []
     );
-    lock.forget_vectorize("default", "shop", "VECTORIZE_DOCS", "shop-docs-v2");
-    assert!(recorded_vectorize(&lock, "shop", "VECTORIZE_DOCS", "default").is_none());
+    VectorizeTable::forget_index(
+        lock.environments.get_mut("default").unwrap(),
+        "shop",
+        "VECTORIZE_DOCS",
+        "shop-docs-v2",
+    );
+    assert!(
+        lock.recorded::<Vectorize>("default", "shop", "VECTORIZE_DOCS")
+            .is_none()
+    );
     // An adopted index is reported and never prunable.
-    lock.record_vectorize("default", "shop", "VECTORIZE_DOCS", "legacy", true);
+    lock.record::<Vectorize>(
+        "default",
+        "shop",
+        "VECTORIZE_DOCS",
+        VectorizeRecord::of("legacy", true),
+    );
     let adopted = find_orphans(&lock, "default", &BTreeMap::new());
     assert!(adopted.vectorize[0].adopted);
     assert!(!adopted.has_prunable());
@@ -341,8 +374,9 @@ fn a_name_the_environment_pushes_over_the_limit_is_an_error_naming_the_instance(
     };
     let resources = BTreeMap::from([("shop".to_string(), declared)]);
     let lock = DeployLock::default();
-    assert!(vectorize_index_problem(&resources, &lock, "default").is_none());
-    let message = vectorize_index_problem(&resources, &lock, "production").expect("65 bytes");
+    assert!(vectorize_index_problem(&resources, LedgerView::of(&lock, "default")).is_none());
+    let message =
+        vectorize_index_problem(&resources, LedgerView::of(&lock, "production")).expect("65 bytes");
     assert!(
         message.contains("VECTORIZE_DOCS") && message.contains("1 to 64 bytes"),
         "{message}"
@@ -352,10 +386,27 @@ fn a_name_the_environment_pushes_over_the_limit_is_an_error_naming_the_instance(
 #[test]
 fn moving_back_to_a_left_index_does_not_make_the_live_one_an_orphan() {
     let mut lock = DeployLock::default();
-    lock.record_vectorize("default", "shop", "VECTORIZE_DOCS", "a", false);
-    lock.record_vectorize("default", "shop", "VECTORIZE_DOCS", "b", false);
-    lock.record_vectorize("default", "shop", "VECTORIZE_DOCS", "a", false);
-    let record = recorded_vectorize(&lock, "shop", "VECTORIZE_DOCS", "default").unwrap();
+    lock.record::<Vectorize>(
+        "default",
+        "shop",
+        "VECTORIZE_DOCS",
+        VectorizeRecord::of("a", false),
+    );
+    lock.record::<Vectorize>(
+        "default",
+        "shop",
+        "VECTORIZE_DOCS",
+        VectorizeRecord::of("b", false),
+    );
+    lock.record::<Vectorize>(
+        "default",
+        "shop",
+        "VECTORIZE_DOCS",
+        VectorizeRecord::of("a", false),
+    );
+    let record = lock
+        .recorded::<Vectorize>("default", "shop", "VECTORIZE_DOCS")
+        .unwrap();
     assert_eq!(record.name, "a");
     assert_eq!(
         record
@@ -390,7 +441,9 @@ fn an_adopted_index_that_matches_is_recorded_as_adopted_and_never_touched() {
         "production",
     )
     .unwrap();
-    let recorded = recorded_vectorize(&lock, "shop", "VECTORIZE_DOCS", "production").unwrap();
+    let recorded = lock
+        .recorded::<Vectorize>("production", "shop", "VECTORIZE_DOCS")
+        .unwrap();
     assert_eq!(
         (recorded.name.as_str(), recorded.adopted),
         ("docs-prod", true)
@@ -472,7 +525,8 @@ fn an_index_that_never_appears_fails_the_deploy_and_says_to_run_it_again() {
     assert!(message.contains("was not pushed"), "{message}");
     // The index itself was created and recorded, so a re-run resumes.
     assert!(
-        recorded_vectorize(&lock, "shop", "VECTORIZE_DOCS", "default").is_some(),
+        lock.recorded::<Vectorize>("default", "shop", "VECTORIZE_DOCS")
+            .is_some(),
         "the created index is recorded even when the wait times out"
     );
 }
@@ -527,7 +581,10 @@ fn an_adopted_index_that_is_missing_fails_and_is_not_created() {
             .contains("an adopted index is never created")
     );
     assert!(fake.calls().iter().all(|c| !c.contains("create")));
-    assert!(recorded_vectorize(&lock, "shop", "VECTORIZE_DOCS", "production").is_none());
+    assert!(
+        lock.recorded::<Vectorize>("production", "shop", "VECTORIZE_DOCS")
+            .is_none()
+    );
 }
 
 #[test]
@@ -601,8 +658,11 @@ fn an_adopted_name_the_platform_refuses_points_at_bynk_toml_not_the_capability()
             ..Default::default()
         },
     )]);
-    let message = vectorize_index_problem(&resources, &DeployLock::default(), "production")
-        .expect("a refused adopted name");
+    let message = vectorize_index_problem(
+        &resources,
+        LedgerView::of(&DeployLock::default(), "production"),
+    )
+    .expect("a refused adopted name");
     assert!(
         message.contains("[deploy.vectorize]") && !message.contains("rename the capability"),
         "{message}"
@@ -642,11 +702,16 @@ fn adopters_may_share_an_index_but_a_created_one_may_not_be_shared() {
         adopting_decl("VECTORIZE_DOCS", "shop-docs", "docs-shared"),
         adopting_decl("VECTORIZE_DOCS", "blog-docs", "docs-shared"),
     );
-    assert!(vectorize_index_problem(&both, &lock, "production").is_none());
+    assert!(vectorize_index_problem(&both, LedgerView::of(&lock, "production")).is_none());
     // Another environment already recording the shared name is no clash either.
     let mut recorded = DeployLock::default();
-    recorded.record_vectorize("staging", "shop", "VECTORIZE_DOCS", "docs-shared", true);
-    assert!(vectorize_index_problem(&both, &recorded, "production").is_none());
+    recorded.record::<Vectorize>(
+        "staging",
+        "shop",
+        "VECTORIZE_DOCS",
+        VectorizeRecord::of("docs-shared", true),
+    );
+    assert!(vectorize_index_problem(&both, LedgerView::of(&recorded, "production")).is_none());
 }
 
 #[test]

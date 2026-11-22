@@ -166,6 +166,11 @@ impl Listings for RestListings {
             KindId::D1 => self.paged("/d1/database?per_page=100", "name"),
             KindId::Queue => self.paged("/queues", "queue_name"),
             KindId::Vectorize => self.paged("/vectorize/v2/indexes", "name"),
+            // A Hyperdrive config's name is not derived to be checked: the plan never asks.
+            KindId::Hyperdrive => Err(format!(
+                "the account's {} are not listed",
+                kind.account_noun()
+            )),
         }
     }
 }
