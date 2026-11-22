@@ -1,11 +1,6 @@
----
-level: patch
-changelog: The docs site now wears the Bynk design system, from the same `@bynk-lang/site-theme` package as the blog — amber and teal in place of the indigo accent, Instrument Sans and JetBrains Mono, the bento-blocks wordmark, and the blog's header — in light and dark, following the reader's setting (web presence track, slice 6, #4006).
----
+# 0883 — The docs site and the blog share one theme package, @bynk-lang/site-theme, published to GitHub Packages
 
-## ADR: one-site-theme-package
-title: The docs site and the blog share one theme package, @bynk-lang/site-theme, published to GitHub Packages
-summary: The Bynk brand for Starlight sites lives in bynk-lang/site-theme as a Starlight plugin both sites depend on; a site's own CSS and component overrides win over the theme's
+- **Status:** Accepted (v0.640.30)
 
 **Context.** The docs site and the blog looked like two projects. The docs
 site carried the brand from the documentation track (an electric-indigo
