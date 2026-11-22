@@ -1847,7 +1847,17 @@ mod tests {
                 f.ids.insert("HYPERDRIVE_MAIN".into(), "id-2".into());
             }),
         );
-        same.lock = f.lock.clone();
+        same.lock.record::<Hyperdrive>(
+            "default",
+            "shop",
+            "HYPERDRIVE_MAIN",
+            HyperdriveRecord {
+                name: "shop-main".into(),
+                id: "id-2".into(),
+                adopted: false,
+                superseded: Vec::new(),
+            },
+        );
         assert!(
             !same
                 .run()
