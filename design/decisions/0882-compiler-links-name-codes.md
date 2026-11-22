@@ -1,11 +1,6 @@
----
-level: patch
-changelog: Every diagnostic code now has its own page on the site, and every tool links a code as `https://bynk-lang.org/d/<code>`, which redirects to it. The editor's code link, `bynk explain`, the MCP tools and the playground show it for every registered code, explained or not. The Book pages that explain a code are listed on its page from `site/src/data/diagnostic-links.json`, in place of `Explain`'s `page` and `anchor` (web presence track, slice 4, #3876).
----
+# 0882 — The compiler links a diagnostic by its code, at /d/<code>, and the site decides where that goes
 
-## ADR: compiler-links-name-codes
-title: The compiler links a diagnostic by its code, at /d/<code>, and the site decides where that goes
-summary: Every tool links a code as `https://bynk-lang.org/d/<code>`; the site serves a page per registry code and keeps the code-to-Book-page links in its own data file
+- **Status:** Accepted (v0.640.15)
 
 **Context.** The toolchain linked a diagnostic to the Book in two ways. A code
 with a curated explanation linked the Book page and heading that `Explain`
