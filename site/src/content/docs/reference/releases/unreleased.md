@@ -7,6 +7,7 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.640.38** | Internal restructuring: test-harness generation moves from the driver into `bynk-emit::testgen`; no emitted output changes |
 | **v0.640.37** | Internal restructuring of `bynk deploy`; no change to plans, provisioning or `bynk.deploy.lock` |
 | **v0.640.36** | The docs site deploys a merge within minutes, from the merge queue's passed run, instead of waiting for the next CI run on `main` to pass |
 | **v0.640.35** | Internal restructuring of the code generator; events, the envelope rule and subscriber failure isolation are decided once, and the Bundle root's event dispatch is laid out by the printer |
