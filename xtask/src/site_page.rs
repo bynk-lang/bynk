@@ -38,7 +38,8 @@ fn lift_title(source: &str) -> (String, String) {
 }
 
 /// Rewrite relative `*.md` links to site routes, resolving each against
-/// `page_dir`: `/reference/<slug>/` under `reference/`, else `/book/<slug>/`.
+/// `page_dir`: `/reference/<slug>/` under `reference/`, `/reference/spec/<slug>/`
+/// under `spec/` (the specification's mdBook home), else `/book/<slug>/`.
 /// External / in-page / already-rooted links are untouched.
 fn rewrite_links(body: &str, page_dir: &str) -> String {
     let re = Regex::new(r"\]\(([^)]+)\)").unwrap();
@@ -72,6 +73,10 @@ fn rewrite_links(body: &str, page_dir: &str) -> String {
         let hash = anchor.map(|a| format!("#{a}")).unwrap_or_default();
         if slug == "reference" || slug.starts_with("reference/") {
             format!("](/{slug}/{hash})")
+        } else if slug == "spec" || slug.starts_with("spec/") {
+            // The specification was the Book's `spec/` in the mdBook layout and
+            // lives under the Reference since slice 5.
+            format!("](/reference/{slug}/{hash})")
         } else {
             format!("](/book/{slug}/{hash})")
         }
@@ -131,6 +136,10 @@ mod tests {
         assert_eq!(
             rewrite_links("[guide](../guides/agents/index.md)", "reference"),
             "[guide](/book/guides/agents/)"
+        );
+        assert_eq!(
+            rewrite_links("[spec](../spec/static-semantics.md#5)", "reference"),
+            "[spec](/reference/spec/static-semantics/#5)"
         );
         assert_eq!(
             rewrite_links("[root](/reference/types/)", "reference"),

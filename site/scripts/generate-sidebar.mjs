@@ -16,8 +16,9 @@
 //!
 //! The contents must also be complete (web presence track, slice 1): every page
 //! under a tree's folder (`src/content/docs/book/`, `src/content/docs/reference/`)
-//! is listed in that tree's contents file, and every entry names a page. The sidebar comes from `SUMMARY.md`, not the folders, so a page
-//! nobody lists exists but no sidebar shows it. `--check` fails naming each one;
+//! is listed in that tree's contents file, and every entry names a page. A
+//! sidebar comes from its contents file, not the folders, so a page nobody
+//! lists exists but no sidebar shows it. `--check` fails naming each one;
 //! a plain run warns.
 //!
 //! The release pages (slice 3) are the one exception to listing by hand: a

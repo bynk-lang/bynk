@@ -11,7 +11,7 @@
 //!      its `{{#grammar <raw>}}`, so the diagnostics `Construct` deep-links
 //!      resolve; one per embeddable rule, unique.
 //!   4. **The spec covers the grammar** (#1780) — every embeddable rule is
-//!      embedded at least once under `book/spec/`, so a new production can't
+//!      embedded at least once under `reference/spec/`, so a new production can't
 //!      land in the reference alone and leave the normative grammar behind.
 //!
 //! Backslash-escaped directives (`\{{#…}}`, as used to show the syntax literally
@@ -179,7 +179,7 @@ fn every_entry_has_a_matching_anchor() {
 }
 
 /// #1780: the normative spec embeds every embeddable rule somewhere under
-/// `book/spec/` (the syntactic grammar, or §3 for the lexical ones), and nothing
+/// `reference/spec/` (the syntactic grammar, or §3 for the lexical ones), and nothing
 /// that isn't one. Before this check only the reference was held to the
 /// grammar, and 29 productions reached it without reaching the spec (8 added by
 /// #1669, the other 21 by #1780).
@@ -201,7 +201,7 @@ fn every_embeddable_rule_is_in_the_spec() {
         missing.is_empty(),
         "grammar rules the spec never embeds: {missing:#?}\n\
          Add a `{{{{#grammar <rule>}}}}` entry for each to the spec's grammar chapter \
-         (`book/spec/syntactic-grammar.md`, or `lexical-grammar.md` for a token)."
+         (`reference/spec/syntactic-grammar.md`, or `lexical-grammar.md` for a token)."
     );
     let extra: Vec<&String> = embedded.difference(&embeddable).collect();
     assert!(
