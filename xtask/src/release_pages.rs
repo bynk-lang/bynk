@@ -70,8 +70,18 @@ fn row_version(row: &str) -> Option<&str> {
 /// A date as the Book writes it: `2026-11-17` → `17 November 2026`.
 pub fn long_date(iso: &str) -> Option<String> {
     const MONTHS: [&str; 12] = [
-        "January", "February", "March", "April", "May", "June", "July", "August", "September",
-        "October", "November", "December",
+        "January",
+        "February",
+        "March",
+        "April",
+        "May",
+        "June",
+        "July",
+        "August",
+        "September",
+        "October",
+        "November",
+        "December",
     ];
     let mut parts = iso.splitn(3, '-');
     let (y, m, d) = (parts.next()?, parts.next()?, parts.next()?);
@@ -177,7 +187,10 @@ mod tests {
         | [v0.1.0](/book/reference/releases/v0-1-0/) | 1 January 2026 | v0.1.0 | 1 |\n";
 
     fn unreleased(rows: &[&str]) -> String {
-        format!("---\ntitle: Unreleased\n---\nSince v0.1.0.\n\n{TABLE}\n{}\n", rows.join("\n"))
+        format!(
+            "---\ntitle: Unreleased\n---\nSince v0.1.0.\n\n{TABLE}\n{}\n",
+            rows.join("\n")
+        )
     }
 
     #[test]
@@ -185,9 +198,15 @@ mod tests {
         let page = unreleased(&["| **v0.2.1** | Second |", "| **v0.2.0** | First |"]);
         let cut = cut(&page, INDEX, v("0.2.1"), "2026-11-22").unwrap();
         assert!(cut.release.contains("title: v0.2.1"));
-        assert!(cut.release.contains("Released on 22 November 2026 as **v0.2.1**"));
+        assert!(
+            cut.release
+                .contains("Released on 22 November 2026 as **v0.2.1**")
+        );
         assert!(cut.release.contains("from v0.2.0 to v0.2.1"));
-        assert!(cut.release.contains("| **v0.2.1** | Second |\n| **v0.2.0** | First |"));
+        assert!(
+            cut.release
+                .contains("| **v0.2.1** | Second |\n| **v0.2.0** | First |")
+        );
         assert!(!cut.unreleased.contains("| **v"), "{}", cut.unreleased);
         assert!(cut.unreleased.contains("since **v0.2.1**"));
         assert!(cut.unreleased.contains(TABLE));
@@ -200,8 +219,13 @@ mod tests {
         let new = cut.index.find("[v0.2.0]").unwrap();
         let old = cut.index.find("[v0.1.0]").unwrap();
         assert!(new < old, "{}", cut.index);
-        assert!(cut.index.contains("| [v0.2.0](/book/reference/releases/v0-2-0/) | 22 November 2026 | v0.2.0 | 1 |"));
-        assert_eq!(release_page(v("0.2.0")), format!("{RELEASES_DIR}/v0-2-0.md"));
+        assert!(cut.index.contains(
+            "| [v0.2.0](/book/reference/releases/v0-2-0/) | 22 November 2026 | v0.2.0 | 1 |"
+        ));
+        assert_eq!(
+            release_page(v("0.2.0")),
+            format!("{RELEASES_DIR}/v0-2-0.md")
+        );
         assert!(cut.release.contains("one increment, v0.2.0."));
     }
 

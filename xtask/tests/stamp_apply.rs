@@ -73,8 +73,10 @@ fn stamp_one_increment_with_an_adr() {
     stamp::apply(&root, &plan, None, bumper(&root)).expect("apply");
 
     // Changelog: new row on top.
-    let changelog =
-        fs::read_to_string(root.join("site/src/content/docs/book/reference/releases/unreleased.md")).unwrap();
+    let changelog = fs::read_to_string(
+        root.join("site/src/content/docs/book/reference/releases/unreleased.md"),
+    )
+    .unwrap();
     let sep = changelog.find("|---|---|").unwrap();
     let after = &changelog[sep..];
     assert!(
@@ -145,8 +147,10 @@ fn stamp_two_increments_get_sequential_versions() {
 
     stamp::apply(&root, &plan, None, bumper(&root)).expect("apply");
 
-    let changelog =
-        fs::read_to_string(root.join("site/src/content/docs/book/reference/releases/unreleased.md")).unwrap();
+    let changelog = fs::read_to_string(
+        root.join("site/src/content/docs/book/reference/releases/unreleased.md"),
+    )
+    .unwrap();
     // Newest (0.186.1) on top, then 0.186.0, then the pre-existing 0.185.0.
     let pos = |v: &str| changelog.find(v).unwrap();
     assert!(pos("v0.186.1") < pos("v0.186.0"));
@@ -584,8 +588,10 @@ fn breaking_without_the_page_fails_before_writing_anything() {
     .unwrap();
     let plan = stamp::plan(&root).expect("plan");
     stamp::apply(&root, &plan, None, bumper(&root)).expect_err("page is missing");
-    let changelog =
-        fs::read_to_string(root.join("site/src/content/docs/book/reference/releases/unreleased.md")).unwrap();
+    let changelog = fs::read_to_string(
+        root.join("site/src/content/docs/book/reference/releases/unreleased.md"),
+    )
+    .unwrap();
     assert!(!changelog.contains("Break a"), "nothing may be written");
     assert!(root.join("design/pending/a-break.md").exists());
 }

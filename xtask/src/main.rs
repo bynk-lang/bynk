@@ -1014,8 +1014,17 @@ fn release_page(apply: bool) -> ExitCode {
                  the version before cutting the next release."
             ));
         }
-        let cut = cut(&read(UNRELEASED_PAGE)?, &read(INDEX_PAGE)?, version, &today_utc())?;
-        let rows = cut.release.lines().filter(|l| l.starts_with("| **v")).count();
+        let cut = cut(
+            &read(UNRELEASED_PAGE)?,
+            &read(INDEX_PAGE)?,
+            version,
+            &today_utc(),
+        )?;
+        let rows = cut
+            .release
+            .lines()
+            .filter(|l| l.starts_with("| **v"))
+            .count();
         if !apply {
             println!(
                 "Would cut v{version} ({rows} increments): write {page}, empty {UNRELEASED_PAGE} \
