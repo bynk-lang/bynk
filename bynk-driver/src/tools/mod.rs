@@ -1,11 +1,12 @@
-//! Back-half paydown 1D.5b (#4003, Decision F): the external tools the driver
-//! spawns, in one place: npm, pnpm, bun and yarn installs, `tsc`, `tsx`,
-//! `node` and `git`.
+//! Back-half paydown 1D.5b (#4003, Decision F): the spawning of the external
+//! tools the driver runs, in one place: `tsc`, `tsx`, `node`, `git`, and the
+//! npm, pnpm, bun and yarn installs.
 //!
 //! - [`pins`]: the versions fetched on demand (TypeScript, `tsx`).
 //! - [`ladder`]: the `tsc` and `tsx` runner ladders.
-//! - Here: the `node` and `git` commands, and [`run_to_completion`], which
-//!   installs use.
+//! - Here: the `node` and `git` commands, and [`run_to_completion`], which runs
+//!   an install. What to run for each package manager (`PackageManager`'s
+//!   runner and install methods) stays in [`crate::npm_install`].
 //!
 //! Each tool is found exactly as its callers always found it, so moving a
 //! spawn here changes no error text and no edge case: `node` through

@@ -284,7 +284,7 @@ fn detect_runner(tb: &dyn Toolbox, root: Option<&std::path::Path>) -> Row {
     let remedy = format!(
         "{} (or `{}`, which runs tests without type-checking)",
         manager.global_install(&bynk_driver::tools::pins::typescript_spec()),
-        manager.global_install("tsx")
+        manager.global_install(bynk_driver::tools::pins::TSX_SPEC)
     );
     match best {
         // #1672, #3420: a `tsc` below the supported major is unsupported, a real defect
