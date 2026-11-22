@@ -158,7 +158,7 @@ fn a_stale_marker_is_warmed_again() {
     let dir = std::env::temp_dir().join(format!("bynk-wrangler-warm-stale-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
-    let (_, marker) = warm::paths(&dir, warm::SPEC);
+    let (_, marker, _) = warm::paths(&dir, warm::SPEC);
 
     assert_eq!(warm::warm_in(&dir, warm::SPEC, || true), Warmed::Now);
     assert_eq!(
@@ -177,9 +177,54 @@ fn a_stale_marker_is_warmed_again() {
         .unwrap();
     assert_eq!(warm::warm_in(&dir, warm::SPEC, || true), Warmed::Now);
 
-    // A failed install leaves no marker, so the next process tries again.
+    // A failed install leaves no marker, so a later run tries again.
     std::fs::remove_file(&marker).unwrap();
     assert_eq!(warm::warm_in(&dir, warm::SPEC, || false), Warmed::Failed);
     assert!(!marker.exists());
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A process that waited on a failing install gives up at once instead of
+/// repeating it: N waiting processes must not serialise N failures. Once the
+/// failure is stale, the install is tried again, and a success clears it.
+#[test]
+fn a_waiting_process_gives_up_at_once_after_a_failed_install() {
+    let dir =
+        std::env::temp_dir().join(format!("bynk-wrangler-warm-failed-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let (_, marker, failed) = warm::paths(&dir, warm::SPEC);
+
+    assert_eq!(warm::warm_in(&dir, warm::SPEC, || false), Warmed::Failed);
+    assert!(failed.exists() && !marker.exists());
+    assert_eq!(
+        warm::warm_in(&dir, warm::SPEC, || panic!(
+            "a fresh failure is not retried"
+        )),
+        Warmed::Failed
+    );
+
+    let old = std::time::SystemTime::now() - warm::FAILURE_TTL - std::time::Duration::from_secs(60);
+    std::fs::File::options()
+        .write(true)
+        .open(&failed)
+        .unwrap()
+        .set_modified(old)
+        .unwrap();
+    assert_eq!(warm::warm_in(&dir, warm::SPEC, || true), Warmed::Now);
+    assert!(marker.exists() && !failed.exists());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Two npm caches on one machine (two users, or two jobs with different
+/// homes) get their own lock and markers, so neither trusts the other's.
+#[test]
+fn each_npm_cache_has_its_own_lock_and_markers() {
+    let dir = std::path::Path::new("/tmp");
+    let a = warm::paths_for(dir, warm::SPEC, "/home/a");
+    let b = warm::paths_for(dir, warm::SPEC, "/home/b");
+    assert_ne!(a.0, b.0);
+    assert_ne!(a.1, b.1);
+    assert_ne!(a.2, b.2);
+    assert_eq!(a, warm::paths_for(dir, warm::SPEC, "/home/a"));
 }
