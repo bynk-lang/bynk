@@ -7,6 +7,7 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.640.43** | Learn Bynk has a new chapter 5, [Handle failure with `Result`](/book/tutorials/failure-and-result/) — the URL shortener gets a rule of its own, composes its fallible steps with `?` and `.mapErr`, and turns every `LinkError` into an HTTP response in one function — and "Add a stateful agent" now builds on it. Chapters link to each other by title, not number (web presence track, slice 9, #4041). |
 | **v0.640.42** | Internal restructuring: `bynk-emit` no longer depends on `bynk-driver`, not even for its tests, and the test-harness lowering entries move into `bynk-emit::testgen`; no emitted output changes |
 | **v0.640.41** | Internal restructuring of `bynk deploy`; no change to plans, provisioning or `bynk.deploy.lock` |
 | **v0.640.40** | bynk-lang.org has a new home page, built to the site mockup — the hero beside a checked program, "Four ways in" to the Book, Examples, Reference and Blog, "What Bynk checks for you", and the blog's newest posts — and both sites share one header and footer from `@bynk-lang/site-theme` 0.3.0. The documentation's prose is now licensed CC BY 4.0 and its code snippets MIT, as the blog's are; Bynk itself stays MIT or Apache-2.0 (web presence track, slice 8, #4025). |
