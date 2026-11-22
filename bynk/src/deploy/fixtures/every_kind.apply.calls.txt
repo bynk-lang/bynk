@@ -1,0 +1,61 @@
+== default ==
+  1 kv namespace create shop-cart-sessions
+  2 queues info shared-feed
+  3 deploy --secrets-file <secrets-file>
+  4 kv namespace create shop-cart
+  5 r2 bucket create shop-archive --jurisdiction eu
+  6 r2 bucket create shop-new
+  7 vectorize list --json
+  8 vectorize get shop-docs --json
+  9 vectorize list-metadata-index shop-docs --json
+ 10 vectorize create-metadata-index shop-docs --propertyName category --type string
+ 11 vectorize list-metadata-index shop-docs --json
+ 12 vectorize list --json
+ 13 vectorize create shop-new --dimensions 384 --metric euclidean
+ 14 vectorize list-metadata-index shop-new --json
+ 15 d1 create shop-new
+ 16 hyperdrive get hd-adopted
+ 17 hyperdrive update hd-shop-main shop-main db.example
+ 18 hyperdrive create shop-new db.example
+ 19 queues info intake
+ 20 queues info outbound
+ 21 queues create outbound
+ 22 d1 migrations apply D1_ORDERS --remote
+ 23 secret put API_TOKEN
+ 24 deploy
+ 25 kv namespace delete --namespace-id kv-gone-default --skip-confirmation
+ 26 kv namespace delete --namespace-id kv-gone-cache-default --skip-confirmation
+ 27 kv namespace delete --namespace-id kv-shop-old-default --skip-confirmation
+ 28 vectorize list --json
+ 29 vectorize list --json
+ 30 hyperdrive delete hd-gone
+ 31 hyperdrive delete hd-shop-main-was
+ 32 queues delete old-jobs
+== staging ==
+  1 kv namespace create shop-cart-sessions-staging
+  2 queues info shared-feed-staging
+  3 deploy --secrets-file <secrets-file> --env staging
+  4 kv namespace create shop-cart-staging
+  5 kv namespace create shop-sessions-staging
+  6 r2 bucket create shop-archive-staging --jurisdiction eu
+  7 r2 bucket create shop-files-staging
+  8 r2 bucket create shop-new-staging
+  9 vectorize list --json
+ 10 vectorize get shop-docs-staging --json
+ 11 vectorize list-metadata-index shop-docs-staging --json
+ 12 vectorize create-metadata-index shop-docs-staging --propertyName category --type string
+ 13 vectorize list-metadata-index shop-docs-staging --json
+ 14 vectorize list --json
+ 15 vectorize create shop-new-staging --dimensions 384 --metric euclidean
+ 16 vectorize list-metadata-index shop-new-staging --json
+ 17 d1 create shop-new-staging
+ 18 hyperdrive get hd-adopted
+ 19 hyperdrive create shop-main-staging db.example
+ 20 hyperdrive create shop-new-staging db.example
+ 21 queues info intake-staging
+ 22 queues info outbound-staging
+ 23 queues create outbound-staging
+ 24 d1 migrations apply D1_ORDERS --remote --env staging
+ 25 secret put API_TOKEN --env staging
+ 26 deploy --env staging
+ 27 queues delete old-jobs-staging

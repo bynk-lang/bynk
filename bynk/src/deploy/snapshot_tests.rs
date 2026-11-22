@@ -13,7 +13,7 @@
 use super::*;
 use crate::deploy::config::tests::project;
 
-const LEDGER: &str = include_str!("fixtures/every_kind.deploy.lock");
+pub(crate) const LEDGER: &str = include_str!("fixtures/every_kind.deploy.lock");
 const PLAN_SHORT: &str = include_str!("fixtures/every_kind.plan.short.txt");
 const PLAN_JSON: &str = include_str!("fixtures/every_kind.plan.json");
 
@@ -28,7 +28,7 @@ fn scratch() -> std::path::PathBuf {
 }
 
 /// The fixture ledger, as `bynk deploy` reads it.
-fn ledger() -> DeployLock {
+pub(crate) fn ledger() -> DeployLock {
     let dir = scratch();
     let path = dir.join(LOCK_FILE);
     std::fs::write(&path, LEDGER).expect("the fixture is written");
@@ -40,7 +40,7 @@ fn ledger() -> DeployLock {
 /// A project declaring every kind: `shop` with each, `shop-cart` with a KV instance, a rate
 /// limiter and a queue it shares. `gone` and the `*_OLD` bindings are recorded and not
 /// declared, so each kind has an orphan.
-fn every_kind() -> BTreeMap<String, Resources> {
+pub(crate) fn every_kind() -> BTreeMap<String, Resources> {
     let mut shop = Resources::default()
         .needs_kv()
         .kv_instances(&["KV_CART", "KV_SESSIONS"])
@@ -94,7 +94,7 @@ fn every_kind() -> BTreeMap<String, Resources> {
     project(vec![("shop", shop), ("shop-cart", cart)])
 }
 
-fn order() -> Vec<String> {
+pub(crate) fn order() -> Vec<String> {
     vec!["shop-cart".to_string(), "shop".to_string()]
 }
 

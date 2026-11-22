@@ -32,6 +32,12 @@ impl Secret {
     pub(crate) fn expose(&self) -> &str {
         &self.0
     }
+
+    /// `raw`, for a test that builds a [`Want`] without reading the environment.
+    #[cfg(test)]
+    pub(crate) fn of(raw: &str) -> Self {
+        Secret(raw.to_string())
+    }
 }
 
 impl std::fmt::Debug for Secret {

@@ -102,7 +102,7 @@ pub(crate) struct Plan<'a> {
     /// its ledger key, which is what `--prune` deletes by. Not serialised:
     /// the plan shows [`Plan::shown_orphans`].
     #[serde(skip)]
-    orphans: Orphans,
+    pub(crate) orphans: Orphans,
     /// The same orphans as the account names them (#2028): a queue or Worker
     /// under its [`env_qualify`]d name. Printed before the per-context
     /// breakdown, so an orphan is seen before what's actually being pushed.
@@ -334,7 +334,7 @@ fn qualified_class(worker: &str, class: &str) -> String {
 /// - I4 (#1970): what its declared foreign callers may call it at, so the ledger
 ///   knows the consumers no manifest of their own records.
 /// - #3562: the contexts of a group's Worker.
-fn record_pushed_contracts(
+pub(crate) fn record_pushed_contracts(
     lock: &mut DeployLock,
     environment: &str,
     (worker, dir): (&str, &Path),
@@ -360,7 +360,7 @@ fn record_pushed_contracts(
 /// so later plans show them as applied: its deletions (State-migrations S3,
 /// #2248, #2253 review) and its renames (#2276 Decision D). Each replaces what
 /// was recorded for the Worker.
-fn record_pushed_tombstones(
+pub(crate) fn record_pushed_tombstones(
     lock: &mut DeployLock,
     environment: &str,
     worker: &str,

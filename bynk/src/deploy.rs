@@ -169,6 +169,8 @@ pub(crate) fn local_session_key(binding: &str) -> String {
     secrets::local_session_key(binding)
 }
 
+#[cfg(all(test, unix))]
+mod apply_tests;
 #[cfg(test)]
 mod snapshot_tests;
 #[cfg(test)]

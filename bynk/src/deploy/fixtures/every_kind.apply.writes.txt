@@ -1,0 +1,230 @@
+== default ==
+-- write 1 (after call 1: kv namespace create shop-cart-sessions)
++ 26 [environments.default.kv_instances.shop-cart.KV_SESSIONS]
++ 27 id = "kv-shop-cart-sessions"
++ 28 
+-- write 2 (after call 1: kv namespace create shop-cart-sessions)
++106 [environments.default.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++107 namespace_id = "958303813"
++108 
+-- write 3 (after call 3: deploy --secrets-file <secrets-file>)
++120 [environments.default.workers.shop-cart]
++121 deployed = true
++122 
++123 [environments.default.workers.shop-cart.contracts]
++124 
++125 [environments.default.workers.shop-cart.expects]
++126 
+-- write 4 (after call 4: kv namespace create shop-cart)
++ 20 [environments.default.kv_instances.shop.KV_CART]
++ 21 id = "kv-shop-cart"
++ 22 
+-- write 5 (after call 5: r2 bucket create shop-archive --jurisdiction eu)
++ 34 jurisdiction = "eu"
++ 40 [[environments.default.r2_instances.shop.R2_ARCHIVE.superseded]]
++ 41 name = "shop-archive"
++ 42 
+-- write 6 (after call 6: r2 bucket create shop-new)
++ 46 [environments.default.r2_instances.shop.R2_NEW]
++ 47 name = "shop-new"
++ 48 
+-- write 7 (after call 13: vectorize create shop-new --dimensions 384 --metric euclidean)
++ 62 [environments.default.vectorize_instances.shop.VECTORIZE_NEW]
++ 63 name = "shop-new"
++ 64 
+-- write 8 (after call 15: d1 create shop-new)
++ 72 [environments.default.d1_instances.shop.D1_NEW]
++ 73 name = "shop-new"
++ 74 id = "0d1d0000-0000-4000-8000-000000000008"
++ 75 
+-- write 9 (after call 16: hyperdrive get hd-adopted)
++ 92 [environments.default.hyperdrive_instances.shop.HYPERDRIVE_ADOPTED]
++ 93 name = "hd-adopted-on-account"
++ 94 id = "hd-adopted"
++ 95 adopted = true
++ 96 
+-- write 10 (after call 17: hyperdrive update hd-shop-main shop-main db.example)
+  (unchanged)
+-- write 11 (after call 18: hyperdrive create shop-new db.example)
++105 [environments.default.hyperdrive_instances.shop.HYPERDRIVE_NEW]
++106 name = "shop-new"
++107 id = "hd-shop-new"
++108 
+-- write 12 (after call 18: hyperdrive create shop-new db.example)
++124 certificate_id = "cert-2"
+-124 certificate_id = "cert-1"
+-- write 13 (after call 18: hyperdrive create shop-new db.example)
++132 [environments.default.ratelimit_instances.shop.RATELIMIT_SIGNUP]
++133 namespace_id = "301720278"
++134 
+-- write 14 (after call 21: queues create outbound)
++  7     "outbound",
+-- write 15 (after call 21: queues create outbound)
++ 71 Renderer = "registry.example/renderer@sha256:bbbb"
+- 71 Renderer = "registry.example/renderer@sha256:aaaa"
+-- write 16 (after call 24: deploy)
+-130 [environments.default.ratelimit_instances.shop.RATELIMIT_OLD]
+-131 namespace_id = "1002"
+-132 
++147 [environments.default.workers.shop.contracts]
++148 
++149 [environments.default.workers.shop.expects]
++150 
++165 shop = ["orders@example.com"]
+-164 shop = [
+-165     "orders@example.com",
+-166     "returns@example.com",
+-167 ]
+-- write 17 (after call 25: kv namespace delete --namespace-id kv-gone-default --skip-confirmation)
+- 12 [environments.default.kv.gone]
+- 13 id = "kv-gone-default"
+- 14 
+-- write 18 (after call 26: kv namespace delete --namespace-id kv-gone-cache-default --skip-confirmation)
+- 15 [environments.default.kv_instances.gone.KV_CACHE]
+- 16 id = "kv-gone-cache-default"
+- 17 
+-- write 19 (after call 27: kv namespace delete --namespace-id kv-shop-old-default --skip-confirmation)
+- 18 [environments.default.kv_instances.shop.KV_OLD]
+- 19 id = "kv-shop-old-default"
+- 20 
+-- write 20 (after call 28: vectorize list --json)
+- 45 [environments.default.vectorize_instances.gone.VECTORIZE_GONE]
+- 46 name = "gone-index"
+- 47 
+-- write 21 (after call 29: vectorize list --json)
+- 48 [[environments.default.vectorize_instances.shop.VECTORIZE_DOCS.superseded]]
+- 49 name = "shop-docs-v0"
+- 50 
+-- write 22 (after call 30: hyperdrive delete hd-gone)
+- 74 [environments.default.hyperdrive_instances.gone.HYPERDRIVE_GONE]
+- 75 name = "gone-main"
+- 76 id = "hd-gone"
+- 77 
+-- write 23 (after call 31: hyperdrive delete hd-shop-main-was)
+- 83 [[environments.default.hyperdrive_instances.shop.HYPERDRIVE_MAIN.superseded]]
+- 84 name = "shop-main-was"
+- 85 id = "hd-shop-main-was"
+- 86 
+-- write 24 (after call 32: queues delete old-jobs)
+-  6     "old-jobs",
+== staging ==
+-- write 1 (after call 1: kv namespace create shop-cart-sessions-staging)
++135 [environments.staging.kv_instances.shop-cart.KV_SESSIONS]
++136 id = "kv-shop-cart-sessions-staging"
++137 
+-- write 2 (after call 1: kv namespace create shop-cart-sessions-staging)
++145 [environments.staging.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++146 namespace_id = "338888791"
++147 
+-- write 3 (after call 2: queues info shared-feed-staging)
++127 queues = [
++128     "old-jobs",
++129     "shared-feed",
++130 ]
++131 reused_queues = ["shared-feed"]
+-127 queues = ["old-jobs"]
+-- write 4 (after call 3: deploy --secrets-file <secrets-file> --env staging)
++154 
++155 [environments.staging.workers.shop-cart]
++156 deployed = true
++157 
++158 [environments.staging.workers.shop-cart.contracts]
++159 
++160 [environments.staging.workers.shop-cart.expects]
+-- write 5 (after call 4: kv namespace create shop-cart-staging)
++136 [environments.staging.kv_instances.shop.KV_CART]
++137 id = "kv-shop-cart-staging"
++138 
+-- write 6 (after call 5: kv namespace create shop-sessions-staging)
+  (unchanged)
+-- write 7 (after call 6: r2 bucket create shop-archive-staging --jurisdiction eu)
++145 [environments.staging.r2_instances.shop.R2_ARCHIVE]
++146 name = "shop-archive-staging"
++147 jurisdiction = "eu"
++148 
+-- write 8 (after call 7: r2 bucket create shop-files-staging)
++149 [environments.staging.r2_instances.shop.R2_FILES]
++150 name = "shop-files-staging"
++151 
+-- write 9 (after call 8: r2 bucket create shop-new-staging)
++152 [environments.staging.r2_instances.shop.R2_NEW]
++153 name = "shop-new-staging"
++154 
+-- write 10 (after call 10: vectorize get shop-docs-staging --json)
++155 [environments.staging.vectorize_instances.shop.VECTORIZE_DOCS]
++156 name = "shop-docs-staging"
++157 adopted = true
++158 
+-- write 11 (after call 15: vectorize create shop-new-staging --dimensions 384 --metric euclidean)
++159 [environments.staging.vectorize_instances.shop.VECTORIZE_NEW]
++160 name = "shop-new-staging"
++161 
+-- write 12 (after call 17: d1 create shop-new-staging)
++162 [environments.staging.d1_instances.shop.D1_NEW]
++163 name = "shop-new-staging"
++164 id = "0d1d0000-0000-4000-8000-000000000016"
++165 
+-- write 13 (after call 18: hyperdrive get hd-adopted)
++170 [environments.staging.hyperdrive_instances.shop.HYPERDRIVE_ADOPTED]
++171 name = "hd-adopted-on-account"
++172 id = "hd-adopted"
++173 adopted = true
++174 
+-- write 14 (after call 19: hyperdrive create shop-main-staging db.example)
++175 [environments.staging.hyperdrive_instances.shop.HYPERDRIVE_MAIN]
++176 name = "shop-main-staging"
++177 id = "hd-shop-main-staging"
++178 
+-- write 15 (after call 20: hyperdrive create shop-new-staging db.example)
++179 [environments.staging.hyperdrive_instances.shop.HYPERDRIVE_NEW]
++180 name = "shop-new-staging"
++181 id = "hd-shop-new-staging"
++182 
+-- write 16 (after call 20: hyperdrive create shop-new-staging db.example)
++183 [environments.staging.stored_secret_links.shop.SECRET_STRIPE_KEY]
++184 store = "default_secrets_store"
++185 store_id = "store-1"
++186 secret = "stripe_key"
++187 
+-- write 17 (after call 20: hyperdrive create shop-new-staging db.example)
++188 [environments.staging.mtls_certificate_links.shop.MTLS_BACKEND]
++189 certificate = "backend-client"
++190 certificate_id = "cert-2"
++191 
+-- write 18 (after call 20: hyperdrive create shop-new-staging db.example)
++188 [environments.staging.ai_search_links.shop.AI_SEARCH_KB]
++189 instance = "kb"
++190 
+-- write 19 (after call 20: hyperdrive create shop-new-staging db.example)
++198 [environments.staging.ratelimit_instances.shop.RATELIMIT_SIGNUP]
++199 namespace_id = "856287038"
++200 
+-- write 20 (after call 23: queues create outbound-staging)
++128     "intake",
++132 reused_queues = [
++133     "intake",
++134     "shared-feed",
++135 ]
+-131 reused_queues = ["shared-feed"]
+-- write 21 (after call 23: queues create outbound-staging)
++130     "outbound",
+-- write 22 (after call 23: queues create outbound-staging)
++167 [environments.staging.container_images.shop]
++168 Renderer = "registry.example/renderer@sha256:bbbb"
++169 
+-- write 23 (after call 26: deploy --env staging)
++215 [environments.staging.workers.shop.contracts]
++216 
++217 [environments.staging.workers.shop.expects]
++218 
++225 
++226 [environments.staging.deleted_classes]
++227 shop = ["Legacy"]
++228 
++229 [environments.staging.renamed_classes.shop]
++230 Basket = "Cart"
++231 
++232 [environments.staging.email_addresses]
++233 shop = ["orders@example.com"]
+-- write 24 (after call 27: queues delete old-jobs-staging)
+-129     "old-jobs",
