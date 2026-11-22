@@ -588,7 +588,9 @@ impl Walk {
                     // `typeof ns.__makeSurface`), never a type.
                     if word == "typeof" {
                         let operand = text[i..].trim_start();
-                        if let Some(name) = leading_ident(operand) {
+                        // `typeof import("./x")` names a module, not a value: `import`
+                        // is the keyword, so nothing is recorded.
+                        if let Some(name) = leading_ident(operand).filter(|n| *n != "import") {
                             if !self.in_scope(name) {
                                 self.used_values.insert(name.to_string());
                                 if let Some(member) = operand[name.len()..]
@@ -1384,6 +1386,23 @@ mod tests {
             function_over(TsType::named("Array<typeof commerce_payment.f>")),
         ]);
         assert!(unbound_names(&bound).is_empty());
+    }
+
+    #[test]
+    fn typeof_import_records_no_used_name() {
+        // `import` after `typeof` is the keyword of an import type, not a value.
+        let p = program(vec![function_over(TsType::named("typeof import(\"./x\")"))]);
+        assert!(unbound_names(&p).is_empty(), "{:?}", unbound_names(&p));
+    }
+
+    #[test]
+    fn a_capitalised_tuple_label_or_parameter_name_reads_as_a_use() {
+        // Pinned, conservative behaviour: `[First: A]` and `(Req: X) => Y` read `First` and
+        // `Req` as uses, because only `{`-keys are recognised as labels. Over-reporting an
+        // unbound name is the safe direction; a lower-case label is already ignored.
+        let over = |name: &str| program(vec![function_over(TsType::named(name))]);
+        assert_eq!(unbound_names(&over("[First: A]")), ["A", "First"]);
+        assert_eq!(unbound_names(&over("(Req: X) => Y")), ["Req", "X", "Y"]);
     }
 
     #[test]
