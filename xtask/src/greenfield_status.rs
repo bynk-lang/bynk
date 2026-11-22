@@ -1842,8 +1842,9 @@ fn emit_abi_shapes(root: &Path) -> Probe {
 /// argued individually the same way [`AST_IMPORTER_EXCEPTIONS`] is, not assumed from a
 /// path prefix: `emitter/wrangler.rs` writes `wrangler.toml`; `emitter/secrets.rs`
 /// writes `bynk-secrets.json`; `emitter/contracts.rs` writes `bynk-contracts.json`;
-/// `testkit.rs` builds a `.bynk` source fixture — a compiler *input* for tests, not
-/// output. P7.3 (#1303): `emitter/toml_doc.rs` writes `wrangler.toml` text too —
+/// `testkit.rs` built a `.bynk` source fixture — a compiler *input* for tests, not
+/// output — until 1B.2b (#4028) moved that helper to `bynk-tests` and the file stopped
+/// having a `format!` to exclude. P7.3 (#1303): `emitter/toml_doc.rs` writes `wrangler.toml` text too —
 /// `emitter/wrangler.rs`'s own writes moved here when it stopped building the TOML text
 /// directly and started building a typed `TomlDocument` for this module to print — same
 /// rationale, same exclusion.
@@ -1860,7 +1861,6 @@ const TS_WRITES_EXCLUDED_FILES: &[&str] = &[
     "emitter/toml_doc.rs",
     "emitter/secrets.rs",
     "emitter/contracts.rs",
-    "testkit.rs",
 ];
 
 /// Is `rel_path` (relative to `bynk-emit/src`) one of [`TS_WRITES_EXCLUDED_FILES`]?
@@ -7226,7 +7226,8 @@ commons app.demo {
         assert!(is_ts_writes_excluded_file(Path::new(
             "emitter/contracts.rs"
         )));
-        assert!(is_ts_writes_excluded_file(Path::new("testkit.rs")));
+        // `testkit.rs` left the list in 1B.2b: it holds no `format!` any more.
+        assert!(!is_ts_writes_excluded_file(Path::new("testkit.rs")));
         // Name proximity to a file that used to be excluded must not false-positive:
         // `emitter/lower.rs` (the emitter's own lowering pass) is genuinely
         // TS-producing and must stay counted — unlike `ir/lower.rs` (the checker→IR

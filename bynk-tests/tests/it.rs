@@ -85,6 +85,8 @@ mod integration {
     mod e2e;
     #[path = "emit_pipeline_helpers.rs"]
     mod emit_pipeline_helpers;
+    #[path = "emit_readme_example.rs"]
+    mod emit_readme_example;
     #[path = "eq_bound_migration.rs"]
     mod eq_bound_migration;
     #[path = "events_schema_registry_behaviour.rs"]
