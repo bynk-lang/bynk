@@ -1561,7 +1561,9 @@ jobs:
           # Pagefind comes in through Starlight, so it is only here because npm
           # hoists it; a missing copy warns rather than failing the step.
           here=$(node -p "require('./node_modules/pagefind/package.json').version" 2>/dev/null || echo unknown)
-          if ! there=$(curl -fsS --max-time 20 https://bynk-lang.org/blog/pagefind/pagefind-entry.json | node -pe "JSON.parse(require('fs').readFileSync(0)).version"); then
+          if [ "$here" = unknown ]; then
+            echo "::warning::Pagefind isn't in node_modules (npm didn't hoist Starlight's copy), so its version can't be compared."
+          elif ! there=$(curl -fsS --max-time 20 https://bynk-lang.org/blog/pagefind/pagefind-entry.json | node -pe "JSON.parse(require('fs').readFileSync(0)).version"); then
             echo "::warning::Could not read the blog's Pagefind version from https://bynk-lang.org/blog/pagefind/pagefind-entry.json"
           elif [ "$(echo "$here" | cut -d. -f1,2)" != "$(echo "$there" | cut -d. -f1,2)" ]; then
             echo "::warning::Pagefind here is $here, the blog's is $there. Merged search needs the same minor version: update the older site's Starlight (or npm update pagefind)."
