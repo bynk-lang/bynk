@@ -29,7 +29,8 @@
 //! - **A route's answer is a union keyed by status**, built from the response set
 //!   `bynk openapi` documents, and never thrown.
 //!
-//! The runtime half is `http_client_runtime.ts`, inlined: a browser-safe subset
+//! The runtime half is `http_client_runtime.ts` (generated from `runtime/src/client/http_client.ts`
+//! by `bundle.mjs`), inlined: a browser-safe subset
 //! with no signing and no Workers types, plus the runtime's own `result`, `bytes`,
 //! `decimal` and `keys` modules for just the names the codecs use.
 

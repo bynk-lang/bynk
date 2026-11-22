@@ -132,8 +132,8 @@ pub(super) type RouteBodyMap =
 ///
 /// #1479: `code` is now real [`TsStmt`]s (was pre-printed `String`) — the
 /// HS256 signer block (`__bynkNow`/`__b64url`/`__bytesB64url`/
-/// `__bynkSignHs256`) is committed `.ts` source (`emitter/test_runtime/
-/// jwt_signer.ts`, #1485), spliced in via [`jwt_signer_runtime_helpers`] and
+/// `__bynkSignHs256`) is committed `.ts` source (`runtime/src/testing/
+/// jwt_signer.ts`, #1485), spliced in via [`TestRuntimeModule::splice`] and
 /// carried as one [`bynk_ts::TsStmtKind::Raw`] statement, the same carrier
 /// this track's earlier still-`String`-typed-sibling conversions already
 /// used.
@@ -1346,33 +1346,28 @@ pub(super) fn emit_system_http_support(
     // #1485: the HS256 signer block — a monotonic clock the signer's `exp`
     // uses (kept out of `bundle`d runtime), plus the test-only HS256 signer
     // itself (never in the deployable app; e2e owns real auth) — now lives
-    // at `emitter/test_runtime/jwt_signer.ts`, the same committed-`.ts`-file
+    // at `runtime/src/testing/jwt_signer.ts`, the same committed-`.ts`-file
     // treatment `expectation_runtime_helpers`/`stub_runtime_helpers` already
     // get, rather than an unexplained raw string literal with `\`-continuations.
-    let mut code = vec![TsStmt::raw(jwt_signer_runtime_helpers(), None)];
+    let mut code = vec![TestRuntimeModule::JwtSigner.splice()];
     // #3052: the test issuer an `Oidc` route's drivers mint tokens with.
     if has_oidc {
-        let mut issuer = TsStmt::raw(
-            format!(
-                "const __bynkOidcRemote: boolean = {remote};\n{}",
-                include_str!("test_runtime/oidc_issuer.ts")
-            ),
-            None,
-        );
+        // The remote flag is the first line of the issuer's text, so the two print as one block.
+        let mut remote_flag = oidc_remote_flag(remote);
+        remote_flag.no_blank_before = true;
+        code.push(remote_flag);
+        let mut issuer = TestRuntimeModule::OidcIssuer.splice();
         issuer.no_blank_before = true;
         code.push(issuer);
     }
     if signs_hmac {
-        let mut signer = TsStmt::raw(
-            include_str!("test_runtime/hmac_signer.ts").to_string(),
-            None,
-        );
+        let mut signer = TestRuntimeModule::HmacSigner.splice();
         signer.no_blank_before = true;
         code.push(signer);
     }
     // Set each secret the target's actors read, so the real Bearer seam verifies.
     // P7.2: `Record<string, string>` — same reasoning as `__bynkSignHs256`'s own
-    // `secret: string` parameter in `emitter/test_runtime/jwt_signer.ts`.
+    // `secret: string` parameter in `runtime/src/testing/jwt_signer.ts`.
     let record_string_string = TsType::named_with_args(
         "globalThis.Record",
         vec![TsType::named("string"), TsType::named("string")],

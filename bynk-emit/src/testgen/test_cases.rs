@@ -876,27 +876,3 @@ pub(super) fn observation_call_record_types(
     }
     stmts
 }
-
-/// v0.117: the observation runtime — wraps each observed capability operation on
-/// the test `deps` so every call records its arguments and a monotonic order
-/// index into the per-case trace `__obs`. Emitted once per module that observes.
-/// Finding #17: source lives at `emitter/test_runtime/observation.ts`.
-pub(super) fn observation_runtime_helpers() -> String {
-    include_str!("test_runtime/observation.ts").to_string()
-}
-
-pub(super) fn property_runtime_helpers() -> String {
-    include_str!("test_runtime/property.ts").to_string()
-}
-
-/// v0.119 (testing track slice 7, ADR 0155): the history-property runtime, emitted
-/// alongside [`property_runtime_helpers`] only when a module declares a
-/// `for all run: History[Agent]` property. Generates a bounded, seeded sequence of
-/// handler calls, drives it through the real handlers (`spec.drive`, the agent
-/// module's `__bynkDriveHistory_<Agent>`), evaluates the predicate over the
-/// observed `run`, and on failure delta-debugs the *sequence* (re-driving after
-/// each reduction so the counterexample stays reachable) then shrinks the surviving
-/// arguments — reporting the seed, the shrunk sequence, and a reproduce line.
-pub(super) fn history_runtime_helpers() -> String {
-    include_str!("test_runtime/history.ts").to_string()
-}
