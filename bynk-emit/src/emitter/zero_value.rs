@@ -6,11 +6,6 @@
 use bynk_check::checker::ZeroValue;
 use bynk_ts::{TsExpr, TsLit};
 
-/// The TypeScript text of a zero value.
-pub(super) fn render_zero_value(z: &ZeroValue) -> String {
-    bynk_ts::print_expr(&zero_expr(z))
-}
-
 /// The zero value as a node, for a caller that places it in a tree.
 pub(super) fn zero_expr(z: &ZeroValue) -> TsExpr {
     match z {

@@ -91,8 +91,10 @@ pub(super) fn ts_base(b: BaseType) -> &'static str {
 /// #2622: the TypeScript type of a `Decimal` (see `runtime/src/decimal.ts`).
 pub(crate) const DECIMAL_TS_TYPE: &str = "{ readonly coefficient: bigint; readonly scale: number }";
 
-pub fn ts_type_ref(r: &TypeRef) -> String {
-    ts_type_ref_with(r, None)
+/// The TypeScript type of a Bynk type reference, as a node (1A.39a, Decision G). A caller that
+/// needs text prints it itself: the driver's test harness does, at its own boundary.
+pub fn ts_type_of(r: &TypeRef) -> TsType {
+    ts_type_ref_to_ts_type(r, None)
 }
 
 /// [`TsType`]-returning sibling of `ts_type_ref`, qualifying named types that
@@ -156,23 +158,6 @@ pub fn ts_type_ref_qualified_multi_ts_type(
 
 /// A name → owning-namespace lookup for `ts_type_ref_with`'s `qualify` arm.
 pub(super) type QualifyFn<'a> = &'a dyn Fn(&str) -> Option<String>;
-
-/// Shared renderer behind `ts_type_ref` (`qualify = None`) and the two
-/// `ts_type_ref_qualified*` helpers above (`qualify = Some(name -> namespace)`).
-/// With `None` it is output-identical to the historic `ts_type_ref`; the only
-/// divergence is the `Named`/`App` arms, which qualify in-scope names when
-/// `qualify` is set.
-/// P7.9 (#1315, R7.2): renders `r` by building a real [`bynk_ts::TsType`]
-/// and printing it through [`bynk_ts::print_type`], instead of `format!`-ing
-/// the type text by hand — this function's own signature and every one of
-/// its ~110 real callers (via `ts_type_ref`/`ts_type_ref_qualified*`) are
-/// unchanged; only the internal construction moved. `TypeRef` has no shape
-/// this crate's `TsType` (`Named`/`Array`/`Object`/`Fn`, all extended for
-/// this slice's own grounded gaps — a `readonly` modifier, and `Fn` itself)
-/// can't represent — confirmed by matching every `TypeRef` variant below.
-pub(super) fn ts_type_ref_with(r: &TypeRef, qualify: Option<QualifyFn<'_>>) -> String {
-    bynk_ts::print_type(&ts_type_ref_to_ts_type(r, qualify))
-}
 
 /// Whether `ty` is a bare (no type arguments) `Named` type whose name is
 /// exactly `target` — used by the two arms below that special-case a
@@ -447,6 +432,11 @@ pub(super) fn ts_type_ref_to_ts_type(r: &TypeRef, qualify: Option<QualifyFn<'_>>
 #[cfg(test)]
 mod ts_type_ref_tests {
     use super::*;
+
+    /// A type reference as the text of its `TsType` node.
+    fn ts_type_ref(r: &TypeRef) -> String {
+        bynk_ts::print_type(&ts_type_of(r))
+    }
 
     fn sp() -> bynk_syntax::span::Span {
         bynk_syntax::span::Span::new(0, 0)
@@ -810,31 +800,24 @@ pub(super) fn ts_ty_to_ts_type(t: TyId, tys: TyRender<'_>) -> TsType {
         // The identity type the actor binding yields (`name.identity`).
         Ty::Actor(id) => ts_ty_to_ts_type(*id, tys),
         // v0.52: a resolved multi-actor sum lowers to a discriminated union
-        // tagged by actor name; non-unit members carry their identity.
-        // Each member's own real text is `, `-separated (`{ tag: "x",
-        // identity: T }`) — `TsType::Object`'s own renderer is `; `-
-        // separated (the ordinary TS object-*type* convention, correct for
-        // every other real caller, e.g. `events_fanout.rs`'s own interface
-        // members), so building each member as an `Object` would silently
-        // change this one shape's separator and fail the zero-diff check
-        // (caught exactly that way — a fixture-corpus-adjacent direct test
-        // failure, not reasoning about the algebra). Each member is instead
-        // an opaque `Named`-carries-verbatim-text node, the same convention
-        // `ts_type_ref_to_ts_type`'s own `Query` arm already established for
-        // a single real shape `TsType`'s general renderers don't reproduce
-        // byte-for-byte — not a new pattern, the second real use of one.
+        // tagged by actor name; non-unit members carry their identity. Each
+        // member is a type literal (1A.39a, Decision G), so it prints with the
+        // object-type separator, `{ tag: "x"; identity: T }`.
         Ty::ActorSum(members) => TsType::union(
             members
                 .iter()
                 .map(|(name, id)| {
-                    if matches!(&*tys.get(*id), Ty::Unit) {
-                        TsType::named(format!("{{ tag: \"{name}\" }}"))
-                    } else {
-                        TsType::named(format!(
-                            "{{ tag: \"{name}\", identity: {} }}",
-                            bynk_ts::print_type(&ts_ty_to_ts_type(*id, tys))
-                        ))
+                    let mut props = vec![bynk_ts::TsTypeMember::prop(
+                        "tag",
+                        TsType::string_literal(name.clone()),
+                    )];
+                    if !matches!(&*tys.get(*id), Ty::Unit) {
+                        props.push(bynk_ts::TsTypeMember::prop(
+                            "identity",
+                            ts_ty_to_ts_type(*id, tys),
+                        ));
                     }
+                    TsType::Object(props)
                 })
                 .collect(),
         ),
@@ -1080,7 +1063,7 @@ mod ts_ty_tests {
         ]));
         assert_eq!(
             ts_ty(sum, TyRender::new(&tys, no_spellings())),
-            "{ tag: \"Guest\" } | { tag: \"Admin\", identity: AdminIdentity }"
+            "{ tag: \"Guest\" } | { tag: \"Admin\"; identity: AdminIdentity }"
         );
     }
 
