@@ -172,22 +172,27 @@ fn zero_value_ts(
 /// The runtime test a `via schema(...)` guard negates (events slice 4b, #990):
 /// `===` for a literal, `>=` and/or `<=` for a range, and none for `_`, which
 /// only forwards the envelope. Bounds are inclusive.
-fn schema_version_test(env_binder: &str, version: SchemaVersionIr) -> Option<String> {
-    let v = format!("{env_binder}.schemaVersion");
+fn schema_version_test(env_binder: &str, version: SchemaVersionIr) -> Option<bynk_ts::TsExpr> {
+    use crate::ts_build::{and_expr, binary, ident, member, num_lit, strict_eq};
+    use bynk_ts::TsBinaryOp::{GreaterThanEq, LessThanEq};
+    let v = || member(ident(env_binder), "schemaVersion");
     match version {
-        SchemaVersionIr::Exact(n) => Some(format!("{v} === {n}")),
+        SchemaVersionIr::Exact(n) => Some(strict_eq(v(), num_lit(n))),
         SchemaVersionIr::Range {
             lo: Some(lo),
             hi: Some(hi),
-        } => Some(format!("{v} >= {lo} && {v} <= {hi}")),
+        } => Some(and_expr(
+            binary(GreaterThanEq, v(), num_lit(lo)),
+            binary(LessThanEq, v(), num_lit(hi)),
+        )),
         SchemaVersionIr::Range {
             lo: Some(lo),
             hi: None,
-        } => Some(format!("{v} >= {lo}")),
+        } => Some(binary(GreaterThanEq, v(), num_lit(lo))),
         SchemaVersionIr::Range {
             lo: None,
             hi: Some(hi),
-        } => Some(format!("{v} <= {hi}")),
+        } => Some(binary(LessThanEq, v(), num_lit(hi))),
         SchemaVersionIr::Range { lo: None, hi: None } | SchemaVersionIr::Any => None,
     }
 }
@@ -2240,6 +2245,7 @@ pub(crate) fn emit_messages_bundle(
         )
     };
     let renderer_ty = bynk_ts::TsType::Fn {
+        rest: false,
         params: vec![bynk_ts::TsType::named_with_args(
             "ReadonlyMap",
             vec![
@@ -6690,8 +6696,8 @@ fn agent_state_checks_and_entries(
     // The loaded record is statically typed (its fields are the agent's types),
     // but at runtime its bytes are untrusted, so each value is laundered to
     // `JsonValue` before the boundary deserialiser decodes it.
-    let ser = |ty: &TypeRef, value: &str| {
-        serialisation::serialise_expr(ty, &hist_id(value), &ctx.runtime_use)
+    let ser = |ty: &TypeRef, value: bynk_ts::TsExpr| {
+        serialisation::serialise_expr(ty, &value, &ctx.runtime_use)
     };
     let deser = |ty: &TypeRef, json: bynk_ts::TsExpr, path: &str| {
         serialisation::deserialise_expr(ty, &json, path, &ctx.runtime_use)
@@ -6733,7 +6739,7 @@ fn agent_state_checks_and_entries(
         rehydrate_checks.push(persist_when_present(path, block));
         encode_entries.push(bynk_ts::TsObjectEntry::prop(
             path,
-            ser(&f.type_ref, &format!("s.{path}")),
+            ser(&f.type_ref, hist_member(hist_id("s"), path)),
         ));
     }
     let held_decls_all = &layout.all_held_maps;
@@ -6818,7 +6824,11 @@ fn agent_state_checks_and_entries(
                 ),
             ));
         } else if is_codecable(v) {
-            encode_entries.push(wire("__wireMap", n, Some(arrow("__v", ser(v, "__v")))));
+            encode_entries.push(wire(
+                "__wireMap",
+                n,
+                Some(arrow("__v", ser(v, hist_id("__v")))),
+            ));
         } else {
             encode_entries.push(wire("__wireMap", n, None));
         }
@@ -6900,7 +6910,7 @@ fn agent_state_checks_and_entries(
                     "__e",
                     bynk_ts::TsExpr::Paren(Box::new(bynk_ts::TsExpr::object_entries(vec![
                         bynk_ts::TsObjectEntry::Spread(hist_id("__e")),
-                        bynk_ts::TsObjectEntry::prop("v", ser(v, "__e.v")),
+                        bynk_ts::TsObjectEntry::prop("v", ser(v, hist_member(hist_id("__e"), "v"))),
                     ]))),
                 )),
             ));
@@ -6928,7 +6938,11 @@ fn agent_state_checks_and_entries(
                 n,
                 vec![persist_for_each("__e", cells, body)],
             ));
-            encode_entries.push(wire("__wireLog", n, Some(arrow("__v", ser(t, "__v")))));
+            encode_entries.push(wire(
+                "__wireLog",
+                n,
+                Some(arrow("__v", ser(t, hist_id("__v")))),
+            ));
         } else {
             encode_entries.push(wire("__wireLog", n, None));
         }
@@ -7432,18 +7446,10 @@ fn result_closure_item(body: Body) -> Item {
 }
 
 /// `if (!(<test>)) return undefined;`: a handler that the guard `test` does not admit does nothing.
-fn return_undefined_unless(test: String) -> Item {
-    let cond = bynk_ts::TsExpr::Unary {
-        op: bynk_ts::TsUnaryOp::Not,
-        expr: Box::new(bynk_ts::TsExpr::Paren(Box::new(bynk_ts::TsExpr::Ident(
-            test,
-        )))),
-    };
-    let nothing = bynk_ts::TsExpr::Ident("undefined".to_string());
-    Item::Node(Box::new(bynk_ts::TsStmt::if_stmt(
-        cond,
-        bynk_ts::TsStmt::return_stmt(Some(nothing), None),
-        None,
+fn return_undefined_unless(test: bynk_ts::TsExpr) -> Item {
+    Item::Node(Box::new(crate::ts_build::if_(
+        crate::ts_build::not_expr(crate::ts_build::paren(test)),
+        crate::ts_build::return_(Some(crate::ts_build::ident("undefined"))),
     )))
 }
 
@@ -7618,12 +7624,7 @@ fn emit_agent_dispatch(
         // `bynk_ts::TsClassMethod`, printed through `print_class_method`, the
         // same zero-`LowerCtx`/no-merge shape #1382 (`emit_ws_dispatch_
         // handlers`) established for this cluster's other Rust-side-only
-        // emitter. `(this as unknown as Record<string, (...bynkArgs:
-        // unknown[]) => unknown>)` stays one opaque `TsExpr::Ident` (a
-        // nested `As`-under-`As` chain the printer's own `needs_parens_as_
-        // operand` would otherwise wrap in an extra, wrong parenthesis pair
-        // — a real, previously-unpredicted algebra gap, not a style choice);
-        // `...args` stays one opaque `TsExpr::Ident` call argument (the
+        // emitter. `...args` stays one opaque `TsExpr::Ident` call argument (the
         // spread-call-argument shape the grounding pass DID predict for this
         // slice, #1382's own PR confirming it belongs here, not there).
         let mut fetch_stmts = vec![bynk_ts::TsStmt::const_stmt(
@@ -7652,13 +7653,20 @@ fn emit_agent_dispatch(
         // commits only a record older than this build's version. Reachable
         // only through this Worker's signed `/_bynk/migrate/` route.
         fetch_stmts.extend(wake_and_inspect_branches(a, agent_versions, ctx));
-        let dispatch_callee = bynk_ts::TsExpr::Index {
-            object: Box::new(bynk_ts::TsExpr::Ident(
-                "(this as unknown as globalThis.Record<string, (...bynkArgs: unknown[]) => unknown>)"
-                    .to_string(),
-            )),
-            index: Box::new(bynk_ts::TsExpr::Ident("methodName".to_string())),
-        };
+        // `(this as unknown as Record<string, (...bynkArgs: unknown[]) => unknown>)[methodName]`:
+        // the cast chain prints bare as `Index`'s receiver and the printer brackets it.
+        let dispatch_callee = crate::ts_build::index(
+            record_cast(
+                bynk_ts::TsExpr::Ident("this".to_string()),
+                bynk_ts::TsType::Fn {
+                    params: vec![bynk_ts::TsType::array(bynk_ts::TsType::named("unknown"))],
+                    names: vec!["bynkArgs".to_string()],
+                    rest: true,
+                    ret: Box::new(bynk_ts::TsType::named("unknown")),
+                },
+            ),
+            bynk_ts::TsExpr::Ident("methodName".to_string()),
+        );
         let mut agent_dispatch_stmts = vec![
             bynk_ts::TsStmt::const_stmt(
                 bynk_ts::TsBindingName::Ident("methodName".to_string()),
@@ -7752,9 +7760,6 @@ fn emit_agent_dispatch(
             // `EVENTS_FANOUT`, computed elsewhere and not fully traced here) —
             // a generic string-keyed record, not a precise structural type.
             //
-            // `this.__env as unknown as Record<string, unknown>` stays one
-            // opaque `TsExpr::Ident` — the same nested-`As`-chain gap the
-            // dispatch callee above hits.
             agent_dispatch_stmts.push(agent_env_const_stmt());
             let mut entries = vec![bynk_ts::TsObjectEntry::Spread(bynk_ts::TsExpr::Paren(
                 Box::new(bynk_ts::TsExpr::As {
@@ -10047,10 +10052,24 @@ fn agent_env_const_stmt() -> bynk_ts::TsStmt {
     bynk_ts::TsStmt::const_stmt(
         bynk_ts::TsBindingName::Ident("env".to_string()),
         None,
-        bynk_ts::TsExpr::Ident(
-            "this.__env as unknown as globalThis.Record<string, unknown>".to_string(),
+        record_cast(
+            crate::ts_build::member(bynk_ts::TsExpr::Ident("this".to_string()), "__env"),
+            bynk_ts::TsType::named("unknown"),
         ),
         None,
+    )
+}
+
+/// `<expr> as unknown as globalThis.Record<string, <value>>`: the double cast the Worker's `env`
+/// and the agent's method table are read through. The chain prints bare; a receiver position
+/// brackets it.
+pub(crate) fn record_cast(expr: bynk_ts::TsExpr, value: bynk_ts::TsType) -> bynk_ts::TsExpr {
+    crate::ts_build::as_expr(
+        crate::ts_build::as_expr(expr, bynk_ts::TsType::named("unknown")),
+        bynk_ts::TsType::named_with_args(
+            "globalThis.Record",
+            vec![bynk_ts::TsType::named("string"), value],
+        ),
     )
 }
 

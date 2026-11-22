@@ -514,28 +514,10 @@ fn json_kind_ts(k: JsonKind) -> &'static str {
     }
 }
 
-/// `path: string = "$"` — the one JS default-valued parameter anywhere in
-/// this crate's generated output (#1441, Arc E slice 4). [`TsParam`] carries
-/// no `default: Option<TsExpr>` field (its own doc names only `optional` —
-/// "nothing in the grounding file needs a default value"), and adding one
-/// would touch every one of the ~120 existing `TsParam { .. }` literal
-/// construction sites across `bynk-emit`/`bynk-ts` for the sake of this
-/// single real occurrence — wildly disproportionate to a 4-function slice.
-/// `name` is already an established "raw-text slot" for a case bigger than
-/// a bare identifier: [`bynk_ts::TsDecl::Import`]'s own `names` field docs
-/// the identical move for a `"type KVNamespace"` specifier. Splicing the
-/// whole clause in as one opaque `name` (with `ty: None`, so
-/// `render_params` appends nothing further) reuses that precedent rather
-/// than inventing a new one.
+/// `path: string = "$"`: the JSON path every generated decoder starts from, a typed parameter
+/// with a default value (#3996 moved it off a raw-text name onto [`TsParam::with_default`]).
 fn deserialise_path_param() -> TsParam {
-    TsParam {
-        name: "path: string = \"$\"".to_string(),
-        ty: None,
-        optional: false,
-        rest: false,
-        array_pattern: None,
-        default: None,
-    }
+    TsParam::new("path", Some(TsType::named("string"))).with_default(str_lit("$"))
 }
 
 /// #2656: the set of codec suffixes that carry a nesting depth
@@ -580,17 +562,29 @@ fn depth_for<'a>(codecs: &'a DepthCodecs, suffix: &str, level: bool) -> Option<D
     codecs.contains(suffix).then_some(Depth { codecs, level })
 }
 
+/// `(globalThis as { __bynkPlainJson?: boolean }).__bynkPlainJson === true`: whether `withPlainJson`
+/// has the plain-JSON flag set. The cast prints bracketed as the member's receiver.
+fn plain_json_test() -> TsExpr {
+    strict_eq(
+        member(
+            TsExpr::As {
+                expr: Box::new(ident("globalThis")),
+                ty: TsType::Object(vec![TsTypeMember::optional_prop(
+                    "__bynkPlainJson",
+                    TsType::named("boolean"),
+                )]),
+            },
+            "__bynkPlainJson",
+        ),
+        TsExpr::Lit(TsLit::Bool(true)),
+    )
+}
+
 /// #2656: `depth: number = 0`, the trailing parameter of a codec on a type
-/// cycle — raw text, as [`deserialise_path_param`] is, for the same reason.
+/// cycle — a typed parameter with a default, as [`deserialise_path_param`] is.
 fn depth_param() -> TsParam {
-    TsParam {
-        name: "depth: number = 0".to_string(),
-        ty: None,
-        optional: false,
-        rest: false,
-        array_pattern: None,
-        default: None,
-    }
+    TsParam::new("depth", Some(TsType::named("number")))
+        .with_default(TsExpr::Lit(TsLit::Num("0".to_string())))
 }
 
 /// `Result<ok, __BoundaryError>`: what every generated decoder returns.
@@ -934,6 +928,7 @@ fn of_probe(name: &str, arg: TsExpr) -> TsStmt {
     };
     let of_ty = |optional: bool| {
         let f = TsType::Fn {
+            rest: false,
             params: vec![TsType::named("unknown")],
             names: vec!["json".to_string()],
             ret: Box::new(result_ty()),
@@ -4204,11 +4199,7 @@ pub fn emit_generic_helpers_qualified(
                 ]);
                 let tagged_none = TsExpr::object(vec![("kind".to_string(), str_lit("None"))]);
                 let body = if ru.plain_json() {
-                    let plain = || {
-                        ident(
-                            "(globalThis as { __bynkPlainJson?: boolean }).__bynkPlainJson === true",
-                        )
-                    };
+                    let plain = plain_json_test;
                     let pick = |plain_branch: TsExpr, tagged_branch: TsExpr| TsExpr::Conditional {
                         test: Box::new(plain()),
                         consequent: Box::new(plain_branch),

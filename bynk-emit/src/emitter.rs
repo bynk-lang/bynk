@@ -105,6 +105,7 @@ pub use workers_entry::{
 pub use workers_group::{GroupEntry, GroupMember, emit_group_entry};
 pub use wrangler::{ClassTombstones, emit_wrangler_toml};
 
+mod claim_predicate;
 mod cmp;
 mod codec;
 pub mod ctx;
