@@ -7,6 +7,7 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.640.22** | Internal hardening in the code generator; the last text identifiers and text-built types in the emitter become syntax-tree nodes, and a corpus audit now checks every identifier in the built trees |
 | **v0.640.21** | Internal restructuring of `bynk deploy`; `bynk deploy --prune` now lists and deletes orphans in the plan's kind order (KV, Vectorize, Hyperdrive, then queues); plans and `bynk.deploy.lock` are unchanged |
 | **v0.640.20** | Internal restructuring of `bynk deploy`; no change to plans or `bynk.deploy.lock` |
 | **v0.640.19** | Internal hardening in the code generator; the last print-then-splice round trips in the emitter become syntax-tree nodes |
