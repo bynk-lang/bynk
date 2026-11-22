@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0880](0880-book-organised-by-kind-then-concern.md) | **The Book is organised by kind first, then by concern** (v0.640.12) — The Book's top level is the kind of page (Start, Learn Bynk, Concepts, Guides, then the lookup parts); concerns group pages within each kind | Accepted (v0.640.12) |
 | [0879](0879-reserve-route-syntax.md) | **`*`, `{` and `}` are reserved in route segments before 1.0** (v0.640) — A route segment may not contain `*`, `{` or `}`, so a rest segment can be added without changing a route's meaning | Accepted (v0.640) |
 | [0878](0878-expect-predicates-hold-no-effect.md) | **An `expect` predicate and an observation's `with` predicate hold no `Effect`** (v0.639.35) — The test predicate positions enforce ADR 0144 D3 by type, not by syntax | Accepted (v0.639.35) |
 | [0877](0877-tree-native-lowering.md) | **Tree-native lowering is the route Part 15.1 left open** (v0.639.8) — Phase 1A lowers into the existing bynk_ts tree through a counted bridge, and no expression IR is built | Accepted (v0.639.8) |

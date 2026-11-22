@@ -1,11 +1,6 @@
----
-level: patch
-changelog: Docs: the Book is reorganised by kind, then by concern. Its sidebar reads Start, Learn Bynk, Concepts (the explanation pages, by concern) and Guides (the how-to pages, by what you are building), then Reference, Specification and Troubleshooting. No page moves. *How these docs are organised* is retired in favour of a shorter front page (web presence track, slice 2, #3865).
----
+# 0880 — The Book is organised by kind first, then by concern
 
-## ADR: book-organised-by-kind-then-concern
-title: The Book is organised by kind first, then by concern
-summary: The Book's top level is the kind of page (Start, Learn Bynk, Concepts, Guides, then the lookup parts); concerns group pages within each kind
+- **Status:** Accepted (v0.640.12)
 
 **Context.** The Book was organised concern-first: after the tutorial, one
 Guides section per concern (the type system, program structure, effects and
