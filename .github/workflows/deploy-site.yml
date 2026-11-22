@@ -222,6 +222,10 @@ jobs:
       # in-site link fails here before anything deploys.
       - name: Build the site (astro build)
         run: npm run build
+        env:
+          # Search also covers the blog, whose index is beside this site's on
+          # bynk-lang.org (web presence slice 7). Local builds leave it off.
+          BYNK_MERGE_SEARCH: "1"
       # Single Pages project at the apex (no sandbox split — this is static
       # content, not a code-execution surface). `--branch=main` publishes to the
       # project's production deployment.

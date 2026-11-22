@@ -288,9 +288,12 @@ page.
   primary action and the current page; teal is for links and success. This
   reconciles the site with the bento-blocks mark, as the design system's README
   asks.
-- **Search across both sites.** Each site keeps its own Pagefind index; the
-  docs site merges the blog's (Pagefind `mergeIndex`), so one search box covers
-  both.
+- **Search across both sites.** Each site keeps its own Pagefind index, and
+  each merges the other's (Pagefind `mergeIndex`, at half weight so a site's
+  own pages lead), so either search box covers both. Both sites declare
+  `en-GB` so the indexes share a language; blog results are titled
+  "Blog · …". The merge is on only in the deploys, because a merged index
+  that fails to load leaves Pagefind with no results at all.
 
 ## 9. Checks
 

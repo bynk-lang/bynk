@@ -53,6 +53,15 @@ plugin, so a broken in-site link **fails the build**. The link validator is
 wired in `site/astro.config.mjs` alongside the directive plugin, the diagram
 renderer, and the `bynk` syntax highlighter.
 
+On bynk-lang.org, search covers the blog too: the deploy sets
+`BYNK_MERGE_SEARCH`, and the site's search then also loads the blog's
+Pagefind index from `/blog/pagefind/` (the blog does the same with this
+site's). A local build leaves it off, because Pagefind returns nothing at all
+when a merged index fails to load, so `npm run preview` searches this site
+alone. The two sites should run the same minor version of Pagefind: CI warns
+when the blog's live index was built with a different one, and the fix is to
+bump whichever site is behind.
+
 > [!TIP]
 > Diagrams render through a headless Chromium. If a build complains it cannot
 > launch a browser, install one once with `npx playwright install chromium`

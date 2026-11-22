@@ -44,7 +44,26 @@ export default defineConfig({
   integrations: [
     starlight({
       title: "Bynk",
+      // British English, as the blog declares: pages are `lang="en-GB"`, and
+      // the search index is `en-gb`, so the two sites' indexes merge.
+      locales: { root: { label: "English", lang: "en-GB" } },
       favicon: "/favicon.svg",
+      // One search box covers both sites (web presence slice 7): this site's
+      // search also searches the blog's index, which the blog's proxy serves
+      // on the same origin at /blog/. Its pages rank at half weight so the
+      // docs lead. The blog merges this site's index the same way.
+      //
+      // Only the deploy sets BYNK_MERGE_SEARCH. Pagefind returns no results at
+      // all when a merged index fails to load, and the blog's index exists
+      // only on bynk-lang.org, so a local build or preview searches this
+      // site alone.
+      ...(process.env.BYNK_MERGE_SEARCH
+        ? {
+            pagefind: {
+              mergeIndex: [{ bundlePath: "/blog/pagefind/", indexWeight: 0.5, language: "en-gb" }],
+            },
+          }
+        : {}),
       // The brand comes from the theme plugin below; this adds only the
       // site's own touches (the landing hero).
       customCss: ["./src/styles/site.css"],
