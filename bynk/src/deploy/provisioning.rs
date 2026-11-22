@@ -828,16 +828,8 @@ mod tests {
     // and answers `kv namespace create` with an id. Nothing reaches
     // Cloudflare.
 
-    /// Write an executable stand-in `wrangler` at `path`; see
-    /// [`crate::test_support::write_executable`] for why not in-process.
-    #[cfg(unix)]
-    fn write_stand_in(path: &Path, script: &str) {
-        crate::test_support::write_executable(path, script);
-    }
-
     /// #3073: every push carries the facts variable (asserted here, for every
     /// test that runs one); the tests then compare the rest of the call.
-    #[cfg(unix)]
     fn strip_facts_var(call: &str) -> String {
         if !call.starts_with("deploy") {
             return call.to_string();
@@ -852,9 +844,41 @@ mod tests {
         }
     }
 
+    /// The account the provisioning tests deploy to: it logs every call and answers as the
+    /// on-disk stand-in did before 1D.3b. A migration of `D1_BROKEN…` fails; `d1 create` mints
+    /// an id from the name's length, and adopts on a name containing `taken`, which `d1 list`
+    /// shows; any other `--json` call is refused as an unknown argument; `kv namespace create`
+    /// mints `minted-id`; everything else succeeds, saying nothing.
+    fn provision_fake() -> crate::cloudflare::fake::Recording {
+        use crate::cloudflare::Op;
+        use crate::cloudflare::fake::{Recording, failed};
+        Recording::new(|op| match op {
+            Op::D1MigrationsApply { binding, .. } if binding.starts_with("D1_BROKEN") => {
+                Err(failed(op, "", "✘ [ERROR] Migration 0001_bad.sql failed\n"))
+            }
+            Op::D1Create { name } if name.contains("taken") => Err(failed(
+                op,
+                "",
+                "✘ [ERROR] A database with that name already exists\n",
+            )),
+            Op::D1Create { name } => {
+                Ok(format!("0d1d0000-0000-4000-8000-00000000000{}", name.len()))
+            }
+            Op::D1List => Ok(
+                "[{\"uuid\": \"adadadad-0000-4000-8000-000000000000\", \"name\": \"api-taken\"}]\n"
+                    .into(),
+            ),
+            _ if op.line().contains("--json") => {
+                Err(failed(op, "", "✘ [ERROR] Unknown argument: json\n"))
+            }
+            Op::KvCreate { .. } => Ok("minted-id".into()),
+            Op::KvList => Ok("[[kv_namespaces]]\nbinding = \"t\"\nid = \"minted-id\"\n".into()),
+            _ => Ok(String::new()),
+        })
+    }
+
     /// What the apply ran, one line per `wrangler` invocation, and the
     /// ledger it left, for one Worker `api` that binds only the bare `KV`.
-    #[cfg(unix)]
     fn provision_bare_kv(environment: &str, lock: DeployLock) -> (Vec<String>, DeployLock) {
         let (calls, lock, pushed) =
             provision_api(environment, Resources::default().needs_kv(), lock, None);
@@ -865,7 +889,6 @@ mod tests {
     /// The apply of Worker `api` declaring `declared` (the whole project),
     /// with the account's live KV ids `live_kv_ids`: the `wrangler`
     /// invocations, the ledger it left, and its outcome.
-    #[cfg(unix)]
     fn provision_api(
         environment: &str,
         declared: Resources,
@@ -878,7 +901,6 @@ mod tests {
     }
 
     /// [`provision_api`], and the generated configuration as the push left it.
-    #[cfg(unix)]
     fn provision_api_with_config(
         environment: &str,
         declared: Resources,
@@ -931,17 +953,7 @@ mod tests {
             ));
         }
         std::fs::write(workers_dir.join("api/wrangler.toml"), config).unwrap();
-        let log = root.join("calls.log");
-        let fake = root.join("wrangler");
-        write_stand_in(
-            &fake,
-            &format!(
-                "#!/bin/sh\necho \"$*\" >> '{}'\ncase \"$*\" in 'd1 migrations apply D1_BROKEN'*) echo '✘ [ERROR] Migration 0001_bad.sql failed' >&2; exit 1;; 'd1 migrations apply '*) if read -r line; then echo stdin:open; else echo stdin:closed; fi >> '{}'; exit 0;; esac\ncase \"$*\" in 'd1 create '*taken*) echo '✘ [ERROR] A database with that name already exists' >&2; exit 1;; 'd1 create '*) printf '[[d1_databases]]\\nbinding = \"DB\"\\ndatabase_name = \"%s\"\\ndatabase_id = \"0d1d0000-0000-4000-8000-00000000000%s\"\\n' \"$3\" \"${{#3}}\"; exit 0;; 'd1 list --json') printf '[{{\"uuid\": \"adadadad-0000-4000-8000-000000000000\", \"name\": \"api-taken\"}}]\\n'; exit 0;; esac\ncase \"$*\" in *--json*) echo '✘ [ERROR] Unknown argument: json' >&2; exit 1;; esac\nif [ \"$1\" = kv ]; then printf '[[kv_namespaces]]\\nbinding = \"t\"\\nid = \"minted-id\"\\n'; fi\nexit 0\n",
-                log.display(),
-                log.display()
-            ),
-        );
-
+        let api = provision_fake();
         let mut lock = lock;
         let source = SecretSource::default();
         let edge_keys = BTreeMap::new();
@@ -960,11 +972,10 @@ mod tests {
             false,
             environment,
         );
-        let provenance = Provenance::Path(fake);
         let pushed = apply_worker(
             &mut RunCx {
                 tools: Tools {
-                    api: &Wrangler::new(&provenance, &root),
+                    api: &api,
                     project_root: &root,
                 },
                 workers_dir: &workers_dir,
@@ -989,11 +1000,7 @@ mod tests {
             },
             &plan.contexts[0],
         );
-        let calls = std::fs::read_to_string(&log)
-            .unwrap_or_default()
-            .lines()
-            .map(strip_facts_var)
-            .collect();
+        let calls = api.calls().iter().map(|c| strip_facts_var(c)).collect();
         let config = std::fs::read_to_string(workers_dir.join("api/wrangler.toml")).unwrap();
         let _ = std::fs::remove_dir_all(root);
         (calls, lock, pushed, config)
@@ -1001,7 +1008,6 @@ mod tests {
 
     // ---- P4a (#2602): D1 databases are created, recorded and bound by id ----
 
-    #[cfg(unix)]
     fn d1_calls(calls: &[String]) -> Vec<&str> {
         calls
             .iter()
@@ -1010,7 +1016,6 @@ mod tests {
             .collect()
     }
 
-    #[cfg(unix)]
     #[test]
     fn each_d1_database_is_created_recorded_and_bound_by_its_minted_id() {
         let (calls, lock, pushed, config) = provision_api_with_config(
@@ -1039,7 +1044,6 @@ mod tests {
         assert_eq!(d1_calls(&calls), Vec::<&str>::new());
     }
 
-    #[cfg(unix)]
     #[test]
     fn a_named_environment_creates_and_binds_its_own_database() {
         let (calls, lock, _, config) = provision_api_with_config(
@@ -1065,7 +1069,6 @@ mod tests {
         );
     }
 
-    #[cfg(unix)]
     #[test]
     fn a_database_of_the_same_name_already_there_is_adopted() {
         let (calls, lock, pushed) = provision_api(
@@ -1086,7 +1089,6 @@ mod tests {
 
     // ---- P4b (#2608): migrations are applied before the push ----
 
-    #[cfg(unix)]
     fn with_migrations(mut resources: Resources) -> Resources {
         for db in &mut resources.d1_databases {
             db.migrations = vec!["0001_create.sql".into(), "0002_more.sql".into()];
@@ -1094,7 +1096,6 @@ mod tests {
         resources
     }
 
-    #[cfg(unix)]
     #[test]
     fn migrations_are_applied_remotely_after_binding_and_before_the_push() {
         let (calls, _, pushed) = provision_api(
@@ -1116,11 +1117,10 @@ mod tests {
             at("d1 migrations apply") < at("deploy"),
             "applied before the push: {calls:?}"
         );
-        // Stdin is closed, so wrangler takes its "yes" fallback.
-        assert!(calls.iter().any(|c| c == "stdin:closed"), "{calls:?}");
+        // Stdin is closed, so wrangler takes its "yes" fallback: the adapter's to do, and
+        // tested there (`cloudflare::process`).
     }
 
-    #[cfg(unix)]
     #[test]
     fn a_named_environment_applies_its_own_databases_migrations() {
         let (calls, _, pushed, config) = provision_api_with_config(
@@ -1146,7 +1146,6 @@ mod tests {
         );
     }
 
-    #[cfg(unix)]
     #[test]
     fn a_failing_migration_stops_the_deploy_before_the_push() {
         let (calls, _, pushed) = provision_api(
@@ -1170,12 +1169,10 @@ mod tests {
 
     // ---- P3 (#2342): rate limiter ids are allocated in the ledger ----
 
-    #[cfg(unix)]
     fn api_with_limiters(bindings: &[&str]) -> Resources {
         Resources::default().ratelimits(bindings)
     }
 
-    #[cfg(unix)]
     #[test]
     fn each_rate_limiter_gets_an_allocated_id_recorded_and_materialised() {
         let (calls, lock, pushed, config) = provision_api_with_config(
@@ -1205,7 +1202,6 @@ mod tests {
         assert!(!config.contains("_NAMESPACE>"), "{config}");
     }
 
-    #[cfg(unix)]
     #[test]
     fn a_recorded_rate_limiter_keeps_its_id_and_a_removed_one_stays_until_pushed() {
         let (_, lock, _, _) = provision_api_with_config(
@@ -1240,7 +1236,6 @@ mod tests {
         );
     }
 
-    #[cfg(unix)]
     #[test]
     fn a_named_environment_gets_its_own_id_in_its_block() {
         let (_, lock, _, _) = provision_api_with_config(
@@ -1277,7 +1272,6 @@ mod tests {
 
     // ---- P5 (#2323): R2 buckets are created by name and recorded ----
 
-    #[cfg(unix)]
     fn api_with_buckets() -> Resources {
         Resources::default().r2_buckets(&[
             ("R2_ARCHIVES", "api-archives", None),
@@ -1286,7 +1280,6 @@ mod tests {
     }
 
     /// The `r2` invocations among `calls`, in order.
-    #[cfg(unix)]
     fn r2_calls(calls: &[String]) -> Vec<&str> {
         calls
             .iter()
@@ -1295,7 +1288,6 @@ mod tests {
             .collect()
     }
 
-    #[cfg(unix)]
     #[test]
     fn each_r2_bucket_is_created_by_name_in_its_jurisdiction_and_recorded() {
         let (calls, lock, pushed) =
@@ -1318,7 +1310,6 @@ mod tests {
         assert_eq!(indexes.jurisdiction.as_deref(), Some("eu"));
     }
 
-    #[cfg(unix)]
     #[test]
     fn a_recorded_r2_bucket_is_not_created_again() {
         let (_, lock, _) =
@@ -1328,7 +1319,6 @@ mod tests {
         assert_eq!(r2_calls(&calls), Vec::<&str>::new());
     }
 
-    #[cfg(unix)]
     #[test]
     fn a_named_environment_creates_its_own_qualified_buckets() {
         let (calls, lock, _) =
@@ -1352,7 +1342,6 @@ mod tests {
         );
     }
 
-    #[cfg(unix)]
     #[test]
     fn a_changed_jurisdiction_makes_a_new_bucket_and_records_it() {
         let (_, lock, _) =
@@ -1390,7 +1379,6 @@ mod tests {
     // staging records the bare `KV`, also `api-staging` under `--env staging`.
     // The plan passes: staging's bare id is recorded, so nothing is created.
 
-    #[cfg(unix)]
     fn api_with_staging_instance() -> (Resources, DeployLock) {
         let declared = Resources::default()
             .needs_kv()
@@ -1410,7 +1398,6 @@ mod tests {
     /// Staging's bare id has gone from the account, so the apply would
     /// create it again as `api-staging`, the title the default environment's
     /// instance holds. Refused before any `kv namespace create` or push.
-    #[cfg(unix)]
     #[test]
     fn a_namespace_created_again_under_a_title_another_environment_holds_is_refused() {
         let (declared, lock) = api_with_staging_instance();
@@ -1444,7 +1431,6 @@ mod tests {
     /// The same project with staging's bare id still live: nothing is created
     /// for it, the instance's distinct `api-staging-staging` is created, and
     /// the push goes ahead.
-    #[cfg(unix)]
     #[test]
     fn a_live_recorded_namespace_is_not_checked_again() {
         let (declared, lock) = api_with_staging_instance();
@@ -1473,7 +1459,6 @@ mod tests {
     /// namespace (`api-staging`), an orphan. The default environment records
     /// `capability Staging` (`api-staging`), and its id has gone too, so the
     /// default deploy re-creates it under that title.
-    #[cfg(unix)]
     #[test]
     fn a_gone_namespace_in_another_environment_holds_no_title() {
         let declared = || Resources::default().kv_instances(&["KV_STAGING"]);
@@ -1523,7 +1508,6 @@ mod tests {
         );
     }
 
-    #[cfg(unix)]
     #[test]
     fn the_default_environment_creates_the_bare_namespace_under_the_workers_name() {
         let (calls, lock) = provision_bare_kv("default", DeployLock::default());
@@ -1535,7 +1519,6 @@ mod tests {
         );
     }
 
-    #[cfg(unix)]
     #[test]
     fn a_named_environment_creates_the_bare_namespace_under_a_qualified_title() {
         // An account holds one namespace per title, so `api` would collide
@@ -1557,7 +1540,6 @@ mod tests {
         );
     }
 
-    #[cfg(unix)]
     #[test]
     fn a_recorded_staging_namespace_is_reused_not_recreated() {
         // Whatever it was titled when made, a namespace the ledger records for
@@ -1584,7 +1566,6 @@ mod tests {
 
     /// What one apply of a Worker `api` with one secret to set left
     /// behind.
-    #[cfg(unix)]
     struct BindingRun {
         /// One line per `wrangler` invocation.
         calls: Vec<String>,
@@ -1595,12 +1576,29 @@ mod tests {
         left_in_project: bool,
     }
 
-    #[cfg(unix)]
+    /// How the fake `wrangler deploy` ends.
+    #[derive(Clone, Copy)]
+    enum Tail {
+        /// It succeeds.
+        Ok,
+        /// It exits 1.
+        Fails,
+        /// A shell script runs it (Unix), through the real process path: for the signal
+        /// tests, which need a process to hold a secrets file across.
+        #[cfg(unix)]
+        Script(&'static str),
+    }
+
+    /// Whether `tail` runs on the recording fake rather than a script.
+    fn recording_used(tail: Tail) -> bool {
+        matches!(tail, Tail::Ok | Tail::Fails)
+    }
+
     fn deploy_with_binding(
         environment: &str,
         already_deployed: bool,
         with_upload: bool,
-        deploy_tail: &str,
+        tail: Tail,
     ) -> BindingRun {
         // One at a time: a first deploy records SIGINT/SIGTERM process-wide
         // while its upload runs, and two tests signalling this process would
@@ -1624,29 +1622,54 @@ mod tests {
         )
         .unwrap();
         let log = root.join("calls.log");
-        let seen = root.join("seen.log");
-        let fake = root.join("wrangler");
         // A `--secrets-file` is checked while the upload runs: it must exist
         // then, and hold the name. Its value is never echoed.
-        let script = format!(
-            "#!/bin/sh\n\
-                 echo \"$*\" >> '{log}'\n\
-                 if [ \"$1\" = secret ] && [ \"$2\" = put ]; then cat > /dev/null; fi\n\
-                 if [ \"$1\" = deploy ]; then\n\
-                 prev=\n\
-                 for a in \"$@\"; do\n\
-                 if [ \"$prev\" = --secrets-file ]; then\n\
-                 if [ -f \"$a\" ] && grep -q '\"{BINDING}\":\"{PLANTED}\"' \"$a\"; then echo present >> '{seen}'; else echo missing >> '{seen}'; fi\n\
-                 fi\n\
-                 prev=$a\n\
-                 done\n\
-                 {deploy_tail}\n\
-                 fi\n\
-                 exit 0\n",
-            log = log.display(),
-            seen = seen.display(),
-        );
-        write_stand_in(&fake, &script);
+        let seen_by_fake = std::rc::Rc::new(std::cell::RefCell::new(Vec::<String>::new()));
+        let seen = seen_by_fake.clone();
+        let recording = crate::cloudflare::fake::Recording::new(move |op| {
+            use crate::cloudflare::Op;
+            let Op::Push { secrets_file, .. } = op else {
+                return Ok(String::new());
+            };
+            if let Some(file) = secrets_file {
+                let held = std::fs::read_to_string(file)
+                    .is_ok_and(|text| text.contains(&format!("\"{BINDING}\":\"{PLANTED}\"")));
+                seen.borrow_mut()
+                    .push(if held { "present" } else { "missing" }.into());
+            }
+            match tail {
+                Tail::Fails => Err(crate::cloudflare::fake::failed(op, "", "")),
+                _ => Ok(String::new()),
+            }
+        });
+        let seen = root.join("seen.log");
+        #[cfg(unix)]
+        let (script, scripted);
+        let api: &dyn CloudflareApi = match tail {
+            #[cfg(unix)]
+            Tail::Script(deploy_tail) => {
+                script = format!(
+                    "echo \"$*\" >> '{log}'\n\
+                     if [ \"$1\" = secret ] && [ \"$2\" = put ]; then cat > /dev/null; fi\n\
+                     if [ \"$1\" = deploy ]; then\n\
+                     prev=\n\
+                     for a in \"$@\"; do\n\
+                     if [ \"$prev\" = --secrets-file ]; then\n\
+                     if [ -f \"$a\" ] && grep -q '\"{BINDING}\":\"{PLANTED}\"' \"$a\"; then echo present >> '{seen}'; else echo missing >> '{seen}'; fi\n\
+                     fi\n\
+                     prev=$a\n\
+                     done\n\
+                     {deploy_tail}\n\
+                     fi\n\
+                     exit 0\n",
+                    log = log.display(),
+                    seen = seen.display(),
+                );
+                scripted = Wrangler::scripted(&script, &root);
+                &scripted
+            }
+            Tail::Ok | Tail::Fails => &recording,
+        };
 
         let mut lock = DeployLock::default();
         if already_deployed {
@@ -1675,11 +1698,10 @@ mod tests {
             false,
             environment,
         );
-        let provenance = Provenance::Path(fake);
         let pushed = apply_worker(
             &mut RunCx {
                 tools: Tools {
-                    api: &Wrangler::new(&provenance, &root),
+                    api,
                     project_root: &root,
                 },
                 workers_dir: &workers_dir,
@@ -1716,9 +1738,21 @@ mod tests {
             !lock_text.contains(PLANTED),
             "the ledger never carries a secret"
         );
+        let (calls, seen) = if recording_used(tail) {
+            (
+                recording
+                    .calls()
+                    .iter()
+                    .map(|c| strip_facts_var(c))
+                    .collect(),
+                seen_by_fake.borrow().clone(),
+            )
+        } else {
+            (read(&log), read(&seen))
+        };
         let run = BindingRun {
-            calls: read(&log),
-            seen: read(&seen),
+            calls,
+            seen,
             pushed,
             left_in_project,
         };
@@ -1726,7 +1760,6 @@ mod tests {
         run
     }
 
-    #[cfg(unix)]
     fn walk(dir: &Path) -> Vec<std::path::PathBuf> {
         let mut out = Vec::new();
         for entry in std::fs::read_dir(dir).into_iter().flatten().flatten() {
@@ -1744,7 +1777,6 @@ mod tests {
     /// dir. The asserts here and below compare without formatting what wrangler
     /// was handed into a failure message: a test of secret handling logs none
     /// of it, even its own planted values.
-    #[cfg(unix)]
     fn secrets_file_of(calls: &[String], rest: &[&str]) -> std::path::PathBuf {
         assert!(calls.len() == 1, "a first deploy is one wrangler call");
         let call = &calls[0];
@@ -1766,10 +1798,9 @@ mod tests {
         path
     }
 
-    #[cfg(unix)]
     #[test]
     fn a_first_deploy_uploads_its_secrets_with_the_worker() {
-        let run = deploy_with_binding("default", false, true, "exit 0");
+        let run = deploy_with_binding("default", false, true, Tail::Ok);
         assert!(run.pushed == Ok(Pushed::Ok), "the push succeeds");
         // One call, and no `secret put` after it: the first version has them.
         let file = secrets_file_of(&run.calls, &[]);
@@ -1782,10 +1813,9 @@ mod tests {
         assert!(!run.left_in_project);
     }
 
-    #[cfg(unix)]
     #[test]
     fn a_failed_first_upload_still_removes_the_secrets_file() {
-        let run = deploy_with_binding("default", false, true, "exit 1");
+        let run = deploy_with_binding("default", false, true, Tail::Fails);
         assert!(run.pushed.is_err(), "wrangler's failure is the deploy's");
         let file = secrets_file_of(&run.calls, &[]);
         assert!(
@@ -1796,12 +1826,11 @@ mod tests {
         assert!(!file.parent().unwrap().exists());
     }
 
-    #[cfg(unix)]
     #[test]
     fn a_first_deploy_under_an_environment_uploads_to_the_suffixed_worker() {
         // `--env staging` is what makes wrangler upload `api-staging`, the
         // secrets with it.
-        let run = deploy_with_binding("staging", false, true, "exit 0");
+        let run = deploy_with_binding("staging", false, true, Tail::Ok);
         assert!(run.pushed == Ok(Pushed::Ok), "the push succeeds");
         let file = secrets_file_of(&run.calls, &["--env", "staging"]);
         assert!(
@@ -1811,6 +1840,7 @@ mod tests {
         assert!(!file.exists());
     }
 
+    // Unix: the upload runs as a process that signals this one, through the real process path.
     #[cfg(unix)]
     #[test]
     fn a_sigterm_during_the_upload_waits_for_wrangler_and_still_removes_the_file() {
@@ -1820,7 +1850,7 @@ mod tests {
             "default",
             false,
             true,
-            "kill -TERM $PPID; sleep 0.2; exit 0",
+            Tail::Script("kill -TERM $PPID; sleep 0.2; exit 0"),
         );
         let file = secrets_file_of(&run.calls, &[]);
         assert!(
@@ -1835,13 +1865,19 @@ mod tests {
         );
     }
 
+    // Unix: the upload runs as a process that signals this one, through the real process path.
     #[cfg(unix)]
     #[test]
     fn a_sigterm_to_bynk_is_passed_on_to_the_upload() {
         // Sent to `bynk` alone, a SIGTERM would otherwise leave wrangler
         // running and `bynk` waiting on it.
         let started = std::time::Instant::now();
-        let run = deploy_with_binding("default", false, true, "kill -TERM $PPID; exec sleep 30");
+        let run = deploy_with_binding(
+            "default",
+            false,
+            true,
+            Tail::Script("kill -TERM $PPID; exec sleep 30"),
+        );
         assert!(
             started.elapsed() < std::time::Duration::from_secs(20),
             "wrangler was stopped, not waited out"
@@ -1854,6 +1890,7 @@ mod tests {
         );
     }
 
+    // Unix: process liveness by pid and directory ownership by uid.
     #[cfg(unix)]
     #[test]
     fn the_sweep_removes_only_a_dead_runs_secrets_directory() {
@@ -1919,19 +1956,18 @@ mod tests {
         assert_eq!(secrets_dir_pid(&name), Some(std::process::id()));
     }
 
-    #[cfg(unix)]
     #[test]
     fn a_redeploy_sets_its_secrets_before_the_push_on_stdin() {
         // The Worker exists, so its secrets go first, as their own version,
         // and never through a file.
-        let run = deploy_with_binding("default", true, true, "exit 0");
+        let run = deploy_with_binding("default", true, true, Tail::Ok);
         assert!(run.pushed == Ok(Pushed::Ok), "the push succeeds");
         assert!(
             run.calls == [format!("secret put {BINDING}"), "deploy".into()],
             "`secret put`, then `deploy`"
         );
         assert!(run.seen.is_empty(), "no secrets file");
-        let run = deploy_with_binding("staging", true, true, "exit 0");
+        let run = deploy_with_binding("staging", true, true, Tail::Ok);
         assert!(
             run.calls
                 == [
@@ -1942,21 +1978,21 @@ mod tests {
         );
     }
 
-    #[cfg(unix)]
     #[test]
     fn a_wrangler_without_the_secrets_file_falls_back_to_setting_after_the_push() {
-        let run = deploy_with_binding("default", false, false, "exit 0");
+        let run = deploy_with_binding("default", false, false, Tail::Ok);
         assert!(run.pushed == Ok(Pushed::Ok), "the push succeeds");
         assert!(
             run.calls == ["deploy".to_string(), format!("secret put {BINDING}")],
             "`deploy`, then `secret put`"
         );
         // And a failed push sets nothing on a Worker that may not exist.
-        let run = deploy_with_binding("default", false, false, "exit 1");
+        let run = deploy_with_binding("default", false, false, Tail::Fails);
         assert!(run.pushed.is_err(), "the push fails");
         assert!(run.calls == ["deploy"], "and nothing is set after it");
     }
 
+    // Unix: file modes 0600 and 0700.
     #[cfg(unix)]
     #[test]
     fn the_secrets_file_is_private_json_of_exactly_the_prepared_secrets() {

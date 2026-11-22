@@ -1036,8 +1036,8 @@ pub(crate) fn execute(
 /// Cloudflare as the live revert sees it.
 pub(crate) struct LiveAccount<'a> {
     pub(crate) rest: Rest,
-    pub(crate) provenance: &'a probe::Provenance,
-    pub(crate) root: &'a Path,
+    /// `wrangler rollback`.
+    pub(crate) api: &'a dyn CloudflareApi,
 }
 
 impl Account for LiveAccount<'_> {
@@ -1135,7 +1135,7 @@ impl Account for LiveAccount<'_> {
 
     fn rollback(&self, script: &str, version: &str) -> Result<(), String> {
         // What wrangler wrote to stderr: `rollback` reports there alone.
-        Wrangler::new(self.provenance, self.root)
+        self.api
             .rollback(script, version)
             .map_err(|e| e.stderr_only())
     }
@@ -1224,11 +1224,8 @@ fn revert_run(root: &Path, opts: &RevertOptions) -> Result<ExitCode, String> {
             manager: Some(bynk_driver::npm_install::system_tool_manager(root)),
         },
     );
-    let account = LiveAccount {
-        rest,
-        provenance: &probe.provenance,
-        root,
-    };
+    let api = Wrangler::new(&probe.provenance, root);
+    let account = LiveAccount { rest, api: &api };
     let planned = plan(
         &account,
         &lock,

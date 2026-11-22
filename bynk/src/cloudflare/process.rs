@@ -20,6 +20,10 @@ use super::error::{Exit, Failure, WranglerError};
 pub(crate) struct Wrangler<'a> {
     provenance: &'a Provenance,
     project_root: &'a Path,
+    /// Tests only: run `sh -c <script> sh <argv…>` instead of wrangler, so a test of the
+    /// process path (signals, stdin, the tee) needs no stand-in written to disk.
+    #[cfg(test)]
+    script: Option<String>,
 }
 
 impl<'a> Wrangler<'a> {
@@ -27,30 +31,49 @@ impl<'a> Wrangler<'a> {
         Wrangler {
             provenance,
             project_root,
+            #[cfg(test)]
+            script: None,
         }
     }
 
-    fn command(&self, op: &Op<'_>, dir: &Path) -> Result<Command, WranglerError> {
-        let argv = op.argv();
+    /// The adapter over a shell script held in memory: each call runs `sh -c <script> sh` with
+    /// the call's arguments, so `"$*"` reads as an on-disk stand-in's did. Unix only, as `sh` is.
+    #[cfg(test)]
+    pub(crate) fn scripted(script: &str, project_root: &'a Path) -> Self {
+        static NONE: Provenance = Provenance::Missing;
+        Wrangler {
+            provenance: &NONE,
+            project_root,
+            script: Some(script.to_string()),
+        }
+    }
+
+    /// The program for `argv`: wrangler as resolved, or a test's script.
+    fn base(&self, op: &Op<'_>, argv: &[String]) -> Result<Command, WranglerError> {
         let (subcommand, rest) = argv
             .split_first()
             .expect("an operation names its subcommand");
+        #[cfg(test)]
+        if let Some(script) = &self.script {
+            let mut command = Command::new("sh");
+            command.args(["-c", script, "sh"]).args(argv);
+            return Ok(command);
+        }
         let mut command = bynk_driver::tools::wrangler::command(self.provenance, subcommand)
             .ok_or_else(|| WranglerError::missing(op))?;
-        command.args(rest).current_dir(dir);
+        command.args(rest);
+        Ok(command)
+    }
+
+    fn command(&self, op: &Op<'_>, dir: &Path) -> Result<Command, WranglerError> {
+        let mut command = self.base(op, &op.argv())?;
+        command.current_dir(dir);
         Ok(command)
     }
 
     /// [`command`](Self::command) run from wherever `bynk` was started.
     fn command_anywhere(&self, op: &Op<'_>) -> Result<Command, WranglerError> {
-        let argv = op.argv();
-        let (subcommand, rest) = argv
-            .split_first()
-            .expect("an operation names its subcommand");
-        let mut command = bynk_driver::tools::wrangler::command(self.provenance, subcommand)
-            .ok_or_else(|| WranglerError::missing(op))?;
-        command.args(rest);
-        Ok(command)
+        self.base(op, &op.argv())
     }
 
     /// Run `op` from `dir`, capturing both streams: its stdout on success.
@@ -493,6 +516,108 @@ mod tests {
         assert!(!status.success());
         assert!(said.starts_with("first\n"), "{said:?}");
         assert!(said.contains("[code: 10007]"), "{said:?}");
+    }
+
+    /// A scratch directory and the log a scripted adapter's calls append to.
+    #[cfg(unix)]
+    fn scratch(tag: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("bynk-adapter-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    /// Each call runs where it always ran: the resource calls from the project root, the
+    /// Worker's calls from its directory. Unix: it runs `sh`.
+    #[cfg(unix)]
+    #[test]
+    fn each_call_runs_from_its_directory_with_its_arguments() {
+        let root = scratch("cwd");
+        let worker = root.join("workers/api");
+        std::fs::create_dir_all(&worker).unwrap();
+        let log = root.join("calls.log");
+        let script = format!("echo \"$PWD $*\" >> '{}'", log.display());
+        let api = Wrangler::scripted(&script, &root);
+        api.queue_create("jobs").unwrap();
+        api.secret_list(&worker, "staging").unwrap();
+        api.d1_migrations_apply(&worker, "DB", "default").unwrap();
+        let calls = std::fs::read_to_string(&log).unwrap();
+        let root_at = std::fs::canonicalize(&root).unwrap();
+        let worker_at = std::fs::canonicalize(&worker).unwrap();
+        assert_eq!(
+            calls,
+            format!(
+                "{} queues create jobs\n{} secret list --format json --env staging\n{} d1 migrations apply DB --remote\n",
+                root_at.display(),
+                worker_at.display(),
+                worker_at.display()
+            )
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// `d1 migrations apply` runs with stdin closed, so wrangler takes its "yes" fallback; a
+    /// secret's value goes on stdin and never in argv (ADR 0195 D1). Unix: it runs `sh`.
+    #[cfg(unix)]
+    #[test]
+    fn stdin_is_closed_for_migrations_and_carries_a_secrets_value() {
+        let root = scratch("stdin");
+        let log = root.join("calls.log");
+        let script = format!(
+            "if read -r line; then echo \"$* stdin:$line\"; else echo \"$* stdin:closed\"; fi >> '{}'",
+            log.display()
+        );
+        let api = Wrangler::scripted(&script, &root);
+        api.d1_migrations_apply(&root, "DB", "default").unwrap();
+        api.secret_put(&root, "TOKEN", "s3cret\n", "default")
+            .unwrap();
+        api.named_secret(&root.join("sweep"), "put", "shop-api", "K", "k3y\n")
+            .unwrap();
+        assert_eq!(
+            std::fs::read_to_string(&log).unwrap(),
+            "d1 migrations apply DB --remote stdin:closed\n\
+             secret put TOKEN stdin:s3cret\n\
+             secret put K --name shop-api stdin:k3y\n"
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// The four renderings of a failed call, from one real failed process. Unix: it runs `sh`.
+    #[cfg(unix)]
+    #[test]
+    fn a_failed_call_renders_as_each_caller_always_rendered_it() {
+        let root = scratch("render");
+        let api = Wrangler::scripted("echo ' out '; echo ' err ' >&2; exit 2", &root);
+        let e = api.rollback("s", "v").unwrap_err();
+        assert_eq!(e.said(), "err\nout");
+        assert_eq!(e.stderr_only(), "err");
+        assert_eq!(e.said_or("silent"), "err\nout");
+        assert_eq!(e.stderr_else_stdout(), "err");
+        let quiet = Wrangler::scripted("exit 4", &root)
+            .rollback("s", "v")
+            .unwrap_err();
+        assert_eq!(quiet.said(), "wrangler exited 4");
+        assert_eq!(
+            quiet.said_or("wrangler secret put failed"),
+            "wrangler secret put failed"
+        );
+        let only_out = Wrangler::scripted("echo ' out '; exit 1", &root)
+            .rollback("s", "v")
+            .unwrap_err();
+        assert_eq!(only_out.stderr_else_stdout(), "out");
+        assert_eq!(only_out.stderr_only(), "");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// A wrangler that cannot be started is its own failure, with the OS's text.
+    #[test]
+    fn a_wrangler_that_cannot_start_says_why() {
+        let absent = Provenance::Path(std::env::temp_dir().join("bynk-no-such-wrangler"));
+        let e = Wrangler::new(&absent, Path::new("."))
+            .kv_list()
+            .unwrap_err();
+        assert!(matches!(e.failure(), Failure::Start(_)), "{e:?}");
+        assert!(!e.to_string().is_empty());
     }
 
     #[test]

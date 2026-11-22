@@ -8,7 +8,6 @@ use std::time::Duration;
 
 use super::sweep::{Cloudflare, Namespace, Secrets, Wake};
 use crate::cloudflare::CloudflareApi;
-use crate::probe::Provenance;
 
 pub(crate) const API: &str = "https://api.cloudflare.com/client/v4";
 
@@ -369,22 +368,22 @@ impl Wake for Https {
 
 /// `wrangler secret put`/`delete` against a deployed Worker by name, run in
 /// an empty directory so no project config is picked up.
-pub(crate) struct WranglerSecrets {
-    pub provenance: Provenance,
+pub(crate) struct WranglerSecrets<'a> {
+    pub api: &'a dyn CloudflareApi,
     pub scratch: PathBuf,
 }
 
-impl WranglerSecrets {
+impl WranglerSecrets<'_> {
     fn run(&self, verb: &str, script: &str, name: &str, stdin: &str) -> Result<(), String> {
         // The value goes on stdin, never argv (ADR 0195 D1); a `delete` sends nothing, so its
         // confirmation takes Wrangler's non-interactive default.
-        crate::cloudflare::Wrangler::new(&self.provenance, &self.scratch)
+        self.api
             .named_secret(&self.scratch, verb, script, name, stdin)
             .map_err(|e| e.said_or(&format!("wrangler secret {verb} failed")))
     }
 }
 
-impl Secrets for WranglerSecrets {
+impl Secrets for WranglerSecrets<'_> {
     fn put(&self, script: &str, name: &str, value: &str) -> Result<(), String> {
         self.run("put", script, name, value)
     }
@@ -464,42 +463,33 @@ pub(crate) mod tests {
     /// The key goes to `wrangler secret put` on stdin, never argv, against the
     /// deployed Worker by name; `delete` names the same secret; a failure
     /// carries what wrangler said.
-    #[cfg(unix)]
     #[test]
     fn secrets_go_through_wrangler_by_worker_name_on_stdin() {
-        let dir =
-            std::env::temp_dir().join(format!("bynk-migrate-wrangler-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        let log = dir.join("log");
-        let script = dir.join("wrangler");
-        // Not `fs::write`: ETXTBSY under parallel tests (see the helper).
-        crate::test_support::write_executable(
-            &script,
-            &format!(
-                "#!/bin/sh\necho \"$@ stdin=$(cat)\" >> {}\n[ \"$3\" = BAD ] && {{ echo nope >&2; exit 1; }}\nexit 0\n",
-                log.display()
-            ),
-        );
+        use crate::cloudflare::Op;
+        use crate::cloudflare::fake::{Recording, failed};
+        let api = Recording::new(|op| match op {
+            Op::NamedSecret { name: "BAD", .. } => Err(failed(op, "", "nope\n")),
+            _ => Ok(String::new()),
+        });
         let secrets = WranglerSecrets {
-            provenance: Provenance::Path(script.clone()),
-            scratch: dir.join("scratch"),
+            api: &api,
+            scratch: std::env::temp_dir().join("bynk-migrate-unused"),
         };
         secrets
             .put("shop-staging", "BYNK_MIGRATE_KEY", "s3cret")
             .unwrap();
         secrets.delete("shop-staging", "BYNK_MIGRATE_KEY").unwrap();
         let err = secrets.put("shop", "BAD", "x").unwrap_err();
-        let logged = std::fs::read_to_string(&log).unwrap();
-        let _ = std::fs::remove_dir_all(&dir);
         assert_eq!(err, "nope");
         assert_eq!(
-            logged.lines().take(2).collect::<Vec<_>>(),
-            vec![
-                "secret put BYNK_MIGRATE_KEY --name shop-staging stdin=s3cret",
-                "secret delete BYNK_MIGRATE_KEY --name shop-staging stdin=",
+            api.calls(),
+            [
+                "secret put BYNK_MIGRATE_KEY --name shop-staging",
+                "secret delete BYNK_MIGRATE_KEY --name shop-staging",
+                "secret put BAD --name shop",
             ]
         );
+        assert_eq!(api.stdin(), ["s3cret", "", "x"]);
     }
 
     #[test]

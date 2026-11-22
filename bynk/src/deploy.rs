@@ -175,8 +175,10 @@ pub(crate) fn local_session_key(binding: &str) -> String {
     secrets::local_session_key(binding)
 }
 
-#[cfg(all(test, unix))]
+#[cfg(test)]
 mod apply_tests;
+// Unix: it runs each call through the real adapter with `sh -c`, and pins the OS's own text for a
+// wrangler that cannot start.
 #[cfg(all(test, unix))]
 mod messages_tests;
 #[cfg(test)]

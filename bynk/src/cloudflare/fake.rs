@@ -18,6 +18,8 @@ type Answer = Box<dyn FnMut(&Op<'_>) -> Reply>;
 
 pub(crate) struct Recording {
     calls: RefCell<Vec<String>>,
+    /// What each call that takes a value on stdin was sent, in order.
+    stdin: RefCell<Vec<String>>,
     answer: RefCell<Answer>,
 }
 
@@ -26,6 +28,7 @@ impl Recording {
     pub(crate) fn new(answer: impl FnMut(&Op<'_>) -> Reply + 'static) -> Self {
         Recording {
             calls: RefCell::new(Vec::new()),
+            stdin: RefCell::new(Vec::new()),
             answer: RefCell::new(Box::new(answer)),
         }
     }
@@ -33,6 +36,11 @@ impl Recording {
     /// Every call so far, one line each, in order.
     pub(crate) fn calls(&self) -> Vec<String> {
         self.calls.borrow().clone()
+    }
+
+    /// What the calls that take a value on stdin were sent, in order: never in [`calls`].
+    pub(crate) fn stdin(&self) -> Vec<String> {
+        self.stdin.borrow().clone()
     }
 
     fn call(&self, op: Op<'_>) -> Reply {
@@ -149,7 +157,6 @@ impl CloudflareApi for Recording {
         self.call(Op::SecretList { environment })
     }
 
-    /// The value is logged as `stdin: <value>` after the call, as the stand-ins logged it.
     fn secret_put(
         &self,
         _worker_dir: &Path,
@@ -157,9 +164,8 @@ impl CloudflareApi for Recording {
         value: &str,
         environment: &str,
     ) -> Result<(), WranglerError> {
-        let reply = self.call(Op::SecretPut { name, environment });
-        self.calls.borrow_mut().push(format!("stdin: {value}"));
-        reply.map(drop)
+        self.stdin.borrow_mut().push(value.to_string());
+        self.call(Op::SecretPut { name, environment }).map(drop)
     }
 
     fn named_secret(
@@ -170,9 +176,8 @@ impl CloudflareApi for Recording {
         name: &str,
         stdin: &str,
     ) -> Result<(), WranglerError> {
-        let reply = self.call(Op::NamedSecret { verb, script, name });
-        self.calls.borrow_mut().push(format!("stdin: {stdin}"));
-        reply.map(drop)
+        self.stdin.borrow_mut().push(stdin.to_string());
+        self.call(Op::NamedSecret { verb, script, name }).map(drop)
     }
 
     fn d1_migrations_apply_local(

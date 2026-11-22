@@ -4,7 +4,7 @@
 //! which 1D.2 promises not to make (#4001's "Goldens", and ADR 0180).
 //!
 //! The every-kind project of `snapshot_tests.rs` is applied, Worker by Worker in the upload order,
-//! against the every-kind ledger, in each of its two environments, through the stand-in `wrangler`
+//! against the every-kind ledger, in each of its two environments, through the recording account
 //! below and a fake of Cloudflare's Hyperdrive API. Each Worker that pushes is recorded as `run`
 //! records it, and once both have, `--prune` deletes the orphans. Three fixtures pin it:
 //!
@@ -30,39 +30,108 @@ const FAILURES: &str = include_str!("fixtures/every_kind.apply.failures.txt");
 
 const ENVIRONMENTS: [&str; 2] = ["default", "staging"];
 
-/// The stand-in `wrangler`: logs each call, counts it, fails the one `fail_at` names, and answers
-/// from a small account kept in `state/` (the indexes, their metadata indexes and the queues).
-const STAND_IN: &str = r#"#!/bin/sh
-d='@DIR@'
-n=$(cat "$d/n"); n=$((n+1)); echo "$n" > "$d/n"
-echo "$*" >> "$d/calls.log"
-if [ -f "$d/fail_at" ] && [ "$n" = "$(cat "$d/fail_at")" ]; then
-  echo "✘ [ERROR] the stand-in failed call $n" >&2; exit 1
-fi
-s="$d/state"
-case "$*" in
-  'kv namespace create '*) printf '[[kv_namespaces]]\nbinding = "t"\nid = "kv-%s"\n' "$4";;
-  'd1 create '*) printf '[[d1_databases]]\nbinding = "DB"\ndatabase_name = "%s"\ndatabase_id = "0d1d0000-0000-4000-8000-0000000000%02d"\n' "$3" "${#3}";;
-  'vectorize list --json')
-    printf '['; sep=''
-    for f in "$s"/index.*; do [ -e "$f" ] || continue; printf '%s{"name":"%s"}' "$sep" "${f##*/index.}"; sep=','; done
-    printf ']\n';;
-  'vectorize get '*) cat "$s/index.$3";;
-  'vectorize create-metadata-index '*) printf '{"propertyName":"%s","indexType":"%s"}' "$5" "$7" > "$s/meta.$3.$5";;
-  'vectorize create '*) printf '{"config":{"dimensions":%s,"metric":"%s"}}' "$5" "$7" > "$s/index.$3";;
-  'vectorize list-metadata-index '*)
-    printf '['; sep=''
-    for f in "$s"/meta."$3".*; do [ -e "$f" ] || continue; printf '%s' "$sep"; cat "$f"; sep=','; done
-    printf ']\n';;
-  'vectorize delete '*) rm -f "$s/index.$3";;
-  'queues info '*) [ -e "$s/queue.$3" ] || exit 1;;
-  'queues create '*) touch "$s/queue.$3";;
-  'queues delete '*) rm -f "$s/queue.$3";;
-esac
-exit 0
-"#;
+/// The account the apply runs against (1D.3b: the recording fake, where it was a `#!/bin/sh`
+/// stand-in): it logs each call, counts it, fails the one `fail_at` names, and answers from a
+/// small account kept in `state/` (the indexes, their metadata indexes and the queues), exactly
+/// as the stand-in did, so the fixtures are unchanged.
+fn account(root: PathBuf) -> crate::cloudflare::fake::Recording {
+    use crate::cloudflare::Op;
+    use crate::cloudflare::fake::{Recording, failed};
+    Recording::new(move |op| {
+        let n = calls_so_far(&root) + 1;
+        std::fs::write(root.join("n"), format!("{n}\n")).unwrap();
+        let mut log = std::fs::read_to_string(root.join("calls.log")).unwrap_or_default();
+        log.push_str(&op.line());
+        log.push('\n');
+        std::fs::write(root.join("calls.log"), log).unwrap();
+        if std::fs::read_to_string(root.join("fail_at")).is_ok_and(|at| at.trim().parse() == Ok(n))
+        {
+            return Err(failed(
+                op,
+                "",
+                &format!("✘ [ERROR] the stand-in failed call {n}\n"),
+            ));
+        }
+        let state = root.join("state");
+        let at = |file: String| state.join(file);
+        // The files `prefix*` in `state/`, in name order.
+        let listed = |prefix: &str| {
+            let mut names: Vec<String> = std::fs::read_dir(&state)
+                .into_iter()
+                .flatten()
+                .flatten()
+                .map(|e| e.file_name().to_string_lossy().into_owned())
+                .filter(|name| name.starts_with(prefix))
+                .collect();
+            names.sort();
+            names
+        };
+        Ok(match *op {
+            Op::KvCreate { title } => format!("kv-{title}"),
+            Op::D1Create { name } => format!("0d1d0000-0000-4000-8000-0000000000{:02}", name.len()),
+            Op::Vectorize(VectorizeOp::List) => {
+                let names: Vec<String> = listed("index.")
+                    .iter()
+                    .map(|f| format!("{{\"name\":\"{}\"}}", &f["index.".len()..]))
+                    .collect();
+                format!("[{}]\n", names.join(","))
+            }
+            Op::Vectorize(VectorizeOp::Get { name }) => {
+                std::fs::read_to_string(at(format!("index.{name}"))).unwrap_or_default()
+            }
+            Op::Vectorize(VectorizeOp::CreateMetadataIndex { name, property, ty }) => {
+                std::fs::write(
+                    at(format!("meta.{name}.{property}")),
+                    format!("{{\"propertyName\":\"{property}\",\"indexType\":\"{ty}\"}}"),
+                )
+                .unwrap();
+                String::new()
+            }
+            Op::Vectorize(VectorizeOp::Create {
+                name,
+                dimensions,
+                metric,
+            }) => {
+                std::fs::write(
+                    at(format!("index.{name}")),
+                    format!(
+                        "{{\"config\":{{\"dimensions\":{dimensions},\"metric\":\"{metric}\"}}}}"
+                    ),
+                )
+                .unwrap();
+                String::new()
+            }
+            Op::Vectorize(VectorizeOp::ListMetadataIndex { name }) => {
+                let metas: Vec<String> = listed(&format!("meta.{name}."))
+                    .iter()
+                    .map(|f| std::fs::read_to_string(at(f.clone())).unwrap())
+                    .collect();
+                format!("[{}]\n", metas.join(","))
+            }
+            Op::Vectorize(VectorizeOp::Delete { name }) => {
+                let _ = std::fs::remove_file(at(format!("index.{name}")));
+                String::new()
+            }
+            Op::QueueInfo { name } => {
+                if !at(format!("queue.{name}")).exists() {
+                    return Err(failed(op, "", ""));
+                }
+                String::new()
+            }
+            Op::QueueCreate { name } => {
+                std::fs::write(at(format!("queue.{name}")), "").unwrap();
+                String::new()
+            }
+            Op::QueueDelete { name } => {
+                let _ = std::fs::remove_file(at(format!("queue.{name}")));
+                String::new()
+            }
+            _ => String::new(),
+        })
+    })
+}
 
-/// One run's scratch directory: the project root, the stand-in and its account.
+/// One run's scratch directory: the project root and the account's state.
 struct Scratch {
     root: PathBuf,
 }
@@ -81,10 +150,6 @@ impl Scratch {
         if let Some(at) = fail_at {
             std::fs::write(root.join("fail_at"), format!("{at}\n")).unwrap();
         }
-        crate::test_support::write_executable(
-            &root.join("wrangler"),
-            &STAND_IN.replace("@DIR@", &root.display().to_string()),
-        );
         // What the account holds before the run: the index the ledger records as made, without
         // its metadata index, and the queues it records.
         let qualified = |name: &str| env_qualify(environment, name);
@@ -406,7 +471,7 @@ fn apply(environment: &str, fail_call: Option<usize>, fail_write: Option<usize>)
         environment,
     )
     .with_lives(&order, &resources, &lock, Lives::for_plan(&wants));
-    let provenance = Provenance::Path(scratch.root.join("wrangler"));
+    let api = account(scratch.root.clone());
     let source = SecretSource::of_values(&[("API_TOKEN", "t0ken")]);
     let (edge_keys, foreign_keys) = (BTreeMap::new(), BTreeMap::new());
     let foreign_secrets = BTreeSet::new();
@@ -439,7 +504,7 @@ fn apply(environment: &str, fail_call: Option<usize>, fail_write: Option<usize>)
             let pushed = apply_worker(
                 &mut RunCx {
                     tools: Tools {
-                        api: &Wrangler::new(&provenance, &scratch.root),
+                        api: &api,
                         project_root: &scratch.root,
                     },
                     workers_dir: &workers_dir,
@@ -481,7 +546,7 @@ fn apply(environment: &str, fail_call: Option<usize>, fail_write: Option<usize>)
         }
         prune_orphans(
             Tools {
-                api: &Wrangler::new(&provenance, &scratch.root),
+                api: &api,
                 project_root: &scratch.root,
             },
             &mut writer,

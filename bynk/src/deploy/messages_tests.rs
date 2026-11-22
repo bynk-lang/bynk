@@ -102,7 +102,13 @@ const SHAPES: &[(&str, Script)] = &[
     ),
 ];
 
-/// A scratch directory per case, with the stand-in and its call log in it.
+/// How a case reaches wrangler.
+enum Reached {
+    Provenance(Provenance),
+    Script(String),
+}
+
+/// A scratch directory per case, with the call log in it.
 struct Scratch {
     dir: PathBuf,
 }
@@ -120,14 +126,17 @@ impl Scratch {
         Scratch { dir }
     }
 
-    /// The wrangler a case runs, written to disk where it is a script.
-    fn provenance(&self, wrangler: Script) -> Provenance {
+    /// The wrangler a case runs: none, one that cannot start, or a script held in memory and
+    /// run with `sh -c` (no stand-in is written to disk).
+    fn wrangler(&self, wrangler: Script) -> Reached {
         match wrangler {
-            Script::Missing => Provenance::Missing,
-            Script::NotStartable => Provenance::Path(self.dir.join("no-such-wrangler")),
+            Script::Missing => Reached::Provenance(Provenance::Missing),
+            Script::NotStartable => {
+                Reached::Provenance(Provenance::Path(self.dir.join("no-such-wrangler")))
+            }
             Script::Answers(answers) => {
                 let mut script = format!(
-                    "#!/bin/sh\nprintf '%s\\n' \"$*\" >> '{}'\ncase \"$*\" in\n",
+                    "printf '%s\\n' \"$*\" >> '{}'\ncase \"$*\" in\n",
                     self.log().display()
                 );
                 for (pattern, answer) in answers {
@@ -149,9 +158,7 @@ impl Scratch {
                     ));
                 }
                 script.push_str("esac\necho \"unscripted: $*\" >&2\nexit 99\n");
-                let path = self.dir.join("wrangler");
-                crate::test_support::write_executable(&path, &script);
-                Provenance::Path(path)
+                Reached::Script(script)
             }
         }
     }
@@ -544,11 +551,9 @@ const SPECIAL: &[(&str, &str, Script)] = &[
     ),
 ];
 
-/// What an operation of the rest of wrangler (1D.3b) runs with: the account operations, wrangler
-/// as the run resolved it, and the scratch project root.
+/// What an operation runs with: the account operations and the scratch project root.
 struct Cx<'a> {
     api: &'a dyn CloudflareApi,
-    provenance: &'a Provenance,
     root: &'a Path,
 }
 
@@ -610,8 +615,7 @@ const OPERATIONS_B: &[(&str, RunB)] = &[
     ("rollback", |c| {
         let account = crate::deploy::revert::LiveAccount {
             rest: crate::migrate::live::tests::rest("http://127.0.0.1:9".into()),
-            provenance: c.provenance,
-            root: c.root,
+            api: c.api,
         };
         shown(crate::deploy::revert::Account::rollback(
             &account, "shop-api", "v-123",
@@ -619,7 +623,7 @@ const OPERATIONS_B: &[(&str, RunB)] = &[
     }),
     ("secret put (by name, for the sweep)", |c| {
         let secrets = crate::migrate::live::WranglerSecrets {
-            provenance: c.provenance.clone(),
+            api: c.api,
             scratch: c.root.join("sweep"),
         };
         shown(crate::migrate::sweep::Secrets::put(
@@ -631,7 +635,7 @@ const OPERATIONS_B: &[(&str, RunB)] = &[
     }),
     ("secret delete (by name, for the sweep)", |c| {
         let secrets = crate::migrate::live::WranglerSecrets {
-            provenance: c.provenance.clone(),
+            api: c.api,
             scratch: c.root.join("sweep"),
         };
         shown(crate::migrate::sweep::Secrets::delete(
@@ -736,10 +740,13 @@ fn case_with(
     run: impl FnOnce(&Cx<'_>) -> String,
 ) -> String {
     let scratch = Scratch::new();
-    let provenance = scratch.provenance(wrangler);
+    let reached = scratch.wrangler(wrangler);
+    let api = match &reached {
+        Reached::Provenance(provenance) => Wrangler::new(provenance, &scratch.dir),
+        Reached::Script(script) => Wrangler::scripted(script, &scratch.dir),
+    };
     let result = run(&Cx {
-        api: &Wrangler::new(&provenance, &scratch.dir),
-        provenance: &provenance,
+        api: &api,
         root: &scratch.dir,
     });
     let at = scratch.dir.display().to_string();
