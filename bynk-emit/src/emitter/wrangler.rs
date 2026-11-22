@@ -4,8 +4,8 @@
 //! Service Bindings are declared for every consumed context. Durable
 //! Object bindings + `exports` entries are declared for every agent.
 
+use crate::emitter::bindings::{BindingSource, WorkerBinding};
 use crate::emitter::toml_doc::{TomlBlock, TomlDocument, TomlEntry, TomlValue};
-pub use bynk_check::worker_bindings::{BindingSource, WorkerBinding};
 use bynk_project::env_protocol;
 use bynk_project::worker_layout::WorkerLayout;
 
@@ -240,7 +240,7 @@ fn addresses_entry(addresses: &[String]) -> Option<TomlEntry> {
 pub fn emit_wrangler_toml(
     context: &str,
     layout: &WorkerLayout,
-    // #1944: every binding this Worker declares, [`worker_bindings`]' list —
+    // #1944: every binding this Worker declares, [`WorkerBindings`]' list —
     // the same one its `Env` interface and the duplicate check read.
     bindings: &[WorkerBinding],
     // v0.10a: every `on cron "expr"` schedule in the context, sorted+deduped.
@@ -567,185 +567,6 @@ fn d1_block(
 }
 
 /// Every binding a Worker's `wrangler.toml` declares, in emission order:
-/// Service Bindings by target, then those to foreign Workers by capability,
-/// then the KV namespaces, then the Durable Objects by class name. [`emit_wrangler_toml`] writes exactly this list,
-/// the Worker's `Env` interface (`emitter::workers`) types it, and the
-/// duplicate check (`bynk_check::worker_bindings`) reads it, so a new kind of
-/// binding is declared, typed and checked from one place (#1944). Each kind
-/// derives its names independently, so two can meet (an agent `Kv` and the KV
-/// namespace are both `KV`); names are never adjusted to avoid that, because
-/// deployed Workers depend on them. Two members with one name would also be
-/// invalid TypeScript in `Env`, so the duplicate check must run first.
-pub fn worker_bindings(
-    // The context's agents (`UnitTable::agents`' keys), in any order.
-    agents: &[String],
-    consumes: &[String],
-    needs_kv: bool,
-    // The context's derived instances, each its binding with a
-    // `KvInstance` (S4a, #1966) or `ForeignService` (interop I5, #1972)
-    // source, in capability order.
-    instances: &[WorkerBinding],
-    // #3300: the one-per-Worker capabilities the closure reaches, each its
-    // `Singleton` binding, in capability order.
-    singletons: &[WorkerBinding],
-    uses_emit: bool,
-) -> Vec<WorkerBinding> {
-    let mut bindings = Vec::new();
-    let mut sorted_consumes: Vec<&String> = consumes.iter().collect();
-    sorted_consumes.sort();
-    bindings.extend(sorted_consumes.into_iter().map(|t| service_binding(t)));
-    // Interop I5 (#1972): Service Bindings to foreign Workers, beside the
-    // ones to project contexts.
-    bindings.extend(
-        instances
-            .iter()
-            .filter(|b| matches!(b.source, BindingSource::ForeignService { .. }))
-            .cloned(),
-    );
-    if needs_kv {
-        bindings.push(kv_binding());
-    }
-    bindings.extend(
-        instances
-            .iter()
-            .filter(|b| matches!(b.source, BindingSource::KvInstance { .. }))
-            .cloned(),
-    );
-    // P5 (#2323): the R2 buckets, after the KV namespaces.
-    bindings.extend(
-        instances
-            .iter()
-            .filter(|b| matches!(b.source, BindingSource::R2Instance { .. }))
-            .cloned(),
-    );
-    // P3 (#2342): the rate limiters, after the buckets.
-    bindings.extend(
-        instances
-            .iter()
-            .filter(|b| matches!(b.source, BindingSource::RateLimitInstance { .. }))
-            .cloned(),
-    );
-    // P2 (#2578): the queue producers, after the rate limiters.
-    bindings.extend(
-        instances
-            .iter()
-            .filter(|b| matches!(b.source, BindingSource::QueueProducer { .. }))
-            .cloned(),
-    );
-    // P3b (#2582): the Analytics Engine datasets, after the queue producers.
-    bindings.extend(
-        instances
-            .iter()
-            .filter(|b| matches!(b.source, BindingSource::AnalyticsDataset { .. }))
-            .cloned(),
-    );
-    // P4a (#2602): the D1 databases, after the datasets.
-    bindings.extend(
-        instances
-            .iter()
-            .filter(|b| matches!(b.source, BindingSource::D1Database { .. }))
-            .cloned(),
-    );
-    // #3301: the Secrets Store secrets, after the databases.
-    bindings.extend(
-        instances
-            .iter()
-            .filter(|b| matches!(b.source, BindingSource::StoredSecret { .. }))
-            .cloned(),
-    );
-    // Hyperdrive H1 (#3318): the Postgres bindings, after the Secrets Store
-    // secrets.
-    bindings.extend(
-        instances
-            .iter()
-            .filter(|b| {
-                matches!(
-                    b.source,
-                    BindingSource::Postgres { .. } | BindingSource::MySql { .. }
-                )
-            })
-            .cloned(),
-    );
-    // #3302: the outbound email bindings, after the Secrets Store secrets.
-    bindings.extend(
-        instances
-            .iter()
-            .filter(|b| matches!(b.source, BindingSource::Email { .. }))
-            .cloned(),
-    );
-    // #3479: the Vectorize indexes, after the email bindings.
-    bindings.extend(
-        instances
-            .iter()
-            .filter(|b| matches!(b.source, BindingSource::VectorizeIndex { .. }))
-            .cloned(),
-    );
-    // #3477: the containers' Durable Object namespaces, after the indexes.
-    bindings.extend(
-        instances
-            .iter()
-            .filter(|b| matches!(b.source, BindingSource::ContainerInstance { .. }))
-            .cloned(),
-    );
-    // #3480: the AI Search instances, after the Vectorize indexes.
-    bindings.extend(
-        instances
-            .iter()
-            .filter(|b| matches!(b.source, BindingSource::AiSearchInstance { .. }))
-            .cloned(),
-    );
-    // #3513 A: the mTLS certificates, after the AI Search instances.
-    bindings.extend(
-        instances
-            .iter()
-            .filter(|b| matches!(b.source, BindingSource::MtlsCertificate { .. }))
-            .cloned(),
-    );
-    // #3300: the one-per-Worker bindings, after the databases.
-    bindings.extend(singletons.iter().cloned());
-    // Events track, slice 0 (spine #936, ADR 0284): a context whose handlers
-    // emit gets its own fan-out DO among the agents' — Cloudflare only cares
-    // that `index.ts` (this Worker's `main`) exports a class with this name,
-    // not which generated file it came from. Sources by provenance, not by
-    // name: an agent that happened to share the fan-out's class name is
-    // still an agent.
-    let mut objects: Vec<(&str, WorkerBinding)> = agents
-        .iter()
-        .map(|class_name| (class_name.as_str(), agent_binding(class_name)))
-        .collect();
-    if uses_emit {
-        objects.push((EVENTS_FANOUT_CLASS_NAME, events_fanout_binding()));
-    }
-    objects.sort_by(|a, b| a.0.cmp(b.0));
-    bindings.extend(objects.into_iter().map(|(_, binding)| binding));
-    bindings
-}
-
-/// #1950: the bindings a handler's `deps.env` type exposes on Workers — the
-/// projection of [`worker_bindings`] handlers reach directly, which
-/// `BindingSource`'s variant docs state per kind. `consumed` is the consumed
-/// contexts the handler calls (#1961), `agents` every local agent when the
-/// handler constructs one (else empty); order as in [`worker_bindings`].
-///
-/// bynk_ts::TsExpr by the same constructors, so each name and source is the Worker's
-/// own: a called context is never an adapter (an adapter may not declare a
-/// `service`, `bynk.adapter.disallowed_item`), and the Worker binds every
-/// context any of its bodies calls, so it has a Service Binding; every local
-/// agent has a Durable Object binding. The
-/// KV namespace, the events fan-out and subscribers' Service Bindings never
-/// reach handlers.
-pub(crate) fn handler_bindings(consumed: &[String], agents: &[String]) -> Vec<WorkerBinding> {
-    let mut consumed: Vec<&String> = consumed.iter().collect();
-    consumed.sort();
-    let mut agents: Vec<&String> = agents.iter().collect();
-    agents.sort();
-    consumed
-        .into_iter()
-        .map(|t| service_binding(t))
-        .chain(agents.into_iter().map(|a| agent_binding(a)))
-        .collect()
-}
-
 /// #3479: the `[[vectorize]]` entry of a `Vectorize` instance.
 fn vectorize_block(
     context: &str,
@@ -909,22 +730,6 @@ pub(crate) fn binding_ts_type(source: &BindingSource) -> &'static str {
     }
 }
 
-// #1958: the constructors below are the only callers of the two name
-// functions, so every place that declares, types or reads a binding (the
-// emitted `env.X`, the fan-out's routing table, the integration harness)
-// gets its name from the one constructor for its kind. A constructor is
-// `pub(crate)` exactly when something outside this file reads its name.
-
-/// The Service Binding to context `target`'s Worker.
-pub fn service_binding(target: &str) -> WorkerBinding {
-    WorkerBinding {
-        name: consumed_binding_name(target),
-        source: BindingSource::Service {
-            context: target.to_string(),
-        },
-    }
-}
-
 /// Interop I5 (#1972): the status of the stand-in for a foreign Worker that
 /// `bynk dev` binds by default and the integration test harness binds always.
 /// 503, not a 2xx: the stand-in served nothing, and code that ignores the
@@ -950,66 +755,6 @@ pub fn kv_instance_id_placeholder(binding: &str) -> String {
 /// takes it as it is, so `bynk dev` runs with it.
 pub fn ratelimit_namespace_placeholder(binding: &str) -> String {
     format!("<{binding}_NAMESPACE>")
-}
-
-/// The bare KV namespace binding the cloudflare adapter's `Kv` reads. Its one
-/// TypeScript read is the default of `WorkersKv`'s `binding` parameter in
-/// `bynk-std`'s `cloudflare.binding.ts`, pinned to `KV_BINDING_NAME` by a test.
-pub(crate) fn kv_binding() -> WorkerBinding {
-    WorkerBinding {
-        name: bynk_check::firstparty::KV_BINDING_NAME.to_string(),
-        source: BindingSource::Kv,
-    }
-}
-
-/// #3300: the binding of `bynk.cloudflare`'s one-per-Worker capability
-/// `capability` (`Version` → `CF_VERSION_METADATA`), by the registry's fixed
-/// name. Its one TypeScript read is the default of its provider's `binding`
-/// parameter in `cloudflare.binding.ts`.
-pub fn singleton_binding(capability: &str) -> WorkerBinding {
-    let singleton =
-        bynk_check::firstparty::singleton(bynk_check::firstparty::CLOUDFLARE_UNIT, capability)
-            .unwrap_or_else(|| panic!("`{capability}` is not a one-per-Worker capability"));
-    WorkerBinding {
-        name: singleton.binding.to_string(),
-        source: BindingSource::Singleton {
-            capability: capability.to_string(),
-        },
-    }
-}
-
-/// The Durable Object binding of agent `class_name`.
-pub(crate) fn agent_binding(class_name: &str) -> WorkerBinding {
-    WorkerBinding {
-        name: agent_binding_name(class_name),
-        source: BindingSource::Agent {
-            class_name: class_name.to_string(),
-        },
-    }
-}
-
-/// The Durable Object binding of the events fan-out class.
-pub(crate) fn events_fanout_binding() -> WorkerBinding {
-    WorkerBinding {
-        name: agent_binding_name(EVENTS_FANOUT_CLASS_NAME),
-        source: BindingSource::EventsFanout {
-            class_name: EVENTS_FANOUT_CLASS_NAME.to_string(),
-        },
-    }
-}
-
-/// Service Binding identifier for a consumed context: uppercase with
-/// underscores. `commerce.payment` → `COMMERCE_PAYMENT`.
-fn consumed_binding_name(target: &str) -> String {
-    target.replace('.', "_").to_uppercase()
-}
-
-/// Durable Object binding identifier for an agent class. We use the
-/// class name in screaming snake case so handlers can grab it by a
-/// predictable name (`OrderEntity` → `ORDER_ENTITY`), the casing derived
-/// capabilities' bindings share.
-fn agent_binding_name(class_name: &str) -> String {
-    bynk_check::worker_bindings::screaming_snake(class_name)
 }
 
 // ---------------------------------------------------------------------------
@@ -2677,78 +2422,6 @@ mod compatibility_flags_tests {
                 "nodejs_compat"
             ]
         );
-    }
-}
-
-#[cfg(test)]
-mod binding_tests {
-    use super::*;
-    use bynk_check::worker_bindings::duplicate_bindings;
-
-    fn names(bindings: &[WorkerBinding]) -> Vec<&str> {
-        bindings.iter().map(|b| b.name.as_str()).collect()
-    }
-
-    /// Emission order: Service Bindings by target, the KV namespace, then
-    /// the Durable Objects by class name, the fan-out among them.
-    #[test]
-    fn worker_bindings_lists_every_kind_in_emission_order() {
-        let bindings = worker_bindings(
-            &[],
-            &["shop.payment".to_string(), "audit".to_string()],
-            true,
-            &[],
-            &[singleton_binding("Version")],
-            true,
-        );
-        assert_eq!(
-            names(&bindings),
-            [
-                "AUDIT",
-                "SHOP_PAYMENT",
-                "KV",
-                "CF_VERSION_METADATA",
-                "___EVENTS_FANOUT"
-            ]
-        );
-        assert!(duplicate_bindings(&bindings).is_empty());
-    }
-
-    /// #1950: the handler projection is drawn from the Worker's own list —
-    /// each binding identical, name and source, a Service Binding and an
-    /// agent's alike — and leaves out the KV namespace and the events fan-out.
-    #[test]
-    fn handler_bindings_are_a_subset_of_the_worker_bindings() {
-        let worker = worker_bindings(
-            &["OrderEntity".to_string()],
-            &["shop.payment".to_string(), "audit".to_string()],
-            true,
-            &[],
-            &[],
-            true,
-        );
-        let handler = handler_bindings(&["shop.payment".to_string()], &["OrderEntity".to_string()]);
-        assert_eq!(names(&handler), ["SHOP_PAYMENT", "ORDER_ENTITY"]);
-        for binding in &handler {
-            assert!(worker.contains(binding), "{binding:?} not in {worker:?}");
-        }
-    }
-
-    /// A consumed context `kv` and the KV namespace are both `KV`: the
-    /// later one is paired with the earlier.
-    #[test]
-    fn a_shared_name_pairs_the_later_binding_with_the_earlier() {
-        let bindings = worker_bindings(&[], &["kv".to_string()], true, &[], &[], false);
-        let duplicates = duplicate_bindings(&bindings);
-        assert_eq!(duplicates.len(), 1);
-        let (earlier, later) = duplicates[0];
-        assert_eq!(
-            earlier.source,
-            BindingSource::Service {
-                context: "kv".to_string()
-            }
-        );
-        assert_eq!(later.source, BindingSource::Kv);
     }
 }
 

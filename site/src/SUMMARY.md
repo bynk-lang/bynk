@@ -19,7 +19,8 @@
 - [5. Handle failure with `Result`](tutorials/failure-and-result.md)
 - [6. Reach out with capabilities](tutorials/capabilities.md)
 - [7. Add a stateful agent](tutorials/05-stateful-agent.md)
-- [8. Test it](tutorials/06-testing.md)
+- [8. Split into contexts](tutorials/contexts.md)
+- [9. Test it](tutorials/06-testing.md)
 
 # Concepts
 

@@ -3,7 +3,7 @@
 //! Crate-hygiene D1 (#2982, PR 2): split out of `tests_emit.rs`.
 
 use super::*;
-use crate::emitter::wrangler::{BindingSource, WorkerBinding};
+use crate::emitter::bindings::{BindingSource, WorkerBinding};
 // #1759: every namespace a test module imports, from one definition.
 use crate::emitter::emit::test_scaffold_ns as test_ns;
 use bynk_check::checker::Types;
@@ -302,7 +302,7 @@ pub(super) fn emit_integration_harness<'a>(
     }
     for p in participants {
         let ns = test_ns(p);
-        let binding = crate::emitter::wrangler::service_binding(p).name;
+        let binding = crate::emitter::bindings::service_binding(p).name;
         body.push(TsStmt::assign(
             member(ident("rootEnv"), binding),
             service_binding_forward(&worker_binding_name(&ns), &env_binding(&ns), sends(p)),
@@ -345,7 +345,7 @@ pub(super) fn emit_remote_harness(participants: &[String]) -> Vec<TsStmt> {
         "function __buildHarness() {\n  const rootEnv: { [binding: string]: __ServiceBinding } = {};\n",
     );
     for p in participants {
-        let binding = crate::emitter::wrangler::service_binding(p).name;
+        let binding = crate::emitter::bindings::service_binding(p).name;
         let worker = worker_dir_name(p);
         text.push_str(&format!(
             "  rootEnv.{binding} = __bynkRemoteBinding({worker:?});\n"
@@ -354,9 +354,9 @@ pub(super) fn emit_remote_harness(participants: &[String]) -> Vec<TsStmt> {
     text.push_str("  return { env: rootEnv };\n}\n");
     text.push_str("let __bynkHarness: ReturnType<typeof __buildHarness> | undefined;\nfunction __makeHarness() {\n  return (__bynkHarness ??= __buildHarness());\n}\n");
     vec![
-        TsStmt::raw(include_str!("test_runtime/remote.ts").to_string(), None),
+        TestRuntimeModule::Remote.splice(),
         // #2138 (track §3.6): the `--settle` retry the case bodies use.
-        TsStmt::raw(include_str!("test_runtime/settle.ts").to_string(), None),
+        TestRuntimeModule::Settle.splice(),
         TsStmt::raw(text, None),
     ]
 }

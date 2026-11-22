@@ -3692,20 +3692,20 @@ fn sorted_local_agents(cx: &LowerCtx<'_>) -> Vec<String> {
 }
 
 /// Workers-mode deps.env shape: the bindings handlers reach
-/// ([`crate::emitter::wrangler::handler_bindings`], #1950) — one Service
+/// ([`crate::emitter::bindings::handler_bindings`], #1950) — one Service
 /// Binding per consumed context the handler calls and one Durable Object
 /// namespace per local agent.
 fn workers_env_ty(called: &[String], agents: &[String]) -> bynk_ts::TsType {
     // #1961: only a consumed context this handler **calls**
     // (`lower_workers_cross_context_call`), the one thing a handler reaches
     // through `env`. The Worker binds exactly the contexts some body of it
-    // calls (`worker_bindings::context_bindings`), a superset of any one
+    // calls (`WorkerBindings`), a superset of any one
     // handler's, so `compose`'s `env` always satisfies this type. A unit
     // consumed for capabilities, types or events only has no binding at all —
     // an adapter is not a Worker, and a context whose services go uncalled
     // need not be bound (binding it made an event subscriber and its
     // publisher bind each other, which no deploy order satisfies).
-    let members = crate::emitter::wrangler::handler_bindings(called, agents)
+    let members = crate::emitter::bindings::handler_bindings(called, agents)
         .into_iter()
         .map(|b| {
             let ty = crate::emitter::wrangler::binding_ts_type(&b.source);
@@ -4473,7 +4473,7 @@ fn lazy_codec_entries(
         path,
         &ctx.runtime_use,
     );
-    let e = serialisation::serialise_text(ty, "__v", &ctx.runtime_use);
+    let e = serialisation::serialise_expr(ty, &hist_id("__v"), &ctx.runtime_use);
     let decode = lazy_codec_arrow(
         "__w",
         "unknown",
@@ -6690,8 +6690,9 @@ fn agent_state_checks_and_entries(
     // The loaded record is statically typed (its fields are the agent's types),
     // but at runtime its bytes are untrusted, so each value is laundered to
     // `JsonValue` before the boundary deserialiser decodes it.
-    let ser =
-        |ty: &TypeRef, value: &str| serialisation::serialise_text(ty, value, &ctx.runtime_use);
+    let ser = |ty: &TypeRef, value: &str| {
+        serialisation::serialise_expr(ty, &hist_id(value), &ctx.runtime_use)
+    };
     let deser = |ty: &TypeRef, json: bynk_ts::TsExpr, path: &str| {
         serialisation::deserialise_expr(ty, &json, path, &ctx.runtime_use)
     };
@@ -7968,7 +7969,7 @@ fn emit_agent_factory(
         }
     }
     let key_ts = ts_type_ref_to_ts_type(&a.key_type, None);
-    let bind = crate::emitter::wrangler::agent_binding(&a.name.name).name;
+    let bind = crate::emitter::bindings::agent_binding(&a.name.name).name;
     let mut make_agent_args = vec![
         bynk_ts::TsExpr::Ident(registry.to_string()),
         bynk_ts::TsExpr::OptionalMember {
@@ -9907,7 +9908,7 @@ fn migrate_wake_branch_stmt(version: i64) -> bynk_ts::TsStmt {
 /// — the fan-out callback is a function, so it never survives the DO wire and is
 /// rebuilt from the DO's own `env` (which must already be in scope).
 fn events_deps_const_stmt() -> bynk_ts::TsStmt {
-    let bind = crate::emitter::wrangler::events_fanout_binding().name;
+    let bind = crate::emitter::bindings::events_fanout_binding().name;
     // P7.2: `env` is now `Record<string, unknown>` (above), so this
     // specific binding needs its own cast to what
     // `dispatchToEventsFanout` actually declares.

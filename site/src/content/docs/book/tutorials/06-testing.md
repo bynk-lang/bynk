@@ -16,9 +16,11 @@ Conventionally they sit in a `tests/` tree beside `src/`, declared with a
 url-shortener/
 ├── bynk.toml
 ├── src/
+│   ├── links.bynk
+│   ├── registry.bynk
 │   └── shortener.bynk
 └── tests/
-    └── shortener.bynk
+    └── registry.bynk
 ```
 
 The manifest just names the project — the conventional `src/`+`tests/` layout
@@ -30,19 +32,21 @@ name = "url-shortener"
 version = "0.1.0"
 ```
 
-Move the `shortener.bynk` you built into `src/`. A `suite` names the unit it
-tests, so `tests/shortener.bynk` — or a `suite` block right inside
-`src/shortener.bynk` — tests the `shortener` context. (When you build, the
-`suite` is stripped; only `bynk test` runs it.)
+Move the three files from [Split into contexts](/book/tutorials/contexts/)
+into `src/`. A `suite` names the unit it tests, so `tests/registry.bynk` — or a
+`suite` block right inside `src/registry.bynk` — tests the `registry` context,
+where the `Link` agent and the `create` service now live. A suite tests one
+unit: the HTTP routes in `shortener` would get a suite of their own. (When you
+build, the `suite` is stripped; only `bynk test` runs it.)
 
 ## Write a test and assert
 
 A test file is a `suite` block naming its target, containing one or more named
 cases. Inside a case, `expect` checks a predicate. Put this in
-`tests/shortener.bynk`:
+`tests/registry.bynk`:
 
 ```bynk,fragment
-suite shortener
+suite registry
 
 case "a fresh code resolves to NotFound" {
 	match ShortCode.of("fresh2") {
@@ -98,7 +102,7 @@ your path. The output:
 ```text
 Running tests...
 
-shortener:
+registry:
   ✓ a fresh code resolves to NotFound
   ✓ register then resolve returns the target
 
@@ -147,7 +151,7 @@ override the seam with a `stub` clause — the capability, the method with an
 argument pattern, and a value on the right:
 
 ```bynk,fragment
-suite shortener {
+suite registry {
 	stub CodeGen.next() returns "test01"
 
 	case "create mints a code via the stubbed generator" {
@@ -176,7 +180,7 @@ bynk test .
 ```
 
 ```text
-shortener:
+registry:
   ✓ a fresh code resolves to NotFound
   ✓ register then resolve returns the target
   ✓ create mints a code via the stubbed generator

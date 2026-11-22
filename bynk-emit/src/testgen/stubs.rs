@@ -1344,7 +1344,7 @@ pub(super) const ANALYTICS_DOUBLE_BODY: &str = r#"  const bytes = (text: string)
 /// builds fresh ones per case.
 ///
 /// #2137: with `harness_clock` (a module whose cases `advance Clock`), `Clock`
-/// reads the harness clock (`emitter/test_runtime/clock.ts`) instead,
+/// reads the harness clock (`runtime/src/testing/clock.ts`) instead,
 /// resetting it to the epoch as each case builds its deps.
 pub(super) fn platform_double(
     owner: &str,

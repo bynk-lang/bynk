@@ -12,8 +12,8 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use super::internal_fault::undefined_node;
 use super::workers_entry::wire_ident;
 use crate::emitter::RuntimeUse;
+use crate::emitter::bindings::agent_binding;
 use crate::emitter::http_handler_method_name_ir;
-use crate::emitter::wrangler::agent_binding;
 use crate::ts_build::{
     and_expr, as_expr, await_expr, binary, block, call, const_, expr_stmt, ident, if_, let_typed,
     member, method_call, new, not_expr, null_lit, num_lit, or_expr, return_, str_lit, strict_eq,
@@ -1787,7 +1787,7 @@ pub(super) fn emit_http_sum_wrapper(
         // result fits the context's optionally-branded parameter type.
         let dser = super::workers_entry::deserialise_call(
             &body_param.type_ref,
-            "__body_json",
+            &ident("__body_json"),
             "$",
             runtime_use,
         );

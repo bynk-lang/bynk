@@ -60,7 +60,11 @@
         "link": "/book/tutorials/05-stateful-agent/"
       },
       {
-        "label": "8. Test it",
+        "label": "8. Split into contexts",
+        "link": "/book/tutorials/contexts/"
+      },
+      {
+        "label": "9. Test it",
         "link": "/book/tutorials/06-testing/"
       }
     ]

@@ -7,6 +7,12 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.640.52** | Internal restructuring: the test runtime and the client runtime are authored as type-checked runtime modules and generated into the files bynk-emit embeds; no emitted output changes |
+| **v0.640.51** | Internal restructuring: the duplicate-binding check, the Workers build and the events fan-out read one binding model, and the old derivations are deleted; no emitted output changes |
+| **v0.640.50** | Internal restructuring: the codec emitter builds field subscripts and error paths as expression nodes, not text; no emitted output changes |
+| **v0.640.49** | Learn Bynk has a new chapter 8, [Split into contexts](/book/tutorials/contexts/) — the URL shortener becomes a `commons links`, a `registry` context that owns the links and codes, and an HTTP-only `shortener` that `consumes registry`, built as two Workers — and "Test it" now tests the `registry` context. The Book's example gate gains a `bynk,project=<name>` fence that compiles a page's files together as one project (web presence track, slice 11, #4062). |
+| **v0.640.48** | Internal test-harness change; the parallel test processes that run `wrangler` through `npx` provision it once per machine, under a lock, instead of racing on a cold npx cache |
+| **v0.640.47** | Learn Bynk has a new chapter 6, [Reach out with capabilities](/book/tutorials/capabilities/) — the URL shortener consumes Bynk's own `Random` and `Logger`, wraps code generation in a `CodeGen` capability of its own with a provider over `Random`, and lists every effect in `given` — so its links get random codes; "Add a stateful agent" and "Test it" build on it (web presence track, slice 10, #4057). |
 | **v0.640.46** | Internal restructuring: `bynk-emit` gets one definition of each small TypeScript node builder (`ident`, `str_lit`, `member`, `call` and the rest), in `ts_build`; no emitted output changes |
 | **v0.640.45** | Internal restructuring: the test harness and the case lowering share one spelling for each generated name, and `bynk_ts` gains a `bigint` literal node; no emitted output changes |
 | **v0.640.44** | Internal restructuring: one typed binding model, `WorkerBindings`, is derived once per build from the composition plan, beside the old derivation it is checked against; no emitted output changes |
