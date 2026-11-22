@@ -36,7 +36,7 @@ use std::sync::Arc;
 use crate::emit_model::*;
 use crate::emitter;
 use crate::emitter::RuntimeUse;
-use crate::emitter::wrangler::WorkerBinding;
+use crate::emitter::bindings::WorkerBinding;
 use bynk_check::checker;
 use bynk_check::checker::ExprId;
 use bynk_check::hints::HintSink;

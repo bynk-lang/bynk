@@ -167,7 +167,7 @@ pub(crate) fn lower_workers_cross_context_call(
     use crate::emitter::serialisation::{deserialise_ref_via, serialise_expr_via};
 
     let info = cx.cross_context();
-    let binding = crate::emitter::wrangler::service_binding(consumed).name;
+    let binding = crate::emitter::bindings::service_binding(consumed).name;
 
     // Look up the service signature on the consumed context.
     //

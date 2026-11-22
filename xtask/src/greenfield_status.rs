@@ -14,11 +14,11 @@
 //! crate-hygiene track's M-3 ratchet, `model_readers_beyond_emit` (B1, #2939), and its H-3 gate,
 //! `unused_deps` (A4, #2976).
 //!
-//! **Thirty-one are gated**, committed and diffed: `workspace_lints`, `fs_below_driver`,
+//! **Thirty-two are gated**, committed and diffed: `workspace_lints`, `fs_below_driver`,
 //! `options_sources`, `hoist_sinks`, `span_keyed_maps`, `emit_diagnostics`,
 //! `ide_emit_edge`, `ast_importers`, `emit_abi_shapes`, `ts_writes`, `ts_any`,
 //! `verbatim_origins`, `verbatim_sites`, `incremental_query_types`,
-//! `unconsumed_ir_items`, `diagnostic_coverage`, `model_readers_beyond_emit`, `unused_deps`, `explained_codes`, `ts_raw_sites_emit`, `ts_raw_sites_testgen`, `ts_text_idents`, `emit_thread_locals`, `emit_silent_fallbacks`, `emit_print_calls`, `testgen_print_calls`, `import_prediction_fns`, `deploy_kind_accessors`, `env_protocol_literals`, `tool_spawn_sites`, `deploy_ledger_writes`. Ten of these are
+//! `unconsumed_ir_items`, `diagnostic_coverage`, `model_readers_beyond_emit`, `unused_deps`, `explained_codes`, `ts_raw_sites_emit`, `ts_raw_sites_testgen`, `ts_text_idents`, `emit_thread_locals`, `emit_silent_fallbacks`, `emit_print_calls`, `testgen_print_calls`, `import_prediction_fns`, `deploy_kind_accessors`, `env_protocol_literals`, `tool_spawn_sites`, `deploy_ledger_writes`, `binding_kind_homes`. Ten of these are
 //! zero/closure-shaped — a boolean, or a count pinned at a small, argued floor
 //! (`ast_importers` = 5, `emit_abi_shapes` = 1). Phase 7's own four are the same shape:
 //! each converged toward an argued floor over dozens of slices, the same trajectory
@@ -42,7 +42,7 @@
 //! **Two kinds of gate** (#3679, amending ADR 0389/0390). Every gated probe is
 //! *exact-match*: a live reading that differs from its committed row fails unless a
 //! pending file names it in `probes:`. The [`GROWTH_PROBES`] (`ts_writes`, `ts_any`,
-//! `emit_abi_shapes`, `verbatim_sites`, `ts_raw_sites_emit`, `ts_raw_sites_testgen`, `ts_text_idents`, `span_keyed_maps`, `emit_thread_locals`, `emit_silent_fallbacks`, `emit_print_calls`, `testgen_print_calls`, `import_prediction_fns`, `deploy_kind_accessors`, `env_protocol_literals`, `tool_spawn_sites`, `deploy_ledger_writes`) are also *directional*:
+//! `emit_abi_shapes`, `verbatim_sites`, `ts_raw_sites_emit`, `ts_raw_sites_testgen`, `ts_text_idents`, `span_keyed_maps`, `emit_thread_locals`, `emit_silent_fallbacks`, `emit_print_calls`, `testgen_print_calls`, `import_prediction_fns`, `deploy_kind_accessors`, `env_protocol_literals`, `tool_spawn_sites`, `deploy_ledger_writes`, `binding_kind_homes`) are also *directional*:
 //! `growth_probes_never_rise` (`xtask/tests/greenfield_status.rs`) fails when the
 //! live leading count exceeds the committed one unless a pending file *raises* the
 //! probe with a reason (`raises:`), which the stamp then records in
@@ -117,7 +117,7 @@ pub fn run(root: &Path) -> Report {
 /// The gated probes' names, in [`run_gated`]'s order — what a pending file's
 /// `probes` key may cite. `greenfield_status_table_is_current` asserts this
 /// matches the probes [`run_gated`] actually returns, so the two cannot drift.
-pub const GATED_PROBES: [&str; 31] = [
+pub const GATED_PROBES: [&str; 32] = [
     "workspace_lints",
     "fs_below_driver",
     "options_sources",
@@ -143,6 +143,7 @@ pub const GATED_PROBES: [&str; 31] = [
     "env_protocol_literals",
     "tool_spawn_sites",
     "deploy_ledger_writes",
+    "binding_kind_homes",
     "incremental_query_types",
     "unconsumed_ir_items",
     "diagnostic_coverage",
@@ -153,12 +154,12 @@ pub const GATED_PROBES: [&str; 31] = [
 
 /// The gated probes that only a reasoned, recorded `raises:` may increase
 /// (#3679, ADR 0389/0390 amended): `ts_writes`, `ts_any`, `emit_abi_shapes`,
-/// `verbatim_sites`, `ts_raw_sites_emit` and `ts_raw_sites_testgen` (the split of `ts_raw_sites`, #3681), `ts_text_idents` (#3681), `span_keyed_maps`, `emit_thread_locals` (1A.19), `emit_silent_fallbacks` (1A.34), `emit_print_calls` (1A.35b), `testgen_print_calls` (1B.2a), `import_prediction_fns` (1A.36a), `deploy_kind_accessors` (1D.1a), `env_protocol_literals` (1D.5a), `tool_spawn_sites` (1D.5b), `deploy_ledger_writes` (1D.2a). Probes already at a zero or closure
+/// `verbatim_sites`, `ts_raw_sites_emit` and `ts_raw_sites_testgen` (the split of `ts_raw_sites`, #3681), `ts_text_idents` (#3681), `span_keyed_maps`, `emit_thread_locals` (1A.19), `emit_silent_fallbacks` (1A.34), `emit_print_calls` (1A.35b), `testgen_print_calls` (1B.2a), `import_prediction_fns` (1A.36a), `deploy_kind_accessors` (1D.1a), `env_protocol_literals` (1D.5a), `tool_spawn_sites` (1D.5b), `deploy_ledger_writes` (1D.2a), `binding_kind_homes` (1C.1b). Probes already at a zero or closure
 /// floor are excluded (their exact-match row pins them), as are
 /// `verbatim_origins` (an argued floor of 2) and `model_readers_beyond_emit`
 /// (which has the opposite direction). A subset of [`GATED_PROBES`], pinned by
 /// a unit test.
-pub const GROWTH_PROBES: [&str; 17] = [
+pub const GROWTH_PROBES: [&str; 18] = [
     "ts_writes",
     "ts_any",
     "emit_abi_shapes",
@@ -176,9 +177,10 @@ pub const GROWTH_PROBES: [&str; 17] = [
     "env_protocol_literals",
     "tool_spawn_sites",
     "deploy_ledger_writes",
+    "binding_kind_homes",
 ];
 
-/// The thirty-one gated (zero/closure/ratchet) probes only — what [`gated_disagreements`] diffs.
+/// The thirty-two gated (zero/closure/ratchet) probes only — what [`gated_disagreements`] diffs.
 pub fn run_gated(root: &Path) -> Vec<Probe> {
     vec![
         workspace_lints(root),
@@ -206,6 +208,7 @@ pub fn run_gated(root: &Path) -> Vec<Probe> {
         env_protocol_literals(root),
         tool_spawn_sites(root),
         deploy_ledger_writes(root),
+        binding_kind_homes(root),
         incremental_query_types(root),
         unconsumed_ir_items(root),
         diagnostic_coverage(root),
@@ -2802,6 +2805,96 @@ fn env_protocol_literals_violations(files: &[(PathBuf, String)]) -> usize {
     })
 }
 
+// --- Gated probe: binding_kind_homes (1C.1b) -------------------------------------------------
+
+/// Back-half paydown 1C.1b (#4031, Decision G): the places a binding kind is defined, the Phase 1
+/// exit row "Places a binding kind is defined" (§8 of the track). The number of production `.rs`
+/// files in `bynk-check`, `bynk-emit`, `bynk-driver` and `bynk`, other than the vocabulary file
+/// `bynk-check/src/worker_bindings.rs` (the one enum, [`BINDING_KIND_VOCABULARY`]), that contain
+/// either
+///
+/// - a construction of a `BindingSource` value: a line matching `source: (\w+::)*BindingSource::`
+///   or `=> (\w+::)*BindingSource::\w+( {|,|$)`; or
+/// - a `#[derive(..Deserialize..)]` struct whose name ends in `Binding`, `Stanza` or
+///   `ManifestEntry`: a parallel definition of a binding kind that a serialised file is read into.
+///
+/// Rendering per kind (TOML, TypeScript types, test doubles) is not counted: a renderer has to
+/// match on the kind, and it matches on the one enum.
+///
+/// It read 3 on `main` before 1C.1 (the driver's `worker_bindings.rs`, `wrangler.rs` and the
+/// CLI's `deploy/config.rs`), reads 2 after 1C.1b (`bindings.rs` and `config.rs`) and reads 1 after
+/// 1C.3b, which replaces the CLI's stanza structs with the model: the §8 target of 1
+/// (`WorkerBindings`). A growth probe ([`GROWTH_PROBES`]): it may only fall unless a pending file
+/// `raises:` it with a reason.
+///
+/// Counts files, not lines, so the many construction lines of the one model count once. Skips
+/// `#[cfg(test)]` modules (deploy's `pub(crate) mod tests` included), wholly-test files
+/// ([`is_whole_test_file`]) and comment lines. Text-level gaps, as for the other line scanners.
+fn binding_kind_homes(root: &Path) -> Probe {
+    let mut files = Vec::new();
+    for krate in ["bynk-check", "bynk-emit", "bynk-driver", "bynk"] {
+        for (path, contents) in rust_files_relative(&root.join(krate).join("src")) {
+            files.push((Path::new(krate).join("src").join(path), contents));
+        }
+    }
+    Probe {
+        name: "binding_kind_homes",
+        gated: true,
+        reads: binding_kind_homes_files(&files).len().to_string(),
+    }
+}
+
+/// The one file that may define a binding kind: the vocabulary, from the repo root.
+const BINDING_KIND_VOCABULARY: &str = "bynk-check/src/worker_bindings.rs";
+
+/// [`binding_kind_homes`]' counting logic over an explicit file list, paths from the repo root:
+/// the files that define a binding kind outside the vocabulary.
+fn binding_kind_homes_files(files: &[(PathBuf, String)]) -> Vec<String> {
+    let construction = regex::Regex::new(
+        r"source:\s*(\w+::)*BindingSource::|=>\s*(\w+::)*BindingSource::\w+(\s*\{|,|$)",
+    )
+    .expect("the construction pattern compiles");
+    let stanza = regex::Regex::new(r"\bstruct\s+\w+(Binding|Stanza|ManifestEntry)\b")
+        .expect("the stanza pattern compiles");
+    let mut homes = Vec::new();
+    for (path, contents) in files {
+        let rel = path.to_string_lossy().replace('\\', "/");
+        if rel == BINDING_KIND_VOCABULARY || is_whole_test_file(&rel) {
+            continue;
+        }
+        // As in [`deploy_kind_accessors_violations`]: a `pub(crate) mod tests` is a test module,
+        // which [`test_mod_ranges`] reads only by its `mod ` line.
+        let lines: Vec<&str> = contents
+            .lines()
+            .map(|line| {
+                line.strip_prefix("pub(crate) mod ")
+                    .map_or(line, |_| &line[11..])
+            })
+            .collect();
+        let ranges = test_mod_ranges(&lines);
+        let defines = lines.iter().enumerate().any(|(i, line)| {
+            if in_test_range(i, &ranges) || is_line_comment(line) {
+                return false;
+            }
+            // A stanza is a `Deserialize` struct: the derive is on one of the attribute lines
+            // just above it.
+            let derived = || {
+                lines[i.saturating_sub(4)..i]
+                    .iter()
+                    .rev()
+                    .take_while(|l| l.trim_start().starts_with("#["))
+                    .any(|l| l.contains("Deserialize"))
+            };
+            construction.is_match(line) || (stanza.is_match(line) && derived())
+        });
+        if defines {
+            homes.push(rel);
+        }
+    }
+    homes.sort();
+    homes
+}
+
 // --- Gated probe: tool_spawn_sites (1D.5b) ---------------------------------------------------
 
 /// Back-half paydown 1D.5b (#4003, Decision H): production process spawns in `bynk` and
@@ -4484,7 +4577,8 @@ pub fn render_table(report: &Report) -> String {
          (`lowering_text_bridge` and `stmt_text_lines`, added by #3694 and #3711, were retired at 0 by 1A.35b); \
          `import_prediction_fns` added by 1A.36a; `deploy_kind_accessors` added by 1D.1a; \
          `env_protocol_literals` added by 1D.5a; `tool_spawn_sites` added by 1D.5b; \
-         `deploy_ledger_writes` added by 1D.2a; `testgen_print_calls` added by 1B.2a. Thirty-one \
+         `deploy_ledger_writes` added by 1D.2a; `testgen_print_calls` added by 1B.2a; \
+         `binding_kind_homes` added by 1C.1b. Thirty-two \
          probes are gated — a disagreement between this file and a fresh run fails \
          `greenfield_status_table_is_current` (`xtask/tests/greenfield_status.rs`). \
          Five are trend probes, reported only.\n\n",
@@ -4874,7 +4968,8 @@ mod tests {
         | `deploy_kind_accessors` | yes | 68 |\n\
         | `env_protocol_literals` | yes | 36 |\n\
         | `tool_spawn_sites` | yes | 20 |\n\
-        | `deploy_ledger_writes` | yes | 25 |\n";
+        | `deploy_ledger_writes` | yes | 25 |\n\
+        | `binding_kind_homes` | yes | 2 |\n";
 
     fn growth_live(ts_writes: &str, abi: &str) -> Vec<Probe> {
         vec![
@@ -4895,6 +4990,7 @@ mod tests {
             gated("env_protocol_literals", "36"),
             gated("tool_spawn_sites", "20"),
             gated("deploy_ledger_writes", "25"),
+            gated("binding_kind_homes", "2"),
         ]
     }
 
@@ -5207,6 +5303,59 @@ mod tests {
             ]),
             none
         );
+    }
+
+    #[test]
+    fn binding_kind_homes_counts_files_that_construct_a_kind_or_deserialise_one() {
+        let homes = |files: &[(&str, &str)]| binding_kind_homes_files(&files_of(files)).len();
+        // A construction in a field, and in a match arm, each count their file once.
+        let field = "WorkerBinding { name, source: BindingSource::Kv }\n";
+        let arm = "match d {\n    (a, b) => BindingSource::KvInstance { capability },\n}\n";
+        assert_eq!(homes(&[("bynk-emit/src/a.rs", field)]), 1);
+        assert_eq!(homes(&[("bynk-emit/src/a.rs", arm)]), 1);
+        assert_eq!(
+            homes(&[("bynk-emit/src/a.rs", &format!("{field}{field}{arm}"))]),
+            1
+        );
+        assert_eq!(
+            homes(&[("bynk-emit/src/a.rs", field), ("bynk-driver/src/b.rs", arm)]),
+            2
+        );
+        // A path-qualified construction counts too.
+        let qualified = "source: crate::worker_bindings::BindingSource::Kv,\n";
+        assert_eq!(homes(&[("bynk-emit/src/a.rs", qualified)]), 1);
+        // A `Deserialize` struct named for a binding counts; one that does not derive
+        // it, or is named otherwise, does not.
+        let stanza = "#[derive(Debug, Deserialize)]\nstruct KvNamespaceBinding {\n}\n";
+        let plain = "#[derive(Debug)]\nstruct KvNamespaceBinding {\n}\n";
+        let other = "#[derive(Deserialize)]\nstruct Resources {\n}\n";
+        assert_eq!(homes(&[("bynk/src/c.rs", stanza)]), 1);
+        assert_eq!(homes(&[("bynk/src/c.rs", plain)]), 0);
+        assert_eq!(homes(&[("bynk/src/c.rs", other)]), 0);
+        let manifest = "#[derive(Deserialize)]\n#[serde(rename_all = \"camelCase\")]\nstruct VectorizeManifestEntry {\n}\n";
+        assert_eq!(homes(&[("bynk/src/c.rs", manifest)]), 1);
+    }
+
+    #[test]
+    fn binding_kind_homes_skips_the_vocabulary_tests_and_comments() {
+        let homes = |files: &[(&str, &str)]| binding_kind_homes_files(&files_of(files)).len();
+        let field = "WorkerBinding { name, source: BindingSource::Kv }\n";
+        // The vocabulary is the one file that may define a kind.
+        assert_eq!(homes(&[("bynk-check/src/worker_bindings.rs", field)]), 0);
+        // A test module, a wholly-test file and a comment do not count.
+        let in_tests = format!("fn real() {{}}\n#[cfg(test)]\nmod tests {{\n    {field}}}\n");
+        assert_eq!(homes(&[("bynk-emit/src/a.rs", &in_tests)]), 0);
+        let deploy_tests = format!("#[cfg(test)]\npub(crate) mod tests {{\n    {field}}}\n");
+        assert_eq!(homes(&[("bynk/src/deploy/a.rs", &deploy_tests)]), 0);
+        assert_eq!(homes(&[("bynk-emit/src/tests.rs", field)]), 0);
+        assert_eq!(
+            homes(&[("bynk-emit/src/a.rs", "// source: BindingSource::Kv\n")]),
+            0
+        );
+        // A pattern, not a construction, is rendering and does not count.
+        let pattern =
+            "match s {\n    BindingSource::Kv => 1,\n    BindingSource::Agent { .. } => 2,\n}\n";
+        assert_eq!(homes(&[("bynk-emit/src/a.rs", pattern)]), 0);
     }
 
     #[test]

@@ -19,10 +19,9 @@ use crate::emitter::compose::{ComposePlan, empty_deps};
 
 use crate::emit_model::{ImportExt, LocaleNegotiationArgs};
 use crate::emitter::RuntimeUse;
+use crate::emitter::bindings::{BindingSource, WorkerBinding, events_fanout_binding};
 use crate::emitter::workers::*;
-use crate::emitter::wrangler::{
-    BindingSource, WorkerBinding, binding_ts_type, events_fanout_binding,
-};
+use crate::emitter::wrangler::binding_ts_type;
 use bynk_check::symbols::MessageBundleInfo;
 use bynk_check::symbols::UnitTable;
 use bynk_ts::{
@@ -124,7 +123,7 @@ pub fn emit_worker_compose(
     // the caller already resolved the cardinality, this function only acts).
     locale_bundle: Option<&MessageBundleInfo>,
     import_ext: ImportExt,
-    // #1944: every binding this Worker declares (`wrangler::worker_bindings`),
+    // #1944: every binding this Worker declares (`WorkerBindings`),
     // the list its `wrangler.toml` is written from; `Env` types exactly it.
     bindings: &[WorkerBinding],
     // #2137: the test build of a context a `system` harness stands up — its

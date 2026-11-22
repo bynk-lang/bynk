@@ -487,7 +487,7 @@ fn loopback(entry: &GroupEntry<'_>) -> Vec<TsStmt> {
     let names: Vec<String> = entry
         .members
         .iter()
-        .map(|m| crate::emitter::wrangler::service_binding(&m.context).name)
+        .map(|m| crate::emitter::bindings::service_binding(&m.context).name)
         .collect();
     let record = || TsType::named_with_args("globalThis.Record", vec![ty("string"), ty("unknown")]);
     let answers_in_process = arrow(

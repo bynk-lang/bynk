@@ -478,7 +478,7 @@ fn inspect_route(context: &str, member_mode: bool, lists: bool, classes: &[Strin
             .map(|c| {
                 (
                     format!("\"{c}\""),
-                    str_lit(crate::emitter::wrangler::agent_binding(c).name),
+                    str_lit(crate::emitter::bindings::agent_binding(c).name),
                 )
             })
             .collect(),
@@ -573,7 +573,7 @@ fn migrate_route(context: &str, member_mode: bool, migratable: &[(String, i64)])
                     vec![
                         member(
                             ident("env"),
-                            crate::emitter::wrangler::agent_binding(class).name,
+                            crate::emitter::bindings::agent_binding(class).name,
                         ),
                         ident("__body"),
                         num_lit(version.to_string()),

@@ -14,17 +14,16 @@
 //! fails to compile until it is placed, rather than being silently left out of
 //! `wrangler.toml`.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use bynk_check::firstparty;
 use bynk_check::symbols::{DerivedInstance, UnitTable};
 use bynk_project::worker_layout::WorkerLayout;
 
+pub use bynk_check::worker_bindings::{BindingSource, WorkerBinding};
+
 use super::compose::{ComposePlan, ComposeUnit};
-use super::wrangler::{
-    BindingSource, EVENTS_FANOUT_CLASS_NAME, WorkerBinding, agent_binding, events_fanout_binding,
-    kv_binding, service_binding, singleton_binding,
-};
+use super::wrangler::EVENTS_FANOUT_CLASS_NAME;
 
 /// Every binding of every Worker in a build.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -318,6 +317,107 @@ fn rank(source: &BindingSource) -> u8 {
     }
 }
 
+// #1958: the constructors below are the only callers of the two name
+// functions, so every place that declares, types or reads a binding (the
+// emitted `env.X`, the fan-out's routing table, the integration harness)
+// gets its name from the one constructor for its kind. A constructor is
+// `pub(crate)` exactly when something outside this file reads its name.
+
+/// The Service Binding to context `target`'s Worker.
+pub fn service_binding(target: &str) -> WorkerBinding {
+    WorkerBinding {
+        name: consumed_binding_name(target),
+        source: BindingSource::Service {
+            context: target.to_string(),
+        },
+    }
+}
+
+/// The bare KV namespace binding the cloudflare adapter's `Kv` reads. Its one
+/// TypeScript read is the default of `WorkersKv`'s `binding` parameter in
+/// `bynk-std`'s `cloudflare.binding.ts`, pinned to `KV_BINDING_NAME` by a test.
+pub(crate) fn kv_binding() -> WorkerBinding {
+    WorkerBinding {
+        name: bynk_check::firstparty::KV_BINDING_NAME.to_string(),
+        source: BindingSource::Kv,
+    }
+}
+
+/// #3300: the binding of `bynk.cloudflare`'s one-per-Worker capability
+/// `capability` (`Version` → `CF_VERSION_METADATA`), by the registry's fixed
+/// name. Its one TypeScript read is the default of its provider's `binding`
+/// parameter in `cloudflare.binding.ts`.
+pub fn singleton_binding(capability: &str) -> WorkerBinding {
+    let singleton =
+        bynk_check::firstparty::singleton(bynk_check::firstparty::CLOUDFLARE_UNIT, capability)
+            .unwrap_or_else(|| panic!("`{capability}` is not a one-per-Worker capability"));
+    WorkerBinding {
+        name: singleton.binding.to_string(),
+        source: BindingSource::Singleton {
+            capability: capability.to_string(),
+        },
+    }
+}
+
+/// The Durable Object binding of agent `class_name`.
+pub(crate) fn agent_binding(class_name: &str) -> WorkerBinding {
+    WorkerBinding {
+        name: agent_binding_name(class_name),
+        source: BindingSource::Agent {
+            class_name: class_name.to_string(),
+        },
+    }
+}
+
+/// The Durable Object binding of the events fan-out class.
+pub(crate) fn events_fanout_binding() -> WorkerBinding {
+    WorkerBinding {
+        name: agent_binding_name(EVENTS_FANOUT_CLASS_NAME),
+        source: BindingSource::EventsFanout {
+            class_name: EVENTS_FANOUT_CLASS_NAME.to_string(),
+        },
+    }
+}
+
+/// Service Binding identifier for a consumed context: uppercase with
+/// underscores. `commerce.payment` → `COMMERCE_PAYMENT`.
+fn consumed_binding_name(target: &str) -> String {
+    target.replace('.', "_").to_uppercase()
+}
+
+/// Durable Object binding identifier for an agent class. We use the
+/// class name in screaming snake case so handlers can grab it by a
+/// predictable name (`OrderEntity` → `ORDER_ENTITY`), the casing derived
+/// capabilities' bindings share.
+fn agent_binding_name(class_name: &str) -> String {
+    bynk_check::worker_bindings::screaming_snake(class_name)
+}
+
+/// #1950: the bindings a handler's `deps.env` type exposes on Workers — the
+/// projection of the Worker's [`WorkerBindings`] list that handlers reach directly, which
+/// `BindingSource`'s variant docs state per kind. `consumed` is the consumed
+/// contexts the handler calls (#1961), `agents` every local agent when the
+/// handler constructs one (else empty); order as in the Worker's list.
+///
+/// bynk_ts::TsExpr by the same constructors, so each name and source is the Worker's
+/// own: a called context is never an adapter (an adapter may not declare a
+/// `service`, `bynk.adapter.disallowed_item`), and the Worker binds every
+/// context any of its bodies calls, so it has a Service Binding; every local
+/// agent has a Durable Object binding. The
+/// KV namespace, the events fan-out and subscribers' Service Bindings never
+/// reach handlers.
+pub(crate) fn handler_bindings(consumed: &[String], agents: &[String]) -> Vec<WorkerBinding> {
+    let mut consumed: Vec<&String> = consumed.iter().collect();
+    consumed.sort();
+    let mut agents: Vec<&String> = agents.iter().collect();
+    agents.sort();
+    consumed
+        .into_iter()
+        .map(|t| service_binding(t))
+        .chain(agents.into_iter().map(|a| agent_binding(a)))
+        .collect()
+}
+
 /// Each Worker's bindings: its members' merged, an identical declaration one
 /// binding (#3562). A group's members are in the manifest's order; every other
 /// context is its own Worker.
@@ -342,7 +442,7 @@ fn workers_of(
                 },
                 <[String]>::to_vec,
             );
-            let merged = bynk_check::worker_bindings::merge_group_bindings(
+            let merged = merge_group_bindings(
                 order
                     .iter()
                     .filter_map(|c| contexts.get(c))
@@ -351,6 +451,26 @@ fn workers_of(
             (dir, merged)
         })
         .collect()
+}
+
+/// The bindings of one Worker from its members' (#3562): each name once, at its
+/// first declaration. Two members declaring one name is one binding when the
+/// declarations are identical; when they differ it is the error
+/// [`bynk_check::worker_bindings::phase_group_binding_collisions`] reports, so a build that reaches the emit
+/// has none.
+fn merge_group_bindings<'a>(
+    members: impl IntoIterator<Item = &'a [WorkerBinding]>,
+) -> Vec<WorkerBinding> {
+    let mut seen: HashSet<&str> = HashSet::new();
+    let mut merged: Vec<WorkerBinding> = Vec::new();
+    for bindings in members {
+        for binding in bindings {
+            if seen.insert(binding.name.as_str()) {
+                merged.push(binding.clone());
+            }
+        }
+    }
+    merged
 }
 
 #[cfg(test)]
@@ -562,6 +682,59 @@ mod tests {
             bindings[1].source,
             BindingSource::EventsFanout { .. }
         ));
+    }
+
+    /// #1950: the handler projection is drawn from the Worker's own list, each
+    /// binding identical (name and source, a Service Binding and an agent's
+    /// alike), and leaves out the KV namespace and the events fan-out.
+    #[test]
+    fn handler_bindings_are_a_subset_of_the_worker_bindings() {
+        let worker = ordered(
+            &[cap("OrderEntity")],
+            &[cap("shop.payment"), cap("audit")],
+            true,
+            vec![],
+            vec![],
+            true,
+        );
+        let handler = handler_bindings(&[cap("shop.payment")], &[cap("OrderEntity")]);
+        assert_eq!(names(&handler), ["SHOP_PAYMENT", "ORDER_ENTITY"]);
+        for binding in &handler {
+            assert!(worker.contains(binding), "{binding:?} not in {worker:?}");
+        }
+    }
+
+    /// A consumed context `kv` and the KV namespace are both `KV`: the later
+    /// one is paired with the earlier.
+    #[test]
+    fn a_shared_name_pairs_the_later_binding_with_the_earlier() {
+        let bindings = ordered(&[], &[cap("kv")], true, vec![], vec![], false);
+        let duplicates = bynk_check::worker_bindings::duplicate_bindings(&bindings);
+        assert_eq!(duplicates.len(), 1);
+        let (earlier, later) = duplicates[0];
+        assert_eq!(
+            earlier.source,
+            BindingSource::Service { context: cap("kv") }
+        );
+        assert_eq!(later.source, BindingSource::Kv);
+    }
+
+    /// #3562: a name two members of a group both declare is one binding, at its
+    /// first declaration.
+    #[test]
+    fn a_group_merges_an_identical_declaration_into_one_binding() {
+        let kv = |name: &str| {
+            instance(
+                name,
+                BindingSource::KvInstance {
+                    capability: cap(name),
+                },
+            )
+        };
+        let first = vec![kv("A"), kv("B")];
+        let second = vec![kv("B"), kv("C")];
+        let merged = merge_group_bindings([first.as_slice(), second.as_slice()]);
+        assert_eq!(names(&merged), ["A", "B", "C"]);
     }
 
     fn plan_with(units: Vec<(&str, super::super::compose::ComposeUnitFacts)>) -> ComposePlan {

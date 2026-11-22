@@ -329,7 +329,7 @@ pub(super) fn emit_system_http_support(
         };
     };
     let ns = test_ns(target);
-    let binding = crate::emitter::wrangler::service_binding(target).name;
+    let binding = crate::emitter::bindings::service_binding(target).name;
     let type_ns = format!("{ns}.");
 
     let mut routes: Vec<TsStmt> = Vec::new();

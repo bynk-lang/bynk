@@ -4,7 +4,8 @@
 
 use super::*;
 use crate::emitter::RuntimeUse;
-use crate::emitter::wrangler::{BindingSource, WorkerBinding, singleton_is};
+use crate::emitter::bindings::{BindingSource, WorkerBinding};
+use crate::emitter::wrangler::singleton_is;
 // #1759: every namespace a test module imports, from one definition.
 use crate::emitter::emit::test_scaffold_ns as test_ns;
 use bynk_check::checker::Types;

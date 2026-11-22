@@ -68,7 +68,7 @@ use bynk_syntax::ast::{
 use ctx::UnitFacts;
 use ts_types::{TyRender, asset_ts_type, ts_base};
 
-pub(crate) mod bindings;
+pub mod bindings;
 pub mod client;
 pub mod commons_barrel;
 pub(crate) mod compose;
@@ -94,7 +94,7 @@ pub use compose::{
     EventSubscription, ExecNeeds,
 };
 pub use containers::{container_class_names, emit_containers_ts};
-pub use events_fanout::{Publisher, emit_events_fanout_do, emit_group_events_fanout_do};
+pub use events_fanout::{emit_events_fanout_do, emit_group_events_fanout_do};
 pub use secrets::emit_secrets_manifest;
 pub use toml_doc::print_toml_document;
 pub use workers_entry::{
