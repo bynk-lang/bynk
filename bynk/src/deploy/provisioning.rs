@@ -1,4 +1,5 @@
 use super::*;
+use crate::cloudflare::CloudflareError;
 
 /// How one context's push ended, short of failing.
 #[derive(Debug, PartialEq, Eq)]
@@ -313,7 +314,7 @@ pub(crate) enum WorkerPresence {
     Missing,
     /// The listing failed for another reason (network, permissions): what
     /// wrangler said.
-    Unknown(String),
+    Unknown(CloudflareError),
 }
 
 /// Interop I5 (#1972): ask the account whether Worker `name` exists, with
@@ -326,7 +327,7 @@ pub(crate) fn worker_presence(api: &dyn CloudflareApi, name: &str) -> WorkerPres
         // A missing Worker is read only from Cloudflare's own code, so an auth or network
         // failure is never mistaken for one.
         Err(e) if e.worker_not_found() => WorkerPresence::Missing,
-        Err(e) => WorkerPresence::Unknown(e.to_string()),
+        Err(e) => WorkerPresence::Unknown(e.into()),
     }
 }
 
@@ -337,7 +338,7 @@ pub(crate) fn worker_presence(api: &dyn CloudflareApi, name: &str) -> WorkerPres
 /// `from queue("n")` already gave it, so a successful create and an
 /// already-existing queue are the same end state and both return `Ok`
 /// (ADR 0194 D2).
-pub(crate) fn create_queue(api: &dyn CloudflareApi, name: &str) -> Result<bool, String> {
+pub(crate) fn create_queue(api: &dyn CloudflareApi, name: &str) -> Result<bool, CloudflareError> {
     // As for KV, the call runs from the project root: the generated config may still carry
     // the KV placeholder, and wrangler cannot load and reject a config it never reads.
     match api.queue_create(name) {
@@ -353,7 +354,7 @@ pub(crate) fn create_queue(api: &dyn CloudflareApi, name: &str) -> Result<bool, 
         // rare race that a re-run fixes — not, as it would on the create-every-time
         // shape, every re-deploy of every queue project.
         Err(e) if e.already_exists() => Ok(false),
-        Err(e) => Err(e.to_string()),
+        Err(e) => Err(e.into()),
     }
 }
 
@@ -422,11 +423,11 @@ pub(crate) fn queues_to_record(declared: &Resources, created: &BTreeSet<String>)
 /// shows only global flags) — it is already non-interactive by default.
 /// Idempotent against a queue already gone ([`crate::cloudflare::WranglerError::already_gone`]:
 /// `Queue "<name>" does not exist. …`, confirmed empirically, #839).
-pub(crate) fn delete_queue(api: &dyn CloudflareApi, name: &str) -> Result<(), String> {
+pub(crate) fn delete_queue(api: &dyn CloudflareApi, name: &str) -> Result<(), CloudflareError> {
     match api.queue_delete(name) {
         Ok(()) => Ok(()),
         Err(e) if e.already_gone() => Ok(()),
-        Err(e) => Err(e.to_string()),
+        Err(e) => Err(e.into()),
     }
 }
 
@@ -483,9 +484,9 @@ pub(crate) fn set_secret(
     name: &str,
     value: &str,
     environment: &str,
-) -> Result<(), String> {
+) -> Result<(), CloudflareError> {
     api.secret_put(worker_dir, name, value, environment)
-        .map_err(|e| e.to_string())
+        .map_err(CloudflareError::from)
 }
 
 /// #3073: each agent class's current schema version, from the project's

@@ -424,6 +424,17 @@ impl fmt::Display for CloudflareError {
 
 impl std::error::Error for CloudflareError {}
 
+/// Two failures are the same when they print the same: the text is the contract (Decision F),
+/// and what a state like `ScriptState::Unknown` is compared by. (A `Failure` holds an
+/// `io::Error`, which has no equality of its own.)
+impl PartialEq for CloudflareError {
+    fn eq(&self, other: &Self) -> bool {
+        self.to_string() == other.to_string()
+    }
+}
+
+impl Eq for CloudflareError {}
+
 impl From<WranglerError> for CloudflareError {
     fn from(e: WranglerError) -> Self {
         CloudflareError::Wrangler(e)

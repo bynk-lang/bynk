@@ -35,7 +35,7 @@ pub(crate) enum ScriptState {
     /// The script exists with this many versions.
     Present(usize),
     /// It could not be told (network, permissions): what was said.
-    Unknown(String),
+    Unknown(crate::cloudflare::CloudflareError),
 }
 
 /// The account's record of a script's versions.
@@ -57,7 +57,7 @@ impl ScriptVersions for RestVersions {
             // Cloudflare's own answer, by status or by code, never a bare number that
             // an id or a message could happen to contain.
             Err(said) if said.status() == Some(404) || said.has_code(10007) => ScriptState::Absent,
-            Err(said) => ScriptState::Unknown(said.to_string()),
+            Err(said) => ScriptState::Unknown(said.into()),
         }
     }
 }

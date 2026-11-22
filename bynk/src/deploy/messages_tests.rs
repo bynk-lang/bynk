@@ -601,7 +601,11 @@ const OPERATIONS_B: &[(&str, RunB)] = &[
     }),
     ("whoami", |c| format!("{:?}", whoami(c.api))),
     ("deployments list", |c| {
-        format!("{:?}", worker_presence(c.api, "billing"))
+        // `Unknown` carries the typed error since 1D.3c; the fixture pinned its text.
+        match worker_presence(c.api, "billing") {
+            WorkerPresence::Unknown(said) => format!("Unknown({:?})", said.to_string()),
+            known => format!("{known:?}"),
+        }
     }),
     ("secret list (default)", |c| {
         format!("{:?}", list_secrets(c.api, c.root, "default"))

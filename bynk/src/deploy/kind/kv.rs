@@ -8,6 +8,7 @@
 //! created again (slice 5, DECISION B).
 
 use super::*;
+use crate::cloudflare::CloudflareError;
 
 /// The KV kind.
 pub(crate) struct Kv;
@@ -648,11 +649,11 @@ pub(crate) fn kv_namespace_noun(worker: &str, binding: &str) -> String {
     }
 }
 
-pub(crate) fn create_kv(api: &dyn CloudflareApi, name: &str) -> Result<String, String> {
+pub(crate) fn create_kv(api: &dyn CloudflareApi, name: &str) -> Result<String, CloudflareError> {
     // The generated worker config still carries the placeholder until the namespace exists, so
     // the adapter creates from the project root, where wrangler cannot load that incomplete
     // config.
-    api.kv_create(name).map_err(|e| e.to_string())
+    api.kv_create(name).map_err(CloudflareError::from)
 }
 
 /// Every KV namespace id currently on the account — slice 5, DECISION B.
@@ -705,11 +706,14 @@ fn parse_kv_namespace_ids(stdout: &str) -> Option<BTreeSet<String>> {
 /// by [`crate::cloudflare::WranglerError::already_gone`]) — confirmed empirically (#839):
 /// Cloudflare answers a not-found delete with an error, never silent success,
 /// so this driver-side match is what makes re-running `--prune` safe.
-pub(crate) fn delete_kv_namespace(api: &dyn CloudflareApi, id: &str) -> Result<(), String> {
+pub(crate) fn delete_kv_namespace(
+    api: &dyn CloudflareApi,
+    id: &str,
+) -> Result<(), CloudflareError> {
     match api.kv_delete(id) {
         Ok(()) => Ok(()),
         Err(e) if e.already_gone() => Ok(()),
-        Err(e) => Err(e.to_string()),
+        Err(e) => Err(e.into()),
     }
 }
 
