@@ -171,6 +171,8 @@ fn the_emitted_dispatch_makes_the_published_checks_in_order() {
 fn the_runtime_caller_sends_the_published_request() {
     // The bundled runtime the emitter embeds, not the module it is bundled
     // from, so a stale bundle fails here too.
+    // The edge-key prefixes are held to the protocol table by
+    // `xtask/tests/env_protocol.rs` (#4003), with every other `BYNK_*` name.
     let boundary = fs::read_to_string(repo("bynk-emit/src/emitter/runtime/boundary.ts")).unwrap();
     for needle in [
         format!(
@@ -193,11 +195,6 @@ fn the_runtime_caller_sends_the_published_request() {
         ),
         format!("export const MAX_BODY_BYTES = {};", wf::MAX_BODY_BYTES),
         format!("export const SIGNING_SCHEME = \"{}\";", wf::SIGNING_SCHEME),
-        format!(
-            "export const EDGE_FROM_PREFIX = \"{}\";",
-            wf::EDGE_FROM_PREFIX
-        ),
-        format!("export const EDGE_TO_PREFIX = \"{}\";", wf::EDGE_TO_PREFIX),
         format!("`http://internal{}${{servicePath}}`", wf::CALL_PATH_PREFIX),
         format!("method: \"{}\",", wf::CALL_METHOD),
         format!("\"{}\": callerContext,", wf::CALLER_HEADER),

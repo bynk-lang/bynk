@@ -7973,7 +7973,7 @@ fn inspect_noted(a: &AgentDecl, binding: &str, make: bynk_ts::TsExpr) -> bynk_ts
     bynk_ts::TsExpr::Call {
         callee: Box::new(bynk_ts::TsExpr::Ident("__noteAgentInstance".to_string())),
         args: vec![
-            env_prop("__BYNK_INSPECT_REGISTRY"),
+            env_prop(bynk_project::env_protocol::INSPECT_REGISTRY),
             env_prop(binding),
             bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(a.name.name.clone())),
             bynk_ts::TsExpr::Ident("key".to_string()),
@@ -8077,7 +8077,7 @@ fn emit_agent_factory(
     }];
     if inspect {
         env_props.push(bynk_ts::TsTypeMember::Prop {
-            name: "__BYNK_INSPECT_REGISTRY".to_string(),
+            name: bynk_project::env_protocol::INSPECT_REGISTRY.to_string(),
             ty: bynk_ts::TsType::named("__DurableObjectNamespace"),
             optional: true,
             readonly: false,

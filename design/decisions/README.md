@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0883](0883-one-site-theme-package.md) | **The docs site and the blog share one theme package, @bynk-lang/site-theme, published to GitHub Packages** (v0.640.30) — The Bynk brand for Starlight sites lives in bynk-lang/site-theme as a Starlight plugin both sites depend on; a site's own CSS and component overrides win over the theme's | Accepted (v0.640.30) |
 | [0882](0882-compiler-links-name-codes.md) | **The compiler links a diagnostic by its code, at /d/<code>, and the site decides where that goes** (v0.640.15) — Every tool links a code as `https://bynk-lang.org/d/<code>`; the site serves a page per registry code and keeps the code-to-Book-page links in its own data file | Accepted (v0.640.15) |
 | [0881](0881-release-pages-cut-before-tagging.md) | **Release notes are one page per release, cut from Unreleased before the release is tagged** (v0.640.14) — The Book keeps one page per release tag plus an Unreleased page the stamp writes; `cargo xtask release-page` cuts Unreleased before tagging, and `release.yml` refuses a tag without its page | Accepted (v0.640.14) |
 | [0880](0880-book-organised-by-kind-then-concern.md) | **The Book is organised by kind first, then by concern** (v0.640.12) — The Book's top level is the kind of page (Start, Learn Bynk, Concepts, Guides, then the lookup parts); concerns group pages within each kind | Accepted (v0.640.12) |

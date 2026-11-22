@@ -144,6 +144,10 @@ jobs:
     if: needs.decide.outputs.changed == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    # `packages: read` lets `npm ci` fetch the site theme from GitHub Packages.
+    permissions:
+      contents: read
+      packages: read
     defaults:
       run:
         working-directory: site
@@ -176,8 +180,14 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: "24"
+          registry-url: https://npm.pkg.github.com
+          scope: "@bynk-lang"
+      # The site theme comes from GitHub Packages; the workflow token reads it
+      # (the job has `packages: read`).
       - name: Install deps
         run: npm ci
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       # Generate the Rust crate API docs and stage them into the site so Astro
       # serves them verbatim at /reference/api/ (the tree is gitignored — CI-generated,
       # never committed). Built here because this is where the toolchain lives.

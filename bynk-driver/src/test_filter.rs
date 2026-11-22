@@ -14,7 +14,7 @@ use serde_json::json;
 use crate::test_json::Unmatched;
 
 /// The environment variable carrying the filter to the emitted test entry.
-pub const FILTER_ENV: &str = "BYNK_TEST_FILTER";
+pub use bynk_project::env_protocol::TEST_FILTER as FILTER_ENV;
 
 /// The `--suite` and `--case` values of one run. Empty values are dropped and
 /// duplicates removed, keeping the first occurrence, so an empty flag is unset

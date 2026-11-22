@@ -26,6 +26,17 @@ page shows.
 
 ## Build and preview locally
 
+The site's brand comes from `@bynk-lang/site-theme`, which is published to
+GitHub Packages, and GitHub Packages needs a token even to read. Create a
+classic personal access token with only the `read:packages` scope, and add it
+to your **user-level** `~/.npmrc` (never the project's):
+
+```ini
+//npm.pkg.github.com/:_authToken=YOUR_TOKEN
+```
+
+`site/.npmrc` already tells npm that `@bynk-lang` packages live there.
+
 Everything runs from `site/`:
 
 ```sh
@@ -50,7 +61,24 @@ renderer, and the `bynk` syntax highlighter.
 Highlighting for `bynk` fenced blocks comes from a TextMate grammar
 (`site/src/grammars/bynk.tmLanguage.json`), a copy of the VS Code extension's
 ([bynk-lang/vscode-bynk](https://github.com/bynk-lang/vscode-bynk)), so code on the page matches the editor.
-Refresh the copy from the extension when its grammar changes.
+Refresh the copy from the extension when its grammar changes. The site theme
+ships the same grammar, and CI fails if the two copies differ. Since the theme
+lives in its own repository, a grammar change goes in this order: change the
+extension's grammar, release the theme with it, then in one pull request here
+bump `@bynk-lang/site-theme` and refresh `site/src/grammars/bynk.tmLanguage.json`.
+A Dependabot bump that brings a new theme grammar fails the same check until
+the site's copy is refreshed on that branch.
+
+## The brand
+
+The colours, fonts, header, wordmark and code themes are not in this
+repository. They come from
+[`@bynk-lang/site-theme`](https://github.com/bynk-lang/site-theme), a
+Starlight plugin the blog uses too, so the two sites cannot drift apart. A
+brand change is made there, released, and taken here by bumping the version
+in `site/package.json`. What is particular to this site stays here: the
+`Sidebar` override, scoped to the surface being viewed, and
+`site/src/styles/site.css`, for the landing hero. Both win over the theme's.
 
 ## The sidebar
 
@@ -268,7 +296,18 @@ rest are Rust drift-guard tests and Node `--check` scripts that CI runs.
 3. **Link checking.** `starlight-links-validator` validates internal links on
    every `astro build`. Separately, `site/scripts/check-llms-links.mjs` confirms
    each `/book/` route named in the hand-authored `llms.txt` index still maps to
-   a real page.
+   a real page, and `site/scripts/check-redirects.mjs` checks
+   `site/public/_redirects` (the Cloudflare Pages redirects that keep moved
+   pages working) against the built `site/dist/`. It applies the rules first
+   match wins, as Cloudflare does, and fails if a rule redirects a page that
+   still exists, can never apply because an earlier rule catches its paths, or
+   sends a reader to a page that does not exist. For a `/*` splat it maps every
+   page under the target folder back to its old path, with and without the
+   trailing slash; for `/d/:code` it tries a few registry codes. It knows only
+   the pages that exist now, not the old ones, so it cannot tell that a page
+   which used to be under a moved folder has no counterpart at the new
+   address; check that by hand when a move also renames or drops pages. Run it
+   after `npm run build` whenever you move or retire a page.
 
 4. **Drift checks.** `node site/scripts/generate-sidebar.mjs --check` and
    `node site/scripts/build-llms-full.mjs --check` fail CI if the committed
