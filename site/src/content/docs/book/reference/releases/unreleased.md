@@ -7,6 +7,7 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.640.14** | The Book's changelog is now one page per release under [Releases](/book/reference/releases/), with an Unreleased page that each increment's row is added to when it merges. `cargo xtask release-page --apply` cuts Unreleased into the current version's page before it is tagged, and `release.yml` refuses a tag whose page is missing (web presence track, slice 3, #3868). |
 | **v0.640.13** | Internal hardening in the code generator; a new enum variant now fails the build at each emitter match outside lowering that has to handle it |
 | **v0.640.12** | Docs: the Book is reorganised by kind, then by concern. Its sidebar reads Start, Learn Bynk, Concepts (the explanation pages, by concern) and Guides (the how-to pages, by what you are building), then Reference, Specification and Troubleshooting. No page moves. *How these docs are organised* is retired in favour of a shorter front page (web presence track, slice 2, #3865). |
 | **v0.640.11** | Generated modules and Worker entry files no longer import names they do not use; each import list now follows from the module's code |

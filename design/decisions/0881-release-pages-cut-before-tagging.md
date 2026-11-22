@@ -1,11 +1,6 @@
----
-level: patch
-changelog: The Book's changelog is now one page per release under [Releases](/book/reference/releases/), with an Unreleased page that each increment's row is added to when it merges. `cargo xtask release-page --apply` cuts Unreleased into the current version's page before it is tagged, and `release.yml` refuses a tag whose page is missing (web presence track, slice 3, #3868).
----
+# 0881 — Release notes are one page per release, cut from Unreleased before the release is tagged
 
-## ADR: release-pages-cut-before-tagging
-title: Release notes are one page per release, cut from Unreleased before the release is tagged
-summary: The Book keeps one page per release tag plus an Unreleased page the stamp writes; `cargo xtask release-page` cuts Unreleased before tagging, and `release.yml` refuses a tag without its page
+- **Status:** Accepted (v0.640.14)
 
 **Context.** The Book's changelog was one page: a table of every increment
 since v0.5, newest first, written by the stamp (ADR 0206) one row per merge.
