@@ -9,6 +9,10 @@
 //! The directory name starts with `_`, which a Bynk identifier cannot (#1653),
 //! and a user file mirrors its source path, so no user path can collide with it.
 
+// 1A.37a: this file has no wildcard enum arm; the attribute keeps it that way until the
+// crate opts in to the workspace lints (1A.37b).
+#![deny(clippy::wildcard_enum_match_arm)]
+
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 
@@ -205,7 +209,21 @@ fn rewrite_import_statement(stmt: &str) -> Option<Vec<String>> {
                 if *type_only { "type " } else { "" },
                 names.join(", ")
             ),
-            _ => unreachable!("split_runtime_import yields named imports"),
+            TsDecl::ImportNamespace { .. }
+            | TsDecl::ImportDefault { .. }
+            | TsDecl::ReExport { .. }
+            | TsDecl::ExportNames { .. }
+            | TsDecl::ReExportAll { .. }
+            | TsDecl::Export(_)
+            | TsDecl::Interface { .. }
+            | TsDecl::ConstDecl { .. }
+            | TsDecl::Class { .. }
+            | TsDecl::Function { .. }
+            | TsDecl::TypeAlias { .. }
+            | TsDecl::ExportDefault(_)
+            | TsDecl::DeclareConst { .. } => {
+                unreachable!("split_runtime_import yields named imports")
+            }
         })
         .collect();
     if let (false, Some(last)) = (comment.is_empty(), lines.last_mut()) {

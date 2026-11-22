@@ -22,6 +22,10 @@
 //! Every helper used is noted on the module's [`RuntimeUse`], which decides the
 //! runtime import list.
 
+// 1A.37a: this file has no wildcard enum arm; the attribute keeps it that way until the
+// crate opts in to the workspace lints (1A.37b).
+#![deny(clippy::wildcard_enum_match_arm)]
+
 use std::collections::HashMap;
 
 use bynk_check::checker::{NamedKind, Ty, TyId, TypedCommons};
@@ -119,12 +123,39 @@ impl<'a> CmpGen<'a> {
                 {
                     self.for_base(*b)
                 }
-                _ => {
+                NamedKind::Refined(_)
+                | NamedKind::Record
+                | NamedKind::Sum
+                | NamedKind::Opaque(_) => {
                     let arg_ws: Vec<TsExpr> = args.iter().map(|a| self.ty(*a, stack)).collect();
                     self.derive(name, arg_ws, stack)
                 }
             },
-            other => unreachable!("bynk internal error: {other:?} is not Ord"),
+            other @ Ty::Error
+            | other @ Ty::Never
+            | other @ Ty::Result(..)
+            | other @ Ty::Effect(_)
+            | other @ Ty::HttpResult(_)
+            | other @ Ty::QueueResult
+            | other @ Ty::HttpOutcome(_)
+            | other @ Ty::BoundaryRejection
+            | other @ Ty::Asset
+            | other @ Ty::RequestHeaders
+            | other @ Ty::RequestQuery
+            | other @ Ty::RequestCookies
+            | other @ Ty::TokenClaims
+            | other @ Ty::Map(..)
+            | other @ Ty::Set(_)
+            | other @ Ty::Query(_)
+            | other @ Ty::Stream(_)
+            | other @ Ty::Connection(_)
+            | other @ Ty::TestConnection(_)
+            | other @ Ty::ValidationError
+            | other @ Ty::DecodeError
+            | other @ Ty::Unit
+            | other @ Ty::Actor(_)
+            | other @ Ty::ActorSum(_)
+            | other @ Ty::Fn { .. } => unreachable!("bynk internal error: {other:?} is not Ord"),
         }
     }
 
@@ -209,7 +240,9 @@ impl<'a> CmpGen<'a> {
                     vec![TsExpr::array(order), TsExpr::object_entries(payloads)],
                 )
             }
-            _ => unreachable!("derive_source returns only records and sums"),
+            TypeBody::Refined { .. } | TypeBody::Opaque { .. } => {
+                unreachable!("derive_source returns only records and sums")
+            }
         };
         let frame = stack.pop().expect("the frame pushed above");
         if frame.used {
@@ -274,7 +307,26 @@ impl<'a> CmpGen<'a> {
                 let ws: Vec<TsExpr> = args.iter().map(|a| self.type_ref(a, env, stack)).collect();
                 self.derive(&name.name, ws, stack)
             }
-            other => unreachable!("bynk internal error: {other:?} is not Ord"),
+            other @ TypeRef::Result(..)
+            | other @ TypeRef::Effect(..)
+            | other @ TypeRef::HttpResult(..)
+            | other @ TypeRef::QueueResult(_)
+            | other @ TypeRef::Asset(_)
+            | other @ TypeRef::RequestHeaders(_)
+            | other @ TypeRef::RequestQuery(_)
+            | other @ TypeRef::RequestCookies(_)
+            | other @ TypeRef::TokenClaims(_)
+            | other @ TypeRef::BoundaryRejection(_)
+            | other @ TypeRef::Map(..)
+            | other @ TypeRef::Set(..)
+            | other @ TypeRef::Query(..)
+            | other @ TypeRef::Stream(..)
+            | other @ TypeRef::Connection(..)
+            | other @ TypeRef::History(..)
+            | other @ TypeRef::ValidationError(_)
+            | other @ TypeRef::DecodeError(_)
+            | other @ TypeRef::Unit(_)
+            | other @ TypeRef::Fn(..) => unreachable!("bynk internal error: {other:?} is not Ord"),
         }
     }
 }

@@ -17,6 +17,10 @@
 //! of each iteration, so a closure created in one iteration keeps that
 //! iteration's values.
 
+// 1A.37a: this file has no wildcard enum arm; the attribute keeps it that way until the
+// crate opts in to the workspace lints (1A.37b).
+#![deny(clippy::wildcard_enum_match_arm)]
+
 use std::collections::HashSet;
 use std::rc::Rc;
 
@@ -126,7 +130,39 @@ fn walk_expr(
             }
             any
         }
-        _ => false,
+        ExprKind::IntLit { .. }
+        | ExprKind::FloatLit { .. }
+        | ExprKind::DecimalLit { .. }
+        | ExprKind::DurationLit { .. }
+        | ExprKind::StrLit(_)
+        | ExprKind::InterpStr(_)
+        | ExprKind::BoolLit(_)
+        | ExprKind::Ident(_)
+        | ExprKind::Call { .. }
+        | ExprKind::Lambda(_)
+        | ExprKind::BinOp(..)
+        | ExprKind::UnaryOp(..)
+        | ExprKind::Paren(_)
+        | ExprKind::Block(_)
+        | ExprKind::Ok(_)
+        | ExprKind::Err(_)
+        | ExprKind::Question(_)
+        | ExprKind::RecordConstruction { .. }
+        | ExprKind::FieldAccess { .. }
+        | ExprKind::MethodCall { .. }
+        | ExprKind::Is { .. }
+        | ExprKind::Some(_)
+        | ExprKind::None
+        | ExprKind::UnitLit
+        | ExprKind::RecordSpread { .. }
+        | ExprKind::EffectPure(_)
+        | ExprKind::Expect(_)
+        | ExprKind::Val { .. }
+        | ExprKind::Wire(_)
+        | ExprKind::ListLit(..)
+        | ExprKind::Observation(_)
+        | ExprKind::Faults(_)
+        | ExprKind::Trace { .. } => false,
     }
 }
 
@@ -174,7 +210,39 @@ fn call_parts<'e>(
             type_args,
             ..
         } => (args, type_args, Some(receiver.as_ref())),
-        _ => return None,
+        ExprKind::IntLit { .. }
+        | ExprKind::FloatLit { .. }
+        | ExprKind::DecimalLit { .. }
+        | ExprKind::DurationLit { .. }
+        | ExprKind::StrLit(_)
+        | ExprKind::InterpStr(_)
+        | ExprKind::BoolLit(_)
+        | ExprKind::Ident(_)
+        | ExprKind::Lambda(_)
+        | ExprKind::BinOp(..)
+        | ExprKind::UnaryOp(..)
+        | ExprKind::Paren(_)
+        | ExprKind::Block(_)
+        | ExprKind::If { .. }
+        | ExprKind::Ok(_)
+        | ExprKind::Err(_)
+        | ExprKind::Question(_)
+        | ExprKind::RecordConstruction { .. }
+        | ExprKind::FieldAccess { .. }
+        | ExprKind::Match { .. }
+        | ExprKind::Is { .. }
+        | ExprKind::Some(_)
+        | ExprKind::None
+        | ExprKind::UnitLit
+        | ExprKind::RecordSpread { .. }
+        | ExprKind::EffectPure(_)
+        | ExprKind::Expect(_)
+        | ExprKind::Val { .. }
+        | ExprKind::Wire(_)
+        | ExprKind::ListLit(..)
+        | ExprKind::Observation(_)
+        | ExprKind::Faults(_)
+        | ExprKind::Trace { .. } => return None,
     };
     let callee = commons.callees.get(&e.id)?;
     let mut all: Vec<&Expr> = Vec::new();
@@ -196,7 +264,31 @@ fn self_call_args<'e>(
     let (callee, all, type_args) = call_parts(e, commons)?;
     let (decl, witnesses) = match callee {
         Callee::Fn(d, w) | Callee::Static(d, w) | Callee::Method(d, w) => (d, w),
-        _ => return None,
+        Callee::FnValue(..)
+        | Callee::Value(_)
+        | Callee::Ctor { .. }
+        | Callee::Refine(_)
+        | Callee::Unsafe(_)
+        | Callee::Kernel { .. }
+        | Callee::SignedCookie { .. }
+        | Callee::CookieField { .. }
+        | Callee::Intrinsic { .. }
+        | Callee::Fault { .. }
+        | Callee::Capability { .. }
+        | Callee::D1Select { .. }
+        | Callee::D1Sql(_)
+        | Callee::D1Peek { .. }
+        | Callee::D1Decode(_)
+        | Callee::CrossCap { .. }
+        | Callee::Cross { .. }
+        | Callee::AgentInit(_)
+        | Callee::Agent { .. }
+        | Callee::TestService { .. }
+        | Callee::TestAssetFetch { .. }
+        | Callee::Store { .. }
+        | Callee::Query { .. }
+        | Callee::Const(..)
+        | Callee::Principal(_) => return None,
     };
     if !same_fn(decl, f) {
         return None;

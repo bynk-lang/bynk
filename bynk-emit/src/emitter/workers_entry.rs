@@ -11,7 +11,12 @@
 //! this file's own conversion, closing the fourth Arc C slice (`workers.rs`
 //! was the third, #1321).
 
+// 1A.37a: this file has no wildcard enum arm; the attribute keeps it that way until the
+// crate opts in to the workspace lints (1A.37b).
+#![deny(clippy::wildcard_enum_match_arm)]
+
 use crate::emitter::http_handler_method_name_ir;
+use crate::emitter::serialisation;
 use crate::emitter::ts_ident;
 use bynk_check::symbols::UnitTable;
 use bynk_syntax::ast::{BaseType, Handler, LimitsPolicy, ServiceProtocol, TypeRef};
@@ -2721,7 +2726,11 @@ pub(crate) fn query_leaf_kind(
         // #3276: a `Decimal` is read as text (its own codec parses it), but is not a
         // plain `String`: a form's empty value is absent for it.
         BaseType::Decimal => "decimal",
-        _ => "string",
+        BaseType::String
+        | BaseType::Float
+        | BaseType::Duration
+        | BaseType::Instant
+        | BaseType::Bytes => "string",
     };
     match r {
         TypeRef::Base(b, _) => of_base(b),
@@ -2737,7 +2746,29 @@ pub(crate) fn query_leaf_kind(
             Some(TypeBody::Sum(_)) => "enum",
             _ => "string",
         },
-        _ => "string",
+        TypeRef::Result(..)
+        | TypeRef::Option(..)
+        | TypeRef::Effect(..)
+        | TypeRef::HttpResult(..)
+        | TypeRef::QueueResult(_)
+        | TypeRef::Asset(_)
+        | TypeRef::RequestHeaders(_)
+        | TypeRef::RequestQuery(_)
+        | TypeRef::RequestCookies(_)
+        | TypeRef::TokenClaims(_)
+        | TypeRef::BoundaryRejection(_)
+        | TypeRef::List(..)
+        | TypeRef::Map(..)
+        | TypeRef::Set(..)
+        | TypeRef::Query(..)
+        | TypeRef::Stream(..)
+        | TypeRef::Connection(..)
+        | TypeRef::History(..)
+        | TypeRef::ValidationError(_)
+        | TypeRef::DecodeError(_)
+        | TypeRef::Unit(_)
+        | TypeRef::Fn(..)
+        | TypeRef::App { .. } => "string",
     }
 }
 
@@ -3001,11 +3032,7 @@ pub(crate) fn record_field_specs(
     rec.fields
         .iter()
         .map(|f| {
-            let (inner, list, option) = match &f.type_ref {
-                TypeRef::List(inner, _) => (inner.as_ref(), true, false),
-                TypeRef::Option(inner, _) => (inner.as_ref(), false, true),
-                other => (other, false, false),
-            };
+            let (inner, list, option) = serialisation::peel_list_option(&f.type_ref);
             (
                 f.name.name.clone(),
                 query_leaf_kind(inner, types, allow_file),
@@ -4234,7 +4261,30 @@ fn emit_path_param_construction(
             stmts.push(const_(jname, member(ident(result), "value")));
             stmts
         }
-        _ => {
+        TypeRef::Base(..)
+        | TypeRef::Result(..)
+        | TypeRef::Option(..)
+        | TypeRef::Effect(..)
+        | TypeRef::HttpResult(..)
+        | TypeRef::QueueResult(_)
+        | TypeRef::Asset(_)
+        | TypeRef::RequestHeaders(_)
+        | TypeRef::RequestQuery(_)
+        | TypeRef::RequestCookies(_)
+        | TypeRef::TokenClaims(_)
+        | TypeRef::BoundaryRejection(_)
+        | TypeRef::List(..)
+        | TypeRef::Map(..)
+        | TypeRef::Set(..)
+        | TypeRef::Query(..)
+        | TypeRef::Stream(..)
+        | TypeRef::Connection(..)
+        | TypeRef::History(..)
+        | TypeRef::ValidationError(_)
+        | TypeRef::DecodeError(_)
+        | TypeRef::Unit(_)
+        | TypeRef::Fn(..)
+        | TypeRef::App { .. } => {
             // P7.2 (review of #1300): this used to emit `__raw_{pname}` as a
             // silent fallback ("other shapes are rejected by the static
             // check"), which was survivable only while the receiving wrapper
@@ -4264,13 +4314,15 @@ fn emit_path_param_construction(
 /// `T`. Used to choose the right serialiser when emitting the HttpResult
 /// body.
 fn http_result_inner(t: &TypeRef) -> TypeRef {
-    let inner = match t {
-        TypeRef::Effect(t, _) => t.as_ref(),
-        other => other,
+    let inner = if let TypeRef::Effect(t, _) = t {
+        t.as_ref()
+    } else {
+        t
     };
-    match inner {
-        TypeRef::HttpResult(payload, _) => (**payload).clone(),
-        other => other.clone(),
+    if let TypeRef::HttpResult(payload, _) = inner {
+        (**payload).clone()
+    } else {
+        inner.clone()
     }
 }
 

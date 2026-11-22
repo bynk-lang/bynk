@@ -552,10 +552,7 @@ pub fn emit_project(
         .commons
         .items
         .iter()
-        .filter_map(|item| match item {
-            CommonsItem::Messages(m) => Some(m),
-            _ => None,
-        })
+        .filter_map(CommonsItem::as_messages)
         .collect();
     if let Some(reference) = messages_blocks
         .iter()
@@ -620,7 +617,14 @@ pub fn emit_project(
                 }
                 body.extend(item_stmts);
             }
-            _ => {}
+            CommonsItem::Type(_)
+            | CommonsItem::Fn(_)
+            | CommonsItem::Actor(_)
+            | CommonsItem::Messages(_)
+            | CommonsItem::Event(_)
+            | CommonsItem::Asset(_)
+            | CommonsItem::Embed(_)
+            | CommonsItem::Const(_) => {}
         }
     }
     // v0.9.2: per-test registry reset. The test runner calls this before each
@@ -632,7 +636,17 @@ pub fn emit_project(
         .iter()
         .filter_map(|i| match i {
             CommonsItem::Agent(a) => Some(a.name.name.as_str()),
-            _ => None,
+            CommonsItem::Type(_)
+            | CommonsItem::Fn(_)
+            | CommonsItem::Capability(_)
+            | CommonsItem::Provider(_)
+            | CommonsItem::Service(_)
+            | CommonsItem::Actor(_)
+            | CommonsItem::Messages(_)
+            | CommonsItem::Event(_)
+            | CommonsItem::Asset(_)
+            | CommonsItem::Embed(_)
+            | CommonsItem::Const(_) => None,
         })
         .collect();
     if !agent_names.is_empty() {
@@ -1074,7 +1088,24 @@ fn collect_json_codec_roots(commons: &TypedCommons) -> Vec<TypeRef> {
                         push_ground(t, &mut roots);
                     }
                 }
-                _ => {}
+                StaticOp::List(_)
+                | StaticOp::Map(_)
+                | StaticOp::Set(_)
+                | StaticOp::Int(_)
+                | StaticOp::Float(_)
+                | StaticOp::Decimal(_)
+                | StaticOp::Duration(_)
+                | StaticOp::Instant(_)
+                | StaticOp::Bytes(_)
+                | StaticOp::TokenClaims(_)
+                | StaticOp::RequestHeaders(_)
+                | StaticOp::RequestQuery(_)
+                | StaticOp::RequestCookies(_)
+                | StaticOp::Stream(_)
+                | StaticOp::HttpResult(_)
+                | StaticOp::QueueResult(_)
+                | StaticOp::TestConnection(_)
+                | StaticOp::TestRun(_) => {}
             }
         };
         for item in &commons.commons.items {
@@ -1095,7 +1126,14 @@ fn collect_json_codec_roots(commons: &TypedCommons) -> Vec<TypeRef> {
                         walk_block_exprs(&op.body, &mut visit);
                     }
                 }
-                _ => {}
+                CommonsItem::Type(_)
+                | CommonsItem::Capability(_)
+                | CommonsItem::Actor(_)
+                | CommonsItem::Messages(_)
+                | CommonsItem::Event(_)
+                | CommonsItem::Asset(_)
+                | CommonsItem::Embed(_)
+                | CommonsItem::Const(_) => {}
             }
         }
     }
@@ -1251,10 +1289,8 @@ fn emit_boundary_helpers(
             .commons
             .items
             .iter()
-            .filter_map(|i| match i {
-                CommonsItem::Service(s) => Some((s.name.name.clone(), s.clone())),
-                _ => None,
-            })
+            .filter_map(CommonsItem::as_service)
+            .map(|s| (s.name.name.clone(), s.clone()))
             .collect()
     } else {
         HashMap::new()
@@ -1266,10 +1302,8 @@ fn emit_boundary_helpers(
         .commons
         .items
         .iter()
-        .filter_map(|i| match i {
-            CommonsItem::Agent(a) => Some((a.name.name.clone(), a.clone())),
-            _ => None,
-        })
+        .filter_map(CommonsItem::as_agent)
+        .map(|a| (a.name.name.clone(), a.clone()))
         .collect();
 
     let locally_declared: HashSet<String> = ctx.file_decl_index.types.keys().cloned().collect();
@@ -2140,7 +2174,15 @@ fn called_consumed_services(
                     walk_block_exprs(&op.body, &mut visit);
                 }
             }
-            _ => {}
+            CommonsItem::Type(_)
+            | CommonsItem::Fn(_)
+            | CommonsItem::Capability(_)
+            | CommonsItem::Actor(_)
+            | CommonsItem::Messages(_)
+            | CommonsItem::Event(_)
+            | CommonsItem::Asset(_)
+            | CommonsItem::Embed(_)
+            | CommonsItem::Const(_) => {}
         }
     }
     out
@@ -2186,10 +2228,7 @@ fn emit_consumed_type_reexports(
         .commons
         .items
         .iter()
-        .filter_map(|i| match i {
-            CommonsItem::Service(s) => Some(s),
-            _ => None,
-        })
+        .filter_map(CommonsItem::as_service)
         .flat_map(|s| s.handlers.iter())
         // The kinds whose `compose.ts` wrapper types its parameters with
         // `qualified_ts_type_ref` (call, cron, queue `message`, http); an
@@ -2456,7 +2495,7 @@ fn emit_context_rebrands(
 fn refined_or_opaque_base(decl: &TypeDecl) -> Option<BaseType> {
     match &decl.body {
         TypeBody::Refined { base, .. } | TypeBody::Opaque { base, .. } => Some(*base),
-        _ => None,
+        TypeBody::Record(_) | TypeBody::Sum(_) => None,
     }
 }
 
@@ -2751,19 +2790,17 @@ fn emit_project_imports(
         .commons
         .items
         .iter()
-        .filter_map(|item| match item {
-            CommonsItem::Service(s) => {
-                let bynk_model::ProtocolIr::Events { event, .. } =
-                    bynk_model::lower_protocol_ir_from_commons(&s.protocol, commons)
-                else {
-                    return None;
-                };
-                match &*commons.tys().get(event) {
-                    Ty::Named { name, .. } => Some(name.clone()),
-                    _ => None,
-                }
-            }
-            _ => None,
+        .filter_map(CommonsItem::as_service)
+        .filter_map(|s| {
+            let bynk_model::ProtocolIr::Events { event, .. } =
+                bynk_model::lower_protocol_ir_from_commons(&s.protocol, commons)
+            else {
+                return None;
+            };
+            let Ty::Named { name, .. } = &*commons.tys().get(event) else {
+                return None;
+            };
+            Some(name.clone())
         })
         .collect();
     // Sibling imports: relative path within the same commons/context directory.
@@ -3387,7 +3424,19 @@ mod runtime_tests {
                         names,
                         from,
                     } => (type_only, names, from),
-                    _ => unreachable!(),
+                    bynk_ts::TsDecl::ImportNamespace { .. }
+                    | bynk_ts::TsDecl::ImportDefault { .. }
+                    | bynk_ts::TsDecl::ReExport { .. }
+                    | bynk_ts::TsDecl::ExportNames { .. }
+                    | bynk_ts::TsDecl::ReExportAll { .. }
+                    | bynk_ts::TsDecl::Export(_)
+                    | bynk_ts::TsDecl::Interface { .. }
+                    | bynk_ts::TsDecl::ConstDecl { .. }
+                    | bynk_ts::TsDecl::Class { .. }
+                    | bynk_ts::TsDecl::Function { .. }
+                    | bynk_ts::TsDecl::TypeAlias { .. }
+                    | bynk_ts::TsDecl::ExportDefault(_)
+                    | bynk_ts::TsDecl::DeclareConst { .. } => unreachable!(),
                 })
                 .collect();
         let v = |xs: &[&str]| xs.iter().map(|s| s.to_string()).collect::<Vec<_>>();

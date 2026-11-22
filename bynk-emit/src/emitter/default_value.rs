@@ -6,6 +6,10 @@
 //! in a test body does not widen `tag` to `string` (#3404). The value is structural, so it needs
 //! no import into the module that builds the record.
 
+// 1A.37a: this file has no wildcard enum arm; the attribute keeps it that way until the
+// crate opts in to the workspace lints (1A.37b).
+#![deny(clippy::wildcard_enum_match_arm)]
+
 use bynk_check::wire_default::DefaultValue;
 use bynk_ts::{TsExpr, TsLit, TsObjectEntry, TsType, TsTypeMember};
 
@@ -32,7 +36,7 @@ impl Slot {
                 object: Box::new(ty.clone()),
                 index: Box::new(key),
             }),
-            other => other.clone(),
+            other @ Slot::Scaffold | other @ Slot::Unbranded => other.clone(),
         }
     }
 
@@ -51,7 +55,7 @@ impl Slot {
                 )]);
                 Slot::Typed(TsType::named_with_args("Extract", vec![ty.clone(), tag]))
             }
-            other => other.clone(),
+            other @ Slot::Scaffold | other @ Slot::Unbranded => other.clone(),
         }
     }
 }

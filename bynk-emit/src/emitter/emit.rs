@@ -6,6 +6,10 @@
 //! `emitter.rs` (ADR 0060); the codec/reference/import/header helpers and the
 //! `ts_*`/`LowerCtx` core stay in the parent and are reached via `use super::*`.
 
+// 1A.37a: this file has no wildcard enum arm; the attribute keeps it that way until the
+// crate opts in to the workspace lints (1A.37b).
+#![deny(clippy::wildcard_enum_match_arm)]
+
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
@@ -1617,7 +1621,16 @@ pub fn collect_handler_labels(commons: &TypedCommons) -> Option<String> {
                     }
                 }
             }
-            _ => {}
+            CommonsItem::Type(_)
+            | CommonsItem::Fn(_)
+            | CommonsItem::Capability(_)
+            | CommonsItem::Provider(_)
+            | CommonsItem::Actor(_)
+            | CommonsItem::Messages(_)
+            | CommonsItem::Event(_)
+            | CommonsItem::Asset(_)
+            | CommonsItem::Embed(_)
+            | CommonsItem::Const(_) => {}
         }
     }
     if entries.is_empty() {
@@ -3411,16 +3424,10 @@ fn cap_ref_ty(
 /// deps field need to exist at all." Syntactic, like its sibling: a false
 /// positive here just adds an unused interface field, not a miscompile.
 pub(crate) fn commons_uses_emit(commons: &TypedCommons) -> bool {
-    commons.commons.items.iter().any(|item| match item {
-        CommonsItem::Service(s) => s
-            .handlers
+    commons.commons.items.iter().any(|item| {
+        item.handlers()
             .iter()
-            .any(|h| bynk_model::block_uses_emit(&h.body, &commons.callees)),
-        CommonsItem::Agent(a) => a
-            .handlers
-            .iter()
-            .any(|h| bynk_model::block_uses_emit(&h.body, &commons.callees)),
-        _ => false,
+            .any(|h| bynk_model::block_uses_emit(&h.body, &commons.callees))
     })
 }
 
@@ -3440,11 +3447,7 @@ pub(crate) fn cross_context_caps_used(
         .commons
         .items
         .iter()
-        .flat_map(|item| match item {
-            CommonsItem::Service(s) => s.handlers.as_slice(),
-            CommonsItem::Agent(a) => a.handlers.as_slice(),
-            _ => &[],
-        })
+        .flat_map(CommonsItem::handlers)
         .map(bynk_model::lower_handler_given_ir)
         .chain(std::iter::once(sibling_agent_givens(commons, ctx)));
     for given in givens {
@@ -3510,7 +3513,14 @@ pub(crate) fn cross_context_cap_namespaces(
             CommonsItem::Provider(p) => collect(bynk_model::lower_provider_given_ir(p)),
             // #2912: a function's `given` names its capability in `deps` too.
             CommonsItem::Fn(f) => collect(bynk_model::lower_fn_given_ir(f)),
-            _ => {}
+            CommonsItem::Type(_)
+            | CommonsItem::Capability(_)
+            | CommonsItem::Actor(_)
+            | CommonsItem::Messages(_)
+            | CommonsItem::Event(_)
+            | CommonsItem::Asset(_)
+            | CommonsItem::Embed(_)
+            | CommonsItem::Const(_) => {}
         }
     }
     collect(sibling_agent_givens(commons, ctx));
@@ -3521,10 +3531,8 @@ pub(crate) fn cross_context_cap_namespaces(
             .commons
             .items
             .iter()
-            .filter_map(|item| match item {
-                CommonsItem::Capability(c) => c.derived.as_ref(),
-                _ => None,
-            })
+            .filter_map(CommonsItem::as_capability)
+            .filter_map(|c| c.derived.as_ref())
             .filter_map(|d| info.flattened_caps.get(&d.base.name).cloned()),
     );
     out
@@ -3540,19 +3548,20 @@ fn sibling_agent_givens(commons: &TypedCommons, ctx: &EmitProjectCtx) -> Vec<byn
         .commons
         .items
         .iter()
-        .filter_map(|i| match i {
-            CommonsItem::Agent(a) => Some(a.name.name.as_str()),
-            _ => None,
-        })
+        .filter_map(CommonsItem::as_agent)
+        .map(|a| a.name.name.as_str())
         .collect();
     let constructed: std::collections::BTreeSet<&str> = commons
         .callees
         .values()
-        .filter_map(|c| match c {
-            bynk_check::checker::Callee::AgentInit(a) if !declared_here.contains(a.as_str()) => {
+        .filter_map(|c| {
+            if let bynk_check::checker::Callee::AgentInit(a) = c
+                && !declared_here.contains(a.as_str())
+            {
                 Some(a.as_str())
+            } else {
+                None
             }
-            _ => None,
         })
         .collect();
     let mut out = Vec::new();
@@ -3660,10 +3669,8 @@ fn sorted_local_agents(cx: &LowerCtx<'_>) -> Vec<String> {
         .commons
         .items
         .iter()
-        .filter_map(|i| match i {
-            CommonsItem::Agent(a) => Some(a.name.name.clone()),
-            _ => None,
-        })
+        .filter_map(CommonsItem::as_agent)
+        .map(|a| a.name.name.clone())
         .chain(cx.local_agents.iter().cloned())
         .collect();
     names.into_iter().collect()
@@ -3832,12 +3839,12 @@ fn emit_context_deps_interface(
         .commons
         .items
         .iter()
-        .filter_map(|i| match i {
-            CommonsItem::Capability(c) => Some(bynk_ts::TsTypeMember::readonly_prop(
+        .filter_map(CommonsItem::as_capability)
+        .map(|c| {
+            bynk_ts::TsTypeMember::readonly_prop(
                 c.name.name.clone(),
                 bynk_ts::TsType::named(c.name.name.clone()),
-            )),
-            _ => None,
+            )
         })
         .collect();
     // #1820: and the capabilities a sibling file of a split context declares.
@@ -3896,12 +3903,12 @@ fn emit_context_deps_interface(
     // #2683: a surface `on call` handler that calls `within` (or sends with
     // `detach`) forwards `deps` to a handler that requires `__exec`, so the
     // surface's `deps` carry it; the compose root supplies it.
-    if commons.commons.items.iter().any(|i| match i {
-        CommonsItem::Service(s) => s
-            .handlers
-            .iter()
-            .any(|h| crate::emitter::call_handler_needs_exec(&commons.exec_plan, h)),
-        _ => false,
+    if commons.commons.items.iter().any(|i| {
+        i.as_service().is_some_and(|s| {
+            s.handlers
+                .iter()
+                .any(|h| crate::emitter::call_handler_needs_exec(&commons.exec_plan, h))
+        })
     }) {
         members.push(bynk_ts::TsTypeMember::readonly_prop(
             "__exec",
@@ -3984,10 +3991,7 @@ pub(crate) fn emit_make_surface(
         .commons
         .items
         .iter()
-        .filter_map(|i| match i {
-            CommonsItem::Service(s) => Some(s),
-            _ => None,
-        })
+        .filter_map(CommonsItem::as_service)
         .collect();
     if services.is_empty() {
         return Vec::new();
@@ -4162,7 +4166,39 @@ pub(crate) fn flatten_emit_ident_chain(e: &Expr) -> Option<String> {
             let head = flatten_emit_ident_chain(receiver)?;
             Some(format!("{head}.{}", field.name))
         }
-        _ => None,
+        ExprKind::IntLit { .. }
+        | ExprKind::FloatLit { .. }
+        | ExprKind::DecimalLit { .. }
+        | ExprKind::DurationLit { .. }
+        | ExprKind::StrLit(_)
+        | ExprKind::InterpStr(_)
+        | ExprKind::BoolLit(_)
+        | ExprKind::Call { .. }
+        | ExprKind::Lambda(_)
+        | ExprKind::BinOp(..)
+        | ExprKind::UnaryOp(..)
+        | ExprKind::Paren(_)
+        | ExprKind::Block(_)
+        | ExprKind::If { .. }
+        | ExprKind::Ok(_)
+        | ExprKind::Err(_)
+        | ExprKind::Question(_)
+        | ExprKind::RecordConstruction { .. }
+        | ExprKind::MethodCall { .. }
+        | ExprKind::Match { .. }
+        | ExprKind::Is { .. }
+        | ExprKind::Some(_)
+        | ExprKind::None
+        | ExprKind::UnitLit
+        | ExprKind::RecordSpread { .. }
+        | ExprKind::EffectPure(_)
+        | ExprKind::Expect(_)
+        | ExprKind::Val { .. }
+        | ExprKind::Wire(_)
+        | ExprKind::ListLit(..)
+        | ExprKind::Observation(_)
+        | ExprKind::Faults(_)
+        | ExprKind::Trace { .. } => None,
     }
 }
 
@@ -4409,7 +4445,33 @@ fn held_frame_ty(ty: TyId, tys: &Types) -> Option<TyId> {
     match &*tys.get(ty) {
         Ty::Connection(inner) => Some(*inner),
         Ty::Option(inner) | Ty::Effect(inner) => held_frame_ty(*inner, tys),
-        _ => None,
+        Ty::Error
+        | Ty::Never
+        | Ty::Base(_)
+        | Ty::Named { .. }
+        | Ty::Result(..)
+        | Ty::HttpResult(_)
+        | Ty::QueueResult
+        | Ty::HttpOutcome(_)
+        | Ty::BoundaryRejection
+        | Ty::Asset
+        | Ty::RequestHeaders
+        | Ty::RequestQuery
+        | Ty::RequestCookies
+        | Ty::TokenClaims
+        | Ty::List(_)
+        | Ty::Map(..)
+        | Ty::Set(_)
+        | Ty::Query(_)
+        | Ty::Stream(_)
+        | Ty::TestConnection(_)
+        | Ty::ValidationError
+        | Ty::DecodeError
+        | Ty::Unit
+        | Ty::Actor(_)
+        | Ty::ActorSum(_)
+        | Ty::Fn { .. }
+        | Ty::Var(_) => None,
     }
 }
 
@@ -4423,11 +4485,28 @@ fn held_frame_ty(ty: TyId, tys: &Types) -> Option<TyId> {
 /// renders the same frame type the `TyId` path would have, not the whole
 /// `Option<Connection<F>>`/`Effect<Connection<F>>` wrapper.
 fn held_frame_ty_ref(t: &TypeRef) -> &TypeRef {
-    match t {
-        TypeRef::Connection(inner, _) | TypeRef::Option(inner, _) | TypeRef::Effect(inner, _) => {
-            held_frame_ty_ref(inner)
-        }
-        _ => t,
+    if let TypeRef::Connection(inner, _) | TypeRef::Option(inner, _) | TypeRef::Effect(inner, _) = t
+    {
+        held_frame_ty_ref(inner)
+    } else {
+        t
+    }
+}
+
+#[cfg(test)]
+mod type_base_is_tests {
+    use super::*;
+    use bynk_syntax::span::Span;
+
+    #[test]
+    fn a_base_type_and_an_alias_over_it_match_only_their_own_base() {
+        let int = TypeRef::Base(BaseType::Int, Span::default());
+        let string = TypeRef::Base(BaseType::String, Span::default());
+        let types = HashMap::new();
+        assert!(type_base_is_int(&int, &types) && !type_base_is_string(&int, &types));
+        assert!(type_base_is_string(&string, &types) && !type_base_is_int(&string, &types));
+        let list = TypeRef::List(Box::new(int), Span::default());
+        assert!(!type_base_is_int(&list, &types) && !type_base_is_string(&list, &types));
     }
 }
 
@@ -4486,38 +4565,48 @@ fn store_field_key_type<'a>(a: &'a AgentDecl, field: &str) -> Option<&'a TypeRef
 /// so the rehydration gate can validate it; a non-textual key persists as a
 /// `String(k)` structural key, whose refinement validation is deferred (ADR 0124).
 fn type_base_is_string(t: &TypeRef, types: &HashMap<String, Arc<TypeDecl>>) -> bool {
+    type_base_is(t, types, BaseType::String)
+}
+
+/// True when `t` is `want` or a refined/opaque type over it.
+fn type_base_is(t: &TypeRef, types: &HashMap<String, Arc<TypeDecl>>, want: BaseType) -> bool {
     match t {
-        TypeRef::Base(BaseType::String, _) => true,
+        TypeRef::Base(b, _) => *b == want,
         TypeRef::Named(id) => matches!(
             types.get(&id.name).map(|d| &d.body),
-            Some(TypeBody::Refined {
-                base: BaseType::String,
-                ..
-            }) | Some(TypeBody::Opaque {
-                base: BaseType::String,
-                ..
-            })
+            Some(TypeBody::Refined { base, .. }) | Some(TypeBody::Opaque { base, .. })
+                if *base == want
         ),
-        _ => false,
+        // Every other shape has no base type.
+        TypeRef::Result(..)
+        | TypeRef::Option(..)
+        | TypeRef::Effect(..)
+        | TypeRef::HttpResult(..)
+        | TypeRef::QueueResult(_)
+        | TypeRef::Asset(_)
+        | TypeRef::RequestHeaders(_)
+        | TypeRef::RequestQuery(_)
+        | TypeRef::RequestCookies(_)
+        | TypeRef::TokenClaims(_)
+        | TypeRef::BoundaryRejection(_)
+        | TypeRef::List(..)
+        | TypeRef::Map(..)
+        | TypeRef::Set(..)
+        | TypeRef::Query(..)
+        | TypeRef::Stream(..)
+        | TypeRef::Connection(..)
+        | TypeRef::History(..)
+        | TypeRef::ValidationError(_)
+        | TypeRef::DecodeError(_)
+        | TypeRef::Unit(_)
+        | TypeRef::Fn(..)
+        | TypeRef::App { .. } => false,
     }
 }
 
 /// True when `t` is `Int` or a refined/opaque type over `Int`.
 fn type_base_is_int(t: &TypeRef, types: &HashMap<String, Arc<TypeDecl>>) -> bool {
-    match t {
-        TypeRef::Base(BaseType::Int, _) => true,
-        TypeRef::Named(id) => matches!(
-            types.get(&id.name).map(|d| &d.body),
-            Some(TypeBody::Refined {
-                base: BaseType::Int,
-                ..
-            }) | Some(TypeBody::Opaque {
-                base: BaseType::Int,
-                ..
-            })
-        ),
-        _ => false,
-    }
+    type_base_is(t, types, BaseType::Int)
 }
 
 /// v0.119: the `.call` variant tag for a handler — its name with the first letter
@@ -4855,7 +4944,10 @@ fn classify_agent_store<'a>(
                 .get(n.name.as_str())
                 .and_then(|kind| match kind {
                     StoreKindIr::Map(_, v_ty) => held_frame_ty(*v_ty, tys.types()),
-                    _ => None,
+                    StoreKindIr::Cell(_)
+                    | StoreKindIr::Set(_)
+                    | StoreKindIr::Cache(..)
+                    | StoreKindIr::Log(..) => None,
                 })
                 .map(|frame_ty| ts_ty_to_ts_type(frame_ty, tys))
                 .unwrap_or_else(|| ts_type_ref_to_ts_type(held_frame_ty_ref(v), None));
@@ -4895,7 +4987,10 @@ fn classify_agent_store<'a>(
                 .get(n.name.as_str())
                 .and_then(|kind| match kind {
                     StoreKindIr::Map(_, v_ty) => Some(ts_ty_to_ts_type(*v_ty, tys)),
-                    _ => None,
+                    StoreKindIr::Cell(_)
+                    | StoreKindIr::Set(_)
+                    | StoreKindIr::Cache(..)
+                    | StoreKindIr::Log(..) => None,
                 })
                 .unwrap_or_else(|| ts_type_ref_to_ts_type(v, None));
             (n.name.clone(), ts)
@@ -5025,7 +5120,10 @@ fn classify_agent_store<'a>(
                 .get(n.name.as_str())
                 .and_then(|kind| match kind {
                     StoreKindIr::Log(elem_ty, _) => Some(ts_ty_to_ts_type(*elem_ty, tys)),
-                    _ => None,
+                    StoreKindIr::Cell(_)
+                    | StoreKindIr::Map(..)
+                    | StoreKindIr::Set(_)
+                    | StoreKindIr::Cache(..) => None,
                 })
                 .unwrap_or_else(|| ts_type_ref_to_ts_type(v, None));
             (n.name.clone(), ts)
@@ -5846,7 +5944,31 @@ fn migrate_old_field_entry(
                 }],
             )
         }
-        _ => stored_at(hist_str(n)),
+        TypeRef::Base(..)
+        | TypeRef::Named(_)
+        | TypeRef::Result(..)
+        | TypeRef::Option(..)
+        | TypeRef::Effect(..)
+        | TypeRef::HttpResult(..)
+        | TypeRef::QueueResult(_)
+        | TypeRef::Asset(_)
+        | TypeRef::RequestHeaders(_)
+        | TypeRef::RequestQuery(_)
+        | TypeRef::RequestCookies(_)
+        | TypeRef::TokenClaims(_)
+        | TypeRef::BoundaryRejection(_)
+        | TypeRef::List(..)
+        | TypeRef::Map(..)
+        | TypeRef::Set(..)
+        | TypeRef::Query(..)
+        | TypeRef::Stream(..)
+        | TypeRef::Connection(..)
+        | TypeRef::History(..)
+        | TypeRef::ValidationError(_)
+        | TypeRef::DecodeError(_)
+        | TypeRef::Unit(_)
+        | TypeRef::Fn(..)
+        | TypeRef::App { .. } => stored_at(hist_str(n)),
     };
     // A field the stored record lacks (an additive predecessor, Decision C) takes the old
     // type's declared default (the record decoder applies it), or else its type's zero.

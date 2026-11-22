@@ -33,6 +33,10 @@
 //! with no signing and no Workers types, plus the runtime's own `result`, `bytes`,
 //! `decimal` and `keys` modules for just the names the codecs use.
 
+// 1A.37a: this file has no wildcard enum arm; the attribute keeps it that way until the
+// crate opts in to the workspace lints (1A.37b).
+#![deny(clippy::wildcard_enum_match_arm)]
+
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt;
 use std::sync::Arc;
@@ -540,7 +544,27 @@ impl Gen {
             // A `@multipart` file part: the standard `File` is a `Blob` here, which
             // is what a `File` input yields, and what `fetch` appends.
             TypeRef::Named(id) if self.is_file(&id.name) => TsType::named("globalThis.Blob"),
-            other => super::ts_types::ts_type_ref_qualified_multi_ts_type(other, &HashMap::new()),
+            other @ TypeRef::Base(..)
+            | other @ TypeRef::Named(_)
+            | other @ TypeRef::Effect(..)
+            | other @ TypeRef::HttpResult(..)
+            | other @ TypeRef::QueueResult(_)
+            | other @ TypeRef::Asset(_)
+            | other @ TypeRef::RequestHeaders(_)
+            | other @ TypeRef::RequestQuery(_)
+            | other @ TypeRef::RequestCookies(_)
+            | other @ TypeRef::TokenClaims(_)
+            | other @ TypeRef::BoundaryRejection(_)
+            | other @ TypeRef::Query(..)
+            | other @ TypeRef::Stream(..)
+            | other @ TypeRef::Connection(..)
+            | other @ TypeRef::History(..)
+            | other @ TypeRef::ValidationError(_)
+            | other @ TypeRef::DecodeError(_)
+            | other @ TypeRef::Unit(_)
+            | other @ TypeRef::Fn(..) => {
+                super::ts_types::ts_type_ref_qualified_multi_ts_type(other, &HashMap::new())
+            }
         })
     }
 
@@ -678,7 +702,24 @@ impl Gen {
                 let key = serialisation::app_ts_name(&name.name, args);
                 self.named_holds(&key, &name.name, args)
             }
-            _ => false,
+            TypeRef::Base(..)
+            | TypeRef::Effect(..)
+            | TypeRef::HttpResult(..)
+            | TypeRef::QueueResult(_)
+            | TypeRef::Asset(_)
+            | TypeRef::RequestHeaders(_)
+            | TypeRef::RequestQuery(_)
+            | TypeRef::RequestCookies(_)
+            | TypeRef::TokenClaims(_)
+            | TypeRef::BoundaryRejection(_)
+            | TypeRef::Query(..)
+            | TypeRef::Stream(..)
+            | TypeRef::Connection(..)
+            | TypeRef::History(..)
+            | TypeRef::ValidationError(_)
+            | TypeRef::DecodeError(_)
+            | TypeRef::Unit(_)
+            | TypeRef::Fn(..) => false,
         }
     }
 
@@ -741,7 +782,7 @@ impl Gen {
                     ))
                 }
             }
-            _ => None,
+            TypeBody::Refined { .. } | TypeBody::Opaque { .. } => None,
         }
     }
 
@@ -809,7 +850,24 @@ impl Gen {
                 self.named_conversion(&key, &name.name, args, t, dir)?;
                 Ok(conversion_call(dir, &key, expr))
             }
-            _ => Ok(expr),
+            TypeRef::Base(..)
+            | TypeRef::Effect(..)
+            | TypeRef::HttpResult(..)
+            | TypeRef::QueueResult(_)
+            | TypeRef::Asset(_)
+            | TypeRef::RequestHeaders(_)
+            | TypeRef::RequestQuery(_)
+            | TypeRef::RequestCookies(_)
+            | TypeRef::TokenClaims(_)
+            | TypeRef::BoundaryRejection(_)
+            | TypeRef::Query(..)
+            | TypeRef::Stream(..)
+            | TypeRef::Connection(..)
+            | TypeRef::History(..)
+            | TypeRef::ValidationError(_)
+            | TypeRef::DecodeError(_)
+            | TypeRef::Unit(_)
+            | TypeRef::Fn(..) => Ok(expr),
         }
     }
 
