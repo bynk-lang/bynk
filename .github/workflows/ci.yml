@@ -1478,6 +1478,12 @@ jobs:
       && !contains(fromJSON(needs.changes.outputs.queue_passed), 'Docs site (astro build)')
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    # `packages: read` lets `npm ci` fetch the site theme
+    # (@bynk-lang/site-theme) from GitHub Packages, which needs a token even
+    # to read (web presence slice 6).
+    permissions:
+      contents: read
+      packages: read
     defaults:
       run:
         working-directory: site
@@ -1488,8 +1494,18 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: "24"
+          registry-url: https://npm.pkg.github.com
+          scope: "@bynk-lang"
       - name: Install deps
         run: npm ci
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # The site registers its own copy of the Bynk grammar (the one the
+      # `textmate_keywords` test holds to the keywords); the theme ships one
+      # too. Fail if they differ, so the docs site and the blog never
+      # highlight Bynk differently.
+      - name: Check the grammar matches the theme's
+        run: cmp src/grammars/bynk.tmLanguage.json node_modules/@bynk-lang/site-theme/grammars/bynk.tmLanguage.json
       # The sidebars are generated from site/src/SUMMARY.md (the Book) and
       # site/src/REFERENCE.md (the Reference); fail if either committed sidebar
       # drifts, or if a page is in no contents.

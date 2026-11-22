@@ -41,6 +41,7 @@ pub mod test_filter;
 pub mod test_json;
 pub mod test_runner;
 pub mod test_stream;
+pub mod tools;
 pub mod tsc_report;
 
 pub use compile_cmd::{

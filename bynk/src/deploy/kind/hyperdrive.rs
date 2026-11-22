@@ -8,8 +8,11 @@
 //! (#3319), never anything derived from the connection string. A replaced config is kept as a
 //! superseded record and reported as an orphan, which `--prune` deletes unless it was adopted.
 //!
-//! The deploy facts do not record a Hyperdrive id, so `bynk revert` does not check one:
-//! [`ResourceKind::bound_id`] keeps its default of `None`, as before.
+//! #3970: the config's id is its [`ResourceKind::bound_id`], so the deploy facts record it and
+//! `bynk revert` refuses a version bound to a config the ledger has since replaced (superseded,
+//! or pruned), as it does for KV, D1 and rate limiters. An adopted config is checked the same
+//! way: a different adopted id is a different config. Facts written before this have no
+//! Hyperdrive id, so there is nothing to compare.
 
 use super::super::hyperdrive::{HyperdriveRun, Want, action, config_name, need_api, scrub};
 use super::*;
@@ -405,6 +408,10 @@ impl ResourceKind for Hyperdrive {
         }
         Ok(())
     }
+
+    fn bound_id(record: &HyperdriveRecord) -> Option<&str> {
+        Some(&record.id)
+    }
 }
 
 /// One recorded Hyperdrive config the build no longer declares (#3319): a
@@ -617,10 +624,10 @@ mod tests {
         );
     }
 
-    /// Kept as it was: the deploy facts carry no Hyperdrive id, so `bynk revert` does not check
-    /// one (#3929, Risks). Whether it should is a separate question.
+    /// #3970: the recorded config's id is what the deploy facts and `bynk revert` read, adopted
+    /// or not.
     #[test]
-    fn a_config_binds_no_id_for_the_facts_or_revert() {
+    fn a_config_binds_its_recorded_id_for_the_facts_and_revert() {
         let mut lock = DeployLock::default();
         lock.record::<Hyperdrive>(
             "default",
@@ -628,16 +635,33 @@ mod tests {
             "HYPERDRIVE_MAIN",
             record("shop-main", "id-1", false),
         );
+        lock.record::<Hyperdrive>(
+            "default",
+            "shop",
+            "HYPERDRIVE_LEGACY",
+            record("legacy", "id-adopted", true),
+        );
         let mut ids = BTreeMap::new();
         kind_bound_ids(
             LedgerView::of(&lock, "default"),
             "shop",
-            &Resources::default().hyperdrive(&["HYPERDRIVE_MAIN"]),
+            &Resources::default().hyperdrive(&["HYPERDRIVE_MAIN", "HYPERDRIVE_LEGACY"]),
             &mut ids,
         );
-        assert!(ids.is_empty());
+        assert_eq!(
+            ids,
+            BTreeMap::from([
+                ("HYPERDRIVE_LEGACY".to_string(), "id-adopted".to_string()),
+                ("HYPERDRIVE_MAIN".to_string(), "id-1".to_string()),
+            ])
+        );
         assert_eq!(
             recorded_bound_id(LedgerView::of(&lock, "default"), "shop", "HYPERDRIVE_MAIN"),
+            Some("id-1".to_string())
+        );
+        // Another environment's record is not this one's.
+        assert_eq!(
+            recorded_bound_id(LedgerView::of(&lock, "staging"), "shop", "HYPERDRIVE_MAIN"),
             None
         );
     }

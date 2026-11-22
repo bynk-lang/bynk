@@ -273,9 +273,13 @@ page.
   `<head>` with fonts, and the Bynk TextMate grammar, as a Starlight plugin.
   The docs site and the blog both depend on a released version. (It was planned
   at `site/theme/` in this repository; it moved out so it could ship while this
-  repository was busy.) The blog's CI reads it
-  with its `GITHUB_TOKEN` (`packages: read`), and local installs need a token
-  with `read:packages` in `~/.npmrc`; the blog's README says how.
+  repository was busy.) Both sites' CI reads it
+  with the workflow's `GITHUB_TOKEN` (`packages: read`), Dependabot with a
+  `read:packages` secret, and local installs need a token with
+  `read:packages` in `~/.npmrc`; the blog's README and the docs site's
+  contributing page say how. The docs site keeps its own copy of the grammar
+  (the one `textmate_keywords` guards), registered over the theme's, and CI
+  fails if the two differ.
 - **The reader's colour scheme decides.** The site follows
   `prefers-color-scheme`, with a toggle that overrides it and is remembered.
   With no preference it falls back to dark, the design system's default. Both

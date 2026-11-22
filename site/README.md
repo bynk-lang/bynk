@@ -12,14 +12,15 @@ Every fenced `bynk` block is compiled by the `doc_examples` gate in `bynk-tests/
 
 ## How it fits together
 
-- **Highlighting.** ` ```bynk ` code fences are highlighted by Shiki/Expressive Code, fed a TextMate grammar at `src/grammars/bynk.tmLanguage.json` (scope `source.bynk`). It is a copy of the VS Code extension's grammar ([bynk-lang/vscode-bynk](https://github.com/bynk-lang/vscode-bynk)); `bynkc`'s `textmate_keywords` test holds it to the reserved keywords, and it is refreshed from the extension when that changes.
+- **Brand.** The colours, fonts, header, wordmark and code themes come from [`@bynk-lang/site-theme`](https://github.com/bynk-lang/site-theme), a Starlight plugin shared with the blog and published to GitHub Packages. The site keeps only its `Sidebar` override (scoped to the surface being viewed) and `src/styles/site.css` (the landing hero). A brand change is made in the theme and taken here as a version bump.
+- **Highlighting.** ` ```bynk ` code fences are highlighted by Shiki/Expressive Code, fed a TextMate grammar at `src/grammars/bynk.tmLanguage.json` (scope `source.bynk`). It is a copy of the VS Code extension's grammar ([bynk-lang/vscode-bynk](https://github.com/bynk-lang/vscode-bynk)); `bynkc`'s `textmate_keywords` test holds it to the reserved keywords, and it is refreshed from the extension when that changes. The theme ships the same grammar; the site's copy is the one registered, and CI fails if the two differ. So a grammar change releases the theme first, then bumps it here and refreshes the site's copy in one pull request.
 - **Search.** [Pagefind](https://pagefind.app/) — local and static, built automatically by `astro build`.
 - **Link checking.** A build-time internal link check (`starlight-links-validator`) fails the build on a broken in-site link.
 - **Toolchain.** Astro 7 + Starlight, Node ≥ 22.12 (Astro 7's floor). A committed `package-lock.json` pins it.
 
 ## Local development
 
-- `npm install` — install deps.
+- `npm install` — install deps. The theme is on GitHub Packages, which needs a token even to read: put a classic token with only `read:packages` in your user-level `~/.npmrc` as `//npm.pkg.github.com/:_authToken=YOUR_TOKEN` (`site/.npmrc` already points `@bynk-lang` there). CI and the deploy use the workflow token (`packages: read`); Dependabot uses the `PACKAGES_READ_TOKEN` Dependabot secret.
 - `npm run dev` — Astro dev server (it prints the local URL — `http://localhost:4321` by default).
 - `npm run build` — static build into `site/dist/`; this also builds the Pagefind index and runs the internal link-checker.
 - `npm run preview` — serve the built `dist/` locally.

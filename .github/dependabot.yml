@@ -1,4 +1,14 @@
 version: 2
+# The site theme, @bynk-lang/site-theme, comes from GitHub Packages, which
+# needs a token even to read. PACKAGES_READ_TOKEN is a Dependabot secret (set
+# under Settings → Secrets and variables → Dependabot, not Actions) holding a
+# classic personal access token with only the read:packages scope. The blog
+# uses the same name.
+registries:
+  github-packages:
+    type: npm-registry
+    url: https://npm.pkg.github.com
+    token: ${{secrets.PACKAGES_READ_TOKEN}}
 updates:
   # Rust workspace dependencies. Grouped into a single PR per run to keep the
   # noise down — the CI gates (clippy, workspace tests, audit) vet the bump.
@@ -44,6 +54,8 @@ updates:
   # The Astro/Starlight docs site. Its deploy job holds the Cloudflare token.
   - package-ecosystem: npm
     directory: "/site"
+    registries:
+      - github-packages
     schedule:
       interval: weekly
     # `astro` peers `@astrojs/markdown-remark` at an exact version, so it must

@@ -1,8 +1,13 @@
 // @ts-check
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "astro/config";
 import starlight from "@astrojs/starlight";
 import starlightLinksValidator from "starlight-links-validator";
+// The Bynk brand, shared with the blog (web presence slice 6): the design-system
+// tokens, Starlight dressed in them, the header and wordmark, the fonts and the
+// code themes. See bynk-lang/site-theme.
+import bynkSiteTheme from "@bynk-lang/site-theme";
 // Bynk highlighting is a TextMate grammar (scopeName: source.bynk), which Shiki
 // consumes directly. This is a copy of the VS Code extension's grammar
 // (bynk-lang/vscode-bynk, syntaxes/bynk.tmLanguage.json), kept here so the site
@@ -28,6 +33,27 @@ import referenceSidebar from "./src/generated/reference-sidebar.json" with { typ
 // remark plugin resolves the `diagnostics/…` suffix against this base).
 const includeBase = fileURLToPath(new URL("./src", import.meta.url));
 
+// The diagrams wear the design system. Mermaid starts from its neutral `base`
+// theme, and src/styles/mermaid.css goes in as `themeCSS`: Mermaid scopes it to
+// each diagram and puts it after its own rules, and its values are the
+// `--bynk-*` tokens, so an inlined diagram follows the page's light or dark
+// theme, Starlight's toggle included. (rehype-mermaid's `dark` option would
+// emit a light and a dark image under a `prefers-color-scheme` media query,
+// which ignores the toggle, and only for the `img-*` strategies.)
+//
+// Mermaid sizes each box to its label in the headless browser at build time,
+// so it must measure in the face the page draws: Instrument Sans, loaded there
+// from the npm package (offline) rather than the page's Google Fonts link.
+const mermaid = {
+  strategy: "inline-svg",
+  css: import.meta.resolve("@fontsource-variable/instrument-sans/index.css"),
+  mermaidConfig: {
+    theme: "base",
+    fontFamily: '"Instrument Sans Variable", sans-serif',
+    themeCSS: readFileSync(new URL("./src/styles/mermaid.css", import.meta.url), "utf8"),
+  },
+};
+
 // https://astro.build/config
 export default defineConfig({
   site: "https://bynk-lang.org",
@@ -35,31 +61,21 @@ export default defineConfig({
   // public/_redirects, before the `/docs/*` splat that moved Developer Docs.
   markdown: {
     remarkPlugins: [[remarkBynkDirectives, { includeBase }]],
-    rehypePlugins: [[rehypeMermaid, { strategy: "inline-svg" }]],
+    rehypePlugins: [[rehypeMermaid, mermaid]],
   },
-  // Web fonts (Inter for body/UI, Literata for the wordmark and headings) are
-  // loaded via a stylesheet <link> in the Head override rather than Astro's
-  // `fonts` API: that API's dev pipeline runs during the dev server's content
-  // initialisation and left the `docs` collection empty (dev-only 404s), while a
-  // plain <link> behaves identically across dev, build, and sync. See
-  // src/components/Head.astro and the font bindings in src/styles/brand.css.
   integrations: [
     starlight({
       title: "Bynk",
-      // The title is plain text — the word "Bynk" set in the site's display face
-      // (Literata) — rather than a bespoke stylised mark; the typographic
-      // treatment lives in src/styles/brand.css.
       favicon: "/favicon.svg",
-      // The brand: one electric-indigo accent (rust/ayu stay reserved for code).
-      customCss: ["./src/styles/brand.css"],
-      // Component overrides: the Header adds the persistent cross-surface nav
-      // (track §1.1); the Sidebar is scoped to the surface being viewed (Book /
-      // By Example / Reference) instead of listing every surface on every
-      // page; the Head emits the self-hosted @font-face declarations.
+      // The brand comes from the theme plugin below; this adds only the
+      // site's own touches (the landing hero).
+      customCss: ["./src/styles/site.css"],
+      // The theme supplies the Head (fonts), Header (wordmark and cross-site
+      // nav) and SiteTitle. The Sidebar stays the site's own: it is scoped to
+      // the surface being viewed (Book / By Example / Reference) instead of
+      // listing every surface on every page.
       components: {
-        Header: "./src/components/Header.astro",
         Sidebar: "./src/components/Sidebar.astro",
-        Head: "./src/components/Head.astro",
       },
       // Build-time internal link checking (the link-check gate): a broken
       // in-site link fails `astro build`. The whole Book is migrated, so it is
@@ -73,11 +89,13 @@ export default defineConfig({
       // `diagnostics_registry` docs-consistency test checks that every such link
       // in the site's content names a registry code, so none can dangle.
       plugins: [
+        bynkSiteTheme(),
         starlightLinksValidator({
           exclude: ["/reference/api/**", "/reference/diagnostics/*/"],
         }),
       ],
-      // Faithful `bynk` highlighting from the editor's own grammar; the fenced
+      // Faithful `bynk` highlighting from the editor's own grammar (the site's
+      // copy wins over the theme's; CI checks the two are the same file); the fenced
       // language id is `bynk` (the grammar's own name is the display "Bynk").
       // #2958: a tagged multi-line string (`"""sql`) embeds that language's
       // grammar, so the languages the grammar includes load with it.
