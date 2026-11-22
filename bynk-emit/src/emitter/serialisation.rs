@@ -2796,7 +2796,7 @@ pub(crate) fn serialise_ref_via(t: &TypeRef, ns: &str, ru: &RuntimeUse) -> TsExp
         | other @ TypeRef::Fn(..) => TsExpr::Arrow {
             params: vec![TsParam::new(
                 "__v".to_string(),
-                Some(TsType::named(crate::emitter::ts_types::ts_type_ref(other))),
+                Some(crate::emitter::ts_types::ts_type_of(other)),
             )],
             is_async: false,
             generics: Vec::new(),
@@ -2850,27 +2850,13 @@ pub(crate) fn witness_codec_expr(t: &TypeRef, ru: &RuntimeUse) -> TsExpr {
                 ident("Ok"),
                 vec![as_expr(
                     ident("__v"),
-                    TsType::named(crate::emitter::ts_types::ts_type_ref(other)),
+                    crate::emitter::ts_types::ts_type_of(other),
                 )],
             )));
-            // The statements are printed and joined onto one line: the printer's
-            // compact object literal takes no multi-line block.
-            let one_line = body
-                .iter()
-                .map(|st| {
-                    bynk_ts::print_stmt(st, 0)
-                        .split('\n')
-                        .map(str::trim)
-                        .filter(|l| !l.is_empty())
-                        .collect::<Vec<_>>()
-                        .join(" ")
-                })
-                .collect::<Vec<_>>()
-                .join(" ");
-            // The text hides what the statements use. They are read as the arrow
-            // they print as, so its parameters and locals bind, and the type its
-            // signature spells is declared with them.
-            let arrow = TsExpr::Arrow {
+            // A flat body: the printer's compact object literal takes no multi-line block, so each
+            // statement prints on the one line (1A.39a, Decision E). The tree is the arrow itself, so
+            // its parameters and locals bind and the names it uses are read from it.
+            TsExpr::Arrow {
                 params: vec![
                     TsParam::new("__j".to_string(), Some(TsType::named("__JsonValue"))),
                     TsParam::new("__p".to_string(), Some(TsType::named("string"))),
@@ -2878,14 +2864,8 @@ pub(crate) fn witness_codec_expr(t: &TypeRef, ru: &RuntimeUse) -> TsExpr {
                 is_async: false,
                 generics: Vec::new(),
                 return_type: None,
-                body: Box::new(TsArrowBody::Block(body)),
-            };
-            let uses =
-                bynk_ts::unbound_names_in(&[bynk_ts::TsStmt::expr_stmt(arrow, None)], |_| false);
-            TsExpr::raw_using(
-                format!("(__j: __JsonValue, __p: string) => {{ {one_line} }}"),
-                uses,
-            )
+                body: Box::new(TsArrowBody::Flat(body)),
+            }
         }
     };
     TsExpr::object(vec![
@@ -2973,6 +2953,15 @@ pub(crate) fn peel_list_option(t: &TypeRef) -> (&TypeRef, bool, bool) {
     }
 }
 
+/// `HttpResult<T>` over the type `inner` spells: generic with no default type argument, so a bare
+/// `HttpResult` in type position is `tsc`'s TS2314.
+fn http_result_ty(inner: &TypeRef) -> TsType {
+    TsType::named_with_args(
+        "HttpResult",
+        vec![crate::emitter::ts_types::ts_type_of(inner)],
+    )
+}
+
 /// v0.22b: an expression-form deserialise call for a codec target. Named
 /// types and generic instantiations go through their (module-local)
 /// helpers; bases inline the structural check.
@@ -3021,16 +3010,16 @@ pub(crate) fn deserialise_expr_via(
     // mirror of `serialise_field_expr_wire`'s own `WireRef::Unchecked` arm
     // (see that arm's own doc for why a nested `As`-under-`As` is safe here:
     // this function's result is never rendered through `render_operand`).
-    let ok_unknown_cast = |ty: &str| -> TsExpr {
+    let ok_unknown_cast = |ty: TsType| -> TsExpr {
         as_expr(
             call(
                 ident("Ok"),
                 vec![as_expr(
                     as_expr(json.clone(), TsType::named("unknown")),
-                    TsType::named(ty.to_string()),
+                    ty.clone(),
                 )],
             ),
-            TsType::named(format!("Result<{ty}, __BoundaryError>")),
+            TsType::named_with_args("Result", vec![ty, TsType::named("__BoundaryError")]),
         )
     };
     // `Err({ kind: "StructuralMismatch", path, expected, actual } as
@@ -3101,8 +3090,8 @@ pub(crate) fn deserialise_expr_via(
         // path above is what real code exercises today); named rather than
         // silently assumed correct, the same "not exercised, defensive"
         // precedent this file's own `TypeRef::Unit` arm above already sets.
-        TypeRef::ValidationError(_) => ok_unknown_cast("ValidationError"),
-        TypeRef::DecodeError(_) => ok_unknown_cast("DecodeError"),
+        TypeRef::ValidationError(_) => ok_unknown_cast(TsType::named("ValidationError")),
+        TypeRef::DecodeError(_) => ok_unknown_cast(TsType::named("DecodeError")),
         // Review of #1319/#1320, finding 1: `HttpResult<T>` (`bynk-emit/
         // runtime/src/http.ts:6`) is generic with no default type argument
         // — a bare `HttpResult` in type position is `tsc`'s TS2314, not the
@@ -3112,14 +3101,11 @@ pub(crate) fn deserialise_expr_via(
         // through `ts_type_ref` — the same real-type-name printer every
         // other `HttpResult<...>` position in this file already uses —
         // instead of dropping the payload.
-        TypeRef::HttpResult(inner, _) => {
-            let ty = format!("HttpResult<{}>", crate::emitter::ts_types::ts_type_ref(inner));
-            ok_unknown_cast(&ty)
-        }
-        TypeRef::QueueResult(_) => ok_unknown_cast("QueueResult"),
+                TypeRef::HttpResult(inner, _) => ok_unknown_cast(http_result_ty(inner)),
+        TypeRef::QueueResult(_) => ok_unknown_cast(TsType::named("QueueResult")),
         // #1883, slice 1a: unreachable in a checked program
         // (`bynk.types.asset_at_boundary`).
-        TypeRef::Asset(_) => ok_unknown_cast("{ readonly url: string }"),
+        TypeRef::Asset(_) => ok_unknown_cast(TsType::named("{ readonly url: string }")),
         // v0.110 (ADR 0142 D5): a `Bytes` wires as a base64 string; decode it
         // (rejecting a non-string or invalid base64) to a `Uint8Array`.
         TypeRef::Base(base @ (BaseType::Bytes | BaseType::Decimal), _) => {

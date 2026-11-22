@@ -1164,7 +1164,9 @@ impl Walk {
                     w.opt_ty(return_type);
                     match body.as_ref() {
                         TsArrowBody::Expr(e) => w.expr(e),
-                        TsArrowBody::Block(stmts) | TsArrowBody::Multiline(stmts) => w.stmts(stmts),
+                        TsArrowBody::Block(stmts)
+                        | TsArrowBody::Multiline(stmts)
+                        | TsArrowBody::Flat(stmts) => w.stmts(stmts),
                     }
                 });
             }
@@ -1682,6 +1684,37 @@ mod tests {
         assert_eq!(
             unbound_names_in(&[TsStmt::expr_stmt(arrow, None)], |_| false),
             ["Ok", "__JsonValue"]
+        );
+    }
+
+    /// 1A.39a: a `Flat` body is read as the statements it holds, so what it declares binds and what
+    /// it calls is a use (the witness decoder's body is exactly this).
+    #[test]
+    fn a_flat_arrow_body_is_read_like_a_block() {
+        let arrow = TsExpr::Arrow {
+            params: vec![TsParam::new("__j".to_string(), None)],
+            is_async: false,
+            generics: vec![],
+            return_type: None,
+            body: Box::new(TsArrowBody::Flat(vec![
+                TsStmt::const_stmt(
+                    TsBindingName::Ident("__v".to_string()),
+                    None,
+                    TsExpr::Ident("__j".to_string()),
+                    None,
+                ),
+                TsStmt::return_stmt(
+                    Some(TsExpr::Call {
+                        callee: Box::new(TsExpr::Ident("Ok".to_string())),
+                        args: vec![TsExpr::Ident("__v".to_string())],
+                    }),
+                    None,
+                ),
+            ])),
+        };
+        assert_eq!(
+            unbound_names_in(&[TsStmt::expr_stmt(arrow, None)], |_| false),
+            ["Ok"]
         );
     }
 

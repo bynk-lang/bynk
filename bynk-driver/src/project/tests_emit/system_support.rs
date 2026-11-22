@@ -457,12 +457,12 @@ pub(super) fn emit_system_http_support(
                 ));
                 TsParam::new(
                     "__extraHeaders".to_string(),
-                    Some(TsType::named(format!(
-                        "{} | undefined",
-                        bynk_emit::emitter::ts_types::ts_type_ref(
-                            &bynk_syntax::ast::TypeRef::RequestHeaders(Default::default())
-                        )
-                    ))),
+                    Some(TsType::union(vec![
+                        bynk_emit::emitter::ts_types::ts_type_of(
+                            &bynk_syntax::ast::TypeRef::RequestHeaders(Default::default()),
+                        ),
+                        TsType::named("undefined"),
+                    ])),
                 )
             });
             // #2854: a `query` param (unless a `:query` path segment binds the
@@ -1682,7 +1682,8 @@ pub(super) fn driver_param_ty(t: &bynk_syntax::ast::TypeRef, _ns: &str) -> Strin
         // (Slice A), so the driver forwards the value to the namespace's
         // `serialise_*`. Primitives stay precise.
         TypeRef::Named(_) => "any".to_string(),
-        other => bynk_emit::emitter::ts_types::ts_type_ref(other),
+        // The driver prints the node itself: this is test-harness text (1B.5's).
+        other => bynk_ts::print_type(&bynk_emit::emitter::ts_types::ts_type_of(other)),
     }
 }
 

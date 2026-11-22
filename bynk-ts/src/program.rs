@@ -411,7 +411,7 @@ fn walk_decl<'a>(decl: &'a TsDecl, out: &mut Vec<(VerbatimOrigin, &'a str)>) {
 fn walk_arrow_body<'a>(body: &'a TsArrowBody, out: &mut Vec<(VerbatimOrigin, &'a str)>) {
     match body {
         TsArrowBody::Expr(e) => walk_expr(e, out),
-        TsArrowBody::Block(stmts) | TsArrowBody::Multiline(stmts) => {
+        TsArrowBody::Block(stmts) | TsArrowBody::Multiline(stmts) | TsArrowBody::Flat(stmts) => {
             for s in stmts {
                 walk_stmt(s, out);
             }
@@ -1155,6 +1155,17 @@ impl TsStmt {
             | TsDecl::ExportDefault(_)
             | TsDecl::DeclareConst { .. } => Vec::new(),
         }
+    }
+
+    /// This statement with its `export` modifier dropped, when it is an exported declaration
+    /// ([`TsDecl::Export`]); any other statement is returned as it was. For a declaration that
+    /// moves into a function body, where `export` is not legal.
+    #[must_use]
+    pub fn without_export(mut self) -> Self {
+        if let TsStmtKind::Decl(TsDecl::Export(inner)) = self.kind {
+            self.kind = TsStmtKind::Decl(*inner);
+        }
+        self
     }
 
     pub fn decl(decl: TsDecl, span: Option<Span>) -> Self {
@@ -2020,6 +2031,14 @@ pub enum TsArrowBody {
     /// compact one-line form, it may hold any statement, nested at its real
     /// depth, and it records no source-map checkpoints for them.
     Multiline(Vec<TsStmt>),
+    /// A block body printed on one line by flattening (back-half paydown 1A.39a): each statement
+    /// is printed at depth 0, its lines trimmed and joined with single spaces, and the whole is
+    /// bracketed `{ .. }`. A statement that prints over several lines (a braced `if`) therefore
+    /// sits on the line as `if (c) { return x; }`. It is the layout the ICU `select` arm and the
+    /// witness decoder have always had, and it records no source-map checkpoints. Unlike
+    /// [`TsArrowBody::Block`], which holds statements that each print on one line, it admits any
+    /// statement and never falls back to the multi-line form.
+    Flat(Vec<TsStmt>),
 }
 
 impl TsExpr {
@@ -3382,6 +3401,30 @@ pub enum VerbatimOrigin {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `without_export` drops one `export` and nothing else: an exported declaration is its
+    /// inner one, a plain declaration is unchanged, and it keeps its own spacing flag.
+    #[test]
+    fn without_export_unwraps_an_exported_declaration_only() {
+        let function = |name: &str| TsDecl::Function {
+            name: name.to_string(),
+            generics: Vec::new(),
+            params: Vec::new(),
+            return_type: None,
+            body: Vec::new(),
+            is_async: false,
+            inline: false,
+        };
+        let mut exported = TsStmt::decl(TsDecl::Export(Box::new(function("f"))), None);
+        exported.no_blank_before = true;
+        let plain = exported.clone().without_export();
+        assert_eq!(plain.kind, TsStmtKind::Decl(function("f")));
+        assert!(plain.no_blank_before);
+        assert_eq!(
+            plain.clone().without_export().kind,
+            TsStmtKind::Decl(function("f"))
+        );
+    }
 
     /// Only an `await`, a unary operator, a number literal (`Num` or `Raw`) and a spread need
     /// a bracket before a member access; every other kind of expression does not.

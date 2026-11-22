@@ -28,9 +28,9 @@ pub fn expr_contains_await(expr: &TsExpr) -> bool {
         }
         TsExpr::Arrow { body, .. } => match &**body {
             TsArrowBody::Expr(e) => expr_contains_await(e),
-            TsArrowBody::Block(stmts) | TsArrowBody::Multiline(stmts) => {
-                stmts.iter().any(stmt_contains_await)
-            }
+            TsArrowBody::Block(stmts)
+            | TsArrowBody::Multiline(stmts)
+            | TsArrowBody::Flat(stmts) => stmts.iter().any(stmt_contains_await),
         },
         TsExpr::Call { callee, args }
         | TsExpr::New { callee, args }
