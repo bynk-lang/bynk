@@ -135,6 +135,7 @@ fn a_running_session_lists_its_instances_and_reads_their_state() {
     let ready = proj.join("ready.json");
     let log = proj.join("bynk-dev.log");
     let (out, err) = dev_child::log_to(&log);
+    dev_child::warm_wrangler();
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_bynk"));
     std::os::unix::process::CommandExt::process_group(&mut cmd, 0);
     let mut dev = Group(
@@ -269,8 +270,9 @@ fn serve_deploy_build(dir: &Path, port: u16, log: &Path) -> Group {
     let mut cmd = if dev_child::have("wrangler") {
         Command::new("wrangler")
     } else {
+        dev_child::wrangler_warm::warm();
         let mut c = Command::new("npx");
-        c.args(["-y", "wrangler@4"]);
+        c.args(["-y", dev_child::wrangler_warm::SPEC]);
         c
     };
     std::os::unix::process::CommandExt::process_group(&mut cmd, 0);
@@ -385,6 +387,7 @@ fn a_dev_session_behaves_as_a_deploy_build_does() {
     let ready = on.join("ready.json");
     let on_log = on.join("bynk-dev.log");
     let (out, err) = dev_child::log_to(&on_log);
+    dev_child::warm_wrangler();
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_bynk"));
     std::os::unix::process::CommandExt::process_group(&mut cmd, 0);
     let mut dev = Group(
@@ -460,6 +463,7 @@ fn a_session_records_each_committed_transition_and_not_a_refused_one() {
     let ready = proj.join("ready.json");
     let log = proj.join("bynk-dev.log");
     let (out, err) = dev_child::log_to(&log);
+    dev_child::warm_wrangler();
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_bynk"));
     std::os::unix::process::CommandExt::process_group(&mut cmd, 0);
     let mut dev = Group(

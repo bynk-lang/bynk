@@ -140,8 +140,9 @@ value, reach for a `property` and its `for all` — see the
 
 ## Stub a collaborator with `stub`
 
-The shortener's `create` service depends on the `CodeGen` capability (it asks for
-it with `given CodeGen`). When a case depends on what that collaborator *returns*,
+The shortener's `create` service depends on the `CodeGen` capability from
+[Reach out with capabilities](/book/tutorials/capabilities/) (it asks for it with
+`given CodeGen`). When a case depends on what that collaborator *returns*,
 override the seam with a `stub` clause — the capability, the method with an
 argument pattern, and a value on the right:
 

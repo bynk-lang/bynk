@@ -16,16 +16,43 @@
 //! The fix is a CI step that provisions the spec once, serially, before the
 //! suite runs — after which every test finds a complete cache and installs
 //! nothing. That only works while the step names the spec the tests actually
-//! run, which is what `wrangler_prewarm.rs` guards: a bump to `wrangler@5` here
-//! that forgets the workflows would silently restore the race, visible only as
-//! an intermittent red.
+//! run, which is what `wrangler_prewarm.rs` guards: a bump to the pin that
+//! forgets the workflows would silently restore the race, visible only as an
+//! intermittent red.
+//!
+//! Off CI, or on a job without that step, [`npx`] does the same once per
+//! machine: it provisions the spec under a cross-process lock before it builds
+//! the command (`support/wrangler_warm.rs`, 1D.3d). Every smoke spawns its
+//! wrangler through it.
 
 /// Free localhost ports that are never handed out twice in a process (#3526).
 #[path = "../support/ports.rs"]
 pub mod ports;
 
-/// The `npx` package spec every workerd smoke provisions.
-pub const SPEC: &str = "wrangler@4";
+/// The one cold-cache provisioning per machine (1D.3d).
+#[path = "../support/wrangler_warm.rs"]
+pub mod warm;
+
+/// The `npx` package spec every workerd smoke provisions: the toolchain's pin.
+pub const SPEC: &str = warm::SPEC;
+
+/// `npx -y <SPEC>`, ready for its subcommand, once the spec is provisioned
+/// for this machine ([`warm::warm`]). Routed through `cmd /C` on Windows so
+/// npm's `npx.cmd` shim resolves: Rust refuses to run a batch script directly
+/// there (the BatBadBut hardening).
+#[allow(dead_code)]
+pub fn npx() -> std::process::Command {
+    warm::warm();
+    let mut c = if cfg!(windows) {
+        let mut c = std::process::Command::new("cmd");
+        c.args(["/C", "npx"]);
+        c
+    } else {
+        std::process::Command::new("npx")
+    };
+    c.args(["-y", SPEC]);
+    c
+}
 
 /// I2 (#1971): the `--var`s a workerd smoke passes `wrangler dev` so its
 /// Worker holds the local key `bynk dev` gives it for each `(caller, callee)`
