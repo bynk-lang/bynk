@@ -240,7 +240,7 @@ pub const LOCAL_CALL_KEY: &str = "bynk-local-call-key";
 /// Worker the local key for it (`BYNK_CALL_FROM_` plus the caller's edge suffix). The
 /// runtime's `INSPECT_CALLER` is the same name.
 pub const INSPECT_CALLER: &str = "bynk.dev";
-pub const INSPECT_CALLER_KEY_VAR: &str = "BYNK_CALL_FROM_BYNK__DEV";
+pub use bynk_project::env_protocol::CALL_FROM_BYNK_DEV as INSPECT_CALLER_KEY_VAR;
 
 /// #3562 (G6): the file a `bynk dev` group build stages beside its entry, naming each
 /// member that hosts an agent and its classes, so `bynk dev inspect` can sign a request
