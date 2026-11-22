@@ -10,7 +10,7 @@
 //! The vocabulary ([`BindingSource`], [`WorkerBinding`]) stays in
 //! `bynk-check`, which needs it for the duplicate-binding diagnostics. The
 //! model, its derivation and its order are the emitter's. The order is a
-//! stable sort by [`rank`], one exhaustive `match`, so a new kind of binding
+//! stable sort by `rank`, one exhaustive `match`, so a new kind of binding
 //! fails to compile until it is placed, rather than being silently left out of
 //! `wrangler.toml`.
 
