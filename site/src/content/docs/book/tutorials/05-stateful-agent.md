@@ -35,7 +35,7 @@ Three parts make up the agent:
 
 - `key code: ShortCode` — the identity. Each distinct `ShortCode` is a separate
   link with its own state. The refined `ShortCode` from
-  [Tutorial 4](/book/tutorials/04-refined-types/) means a link can only ever be keyed by a
+  [Make illegal states unrepresentable](/book/tutorials/04-refined-types/) means a link can only ever be keyed by a
   valid code.
 - `store target: Cell[Option[Url]]` and `store hits: Cell[Int]` — the data this
   agent owns, one `store` field per value: the target URL (once registered) and a
@@ -85,16 +85,16 @@ the target and counts the hit:
 
 ```bynk,fragment
   on call resolve() -> Effect[Result[ResolveView, LinkError]] {
-    match target {
-      Some(url) => {
-        let next = hits + 1
-        hits := next
-        Ok(ResolveView { target: url, hits: next })
-      }
-      None => Err(NotFound)
-    }
+    let Some(url) = target else { Err(NotFound) }
+    let next = hits + 1
+    hits := next
+    Ok(ResolveView { target: url, hits: next })
   }
 ```
+
+The `let … else` from [Handle failure with `Result`](/book/tutorials/failure-and-result/)
+does the work here: a link that was never registered has no target, so
+`resolve` answers `Err(NotFound)` and reads no further.
 
 There is no `commit` step: every `store` write a handler makes is collected and
 **committed atomically when the handler returns**. If the handler faults partway
@@ -164,6 +164,31 @@ supplies it. They are a topic in their own right — see
 [Compose a provider](/book/guides/effects-and-capabilities/compose-a-provider/) — but the shape
 above is all we need: mint a raw string, then validate it into a `ShortCode`.
 
+The handlers reuse what the last chapter built. `newLink` checks the target and
+validates the code, `failure` turns any `LinkError` into a response, and the
+agent's own errors are `LinkError`s too, so they go through the same function:
+
+```bynk,fragment
+on POST("/links") (
+	body: CreateLinkRequest
+) -> Effect[HttpResult[CreatedView]] by Visitor given CodeGen {
+	let raw <- CodeGen.next()
+	let Ok(view) = newLink(raw, body.target) else match {
+		Err(error) => failure[CreatedView](error),
+	}
+	let registered <- Link(view.code).register(view.target)
+	match registered {
+		Ok(_) => Created(view),
+		Err(error) => failure[CreatedView](error),
+	}
+}
+```
+
+`let Ok(view) = … else match { … }` keeps the good path flat: when `newLink`
+fails, the `else match` works out the answer from the error, and the handler
+ends there. A link whose code is already taken is answered by `failure` with
+`409 Conflict`, as the last chapter decided.
+
 ## The whole file
 
 ```bynk
@@ -173,15 +198,18 @@ type ShortCode = String where MinLength(6) && MaxLength(8)
 
 type Url = String where MinLength(1) && MaxLength(2048)
 
-type LinkError = enum { AlreadyExists, NotFound, Invalid }
+type LinkError = enum { AlreadyExists, NotFound, Invalid, SelfLink }
 
 fn describe(error: LinkError) -> String {
 	match error {
 		AlreadyExists => "code already in use",
 		NotFound => "no such code",
 		Invalid => "invalid code",
+		SelfLink => "a link can't point back at the shortener",
 	}
 }
+
+const HOME: String = "https://sho.rt/"
 
 type CreateLinkRequest = {
 	target: Url,
@@ -195,6 +223,25 @@ type CreatedView = {
 type ResolveView = {
 	target: Url,
 	hits: Int,
+}
+
+fn checkTarget(url: Url) -> Result[Url, LinkError] {
+	if url.startsWith(HOME) { Err(SelfLink) } else { Ok(url) }
+}
+
+fn newLink(raw: String, target: Url) -> Result[CreatedView, LinkError] {
+	let checked = checkTarget(target)?
+	let code = ShortCode.of(raw).mapErr((_) => Invalid)?
+	Ok(CreatedView { code: code, target: checked })
+}
+
+fn failure[T](error: LinkError) -> HttpResult[T] {
+	match error {
+		SelfLink => BadRequest(describe(error)),
+		AlreadyExists => Conflict(describe(error)),
+		NotFound => NotFound,
+		Invalid => ServerError(describe(error)),
+	}
 }
 
 capability CodeGen {
@@ -224,31 +271,20 @@ agent Link {
 	}
 
 	on call resolve() -> Effect[Result[ResolveView, LinkError]] {
-		match target {
-			Some(url) => {
-				let next = hits + 1
-				hits := next
-				Ok(ResolveView { target: url, hits: next })
-			},
-			None => Err(NotFound),
-		}
+		let Some(url) = target else { Err(NotFound) }
+		let next = hits + 1
+		hits := next
+		Ok(ResolveView { target: url, hits: next })
 	}
 }
 
 service create {
 	on call(target: Url) -> Effect[Result[ShortCode, LinkError]] given CodeGen {
 		let raw <- CodeGen.next()
-		match ShortCode.of(raw) {
-			Err(_) => Err(Invalid),
-			Ok(code) => {
-				let link = Link(code)
-				let outcome <- link.register(target)
-				match outcome {
-					Ok(_) => Ok(code),
-					Err(e) => Err(e),
-				}
-			},
-		}
+		let view = newLink(raw, target)?
+		let registered <- Link(view.code).register(view.target)
+		let _ = registered?
+		Ok(view.code)
 	}
 }
 
@@ -257,33 +293,21 @@ service api from http {
 		body: CreateLinkRequest
 	) -> Effect[HttpResult[CreatedView]] by Visitor given CodeGen {
 		let raw <- CodeGen.next()
-		match ShortCode.of(raw) {
-			Err(_) => ServerError("generated an invalid code"),
-			Ok(code) => {
-				let link = Link(code)
-				let outcome <- link.register(body.target)
-				match outcome {
-					Ok(_) => Created(CreatedView { code: code, target: body.target }),
-					Err(linkError) => match linkError {
-						AlreadyExists => Conflict("code already in use"),
-						NotFound => ServerError("unexpected state"),
-						Invalid => ServerError("invalid code"),
-					},
-				}
-			},
+		let Ok(view) = newLink(raw, body.target) else match {
+			Err(error) => failure[CreatedView](error),
+		}
+		let registered <- Link(view.code).register(view.target)
+		match registered {
+			Ok(_) => Created(view),
+			Err(error) => failure[CreatedView](error),
 		}
 	}
 
 	on GET("/links/:code") (code: ShortCode) -> Effect[HttpResult[ResolveView]] by Visitor {
-		let link = Link(code)
-		let outcome <- link.resolve()
-		match outcome {
+		let resolved <- Link(code).resolve()
+		match resolved {
 			Ok(view) => Ok(view),
-			Err(linkError) => match linkError {
-				NotFound => NotFound,
-				AlreadyExists => ServerError("unexpected state"),
-				Invalid => ServerError("invalid code"),
-			},
+			Err(error) => failure[ResolveView](error),
 		}
 	}
 }
@@ -301,11 +325,12 @@ You gave the shortener a memory: a `Link` agent keyed by `ShortCode`, with
 zeroable `store` fields (`target: Cell[Option[Url]]`, `hits: Cell[Int]`), handlers
 that read by bare name and write with `:=`, and an API wired to store and resolve.
 You saw fresh-state initialisation and the single end-of-handler commit in the
-emitted code.
+emitted code. And the agent's failures went through the same `failure` function
+as the rest, so every handler stays short.
 
 We have asserted that all this works — now let us prove it.
 
-➡️ **[Tutorial 6: Test it](/book/tutorials/06-testing/)**
+➡️ **Next: [Test it](/book/tutorials/06-testing/)**
 
 ---
 

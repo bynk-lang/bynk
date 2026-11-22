@@ -8,7 +8,7 @@ table: the thing you hand-roll in TypeScript, and the Bynk construct that does i
 for you.
 
 It is an orientation, not a tutorial — for the hands-on build, start with
-[Tutorial 1](/book/tutorials/01-first-program/); for the deeper *whether and when
+[Compile your first program](/book/tutorials/01-first-program/); for the deeper *whether and when
 to choose Bynk*, see
 [Bynk compared to TypeScript](/book/concepts/about/bynk-compared-to-typescript/).
 
@@ -45,7 +45,7 @@ honestly in
 
 ## Where to next
 
-- Build something: [Tutorial 1](/book/tutorials/01-first-program/) is a five-minute
+- Build something: [Compile your first program](/book/tutorials/01-first-program/) is a five-minute
   warm-up; tutorials 2–6 then build one real service end to end.
 - Keep the [glossary](/reference/glossary/) open for any unfamiliar term.
 - Skim [the type-system philosophy](/book/concepts/type-system/philosophy/) for
