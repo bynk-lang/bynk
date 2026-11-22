@@ -1375,33 +1375,6 @@ pub(crate) fn deploy_command(environment: &str) -> String {
     }
 }
 
-/// The account-facing title of one of `worker`'s KV namespaces under
-/// `environment` (S4b, #1967), always environment-qualified ([`env_qualify`]).
-/// The bare `KV`'s is the Worker's name: `shop-cart` in the default
-/// environment, as it has always been, and `shop-cart-staging` under
-/// `--env staging` (#2037). A derived instance's is `<worker>-<capability,
-/// kebab>`: `shop-cart-sessions`, and `shop-cart-sessions-staging`.
-///
-/// Qualified because Cloudflare refuses a second namespace with a title the
-/// account already holds: "Returns `400` if the account already owns a
-/// namespace with that title" (API reference, Create a Namespace), which
-/// Wrangler reports as code 10014, "A KV namespace with the title … already
-/// exists". Bynk never passes `--env` to `kv namespace create` (ADR 0254 D4),
-/// so Wrangler's own `<env>-` title prefix never applies; this is the only
-/// qualification. The title matters only on create: a namespace whose id the
-/// ledger already records for the environment is reused by id, whatever it
-/// was titled when it was made.
-pub(crate) fn kv_title(worker: &str, binding: &str, environment: &str) -> String {
-    if binding == bynk_emit::emitter::wrangler::KV_BINDING_NAME {
-        env_qualify(environment, worker)
-    } else {
-        env_qualify(
-            environment,
-            &bynk_emit::emitter::wrangler::kv_instance_title(worker, binding),
-        )
-    }
-}
-
 /// P5 (#2323): the name an `R2` instance's bucket has on the account in
 /// `environment`: its derived name, [`env_qualify`]d. R2 bucket names are
 /// scoped to the account, so (like a Worker's) it is a function of the
@@ -2244,24 +2217,6 @@ max_batch_size = 10
         assert_eq!(
             ids,
             [("KV", "bare-staging"), ("KV_SESSIONS", "sessions-staging")]
-        );
-    }
-
-    #[test]
-    fn kv_titles_keep_the_default_names_and_qualify_every_other_environment() {
-        // The default environment's titles are the ones every existing
-        // production deployment was created with.
-        assert_eq!(kv_title("api", "KV", "default"), "api");
-        // #2037: the bare namespace is qualified under `--env` too, since an
-        // account holds one namespace per title.
-        assert_eq!(kv_title("api", "KV", "staging"), "api-staging");
-        assert_eq!(
-            kv_title("shop-cart", "KV_SESSIONS", "default"),
-            "shop-cart-sessions"
-        );
-        assert_eq!(
-            kv_title("shop-cart", "KV_PRICE_CACHE", "staging"),
-            "shop-cart-price-cache-staging"
         );
     }
 

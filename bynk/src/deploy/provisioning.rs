@@ -112,12 +112,12 @@ pub(crate) fn deploy_one(
     wrangler_args: &[String],
     environment: &str,
     // Slice 5, DECISION B: `Some` when `run()` fetched the account's live KV
-    // namespace ids once, up front. A recorded id absent from this set is
-    // exactly as untrustworthy as no record at all — re-provision rather than
-    // inject a dead id. `None` means the fetch was skipped or failed; the
-    // recorded id is trusted unconditionally, as it always was pre-slice-5,
-    // rather than blocking a deploy on a fetch that didn't happen.
-    live_kv_ids: Option<&BTreeSet<String>>,
+    // namespace ids once, up front ([`Kv`]'s `live`). A recorded id absent from
+    // this set is exactly as untrustworthy as no record at all — re-provision
+    // rather than inject a dead id. `None` means the fetch was skipped or
+    // failed; the recorded id is trusted unconditionally, as it always was
+    // pre-slice-5, rather than blocking a deploy on a fetch that didn't happen.
+    live_kv: &<Kv as ResourceKind>::Live,
     // #3301: the Secrets Store each `(worker, binding)` linked to, as its id,
     // found before anything was pushed ([`link_for_run`]).
     linked_stores: &BTreeMap<(String, String), String>,
@@ -127,46 +127,16 @@ pub(crate) fn deploy_one(
     let config = worker_dir.join("wrangler.toml");
     // Every KV namespace the Worker binds: the bare `KV`, then each derived
     // instance (S4b, #1967), each its own namespace with its own ledger entry.
-    let mut kv_ids = BTreeMap::new();
-    for binding in kv_bindings(declared) {
-        let recorded = recorded_kv_binding(lock, worker, binding, environment).map(str::to_owned);
-        let trust_recorded = should_trust_recorded_kv(recorded.as_deref(), live_kv_ids);
-        let id = if trust_recorded {
-            recorded.expect("trust_recorded is only true when recorded is Some")
-        } else {
-            // #2059: the plan-time check covered only namespaces with no
-            // recorded id. One whose recorded id has gone from the account is
-            // created again here, under its current title, so compare that
-            // title across environments now, before `kv namespace create`.
-            if let Some(message) = cross_environment_title_clash(
-                project,
-                lock,
-                environment,
-                &[(worker, binding)],
-                live_kv_ids,
-            ) {
-                return Err(DeployFailure::driver(message));
-            }
-            let what = kv_namespace_noun(worker, binding);
-            let id = create_kv(
-                provenance,
-                &kv_title(worker, binding, environment),
-                project_root,
-            )
-            .map_err(|e| DeployFailure::driver(format!("could not create {what}: {e}")))?;
-            lock.record_kv(environment, worker, binding, &id);
-            // Recorded before the push, so an interrupted run never makes a
-            // second namespace (ADR 0180).
-            write_lock(lock_path, lock).map_err(|e| {
-                DeployFailure::driver(format!(
-                    "created {what} but could not record it in {}: {e}",
-                    lock_path.display()
-                ))
-            })?;
-            id
-        };
-        kv_ids.insert(binding.to_string(), id);
-    }
+    let site = Site {
+        tools: Tools {
+            provenance,
+            project_root,
+        },
+        environment,
+        worker,
+        project,
+    };
+    let kv_ids = provision_kind::<Kv>(site, declared, lock, lock_path, live_kv)?;
     provision_r2_buckets(
         provenance,
         project_root,
@@ -237,11 +207,7 @@ pub(crate) fn deploy_one(
             "could not materialise the rate limiter ids into `{worker}`'s generated configuration"
         )));
     }
-    if !kv_ids.is_empty() && !materialise_kv_ids(&config, &kv_ids) {
-        return Err(DeployFailure::driver(format!(
-            "could not materialise the KV namespace ids into `{worker}`'s generated configuration"
-        )));
-    }
+    Kv::materialise(&config, worker, &kv_ids)?;
     // Reconciled against the account on every run, never against the ledger:
     // the ledger's queue set is a planning aid, so trusting it to skip would
     // leave a queue deleted out-of-band un-recreated and the push failing
@@ -814,122 +780,6 @@ pub(crate) fn classify_worker_listing(success: bool, said: &str) -> WorkerPresen
     }
 }
 
-/// How a message names one of `worker`'s KV namespaces: `KV namespace for
-/// `api`` for the bare one, as it always has, `KV namespace `KV_SESSIONS` for
-/// `shop-cart`` for a derived instance (S4b, #1967).
-pub(crate) fn kv_namespace_noun(worker: &str, binding: &str) -> String {
-    if is_bare_kv(binding) {
-        format!("KV namespace for `{worker}`")
-    } else {
-        format!("KV namespace `{binding}` for `{worker}`")
-    }
-}
-
-fn create_kv(provenance: &Provenance, name: &str, project_root: &Path) -> Result<String, String> {
-    let Some(mut command) = workers::wrangler_command(provenance, "kv") else {
-        return Err("wrangler not found".into());
-    };
-    let output = command
-        .arg("namespace")
-        .arg("create")
-        .arg(name)
-        // No `--json`: `kv namespace create` has no such flag (`Unknown
-        // argument: json`, #2428). The id is read from the binding snippet it
-        // prints instead.
-        // The generated worker config still carries the placeholder until the
-        // namespace exists. Create from the project root so Wrangler cannot
-        // load and validate that incomplete config.
-        .current_dir(project_root)
-        .output()
-        .map_err(|e| e.to_string())?;
-    if !output.status.success() {
-        return Err(wrangler_said(&output));
-    }
-    parse_kv_id(&String::from_utf8_lossy(&output.stdout))
-        .ok_or_else(|| "wrangler did not return a namespace id".into())
-}
-
-/// The namespace id in `wrangler kv namespace create`'s printed binding
-/// snippet: `"id": "…"` in a JSON config, `id = "…"` in a TOML one.
-fn parse_kv_id(output: &str) -> Option<String> {
-    // A whole-output JSON document first (compact or pretty), then the line scan.
-    if let Ok(value) = serde_json::from_str::<serde_json::Value>(output) {
-        let id = value
-            .get("id")
-            .or_else(|| value.get("kv_namespaces")?.get(0)?.get("id"));
-        if let Some(id) = id.and_then(|id| id.as_str()) {
-            return Some(id.to_owned());
-        }
-    }
-    output.lines().find_map(|line| {
-        let line = line.trim().trim_start_matches(['{', '[']).trim_start();
-        let rest = line
-            .strip_prefix("\"id\"")
-            .or_else(|| line.strip_prefix("id"))?
-            .trim_start();
-        let rest = rest
-            .strip_prefix([':', '='])?
-            .trim_start()
-            .strip_prefix('"')?;
-        let id = &rest[..rest.find('"')?];
-        (!id.is_empty()).then(|| id.to_owned())
-    })
-}
-
-/// Every KV namespace id currently on the account — slice 5, DECISION B.
-///
-/// Fetched **once per `bynk deploy` run**, not once per context: this is an
-/// account-wide list, so calling it from inside `deploy_one` would pay one
-/// identical round-trip per KV-bearing context on every redeploy. `run()`
-/// calls this once, before the per-context loop, and threads the result
-/// through — see `deploy_one`'s `live_kv_ids` parameter.
-///
-/// `None` means "could not ask" (no wrangler, network/auth failure, or an
-/// unparseable response) — read the same way [`list_secrets`]'s `None` is:
-/// the caller falls back to trusting whatever the ledger already says, rather
-/// than blocking every deploy on this call succeeding.
-///
-/// **Completeness (review, #840):** Cloudflare's list-namespaces endpoint is
-/// itself paginated, but `wrangler`'s `listKVNamespaces` (`workers-sdk`
-/// `packages/wrangler/src/kv/helpers.ts`) loops `page`/`per_page` until a
-/// short page comes back, aggregating every page before this command prints
-/// — confirmed against wrangler's own source, not assumed. A truncated
-/// response is not a live risk on the CLI path this calls.
-pub(crate) fn live_kv_namespace_ids(
-    provenance: &Provenance,
-    project_root: &Path,
-) -> Option<BTreeSet<String>> {
-    let mut command = workers::wrangler_command(provenance, "kv")?;
-    // No `--format json`: unlike `secret list`/`queues`, this command has no
-    // such flag at all — confirmed against wrangler 4.103 (`Unknown argument:
-    // format`, exit 1). Its *default* output is already a raw JSON array, so
-    // this is not a missing-flag gap, just a different default per command.
-    let output = command
-        .arg("namespace")
-        .arg("list")
-        .current_dir(project_root)
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    parse_kv_namespace_ids(&String::from_utf8_lossy(&output.stdout))
-}
-
-/// The ids in `wrangler kv namespace list`'s (default, already-JSON) output —
-/// the same structural shape [`parse_secret_list`] reads, `"id"` instead of
-/// `"name"`.
-fn parse_kv_namespace_ids(stdout: &str) -> Option<BTreeSet<String>> {
-    let parsed: serde_json::Value = serde_json::from_str(stdout).ok()?;
-    Some(
-        parsed
-            .as_array()?
-            .iter()
-            .filter_map(|entry| entry.get("id")?.as_str().map(str::to_owned))
-            .collect(),
-    )
-}
-
 /// Create `name`, or accept that it is already there. Returns whether this call
 /// created it: a race-loser, finding it made in between, did not (#2579).
 ///
@@ -1333,53 +1183,6 @@ fn queue_already_exists(stderr: &str) -> bool {
     stderr.to_ascii_lowercase().contains("already exists")
 }
 
-/// Delete a KV namespace by id — `--prune`'s one KV-side mutation.
-///
-/// `--skip-confirmation`: wrangler's own prompt is redundant with
-/// [`confirm_prune`], which already named every resource about to go and
-/// asked once for the whole batch: a second, per-resource prompt would be
-/// noise, not safety. Idempotent against a namespace already gone (matched
-/// via [`kv_namespace_already_deleted`]) — confirmed empirically (#839):
-/// Cloudflare answers a not-found delete with an error, never silent success,
-/// so this driver-side match is what makes re-running `--prune` safe.
-pub(crate) fn delete_kv_namespace(
-    provenance: &Provenance,
-    id: &str,
-    project_root: &Path,
-) -> Result<(), String> {
-    let Some(mut command) = workers::wrangler_command(provenance, "kv") else {
-        return Err("wrangler not found".into());
-    };
-    let output = command
-        .arg("namespace")
-        .arg("delete")
-        .arg("--namespace-id")
-        .arg(id)
-        .arg("--skip-confirmation")
-        .current_dir(project_root)
-        .output()
-        .map_err(|e| e.to_string())?;
-    if output.status.success() {
-        return Ok(());
-    }
-    let said = wrangler_said(&output);
-    if kv_namespace_already_deleted(&said) {
-        return Ok(());
-    }
-    Err(said)
-}
-
-/// Does this `wrangler kv namespace delete` failure just mean the namespace
-/// is already gone? Confirmed empirically (#839) against a real account:
-/// `namespace not found [code: 10013]`. Matching the stable error code rather
-/// than the prose, unlike [`queue_already_exists`]'s text match — Cloudflare
-/// structures its API errors with a `code`, and `10013` is the more durable
-/// half of the message if the wording is ever revised. Pure, so the rule is
-/// tested without an account.
-fn kv_namespace_already_deleted(stderr: &str) -> bool {
-    stderr.contains("code: 10013") || stderr.to_ascii_lowercase().contains("namespace not found")
-}
-
 /// Delete a queue by name — `--prune`'s other mutation.
 ///
 /// No confirmation flag to pass: confirmed empirically (#839) that
@@ -1641,55 +1444,6 @@ mod tests {
         // KV, materialisation, a missing wrangler — nothing ran, so there is no
         // code to propagate and 1 is the honest answer.
         assert_eq!(DeployFailure::driver("nope".into()).code, 1);
-    }
-
-    #[test]
-    fn parses_the_id_from_the_printed_binding_snippet() {
-        let toml = "🌀 Creating namespace with title \"api\"\n✨ Success!\n\
-                    [[kv_namespaces]]\nbinding = \"api\"\nid = \"abc\"\n";
-        assert_eq!(parse_kv_id(toml), Some("abc".into()));
-        let json = "{\n  \"kv_namespaces\": [\n    {\n      \"binding\": \"api\",\n      \"id\": \"abc\"\n    }\n  ]\n}\n";
-        assert_eq!(parse_kv_id(json), Some("abc".into()));
-        let compact = r#"{"kv_namespaces":[{"binding":"api","id":"abc"}]}"#;
-        assert_eq!(parse_kv_id(compact), Some("abc".into()));
-        assert_eq!(parse_kv_id("✘ [ERROR] nope"), None);
-    }
-
-    #[test]
-    fn should_trust_recorded_kv_only_when_the_id_is_live_or_unchecked() {
-        let live = BTreeSet::from(["kv-abc".to_string()]);
-        assert!(
-            should_trust_recorded_kv(Some("kv-abc"), Some(&live)),
-            "recorded and present in the live set"
-        );
-        assert!(
-            !should_trust_recorded_kv(Some("kv-deleted"), Some(&live)),
-            "recorded but Cloudflare no longer has it — treat as unrecorded"
-        );
-        assert!(
-            should_trust_recorded_kv(Some("kv-abc"), None),
-            "the fetch never ran or failed — trust the ledger, as pre-slice-5"
-        );
-        assert!(
-            !should_trust_recorded_kv(None, Some(&live)),
-            "nothing recorded at all"
-        );
-        assert!(!should_trust_recorded_kv(None, None));
-    }
-
-    #[test]
-    fn kv_namespace_already_deleted_matches_the_confirmed_error_shape() {
-        // Confirmed empirically against a real account (#839): `namespace not
-        // found [code: 10013]`. The code is matched, not just the prose — the
-        // more durable half if Cloudflare ever reword the message.
-        assert!(kv_namespace_already_deleted(
-            "✘ [ERROR] A request to the Cloudflare API (...) failed.\n  namespace not found [code: 10013]"
-        ));
-        assert!(kv_namespace_already_deleted("code: 10013"));
-        assert!(!kv_namespace_already_deleted(
-            "✘ [ERROR] Authentication error [10000]"
-        ));
-        assert!(!kv_namespace_already_deleted(""));
     }
 
     #[test]
@@ -2019,7 +1773,7 @@ mod tests {
             },
             &[],
             environment,
-            live_kv_ids.as_ref(),
+            &live_kv_ids,
             &BTreeMap::new(),
             &hyperdrive::HyperdriveRun::none(),
         );
@@ -2459,9 +2213,14 @@ mod tests {
             .needs_kv()
             .kv_instances(&["KV_STAGING"]);
         let mut lock = DeployLock::default();
-        lock.record_kv("default", "api", "KV", "default-bare-id");
-        lock.record_kv("default", "api", "KV_STAGING", "default-staging-id");
-        lock.record_kv("staging", "api", "KV", "staging-bare-id");
+        lock.record::<Kv>("default", "api", "KV", KvNamespace::of("default-bare-id"));
+        lock.record::<Kv>(
+            "default",
+            "api",
+            "KV_STAGING",
+            KvNamespace::of("default-staging-id"),
+        );
+        lock.record::<Kv>("staging", "api", "KV", KvNamespace::of("staging-bare-id"));
         (declared, lock)
     }
 
@@ -2474,7 +2233,7 @@ mod tests {
         let (declared, lock) = api_with_staging_instance();
         let plan_time = BTreeMap::from([("api".to_string(), api_with_staging_instance().0)]);
         assert_eq!(
-            crate::deploy::plan::kv_title_collision(&plan_time, &lock, "staging"),
+            kv_title_collision(&plan_time, LedgerView::of(&lock, "staging")),
             None,
             "the plan cannot see it: the bare id is recorded"
         );
@@ -2492,7 +2251,8 @@ mod tests {
         );
         assert!(calls.is_empty(), "nothing ran: {calls:?}");
         assert_eq!(
-            recorded_kv_binding(&lock, "api", "KV", "staging"),
+            lock.recorded::<Kv>("staging", "api", "KV")
+                .map(|kv| kv.id.as_str()),
             Some("staging-bare-id"),
             "the ledger is untouched"
         );
@@ -2536,14 +2296,19 @@ mod tests {
         let declared = || Resources::default().kv_instances(&["KV_STAGING"]);
         let lock = || {
             let mut lock = DeployLock::default();
-            lock.record_kv("default", "api", "KV_STAGING", "gone-default-id");
-            lock.record_kv("staging", "api", "KV", "orphan-id");
+            lock.record::<Kv>(
+                "default",
+                "api",
+                "KV_STAGING",
+                KvNamespace::of("gone-default-id"),
+            );
+            lock.record::<Kv>("staging", "api", "KV", KvNamespace::of("orphan-id"));
             lock
         };
         // The plan passes: `KV_STAGING` is recorded, so it creates nothing.
         let plan_time = BTreeMap::from([("api".to_string(), declared())]);
         assert_eq!(
-            crate::deploy::plan::kv_title_collision(&plan_time, &lock(), "default"),
+            kv_title_collision(&plan_time, LedgerView::of(&lock(), "default")),
             None
         );
 
@@ -2569,7 +2334,8 @@ mod tests {
         assert_eq!(pushed, Ok(Pushed::Ok));
         assert_eq!(calls, ["kv namespace create api-staging", "deploy"]);
         assert_eq!(
-            recorded_kv_binding(&lock, "api", "KV_STAGING", "default"),
+            lock.recorded::<Kv>("default", "api", "KV_STAGING")
+                .map(|kv| kv.id.as_str()),
             Some("minted-id")
         );
     }
@@ -2580,7 +2346,8 @@ mod tests {
         let (calls, lock) = provision_bare_kv("default", DeployLock::default());
         assert_eq!(calls, ["kv namespace create api", "deploy"]);
         assert_eq!(
-            recorded_kv_binding(&lock, "api", "KV", "default"),
+            lock.recorded::<Kv>("default", "api", "KV")
+                .map(|kv| kv.id.as_str()),
             Some("minted-id")
         );
     }
@@ -2596,10 +2363,15 @@ mod tests {
             ["kv namespace create api-staging", "deploy --env staging"]
         );
         assert_eq!(
-            recorded_kv_binding(&lock, "api", "KV", "staging"),
+            lock.recorded::<Kv>("staging", "api", "KV")
+                .map(|kv| kv.id.as_str()),
             Some("minted-id")
         );
-        assert_eq!(recorded_kv_binding(&lock, "api", "KV", "default"), None);
+        assert_eq!(
+            lock.recorded::<Kv>("default", "api", "KV")
+                .map(|kv| kv.id.as_str()),
+            None
+        );
     }
 
     #[cfg(unix)]
@@ -2608,11 +2380,12 @@ mod tests {
         // Whatever it was titled when made, a namespace the ledger records for
         // the environment is the one the deploy binds.
         let mut lock = DeployLock::default();
-        lock.record_kv("staging", "api", "KV", "staging-id");
+        lock.record::<Kv>("staging", "api", "KV", KvNamespace::of("staging-id"));
         let (calls, lock) = provision_bare_kv("staging", lock);
         assert_eq!(calls, ["deploy --env staging"]);
         assert_eq!(
-            recorded_kv_binding(&lock, "api", "KV", "staging"),
+            lock.recorded::<Kv>("staging", "api", "KV")
+                .map(|kv| kv.id.as_str()),
             Some("staging-id")
         );
     }
@@ -2731,7 +2504,7 @@ mod tests {
             },
             &[],
             environment,
-            None,
+            &None,
             &BTreeMap::new(),
             &hyperdrive::HyperdriveRun::none(),
         );

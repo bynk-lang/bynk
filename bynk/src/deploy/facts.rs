@@ -93,11 +93,13 @@ pub(crate) fn build_facts(
     layout: &bynk_project::worker_layout::WorkerLayout,
 ) -> Facts {
     let mut ids = BTreeMap::new();
-    for binding in kv_bindings(declared) {
-        if let Some(id) = recorded_kv_binding(lock, worker, binding, environment) {
-            ids.insert(binding.to_string(), id.to_string());
-        }
-    }
+    // 1D.1 (#3929): each converted kind's bound ids.
+    kind_bound_ids(
+        LedgerView::of(lock, environment),
+        worker,
+        declared,
+        &mut ids,
+    );
     for d1 in &declared.d1_databases {
         if let Some(record) = recorded_d1(lock, worker, &d1.binding, environment) {
             ids.insert(d1.binding.clone(), record.id.clone());
@@ -224,7 +226,7 @@ mod tests {
     #[test]
     fn build_facts_gathers_ids_migrations_and_this_workers_agents() {
         let mut lock = DeployLock::default();
-        lock.record_kv("default", "shop", "KV", "kv-1");
+        lock.record::<Kv>("default", "shop", "KV", KvNamespace::of("kv-1"));
         let declared = Resources {
             needs_kv: true,
             d1_databases: vec![D1Decl {

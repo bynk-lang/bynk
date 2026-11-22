@@ -1,0 +1,600 @@
+== default ==
+{
+  "environment": "default",
+  "orphans": {
+    "kv": [
+      {
+        "worker": "gone"
+      },
+      {
+        "worker": "gone",
+        "binding": "KV_CACHE"
+      },
+      {
+        "worker": "shop",
+        "binding": "KV_OLD"
+      }
+    ],
+    "r2": [
+      {
+        "worker": "shop",
+        "binding": "R2_OLD",
+        "bucket": "shop-old",
+        "jurisdiction": "eu"
+      },
+      {
+        "worker": "shop",
+        "binding": "R2_ARCHIVE",
+        "bucket": "shop-archive-was",
+        "jurisdiction": "fedramp"
+      }
+    ],
+    "vectorize": [
+      {
+        "worker": "gone",
+        "binding": "VECTORIZE_GONE",
+        "index": "gone-index",
+        "adopted": false
+      },
+      {
+        "worker": "shop",
+        "binding": "VECTORIZE_DOCS",
+        "index": "shop-docs-v0",
+        "adopted": false
+      },
+      {
+        "worker": "shop",
+        "binding": "VECTORIZE_OLD",
+        "index": "shared-old",
+        "adopted": true
+      }
+    ],
+    "d1": [
+      {
+        "worker": "shop",
+        "binding": "D1_OLD",
+        "database": "shop-old"
+      },
+      {
+        "worker": "shop",
+        "binding": "D1_ORDERS",
+        "database": "shop-orders-was"
+      }
+    ],
+    "hyperdrive": [
+      {
+        "worker": "gone",
+        "binding": "HYPERDRIVE_GONE",
+        "config": "gone-main",
+        "adopted": false
+      },
+      {
+        "worker": "shop",
+        "binding": "HYPERDRIVE_MAIN",
+        "config": "shop-main-was",
+        "adopted": false
+      },
+      {
+        "worker": "shop",
+        "binding": "HYPERDRIVE_OLD",
+        "config": "shared-pg",
+        "adopted": true
+      }
+    ],
+    "workers": [
+      "gone-core"
+    ],
+    "worker_contexts": {
+      "gone-core": [
+        "gone",
+        "gone.admin"
+      ]
+    },
+    "queues": [
+      "old-jobs"
+    ]
+  },
+  "order": [
+    "shop-cart",
+    "shop"
+  ],
+  "contexts": [
+    {
+      "worker": "shop-cart",
+      "kv": [
+        {
+          "binding": "KV_SESSIONS",
+          "action": "create",
+          "namespace": "shop-cart-sessions"
+        }
+      ],
+      "ratelimits": [
+        {
+          "binding": "RATELIMIT_CHECKOUT",
+          "action": "allocate"
+        }
+      ],
+      "queues": [
+        {
+          "action": "reuse",
+          "queue": "shared-feed"
+        }
+      ],
+      "durable_objects": [],
+      "secrets": [
+        {
+          "name": "BYNK_CALL_FROM_SHOP",
+          "origin": "managed",
+          "action": "set"
+        }
+      ],
+      "secrets_complete": true,
+      "action": "deploy",
+      "binds_to": [],
+      "foreign_services": []
+    },
+    {
+      "worker": "shop",
+      "kv": [
+        {
+          "binding": "KV",
+          "action": "reuse",
+          "namespace": "shop"
+        },
+        {
+          "binding": "KV_CART",
+          "action": "create",
+          "namespace": "shop-cart"
+        },
+        {
+          "binding": "KV_SESSIONS",
+          "action": "reuse",
+          "namespace": "shop-sessions"
+        }
+      ],
+      "r2": [
+        {
+          "binding": "R2_ARCHIVE",
+          "action": "recreate",
+          "bucket": "shop-archive",
+          "jurisdiction": "eu"
+        },
+        {
+          "binding": "R2_FILES",
+          "action": "reuse",
+          "bucket": "shop-files"
+        },
+        {
+          "binding": "R2_NEW",
+          "action": "reuse",
+          "bucket": "shop-new"
+        }
+      ],
+      "vectorize": [
+        {
+          "binding": "VECTORIZE_DOCS",
+          "action": "reuse",
+          "index": "shop-docs",
+          "dimensions": 768,
+          "metric": "cosine",
+          "indexed": [
+            "category"
+          ]
+        },
+        {
+          "binding": "VECTORIZE_NEW",
+          "action": "reuse",
+          "index": "shop-new",
+          "dimensions": 384,
+          "metric": "euclidean"
+        }
+      ],
+      "d1": [
+        {
+          "binding": "D1_NEW",
+          "action": "reuse",
+          "database": "shop-new"
+        },
+        {
+          "binding": "D1_ORDERS",
+          "action": "reuse",
+          "database": "shop-orders",
+          "migrations": [
+            "0001_init.sql",
+            "0002_index.sql"
+          ]
+        }
+      ],
+      "hyperdrive": [
+        {
+          "binding": "HYPERDRIVE_ADOPTED",
+          "action": "adopt",
+          "config": "hd-adopted"
+        },
+        {
+          "binding": "HYPERDRIVE_MAIN",
+          "action": "reuse",
+          "config": "shop-main"
+        },
+        {
+          "binding": "HYPERDRIVE_NEW",
+          "action": "create",
+          "config": "shop-new"
+        }
+      ],
+      "ratelimits": [
+        {
+          "binding": "RATELIMIT_LOGIN",
+          "action": "reuse",
+          "namespace_id": "1001"
+        },
+        {
+          "binding": "RATELIMIT_SIGNUP",
+          "action": "allocate"
+        }
+      ],
+      "queues": [
+        {
+          "action": "reuse",
+          "queue": "intake"
+        },
+        {
+          "action": "reuse",
+          "queue": "outbound"
+        },
+        {
+          "action": "reuse",
+          "queue": "shared-feed"
+        }
+      ],
+      "datasets": [
+        {
+          "binding": "ANALYTICS_EVENTS",
+          "dataset": "shop-events"
+        }
+      ],
+      "stored_secrets": [
+        {
+          "binding": "SECRET_STRIPE_KEY",
+          "store": "default_secrets_store",
+          "secret": "stripe_key"
+        }
+      ],
+      "ai_search": [
+        {
+          "binding": "AI_SEARCH_KB",
+          "instance": "kb"
+        }
+      ],
+      "mtls_certificates": [
+        {
+          "binding": "MTLS_BACKEND",
+          "certificate": "backend-client"
+        }
+      ],
+      "durable_objects": [
+        {
+          "class": "Cart",
+          "storage": "sqlite",
+          "reconciled_by": "Cloudflare"
+        }
+      ],
+      "containers": [
+        {
+          "class": "__BynkContainer_Renderer",
+          "capability": "Renderer",
+          "build": "containers/renderer",
+          "adopted": "registry.example/renderer@sha256:bbbb",
+          "previously_adopted": "registry.example/renderer@sha256:aaaa",
+          "instance": "lite",
+          "reconciled_by": "Cloudflare"
+        },
+        {
+          "class": "__BynkContainer_Thumbnailer",
+          "capability": "Thumbnailer",
+          "build": "containers/thumbnailer",
+          "instance": "standard",
+          "reconciled_by": "Cloudflare"
+        }
+      ],
+      "durable_objects_renamed": [
+        {
+          "from": "Basket",
+          "to": "Cart",
+          "already_applied": true
+        }
+      ],
+      "durable_objects_deleted": [
+        {
+          "class": "shop.Legacy",
+          "already_applied": true
+        }
+      ],
+      "secrets": [
+        {
+          "name": "API_TOKEN",
+          "origin": "declared",
+          "action": "set"
+        },
+        {
+          "name": "BYNK_CALL_TO_SHOP__CART",
+          "origin": "managed",
+          "action": "set"
+        }
+      ],
+      "secrets_complete": true,
+      "action": "redeploy",
+      "binds_to": [
+        "shop-cart"
+      ],
+      "foreign_services": [
+        {
+          "binding": "PAYMENTS",
+          "worker": "payments-worker"
+        }
+      ],
+      "email_addresses": [
+        "orders@example.com"
+      ],
+      "removed_email_addresses": [
+        "returns@example.com"
+      ]
+    }
+  ]
+}
+bynk: warning: the KV namespace `shop-cart` (`KV_CART` of `shop`) is already on the account, but `bynk.deploy.lock` does not record it, and Cloudflare refuses a second namespace of one title: the deploy cannot create it. Delete the namespace if it holds nothing you need, or rename the capability
+== staging ==
+{
+  "environment": "staging",
+  "orphans": {
+    "kv": [],
+    "workers": [],
+    "queues": [
+      "old-jobs-staging"
+    ]
+  },
+  "order": [
+    "shop-cart-staging",
+    "shop-staging"
+  ],
+  "contexts": [
+    {
+      "worker": "shop-cart-staging",
+      "kv": [
+        {
+          "binding": "KV_SESSIONS",
+          "action": "create",
+          "namespace": "shop-cart-sessions-staging"
+        }
+      ],
+      "ratelimits": [
+        {
+          "binding": "RATELIMIT_CHECKOUT",
+          "action": "allocate"
+        }
+      ],
+      "queues": [
+        {
+          "action": "create",
+          "queue": "shared-feed-staging"
+        }
+      ],
+      "durable_objects": [],
+      "secrets": [
+        {
+          "name": "BYNK_CALL_FROM_SHOP",
+          "origin": "managed",
+          "action": "set"
+        }
+      ],
+      "secrets_complete": true,
+      "action": "deploy",
+      "binds_to": [],
+      "foreign_services": []
+    },
+    {
+      "worker": "shop-staging",
+      "kv": [
+        {
+          "binding": "KV",
+          "action": "reuse",
+          "namespace": "shop-staging"
+        },
+        {
+          "binding": "KV_CART",
+          "action": "create",
+          "namespace": "shop-cart-staging"
+        },
+        {
+          "binding": "KV_SESSIONS",
+          "action": "reuse",
+          "namespace": "shop-sessions-staging"
+        }
+      ],
+      "r2": [
+        {
+          "binding": "R2_ARCHIVE",
+          "action": "create",
+          "bucket": "shop-archive-staging",
+          "jurisdiction": "eu"
+        },
+        {
+          "binding": "R2_FILES",
+          "action": "create",
+          "bucket": "shop-files-staging"
+        },
+        {
+          "binding": "R2_NEW",
+          "action": "create",
+          "bucket": "shop-new-staging"
+        }
+      ],
+      "vectorize": [
+        {
+          "binding": "VECTORIZE_DOCS",
+          "action": "create",
+          "index": "shop-docs-staging",
+          "dimensions": 768,
+          "metric": "cosine",
+          "indexed": [
+            "category"
+          ]
+        },
+        {
+          "binding": "VECTORIZE_NEW",
+          "action": "create",
+          "index": "shop-new-staging",
+          "dimensions": 384,
+          "metric": "euclidean"
+        }
+      ],
+      "d1": [
+        {
+          "binding": "D1_NEW",
+          "action": "create",
+          "database": "shop-new-staging"
+        },
+        {
+          "binding": "D1_ORDERS",
+          "action": "reuse",
+          "database": "shop-orders-staging",
+          "migrations": [
+            "0001_init.sql",
+            "0002_index.sql"
+          ]
+        }
+      ],
+      "hyperdrive": [
+        {
+          "binding": "HYPERDRIVE_ADOPTED",
+          "action": "adopt",
+          "config": "hd-adopted"
+        },
+        {
+          "binding": "HYPERDRIVE_MAIN",
+          "action": "create",
+          "config": "shop-main-staging"
+        },
+        {
+          "binding": "HYPERDRIVE_NEW",
+          "action": "create",
+          "config": "shop-new-staging"
+        }
+      ],
+      "ratelimits": [
+        {
+          "binding": "RATELIMIT_LOGIN",
+          "action": "reuse",
+          "namespace_id": "2001"
+        },
+        {
+          "binding": "RATELIMIT_SIGNUP",
+          "action": "allocate"
+        }
+      ],
+      "queues": [
+        {
+          "action": "create",
+          "queue": "intake-staging"
+        },
+        {
+          "action": "create",
+          "queue": "outbound-staging"
+        },
+        {
+          "action": "create",
+          "queue": "shared-feed-staging"
+        }
+      ],
+      "datasets": [
+        {
+          "binding": "ANALYTICS_EVENTS",
+          "dataset": "shop-events_staging"
+        }
+      ],
+      "stored_secrets": [
+        {
+          "binding": "SECRET_STRIPE_KEY",
+          "store": "default_secrets_store",
+          "secret": "stripe_key"
+        }
+      ],
+      "ai_search": [
+        {
+          "binding": "AI_SEARCH_KB",
+          "instance": "kb"
+        }
+      ],
+      "mtls_certificates": [
+        {
+          "binding": "MTLS_BACKEND",
+          "certificate": "backend-client"
+        }
+      ],
+      "durable_objects": [
+        {
+          "class": "Cart",
+          "storage": "sqlite",
+          "reconciled_by": "Cloudflare"
+        }
+      ],
+      "containers": [
+        {
+          "class": "__BynkContainer_Renderer",
+          "capability": "Renderer",
+          "build": "containers/renderer",
+          "adopted": "registry.example/renderer@sha256:bbbb",
+          "instance": "lite",
+          "reconciled_by": "Cloudflare"
+        },
+        {
+          "class": "__BynkContainer_Thumbnailer",
+          "capability": "Thumbnailer",
+          "build": "containers/thumbnailer",
+          "instance": "standard",
+          "reconciled_by": "Cloudflare"
+        }
+      ],
+      "durable_objects_renamed": [
+        {
+          "from": "Basket",
+          "to": "Cart",
+          "already_applied": false
+        }
+      ],
+      "durable_objects_deleted": [
+        {
+          "class": "shop.Legacy",
+          "already_applied": false
+        }
+      ],
+      "secrets": [
+        {
+          "name": "API_TOKEN",
+          "origin": "declared",
+          "action": "set"
+        },
+        {
+          "name": "BYNK_CALL_TO_SHOP__CART",
+          "origin": "managed",
+          "action": "set"
+        }
+      ],
+      "secrets_complete": true,
+      "action": "redeploy",
+      "binds_to": [
+        "shop-cart-staging"
+      ],
+      "foreign_services": [
+        {
+          "binding": "PAYMENTS",
+          "worker": "payments-worker"
+        }
+      ],
+      "email_addresses": [
+        "orders@example.com"
+      ]
+    }
+  ]
+}
+bynk: warning: could not list the account's R2 buckets in jurisdiction eu (Cloudflare answered 403); the plan says what `bynk.deploy.lock` records for them

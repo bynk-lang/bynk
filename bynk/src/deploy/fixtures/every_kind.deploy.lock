@@ -1,0 +1,143 @@
+version = 1
+
+[environments.default]
+queues = [
+    "intake",
+    "old-jobs",
+    "shared-feed",
+]
+reused_queues = ["shared-feed"]
+
+[environments.default.kv.gone]
+id = "kv-gone-default"
+
+[environments.default.kv.shop]
+id = "kv-shop-default"
+
+[environments.default.kv_instances.gone.KV_CACHE]
+id = "kv-gone-cache-default"
+
+[environments.default.kv_instances.shop.KV_OLD]
+id = "kv-shop-old-default"
+
+[environments.default.kv_instances.shop.KV_SESSIONS]
+id = "kv-shop-sessions-default"
+
+[environments.default.r2_instances.shop.R2_ARCHIVE]
+name = "shop-archive"
+
+[[environments.default.r2_instances.shop.R2_ARCHIVE.superseded]]
+name = "shop-archive-was"
+jurisdiction = "fedramp"
+
+[environments.default.r2_instances.shop.R2_FILES]
+name = "shop-files"
+
+[environments.default.r2_instances.shop.R2_OLD]
+name = "shop-old"
+jurisdiction = "eu"
+
+[environments.default.vectorize_instances.gone.VECTORIZE_GONE]
+name = "gone-index"
+
+[environments.default.vectorize_instances.shop.VECTORIZE_DOCS]
+name = "shop-docs"
+
+[[environments.default.vectorize_instances.shop.VECTORIZE_DOCS.superseded]]
+name = "shop-docs-v0"
+
+[environments.default.vectorize_instances.shop.VECTORIZE_OLD]
+name = "shared-old"
+adopted = true
+
+[environments.default.container_images.shop]
+Renderer = "registry.example/renderer@sha256:aaaa"
+
+[environments.default.d1_instances.shop.D1_OLD]
+name = "shop-old"
+id = "d1-shop-old"
+
+[environments.default.d1_instances.shop.D1_ORDERS]
+name = "shop-orders"
+id = "d1-shop-orders"
+
+[[environments.default.d1_instances.shop.D1_ORDERS.superseded]]
+name = "shop-orders-was"
+id = "d1-shop-orders-was"
+
+[environments.default.hyperdrive_instances.gone.HYPERDRIVE_GONE]
+name = "gone-main"
+id = "hd-gone"
+
+[environments.default.hyperdrive_instances.shop.HYPERDRIVE_MAIN]
+name = "shop-main"
+id = "hd-shop-main"
+
+[[environments.default.hyperdrive_instances.shop.HYPERDRIVE_MAIN.superseded]]
+name = "shop-main-was"
+id = "hd-shop-main-was"
+
+[environments.default.hyperdrive_instances.shop.HYPERDRIVE_OLD]
+name = "shared-pg"
+id = "hd-shared"
+adopted = true
+
+[environments.default.stored_secret_links.shop.SECRET_STRIPE_KEY]
+store = "default_secrets_store"
+store_id = "store-1"
+secret = "stripe_key"
+
+[environments.default.ai_search_links.shop.AI_SEARCH_KB]
+instance = "kb"
+
+[environments.default.mtls_certificate_links.shop.MTLS_BACKEND]
+certificate = "backend-client"
+certificate_id = "cert-1"
+
+[environments.default.ratelimit_instances.shop.RATELIMIT_LOGIN]
+namespace_id = "1001"
+
+[environments.default.ratelimit_instances.shop.RATELIMIT_OLD]
+namespace_id = "1002"
+
+[environments.default.workers.gone]
+deployed = true
+contexts = [
+    "gone",
+    "gone.admin",
+]
+script = "gone-core"
+
+[environments.default.workers.shop]
+deployed = true
+
+[environments.default.deleted_classes]
+shop = ["Legacy"]
+
+[environments.default.renamed_classes.shop]
+Basket = "Cart"
+
+[environments.default.email_addresses]
+shop = [
+    "orders@example.com",
+    "returns@example.com",
+]
+
+[environments.staging]
+queues = ["old-jobs"]
+
+[environments.staging.kv.shop]
+id = "kv-shop-staging"
+
+[environments.staging.kv_instances.shop.KV_SESSIONS]
+id = "kv-shop-sessions-staging"
+
+[environments.staging.d1_instances.shop.D1_ORDERS]
+name = "shop-orders-staging"
+id = "d1-shop-orders-staging"
+
+[environments.staging.ratelimit_instances.shop.RATELIMIT_LOGIN]
+namespace_id = "2001"
+
+[environments.staging.workers.shop]
+deployed = true

@@ -120,14 +120,14 @@ pub(crate) struct Plan<'a> {
 }
 
 #[derive(Debug, Serialize)]
-struct ContextPlan<'a> {
+pub(crate) struct ContextPlan<'a> {
     /// The Worker this context deploys as: its [`deployed_worker_name`] in
     /// this environment, the name the push hands Wrangler (#2028).
-    worker: String,
+    pub(crate) worker: String,
     /// One line per KV namespace the Worker binds: the bare `KV` first, then
     /// each derived instance in binding order (S4b, #1967). Empty for a
-    /// context with no KV.
-    kv: Vec<PlanKv<'a>>,
+    /// context with no KV. Filled by [`Kv`] (1D.1a, #3929).
+    pub(crate) kv: Vec<PlanKv<'a>>,
     /// P5 (#2323): one line per R2 bucket the Worker binds, in binding order.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     r2: Vec<PlanR2<'a>>,
@@ -259,15 +259,6 @@ struct PlanStoredSecret<'a> {
 struct PlanForeignService<'a> {
     binding: &'a str,
     worker: &'a str,
-}
-
-#[derive(Debug, Serialize)]
-struct PlanKv<'a> {
-    /// `KV` for the bare `Kv`, `KV_<SNAKE>` for a derived instance.
-    binding: &'a str,
-    action: &'static str,
-    /// The namespace's account-facing title ([`kv_title`]).
-    namespace: String,
 }
 
 /// P3 (#2342): one rate limiter. Its `namespace_id` is the ledger's to
@@ -1302,20 +1293,18 @@ pub fn run(
         return ExitCode::FAILURE;
     }
 
-    // Slice 5, DECISION B: once per run, not once per context — an
-    // account-wide list, fetched only when it could actually change an
-    // outcome (a context needs KV and already has a recorded id worth
-    // checking; a first deploy has nothing to check drift against). `None`
-    // (no wrangler, or the call failed) falls back to trusting the ledger
-    // unconditionally, exactly as every deploy before this slice did.
-    let live_kv_ids = if order.iter().any(|w| {
-        kv_bindings(&resources[w])
-            .any(|b| recorded_kv_binding(&lock, w, b, &opts.environment).is_some())
-    }) {
-        live_kv_namespace_ids(&probe.provenance, project_root)
-    } else {
-        None
-    };
+    // Slice 5, DECISION B: the account's live KV ids, read once per run.
+    let live_kv = Kv::live(
+        Tools {
+            provenance: &probe.provenance,
+            project_root,
+        },
+        &ProjectCx {
+            ledger: LedgerView::of(&lock, &opts.environment),
+            resources: &resources,
+            order: &order,
+        },
+    );
 
     // Provision → wire → push, per context, in dependency order. Each context's
     // state is written to the ledger as it lands (ADR 0180's incremental
@@ -1438,7 +1427,7 @@ pub fn run(
             },
             &opts.wrangler_args,
             &opts.environment,
-            live_kv_ids.as_ref(),
+            &live_kv,
             &linked_stores,
             &hyperdrive_run,
         ) {
@@ -2379,14 +2368,7 @@ pub(crate) fn plan_report(plan: &Plan<'_>, format: DeployFormat) -> String {
             // fact about the account regardless of what this run is about to
             // do, and a reader should see it before the noise of what's being
             // pushed (slice 5).
-            for kv in &plan.shown_orphans.kv {
-                match &kv.binding {
-                    None => out.push_str(&format!("orphan kv {}\n", kv.worker)),
-                    Some(binding) => {
-                        out.push_str(&format!("orphan kv {} {binding}\n", kv.worker));
-                    }
-                }
-            }
+            short_kind_orphans(&plan.shown_orphans, &mut out);
             for r2 in &plan.shown_orphans.r2 {
                 out.push_str(&format!(
                     "orphan r2 {} {} ({}{}; not deleted)\n",
@@ -2450,17 +2432,7 @@ pub(crate) fn plan_report(plan: &Plan<'_>, format: DeployFormat) -> String {
                 out.push_str(&format!("orphan queue {queue}\n"));
             }
             for context in &plan.contexts {
-                for kv in &context.kv {
-                    // The bare line is unchanged; an instance names its binding.
-                    if is_bare_kv(kv.binding) {
-                        out.push_str(&format!("kv {} {}\n", kv.action, kv.namespace));
-                    } else {
-                        out.push_str(&format!(
-                            "kv {} {} ({})\n",
-                            kv.action, kv.namespace, kv.binding
-                        ));
-                    }
-                }
+                short_kind_lines(context, &mut out);
                 for r2 in &context.r2 {
                     out.push_str(&format!("r2 {} {} ({})", r2.action, r2.bucket, r2.binding));
                     if let Some(jurisdiction) = r2.jurisdiction {
@@ -2694,11 +2666,12 @@ fn unrecordable_in_ci(
     if !is_ci() {
         return false;
     }
-    if let Some((worker, binding)) = first_unrecorded_kv(order, resources, lock, environment) {
-        emsg!(
-            "bynk: error: {} is unrecorded; provision locally first and commit {LOCK_FILE}",
-            kv_namespace_noun(worker, binding)
-        );
+    if let Some(message) = kind_unrecordable_in_ci(&ProjectCx {
+        ledger: LedgerView::of(lock, environment),
+        resources,
+        order,
+    }) {
+        emsg!("{message}");
         return true;
     }
     if let Some((worker, binding)) = first_unrecorded_ratelimit(order, resources, lock, environment)
@@ -2719,11 +2692,15 @@ fn account_name_problem(
     lock: &DeployLock,
     environment: &str,
 ) -> Option<String> {
-    kv_title_collision(resources, lock, environment)
-        .or_else(|| r2_bucket_problem(resources, lock, environment))
-        .or_else(|| vectorize_index_problem(resources, lock, environment))
-        .or_else(|| d1_database_problem(resources, lock, environment))
-        .or_else(|| analytics_dataset_problem(resources, lock, environment))
+    kind_name_problem(&ProjectCx {
+        ledger: LedgerView::of(lock, environment),
+        resources,
+        order: &[],
+    })
+    .or_else(|| r2_bucket_problem(resources, lock, environment))
+    .or_else(|| vectorize_index_problem(resources, lock, environment))
+    .or_else(|| d1_database_problem(resources, lock, environment))
+    .or_else(|| analytics_dataset_problem(resources, lock, environment))
 }
 
 /// #3319: the plan lines of `worker`'s Hyperdrive configs. `wants` is empty
@@ -2763,24 +2740,21 @@ impl<'a> Plan<'a> {
     /// #3494: the listings the account is asked for: one per kind (and R2
     /// jurisdiction) of which this plan would create something.
     pub(crate) fn account_listings(&self) -> BTreeSet<super::on_account::Listing> {
-        use super::on_account::Kind;
         let creates = |action: &str| action == "create" || action == "create or reuse";
         let mut wanted = BTreeSet::new();
         for c in &self.contexts {
-            if c.kv.iter().any(|kv| creates(kv.action)) {
-                wanted.insert((Kind::Kv, None));
-            }
+            kind_listings(c, &mut wanted);
             for r2 in c.r2.iter().filter(|r2| creates(r2.action)) {
-                wanted.insert((Kind::R2, r2.jurisdiction.map(str::to_string)));
+                wanted.insert((KindId::R2, r2.jurisdiction.map(str::to_string)));
             }
             if c.d1.iter().any(|d1| creates(d1.action)) {
-                wanted.insert((Kind::D1, None));
+                wanted.insert((KindId::D1, None));
             }
             if c.queues.iter().any(|q| creates(q.action)) {
-                wanted.insert((Kind::Queue, None));
+                wanted.insert((KindId::Queue, None));
             }
             if c.vectorize.iter().any(|v| creates(v.action)) {
-                wanted.insert((Kind::Vectorize, None));
+                wanted.insert((KindId::Vectorize, None));
             }
         }
         wanted
@@ -2793,7 +2767,6 @@ impl<'a> Plan<'a> {
     /// A KV namespace is noted instead: Cloudflare refuses a second namespace of
     /// one title, so the deploy cannot create it.
     pub(crate) fn checked_against(mut self, on: &super::on_account::OnAccount) -> Self {
-        use super::on_account::Kind;
         // A listing not read changes nothing: the ledger's word stands.
         let verb = |action: &'static str, held: Option<bool>| match (action, held) {
             ("create" | "create or reuse", Some(true)) => "reuse",
@@ -2803,29 +2776,18 @@ impl<'a> Plan<'a> {
         self.account_notes.extend(on.notes.iter().cloned());
         for c in &mut self.contexts {
             for r2 in &mut c.r2 {
-                r2.action = verb(r2.action, on.holds(Kind::R2, r2.jurisdiction, &r2.bucket));
+                r2.action = verb(r2.action, on.holds(KindId::R2, r2.jurisdiction, &r2.bucket));
             }
             for d1 in &mut c.d1 {
-                d1.action = verb(d1.action, on.holds(Kind::D1, None, &d1.database));
+                d1.action = verb(d1.action, on.holds(KindId::D1, None, &d1.database));
             }
             for q in &mut c.queues {
-                q.action = verb(q.action, on.holds(Kind::Queue, None, &q.queue));
+                q.action = verb(q.action, on.holds(KindId::Queue, None, &q.queue));
             }
             for v in &mut c.vectorize {
-                v.action = verb(v.action, on.holds(Kind::Vectorize, None, &v.index));
+                v.action = verb(v.action, on.holds(KindId::Vectorize, None, &v.index));
             }
-            for kv in c.kv.iter().filter(|kv| kv.action == "create") {
-                if on.holds(Kind::Kv, None, &kv.namespace) == Some(true) {
-                    self.account_notes.push(format!(
-                        "bynk: warning: the KV namespace `{}` (`{}` of `{}`) is already on the \
-                         account, but `bynk.deploy.lock` does not record it, and Cloudflare \
-                         refuses a second namespace of one title: the deploy cannot create it. \
-                         Delete the namespace if it holds nothing you need, or rename the \
-                         capability",
-                        kv.namespace, kv.binding, c.worker
-                    ));
-                }
-            }
+            check_kind_lines(c, on, &mut self.account_notes);
         }
         self
     }
@@ -2913,21 +2875,9 @@ pub(crate) fn derive_plan<'a>(
             .iter()
             .map(|worker| {
                 let declared = &resources[worker];
-                ContextPlan {
+                let mut context = ContextPlan {
                     worker: deployed_worker_name(environment, worker),
-                    kv: kv_bindings(declared)
-                        .map(|binding| PlanKv {
-                            binding,
-                            action: if recorded_kv_binding(lock, worker, binding, environment)
-                                .is_some()
-                            {
-                                "reuse"
-                            } else {
-                                "create"
-                            },
-                            namespace: kv_title(worker, binding, environment),
-                        })
-                        .collect(),
+                    kv: Vec::new(),
                     r2: declared
                         .r2_buckets
                         .iter()
@@ -3169,70 +3119,17 @@ pub(crate) fn derive_plan<'a>(
                         worker,
                         &declared.email_addresses,
                     ),
-                }
+                };
+                // 1D.1 (#3929): each converted kind's lines.
+                let cx = PlanCx {
+                    ledger: LedgerView::of(lock, environment),
+                    worker,
+                };
+                fill_kind_lines(&mut context, declared, &cx);
+                context
             })
             .collect(),
     }
-}
-
-/// Two KV namespaces that would share one account-facing title
-/// ([`kv_title`]), described for the user. `None` when there is no clash.
-///
-/// Cloudflare refuses a namespace whose title the account already holds, in
-/// any environment ("Returns `400` if the account already owns a namespace
-/// with that title"), so there are two checks:
-///
-/// - **Within `environment`**, every namespace the project declares: Worker
-///   `shop` with `capability CartSessions` and Worker `shop-cart` with
-///   `capability Sessions` both give `shop-cart-sessions`.
-/// - **Across environments** (#2048), each namespace this deploy would create
-///   (declared, with no id recorded for `environment`) against every other
-///   environment the ledger knows: the titles of the namespaces it records,
-///   and the titles its next deploy of this source would create. Worker
-///   `shop`'s bare namespace under `--env staging` and its `capability
-///   Staging` in the default environment are both `shop-staging`. A namespace
-///   already recorded here is not created, so it cannot fail; that clash is
-///   refused by the other environment's deploy instead. A recorded namespace
-///   whose id has gone from the account is created again, and that is only
-///   known once the deploy fetches the live ids, so `deploy_one` runs
-///   [`cross_environment_title_clash`] again at that point (#2059).
-///
-/// Checked across the whole project, not just `--context`'s selection, since
-/// titles are account-wide. The ledger records ids, not titles, so a recorded
-/// namespace counts under the title Bynk would give it now; one made under
-/// `--env` before #2037 is really titled with the bare Worker name.
-pub(crate) fn kv_title_collision(
-    resources: &BTreeMap<String, Resources>,
-    lock: &DeployLock,
-    environment: &str,
-) -> Option<String> {
-    let mut seen: BTreeMap<String, (&str, &str)> = BTreeMap::new();
-    for (worker, declared) in resources {
-        for binding in kv_bindings(declared) {
-            let title = kv_title(worker, binding, environment);
-            if let Some((first_worker, first_binding)) =
-                seen.insert(title.clone(), (worker.as_str(), binding))
-            {
-                return Some(format!(
-                    "{} and {} would both be titled `{title}` on the account; rename a capability or context so they differ",
-                    kv_namespace_noun(first_worker, first_binding),
-                    kv_namespace_noun(worker, binding)
-                ));
-            }
-        }
-    }
-
-    // What this deploy creates: each declared namespace with no recorded id.
-    let creates: Vec<(&str, &str)> = resources
-        .iter()
-        .flat_map(|(worker, declared)| {
-            kv_bindings(declared).map(move |binding| (worker.as_str(), binding))
-        })
-        .filter(|(worker, binding)| {
-            recorded_kv_binding(lock, worker, binding, environment).is_none()
-        })
-        .collect();
-    cross_environment_title_clash(resources, lock, environment, &creates, None)
 }
 
 /// P5 (#2323): why a plan with a `recreate` bucket may not proceed without
@@ -3475,112 +3372,6 @@ pub(crate) fn r2_bucket_problem(
         }
     }
     None
-}
-
-/// The cross-environment half of [`kv_title_collision`]: does any of
-/// `creates`, the `(worker, binding)` namespaces about to be created under
-/// `environment`, take a title another environment the ledger knows holds or
-/// would create? The message names both namespaces and both environments.
-///
-/// Also run by `deploy_one` at the moment it decides to create (#2059), since
-/// that is the only point that knows a recorded id has gone from the account
-/// and its namespace is about to be created again. There `live_kv_ids` is the
-/// account's live ids, when fetched: another environment's recorded namespace
-/// whose id is not among them no longer holds its title (though one this
-/// source declares there still counts, since that deploy would create it).
-/// `None` counts every recorded namespace, which is always the case at plan
-/// time: [`kv_title_collision`] runs before the live ids are fetched, so the
-/// relaxation applies only to the deploy-time re-check.
-pub(crate) fn cross_environment_title_clash(
-    resources: &BTreeMap<String, Resources>,
-    lock: &DeployLock,
-    environment: &str,
-    creates: &[(&str, &str)],
-    live_kv_ids: Option<&BTreeSet<String>>,
-) -> Option<String> {
-    if creates.is_empty() {
-        return None;
-    }
-    let is_live = |id: &str| live_kv_ids.is_none_or(|live| live.contains(id));
-    let declared = || {
-        resources.iter().flat_map(|(worker, declared)| {
-            kv_bindings(declared).map(move |binding| (worker.as_str(), binding))
-        })
-    };
-    for (other, recorded) in &lock.environments {
-        if other == environment {
-            continue;
-        }
-        // Each title `other` holds or would create, and whose it is: what its
-        // ledger records first, then what this source declares.
-        let held = recorded
-            .kv
-            .iter()
-            .filter(|(_, kv)| is_live(&kv.id))
-            .map(|(worker, _)| {
-                (
-                    worker.as_str(),
-                    bynk_emit::emitter::wrangler::KV_BINDING_NAME,
-                )
-            })
-            .chain(
-                recorded
-                    .kv_instances
-                    .iter()
-                    .flat_map(|(worker, instances)| {
-                        instances
-                            .iter()
-                            .filter(|(_, kv)| is_live(&kv.id))
-                            .map(move |(binding, _)| (worker.as_str(), binding.as_str()))
-                    }),
-            );
-        let mut taken: BTreeMap<String, (&str, &str)> = BTreeMap::new();
-        for (worker, binding) in held.chain(declared()) {
-            taken
-                .entry(kv_title(worker, binding, other))
-                .or_insert((worker, binding));
-        }
-        for &(worker, binding) in creates {
-            let title = kv_title(worker, binding, environment);
-            if let Some(&(other_worker, other_binding)) = taken.get(&title) {
-                return Some(format!(
-                    "{} in {} and {} in {} would both be titled `{title}` on the account, which holds one namespace per title; rename a capability or context so they differ",
-                    kv_namespace_noun(worker, binding),
-                    environment_label(environment),
-                    kv_namespace_noun(other_worker, other_binding),
-                    environment_label(other),
-                ));
-            }
-        }
-    }
-    None
-}
-
-/// How a message names an environment: `the default environment`, or
-/// `` `--env staging` ``.
-fn environment_label(environment: &str) -> String {
-    if environment == "default" {
-        "the default environment".to_string()
-    } else {
-        format!("`--env {environment}`")
-    }
-}
-
-/// The first KV namespace in `order` with no recorded id, as `(worker,
-/// binding)`: what CI refuses to mint, since an id created there and never
-/// committed is an orphan nobody can find again. Every namespace counts, the
-/// bare `KV` and each derived instance alike (S4b, #1967).
-fn first_unrecorded_kv<'a>(
-    order: &'a [String],
-    resources: &'a BTreeMap<String, Resources>,
-    lock: &DeployLock,
-    environment: &str,
-) -> Option<(&'a str, &'a str)> {
-    order.iter().find_map(|worker| {
-        kv_bindings(&resources[worker])
-            .find(|binding| recorded_kv_binding(lock, worker, binding, environment).is_none())
-            .map(|binding| (worker.as_str(), binding))
-    })
 }
 
 /// P3 (#2342): the first rate limiter in `order` with no recorded
@@ -3897,20 +3688,16 @@ pub(crate) mod tests {
     /// An account holding `names` of each kind (R2 within the jurisdiction
     /// given), counting what it was asked for.
     struct Account {
-        names: Vec<(
-            super::super::on_account::Kind,
-            Option<&'static str>,
-            &'static str,
-        )>,
+        names: Vec<(KindId, Option<&'static str>, &'static str)>,
         asked: std::cell::RefCell<Vec<super::super::on_account::Listing>>,
         /// The kinds whose listing fails.
-        failing: Vec<super::super::on_account::Kind>,
+        failing: Vec<KindId>,
     }
 
     impl super::super::on_account::Listings for Account {
         fn names(
             &self,
-            kind: super::super::on_account::Kind,
+            kind: KindId,
             jurisdiction: Option<&str>,
         ) -> Result<BTreeSet<String>, String> {
             self.asked
@@ -3955,19 +3742,18 @@ pub(crate) mod tests {
     /// Cloudflare refuses, is named in a note instead.
     #[test]
     fn a_resource_already_on_the_account_is_planned_as_reuse() {
-        use super::super::on_account::Kind;
         let order = names(&["shop"]);
         let declared = every_kind();
         let account = Account {
             names: vec![
-                (Kind::Kv, None, "shop"),
-                (Kind::R2, None, "shop-files"),
+                (KindId::Kv, None, "shop"),
+                (KindId::R2, None, "shop-files"),
                 // The same name in the default jurisdiction is another bucket.
-                (Kind::R2, None, "shop-archive"),
-                (Kind::D1, None, "shop-orders"),
-                (Kind::Queue, None, "intake"),
-                (Kind::Queue, None, "outbound"),
-                (Kind::Vectorize, None, "shop-docs"),
+                (KindId::R2, None, "shop-archive"),
+                (KindId::D1, None, "shop-orders"),
+                (KindId::Queue, None, "intake"),
+                (KindId::Queue, None, "outbound"),
+                (KindId::Vectorize, None, "shop-docs"),
             ],
             asked: Default::default(),
             failing: Vec::new(),
@@ -4013,7 +3799,7 @@ pub(crate) mod tests {
         let account = Account {
             names: Vec::new(),
             asked: Default::default(),
-            failing: vec![super::super::on_account::Kind::Queue],
+            failing: vec![KindId::Queue],
         };
         let plan = checked(plan_of(&order, &declared, &DeployLock::default()), &account);
         let text = plan_report(&plan, DeployFormat::Short);
@@ -5446,8 +5232,11 @@ queue = "jobs"
                 Resources::default().kv_instances(&["KV_SESSIONS"]),
             ),
         ]);
-        let message =
-            kv_title_collision(&colliding, &DeployLock::default(), "default").expect("a collision");
+        let message = kv_title_collision(
+            &colliding,
+            LedgerView::of(&DeployLock::default(), "default"),
+        )
+        .expect("a collision");
         assert!(
             message.contains("`shop-cart-sessions`")
                 && message.contains("`KV_CART_SESSIONS` for `shop`")
@@ -5459,7 +5248,9 @@ queue = "jobs"
             ("shop", Resources::default().kv_instances(&["KV_CART"])),
             ("shop-cart", Resources::default().needs_kv()),
         ]);
-        assert!(kv_title_collision(&bare, &DeployLock::default(), "default").is_some());
+        assert!(
+            kv_title_collision(&bare, LedgerView::of(&DeployLock::default(), "default")).is_some()
+        );
         let distinct = project(vec![(
             "shop-cart",
             Resources::default()
@@ -5467,7 +5258,7 @@ queue = "jobs"
                 .kv_instances(&["KV_PRICE_CACHE", "KV_SESSIONS"]),
         )]);
         assert_eq!(
-            kv_title_collision(&distinct, &DeployLock::default(), "staging"),
+            kv_title_collision(&distinct, LedgerView::of(&DeployLock::default(), "staging")),
             None
         );
     }
@@ -5491,9 +5282,15 @@ queue = "jobs"
     fn a_title_another_environment_holds_is_refused() {
         let resources = shop_with_staging_instance();
         let mut lock = DeployLock::default();
-        lock.record_kv("default", "shop", "KV", "bare-id");
-        lock.record_kv("default", "shop", "KV_STAGING", "instance-id");
-        let message = kv_title_collision(&resources, &lock, "staging").expect("a collision");
+        lock.record::<Kv>("default", "shop", "KV", KvNamespace::of("bare-id"));
+        lock.record::<Kv>(
+            "default",
+            "shop",
+            "KV_STAGING",
+            KvNamespace::of("instance-id"),
+        );
+        let message =
+            kv_title_collision(&resources, LedgerView::of(&lock, "staging")).expect("a collision");
         assert_eq!(
             message,
             "KV namespace for `shop` in `--env staging` and KV namespace `KV_STAGING` for `shop` \
@@ -5511,7 +5308,8 @@ queue = "jobs"
         let mut lock = DeployLock::default();
         // Staging is known to the ledger, but has not provisioned KV yet.
         lock.record_deployed("staging", "other", Some(Default::default()));
-        let message = kv_title_collision(&resources, &lock, "default").expect("a collision");
+        let message =
+            kv_title_collision(&resources, LedgerView::of(&lock, "default")).expect("a collision");
         assert!(
             message.contains("KV namespace `KV_STAGING` for `shop` in the default environment")
                 && message.contains("KV namespace for `shop` in `--env staging`")
@@ -5530,8 +5328,9 @@ queue = "jobs"
             Resources::default().kv_instances(&["KV_STAGING"]),
         )]);
         let mut lock = DeployLock::default();
-        lock.record_kv("staging", "shop", "KV", "orphaned-id");
-        let message = kv_title_collision(&resources, &lock, "default").expect("a collision");
+        lock.record::<Kv>("staging", "shop", "KV", KvNamespace::of("orphaned-id"));
+        let message =
+            kv_title_collision(&resources, LedgerView::of(&lock, "default")).expect("a collision");
         assert!(
             message.contains("KV namespace for `shop` in `--env staging`"),
             "{message}"
@@ -5545,12 +5344,20 @@ queue = "jobs"
     fn a_namespace_already_recorded_here_is_not_refused() {
         let resources = shop_with_staging_instance();
         let mut lock = DeployLock::default();
-        lock.record_kv("default", "shop", "KV", "bare-id");
-        lock.record_kv("default", "shop", "KV_STAGING", "instance-id");
+        lock.record::<Kv>("default", "shop", "KV", KvNamespace::of("bare-id"));
+        lock.record::<Kv>(
+            "default",
+            "shop",
+            "KV_STAGING",
+            KvNamespace::of("instance-id"),
+        );
         lock.record_deployed("staging", "other", Some(Default::default()));
-        assert_eq!(kv_title_collision(&resources, &lock, "default"), None);
+        assert_eq!(
+            kv_title_collision(&resources, LedgerView::of(&lock, "default")),
+            None
+        );
         // ...and the staging deploy is the one refused.
-        assert!(kv_title_collision(&resources, &lock, "staging").is_some());
+        assert!(kv_title_collision(&resources, LedgerView::of(&lock, "staging")).is_some());
     }
 
     /// #2048: an environment the ledger does not know is not compared, and
@@ -5559,7 +5366,10 @@ queue = "jobs"
     fn unknown_environments_and_distinct_titles_pass() {
         let resources = shop_with_staging_instance();
         assert_eq!(
-            kv_title_collision(&resources, &DeployLock::default(), "staging"),
+            kv_title_collision(
+                &resources,
+                LedgerView::of(&DeployLock::default(), "staging")
+            ),
             None
         );
         let plain = project(vec![(
@@ -5569,10 +5379,18 @@ queue = "jobs"
                 .kv_instances(&["KV_SESSIONS"]),
         )]);
         let mut lock = DeployLock::default();
-        lock.record_kv("default", "shop-cart", "KV", "bare-id");
-        lock.record_kv("default", "shop-cart", "KV_SESSIONS", "sessions-id");
-        lock.record_kv("production", "shop-cart", "KV", "prod-id");
-        assert_eq!(kv_title_collision(&plain, &lock, "staging"), None);
+        lock.record::<Kv>("default", "shop-cart", "KV", KvNamespace::of("bare-id"));
+        lock.record::<Kv>(
+            "default",
+            "shop-cart",
+            "KV_SESSIONS",
+            KvNamespace::of("sessions-id"),
+        );
+        lock.record::<Kv>("production", "shop-cart", "KV", KvNamespace::of("prod-id"));
+        assert_eq!(
+            kv_title_collision(&plain, LedgerView::of(&lock, "staging")),
+            None
+        );
     }
 
     /// S4b (#1967): CI refuses any unrecorded namespace, including an
@@ -5580,6 +5398,11 @@ queue = "jobs"
     #[test]
     fn ci_refuses_the_first_unrecorded_namespace_bare_or_instance() {
         use crate::deploy::ledger::tests::with_kv_instance;
+        let refusal = |noun: &str| {
+            Some(format!(
+                "bynk: error: {noun} is unrecorded; provision locally first and commit {LOCK_FILE}"
+            ))
+        };
         let order = names(&["shop-cart"]);
         let declared = project(vec![(
             "shop-cart",
@@ -5588,13 +5411,21 @@ queue = "jobs"
                 .kv_instances(&["KV_PRICE_CACHE", "KV_SESSIONS"]),
         )]);
         assert_eq!(
-            first_unrecorded_kv(&order, &declared, &DeployLock::default(), "default"),
-            Some(("shop-cart", "KV"))
+            Kv::unrecordable_in_ci(&ProjectCx {
+                ledger: LedgerView::of(&DeployLock::default(), "default"),
+                resources: &declared,
+                order: &order
+            }),
+            refusal("KV namespace for `shop-cart`")
         );
         let bare = with_kv(DeployLock::default(), "shop-cart");
         assert_eq!(
-            first_unrecorded_kv(&order, &declared, &bare, "default"),
-            Some(("shop-cart", "KV_PRICE_CACHE"))
+            Kv::unrecordable_in_ci(&ProjectCx {
+                ledger: LedgerView::of(&bare, "default"),
+                resources: &declared,
+                order: &order
+            }),
+            refusal("KV namespace `KV_PRICE_CACHE` for `shop-cart`")
         );
         let all = with_kv_instance(
             with_kv_instance(bare, "shop-cart", "KV_PRICE_CACHE"),
@@ -5602,12 +5433,20 @@ queue = "jobs"
             "KV_SESSIONS",
         );
         assert_eq!(
-            first_unrecorded_kv(&order, &declared, &all, "default"),
+            Kv::unrecordable_in_ci(&ProjectCx {
+                ledger: LedgerView::of(&all, "default"),
+                resources: &declared,
+                order: &order
+            }),
             None
         );
         assert_eq!(
-            first_unrecorded_kv(&order, &declared, &all, "staging"),
-            Some(("shop-cart", "KV")),
+            Kv::unrecordable_in_ci(&ProjectCx {
+                ledger: LedgerView::of(&all, "staging"),
+                resources: &declared,
+                order: &order
+            }),
+            refusal("KV namespace for `shop-cart`"),
             "recorded under another environment is unrecorded here"
         );
     }
