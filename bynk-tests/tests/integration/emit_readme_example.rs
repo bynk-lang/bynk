@@ -45,8 +45,15 @@ fn the_example_matches_the_readme() {
         .nth(1)
         .and_then(|rest| rest.split("```").next())
         .expect("the README holds a `rust,ignore` example");
+    // Only the body of the example test counts: a line elsewhere in this file (this test's own
+    // asserts, say) must not satisfy a README line.
     let this = include_str!("emit_readme_example.rs");
-    let ours: std::collections::HashSet<&str> = this.lines().map(str::trim).collect();
+    let start = this
+        .find("fn the_readme_example_compiles_and_emits() {")
+        .expect("the example test is in this file");
+    let body = &this[start..];
+    let body = &body[..body.find("\n}\n").expect("the example test closes")];
+    let ours: std::collections::HashSet<&str> = body.lines().map(str::trim).collect();
     for line in block.lines().map(str::trim).filter(|l| !l.is_empty()) {
         assert!(
             ours.contains(line),

@@ -75,6 +75,7 @@ pub(crate) mod compose;
 pub mod containers;
 pub mod contracts;
 pub(crate) mod events_fanout;
+pub(crate) mod harness_names;
 pub mod http_client;
 pub mod secrets;
 pub mod serialisation;

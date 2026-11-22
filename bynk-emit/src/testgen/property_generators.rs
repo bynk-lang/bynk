@@ -175,7 +175,7 @@ pub(super) fn base_draw_ts(base: BaseType, refinement: Option<&Refinement>) -> T
             method_call(
                 ident("rng"),
                 "int",
-                vec![num_lit(format!("{lo}n")), num_lit(format!("{hi}n"))],
+                vec![TsExpr::bigint(lo), TsExpr::bigint(hi)],
             )
         }
         BaseType::Float => {
@@ -203,7 +203,7 @@ pub(super) fn base_draw_ts(base: BaseType, refinement: Option<&Refinement>) -> T
                 bynk_ts::print_expr(&method_call(
                     ident("rng"),
                     "int",
-                    vec![num_lit(format!("{lo}n")), num_lit(format!("{hi}n"))],
+                    vec![TsExpr::bigint(lo), TsExpr::bigint(hi)],
                 ))
             ))
         }
@@ -217,7 +217,7 @@ pub(super) fn base_canon_ts(base: BaseType, refinement: Option<&Refinement>) -> 
     match base {
         BaseType::Int => {
             let (lo, _, _) = int_bounds(refinement);
-            num_lit(format!("{lo}n"))
+            TsExpr::bigint(lo)
         }
         BaseType::Float => {
             let (lo, _) = float_bounds(refinement);
@@ -522,7 +522,7 @@ pub(super) fn gen_ts_for_ty(
             method_call(
                 ident("rng"),
                 "int",
-                vec![num_lit(format!("{lo}n")), num_lit(format!("{hi}n"))],
+                vec![TsExpr::bigint(lo), TsExpr::bigint(hi)],
             )
         }
         checker::Ty::Base(BaseType::String) => {
@@ -805,13 +805,13 @@ pub(super) fn binding_gen(
             let (lo, hi, floor) = int_bounds(None);
             (
                 vec![
-                    num_lit(format!("{floor}n")),
-                    num_lit(format!("{hi}n")),
-                    num_lit(format!("{lo}n")),
+                    TsExpr::bigint(floor),
+                    TsExpr::bigint(hi),
+                    TsExpr::bigint(lo),
                 ],
                 call(
                     ident("__bynkShrinkInt"),
-                    vec![ident("v"), num_lit(format!("{floor}n"))],
+                    vec![ident("v"), TsExpr::bigint(floor)],
                 ),
             )
         }
@@ -865,7 +865,7 @@ pub(super) fn binding_gen(
                             method_call(
                                 call(
                                     ident("__bynkShrinkInt"),
-                                    vec![ident("v"), num_lit(format!("{floor}n"))],
+                                    vec![ident("v"), TsExpr::bigint(floor)],
                                 ),
                                 "map",
                                 vec![TsExpr::Arrow {

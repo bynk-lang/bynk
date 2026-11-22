@@ -398,7 +398,7 @@ pub(super) fn decimal_lit(coef: &str, scale: u32) -> bynk_ts::TsExpr {
     bynk_ts::TsExpr::object(vec![
         (
             "coefficient".to_string(),
-            num_lit(format!("{}n", decimal_signed_coef(coef))),
+            bynk_ts::TsExpr::bigint(decimal_signed_coef(coef)),
         ),
         ("scale".to_string(), num_lit(scale.to_string())),
     ])

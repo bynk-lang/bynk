@@ -102,14 +102,14 @@ pub(super) fn template(text: impl Into<String>) -> TsExpr {
 /// <decode_fn>(__res, <payload>);`. Slice F (#1407): the one real shape
 /// shared by all four per-route `__sysdrive_{,raw_,noauth_,rawnoauth_}*`
 /// drivers in `emit_system_http_support`, differing only in name (built here
-/// from `kind_prefix`/`sname`/`key`, one shared spot rather than one
+/// from `kind`/`sname`/`key`, one shared spot rather than one
 /// `format!` call per driver kind), params, the optional body statement, the
 /// options object (Decision A, see its own call sites), and the decode
 /// function — every real difference is a parameter here, not a reason to
 /// hand-write four near-identical bodies.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn sysdrive_driver(
-    kind_prefix: &str,
+    kind: SysdriveKind<'_>,
     sname: &str,
     key: &str,
     mut params: Vec<TsParam>,
@@ -185,7 +185,7 @@ pub(super) fn sysdrive_driver(
     ));
     TsStmt::decl(
         TsDecl::Function {
-            name: format!("__sysdrive_{kind_prefix}{sname}_{key}"),
+            name: sysdrive_name(kind, sname, key),
             generics: Vec::new(),
             params,
             return_type: None,
@@ -505,8 +505,8 @@ pub fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt, pg: bool) -
         program.push(TsStmt::decl(
             TsDecl::ImportNamespace {
                 type_only: false,
-                alias: format!("test_{i}"),
-                from: format!("./{module_stem}.{ext}"),
+                alias: case_alias(i),
+                from: sibling_specifier(module_stem, ext),
             },
             None,
         ));
@@ -527,9 +527,9 @@ pub fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt, pg: bool) -
                 ("name".to_string(), str_lit(t.target_name.clone())),
                 (
                     "names".to_string(),
-                    member(ident(format!("test_{i}")), "__bynkCases"),
+                    member(ident(case_alias(i)), "__bynkCases"),
                 ),
-                ("run".to_string(), member(ident(format!("test_{i}")), "run")),
+                ("run".to_string(), member(ident(case_alias(i)), "run")),
             ])
         })
         .collect();

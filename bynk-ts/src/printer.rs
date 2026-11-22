@@ -2618,6 +2618,10 @@ fn render_lit(out: &mut String, lit: &TsLit) {
             out.push('"');
         }
         TsLit::Num(n) => out.push_str(n),
+        TsLit::BigInt(digits) => {
+            out.push_str(digits);
+            out.push('n');
+        }
         TsLit::Null => out.push_str("null"),
         TsLit::Bool(b) => out.push_str(if *b { "true" } else { "false" }),
         // The whole literal, printed exactly as given — see `TsLit::Raw`'s
@@ -5022,6 +5026,19 @@ mod tests {
         p.default = Some(TsExpr::Lit(TsLit::Num("1".to_string())));
         let mut out = String::new();
         render_params(&mut out, &[p]);
+    }
+
+    /// A `bigint` literal prints its digits and the `n` suffix, whatever its size or sign.
+    #[test]
+    fn print_expr_renders_a_bigint_literal() {
+        assert_eq!(print_expr(&TsExpr::bigint(0)), "0n");
+        assert_eq!(print_expr(&TsExpr::bigint(-5)), "-5n");
+        assert_eq!(
+            print_expr(&TsExpr::bigint(i128::MIN)),
+            "-170141183460469231731687303715884105728n"
+        );
+        let wide = "1".repeat(41);
+        assert_eq!(print_expr(&TsExpr::bigint(&wide)), format!("{wide}n"));
     }
 
     /// An integer literal type indexes a tuple type: `Parameters<typeof f>[0]`.
