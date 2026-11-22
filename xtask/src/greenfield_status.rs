@@ -3093,13 +3093,14 @@ fn binding_kind_homes_files(files: &[(PathBuf, String)]) -> Vec<String> {
         }
         // As in [`deploy_kind_accessors_violations`]: a `pub(crate) mod tests` is a test module,
         // which [`test_mod_ranges`] reads only by its `mod ` line.
-        let lines: Vec<&str> = contents
+        let owned: Vec<String> = contents
             .lines()
-            .map(|line| {
-                line.strip_prefix("pub(crate) mod ")
-                    .map_or(line, |_| &line[11..])
+            .map(|line| match line.strip_prefix("pub(crate) mod ") {
+                Some(rest) => format!("mod {rest}"),
+                None => line.to_string(),
             })
             .collect();
+        let lines: Vec<&str> = owned.iter().map(String::as_str).collect();
         let ranges = test_mod_ranges(&lines);
         let defines = lines.iter().enumerate().any(|(i, line)| {
             if in_test_range(i, &ranges) || is_line_comment(line) {
@@ -3108,10 +3109,13 @@ fn binding_kind_homes_files(files: &[(PathBuf, String)]) -> Vec<String> {
             // A stanza is a `Deserialize` struct: the derive is on one of the attribute lines
             // just above it.
             let derived = || {
-                lines[i.saturating_sub(4)..i]
+                lines[..i]
                     .iter()
                     .rev()
-                    .take_while(|l| l.trim_start().starts_with("#["))
+                    .take_while(|l| {
+                        let l = l.trim_start();
+                        l.starts_with("#[") || l.starts_with("//")
+                    })
                     .any(|l| l.contains("Deserialize"))
             };
             construction.is_match(line) || (stanza.is_match(line) && derived())
@@ -5563,6 +5567,12 @@ mod tests {
         assert_eq!(homes(&[("bynk/src/c.rs", stanza)]), 1);
         assert_eq!(homes(&[("bynk/src/c.rs", plain)]), 0);
         assert_eq!(homes(&[("bynk/src/c.rs", other)]), 0);
+        let stacked = "#[derive(Deserialize)]\n/// A doc line.\n#[serde(rename_all = \"camelCase\")]\n#[serde(deny_unknown_fields)]\n#[allow(dead_code)]\n#[cfg_attr(test, derive(Debug))]\nstruct HyperdriveStanza {\n}\n";
+        assert_eq!(homes(&[("bynk/src/c.rs", stacked)]), 1);
+        // The derive of the struct above does not carry over a blank line or an item.
+        let apart =
+            "#[derive(Deserialize)]\nstruct Resources {\n}\n\nstruct KvNamespaceBinding {\n}\n";
+        assert_eq!(homes(&[("bynk/src/c.rs", apart)]), 0);
         let manifest = "#[derive(Deserialize)]\n#[serde(rename_all = \"camelCase\")]\nstruct VectorizeManifestEntry {\n}\n";
         assert_eq!(homes(&[("bynk/src/c.rs", manifest)]), 1);
     }
