@@ -1,0 +1,22 @@
+/* The docs site's own touches, on top of the Bynk site theme
+ * (@bynk-lang/site-theme), which carries the brand: tokens, colours, fonts,
+ * headings, quotations and code blocks. Keep this file to what is particular
+ * to this site. */
+
+/* A little more vertical rhythm between content blocks than Starlight's
+ * default. */
+:root {
+  --sl-content-gap-y: 1.25rem;
+}
+
+/* The landing hero: more breathing room, and a tagline that wraps evenly
+ * rather than leaving a short last line. Scoped to the splash template, so
+ * Book pages are untouched. */
+.hero {
+  --sl-hero-gap: clamp(1.5rem, 6vw, 4rem);
+}
+
+.hero .tagline {
+  max-width: 38ch;
+  text-wrap: balance;
+}
