@@ -27,7 +27,7 @@ fn build_dir_for(
 
 /// The rebuild after recording older contracts: the same build as the first,
 /// so `--no-install` and `--dry-run` apply to it as well (#3350).
-fn rebuild(project_root: &Path, build_dir: &Path, opts: &DeployOptions) -> bool {
+pub(crate) fn rebuild(project_root: &Path, build_dir: &Path, opts: &DeployOptions) -> bool {
     let build = workers::Build::new(true, opts.dry_run).no_install(opts.no_install);
     workers::compile_once_reporting(project_root, build_dir, build, None)
 }
@@ -559,15 +559,15 @@ pub(crate) fn secrets_file_passthrough_refusal(
 
 /// The secrets `deploy` decides itself rather than asking the user for: a foreign caller's
 /// (I3, #1971) and a `SignedCookie` actor's signing key (#3386), over the Workers in a run.
-struct ManagedKeys<'a> {
-    order: &'a [String],
-    resources: &'a BTreeMap<String, Resources>,
-    listed: &'a BTreeMap<String, Option<BTreeSet<String>>>,
+pub(crate) struct ManagedKeys<'a> {
+    pub(crate) order: &'a [String],
+    pub(crate) resources: &'a BTreeMap<String, Resources>,
+    pub(crate) listed: &'a BTreeMap<String, Option<BTreeSet<String>>>,
 }
 
 impl ManagedKeys<'_> {
     /// Every such secret's name in the project, which is never spread as an ordinary secret.
-    fn names(&self) -> BTreeSet<String> {
+    pub(crate) fn names(&self) -> BTreeSet<String> {
         self.resources
             .values()
             .flat_map(|r| {
@@ -584,7 +584,7 @@ impl ManagedKeys<'_> {
     /// the Worker holds (kept), or a fresh one minted. A refusal is the text to print. A foreign
     /// caller's mint is hex and handed off; a session key's is base64url and stays on its Worker,
     /// where a supplied value must be one the runtime accepts, so a weak key is caught here.
-    fn decide(
+    pub(crate) fn decide(
         &self,
         lock: &DeployLock,
         opts: &DeployOptions,
@@ -693,48 +693,25 @@ pub fn run(
     node_floor: (u32, u32),
     opts: &DeployOptions,
 ) -> ExitCode {
-    // Slice 4 (DECISION E), and the first check of all: once `--env` is a
-    // real, driver-curated concept, a conflicting `-- --env`/`-- --environment`
-    // would otherwise reach `wrangler deploy` as a second, contradictory flag —
-    // Wrangler's own last-wins parsing deciding silently which one actually
-    // deploys, while the ledger records the driver's choice regardless. Reject
-    // before any other work, rather than pick a winner between two explicit,
-    // conflicting inputs.
-    if let Some(conflict) = conflicting_env_passthrough(&opts.wrangler_args) {
-        emsg!(
-            "bynk: error: `--env {}` conflicts with `{conflict}` after `--` — pass one or the other, not both",
-            opts.environment
-        );
-        return ExitCode::FAILURE;
+    match deploy(tb, project_root, node_floor, opts) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(code) => code,
     }
+}
 
-    // #3107: no contract checks in a deployment; #3562: no Worker groups yet.
-    if let Err(e) = bynk_driver::refuse_undeployable_project(project_root) {
-        emsg!("bynk: error: {e}");
-        return ExitCode::FAILURE;
-    }
-
-    let preflight_opts = DoctorOptions {
-        only: Some(Capability::Deploy),
-        strict: false,
-    };
-    let report = doctor::diagnose(
-        tb,
-        &Context {
-            project_root: Some(project_root.to_path_buf()),
-            in_repo: false,
-            node_floor,
-        },
-        &preflight_opts,
-    );
-    if report.exit_nonzero(&preflight_opts) {
-        colour::eprint(&preflight_failure_message(&report));
-        return ExitCode::FAILURE;
-    }
+/// [`run`]'s orchestration (1D.2c, #4001 Decision E): the gates, the plan, the confirmation, the
+/// apply and `--prune`, each a step that returns the code the run exits with when it stops.
+fn deploy(
+    tb: &dyn Toolbox,
+    project_root: &Path,
+    node_floor: (u32, u32),
+    opts: &DeployOptions,
+) -> Result<(), ExitCode> {
+    preflight(tb, project_root, node_floor, opts)?;
 
     // `_scratch` removes a dry run's build when the run ends (#3796).
     let Some((build_dir, _scratch)) = build_dir_for(project_root, opts.dry_run) else {
-        return ExitCode::FAILURE;
+        return Err(ExitCode::FAILURE);
     };
     if !workers::compile_once_reporting(
         project_root,
@@ -742,7 +719,7 @@ pub fn run(
         workers::Build::new(true, opts.dry_run).no_install(opts.no_install),
         bynk_driver::progress::terminal_sink(),
     ) {
-        return ExitCode::FAILURE;
+        return Err(ExitCode::FAILURE);
     }
     // Slice 2: every context, ordered — not the one context slice 0 demanded.
     let workers_dir = build_dir.join("workers");
@@ -751,7 +728,7 @@ pub fn run(
         Ok(selected) => selected,
         Err(e) => {
             emsg!("bynk: error: {e}");
-            return ExitCode::FAILURE;
+            return Err(ExitCode::FAILURE);
         }
     };
     // Read spans the *whole* project even under `--context`: D4 needs the
@@ -761,7 +738,7 @@ pub fn run(
         Ok(resources) => resources,
         Err(e) => {
             emsg!("bynk: error: {e}");
-            return ExitCode::FAILURE;
+            return Err(ExitCode::FAILURE);
         }
     };
     let (graph, groups) = (service_graph(&resources), GroupNames::of(project_root));
@@ -772,7 +749,7 @@ pub fn run(
         Ok(source) => source,
         Err(e) => {
             emsg!("bynk: error: {e}");
-            return ExitCode::FAILURE;
+            return Err(ExitCode::FAILURE);
         }
     };
     let lock_path = project_root.join(LOCK_FILE);
@@ -781,264 +758,35 @@ pub fn run(
         Ok(lock) => lock,
         Err(e) => {
             emsg!("bynk: error: could not read {}: {e}", lock_path.display());
-            return ExitCode::FAILURE;
+            return Err(ExitCode::FAILURE);
         }
     };
 
-    // (D4) `--context` does not deploy a dependency closure. A binding to a
-    // Worker that has never been pushed fails at upload, so say which one
-    // rather than letting Cloudflare's own error carry it.
-    let env = opts.environment.as_str();
-    if opts.context.is_some()
-        && let [worker] = selected.as_slice()
-    {
-        let absent = absent_dependencies(worker, &graph, &lock, &opts.environment);
-        if !absent.is_empty() {
-            colour::eprint(&absent_dependencies_refusal(env, worker, &absent));
-            return ExitCode::FAILURE;
-        }
+    // (D4) `--context` does not deploy a dependency closure, and a context deployed alone must
+    // not skew the contracts of what it calls or what calls it.
+    context_gate(
+        &ContextGate {
+            opts,
+            project_root,
+            build_dir: &build_dir,
+            workers_dir: &workers_dir,
+            graph: &graph,
+            groups: &groups,
+            lock: &lock,
+            runner,
+        },
+        &selected,
+    )?;
 
-        // v0.177 (#643): the other half of D4. The dependency exists — but does
-        // it still provide the contract this worker was compiled against?
-        // Without this, the push succeeds and production discovers the skew by
-        // 409ing. `--context` is precisely the flag that makes this reachable.
-        let mut manifest = match read_contracts_manifest(&workers_dir.join(worker)) {
-            Ok(m) => m,
-            Err(e) => {
-                emsg!(
-                    "bynk: error: could not read `{worker}`'s {}: {e}",
-                    bynk_emit::emitter::contracts::CONTRACTS_MANIFEST
-                );
-                return ExitCode::FAILURE;
-            }
-        };
-        let mut skews = contract_skews(
-            &manifest.expects,
-            &lock,
-            |context: &str| groups.dir(context),
-            &opts.environment,
-        );
-        classify_contract_skews(
-            &mut skews,
-            &manifest.expects_shapes,
-            &lock,
-            |context: &str| groups.dir(context),
-            &opts.environment,
-        );
-        if !skews.is_empty() {
-            colour::eprint(&contract_skew_refusal(&opts.environment, worker, &skews));
-            return ExitCode::FAILURE;
-        }
-
-        // #2077: and the callee half. Does this build still provide what every
-        // *other* live Worker was compiled against? Without this, pushing a
-        // callee whose contract changed answers each live caller 409.
-        let mut callee_skews = callee_contract_skews(
-            worker,
-            &manifest.provides,
-            &lock,
-            |context: &str| groups.dir(context),
-            &opts.environment,
-        );
-        classify_callee_skews(
-            &mut callee_skews,
-            &manifest.provides_shapes,
-            &lock,
-            &opts.environment,
-        );
-        // #2554: a callee ahead of its callers may answer the older contract
-        // they were compiled against, when the change is compatible for them.
-        // The older contracts are recorded in `bynk.contracts.lock` and the
-        // callee rebuilt to carry them.
-        let mut recorded = false;
-        if opts.accept_compatible_skew {
-            let wanted =
-                shapes_to_accept(&callee_skews, &manifest.accepts, &lock, &opts.environment);
-            if !wanted.is_empty() && opts.dry_run {
-                // A dry run writes nothing and builds nothing: it reports what
-                // the real run would record, and treats it as accepted.
-                for (_, service, hash, _) in &wanted {
-                    manifest
-                        .accepts
-                        .entry(service.clone())
-                        .or_default()
-                        .push(hash.clone());
-                }
-            } else if !wanted.is_empty() {
-                match record_accepted(project_root, &wanted) {
-                    Ok(()) => recorded = true,
-                    Err(e) => {
-                        emsg!(
-                            "bynk: error: could not record the older contracts in {}: {e}",
-                            bynk_driver::contracts_lock::lock_path(project_root).display()
-                        );
-                        return ExitCode::FAILURE;
-                    }
-                }
-                // The build reads the lock, so the callee carries what was just
-                // recorded.
-                if !rebuild(project_root, &build_dir, opts) {
-                    emsg!(
-                        "bynk: error: the older contracts were recorded in {}, but the rebuild failed; nothing was deployed. The entries are safe to keep (every build re-checks them), or revert the file.",
-                        bynk_driver::contracts_lock::lock_path(project_root).display()
-                    );
-                    return ExitCode::FAILURE;
-                }
-                manifest = match read_contracts_manifest(&workers_dir.join(worker)) {
-                    Ok(m) => m,
-                    Err(e) => {
-                        emsg!(
-                            "bynk: error: could not read `{worker}`'s {}: {e}",
-                            bynk_emit::emitter::contracts::CONTRACTS_MANIFEST
-                        );
-                        return ExitCode::FAILURE;
-                    }
-                };
-                callee_skews = callee_contract_skews(
-                    worker,
-                    &manifest.provides,
-                    &lock,
-                    |context: &str| groups.dir(context),
-                    &opts.environment,
-                );
-                classify_callee_skews(
-                    &mut callee_skews,
-                    &manifest.provides_shapes,
-                    &lock,
-                    &opts.environment,
-                );
-            }
-        }
-        let callee_skews = if opts.accept_compatible_skew {
-            let (accepted, refused) = partition_accepted(callee_skews, &manifest.accepts);
-            if !accepted.is_empty() {
-                eprint!(
-                    "{}",
-                    accepted_skew_notice(
-                        &opts.environment,
-                        worker,
-                        &accepted,
-                        recorded,
-                        opts.dry_run
-                    )
-                );
-            }
-            refused
-        } else {
-            callee_skews
-        };
-        if !callee_skews.is_empty() {
-            report_callee_skews(
-                callee_skews,
-                &graph,
-                (&opts.environment, worker),
-                (runner, &lock),
-            );
-            return ExitCode::FAILURE;
-        }
-        // #2554: older contracts the lock still accepts that no live caller
-        // was compiled against any more are noise; say so.
-        if let Ok(existing) = bynk_driver::contracts_lock::read(project_root)
-            && let Ok(contracts) =
-                bynk_project::contracts_lock::parse(existing.as_deref(), project_root)
-        {
-            let dir_of = |context: &str| groups.dir(context);
-            let unused = unused_accepted(&contracts, (worker, &dir_of), &lock, &opts.environment);
-            if !unused.is_empty() {
-                colour::eprint(&unused_accepted_notice(&unused));
-            }
-        }
-        for caller in unrecorded_callers(worker, &graph, &lock, &opts.environment) {
-            colour::eprint(&unrecorded_caller_warning(env, worker, &caller));
-        }
-    }
-
-    let order = match deploy_order(&selected, &graph) {
-        Ok(order) => order
-            .into_iter()
-            // A whole-project run orders every worker; `--context` orders only
-            // the selection, but the DFS reaches its (already-live) targets —
-            // drop them, D4 having already checked them.
-            .filter(|worker| selected.contains(worker))
-            .collect::<Vec<_>>(),
-        Err(e) => {
-            emsg!("bynk: error: {e}");
-            let OrderError::Cycle(path) = &e;
-            let publishers = cycle_publishers(path, &resources);
-            if !publishers.is_empty() {
-                eprintln!(
-                    "  The cycle runs through event delivery: {} {} events, so {} to each subscriber, and a subscriber on this cycle also calls back into {} services.",
-                    publishers
-                        .iter()
-                        .map(|p| format!("`{p}`"))
-                        .collect::<Vec<_>>()
-                        .join(", "),
-                    if publishers.len() == 1 {
-                        "publishes"
-                    } else {
-                        "publish"
-                    },
-                    if publishers.len() == 1 {
-                        "it binds"
-                    } else {
-                        "each binds"
-                    },
-                    if publishers.len() == 1 {
-                        "its"
-                    } else {
-                        "their"
-                    },
-                );
-                eprintln!(
-                    "  A subscriber that calls its publisher cannot be deployed yet; move the services it calls out of the publishing context."
-                );
-            }
-            return ExitCode::FAILURE;
-        }
-    };
+    let order = ordered(&selected, &graph, &resources)?;
 
     // #3562 (G5): a context with agent state that would change scripts is refused before
     // anything is pushed, `--dry-run` included.
     let Some(moves) = checked_agent_moves(&lock, opts, &resources, &order, &groups) else {
-        return ExitCode::FAILURE;
+        return Err(ExitCode::FAILURE);
     };
 
-    // I4 (#1970, track §11 Q6): a declared foreign caller's pin. Refused
-    // before the plan, `--dry-run` included, as a Bynk caller's skew is: the
-    // foreign caller's client would be refused on every call.
-    let pins = match read_pins(project_root) {
-        Ok(pins) => pins,
-        Err(e) => {
-            emsg!("bynk: error: {e}");
-            return ExitCode::FAILURE;
-        }
-    };
-    let mut built_foreign: BTreeMap<String, BTreeMap<String, BTreeMap<String, String>>> =
-        BTreeMap::new();
-    for worker in &order {
-        match read_contracts_manifest(&workers_dir.join(worker)) {
-            Ok(m) if !m.foreign.is_empty() => {
-                built_foreign.insert(context_of(worker), m.foreign);
-            }
-            Ok(_) => {}
-            Err(e) => {
-                emsg!(
-                    "bynk: error: could not read `{worker}`'s {}: {e}",
-                    bynk_emit::emitter::contracts::CONTRACTS_MANIFEST
-                );
-                return ExitCode::FAILURE;
-            }
-        }
-    }
-    let in_run: BTreeSet<String> = order.iter().map(|w| context_of(w)).collect();
-    let (broken, unpinned) = check_pins(&pins, &built_foreign, &in_run, opts.context.is_none());
-    if !broken.is_empty() {
-        colour::eprint(&refusal_message(&broken));
-        return ExitCode::FAILURE;
-    }
-    if !unpinned.is_empty() {
-        colour::eprint(&unpinned_message(&unpinned));
-    }
+    check_foreign_pins(project_root, &workers_dir, &order, opts)?;
 
     // Review of #1974: names the account scopes (a namespace's title, a
     // bucket's, a database's, a dataset's) can coincide, so they are refused
@@ -1046,11 +794,11 @@ pub fn run(
     // #3479: an index `bynk.toml` names for this environment is adopted, not
     // created, so its name is known before the plan.
     if apply_adoptions(project_root, &mut resources, &opts.environment).is_err() {
-        return ExitCode::FAILURE;
+        return Err(ExitCode::FAILURE);
     }
     if let Some(message) = account_name_problem(&resources, &lock, &opts.environment) {
         emsg!("bynk: error: {message}");
-        return ExitCode::FAILURE;
+        return Err(ExitCode::FAILURE);
     }
     // #2055: a first deploy hands `wrangler deploy` Bynk's own
     // `--secrets-file`, so a passthrough one would be a second, with
@@ -1060,7 +808,7 @@ pub fn run(
         secrets_file_passthrough_refusal(&opts.wrangler_args, &order, &lock, &opts.environment)
     {
         colour::eprint(&refusal);
-        return ExitCode::FAILURE;
+        return Err(ExitCode::FAILURE);
     }
 
     // #3319: each `Postgres` binding's connection string is read now, from the
@@ -1071,7 +819,7 @@ pub fn run(
     let Some(hyperdrive_wants) =
         hyperdrive::wants_for_run(project_root, &order, &resources, &opts.environment)
     else {
-        return ExitCode::FAILURE;
+        return Err(ExitCode::FAILURE);
     };
     let plan = derive_plan(
         &order,
@@ -1090,76 +838,39 @@ pub fn run(
     .checked_against_account();
     print_plan_then_forward_warnings(&plan, opts, &order, &resources, project_root);
     if opts.dry_run {
-        return ExitCode::SUCCESS;
+        return Ok(());
     }
     // P5 (#2323): a changed `@jurisdiction` is a new bucket beside the old,
     // whose objects do not move, so it is only made on an explicit `--yes`.
     if let Some(refusal) = recreate_refusal(&plan, opts.yes) {
         emsg!("bynk: error: {refusal}");
-        return ExitCode::FAILURE;
+        return Err(ExitCode::FAILURE);
     }
 
-    if unrecordable_in_ci(
-        &order,
-        &resources,
-        &lock,
-        &opts.environment,
-        &hyperdrive_wants,
-    ) {
-        return ExitCode::FAILURE;
-    }
-    let (manager, probe) = probe::detect_in_project(tb, "wrangler", project_root);
-    // #1796: before authenticating, so the refusal costs no network call.
-    if let Some(refusal) = preflight_refusal(tb, &probe, manager, &order, &resources) {
-        colour::eprintln(&refusal);
-        return ExitCode::FAILURE;
-    }
-    if !whoami(&probe.provenance) {
-        emsg!(
-            "bynk: error: Cloudflare authentication is unavailable; run `wrangler login` or set CLOUDFLARE_API_TOKEN"
-        );
-        return ExitCode::FAILURE;
-    }
-    // Interop I5 (#1972, track §11 Q8): a foreign Worker a Service Binding
-    // names is not Bynk's to create, so a missing one is a warning, never a
-    // refusal from the driver. Asked once per Worker, before the
-    // confirmation, so the user decides with it in view.
-    for warning in foreign_worker_warnings(&order, &resources, |name| {
-        worker_presence(&probe.provenance, name, project_root)
-    }) {
-        colour::eprintln(&warning);
-    }
-    // #3301: a stored secret is linked, never created, so a missing store or
-    // secret stops the run here, before the confirmation and before anything
-    // is provisioned or pushed.
-    let Some(linked_stores) = link_for_run(&order, &resources) else {
-        return ExitCode::FAILURE;
-    };
-    // #3480: an AI Search instance too: found by name, never created.
-    if !link_ai_search_for_run(&order, &resources) {
-        return ExitCode::FAILURE;
-    }
-    // #3319: the Hyperdrive API client, checked here, before the confirmation,
-    // so a missing token costs nothing.
-    let Ok(hyperdrive_api) = hyperdrive::api_for_run(
-        &order,
-        &resources,
-        &lock,
-        &opts.environment,
-        &hyperdrive_wants,
-        &plan.orphans,
-        opts.prune,
-    ) else {
-        return ExitCode::FAILURE;
-    };
+    let AccountChecked {
+        probe,
+        linked_stores,
+        hyperdrive_api,
+    } = account_checks(
+        tb,
+        &AccountCx {
+            project_root,
+            opts,
+            plan: &plan,
+            order: &order,
+            resources: &resources,
+            lock: &lock,
+            hyperdrive_wants: &hyperdrive_wants,
+        },
+    )?;
     let hyperdrive_run = hyperdrive::HyperdriveRun::new(&hyperdrive_wants, hyperdrive_api.as_ref());
     // State-migrations S3 (#2248): a deletion is confirmed by name, apart
     // from — and before — the ordinary confirmation.
     if !confirm_destructive(&plan, opts, &lock) {
-        return ExitCode::FAILURE;
+        return Err(ExitCode::FAILURE);
     }
     if !confirm(opts.yes) {
-        return ExitCode::FAILURE;
+        return Err(ExitCode::FAILURE);
     }
 
     let tools = Tools {
@@ -1191,210 +902,37 @@ pub fn run(
     // posture), so an interrupted multi-context run is resumable rather than
     // restartable — and never rolled back (D2): a half-deployed project is a
     // real state the next plan will show, not an error to unwind.
-    // I2 (#1971): each edge's key is decided over both its ends at once, so
-    // each Worker's `secret list` is asked here, before anything is pushed,
-    // and the per-context step reuses the answer. That covers every Worker
-    // this run deploys and the far end of each edge it touches, which a
-    // `--context` run does not deploy. Asked before the KV ids are
-    // materialised and any `[env.<name>]` table is synthesised: wrangler loads
-    // that config (a placeholder id included) and addresses the same Worker
-    // either way, since the `name` the synthesised table sets (#2028) is the
-    // one Wrangler's `--env` default gives a table without one.
-    let in_run: BTreeSet<&str> = order.iter().map(String::as_str).collect();
-    let edges: Vec<Edge> = project_edges(&resources)
-        .into_iter()
-        .filter(|e| in_run.contains(e.caller.as_str()) || in_run.contains(e.callee.as_str()))
-        .collect();
-    let mut asked: BTreeSet<&str> = in_run.clone();
-    for e in &edges {
-        asked.insert(&e.caller);
-        asked.insert(&e.callee);
-    }
-    let listed: BTreeMap<String, Option<BTreeSet<String>>> = asked
-        .iter()
-        .map(|worker| {
-            let answer = list_secrets(
-                &probe.provenance,
-                &workers_dir.join(worker),
-                &opts.environment,
-            );
-            (worker.to_string(), answer)
-        })
-        .collect();
-    let mut edge_keys: BTreeMap<Edge, EdgeKey> = BTreeMap::new();
-    for edge in &edges {
-        let names = match edge.keys() {
-            Ok(names) => names,
-            Err(e) => {
-                emsg!("bynk: error: {e}");
-                return ExitCode::FAILURE;
-            }
-        };
-        let held = |worker: &str, keys: &[String]| {
-            end_presence(edge, worker, keys, &listed, &lock, &opts.environment)
-        };
-        let callee = held(&edge.callee, &names.on_callee);
-        let caller = held(&edge.caller, &names.on_caller);
-        let both_in_run =
-            in_run.contains(edge.caller.as_str()) && in_run.contains(edge.callee.as_str());
-        match decide_edge_key(
-            edge,
-            caller,
-            callee,
-            both_in_run,
-            opts.force,
-            &mut mint_edge_key,
-            &opts.environment,
-        ) {
-            Ok(decision) => {
-                edge_keys.insert(edge.clone(), decision);
-            }
-            Err(e) => {
-                emsg!("bynk: error: {e}");
-                return ExitCode::FAILURE;
-            }
-        }
-    }
-    // I3 (#1971): each foreign caller's secret, and (#3386) each `SignedCookie` actor's signing
-    // key, on the context in the run that holds it. Only that end is ours, so a `--context` run
-    // decides them too.
-    let managed = ManagedKeys {
-        order: &order,
-        resources: &resources,
-        listed: &listed,
-    };
-    let foreign_secrets = managed.names();
-    let foreign_keys = match managed.decide(&lock, opts, &secret_source) {
-        Ok(keys) => keys,
-        Err(e) => {
-            colour::eprint(&e);
-            return ExitCode::FAILURE;
-        }
-    };
-    // Shared across the loop so two contexts wanting the same secret prompt
-    // once. Dropped with the run — nothing here is ever written (ADR 0195 D1).
-    let mut resolved_secrets = BTreeMap::new();
+    let keys = decide_keys(
+        &KeysCx {
+            order: &order,
+            resources: &resources,
+            provenance: &probe.provenance,
+            workers_dir: &workers_dir,
+            lock: &lock,
+            opts,
+        },
+        &secret_source,
+    )?;
     sweep_and_report_stale_uploads();
     let mut writer = LedgerWriter::new(&mut lock, &lock_path);
-    for (i, (worker, context)) in order.iter().zip(&plan.contexts).enumerate() {
-        if order.len() > 1 {
-            eprint!(
-                "{}",
-                deploying_notice(&opts.environment, worker, i + 1, order.len())
-            );
-        }
-        // 1D.2b (#4001): each context's plan is what is applied.
-        let run = &mut RunCx {
-            tools,
-            workers_dir: &workers_dir,
-            project: &resources,
-            writer: &mut writer,
-            secrets: &mut Secrets {
-                source: &secret_source,
-                force: opts.force,
-                edge_keys: &edge_keys,
-                foreign_keys: &foreign_keys,
-                foreign_secrets: &foreign_secrets,
-                listed: &listed,
-                resolved: &mut resolved_secrets,
-                with_upload: secrets_file_supported(&probe),
-            },
-            wrangler_args: &opts.wrangler_args,
-            environment: &opts.environment,
-            lives,
-        };
-        match apply_worker(run, context) {
-            Ok(Pushed::Ok) => {
-                // P3 (#2342): e.g. a rate limiter's id the source dropped is free again.
-                let pushed = PushedWorker::of(worker, &workers_dir, &groups, &resources[worker]);
-                let recorded = record_pushed(&mut writer, &opts.environment, &pushed, |lock| {
-                    record_fresh_moves(lock, opts, worker, &moves)
-                });
-                // I3 (#1971): the secrets just minted for this context's
-                // foreign callers, handed to their operators.
-                for caller in &resources[worker].foreign_callers {
-                    if let Some(ForeignKey::Set {
-                        value,
-                        minted: true,
-                    }) = foreign_keys.get(&(worker.clone(), caller.binding.clone()))
-                    {
-                        colour::eprint(&foreign_hand_off(env, worker, caller, value, runner));
-                    }
-                }
-                if let Err(e) = recorded {
-                    colour::eprint(&unrecorded_deploy_failure(
-                        &opts.environment,
-                        worker,
-                        &writer.path().display().to_string(),
-                        &e,
-                    ));
-                    return ExitCode::FAILURE;
-                }
-            }
-            // A shared Ctrl-C. Stop, but report nothing and exit cleanly: the
-            // user asked for this, and the terminal signalled us too. `worker`
-            // is deliberately *not* recorded as deployed — the push was cut
-            // short, so whether it landed is unknown, and the ledger only ever
-            // claims what it watched succeed.
-            Ok(Pushed::Interrupted) => return ExitCode::SUCCESS,
-            Err(f) => {
-                emsg!("bynk: error: {}", f.message);
-                // Stop rather than push on: everything left in the order either
-                // binds to what just failed or would be uploaded into a
-                // topology that is not what the plan described. `worker` itself
-                // is excluded — the line above already named it as the failure,
-                // and listing it here again as "not deployed" would double-count
-                // it against the number.
-                colour::eprint(&stopped_report(&opts.environment, &order[i + 1..]));
-                // #2004 review: a run that re-keyed an edge and stopped between
-                // its two ends leaves them refusing each other. The next plain
-                // run sees a key on each end and keeps both, so say how to
-                // repair it.
-                if let Some(hint) =
-                    interrupted_rotation_hint(&opts.environment, &edge_keys, &order[..i])
-                {
-                    colour::eprint(&hint);
-                }
-                // I3 (#1971): a secret minted for this context's foreign
-                // caller may already be set, and the next run would keep it
-                // without ever showing it, so hand it off now.
-                for caller in &resources[worker].foreign_callers {
-                    if let Some(ForeignKey::Set {
-                        value,
-                        minted: true,
-                    }) = foreign_keys.get(&(worker.clone(), caller.binding.clone()))
-                    {
-                        colour::eprint(&foreign_binding_maybe_set_notice(env, worker, caller));
-                        colour::eprint(&foreign_hand_off(env, worker, caller, value, runner));
-                    }
-                }
-                // Wrangler's own code, not a flat 1 (slice 0's contract).
-                return ExitCode::from(f.code);
-            }
-        }
-    }
-
-    // Slice 5: pruning is project-wide, independent of `--context` — the
-    // orphan report already is (DECISION A), so pruning follows it. Runs
-    // only after every selected context has pushed cleanly: a failed deploy
-    // above already returned, so a mid-flight ledger never reaches this.
-    if opts.prune && plan.orphans.has_prunable() {
-        if !confirm_prune(opts.yes, &plan.orphans, &opts.environment) {
-            return ExitCode::FAILURE;
-        }
-        if let Err(e) = prune_orphans(
-            &probe.provenance,
-            project_root,
-            &mut writer,
-            &opts.environment,
-            &plan.orphans,
-            lives,
-        ) {
-            emsg!("bynk: error: {}", e.message);
-            return ExitCode::from(e.code);
-        }
-    }
-    ExitCode::SUCCESS
+    let apply = PlanApply {
+        plan: &plan,
+        order: &order,
+        opts,
+        tools,
+        workers_dir: &workers_dir,
+        resources: &resources,
+        groups: &groups,
+        moves: &moves,
+        keys: &keys,
+        secret_source: &secret_source,
+        with_upload: secrets_file_supported(&probe),
+        runner,
+        lives,
+    };
+    apply_plan(&apply, &mut writer)?;
+    prune_plan(&apply, &mut writer)?;
+    Ok(())
 }
 
 /// #2055: a first deploy's secrets file that a SIGKILLed run left behind goes
@@ -1604,7 +1142,7 @@ pub(crate) fn shapes_to_accept(
 }
 
 /// #2554: add `wanted` (from [`shapes_to_accept`]) to `bynk.contracts.lock`.
-fn record_accepted(
+pub(crate) fn record_accepted(
     project_root: &Path,
     wanted: &[(String, String, String, String)],
 ) -> Result<(), String> {
@@ -1623,7 +1161,7 @@ fn record_accepted(
 /// What a push that would break live callers prints: a caller this build still has
 /// gets the callee's refusal, and one it no longer builds its own remedy, since a
 /// whole-project deploy would not move it (#3562: named by its script).
-fn report_callee_skews(
+pub(crate) fn report_callee_skews(
     skews: Vec<CalleeSkew>,
     graph: &BTreeMap<String, Vec<String>>,
     (environment, worker): (&str, &str),
@@ -1863,7 +1401,7 @@ pub(crate) fn contract_skew_refusal(
 
 /// Whether one end of `edge` holds its key: it holds each name the edge puts on it (a
 /// group's Worker holds one per member), and an end holding only some is keyed afresh.
-fn end_presence(
+pub(crate) fn end_presence(
     edge: &Edge,
     worker: &str,
     keys: &[String],
@@ -1989,7 +1527,7 @@ pub(crate) fn foreign_binding_maybe_set_notice(
 /// so it costs no call: the wrangler floor for a Durable Object class
 /// (a container is one; [`wrangler_floor_refusal`]), then a container's Docker
 /// ([`container_refusals`]).
-fn preflight_refusal(
+pub(crate) fn preflight_refusal(
     tb: &dyn Toolbox,
     probe: &probe::Probe,
     manager: bynk_driver::npm_install::PackageManager,
@@ -2368,7 +1906,7 @@ pub(super) fn print_plan(plan: &Plan<'_>, format: DeployFormat) {
 ///   number, resetting the limiter's counters.
 /// - A Hyperdrive config's id is minted (#3319); a team that deploys from CI
 ///   adopts one (`config_id`) instead.
-fn unrecordable_in_ci(
+pub(crate) fn unrecordable_in_ci(
     order: &[String],
     resources: &BTreeMap<String, Resources>,
     lock: &DeployLock,
