@@ -48,7 +48,8 @@ use bynk_ts::{TsDecl, TsExpr, TsObjectEntry, TsParam, TsProgram, TsStmt, TsType,
 
 use super::runtime_use::RuntimeUse;
 use super::serialisation;
-use crate::ts_build::str_lit;
+use super::ts_ident;
+use crate::ts_build::{ident, str_lit};
 
 /// The file, beside the Worker's `bynk-contracts.json`. Hyphenated like the
 /// other compiler-written files there, so no Bynk unit can emit a module of
@@ -408,7 +409,7 @@ pub fn emit_client(
             .params
             .iter()
             .map(|(name, t)| {
-                serialisation::serialise_via_text(&renamed(t), &super::ts_ident(name), "", &ru)
+                serialisation::serialise_expr_via(&renamed(t), &ident(ts_ident(name)), "", &ru)
             })
             .collect();
         let args = match encoded.len() {

@@ -35,18 +35,6 @@ const OWNER: &str = "1A.40";
 
 const TEXT_CLASSES: &[TextClass] = &[
     TextClass {
-        name: "subscript",
-        matches: is_subscript,
-        reason: "`obj[\"f\"]` / `argsObj[\"f\"]`: the `json: &str` threaded through the serialise family",
-        owner: OWNER,
-    },
-    TextClass {
-        name: "template path",
-        matches: is_template_path,
-        reason: "`${path}.f` / `${path}[${i}]`: the `path_expr: &str` threaded through the serialise family",
-        owner: OWNER,
-    },
-    TextClass {
         name: "rendered literal",
         matches: is_rendered_literal,
         reason: "a pre-rendered default, zero or wire literal (`\"\"`, `0`, `[]`, `{ kind: \"None\" }`)",
@@ -67,56 +55,6 @@ fn has_await_word(text: &str) -> bool {
         !text[..i].chars().next_back().is_some_and(word)
             && !text[i + m.len()..].chars().next().is_some_and(word)
     })
-}
-
-fn is_identifier(t: &str) -> bool {
-    let mut c = t.chars();
-    c.next()
-        .is_some_and(|c| c.is_ascii_alphabetic() || c == '_' || c == '$')
-        && c.all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '$')
-}
-
-/// `<identifier>["<name>"]`.
-fn is_subscript(t: &str) -> bool {
-    t.split_once("[\"").is_some_and(|(head, rest)| {
-        is_identifier(head)
-            && rest
-                .strip_suffix("\"]")
-                .is_some_and(|k| !k.contains('"') && !k.contains('\\'))
-    })
-}
-
-/// A template literal made of `${path}`, `.name`, `[${i}]` and `[<digits>]` only.
-fn is_template_path(t: &str) -> bool {
-    let Some(inner) = t.strip_prefix('`').and_then(|t| t.strip_suffix('`')) else {
-        return false;
-    };
-    let Some(mut rest) = inner.strip_prefix("${path}") else {
-        return false;
-    };
-    while !rest.is_empty() {
-        if let Some(r) = rest.strip_prefix("[${i}]") {
-            rest = r;
-        } else if let Some(r) = rest.strip_prefix('[') {
-            let digits = r.chars().take_while(char::is_ascii_digit).count();
-            match r[digits..].strip_prefix(']') {
-                Some(r2) if digits > 0 => rest = r2,
-                _ => return false,
-            }
-        } else if let Some(r) = rest.strip_prefix('.') {
-            let n = r
-                .chars()
-                .take_while(|c| c.is_ascii_alphanumeric() || *c == '_' || *c == '$')
-                .count();
-            if n == 0 {
-                return false;
-            }
-            rest = &r[n..];
-        } else {
-            return false;
-        }
-    }
-    true
 }
 
 /// A literal: strings, numbers, arrays and objects of literals. No operator, call or cast.
@@ -176,8 +114,6 @@ fn is_rendered_literal(t: &str) -> bool {
 /// Expression text that is not a literal: it carries an operator, a call, a cast or a ternary.
 fn is_rendered_expression(t: &str) -> bool {
     !is_rendered_literal(t)
-        && !is_subscript(t)
-        && !is_template_path(t)
         && ["(", " === ", " >= ", " + ", " as ", " ? ", " => "]
             .iter()
             .any(|n| t.contains(n))
@@ -351,21 +287,6 @@ fn every_ident_in_the_built_trees_is_an_identifier_path() {
 
 #[test]
 fn the_class_matchers_match_their_shapes_and_nothing_wider() {
-    // subscript
-    assert!(is_subscript("obj[\"f\"]"));
-    assert!(is_subscript("argsObj[\"by_name\"]"));
-    assert!(!is_subscript("obj[f]"));
-    assert!(!is_subscript("a.b[\"f\"]"));
-    assert!(!is_subscript("obj[\"f\"].x"));
-    // template path
-    assert!(is_template_path("`${path}`"));
-    assert!(is_template_path("`${path}.after`"));
-    assert!(is_template_path("`${path}[${i}][0]`"));
-    assert!(is_template_path("`${path}[${i}]`"));
-    assert!(!is_template_path("`${other}.x`"));
-    assert!(!is_template_path("`${path}.`"));
-    assert!(!is_template_path("`${path} x`"));
-    assert!(!is_template_path("${path}.x"));
     // rendered literal
     assert!(is_rendered_literal("\"\""));
     assert!(is_rendered_literal("-0.25"));

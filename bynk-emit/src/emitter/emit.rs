@@ -4473,7 +4473,7 @@ fn lazy_codec_entries(
         path,
         &ctx.runtime_use,
     );
-    let e = serialisation::serialise_text(ty, "__v", &ctx.runtime_use);
+    let e = serialisation::serialise_expr(ty, &hist_id("__v"), &ctx.runtime_use);
     let decode = lazy_codec_arrow(
         "__w",
         "unknown",
@@ -6690,8 +6690,9 @@ fn agent_state_checks_and_entries(
     // The loaded record is statically typed (its fields are the agent's types),
     // but at runtime its bytes are untrusted, so each value is laundered to
     // `JsonValue` before the boundary deserialiser decodes it.
-    let ser =
-        |ty: &TypeRef, value: &str| serialisation::serialise_text(ty, value, &ctx.runtime_use);
+    let ser = |ty: &TypeRef, value: &str| {
+        serialisation::serialise_expr(ty, &hist_id(value), &ctx.runtime_use)
+    };
     let deser = |ty: &TypeRef, json: bynk_ts::TsExpr, path: &str| {
         serialisation::deserialise_expr(ty, &json, path, &ctx.runtime_use)
     };
