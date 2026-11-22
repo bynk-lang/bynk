@@ -7,7 +7,7 @@ export interface Env {
 }
 
 export function compose(env: Env) {
-  const deps = {  };
+  const deps = {};
   return {
     async cron_pruner_0() {
       return handlers.pruner.cron_pruner_0(deps);

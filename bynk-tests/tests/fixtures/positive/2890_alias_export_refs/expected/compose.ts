@@ -5,7 +5,7 @@ import * as app from "./app.js";
 import * as lib from "./lib.js";
 
 export function composeApp() {
-  const libDeps = {  };
+  const libDeps = {};
   const libSurface = lib.__makeSurface(libDeps);
   const appDeps = { surface: { lib: libSurface } };
   const appSurface = app.__makeSurface(appDeps);

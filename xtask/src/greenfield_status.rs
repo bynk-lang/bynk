@@ -2647,7 +2647,7 @@ fn import_prediction_fns_violations(files: &[(PathBuf, String)]) -> usize {
 /// (`id` over `ident_node`, `ne` over `binary`). The body has no string literal, `self`, `let`,
 /// `match`, `if`, loop, iterator or `format!`, and no `.clone()`, so it is a function of its
 /// parameters alone; a path value must be a `Ts*` one (`TsBinaryOp::StrictEq`, not
-/// `VerbatimOrigin::FormFieldSpecs`). A helper that composes two constructors (`if_then`,
+/// `VerbatimOrigin::FormFieldSpecs`). A helper with no parameters is a constant (`empty_deps`), not a builder. A helper that composes two constructors (`if_then`,
 /// `applied`, `tag_const`) says something about a construct, not about TypeScript, and does
 /// not count. Text-level gaps, as for the other line scanners: a signature split over more than
 /// twelve lines is missed, the helpers a body calls are known by name only, a wrapper with a
@@ -2746,7 +2746,14 @@ fn node_builder_defs_found(files: &[(PathBuf, String)]) -> (Vec<(PathBuf, usize,
                 i += 1;
                 continue;
             };
-            if !ret.is_match(head.trim_end()) {
+            // A helper with no parameters is a constant (`empty_deps`, `undefined`), not a builder:
+            // the proposal leaves the constant helpers alone.
+            let after_name = fn_name.find(&head).map_or("", |m| &head[m.end()..]);
+            let no_params = after_name
+                .split_once('(')
+                .and_then(|(_, rest)| rest.split_once(')'))
+                .is_some_and(|(params, _)| params.trim().is_empty());
+            if !ret.is_match(head.trim_end()) || no_params {
                 i += 1;
                 continue;
             }
@@ -5511,6 +5518,9 @@ mod tests {
                       fn pick(c: bool, e: TsExpr) -> TsExpr {\n    if c { TsExpr::Paren(Box::new(e)) } else { e }\n}\n\
                       fn any_ty() -> TsType {\n    TsType::named(x)\n}\n";
         assert_eq!(count(others), 0);
+        // A helper with no parameters is a constant, not a builder.
+        let constant = "fn empty_deps() -> TsExpr {\n    TsExpr::object_entries(Vec::new())\n}\n";
+        assert_eq!(count(constant), 0);
         // A `#[cfg(test)]` copy and a comment do not count; nor does `ts_build.rs` itself.
         let in_tests = "#[cfg(test)]\nmod tests {\n    fn ident(s: &str) -> TsExpr {\n        \
                         TsExpr::Ident(s.to_string())\n    }\n}\n// fn id(n: &str) -> TsExpr { TsExpr::Ident(n) }\n";

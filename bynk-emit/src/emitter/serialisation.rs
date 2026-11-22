@@ -14,12 +14,13 @@ use std::sync::Arc;
 
 use bynk_syntax::ast::{BaseType, PredKind, TypeBody, TypeDecl, TypeRef};
 
+use crate::emitter::default_value::wire_default_node;
 use crate::emitter::{RuntimeUse, payload_prop};
 use crate::ts_build::{
     and_expr, arrow, as_expr, binary, block, call, const_, ident, if_, index, member, not_expr,
     or_expr, param, ret, str_lit, strict_eq, strict_neq, switch_stmt, typeof_expr,
 };
-use bynk_check::wire_default::lower_field_default_wire;
+use bynk_check::wire_default::field_default_value;
 use bynk_ts::{
     TsArrowBody, TsBinaryOp, TsBindingName, TsDecl, TsExpr, TsLit, TsObjectEntry, TsParam, TsStmt,
     TsSwitchCase, TsType, TsTypeMember, TsUnaryOp,
@@ -1360,10 +1361,10 @@ mod emit_inline_refinement_checks_tests {
 /// `bynk_check::wire::wire_type` — the same declaration-order shape (field
 /// name, [`WireRef`] shape, and raw `(Expr, TypeRef)` default) both the
 /// codec and a future peek would derive — rather than re-walking
-/// `body.fields` inline. `lower_field_default_wire` (this file) stays the
-/// one place a default's *rendered* wire-JSON literal is produced, called
-/// from `emit_record_codec` at the same point it always was (Part 1's
-/// seam: the IR carries the raw default, the emitter renders it).
+/// `body.fields` inline. `default_value::wire_default_node` is the
+/// one place a default's wire-JSON literal is produced, called from
+/// `emit_record_codec` at the same point it always was (Part 1's seam: the
+/// IR carries the raw default, the emitter renders it).
 ///
 /// #1443 (Arc E slice 5): returns [`emit_record_codec`]'s own `Vec<TsDecl>`
 /// straight through — a plain passthrough, the same shape
@@ -1404,8 +1405,8 @@ fn emit_record(
 /// #855 (Phase 2 step 7): takes `&[WireField]` — the field's shape as a
 /// [`WireRef`] (rendered via [`serialise_field_expr_wire`] /
 /// [`emit_field_deserialise_wire`], no re-derivation from a raw `TypeRef`)
-/// and its default as a raw `(Expr, TypeRef)`, lowered to its wire-JSON
-/// literal right here via `lower_field_default_wire` — the same point it was
+/// and its default as a raw `(Expr, TypeRef)`, built into its wire-JSON
+/// literal right here via `field_default_value` and `wire_default_node` — the same point it was
 /// always called from, per Part 1's seam (`bynk-check` carries the boundary
 /// fact, `bynk-emit` renders it). Only `deserialise_<fn_suffix>` consults
 /// a default; `serialise_<fn_suffix>` is untouched (Decision B, #972). A
@@ -1517,21 +1518,14 @@ fn emit_record_codec(
         let default = field
             .default
             .as_ref()
-            .and_then(|(e, t)| lower_field_default_wire(e, t, types).ok());
+            .and_then(|(e, t)| field_default_value(e, t, types).ok());
         let fname = &field.name;
         let access = if let Some(d) = &default {
-            // #1443 (Arc E slice 5): `"<field>" in obj ? obj["<field>"] :
-            // <default>` — `d` is already-rendered wire-JSON literal *TS
-            // source text* (`lower_field_default_wire`'s own contract, the
-            // same "opaque, pre-rendered TS text" shape
-            // `emit_inline_pred_check`'s own `cond` splice already
-            // established in this file), spliced via `ident` rather than
-            // re-derived as a real node — it is never re-parenthesised: as
-            // a `Conditional`'s own `alternate`, it sits in an
-            // `AssignmentExpression` grammar position, which (per
-            // `bynk-ts/src/printer.rs`'s own `Conditional` render arm)
-            // never adds parens around either branch regardless of that
-            // branch's own shape.
+            // `"<field>" in obj ? obj["<field>"] : <default>`: `d` is the default's tree
+            // (`field_default_value`), rendered in its wire form (`wire_default_node`). As a
+            // `Conditional`'s own `alternate` it sits in an `AssignmentExpression` grammar
+            // position, which (per `bynk-ts/src/printer.rs`'s own `Conditional` render arm)
+            // never adds parens around either branch, whatever the branch's shape.
             let d_name = format!("__d_{fname}");
             body.push(TsStmt::const_stmt(
                 TsBindingName::Ident(d_name.clone()),
@@ -1539,7 +1533,7 @@ fn emit_record_codec(
                 TsExpr::Conditional {
                     test: Box::new(binary(TsBinaryOp::In, str_lit(fname.clone()), ident("obj"))),
                     consequent: Box::new(index(ident("obj"), str_lit(fname.clone()))),
-                    alternate: Box::new(ident(d.clone())),
+                    alternate: Box::new(wire_default_node(d)),
                 },
                 None,
             ));
@@ -4665,7 +4659,7 @@ mod default_lowering_tests {
     /// Parses `src` as a single-file commons and returns its `types` table
     /// plus the field list of the `event`/`type` decl named `subject`, so
     /// each test can feed a real, parsed `(init, type_ref)` pair into
-    /// [`lower_field_default_wire`] rather than hand-building AST nodes.
+    /// [`field_default_value`] rather than hand-building AST nodes.
     fn parse_fields(
         src: &str,
         subject: &str,
@@ -4713,6 +4707,17 @@ mod default_lowering_tests {
             types,
             fields.unwrap_or_else(|| panic!("no decl named `{subject}`")),
         )
+    }
+
+    /// The wire form of a default, printed: the tree [`field_default_value`] builds, rendered by
+    /// [`wire_default_node`], as the text the codec splices in.
+    fn lower_field_default_wire(
+        init: &Expr,
+        ty: &TypeRef,
+        types: &HashMap<String, Arc<TypeDecl>>,
+    ) -> Result<String, bynk_check::wire_default::DefaultReason> {
+        field_default_value(init, ty, types)
+            .map(|value| bynk_ts::print_expr(&wire_default_node(&value)))
     }
 
     fn default_of<'a>(fields: &'a [RecordField], name: &str) -> (&'a Expr, &'a TypeRef) {

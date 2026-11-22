@@ -252,7 +252,6 @@ dependencies = [
  "bynk-project",
  "bynk-std",
  "bynk-syntax",
- "bynk-ts",
  "regress",
  "rusqlite",
  "sqlparser",
