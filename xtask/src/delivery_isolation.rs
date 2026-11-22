@@ -51,7 +51,15 @@ fn scan(dir: &Path, root: &Path, needle: &str, found: &mut Vec<String>) {
         } else if path.extension().is_some_and(|e| e == "rs")
             && let Ok(source) = std::fs::read_to_string(&path)
         {
-            let rel = path.strip_prefix(root).unwrap_or(&path).display();
+            // Repo-relative, with `/` separators on every platform, so the
+            // reported location reads (and compares) the same on Windows.
+            let rel = path
+                .strip_prefix(root)
+                .unwrap_or(&path)
+                .components()
+                .map(|c| c.as_os_str().to_string_lossy())
+                .collect::<Vec<_>>()
+                .join("/");
             found.extend(
                 occurrences_in(&source, needle)
                     .into_iter()
