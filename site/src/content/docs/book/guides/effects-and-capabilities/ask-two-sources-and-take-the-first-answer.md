@@ -53,7 +53,7 @@ are idempotent. Racing two payments pays twice. It also does the work twice, so 
 costs twice what one call does: it pays when the latency you save is worth that.
 
 Use `FetchOptions.timeout` when work must actually stop. For more, read
-[what a timeout stops](/book/guides/effects-and-capabilities/what-a-timeout-stops/).
+[what a timeout stops](/book/concepts/effects-and-capabilities/what-a-timeout-stops/).
 
 ## Where it is allowed
 

@@ -105,7 +105,7 @@ sentinel. Bynk refuses that. Instead, "not set yet" is expressed honestly with
 `Option`: a `store reading: Cell[Option[Int]]` is zeroable because its zero is
 `None`, and `None` *means* "never set". The absence is in the type, where the
 rest of the code is forced to handle it — exactly the [errors-as-values
-discipline](/book/guides/type-system/philosophy/) applied to state.
+discipline](/book/concepts/type-system/philosophy/) applied to state.
 
 So the zeroability rule is not a limitation to work around; it pushes you toward
 modelling "absent" precisely, and it is what makes fresh keys safe.

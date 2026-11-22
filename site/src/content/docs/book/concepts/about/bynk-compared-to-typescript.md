@@ -15,19 +15,19 @@ functions.
 
 - **Refinement is in the type system.** TypeScript can model a `number`, but "a
   number between 0 and 150" is a runtime check you remember to write. In Bynk it
-  is a [refined type](/book/guides/type-system/philosophy/): the invalid value cannot be
+  is a [refined type](/book/concepts/type-system/philosophy/): the invalid value cannot be
   constructed, and validation at the boundary is forced by the type of `.of`.
 - **Opacity is enforced, not conventional.** TypeScript's branding tricks are
-  opt-in and bypassable. Bynk's [opaque types](/book/guides/type-system/philosophy/) are a
+  opt-in and bypassable. Bynk's [opaque types](/book/concepts/type-system/philosophy/) are a
   language feature with enforced construction and boundaries.
 - **No exceptions, no `null`.** Failure and absence are
-  [values](/book/guides/type-system/philosophy/) (`Result`, `Option`) the caller must
+  [values](/book/concepts/type-system/philosophy/) (`Result`, `Option`) the caller must
   handle, rather than control flow you can forget to catch.
 - **Architecture is in the language.** Contexts, services, agents, capabilities,
   and the `uses`/`consumes` graph are language constructs the compiler checks —
   not patterns layered on top. See
-  [How a Bynk program is shaped](/book/guides/program-structure/how-a-program-is-shaped/).
-- **State and deployment are modelled.** A stateful [agent](/book/guides/agents-and-state/the-agent-model/)
+  [How a Bynk program is shaped](/book/concepts/program-structure/how-a-program-is-shaped/).
+- **State and deployment are modelled.** A stateful [agent](/book/concepts/agents-and-state/the-agent-model/)
   maps to a Durable Object; a context maps to a Worker. The language model and
   the deployment model line up.
 
@@ -52,4 +52,4 @@ the gains.
 
 ## See also
 
-- [Why Bynk exists](/book/about/why-bynk-exists/) · [Why compile to TypeScript](/book/guides/projects-build-and-deployment/why-compile-to-typescript/)
+- [Why Bynk exists](/book/about/why-bynk-exists/) · [Why compile to TypeScript](/book/concepts/projects-build-and-deployment/why-compile-to-typescript/)

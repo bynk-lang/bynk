@@ -264,13 +264,13 @@
     "/reference/agents/",
     "/book/guides/agents-and-state/state-machine/",
     "/book/guides/agents-and-state/stateful-agent/",
-    "/book/guides/agents-and-state/the-agent-model/"
+    "/book/concepts/agents-and-state/the-agent-model/"
   ],
   "bynk.agents.non_zeroable_state_field": [
     "/reference/agents/#state-initialisation",
     "/book/guides/agents-and-state/stateful-agent/",
     "/reference/agents/",
-    "/book/guides/agents-and-state/the-agent-model/"
+    "/book/concepts/agents-and-state/the-agent-model/"
   ],
   "bynk.asset.duplicate": [
     "/reference/assets/#declaring-an-asset"
@@ -387,7 +387,7 @@
     "/book/guides/program-structure/consume-services/"
   ],
   "bynk.consumes.target_is_commons": [
-    "/book/guides/program-structure/how-a-program-is-shaped/#the-two-kinds-of-module"
+    "/book/concepts/program-structure/how-a-program-is-shaped/#the-two-kinds-of-module"
   ],
   "bynk.consumes.type_alias_capability": [
     "/book/guides/program-structure/consume-services/#rename-an-exported-type-that-clashes-with-one-of-yours"
@@ -545,31 +545,31 @@
     "/reference/types/#duration"
   ],
   "bynk.effect.bind_in_pure_context": [
-    "/book/guides/effects-and-capabilities/understand-the-capability-model/"
+    "/book/concepts/effects-and-capabilities/understand-the-capability-model/"
   ],
   "bynk.effect.bind_on_non_effect": [
-    "/book/guides/effects-and-capabilities/understand-the-capability-model/#why-effects-are-gated"
+    "/book/concepts/effects-and-capabilities/understand-the-capability-model/#why-effects-are-gated"
   ],
   "bynk.effect.capability_in_pure_context": [
-    "/book/guides/effects-and-capabilities/understand-the-capability-model/#why-effects-are-gated"
+    "/book/concepts/effects-and-capabilities/understand-the-capability-model/#why-effects-are-gated"
   ],
   "bynk.effect.cross_context_in_pure_context": [
-    "/book/guides/effects-and-capabilities/understand-the-capability-model/#why-effects-are-gated"
+    "/book/concepts/effects-and-capabilities/understand-the-capability-model/#why-effects-are-gated"
   ],
   "bynk.effect.do_discards_result": [
-    "/book/guides/effects-and-capabilities/understand-the-capability-model/#why-effects-are-gated"
+    "/book/concepts/effects-and-capabilities/understand-the-capability-model/#why-effects-are-gated"
   ],
   "bynk.effect.do_in_pure_context": [
-    "/book/guides/effects-and-capabilities/understand-the-capability-model/#why-effects-are-gated"
+    "/book/concepts/effects-and-capabilities/understand-the-capability-model/#why-effects-are-gated"
   ],
   "bynk.effect.do_on_non_effect": [
-    "/book/guides/effects-and-capabilities/understand-the-capability-model/#why-effects-are-gated"
+    "/book/concepts/effects-and-capabilities/understand-the-capability-model/#why-effects-are-gated"
   ],
   "bynk.effect.fn_value_in_pure_context": [
-    "/book/guides/effects-and-capabilities/understand-the-capability-model/"
+    "/book/concepts/effects-and-capabilities/understand-the-capability-model/"
   ],
   "bynk.effect.unbound_effect": [
-    "/book/guides/effects-and-capabilities/understand-the-capability-model/"
+    "/book/concepts/effects-and-capabilities/understand-the-capability-model/"
   ],
   "bynk.email.bad_params": [
     "/reference/inbound-email/#handler-form"
@@ -608,52 +608,52 @@
     "/reference/embeds/#declaring-an-embed"
   ],
   "bynk.event.bad_params": [
-    "/book/guides/events/understand-events/#the-envelope-and-idempotent-handling"
+    "/book/concepts/events/understand-events/#the-envelope-and-idempotent-handling"
   ],
   "bynk.event.bad_schema_dispatch": [
-    "/book/guides/events/understand-events/#dispatching-by-version-with-via-scheman"
+    "/book/concepts/events/understand-events/#dispatching-by-version-with-via-scheman"
   ],
   "bynk.event.bad_schema_version": [
-    "/book/guides/events/understand-events/#asserting-a-schema-version-with-scheman"
+    "/book/concepts/events/understand-events/#asserting-a-schema-version-with-scheman"
   ],
   "bynk.event.duplicate_handler": [
-    "/book/guides/events/understand-events/#the-three-pieces"
+    "/book/concepts/events/understand-events/#the-three-pieces"
   ],
   "bynk.event.emit_not_an_event": [
-    "/book/guides/events/understand-events/#only-the-declaring-context-may-emit"
+    "/book/concepts/events/understand-events/#only-the-declaring-context-may-emit"
   ],
   "bynk.event.emit_outside_owner": [
-    "/book/guides/events/understand-events/#only-the-declaring-context-may-emit"
+    "/book/concepts/events/understand-events/#only-the-declaring-context-may-emit"
   ],
   "bynk.event.handler_param_type_mismatch": [
-    "/book/guides/events/understand-events/#the-three-pieces"
+    "/book/concepts/events/understand-events/#the-three-pieces"
   ],
   "bynk.event.outside_context": [
-    "/book/guides/events/understand-events/#the-three-pieces"
+    "/book/concepts/events/understand-events/#the-three-pieces"
   ],
   "bynk.event.pattern_duplicate_field": [
-    "/book/guides/events/understand-events/#filtering-delivery-with-a-pattern"
+    "/book/concepts/events/understand-events/#filtering-delivery-with-a-pattern"
   ],
   "bynk.event.pattern_type_mismatch": [
-    "/book/guides/events/understand-events/#filtering-delivery-with-a-pattern"
+    "/book/concepts/events/understand-events/#filtering-delivery-with-a-pattern"
   ],
   "bynk.event.pattern_unknown_field": [
-    "/book/guides/events/understand-events/#filtering-delivery-with-a-pattern"
+    "/book/concepts/events/understand-events/#filtering-delivery-with-a-pattern"
   ],
   "bynk.event.pattern_unknown_variant": [
-    "/book/guides/events/understand-events/#filtering-delivery-with-a-pattern"
+    "/book/concepts/events/understand-events/#filtering-delivery-with-a-pattern"
   ],
   "bynk.event.pattern_variant_payload": [
-    "/book/guides/events/understand-events/#filtering-delivery-with-a-pattern"
+    "/book/concepts/events/understand-events/#filtering-delivery-with-a-pattern"
   ],
   "bynk.event.return_not_effect_unit": [
-    "/book/guides/events/understand-events/#emission-is-fire-and-forget-and-release-at-commit"
+    "/book/concepts/events/understand-events/#emission-is-fire-and-forget-and-release-at-commit"
   ],
   "bynk.event.unknown_annotation": [
-    "/book/guides/events/understand-events/#asserting-a-schema-version-with-scheman"
+    "/book/concepts/events/understand-events/#asserting-a-schema-version-with-scheman"
   ],
   "bynk.event.unknown_subscription": [
-    "/book/guides/events/understand-events/#the-three-pieces"
+    "/book/concepts/events/understand-events/#the-three-pieces"
   ],
   "bynk.exec.unavailable": [
     "/reference/capabilities/#within"
@@ -756,7 +756,7 @@
     "/reference/generics/#ord",
     "/reference/generics/",
     "/reference/types/#ordering-your-own-types",
-    "/book/guides/type-system/ordering-your-own-types/"
+    "/book/concepts/type-system/ordering-your-own-types/"
   ],
   "bynk.generics.polymorphic_recursion": [
     "/book/guides/type-system/recursive-generic-types/"
@@ -770,7 +770,7 @@
     "/book/guides/type-system/key-a-map-by-a-record/",
     "/reference/generics/",
     "/reference/types/#ordering-your-own-types",
-    "/book/guides/type-system/ordering-your-own-types/"
+    "/book/concepts/type-system/ordering-your-own-types/"
   ],
   "bynk.generics.type_arg_count": [
     "/reference/generics/#type-parameters"
@@ -801,7 +801,7 @@
     "/reference/capabilities/#capabilities-in-functions"
   ],
   "bynk.given.undeclared_capability": [
-    "/book/guides/effects-and-capabilities/understand-the-capability-model/"
+    "/book/concepts/effects-and-capabilities/understand-the-capability-model/"
   ],
   "bynk.given.unknown_capability": [
     "/reference/capabilities/#declaring-a-capability"
@@ -1287,7 +1287,7 @@
     "/reference/spec/syntactic-grammar/#441-service_decl"
   ],
   "bynk.parse.event_pattern_empty": [
-    "/book/guides/events/understand-events/#filtering-delivery-with-a-pattern"
+    "/book/concepts/events/understand-events/#filtering-delivery-with-a-pattern"
   ],
   "bynk.parse.expected_agent_key": [
     "/reference/agents/#declaration"
@@ -1650,10 +1650,10 @@
     "/reference/spec/static-semantics/"
   ],
   "bynk.resolve.let_shadows_fn": [
-    "/book/guides/program-structure/how-a-program-is-shaped/"
+    "/book/concepts/program-structure/how-a-program-is-shaped/"
   ],
   "bynk.resolve.let_shadows_type": [
-    "/book/guides/program-structure/how-a-program-is-shaped/"
+    "/book/concepts/program-structure/how-a-program-is-shaped/"
   ],
   "bynk.resolve.method_unknown_type": [
     "/reference/spec/static-semantics/"
@@ -1671,7 +1671,7 @@
     "/reference/types/#opaque-types"
   ],
   "bynk.resolve.param_as_function": [
-    "/book/guides/program-structure/how-a-program-is-shaped/"
+    "/book/concepts/program-structure/how-a-program-is-shaped/"
   ],
   "bynk.resolve.recursive_record_field": [
     "/reference/types/#record-types"
@@ -1703,10 +1703,10 @@
     "/reference/types/#record-types"
   ],
   "bynk.resolve.unknown_function": [
-    "/book/guides/program-structure/how-a-program-is-shaped/"
+    "/book/concepts/program-structure/how-a-program-is-shaped/"
   ],
   "bynk.resolve.unknown_name": [
-    "/book/guides/program-structure/how-a-program-is-shaped/"
+    "/book/concepts/program-structure/how-a-program-is-shaped/"
   ],
   "bynk.resolve.unknown_static_member": [
     "/reference/types/#sum-types"
@@ -1763,7 +1763,7 @@
     "/reference/grammar/#rule-service_protocol"
   ],
   "bynk.service.unknown_via_clause": [
-    "/book/guides/events/understand-events/#dispatching-by-version-with-via-scheman"
+    "/book/concepts/events/understand-events/#dispatching-by-version-with-via-scheman"
   ],
   "bynk.service.websocket_header": [
     "/reference/websocket/#service-form"
@@ -2306,7 +2306,7 @@
   "bynk.types.not_orderable": [
     "/reference/types/#ordering-your-own-types",
     "/reference/generics/",
-    "/book/guides/type-system/ordering-your-own-types/"
+    "/book/concepts/type-system/ordering-your-own-types/"
   ],
   "bynk.types.ok_value_mismatch": [
     "/book/guides/type-system/result-and-optionals/#construct-values"
@@ -2435,16 +2435,16 @@
     "/reference/types/#sum-types"
   ],
   "bynk.uses.name_conflict": [
-    "/book/guides/program-structure/how-a-program-is-shaped/"
+    "/book/concepts/program-structure/how-a-program-is-shaped/"
   ],
   "bynk.uses.self_reference": [
-    "/book/guides/program-structure/how-a-program-is-shaped/#the-two-kinds-of-module"
+    "/book/concepts/program-structure/how-a-program-is-shaped/#the-two-kinds-of-module"
   ],
   "bynk.uses.target_is_context": [
-    "/book/guides/program-structure/how-a-program-is-shaped/#the-two-kinds-of-module"
+    "/book/concepts/program-structure/how-a-program-is-shaped/#the-two-kinds-of-module"
   ],
   "bynk.uses.unknown_commons": [
-    "/book/guides/program-structure/how-a-program-is-shaped/#the-two-kinds-of-module"
+    "/book/concepts/program-structure/how-a-program-is-shaped/#the-two-kinds-of-module"
   ],
   "bynk.val.agent_not_generable": [
     "/reference/testing/#properties",

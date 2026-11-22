@@ -351,7 +351,7 @@ and 4 may be built before the freeze lifts is the maintainer's decision.
 | 4 | Diagnostics: a generated page for every code; the `/d/<code>` contract (L1–L3); `page`/`anchor` move from `Explain` to the site's data file | Yes | 0 |
 | 4b | Fold the troubleshooting pages into their codes' `Explain` entries; retire `book/troubleshooting/` behind one splat redirect | Yes | 4 |
 | 5 | Reference consolidation: move `book/reference`, `book/spec` and `/docs/` to `/reference/`; its own contents (`REFERENCE.md`); sidebar surfaces; splat redirects. Repository links rewritten (L5) | Yes | 2, 3, 4 |
-| 5b | Move the Concepts pages to `/book/concepts/`, one rule each (split out of slice 5 so the Reference move stays mechanical) | Yes | 5 |
+| 5b | Move the Concepts pages to `/book/concepts/<concern>/`, one rule each; the concern hubs stay in Guides, under "By topic" (split out of slice 5 so the Reference move stays mechanical) | Yes | 5 |
 | 6 | Theme package from the design system tokens, published to GitHub Packages; light and dark following the reader's setting; docs site adopts it | No | 0 |
 | 7 | Blog adopts the theme; cross-site search | No | 6 |
 | 8 | Site shell: header, footer and home page per the mockups | No | 5, 6 |

@@ -138,5 +138,5 @@ Write `do e.detach()`. On v0.603.x, `bynk check --fix` rewrites each one for you
 [Upgrading](/reference/upgrading/). Unlike `~>`, `detach` accepts an effect of any type,
 because a failure is reported rather than dropped.
 
-**See also:** [Understand the capability model](/book/guides/effects-and-capabilities/understand-the-capability-model/),
+**See also:** [Understand the capability model](/book/concepts/effects-and-capabilities/understand-the-capability-model/),
 [Reference: detaching an effect](/reference/capabilities/#detach).

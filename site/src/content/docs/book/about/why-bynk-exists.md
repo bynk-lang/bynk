@@ -64,8 +64,8 @@ In Bynk, it does not:
 ```
 
 The same move plays out for the id-swap and the unhandled `Result` (see
-[the type-system philosophy](/book/guides/type-system/philosophy/)) and for unzeroable agent
-state (see [the agent model](/book/guides/agents-and-state/the-agent-model/)).
+[the type-system philosophy](/book/concepts/type-system/philosophy/)) and for unzeroable agent
+state (see [the agent model](/book/concepts/agents-and-state/the-agent-model/)).
 
 ## The pragmatic choice: compile to typed TypeScript
 
@@ -81,7 +81,7 @@ typed TypeScript** and targets **Cloudflare Workers**. That choice buys a lot:
   the deployment model and the language model line up.
 
 It also has costs, which the companion page
-[Why compile to TypeScript](/book/guides/projects-build-and-deployment/why-compile-to-typescript/) discusses honestly.
+[Why compile to TypeScript](/book/concepts/projects-build-and-deployment/why-compile-to-typescript/) discusses honestly.
 
 ## What this adds up to
 
@@ -89,7 +89,7 @@ Put together, Bynk is an attempt to make the *correct* way to build a service
 also the *easy* way: state the architecture so it stays true, lean on the type
 system so illegal states never compile, and ride a proven runtime instead of a
 bespoke one. Whether that trade is worth it for you depends on the work — see
-[Bynk compared to TypeScript](/book/about/bynk-compared-to-typescript/) for when to reach
+[Bynk compared to TypeScript](/book/concepts/about/bynk-compared-to-typescript/) for when to reach
 for it.
 
 Underneath the three bets is a quieter principle: the constraints are
@@ -97,7 +97,7 @@ Underneath the three bets is a quieter principle: the constraints are
 resistance — the expressible program tends to be the correct one — and when you
 do reach for a shape it will not allow, it does not merely fail. It declines the
 program and names the invariant you broke, as the refusals above (and on the
-[type-system](/book/guides/type-system/philosophy/) and [agent](/book/guides/agents-and-state/the-agent-model/) pages)
+[type-system](/book/concepts/type-system/philosophy/) and [agent](/book/concepts/agents-and-state/the-agent-model/) pages)
 show: the diagnostic is the lesson, delivered at the moment it is most useful.
 Bynk is a service-tier language, not a teaching tool — but a language that
 explains every refusal is one you come to understand *as you use it*.

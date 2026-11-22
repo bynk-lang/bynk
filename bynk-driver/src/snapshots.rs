@@ -21,10 +21,10 @@ use serde::Serialize;
 pub const REPORT_MARKER: char = '\u{1}';
 const REPORT_PREFIX: &str = "bynk-snapshots ";
 
-/// Environment: `1` makes the runner record rather than compare.
-pub const UPDATE_ENV: &str = "BYNK_UPDATE_SNAPSHOTS";
 /// Environment: `1` makes the human-format runner print the report line.
-pub const REPORT_ENV: &str = "BYNK_SNAPSHOT_REPORT";
+pub use bynk_project::env_protocol::SNAPSHOT_REPORT as REPORT_ENV;
+/// Environment: `1` makes the runner record rather than compare.
+pub use bynk_project::env_protocol::UPDATE_SNAPSHOTS as UPDATE_ENV;
 
 /// What a run did to the project's snapshots, as the report states it: in every
 /// output format (`snapshots` in the JSON document and the NDJSON `run-end`).

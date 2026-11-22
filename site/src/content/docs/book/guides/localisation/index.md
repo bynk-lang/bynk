@@ -6,7 +6,7 @@ bundle** turns that into text in a particular language. Adding a language
 touches the bundle and nothing else.
 
 **Understand**
-- [Understand localisation](/book/guides/localisation/understand-localisation/)
+- [Understand localisation](/book/concepts/localisation/understand-localisation/)
 
 **Do**
 - [Declare a message bundle](/book/guides/localisation/declare-a-message-bundle/)

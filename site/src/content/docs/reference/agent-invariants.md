@@ -5,7 +5,7 @@ An **invariant** is a property an agent guarantees of *every* committed state. I
 is a universally-quantified claim — *for all reachable states, this holds* — and
 the runtime enforces it at each commit boundary. Invariants are the contract half
 of validation; tests are the behaviour half (see
-[Invariants as contracts](/book/guides/agents-and-state/understand-invariants/)).
+[Invariants as contracts](/book/concepts/agents-and-state/understand-invariants/)).
 
 ## Declaration
 

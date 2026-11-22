@@ -14,11 +14,11 @@
 //! crate-hygiene track's M-3 ratchet, `model_readers_beyond_emit` (B1, #2939), and its H-3 gate,
 //! `unused_deps` (A4, #2976).
 //!
-//! **Twenty-eight are gated**, committed and diffed: `workspace_lints`, `fs_below_driver`,
+//! **Twenty-nine are gated**, committed and diffed: `workspace_lints`, `fs_below_driver`,
 //! `options_sources`, `hoist_sinks`, `span_keyed_maps`, `emit_diagnostics`,
 //! `ide_emit_edge`, `ast_importers`, `emit_abi_shapes`, `ts_writes`, `ts_any`,
 //! `verbatim_origins`, `verbatim_sites`, `incremental_query_types`,
-//! `unconsumed_ir_items`, `diagnostic_coverage`, `model_readers_beyond_emit`, `unused_deps`, `explained_codes`, `ts_raw_sites_emit`, `ts_raw_sites_testgen`, `ts_text_idents`, `emit_thread_locals`, `emit_silent_fallbacks`, `emit_print_calls`, `import_prediction_fns`, `deploy_kind_accessors`, `tool_spawn_sites`. Ten of these are
+//! `unconsumed_ir_items`, `diagnostic_coverage`, `model_readers_beyond_emit`, `unused_deps`, `explained_codes`, `ts_raw_sites_emit`, `ts_raw_sites_testgen`, `ts_text_idents`, `emit_thread_locals`, `emit_silent_fallbacks`, `emit_print_calls`, `import_prediction_fns`, `deploy_kind_accessors`, `env_protocol_literals`, `tool_spawn_sites`. Ten of these are
 //! zero/closure-shaped — a boolean, or a count pinned at a small, argued floor
 //! (`ast_importers` = 5, `emit_abi_shapes` = 1). Phase 7's own four are the same shape:
 //! each converged toward an argued floor over dozens of slices, the same trajectory
@@ -42,7 +42,7 @@
 //! **Two kinds of gate** (#3679, amending ADR 0389/0390). Every gated probe is
 //! *exact-match*: a live reading that differs from its committed row fails unless a
 //! pending file names it in `probes:`. The [`GROWTH_PROBES`] (`ts_writes`, `ts_any`,
-//! `emit_abi_shapes`, `verbatim_sites`, `ts_raw_sites_emit`, `ts_raw_sites_testgen`, `ts_text_idents`, `span_keyed_maps`, `emit_thread_locals`, `emit_silent_fallbacks`, `emit_print_calls`, `import_prediction_fns`, `deploy_kind_accessors`, `tool_spawn_sites`) are also *directional*:
+//! `emit_abi_shapes`, `verbatim_sites`, `ts_raw_sites_emit`, `ts_raw_sites_testgen`, `ts_text_idents`, `span_keyed_maps`, `emit_thread_locals`, `emit_silent_fallbacks`, `emit_print_calls`, `import_prediction_fns`, `deploy_kind_accessors`, `env_protocol_literals`, `tool_spawn_sites`) are also *directional*:
 //! `growth_probes_never_rise` (`xtask/tests/greenfield_status.rs`) fails when the
 //! live leading count exceeds the committed one unless a pending file *raises* the
 //! probe with a reason (`raises:`), which the stamp then records in
@@ -117,7 +117,7 @@ pub fn run(root: &Path) -> Report {
 /// The gated probes' names, in [`run_gated`]'s order — what a pending file's
 /// `probes` key may cite. `greenfield_status_table_is_current` asserts this
 /// matches the probes [`run_gated`] actually returns, so the two cannot drift.
-pub const GATED_PROBES: [&str; 28] = [
+pub const GATED_PROBES: [&str; 29] = [
     "workspace_lints",
     "fs_below_driver",
     "options_sources",
@@ -139,6 +139,7 @@ pub const GATED_PROBES: [&str; 28] = [
     "emit_print_calls",
     "import_prediction_fns",
     "deploy_kind_accessors",
+    "env_protocol_literals",
     "tool_spawn_sites",
     "incremental_query_types",
     "unconsumed_ir_items",
@@ -150,12 +151,12 @@ pub const GATED_PROBES: [&str; 28] = [
 
 /// The gated probes that only a reasoned, recorded `raises:` may increase
 /// (#3679, ADR 0389/0390 amended): `ts_writes`, `ts_any`, `emit_abi_shapes`,
-/// `verbatim_sites`, `ts_raw_sites_emit` and `ts_raw_sites_testgen` (the split of `ts_raw_sites`, #3681), `ts_text_idents` (#3681), `span_keyed_maps`, `emit_thread_locals` (1A.19), `emit_silent_fallbacks` (1A.34), `emit_print_calls` (1A.35b), `import_prediction_fns` (1A.36a), `deploy_kind_accessors` (1D.1a), `tool_spawn_sites` (1D.5b). Probes already at a zero or closure
+/// `verbatim_sites`, `ts_raw_sites_emit` and `ts_raw_sites_testgen` (the split of `ts_raw_sites`, #3681), `ts_text_idents` (#3681), `span_keyed_maps`, `emit_thread_locals` (1A.19), `emit_silent_fallbacks` (1A.34), `emit_print_calls` (1A.35b), `import_prediction_fns` (1A.36a), `deploy_kind_accessors` (1D.1a), `env_protocol_literals` (1D.5a), `tool_spawn_sites` (1D.5b). Probes already at a zero or closure
 /// floor are excluded (their exact-match row pins them), as are
 /// `verbatim_origins` (an argued floor of 2) and `model_readers_beyond_emit`
 /// (which has the opposite direction). A subset of [`GATED_PROBES`], pinned by
 /// a unit test.
-pub const GROWTH_PROBES: [&str; 14] = [
+pub const GROWTH_PROBES: [&str; 15] = [
     "ts_writes",
     "ts_any",
     "emit_abi_shapes",
@@ -169,10 +170,11 @@ pub const GROWTH_PROBES: [&str; 14] = [
     "emit_print_calls",
     "import_prediction_fns",
     "deploy_kind_accessors",
+    "env_protocol_literals",
     "tool_spawn_sites",
 ];
 
-/// The twenty-eight gated (zero/closure/ratchet) probes only — what [`gated_disagreements`] diffs.
+/// The twenty-nine gated (zero/closure/ratchet) probes only — what [`gated_disagreements`] diffs.
 pub fn run_gated(root: &Path) -> Vec<Probe> {
     vec![
         workspace_lints(root),
@@ -196,6 +198,7 @@ pub fn run_gated(root: &Path) -> Vec<Probe> {
         emit_print_calls(root),
         import_prediction_fns(root),
         deploy_kind_accessors(root),
+        env_protocol_literals(root),
         tool_spawn_sites(root),
         incremental_query_types(root),
         unconsumed_ir_items(root),
@@ -2638,6 +2641,77 @@ fn deploy_kind_accessors_violations(files: &[(PathBuf, String)]) -> usize {
     production_lines_matching(&production, |line| accessor.is_match(line))
 }
 
+// --- Gated probe: env_protocol_literals (1D.5a) ---------------------------------------------
+
+/// Back-half paydown 1D.5a (#4003, Decision H): production Rust lines that spell a name of the
+/// cross-language `BYNK_*` protocol themselves, instead of using
+/// `bynk_project::env_protocol`'s constant. The pattern is the table: a `BYNK_` or `__BYNK_`
+/// token counts when [`bynk_project::env_protocol::entry_of`] places it (an entry's name, or a
+/// member of a prefix family), so a name added to the table is measured at once and the probe
+/// cannot drift from it.
+///
+/// It read 36 on `main` before 1D.5a. After it, the residual is named: the three literals in
+/// `bynk-driver/src/project/tests_emit/test_main.rs`, which 1B.2 moves into `bynk-emit::testgen`
+/// untouched (a follow-up replaces them there), and `bynk/src/deploy/config.rs`'s
+/// `BYNK_DATASET_`, inside `synthesise_environment_block`, which 1C.2 deletes. A growth probe
+/// ([`GROWTH_PROBES`]): it may only fall unless a pending file `raises:` it with a reason, so a
+/// new bare protocol literal fails the gate.
+///
+/// Counts non-comment lines outside `#[cfg(test)]` modules (deploy's `pub(crate) mod tests`
+/// included) and wholly-test files ([`is_whole_test_file`]) in every workspace crate's `src/`,
+/// except `xtask` (repo automation, not shipped), the test-only crates `bynk-tests` and
+/// `bynk-testkit`, the table itself, and `bynk-syntax/src/diagnostics.rs`, whose explanations
+/// name the edge-key families as prose, not as uses. Text-level gaps, as for the other line
+/// scanners: two names on one line count once, and a name in a block comment counts.
+fn env_protocol_literals(root: &Path) -> Probe {
+    let files: Vec<(PathBuf, String)> = workspace_crate_src_files(root)
+        .into_iter()
+        .filter(|(krate, _, _)| !matches!(krate.as_str(), "xtask" | "bynk-tests" | "bynk-testkit"))
+        .map(|(krate, path, contents)| (Path::new(&krate).join("src").join(path), contents))
+        .collect();
+    Probe {
+        name: "env_protocol_literals",
+        gated: true,
+        reads: env_protocol_literals_violations(&files).to_string(),
+    }
+}
+
+/// The files [`env_protocol_literals`] never counts, from the repo root.
+const ENV_PROTOCOL_LITERALS_EXEMPT: [&str; 2] = [
+    "bynk-project/src/env_protocol.rs",
+    "bynk-syntax/src/diagnostics.rs",
+];
+
+/// [`env_protocol_literals`]'s counting logic over an explicit file list, paths from the repo
+/// root.
+fn env_protocol_literals_violations(files: &[(PathBuf, String)]) -> usize {
+    let token = regex::Regex::new(r"\b(__)?BYNK_[A-Z0-9_]+").expect("the token pattern compiles");
+    let production: Vec<(PathBuf, String)> = files
+        .iter()
+        .filter(|(path, _)| {
+            let rel = path.to_string_lossy().replace('\\', "/");
+            !is_whole_test_file(&rel) && !ENV_PROTOCOL_LITERALS_EXEMPT.contains(&rel.as_str())
+        })
+        .map(|(path, contents)| {
+            // As in [`deploy_kind_accessors_violations`]: a `pub(crate) mod tests` is a test
+            // module, which [`test_mod_ranges`] reads only by its `mod ` line.
+            let contents: Vec<&str> = contents
+                .lines()
+                .map(|line| {
+                    line.strip_prefix("pub(crate) mod ")
+                        .map_or(line, |_| &line[11..])
+                })
+                .collect();
+            (path.clone(), contents.join("\n"))
+        })
+        .collect();
+    production_lines_matching(&production, |line| {
+        token
+            .find_iter(line)
+            .any(|m| bynk_project::env_protocol::entry_of(m.as_str()).is_some())
+    })
+}
+
 // --- Gated probe: tool_spawn_sites (1D.5b) ---------------------------------------------------
 
 /// Back-half paydown 1D.5b (#4003, Decision H): production process spawns in `bynk` and
@@ -4319,7 +4393,7 @@ pub fn render_table(report: &Report) -> String {
          added by 1A.19; `emit_silent_fallbacks` added by 1A.34; `emit_print_calls` added by 1A.35b \
          (`lowering_text_bridge` and `stmt_text_lines`, added by #3694 and #3711, were retired at 0 by 1A.35b); \
          `import_prediction_fns` added by 1A.36a; `deploy_kind_accessors` added by 1D.1a; \
-         `tool_spawn_sites` added by 1D.5b. Twenty-eight \
+         `env_protocol_literals` added by 1D.5a; `tool_spawn_sites` added by 1D.5b. Twenty-nine \
          probes are gated — a disagreement between this file and a fresh run fails \
          `greenfield_status_table_is_current` (`xtask/tests/greenfield_status.rs`). \
          Five are trend probes, reported only.\n\n",
@@ -4706,6 +4780,7 @@ mod tests {
         | `emit_print_calls` | yes | 30 |\n\
         | `import_prediction_fns` | yes | 8 |\n\
         | `deploy_kind_accessors` | yes | 68 |\n\
+        | `env_protocol_literals` | yes | 36 |\n\
         | `tool_spawn_sites` | yes | 20 |\n";
 
     fn growth_live(ts_writes: &str, abi: &str) -> Vec<Probe> {
@@ -4723,6 +4798,7 @@ mod tests {
             gated("emit_print_calls", "30"),
             gated("import_prediction_fns", "8"),
             gated("deploy_kind_accessors", "68"),
+            gated("env_protocol_literals", "36"),
             gated("tool_spawn_sites", "20"),
         ]
     }
@@ -4942,6 +5018,46 @@ mod tests {
                 ("hyperdrive/tests.rs", "lock.record_hyperdrive(a);\n"),
                 ("snapshot_tests.rs", "recorded_r2(l, w, b, e);\n"),
                 ("hyperdrive.rs", "lock.record_hyperdrive(a);\n"),
+            ])),
+            1
+        );
+    }
+
+    #[test]
+    fn env_protocol_literals_counts_protocol_names_outside_tests_comments_and_the_table() {
+        let count = |src: &str| {
+            env_protocol_literals_violations(&files_of(&[("bynk-driver/src/run.rs", src)]))
+        };
+        // A name, a prefix spelt into a `format!`, a family member and a binding name.
+        let src = "cmd.env(\"BYNK_TEST_SEED\", hex);\n\
+                   format!(\"BYNK_DATASET_{binding}\")\n\
+                   let k = \"BYNK_CALL_FROM_SHOP__ORDERS\";\n\
+                   name: \"__BYNK_INSPECT_REGISTRY\".to_string(),\n";
+        assert_eq!(count(src), 4);
+        // Not protocol names: Rust-only configuration, a longer name than an exact entry,
+        // a runtime constant, a misspelling and a constant path.
+        let src = "env::var(\"BYNK_HOME\")\nenv::var(\"BYNK_DEV_COMMAND\")\n\
+                   \"__BYNK_TIMED_OUT\"\n\"BYNK_TEST_SEDE\"\ncmd.env(env_protocol::TEST_SEED, h);\n";
+        assert_eq!(count(src), 0);
+        // Comments and test modules (deploy's are `pub(crate)`) do not count.
+        let src =
+            "// BYNK_TEST_SEED\n#[cfg(test)]\nmod tests {\n    const S: &str = \"BYNK_DEV\";\n}\n";
+        assert_eq!(count(src), 0);
+        let src = "#[cfg(test)]\npub(crate) mod tests {\n    const S: &str = \"BYNK_DEV\";\n}\n";
+        assert_eq!(count(src), 0);
+        // The table, the diagnostics' prose and a wholly-test file are exempt.
+        assert_eq!(
+            env_protocol_literals_violations(&files_of(&[
+                (
+                    "bynk-project/src/env_protocol.rs",
+                    "pub const DEV: &str = \"BYNK_DEV\";\n"
+                ),
+                (
+                    "bynk-syntax/src/diagnostics.rs",
+                    "blurb: \"`BYNK_CALL_TO_<CONTEXT>`\",\n"
+                ),
+                ("bynk/src/deploy/tests.rs", "\"BYNK_DEV\"\n"),
+                ("bynk/src/dev.rs", "\"BYNK_DEV\"\n"),
             ])),
             1
         );

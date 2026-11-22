@@ -17,9 +17,12 @@ up: the language, architecture, adapters, tooling, diagnostics, the
 specification and the releases, under `site/src/content/docs/reference/`.
 [Diátaxis](https://diataxis.fr/) governs each page — one mode per page — and
 the part a page sits in says which mode it is. A new page goes in the part for
-its mode: an explanation in Concepts, under its concern; a how-to in Guides,
-under the group for the task. The page's file stays in its concern's folder
-under `guides/`; only `SUMMARY.md` decides where it shows.
+its mode, and its folder follows: an explanation in Concepts, as
+`book/concepts/<concern>/<page>.md` (served at `/book/concepts/…`); a how-to in
+Guides, as `book/guides/<concern>/<page>.md`, listed under the group for the
+task. Each concern's hub, `book/guides/<concern>/index.md`, gathers both and
+stays in Guides, under "By topic". Within a part, `SUMMARY.md` decides where a
+page shows.
 
 ## Build and preview locally
 
@@ -169,7 +172,7 @@ its captured transcript:
    The plugin resolves the `diagnostics/…` suffix against `site/src/` (the
    `includeBase` set in `astro.config.mjs`), so only the `diagnostics/` part of
    the path matters. See
-   [the agent model](/book/guides/agents-and-state/the-agent-model/) for a live
+   [the agent model](/book/concepts/agents-and-state/the-agent-model/) for a live
    example to copy.
 
 The `.txt` transcripts are **generated — never hand-edit them**;
@@ -198,7 +201,7 @@ persuasive shape in the Book. Two panels:
 Weave it into the prose where the page already *asserts* the bug, so the
 demonstration replaces the assertion rather than bolting on. Keep it to
 explanation pages; reference stays dry. See
-[the type-system philosophy](/book/guides/type-system/philosophy/) for the
+[the type-system philosophy](/book/concepts/type-system/philosophy/) for the
 device in use.
 
 ## The guardrails
@@ -265,7 +268,18 @@ rest are Rust drift-guard tests and Node `--check` scripts that CI runs.
 3. **Link checking.** `starlight-links-validator` validates internal links on
    every `astro build`. Separately, `site/scripts/check-llms-links.mjs` confirms
    each `/book/` route named in the hand-authored `llms.txt` index still maps to
-   a real page.
+   a real page, and `site/scripts/check-redirects.mjs` checks
+   `site/public/_redirects` (the Cloudflare Pages redirects that keep moved
+   pages working) against the built `site/dist/`. It applies the rules first
+   match wins, as Cloudflare does, and fails if a rule redirects a page that
+   still exists, can never apply because an earlier rule catches its paths, or
+   sends a reader to a page that does not exist. For a `/*` splat it maps every
+   page under the target folder back to its old path, with and without the
+   trailing slash; for `/d/:code` it tries a few registry codes. It knows only
+   the pages that exist now, not the old ones, so it cannot tell that a page
+   which used to be under a moved folder has no counterpart at the new
+   address; check that by hand when a move also renames or drops pages. Run it
+   after `npm run build` whenever you move or retire a page.
 
 4. **Drift checks.** `node site/scripts/generate-sidebar.mjs --check` and
    `node site/scripts/build-llms-full.mjs --check` fail CI if the committed

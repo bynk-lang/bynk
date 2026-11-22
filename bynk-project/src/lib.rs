@@ -34,6 +34,7 @@ pub mod containers;
 pub mod contracts_lock;
 pub mod dev_ack;
 pub mod discovery;
+pub mod env_protocol;
 pub mod graph;
 pub mod hyperdrive;
 pub mod json;
