@@ -2589,7 +2589,9 @@ fn import_prediction_fns_violations(files: &[(PathBuf, String)]) -> usize {
 ///
 /// Counts non-comment lines outside `#[cfg(test)]` modules and wholly-test files
 /// ([`is_whole_test_file`]) in `bynk/src/deploy` that match [`DEPLOY_KIND_ACCESSOR`]. Text-level
-/// gaps, as for the other line scanners: two sites on one line count once.
+/// gaps, as for the other line scanners: two sites on one line count once, and a definition with
+/// generics (`fn recorded_r2<'a>(`) is not matched, which is how #3929's pattern read 68. Its
+/// callers are, so a kind is converted only once they are gone.
 fn deploy_kind_accessors(root: &Path) -> Probe {
     Probe {
         name: "deploy_kind_accessors",
@@ -4809,7 +4811,7 @@ mod tests {
     fn deploy_kind_accessors_counts_accessor_sites_outside_tests_and_comments() {
         let count = |src: &str| deploy_kind_accessors_violations(&files_of(&[("ledger.rs", src)]));
         // A definition and a call, of each family.
-        let src = "pub(crate) fn recorded_kv_binding<'a>(\n\
+        let src = "pub(crate) fn record_r2(\n\
                    let id = recorded_d1(lock, w, b, e);\n\
                    lock.record_queue(env, q);\n\
                    lock.forget_vectorize(env, w, b, i);\n\
@@ -4820,6 +4822,8 @@ mod tests {
             count("fn my_recorded_kv() {}\nlet f = record_kv;\nlock.recorded::<Kv>(e, w, b);\n"),
             0
         );
+        // #3929's pattern, as it measured 68: a definition with generics is not matched.
+        assert_eq!(count("pub(crate) fn recorded_kv_binding<'a>(\n"), 0);
         // A comment, a test module (deploy's are `pub(crate)`) and a wholly-test file do not count.
         let src = "// record_kv(\n#[cfg(test)]\nmod tests {\n    fn t() { lock.record_kv(a, b, c, d); }\n}\n";
         assert_eq!(count(src), 0);
