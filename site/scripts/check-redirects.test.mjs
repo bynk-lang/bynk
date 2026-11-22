@@ -270,9 +270,19 @@ test("the list is written sorted, deduplicated, under its header", () => {
   assert.deepEqual(parsePublished(text), ["/a/", "/b/"]);
 });
 
-test("pages are folders, not assets or the 404 page", () => {
-  const built = new Set([...BUILT, "/pagefind/fragment/en_01.pf_fragment", "/_redirects"]);
+test("pages are folders, not assets, the 404 page or the rustdoc", () => {
+  const built = new Set([...BUILT, "/pagefind/fragment/en_01.pf_fragment", "/_redirects", "/reference/api/", "/reference/api/bynk_syntax/"]);
   assert.deepEqual(pagesOf(built).sort(), LISTED);
+});
+
+test("a listed rustdoc route is not checked (CI builds no rustdoc)", () => {
+  assert.deepEqual(published("", [...LISTED, "/reference/api/bynk_syntax/"]), []);
+});
+
+test("a rule over the 404 page or an asset is reported as shadowing it", () => {
+  const problems = checkRedirects(rules("/404 /book/ 301\n/llms.txt /book/ 301\n"), SITE, SAMPLES).map((p) => p.problem);
+  assert.ok(problems.includes("shadows the live page /404 (a request for /404 is redirected)"), problems.join("\n"));
+  assert.ok(problems.includes("shadows the live page /llms.txt (a request for /llms.txt is redirected)"), problems.join("\n"));
 });
 
 test("a list that matches the build has no problems", () => {

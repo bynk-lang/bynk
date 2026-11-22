@@ -202,8 +202,11 @@ export function fillPattern(from, values, splat = "") {
  * @param {Iterable<string>} routes
  */
 export function pagesOf(routes) {
-  return [...routes].filter((r) => r.endsWith("/"));
+  return [...routes].filter((r) => r.endsWith("/") && !isExempt(r));
 }
+
+/** Is a route under a prefix only a deploy builds (the rustdoc)? */
+const isExempt = (/** @type {string} */ r) => EXEMPT_TARGETS.some((p) => r.startsWith(p));
 
 /**
  * Parse the published-routes list: one route per line; `#` comment lines and
@@ -249,7 +252,7 @@ export function checkPublished(rules, routes, published) {
   const problems = [];
   const listed = new Set(published);
   for (const route of published) {
-    if (routes.has(route)) continue;
+    if (routes.has(route) || isExempt(route)) continue;
     const forms = route.endsWith("/") && route !== "/" ? [route, route.slice(0, -1)] : [route];
     for (const form of forms) {
       const hit = applyRedirects(rules, form);
@@ -296,7 +299,9 @@ export function checkRedirects(rules, routes, options = {}) {
   const pages = pagesOf(routes);
   /** @type {Map<Rule, number>} */
   const shadowed = new Map();
-  for (const page of pages) {
+  // Every route the site serves, not only folder pages: a rule over `/404`
+  // or `/llms.txt` hides it just the same.
+  for (const page of routes) {
     const forms = page.endsWith("/") && page !== "/" ? [page, page.slice(0, -1)] : [page];
     for (const form of forms) {
       const hit = applyRedirects(rules, form);
