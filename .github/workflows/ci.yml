@@ -1542,6 +1542,12 @@ jobs:
           save: ${{ github.event_name != 'merge_group' }}
       - name: Build (astro build — render + Pagefind + link-check)
         run: npm run build
+        # Build the deploy's search config (the blog's index merged, web
+        # presence slice 7), so a config Starlight rejects fails here rather
+        # than on main. The output isn't served, so the blog's index needn't
+        # exist.
+        env:
+          BYNK_MERGE_SEARCH: "1"
       # Search merges the blog's Pagefind index (web presence slice 7), and
       # Pagefind loads it with this site's code, so the two should share a
       # minor version. A warning, not a failure: the blog deploys on its own.
@@ -1550,7 +1556,7 @@ jobs:
           here=$(node -p "require('./node_modules/pagefind/package.json').version")
           if ! there=$(curl -fsS --max-time 20 https://bynk-lang.org/blog/pagefind/pagefind-entry.json | node -pe "JSON.parse(require('fs').readFileSync(0)).version"); then
             echo "::warning::Could not read the blog's Pagefind version from https://bynk-lang.org/blog/pagefind/pagefind-entry.json"
-          elif [ "${here%.*}" != "${there%.*}" ]; then
+          elif [ "$(echo "$here" | cut -d. -f1,2)" != "$(echo "$there" | cut -d. -f1,2)" ]; then
             echo "::warning::Pagefind here is $here, the blog's is $there. Merged search needs the same minor version: bump the older site."
           else
             echo "Pagefind $here here, $there on the blog."

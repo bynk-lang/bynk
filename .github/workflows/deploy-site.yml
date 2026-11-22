@@ -220,12 +220,31 @@ jobs:
           save: "false"
       # astro build also runs Pagefind + the internal link-checker; a broken
       # in-site link fails here before anything deploys.
+      # Search also covers the blog, whose index is beside this site's on
+      # bynk-lang.org (web presence slice 7). Pagefind loads a merged index
+      # with this site's code and returns no results at all when that fails,
+      # so the merge is turned on only when the live blog index was built with
+      # the same Pagefind minor version. Otherwise this deploy searches the
+      # docs alone, and says so.
+      - name: Decide whether search merges the blog's index
+        id: merge
+        run: |
+          here=$(node -p "require('./node_modules/pagefind/package.json').version")
+          url=https://bynk-lang.org/blog/pagefind/pagefind-entry.json
+          if ! there=$(curl -fsS --max-time 20 "$url" | node -pe "JSON.parse(require('fs').readFileSync(0)).version"); then
+            echo "::warning::Could not read the blog's Pagefind version from $url: search will cover the docs alone."
+            echo "flag=" >> "$GITHUB_OUTPUT"
+          elif [ "$(echo "$here" | cut -d. -f1,2)" != "$(echo "$there" | cut -d. -f1,2)" ]; then
+            echo "::warning::Pagefind here is $here, the blog's is $there: search will cover the docs alone until they match."
+            echo "flag=" >> "$GITHUB_OUTPUT"
+          else
+            echo "Pagefind $here here, $there on the blog: search covers both."
+            echo "flag=1" >> "$GITHUB_OUTPUT"
+          fi
       - name: Build the site (astro build)
         run: npm run build
         env:
-          # Search also covers the blog, whose index is beside this site's on
-          # bynk-lang.org (web presence slice 7). Local builds leave it off.
-          BYNK_MERGE_SEARCH: "1"
+          BYNK_MERGE_SEARCH: ${{ steps.merge.outputs.flag }}
       # Single Pages project at the apex (no sandbox split — this is static
       # content, not a code-execution surface). `--branch=main` publishes to the
       # project's production deployment.

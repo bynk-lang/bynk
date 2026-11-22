@@ -58,9 +58,12 @@ On bynk-lang.org, search covers the blog too: the deploy sets
 Pagefind index from `/blog/pagefind/` (the blog does the same with this
 site's). A local build leaves it off, because Pagefind returns nothing at all
 when a merged index fails to load, so `npm run preview` searches this site
-alone. The two sites should run the same minor version of Pagefind: CI warns
-when the blog's live index was built with a different one, and the fix is to
-bump whichever site is behind.
+alone. (CI builds with it on, to check the config, but never serves the
+result.) The two sites should run the same minor version of Pagefind, because
+Pagefind loads a merged index with the host site's code. CI warns when the
+blog's live index was built with a different one, and the deploy then leaves
+the merge off, so search covers the docs alone until whichever site is behind
+is bumped.
 
 > [!TIP]
 > Diagrams render through a headless Chromium. If a build complains it cannot
