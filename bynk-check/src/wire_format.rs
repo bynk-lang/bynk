@@ -78,11 +78,11 @@ pub const SIGNING_SCHEME: &str = "BYNK-CALL-1";
 
 /// I2 (#1971): the secret a callee holds for the edge from one caller,
 /// [`edge_key_from`].
-pub const EDGE_FROM_PREFIX: &str = "BYNK_CALL_FROM_";
+pub use bynk_project::env_protocol::CALL_FROM_PREFIX as EDGE_FROM_PREFIX;
 
 /// I2 (#1971): the secret a caller holds for the edge to one callee,
 /// [`edge_key_to`].
-pub const EDGE_TO_PREFIX: &str = "BYNK_CALL_TO_";
+pub use bynk_project::env_protocol::CALL_TO_PREFIX as EDGE_TO_PREFIX;
 
 /// State-migrations S4 (#2259 Decision D): the prefix of `bynk migrate
 /// sweep`'s wake route, `/_bynk/migrate/<Class>`. Not part of the published
@@ -95,7 +95,7 @@ pub const MIGRATE_CALLER: &str = "bynk.migrate";
 
 /// State-migrations S4 (#2259): the secret a sweep's key is set under for the
 /// sweep's duration. Without it the route answers `404`.
-pub const MIGRATE_KEY: &str = "BYNK_MIGRATE_KEY";
+pub use bynk_project::env_protocol::MIGRATE_KEY;
 
 /// I2 (#1971): whether `context` is a name an edge key can be derived from:
 /// dot-separated segments, each a lowercase letter, then lowercase letters

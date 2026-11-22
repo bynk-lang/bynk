@@ -38,12 +38,12 @@ pub const DEV_ENV_ENV: &str = "BYNK_TEST_DEV_ENV";
 pub const DEV_SECRETS_ENV: &str = "BYNK_TEST_DEV_SECRETS";
 
 /// The variable the remote harness reads every secret value from, by name.
-pub const SECRETS_ENV: &str = "BYNK_TEST_SECRETS";
+pub use bynk_project::env_protocol::TEST_SECRETS as SECRETS_ENV;
 
 /// The variable the remote harness reads `run.id` from. The runner always
 /// sets it for a remote run, so a value exported in the shell or a CI job is
 /// overwritten, never reused: each run's id is its own.
-pub const RUN_ID_ENV: &str = "BYNK_TEST_RUN_ID";
+pub use bynk_project::env_protocol::TEST_RUN_ID as RUN_ID_ENV;
 
 /// Internal: the `run.id` every `bynk dev` group of one `--against dev` run
 /// shares (set by the orchestration). Read only with [`DEV_URLS_ENV`].

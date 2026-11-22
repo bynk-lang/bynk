@@ -6,6 +6,7 @@
 
 use crate::emitter::toml_doc::{TomlBlock, TomlDocument, TomlEntry, TomlValue};
 pub use bynk_check::worker_bindings::{BindingSource, WorkerBinding};
+use bynk_project::env_protocol;
 use bynk_project::worker_layout::WorkerLayout;
 
 /// Compile-time pinned compatibility date. Cloudflare uses this to lock
@@ -71,8 +72,8 @@ pub const WRANGLER_MIN: &str = "4.162.0";
 /// #3477 (slice C3): the `wrangler dev --var` that tells a generated container
 /// class its containers are off (`bynk dev` without Docker), so a call faults
 /// naming Docker. The runtime's own copy is `CONTAINERS_UNAVAILABLE_VAR`
-/// (`container.ts`); a test keeps the two equal.
-pub const CONTAINERS_UNAVAILABLE_VAR: &str = "BYNK_CONTAINERS_UNAVAILABLE";
+/// (`container.ts`); `xtask/tests/env_protocol.rs` keeps the two equal (#4003).
+pub use bynk_project::env_protocol::CONTAINERS_UNAVAILABLE as CONTAINERS_UNAVAILABLE_VAR;
 
 /// Events track, slice 0 (spine #936, ADR 0284): the class name of a
 /// publishing context's fan-out Durable Object (`emitter::events_fanout`).
@@ -1096,7 +1097,7 @@ pub fn bind_vectorize_for_dev(
         };
         for (binding, value) in declared {
             vars.insert(
-                &format!("BYNK_DEV_INDEX_{binding}"),
+                &format!("{}{binding}", env_protocol::DEV_INDEX_PREFIX),
                 toml_edit::value(value.as_str()),
             );
         }
@@ -1241,7 +1242,7 @@ fn dataset_vars_block(
 /// #3513 B: the `[vars]` entry that carries an `Analytics` binding's dataset name to the
 /// Worker (`ANALYTICS_SIGNUPS` gives `BYNK_DATASET_ANALYTICS_SIGNUPS`).
 pub fn dataset_var_name(binding: &str) -> String {
-    format!("BYNK_DATASET_{binding}")
+    format!("{}{binding}", env_protocol::DATASET_PREFIX)
 }
 
 /// P3b (#2582): the account-facing name of an `Analytics` instance's dataset,
@@ -2136,7 +2137,7 @@ pub fn enable_agent_inspection(text: &str, entry: &str) -> Result<String, String
         return Ok(text.to_string());
     }
     let mut binding = toml_edit::Table::new();
-    binding.insert("name", toml_edit::value("__BYNK_INSPECT_REGISTRY"));
+    binding.insert("name", toml_edit::value(env_protocol::INSPECT_REGISTRY));
     binding.insert("class_name", toml_edit::value(CLASS));
     let durable = doc
         .entry("durable_objects")
