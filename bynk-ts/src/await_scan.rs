@@ -1,21 +1,23 @@
 //! Whether an expression awaits (1A.21, #3722, Decision C): the structural form of the
 //! `v.contains("await")` text inspection `Json.encodePlain` made of its lowered argument. It
 //! looks inside nested arrows and object methods too, as the text search did, so an argument that
-//! awaits anywhere is hoisted ahead of the flag it must not run under.
+//! awaits anywhere is hoisted ahead of the flag it must not run under. An [`TsExpr::Ident`] holds
+//! an identifier path and nothing else (1A.39b, Decision D's audit), so only [`TsExpr::Await`]
+//! nodes count; a user identifier that merely contains "await" does not.
 
 use crate::program::{TsArrowBody, TsExpr, TsObjectEntry, TsStmt, TsStmtKind};
 
-/// Whether `expr` contains an `await`, at any depth. A [`TsExpr::VerbatimExpr`] is text, so it is
-/// searched as text.
+/// Whether `expr` contains an `await`, at any depth. A [`TsExpr::VerbatimExpr`] or
+/// [`TsExpr::RawUsing`] is foreign text, so it is searched as text; an `Ident` is not.
 pub fn expr_contains_await(expr: &TsExpr) -> bool {
     match expr {
         TsExpr::Await(_) => true,
         TsExpr::Lit(_) => false,
-        // An `Ident` or a `VerbatimExpr` may carry expression text (a still-text operand wrapped for
-        // a node-taking caller), so both are searched as text: a false positive only hoists.
-        TsExpr::Ident(text) | TsExpr::VerbatimExpr(text, _) | TsExpr::RawUsing(text, _) => {
-            text.contains("await")
-        }
+        // An identifier path never awaits, even if it spells "await" (`awaiter`, `awaitedValue`).
+        TsExpr::Ident(_) => false,
+        // Foreign text is the one place an `await` can hide outside a node: search it as text (a
+        // false positive only hoists).
+        TsExpr::VerbatimExpr(text, _) | TsExpr::RawUsing(text, _) => text.contains("await"),
         TsExpr::Member { object, .. } | TsExpr::OptionalMember { object, .. } => {
             expr_contains_await(object)
         }
@@ -177,11 +179,16 @@ mod tests {
         assert!(!expr_contains_await(&e));
     }
 
-    /// Text in an `Ident` is searched as text, as a `VerbatimExpr` is.
+    /// An `Ident` is an identifier path: a name that contains "await" is not an `await`. Foreign
+    /// text (`VerbatimExpr`) is still searched as text.
     #[test]
-    fn an_await_hidden_in_ident_text_is_found() {
-        assert!(expr_contains_await(&id("(await f())")));
+    fn only_await_nodes_and_foreign_text_count() {
+        assert!(!expr_contains_await(&id("awaiter")));
         assert!(!expr_contains_await(&id("plain")));
+        assert!(expr_contains_await(&TsExpr::VerbatimExpr(
+            "(await f())".to_string(),
+            crate::program::VerbatimOrigin::Emit
+        )));
     }
 
     #[test]

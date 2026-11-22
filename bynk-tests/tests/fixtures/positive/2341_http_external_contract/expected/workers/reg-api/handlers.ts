@@ -47,7 +47,7 @@ export const api = {
     }
     throw new globalThis.Error("non-exhaustive match");
   },
-  async http_POST_notes_Param_id(id: string, body: string, headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } }, deps: { who: { tag: "Sender" } | { tag: "User", identity: UserId } }): globalThis.Promise<HttpResult<string>> {
+  async http_POST_notes_Param_id(id: string, body: string, headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } }, deps: { who: { tag: "Sender" } | { tag: "User"; identity: UserId } }): globalThis.Promise<HttpResult<string>> {
     const traceId = ((__o: Option<string>, __d: string) => __o.tag === "Some" ? __o.value : __d)(headers.get("x-trace"), "-");
     switch (deps.who.tag) {
       case "Sender": {

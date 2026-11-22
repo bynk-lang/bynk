@@ -1712,7 +1712,7 @@ fn unbranded_commons_qual(commons: &TypedCommons, ctx: &EmitProjectCtx) -> HashM
                 n,
             )
         })
-        .map(|n| (n.clone(), format!("__Commons{n}")))
+        .map(|n| (n.clone(), commons_alias(n)))
         .collect()
 }
 
@@ -2320,7 +2320,7 @@ fn emit_context_rebrands(
                 name: name.clone(),
                 type_params: params.iter().map(|p| p.to_string()).collect(),
                 ty: bynk_ts::TsType::intersection(vec![
-                    bynk_ts::TsType::named_with_args(format!("__Commons{name}"), generic_args),
+                    bynk_ts::TsType::named_with_args(commons_alias(name), generic_args),
                     // #1704: the brand is *optional*. A plain commons value (a
                     // record literal, a nested field, a commons fn's result)
                     // has no brand, and it is assignable here; another
@@ -2376,7 +2376,7 @@ fn emit_context_rebrands(
                 body: vec![bynk_ts::TsStmt::return_stmt(
                     Some(bynk_ts::TsExpr::Call {
                         callee: Box::new(bynk_ts::TsExpr::Member {
-                            object: Box::new(bynk_ts::TsExpr::Ident(format!("__Commons{name}"))),
+                            object: Box::new(bynk_ts::TsExpr::Ident(commons_alias(name))),
                             property: "of".to_string(),
                         }),
                         args: vec![bynk_ts::TsExpr::Ident("value".to_string())],
@@ -2404,9 +2404,7 @@ fn emit_context_rebrands(
                     body: vec![bynk_ts::TsStmt::return_stmt(
                         Some(bynk_ts::TsExpr::Call {
                             callee: Box::new(bynk_ts::TsExpr::Member {
-                                object: Box::new(bynk_ts::TsExpr::Ident(format!(
-                                    "__Commons{name}"
-                                ))),
+                                object: Box::new(bynk_ts::TsExpr::Ident(commons_alias(name))),
                                 property: "unsafe".to_string(),
                             }),
                             args: vec![bynk_ts::TsExpr::Ident("value".to_string())],
@@ -2455,7 +2453,7 @@ fn emit_context_rebrands(
                 bynk_ts::TsDecl::Export(Box::new(bynk_ts::TsDecl::ConstDecl {
                     name: name.clone(),
                     ty: None,
-                    init: bynk_ts::TsExpr::Ident(format!("__Commons{name}")),
+                    init: bynk_ts::TsExpr::Ident(commons_alias(name)),
                 })),
                 None,
             ));
@@ -2608,9 +2606,19 @@ const TS_TYPE_KEYWORDS: &[&str] = &[
     "undefined",
 ];
 
-/// `__CommonsX` is the import alias of a used commons' `X`.
+/// The prefix of a used commons type's import alias.
+const COMMONS_ALIAS_PREFIX: &str = "__Commons";
+
+/// The import alias of a used commons' `X` (`__CommonsX`). The one spelling: the import, the
+/// type alias and every value reference name it through here, so they cannot drift apart
+/// (1A.39b, Decision C).
+pub(crate) fn commons_alias(name: &str) -> String {
+    format!("{COMMONS_ALIAS_PREFIX}{name}")
+}
+
+/// `__CommonsX` is the import alias of a used commons' `X`: the inverse of [`commons_alias`].
 fn external_alias_target(name: &str) -> &str {
-    name.strip_prefix("__Commons").unwrap_or(name)
+    name.strip_prefix(COMMONS_ALIAS_PREFIX).unwrap_or(name)
 }
 
 /// The imports the names `used` ask for, each resolved to its home by [`record_name_ref`].
@@ -2888,7 +2896,7 @@ fn emit_project_imports(
                         n,
                     )
                 {
-                    parts.push(format!("{n} as __Commons{n}"));
+                    parts.push(format!("{n} as {}", commons_alias(n)));
                 } else if is_subscribed_event_type || is_consumed_context_type {
                     // Events track, slice 0 (spine #936): under Workers, a
                     // context deploys as its own separate Worker script —

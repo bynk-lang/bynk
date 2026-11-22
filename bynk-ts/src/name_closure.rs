@@ -241,6 +241,20 @@ pub fn unbound_names_in(stmts: &[TsStmt], provided: impl Fn(&str) -> bool) -> Ve
     all.into_iter().collect()
 }
 
+/// 1A.39b (Decision D): every `TsExpr::Ident` of `program` that is not an identifier path
+/// (`[A-Za-z_$][\w$]*(\.[A-Za-z_$][\w$]*)*`) and every `TsBindingName::Ident` that is not an
+/// identifier, sorted and deduplicated. Such a text is expression text or a name built from it
+/// held in a variable-like node: it hides what it uses from [`unbound_names`] and from the
+/// printer's precedence. Member chains (`globalThis.Number`, `this.state`) pass: they print as
+/// they read and their head is what the closure sees.
+pub fn text_idents(program: &TsProgram) -> Vec<String> {
+    let mut w = Walk::default();
+    for s in &program.stmts {
+        w.stmt(s);
+    }
+    w.text_idents.into_iter().collect()
+}
+
 /// #2045: each `(specifier, name)` a structured named import brings in as a
 /// value: every entry of an `import { … }` but its `type X` ones, none of an
 /// `import type { … }`. Namespace and opaque-text imports are not reported.
@@ -438,6 +452,24 @@ struct Walk {
     /// other way. A value use of the first and not the second is `TS1361`.
     type_only: BTreeSet<String>,
     value_bound: BTreeSet<String>,
+    /// 1A.39b (Decision D): each `TsExpr::Ident` or `TsBindingName::Ident` text that is not an
+    /// identifier path (see [`text_idents`]).
+    text_idents: BTreeSet<String>,
+}
+
+/// Whether `text` is an identifier (`[A-Za-z_$][\w$]*`).
+fn is_identifier(text: &str) -> bool {
+    let mut chars = text.chars();
+    chars
+        .next()
+        .is_some_and(|c| c.is_ascii_alphabetic() || c == '_' || c == '$')
+        && chars.all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '$')
+}
+
+/// Whether `text` is an identifier path: identifiers joined by single dots (`this.state`,
+/// `globalThis.Number`).
+fn is_identifier_path(text: &str) -> bool {
+    text.split('.').all(is_identifier)
 }
 
 /// The identifier a piece of text starts with: `value` of `value.name`,
@@ -494,7 +526,12 @@ impl Walk {
 
     fn binding(&mut self, name: &TsBindingName) {
         match name {
-            TsBindingName::Ident(n) => self.bind(n),
+            TsBindingName::Ident(n) => {
+                if !is_identifier(n) {
+                    self.text_idents.insert(n.clone());
+                }
+                self.bind(n)
+            }
             TsBindingName::ObjectPattern(names) => self.bind_pattern(names),
             TsBindingName::ArrayPattern(names) => {
                 for n in names.iter().filter(|n| !n.is_empty()) {
@@ -1134,7 +1171,12 @@ impl Walk {
 
     fn expr(&mut self, expr: &TsExpr) {
         match expr {
-            TsExpr::Ident(name) => self.use_value(name),
+            TsExpr::Ident(name) => {
+                if !is_identifier_path(name) {
+                    self.text_idents.insert(name.clone());
+                }
+                self.use_value(name)
+            }
             TsExpr::Lit(_) => {}
             TsExpr::VerbatimExpr(text, _) => self.opaque(text),
             // Text the emitter printed from nodes, with the names it uses declared
@@ -2312,5 +2354,25 @@ mod tests {
         };
         assert_eq!(unbound_names(&program(vec![f()])), ["fallback"]);
         assert!(unbound_names(&program(vec![import(&["fallback"]), f()])).is_empty());
+    }
+
+    /// 1A.39b (Decision D): an identifier path passes; expression text held in an `Ident` is
+    /// reported, as is a binding name that is not an identifier.
+    #[test]
+    fn text_idents_reports_expression_text_and_passes_identifier_paths() {
+        let id = |n: &str| TsExpr::Ident(n.to_string());
+        let p = program(vec![
+            TsStmt::expr_stmt(id("globalThis.Number"), None),
+            TsStmt::expr_stmt(id("this.state"), None),
+            TsStmt::expr_stmt(id("f(a) as K"), None),
+            TsStmt::expr_stmt(id("a..b"), None),
+            TsStmt::const_stmt(
+                TsBindingName::Ident("x y".to_string()),
+                None,
+                id("ok"),
+                None,
+            ),
+        ]);
+        assert_eq!(text_idents(&p), vec!["a..b", "f(a) as K", "x y"]);
     }
 }

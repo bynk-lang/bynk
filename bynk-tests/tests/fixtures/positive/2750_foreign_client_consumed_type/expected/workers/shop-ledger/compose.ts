@@ -9,7 +9,7 @@ export interface Env {
 export function compose(env: Env) {
   const deps = { env };
   return {
-    async echo(__who: { tag: "Caller", identity: string } | { tag: "Legacy" }, o: handlers.Order) {
+    async echo(__who: { tag: "Caller"; identity: string } | { tag: "Legacy" }, o: handlers.Order) {
       return handlers.echo.call(o, { ...deps, who: __who });
     },
     async orderId(o: handlers.Order) {
