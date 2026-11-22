@@ -18,6 +18,7 @@
 //! Cloudflare's own pages.
 
 use crate::discovery::read_source;
+use crate::env_protocol;
 use crate::paths::{ProjectPathsError, did_you_mean};
 use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
@@ -36,33 +37,33 @@ pub struct RemoteKind {
 pub const REMOTE_KINDS: &[RemoteKind] = &[
     RemoteKind {
         key: "ai",
-        var: "BYNK_DEV_ACK_AI",
+        var: env_protocol::DEV_ACK_AI,
     },
     RemoteKind {
         key: "vectorize",
-        var: "BYNK_DEV_ACK_VECTORIZE",
+        var: env_protocol::DEV_ACK_VECTORIZE,
     },
     // #3480: AI Search is its own kind, not covered by `ai`.
     RemoteKind {
         key: "ai-search",
-        var: "BYNK_DEV_ACK_AI_SEARCH",
+        var: env_protocol::DEV_ACK_AI_SEARCH,
     },
     // #3513 A: an mTLS certificate binding runs on Cloudflare under `bynk dev`.
     RemoteKind {
         key: "mtls",
-        var: "BYNK_DEV_ACK_MTLS",
+        var: env_protocol::DEV_ACK_MTLS,
     },
     // #3513 B: an Analytics SQL query runs on Cloudflare under `bynk dev`.
     RemoteKind {
         key: "analytics-sql",
-        var: "BYNK_DEV_ACK_ANALYTICS_SQL",
+        var: env_protocol::DEV_ACK_ANALYTICS_SQL,
     },
 ];
 
 /// The variable `bynk dev` sets to `1` on every Worker it serves, so a
 /// provider can tell a development session from a deployment. A deployed
 /// Worker has neither this nor any acknowledgement variable.
-pub const DEV_VAR: &str = "BYNK_DEV";
+pub use crate::env_protocol::DEV as DEV_VAR;
 
 /// The one value an acknowledgement takes.
 pub const ALLOW: &str = "allow";

@@ -138,7 +138,9 @@ pub(super) fn emit_test_deps(
             .get(target_name)
             .cloned()
             .unwrap_or_default();
-        for (cap, owner) in handler_cross_caps(table, &consumed_all, &aliases, &flattened) {
+        for (cap, owner) in
+            handler_cross_caps(table, target_name, &consumed_all, &aliases, &flattened)
+        {
             if tops.iter().any(|(k, _, _)| *k == cap) {
                 continue;
             }

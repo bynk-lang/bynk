@@ -519,6 +519,11 @@ mod tests {
             bynk_emit::INSPECT_CALLER_KEY_VAR,
             format!("BYNK_CALL_FROM_{suffix}")
         );
+        // #4003: and the protocol table's fixed `BYNK_CALL_FROM_` member is that key.
+        assert_eq!(
+            bynk_emit::wire_format::edge_key_from(bynk_emit::INSPECT_CALLER).as_deref(),
+            Some(bynk_project::env_protocol::CALL_FROM_BYNK_DEV)
+        );
     }
 
     #[test]
