@@ -7,6 +7,7 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.640.16** | Internal hardening in the code generator; bynk-emit now denies wildcard enum arms, so a new enum variant fails the build at each emitter match that has to handle it |
 | **v0.640.15** | Every diagnostic code now has its own page on the site, and every tool links a code as `https://bynk-lang.org/d/<code>`, which redirects to it. The editor's code link, `bynk explain`, the MCP tools and the playground show it for every registered code, explained or not. The Book pages that explain a code are listed on its page from `site/src/data/diagnostic-links.json`, in place of `Explain`'s `page` and `anchor` (web presence track, slice 4, #3876). |
 | **v0.640.14** | The Book's changelog is now one page per release under [Releases](/book/reference/releases/), with an Unreleased page that each increment's row is added to when it merges. `cargo xtask release-page --apply` cuts Unreleased into the current version's page before it is tagged, and `release.yml` refuses a tag whose page is missing (web presence track, slice 3, #3868). |
 | **v0.640.13** | Internal hardening in the code generator; a new enum variant now fails the build at each emitter match outside lowering that has to handle it |
