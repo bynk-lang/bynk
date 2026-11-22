@@ -7,16 +7,23 @@
 //! the spelling of each provider and the `__exec` condition are this
 //! renderer's own (divergences 1, 2, 3 and 4 of #3928).
 
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap};
 
 use crate::emit_model::*;
 use crate::emitter;
+use crate::emitter::compose::events::isolated_delivery;
 use crate::emitter::compose::{ComposePlan, empty_deps};
 use bynk_check::project_model::AdapterBinding;
 use bynk_check::symbols::UnitTable;
-use bynk_model::EventSubscriberShape;
 use bynk_project::paths::commons_dir_for;
-use bynk_ts::{TsDecl, TsExpr, TsParam, TsProgram, TsStmt, TsType};
+use bynk_ts::{TsArrowBody, TsDecl, TsExpr, TsParam, TsProgram, TsStmt, TsSwitchCase, TsType};
+
+/// Where `compose.ts` imports the runtime from (it sits at the out root).
+///
+/// The import is built from the finished tree (`derived_runtime_names`) and
+/// inserted after the banner, so this is the one place the specifier is
+/// spelled.
+const COMPOSE_RUNTIME_SPECIFIER: &str = "./runtime.js";
 
 // -- Small tree-construction helpers (#1327) ------------------------------
 /// Divergence 1 of #3928, the Bundle's entry order: sort key for a `{ns}Deps` entry, mirroring the pre-conversion code's own
@@ -46,26 +53,100 @@ fn deps_entry_sort_key(key: &str) -> String {
 /// `call` handler needs one (the Workers `compose` to any handler), and as
 /// `__bynkProcessExec()`, not the request's `exec`.
 fn bundle_process_exec_entry(needs_exec: bool) -> Option<(String, TsExpr)> {
-    needs_exec.then(|| ("__exec".to_string(), ident("__bynkProcessExec()")))
+    needs_exec.then(|| {
+        (
+            "__exec".to_string(),
+            call(ident("__bynkProcessExec"), Vec::new()),
+        )
+    })
 }
 
-/// The composition root's import of `__bynkProcessExec` from the runtime.
-fn process_exec_import() -> Vec<TsStmt> {
-    emitter::runtime_files::runtime_import_stmts(
-        false,
-        &["__bynkProcessExec".to_string()],
-        "./runtime.js",
-    )
+/// Events track, slice 0 (spine #936): the `__eventsDispatch` closure of a
+/// publishing context. Bundle/node mode has no isolate boundary to cross, so
+/// this dispatches in-process, directly into each subscriber's own `on event`
+/// handler (`.event`, the object method `emit_service` gives
+/// `HandlerKind::Event`), reusing whatever deps that subscriber context builds
+/// in the same `composeApp` (referenced by name; the arrow's body is not
+/// evaluated until well after every `const ...Deps` has run, so declaration
+/// order does not matter). A publisher with no subscribers still gets the
+/// field, as its type is required, with an empty switch.
+///
+/// Each delivery is the shared failure-isolated one (ADR 0284,
+/// [`isolated_delivery`]); whether it carries the envelope is the plan's
+/// per-subscription `wants_envelope` (Decision F of #3928).
+fn events_dispatch(plan: &ComposePlan, publisher: &str) -> TsExpr {
+    // #3815: the plan's events are in name order, so the cases do not vary from
+    // one build to the next (the table they came from is a `HashMap`).
+    let cases: Vec<TsSwitchCase> = plan
+        .events
+        .published_by(publisher)
+        .map(|(event, subs)| {
+            let mut body: Vec<TsStmt> = subs
+                .iter()
+                .map(|sub| {
+                    let sub_ns = sub.context.replace('.', "_");
+                    // P7.2: deferred, not narrowed. The event's bare name is not
+                    // necessarily in scope at this dispatch site
+                    // (cross-context: publisher and subscriber are different
+                    // units), the same qualification problem
+                    // `ts_type_ref_qualified_ts_type` exists to solve for
+                    // handler wrappers elsewhere in this crate, so the payload
+                    // stays `any`.
+                    let mut args = vec![as_any(member(ident("ev"), "payload"))];
+                    if sub.wants_envelope {
+                        args.push(member(ident("ev"), "envelope"));
+                    }
+                    args.push(ident(format!("{sub_ns}Deps")));
+                    let delivery = call(
+                        member(member(ident(sub_ns), sub.service.as_str()), "event"),
+                        args,
+                    );
+                    isolated_delivery(delivery, str_lit(sub.service.as_str()))
+                })
+                .collect();
+            body.push(TsStmt::break_stmt(None));
+            TsSwitchCase {
+                labels: vec![str_lit(event)],
+                body,
+                default_braced: false,
+                case_braced: true,
+                span: None,
+            }
+        })
+        .collect();
+    let dispatch = TsStmt::for_of(
+        "ev",
+        ident("events"),
+        TsStmt::block(
+            vec![TsStmt::switch_stmt(
+                member(ident("ev"), "type"),
+                cases,
+                None,
+            )],
+            None,
+        ),
+        None,
+    );
+    TsExpr::Arrow {
+        params: vec![TsParam::new(
+            "events".to_string(),
+            Some(TsType::named_with_args(
+                "globalThis.Array",
+                vec![TsType::named(crate::emitter::EVENTS_WIRE_EVENT_TS_TYPE)],
+            )),
+        )],
+        is_async: true,
+        generics: Vec::new(),
+        return_type: None,
+        body: Box::new(TsArrowBody::Multiline(vec![dispatch])),
+    }
 }
 
-/// #3815: a unit's event names in name order. `table.events` is a `HashMap`,
-/// so walking it directly put the Bundle `__eventsDispatch` cases in a
-/// different order from one build to the next; the Workers fan-out walks a
-/// `BTreeMap`, so the two targets now agree.
-fn event_names_in_order(table: &UnitTable) -> Vec<&String> {
-    let mut names: Vec<&String> = table.events.keys().collect();
-    names.sort();
-    names
+fn as_any(expr: TsExpr) -> TsExpr {
+    TsExpr::As {
+        expr: Box::new(expr),
+        ty: TsType::named("any"),
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -74,10 +155,6 @@ pub fn emit_composition_root(
     unit_consumes: &HashMap<String, Vec<String>>,
     unit_consumes_aliases: &HashMap<String, HashMap<String, String>>,
     unit_tables: &HashMap<String, UnitTable>,
-    // P6.x (#1232): see `EventSubscriberShape`'s own doc comment. Read by
-    // `wants_envelope` below instead of walking a *different, already-
-    // consumed* unit's raw `UnitTable` directly.
-    unit_event_subscriber_shapes: &HashMap<String, HashMap<String, EventSubscriberShape>>,
     adapter_bindings: &HashMap<String, AdapterBinding>,
     unit_flattened: &HashMap<String, HashMap<String, String>>,
     // v0.19 (decision 0025, D1): when the program's closure reaches a
@@ -86,10 +163,6 @@ pub fn emit_composition_root(
     // Worker with `env` at its entry; native-free programs emit the v0.18
     // no-parameter signature unchanged.
     thread_env: bool,
-    // Events track, slice 0 (spine #936): the project-wide subscriber table,
-    // computed once by the caller (Workers mode needs the same table for its
-    // own per-Worker fan-out wiring, so it is shared rather than rebuilt).
-    event_subscribers: &BTreeMap<(String, String), Vec<(String, String)>>,
 ) -> Option<TsProgram> {
     if !plan.bundle_root {
         return None;
@@ -112,8 +185,6 @@ pub fn emit_composition_root(
     let env_ident = if thread_env { Some("env") } else { None };
 
     let mut body: Vec<TsStmt> = Vec::new();
-    // #3541: whether a context took the bundle's process execution context.
-    let mut process_exec_used = false;
 
     // The plan's order puts a consumed context before its consumer, and holds
     // only the contexts the root composes: a context's deps object exists only
@@ -121,9 +192,6 @@ pub fn emit_composition_root(
     // needs neither (v0.15). The bundle's `bynk.capability.not_provided` check
     // skips the same ones.
     for ctx_name in &plan.bundle_order {
-        let Some(table) = unit_tables.get(ctx_name.as_str()) else {
-            continue;
-        };
         let unit = &plan.units[ctx_name];
         let ns = ctx_name.replace('.', "_");
 
@@ -186,106 +254,13 @@ pub fn emit_composition_root(
             );
             deps_entries.push((cap.clone(), expr));
         }
-        // Events track, slice 0 (spine #936): a context whose handlers emit
-        // gets an `__eventsDispatch` closure built here — Bundle/node mode
-        // has no isolate boundary to cross, so this dispatches in-process
-        // directly into each subscriber's own `on event` handler (`.event`,
-        // the object method `emit_service` gives `HandlerKind::Event`),
-        // reusing whatever deps that subscriber context already builds in
-        // this same loop (referenced by name; the arrow function body isn't
-        // evaluated until well after every `const ...Deps` in `composeApp`
-        // has run, so declaration order here doesn't matter). A publisher
-        // with no subscribers still gets the field — its type is required —
-        // just with an empty switch.
         if unit.publishes {
-            let mut cases = String::new();
-            for name in event_names_in_order(table) {
-                let Some(subs) = event_subscribers.get(&(ctx_name.clone(), name.clone())) else {
-                    continue;
-                };
-                // ADR 0284: subscriber failure isolation — one subscriber's
-                // throw is caught and logged, not left to abort delivery to
-                // its siblings or propagate into the already-committed
-                // publishing handler. Mirrors the Cloudflare fan-out DO's own
-                // per-subscriber try/catch (`emit_events_fanout_do`) so the
-                // two targets agree on this guarantee, not just on delivery.
-                let calls: Vec<String> = subs
-                    .iter()
-                    .map(|(sub_ctx, sub_svc)| {
-                        let sub_ns = sub_ctx.replace('.', "_");
-                        // Events track, slice 2 (spine #936): the envelope
-                        // is only forwarded to a subscriber that declared
-                        // the optional second `env: EventEnvelope`
-                        // parameter — a subscriber that kept `on event(e:
-                        // E)` sees no change to its call at all. Slice 4
-                        // (#985): also forwarded when the subscriber's
-                        // protocol carries a `via schema(N)` clause, even if
-                        // undeclared — `emit_service` inserts a synthetic
-                        // `env` parameter in that case, and needs the value
-                        // to line up positionally.
-                        let wants_envelope = unit_event_subscriber_shapes
-                            .get(sub_ctx)
-                            .and_then(|m| m.get(sub_svc))
-                            .is_some_and(|shape| shape.two_param_handler || shape.schema_dispatch);
-                        // P7.2: deferred, not narrowed — a first attempt used the
-                        // event's own bare name directly (`EventDecl::as_type_decl`
-                        // keys the synthetic `TypeDecl` on it), on the theory that
-                        // an event doubles as a named type. It broke real
-                        // `tsc --strict` fixtures ("Cannot find name") — the bare
-                        // name isn't necessarily in scope at this dispatch site
-                        // (cross-context: publisher and subscriber are different
-                        // units), the same qualification problem
-                        // `ts_type_ref_qualified_ts_type` exists to solve for
-                        // handler wrappers elsewhere in this crate. Needs the same
-                        // kind of scoped qualification, not a bare name — more
-                        // than a same-line fix.
-                        let call_args = if wants_envelope {
-                            "ev.payload as any, ev.envelope".to_string()
-                        } else {
-                            "ev.payload as any".to_string()
-                        };
-                        format!(
-                            "try {{ await {sub_ns}.{sub_svc}.event({call_args}, {sub_ns}Deps); }} catch (e) {{ globalThis.console.error(\"EventsFanout delivery failed\", {{ event: ev.type, service: {sub_svc:?}, error: String(e) }}); }}"
-                        )
-                    })
-                    .collect();
-                cases.push_str(&format!("case {name:?}: {{ {} break; }} ", calls.join(" ")));
-            }
-            // Decision B (#1327): the closure's own body is a genuine block
-            // statement (`for`/`switch`/`try`-`catch` nested), not an
-            // expression. #1435 later gave `TsExpr::Arrow` a real block-body
-            // shape (`TsArrowBody::Block`) — but that variant's own printer
-            // reuses the compact-statement-list renderer `TsStmtKind::
-            // InlineBlock` already shares (one physical line, semicolon-
-            // separated top-level statements), which cannot flatten a nested
-            // `for`/`switch` onto one line the way this closure's own real
-            // content needs; new "flatten every nested statement to one
-            // line" printer machinery for that would still be disproportionate
-            // to what the 3 real fixtures reaching this closure need. Kept as
-            // the same nested `format!` calls as before conversion, just fed
-            // into a real `Arrow` node's `body` as one opaque `TsExpr::Ident`
-            // — the same "opaque text carrier" precedent `workers.rs`'s/
-            // `workers_entry.rs`'s own `claim_predicate_to_js` output already
-            // uses.
-            let dispatch_body =
-                format!("{{ for (const ev of events) {{ switch (ev.type) {{ {cases}}} }} }}");
-            let arrow = TsExpr::Arrow {
-                params: vec![TsParam::new(
-                    "events".to_string(),
-                    Some(TsType::named_with_args(
-                        "globalThis.Array",
-                        vec![TsType::named(crate::emitter::EVENTS_WIRE_EVENT_TS_TYPE)],
-                    )),
-                )],
-                is_async: true,
-                generics: Vec::new(),
-                return_type: None,
-                body: Box::new(bynk_ts::TsArrowBody::Expr(Box::new(ident(dispatch_body)))),
-            };
-            deps_entries.push(("__eventsDispatch".to_string(), arrow));
+            deps_entries.push((
+                "__eventsDispatch".to_string(),
+                events_dispatch(plan, ctx_name),
+            ));
         }
         if let Some(entry) = bundle_process_exec_entry(unit.exec.call_handler) {
-            process_exec_used = true;
             deps_entries.push(entry);
         }
         deps_entries.sort_by_cached_key(|(k, _)| deps_entry_sort_key(k));
@@ -372,9 +347,9 @@ pub fn emit_composition_root(
         None,
     ));
     program.push(TsStmt::comment("composition root", None));
-    if process_exec_used {
-        program.stmts.extend(process_exec_import());
-    }
+    // The runtime import is what the finished tree uses (Decision G of #3928),
+    // inserted here once the function is built.
+    let runtime_import_at = program.stmts.len();
 
     // Import every context as a namespace.
     for (ctx_name, _) in plan.contexts() {
@@ -429,6 +404,14 @@ pub fn emit_composition_root(
         None,
     ));
 
+    let names = emitter::runtime_header::derived_runtime_names(&program.stmts[runtime_import_at..]);
+    for (i, stmt) in
+        emitter::runtime_files::runtime_import_stmts(false, &names, COMPOSE_RUNTIME_SPECIFIER)
+            .into_iter()
+            .enumerate()
+    {
+        program.stmts.insert(runtime_import_at + i, stmt);
+    }
     // A namespace is imported for every unit the closure reaches; the tree keeps the ones it uses.
     program.prune_unused_imports();
     Some(program)

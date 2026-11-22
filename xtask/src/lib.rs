@@ -18,6 +18,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 pub mod bench;
+pub mod delivery_isolation;
 pub mod editor_contract;
 pub mod fn_length;
 pub mod grammar;

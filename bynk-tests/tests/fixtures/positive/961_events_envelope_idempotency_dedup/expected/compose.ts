@@ -6,7 +6,20 @@ import * as commerce_order from "./commerce/order.js";
 import * as bynk__binding from "./bynk-cloudflare.js";
 
 export function composeApp() {
-  const commerce_orderDeps = { __eventsDispatch: async (events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number } }>) => { for (const ev of events) { switch (ev.type) { case "PaymentConfirmed": { try { await commerce_notifications.OnPayment.event(ev.payload as any, ev.envelope, commerce_notificationsDeps); } catch (e) { globalThis.console.error("EventsFanout delivery failed", { event: ev.type, service: "OnPayment", error: String(e) }); } break; } } } } };
+  const commerce_orderDeps = { __eventsDispatch: async (events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number } }>) => {
+    for (const ev of events) {
+      switch (ev.type) {
+        case "PaymentConfirmed": {
+          try {
+            await commerce_notifications.OnPayment.event(ev.payload as any, ev.envelope, commerce_notificationsDeps);
+          } catch (e) {
+            globalThis.console.error("EventsFanout delivery failed", { event: ev.type, service: "OnPayment", error: String(e) });
+          }
+          break;
+        }
+      }
+    }
+  } };
   const commerce_orderSurface = commerce_order.__makeSurface(commerce_orderDeps);
   const commerce_notificationsDeps = { Idempotency: new bynk__binding.IdempotencyProvider({ Clock: new bynk__binding.ClockProvider() }), Logger: new bynk__binding.LoggerProvider(), surface: { order: commerce_orderSurface } };
   const commerce_notificationsSurface = commerce_notifications.__makeSurface(commerce_notificationsDeps);

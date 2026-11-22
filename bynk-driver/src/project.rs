@@ -3571,12 +3571,11 @@ fn run_checks(
         bytes: asset_bytes.as_ref().unwrap_or(&no_asset_bytes),
         fixtures: &fixture_text,
     };
-    // #1975: a user adapter's binding module, for a test that builds the
-    // binding for real. A first-party adapter's binding reaches the platform
-    // (the network, a KV namespace), so a test keeps its double. `bynk.crypto`
-    // is the exception (K4): its binding is Web Crypto over the test's own
-    // bytes, deterministic and I/O-free, so a test runs it for real and a fake
-    // would check nothing.
+    // #1975: a user adapter's binding module, for a test that builds the binding
+    // for real. A first-party adapter's binding reaches the platform (the network,
+    // a KV namespace), so a test keeps its double. `bynk.crypto` is the exception
+    // (K4): its binding is Web Crypto over the test's own bytes, deterministic and
+    // I/O-free, so a test runs it for real and a fake would check nothing.
     let test_binding_modules: HashMap<String, String> = adapter_bindings
         .iter()
         .filter(|(name, _)| {
@@ -3616,6 +3615,7 @@ fn run_checks(
         &test_binding_modules,
         &schema_effective_versions.events,
         &unit_callees,
+        &unit_event_subscriber_shapes,
         &mut test_errors,
         &mut refs,
         tys,
@@ -4719,25 +4719,18 @@ fn emit_bundle_compose_root(
     unit_consumes: &HashMap<String, Vec<String>>,
     unit_consumes_aliases: &HashMap<String, HashMap<String, String>>,
     unit_tables: &HashMap<String, UnitTable>,
-    unit_event_subscriber_shapes: &HashMap<
-        String,
-        HashMap<String, bynk_model::EventSubscriberShape>,
-    >,
     adapter_bindings: &HashMap<String, AdapterBinding>,
     unit_flattened: &HashMap<String, HashMap<String, String>>,
     thread_env: bool,
-    event_subscribers: &BTreeMap<(String, String), Vec<(String, String)>>,
 ) {
     if let Some(compose_program) = emitter::emit_composition_root(
         plan,
         unit_consumes,
         unit_consumes_aliases,
         unit_tables,
-        unit_event_subscriber_shapes,
         adapter_bindings,
         unit_flattened,
         thread_env,
-        event_subscribers,
     ) {
         compiled.push(StagedFile {
             output_path: PathBuf::from("compose.ts"),
@@ -4905,6 +4898,8 @@ fn build_output(
         &unit_tables,
         &unit_callees,
         &unit_flattened,
+        &event_subscribers,
+        &unit_event_subscriber_shapes,
     );
     debug_assert_plan_covers_groups(&compose_plan, &groups, &kinds);
     // #2137: the contexts a `system` harness stands up (test build only).
@@ -4918,14 +4913,12 @@ fn build_output(
             &unit_consumes,
             &unit_consumes_aliases,
             &unit_tables,
-            &unit_event_subscriber_shapes,
             &adapter_bindings,
             &unit_flattened,
             // D1: thread `env` through composeApp only when a native
             // resource is consumed, so native-free programs are
             // byte-identical to v0.18 output.
             !context_native.is_empty(),
-            &event_subscribers,
         ),
         BuildTarget::Workers => {
             // v0.8 §2.3: per-Worker entry point, compose.ts, and wrangler
