@@ -31,6 +31,6 @@ records, and `Result`/`Option` errors-as-values, all checked before emission.
 - [Generic code that crosses the boundary](/book/guides/type-system/generic-code-that-crosses-the-boundary/)
 - [Constructors for generic types](/book/guides/type-system/constructors-for-generic-types/)
 
-**See also:** [Reference — Type system](/book/reference/types/),
-[Refined-type API](/book/reference/refined-types/),
-[Spec §6 — The type system](/book/spec/type-system/).
+**See also:** [Reference — Type system](/reference/types/),
+[Refined-type API](/reference/refined-types/),
+[Spec §6 — The type system](/reference/spec/type-system/).

@@ -15,4 +15,4 @@ collaborators — in one context, or wired across the real cross-context edge.
 - [Try an expression against your project](/book/guides/testing/try-an-expression/)
 - [Test against a running system](/book/guides/testing/against-a-running-system/)
 
-**See also:** [Reference — Testing](/book/reference/testing/).
+**See also:** [Reference — Testing](/reference/testing/).

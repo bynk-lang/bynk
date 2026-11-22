@@ -84,7 +84,7 @@ The library (`lib.rs`) exposes the flows the CLI and LSP build on:
 Every error has a stable `bynk.*` code (the `category` field of `CompileError`).
 These codes are the user-facing contract, so they are catalogued in a central
 registry, `diagnostics.rs`, which also generates the
-[diagnostic index](/book/reference/diagnostics/). A test asserts the registry
+[diagnostic index](/reference/diagnostics/). A test asserts the registry
 matches the codes actually emitted in the source — so adding a new code without
 registering it fails the build. See [Testing & fixtures](/book/contributing/testing/).
 
@@ -97,7 +97,7 @@ The emitter has two targets, selected by `BuildTarget`:
 - **Workers** — one Cloudflare Worker per context; cross-context calls go over
   Service Bindings with boundary validation, and agents become Durable Objects.
 
-See the [emission reference](/docs/emission/) for what each construct
+See the [emission reference](/reference/tooling/emission/) for what each construct
 produces.
 
 ## The sibling tools
@@ -105,4 +105,4 @@ produces.
 - `bynk-fmt` is a leaf over `bynk-syntax`, so the formatter has one
   implementation shared by the CLI (`bynk fmt`) and the LSP.
 - `bynk-lsp` depends on `bynk-ide` for `diagnose` and on the formatter, adding the
-  LSP protocol layer. See [`bynk-lsp`](/docs/tooling/bynk-lsp/).
+  LSP protocol layer. See [`bynk-lsp`](/reference/tooling/bynk-lsp/).

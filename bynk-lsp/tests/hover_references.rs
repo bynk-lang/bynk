@@ -487,7 +487,7 @@ fn hover_links_a_first_party_name_to_the_book() {
     )
     .expect("hover on the `api` service declaration");
     assert!(
-        hover.contains("[Clock.now](https://bynk-lang.org/book/reference/bynk-capabilities/#"),
+        hover.contains("[Clock.now](https://bynk-lang.org/reference/bynk-capabilities/#"),
         "a first-party doc link should render as a Book link, got:\n{hover}"
     );
 }

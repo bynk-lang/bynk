@@ -1,16 +1,18 @@
 //! Shared test helper: turn a generated mdBook-format reference page into the
-//! Starlight page committed under `site/src/content/docs/book/`. This is the
+//! Starlight page committed under `site/src/content/docs/`. This is the
 //! same transform `site/scripts/migrate-page.mjs` applied during the Book
 //! migration — lift the leading `# H1` into `title:` frontmatter (dropping the
-//! heading), and rewrite relative `.md` links to `/book/<slug>/` routes — so the
+//! heading), and rewrite relative `.md` links to site routes — so the
 //! generated-page drift guards keep their committed site pages byte-identical to
 //! the migrated originals once `docs/` is gone.
 
 use regex::{Captures, Regex};
 
 /// Transform `markdown` (a generated reference page, mdBook form) into its
-/// committed Starlight form. `page_dir` is the page's directory within the Book
-/// (e.g. `"reference"`), used to resolve relative links.
+/// committed Starlight form. `page_dir` is the page's directory, as the Book's
+/// mdBook sources lay it out (e.g. `"reference"`), used to resolve relative
+/// links. A link that resolves into `reference/` is a Reference route (web
+/// presence slice 5); any other, a Book route.
 pub fn to_site_page(markdown: &str, page_dir: &str) -> String {
     let (title, body) = lift_title(markdown);
     let body = rewrite_links(&body, page_dir);
@@ -35,8 +37,9 @@ fn lift_title(source: &str) -> (String, String) {
     panic!("generated page has no leading `# H1` to lift into the title");
 }
 
-/// Rewrite relative `*.md` links to `/book/<slug>/` routes, resolving each
-/// against `page_dir`. External / in-page / already-rooted links are untouched.
+/// Rewrite relative `*.md` links to site routes, resolving each against
+/// `page_dir`: `/reference/<slug>/` under `reference/`, else `/book/<slug>/`.
+/// External / in-page / already-rooted links are untouched.
 fn rewrite_links(body: &str, page_dir: &str) -> String {
     let re = Regex::new(r"\]\(([^)]+)\)").unwrap();
     re.replace_all(body, |caps: &Captures| {
@@ -67,7 +70,11 @@ fn rewrite_links(body: &str, page_dir: &str) -> String {
             slug.clear();
         }
         let hash = anchor.map(|a| format!("#{a}")).unwrap_or_default();
-        format!("](/book/{slug}/{hash})")
+        if slug == "reference" || slug.starts_with("reference/") {
+            format!("](/{slug}/{hash})")
+        } else {
+            format!("](/book/{slug}/{hash})")
+        }
     })
     .into_owned()
 }
@@ -100,5 +107,34 @@ fn yaml_string(value: &str) -> String {
         value.to_string()
     } else {
         format!("\"{}\"", value.replace('\\', "\\\\").replace('"', "\\\""))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::rewrite_links;
+
+    #[test]
+    fn a_link_into_the_reference_is_a_reference_route() {
+        assert_eq!(
+            rewrite_links("[grammar](grammar.md#rule-x)", "reference"),
+            "[grammar](/reference/grammar/#rule-x)"
+        );
+        assert_eq!(
+            rewrite_links("[index](index.md)", "reference"),
+            "[index](/reference/)"
+        );
+    }
+
+    #[test]
+    fn a_link_out_of_the_reference_stays_a_book_route() {
+        assert_eq!(
+            rewrite_links("[guide](../guides/agents/index.md)", "reference"),
+            "[guide](/book/guides/agents/)"
+        );
+        assert_eq!(
+            rewrite_links("[root](/reference/types/)", "reference"),
+            "[root](/reference/types/)"
+        );
     }
 }

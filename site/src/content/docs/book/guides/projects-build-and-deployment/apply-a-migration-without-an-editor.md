@@ -75,5 +75,5 @@ ones from a terminal or CI.
 > provider that calls it short of the same capability), and in refusing the whole
 > run rather than leaving a half-migrated tree.
 
-**See also:** [`bynk check`](/docs/bynk-cli/#applying-fixes),
-[Editor support](/docs/editor-and-tooling/editor-support/).
+**See also:** [`bynk check`](/reference/tooling/bynk-cli/#applying-fixes),
+[Editor support](/reference/tooling/editor-and-tooling/editor-support/).

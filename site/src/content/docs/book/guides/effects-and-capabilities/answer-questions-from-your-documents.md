@@ -153,7 +153,7 @@ case "an empty search is an empty list" {
 }
 ```
 
-To test retrieval logic of your own, use [`Vectorize`](/book/reference/bynk-capabilities/#vector-indexes-vectorize),
+To test retrieval logic of your own, use [`Vectorize`](/reference/bynk-capabilities/#vector-indexes-vectorize),
 which has an in-memory index for tests.
 
 ## Run it locally
@@ -170,7 +170,7 @@ ai-search = "allow"
 ```
 
 This is separate from `ai = "allow"` for Workers AI. See
-[Acknowledging a remote-only binding](/docs/manifest/#acknowledging-a-remote-only-binding).
+[Acknowledging a remote-only binding](/reference/tooling/manifest/#acknowledging-a-remote-only-binding).
 
 AI Search runs on your Cloudflare account, so a call may incur charges. What
 applies is on Cloudflare's [AI Search pricing](https://developers.cloudflare.com/ai-search/platform/limits-pricing/)
@@ -186,7 +186,7 @@ levels of how much you assemble yourself:
 | You have | Use |
 | --- | --- |
 | Documents in R2 or on a website, and you want search or question answering with no pipeline | `AiSearch` |
-| You need your own chunking, embedding model, metadata schema or scoring | [`Ai.embed`](/book/guides/effects-and-capabilities/run-a-model-from-a-worker/) with [`Vectorize`](/book/reference/bynk-capabilities/#vector-indexes-vectorize) |
+| You need your own chunking, embedding model, metadata schema or scoring | [`Ai.embed`](/book/guides/effects-and-capabilities/run-a-model-from-a-worker/) with [`Vectorize`](/reference/bynk-capabilities/#vector-indexes-vectorize) |
 | Retrieval is solved and you need only text generation | [`Ai.generate`](/book/guides/effects-and-capabilities/run-a-model-from-a-worker/) |
 | AI Search's retrieval, but your own prompt | `AiSearch.search`, then `Ai.generate` |
 
@@ -197,5 +197,5 @@ Worker can use all three.
 ## Related
 
 - [Run a model from a Worker](/book/guides/effects-and-capabilities/run-a-model-from-a-worker/)
-- [Reference: AI Search](/book/reference/bynk-capabilities/#ai-search-aisearch)
+- [Reference: AI Search](/reference/bynk-capabilities/#ai-search-aisearch)
 - [Deploy to Cloudflare: AI Search instances](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/#ai-search-instances)

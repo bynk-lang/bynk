@@ -75,7 +75,7 @@ jobs:
       # live in `on.push.paths`.
       #
       # `**/src/**/*.rs` + the manifests are here because the crate API docs
-      # (/docs/api/) are generated from the Rust source during this deploy. That
+      # (/reference/api/) are generated from the Rust source during this deploy. That
       # does mean most Rust merges rebuild the whole site; splitting the rustdoc
       # refresh into its own job would fix that, and is deliberately left alone
       # here so this change stays about the CI gate.
@@ -179,7 +179,7 @@ jobs:
       - name: Install deps
         run: npm ci
       # Generate the Rust crate API docs and stage them into the site so Astro
-      # serves them verbatim at /docs/api/ (the tree is gitignored — CI-generated,
+      # serves them verbatim at /reference/api/ (the tree is gitignored — CI-generated,
       # never committed). Built here because this is where the toolchain lives.
       # rust-cache / rust-toolchain are JS actions, so they run at the repo root
       # regardless of the job's `working-directory: site` default; the shell step
@@ -190,10 +190,10 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           cargo doc --no-deps --workspace
-          rm -rf site/public/docs/api
-          mkdir -p site/public/docs/api
-          cp -r target/doc/. site/public/docs/api/
-          node site/scripts/build-api-index.mjs site/public/docs/api
+          rm -rf site/public/reference/api
+          mkdir -p site/public/reference/api
+          cp -r target/doc/. site/public/reference/api/
+          node site/scripts/build-api-index.mjs site/public/reference/api
       # The Book's ```mermaid diagrams render to inline SVG at build time via
       # rehype-mermaid, which drives a headless Chromium. Its apt packages come
       # from the Actions cache CI's `site` job saves on `main` (same key):

@@ -21,11 +21,15 @@ const DOCS: [(&str, bool, bool); 3] = [
     // (path, quotes the date, quotes the wrangler minimum)
     ("design/bynk-release-discipline.md", true, true),
     (
-        "site/src/content/docs/docs/editor-and-tooling/doctor.md",
+        "site/src/content/docs/reference/tooling/editor-and-tooling/doctor.md",
         true,
         true,
     ),
-    ("site/src/content/docs/docs/emission.md", true, false),
+    (
+        "site/src/content/docs/reference/tooling/emission.md",
+        true,
+        false,
+    ),
 ];
 
 #[test]

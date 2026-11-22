@@ -209,7 +209,7 @@ bynk approve --list    # shows pending and approved packages
 
 In VS Code, **Bynk: Review Pending npm Requirements…** does the same in the
 editor: it lists each pending package with the chain that brought it in, and
-approves one package at a time (see [the extension](/docs/tooling/vscode-bynk/)).
+approves one package at a time (see [the extension](/reference/tooling/vscode-bynk/)).
 
 Each approval is one npm package at one range, recorded in `bynk.lock` as
 `approved = true` — commit it, and CI and your teammates inherit it. A
@@ -220,7 +220,7 @@ otherwise list it; `check`, `test`, `dev` and `deploy` never ask.
 
 ### Dependencies from the editor
 
-The [VS Code extension](/docs/tooling/vscode-bynk/) lists a project's
+The [VS Code extension](/reference/tooling/vscode-bynk/) lists a project's
 dependencies in the Project sidebar, adds one (**Bynk: Add Dependency…**), fetches
 them, flags a newer version of a registry dependency in `bynk.toml`, and
 publishes a package after showing what it would send. Each of these runs the
@@ -236,6 +236,6 @@ npm's own lockfile pins.
 
 ## Related
 
-- [Reference — `[dependencies]`](/docs/manifest/#dependencies) and
-  [`[package]`](/docs/manifest/#package).
+- [Reference — `[dependencies]`](/reference/tooling/manifest/#dependencies) and
+  [`[package]`](/reference/tooling/manifest/#package).
 - [Lay out a project — Workspaces](/book/guides/projects-build-and-deployment/layout/#workspaces).

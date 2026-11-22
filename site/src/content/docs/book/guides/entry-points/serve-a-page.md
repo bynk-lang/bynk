@@ -5,7 +5,7 @@ title: "Serve a page from an HTML file"
 change, and serve it from an HTTP handler.
 
 A page built from string literals gets hard to read quickly: markup, escaping
-and logic share one line. An [`embed`](/book/reference/embeds/) reads a file
+and logic share one line. An [`embed`](/reference/embeds/) reads a file
 into a `String`, so the static markup stays a real HTML file and Bynk only
 fills in the gaps.
 
@@ -34,7 +34,7 @@ them no meaning.
 
 ## Fill it in
 
-Declare the embed, and the stylesheet as an [asset](/book/reference/assets/)
+Declare the embed, and the stylesheet as an [asset](/reference/assets/)
 so the page links a real, content-hashed URL:
 
 ```bynk,fragment
@@ -95,5 +95,5 @@ suite app.web {
 }
 ```
 
-**See also:** [Reference — Embedded text](/book/reference/embeds/),
-[Static assets](/book/reference/assets/).
+**See also:** [Reference — Embedded text](/reference/embeds/),
+[Static assets](/reference/assets/).

@@ -1,5 +1,5 @@
 //! #1969: the cross-context wire format, version 1, is a published contract
-//! (`site/src/content/docs/book/reference/wire-format.md`). These guards keep
+//! (`site/src/content/docs/reference/wire-format.md`). These guards keep
 //! the page, the emitter and the runtime in agreement:
 //!
 //! - the committed page is exactly what `bynk_check::wire_format::reference`
@@ -41,7 +41,7 @@ fn repo(rel: &str) -> PathBuf {
 
 #[test]
 fn generated_wire_format_page_is_up_to_date() {
-    let page = repo("site/src/content/docs/book/reference/wire-format.md");
+    let page = repo("site/src/content/docs/reference/wire-format.md");
     let rendered = to_site_page(&render_reference(), "reference");
 
     if std::env::var_os("BYNK_BLESS").is_some() {
@@ -52,7 +52,7 @@ fn generated_wire_format_page_is_up_to_date() {
     let current = fs::read_to_string(&page).unwrap_or_default();
     assert_eq!(
         current, rendered,
-        "site/src/content/docs/book/reference/wire-format.md is out of date with the wire format.\n\
+        "site/src/content/docs/reference/wire-format.md is out of date with the wire format.\n\
          Regenerate with: BYNK_BLESS=1 cargo test -p bynk-tests --test it wire_reference::"
     );
 }

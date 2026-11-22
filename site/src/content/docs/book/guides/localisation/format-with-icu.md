@@ -170,4 +170,4 @@ render time rather than failing the build.
 **See also:**
 [Understand localisation](/book/guides/localisation/understand-localisation/),
 [Declare a message bundle](/book/guides/localisation/declare-a-message-bundle/),
-[Diagnostics](/book/reference/diagnostics/).
+[Diagnostics](/reference/diagnostics/).

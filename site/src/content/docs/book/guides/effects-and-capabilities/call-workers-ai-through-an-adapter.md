@@ -14,9 +14,9 @@ below shows how to move a Worker's consumers to the binding.
 A hand-written adapter's binding receives only its `given` dependencies, not the
 Worker's `env`, so it cannot read the Worker's `[ai]` binding (that is what
 first-party `Ai` is for). What an adapter *can* do is call Workers AI's REST endpoint through the portable
-[`bynk.Fetch`](/book/reference/bynk-capabilities/) capability, authenticated with
-a token held in [`bynk.Secrets`](/book/reference/bynk-capabilities/). That is an
-ordinary [library adapter](/book/reference/adapters/): no new binding kind, and
+[`bynk.Fetch`](/reference/bynk-capabilities/) capability, authenticated with
+a token held in [`bynk.Secrets`](/reference/bynk-capabilities/). That is an
+ordinary [library adapter](/reference/adapters/): no new binding kind, and
 it stays portable because it consumes only `bynk`.
 
 The trade-offs are real: each call is an HTTPS round trip to the Cloudflare API
@@ -217,5 +217,5 @@ binding to read.
 
 - [Run a model from a Worker](/book/guides/effects-and-capabilities/run-a-model-from-a-worker/)
 - [Wrap a library as an adapter](/book/guides/effects-and-capabilities/wrap-a-library/)
-- [Adapters reference](/book/reference/adapters/)
-- [First-party `bynk` capabilities](/book/reference/bynk-capabilities/)
+- [Adapters reference](/reference/adapters/)
+- [First-party `bynk` capabilities](/reference/bynk-capabilities/)

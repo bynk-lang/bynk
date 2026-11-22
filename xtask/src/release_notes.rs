@@ -14,7 +14,7 @@
 use crate::stamp::Version;
 
 /// The Book's upgrading page, relative to the repo root.
-pub const UPGRADING_PAGE: &str = "site/src/content/docs/book/reference/upgrading.md";
+pub const UPGRADING_PAGE: &str = "site/src/content/docs/reference/upgrading.md";
 
 /// The marker the stamp inserts new entries after (newest first). It is an HTML
 /// comment so it is invisible in the rendered page.
@@ -110,7 +110,7 @@ pub fn release_section(page: &str, prev: Option<Version>, tag: Version) -> Strin
     }
     out.push_str(
         "\nThe full history is in the \
-         [upgrading page](https://bynk-lang.org/book/reference/upgrading/).\n",
+         [upgrading page](https://bynk-lang.org/reference/upgrading/).\n",
     );
     out
 }

@@ -14,13 +14,13 @@ bynk dev          # already serving on http://localhost:8787
 `.gitignore`, and a starter HTTP service under `src/`. The scaffold is chosen so
 [`bynk dev`](/book/guides/projects-build-and-deployment/run-locally/) serves it unmodified — that end-to-end loop is the
 whole point. `bynk new` is the first step of the driver arc *is my machine ready*
-([`bynk doctor`](/docs/editor-and-tooling/doctor/)) → *make me something*
+([`bynk doctor`](/reference/tooling/editor-and-tooling/doctor/)) → *make me something*
 (`bynk new`) → *run it* ([`bynk dev`](/book/guides/projects-build-and-deployment/run-locally/)).
 
 > **`bynk new` needs no toolchain.** Unlike `dev`, it only writes files — it
 > shells nothing, compiles nothing, and reads no network. It works *before*
 > Node or `wrangler` are installed, which is exactly why it can be your
-> very first command. (Run [`bynk doctor`](/docs/editor-and-tooling/doctor/) once
+> very first command. (Run [`bynk doctor`](/reference/tooling/editor-and-tooling/doctor/) once
 > you want to build or serve.)
 
 ## What it writes
@@ -92,4 +92,4 @@ away if you want a new one.
   `new` wrote.
 - [Lay out a project](/book/guides/projects-build-and-deployment/layout/) — how the source tree maps to contexts and
   commons as the project grows beyond one file.
-- Reference: [the `bynk` driver CLI](/docs/bynk-cli/).
+- Reference: [the `bynk` driver CLI](/reference/tooling/bynk-cli/).

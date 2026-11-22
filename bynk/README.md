@@ -12,7 +12,7 @@ my machine ready?*, *scaffold me a project*, *build and serve it locally*, *ship
 it* — is the driver's job.
 
 See the [Bynk Book](https://bynk-lang.org/book/) for the full guide and
-reference, and the [`bynk` CLI reference](https://bynk-lang.org/docs/bynk-cli/)
+reference, and the [`bynk` CLI reference](https://bynk-lang.org/reference/tooling/bynk-cli/)
 for every argument and exit code.
 
 ## The project-lifecycle arc

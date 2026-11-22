@@ -4,12 +4,12 @@ title: The agent model
 An **agent** is Bynk's unit of state. It is a named thing, identified by a key,
 that owns some state and exposes handlers to read and change it. This page
 explains what that means and why agent state must be
-*[zeroable](/book/reference/glossary/#term-zeroable)*.
+*[zeroable](/reference/glossary/#term-zeroable)*.
 
 ## What an agent is
 
 Most of a Bynk program is stateless: functions and
-[services](/book/reference/glossary/#term-service) transform inputs into outputs. An agent is the deliberate exception — the place where something is
+[services](/reference/glossary/#term-service) transform inputs into outputs. An agent is the deliberate exception — the place where something is
 *remembered* between calls.
 
 Each agent has a **key**. Two calls naming the same key address the same logical
@@ -19,12 +19,12 @@ instance with the same state; different keys are independent. A `Counter` keyed 
 becomes a Cloudflare Durable Object, where the key selects the object instance.
 
 State lives in `store` fields: a handler reads a field by its bare name and writes
-it with `:=`. The writes are [committed](/book/reference/glossary/#term-commit)
+it with `:=`. The writes are [committed](/reference/glossary/#term-commit)
 atomically when the handler returns — never persisted mid-flight, and never at all
 if the handler faults — which keeps each handler's effect on state explicit. An instance also runs one handler at
 a time, so a handler that awaits another agent partway through is not interleaved with a
 second handler on the same instance; see
-[one handler at a time](/book/reference/agents/#one-handler-at-a-time).
+[one handler at a time](/reference/agents/#one-handler-at-a-time).
 
 ```mermaid
 flowchart TD
@@ -52,7 +52,7 @@ returns. Different keys (`a`, `b`) are wholly independent instances.
 Because a scan, a join or a group-by still reads a whole collection (a keyed read or
 write reads one entry, but a scan reads them all), the key is also your scaling
 lever: spread a growing collection across many keys rather than into one agent. See
-[the size and cost of an agent's state](/book/reference/agents/#size-and-cost-of-an-agents-state).
+[the size and cost of an agent's state](/reference/agents/#size-and-cost-of-an-agents-state).
 
 ## Why state must be zeroable
 
@@ -96,7 +96,7 @@ and the compiler says so — verbatim, captured from `bynk`:
 ```
 
 The fix is to give the field a starting value
-([`bynk.agents.non_zeroable_state_field`](/book/reference/diagnostics/bynk.agents.non_zeroable_state_field/)).
+([`bynk.agents.non_zeroable_state_field`](/reference/diagnostics/bynk.agents.non_zeroable_state_field/)).
 
 ## Why "not set yet" is `Option`, not a special case
 
@@ -114,4 +114,4 @@ modelling "absent" precisely, and it is what makes fresh keys safe.
 
 - Tutorial: [Add a stateful agent](/book/tutorials/05-stateful-agent/).
 - How-to: [Build a stateful agent](/book/guides/agents-and-state/stateful-agent/).
-- Reference: [agents](/book/reference/agents/).
+- Reference: [agents](/reference/agents/).

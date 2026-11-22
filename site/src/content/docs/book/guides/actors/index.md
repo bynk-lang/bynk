@@ -62,6 +62,6 @@ things about a party:
 - [Add an authorisation invariant](/book/guides/actors/authorisation/) — refinement actors and the `401`/`403` split.
 - [Know which context called you](/book/guides/actors/cross-context-callers/) — the `Caller` identity.
 
-**See also:** [Reference — Actors](/book/reference/actors/),
-[Specification §5.7a](/book/spec/static-semantics/),
-[Diagnostic index (`bynk.actor.*`)](/book/reference/diagnostics/).
+**See also:** [Reference — Actors](/reference/actors/),
+[Specification §5.7a](/reference/spec/static-semantics/),
+[Diagnostic index (`bynk.actor.*`)](/reference/diagnostics/).

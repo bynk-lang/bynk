@@ -360,25 +360,25 @@ Built-in type names, reserved in type position: `Asset` `BoundaryRejection`
 ### By Example (problem-first)
 - [Bynk by Example](/by-example/): a gallery of single-file snippets (openable in the playground) and complete example projects, each cut from the real `examples/` and verified by the compiler.
 
-### Developer documentation (toolchain)
-- [Developer Documentation](/docs/): operating the toolchain, distinct from the language reference.
-- [CLI (`bynk`)](/docs/bynk-cli/): every subcommand, its flags and exit codes.
-- [`bynk.toml` manifest](/docs/manifest/) · [Emission](/docs/emission/): project configuration and the TypeScript each construct emits.
-- [Editor & tooling](/docs/editor-and-tooling/): `bynk doctor`, the formatter, editor support, debugging.
-- [Tool reference](/docs/tooling/): `bynk-fmt`, `bynk-lsp`, `tree-sitter-bynk`, `vscode-bynk`.
-- [Crate API docs](/docs/api/): generated rustdoc for every workspace crate (contributors/embedders).
+### Tooling (Reference)
+- [Tooling](/reference/tooling/): operating the toolchain, the Tooling section of the Reference.
+- [CLI (`bynk`)](/reference/tooling/bynk-cli/): every subcommand, its flags and exit codes.
+- [`bynk.toml` manifest](/reference/tooling/manifest/) · [Emission](/reference/tooling/emission/): project configuration and the TypeScript each construct emits.
+- [Editor & tooling](/reference/tooling/editor-and-tooling/): `bynk doctor`, the formatter, editor support, debugging.
+- [Tool reference](/reference/tooling/#tool-reference): `bynk-fmt`, `bynk-lsp`, `tree-sitter-bynk`, `vscode-bynk`.
+- [Crate API docs](/reference/api/): generated rustdoc for every workspace crate (contributors/embedders).
 
 ### Reference (exact behaviour)
-- [Syntax & grammar](/book/reference/grammar/) and [complete grammar appendix](/book/reference/grammar-appendix/)
-- [Keywords](/book/reference/keywords/) · [Glossary](/book/reference/glossary/)
-- [Type system](/book/reference/types/) · [Refined-type API](/book/reference/refined-types/) · [Operators & built-ins](/book/reference/operators/)
-- [Agents](/book/reference/agents/) · [Agent invariants](/book/reference/agent-invariants/)
-- [Capabilities & providers](/book/reference/capabilities/) · [First-party `bynk` capabilities](/book/reference/bynk-capabilities/) · [Adapters](/book/reference/adapters/)
-- [HTTP](/book/reference/http/) · [Cron](/book/reference/cron/) · [Queue](/book/reference/queue/) · [WebSocket](/book/reference/websocket/) · [Actors](/book/reference/actors/)
-- [Testing](/book/reference/testing/) · [Diagnostic index](/book/reference/diagnostics/)
+- [Syntax & grammar](/reference/grammar/) and [complete grammar appendix](/reference/grammar-appendix/)
+- [Keywords](/reference/keywords/) · [Glossary](/reference/glossary/)
+- [Type system](/reference/types/) · [Refined-type API](/reference/refined-types/) · [Operators & built-ins](/reference/operators/)
+- [Agents](/reference/agents/) · [Agent invariants](/reference/agent-invariants/)
+- [Capabilities & providers](/reference/capabilities/) · [First-party `bynk` capabilities](/reference/bynk-capabilities/) · [Adapters](/reference/adapters/)
+- [HTTP](/reference/http/) · [Cron](/reference/cron/) · [Queue](/reference/queue/) · [WebSocket](/reference/websocket/) · [Actors](/reference/actors/)
+- [Testing](/reference/testing/) · [Diagnostic index](/reference/diagnostics/)
 
 ### Specification (normative)
-- [The Bynk Language Specification](/book/spec/): §1 scope, §3 lexical grammar, §4 syntactic grammar, §5 static semantics, §6 type system, §7 meaning by translation, §8 compilation model, §9 diagnostics, §10 conformance.
+- [The Bynk Language Specification](/reference/spec/): §1 scope, §3 lexical grammar, §4 syntactic grammar, §5 static semantics, §6 type system, §7 meaning by translation, §8 compilation model, §9 diagnostics, §10 conformance.
 
 ### Examples (complete projects under examples/)
 - `hello-world` (minimal multi-file), `todo` (auth + per-user agent), `orders`
@@ -391,6 +391,6 @@ Built-in type names, reserved in type position: `Asset` `BoundaryRejection`
 
 - [Why Bynk exists](/book/about/why-bynk-exists/) and [Bynk compared to TypeScript](/book/about/bynk-compared-to-typescript/): motivation and contrasts.
 - [Versioning & roadmap](/book/about/versioning-and-roadmap/): what is shipped vs deferred to v1.
-- [Planned features (non-normative)](/book/spec/appendix-planned/): sagas and event replay are designed but not yet implemented.
-- [Diagnostic index](/book/reference/diagnostics/): every diagnostic code, each with a page saying what it means and how to fix it (`https://bynk-lang.org/d/<code>`).
+- [Planned features (non-normative)](/reference/spec/appendix-planned/): sagas and event replay are designed but not yet implemented.
+- [Diagnostic index](/reference/diagnostics/): every diagnostic code, each with a page saying what it means and how to fix it (`https://bynk-lang.org/d/<code>`).
 - [Contributing](/book/contributing/): compiler architecture (lex → parse → resolve → check → emit), testing, docs.

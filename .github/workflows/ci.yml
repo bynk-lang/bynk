@@ -316,7 +316,9 @@ jobs:
               # The doc gates (doc_examples, doc_diagnostics, doc_version,
               # grammar_coverage, the generated-page drift guards) read the Book
               # and its fixtures, so a content edit must run the Rust test job.
+              # The Reference has its own tree since web presence slice 5.
               - 'site/src/content/docs/book/**'
+              - 'site/src/content/docs/reference/**'
               - 'site/src/diagnostics/**'
               # #2096: xtask's manifest_schema test diffs the committed
               # `bynk.toml` schema (and reads the manifest reference page's
@@ -328,7 +330,6 @@ jobs:
               # golden-only edit must re-run the snapshot test.
               - 'bynk/tests/golden/doctor.json'
               - 'bynk/tests/golden/migrate-status.json'
-              - 'site/src/content/docs/docs/manifest.md'
               - 'scripts/build-registry-core.sh'
               - 'scripts/registry-core-parity.mjs'
               # the textmate_keywords test reads the site's copy of the
@@ -775,7 +776,7 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
 
   api-docs:
-    # Guards the /docs/api/ rustdoc the deploy publishes (documentation track
+    # Guards the /reference/api/ rustdoc the deploy publishes (documentation track
     # follow-on). -D warnings makes a broken intra-doc link fail the build, so the
     # published API docs can't rot; the deploy regenerates the same tree leniently.
     name: API docs (cargo doc)
@@ -1489,8 +1490,9 @@ jobs:
           node-version: "24"
       - name: Install deps
         run: npm ci
-      # The sidebar is generated from site/src/SUMMARY.md; fail if the committed
-      # sidebar.json drifts from it.
+      # The sidebars are generated from site/src/SUMMARY.md (the Book) and
+      # site/src/REFERENCE.md (the Reference); fail if either committed sidebar
+      # drifts, or if a page is in no contents.
       - name: Check the generated sidebar is current
         run: node scripts/generate-sidebar.mjs --check
       # The generator's own tests: its contents checks, on small in-memory

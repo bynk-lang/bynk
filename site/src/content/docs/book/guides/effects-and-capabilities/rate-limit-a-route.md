@@ -68,7 +68,7 @@ at the cost of a Durable Object call per request.
 ## Test it
 
 In a test each limiter counts calls per key in memory, allowing its `@limit`
-per `@period`, on the [harness clock](/book/reference/testing/#time-in-tests):
+per `@period`, on the [harness clock](/reference/testing/#time-in-tests):
 
 ```bynk,ignore
 case "a token is refused after twenty publishes" {
@@ -93,5 +93,5 @@ To test the refusal path without counting, stub it:
 
 ## Related
 
-- [`RateLimit` reference](/book/reference/bynk-capabilities/#rate-limiting-ratelimit)
-- [HTTP reference: `TooManyRequests`](/book/reference/http/#4xx-client-error)
+- [`RateLimit` reference](/reference/bynk-capabilities/#rate-limiting-ratelimit)
+- [HTTP reference: `TooManyRequests`](/reference/http/#4xx-client-error)

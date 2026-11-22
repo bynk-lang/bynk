@@ -1,23 +1,40 @@
 # Cloudflare Pages redirects for bynk-lang.org (web presence track, link rule L2).
 # A page that moved or retired keeps working here. Tree moves use one splat
 # rule; a single page gets a rule only where something is known to link to it.
+# The first matching rule wins, so a single page's rule comes before the splat
+# for its folder.
 
 # Retired in slice 2 (#3865); the Book's front page now says how the Book is laid out.
 /book/introduction/how-these-docs-are-organised/ /book/ 301
 /book/introduction/how-these-docs-are-organised /book/ 301
 
 # The changelog became one page per release in slice 3 (#3868).
-/book/reference/changelog/ /book/reference/releases/ 301
-/book/reference/changelog /book/reference/releases/ 301
+/book/reference/changelog/ /reference/releases/ 301
+/book/reference/changelog /reference/releases/ 301
 
 # Every tool links a diagnostic code as /d/<code> (slice 4, #3876); the page it
 # names may move, so the link stays a 302.
-/d /book/reference/diagnostics/ 302
-/d/ /book/reference/diagnostics/ 302
-/d/:code /book/reference/diagnostics/:code/ 302
-/d/:code/ /book/reference/diagnostics/:code/ 302
+/d /reference/diagnostics/ 302
+/d/ /reference/diagnostics/ 302
+/d/:code /reference/diagnostics/:code/ 302
+/d/:code/ /reference/diagnostics/:code/ 302
 
 # The troubleshooting pages were folded into each code's explanation in slice 4b
 # (#3907); every code now has its own page, listed on the Diagnostic index.
-/book/troubleshooting /book/reference/diagnostics/ 302
-/book/troubleshooting/* /book/reference/diagnostics/ 302
+/book/troubleshooting /reference/diagnostics/ 302
+/book/troubleshooting/* /reference/diagnostics/ 302
+
+# One Reference surface at /reference/ (slice 5, #3935): the Book's reference
+# and specification and the Developer Docs moved there as folders. The per-tool
+# pages came up a level (/docs/tooling/<tool>/ → /reference/tooling/<tool>/), and
+# the rustdoc moved with them.
+/book/reference /reference/ 301
+/book/reference/* /reference/:splat 301
+/book/spec /reference/spec/ 301
+/book/spec/* /reference/spec/:splat 301
+/docs /reference/tooling/ 301
+/docs/cli /reference/tooling/bynk-cli/ 301
+/docs/cli/ /reference/tooling/bynk-cli/ 301
+/docs/api/* /reference/api/:splat 301
+/docs/tooling/* /reference/tooling/:splat 301
+/docs/* /reference/tooling/:splat 301

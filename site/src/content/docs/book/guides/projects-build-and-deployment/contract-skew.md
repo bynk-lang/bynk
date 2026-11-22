@@ -152,7 +152,7 @@ bynk: error: `shop-payment` no longer provides the contract its live callers wer
       compatible response.receipt: the callee sends the field `receipt`, which the caller ignores
 ```
 
-The rules are the wire format's own ([Wire format](/book/reference/wire-format/)).
+The rules are the wire format's own ([Wire format](/reference/wire-format/)).
 A request flows from caller to callee and a response from callee to caller, and in
 both the receiver must be able to decode everything the sender can produce:
 
@@ -250,7 +250,7 @@ nothing above can see what it expects. It calls through a generated client
 that embeds the hashes it was generated at, and the context's project pins
 them in `bynk.foreign.toml`. `bynk deploy` refuses a build that breaks a pin
 (`bynk.deploy.foreign_contract_skew`); regenerate that Worker's client, then
-update the pin. See [TypeScript client](/book/reference/typescript-client/#skew).
+update the pin. See [TypeScript client](/reference/typescript-client/#skew).
 
 ## What to do when you hit it
 

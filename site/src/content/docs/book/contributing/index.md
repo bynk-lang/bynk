@@ -43,7 +43,7 @@ See [Testing & fixtures](/book/contributing/testing/) for how these work and how
   re-blesses fixture expectations *and* the generated reference pages. Run it
   deliberately and review the diff.
 - **The spec is the source of truth; the design notes are rationale.** The
-  normative spec under `site/src/content/docs/book/spec/` defines the current language and is
+  normative spec under `site/src/content/docs/reference/spec/` defines the current language and is
   updated per increment; the decisions behind increments live in
   `design/decisions/`. The remaining `design/*.md` notes are rationale and
   history — some are aspirational or predate the Rust rewrite. Trust the

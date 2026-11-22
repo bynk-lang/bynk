@@ -17,8 +17,8 @@ schedules, queue messages, WebSocket connections, and inbound email.
 - [Stream a large upload](/book/guides/entry-points/stream-a-large-upload/)
 - [Call your API from a front end](/book/guides/entry-points/call-from-a-front-end/)
 
-**See also:** [Reference — HTTP](/book/reference/http/),
-[Cron](/book/reference/cron/), [Queue](/book/reference/queue/),
-[WebSocket](/book/reference/websocket/),
-[Inbound email](/book/reference/inbound-email/),
-[HTTP client](/book/reference/http-client/).
+**See also:** [Reference — HTTP](/reference/http/),
+[Cron](/reference/cron/), [Queue](/reference/queue/),
+[WebSocket](/reference/websocket/),
+[Inbound email](/reference/inbound-email/),
+[HTTP client](/reference/http-client/).

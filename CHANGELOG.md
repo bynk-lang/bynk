@@ -2,8 +2,8 @@
 
 > **This file is no longer maintained.** The live changelog is
 > one page per release under
-> [`site/src/content/docs/book/reference/releases/`](site/src/content/docs/book/reference/releases/),
-> published as [Releases](https://bynk-lang.org/book/reference/releases/).
+> [`site/src/content/docs/reference/releases/`](site/src/content/docs/reference/releases/),
+> published as [Releases](https://bynk-lang.org/reference/releases/).
 > `cargo xtask stamp` writes a row there for every merged increment, from its
 > `design/pending/` file. The entries below are kept as history: the Karn → Bynk
 > rename and v0.142.0.

@@ -109,8 +109,8 @@ The Worker under test is the one you deploy: only the test module holds the key
 and the JWKS answer, so nothing in production trusts them. To give a handler
 claims to read, pass them in the principal:
 `by Workload("wid", TokenClaims.of(["repository: acme/money"]))`. See
-[the failure principals](/book/reference/testing/#failure-principals) and
-[`Oidc` routes at `system`](/book/reference/testing/#oidc-issuer).
+[the failure principals](/reference/testing/#failure-principals) and
+[`Oidc` routes at `system`](/reference/testing/#oidc-issuer).
 
 ## Scope this slice
 

@@ -29,8 +29,10 @@ fn grammar_json() -> String {
     fs::read_to_string(path).expect("read grammar.json")
 }
 
+/// The site's content root: the Book under `book/` and, since web presence
+/// slice 5, the Reference and the specification under `reference/`.
 fn docs_src() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../site/src/content/docs/book")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../site/src/content/docs")
 }
 
 fn grammar_md() -> String {
@@ -187,7 +189,7 @@ fn every_embeddable_rule_is_in_the_spec() {
         .into_iter()
         .collect();
     let mut files = Vec::new();
-    gather_md(&docs_src().join("spec"), &mut files);
+    gather_md(&docs_src().join("reference/spec"), &mut files);
     let embedded: BTreeSet<String> = files
         .iter()
         .flat_map(|f| directive_uses(&fs::read_to_string(f).unwrap()))

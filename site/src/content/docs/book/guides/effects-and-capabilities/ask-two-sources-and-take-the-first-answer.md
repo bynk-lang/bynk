@@ -83,4 +83,4 @@ suite shop.prices {
 
 Stubs replace capabilities, so a race between two *contexts* runs at `integration` or
 `system`, not at `unit`. At `system`, `race` runs in real time. See
-[testing](/book/reference/testing/#stub-latency).
+[testing](/reference/testing/#stub-latency).

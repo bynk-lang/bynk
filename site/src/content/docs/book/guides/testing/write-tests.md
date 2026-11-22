@@ -60,7 +60,7 @@ case "a ping is acknowledged" {
 ```
 
 A helper is private to its suite and pure; see
-[Helper functions in a suite](/book/reference/testing/#helpers).
+[Helper functions in a suite](/reference/testing/#helpers).
 
 ## Test with a real payload
 
@@ -79,7 +79,7 @@ case "a real issues delivery decodes" {
 ```
 
 The file is never part of the deployable. See
-[Test fixtures](/book/reference/fixtures/).
+[Test fixtures](/reference/fixtures/).
 
 ## Unwrap a fixture with `?`
 
@@ -95,7 +95,7 @@ case "a day reads" {
 ```
 
 The error must be a `ValidationError`, the error type of `.of`.
-See [`?` in a case](/book/reference/testing/#question-in-case).
+See [`?` in a case](/reference/testing/#question-in-case).
 
 ## Fabricate values with `Val[T]`
 
@@ -114,7 +114,7 @@ suite quantities {
 ```
 
 A `Matches`-refined string cannot be fabricated blindly — a bare `Val` of one is
-rejected ([`bynk.val.needs_pin`](/book/reference/diagnostics/bynk.val.needs_pin/)); pin it
+rejected ([`bynk.val.needs_pin`](/reference/diagnostics/bynk.val.needs_pin/)); pin it
 instead, or give the type an example once, where it is declared, so every `Val`
 of it (and the derived smoke) has a value:
 
@@ -123,7 +123,7 @@ type Code = String where Matches("[A-Z]{3}") @example("ABC")
 ```
 
 The compiler checks that the example matches the pattern
-([`@example`](/book/reference/testing/#val-example)). `Val[T]` is test-only.
+([`@example`](/reference/testing/#val-example)). `Val[T]` is test-only.
 
 ## Snapshot a decoded value
 
@@ -154,7 +154,7 @@ changes, the case fails with a line diff of the stored value against the new one
 run `bynk test --update-snapshots` when the change is intended, and the diff of
 the snapshot file is the review. A snapshot whose case you delete is reported as
 obsolete and removed by the same command. Stub `Clock` and `Random` so the value
-is stable. See [Snapshots](/book/reference/testing/#snapshots).
+is stable. See [Snapshots](/reference/testing/#snapshots).
 
 ## Constrain a function with `requires` / `ensures`
 
@@ -180,7 +180,7 @@ and the runner **generates** arguments (filtered by `requires`) to attack the
 `ensures` — reporting a shrunk counterexample if one breaks. In the deploy build
 the checks are stripped, so contracts cost nothing in production. A contract is a
 property that is always on; reach for a `property` only when a claim is relational
-or spans calls. See the [testing reference](/book/reference/testing/#contracts).
+or spans calls. See the [testing reference](/reference/testing/#contracts).
 
 ## Constrain a state change with `transition`
 
@@ -207,7 +207,7 @@ agent Order {
 Again you write no test: a `transition` is checked at the commit boundary (from the
 second commit — the first has no `old`), so it holds under every `case` at every
 tier for free. See
-[Agent invariants → Step invariants](/book/reference/agent-invariants/#step-invariants).
+[Agent invariants → Step invariants](/reference/agent-invariants/#step-invariants).
 
 ## Check a claim across inputs with `property` / `for all`
 
@@ -230,7 +230,7 @@ Reach for a `property` when a claim should hold across a *range* of inputs; reac
 for a `case` when one named scenario is the point. On failure a property prints a
 shrunk counterexample and a reproduce line — see
 [Run your tests](/book/guides/testing/run-tests/) and the
-[testing reference](/book/reference/testing/).
+[testing reference](/reference/testing/).
 
 ## Stub a collaborator with `stub`
 
@@ -257,7 +257,7 @@ failure would, and the fault propagates out of the handler. Left unclaimed it
 fails the case, so a case that expects one says so with `expect <call> faults`,
 giving the call itself rather than a value bound from it. To test an in-band
 error instead, stub the `Err` as a value (`returns Err(…)`) and assert `expect r
-is Err(_)`. See [Claiming a fault](/book/reference/testing/#faults).
+is Err(_)`. See [Claiming a fault](/reference/testing/#faults).
 
 The right-hand side is a *value* or `fails`, **never a block** — a double that
 needs logic is the signal to promote the tier instead. For a collaborator whose
@@ -271,7 +271,7 @@ stub Net.fetch(_) returns each [fails, fails, ok(resp)]  // fails twice, then su
 
 `stub` is capability-only, at suite scope (every case) and case scope
 (precedence: case > suite > the tier default). See the
-[`stub` reference](/book/reference/testing/#stub).
+[`stub` reference](/reference/testing/#stub).
 
 ## Aliased types in a suite
 
@@ -337,5 +337,5 @@ expect calls.all((c) => c.msg.length() > 0)
 ## Related
 
 - Tutorial: [Test it](/book/tutorials/06-testing/).
-- Reference: [testing](/book/reference/testing/).
-- Diagnostics: [`bynk.val.*` errors](/book/reference/diagnostics/#value-fabrication), [`bynk.observe.*` errors](/book/reference/diagnostics/#observation).
+- Reference: [testing](/reference/testing/).
+- Diagnostics: [`bynk.val.*` errors](/reference/diagnostics/#value-fabrication), [`bynk.observe.*` errors](/reference/diagnostics/#observation).

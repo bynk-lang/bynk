@@ -200,4 +200,4 @@ commons, not per file.
 **See also:**
 [Understand localisation](/book/guides/localisation/understand-localisation/),
 [Format with ICU](/book/guides/localisation/format-with-icu/),
-[Diagnostics](/book/reference/diagnostics/).
+[Diagnostics](/reference/diagnostics/).

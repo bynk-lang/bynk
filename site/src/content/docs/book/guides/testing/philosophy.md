@@ -57,7 +57,7 @@ divide — one names a scenario, the other quantifies over a domain.
 Some values cannot be generated or fabricated blindly — there is no sensible way to
 invent a string matching an arbitrary regular expression — so a bare `Val` (or a
 `for all`) over a `Matches`-refined type is rejected
-([`bynk.val.needs_pin`](/book/reference/diagnostics/bynk.val.needs_pin/)) and you must supply
+([`bynk.val.needs_pin`](/reference/diagnostics/bynk.val.needs_pin/)) and you must supply
 one (a pin, or an `@example` on the type for `Val`); an agent, which has no domain to draw from, cannot be generated at all. The
 language would rather stop than guess.
 
@@ -77,7 +77,7 @@ contract states what one result always guarantees; a `property` earns its keep
 only when the claim is *relational* or *spans calls* — a monotonicity, a
 round-trip — which no per-call postcondition can express. A `case`/`property` that
 merely restates a contract is redundant, and Bynk says so
-([`bynk.contract.restated_by_test`](/book/reference/diagnostics/bynk.contract.restated_by_test/)). The
+([`bynk.contract.restated_by_test`](/reference/diagnostics/bynk.contract.restated_by_test/)). The
 same one predicate surface runs at each rung: `case`, contract, `property`, and
 `invariant` are the *same* predicate, checked over different subjects.
 
@@ -196,4 +196,4 @@ your code.
 - Tutorial: [Test it](/book/tutorials/06-testing/).
 - How-to: [Write tests and stub collaborators](/book/guides/testing/write-tests/).
 - Guide: [Test tiers](/book/guides/testing/integration/).
-- Reference: [testing](/book/reference/testing/).
+- Reference: [testing](/reference/testing/).

@@ -52,7 +52,7 @@ Sequence diagrams draw `do e.detach()` as the open arrow.
 There is no other spelling. A plain `let e = op(a)`, without the `<-`, does not
 build a value you can await later: the call starts as soon as it is built, so it
 would run unawaited, out of order with everything after it. Bynk rejects it
-([`bynk.effect.unbound_effect`](/book/reference/diagnostics/)), as it does an
+([`bynk.effect.unbound_effect`](/reference/diagnostics/)), as it does an
 effect put into a list, an `Option` or a record. Bind it, sequence it with `do`,
 detach it, or return it.
 
@@ -96,12 +96,12 @@ reported as an `Err`, which is correct: the work was abandoned.
 An agent handler can't detach. It runs inside the agent's Durable Object, not a
 request, so there is no execution context to keep a detached effect alive after
 the handler returns, and Bynk rejects the `detach`
-([`bynk.detach.in_agent_handler`](/book/reference/diagnostics/)). Await the effect
+([`bynk.detach.in_agent_handler`](/reference/diagnostics/)). Await the effect
 instead with `let _ <- op(a)` (or `do op(a)`), or detach it from the service
 handler that calls the agent.
 
 A store operation gets its own refusal
-([`bynk.detach.store_op`](/book/reference/diagnostics/)). A store write isn't a
+([`bynk.detach.store_op`](/reference/diagnostics/)). A store write isn't a
 message to anyone: it's staged and committed atomically with the rest of the
 handler, so there is nothing to detach without waiting for. Write it as a plain
 statement:
@@ -133,10 +133,10 @@ finishes.
 ## The removed spelling, `~>`
 
 Before `detach`, the spelling was `~> e`. It is removed: a program that uses it is refused with
-[`bynk.parse.removed_send_arrow`](/book/reference/diagnostics/), which names the replacement.
+[`bynk.parse.removed_send_arrow`](/reference/diagnostics/), which names the replacement.
 Write `do e.detach()`. On v0.603.x, `bynk check --fix` rewrites each one for you; see
-[Upgrading](/book/reference/upgrading/). Unlike `~>`, `detach` accepts an effect of any type,
+[Upgrading](/reference/upgrading/). Unlike `~>`, `detach` accepts an effect of any type,
 because a failure is reported rather than dropped.
 
 **See also:** [Understand the capability model](/book/guides/effects-and-capabilities/understand-the-capability-model/),
-[Reference: detaching an effect](/book/reference/capabilities/#detach).
+[Reference: detaching an effect](/reference/capabilities/#detach).

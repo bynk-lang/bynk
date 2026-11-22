@@ -67,7 +67,7 @@ with, at an exact version. `bynk dev`, `bynk deploy` and `bynk test` install it
 for you, with the package manager you already use, into the build directory
 (`.bynk/dev`, `.bynk/deploy`, `out`), and only when it is missing. For the
 output directory of a plain `bynk compile`, run your package manager's `install`
-there yourself. See [Installing npm packages](/docs/bynk-cli/#installing-npm-packages).
+there yourself. See [Installing npm packages](/reference/tooling/bynk-cli/#installing-npm-packages).
 
 A reply goes out only for a sender whose mail passed DMARC, and only once per
 message. The runtime does the sending, so the handler stays a pure decision.
@@ -101,4 +101,4 @@ suite shop.support {
 Fields after `to` have defaults, so a case writes only what it cares about.
 `bynk test` runs it with no Worker and no mail.
 
-**See also:** [Reference — Inbound email](/book/reference/inbound-email/).
+**See also:** [Reference — Inbound email](/reference/inbound-email/).

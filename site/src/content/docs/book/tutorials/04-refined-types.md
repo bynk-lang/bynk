@@ -12,7 +12,7 @@ Keep editing `shortener.bynk`.
 
 ## Declare a refined type
 
-A [refined type](/book/reference/glossary/#term-refined-type) is a base type plus a
+A [refined type](/reference/glossary/#term-refined-type) is a base type plus a
 predicate, written with `where`. Give the
 shortener real `ShortCode` and `Url` types:
 
@@ -27,7 +27,7 @@ and `InRange(lo, hi)`; string ones like `NonEmpty`, `MinLength(n)`, `MaxLength(n
 `Length(n)`, and `Matches(regex)`. For a code we really want a character set too,
 which `Matches` gives us — `String where Matches("[a-zA-Z0-9]{6,8}")` — but the
 length bounds are enough to see the idea. The
-[refined-type reference](/book/reference/refined-types/) lists every predicate.
+[refined-type reference](/reference/refined-types/) lists every predicate.
 
 Now swap the plain `String` fields in the data model for these types:
 
@@ -150,7 +150,7 @@ fn normalise(code: ShortCode) -> String {
 `code.length()`, `code.slice(0, 3)`, and the rest of the `String` kernel work the
 same way. If you declare your own method on the refined type, yours wins; the
 inherited kernel is only the fallback. See
-[Inherited base methods](/book/reference/refined-types/#inherited-base-methods)
+[Inherited base methods](/reference/refined-types/#inherited-base-methods)
 for the full rule.
 
 ## The file so far

@@ -55,7 +55,7 @@ the object has no other keys. A tagged object with an extra key, such as
 `{"kind": "Some", "value": "d", "note": "x"}`, is read as a bare value instead.
 A bare value is still checked as the inner type, so `"description": 7` is an
 error, and so is that extra-key object.
-See [the JSON codec](/book/reference/types/#the-json-codec) for the full rule.
+See [the JSON codec](/reference/types/#the-json-codec) for the full rule.
 
 ## Decode a third-party payload with reserved-word keys
 
@@ -88,7 +88,7 @@ commons hooks {
 A match pattern names the field the same way, `Account { type: t, .. }`. The
 shorthand `Account { type, .. }` would bind a variable called `type`, which a
 keyword cannot be, so it is an error with a fix to `type: type_`. See
-[reserved words as field names](/book/reference/types/#keyword-field-names).
+[reserved words as field names](/reference/types/#keyword-field-names).
 
 ## Decode straight into a refined type
 
@@ -204,8 +204,8 @@ commons github {
 
 Pass the text as the `body` of a `Fetch.send` request. `Json.decode[NewComment]` reads
 it back, since the decoder accepts both forms. See
-[Plain JSON](/book/reference/types/#plain-json) for the two refusals.
+[Plain JSON](/reference/types/#plain-json) for the two refusals.
 
 **See also:** [Define a refined type and validate untrusted
 input](/book/guides/type-system/define-and-validate/) (the `.of` path, for values you already have in
-hand), and the [type-system reference](/book/reference/types/#the-json-codec).
+hand), and the [type-system reference](/reference/types/#the-json-codec).

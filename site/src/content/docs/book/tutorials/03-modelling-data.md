@@ -16,7 +16,7 @@ Keep editing `shortener.bynk`; we compile it at the end.
 
 ## Records group fields
 
-A **[record](/book/reference/glossary/#term-record)** groups fields into a single
+A **[record](/reference/glossary/#term-record)** groups fields into a single
 value. The shortener needs a request
 body and two response shapes:
 
@@ -59,7 +59,7 @@ export interface ResolveView {
 ## A sum type for errors
 
 Creating or resolving a link can go wrong in a few distinct ways. That is exactly
-what a **[sum type](/book/reference/glossary/#term-sum-type)** expresses — a value
+what a **[sum type](/reference/glossary/#term-sum-type)** expresses — a value
 that is one of several named variants.
 When none of the variants carries a payload, the shorthand is an **enum**:
 
@@ -90,7 +90,7 @@ export const LinkError = {
 
 (A variant can also carry data — `Shipped(tracking: String)` — but our errors are
 plain tags, so an `enum` is the right tool. See the
-[type reference](/book/reference/types/) for payload-carrying variants.)
+[type reference](/reference/types/) for payload-carrying variants.)
 
 ## Read a sum type with `match`
 
@@ -206,4 +206,4 @@ Right now a `code` is any old `String`. Next we sharpen that: how do we stop an
 
 *For the reasoning behind opacity, sums, and immutable records, see
 [The type-system philosophy](/book/guides/type-system/philosophy/). For
-exact rules, see the [type system reference](/book/reference/types/).*
+exact rules, see the [type system reference](/reference/types/).*

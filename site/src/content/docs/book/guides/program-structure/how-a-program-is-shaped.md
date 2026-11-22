@@ -44,10 +44,10 @@ Every Bynk declaration lives in one of two top-level units:
 - **`commons`** — pure, stateless building blocks: types and functions. A
   `commons` compiles to plain TypeScript types and functions. It has no state,
   no effects, and no dependencies on contexts.
-- **[`context`](/book/reference/glossary/#term-context)** — a deployable boundary.
-  Contexts hold [services](/book/reference/glossary/#term-service),
-  [agents](/book/reference/glossary/#term-agent),
-  [capabilities](/book/reference/glossary/#term-capability), and handlers. A
+- **[`context`](/reference/glossary/#term-context)** — a deployable boundary.
+  Contexts hold [services](/reference/glossary/#term-service),
+  [agents](/reference/glossary/#term-agent),
+  [capabilities](/reference/glossary/#term-capability), and handlers. A
   context is the unit Bynk deploys: on the `workers` target, each context becomes
   its own Cloudflare Worker.
 
@@ -61,7 +61,7 @@ a running, deployable piece of your system.
 - **Agents** own state, keyed by identity. See [The agent model](/book/guides/agents-and-state/the-agent-model/).
 - **Capabilities** are dependencies a handler asks for with `given` — an
   interface the context needs but does not itself implement.
-- **[Providers](/book/reference/glossary/#term-provider)** (`provides`) supply an
+- **[Providers](/reference/glossary/#term-provider)** (`provides`) supply an
   implementation of a capability.
 
 ## How the pieces connect

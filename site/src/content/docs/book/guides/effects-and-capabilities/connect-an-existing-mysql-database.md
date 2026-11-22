@@ -67,7 +67,7 @@ MySQL has no `RETURNING`, so `run` reports the `AUTO_INCREMENT` id it inserted a
 `false`, a `BLOB` as base64, a `JSON` column nested. A `DATETIME` or `TIMESTAMP`
 arrives as the server's text, `2026-11-12 09:30:00`, with no zone: read it as a
 `String`. The
-[reference](/book/reference/bynk-capabilities/#mysql-databases-mysql) has the full
+[reference](/reference/bynk-capabilities/#mysql-databases-mysql) has the full
 rules.
 
 **Unsigned integers, flags and dates.** An `Int` is signed, so a `BIGINT UNSIGNED`
@@ -145,7 +145,7 @@ hand, which you adopt with `config_id`. See the
 The Worker needs the `mysql2` npm package, which the build adds to
 `out/package.json` pinned to an exact version. `bynk dev`, `bynk deploy` and
 `bynk test` install it into the build directory with your own package manager
-when it is missing; [`--no-install`](/docs/bynk-cli/#installing-npm-packages)
+when it is missing; [`--no-install`](/reference/tooling/bynk-cli/#installing-npm-packages)
 stops instead, naming the command to run. The connection's password is a secret:
 it is never logged and never appears in an error.
 
@@ -172,6 +172,6 @@ A `schema.sql` at the project root switches on the same check `Postgres` has, wi
 MySQL's parser: `bynk check` counts the `?` placeholders against the list you pass
 (`bynk.mysql.sql_param_count`, an error) and parses the statement
 (`bynk.mysql.sql_invalid`, a warning, since the parser is not MySQL's own). See
-[MySQL SQL checked for syntax](/book/reference/bynk-capabilities/#mysql-sql-checked-for-syntax).
+[MySQL SQL checked for syntax](/reference/bynk-capabilities/#mysql-sql-checked-for-syntax).
 
-**See also:** [Reference: MySQL databases](/book/reference/bynk-capabilities/#mysql-databases-mysql).
+**See also:** [Reference: MySQL databases](/reference/bynk-capabilities/#mysql-databases-mysql).

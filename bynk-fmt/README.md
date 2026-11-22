@@ -18,7 +18,7 @@ reaches it via `bynk-driver`.
 
 Most users format Bynk through the CLI (`bynk fmt`) or format-on-save in the
 editor, rather than depending on this crate directly. See
-[Format your code with `bynk-fmt`](https://bynk-lang.org/docs/editor-and-tooling/format/).
+[Format your code with `bynk-fmt`](https://bynk-lang.org/reference/tooling/editor-and-tooling/format/).
 
 ## Where it sits
 

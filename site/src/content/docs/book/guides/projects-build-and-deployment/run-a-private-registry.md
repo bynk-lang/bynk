@@ -191,7 +191,7 @@ machine: the commands work on a copy of the registry's `config.json`.
 
 ## Related
 
-- [Registry protocol](/docs/registry-protocol/) — what a registry serves.
-- [`[registries]`](/docs/manifest/#registries) and
-  [`[dependencies]`](/docs/manifest/#dependencies).
+- [Registry protocol](/reference/tooling/registry-protocol/) — what a registry serves.
+- [`[registries]`](/reference/tooling/manifest/#registries) and
+  [`[dependencies]`](/reference/tooling/manifest/#dependencies).
 - [Share code between projects](/book/guides/projects-build-and-deployment/share-code-between-projects/).

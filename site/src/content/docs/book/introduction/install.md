@@ -74,7 +74,7 @@ bynk doctor
 `dev`/deploy, editor support — and prints the exact remedy for anything missing.
 It is the recommended first step: the prerequisites above are *checked*, not just
 listed. See [Check your environment with `bynk
-doctor`](/docs/editor-and-tooling/doctor/) for the capability groups, exit
+doctor`](/reference/tooling/editor-and-tooling/doctor/) for the capability groups, exit
 codes, and `--format` outputs.
 
 `bynk` compiles, checks, formats and tests with these commands:
@@ -87,7 +87,7 @@ codes, and `--format` outputs.
 | `bynk fmt`      | Format Bynk source.                                |
 | `bynk test`     | Compile and run `suite` blocks.                     |
 
-See the [CLI reference](/docs/bynk-cli/) for every flag and exit code.
+See the [CLI reference](/reference/tooling/bynk-cli/) for every flag and exit code.
 
 ## Editor support
 
@@ -103,7 +103,7 @@ through the VS Code extension rather than directly. Install it from the
 `bynk-lsp` on your `PATH`, or downloads the matching release if there isn't
 one. It does the same for `bynk`, so with the extension you need no
 separate install or `cargo`: the downloaded tools go on the `PATH` of its
-integrated terminals. See [Set up editor support](/docs/editor-and-tooling/editor-support/).
+integrated terminals. See [Set up editor support](/reference/tooling/editor-and-tooling/editor-support/).
 
 ## Build from source
 
@@ -120,7 +120,7 @@ cargo install --path bynk-lsp
 
 This puts the binaries on your `PATH` (under `~/.cargo/bin` by default). Then
 run `bynk doctor` as above. A build from `main` includes unreleased changes;
-[Unreleased](/book/reference/releases/unreleased/) lists what has changed since
+[Unreleased](/reference/releases/unreleased/) lists what has changed since
 the latest release.
 
 ## Dev Containers / Codespaces

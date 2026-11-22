@@ -1,0 +1,3524 @@
+---
+title: "§5 Static semantics"
+---
+A program that parses ([§3](/reference/spec/lexical-grammar/), [§4](/reference/spec/syntactic-grammar/)) is
+not yet known to be well-formed. This chapter states the **well-formedness
+rules**: the conditions a program MUST satisfy beyond parsing, each tied to the
+`bynk.*` diagnostic a conforming implementation emits when the rule is violated
+([§1.3](/reference/spec/scope/)). A program is well-formed exactly when it provokes no such
+diagnostic.
+
+> [!NOTE]
+> Lexical and grammatical errors — the `bynk.lex.*` and `bynk.parse.*` codes —
+> are *syntactic*: they report a text that does not match the grammar, and are
+> governed by §3 and §4. This chapter covers only **post-syntactic**
+> well-formedness. This note is informative.
+
+The rules are organised by theme. Each theme states its load-bearing rules and
+cites the governing codes; the **exhaustive** code-by-code catalogue is the
+[diagnostic index](/reference/diagnostics/) (and §9). Where a theme maps to a
+single construct, its full set of governing diagnostics is surfaced inline with
+`{{#grammar-semantics}}`.
+
+## §5.1 Name resolution & visibility
+
+Every referenced name MUST resolve to a declaration in scope
+(`bynk.resolve.unknown_name`, `bynk.resolve.unknown_type`,
+`bynk.resolve.unknown_function`, `bynk.resolve.unknown_field`). A name used where
+a value is expected MUST denote a value, not a type (`bynk.resolve.type_in_expr`,
+`bynk.resolve.type_as_function`); a function MUST be called, not referenced bare
+(`bynk.resolve.fn_without_call`).
+
+Within a scope, names MUST be unique: duplicate types, functions, methods,
+services, capabilities, providers, agents, record fields, variants, and
+parameters are each rejected (the `bynk.resolve.duplicate_*` codes). A `let`
+binding MUST NOT shadow a function or a type (`bynk.resolve.let_shadows_fn`,
+`bynk.resolve.let_shadows_type`), but a `let` MAY re-bind a name already bound
+by a prior `let` in the same scope — a deliberate ML-family idiom the
+locals-in-scope tooling (ADR 0064) resolves as "latest in-scope def wins" —
+with each occurrence free to change type. The emitter gives a re-bound name
+its own emitted identifier so each `let` still lowers to a distinct binding.
+
+A unit's top-level declarations share one namespace, except capabilities and
+actors, which each keep their own. A function, an asset, an embed, a constant,
+a type or event, a service, an agent and a provider with a body (by its
+implementation name, `provides Cap = Name`) MUST NOT share a name, across all
+of the unit's files (`bynk.resolve.name_conflict`; two types, or a type and an
+event, are `bynk.resolve.duplicate_type`; two constants are
+`bynk.resolve.duplicate_const`). They are all one scope of the emitted module.
+
+A bare reference to a **named function** is a value only where a function
+type is expected (v0.20a); elsewhere it MUST be called
+(`bynk.resolve.fn_without_call`). A call on an in-scope **value** is legal
+only when the value's type is a function type
+(`bynk.resolve.param_as_function` otherwise) — both judgments are made by the
+checker, with the type information they require; a *type name* is never
+callable (`bynk.resolve.type_as_function`). Call resolution prefers declared
+functions, then variant constructors, then agents, then in-scope values —
+scope-first call resolution would change the meaning of existing programs, so
+the pre-existing ident/call precedence asymmetry is preserved deliberately.
+
+A `commons` is imported with `uses`, which MUST name an existing `commons`, not a
+context, and MUST NOT be self-referential or introduce a colliding name
+(`bynk.uses.unknown_commons`, `bynk.uses.target_is_context`,
+`bynk.uses.self_reference`, `bynk.uses.name_conflict`). The visibility of types
+across context boundaries is governed by `exports` and `consumes`
+([§5.8](#58-boundaries--cross-context)).
+
+`uses` is one level for naming: a unit names the types its `uses` targets
+declare, not the types *they* use. An imported declaration's types are still
+resolved where it was declared. If `t.web uses t.model`, and `t.model uses
+t.core` to declare `type Run = { repo: Repo }`, then in `t.web` a `Run`
+literal's `repo` is checked as a `Repo`, and `r.repo` is a `Repo`. The same
+holds for an imported function's signature, for a reached type's methods, and
+for a type that a consumed context's export reaches through that context's
+`uses`. A reached type MUST NOT be named in the unit (`bynk.resolve.unknown_type`).
+To name it, `uses` its commons. A unit's own declaration MUST NOT share a
+reached type's name when that type's commons is not one the unit `uses`
+(`bynk.uses.name_conflict`), since the imported declaration would then be typed
+by the wrong one.
+
+A unit's own declaration MAY shadow a type of a commons it `uses` directly. An
+imported declaration that names the shadowed type still means its own commons'
+type, so a value MUST NOT cross between the unit's code and such a position
+(`bynk.uses.name_conflict`, at the crossing): a value the unit supplies for a
+record field, a parameter or a variant payload declared with that type, and a
+value the unit takes from one (a field read, a call's result, a bound payload).
+A value moved from one such position directly into another that names the same
+types is not a crossing. If `t.app` declares `type Repo = Int` beside `uses
+t.core` and `uses t.model`, then `Run { repo: first(r) }` is legal in `t.app`,
+and `Run { repo: 42 }` and `r.repo + 1` are not.
+
+A unit's own declaration also shadows a function, asset, embed or constant of
+the same name from a commons it `uses`, whatever the local declaration's kind, as in the
+emitted module: the import is not in scope. Where the local declaration cannot
+answer a reference (a call to a type or service, a bare event name, an asset
+used as a function), the reference is `bynk.uses.name_conflict`, naming both
+declarations. A local declaration that can answer one does: a call to a local
+agent constructs the agent. An unused shadow is legal.
+
+A local value (a function, asset, service, agent or provider) likewise hides a
+type of the same name from a commons the unit `uses`. The type stays
+resolvable, so an imported declaration that uses it still checks and a value
+of it still flows through the unit's code (`isDone(current())`). But the unit
+MUST NOT write its name (`bynk.uses.name_conflict`): not in a type position, a
+construction, a receiver (`Status.Done`), a pattern's qualifier or an `is`
+test, and not by constructing one of its variants bare (`Done`), which names
+the type in the emitted module too. Matching a bare variant is legal. A local
+value that can answer a receiver still does: a suite's `Status.GET("/")`
+addresses a service `Status`, and `Status.url` reads an asset `Status`. A unit
+suite may name no more than its target. A local type or event over an imported
+type is the type shadowing above.
+
+A context's local value MUST NOT share its name with a type a context it
+`consumes` exports (`bynk.consumes.name_conflict`, at the `consumes` clause),
+as a local type of that name already may not.
+
+### §5.1a Module documentation {#module-docs}
+
+A doc-block ([§3.3.2](/reference/spec/lexical-grammar/#332-doc-blocks)) immediately
+above a `commons`, `context` or `adapter` header is that unit's **module doc**.
+A unit whose files share its qualified name
+([§8.3](/reference/spec/compilation-model/#83-source-layout-and-test-ness)) MUST carry
+at most one module doc across all of them: when two or more of its files carry
+one, each such file is rejected (`bynk.project.duplicate_module_doc`), and the
+diagnostic names every such file. A `suite` is not part of the unit it targets,
+so a suite's own doc-block is not counted. Nor is a doc-block whose content is
+empty or only whitespace: it documents nothing, so it is not a module doc.
+
+> [!NOTE]
+> The rule exists so that a unit's documentation is one piece of prose,
+> independent of file order. The tooling shows the module doc on hover over the
+> unit's name (its header, a `uses` target, a `consumes` target) and as the lede
+> of the unit's documentation page, which merges every file of a multi-file
+> unit. This note is informative.
+
+### §5.1b One doc per target {#one-doc-per-target}
+
+A declaration or member ([§3.3.2](/reference/spec/lexical-grammar/#332-doc-blocks))
+MUST carry at most one doc. A doc directly followed by another, of either
+shape, with no blank line between, is rejected (`bynk.parse.multiple_docs`); a
+doc of more than one line is written as a doc-block. A comment or doc in a
+retired spelling ([§3.3.3](/reference/spec/lexical-grammar/#333-retired-spellings))
+is rejected (`bynk.lex.legacy_comment`, `bynk.lex.legacy_doc_line`,
+`bynk.lex.slash_doc`), each with a machine-applicable fix; a retired comment is
+still read as a comment, so no unmigrated source is accepted with another
+meaning.
+
+### §5.1c Unit-private declarations {#private-declarations}
+
+A `type`, `fn` (a free function or a method), `messages`, `asset`, `embed` or
+`const` declaration in a `commons` or `context` MAY carry the `private` modifier
+([§4.1.12d](/reference/spec/syntactic-grammar/#4112d-visibility_modifier)). A
+declaration without it is public, as every declaration was before the modifier
+existed. A private declaration is visible throughout its own unit, across all
+of the unit's files, and to the unit's suites (§5.9). It is never visible
+through `uses`.
+
+- A unit that `uses` a commons does not see that commons' private
+  declarations at all: they are not imported, and so they never conflict with
+  the unit's own declarations or with another import of the same name
+  (`bynk.uses.name_conflict` does not apply to them). A reference from such a
+  unit that resolves to nothing but a private declaration (a call, a type
+  reference, a static or instance method call, an asset, embed or constant
+  name) is rejected (`bynk.visibility.private_item`), naming the declaration and its
+  unit. A reference the unit's own declaration answers is the unit's own.
+- A private type's methods are out of an importer's reach with the type,
+  whether or not they are marked `private`. A private method of a public type
+  hides only that method.
+- A public declaration MUST NOT name a private type of its own unit in its
+  signature: a public function's or method's parameter and return types, a
+  public type's record field types and variant payloads, a public constant's
+  type annotation, and a context's `exports` list
+  (`bynk.visibility.private_in_public`). A method of a private
+  type is exempt. Signatures of services, agents, capabilities, providers,
+  actors and events are not constrained by this rule: how far they reach is
+  governed by `exports` and `consumes` (§5.8), and the cross-context
+  structural rule of §6.5 is unchanged.
+- `private` MUST NOT modify a `service`, `agent`, `capability`, `provides`,
+  `actor` or `event` declaration, nor any declaration in an `adapter`
+  (`bynk.visibility.private_not_allowed`).
+- A context negotiates its locale (`Locale.current()`) against the bundle of
+  a commons it `uses` only when that bundle's `@reference` block is public. A
+  private `@reference` block keeps the whole bundle out of every such
+  context; the commons' own `render` still reads every block. `private` on a
+  `messages` block warns (`bynk.visibility.private_messages`): on the
+  `@reference` block because no context will negotiate against the bundle,
+  and on any other block of a bundle whose reference is public because it
+  has no effect.
+- A `system` suite (§5.9) may name every type a participant context
+  declares, its private types included, although a context that `consumes`
+  the participant may not: a harness test often needs to build or inspect a
+  value the system keeps to itself. The suite's own `uses` commons keep their
+  private declarations, as in any other unit.
+
+Visibility is a naming rule only. It does not change what a declaration
+means, how it is checked within its own unit, or what is emitted for it. A
+private `asset` is still served publicly by the platform, since that is what
+an asset is: the modifier hides its *name* from importers, not its file.
+
+## §5.2 Well-typedness
+
+Every expression MUST have the type its position requires. A function or method
+argument MUST match the parameter type (`bynk.types.argument_mismatch`), and a
+call MUST supply the right number of arguments (`bynk.resolve.arity_mismatch`,
+`bynk.types.method_arity`). A returned value MUST match the declared return type
+(`bynk.types.return_mismatch`); a `let` value MUST match any annotation
+(`bynk.types.let_annotation_mismatch`); a record field MUST be given a value of
+its type (`bynk.types.field_value_mismatch`), and every field without a default
+([§5.2b](#field-defaults)) MUST be supplied (`bynk.resolve.missing_field`).
+
+An `if` condition MUST be a `Bool` and both branches MUST **join** to a common
+type — their least upper bound, so a refined type and its base (or two refined
+types over one base) agree at the base, but unrelated types do not
+(`bynk.types.if_non_bool_cond`, `bynk.types.if_branch_mismatch`). The payloads of
+`Ok`, `Err`, `Some`, and the like MUST match the expected component type (the
+`bynk.types.*_value_mismatch` codes). A bare `Ok` takes `Result` or `HttpResult`
+from its expected type when that type is either, and otherwise from the enclosing
+return type, so it is never ambiguous (#1659).
+
+The operands of `==` and `!=` are same-typed, so one operand's type is the
+expected type for the other. An operand that can take its type only from its
+context — a bare `None`, `Ok(…)`, `Err(…)`, an empty list, or an `HttpResult`
+or `QueueResult` variant (`NotFound`, `BadRequest("…")`, `HttpResult.NotFound`,
+`Ack`, `Retry("…")`) — is typed against the other operand, so
+`r == BadRequest("msg")` and `r != NotFound` type-check for
+`r: HttpResult[String]`. A variant with nothing to infer from keeps the `()`
+payload fallback; `expect r is …` is unchanged (#2839).
+
+**The bottom type and deliberate faults** (#2620). `unreachable(message)` and
+`todo(message)` are ambient built-in functions, not keywords: each takes one
+`String` (`bynk.types.argument_mismatch`, `bynk.types.call_arity`), and a `fn`,
+parameter or local of the same name shadows the built-in, as `Json` is shadowed.
+A call has the internal **bottom type** `Never`, which is assignable to every
+type and is absorbed by every join — the join of `Never` and *T* is *T*, and of
+two `Never`s is `Never` — so such a call fits a `match` arm, an `if` branch, a
+function body or a lambda body of any type without poisoning the type of the
+whole. `Never` is not nameable in source (there is no `-> Never`); diagnostics
+and hover render it as "never returns". An `unreachable` arm is still an arm, so
+exhaustiveness is unchanged. Both are valid in pure and
+effectful positions; in an `Effect[T]` position the fault happens when the effect runs.
+`todo` additionally reports the non-failing warning `bynk.fault.todo` (ADR 0117),
+which `check --deny-warnings` turns into a refusal. Errors-as-values remains the
+rule for expected failure: there is deliberately no general `panic`.
+
+**Lambdas** (v0.20a). Against an expected function type, a lambda's
+parameters take the expected types (an annotation MUST agree), its body is
+checked against the expected return — a pure body auto-lifts into an
+effectful expectation — and arity MUST match (`bynk.types.lambda_mismatch`).
+In a position with no expected function type, every parameter MUST be
+annotated (`bynk.lambda.unannotated_param`) and the lambda's type is read off
+its body: a body that performs an effect operation (an `<-` bind, a
+capability call, a call returning `Effect`) makes the lambda **effectful**,
+wrapping its result in `Effect` — effectfulness is judged by the *presence*
+of effect operations, never by a pre-declared result type, which is what
+dissolves the apparent circularity. A nested lambda's effects are its own.
+
+A lambda parameter MAY be an irrefutable record pattern (#2712, patterns track
+slice 6; [§4.6.9b](/reference/spec/syntactic-grammar/#469b-lambda_param)). The pattern
+counts as one parameter, so the arity rule is unchanged. Its type is the expected
+parameter type when there is an expected function type — and the pattern is then
+checked against it by the record-pattern rules below, so a pattern naming another
+type is `bynk.types.pattern_type_mismatch` at the pattern and a generic record
+takes its type arguments from the expectation. With no expected function type it
+is the record the pattern names, as if annotated, when that record is not
+generic; a generic one has nothing to supply its type arguments, so it is
+`bynk.lambda.unannotated_param`. Field existence, duplicate fields and
+`bynk.context.opaque_inspection` are the record pattern's own (§5.6). The names
+the pattern binds are in scope in the lambda body.
+
+**Value application** (v0.20a). Applying a function-typed value checks
+arguments against the function type's parameters
+(`bynk.types.argument_mismatch`, `bynk.types.call_arity`).
+
+**Recursion** (#2612). A function MAY call itself, and functions MAY call one
+another in a cycle: a free function, a generic function, and a method alike. A
+call cycle stays within one unit, because `uses` clauses may not form a cycle;
+a recursive function in a unit another `uses` is called like any other function.
+A recursive call is checked like any other call, and a recursive generic
+function instantiates its type parameters at each call as usual. A lambda has no
+name of its own, and a `let` binding is not in scope in its own initialiser, so
+`let f = (x) => f(x)` is rejected (`bynk.resolve.unknown_function`): a lambda
+cannot call itself. Termination is not checked: a well-formed program may recurse without
+bound, and what happens at run time is specified in
+[§7.3.2](/reference/spec/emission/#732-expressions): a direct self call in tail
+position runs in constant stack, and any other recursion is bounded by the
+host's stack.
+
+A free function cannot name a capability ([§5.5](#55-effects-capabilities--providers)),
+so it cannot perform an effect of its own accord. It can perform the effects of
+an effectful function value it is given, so a recursive function can drive
+capability calls on behalf of the handler that passed it one:
+
+```bynk
+commons loops {
+	fn repeat(n: Int, step: Int -> Effect[()]) -> Effect[()] {
+		if n <= 0 {
+			Effect.pure(())
+		} else {
+			do step(n)
+			repeat(n - 1, step)
+		}
+	}
+}
+```
+
+Iteration over a collection is the kernel's (`fold`, `forEach`, the traverse
+family, [§5.10](#510-collections)), which needs no recursion and has no depth
+limit; recursion is for structures and loops the kernel does not cover, and a loop
+written as a self tail call (an accumulator) has no depth limit either.
+
+**Numeric operators** (v0.21). The arithmetic operators `+ - * /` are
+defined on `Int` operands (yielding `Int`) and on `Float` operands
+(yielding `Float`). They MUST NOT mix the two: an `Int` and a `Float`
+operand in the same operation is `bynk.types.no_numeric_coercion` — there
+is **no implicit numeric coercion** in either direction. The same rule
+applies to the comparison operators `< <= > >=` and to `==`/`!=`. Refined
+numeric types widen to their base in operator positions, as before.
+
+**Ordering** (constrained generics, slice 1). `< <= > >=` accept two operands
+of the **same `Ord` type**; a type that is not `Ord` is
+`bynk.types.not_orderable`. A type is `Ord` when it is one of:
+
+- `Int`, `Float`, `String`, `Duration`, `Instant` or `Bytes`, or a refined type
+  over one of them;
+- `Option[T]` or `List[T]` where `T` is `Ord`;
+- a record, sum, enum or opaque type that declares `derives Ord` (§4.2.1),
+  provided every field and payload type is `Ord`
+  (`bynk.types.derives_field_not_orderable` otherwise). A generic one is `Ord`
+  at an instantiation whose type arguments are;
+- a type parameter declared `T: Ord`.
+
+`Bool`, `Result`, `Map`, `Set`, function types and held resources are not `Ord`,
+and an opaque type is `Ord` outside its defining unit only if it declares
+`derives Ord`. A type with no `derives Ord` is never ordered implicitly, because
+opting in makes declaration order significant.
+
+Every `Ord` type has a **total order**, and an implementation MUST compute it as
+follows:
+
+- `Int`, `Duration` and `Instant` order numerically; a refined type orders as
+  its base.
+- `String` orders by **UTF-16 code unit**, element by element, a proper prefix
+  first. This is not Unicode code-point or locale order.
+- `Bytes` orders **lexicographically over unsigned octets**, a proper prefix
+  first.
+- `Float` orders as a **total order**: `NaN` sorts after every other value and
+  equals itself, and `-0.0` equals `0.0`. This applies wherever the order is
+  used as an order, that is the ordering kernels (`sortBy`, `min`, `max`),
+  `bynk.list.sort`/`min`/`max`, and every `T: Ord` witness. The operators
+  `< <= > >=` on `Float` keep the IEEE meaning (`NaN < x` is `false`), and
+  `==` is unchanged.
+- `Option` orders `None` before every `Some`, and `Some` by payload.
+- `List` orders lexicographically by element, a proper prefix first.
+- A record orders by its fields in **declaration order**, the first differing
+  field deciding.
+- A sum or enum orders by **variant declaration order**, then by payload (fields
+  in declaration order) between two values of the same variant.
+
+Reordering the fields or variants of a `derives Ord` declaration therefore
+changes how its values sort. The contract hash ignores field and variant
+order, so the change is not a contract change.
+
+**Equality is structural** (#1652). `==`/`!=` compare **values**, not
+references. Two records are equal when every field is equal; two sum values when
+they are the same variant with equal payloads; two `Option`/`Result`/`List`/`Map`
+values element by element; two `Bytes` byte by byte. This holds at any depth, and
+for an opaque type it compares the representation. `==` is defined only on an
+**equality-supporting** type: a type that contains a function, `Effect`, `Query`,
+`Stream` or held `Connection` **anywhere** inside it (in a field, a payload, a
+container element, or a generic argument written in the type, such as
+`Box[(Int) -> Int]`) is not equality-supporting, and `==` on it is rejected
+(`bynk.types.not_comparable`, `bynk.types.stream_not_comparable`,
+`bynk.types.held_not_comparable`). Inside a generic function or method, `==` on
+a type that mentions a type parameter is accepted only when that parameter is
+**declared `Eq`** (or `Ord`, which implies it): by a `T: Eq` bound on the function, a `where A: Eq` entry on
+a method (for its receiver type's parameter), or a bound its receiver type
+declares; otherwise it is `bynk.generics.missing_eq_bound`. Passing a type
+parameter to an `Eq`-bounded parameter of another generic is the same rule,
+reported at the call, so a bound is declared at every link of a chain of calls.
+Each call MUST instantiate an `Eq`-bounded parameter with an equality-supporting
+type (the same codes, reported at the call: `same(f, h)` on two functions is
+rejected for `fn same[T: Eq](a: T, b: T) -> Bool { a == b }`, and `b.has(dec)`
+for `fn Box.has(self, x: A) -> Bool where A: Eq { self.value == x }` on a
+`Box[(Int) -> Int]`). Every `missing_eq_bound` carries a machine-applicable fix
+that adds the bound. One case is not yet checked, and
+falls back to comparing such values by identity: a record imported from another
+unit is not walked through its fields. A nullary variant read from storage or decoded
+from JSON equals the same variant written in source.
+
+**`Decimal` arithmetic** (#2622). `Decimal` is an exact base-10 type. `+`, `-` and
+`*` on two `Decimal` operands, and unary `-`, are exact: a sum or difference has
+the larger of the two scales, a product the sum of them, and the result is never
+rounded. `/` is rejected (`bynk.types.decimal_division_unscaled`); division is
+`a.div(b, scale, mode)`, the quotient at exactly `scale` fraction digits rounded
+by `mode`, and a zero divisor faults. The `scale` of `div` and `round` MUST be an `Int` from 0 to 100; any other scale faults. More generally every `Decimal` MUST have a scale of 0 to 100 and canonical text of at most 1000 characters, and an operation (`+`, `-`, `*`, `round`, `div`, `Decimal.fromInt`) whose result would break that faults at the operation; a literal that would is `bynk.lex.decimal_literal_too_large`. `d.round(scale, mode)` returns `d` at
+exactly `scale` fraction digits: a larger scale pads with zeros, a smaller one
+rounds by `mode`. `mode` is written `RoundingMode.<mode>` for one of `Down`,
+`Up`, `Floor`, `Ceiling`, `HalfUp`, `HalfDown`, `HalfEven`, read where the
+rounding happens, and is not a first-class value
+(`bynk.types.unknown_rounding_mode`, `bynk.types.rounding_mode_position`). A
+`Decimal` and an `Int` or `Float` operand never mix, in arithmetic or in
+comparison (`bynk.types.no_numeric_coercion`). `==` and the ordering operators
+compare by numeric value, so `1.20 == 1.2`. The kernel also has `scale()`,
+`toString()`, `abs()`, `min`, `max`, `toInt() -> Option[Int]` (`Some` only for a
+whole number in the safe-`Int` range) and `toFloat()`; the statics are
+`Decimal.parse(s) -> Option[Decimal]` (plain decimal text only) and
+`Decimal.fromInt(n)`.
+
+**`Float` equality** (v0.21). `==`/`!=` on `Float` follow the host's IEEE
+754 semantics, and both classic surprises apply: `0.1 + 0.2 != 0.3`
+(decimal fractions are not exact doubles), and a `NaN` produced by
+arithmetic is **unequal to itself**, including inside a record or a list
+(structural equality compares each `Float` with these same semantics). Exact `Float` equality is rarely the
+test a program needs — compare with an explicit tolerance, or use `Decimal`
+for a quantity that must be exact, such as money
+([§6.1.1](/reference/spec/type-system/#611-base-types)). Division by zero and overflow in `Float` arithmetic follow
+the host (`Infinity`/`NaN`); no Bynk-level guard applies **in arithmetic**
+(boundaries are guarded: [§7.2](/reference/spec/emission/#72-targets)).
+
+**The `Int` domain** (#1657). An `Int` is a JS **safe integer**, from
+−(2^53 − 1) to 2^53 − 1 (±9007199254740991), the range the runtime represents
+exactly. Every entry point enforces it:
+- **literals:** an integer literal with a larger magnitude is
+  `bynk.lex.integer_overflow`;
+- **the JSON boundary:** decoding rejects a number that is not a safe integer
+  (`1e300`, `3.5`), and encoding an `Int` that is not one faults rather than
+  writing `null`;
+- **`Int.parse`:** see below;
+- **`Int` division by zero:** a runtime fault, not `Infinity`/`NaN`;
+- **`round`/`floor`/`ceil`/`truncate`:** a runtime fault when the result is not a
+  safe integer (a non-finite `Float`, or one past ±2^53).
+
+Overflow in `Int` `+`, `-` and `*` is not checked: past 2^53 the result is
+imprecise, as host arithmetic is (ADR 0042, "arithmetic host-defined,
+boundaries guarded"). Such a value can still not leave through a boundary
+undetected.
+
+**The numeric kernel** (v0.21, extended v0.22a). Conversion between the
+numeric types is explicit, via built-in value methods on the bare base
+types: `i.toFloat() -> Float` (total) on `Int`; `f.round()`, `f.floor()`,
+`f.ceil()`, `f.truncate()` (each `-> Int`, named and lossy) on `Float` —
+there is deliberately no ambiguous `toInt`. v0.22a (ADR 0048) adds, on
+**both** numeric types, `x.abs()`, `a.min(b)`, `a.max(b)`, and
+`x.clamp(lo, hi)` (arguments take the receiver's type — mixing is the
+no-coercion error), and on `Float` only, `f.isNaN()` and `f.isFinite()`
+(`-> Bool`). v0.42 (ADR 0074) adds `x.toString() -> String` on **both** types
+(total — the render direction `Int.parse` lacks); for `Float` the result is the
+**host's number→string** (ECMAScript `Number::toString` — shortest round-trip),
+pinned to the platform the same way ADR 0046 pins the string kernel. Wrong arity
+is `bynk.types.method_arity`; an unknown method on a numeric receiver is
+`bynk.types.method_not_found`.
+
+**Integer division companions and power** (standard-library K6b, #2598). On
+`Int`, each faulting on a zero divisor as `/` does:
+- `a.rem(b)` is the remainder of `/` (which truncates). It takes the
+  dividend's sign: `(-7).rem(2) == -1`, and `a == b * (a / b) + a.rem(b)`.
+- `a.div(b)` is floor division (`(-7).div(2) == -4`), and `a.mod(b)` its
+  remainder, taking the divisor's sign: `(-7).mod(2) == 1`, and
+  `a == b * a.div(b) + a.mod(b)`. For a positive `n`, `x.mod(n)` is in
+  `0..n-1`.
+- `a.pow(n)` is an exact power. A negative `n` faults (there is no `Int`
+  result), and so does a result past ±(2^53 − 1). Unlike `*`, whose overflow
+  is unchecked, `pow` overflows too readily for an imprecise result to be
+  tolerable. `0.pow(0) == 1`.
+
+**Bitwise operations** (#2621). On `Int`, as methods (no operator, so no
+grammar change): `a.and(b)`, `a.or(b)`, `a.xor(b)`, `a.andNot(mask)` (the bits
+of `a` not in `mask`), `a.shl(n)` and `a.shr(n)`, each `-> Int`. They are exact
+over the whole safe-integer range, not the 32 bits of the host's own operators,
+so `1.shl(40).or(5).and(5) == 5`; values past 2^31 are slower than native ops.
+Operands must be non-negative (a sign-magnitude domain has no two's complement),
+so a negative operand faults, which is also why there is no `not`. A shift
+count outside `0..52` faults, as does an `shl` whose result passes 2^53 − 1;
+`shr` floors, and is the logical shift.
+
+**`Float` functions** (K6b). On `Float`: `f.sqrt()`, `f.pow(y)`, `f.exp()`,
+`f.ln()`, `f.log10()`, `f.log2()`, and in radians `f.sin()`, `f.cos()`,
+`f.tan()`, `f.asin()`, `f.acos()`, `f.atan()` and `y.atan2(x)` (the angle of
+the point `(x, y)`), each `-> Float`. They are the host's `Math` functions, so
+outside a function's domain the result is host-defined like the rest of `Float`
+arithmetic (ADR 0042): `(0.0 - 1.0).sqrt()` is `NaN` and `0.0.ln()` is
+`-Infinity`, with no fault. The statics `Float.pi()` and `Float.e()` give the
+two constants.
+
+**The numeric parse statics** (v0.22a). `Int.parse(s) -> Option[Int]` and
+`Float.parse(s) -> Option[Float]` — statics, per 0041's rule (ways to
+*obtain* a value). Parsing is **full-string** in a strict decimal grammar
+(#1657): `Int.parse` accepts `[+-]?[0-9]+` only, and `Float.parse` accepts
+`[+-]?` then digits with an optional fraction (`5.`, `.5`), then an optional
+exponent (`1e3`). Anything else is `None`: surrounding whitespace, a
+`0x`/`0b`/`0o` prefix, an exponent or fraction in an `Int`, the empty string.
+A value outside the safe-integer range (`Int`) or non-finite (`Float`) is `None`,
+and `Int.parse("-0")` is `0`. `parse` is the only static on the numeric types
+(`bynk.resolve.unknown_static_member`).
+
+**The string kernel** (v0.22a, ADR 0046). `String` is opaque — no direct
+character access — so its operations are built-in value methods:
+`s.length() -> Int`, `s.split(sep) -> List[String]`, `s.trim()`,
+`s.toUpper()`, `s.toLower()`, `s.concat(t)`, `s.contains(sub)`,
+`s.startsWith(sub)`, `s.endsWith(sub)` (`-> Bool`),
+`s.replace(a, b)`, `s.slice(lo, hi)`, `s.indexOf(sub) -> Option[Int]`,
+and `s.chars() -> List[String]`. **Semantics are UTF-16 code units**,
+normatively, with two pinned exceptions: `replace` replaces **every**
+occurrence (not TS's first-only string form) and inserts `b` **literally**
+(no `$&`, `$1`, `` $` ``, `$'` or `$$` expansion, #1650), and `chars()` splits by
+**code points** (so `s.length() != s.chars().length()` when `s` contains
+astral characters). `slice` clamps negative indices to `0` — there is no
+wrap-around. `indexOf` returns `None` for a missing substring, never a
+sentinel `-1`.
+
+**Percent-encoding** (standard-library K2, #2594) works on the **UTF-8 bytes**,
+not code units. `s.percentEncode() -> String` keeps RFC 3986's unreserved set
+(`A–Z a–z 0–9 - . _ ~`) and writes every other byte as `%XX` in upper-case hex,
+so `! ' ( ) *` are encoded too, and a lone surrogate is encoded as U+FFFD.
+`s.percentDecode() -> Option[String]` reads `%XX` in either case and is `None`
+for a `%` without two hex digits after it, or for bytes that are not UTF-8; it
+leaves `+` as `+`. `percentDecode(percentEncode(s))` is `Some(s)`. URL structure
+is the `bynk.url` commons, written in Bynk over these.
+
+**Regular expressions** (standard-library K6c, #2600). Six string methods take a
+pattern: `s.matchesRegex(p)` (the whole string, anchored as `Matches` is) and
+`s.containsRegex(p)` (anywhere), `-> Bool`; `s.findRegex(p) ->
+Option[List[Option[String]]]` (the first match: element 0 the whole match,
+element `i` group `i`, `None` for a group that did not take part);
+`s.findAllRegex(p) -> List[List[Option[String]]]` (every match, left to right,
+an empty match advancing by one code unit); `s.replaceRegex(p, with) -> String`
+(every match, `with` read with JS replacement syntax: `$1`, `$<name>`, `$&`,
+`$$`); and `s.splitRegex(p) -> List[String]` (JS `split`, without the captured
+groups it would splice in).
+- The pattern MUST be a string literal (`bynk.types.regex_not_literal`), so it is
+  checked at compile time exactly as a `Matches` pattern is: ECMAScript syntax
+  (`bynk.types.invalid_regex`), no nested unbounded quantifier the analysis
+  cannot prove unambiguous, and no ambiguity it finds (`bynk.types.catastrophic_regex`,
+  `bynk.types.polynomial_regex`; no length bound can excuse a polynomial one
+  here).
+- Semantics are JS `RegExp` with `Matches`' flag set: no `u`, so `.` and
+  classes work on UTF-16 code units. A pattern may open with one inline-flag
+  group, `(?i)`, `(?m)`, `(?s)` or a combination, which becomes the `RegExp`
+  flags; an unknown or repeated flag is `invalid_regex`. The ambiguity analysis
+  runs under those flags: under `s`, `.` matches every code unit, and under
+  `i`, every character set is case-folded, so `(?i)(a|A)+` is refused.
+- `matchesRegex` anchors with lookarounds, `(?<![\s\S])(?:…)(?![\s\S])`,
+  not `^…$`, so an `m` flag cannot turn it into a line match.
+
+**Refined receivers inherit the base kernel** (v0.143, ADR 0168). A method
+call whose receiver is a **refined** type resolves against that type's declared
+instance methods first; on a miss, it resolves against its **base type's
+read-only kernel** — the numeric, string, `Duration`, `Instant`, and `Bytes`
+kernels above. The result is **base-typed**: `n.toUpper()` on a `Name = String
+where …` has type `String`, never `Name` — the same widening a refined value
+already undergoes in arithmetic (D2/D3) and comparison. A declared method always
+takes precedence over the inherited kernel, so it can never be shadowed. `Bool`
+has no kernel, so a `Bool`-based refinement inherits nothing. An **opaque** type
+does **not** widen and therefore inherits nothing — a kernel call on an opaque
+receiver stays `bynk.types.method_not_found`. Refined arguments to an inherited
+method widen to the base like any other argument.
+
+**String interpolation** (v0.43, ADR 0075). An interpolated string
+`"… \(e) …"` has type `String`. Each hole expression `e` must have type
+`String`, `Int`, `Float`, `Bool`, `Decimal`, or a **refinement** of one of those (which
+widens to its base for display) — these are the types with a well-defined
+string form (`Int`/`Float` via the ADR 0074 `toString` contract, `Bool` as
+`true`/`false`, `Decimal` as its canonical text per ADR 0698). Any other hole type — `record`, `sum`, `Option`, `Result`,
+`List`, an opaque type (whose base is hidden — `.raw` it first), … — is a
+static error (`bynk.types.interpolation_non_scalar`): map the value to a
+`String` first. This includes the remaining base types — `Bytes` (`toHex()`,
+`toBase64()`), `Duration` (`toString()`) and `Instant` (`toIso()`,
+`toString()`) — whose string form is a choice, not a default. The conversion is implicit only here, in a display context; it
+does **not** generalise to arithmetic or comparison (ADR 0046 is unchanged —
+`+` stays numeric, `concat` stays a method).
+
+**The `Option`/`Result` kernel** (v0.22a, ADR 0048). The combinators are
+built-in value methods on the compiler-known generic receivers — *not*
+free functions, which would collide by bare name on `uses` import
+(`bynk.resolve.duplicate_fn`). On `Option[T]`: `o.map(f)`,
+`o.andThen(f)` (the function MUST return an `Option`), `o.getOrElse(x)`,
+`o.isSome()`, `o.isNone()`, `o.orElse(f)` (`f: () -> Option[T]`, run only
+on `None`), `o.filter(p)` (`p: T -> Bool`), `o.okOr(e) -> Result[T, E]`.
+On `Result[T, E]`: `r.map(f)`,
+`r.andThen(f)` (the function MUST return a `Result` with the receiver's
+error type), `r.mapErr(f)`, `r.getOrElse(x)`, `r.isOk()`, `r.isErr()`,
+`r.ok() -> Option[T]` (#2838; there is no `flatMap` alias of `andThen`
+on either type). The function
+argument's parameters type contextually from the receiver and its return
+is read from the actual (the v0.20a pass-2 rule) — so a lambda body that
+itself needs an expected type (a bare `Ok`/`Err`/`None`/`[]`) annotates a
+`let`, exactly as with lambdas passed to generic calls.
+
+```bynk
+commons checkout {
+	fn parseQty(s: String) -> Int {
+		Int.parse(s.trim()).map((n) => n.clamp(1, 99)).getOrElse(1)
+	}
+
+	fn label(name: Option[String]) -> Result[String, String] {
+		name.map((n) => n.toUpper()).okOr("missing name")
+	}
+}
+```
+
+**The `Effect[Result[T, E]]` kernel** (v0.152, ADR 0176 — design doc §2.8.3).
+`Effect[Result[T, E]]` is the universal shape of cross-context calls, and the
+volume of that composition earns four compiler-synthesised combinators directly
+on the receiver — so success/error reshaping and effectful recovery need no
+intervening `<-` peel and `match`:
+
+| Method | Result |
+|---|---|
+| `e.mapOk(f: T -> U)` | `Effect[Result[U, E]]` |
+| `e.mapErr(f: E -> F)` | `Effect[Result[T, F]]` |
+| `e.flatMapOk(f: T -> Effect[Result[U, E]])` | `Effect[Result[U, E]]` |
+| `e.flatMapErr(f: E -> Effect[Result[T, F]])` | `Effect[Result[T, F]]` |
+
+`mapOk`/`mapErr` map the two sides of the success/error split; `flatMapOk`
+chains a further effectful-fallible step on success (keeping the single error
+type `E`, exactly as `?` does); `flatMapErr` attempts an effectful recovery on
+error (its recovery MUST produce the receiver's success type `T`). The naming is
+verb-first, matching `map`/`mapErr` on `Result`. A method outside the four is
+`bynk.types.method_not_found`; a `flatMapOk`/`flatMapErr` argument that does not
+return `Effect[Result[…]]`, or whose error/success side does not line up, is
+`bynk.types.combinator_return_mismatch`. Only an `Effect` wrapping a
+`Result` carries these — any other `Effect[_]` has no kernel methods. Unlike the
+eager `List.forEach`/`traverseTry` iterators, these **produce** an `Effect`
+rather than running one, so they are **not** effectful-context-confined: a pure
+helper may reshape an `Effect[Result[…]]` it was handed and return it. `.map`
+and `.flatMap` on such a receiver remain Effect's own (operating on the whole
+`Result`); the four named methods remove the "which `.map`?" ambiguity. Other
+`Effect`-of-X shapes (`Effect[Option[T]]`, `Effect[List[T]]`) have no synthesised
+methods — write `e.map((r) => …)` explicitly.
+
+**Declared error embeddings and `?` conversion** (v0.154, ADR 0178). A sum type
+MAY declare error embeddings — `type OrderError = … embeds PaymentError as
+Payment, ScheduleError as Fulfilment` — where each `embeds E as V` names a
+variant `V` of the same sum that MUST have **exactly one payload field, of type
+`E`** (`bynk.types.embeds_unknown_variant` if `V` is not a variant;
+`bynk.types.embeds_variant_shape` if its shape does not match). A given source
+type MAY be embedded by at most one variant, so the conversion is unambiguous
+(`bynk.types.embeds_ambiguous`). The `?` operator then uses the embedding: in a
+function returning `Result[_, F]` (or `Effect[Result[_, F]]`), applying `?` to a
+`Result[T, E]` propagates as before when `E` matches `F`, and otherwise — when
+`F` declares `embeds E as V` — **auto-wraps** the `Err(e)` into `Err(F.V(e))`
+instead of requiring a manual `.mapErr`. The conversion is **one level**: `E`
+must match a declared embedding of `F` directly. When neither the types match
+nor an embedding applies, it is `bynk.types.question_error_mismatch`.
+
+**`Json.encodePlain`** (ADR for #2991). `Json.encodePlain(v) -> String` has `Json.encode`'s
+rules and the same domain, and writes an `Option[U]` as `u` / `null` (the form of a plain
+route, [§5.7.5](/reference/spec/static-semantics/#response-json)). It is refused when the type
+of `v` contains an `Option` whose payload can encode as `null`
+(`bynk.json.nested_option_plain`, the injectivity rule of §5.7.5), or mentions a type
+parameter (`bynk.json.encode_plain_generic`).
+
+**The typed JSON codec** (v0.22b, ADR 0045). `Json.encode(v) -> String` and
+`Json.decode[T](s) -> Result[T, DecodeError]` are compiler-backed statics on
+the built-in `Json` module: `encode` dispatches to the generated
+`__serialise_<T>` for the value's checked type; `decode` to `JSON.parse` +
+`__deserialise_<T>`. The **domain of `T`** (and of `encode`'s argument) is any
+boundary-legal shape — base types, named types, and the built-in containers
+over them; functions, effects, `HttpResult`, the error builtins, a `bynk.crypto` key
+(`SigningKey`, `VerifyKey`) at any depth, and
+type variables are `bynk.types.json_uncodable`, except a type parameter declared
+`T: Codable`, which `Json.encode` and `Json.decode[T]` accept inside the generic
+function (the call site passes the codec; an unbounded one is
+`bynk.generics.missing_codable_bound`). A generic record or sum applied to such a
+type parameter (`Box[T]` with `T: Codable`) is in the domain too; its codec is built
+from the declaration and the codecs of its arguments, and agrees with the codec for
+a concrete instantiation. `decode`'s target is given
+explicitly (`Json.decode[Order](s)`, any boundary-legal type-ref including
+`Json.decode[List[Order]]`) or inferred from an expected
+`Result[T, DecodeError]`; with neither, `bynk.generics.uninferable_type_arg`.
+`encode` is `-> String` but **throws on a value containing a non-finite
+`Float`** — the 0040 contract violation, documented rather than `Result`-ified
+(the program itself created that state). A user-declared type named `Json`
+shadows the built-in module.
+
+**`Yaml.decode`** (#3214). `Yaml.decode[T](s) -> Result[T, DecodeError]` is a
+compiler-backed static on the built-in `Yaml` module, typed exactly as
+`Json.decode[T]` is: the same domain of `T` (`bynk.types.json_uncodable` otherwise,
+worded "decoded from YAML"), the same explicit or inferred type argument
+(`bynk.generics.uninferable_type_arg`), the same `Codable` rule for a type
+parameter. `Yaml` has no other static: `Yaml.encode` is
+`bynk.resolve.unknown_static_member`, and `Yaml.decodeSql` does not exist. A
+user-declared type named `Yaml` shadows the built-in module. The text is parsed as
+YAML 1.2 by the rules of [§7.3.9a](/reference/spec/emission/#739a-the-yaml-decoder), and the resulting
+JSON-shaped value is decoded by the same `__deserialise_<T>` as `Json.decode`, so
+field defaults, `Option`, refinements, the nesting bound and the `$.path` of an
+error are `Json.decode`'s.
+
+**`DecodeError`** (v0.22b, ADR 0047). The decode error is a compiler-known
+record — `kind`, `path`, `message`, all `String` — putting a boundary
+failure in the program's hands for the first time (the `ValidationError`
+precedent). `kind` is `"Malformed"` for unparseable input, else the
+boundary kind (`"StructuralMismatch"`, `"RefinementViolation"`), or, for
+`Yaml.decode`, one of the refusal kinds of [§7.3.9a](/reference/spec/emission/#739a-the-yaml-decoder); `path` is
+the tracked field path (`$.items[2].qty`); decode failures are runtime
+values, never compile diagnostics. The type was named `JsonError` until it
+became the error of every decoder (ADR 0047 is amended); `JsonError` remains a
+reserved, deprecated spelling of the same type, and a use of it is the warning
+`bynk.types.deprecated_json_error` with a machine-applicable fix.
+
+```bynk
+commons store {
+	type Item = {
+		sku: String,
+		price: Float,
+		qty: Int,
+	}
+
+	fn snapshot(i: Item) -> String {
+		Json.encode(i)
+	}
+
+	fn restore(s: String) -> Result[Item, DecodeError] {
+		Json.decode[Item](s)
+	}
+
+	fn restoreError(s: String) -> String {
+		match Json.decode[Item](s) {
+			Ok(i) => i.sku,
+			Err(e) => e.kind.concat(" at ").concat(e.path),
+		}
+	}
+}
+```
+
+**Generic instantiation** (v0.20a). A generic function's type arguments are
+inferred from its arguments by argument-directed unification: non-lambda
+arguments first, left to right; lambda arguments after, against the
+substituted expectations — a lambda whose expected *parameter* types remain
+undetermined is rejected unless fully annotated, and an expected *return*
+variable is captured from the lambda's actual type. Conflicting inferences
+MUST agree exactly (`bynk.generics.type_arg_mismatch`); a type parameter
+neither inferable nor given explicitly (`name[T](…)`) is rejected
+(`bynk.generics.uninferable_type_arg`), as is a bare generic function passed
+as a value. There is no inference between lambdas and none from the call's
+own expected type. Only a record or sum *type* declaration may be generic — type
+parameters on a refined or opaque body are rejected
+(`bynk.generics.generic_non_record`); a
+type parameter MUST NOT shadow a declared type. Within a generic function's
+body its type parameters are rigid: equal only to themselves. The checker
+maintains the invariant that a type-variable-bearing expected type imposes
+no constraint on expression checking.
+
+**Bounds** (constrained generics, slice 0). A type parameter MAY carry bounds,
+`T: Eq` or `T: C1 + C2`, on a `fn`, a `type` declaration or — as a `where`
+clause — a method (§4.3.1b). The constraints are `Eq` and, from slice 1, `Ord`;
+any other name is `bynk.generics.unknown_constraint`. **`Ord` implies `Eq`**: a
+`T: Ord` parameter may be compared with `==`, and `T: Eq + Ord` is the warning
+`bynk.generics.redundant_eq_bound`, whose fix removes `Eq`.
+
+A parameter that a body orders must be declared `Ord`: `<`, `<=`, `>`, `>=`,
+an ordering kernel key, or passing it to an `Ord`-bounded parameter of another
+generic, on a `T` without the bound is `bynk.generics.missing_ord_bound`, with a
+machine-applicable fix that declares `: Ord` (replacing an existing `Eq`). Each
+call MUST instantiate an `Ord`-bounded parameter with an `Ord` type
+(`bynk.types.not_orderable`). A bounded generic named as a value, such as
+`xs.map(top)`, is instantiated at the reference from its expected function type;
+if the type arguments cannot be resolved there it is
+`bynk.generics.ambiguous_instantiation`.
+
+A bound on a generic capability operation's
+type parameter is `bynk.generics.bound_on_capability_op` (only `Key` and `Codable`
+are accepted there), and a `where` entry
+that names no type parameter of the method or its receiver type is
+`bynk.generics.unknown_where_param`. A bound on a type declaration is checked
+where the type is applied to a written type argument: `type Set2[T: Eq]` rejects
+`Set2[(Int) -> Int]` with the equality diagnostics below. An `Eq` bound adds nothing to emission. An
+`Ord` bound adds one hidden trailing comparator parameter to the emitted
+function (the receiver type's parameters first, then the method's own, in
+declaration order), which the caller builds from the concrete type; it is
+internal and not part of the published ABI.
+
+**Typed capability reads** (#3458, lifting ADR 0696 decision 5). A capability
+operation's `Effect[P]` payload `P` MAY mention one of the operation's `Codable`
+type parameters, but only in a **first-party** capability (a unit under the reserved
+`bynk` root); in a user-declared one it is `bynk.generics.codable_op_return_not_first_party`.
+The provider replies with the boundary encoding of `P` as plain JSON; the call site
+decodes the reply **whole**, with the codec of the instantiated `P`, so `Option[T]`,
+`List[T]`, `Result[T, E]` and `T` are one rule. The instantiated `P` MUST be `Codable`
+(`bynk.types.not_codable`), and a type parameter that occurs only in the return type
+is given explicitly at the call (`Store.read[Receipt](key)`), since nothing infers it.
+What a reply that does not decode means is **declared per operation**: by default a
+**fault**, the effect rejecting with `Cap.op returned a value that does not decode as P:
+at <path>: expected …` (naming the capability, operation, instantiated type and path,
+never the value); with the internal `@onUndecodable(miss)` a **miss**, where the call
+returns `None` and a warning goes to the runtime console, which requires an
+`Effect[Option[..]]` return. `@onUndecodable(fault)` spells the default. The
+annotation is `bynk.generics.internal_op_annotation` outside a first-party unit, or
+when malformed or when `miss` is declared on another return shape. Nothing is derived
+from the return shape.
+
+{{#grammar-semantics if_expr}}
+
+### §5.2a Numeric literals — digit separators (v0.142) {#numeric-literals}
+
+> [!NOTE]
+> This is a *lexical* rule (governed normatively by §3), surfaced here because it
+> concerns how a numeric value is written.
+
+An `Int` or `Float` literal MAY carry an underscore **`_`** as a **digit
+separator** between digit groups — `1_048_576`, `1_000.5`, `26_214_400`. A
+separator MUST fall between two digits: a leading (`_1`), trailing (`1_`), or
+doubled (`1__2`) separator, or one adjacent to the decimal point or exponent
+marker, is a lexical error. The separators are **purely visual** — they are
+stripped before the value is parsed, so `1_000` and `1000` denote the same value.
+As with `Float` literals, the **as-written lexeme is preserved**, so `bynk fmt`
+keeps the author's grouping verbatim.
+
+### §5.2b Record field defaults {#field-defaults}
+
+A field of a record type (`type R = { … }`) or of an `event` MAY declare a
+**default**, `field: T = expr`. A sum variant's payload field MUST NOT
+(`bynk.types.field_default_on_variant`): a variant is built like a call, with
+every payload field given.
+
+**What a default may be.** `expr` MUST be a static, wire-representable value of
+`T` (`bynk.types.bad_field_default`): a literal admitted to `T`, a sum variant,
+`Some`/`None`/`Ok`/`Err`, a record literal, a list literal, `Map.empty()` or
+`Set.empty()`, or `T.unsafe(lit)` for an opaque `T` whose literal satisfies its
+refinement. It is evaluated in an empty scope, so it MUST NOT name `self`, a
+parameter, a binding, a capability or a function (ADR 0004's static set). A field
+whose type has no wire form (a function, a held resource) has no default.
+
+**Generic records.** A default MUST hold for every instantiation of the record. A
+field whose type is a bare type parameter has none, and neither does a default
+that reaches one (`Option[T] = Some(1)`); `Option[T] = None`, `List[T] = []`,
+`Map.empty()`, `Set.empty()` and a concrete field's default do. A field whose type
+applies a user generic record or sum (`Page[Int]`, `Page[T]`) has a default that
+is a closed-form value of the instantiated type (the declaration's fields read at
+the arguments). Inside a generic record the arguments may be its own parameters,
+and the default MUST then write no value of such a parameter: `Page[T] = Page {}`
+holds for every `T`, `Page { items: [1] }` doesn't. A default that nests generic
+instantiations too deeply is refused. Only a record field's default may apply a
+generic: an event field's and an old-state field's may not.
+
+**Where a default applies.** In exactly two places:
+- **A record literal** that leaves a defaulted field out takes the field's
+  default, as if it were written. A literal that writes the field keeps its own
+  value. A spread (`R { ...base, f: v }`) takes every unwritten field from `base`,
+  never from a default. A record literal written *as* a default may itself leave
+  out a defaulted field of its own type.
+- **A decode** (an HTTP body, a queue message, a service call, an event,
+  `Json.decode`, agent-state rehydration) of a body with no key for a defaulted
+  field takes the default. A present key decodes as sent: `null` or an explicit
+  `None` at an `Option` field is `None`, not the default.
+
+Everywhere else a value is complete: field access, equality and encoding never
+see a missing field. A default is part of a type's source contract, not its wire
+contract hash ([wire format](/reference/wire-format/)): adding a field changes
+the hash whether or not it has a default, and changing only a default's value does
+not.
+
+## §5.3 Refinement & admission
+
+A refinement's predicates MUST apply to the type's base — a string predicate on
+an `Int` is rejected (`bynk.types.predicate_base_mismatch`) — and MUST be
+internally consistent: an `InRange` MUST NOT be inverted
+(`bynk.types.inverted_range`), a length MUST NOT be negative
+(`bynk.types.negative_length`), a `Matches` regex MUST be valid
+(`bynk.types.invalid_regex`) and MUST be safe to backtrack (below), and the
+predicates together MUST admit at least one value (`bynk.types.empty_refinement`
+— on `Float`, `Positive` excludes the lower endpoint `0.0`, so
+`InRange(-1.0, 0.0) && Positive` is empty).
+
+**A `Matches` pattern MUST be unambiguous enough to backtrack in linear time**
+(#1651). The emitted boundary check runs the pattern under a backtracking
+`RegExp` on untrusted input, so a pattern that can match the same text along many
+paths is a denial-of-service risk. The compiler decides this on the pattern's
+automaton:
+
+- **Exponential ambiguity is rejected** (`bynk.types.catastrophic_regex`): a
+  repetition whose body can match the same text in two ways, so each repetition
+  doubles the paths. This covers nested repetition (`(a+)+`), overlapping
+  alternatives (`(a|a)+`, `(\d|\d\d)+`, `(a|aa)*`), a bounded repeat inside a
+  loop (`(a{1,2})+`, `(a{2,3})+`), and a bounded repeat of an ambiguous body
+  (`(?:a|a){0,24}`), which is exponential in its count. Alternatives that overlap but are uniquely
+  decodable are linear and accepted: `(foo|foobar)+`. Nested repetition with
+  an unambiguous separator is likewise accepted: in `[a-z]+(-[a-z]+)*` each
+  repetition of the group must begin with a `-` that the preceding `[a-z]+`
+  cannot match, so a text splits between repetitions in only one way. An
+  optional separator, `[a-z]+(-?[a-z]+)*`, is exponential and rejected.
+- **Polynomial ambiguity is rejected** (`bynk.types.polynomial_regex`): two
+  repetitions that can divide the same text between them (`\d*\d*`), so matching
+  time grows with the input's length to a power, the **degree** (the longest
+  chain of repetitions that can split text this way: `\d*\d*\d*` is 3). When
+  the refinement also has a `MaxLength` or `Length` bound `L` with
+  `L^degree ≤ 10⁷` (3,162 characters at degree 2, 215 at degree 3), it is a
+  **warning** (`bynk.types.polynomial_regex_capped`) instead: length predicates
+  are checked before every `Matches`, wherever they are written, so the bound
+  caps the cost. A larger bound is still an error.
+- **A pattern the analysis cannot bound is rejected**
+  (`bynk.types.catastrophic_regex`): a backreference under an unbounded
+  quantifier, an unbounded quantifier over a body that can match the empty
+  string (`(a?b?)*`), or a pattern too large or too complex to analyse.
+
+The analysis over-approximates in the safe direction: it reads assertions and
+lookarounds as matching anything (analysing each lookaround body as a pattern of
+its own), and a backreference as an optional copy of its group. So it can reject
+a pattern that is in fact safe, never accept one that is not.
+
+`InRange` bounds MUST match the numeric base (v0.21): integer bounds on
+`Int`, float bounds on `Float`. A bound of the other numeric type, or a
+mixed pair, is `bynk.types.no_numeric_coercion`.
+
+A **literal** written where a refined type is expected is admitted at compile
+time ([§6.4](/reference/spec/type-system/#64-admission--construction)) in these positions:
+return (block tail), a `let` with a type annotation, an `Ok`/`Some`/`Err`
+payload, and a refined-typed call argument — including a cross-context call's
+(`t.pay.charge(250)`, from a consuming context or a `system` case). A literal
+in a cross-context argument, passed directly or nested in a `Some`/`Ok`/`Err`
+payload, a list element, or a field of a record literal of the callee's own
+type, a generic one included with its type arguments substituted into the
+field types (`t.pay.maybe(Some(250))`, `Page { items: [250] }` for a
+`Page[Cents]` parameter), is checked against the declaration of the type at
+its position in the parameter's type, in the consumed context, so the caller
+need not `uses` its commons, and a type of the same name the caller declares
+plays no part. A `None`, `[]`, `List.empty()` or `Map.empty()` in such an
+argument takes its position's type the same way. A shorthand field
+(`Page { items, size }`) is a value, not a literal: it is checked by its
+binding's type, beside literal fields admitted as above. The
+literal MUST satisfy the predicate, or it is rejected (`bynk.refine.literal_violates`); an admitted
+literal MUST be a compile-time literal, not an expression or identifier. A refined
+type is thus constructed at run time through `.of` alone and has **no** unchecked
+`.unsafe` — the unchecked escape hatch is opaque-only (`Age.unsafe(x)` is rejected
+as `bynk.resolve.unknown_static_member`). **Opaque
+types are excluded** from admission and MUST be constructed through `.of`,
+`.unsafe`, or `.raw`, never record syntax (`bynk.resolve.opaque_record_construction`); `.raw` MUST be used only within the
+defining `commons` (`bynk.types.opaque_raw_outside`) and `.unsafe` only within
+the defining context (`bynk.types.opaque_unsafe_outside`).
+
+{{#grammar-semantics refined_type}}
+
+## §5.4 Agents & state
+
+An `agent` MUST be declared inside a context (`bynk.agent.outside_context`) and
+MUST NOT declare `from http`, `from cron`, or `on message` handlers (the
+`bynk.parse.*_in_agent` codes). Each agent handler's return type MUST be an
+`Effect` (`bynk.agent.return_not_effect`).
+
+Every `store` field MUST have a defined initial value: either an **explicit
+initialiser** — a compile-time constant of the field's (element) type, not
+referencing `self`, parameters, or capabilities (`bynk.agents.bad_state_initialiser`)
+— or an **implicit zero** (`Int` → `0`, `Bool` → `false`, `String` → `""`,
+`Option[T]` → `None`, a record of zeroable fields). A field with neither is
+rejected (`bynk.agents.non_zeroable_state_field`).
+
+A `:=` store write MUST target a `store Cell` field (`bynk.cell.invalid_target`),
+and its right-hand side MUST NOT read the cell being written
+(`bynk.cell.self_reference`) — a read-modify-write reads the old value into a
+`let` first. A handler's writes are staged and committed atomically when it
+returns (ADR 0109). Constructing or calling an agent MUST use the right key arity
+and type and a declared handler (`bynk.agent.construction_arity`,
+`bynk.agent.key_mismatch`, `bynk.agent.handler_arity`, `bynk.agent.handler_not_found`).
+
+### §5.4.1 Invariants (v0.80)
+
+An **invariant** is a universally-quantified property that MUST hold of every
+committed agent state (`design/bynk-design-notes.md` §14; ADR 0107). Its predicate
+references the agent's `store` fields by bare name and is a *pure, agent-local
+`Bool` expression*:
+
+- the predicate MUST have type `Bool` (`bynk.invariant.not_bool`);
+- it MUST be pure — no capabilities, no effects, no test-only constructs
+  (`bynk.invariant.impure_predicate`);
+- it MUST NOT reference another agent (`bynk.invariant.cross_agent_reference`) —
+  invariants constrain a single agent's reachable states; a property that spans
+  agents belongs in a saga or scenario;
+- invariant names MUST be distinct within an agent (`bynk.invariant.duplicate_name`).
+
+The predicate language is ordinary expressions plus `implies` (logical
+implication, `P implies Q` ≡ `!P || Q`) and `is` (pattern-matching as a `Bool`
+expression). Invariants are **runtime-checked at the commit boundary**: each is
+evaluated against the state staged by the handler's `store` writes, before it is
+persisted. A violation is a **fault** (`InvariantViolation`), not an outcome — see
+§7 and the emission model. "Revert" is the **non-persistence of the staged
+state**, not whole-handler rollback (ADR 0107 D6): effects already performed by
+the handler stand.
+
+#### §5.4.1-i Step invariants — transitions (v0.116) {#step-invariants}
+
+A **transition** is the invariant predicate widened to a *step*: a claim about the
+move from the last committed state (`old`) to the state a commit would persist
+(`new`) — ADR 0151. It sits in the same phase as invariants and reads state fields
+through two contextual bindings, `old` and `new`, each the agent's synthetic state
+record (so `old.status` / `new.balance` are ordinary record accesses); `old`/`new`
+are ordinary identifiers outside a `transition`. The predicate is a *pure,
+agent-local `Bool` expression* in the same predicate language:
+
+- the predicate MUST have type `Bool` (`bynk.transition.not_bool`);
+- it MUST be pure (`bynk.transition.impure_predicate`);
+- it MUST NOT reference another agent (`bynk.transition.cross_agent_reference`);
+- transition names MUST be distinct within an agent
+  (`bynk.transition.duplicate_name`);
+- it MUST reference `old` or `new` (`bynk.transition.no_step_reference`) — a
+  predicate over neither is a snapshot claim, which is an `invariant`.
+
+Placement is structural: a `transition` is an agent-body declaration only, so there
+is no "transition on a non-agent" rule to state. Transitions are **runtime-checked
+at the commit boundary**, alongside the snapshot invariants, but only **from the
+second commit onward**: the genesis commit (an agent's first) has no `old` and is
+skipped (its state is still constrained by the snapshot invariants). A violation is
+the same **fault** (`InvariantViolation`), with the same non-persistence semantics.
+A transition is **not** attacked by the generative runner — a valid agent state is
+not necessarily reachable (ADR 0149), so behavioural generation over steps is a
+handler-sequence concern (a later increment), not state fabrication.
+
+### §5.4.1a Function contracts (v0.115)
+
+A **contract** is the invariant predicate attached to a pure function (ADR 0150).
+A `fn` carries any number of named `requires` (preconditions) and `ensures`
+(postconditions) between its return type and body; each predicate is a pure `Bool`
+expression in the same predicate language as an invariant (`implies`, `is`,
+operators, pure methods):
+
+- a `requires` predicate is typed with the parameters in scope; a `ensures`
+  predicate is typed with the parameters **and** `result` in scope, where `result`
+  has the declared return type (the awaited element `T` for an `Effect[T]` return);
+- `result` MUST NOT appear in a `requires` (`bynk.contract.result_in_requires`) —
+  the return value is not bound on entry;
+- each predicate MUST have type `Bool` (`bynk.contract.not_bool`);
+- each MUST be pure — no capabilities, effects, or test-only constructs
+  (`bynk.contract.impure_predicate`);
+- clause names MUST be distinct across a function's `requires` and `ensures`
+  (`bynk.contract.duplicate_name`).
+
+A contract is checked at two points, and stripped from the deploy build (the
+runtime library and emission model describe the guard and the runner attack). A
+`case`/`property` whose predicate is syntactically / α-equivalent to a declared
+clause over the same bound arguments is flagged `bynk.contract.restated_by_test`
+(conservative — under-flagging is acceptable, over-flagging is not).
+
+### §5.4.2 Held-resource linearity (v0.102)
+
+A **held resource** is a value of the closed `Held` kind — currently the single
+type `Connection[F]` (§6.2). A held value is **runtime-produced** (no surface
+constructor) and governed by an **ownership discipline** (linearity): at every
+point a held binding is in one of three states — **owned**, **borrowed**, or
+**consumed** — and a static *linearity pass* tracks each binding through them and
+enforces (ADR 0130):
+
+- **Disposal before scope exit.** An owned held binding MUST be **disposed** —
+  stored, closed, or transferred to a handler that takes ownership — before its
+  scope exits; one still owned at the end is `bynk.held.leak`.
+- **No use after consume.** A *consuming* operation (`c.close()`, a `put`/`take`
+  into storage, or transfer) ends the binding's lifetime; any later use is
+  `bynk.held.use_after_consume`. A *non-consuming* operation (`c.send(f)`) leaves
+  the binding owned.
+- **Consistent disposal across branches.** Every branch of an `if`/`match` MUST
+  leave a held binding in the same ownership state (`bynk.held.branch_divergence`).
+- **Borrows are non-consuming.** A borrowed held binding — e.g. the closure
+  parameter of a `forEach`/`parTraverse` over a `Map[K, Connection]` — admits only
+  non-consuming operations; a consuming op on a borrow is
+  `bynk.held.consume_on_borrow`.
+- **Guards borrow.** A `match` arm's `if` guard runs before its arm is chosen, so
+  it borrows every held binding it can see, the arm's own pattern bindings
+  included. A consuming use inside a guard is `bynk.held.consume_on_borrow`, and
+  the guard leaves every binding's ownership state unchanged.
+
+A held value is **non-boundary and not value-comparable** (§6.5,
+`bynk.types.held_at_boundary` / `bynk.types.held_not_comparable`). It may be stored
+**only** in `Cell[Option[Connection]]` or `Map[K, Connection]` — a `put` consumes
+the value and a `remove` removes-and-closes it; a `put` over a key that already holds
+a connection closes the displaced connection first, unless it is the connection being
+put ([§7.3.10](/reference/spec/emission/#7310-streams-and-websockets-v0100-v0102)) — and a `Set`/`Log`/`Cache` rejects
+it (`bynk.held.unsupported_storage`); a held `Map` rejects the transforming
+`update`/`upsert` ops (`bynk.held.unsupported_map_op`). On an abnormal exit a
+connection owned within a handler is implicitly closed by the runtime, and a stored
+one rolls back with agent state (ADR 0130 Q5). Held resources are produced by the
+`from websocket` protocol ([§5.7](/reference/spec/static-semantics/#57-handlers)).
+
+### §5.4.3 Rehydration validation (v0.97)
+
+An agent's persisted state is **stored in the wire shape and decoded when it is
+loaded** (ADR 0124, #1649). A commit writes each value position — a `Cell`'s `T`, a
+`Map`/`Cache`'s `V`, a `Log`'s `T` — through the **same boundary serialiser** the
+HTTP/queue seams use, so stored state has the documented wire form of §7.2. A load
+runs each stored value position, and textual `Set` elements / `Map` keys, through
+the **same boundary deserialiser**, against the **current** type definition, and
+the handler reads the decoded values. A failure is an internal **fault**, `RehydrationViolation` — the
+load-time twin of `InvariantViolation` (§5.4.1) — **not** a caller-facing `400`:
+the supplier of stored state is trusted past-self, not an untrusted caller. A
+refinement that **tightens** across a deploy therefore faults on load (orphaned
+data is indistinguishable from corruption); breaking migrations remain
+by-convention (no coercion, no silent drop).
+
+**Additive evolution is automatic:** a `store` field absent from the stored record
+(added in a later deploy) takes its zero/initialiser
+([§5.4](/reference/spec/static-semantics/#54-agents--state)) instead of reading as absent,
+and is not decoded. Inside a stored value, a record field with a default
+([§5.2b](#field-defaults)) that the stored record lacks decodes to its default.
+A stored key the current definition does not declare (a renamed
+or removed field) is carried through unchanged and written back, never silently
+dropped. A value that has no wire form, such as a non-finite `Float`, cannot be
+stored: the commit faults and nothing persists.
+
+**Recorded state shapes.** A build also reconciles each agent class's stored shape
+against the project's `bynk.schema.lock`, keyed `<context>.<Agent>`. A field's
+shape is its storage kind and its value types, expanded structurally (record
+fields, sum variants and variant payload fields by name; type names do not
+appear, since stored bytes carry none), with and without refinements, and as the
+list of positions in the stored value (each record field, variant and container
+element by path, with whether a record field declares a default). A new class is
+recorded at version 1. An unchanged shape keeps its version. These changes
+increment it:
+- adding a `store` field;
+- adding a record field **with a default** anywhere inside a stored value, together
+  with whatever lies beneath it, since every record stored before decodes it as its
+  default ([§5.2b](#field-defaults));
+- a record field gaining a default;
+- adding a **sum variant** anywhere inside a stored value, with its payload fields:
+  no value stored before it can name it, and a record holding the new variant is
+  stopped on rollback by the `__v` marker. This is a rule about stored data only: a
+  `match` over the sum must still handle the new variant, as always;
+- changing only a refinement, which also warns (`bynk.agent.refinement_changed`),
+  since a narrowing faults on load as above.
+
+Any other change is `bynk.agent.non_additive_state_change`, and the diagnostic
+names each position that broke:
+- removing a `store` field, or a record field inside a stored value;
+- changing a position's type, or a field's storage kind;
+- adding a record field without a default;
+- a record field losing its default;
+- removing or renaming a sum variant, or changing an existing variant's payload.
+
+Renaming a field is a removal plus an addition. A shape recorded before positions
+were (an older lock) has none: an unchanged build fills them in without changing
+the version, and until then a change inside a stored value is judged as a change of
+the field's value types. A recorded class no
+longer declared is `bynk.agent.class_removed`. As for events, `bynk check` and
+`bynk test` reconcile without writing the lock, and only a build records a new
+version.
+
+**The schema-version marker.** A build with the lock stamps every committed record
+with `__v`, its class's recorded version, in the same write as the record. A load
+reads `__v` from the raw stored record before merging or decoding anything. An absent
+marker is version 1. A marker equal to the current version decodes as above. A
+marker from the oldest version the class reads without a migration step (every later
+change additive) up to the current version decodes by the same zero-merge. A marker
+above the current version faults, `RehydrationViolation` with detail `NewerSchema`
+(the record was written by a newer build), and any other marker, including one that
+is not a positive integer, faults with `NoMigrationPath`. A faulting record is never
+decoded or written back. A build without the lock emits none of this and carries a
+stored marker through unchanged. A stored key the current definition does not
+declare, other than `__v`, is reported once per isolate by name, never by value, and
+is still carried through.
+
+**Handler serialisation.** An agent instance executes at most one handler at a time:
+a handler that reaches an instance, whatever it reads or writes, begins only after
+every handler that reached the instance before it has finished, in arrival order, and
+the instance's state is loaded after it begins. A call to another handler of the same
+agent made on the agent itself is part of the running handler. A handler that reaches
+its own instance again through calls to other agents MUST fault
+(`ReentrantAgentCall`) rather than wait on itself; a call that has waited longer than the
+implementation's limit (30 seconds) behind the handlers ahead of it MUST fault
+(`AgentBusy`). Neither fault runs the called handler, and neither affects the handler
+already running.
+
+**The layout marker and per-entry storage.** `__layout` is a second reserved key in
+the stored record, beside `__v`, naming how the record is laid out in storage. A build
+writes layout 2, the per-entry layout: the `"state"` record holds the `Cell` fields, `__v`
+and `__layout`, and each entry of a `Map`, `Set`, `Cache` and `Log`, and each `@indexed`
+posting, is stored under a key of its own. An entry of a `Map` or `Set` carries its
+insertion sequence, so a `Map` is read back in insertion order: an overwrite keeps its
+place, and a key removed and inserted again goes to the end. A record with no `__layout`
+is the earlier layout, with every collection inline in `"state"`; its next commit splits
+it, in one transaction, and a record is never left half upgraded. A handler commits only
+the entries it changed. A load checks `__layout` on the raw stored record first, whether
+or not the project has the lock, and a marker this build does not know faults,
+`RehydrationViolation` with detail `NewerLayout` (a later build wrote the record). The
+faulting record is never decoded, merged or written back. A held `Map[K, Connection]`
+stays in the `"state"` record, as the object it has always been (key to connection id), with
+its insertion order beside it, in a `<field>:order` array of keys (a key no field name can be) (an object cannot carry the
+order of its integer-like keys). A record with no order beside it, as an earlier build wrote
+it, is read in the order an object enumerates, and a build that predates the order reads the
+object and ignores the array.
+
+**Migration steps.** An agent may declare `migrate from N (old: T) { … }` steps
+between its `store` fields and its handlers.
+- **The old shape.** `T` names a record type whose fields MUST match, on structure,
+  the same-named fields the lock recorded at version `N`
+  (`bynk.agent.migrate_shape_mismatch`). A field of type `T` matches a `Cell` of `T`,
+  and a field of type `Map[K, V]` matches a `Map` of `K, V`. A difference in
+  refinements alone warns (`bynk.agent.refinement_changed`). Such a record type may
+  declare field defaults.
+- **The version.** `N` MUST be a recorded version, at or above the floor and below
+  the current version (`bynk.agent.migrate_unknown_version`). At most one step may
+  read each `N` (`bynk.agent.migrate_duplicate`).
+- **Below the floor.** A step with `N` below the floor is not an error. It warns
+  (`bynk.agent.migrate_below_floor`) and emits nothing, because no stored instance
+  can hold version `N`. Versions are numbered contiguously from 1, so every version
+  below the floor was once recorded. Only a complete `bynk migrate sweep` raises the
+  floor, and raising it drops the lock's snapshots below it.
+- **The body.** It holds `f := e` for a current `Cell` or `Map` field `f`, at most
+  once per field (`bynk.agent.migrate_duplicate_assignment`); `let` bindings; and
+  `drop f`. A bare field name reads the field's carried value. The body MUST be pure
+  and MUST NOT read the agent's key (`bynk.agent.migrate_impure`).
+- **Coverage.** Against the current shape, a step MUST read (`old.f`) or `drop`
+  every field version `N` recorded that no longer exists. It MUST assign every field
+  whose structure or storage kind changed; a `Set`, `Log` or `Cache` field may
+  instead be dropped (`bynk.agent.migrate_incomplete`). A non-additive change into
+  version `K` is accepted, with `additive = false`, exactly when a step from `K-1`
+  passes these rules.
+- **Additive predecessors.** A step from `N` also covers every version `M` at or
+  above the floor whose path from `M` to `N` is entirely additive. A version from
+  the floor to the current one that no step covers and that has no all-additive
+  path to current warns (`bynk.agent.version_without_path`).
+- **At load.** After the marker check, a record whose version a step covers runs
+  the nearest such step: the step with the smallest `N` at or above the stored
+  version. A step takes precedence over the zero-merge.
+  - The declared old fields are decoded through `T`. A field the record lacks takes
+    `T`'s field default, or else its type's zero.
+  - The fields whose structure is unchanged carry over, and the body's assignments
+    replace fields.
+  - Keys version `N` did not record are kept.
+  - The result is then zero-merged and validated as above.
+  - A step that throws while running faults as `RehydrationViolation` with detail
+    `MigrationFailed`, and nothing is written.
+
+**Renaming and removing a class.** `agent New replaces Old` and the context item
+`removed agent Old` declare what becomes of a recorded class's stored data.
+- **What may be named.** The old name MUST NOT also be declared as an agent
+  (`bynk.agent.replaces_live`, `bynk.agent.removed_live`). Each old name has at most
+  one fate: renamed once, or removed (`bynk.agent.class_conflict`).
+- **What the lock does.** With a lock, `replaces Old` MUST name a class the lock
+  records for the same context (`bynk.agent.replaces_unknown`), unless the rename has
+  already been recorded. `New` MUST NOT have a history of its own
+  (`bynk.agent.class_conflict`). The lock entry `<context>.Old` moves to
+  `<context>.New` with its versions and shapes. A removal drops its entry.
+- **What the Worker gets.** The Worker's `exports` gain a `renamed` tombstone naming
+  `New`, or a `deleted` one, and the old class gets no binding.
+- **Everything else is refused.** A recorded class that disappears with neither
+  declaration is `bynk.agent.class_removed`.
+
+## §5.5 Effects, capabilities & providers
+
+Bynk separates **pure** from **effectful** code. An `<-` bind MUST occur in an
+effectful position and MUST be applied to an `Effect`
+(`bynk.effect.bind_in_pure_context`, `bynk.effect.bind_on_non_effect`); a
+capability call or a cross-context call MUST NOT occur in a pure context
+(`bynk.effect.capability_in_pure_context`, `bynk.effect.cross_context_in_pure_context`).
+
+A **detached effect** (`e.detach()`, #3437) stops waiting for an effect that is already
+running. `detach` is a kernel method on every `Effect[T]` that returns `Effect[()]`, so it is an
+ordinary effect: `do e.detach()` and `let _ <- e.detach()` are statements, and it may be the body
+of a lambda or the last expression of a function. It MUST occur in an effectful position
+(`bynk.detach.in_pure_context`). It never starts anything, because an effect is an eager promise
+started where its expression is evaluated: it hands the running promise to the execution
+context's `waitUntil` and completes at once. "No value" and "no need to wait" are independent: to
+*await* a unit-returning effect (a durable write that must join the commit) keep the `<-` bind;
+to await and discard a **valued** reply, write `do e` (a `Result` reply is refused, so write
+`let _ <- e`); to stop waiting, write `do e.detach()`.
+
+**Delivery guarantee.** A detach is **immediate and best-effort**
+([ADR 0106](https://github.com/bynk-lang/bynk/blob/main/design/decisions/0106-async-message-send.md)).
+The effect starts when its expression is evaluated, not at the handler's commit. It is **not
+retried**, it MAY be cut short by the platform once the response has been sent, and its outcome is
+**never returned to the sender**: the handler's result does not depend on it, and a fault in it
+cannot fail or alter the handler. A program MUST NOT rely on a detached effect having completed.
+Unlike the producers that promise **at-least-once** delivery, a queue
+message ([ADR 0122](https://github.com/bynk-lang/bynk/blob/main/design/decisions/0122-queue-is-a-delivery-concern.md))
+and an `Events` emission ([§5.7b](#events)), which are redelivered until handled and whose
+consumers are therefore written to be idempotent. A detach carries no such promise. To
+await the effect, or to have its fault reach the handler, use `<-` or `do`.
+
+**A detached failure is reported, never lost.** A detached effect has no caller to receive a
+failure, so the runtime reports it ([§7.4.17](/reference/spec/runtime-library/#7417-the-detach-reporter-3437)),
+and not `Logger`. The route is chosen from the effect's static type. A **fault** (the effect's
+promise rejects) is passed to the platform's exception path unchanged. When the effect is an
+`Effect[Result[_, E]]` an **`Err`** is reported as one structured `console.error` record carrying
+the site and the error's type name and, for a sum type, its variant tag, and never its payload.
+`Ok`, and every other payload, report nothing. A test records each report and does not fail the
+case.
+
+A `detach` MUST NOT occur in an **agent handler** body, a closure within one included
+(`bynk.detach.in_agent_handler`): an agent handler runs inside the agent's Durable
+Object and has no execution context to keep a detached effect alive past
+it, so its effects are awaited (`let _ <- e`, `do e`). A `detach` of the agent's own
+**store operation** is refused with its own code (`bynk.detach.store_op`): a store
+write is staged and committed atomically at the handler boundary, so there is
+nothing to detach without waiting for — write it as `do field.op(…)`.
+
+**The asynchronous send `~>` (removed, #3443).** `~> e` was the older spelling of
+`do e.detach()`. It is removed: the parser refuses it with `bynk.parse.removed_send_arrow`
+(§4.8.5), which names the replacement. The position rules above are those of `detach`.
+
+A **`do` statement** (`do e`, §4.8.6) performs an effect without a binder: it
+MUST occur in an effectful position (`bynk.effect.do_in_pure_context`) and MUST
+be applied to an `Effect[T]` (`bynk.effect.do_on_non_effect`). Unlike a detached effect,
+the effect *is* awaited and joins the enclosing computation, so a fault in it
+rejects the enclosing handler exactly as for `let x <- e`. `do e` is `let _ <- e`
+for every `T` that is not a `Result`. When `T` is a `Result` (including one reached by instantiating a generic
+callee) the statement is refused (`bynk.effect.do_discards_result`): an
+`Err` must not be dropped without a visible spelling, and the explicit
+`let _ <- e` remains legal. In a generic body an opaque type parameter `T` is
+accepted, since the checker cannot know that a caller will instantiate it with a
+`Result`. `HttpResult[T]` and `Option[T]` are not excluded.
+
+A **`par` block** (`par { … }`, §4.8.7b; #2640) joins independent effects: it
+issues every effect it holds, in source order, before awaiting any of them, and
+completes when all have settled. It MUST occur in an effectful position
+(`bynk.effect.bind_in_pure_context`) and holds only `let x <- e` (optionally typed)
+and `do e`; each binding is checked exactly as the same statement written outside
+the block, against the scope *outside* it. Anything else is
+`bynk.par.invalid_statement`, naming the statement: a `let` with a refutable
+pattern and an `else`, a plain `let` (it has no effect to overlap), `:=` or a mutating `store` operation
+(`store` writes stay sequential), `expect`, `advance`, a nested `par`, and an
+empty block. A `?` in a binding is `bynk.par.question_in_join` (a `?` inside a
+lambda belongs to the lambda). This is permanent: `?` takes a `Result` value, not
+an effect, so a binding's `Result` is bound in the block and unwrapped after it
+(`let user = userR?`). The block has waited for every binding, so those `?` lines
+propagate the first `Err` in source order. The bindings run together, so **no binding may mention
+a name another binding of the block binds, and no two bind one name**
+(`bynk.par.sibling_name`) — even where the name would also resolve to a binding from
+before the block, so a stale value is never picked up silently. A binding's own name
+is not a sibling: `let n <- F(n + 1)` reads the earlier `n`. The bound names are in
+scope after the closing brace, and re-binding an earlier name follows §5.1. A block
+with one binding is `bynk.par.single_binding`, a non-failing warning (ADR 0117). The
+block has no value; it is a statement.
+
+The same rule covers the closure passed to `parTraverse`, `parTraverseAll` or
+`parTraverseTry` (on a `List` or a `Query`; #3298): the closure runs once per element,
+concurrently, so it MUST NOT write a `store` field (`bynk.par.store_write_in_closure`).
+A write is a mutating `store` operation (`put`, `remove`, `update`, `upsert`, `add`,
+`append`) or a `:=`, found anywhere in the written lambda, a lambda nested in it
+included, or in a lambda bound by `let` to a name that is passed as the closure.
+Reads, a `store` as the combinator's receiver, and calls to other agents are not
+writes. The sequential `forEach`, `traverseAll` and `traverseTry` are not restricted.
+
+*Faults.* If any effect of the block faults, the block still waits for every other
+to settle, then raises the **first fault in source order**, whichever faulted first
+in time; later faults are attached to it for the log and cannot be caught
+separately. Nothing the block started is still running when it completes or
+raises, so no work outlives the handler, and the fault a program sees does not
+depend on timing. Effects that completed before the fault keep their effects
+(ADR 0109 D4: a cross-agent `<-` call commits as it returns; `store` writes are
+staged and discarded; a detached effect stands). A `par` block is legal in an agent handler:
+an input gate that is open while a handler awaits a subrequest is open for a join
+too, so a join adds no interleaving a sequence of `<-`s does not already allow —
+the one thing it removes is the synchronous gap between two adjacent lines, which
+nothing inside the block can rely on, because no binding can read another's result.
+
+A **timeout** (`e.within(d)`; #2683) bounds how long an effect may take. It is a
+method of every `Effect[T]`: `d` MUST be a `Duration`, and the call has type
+`Effect[Result[T, TimedOut]]`, where `TimedOut { after: Duration }` is `bynk`'s (a
+unit that calls `within` MUST have `TimedOut` in scope, as `consumes bynk { TimedOut }` or an
+entry in its existing `consumes bynk { … }`, `bynk.within.timed_out_not_in_scope`).
+The effect is raced against `d`. If it settles first, the result is `Ok` of its
+value (a fault in it first faults the call, as it would unbounded), and the timer is
+cleared. If `d` passes first, the result is `Err(TimedOut { after: d })`. **The
+effect is not cancelled** (concurrent-effects Q7): it is handed to the execution
+context's `waitUntil`, so it runs to completion and its side effects — a write, a
+commit in another agent — still happen after the handler has moved on. A fault in it
+after the timeout is the platform's to log, not the handler's to catch. A tie, where
+the effect settles at the very instant `d` passes, goes to the effect. `d` MUST be
+over zero and at most 2,147,483,647 ms (about 24 days, the longest a platform timer
+takes); anything else faults the call, with the effect handed on as above. The type
+is the same whatever `T` is: `Effect[Result[T, E]]` becomes
+`Effect[Result[Result[T, E], TimedOut]]`, and the author unwraps both layers (there
+is no flattening form in this increment). `FetchOptions.timeout` remains the tool
+when the work must actually stop.
+
+Because the abandoned effect needs an execution context to be handed to, `within`
+is legal only where a service handler's `deps` carry one: in a **service handler's
+body**, a lambda written there included (`xs.parTraverse((x) => S.op(x).within(d))`
+closes over the handler's `deps`). It MUST NOT occur in an **agent handler**, a
+lambda within one included (`bynk.within.in_agent_handler`), for the reason a `detach`
+MUST NOT (an agent handler has no execution context; the Durable Object's own
+`waitUntil` is a recorded follow-up). It MUST occur in an effectful position
+(`bynk.within.in_pure_context`), and it MUST NOT occur in a provider operation or a
+WebSocket handler (`bynk.within.outside_handler`): a WebSocket handler runs in the
+connection's Durable Object, which has no execution context. It MAY occur in an
+effectful `fn` or method (#2719): see *The execution context in functions* below. A
+`within` in a `par` binding bounds its own effect
+alone, as the binding would be checked written outside the block.
+
+A **race** (`a.race(b)`; #2711) takes the first of two effects to succeed. It is a
+method of every `Effect[T]`: `b` MUST have type `Effect[T]` (a mismatch is an ordinary
+type error), and the call has type `Effect[T]`. It chains, and `a.race(b).race(c)` is
+the first of three. Both effects are already running when `race` is called, because an
+`Effect` is eager. The result is that of the first effect to **succeed**; a fault in a
+side does not end the race while another side may still succeed. If every side faults,
+the first fault in source order (not in time) is raised, with the others attached as
+`suppressed`, as a `par` block raises. A `Result` is a value, so an `Err` returned by an
+`Effect[Result[T, E]]` is a success and may win; there is no flattening form. A tie,
+where two sides settle at the same instant, goes to the earlier in source order (the
+receiver before the argument). **The losers are not cancelled** (concurrent-effects Q7,
+option (b), as amended by #2711): each is handed to the execution context's `waitUntil`,
+so it runs to completion and its side effects still happen; a fault in one after the
+race is decided is the platform's to log. `race` is for idempotent work.
+
+`race` is legal exactly where `within` is, and for the same reason: in a **service
+handler's body**, a lambda written there included, and in event, cron and queue
+handlers. It MUST NOT occur in an **agent handler**, a lambda within one included
+(`bynk.race.in_agent_handler`); it MUST occur in an effectful position
+(`bynk.race.in_pure_context`); and it MUST NOT occur in a provider operation or a
+WebSocket handler (`bynk.race.outside_handler`); it MAY occur in an effectful `fn` or
+method, as `within` may. Its argument is consumed
+by the call, so the unawaited-effect check (`bynk.effect.unbound_effect`) does not flag
+it. The `race` of a `race`, or of a `within`, composes: `a.race(b).within(d)`.
+
+**The execution context in functions (#2719).** `detach`, `within and `race` MAY occur in
+an effectful `fn` or method. A function takes the execution context from its caller, so
+the compiler works out which functions need it: the **needs-context set** holds every
+effectful function whose body (a lambda in it included) uses a `detach`, `within` or
+`race` the checker resolved as the kernel method on an `Effect` receiver (never by
+name: a user type's own `race` method puts nothing in the set), or that calls a function
+in the set, or names one as a value. It is a fixed point over the whole build,
+dependency packages included. A function in the set MAY be called, or named as a value,
+only where an execution context exists: in a service handler (an event, cron or queue
+handler included), a Bundle `on call` handler, a lambda written in either, another
+function in the set, or a test `case` body. A call or a reference to such a function in
+an **agent handler**, a **WebSocket handler** or a **provider operation** MUST be refused
+(`bynk.exec.unavailable`), with a note naming the chain of functions down to the
+construct. A direct `detach`, `within` or `race` written in a test `case` body remains
+refused.
+
+**Implicit unit tail (§4.8.1).** A block with no trailing expression has value
+`()`: the tail auto-lift (an `Effect[T]` context lifts a tail of type `T`) then
+lifts it to `Effect[()]` where the enclosing return type is `Effect[()]`, so an
+effectful unit body may simply *end* rather than close with `Effect.pure(())`.
+Against a **valued** expected type the synthesised `()` is an ordinary type
+mismatch, reported where any wrong-typed tail would be.
+
+**Else-less `if` (§4.6.3).** An `if` with no `else` defaults the missing branch
+to `()`. It is legal only when the then-branch is unit (`()` or `Effect[()]`);
+otherwise the missing value has no default and it is rejected
+(`bynk.types.if_without_else_requires_unit`). A value-producing `if` still
+requires an explicit `else`, and the "both branches agree" rule (§5) is
+unchanged — the synthesised `()` branch simply matches the unit then-branch.
+
+A capability MUST be declared inside a context or an adapter
+(`bynk.capability.outside_context`); a bodied provider MUST implement exactly its
+capability's operations — no missing, no extra, signatures matching
+(`bynk.provider.missing_operation`, `bynk.provider.extra_operation`,
+`bynk.provider.signature_mismatch`) — and every provider MUST name an existing
+capability (`bynk.provider.unknown_capability`). A handler or provider MUST
+declare every capability it uses with `given`, and `given` MUST name a real
+capability; a call to an undeclared capability is rejected and an unused one
+warned (`bynk.given.unknown_capability`, `bynk.given.undeclared_capability`,
+`bynk.given.unused_capability`). A **free function in a
+context** MAY declare `given` (#2868), and then uses those capabilities as a handler
+does; a `given` on a method, on a function that does not return `Effect[T]`, or
+naming `Events` is rejected (`bynk.given.fn_unsupported`), as is any `given` on a
+function in a commons or a suite (`bynk.given.fn_outside_context`). A call to, or a
+reference to, a function that declares `given` MUST occur in a body whose own
+`given` includes every one of the callee's (`bynk.given.missing_for_call`); the
+rule is checked at each call, so it holds along every path of calls, and the
+callee's capabilities count as used by the caller. A test `case` calling such a
+function is supplied the target's capabilities as it is for a handler. A provider whose body calls an agent handler
+MUST also list in its `given` every capability that handler is `given`, and,
+transitively, every capability `given` to the agent handlers it calls
+(`bynk.provider.agent_call_undeclared_capability`). A service or agent handler
+is exempt: its deps are widened to cover the agent handlers it calls. Providers MUST NOT form a dependency cycle
+through `given` (`bynk.provider.dependency_cycle`).
+
+**Derived capabilities** (standard-library S4a, #1966). `capability X = K`
+declares a capability `X` whose operations are those of `K`, as a **distinct
+instance** of `K`, not an alias: two derivations of `Kv` are two namespaces,
+just as `type Id = Int` is a distinct type over `Int` (§6.1.2). No `provides`
+is written. `X` is provided by `K`'s platform provider, bound to `X`'s own
+resource. Otherwise `X` is an ordinary capability: `given X`, `X.op(…)`, `stub`
+and `expect` apply to it unchanged. The rules:
+- `K` MUST be a capability the unit selects with `consumes U { K }`
+  (`bynk.capability.unknown_base`).
+- `K` MUST be a platform resource kind with instances. `bynk.cloudflare`'s
+  `Kv`, `Service`, `R2`, `RateLimit`, `Queue`, `Analytics`, `EdgeCache`,
+  `StoredSecret`, `Email` and `Postgres` have them
+  (`bynk.capability.base_not_instantiable`). `Version` is bound once per Worker
+  and has none: it is used bare (#3300).
+- Each `@annotation` MUST be one of `K`'s instance options
+  (`bynk.capability.unknown_option`), given at most once, with one positional
+  literal of the option's kind (`bynk.capability.invalid_option`): a string for
+  `@worker`, `@jurisdiction` and `@name`, a positive `Int` for `@limit`, a
+  `Duration` for `@period`. Every option `K` requires MUST be present
+  (`bynk.capability.missing_option`). `Kv` takes none. `R2` takes an optional
+  `@jurisdiction("eu" | "fedramp")`. `RateLimit` requires `@limit(n)` and
+  `@period(d)`, where `d` is exactly 10 or 60 seconds (standard-library P3).
+  `Service` requires `@worker("name")`, where `name` is 1 to 63 lowercase
+  letters, digits, `-` or `_`, not starting or ending with `-`, and not the
+  Worker of a context in the project (`bynk.capability.invalid_option`): the
+  Worker outside the project the instance reaches (interop I5, #1972).
+  `Queue` requires `@name("queue")`, where `queue` is 1 to 63 lowercase letters,
+  digits or `-`, starting and ending with a letter or digit
+  (`bynk.capability.invalid_option`): the queue the instance sends to
+  (standard-library P2, #2578). `Analytics` takes none (standard-library P3b,
+  #2582). `StoredSecret` requires `@store("name")` and `@secret("name")`, each
+  1 to 255 letters, digits, `-` or `_` (`bynk.capability.invalid_option`): the
+  Secrets Store and the secret in it. A `StoredSecret` is a *linked* resource
+  (#3301): it belongs to the account, so a deploy resolves and checks it and
+  never creates it. `Email` takes `@to("addr")`, `@allowedRecipients([…])` and
+  `@allowedSenders([…])`, each optional, a string literal or a non-empty list of
+  string literals, every address being `local@domain` with no whitespace,
+  control, angle-bracket, quote or comma character
+  (`bynk.capability.invalid_option`) (#3302). A deploy checks each allowed
+  sender's domain and never configures it. `Postgres` takes none (Hyperdrive
+  H1, #3318): it binds as `HYPERDRIVE_<NAME>`, a `[[hyperdrive]]` entry whose
+  `id` is a placeholder until the Hyperdrive configuration exists. The SQL
+  argument of each of its operations MUST be a string literal, or a `String`
+  constant bound to one (`bynk.types.sql_not_literal`), with `$1`, `$2`, … as its
+  placeholders. So MUST the `sql` of each `PgStatement` of a `transaction`
+  (Hyperdrive H3, #3320). A `PgStatement` MUST NOT appear in a storable or
+  boundary position or as a `Json` codec target
+  (`bynk.types.sql_statement_at_boundary`), as a `SqlStatement` MUST NOT. Its
+  `transaction(statements)` runs the statements in order, all or none. Like
+  `D1`'s, a derived `Postgres` instance has the compiler-lowered typed reads
+  `select[T](tail, params)` and `firstAs[T](tail, params)`: the tail MUST be a
+  string literal or constant that continues from `FROM`
+  (`bynk.types.select_tail_has_select`, `bynk.types.sql_not_literal`), `T` MUST
+  be a row record whose fields are `Int`, `Float`, `String`, `Bool`, `Bytes`,
+  `Decimal` or `Instant` (or a refined or opaque type over one, or an `Option`
+  of either) (`bynk.types.sql_row_shape`), and the call has type
+  `Effect[Result[List[T], PgReadError]]` (`firstAs`: `Option[T]`). The compiler
+  writes the column list from `T`'s field names as Postgres quoted identifiers.
+  A derived `MySql` instance (Hyperdrive H5, #3322) is the same with `?`
+  placeholders, `MySqlValue`, `MySqlStatement` and `MySqlReadError`, MySQL's
+  backtick-quoted identifiers, and no `Instant` row field (a MySQL date or time
+  arrives as text without a zone). Its optional `@tls` MUST be `"required"`,
+  `"verify-ca"` or `"verify-identity"` (`bynk.capability.invalid_option`).
+  The rows decode through the boundary codec, with an `Int` field read from the
+  text of an `int8` and an `Instant` field from the ISO-8601 text of a
+  `timestamptz` (normalised to UTC) before it runs; `Json.decode` reads neither.
+- A kind used only through instances MUST NOT be named bare in a `given`
+  clause (`bynk.capability.instance_only`). `Service`, `R2`, `RateLimit`,
+  `Queue`, `Analytics`, `EdgeCache`, `Email`, `Postgres` and `MySql` are such kinds.
+- A context MUST declare at most one `EdgeCache` instance
+  (`bynk.cloudflare.edge_cache_duplicate`). The instance has no binding: it
+  makes the Worker's `wrangler.toml` carry `[cache] enabled = true`. An agent
+  handler MUST NOT reach it through its `given` clause, directly or through
+  the `given` of a provider of the context, at any depth
+  (`bynk.cloudflare.edge_cache_in_agent`). Nor may a queue consumer's
+  handler (`bynk.cloudflare.edge_cache_in_queue`), an `on schedule` handler
+  (`bynk.cloudflare.edge_cache_in_schedule`), or an exported capability
+  through its provider (`bynk.cloudflare.edge_cache_exported`). In such a
+  context, a `@cache(scope: public)` route's `by` MUST name only open actors
+  (`bynk.cloudflare.edge_cache_public_authenticated`). A purge reaches the
+  cache only from the Worker's `fetch` (L7, #2414).
+- `X` MUST be declared in a context (`bynk.capability.derived_outside_context`).
+  An instance belongs to the context that owns its data.
+- `X` MUST NOT be exported (`bynk.exports.derived_capability`). Another context
+  reaches the data through this context's services.
+- `X` shares the unit's capability namespace and its conflict rules.
+- On Workers, `X`'s binding is `K`'s prefix and `X` in screaming snake case
+  (`Sessions` → `KV_SESSIONS`, `Billing` → `SERVICE_BILLING`). It MUST NOT
+  clash with another of the Worker's bindings
+  (`bynk.context.duplicate_binding`).
+
+A write to an instance commits as it returns and is not rolled back on a fault,
+like any platform-resource write (ADR 0109 D4).
+
+Calling an **effectful function value** — one whose type's return is
+`Effect[_]` — is an effect operation: it MUST occur in an effectful context
+(`bynk.effect.fn_value_in_pure_context`), exactly as a capability call must.
+`Effect[T]` remains non-storable in pure contexts; this feature opens no back
+door (the eager-`Promise` translation makes an un-bound effectful call
+observable, so the confinement is load-bearing).
+
+**An `Effect` value in an effectful body MUST be awaited in order** (#1658).
+The eager-`Promise` translation starts an effectful call as soon as it is
+built, so a call that is built and not bound runs unawaited, racing everything
+after it. An `Effect[T]` value MUST therefore be:
+- bound with `<-`;
+- sequenced with `do`;
+- returned as the body's value; or
+- passed as an argument, whose parameter decides what happens to it (a
+  parameter typed `Effect[T]` binds it).
+
+Building one in a value position is `bynk.effect.unbound_effect`. That covers:
+- the right-hand side of a plain `let` (including `let _ = …` and an
+  `Effect`-annotated `let`);
+- a list literal's element;
+- the payload of `Some`/`Ok`/`Err`, a sum-variant constructor, or a record
+  field.
+
+**Provider placement follows the unit kind.** A provider in a *context* MUST
+have a Bynk body (`bynk.context.external_provider`); a provider in an *adapter*
+MUST be external — bodiless, its implementation supplied by the binding
+(`bynk.adapter.provider_has_body`); a provider anywhere else is rejected
+(`bynk.provider.outside_context`). An **external** provider's `given` resolves
+exactly as a bodied provider's does — each bare name MUST be a local capability
+or one flattened from a `consumes` selection
+([§5.8](#58-boundaries--cross-context)) — and external providers participate in
+the same dependency-cycle check.
+
+{{#grammar-semantics given_clause}}
+
+**A capability operation's own type parameter (v0.235, ADR 0281).** A
+`capability_op`'s optional `[T, …]` is resolved only from an explicit type
+argument at the call site (`Cap.op[SomeType](…)`) — never inferred from the
+arguments or the expected type. Omitting it where no parameter's type mentions
+`T` is rejected (`bynk.generics.uninferable_type_arg`); the wrong number of
+type arguments is `bynk.generics.type_arg_mismatch`. A capability with a
+generic operation MUST be implemented by an **external** provider
+(`bynk.provider.generic_op_requires_external`) — a Bynk-bodied provider's `T`
+has no expressive use, since its body can only return a value it already has —
+so a generic operation is declarable only inside an `adapter`, whose providers
+are always external, never a plain `context`. A generic operation MUST NOT be
+named in a test `stub` clause (`bynk.stub.generic_op`): a stub body has no way
+to construct a value of an unconstrained `T`; stubbing a different, non-generic
+operation of the same capability is unaffected.
+
+## §5.6 Pattern matching
+
+A `match` MUST be **exhaustive** — every value of the scrutinee covered by some
+unguarded arm (`bynk.types.non_exhaustive_match`) — and its
+scrutinee MUST be a sum type, a primitive, or a record matched by record
+patterns (`bynk.types.match_non_sum_discriminant`). Its arms
+MUST **join** to a common result type — their least upper bound, so a refined
+type and its base agree at the base (`bynk.types.match_arm_mismatch`), MUST NOT
+repeat a
+variant (`bynk.types.duplicate_variant_arm`), and MUST NOT be unreachable
+(`bynk.types.unreachable_arm`): every arm MUST match some value that no earlier
+unguarded arm matches. A guarded arm or a refined pattern (`n where P`) never
+covers a later arm, since its guard or predicate may fail.
+
+**Coverage is usefulness** (patterns track, slice 3, #2665). Both rules are one
+question about a matrix whose rows are the earlier unguarded arms' patterns. A
+pattern is *useful* after those rows when it matches some value none of them
+does; a `match` is exhaustive exactly when `_` is not useful after all of its
+unguarded arms, and an arm is unreachable exactly when its pattern is not useful
+after the unguarded arms before it. The values a type has are its constructors:
+
+- a sum, `Result` or `Option` has its declared variants, whose payload fields are
+  its columns in declared order (named and positional bindings are the same
+  columns);
+- a record has one constructor whose columns are all its fields in declared
+  order, and a field a record pattern does not list matches anything;
+- `Bool` has `true` and `false`;
+- a `List[T]` has one constructor per length, set out below;
+- `String` has a literal for every value, so no finite set of literals is
+  complete and only an irrefutable pattern covers it;
+- `Int` has the safe integers `-(2^53 − 1)` to `2^53 − 1`, whose constructors are
+  intervals, set out below (#2699). A literal is the interval of one value;
+- a refined type has its base's constructors, and an opaque type has no patterns.
+
+An or-pattern, at any depth, stands for each of its alternatives. A guarded arm
+contributes no row. A refined pattern contributes no row, and as the arm under
+test it is tested as the pattern it refines. So `Pair(true, _)`,
+`Pair(false, true)` and `Pair(false, false)` cover a `Pair(Bool, Bool)` with no
+wildcard, and the arms of `Order { status: Paid, .. }`, `Order { status: Pending, .. }`
+and `Order { status: Cancelled, .. }` cover an `Order` between them, after which
+an `Order { total, .. }` arm is `bynk.types.unreachable_arm`. Redundancy may be
+spread across several earlier arms.
+
+Each value no arm covers is reported as a pattern that can be written as an arm:
+`Pair(false, false)`, `Order { status: Cancelled, .. }`, or `_` for an unbounded
+type, with `_` standing for a field the uncovered values leave unconstrained. At
+most eight are reported for one `match`, followed by a count of the rest. A
+checker MAY bound the work it does: when a `match` is too complex to decide, it
+MUST report `bynk.types.non_exhaustive_match` (asking for a wildcard arm) rather
+than accept it, and MUST NOT report an arm unreachable.
+
+**Extensible enums** (standard-library S3, #1963). A standard-library enum
+marked extensible in the first-party registry (`FetchError`, `Method`) may gain
+variants in a minor release, so its coverage counts one more shape than its
+declared variants: a future variant that only an irrefutable pattern (`_` or a
+binding) covers. A `match` that covers an extensible enum at any depth
+(`Err(Network)` … inside `Result`, or at top level) without such a pattern is
+`bynk.types.extensible_match_needs_wildcard`. Once the wildcard is present it
+covers the future variant, so it is not `bynk.types.unreachable_arm`. The enum
+is identified by the unit that provides it, not by its name, so a user's own
+enum of the same name is unaffected. Suite bodies are not checked under this
+rule: a test is not under the compatibility promise, and its views lack the
+unit's provenance.
+
+**Record patterns** (patterns track, slice 1, #2641, [§4.7.11](/reference/spec/syntactic-grammar/#4711-record_pattern)).
+In `T { f, g: p, .. }`:
+
+- `T` MUST be a record type — not a sum, enum, refined or opaque type, or a
+  built-in (`bynk.types.record_pattern_on_non_record`) — and the matched value
+  MUST be of type `T` (`bynk.types.pattern_type_mismatch`). For a generic record
+  the type arguments are the scrutinee's.
+- Each listed field MUST exist (`bynk.types.unknown_field`) and appear at most
+  once (`bynk.types.duplicate_pattern_field`). A bare `f` binds a local `f` of
+  the field's type; in `f: p`, `p` is checked against the field's type. Under an
+  or-pattern the alternatives MUST bind the same names at the same types, as
+  for any pattern.
+- A record pattern is subject to the visibility rules of a field read: it MUST
+  NOT name a type the unit may not inspect, such as another context's
+  `exports opaque` type (`bynk.context.opaque_inspection`, reported at the
+  pattern).
+- **Coverage is precise.** A record pattern is one constructor over the record's
+  fields, so several arms cover a record between them, as stated above.
+- After `is`, the names bound by a record pattern in scope are its flat fields:
+  bare `f` and `f: name`, like a variant's flat payload bindings.
+
+**List patterns** (patterns track, slice 4, #2680, [§4.7.12](/reference/spec/syntactic-grammar/#4712-list_pattern)).
+In `[p₁, …, pₙ]` and `[p₁, …, pₙ, ..]` / `[p₁, …, pₙ, ..rest]`:
+
+- The matched value MUST be a `List[T]`. A record, a sum, a base type, a `Set`
+  or a `Map` is not a list (`bynk.types.list_pattern_on_non_list`). A `match`
+  whose scrutinee is a `List` and whose arms include a list pattern is a `match`
+  on a list; one with no list pattern still is not
+  (`bynk.types.match_non_sum_discriminant`).
+- Each `pᵢ` is checked at `T`, and `rest` has type `List[T]`. Under an
+  or-pattern the alternatives MUST bind the same names at the same types, as for
+  any pattern, so `[x] | [x, _]` is well-typed and `[x] | []` is not.
+- **Coverage is by length.** The constructors of a list column are the lengths
+  the column's patterns spell out. With *L* the longest prefix any pattern in the
+  column writes, they are the exact lengths `0` to *L* and "*L* + 1 or more"; a
+  pattern with a rest marker covers every length from its prefix up. So `[]` and
+  `[x, ..rest]` cover every list with no wildcard, and `[_]`, `[_, _]` cover only
+  the lists of one or two elements. The split is linear in *L*. An uncovered
+  length is reported as a pattern: `[]`, `[_]`, `[_, _, ..]`, with an element
+  pattern where the uncovered lists constrain one (`[None, ..]`). A list arm is
+  `bynk.types.unreachable_arm` when the earlier arms cover every list it matches
+  (`[x, ..]` after `[_, ..]`, `[a, b]` after `[_, _]`).
+- A list pattern is irrefutable exactly when it is `[..]` or `[..rest]`.
+- After `is`, the names bound by a list pattern in scope are its elements that
+  are bare names and the named rest, like a variant's flat payload bindings.
+
+**Range patterns** (patterns track, slice 5, #2699, [§4.7.13](/reference/spec/syntactic-grammar/#4713-int_range)).
+In `lo..hi`, `lo..` and `..hi`:
+
+- The matched value MUST be an `Int`, or a refinement of one
+  (`bynk.types.range_pattern_on_non_int`). `Float`, `String` and every other type
+  have no range patterns. A refined type is matched as its base: its own bounds
+  are not interpreted, so `Age = Int where InRange(0, 150)` still needs all of
+  `Int` covered.
+- The bounds are inclusive. A closed range MUST have `lo <= hi`
+  (`bynk.types.empty_range_pattern`); `lo..lo` is the literal. A bound outside the
+  `Int` range is the integer-literal error of the lexer.
+- A range binds nothing and is refutable. Under an or-pattern it contributes no
+  names, so `0..9 | 90..99` is well-typed.
+- **Coverage is by interval.** The constructors of an `Int` column are the
+  disjoint intervals the column's patterns cut the safe integers into: a cut at
+  each range's low bound and just after each high bound. Every pattern then covers
+  whole intervals, and the split is linear in the number of distinct endpoints. A
+  column whose patterns are all single values is not split, so literals alone
+  still need a wildcard and report `_`. An uncovered interval is reported as a
+  pattern: `13..17`, `101..`, `..-1`, or the single value when the gap is one
+  number; adjacent uncovered intervals are reported as one. `..-1` and `0..`
+  cover every `Int`. An arm whose range the earlier unguarded arms wholly cover is
+  `bynk.types.unreachable_arm`; a partly covered range is legal.
+- After `is`, a range directly after the keyword MUST NOT be written
+  (`bynk.types.is_range_pattern`), as for a literal
+  (`bynk.types.is_literal_pattern`).
+
+A pattern MUST name a real variant (`bynk.types.unknown_variant_in_pattern`) and
+real payload fields (`bynk.types.unknown_pattern_field`), bind the right number
+of fields (`bynk.types.pattern_arity`), and MUST NOT mix named and positional
+bindings (`bynk.types.mixed_pattern_bindings`). An `is` check MUST be applied to a
+value of the matching base or sum (`bynk.types.is_base_mismatch`,
+`bynk.types.is_non_sum`, `bynk.types.is_unknown_variant`).
+
+**Where an `is` binding is in scope** (#1654, type-system §2.3.6). The names an
+`e is P` test binds are in scope wherever the test is known to have matched.
+Which tests a Boolean expression proves follows its structure:
+- `e is P` proves itself when true;
+- `a && b` proves both operands' tests when true;
+- `a || b` proves both operands' negated tests when false;
+- `!e` swaps true and false;
+- `a implies b` (`!a || b`) proves `a`'s tests and `b`'s negated tests when
+  false.
+
+So the bindings are in scope in:
+- an `if`'s then-branch, for what its condition proves when true;
+- its else-branch, for what the condition proves when false
+  (`if !(o is Some(v)) { 0 } else { v }`);
+- the right operand of `&&` and `implies`, for what the left operand proves
+  when true, since the right is evaluated only then
+  (`o is Some(v) && v > 0`, `(state is Held(g, r)) && useGuestRoom(g, r)`).
+
+They are never in scope in the right operand of `||` or past the `if`
+(`bynk.resolve.unknown_name`).
+
+{{#grammar-semantics match_expr}}
+
+**`let … else`** (#2010, [§4.8.4a](/reference/spec/syntactic-grammar/#484a-let_else_stmt-2010)).
+A `let` whose left side is a pattern, followed by the statements `S…` and the
+tail `t` of its block, means exactly
+
+```bynk,ignore
+let v <- e               // or `let v = e`
+match v { P => { S… t }, _ => E }
+```
+
+for `let P <- e else E`, where `v` is a name the program cannot write; for
+`let P <- e else match { arms }` the arms replace `_ => E`. So:
+
+- `E` is the value of the **enclosing block** when `e` does not match `P`,
+  not of the enclosing function. It MUST have the type the rest of the block
+  produces (`bynk.types.match_arm_mismatch`). A `?` inside `E` still returns
+  from the function, as a `?` anywhere does.
+- `P`'s names are in scope from the end of the statement to the end of the
+  block, like a `let` binding's.
+- The `else match` arms MUST cover the values `P` does not
+  (`bynk.types.non_exhaustive_match`) and MUST NOT be unreachable, which
+  includes an arm `P` already covers (`bynk.types.unreachable_arm`,
+  `bynk.types.duplicate_variant_arm`).
+- If `P` matches every value of `e`'s type, the `else` can never run, which is
+  `bynk.types.unreachable_arm`. Bind the value with a plain `let` instead; for a
+  record pattern, drop the `else` (the diagnostic offers that fix).
+- A list pattern opens a `let … else` (`let [head, ..] = jobs else { 0 }`, #2680).
+  Every list pattern but `[..]` and `[..rest]` can fail, so it needs the `else`.
+  `[..]` and `[..rest]` match every list, which makes their `else` unreachable
+  (`bynk.types.unreachable_arm`); the `else`-less form stays record-only
+  (`bynk.parse.let_pattern_without_else`), since `let rest = xs` already binds
+  the whole list.
+- A `let` whose pattern is an irrefutable record pattern may omit the `else`
+  (#2654, [§4.8.4a](/reference/spec/syntactic-grammar/#484a-let_else_stmt-2010)):
+  `let T { f, .. } = e` means `match v { T { f, .. } => { S… t } }`, a
+  one-arm `match` with no fallback, whose coverage is the record-pattern
+  coverage rule above. It adds no type rule: the pattern's type checks,
+  visibility (`bynk.context.opaque_inspection`) and binding scopes are those of
+  the `match` arm.
+- A lambda parameter that is a record pattern (#2712) is this `else`-less `let`
+  on a hidden parameter: `(P) => body` means `(v) => { let P = v; body }`. It
+  adds no rule of its own beyond §5.2's lambda typing.
+- `<-` follows the `effect_let_stmt` rules (§5.5): the body MUST be effectful,
+  and `P` matches the `Effect`'s payload.
+
+Each statement nests the rest of its block one level, as the `match` it stands
+for does, so a single block holds at most as many steps as the nesting limit
+allows (`bynk.parse.nesting_too_deep`).
+
+{{#grammar-semantics let_else_stmt}}
+
+## §5.7 Handlers
+
+A `service` MUST be declared inside a context (`bynk.service.outside_context`) and
+every service handler MUST return an `Effect` (`bynk.service.return_not_effect`).
+A service with no `from` clause MUST declare exactly one `on call` handler; a second
+is `bynk.service.duplicate_call_handler`.
+
+An HTTP handler MUST return `Effect[HttpResult[T]]`
+(`bynk.http.return_not_effect_http_result`); its route MUST be well-formed and
+unique, MUST NOT use the reserved `/_bynk/` prefix
+(`bynk.http.invalid_path`, `bynk.http.duplicate_route`, `bynk.http.reserved_prefix`),
+MUST NOT contain `*`, `{` or `}` in any segment, which are reserved for a future
+route form (`bynk.http.reserved_route_syntax`),
+and each `:name` segment MUST bind to a string-constructible parameter
+(`bynk.http.unbound_path_param`, `bynk.http.path_param_not_stringy`,
+`bynk.http.extra_param`); `GET` and `DELETE` MUST NOT take a `body`
+(`bynk.http.body_on_get_or_delete`). A parameter named `query` that no `:query`
+segment binds (#2854) MUST be `RequestQuery` or a record type, at most one per
+handler, whose fields are each a `String`, `Int`, `Bool` or `Decimal`, a refined or
+opaque type over one, or an enum, or an `Option` or `List` of one
+(`bynk.http.query_wrong_type`, `bynk.http.query_field_not_stringy`); the router
+MUST decode a record `query` from the request's query string and validate it, with
+a `400` on a violation, before the handler runs, ignoring keys the record does not
+declare and refusing a repeated key on a field that is not a `List`. A
+`RequestQuery` MUST NOT appear outside an HTTP handler's `query` parameter
+(`bynk.http.query_not_http`, `bynk.types.request_query_at_boundary`). Constructing a `Raw` variant (v0.111) MUST
+supply exactly two arguments — a `Bytes` body then a `String` content-type
+(`bynk.types.variant_arity`, `bynk.types.argument_mismatch`) — and yields
+`HttpResult[()]`, the JSON body parameter `T` being unused, as for `Streaming`
+and the redirect variants. Constructing `RawCreated` (the `201` variant, #2403)
+MUST supply the same two arguments, with the same codes and result. Constructing
+`RawStreamed` (#2623) MUST supply exactly two — a `Stream[Bytes]` body then a
+`String` content-type — with the same codes and result. Constructing
+`RawTagged` MUST supply exactly three — a
+`Bytes` body, a `String` content-type, then a `String` entity tag — with the same
+codes and result; the tag's syntax is checked at run time
+([§7.4.3](/reference/spec/runtime-library/#743-httpresult)), not here. An cron handler MUST take at most one
+`Int` parameter, a valid five-field schedule, and return `Effect[Result[(), E]]`
+(the `bynk.cron.*` codes); an `on message` handler MUST take exactly one `message`
+parameter, a Cloudflare-valid queue name, and the same return shape (the `bynk.queue.*`
+codes).
+
+A **`from email("address")`** service (#3328) claims one recipient address, written
+`local@domain` or, for a domain's catch-all, `*@domain`; any other form is
+`bynk.email.invalid_address`. Two services of a context MUST NOT claim the same
+address, compared without regard to case (`bynk.email.duplicate_address`); a literal
+address and the catch-all of its domain MAY both be claimed, the literal address
+winning. The service MUST declare exactly one handler, `on message(mail:
+InboundEmail) -> Effect[EmailVerdict]`: one parameter of the first-party
+`InboundEmail` (`bynk.email.bad_params`), and the first-party verdict
+`EmailVerdict` (`bynk.email.return_not_email_verdict`), with a second `on message`
+being `bynk.email.duplicate_handler`. The verdict is `Accept`, `Reject(reason)`,
+`Forward(to)` or `Reply(message)`; `InboundEmail`, `EmailVerdict` and `EmailReply`
+are exported by `bynk.cloudflare`, not hard-wired as `QueueResult` is. The default
+actor is `Sender`. Inbound email is Cloudflare's: a context declaring a
+`from email` service is platform-native to `cloudflare`, so another `--platform`
+is `bynk.target.vendor_required`. Two contexts claiming one address is also
+`bynk.email.duplicate_address`: the check is project-wide, because routing is.
+On `--target workers` the Worker exports `email(message, env, ctx)`, which
+dispatches on the envelope recipient, parses the raw message into `InboundEmail`
+under fixed limits, mints the `Sender` identity from the
+topmost `Authentication-Results` header when its authserv-id is `mx.cloudflare.net`, runs
+the handler, and applies its verdict; a fault, a parse failure and a refused
+reply each reject the message with a fixed reason and log nothing of it.
+
+### §5.7.1 CORS policy (v0.131) {#cors}
+
+A `from http` service MAY declare a single **`cors { }`** policy in header position
+(before the handlers). It is legal only on a `from http` service
+(`bynk.http.cors_not_http`) and at most once per service
+(`bynk.parse.duplicate_cors`). The grammar accepts any `name: value` field; the
+checker enforces the closed field set — an unknown field is
+`bynk.http.cors_unknown_field`. The fields:
+
+- **`origins`** — REQUIRED; a non-empty list of string literals
+  (`bynk.http.cors_invalid_origins`). The allowlist of origins, or the single
+  wildcard `["*"]`.
+- **`headers`** — OPTIONAL; a list of string literals
+  (`bynk.http.cors_invalid_field`). Overrides the default `Access-Control-Allow-Headers`.
+- **`credentials`** — OPTIONAL; a boolean literal (`bynk.http.cors_invalid_field`).
+- **`maxAge`** — OPTIONAL; a `Duration` literal (`bynk.http.cors_invalid_field`).
+
+`credentials: true` combined with a wildcard origin (`["*"]`) is rejected
+(`bynk.http.cors_wildcard_credentials`) — the Fetch standard forbids that pair.
+`Access-Control-Allow-Methods` is **not** a field: it is derived from the service's
+declared route methods (plus `HEAD` where `GET` is declared, plus `OPTIONS`) — the
+same derivation that drives the always-on `Allow` header. A service with no
+`cors { }` policy emits no `Access-Control-*` headers (and a cross-origin preflight
+carries no CORS grant, so the browser blocks the read); it still answers the
+always-on method contract — a plain `OPTIONS` is a `204 + Allow`, a wrong method a
+`405 + Allow`, and `HEAD` mirrors `GET`. See [§7 emission](/reference/spec/emission/)
+for the synthesised preflight, the method-contract fall-through, and header
+stamping, whose ordering (the preflight and the `405`/`OPTIONS` answers precede the
+handler authentication seam) is normative.
+
+### §5.7.2 Handler caching annotation (v0.140) {#cache}
+
+A `GET` handler MAY carry a single **`@cache`** annotation in handler position
+(immediately before `on`). It is the first handler-position annotation; the grammar
+admits any `@name(args)` before a handler, so a dangling annotation with no
+following `on` is a parse error (`bynk.parse.dangling_handler_annotation`) and any
+name outside the closed set is `bynk.http.unknown_handler_annotation`. `@cache` is
+legal **only on an `on http GET` handler** — on any other method, protocol, or an
+agent handler it is `bynk.http.cache_on_non_get` — and at most once per handler
+(`bynk.http.cache_duplicate`). Its arguments:
+
+- **`maxAge`** — REQUIRED; a positive `Duration` literal resolving to a whole
+  number of seconds (`bynk.http.cache_bad_max_age` if not positive;
+  `bynk.http.cache_max_age_fractional_seconds` if positive but not an exact
+  multiple of one second — `Cache-Control: max-age` has no finer granularity,
+  so a fractional-second value would otherwise silently drop the remainder
+  rather than honour it). The freshness window, lowered to `Cache-Control:
+  max-age` in whole seconds.
+- **`scope`** — OPTIONAL; the bare identifier `public` or `private`
+  (`bynk.http.cache_bad_scope`), defaulting to `private`.
+- **`immutable`** — OPTIONAL; a `Bool` literal (`bynk.http.cache_bad_immutable`),
+  defaulting to `false`. `true` appends the RFC 8246 `immutable` directive to the
+  `Cache-Control`.
+
+Any other argument is `bynk.http.cache_unknown_arg`. The annotation governs only
+the opt-in **freshness** half; the conditional **`ETag`/`304`** half is automatic
+for every eligible `GET` (one returning `Ok`, or a `Raw` body of at most 1 MiB)
+and carries no author surface; `RawTagged` carries the handler's own validator.
+Because eligibility is a value-level property — the returned variant, not the
+`Effect[HttpResult[T]]` return type — the runtime attaches the validator only to
+those responses. `@cache`'s `Cache-Control` applies to an `Ok`, `Raw` or
+`RawTagged` response; on a `GET` that returns only `Streaming` it is a harmless
+no-op for the stream (a static diagnostic for that case is a named follow-on). See [§7.4.3](/reference/spec/runtime-library/#743-httpresult)
+for the runtime lowering and the normative composition order.
+
+### §5.7.3 Security-headers policy (v0.141) {#security}
+
+A `from http` service MAY declare a single **`security { }`** policy in header
+position (beside `cors { }`). It is legal only on a `from http` service
+(`bynk.http.security_not_http`) and at most once per service
+(`bynk.parse.duplicate_security`). The grammar accepts any `name: value` field; the
+checker enforces the closed field set — an unknown field is
+`bynk.http.security_unknown_field`. The fields:
+
+- **`nosniff`** — OPTIONAL; a boolean literal (`bynk.http.security_invalid_field`).
+  Whether `X-Content-Type-Options: nosniff` is stamped. Defaults to **`true`**.
+- **`hsts`** — OPTIONAL; a **positive** `Duration` literal
+  (`bynk.http.security_invalid_field`). Opts in to `Strict-Transport-Security`,
+  lowered to `max-age` in whole seconds. Absent ⇒ no HSTS.
+
+Unlike `cors`, the safe header is **on by default**: a `from http` service with no
+`security { }` policy (or one that omits `nosniff`) still stamps
+`X-Content-Type-Options: nosniff` on every response — the compiler synthesises a
+default policy (`nosniff: true`, no HSTS) for **every** `from http` service. Only an
+explicit `nosniff: false` suppresses it. The headers are stamped uniformly across
+every response family and the synthesised preflight, `405`/`OPTIONS`, and `304`,
+composing with the CORS headers (the two sets are disjoint, so the stamping order is
+not observable). `Content-Security-Policy` and `X-Frame-Options` are **not** emitted
+— they constrain markup, which the Bynk HTTP surface does not serve. See
+[§7.4.3](/reference/spec/runtime-library/#743-httpresult) for the runtime lowering.
+
+### §5.7.4 Request body-size limits (v0.142) {#body-limits}
+
+A `from http` service MAY declare a single **`limits { }`** section in header
+position (beside `cors { }` and `security { }`), and a body-taking handler MAY
+carry a single **`@limit`** annotation that overrides it. Both bound the size of a
+request body, in bytes.
+
+The **`limits { }`** section is legal only on a `from http` service
+(`bynk.http.limits_not_http`) and at most once per service
+(`bynk.parse.duplicate_limits`). The grammar accepts any `name: value` field; the
+checker enforces the closed field set:
+
+- **`maxBody`** — the only field; a positive `Int` byte count
+  (`bynk.http.limits_invalid_field`). Any other field is
+  `bynk.http.limits_unknown_field`.
+
+The **`@limit`** annotation is a handler-position annotation (the `@cache`
+position, ADR 0111). It is legal **only on an `on http POST`/`PUT`/`PATCH`
+handler** — a body-taking method — and on a `GET`/`DELETE` (or any bodyless
+method) it is `bynk.http.limit_on_bodyless`; at most once per handler
+(`bynk.http.limit_duplicate`). Its arguments:
+
+- **`maxBody`** — the only argument; a positive `Int` byte count
+  (`bynk.http.limit_bad_max_body`). Any other argument is
+  `bynk.http.limit_unknown_arg`.
+
+**Effective cap and precedence.** For a body-taking route the effective cap is the
+route `@limit` `maxBody` if present, otherwise the service `limits { maxBody }` if
+present, otherwise **none**. A route with no effective cap reads the body
+unchanged, so this surface is **opt-in** (the CORS posture, not the security
+default-on posture): a service declaring neither `limits { }` nor any `@limit` is
+byte-for-byte unchanged.
+
+**Enforcement.** A capped route rejects a request whose `Content-Length` exceeds
+the effective cap with a synthesised **`413 PayloadTooLarge`** (`{ kind:
+"PayloadTooLarge", details: … }`), produced **before the body is read** and
+**before the `by`/Bearer auth seam** — the boundary posture of the method-semantics
+`405` ([§5.7](#57-handlers)). It reuses the existing `413` status; the closed
+`HttpResult` registry is **unchanged**. The `413` is stamped with the CORS and
+security headers so a cross-origin caller can read it. Because it keys on
+`Content-Length` — which may be absent (chunked) or spoofed — this is a fast-reject,
+not a hard guarantee on its own. A capped body is therefore also read through a
+counting reader: the bytes actually read are counted against the cap, and the read
+is cancelled with the same `413` as soon as it crosses it, so a chunked body, or one
+whose `Content-Length` understates it, cannot exceed the cap. This covers a JSON
+body, a `@raw` body and a multi-actor route (whose wrapper returns `PayloadTooLarge`).
+`maxBody` is an `Int` byte count in this version; a byte `Size` literal is a named
+follow-on.
+
+**`@form`.** A handler annotation, `@form`, marks a handler's `body` as a form post
+(`application/x-www-form-urlencoded`). It is legal only on a `POST`/`PUT`/`PATCH`
+handler with a `body` (`bynk.http.form_on_bodyless`), at most once
+(`bynk.http.form_duplicate`), with no arguments (`bynk.http.form_unknown_arg`), and
+not together with `@raw` (`bynk.http.body_kind_conflict`) or a `by` clause that is a
+sum of actors (`bynk.http.form_on_sum_route`). The `body` MUST be a record
+(`bynk.http.form_body_not_record`) whose fields are each a string-constructible leaf
+(`String`, `Int`, `Bool`, `Decimal`, an enum, or a refined or opaque type over one),
+an `Option` of one, or a `List` of one (`bynk.http.form_field_not_stringy`); a `Bool`
+field with no default is a warning (`bynk.http.form_bool_without_default`). The
+router answers a missing or different `Content-Type` (parameters stripped, compared
+case-insensitively; a `charset` other than UTF-8 included) with a synthesised
+**`415 UnsupportedMediaType`** ahead of the auth seam and the body read. It reads the
+body as UTF-8 text under the route's cap, splits it into key/value pairs as the URL
+standard's `application/x-www-form-urlencoded` parser does, and reads the pairs into
+the record's JSON form field by field: unknown keys are ignored; a repeated key fills
+a `List` and is otherwise `StructuralMismatch`; an `Int` reads `-?[0-9]+` within the
+safe-integer range; a `Bool` reads `true`/`on` and `false`/`off`; an empty value is
+absent for an `Option` and for every leaf but `String`. The record's codec then
+applies refinements and defaults and a failure is a `400` whose `path` is rooted at
+`body`. See the HTTP reference.
+
+**`@multipart`.** A handler annotation, `@multipart`, marks a handler's `body` as a
+`multipart/form-data` upload. Its placement rules are `@form`'s, and it likewise excludes
+`@raw` and `@form` (`bynk.http.body_kind_conflict`). The `body` MUST be a record whose
+fields are form leaves, or `File` (the record `bynk` exports), or an `Option` or `List` of
+one. The route MUST have an effective `maxBody` (`bynk.http.multipart_body_unbounded`),
+and a cap over 32 MiB is a warning (`bynk.http.multipart_large_cap`). `maxFile` and
+`maxParts` are positive `Int` fields of `limits { }` and arguments of `@limit`
+(`bynk.http.limits_invalid_field`, `bynk.http.limit_bad_max_file`); in `@limit` they are legal
+only on a `@multipart` handler (`bynk.http.limit_on_non_multipart`). The router answers a
+`Content-Type` that is not `multipart/form-data` with the `415`, reads the body under the
+cap, and parses its parts: a part with a filename is a file, the rest are text parts read as
+a `@form` body's fields. A body that is not multipart is a `400` of kind `MalformedForm`; a
+part count over `maxParts`, or a file over `maxFile`, is a `413` of kind `PayloadTooLarge`;
+a part of the wrong kind for its field, or two files for a single `File`, is a
+`StructuralMismatch` at `body.<field>`.
+
+**`cookies`.** An `on http` handler MAY declare a parameter named `cookies` (unless a `:cookies`
+path segment binds the name), typed as a record (`bynk.http.cookies_wrong_type`) whose fields are
+each a string-constructible leaf (`String`, `Int`, `Bool`, `Decimal`, an enum, or a refined or
+opaque type over one), an `Option` of one, or a `List` of one
+(`bynk.http.cookies_field_not_stringy`). The router parses the `Cookie` header into
+name/value pairs (RFC 6265 §5.4; values are not decoded), reads them into the record's JSON
+form by the rules of a typed `query` (unknown names ignored; a name repeated on a
+non-`List` field is `StructuralMismatch`), and applies the record's codec, so refinements and
+defaults hold; a failure is a `400` whose `path` is rooted at `cookies`.
+
+**Raw `cookies`.** A handler's `cookies` parameter MAY instead be `RequestCookies`, a read-only
+view of the request's cookies with `get(name) -> Option[String]`, `all(name) -> List[String]`
+(header order) and `names() -> List[String]`, read by the parsing above and not decoded or
+validated. It exists for a name a record field cannot spell (`__Host-sid`). `RequestCookies`
+MAY appear only as the `cookies` parameter of an `on http` handler (`bynk.http.cookies_not_http`)
+and MUST NOT be stored, sent or returned (`bynk.types.request_cookies_at_boundary`). A test builds one with
+`RequestCookies.of(pairs)` (`"name=value"` strings, as a browser sends them) or `RequestCookies.empty()`.
+
+**Setting cookies.** `HttpResult[T]` has three methods, available once the `bynk` `Cookie` type
+is in scope: `withCookie(c)` and `clearCookie(c)`, each taking a `Cookie` and answering the same
+`HttpResult[T]` with the cookie attached, and `cookies()`, answering the `List[Cookie]` a result
+carries. The router sends one `Set-Cookie` header for each cookie, in order; `clearCookie` sends
+the cookie empty with `Max-Age=0` and an epoch `Expires`. A `Cookie { … }` literal is refused
+when it has `sameSite: SameSite.Unrestricted` or `partitioned: true` with `secure: false`
+(`bynk.http.cookie_samesite_none_insecure`, `bynk.http.cookie_partitioned_insecure`), a `__Host-`
+name that is not `secure`, has a `domain`, or a `path` other than `/`
+(`bynk.http.cookie_host_prefix`), or a `__Secure-` name that is not `secure`
+(`bynk.http.cookie_secure_prefix`); it draws a warning for `httpOnly: false`
+(`bynk.http.cookie_script_readable`) and for a `domain` on a name that is not `__Host-`
+(`bynk.http.cookie_domain_widens`). A `from http` service whose handlers attach a literal
+`Cookie` with `sameSite: SameSite.Unrestricted` and that does not declare `cors { credentials: true }`
+draws a warning (`bynk.http.cookie_cross_site_without_credentials`). A `@cache(scope: public)` handler MUST NOT take a `cookies`
+parameter (`bynk.http.cache_public_reads_cookies`). A computed cookie that is not valid at
+emission (a name that is not a token, a value outside the cookie-octet set, an unsafe `Domain` or
+`Path`, an `Expires` outside the date range, a violated prefix rule, or a header over 4096 bytes)
+faults the request. A response carrying a `Set-Cookie` is sent with `Cache-Control: private`
+whatever its `@cache` scope.
+
+**Typed cookie writes.** `R.f.cookie(v)` and `R.f.expire()`, where `R` is a record type, `f` one of
+its fields and `R.f` not a value on its own, are checker-typed forms answering a `Cookie`, recognised
+ahead of any other reading of the receiver; a static method `cookie` or `expire` declared on `R`
+takes precedence. `R` MUST be the type of the `cookies` parameter of some `on http` handler of the
+unit that writes the cookie (`bynk.http.cookie_field_not_cookie_record`) and `f` MUST be one of its
+fields (`bynk.http.cookie_field_unknown`). `cookie` takes exactly one argument and `expire` none
+(`bynk.http.cookie_field_arity`), and `f` MUST NOT be a `List` (`bynk.http.cookie_field_list`).
+`cookie(v)` checks `v` against `f`'s type (the `T` of an `Option[T]`) and answers a `Cookie` whose
+`name` is `f`'s wire name (its `@name`, else its own name) and whose `value` is `v` as the `cookies`
+decoder reads it: an `Int` its decimal digits, a `Bool` `true` or `false`, an enum its variant's
+name, anything else its text; every other attribute is the `Cookie` default. `expire()` answers the
+cookie with that name, an empty value, `maxAge: Some(0)` and an epoch `expires`. The field segment
+is a reference to the field for rename and go-to-definition.
+
+A cookie whose name is known at compile time is checked against the unit's records and actors. The
+`__Host-`/`__Secure-` and attribute rules of a `Cookie` literal apply equally to `Cookie { ...R.f.cookie(v), … }`
+and to a bare typed cookie, judged against the field's wire name. A cookie named like the session
+cookie of a `SignedCookie` actor of the unit MUST NOT be written as a typed write
+(`bynk.actor.signed_cookie_write_directly`) or an untyped `Cookie` literal
+(`bynk.actor.signed_cookie_write_literal`). An untyped literal named like a field of a `cookies` record
+of the unit draws a warning (`bynk.http.cookie_untyped_has_field`), and a literal `value` that field's
+decoder rejects (an enum other than a variant's exact name, an `Int` that is not a safe integer's
+digits, a `Bool` other than `true` or `false`) is refused (`bynk.http.cookie_value_undecodable`).
+
+**`@raw`.** A third handler annotation, `@raw(contentType: "<type>/<subtype>")` (or
+`"*/*"`), marks a handler's `body: Bytes` as the raw request body. It is legal only
+on a `POST`/`PUT`/`PATCH` handler with a `body` (`bynk.http.raw_on_bodyless`), at
+most once (`bynk.http.raw_duplicate`), with the one argument `contentType`
+(`bynk.http.raw_unknown_arg`) a media type (`bynk.http.raw_bad_content_type`). The
+`body` MUST be `Bytes` or `Stream[Bytes]` (`bynk.http.raw_body_not_bytes`) and the
+route MUST have an effective cap (`bynk.http.raw_body_unbounded`). A `Stream[Bytes]`
+body is the request body as it arrives, read once and counted against the cap as it is
+read; it is refused with a `Signature` actor (`bynk.http.stream_body_signature`) or a sum
+of actors (`bynk.http.stream_body_on_sum_route`), and without `@raw`
+(`bynk.http.stream_body_not_raw`). The router answers a missing or
+different `Content-Type` (parameters stripped, compared case-insensitively) with a
+synthesised **`415 UnsupportedMediaType`** (`{ kind: "UnsupportedMediaType",
+details: … }`) ahead of the auth seam and the body read, reads the body under the
+cap (a `Bytes` body is read whole first), and passes the octets to the handler undecoded. A `Signature` actor verifies
+over those octets. A `Bytes` body without `@raw` keeps its base64-in-JSON form. See
+[§7.4.3](/reference/spec/runtime-library/#743-httpresult) for the runtime lowering and
+its position in the dispatch order.
+
+### §5.7.5 Response JSON encoding (#2858) {#response-json}
+
+A `from http` service MAY declare a single **`json { }`** section in header
+position after `limits { }`, and an `on http` handler MAY carry a single
+**`@json`** annotation that overrides it. Both choose how an `Option` is written
+in the handler's response body.
+
+The **`json { }`** section is legal only on a `from http` service
+(`bynk.http.json_not_http`) and at most once per service
+(`bynk.parse.duplicate_json`). Its only field is **`options`**, whose value is the
+bare identifier `tagged` or `plain` (`bynk.http.json_invalid_field`); any other
+field is `bynk.http.json_unknown_field`. **`@json(options: tagged | plain)`** is
+legal only on an `on http` handler (`bynk.http.json_on_non_http`), at most once
+(`bynk.http.json_duplicate`), takes only `options` (`bynk.http.json_unknown_arg`)
+and requires it (`bynk.http.json_invalid_arg`).
+
+The **effective mode** of a route is its `@json`, else its service's `json { }`,
+else `tagged`. In `tagged` mode an `Option[U]` is written `{"kind": "Some",
+"value": u}` or `{"kind": "None"}`. In `plain` mode `Some(u)` is written as `u`
+and `None` as `null`, the key always present, at any depth. The mode applies to
+the `Ok`, `Created` and `Accepted` bodies only; request decoding, cross-context
+calls, queues, agent state, `Json.encode`, SSE events and contract hashes keep the
+tagged form and are unchanged.
+
+**Injectivity.** Plain mode would write `Some(u)` and `None` of an
+`Option[U]` identically when `U` can itself encode as `null` (`Option[T]` or `()`), so such an `Option` reachable from the
+response type of a `plain` route (through record and sum fields, `List`, `Set`,
+`Map`, `Result`, and generic arguments after substitution) is
+`bynk.json.nested_option_plain`. A service or route with neither declaration is
+unchanged.
+
+A **`from websocket(in: I, out: O)`** service (v0.103) binds the inbound frame
+type `I` and the server-sent frame type `O` on its header, and declares the
+connection-lifecycle handlers:
+
+- **`on open`** — exactly one per service. The upgrade is authenticated **at the
+  edge**: like a `from http` handler it MUST name its actor with `by` (there is no
+  anonymous upgrade), and the boundary admits `None`/`Bearer` actors and rejects
+  `Signature` (a browser cannot set an `Authorization` header). The handler
+  receives a fresh, **owned** `connection: Connection[O]` that it MUST dispose of
+  under the held-resource linearity discipline
+  ([§5.4.2](/reference/spec/static-semantics/#542-held-resource-linearity-v0102)) — the canonical
+  disposal being transfer into an agent. On the Workers target that transfer MUST
+  resolve to exactly one routable agent (`bynk.ws.open_transfer_shape`), keyed by
+  a parameter of `on open`, a constant of the context or a string, integer or
+  boolean literal, since the upgrade is routed before the body runs
+  (`bynk.ws.open_transfer_key`).
+- **`on message`** (v0.106) — an inbound frame arrived; its parameters are the
+  route params plus the decoded frame of type `I`.
+- **`on close`** (v0.106) — the connection ended; the stored connection is
+  disposed (typically via the owning agent).
+
+Inbound frames are dispatched to the agent that owns the connection, so the
+service holds **exactly one** `on open` and broadcasts by iterating a held
+`Map[K, Connection]` ([§5.4.2](/reference/spec/static-semantics/#542-held-resource-linearity-v0102)).
+
+{{#grammar-semantics http_handler}}
+
+## §5.7a Actors & the `by` clause (v0.45)
+
+An `actor` MUST be declared inside a context (`bynk.actor.outside_context`). Its
+`auth` scheme MUST be compiler-known (`bynk.actor.unknown_scheme`) — `None`,
+`Internal`, `Bearer` (v0.47), and `Signature` (v0.51) are supported. A `Bearer`
+actor MUST name its signing secret (`auth = Bearer(secret = "<ENV>")`,
+`bynk.actor.bearer_missing_secret`) and MUST declare a string-constructible
+`identity` — a refined or opaque `String`, minted from the JWT `sub` claim
+(`bynk.actor.bearer_identity_not_string_constructible`); `Bearer` is admissible
+only on `from http` handlers. A `Signature` actor (HMAC over the request body)
+MUST name its secret (`bynk.actor.signature_missing_secret`) and its signature
+`header` (`bynk.actor.signature_missing_header`); a `tolerance` requires a
+`timestamp` header (`bynk.actor.signature_tolerance_without_timestamp`); a
+`Signature` actor takes **no** `identity` — the signature attests authenticity,
+not a principal (`bynk.actor.signature_identity_unsupported`) — and is admissible
+only on `from http` handlers. An **`Oidc`** actor (v0.151) verifies an
+asymmetrically-signed (RS256/ES256) JWT against a provider's published JWKS. It
+MUST name its `issuer` (`bynk.actor.oidc_missing_issuer`), its `audience`
+(`bynk.actor.oidc_missing_audience`), and its `jwks` endpoint URL
+(`bynk.actor.oidc_missing_jwks`) — public trust parameters, **no secret** — and
+MUST declare a string-constructible `identity`, minted from the verified `sub`
+claim (`bynk.actor.oidc_identity_not_string_constructible`); `Oidc` is admissible
+only on `from http` handlers and, this slice, only as a **single** actor — never a
+sum member (`bynk.actor.oidc_not_in_sum`) and not a refinement base. A declared
+`identity = T` MUST be a context-ownable
+value type, so the verified identity is sealed — minted only inside the owning
+context (`bynk.actor.identity_not_sealed`). A **`Foreign`** actor (#1971) is a
+caller that is not Bynk, declared by the context it calls. It MUST name the
+secret its calls are signed with (`auth = Foreign(secret = "<ENV>")`,
+`bynk.actor.foreign_missing_secret`) as a string
+(`bynk.actor.foreign_secret_not_string`). No other actor in the context MAY
+name the same secret (`bynk.actor.foreign_duplicate_secret`), and it MUST NOT begin with an edge key's
+prefix, `BYNK_CALL_FROM_` or `BYNK_CALL_TO_` (`bynk.actor.foreign_reserved_secret`);
+it MAY name the foreign Worker (`worker = "<name>"`). Its name MUST NOT be one a
+context could have (`bynk.actor.foreign_name_is_context_name`): it is what the
+caller sends as `X-Bynk-Caller`, so it must never select a context's edge key.
+It takes **no** `identity` (`bynk.actor.foreign_identity_unsupported`), and is
+admissible only on `on call` handlers. A **`SignedCookie`** actor (#3386) is a
+session cookie Bynk issues and verifies. It MUST name its signing `secret`
+(`bynk.actor.signed_cookie_missing_secret`) and a `ttl`
+(`bynk.actor.signed_cookie_missing_ttl`), the latter a positive whole number of
+seconds (`bynk.actor.signed_cookie_bad_ttl`); its config keys are the closed set
+`secret`, `ttl`, `cookie`, `previous` and `sameSite`
+(`bynk.actor.signed_cookie_unknown_key`, `bynk.actor.signed_cookie_bad_arg`); its
+`cookie` MUST be a cookie-name token (`bynk.actor.signed_cookie_bad_name`); its
+`secret` and `previous` MUST differ from each other and from every other actor's
+secret (`bynk.actor.signed_cookie_secret_shared`); and its `identity` MUST be
+string-constructible (`bynk.actor.signed_cookie_identity_not_string_constructible`).
+A `ttl` over 30 days (`bynk.actor.signed_cookie_ttl_long`) and a `cookie` without the
+`__Host-` prefix (`bynk.actor.signed_cookie_unprefixed`) are warnings. It is `http`
+only, MUST NOT be a sum member (`bynk.actor.signed_cookie_not_in_sum`) or a refinement
+base, and MUST NOT guard a `@cache(scope: public)` route
+(`bynk.actor.signed_cookie_public_cache`). Inside the declaring context, `Actor.issue(identity)`
+(an `Effect[Cookie]`; `identity` is the actor's identity type) and `Actor.expire()` (a `Cookie`) are the
+only members an actor name has as a value; `issue` reads the `Clock`, which the handler MUST list in
+`given` (`bynk.actor.signed_cookie_issue_needs_clock`), and the cookie it returns has the attributes the
+scheme fixes (§7.3.4a). A route it guards verifies the session
+cookie before the body runs (§7.3.4a): a cross-site state-changing request is `403`, a missing,
+repeated, forged, tampered, expired or over-long-lived cookie is `401`, a bad signing key
+faults the request, and the credential is hidden from the handler's `cookies` view
+(`bynk.actor.signed_cookie_read_directly`).
+
+> **Who, not whose.** An actor contract answers *who* is at the boundary — it
+> authenticates a party and seals its identity. It deliberately does **not**
+> answer *whose* a given object is: object-level authorisation (may *this* user
+> read *this* record?) is domain logic and lives in the handler body, by design.
+> The `where`-clause authorisation invariants below narrow *who* (a claim the
+> party carries), never *whose*.
+
+The **refinement form** `actor Admin = User where <predicate>` (v0.53) declares
+an **authorisation invariant**: an `Admin` is a `User` who additionally satisfies
+the predicate. Its base MUST be a declared `Bearer` actor — only `Bearer` carries
+claims to authorise against (`bynk.actor.refinement_base_unsupported`) — and its
+`where` predicate MUST be in the closed claim-predicate set: `hasClaim("name")`
+(the claim is present and truthy) and `claimEquals("name", "value")` (string
+equality), composed with `&&`, `||`, `!` (`bynk.actor.refinement_predicate_unsupported`).
+A refinement actor is a handler's sole `by` contract, never a sum member
+(`bynk.actor.refinement_in_sum`, §5.7a.1). By refinement elimination an `Admin`
+is usable wherever its base `User` is: a `by a: Admin` binder yields the base
+`User` identity. The invariant is discharged at the boundary (§7.3.4a): the scheme
+is verified (failure → 401), then the predicate is checked against the verified
+claims (failure → **403**, distinct from 401), then the identity is minted and the
+body runs.
+
+A handler consumes an actor on its `by (<binder>:)? <Actor>` clause. The named
+actor MUST resolve to a declared actor or a prelude actor (`Visitor`,
+`Scheduler`, `Producer`, `Sender`, `Caller`) (`bynk.actor.unknown_actor`), and its scheme
+MUST be admissible on the handler's protocol — HTTP admits `None`, `Bearer`,
+`Signature`, and `Oidc`; the internal protocols (call/cron/queue/email) admit `Internal`,
+and `call` admits `Foreign` too (`bynk.actor.scheme_not_admissible`). In a sum,
+`Foreign` peers are exempt from the one-peer-per-scheme rule, since each is told
+apart by name. A `Signature` handler MUST take a `body`
+parameter — the signature is computed over the request body, so a bodyless signed
+request is meaningless (`bynk.actor.signature_requires_body`). A handler that
+omits `by` inherits its protocol's default actor; an **HTTP handler has no safe
+default and MUST declare `by`** (`bynk.actor.missing_by_on_http`).
+
+The `Caller` prelude actor (the `on call` default) yields a **live `CallerId`**
+(v0.54): a cross-context `on call … by c: Caller (…)` handler binds `c.identity`
+to the **calling context's qualified name**, established at the boundary over the
+internal Service Binding before the body runs. The name is proved by the call's
+per-edge signature (emission §7.3.4d); a call whose caller holds no key at the
+callee is refused (`401`) before any handler. `Caller` admits Bynk contexts
+only: a call from a foreign caller reaches a handler only if its `by` clause
+names that `Foreign` actor, and is otherwise refused (`403`). A binder-less
+`on call` captures nothing and is unaffected.
+The **binder is optional** (v0.50): with `by <binder>: <Actor>` the verified
+identity binds to `<binder>` and is read as `<binder>.identity` — a sealed value,
+minted at the boundary before the body runs and never re-checked downstream; with
+the binder-less `by <Actor>` the contract is still declared and verified
+fail-closed, but no identity is captured (anonymous / verify-and-discard). `_`
+MUST NOT be used as the binder (omit it instead). A named binder MUST NOT collide
+with a handler parameter (`bynk.actor.binder_shadows_param`).
+
+### §5.7a.1 Multi-actor sum dispatch (v0.52)
+
+A `by` clause MAY name an **ordered sum of peer actors**
+(`by who: A | B | …`): distinct parties distinguished by **scheme**, resolved
+**first-wins**. The boundary tries each peer's scheme in declared order and binds
+the first that verifies; the body `match`es on the resolved actor, each arm
+yielding that actor's identity directly (`User(u)` ⇒ `u` is the `User` identity;
+a unit-identity peer such as `Visitor` or a `Signature` webhook binds nothing).
+A sum is well-formed when:
+
+- it **binds the resolved actor** — a sum MUST have a binder, since the body
+  learns *which* peer verified by matching it (`bynk.actor.sum_requires_binder`);
+- its members are **peer base actors** — a refinement actor (`actor A = B where
+  …`) MUST NOT be a member (every `A` is a `B`, so the arm is dead,
+  `bynk.actor.refinement_in_sum`); narrowing belongs *inside* the resolved arm;
+- **no two members share a scheme** — peers are distinguished by scheme, so a
+  second same-scheme member is unreachable (`bynk.actor.duplicate_sum_scheme`);
+- a **`None`-scheme (catch-all) member is last** — it accepts every caller, so any
+  member after it is unreachable (`bynk.actor.unreachable_sum_arm`);
+- **every member is admissible** on the handler's protocol (in practice a sum is
+  HTTP-only — the only protocol with more than one admissible non-internal
+  scheme) (`bynk.actor.scheme_not_admissible`);
+- the body `match` is **exhaustive** over the members (the ordinary
+  sum-exhaustiveness rule, `bynk.types.non_exhaustive_match`).
+
+The reachability checks are **decidable and scheme-level**; the compiler does not
+reason about predicate-level disjointness. Total verification failure (no member
+verifies) is **fail-closed → 401**; a sum's members carry no invariants, so there
+is no 403 path. Verification is side-effect-free and idempotent: first-wins
+short-circuits, so the set and order of verifications attempted is observable, and
+audit/logging belongs *after* resolution.
+
+## §5.7b Events (v0.238–v0.244) {#events}
+
+An **event** is a typed fact one context emits and any number of contexts
+receive. Delivery is at-least-once and fire-and-forget: an emitter never learns
+whether, or how, a subscriber ran.
+
+**Declaration.** An `event` ([§4.1.12](/reference/spec/syntactic-grammar/#4112-event_decl))
+MUST be declared in a context (`bynk.event.outside_context`). Its one admitted
+annotation is `@schema(N)` (`bynk.event.unknown_annotation`), at most once, with
+`N` a single positive `Int` literal (`bynk.event.bad_schema_version`). An event's
+fields MAY declare defaults under the record rule ([§5.2b](#field-defaults)): a
+received payload with no key for a defaulted field takes the default, and the
+schema registry counts a field added with a default as an additive change.
+
+**Emission.** `Events` is a first-party capability of the `bynk` adapter,
+`emit[E](event: E) -> Effect[()]`, consumed with `consumes bynk { Events }` and
+required by `given Events`; its type argument is always written, never inferred.
+`E` MUST be an `event` (`bynk.event.emit_not_an_event`) declared in the emitting
+context itself (`bynk.event.emit_outside_owner`): a context that can name a
+foreign event, to subscribe to it, still cannot emit it. An emission is released
+only when the emitting handler commits ([§5.4](#54-agents--state)); a handler that
+faults, an `InvariantViolation` included, emits nothing.
+
+**Subscription.** A `from Events(E)` service
+([§4.4.7b](/reference/spec/syntactic-grammar/#447b-events-subscriptions-v0238)) MUST name an
+event declared in its own context or a consumed one
+(`bynk.event.unknown_subscription`), and it MUST have exactly one handler, an
+`on event` (`bynk.parse.empty_service` for none, `bynk.service.mixed_protocols`
+for any other kind, `bynk.event.duplicate_handler` for a second `on event`). An `on event` handler
+takes the payload, of type `E` (`bynk.event.handler_param_type_mismatch`), and
+optionally a second parameter of type `EventEnvelope`; any other parameter list
+is `bynk.event.bad_params`. It MUST return `Effect[()]`
+(`bynk.event.return_not_effect_unit`): nothing receives a subscriber's result.
+
+**Delivery filters.** A header pattern's fields MUST be fields of `E`
+(`bynk.event.pattern_unknown_field`), each listed once
+(`bynk.event.pattern_duplicate_field`), with a value compatible with the field's
+type (`bynk.event.pattern_type_mismatch`); a variant value MUST exist on the
+field's sum type (`bynk.event.pattern_unknown_variant`) and carry no payload
+(`bynk.event.pattern_variant_payload`). Listed fields combine with AND. A
+`via schema(...)` clause MUST give a positive `Int` literal `N`, a range of
+positive `Int` literals (`N..M`, `N..`, `..M`) or `_` (events slice 4b, #990;
+`bynk.event.bad_schema_dispatch` for a non-positive bound). A literal matches an
+emission whose envelope `schemaVersion` equals `N`; a range matches one within it,
+both bounds inclusive; `_` matches every version, as no clause does. `N..M` MUST
+have `N <= M` (`bynk.types.empty_range_pattern`). The range is the production of a
+`match` range pattern (§4.7.13). Both filters are **deliver-and-filter**: every
+emission of `E` is delivered to every subscriber of `E`, and each subscriber
+evaluates its own filters as a guard on entry, running its body only on a
+match. A filter does not narrow the handler parameter's type, and two
+subscribers whose filters overlap are not diagnosed.
+
+**The envelope.** `EventEnvelope`, exported by `bynk`, is
+`{ eventId: String, publisherId: String, emittedAt: Instant, schemaVersion: Int }`.
+`eventId` identifies the emission: every subscriber of one emission observes the
+same value. `publisherId` is the emitting context's qualified name.
+
+**Schema versions.** Every build reconciles each event's field shape — names,
+types, and which fields carry a default — against the project's committed
+schema registry, `bynk.schema.lock`. A new event starts at version 1, or at its
+`@schema(N)`. An unchanged shape keeps its version; an additive change, in which
+every added field has a default and no field is removed, retyped, or loses a
+default, increments it by one; any other change is
+`bynk.event.non_additive_schema_change`. A declared `@schema(N)` MUST equal the
+version so computed (`bynk.event.schema_version_mismatch`). The computed version
+is the envelope's `schemaVersion`. A check (`bynk check`) and a test run
+(`bynk test`) reconcile against the committed registry the same way and report
+the same diagnostics, but never write it; only a build records a new version.
+
+**Idempotent handling.** `Idempotency` is a first-party capability of the `bynk`
+adapter with two operations, `dedup[T](key: String) -> Effect[Option[T]]` and
+`remember[T](key: String, value: T, expiresAfter: Duration) -> Effect[()]`; each
+call's key is scoped to the calling handler's qualified name, so two handlers
+never share a key by accident. A subscriber that must not apply one emission
+twice deduplicates on `env.eventId` with this pair: the idiom is a documented
+convention, not syntax ([ADR 0294](https://github.com/bynk-lang/bynk/blob/main/design/decisions/0294-events-idempotency-idiom-is-documented-convention.md)).
+
+## §5.8 Boundaries & cross-context
+
+`consumes` MUST appear only in a context or an adapter (a `commons` or `suite`
+cannot declare one: `bynk.parse.expected_item`),
+MUST name an existing context or adapter — not a `commons`
+(`bynk.consumes.unknown_context`, `bynk.consumes.target_is_commons`) — and not the
+consumer itself (`bynk.consumes.self_reference`), and MUST NOT produce colliding
+names or aliases (the `bynk.consumes.*` codes). Calling another context's service
+requires a `consumes` declaration (`bynk.resolve.unconsumed_context`), and units
+MUST NOT form a `consumes` cycle (`bynk.context.consumes_cycle`).
+
+A **capability selection** (`consumes b { Cap, … }`) flattens each named
+capability into the consumer's local namespace under its bare name, so it reads
+as `given Cap` / `Cap.op(…)`. Each selected name MUST be a capability the target
+**exports** (`bynk.given.cross_context_unknown_capability`), and a flattened bare
+name MUST NOT collide with a locally declared capability or with a name
+flattened from another unit (`bynk.consumes.capability_name_clash`) — a clash is
+resolved by the qualified `given b.Cap` form or an alias.
+
+**Imports are per file.** A unit's own declarations are in scope in every file
+of the unit, but a name from another unit (a standard-library unit, a context of
+the project or an adapter) is in scope in a file only if that file's own
+`consumes` brings it in: a bare `consumes U` brings in all of `U`'s names, a
+braced list only the names it lists (an alias is per file too). The unit's
+dependencies (wiring, deploy order, the `consumes` graph) are the union of its
+files' `consumes`, so two files may consume the same unit. A suite file follows
+the same rule with its own `consumes`; it does not inherit its target's.
+
+A braced `consumes` of a first-party unit (`bynk`, `bynk.cloudflare`, …) brings
+into scope only the names it lists, and the types its listed capabilities'
+signatures use. Any other type, and its variants, are not candidates for a name clash (`bynk.suite.type_name_clash`,
+`bynk.consumes.name_conflict`) or for bare-variant resolution
+(`bynk.resolve.ambiguous_variant`), and a declaration of the unit's own takes
+the name.
+
+A name a file uses without its own `consumes` bringing it in is an error. A type, or a bare variant of a sum, is `bynk.consumes.type_not_selected`; a
+flattened capability named in a `given` clause, a call, `provides` or a suite's
+`stub` is `bynk.consumes.capability_not_selected`; a call to another unit's
+service is `bynk.consumes.unit_not_consumed`. Each error's fix edits the file
+it is reported in, so `bynk check --fix=<code>` migrates every file of a split
+unit and every suite.
+
+An **adapter's** `consumes` is further restricted: it MUST use the
+capability-selection form — an adapter has no services to call, so the
+whole-unit and aliased forms are rejected
+(`bynk.adapter.consumes_requires_selection`) — and it MUST target an adapter,
+never a context (`bynk.adapter.consumes_context`).
+
+`exports` MUST name declared types or capabilities, MUST NOT export a name twice
+or with conflicting visibility, and an exported capability MUST have a provider
+(the `bynk.exports.*` codes). A value crossing a boundary MUST be structurally
+compatible with the receiving side ([§6.5](/reference/spec/type-system/#65-type-compatibility--boundaries),
+`bynk.boundary.structural_mismatch`); outside its owning context, a context-owned
+type MUST NOT be built through its constructors (`.of`, `.unsafe`, a variant) and
+an opaque export MUST NOT be built with record syntax or inspected
+(`bynk.context.external_construction`, `bynk.context.opaque_inspection`), nor
+decoded from JSON (`bynk.context.external_decode`); a
+field read on a value of an opaque export is an inspection, however the value
+was bound. A transparent record's fields are shared, so a consumer MAY build
+one with record syntax. A consumer MAY read the fields of a value whose type the
+providing context declares but does not export; the read is checked against
+that declaration ([§6.5](/reference/spec/type-system/#65-type-compatibility--boundaries)). These rules hold in every body — functions, service and agent handlers,
+and provider operations.
+
+**Adapters are the host boundary.** An adapter MUST NOT declare a `service` or an
+`agent` (`bynk.adapter.disallowed_item`); it MAY declare at most one `binding`
+clause (`bynk.adapter.duplicate_binding`), and MUST declare one if it declares
+any external provider (`bynk.adapter.no_binding`). A binding's `requires` ranges
+MUST be pinned: a range MUST name at least one version digit — `*`, `x`,
+`latest`, and digit-free ranges are rejected
+(`bynk.requires.unpinned_dependency`). Every `requires` entry for one package
+MUST give the same range; a different range for a package another adapter
+already requires is rejected (`bynk.requires.conflicting_range`). A reached
+adapter of a git or registry dependency MUST NOT require a package at a range
+that `bynk.lock` doesn't approve (`approved = true` on its `[[npm]]` row;
+`bynk.requires.unapproved`); the project's own adapters and its path
+dependencies' need no approval. The `bynk` namespace is **reserved for the
+toolchain**: no user unit's name may have `bynk` as its first segment
+(`bynk.namespace.reserved`); the toolchain's own first-party adapters — the
+ambient `bynk` surface and the `bynk.<platform>` platform adapters
+([§7.3.6](/reference/spec/emission/#736-adapters)) — live inside that reserved prefix and are
+injected when a unit consumes them.
+
+**The platform lock** (v0.19). A capability of a **platform adapter**
+(`bynk.cloudflare`) is *platform-native*: its binding runs only on that
+platform. A **deployment unit** — each context under `--target workers`; the
+whole program under `bundle`, where co-location shares the lock — is locked to
+the union of native platforms its **in-process closure** reaches: the providers
+its composition would instantiate, walked through `given` and flattening edges.
+A service `consumes` edge between contexts is RPC under `workers` and does
+**not** propagate the lock. The selected `--platform` MUST be the locked
+platform (`bynk.target.vendor_required`), and one deployment unit MUST NOT span
+two mutually-exclusive native platforms (`bynk.target.vendor_conflict`). The
+`bynk` surface and library adapters impose no lock. New operations on an
+already-native capability (v0.23: `Kv.putTtl`, `Kv.list`) inherit the lock
+unchanged — no per-operation rules exist.
+
+A `system`-tier test ([§5.9c](#59c-tiers-v0118)) derives its wired participant set from
+the unit under test's transitive `consumes` closure; the inferred set MUST span at
+least two contexts, or the target MUST expose an `http` or `queue` service
+(`bynk.tier.system_needs_wire`). There is no participant list,
+so the set cannot drift from the dependency graph and every consumed dependency is
+wired by construction.
+
+{{#grammar-semantics consumes_decl}}
+
+{{#grammar-semantics adapter_decl}}
+
+{{#grammar-semantics binding_decl}}
+
+## §5.9 Testing constructs
+
+An `expect` MUST occur only in a `case` body and MUST be given a `Bool` predicate
+(`bynk.expect.outside_case`, `bynk.expect.not_bool`) — the same invariant
+predicate surface as `invariant`/`ensures` (one predicate surface, ADR 0144). The
+predicate MUST be pure: no sub-expression of it may have type `Effect[_]`
+(`bynk.expect.impure_predicate`, #3774), so a capability, service or agent call
+held inside it (in a list, or returned by a lambda) is refused rather than run.
+`expect`'s own constructs are not sub-expressions in this sense: a fault claim's
+subject (§5.9e), which the claim awaits; an observation's `Cap.op`
+subject, which is named, not called; and `trace(Cap.op)`. A
+`suite` MUST target an existing unit and MUST NOT duplicate a case description
+(`bynk.suite.unknown_target`, `bynk.suite.duplicate_case_name`).
+
+A suite MAY declare `fixture name = "path"` declarations (#2841). The path MUST be
+relative to the project root and inside its `fixtures/` folder, name a regular
+UTF-8 text file with no NUL byte of at most 4 MiB, and not be absolute or contain
+`..` (`bynk.fixture.unsafe_path`, `bynk.fixture.outside_fixtures_dir`,
+`bynk.fixture.missing_file`, `bynk.fixture.unreadable_file`,
+`bynk.fixture.invalid_encoding`, `bynk.fixture.binary_content`,
+`bynk.fixture.too_large`). The name is a `String` constant in the case scope of
+the declaring suite alone, and MUST NOT repeat another fixture of the suite or a
+name already in scope there (`bynk.fixture.duplicate`, `bynk.resolve.name_conflict`).
+The text follows an `embed`'s (§5.12a): a leading byte-order mark dropped, line
+endings normalised to `\n`. A fixture is emitted into test output only.
+
+A suite MAY declare helper `fn`s (#2834). A helper MUST be a free function
+that does not return an `Effect` (`bynk.suite.fn_method`, `bynk.suite.fn_effectful`),
+MUST NOT repeat the name of another helper of its suite or of any value in scope in
+its cases (`bynk.suite.duplicate_fn`, `bynk.suite.fn_name_clash`), and is visible to
+the `case`s, `property` bodies and other helpers of the suite that declares it,
+and to no other suite. A helper body is checked in its suite's view and MAY use
+test-only values such as `Val[T]`. It is emitted into test output only.
+
+A suite MAY declare `type` and `const` items (#3066). A suite type MUST be
+non-generic (`bynk.suite.type_generic`); a suite constant follows the rules of §5.1
+for a constant (`bynk.resolve.const_name_case`, `bynk.resolve.bad_const_initialiser`,
+`bynk.resolve.const_cycle`). Neither MUST repeat the name of another `type` or
+`const` of its suite (`bynk.suite.duplicate_type`, `bynk.suite.duplicate_const`) or
+of any value, type or sum variant in scope in its cases (`bynk.suite.type_name_clash`,
+`bynk.suite.const_name_clash`). They are visible to the `case`s, `property` bodies,
+helper `fn`s and other suite items of the suite that declares them, and to no other
+suite. A suite type has the JSON codecs of any record or sum. Both are emitted into
+test output only.
+
+A suite below `system` sees its target as the target sees itself, so the
+target's private declarations (§5.1c) are in scope in its cases, stubs and
+properties: tests routinely exercise helpers. The exception covers the target
+alone. A commons that the target, or the suite, `uses` keeps its own private
+declarations, and a reference to one is `bynk.visibility.private_item` as it
+would be in any other unit.
+A `system` suite may instead name every type a participant context declares,
+its private types included (§5.1c).
+
+`Val[T]` (v0.114, retiring `Mock[T]`) MUST occur only in a test body
+(`bynk.val.outside_test`), name a resolvable type (`bynk.val.unknown_type`), and
+receive pins that are compile-time literals of the right arity satisfying the
+type (`bynk.val.pin_not_literal`, `bynk.val.arity`, `bynk.val.literal_violates`);
+a type that cannot be fabricated MUST be pinned (`bynk.val.needs_pin`,
+`bynk.val.pin_unsupported`, `bynk.val.unsupported_kind`), unless every
+refinement that would need a pin (`Matches`, `IsoDate`) carries an `@example`
+(#2686).
+
+A type declaration's or record field's refinement MAY be followed by one
+`@example(<literal>)` annotation. Its argument MUST be a single literal of the
+base type (`bynk.types.example_not_literal`) that satisfies every predicate of
+the refinement (`bynk.types.example_violates`); the refinement MUST be one that
+needs a pin (`bynk.types.example_unneeded`); at most one is allowed
+(`bynk.types.duplicate_example`); no other annotation name is accepted there
+(`bynk.types.unknown_annotation`). A bare `Val[T]` of the type, or of a record or
+sum reaching it, is the example. The example is not a predicate: it is absent
+from the type's contract, wire format and emitted code, and `for all` does not
+draw from it.
+
+{{#grammar-semantics val_expr}}
+
+A `Wire(...)` raw argument
+([§4.6.24](/reference/spec/syntactic-grammar/#4624-wire_expr)) MUST occur only as an
+argument of a service address in a `system`-tier `case`
+(`bynk.test.wire_needs_system`): it hands unvalidated input to the boundary,
+which only a `system` case runs. It MUST NOT be passed to a queue, cron,
+`on call` or event address (`bynk.test.wire_http_only`): `Wire` drives an http
+body or path segment only.
+
+An `advance Clock by <amount>` statement
+([`advance_stmt`](/reference/grammar/#rule-advance_stmt)) MUST occur only in
+a `case` body (`bynk.test.advance_outside_case`), MUST name `Clock`
+(`bynk.test.advance_not_clock`), and its amount MUST be a `Duration`
+(`bynk.test.advance_not_duration`). It moves the case's harness clock, which
+starts at the epoch; the `Clock` test double reads it at `unit` and
+`integration`, and every participant's first-party `Clock` reads it at
+`system`. A negative amount faults the case at run time. At `unit` and
+`integration`, in a module whose target calls `within` or whose `stub`s take time
+([§5.9d](#59d-test-double-provision--stub-v0118)), the clock is **virtual time**:
+`advance` also fires every timer that falls due by then, earliest first.
+
+In a `system`-tier `case`, a `svc.schedule("…", …)` address runs the cron
+handler through the participant Worker's `scheduled` entry point and yields the
+handler's `Result`, and a `svc.message(m)` address delivers `m`, after a JSON
+round trip, through its `queue` entry point and yields `Ack` or `Retry(reason)`
+as the consumer acknowledged or retried it. The scheduled time is required when
+the handler declares it, as at the other tiers.
+
+An http address in a `system`-tier `case` presents the acting actor's
+credential: a signed token for a Bearer actor, a signature for a `Signature`
+actor (#2135), and on an actor sum the credential of the member the principal
+names (#2155). For an `Oidc` actor (#3052) the driver is the issuer: it signs the
+token with a key pair generated for the test process, serves the matching JWKS in
+answer to the Worker's fetch of the actor's `jwks` URL (replaced by the
+`trustFrom` variable's roots when the case's `env` sets it), and takes the claims
+from the principal's literal `TokenClaims.of(…)` lines
+(`bynk.test.system_claims_need_literal`). The deployed Worker is not changed.
+
+`Nobody`, `Forged`, `Stale`, `Expired`, `WrongIssuer`, `WrongAudience`,
+`WrongAlgorithm` and `NoSubject` are reserved call-site principals, not declarations, and take no identity
+(`bynk.test.actor_no_identity`). `by Nobody` MUST address a route with a Bearer,
+`Oidc` or `Signature` actor, alone or as a sum member
+(`bynk.test.nobody_needs_secured_route`). `by Forged` MUST address a route with
+a `Signature`, Bearer or `Oidc` actor, and `by Stale` one with a `Signature`
+actor, alone or as a sum member (`bynk.test.forged_needs_signature_route`); on a
+sum they sign as its first `Signature` member (`by Forged` as its first Bearer
+member when it has no `Signature` member). `by Expired` MUST address a route
+with a Bearer actor, alone or as a sum member, or an `Oidc` actor
+(`bynk.test.expired_needs_bearer_route`). `by WrongIssuer` and `by WrongAudience`
+MUST address a route with an `Oidc` actor (`bynk.test.wrong_issuer_needs_oidc_route`,
+`bynk.test.wrong_audience_needs_oidc_route`); each sends a correctly signed,
+unexpired token whose `iss`, or `aud`, is not the actor's. `by WrongAlgorithm`
+and `by NoSubject` MUST address a route with an `Oidc` actor
+(`bynk.test.wrong_algorithm_needs_oidc_route`,
+`bynk.test.no_subject_needs_oidc_route`) and each presents two tokens in turn,
+the call reading the first outcome that is not the seam's refusal, or the refusal
+when every token was refused. Otherwise valid, `by WrongAlgorithm`'s tokens are one
+with `alg: none` and no signature, and one with `alg: HS256` MACed with the
+published public key as the secret; `by NoSubject`'s are correctly signed, one
+with an empty `sub` and one with no `sub` claim. The seam refuses all four before
+the handler runs, whatever the identity type's refinement. On an `Oidc` route,
+`by Forged` sends a token signed by a key the served JWKS does not publish.
+It sends a correctly signed token with a valid `sub` and an `exp` one hour
+before the test clock; `by Forged` on a Bearer route sends a token with a valid
+`sub` and a future `exp`, signed with a secret derived from the real one. On an
+actor sum with an open member (`Visitor`, or an actor with no auth scheme),
+none of them is admitted: the seam resolves a missing or bad credential as
+that member and never answers `401`. `by Stale` needs that actor to declare
+`timestamp` and `tolerance` (`bynk.test.stale_needs_timestamp`). All of them MUST
+occur in a `system`-tier case (`bynk.test.credential_needs_system`,
+`bynk.test.forged_needs_system`), and each address yields an `HttpOutcome`.
+
+A service address in a `case` (`svc.call(…)`, `svc.<VERB>("/path", …)`,
+`svc.schedule("…")`, `svc.message(m)`, `svc.event(e)`) has the addressed handler's declared
+return type, an `Effect[T]` (#1934). An http address that carries a `Wire(...)`
+argument, is driven `by Nobody`, or names a method the path declares no handler
+for has type `Effect[HttpOutcome[T]]` instead, where the handler returns
+`Effect[HttpResult[T]]` (`T` is `()` for a method with no handler).
+`HttpOutcome[T]` is the built-in sum `Rejected(BoundaryRejection) |
+Handled(HttpResult[T])`, and `BoundaryRejection` is the built-in sum
+`RefinementViolation(detail: String) | MalformedJson(detail: String) |
+StructuralMismatch(detail: String) | Unauthorized | MethodNotAllowed |
+PayloadTooLarge(detail: String) | UnsupportedMediaType(detail: String) |
+MalformedForm(detail: String)`. Neither
+type can be named in source. An asset fetch (`svc.GET(asset)`) has type
+`Effect[HttpResult[()]]`.
+
+An event address `svc.event(e)` or `svc.event(e, env)` (#2052) MUST name a
+`from Events(E)` service (`bynk.test.service_bad_address`) and pass one or two
+arguments (`bynk.test.service_call_arity`). `e` MUST have type `E`: another
+event the target declares or consumes is `bynk.test.event_not_subscribed`, any
+other type `bynk.types.argument_mismatch`. `env` MUST have type `EventEnvelope`
+(`bynk.types.argument_mismatch`). The address MUST NOT occur in a `system`-tier
+`case` (`bynk.test.event_needs_in_process`). Delivery evaluates the service's
+pattern filter and `via schema(N)` guard as a fan-out delivery does. An omitted
+`env` is a fresh envelope: a new `eventId` per call, `E`'s publisher as
+`publisherId`, `Instant.fromEpochMillis(0)` as `emittedAt`, and `E`'s current
+schema version. The publisher is the target if it declares `E`, else the one
+context it consumes that declares `E`. With no such unique context, `env` MUST
+be given (`bynk.test.event_publisher_ambiguous`).
+
+A WebSocket address (#3051) `svc.open(tc, r…)`, `svc.message(tc, f)` or
+`svc.close(tc)` MUST name a `from websocket` service that declares the matching
+handler (`bynk.test.service_unknown_route`). `tc` MUST have type
+`TestConnection[O]` for the service's `out` type `O`. `open` takes the handler's
+route parameters and the call-site `by`; `f` MUST have the service's `in` type;
+`message` and `close` take no other arguments (`bynk.test.service_call_arity`)
+and no `by` (`bynk.test.ws_lifecycle_by`), because the connection carries the
+route values and the principal from `open`. The address MUST NOT occur in a
+`system`-tier `case` (`bynk.test.ws_needs_in_process`). `TestConnection[O]()` is
+a value of a type that can be named only in a test body; `tc.sent()` has type
+`List[O]`, `tc.closed()` type `Bool`, and `tc.connection()` an owned
+`Connection[O]`, available once per `tc`. A `message` or `close` on a `tc` that
+was not opened is a failure of the case at run time.
+
+### §5.9c Tiers (v0.118)
+
+*(ADR 0153)* A `case` runs at one of three **tiers** — `unit` | `integration` |
+`system` — declared by an optional `as <tier>` clause on the `case` header. `unit`
+is the default and is elided. `as` also sits on the `suite` header as an inherited
+default; a case's effective tier is `case.tier ?? suite.tier ?? unit`, so a case
+overrides the suite default. A tier is metadata on the header, **not** an
+executable statement: promotion changes substitution, not assertion, and between
+`unit` and `integration` the case body is identical.
+
+- **`system` is a suite of its own (#1738).** A `system` case runs against the
+  contexts stood up as Workers and addresses a service by its context path, so a
+  suite whose effective tiers include `system` MUST contain only `system` cases
+  (`bynk.tier.mixed_system_suite`).
+- **Crossing a context requires `system` (#1737).** Below `system` a case runs
+  in-process: no consumed context is stood up, and `stub` substitutes capability
+  seams only. A `unit` or `integration` case, or a `property` (which has no tier
+  and always runs in-process), that reaches a consumed context's service,
+  directly or through a service or agent handler of the unit under test that
+  (transitively) calls one, MUST be rejected
+  (`bynk.tier.cross_context_needs_system`).
+
+- **Tiers are `case`-only.** A `property` generates and does not promote, so a
+  suite-level `as` binds its `case` members only, and a `property` header has no
+  tier production (a tier there is a parse error).
+- **Participants are inferred (DECISION K).** For `system` the wired participant
+  set is the unit under test's transitive `consumes` closure — there is no `wires`
+  clause. `system` is the wired tier: its inferred set MUST span at least two
+  contexts, or its target MUST expose an `http` or `queue` service
+  (`bynk.tier.system_needs_wire`);
+  `integration` is real collaborators **within one context, no wire**, and carries
+  no ≥ 2-context rule.
+- **The agent-state lifecycle is fixed across tiers (DECISION D7).** The unit under
+  test is always a real in-memory instance, keyed normally, fresh per case; only
+  the realness of its collaborators and whether sends cross a serialisation
+  boundary change with the tier. Snapshot and step invariants are checked at the
+  commit boundary and therefore fire at every tier.
+- **At `unit`, an un-overridden seam keeps its real provider (DECISION D8).** Full
+  auto-stubbing (a synthesised return per collaborator) is a named follow-on, not
+  part of this increment; `unit` and `integration` differ in the default provision
+  discipline the author follows, and `system` is the tier that differs
+  mechanically (it wires participants across the real boundary).
+
+The tier names `unit` / `integration` / `system` are **contextual** — parsed only
+in the `as`-clause position after a case/suite header; elsewhere they remain
+ordinary identifiers.
+
+### §5.9d Test-double provision — `stub` (v0.118)
+
+*(ADR 0154; keyword `stub` since #548, formerly a pun on `provides`)* A
+`stub Cap.method(<args>) returns <value> [after <d>] | fails | never` clause
+overrides one capability seam's provision under test. `as <tier>` sets the
+*default* provision of every seam; a `stub` clause overrides one. It names a
+consumed seam of the unit under test (`consumes` declares, `given` requires,
+`stub` substitutes under test), scoped to a test.
+
+- **Seam resolution and legality (DECISION M).** `stub` is **capability-only**:
+  its target MUST be a capability the unit under test consumes / has in scope via
+  `given` (`bynk.stub.not_a_seam`), and `method` MUST be one of that
+  capability's declared operations (`bynk.stub.unknown_op`).
+- **Scope and precedence.** A `stub` MAY appear at suite scope (applies to every
+  case) and at case scope (overrides for one case); precedence is case `stub` >
+  suite `stub` > the tier default.
+- **Tier (#2026).** A `stub` MUST NOT appear in a `system`-tier case, nor at the
+  scope of a suite that runs `system` cases (`suite … as system`, or one with a
+  `case … as system`) (`bynk.stub.at_system`): each participant runs as
+  the Worker it deploys as, whose composition builds its own capability providers,
+  so no seam is open to a double.
+- **Argument patterns (DECISION D3).** Each parameter takes a pattern from the one
+  predicate surface — `_` (any) or a literal / pure value the recorded argument must
+  equal, plus `is` narrowing. Multiple clauses for one method form an ordered match
+  list, tried top to bottom, **first match wins**, so a specific clause MUST precede
+  a fallback.
+- **RHS typing (DECISION D2).** The right-hand side is a *value* or the fault atom
+  `fails`, never a computed body. A `returns <value>` whose type disagrees with the
+  operation's declared return type is `bynk.stub.rhs_type`.
+- **Latency and virtual time (#2683).** A stub can take time. `returns <value>
+  after <d>` completes only when the case's harness clock has reached `d` from the
+  call, and `never` does not complete at all; both are for testing a `within`. `d`
+  MUST be a `Duration` (`bynk.stub.after_type`); `after` is allowed on `returns`
+  only. The harness clock gains a timer queue, on which a `within` registers its
+  deadline in place of the host's `setTimeout`, and on which an `after` stub
+  registers its completion. A case's addressed call is then driven by
+  **auto-advance**: when it has not settled after the pending microtasks have run,
+  the harness moves the clock to the earliest queued timer — but only when every
+  capability call in flight is a harness stub waiting on `after` or `never`. A call
+  into a real provider holds the clock back, so work that is simply doing I/O is
+  never timed out by a test, and a case waiting on a host timer or I/O outside any
+  capability call waits in real time. The harness counts calls and stub waits, not
+  what a provider does between them: a provider operation that waits on a stub and
+  on real I/O at once is treated as waiting on the stub. Timers fire one at a time, the effect's
+  completion before a deadline at the same instant, so **a tie goes to the effect**.
+  When the call returns, the harness settles the effects `within` abandoned (an
+  abandoned `after` effect completes by moving the clock on; an abandoned `never`
+  is left), as it settles detached effects, so an expectation sees them. A call that can
+  never complete and has no `within` to end it faults the case. A module whose
+  target does not call `within` and whose stubs take no time keeps the plain counter
+  clock, byte for byte. Latency exists where `stub` does: at `system`, and under
+  `bynk test --against`, `within` reads real time.
+- **Sequenced provision (DECISION V).** `returns each [<outcome>, …]` supplies one
+  outcome per call, in order; each outcome is a value, `fails`, or `ok(v)`. On
+  **exhaustion the last outcome repeats** (steady state). A malformed sequence
+  (e.g. empty) is `bynk.stub.bad_sequence`.
+
+A call that `within` abandoned is recorded when it is **issued**, like any call
+(#2683): `expect A.op before B.op` keeps comparing issue order, and a case sees the
+abandoned call once its effects have been settled at the end of the addressed call.
+
+Bare observation ([§5.9b](#59b-observation)) needs no `stub` — calls are
+recorded at the seam regardless; a `stub` is written only when a case depends on
+a collaborator's *return*.
+
+#### Suite configuration — `env` (#2134) {#suite-env}
+
+An `env { NAME = "value" … }` clause gives the variables and secrets a suite's
+participants see. It sets the environment and overrides no seam, so it is legal
+at every tier, `system` included.
+
+- **Values.** Each entry's value MUST be a `String` literal or the name of a
+  `fixture` the same suite declares, whose text it is, verbatim
+  (`bynk.suite.env_not_literal`).
+- **Names.** A name MUST NOT be given twice at one scope: across a suite's own
+  `env` clauses, or across one case's (`bynk.suite.duplicate_env`).
+- **Scope and precedence.** A case runs with its suite's entries overlaid by its
+  own, name by name. A suite's entries apply to its own cases only; a `property`
+  runs with none.
+- **Meaning by tier.** At `system` the case's entries are put on each
+  participant's Worker `env` before the harness's own keys and bindings. At
+  `unit` and `integration` they are what the `Secrets` test double answers:
+  `Some(value)` for a name an entry gives, `None` otherwise.
+- **Bindings (`system`).** A name MUST NOT be a binding a participant's Worker
+  declares, nor a key the harness sets on it (a call-edge key, a `Foreign`
+  caller's secret) (`bynk.suite.env_binding_clash`). The check needs the Worker bindings,
+  so it runs on an otherwise clean build.
+- **Test secrets.** An entry naming a `Bearer` actor's declared `secret` is the
+  secret the `system` driver signs with, and the one the seam verifies with,
+  in place of the fixed test secret.
+
+### §5.9a Generative properties
+
+*(v0.114)* A `property` is a generative test: its body is a single `for all`
+binder over inhabitants the runner produces. Each binding `x: T` binds `x` to a
+generated inhabitant of `T`; an optional `where <pred>` filters generated tuples
+before the body runs; the body is one or more `expect`s (the one predicate
+surface). The `where` filter MUST type to `Bool` (`bynk.property.where_not_bool`),
+as MUST each `expect` (`bynk.expect.not_bool`).
+
+**Generation (DECISION P): a type is its own inhabitant space.** The generator
+for `T` produces only values satisfying `T`'s refinements, so a generated subject
+is valid by construction. A `T` used in `for all` (or `Val`) MUST be
+refinement-generable: a `String where Matches(re)` has no refinement-driven
+generator and MUST be pinned instead (`bynk.val.needs_pin`); an **agent** MUST
+NOT be generated (`bynk.val.agent_not_generable`) — a fabricated agent state need
+not be reachable, so behavioural agent generation is handler-*sequence*
+generation, deferred to the history rung.
+
+**Restating a refinement is redundant.** A property whose predicate merely
+re-checks a refinement the bound variable's type already guarantees is flagged
+(`bynk.property.restates_refinement`). The check is **conservative** — it fires
+only when the predicate is syntactically the refinement over the bound variable
+(under-flagging is acceptable; over-flagging is not).
+
+{{#grammar-semantics property_decl}}
+
+{{#grammar-semantics for_all}}
+
+### §5.9b Observation
+
+*(v0.117)* An **observation** asserts over a unit's *interaction* with a
+capability, inside a `case` — ADR 0152. Its subject is a `Cap.op` reference (a
+capability and one of its operations, named not called). Well-formedness:
+
+- the observation MUST occur inside a `case` body — it is an `expect`, so outside a
+  test body it is rejected as one (`bynk.expect.outside_case`);
+- `Cap` MUST be a capability the unit under test consumes / has in scope via
+  `given` (`bynk.observe.not_a_seam`); `op` MUST be one of its declared operations
+  (`bynk.observe.unknown_op`);
+- a `with <pred>` predicate is the one predicate surface with the operation's
+  parameters in scope by their declared names; it MUST type to `Bool`
+  (`bynk.observe.with_not_bool`) and MUST be pure (`bynk.observe.impure_with`):
+  it MUST NOT use an effectful or test-only construct, and no sub-expression of it
+  may have type `Effect[_]` (#3774), since it is evaluated once per recorded call;
+- a call count is `once` or a non-negative integer literal followed by `times`
+  (the grammar admits nothing else) — `called once` desugars to a count of one.
+
+**Issue order.** The recorder logs a call when it is *made*, so `A.op before B.op`
+compares **issue** order, not completion order. Inside a `par` block (§4.8.7b) the
+first capability call of each binding is issued in source order, so between two
+bindings' first calls it is source order. A later call inside a composite binding —
+a user function that makes several calls — is issued when the earlier ones complete,
+so its place against another binding's calls follows completion and microtask
+order. Neither is evidence that one effect *finished* first; a test that needs
+completion order is testing a race and belongs against a stub that controls it.
+
+`trace(Cap.op)` is a **test-only builtin** yielding `List[<CallRecord>]`, where
+`<CallRecord>` is a synthetic record of the operation's parameters at their declared
+types (`{ msg: String }` for `Logger.log`), registered into the test-body type table
+the way a fabricated agent-state record is. It types as an ordinary `List`
+(field access on its elements, `length()`, `all`/`any`, indexing); `trace` outside a
+`case` is `bynk.observe.trace_outside_test`. Recording is *ambient at the seam and
+test-build-only* — no source declares it, and the deploy build carries none of it
+(see [emission](/reference/spec/emission/)).
+
+### §5.9e Fault claim
+
+A **fault claim**, `expect <call> [by <Actor>(<identity>)] faults` (#1706, #1812), asserts that awaiting an
+effectful call throws rather than returns. A fault is untyped and no caller can
+handle it ([§7.4.12](/reference/spec/runtime-library/#7412-the-stub-clause-v0118)), so
+the claim is how a `case` observes one, not a way to catch it. Well-formedness:
+
+- the claim MUST occur inside a `case` body — it is an `expect`, so outside a test
+  body it is rejected as one (`bynk.expect.outside_case`);
+- the subject MUST be a call expression whose type is `Effect[_]`
+  (`bynk.expect.faults_not_effect`) — a value bound from a call has already run it;
+- awaiting is an effect, so the claim MUST sit in an effectful body, as `<-` does
+  (`bynk.effect.bind_in_pure_context`);
+- the claim's optional call-site principal, written between the call and
+  `faults`, is validated against the addressed handler exactly as an effect-let's
+  is ([`call_site_actor`](/reference/grammar/#rule-call_site_actor)): an addressed handler that requires an
+  identity and is given no `by` is `bynk.test.principal_required`, and a supplied
+  identity MUST type as the handler's;
+- the case MUST NOT be `system`-tier (`bynk.test.faults_needs_in_process`): at
+  `system` a handler's fault crosses the deployed Worker's boundary as an error
+  response, never a throw. The restriction is deliberate (#1811): a fault is an
+  in-process concept, and at `system` the observable is the response. A `system`
+  case asserts `r is ServerError(_)`, which does not distinguish a fault from a
+  handler's deliberate `ServerError`;
+- the principal MUST NOT be `by Nobody`, at any tier
+  (`bynk.test.faults_needs_in_process`): `Nobody` exercises the `system`-tier auth
+  seam, where the claim cannot hold.
+
+The claim types as `Bool`. A call that reaches `unreachable(…)` or `todo(…)`
+([§5.2](#52-well-typedness)) faults like any other runtime fault, so the claim holds
+for it.
+
+{{#grammar-semantics faults_expr}}
+
+### §5.9f Snapshot claim
+
+A **snapshot claim**, `expect <value> matches snapshot "<name>"` (#2842), asserts
+that a value's canonical JSON equals the snapshot stored for its case and name
+([§7.4.12b](/reference/spec/runtime-library/#7412b-the-snapshot-claim)). Unlike every
+other `expect`, its subject is not a `Bool`. Well-formedness:
+
+- the claim MUST occur inside a `case` body (`bynk.expect.outside_case`), and not in
+  a `property` or a history property (`bynk.test.snapshot_in_property`), whose body
+  runs once per generated input;
+- the value MUST be `Codable` ([§6](/reference/spec/type-system/)): the domain
+  `Json.encode` accepts (`bynk.test.snapshot_not_codable`);
+- the name MUST be a string literal (`bynk.test.snapshot_name_not_literal`), so the
+  snapshots a suite takes are known at compile time, and MUST be unique within its
+  case (`bynk.test.snapshot_duplicate_name`);
+- the case MUST be in a unit suite and not `system`-tier
+  (`bynk.test.snapshot_needs_unit_suite`): snapshots are stored per unit suite file
+  and compared by the in-process harness.
+
+The claim has no value of its own and is a statement of the case body.
+
+{{#grammar-semantics snapshot_expr}}
+
+## §5.10 Collections
+
+*(v0.20b)* `List[T]` and `Map[K, V]` are built-in generic types
+([§6.2](/reference/spec/type-system/#62-built-in-generic-types)); this section is their
+static semantics. `Set[T]` (standard-library K6a, #2596) joins them, and like
+them `Set` is a reserved built-in type name (`bynk.resolve.reserved_builtin_type`
+for a `type Set`). Its
+element type MUST be `Key` ([§6.2.1](/reference/spec/type-system/#621-the-key-constraint),
+`bynk.types.not_keyable`), checked at a written `Set[T]` and at the
+inferred element of `Set.of`; a type parameter there MUST be declared `Key`
+(`bynk.generics.missing_key_bound`). `Set.empty()` obeys the empty-collection rule
+below; `insert` and `remove` propagate an expected `Set` down their receiver
+chain. A `Set`'s compatibility at a boundary requires its element type to match
+exactly, as a `Map` key's does.
+
+**Construction.** A list literal `[a, b, c]`
+([§4 list_literal](/reference/grammar/#rule-list_literal)) types each
+element against the **expected element type** when one is supplied — so
+refined literals admit ([§5.3](#53-refinement--admission)) — and a mismatched
+element is `bynk.types.list_element_mismatch`. With no expected type, the
+first element fixes the element type. An **empty `[]` MUST have an expected
+type** (`bynk.types.uninferable_element_type`); the qualified statics
+`List.empty()` and `Map.empty()` obey exactly the same rule — an expected
+type is their only source of type arguments. `insert`, `prepend`, `append`,
+and `concat` propagate an expected collection type down their receiver chain,
+so `let m: Map[String, Int] = Map.empty().insert("a", 1)` infers, and so does
+`let xs: List[Int] = [].append(1)`. `concat`'s argument checks against the
+receiver's `List[T]`, so `xs.concat([])` needs no annotation.
+
+**The kernel.** The built-in operations are compiler-known special forms,
+dispatched on the receiver's checked type before declared-method lookup;
+they may be generic in their accumulator without declared generic methods
+existing (ADR 0037). The whole kernel:
+
+| Receiver | Operation | Type |
+|---|---|---|
+| `List[T]` | `length()` | `Int` |
+| `List[T]` | `get(i: Int)` | `Option[T]` |
+| `List[T]` | `prepend(x: T)` | `List[T]` |
+| `List[T]` | `append(x: T)` | `List[T]` |
+| `List[T]` | `concat(other: List[T])` | `List[T]` |
+| `List[T]` | `fold(init: A, f: (A, T) -> A)` | `A` |
+| `List[T]` | `foldEff(init: A, f: (A, T) -> Effect[A])` | `Effect[A]` |
+| `List[T]` | `forEach(f: T -> Effect[()])` | `Effect[()]` |
+| `List[T]` | `parTraverse(f: T -> Effect[()])` | `Effect[()]` |
+| `List[T]` | `traverseAll(f: T -> Effect[Result[U, E]])` | `Effect[List[Result[U, E]]]` |
+| `List[T]` | `parTraverseAll(f: T -> Effect[Result[U, E]])` | `Effect[List[Result[U, E]]]` |
+| `List[T]` | `traverseTry(f: T -> Effect[Result[U, E]])` | `Effect[Result[List[U], E]]` |
+| `List[T]` | `parTraverseTry(f: T -> Effect[Result[U, E]])` | `Effect[Result[List[U], E]]` |
+| `List[Result[T, E]]` | `sequenceAll()` | `Result[List[T], List[E]]` |
+| `List[Result[T, E]]` | `sequenceTry()` | `Result[List[T], E]` |
+| `List[T]` | `map(f: T -> U)` | `List[U]` |
+| `List[T]` | `filter(p: T -> Bool)` | `List[T]` |
+| `List[T]` | `flatMap(f: T -> List[U])` | `List[U]` |
+| `List[T]` | `sortBy(key: T -> K)` | `List[T]` |
+| `List[T]` | `sortByDescending(key: T -> K)` | `List[T]` |
+| `List[T]` | `take(n: Int)` / `skip(n: Int)` | `List[T]` |
+| `List[T]` | `distinct()` | `List[T]` |
+| `List[T]` | `distinctBy(key: T -> K)` | `List[T]` |
+| `List[T]` | `joinOn(other: List[U], left: T -> K, right: U -> K, into: (T, U) -> V)` | `List[V]` |
+| `List[T]` | `leftJoin(other: List[U], left: T -> K, right: U -> K, into: (T, Option[U]) -> V)` | `List[V]` |
+| `List[T]` | `join(other: List[U], on: (T, U) -> Bool, into: (T, U) -> V)` | `List[V]` |
+| `List[T]` | `groupBy(key: T -> K, into: (K, List[T]) -> V)` | `List[V]` |
+| `List[T]` | `count()` | `Int` |
+| `List[T]` | `any(p: T -> Bool)` / `all(p: T -> Bool)` | `Bool` |
+| `List[T]` | `first()` | `Option[T]` |
+| `List[T]` | `firstOrElse(default: T)` | `T` |
+| `List[T]` | `sum(key: T -> K)` | `K` |
+| `List[T]` | `min(key: T -> K)` / `max(key: T -> K)` | `Option[K]` |
+| `List[T]` | `average(key: T -> K)` | `Option[Float]` |
+| `Map[K, V]` | `length()` | `Int` |
+| `Map[K, V]` | `keys()` | `List[K]` |
+| `Map[K, V]` | `values()` | `List[V]` |
+| `Map[K, V]` | `get(k: K)` | `Option[V]` |
+| `Map[K, V]` | `insert(k: K, v: V)` | `Map[K, V]` |
+
+A method outside the kernel is `bynk.types.method_not_found`; a wrong arity
+is `bynk.types.method_arity`. **`foldEff`, `forEach`, `parTraverse`,
+`traverseAll`, `parTraverseAll`, `traverseTry`, and `parTraverseTry` are effect
+operations**: each runs its
+effectful function value, so calling one in a pure context is
+`bynk.effect.fn_value_in_pure_context`, exactly the function-value confinement of
+[§5.5](#55-effects-capabilities--providers). `forEach(f: T -> Effect[()])`
+(v0.146, [ADR 0170](https://github.com/bynk-lang/bynk/blob/main/design/decisions/0170-do-statement-implicit-unit-and-list-foreach.md))
+is the `Query.forEach` terminal over an eager list — the effect-per-element loop,
+**sequential** (each element awaited in order). `parTraverse(f: T -> Effect[()])`
+(v0.147, [ADR 0171](https://github.com/bynk-lang/bynk/blob/main/design/decisions/0171-list-partraverse.md))
+is its **concurrent** sibling — the `Query.parTraverse` fan-out over an eager
+list, issuing every element's effect at once and awaiting them together, so a
+slow element does not head-of-line-block the rest; the order in which side
+effects interleave is unspecified. Unlike the sequential `forEach` (which
+short-circuits on the first failure and never issues the rest), a rejecting
+element does **not** cancel siblings already issued — every element's effect is
+issued, in input order, before any is awaited. The fan-out has **settle-all**
+fault semantics, as a `par` block does (§4.8.7b): when any element faults it waits
+for **every** element to settle, then raises the **first fault in input order**
+(not the first in time), so no element's work outlives the call and the fault a
+program sees does not depend on timing. Later faults ride on the raised one as
+`suppressed` and are not catchable separately. A fast fault therefore waits for a
+slow sibling. A synchronous throw from `f` is a fault of that element only: the
+elements before and after it are still issued and awaited. The same holds for
+`parTraverseAll` and `parTraverseTry` and for the `Query`/`Map` broadcast forms
+([#2662](https://github.com/bynk-lang/bynk/issues/2662)). The closure of all three
+MUST NOT write a `store` (see the `par` block above).
+
+The **collect-all** pair `traverseAll` / `parTraverseAll` (v0.148,
+[ADR 0172](https://github.com/bynk-lang/bynk/blob/main/design/decisions/0172-list-collect-all-iterators.md))
+take a **`Result`-returning** function `f: T -> Effect[Result[U, E]]` and return
+`Effect[List[Result[U, E]]]` — every element's outcome, `Ok` or `Err`, gathered
+into the result list in input order. Because a `Result` `Err` is a **value**, not
+a fault, neither short-circuits: `traverseAll` awaits each element in turn,
+`parTraverseAll` issues all at once and collects them together (its interleaving
+order, like `parTraverse`, unspecified). The function *must* return
+`Effect[Result[U, E]]`; a non-`Result` effect is `bynk.types.combinator_return_mismatch`.
+They are the fault-gathering counterpart to `traverse` (the short-circuiting
+sequential collect); the collecting **short-circuit** `parTraverse` overload and
+`traverse`'s `Result` overload remain a later slice. Like `forEach`/`parTraverse`,
+both also apply over a lazy `Query[T]` and a lifted `store Map[K, V]` (v0.149,
+[ADR 0173](https://github.com/bynk-lang/bynk/blob/main/design/decisions/0173-map-values-and-broadcast-collect-all.md)),
+so the fan-out reaches a held `Map[K, Connection]` — each connection is
+**borrowed** into the closure (`send` allowed, `close`/transfer rejected as
+`bynk.held.consume_on_borrow`) and the map keeps ownership.
+
+The **short-circuit** pair `traverseTry` / `parTraverseTry` (v0.150,
+[ADR 0174](https://github.com/bynk-lang/bynk/blob/main/design/decisions/0174-short-circuit-collect-iterators.md))
+take the same `f: T -> Effect[Result[U, E]]` but **stop at the first `Err`**,
+returning `Effect[Result[List[U], E]]` — `Ok` of the collected values, or the
+first `Err` encountered. `traverseTry` awaits each element in order and bails on
+the first `Err` (later elements never run); `parTraverseTry` issues all at once,
+awaits them all, then returns the first `Err` in input order — unless an element
+faulted, in which case the fault (first in input order) is raised instead, whatever
+the `Err` positions. They are the fault-**propagating** counterpart to the fault-gathering
+`traverseAll`/`parTraverseAll`, and likewise apply over the `Query`/`Map`
+broadcast.
+
+The **pure** pair `sequenceAll` / `sequenceTry` collect a `List[Result[T, E]]` that
+already exists, with no function and no effect. `sequenceAll` returns `Ok` of every
+value, or `Err` of **every** error in input order (`Result[List[T], List[E]]`);
+`sequenceTry` returns `Ok` of every value, or the **first** `Err`
+(`Result[List[T], E]`). The empty list is `Ok([])`. Calling either on a list whose
+elements are not `Result`s is `bynk.types.sequence_needs_result`. They are defined on
+a `List` receiver only; a `Query` is `collect`ed first.
+
+*(v0.88, [ADR 0116](https://github.com/bynk-lang/bynk/blob/main/design/decisions/0116-query-vocabulary-and-ordering.md))*
+The builder/terminal rows above are the **eager in-memory half** of the query
+algebra ([design notes §11](https://github.com/bynk-lang/bynk/blob/main/design/bynk-design-notes.md)) —
+the same combinator names a lazy storage `Query[T]` will carry. **Ordering keys**
+(`sortBy`/`sortByDescending`/`min`/`max`), on a `List` and on a storage `Query`, are any `Ord` type
+(§5.2) — else `bynk.types.key_not_orderable`. **`sortByDescending`** orders the largest key first;
+it is the exact reverse of the ascending order (so a `Float` `NaN` is first, §5.2), but stable:
+equal keys keep input order. **Numeric keys**
+(`sum`/`average`) are `Int`/`Float`/`Duration` (not `Instant` — instants are not
+summable), else `bynk.query.sum_needs_numeric`;
+`average` of a `Duration` is a `Duration` (integer-rounded millis), otherwise a
+`Float`. **`distinct`/`distinctBy`** need a `Key` element/key on a `List`
+(`bynk.types.not_keyable`), and the `String`/`Int` rule (incl. refined and opaque)
+on a `Query`. **Empty
+aggregates are total**: `first`/`min`/`max`/`average` return `Option` (`None` on
+empty); `sum` returns the zero, `count` returns `0`. The aggregate terminals take
+a **projection** `T -> K`, uniform with the storage half where a record field is
+the common key.
+
+*(v0.94, [ADR 0120](https://github.com/bynk-lang/bynk/blob/main/design/decisions/0120-join-group-combiner-form.md))*
+**Joins & grouping take a combiner** — bynk has no pair type, so the join row
+exists only inside `into`, which names the result. `joinOn`/`leftJoin` are
+equi-joins hashing on a **`Key`** key; the left and
+right key functions MUST return the **same** key type, else
+`bynk.query.join_key_mismatch`. `join` is a general-predicate (nested-loop) join.
+`groupBy` partitions by a `Key` key in **first-seen** key order, projecting
+each `(K, List[T])` group through `into`. The `other` side is a `List`/`Query` of
+the **matching shape** (a `List` joins a `List`, a `Query` joins a `Query` — a bare
+`store Map` used as a value lifts to a `Query` over its values). The same names
+carry to a storage `Query` (the builders return `Query[V]`, still lazy). Arguments
+are **positional** in v1 (labelled call arguments are a named deferral). The
+cross-shape `Map × Log` join lands with the storage `Log` slice.
+
+*(v0.92, [ADR 0115](https://github.com/bynk-lang/bynk/blob/main/design/decisions/0115-query-model-lazy-eager-dispatch.md)/[0119](https://github.com/bynk-lang/bynk/blob/main/design/decisions/0119-durable-object-query-lowering.md))*
+The same combinator names form a **lazy** query over a `store` `Map[K, V]` field —
+dispatched by **receiver provenance** (ADR 0110, generalised from op-set to
+evaluation strategy). A chain rooted in a store map is lazy: a builder lifts the
+map's **values** into a `Query[V]` (`reservations.filter(r => …)`) and chains
+build further `Query`s; a **terminal** executes it and is **`Effect`-typed**
+(`.collect() -> Effect[List[V]]`, awaited with `<-`), folding into the storage
+capability the `store` fields carry — no new `given`. **`Query[T]` is a
+first-class, by-reference, non-storable and non-boundary type** (like
+`Effect`/`Fn`): nameable in a pure helper's return, passable as an argument, but
+rejected in any storable or boundary position (`bynk.types.query_at_boundary`).
+`flatMap`'s function returns a `Query` over storage (`T -> Query[U]`). Joins and
+`groupBy` arrive with a later slice. A query is **agent-local** (it reaches only
+the owning agent's storage) and reads **staged** state (read-your-writes); it
+lowers to a scan over the in-memory `Record` of the wholesale-persisted map, or
+to an **index lookup** when an `@indexed` field routes it (below).
+
+*(v0.93, [ADR 0118](https://github.com/bynk-lang/bynk/blob/main/design/decisions/0118-indexed-indexing-model.md))*
+A `store Map[K, V]` field may carry `@indexed(by: f, …)` to maintain a **secondary
+index** on one or more of its value type's fields. Each `by:` target MUST name a
+**value-keyable field** of `V` (the `Map`-key rule — `String`/`Int`, incl.
+refined/opaque over them); a non-`by:` argument is `bynk.index.bad_argument`, a
+field the value type lacks is `bynk.index.unknown_key`, and a non-keyable field
+is `bynk.index.unkeyable_key`. The runtime maintains a sibling posting-list
+`Record` per indexed field **inside the same atomic commit** (ADR 0109) as the
+map it indexes — re-indexed on every `put`/`update`/`upsert`/`remove`
+(last-write-wins). An **equality `filter` directly on the map**
+(`reservations.filter(r => r.f == v)`, with `v` not mentioning the row) **routes**
+to a posting-list lookup instead of a scan; any other predicate (a comparison, a
+compound condition, a filter deeper in a chain) still scans. **Index hygiene is
+build-time *warnings*** (non-failing, ADR 0117): an equality filter on a
+non-indexed keyable field is `bynk.index.missing` (add the index), and a declared
+index no equality filter routes through is `bynk.index.unused` (it costs
+maintenance on every write). Under the wholesale-`Record` representation the index
+is a **CPU** optimisation (the map loads whole regardless); the I/O scaling awaits
+per-entry storage keys. The most-selective tie-break, and a note when two indexes
+could serve one filter, arrive with compound-predicate routing (a later slice).
+
+**Keys.** A `Map` key type MUST be `Key`
+([§6.2.1](/reference/spec/type-system/#621-the-key-constraint)): a base type other than
+`Float`, `Option`/`List` of a key, a refined or opaque type over one, or a record,
+sum or enum of keys; anything else is `bynk.types.not_keyable`, checked at every
+written `Map[K, V]` reference. A type parameter in key position MUST be declared
+`K: Key`, on the function, on the type, or in a method's `where` clause
+(`bynk.generics.missing_key_bound`, with a machine-applicable fix). A store
+`Map`'s key is still `String`/`Int` (`bynk.store.unkeyable_key`).
+
+**Order.** A `List` is ordered by construction. A `Map` is
+**insertion-ordered**, normatively: `keys()` enumerates in insertion order,
+and `insert` on an existing key updates in place, keeping its position.
+
+**Boundaries.** Collections serialise: a handler may take or return a
+`List` or `Map`, and both may appear in record fields, sum payloads, agent
+state, and capability signatures. The function-type confinement of
+[§5.8](#58-boundaries--cross-context) **looks through** collections — a
+`List[Int -> Int]` in a boundary position is still
+`bynk.types.function_at_boundary`. The wire forms are
+[§7.3.7](/reference/spec/emission/#737-collections).
+
+**The combinator stdlib.** Everything derivable from the kernel is ordinary
+Bynk in the first-party `bynk.list` / `bynk.map` commons
+([§8.4](/reference/spec/compilation-model/#84-build-pipeline--conformance-to-typescript)),
+imported with `uses bynk.list` like any commons: `map`, `filter`, `find`,
+`any`, `all`, `reverse`, `traverse` (sequential); `values`, `contains`,
+`getOr`. There is no `Map.fromList` — Bynk has no pair type to spell its
+argument with; maps build via `Map.empty()` + `insert` folds.
+
+> **Deprecated (v0.91, ADR 0116 D6).** The free functions whose `List` method
+> forms exist — `map`, `filter`, `find`, `any`, `all` — emit a non-failing
+> `bynk.list.deprecated_function` warning at each call site (the build still
+> succeeds; [§9](/reference/spec/diagnostics/)), with a machine-applicable fix to the method
+> form. They still work; `reverse` and `traverse` keep their free-function form.
+
+```bynk
+context jobs
+
+uses bynk.list
+
+capability Clock {
+	fn now() -> Effect[Int]
+}
+
+provides Clock = FixedClock {
+	fn now() -> Effect[Int] {
+		42
+	}
+}
+
+service stamps {
+	on call(names: List[String]) -> Effect[Result[List[Int], ()]] given Clock {
+		let stamped <- traverse(names, (name) => Clock.now())
+		Ok(stamped)
+	}
+}
+```
+
+## §5.11 Message bundles (v0.228–v0.234) {#messages}
+
+A **message bundle** maps message codes to templates, one `messages` block
+([§4.1.13](/reference/spec/syntactic-grammar/#4113-messages_decl)) per locale. A
+`messages` block MUST be declared in a commons (`bynk.messages.outside_commons`),
+and that commons MUST `uses bynk.locale` and `uses bynk.locale.types`
+(`bynk.messages.missing_locale_dependency`). The blocks of one commons, across
+all its files, form one bundle, and the following rules hold over the bundle:
+
+- Each block's tag MUST be a valid `LocaleTag`, a well-formed BCP-47 tag in
+  canonical case (`bynk.messages.invalid_locale_tag`), and no tag may be
+  declared twice (`bynk.resolve.duplicate_message_locale`).
+- Exactly one block MUST carry `@reference` (`bynk.messages.missing_reference`,
+  `bynk.messages.multiple_reference`).
+- Every other locale MUST declare every code the reference declares
+  (`bynk.messages.incomplete`).
+- A template is ICU MessageFormat and MUST parse as the supported subset of it
+  (`bynk.messages.malformed_icu_syntax`). For each code, every locale's template
+  MUST use the same set of placeholder names, in any order
+  (`bynk.messages.placeholder_mismatch`), each with the same ICU format kind
+  (`bynk.messages.format_mismatch`).
+
+The bundle gives its commons a generated
+`render(tag: LocaleTag, msg: Message) -> String`. `render` is total: it uses the
+template for `msg.code` in `tag`'s block, else in the reference block, else
+renders the code and its parameters; a placeholder with no matching parameter is
+left as its literal text. Nothing checks that a `Message` built at a call site
+supplies the parameters its code's templates name.
+
+**The `Locale` capability** (v0.221). `Locale` is a first-party capability of the
+`bynk` adapter, `current() -> Effect[LocaleTag]`. On Cloudflare, in a context
+whose direct `uses` reach exactly one message-bundle commons, it negotiates the
+request's `Accept-Language` against that bundle's locales and falls back to its
+reference locale; otherwise it returns `"en"`. A context that consumes `Locale`
+and whose direct `uses` reach two or more bundles is
+`bynk.locale.multiple_message_bundles`.
+
+## §5.12 Static assets {#assets}
+
+An **asset** declaration, `asset name = "path"`
+([§4.1.12a](/reference/spec/syntactic-grammar/#4112a-asset_decl)), names one static
+file the platform serves beside a Worker, at a content-hashed URL, without
+running the Worker. An asset is therefore public whatever the actors of the
+declaring context say.
+
+- An `asset` MUST be declared in a context or a commons
+  (`bynk.asset.outside_context_or_commons`).
+- Its path is relative to the project root. It MUST NOT be empty, absolute
+  (`/x`, `\x`, `C:/x`), or contain a `..` segment, under either separator
+  (`bynk.asset.unsafe_path`); and it MUST name a file in the project's
+  `assets/` folder (`bynk.asset.outside_assets_dir`), so a declaration can
+  never publish `.env` or a source file. `./` prefixes, repeated separators and
+  `\` separators are normalised (`./assets//board.css` is `assets/board.css`).
+- The file MUST exist as a regular file in that folder; a symbolic link is not
+  followed (`bynk.asset.missing_file`), and it MUST be readable
+  (`bynk.asset.unreadable_file`). A check with no filesystem (an in-memory
+  check) skips this; a build with none treats the folder as empty. Only the
+  files a declaration names are read; other files in the folder are not.
+- Its name MUST NOT be declared twice in one unit (`bynk.asset.duplicate`), and
+  MUST NOT equal the name of another declaration in the unit's namespace
+  ([§5.1](#51-name-resolution--visibility)): a function, type, event, service,
+  agent or provider (`bynk.resolve.name_conflict`).
+- A unit sees its own assets and those of each commons it `uses`, one level, as
+  with functions; a local declaration wins. Two used commons that declare the
+  same name are `bynk.uses.name_conflict`.
+
+In an expression, an asset's name has type `Asset`. `Asset` is a built-in,
+non-generic type with one field, `url : String`; any other field is
+`bynk.types.unknown_field`. `Asset` is reserved as a built-in type name, so
+`type Asset` is `bynk.resolve.reserved_builtin_type`. An `Asset` is not data:
+it MUST NOT appear in a record field, a sum-variant payload, a boundary
+position, or an agent `store` field (`bynk.types.asset_at_boundary`); its `.url`
+may.
+
+**Fixed paths** (`asset favicon = "assets/favicon.ico" at "/favicon.ico"`), for
+clients that fetch a file by name without reading a page:
+
+- The `at` path MUST be a URL path naming one file: starting with `/`, not
+  ending in `/`, with no empty, `.` or `..` segment, only `[A-Za-z0-9._~-]`
+  between slashes, not under `/_assets/` or `/_bynk/`, and not one of the root
+  files the platform reads as configuration (`/_headers`, `/_redirects`,
+  `/.assetsignore`) (`bynk.asset.invalid_at_path`). The asset's `.url` is that
+  path.
+- A Worker MUST NOT serve two different files at one fixed path, nor files at
+  two fixed paths where one is a folder of the other (`/logo` and
+  `/logo/icon.png`) (`bynk.asset.path_conflict`).
+- The platform answers a fixed path before the Worker runs, for every method.
+  So a context's HTTP route equal to a fixed path its Worker serves is
+  unreachable (`bynk.asset.shadows_route`), and a parameterised route that
+  matches one (`/:page`) no longer sees that path (the warning
+  `bynk.asset.may_shadow_route`).
+- HTTP routes MUST NOT use the `/_assets/` prefix, where content-hashed assets
+  are served (`bynk.http.reserved_prefix`).
+
+**Translation.** A content-hashed asset's `.url` is
+`/_assets/<stem>.<hash>.<ext>`: `<hash>` is the FNV-1a 64 of the file's
+content as 16 lowercase hex digits, `<stem>` and `<ext>` the file name's,
+split at its last `.` (no `.<ext>` when it has none), with any character
+outside `[A-Za-z0-9._-]` replaced by `-`. It depends only on the name and the
+content, so builds are reproducible, and a content change changes the URL. The
+declaring unit's module exports the asset as a constant of TypeScript type
+`{ readonly url: string }`; a unit that uses it imports it like a function.
+
+On the Workers target, each context's Worker ships the content-hashed files
+declared by every unit it reaches over `uses` **and** `consumes`, transitively —
+wider than name visibility, since a used commons, or a consumed context's
+service, may hand back another unit's `.url`, which then resolves against this
+Worker. Fixed-path files ship only over `uses`: they belong to the root of the
+Worker that declares them. They are
+written to the Worker's `assets/` directory, beside (never containing) its
+code, under their served paths, with a `_headers` file giving `/_assets/*`
+`Cache-Control: public, max-age=31536000, immutable`. Its `wrangler.toml`
+gains an `[assets]` block with `run_worker_first = false` (a matching asset is
+served without running the Worker), `not_found_handling = "none"` (any other
+request reaches the Worker) and `html_handling = "none"` (an asset is served
+only at its exact path). A Worker with no assets gets none of these. The Bundle target ships no
+files, so a deployable Bundle build (one without tests) warns about each
+asset whose `.url` it emits (`bynk.asset.not_served`). `bynk deploy` does not record the served paths in
+`bynk.deploy.lock`: they are a function of the build, so the lock changes only
+when what it records (resources, contracts, tombstones) does.
+
+**Single files.** A single file has no project root and no Worker, so building
+one that declares an asset is `bynk.asset.needs_project`. Checking it is
+unaffected.
+
+**In suites.** A case sees exactly the assets the target's Worker ships: the
+target's own and its `uses`d commons' (content-hashed and fixed-path), plus the
+content-hashed assets of the contexts it consumes. A consumed context's
+fixed-path assets, and those of a `system` suite's own `uses` commons, are not
+nameable, nor is an asset the target hides behind its own declaration of the
+same name ([§5.1](#51-name-resolution--visibility)); naming it in a unit suite
+is `bynk.uses.name_conflict`, as in the target. Its file still ships, since the
+commons that declares it may use it. `svc.GET(a)`, for
+an `Asset` `a` and any `from http` service `svc` of the target (any other
+service is `bynk.test.service_bad_address`), fetches `a` from the asset tier
+rather than a handler: it yields `Raw(body, contentType)` when the target's
+Worker ships `a.url` (with the content type the platform sends for the file's
+extension), and `NotFound` otherwise. The method MUST be `GET`
+(`bynk.test.asset_address_method`), the asset MUST be the only argument
+(`bynk.test.service_call_arity`), and the call MUST NOT carry a `by`
+(`bynk.test.principal_on_asset`).
+
+## §5.12a Embedded text {#embeds}
+
+An **embed** declaration, `embed name = "path"`
+([§4.1.12b](/reference/spec/syntactic-grammar/#4112b-embed_decl)), names one project
+file whose text is the value of `name`: a `String` constant compiled into the
+code. Unlike an asset ([§5.12](#assets)) an embed is never served, so it is
+private to the code that reads it.
+
+- An `embed` MUST be declared in a context or a commons
+  (`bynk.embed.outside_context_or_commons`).
+- Its path is relative to the project root. It MUST NOT be empty, absolute
+  (`/x`, `\x`, `C:/x`), or contain a `..` segment, under either separator
+  (`bynk.embed.unsafe_path`); and it MUST name a file in the project's
+  `embeds/` folder (`bynk.embed.outside_embeds_dir`), so a declaration can
+  never pull `.env` or a source file into the deployed code. `./` prefixes,
+  repeated separators and `\` separators are normalised.
+- Its name MUST NOT be declared twice in one unit (`bynk.embed.duplicate`), and
+  MUST NOT equal the name of another declaration in the unit's namespace
+  ([§5.1](#51-name-resolution--visibility)): an asset, a function, a type, an
+  event, a service, an agent or a provider (`bynk.resolve.name_conflict`).
+- A unit sees its own embeds and those of each commons it `uses`, one level, as
+  with functions; a local declaration wins. Two used commons that declare the
+  same name are `bynk.uses.name_conflict`. A package dependency MUST NOT
+  declare an `embed`, as with an asset.
+
+In an expression, an embed's name has type `String`, and its value is the text
+of the file it names.
+
+- The file MUST exist as a regular file in `embeds/` (`bynk.embed.missing_file`);
+  a symbolic link is not followed. It MUST be readable
+  (`bynk.embed.unreadable_file`), valid UTF-8 (`bynk.embed.invalid_encoding`), and free
+  of NUL bytes (`bynk.embed.binary_content`). A check with no filesystem (an
+  in-memory check) skips the existence check; a build with none treats the
+  folder as empty. Only the files a declaration names are read.
+- It MUST NOT exceed 256 KiB, and the files the project's declarations name
+  MUST NOT total more than 1 MiB, each file counted once
+  (`bynk.embed.too_large`).
+- The text is the file's contents verbatim, except that a leading byte-order
+  mark is dropped and `\r\n` and a bare `\r` are each replaced by `\n`, so the
+  same source builds to the same value on every checkout. A trailing newline is
+  kept. The text has no interpretation: `\(` and `{{ }}` in the file mean
+  nothing to the language.
+
+An embed is never served. It is emitted as an exported `string` constant of the
+declaring module, imported like a function by a unit that `uses` it; a bundler
+drops one that nothing references. A unit-tier `suite` case names the embeds of
+its target and of the commons the target `uses`. A single file has no project
+root to find `embeds/` under, so building one that declares an embed is
+`bynk.embed.needs_project`; checking it is unaffected.
+
+## §5.12b Named constants {#constants}
+
+A **constant** declaration, `const Name: T = e`
+([§4.1.12c](/reference/spec/syntactic-grammar/#4112c-const_decl)), names a value of
+type `T`. In an expression, `Name` has type `T` and its value is `e`'s.
+
+- A `const` MUST be declared in a context or a commons
+  (`bynk.resolve.const_outside_context_or_commons`).
+- Its name MUST be upper-camel, a
+  [`constant_name`](/reference/spec/lexical-grammar/#312-constant_name)
+  (`/[A-Z][A-Za-z0-9_]*/`; `bynk.resolve.const_name_case`).
+- Its name MUST NOT be declared twice in one unit
+  (`bynk.resolve.duplicate_const`), and MUST NOT equal the name of another
+  declaration in the unit's namespace ([§5.1](#51-name-resolution--visibility)):
+  a function, an asset, an embed, a type, an event, a service, an agent or a
+  provider (`bynk.resolve.name_conflict`). Nor may it equal a built-in type name
+  (`List`, `Map`) or the name of a variant of a sum type in scope, including a
+  predeclared `HttpResult` variant, since a bare reference would then read as
+  either (`bynk.resolve.name_conflict`).
+- A unit sees its own constants and those of each commons it `uses`, one level,
+  as with functions; a local declaration wins. Two used commons that declare
+  the same name are `bynk.uses.name_conflict`. A `let` binding or parameter
+  shadows a constant of the same name.
+
+The initialiser `e` MUST be a **static expression** (ADR 0004) or a reference
+to another constant (`bynk.resolve.bad_const_initialiser`). The closed set is:
+
+- an `Int`, `Float`, `Bool` or unit literal, a negative numeric literal, or a
+  plain string literal with no interpolation hole;
+- a `Duration` literal (`30.seconds`);
+- a parenthesised static expression;
+- a list literal, a record construction with every field given (no spread, no
+  shorthand), a sum-variant construction (a bare or qualified nullary variant,
+  or a variant call), or `Some`/`None`/`Ok`/`Err`, each over static values;
+- `T.unsafe(lit)` for an opaque type `T`, `lit` a literal (confined to the
+  defining commons as anywhere else, [§6.4](/reference/spec/type-system/#64-admission--construction));
+- `List.empty()`, `Map.empty()` or `Set.empty()`;
+- the name of another constant in scope.
+
+Anything else is refused: a function or method call, an operator, a field
+access, `self`, a capability, a bind, an interpolated string, a lambda or a
+control-flow expression. `e` is then checked against `T` in an empty, pure
+scope, as an agent state initialiser is ([§5.4](#54-agents--state)): a literal
+is admitted to a refined `T` only when it satisfies the refinement
+(`bynk.refine.literal_violates`), and a value of another type is
+`bynk.resolve.bad_const_initialiser`.
+
+Constants MAY refer to one another, across the files of a unit and to the
+constants of a commons the unit `uses`, but MUST NOT do so in a cycle
+(`bynk.resolve.const_cycle`, reported once per cycle, naming its members in
+order). The files of a unit MAY import each other in a cycle through their
+constants: a constant is emitted as a hoisted function, so the order in which
+the files' modules evaluate does not matter. A constant MAY NOT yet appear in
+a refinement bound (`InRange(1, MaxQty)`).
+
+A bare reference to a constant MAY stand in an **annotation argument** that
+takes a literal, and counts as the literal it is bound to, following
+constant-to-constant references (ADR 0678 C, as amended; the rule ADR 0762
+applies to SQL text). The constant's declared type MUST be exactly the
+argument's base type (a refined or opaque constant is not accepted) and each
+constant on the chain MUST be declared so; a `private` constant does not leave
+its unit. The reference is resolved once, before any annotation argument is
+read, so every check and every reader (the emitters, the OpenAPI document,
+hover) sees the literal, and a diagnostic about the value points at the
+reference. A name that does not resolve is the annotation's own bad-argument
+diagnostic. The annotations that take such a constant are `@name`
+([`String`](/reference/types/#field-name)), `@ttl`, `@retain` and
+`@cache(maxAge:)` (`Duration`), `@cache(immutable:)` (`Bool`), `@limit` and
+`@schema` (`Int`), `@raw(contentType:)` (`String`) and `@example` (the base of
+its refinement). A keyword argument (`@cache(scope: public)`,
+`@json(options: plain)`), `@indexed(by:)` and the value-less markers are not
+values and are unchanged.
+
+A constant is emitted as an exported, hoisted function of the declaring module
+that returns its cached value
+([§7.3.1a](/reference/spec/emission/#731a-named-constants)), imported like a function by a
+sibling file or a unit that `uses` it. A unit-tier `suite` case names the
+constants of its target and of the commons the target `uses`.

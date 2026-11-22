@@ -528,7 +528,7 @@ pub fn emit_client(
             None,
         ),
         TsStmt::comment(
-            "It imports `@bynk/wire-client`: https://bynk-lang.org/book/reference/typescript-client/",
+            "It imports `@bynk/wire-client`: https://bynk-lang.org/reference/typescript-client/",
             None,
         ),
         TsStmt::decl(

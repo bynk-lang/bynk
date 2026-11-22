@@ -85,7 +85,7 @@
       "type": "object",
       "x-taplo": {
         "links": {
-          "key": "https://bynk-lang.org/docs/manifest/#build"
+          "key": "https://bynk-lang.org/reference/tooling/manifest/#build"
         }
       }
     },
@@ -102,7 +102,7 @@
       "type": "object",
       "x-taplo": {
         "links": {
-          "key": "https://bynk-lang.org/docs/manifest/#check"
+          "key": "https://bynk-lang.org/reference/tooling/manifest/#check"
         }
       }
     },
@@ -144,7 +144,7 @@
       "type": "object",
       "x-taplo": {
         "links": {
-          "key": "https://bynk-lang.org/docs/manifest/#dependencies"
+          "key": "https://bynk-lang.org/reference/tooling/manifest/#dependencies"
         }
       }
     },
@@ -259,7 +259,7 @@
       "type": "object",
       "x-taplo": {
         "links": {
-          "key": "https://bynk-lang.org/docs/manifest/#deploy"
+          "key": "https://bynk-lang.org/reference/tooling/manifest/#deploy"
         }
       }
     },
@@ -346,7 +346,7 @@
       "type": "object",
       "x-taplo": {
         "links": {
-          "key": "https://bynk-lang.org/docs/manifest/#dev"
+          "key": "https://bynk-lang.org/reference/tooling/manifest/#dev"
         }
       }
     },
@@ -388,7 +388,7 @@
       "type": "object",
       "x-taplo": {
         "links": {
-          "key": "https://bynk-lang.org/docs/manifest/#dev-dependencies"
+          "key": "https://bynk-lang.org/reference/tooling/manifest/#dev-dependencies"
         }
       }
     },
@@ -429,7 +429,7 @@
       "type": "object",
       "x-taplo": {
         "links": {
-          "key": "https://bynk-lang.org/docs/manifest/#fmt"
+          "key": "https://bynk-lang.org/reference/tooling/manifest/#fmt"
         }
       }
     },
@@ -457,7 +457,7 @@
       "type": "object",
       "x-taplo": {
         "links": {
-          "key": "https://bynk-lang.org/docs/manifest/#lsp"
+          "key": "https://bynk-lang.org/reference/tooling/manifest/#lsp"
         }
       }
     },
@@ -500,7 +500,7 @@
       "type": "object",
       "x-taplo": {
         "links": {
-          "key": "https://bynk-lang.org/docs/manifest/#package"
+          "key": "https://bynk-lang.org/reference/tooling/manifest/#package"
         }
       }
     },
@@ -541,7 +541,7 @@
       "type": "object",
       "x-taplo": {
         "links": {
-          "key": "https://bynk-lang.org/docs/manifest/#paths"
+          "key": "https://bynk-lang.org/reference/tooling/manifest/#paths"
         }
       }
     },
@@ -575,7 +575,7 @@
       "type": "object",
       "x-taplo": {
         "links": {
-          "key": "https://bynk-lang.org/docs/manifest/#profile"
+          "key": "https://bynk-lang.org/reference/tooling/manifest/#profile"
         }
       }
     },
@@ -595,7 +595,7 @@
       "type": "object",
       "x-taplo": {
         "links": {
-          "key": "https://bynk-lang.org/docs/manifest/#project"
+          "key": "https://bynk-lang.org/reference/tooling/manifest/#project"
         }
       }
     },
@@ -636,7 +636,7 @@
       "type": "object",
       "x-taplo": {
         "links": {
-          "key": "https://bynk-lang.org/docs/manifest/#registries"
+          "key": "https://bynk-lang.org/reference/tooling/manifest/#registries"
         }
       }
     },
@@ -714,7 +714,7 @@
       "type": "object",
       "x-taplo": {
         "links": {
-          "key": "https://bynk-lang.org/docs/manifest/#test"
+          "key": "https://bynk-lang.org/reference/tooling/manifest/#test"
         }
       }
     },
@@ -734,7 +734,7 @@
       "type": "object",
       "x-taplo": {
         "links": {
-          "key": "https://bynk-lang.org/docs/manifest/#unstable"
+          "key": "https://bynk-lang.org/reference/tooling/manifest/#unstable"
         }
       }
     },
@@ -758,7 +758,7 @@
       "type": "object",
       "x-taplo": {
         "links": {
-          "key": "https://bynk-lang.org/docs/manifest/#workers"
+          "key": "https://bynk-lang.org/reference/tooling/manifest/#workers"
         }
       }
     },
@@ -788,7 +788,7 @@
       "type": "object",
       "x-taplo": {
         "links": {
-          "key": "https://bynk-lang.org/docs/manifest/#workspace"
+          "key": "https://bynk-lang.org/reference/tooling/manifest/#workspace"
         }
       }
     }
@@ -797,7 +797,7 @@
   "type": "object",
   "x-taplo": {
     "links": {
-      "key": "https://bynk-lang.org/docs/manifest/"
+      "key": "https://bynk-lang.org/reference/tooling/manifest/"
     }
   }
 }

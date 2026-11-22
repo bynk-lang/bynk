@@ -9,7 +9,7 @@ WebSocket handlers go in a `service` inside a `context`. The protocol is bound o
 the service header — `from websocket(in:, out:)` — naming the **frame types** the
 client sends (`in`) and the server sends (`out`). Unlike HTTP, the connection
 outlives the handler: `on open` is handed an owned
-[`Connection`](/book/reference/types/#connection) that it must **dispose** of,
+[`Connection`](/reference/types/#connection) that it must **dispose** of,
 the canonical disposal being transfer into an agent that holds it.
 
 ## Open a connection
@@ -46,7 +46,7 @@ name its actor. (A browser `WebSocket` cannot set an `Authorization` header, so 
 `None`/`Bearer` and rejects `Signature`.) Only on success is the handler run with a
 fresh, **owned** `connection: Connection[ServerFrame]`.
 
-That connection is a [held resource](/book/reference/types/#connection): it has
+That connection is a [held resource](/reference/types/#connection): it has
 exactly one owner and must be disposed before the handler returns. Here it is
 **transferred into the `Room` agent** (`Room(roomId).join(…, connection)`); leaving
 it undisposed is a compile error (`bynk.held.leak`).
@@ -158,7 +158,7 @@ suite chat {
 `open` takes the route params and the actor (`by`); `message` and `close` reuse
 both from the connection, as the platform does. To test an agent without the
 service, pass it `tc.connection()`. See [Driving a WebSocket
-service](/book/reference/testing/#websocket-address).
+service](/reference/testing/#websocket-address).
 
 ## Build and run
 
@@ -230,8 +230,8 @@ agent Room {
 
 ## Related
 
-- Reference: [WebSocket](/book/reference/websocket/) — the full handler surface,
+- Reference: [WebSocket](/reference/websocket/) — the full handler surface,
   broadcast, authentication, and diagnostics.
-- Reference: [Type system — Connection](/book/reference/types/#connection) — the
+- Reference: [Type system — Connection](/reference/types/#connection) — the
   held-resource type and its linearity discipline.
 - Guide: [Handle an HTTP request](/book/guides/entry-points/http/) — the sibling request/response protocol.

@@ -86,7 +86,7 @@ bynk check --fix=bynk.consumes.type_not_selected,bynk.consumes.capability_not_se
 ```
 
 A suite file consumes what it names in the same way: see
-[what a suite consumes](/book/reference/testing/#suite-consumes).
+[what a suite consumes](/reference/testing/#suite-consumes).
 
 ## Rename an exported type that clashes with one of yours
 
@@ -188,5 +188,5 @@ target details.
 
 ## Related
 
-- Reference: [type system](/book/reference/types/).
+- Reference: [type system](/reference/types/).
 - Explanation: [How a Bynk program is shaped](/book/guides/program-structure/how-a-program-is-shaped/).

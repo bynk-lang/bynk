@@ -40,7 +40,7 @@ service join from http {
 ```
 
 The country is stored as `blob1`: blobs are numbered from 1 in the order you give them, and the
-SQL below refers to it by that name. See [Writing events: `Analytics`](/book/reference/bynk-capabilities/#writing-events-analytics)
+SQL below refers to it by that name. See [Writing events: `Analytics`](/reference/bynk-capabilities/#writing-events-analytics)
 for the limits on a data point.
 
 ## Read them back
@@ -187,4 +187,4 @@ suite shop.signups {
 }
 ```
 
-The reference is [Reading events: `AnalyticsSql`](/book/reference/bynk-capabilities/#reading-events-analyticssql).
+The reference is [Reading events: `AnalyticsSql`](/reference/bynk-capabilities/#reading-events-analyticssql).

@@ -80,7 +80,7 @@ A `SignedCookie` is **signed, not encrypted**: the holder can read the identity 
 put a secret in an identity. It cannot be revoked before `ttl`: `expire()` clears the browser's copy but
 does not invalidate one a user already took, so keep `ttl` short, or keep the session on the server (see
 `examples/sessions`) if you must log out everywhere. See
-[the reference](/book/reference/actors/#what-a-signed-cookie-does-and-does-not-protect-against) for
+[the reference](/reference/actors/#what-a-signed-cookie-does-and-does-not-protect-against) for
 the full list.
 
 ## Cross-site requests
@@ -117,5 +117,5 @@ suite shop.api as system {
 }
 ```
 
-See [the failure principals](/book/reference/testing/#failure-principals) for `by Forged` and
+See [the failure principals](/reference/testing/#failure-principals) for `by Forged` and
 `by Expired`.

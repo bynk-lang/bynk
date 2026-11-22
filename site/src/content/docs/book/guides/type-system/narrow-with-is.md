@@ -76,7 +76,7 @@ fn classify(n: Int) -> Int {
 ```
 
 The value must be an identifier to be narrowed, and the refined type's base must
-match it ([`bynk.types.is_base_mismatch`](/book/reference/diagnostics/bynk.types.is_base_mismatch/)).
+match it ([`bynk.types.is_base_mismatch`](/reference/diagnostics/bynk.types.is_base_mismatch/)).
 Use `.of` instead when you need to handle the failure as a value.
 
 ## Test several patterns with `|`

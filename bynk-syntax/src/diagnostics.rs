@@ -1,7 +1,7 @@
 //! Central registry of diagnostic codes.
 //!
 //! This is the single source of truth for the `bynk.*` codes the compiler can
-//! emit. The reference page `site/src/content/docs/book/reference/diagnostics.md` is generated
+//! emit. The reference page `site/src/content/docs/reference/diagnostics.md` is generated
 //! from [`render_markdown`], and the test `tests/diagnostics_registry.rs`
 //! asserts that this table matches exactly the set of codes used across the
 //! compiler source — so a new code cannot be introduced without documenting it
@@ -6630,7 +6630,7 @@ pub fn explain(code: &str) -> Option<&'static Explain> {
 /// The hosted diagnostic index page (the generated `reference/diagnostics`
 /// page). Each code's own page is `{INDEX_PATH}<code>/`, which `/d/<code>`
 /// redirects to.
-pub const INDEX_PATH: &str = "/book/reference/diagnostics/";
+pub const INDEX_PATH: &str = "/reference/diagnostics/";
 
 /// The anchor slug of a category's `## <title>` heading on the generated
 /// diagnostic index (Starlight/github-slugger shape: lowercase, spaces to
@@ -10802,7 +10802,7 @@ fn category_title(cat: &str) -> &'static str {
 
 /// Render the diagnostic index as a Markdown reference page, grouped by
 /// category. This is the generator behind
-/// `site/src/content/docs/book/reference/diagnostics.md`.
+/// `site/src/content/docs/reference/diagnostics.md`.
 pub fn render_markdown() -> String {
     use std::collections::BTreeMap;
 
@@ -10876,7 +10876,7 @@ pub fn render_markdown() -> String {
 /// grammar constructs, and the curated `blurb` and `example` where the code
 /// has one (else `null`). Sorted by code. This is the generator behind
 /// `site/src/generated/diagnostics.json`, which the route
-/// `site/src/pages/book/reference/diagnostics/[code].astro` renders; the
+/// `site/src/pages/reference/diagnostics/[code].astro` renders; the
 /// docs-consistency test keeps the committed file current.
 pub fn render_json() -> String {
     let mut infos: Vec<&DiagnosticInfo> = REGISTRY.iter().collect();

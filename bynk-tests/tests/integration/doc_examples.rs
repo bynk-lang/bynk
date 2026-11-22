@@ -1,8 +1,8 @@
 //! The example-compilation gate.
 //!
 //! Extracts every fenced ```bynk block from the Book
-//! (`site/src/content/docs/book/**`) and the Developer Documentation surface
-//! (`site/src/content/docs/docs/**`) plus the landing page
+//! (`site/src/content/docs/book/**`) and the Reference
+//! (`site/src/content/docs/reference/**`) plus the landing page
 //! (`site/src/content/docs/index.mdx`, which ships the most visible example), the
 //! repository README and the LLM primer (`site/public/llms.txt`), and compiles
 //! each, so a doc example can never fall out of step with the compiler.
@@ -52,7 +52,7 @@ fn docs_root() -> PathBuf {
 /// The prose surfaces whose ```bynk blocks are gated: the Book and the Developer
 /// Documentation surface. (By Example is `.mdx` and has its own extraction gate.)
 fn doc_surfaces() -> [PathBuf; 2] {
-    [docs_root().join("book"), docs_root().join("docs")]
+    [docs_root().join("book"), docs_root().join("reference")]
 }
 
 fn landing_page() -> PathBuf {
@@ -408,8 +408,11 @@ fn book_examples_are_canonically_formatted() {
 
     let mut dirty = Vec::new();
     for b in collect_blocks() {
-        if !b.file.starts_with("book/")
-            || b.file == "book/reference/wire-format.md"
+        // The Book and the language Reference are held to the formatter; the
+        // Tooling pages (formerly Developer Docs) never were.
+        if !(b.file.starts_with("book/") || b.file.starts_with("reference/"))
+            || b.file.starts_with("reference/tooling/")
+            || b.file == "reference/wire-format.md"
             || b.indented
             || b.info.contains("ignore")
         {

@@ -3,7 +3,7 @@ title: Why Bynk exists
 ---
 This page is about motivation: the problems Bynk is trying to solve, and the
 bets it makes in solving them. It argues a position rather than documenting exact
-behaviour — for that, see the [reference](/book/reference/).
+behaviour — for that, see the [reference](/reference/).
 
 ## The problem: services drift from their design
 
@@ -15,9 +15,9 @@ without ever *stating* it. Over time the two drift apart, and the gap is where
 bugs and onboarding pain live.
 
 Bynk's first bet is that **the architecture should be in the language**. A
-[context](/book/reference/glossary/#term-context) is a deployable boundary. A
-[service](/book/reference/glossary/#term-service) groups handlers. An
-[agent](/book/reference/glossary/#term-agent) is a named, keyed owner of state. These are not naming conventions or folder layouts — they
+[context](/reference/glossary/#term-context) is a deployable boundary. A
+[service](/reference/glossary/#term-service) groups handlers. An
+[agent](/reference/glossary/#term-agent) is a named, keyed owner of state. These are not naming conventions or folder layouts — they
 are constructs the compiler understands and enforces. The shape of the system is
 written down, checked, and compiled, so it cannot quietly rot.
 
@@ -30,18 +30,18 @@ swapped with a customer id. A percentage is "just a number", so one day it is
 
 Bynk pushes hard on the type system to close these gaps:
 
-- **[Refined types](/book/reference/glossary/#term-refined-type)** carry a
+- **[Refined types](/reference/glossary/#term-refined-type)** carry a
   predicate, so `Age = Int where InRange(0, 150)` is a distinct type whose invalid
   values *cannot be constructed*. An out-of-range literal is a compile error, not
   a runtime surprise.
-- **[Opaque types](/book/reference/glossary/#term-opaque-type)** give a value a
+- **[Opaque types](/reference/glossary/#term-opaque-type)** give a value a
   nominal identity, so an `OrderId` and a `CustomerId` never mix even though both
   are strings underneath.
 - **Errors are values.** Operations that can fail return a
-  [`Result`](/book/reference/glossary/#term-result-option); absence is an `Option`.
+  [`Result`](/reference/glossary/#term-result-option); absence is an `Option`.
   There are no exceptions to forget to catch — the type forces the caller to
   handle both outcomes.
-- **Agent state must be [zeroable](/book/reference/glossary/#term-zeroable)**, so a
+- **Agent state must be [zeroable](/reference/glossary/#term-zeroable)**, so a
   never-seen key has a well-defined
   starting state, and "uninitialised" is expressed honestly with `Option`.
 

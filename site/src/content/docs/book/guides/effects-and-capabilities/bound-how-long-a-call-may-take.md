@@ -93,7 +93,7 @@ suite shop.quote {
 
 The harness moves its clock to the deadline for you, but only while every call in flight
 is a stub waiting on `after` or `never`; a call into a real provider is waited for. See
-[testing](/book/reference/testing/#stub-latency).
+[testing](/reference/testing/#stub-latency).
 
 For what a timeout does and does not stop, read
 [what a timeout stops](/book/guides/effects-and-capabilities/what-a-timeout-stops/).

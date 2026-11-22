@@ -4,7 +4,7 @@ title: Stream a large upload
 **Goal:** accept an upload too big to hold in memory, such as an archive or a video, and
 pass it straight on to storage, with a limit on how much a client may send.
 
-A [`@raw`](/book/reference/http/#raw-request-bodies) handler whose `body` is a
+A [`@raw`](/reference/http/#raw-request-bodies) handler whose `body` is a
 `Stream[Bytes]` is handed the request body **as it arrives**, a chunk at a time, instead
 of after it has been read whole. For a small upload that you want in memory, keep
 `body: Bytes` (and see [Accept a file upload](/book/guides/entry-points/accept-a-file-upload/)
@@ -53,7 +53,7 @@ A stream with more or fewer bytes than `size` faults the write, and R2 stores no
 client that lies about its length cannot leave half an object behind. An upload sent
 chunked has no `Content-Length`: it cannot go to `putStream`. Either answer with an error as
 above, or pass the stream to
-[`Fetch.sendStream`](/book/reference/bynk-capabilities/#streamed-bodies), which needs no
+[`Fetch.sendStream`](/reference/bynk-capabilities/#streamed-bodies), which needs no
 length, to forward it to another service.
 
 ## What the client sees past the limit
@@ -78,7 +78,7 @@ length, to forward it to another service.
   Cloudflare's edge ([#3396](https://github.com/bynk-lang/bynk/issues/3396)).
 - **Retries.** A request body cannot be replayed, so a client that retries sends it again.
   If the upload must be safe to repeat, take an
-  [`Idempotency`](/book/reference/bynk-capabilities/#the-idempotency-capability) key from the
+  [`Idempotency`](/reference/bynk-capabilities/#the-idempotency-capability) key from the
   head of the request (a path segment or a header), not the body.
 - **A browser** uploads a large file by `PUT`ting the file itself (`fetch(url, { method: "PUT",
   body: file })`) to a streamed `@raw` route. A `multipart/form-data` upload is still
@@ -126,6 +126,6 @@ The happy path of the `Content-Length` pattern above cannot be run at `system` t
 the driver never sends a `Content-Length` for a stream: a case there reaches the handler's
 `BadRequest`. Cover it at `unit` or `integration`, as above.
 
-**See also:** [Reference: streamed request bodies](/book/reference/http/#streamed-request-bodies),
-[Streams](/book/reference/types/#stream), [R2](/book/reference/bynk-capabilities/),
-[Sending a streamed body](/book/reference/testing/#sending-a-streamed-body).
+**See also:** [Reference: streamed request bodies](/reference/http/#streamed-request-bodies),
+[Streams](/reference/types/#stream), [R2](/reference/bynk-capabilities/),
+[Sending a streamed body](/reference/testing/#sending-a-streamed-body).

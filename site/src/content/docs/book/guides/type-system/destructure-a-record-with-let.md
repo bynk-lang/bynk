@@ -24,7 +24,7 @@ commons shop {
 ```
 
 `sku` and `qty` are in scope for the rest of the block. The trailing `..` is
-required, as in every [record pattern](/book/reference/types/#record-patterns): it
+required, as in every [record pattern](/reference/types/#record-patterns): it
 says the other fields are ignored, so adding a field to `Item` never breaks the
 `let`. No `else` is needed, because the pattern cannot fail to match an `Item`.
 
@@ -132,4 +132,4 @@ error, as it is anywhere else.
 
 **See also:** [Match on a record's fields](/book/guides/type-system/match-on-a-records-fields/),
 [Work with `Result` and optional values](/book/guides/type-system/result-and-optionals/#let-else),
-[Reference — Record patterns](/book/reference/types/#record-patterns).
+[Reference — Record patterns](/reference/types/#record-patterns).

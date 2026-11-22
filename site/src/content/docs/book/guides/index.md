@@ -27,8 +27,8 @@ New to Bynk? Work through [Learn Bynk](/book/tutorials/01-first-program/)
 first. To understand why a part of the language works the way it does, read its
 **Concepts** page, starting with
 [how a Bynk program is shaped](/book/guides/program-structure/how-a-program-is-shaped/).
-For exact rules, see the [Reference](/book/reference/) and the
-[Specification](/book/spec/).
+For exact rules, see the [Reference](/reference/) and the
+[Specification](/reference/spec/).
 
 Running the toolchain — `bynk doctor`, the formatter, editor support, and
-debugging — is covered under [Developer Documentation](/docs/editor-and-tooling/).
+debugging — is covered under [Tooling](/reference/tooling/editor-and-tooling/) in the Reference.

@@ -5,7 +5,7 @@
 > **Implementation status (refreshed October 2026, v0.309).** This is an
 > aspirational specification and runs ahead of, or apart from, the compiler in
 > places. The normative definition of what compiles is the language
-> specification (`site/src/content/docs/book/spec/`), with the decision records
+> specification (`site/src/content/docs/reference/spec/`), with the decision records
 > (`decisions/`) behind it; treat "Settled" here as "settled in design". Where
 > this document's names differ from what was built:
 >

@@ -67,7 +67,7 @@ case "a user sees their own view" {
 }
 ```
 
-See [acting as an actor](/book/reference/testing/#call-site-by).
+See [acting as an actor](/reference/testing/#call-site-by).
 
 ## Mixing a header and a body member
 
@@ -99,4 +99,4 @@ service api from http {
 ```
 
 **Next:** [add an authorisation invariant](/book/guides/actors/authorisation/) to a member, or read
-the [reference](/book/reference/actors/).
+the [reference](/reference/actors/).

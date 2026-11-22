@@ -55,5 +55,5 @@ you cannot control.
 ## Know what it is
 
 These facts are derived from the caller's IP address, so treat them as personal data,
-and as a best guess: a VPN or a proxy makes them wrong. [The reference](/book/reference/http/#request-cf)
+and as a best guess: a VPN or a proxy makes them wrong. [The reference](/reference/http/#request-cf)
 lists every field.

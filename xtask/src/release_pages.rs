@@ -14,11 +14,11 @@ use std::io;
 use std::path::Path;
 
 /// The release pages' directory, from the repository root.
-pub const RELEASES_DIR: &str = "site/src/content/docs/book/reference/releases";
+pub const RELEASES_DIR: &str = "site/src/content/docs/reference/releases";
 /// The page the stamp writes each increment's changelog row into.
-pub const UNRELEASED_PAGE: &str = "site/src/content/docs/book/reference/releases/unreleased.md";
+pub const UNRELEASED_PAGE: &str = "site/src/content/docs/reference/releases/unreleased.md";
 /// The index of every release.
-pub const INDEX_PAGE: &str = "site/src/content/docs/book/reference/releases/index.md";
+pub const INDEX_PAGE: &str = "site/src/content/docs/reference/releases/index.md";
 
 /// The anchor of the changelog table on Unreleased and each release page.
 pub const ROWS_ANCHOR: &str = "| Version |";
@@ -156,7 +156,7 @@ pub fn cut(unreleased: &str, index: &str, version: Version, date: &str) -> Resul
     let release = format!(
         "---\ntitle: v{version}\ndescription: The increments released in Bynk v{version}.\n---\n\
          Released on {when} as **v{version}**, with {span}\n\
-         See [Upgrading](/book/reference/upgrading/) for what to change when you move to it.\n\n\
+         See [Upgrading](/reference/upgrading/) for what to change when you move to it.\n\n\
          {TABLE}\n{}\n",
         rows.join("\n")
     );
@@ -171,7 +171,7 @@ pub fn cut(unreleased: &str, index: &str, version: Version, date: &str) -> Resul
         format!("v{oldest} to v{newest}")
     };
     let index_row = format!(
-        "| [v{version}](/book/reference/releases/{}/) | {when} | {range} | {} |",
+        "| [v{version}](/reference/releases/{}/) | {when} | {range} | {} |",
         release_stem(version),
         rows.len()
     );
@@ -193,7 +193,7 @@ mod tests {
 
     const INDEX: &str = "---\ntitle: Releases\n---\nIntro.\n\n\
         | Release | Released | Versions | Increments |\n|---|---|---|---|\n\
-        | [v0.1.0](/book/reference/releases/v0-1-0/) | 1 January 2026 | v0.1.0 | 1 |\n";
+        | [v0.1.0](/reference/releases/v0-1-0/) | 1 January 2026 | v0.1.0 | 1 |\n";
 
     fn unreleased(rows: &[&str]) -> String {
         format!(
@@ -228,9 +228,11 @@ mod tests {
         let new = cut.index.find("[v0.2.0]").unwrap();
         let old = cut.index.find("[v0.1.0]").unwrap();
         assert!(new < old, "{}", cut.index);
-        assert!(cut.index.contains(
-            "| [v0.2.0](/book/reference/releases/v0-2-0/) | 22 November 2026 | v0.2.0 | 1 |"
-        ));
+        assert!(
+            cut.index.contains(
+                "| [v0.2.0](/reference/releases/v0-2-0/) | 22 November 2026 | v0.2.0 | 1 |"
+            )
+        );
         assert_eq!(
             release_page(v("0.2.0")),
             format!("{RELEASES_DIR}/v0-2-0.md")

@@ -111,7 +111,7 @@ jobs:
         run: |
           ver="$(grep -m1 '^version' Cargo.toml | sed 's/.*"\(.*\)".*/\1/')"
           # Release pages use dashes (v0-639-1.md): Astro drops dots from URLs.
-          page="site/src/content/docs/book/reference/releases/v${ver//./-}.md"
+          page="site/src/content/docs/reference/releases/v${ver//./-}.md"
           if [ -f "$page" ]; then
             echo "::notice::$page is present"
           else

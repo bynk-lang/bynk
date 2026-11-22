@@ -26,8 +26,8 @@ check it.
 Where they differ is **what enforces the shape**:
 
 - **Bynk is a language; Encore is a framework in a host language.** Bynk's
-  guarantees live in the type system — [refined](/book/reference/glossary/#term-refined-type) and
-  [opaque](/book/reference/glossary/#term-opaque-type) types, errors-as-values, single-owner
+  guarantees live in the type system — [refined](/reference/glossary/#term-refined-type) and
+  [opaque](/reference/glossary/#term-opaque-type) types, errors-as-values, single-owner
   [agent state](/book/guides/agents-and-state/the-agent-model/), tracked effects — so the illegal
   shape does not compile. Encore layers structure and static analysis on top of Go
   or TypeScript, but the host language's escape hatches remain: you can still
@@ -71,7 +71,7 @@ The difference is **by construction versus by discipline**:
 - **One source of truth, not two.** In the TS + Zod stack a Zod schema and a
   TypeScript type describe the same value in two places, and the two can drift;
   you keep them in step by hand or by a generator. In Bynk the
-  [refined type](/book/reference/glossary/#term-refined-type) *is* the definition —
+  [refined type](/reference/glossary/#term-refined-type) *is* the definition —
   `type Age = Int where InRange(0, 150)` is a single fact the compiler enforces,
   boundary validation included.
 - **Forced, not remembered.** Zod validates where you remember to call it; nothing
@@ -98,8 +98,8 @@ the nearest relative of Bynk's effect story. Its `Effect<Success, Error,
 Requirements>` type tracks expected errors and required services in the type, and
 its [Schema](https://effect.website/docs/schema/introduction/) module validates
 and transforms data at the boundary. Bynk's
-[`Effect`](/book/reference/glossary/#term-effect), `given` clauses and
-[`Result`](/book/reference/glossary/#term-result-option) cover similar ground
+[`Effect`](/reference/glossary/#term-effect), `given` clauses and
+[`Result`](/reference/glossary/#term-result-option) cover similar ground
 (typed failure, declared dependencies), so the two read as cousins.
 
 The difference is **library versus language**:
@@ -138,7 +138,7 @@ What Rust leaves to you, and Bynk does not:
   handler must declare. You build those conventions; Bynk checks them.
 - **Boundary validation.** In Rust you write or derive the decoding and check
   the invariants yourself; a Bynk
-  [refined type](/book/reference/glossary/#term-refined-type) makes the
+  [refined type](/reference/glossary/#term-refined-type) makes the
   invariant part of the type, and the unvalidated value cannot be built.
 
 Where Rust is ahead, and it is a long list: a general-purpose language with a

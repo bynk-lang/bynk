@@ -112,7 +112,7 @@ code.
 ## Fabricate values with `Val[T]`
 
 Tests often need a value of some type without caring exactly what it is.
-[`Val[T]`](/book/reference/glossary/#term-val) fabricates one. For a refined type
+[`Val[T]`](/reference/glossary/#term-val) fabricates one. For a refined type
 it produces a value that satisfies
 the refinement; pass an argument to pin a specific one:
 
@@ -136,7 +136,7 @@ rejected with `bynk.val.needs_pin`; pin it and you are fine.
 
 To check a claim across a *range* of generated inputs rather than one fabricated
 value, reach for a `property` and its `for all` — see the
-[testing reference](/book/reference/testing/).
+[testing reference](/reference/testing/).
 
 ## Stub a collaborator with `stub`
 
@@ -203,7 +203,7 @@ From here:
 
 - **Have a specific task?** The [how-to guides](/book/guides/) are recipes
   for individual jobs.
-- **Need exact behaviour?** The [reference](/book/reference/) is the
+- **Need exact behaviour?** The [reference](/reference/) is the
   consultable source of truth.
 - **Want the reasoning?** The [explanation](/book/guides/) section
   covers the *why* behind Bynk's design.
@@ -212,4 +212,4 @@ From here:
 
 *For the reasoning behind `Val[T]` and test isolation, see
 [The testing philosophy](/book/guides/testing/philosophy/). For exact rules,
-see the [testing reference](/book/reference/testing/).*
+see the [testing reference](/reference/testing/).*

@@ -211,7 +211,7 @@ the new repo with the script.
 - `bynk-lsp/Cargo.toml` exclusions and comment block; the three tests (§4).
 - `bynk/src/compiler.rs` comment mentioning how `vscode-bynk` resolves
   `bynkc`; `explain_request.rs` comment path.
-- Docs: `site/…/docs/tooling/vscode-bynk.md`, `editor-support.md`, `install.md`,
+- Docs: `site/…/reference/tooling/vscode-bynk.md`, `editor-support.md`, `install.md`,
   `llms.txt` (guarded against drift — update its source), tooling roadmap,
   `devcontainer.json` extension recommendations, `CONTRIBUTING.md`, README.
   Link to the new repo; keep the user-facing extension docs on the site

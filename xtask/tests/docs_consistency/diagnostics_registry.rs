@@ -5,7 +5,7 @@
 //!    appear in `bynk_syntax::diagnostics::REGISTRY`, and vice versa. "Compiler
 //!    source" is the `src/` of every workspace member (#1662), since emit sites
 //!    are spread across crates.
-//! 2. `site/src/content/docs/book/reference/diagnostics.md` and
+//! 2. `site/src/content/docs/reference/diagnostics.md` and
 //!    `site/src/generated/diagnostics.json` must match what the registry
 //!    renders.
 //!
@@ -180,7 +180,7 @@ fn grammar_symbols_are_embeddable_rules() {
 #[test]
 fn generated_diagnostics_page_is_up_to_date() {
     let page = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../site/src/content/docs/book/reference/diagnostics.md");
+        .join("../site/src/content/docs/reference/diagnostics.md");
     let rendered = xtask::site_page::to_site_page(&render_markdown(), "reference");
 
     if std::env::var_os("BYNK_BLESS").is_some() {
@@ -191,7 +191,7 @@ fn generated_diagnostics_page_is_up_to_date() {
     let current = fs::read_to_string(&page).unwrap_or_default();
     assert_eq!(
         current, rendered,
-        "site/src/content/docs/book/reference/diagnostics.md is out of date with the registry.\n\
+        "site/src/content/docs/reference/diagnostics.md is out of date with the registry.\n\
          Regenerate with: BYNK_BLESS=1 cargo test -p xtask --test docs_consistency diagnostics_registry::"
     );
 }
@@ -391,13 +391,13 @@ fn diagnostic_links_name_registry_codes_and_real_pages() {
     }
 }
 
-/// A link to a code's page (`/book/reference/diagnostics/<code>/`) must name a
+/// A link to a code's page (`/reference/diagnostics/<code>/`) must name a
 /// registry code. The site's links validator cannot see these custom pages, so
 /// it skips them; this is the check in its place, over every page the site
 /// builds from (#3876).
 #[test]
 fn links_to_code_pages_name_registry_codes() {
-    const PREFIX: &str = "/book/reference/diagnostics/";
+    const PREFIX: &str = "/reference/diagnostics/";
     let content = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../site/src/content");
     let mut files = vec![content];
     let mut bad = Vec::new();

@@ -113,4 +113,4 @@ the rest marker but a range: see
 Only a `List` has list patterns: a `Set` or `Map` is not one
 (`bynk.types.list_pattern_on_non_list`).
 
-See [list patterns](/book/reference/types/#list-patterns) for the rules.
+See [list patterns](/reference/types/#list-patterns) for the rules.

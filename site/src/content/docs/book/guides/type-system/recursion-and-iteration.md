@@ -119,5 +119,5 @@ commons loops {
 `adders(3, [])` holds functions that add 3, 2 and 1.
 
 **See also:** [Match on a list's shape](/book/guides/type-system/match-on-a-lists-shape/),
-[Spec §5.2](/book/spec/static-semantics/#52-well-typedness) and
-[§7.3.2](/book/spec/emission/#732-expressions).
+[Spec §5.2](/reference/spec/static-semantics/#52-well-typedness) and
+[§7.3.2](/reference/spec/emission/#732-expressions).

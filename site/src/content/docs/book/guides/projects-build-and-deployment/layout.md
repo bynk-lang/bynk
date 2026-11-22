@@ -57,7 +57,7 @@ version = "0.1.0"
 exclude = ["vendor"]   # skip subtrees (monorepo, vendored, generated .bynk)
 ```
 
-See the [`bynk.toml` reference](/docs/manifest/) for every key. The tool always
+See the [`bynk.toml` reference](/reference/tooling/manifest/) for every key. The tool always
 skips its own `out/` and `node_modules/` caches and dot-directories.
 
 ## Path identity
@@ -205,4 +205,4 @@ identity: it is a build grouping only.
 
 - [Write tests and stub collaborators](/book/guides/testing/write-tests/).
 - [Target Cloudflare Workers](/book/guides/projects-build-and-deployment/cloudflare-workers/).
-- Reference: [`bynk.toml` manifest](/docs/manifest/).
+- Reference: [`bynk.toml` manifest](/reference/tooling/manifest/).

@@ -250,7 +250,7 @@ fn colour(passed: Bool) -> String { if passed { "green" } else { "red" } }
 ```
 
 The `---` lines inside are content, because only a `----` line closes this
-block. [Spec §3.3.2](/book/spec/lexical-grammar/#332-doc-blocks) has the exact
+block. [Spec §3.3.2](/reference/spec/lexical-grammar/#332-doc-blocks) has the exact
 rule.
 
 ## Write examples that stay true {#examples}
@@ -276,7 +276,7 @@ the test run. Mark a deliberately partial example `bynk ignore` (or
 `bynk,ignore`) to skip it. Mark one `bynk test` and it runs as a test case too,
 so its `expect`s are checked against the code and not just type-checked. Blocks
 in other languages, and `bynk fragment` or `bynk fail` blocks, are left alone. A one-line doc (`--- text`) can't hold a
-fence, so an example goes in a doc-block. See [Doc examples](/book/reference/testing/#doc-examples).
+fence, so an example goes in a doc-block. See [Doc examples](/reference/testing/#doc-examples).
 
 ## `//`, `--- text` or a `---` block?
 
@@ -323,5 +323,5 @@ meant: an old `--- Helpers ---` divider, which now reads as a doc, or a new
 the `--` comments first, and format again.
 
 **See also:** [Spec §3.3 — Comments and
-doc-blocks](/book/spec/lexical-grammar/#33-comments-and-doc-blocks),
-[Spec §5.1a — Module documentation](/book/spec/static-semantics/#module-docs).
+doc-blocks](/reference/spec/lexical-grammar/#33-comments-and-doc-blocks),
+[Spec §5.1a — Module documentation](/reference/spec/static-semantics/#module-docs).

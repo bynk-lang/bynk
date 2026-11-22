@@ -2,10 +2,10 @@
 title: The refined-literal admission model
 ---
 When you write a literal where a
-[refined type](/book/reference/glossary/#term-refined-type) is expected, Bynk
+[refined type](/reference/glossary/#term-refined-type) is expected, Bynk
 checks it at compile time and admits it directly — no
-[`.of`](/book/reference/glossary/#term-of-unsafe), no
-[`Result`](/book/reference/glossary/#term-result-option):
+[`.of`](/reference/glossary/#term-of-unsafe), no
+[`Result`](/reference/glossary/#term-result-option):
 
 ```bynk,fragment
 fn defaultQty() -> Quantity {   // Quantity = Int where InRange(1, 100)
@@ -62,7 +62,7 @@ positions where the expected type is a refined type, a literal is checked agains
 the predicate and admitted. Those positions are the return position, a `let` with
 a type annotation, an `Ok`/`Some`/`Err` payload, and a refined-typed call
 argument. A valid literal compiles (lowering to an inline brand cast); an invalid
-one is a compile error, [`bynk.refine.literal_violates`](/book/reference/diagnostics/bynk.refine.literal_violates/).
+one is a compile error, [`bynk.refine.literal_violates`](/reference/diagnostics/bynk.refine.literal_violates/).
 
 ```mermaid
 flowchart TD
@@ -104,4 +104,4 @@ them.
 ## See also
 
 - How-to: [Use a literal where a refined type is expected](/book/guides/type-system/use-a-literal/).
-- Reference: [refined-type API](/book/reference/refined-types/).
+- Reference: [refined-type API](/reference/refined-types/).

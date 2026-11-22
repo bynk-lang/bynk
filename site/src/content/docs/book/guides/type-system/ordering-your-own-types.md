@@ -125,7 +125,7 @@ fn clamp[T: Ord](x: T, lo: T, hi: T) -> T {
 about it). Callers must pass an orderable type; `top` over a record without
 `derives Ord` is rejected at the call. If you forget the bound, the compiler
 points at the comparison and offers the fix: see
-[`bynk.generics.missing_ord_bound`](/book/reference/diagnostics/bynk.generics.missing_ord_bound/).
+[`bynk.generics.missing_ord_bound`](/reference/diagnostics/bynk.generics.missing_ord_bound/).
 
 ## Three edge cases
 
@@ -142,5 +142,5 @@ for sorting on a `Bytes` key now compiles.
 JavaScript's `<` gives. It is neither Unicode code-point nor locale order, so
 `"Z"` sorts before `"a"`.
 
-Reference: [Ordering your own types](/book/reference/types/#ordering-your-own-types)
-and [Generics and bounds](/book/reference/generics/).
+Reference: [Ordering your own types](/reference/types/#ordering-your-own-types)
+and [Generics and bounds](/reference/generics/).

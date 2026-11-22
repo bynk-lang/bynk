@@ -1399,7 +1399,7 @@ fn removed_send_arrow_error(span: Span) -> CompileError {
         "`~>` was removed; write `do e.detach()` instead of `~> e`",
     )
     .with_note(
-        "`e.detach()` stops waiting for `e` as `~>` did, for any `Effect[T]`, and reports a fault or an `Err` instead of losing it; for a unit effect that need not outlive the handler, plain `do e` is enough. See \"Upgrading\" in the Book (`/book/reference/upgrading/`)",
+        "`e.detach()` stops waiting for `e` as `~>` did, for any `Effect[T]`, and reports a fault or an `Err` instead of losing it; for a unit effect that need not outlive the handler, plain `do e` is enough. See \"Upgrading\" in the Book (`/reference/upgrading/`)",
     )
 }
 

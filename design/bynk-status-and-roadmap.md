@@ -23,7 +23,7 @@ against the language's own specs._
 Bynk is described by three tiers of documents; conflating them produces a
 misleading verdict, so this audit keeps them separate:
 
-1. **The normative spec** (`site/src/content/docs/book/spec/`) plus the **decision records**
+1. **The normative spec** (`site/src/content/docs/reference/spec/`) plus the **decision records**
    (`decisions/`) are the authoritative "what exists now". The ADR index runs
    from v0.9.4 (ADR 0001) to v0.54 (ADR 0092) and is the spine of this audit.
 2. **The design notes** (`bynk-design-notes.md`) and **type-system spec**

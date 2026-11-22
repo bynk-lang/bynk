@@ -64,7 +64,7 @@ service orders from http {
 `all` and `first` return the rows as JSON text, for `Json.decode`: `bigint` and
 `numeric` columns arrive as strings, `timestamptz` as ISO-8601 text, `bytea` as
 base64, and `json` and `jsonb` nested. The
-[reference](/book/reference/bynk-capabilities/#postgres-databases-postgres) has the
+[reference](/reference/bynk-capabilities/#postgres-databases-postgres) has the
 full rules and the `PgError` variants.
 
 ## Read rows into a record
@@ -162,7 +162,7 @@ and out of `wrangler.toml`.
 The Worker also needs the `postgres` npm package, which the build adds to
 `out/package.json` (pinned to an exact version). `bynk dev`, `bynk deploy` and
 `bynk test` install it into the build directory with your own package manager
-when it is missing; [`--no-install`](/docs/bynk-cli/#installing-npm-packages)
+when it is missing; [`--no-install`](/reference/tooling/bynk-cli/#installing-npm-packages)
 stops instead, naming the command to run.
 
 ## Mind the connection limit
@@ -225,7 +225,7 @@ failure needs two transactions at once, so stub it to test your retry.
 The first `bynk test` of a project that opts in installs PGlite (about 27 MB), and
 each run starts it once, about 1.5 seconds per `Postgres` instance. Leave the
 setting out and tests stay as quick as before, with every operation stubbed. See
-[Postgres under test](/book/reference/testing/#postgres-under-test).
+[Postgres under test](/reference/testing/#postgres-under-test).
 
 ## Catch a bad statement at compile time
 
@@ -242,7 +242,7 @@ let _ <- Main.all("select name from orders where id = $1", [])       // error: b
 
 It does not check names against your tables: Bynk does not own the schema. Without
 a `schema.sql` there is no check. See
-[Postgres SQL checked for syntax](/book/reference/bynk-capabilities/#postgres-sql-checked-for-syntax).
+[Postgres SQL checked for syntax](/reference/bynk-capabilities/#postgres-sql-checked-for-syntax).
 
-**See also:** [Reference: Postgres databases](/book/reference/bynk-capabilities/#postgres-databases-postgres),
+**See also:** [Reference: Postgres databases](/reference/bynk-capabilities/#postgres-databases-postgres),
 [Run independent calls at the same time](/book/guides/effects-and-capabilities/run-independent-calls-at-the-same-time/).
