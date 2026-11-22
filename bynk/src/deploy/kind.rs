@@ -321,7 +321,8 @@ pub(crate) struct Lives<'a> {
     /// consume is one queue, made once per run (ADR 0194 D2). `None` attempts every queue.
     pub(crate) queues: Option<&'a std::cell::RefCell<BTreeSet<String>>>,
     /// The ids each stored secret's Secrets Store and each mTLS certificate was linked to before
-    /// the run confirmed, by `(worker, binding)` ([`link_for_run`]). `None` links nothing.
+    /// the run confirmed, by `(worker, binding)` ([`link_for_run`]). With `None`, every declared
+    /// stored secret or certificate is reported as not linked.
     pub(crate) linked: Option<&'a BTreeMap<(String, String), String>>,
 }
 
