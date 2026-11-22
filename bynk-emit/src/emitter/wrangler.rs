@@ -4,6 +4,8 @@
 //! Service Bindings are declared for every consumed context. Durable
 //! Object bindings + `exports` entries are declared for every agent.
 
+pub mod environment;
+
 use crate::emitter::bindings::{BindingSource, WorkerBinding};
 use crate::emitter::toml_doc::{TomlBlock, TomlDocument, TomlEntry, TomlValue};
 use bynk_project::env_protocol;

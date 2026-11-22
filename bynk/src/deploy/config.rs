@@ -1321,47 +1321,12 @@ pub(crate) fn materialise_ratelimit_ids(path: &Path, ids: &BTreeMap<String, Stri
     std::fs::write(path, patched).is_ok()
 }
 
-/// The environment-qualified physical name for a resource whose logical
-/// identity is chosen by the source (`on queue "n"`) or the compiler (a
-/// target context's `worker_dir_name`) — slice 4, DECISION C.
-///
-/// `"default"` is unqualified, which is the property that keeps a plain
-/// `bynk deploy` byte-for-byte unchanged from before this slice. Any other
-/// environment gets Cloudflare's own suffix shape (`<name>-<env>`) — not a
-/// free choice for a Service Binding target: Cloudflare auto-suffixes a
-/// Worker's *own* deployed name the same way under `--env`, so a binding must
-/// match it exactly to resolve. Queues are not Cloudflare-mandated to follow
-/// this shape, but using the same one keeps the two resource kinds — and the
-/// mental model — consistent.
-pub(crate) fn env_qualify(environment: &str, name: &str) -> String {
-    if environment == "default" {
-        name.to_string()
-    } else {
-        format!("{name}-{environment}")
-    }
-}
-
-/// The name project Worker `worker` is deployed under in `environment`, and
-/// so the name every Service Binding to it must carry (#2028).
-///
-/// The one place both sides of a deploy get this name: the plan prints it
-/// (each context's `worker`, `binds_to`, and the `order` line), and
-/// [`synthesise_environment_block`] writes it into the `[env.<name>]` block
-/// the push hands Wrangler, as the block's `name` and as each project
-/// Service Binding's `service`. So what `--dry-run` says is what the push
-/// creates, by construction rather than by agreement.
-///
-/// It is [`env_qualify`]: `default` is the bare name, any other environment
-/// `<worker>-<env>`. Writing `name` explicitly changes nothing Wrangler would
-/// have done on its own: under `--env`, Wrangler 4.149.0 names an
-/// environment that sets no `name` `<top-level name>-<env>` (`inheritable`
-/// with `appendEnvName`; its `legacy_env` removal note: "each environment is
-/// now deployed as its own Worker named `<name>-<environment>`"), and uses an
-/// environment's own `name` as given. Stating it makes Bynk, not a Wrangler
-/// default, the owner of the name the plan promises.
-pub(crate) fn deployed_worker_name(environment: &str, worker: &str) -> String {
-    env_qualify(environment, worker)
-}
+// 1C.2 (Decision E of #4039): the names a deploy gives a resource in an environment are
+// `bynk_project::environment`'s, one set for the plan, the push and the block `bynk-emit` renders.
+pub(crate) use bynk_project::environment::{
+    analytics_dataset_name, d1_database_name, deployed_worker_name, env_qualify, r2_bucket_name,
+    vectorize_index_name,
+};
 
 /// The `bynk deploy` command a message suggests, for the environment the run
 /// is deploying (#2047): `bynk deploy` for `default`, `bynk deploy --env
@@ -1373,20 +1338,6 @@ pub(crate) fn deploy_command(environment: &str) -> String {
     } else {
         format!("bynk deploy --env {environment}")
     }
-}
-
-/// P5 (#2323): the name an `R2` instance's bucket has on the account in
-/// `environment`: its derived name, [`env_qualify`]d. R2 bucket names are
-/// scoped to the account, so (like a Worker's) it is a function of the
-/// project's names alone.
-pub(crate) fn r2_bucket_name(environment: &str, name: &str) -> String {
-    env_qualify(environment, name)
-}
-
-/// #3479: the name a `Vectorize` instance's index has in `environment`: its
-/// derived name, qualified as [`env_qualify`] does.
-pub(crate) fn vectorize_index_name(environment: &str, name: &str) -> String {
-    env_qualify(environment, name)
 }
 
 /// #3479, #3496: why `name` cannot be an index name, or `None`. Cloudflare
@@ -1413,26 +1364,6 @@ pub(crate) fn vectorize_index_name_problem(name: &str) -> Option<&'static str> {
         return Some("it may not end with a hyphen");
     }
     None
-}
-
-/// P3b (#2582): the name an `Analytics` instance's dataset has in
-/// `environment`: its derived name, qualified as [`env_qualify`] does but with
-/// `_` (`shop_cart_signups_staging`), since the dataset is a SQL table name.
-pub(crate) fn analytics_dataset_name(environment: &str, name: &str) -> String {
-    if environment == "default" {
-        name.to_string()
-    } else {
-        format!(
-            "{name}_{}",
-            environment.to_ascii_lowercase().replace('-', "_")
-        )
-    }
-}
-
-/// P4a (#2602): the name a `D1` instance's database has on the account in
-/// `environment`: its derived name, [`env_qualify`]d, as a bucket's is.
-pub(crate) fn d1_database_name(environment: &str, name: &str) -> String {
-    env_qualify(environment, name)
 }
 
 /// P4a (#2602): materialise each `D1` database's environment's name and
@@ -2221,13 +2152,6 @@ max_batch_size = 10
     }
 
     #[test]
-    fn env_qualify_is_a_no_op_for_default_and_suffixes_otherwise() {
-        assert_eq!(env_qualify("default", "jobs"), "jobs");
-        assert_eq!(env_qualify("staging", "jobs"), "jobs-staging");
-        assert_eq!(env_qualify("staging", "payment"), "payment-staging");
-    }
-
-    #[test]
     fn synthesise_environment_block_covers_every_binding_kind() {
         let out = synthesise_environment_block(
             FULL_CONFIG,
@@ -2687,6 +2611,99 @@ max_batch_size = 10
             include_str!("fixtures/every_kind.env.toml"),
             "the `[env.*]` block's bytes changed: 1C.2 must not change what `bynk deploy` hands Wrangler"
         );
+    }
+
+    /// 1C.2, commit 2 (Decision C of #4039): the renderer `bynk-emit` owns writes the bytes the
+    /// synthesiser does, over every generated `wrangler.toml` of the corpus, in a named
+    /// environment and in one whose name needs the dataset form, with a resolved id for every KV
+    /// binding the file names. Deleted with the synthesiser, in the commit that switches the
+    /// caller; the pin above stays.
+    #[test]
+    fn the_emitters_renderer_matches_the_synthesiser_over_the_corpus() {
+        use bynk_emit::emitter::wrangler::environment::{Resolved, render};
+        fn walk(dir: &Path, out: &mut Vec<std::path::PathBuf>) {
+            for entry in std::fs::read_dir(dir).unwrap() {
+                let path = entry.unwrap().path();
+                if path.is_dir() {
+                    walk(&path, out);
+                } else if path.file_name().is_some_and(|n| n == "wrangler.toml") {
+                    out.push(path);
+                }
+            }
+        }
+        let mut files = Vec::new();
+        walk(
+            &Path::new(env!("CARGO_MANIFEST_DIR")).join("../bynk-tests/tests/fixtures"),
+            &mut files,
+        );
+        assert!(files.len() > 400, "the corpus: {} files", files.len());
+        let compare = |text: &str,
+                       environment: &str,
+                       ids: &BTreeMap<String, String>,
+                       foreign: &BTreeSet<String>| {
+            assert_eq!(
+                render(
+                    text,
+                    environment,
+                    &Resolved {
+                        kv_ids: ids,
+                        foreign_bindings: foreign
+                    }
+                ),
+                synthesise_environment_block(text, environment, ids, foreign),
+                "`{environment}` differs for:\n{text}"
+            );
+        };
+        for file in &files {
+            let text = std::fs::read_to_string(file).unwrap();
+            let doc: toml::Table = text.parse().unwrap();
+            let kv: Vec<String> = doc
+                .get("kv_namespaces")
+                .and_then(toml::Value::as_array)
+                .into_iter()
+                .flatten()
+                .filter_map(|n| n.get("binding")?.as_str().map(str::to_string))
+                .collect();
+            let ids: BTreeMap<String, String> =
+                kv.iter().map(|b| (b.clone(), format!("{b}-id"))).collect();
+            let services: BTreeSet<String> = doc
+                .get("services")
+                .and_then(toml::Value::as_array)
+                .into_iter()
+                .flatten()
+                .filter_map(|n| n.get("binding")?.as_str().map(str::to_string))
+                .collect();
+            for environment in ["staging", "eu-staging", "default"] {
+                compare(&text, environment, &ids, &BTreeSet::new());
+                compare(&text, environment, &BTreeMap::new(), &BTreeSet::new());
+                // Every Service Binding foreign, and the first only.
+                compare(&text, environment, &ids, &services);
+                compare(
+                    &text,
+                    environment,
+                    &ids,
+                    &services.iter().take(1).cloned().collect(),
+                );
+            }
+        }
+        // The edge cases: the every-kind config, a key the emitter does not write, a nameless
+        // config, and text that is not TOML.
+        let every = every_kind_config();
+        let unknown = format!("{every}\n[unknown_table]\nkey = \"value\"\n");
+        for text in [
+            every.as_str(),
+            unknown.as_str(),
+            "main = \"index.ts\"\n",
+            "not = valid = toml",
+        ] {
+            compare(
+                text,
+                "staging",
+                &kv_ids(&[("KV", "kv-id")]),
+                &["FOREIGN".to_string()].into_iter().collect(),
+            );
+            compare(text, "staging", &BTreeMap::new(), &BTreeSet::new());
+        }
     }
 
     #[test]
