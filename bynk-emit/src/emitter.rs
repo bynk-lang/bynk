@@ -69,6 +69,7 @@ use ctx::UnitFacts;
 use ts_types::{TyRender, asset_ts_type, ts_base};
 
 pub mod client;
+pub(crate) mod compose;
 pub mod containers;
 pub mod contracts;
 pub(crate) mod events_fanout;
@@ -82,11 +83,12 @@ pub(crate) mod workers_entry;
 pub mod workers_group;
 pub mod wrangler;
 
+pub use compose::bundle::emit_composition_root;
+pub use compose::workers::emit_worker_compose;
 pub use containers::{container_class_names, emit_containers_ts};
 pub use events_fanout::{Publisher, emit_events_fanout_do, emit_group_events_fanout_do};
 pub use secrets::emit_secrets_manifest;
 pub use toml_doc::print_toml_document;
-pub use workers::emit_worker_compose;
 pub use workers_entry::{
     emit_worker_entry, field_spec_source, form_body_specs, renamed_specs_source,
     table_has_plain_json,
