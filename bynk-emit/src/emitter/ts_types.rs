@@ -1,9 +1,5 @@
 //! TypeScript type rendering: `ts_type_ref*`, `ts_ty`, and the `TsType` builders.
 
-// 1A.37a: this file has no wildcard enum arm; the attribute keeps it that way until the
-// crate opts in to the workspace lints (1A.37b).
-#![deny(clippy::wildcard_enum_match_arm)]
-
 use super::*;
 
 /// Unchecked construction of a branded value in emitted TypeScript.

@@ -12,6 +12,9 @@ categories = ["compilers"]
 [lib]
 path = "src/lib.rs"
 
+[lints]
+workspace = true
+
 [dependencies]
 # #521: bynk.toml parsing (read_project_paths). #980: also the schema
 # registry (`bynk.schema.lock`), same format.

@@ -8,10 +8,6 @@
 //! this crate for `bynk-driver` without the emitter depending on it. `project`
 //! re-exports everything below at its old path until then.
 
-// 1A.37a: this file has no wildcard enum arm; the attribute keeps it that way until the
-// crate opts in to the workspace lints (1A.37b).
-#![deny(clippy::wildcard_enum_match_arm)]
-
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 

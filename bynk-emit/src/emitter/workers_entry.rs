@@ -11,10 +11,6 @@
 //! this file's own conversion, closing the fourth Arc C slice (`workers.rs`
 //! was the third, #1321).
 
-// 1A.37a: this file has no wildcard enum arm; the attribute keeps it that way until the
-// crate opts in to the workspace lints (1A.37b).
-#![deny(clippy::wildcard_enum_match_arm)]
-
 use crate::emitter::http_handler_method_name_ir;
 use crate::emitter::serialisation;
 use crate::emitter::ts_ident;

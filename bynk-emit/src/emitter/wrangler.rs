@@ -4,10 +4,6 @@
 //! Service Bindings are declared for every consumed context. Durable
 //! Object bindings + `exports` entries are declared for every agent.
 
-// 1A.37a: this file has no wildcard enum arm; the attribute keeps it that way until the
-// crate opts in to the workspace lints (1A.37b).
-#![deny(clippy::wildcard_enum_match_arm)]
-
 use crate::emitter::toml_doc::{TomlBlock, TomlDocument, TomlEntry, TomlValue};
 pub use bynk_check::worker_bindings::{BindingSource, WorkerBinding};
 use bynk_project::worker_layout::WorkerLayout;

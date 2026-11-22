@@ -7,10 +7,6 @@
 //! declaration's literals, so the generated file holds data and no logic, as
 //! the agent classes' `serialiseAgentClass` wrapper does.
 
-// 1A.37a: this file has no wildcard enum arm; the attribute keeps it that way until the
-// crate opts in to the workspace lints (1A.37b).
-#![deny(clippy::wildcard_enum_match_arm)]
-
 use bynk_check::worker_bindings::BindingSource;
 use bynk_ts::{TsDecl, TsExpr, TsLit, TsProgram, TsStmt};
 

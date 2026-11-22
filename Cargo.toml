@@ -52,8 +52,8 @@ homepage = "https://github.com/bynk-lang/bynk"
 # rather than a hand-rolled scan. `warn`, not `deny`: CI runs `cargo clippy --workspace
 # --all-targets -- -D warnings`, so for a crate that opts in with `[lints] workspace =
 # true` the lint is effectively deny. `bynk-ts` and `bynk-model` have opted in (P0.4,
-# #3685); the other crates opt in as each is cleaned (1A.lints for `bynk-emit`, per
-# design/tracks/back-half-paydown.md), because opting in a crate that still has
+# #3685), and `bynk-emit` with them (1A.37b, per design/tracks/back-half-paydown.md);
+# the other crates opt in as each is cleaned, because opting in a crate that still has
 # violations would turn every one into a build failure. Track slice T0.3
 # (design/tracks/compiler-architecture.md); the 296-violation inventory is recorded on
 # the spine, #996.

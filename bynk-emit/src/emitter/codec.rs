@@ -17,10 +17,6 @@
 //!   factory (`serialisation::emit_codec_factory`) applied to the witnesses of
 //!   its arguments (#2792).
 
-// 1A.37a: this file has no wildcard enum arm; the attribute keeps it that way until the
-// crate opts in to the workspace lints (1A.37b).
-#![deny(clippy::wildcard_enum_match_arm)]
-
 use std::collections::HashMap;
 
 use bynk_check::checker::{Ty, TyId, TypedCommons};

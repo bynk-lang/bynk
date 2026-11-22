@@ -10,10 +10,6 @@
 //! `writeln!`-ing a `String` — this file's own conversion, closing the
 //! third Arc C slice (`events_fanout.rs` was the first, #1317).
 
-// 1A.37a: this file has no wildcard enum arm; the attribute keeps it that way until the
-// crate opts in to the workspace lints (1A.37b).
-#![deny(clippy::wildcard_enum_match_arm)]
-
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use super::internal_fault::undefined_node;

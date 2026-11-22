@@ -6,10 +6,6 @@
 //! `emitter.rs` (ADR 0060); the codec/reference/import/header helpers and the
 //! `ts_*`/`LowerCtx` core stay in the parent and are reached via `use super::*`.
 
-// 1A.37a: this file has no wildcard enum arm; the attribute keeps it that way until the
-// crate opts in to the workspace lints (1A.37b).
-#![deny(clippy::wildcard_enum_match_arm)]
-
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 

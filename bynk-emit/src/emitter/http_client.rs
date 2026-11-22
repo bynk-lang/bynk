@@ -33,10 +33,6 @@
 //! with no signing and no Workers types, plus the runtime's own `result`, `bytes`,
 //! `decimal` and `keys` modules for just the names the codecs use.
 
-// 1A.37a: this file has no wildcard enum arm; the attribute keeps it that way until the
-// crate opts in to the workspace lints (1A.37b).
-#![deny(clippy::wildcard_enum_match_arm)]
-
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt;
 use std::sync::Arc;

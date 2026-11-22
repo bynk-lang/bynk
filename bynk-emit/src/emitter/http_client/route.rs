@@ -2,10 +2,6 @@
 //! encodings the method needs. Split from `http_client.rs` (1A.38b) so each file
 //! stays under the module-size ceiling; the code is unchanged.
 
-// 1A.37a: this file has no wildcard enum arm; the attribute keeps it that way until the
-// crate opts in to the workspace lints (1A.37b).
-#![deny(clippy::wildcard_enum_match_arm)]
-
 use std::collections::HashMap;
 use std::sync::Arc;
 
