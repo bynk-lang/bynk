@@ -7,6 +7,7 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.640.20** | Internal restructuring of `bynk deploy`; no change to plans or `bynk.deploy.lock` |
 | **v0.640.19** | Internal hardening in the code generator; the last print-then-splice round trips in the emitter become syntax-tree nodes |
 | **v0.640.18** | Internal restructuring of `bynk deploy`; no change to plans or `bynk.deploy.lock` |
 | **v0.640.17** | The Book's troubleshooting pages are folded into each code's explanation, which `bynk explain`, the editor's Explain panel and the code's page at `/d/<code>` all show, and `/book/troubleshooting/` redirects to the Diagnostic index. `bynk.property.restates_refinement` gains an explanation, eleven others gain the fixes only the troubleshooting pages gave, and the index sorts actors, adapters, deployment, events, generics, history properties, packages, npm requirements, agent storage, stubs, tests and test tiers into categories of their own (web presence track, slice 4b, #3907). |
