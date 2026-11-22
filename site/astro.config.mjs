@@ -63,7 +63,16 @@ export default defineConfig({
       // `/docs/api/` is the generated rustdoc tree — built by `cargo doc` in the
       // deploy workflow and copied into `public/docs/api/` (gitignored, absent from
       // local builds), so the internal link-checker must not try to resolve into it.
-      plugins: [starlightLinksValidator({ exclude: ["/docs/api/**"] })],
+      // A diagnostic code's page (`src/pages/book/reference/diagnostics/[code].astro`)
+      // is a custom page, which the validator cannot see, so links to one are
+      // excluded too. The page is built for every registry code, and the
+      // `diagnostics_registry` docs-consistency test checks that every such link
+      // in the site's content names a registry code, so none can dangle.
+      plugins: [
+        starlightLinksValidator({
+          exclude: ["/docs/api/**", "/book/reference/diagnostics/*/"],
+        }),
+      ],
       // Faithful `bynk` highlighting from the editor's own grammar; the fenced
       // language id is `bynk` (the grammar's own name is the display "Bynk").
       // #2958: a tagged multi-line string (`"""sql`) embeds that language's

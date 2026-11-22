@@ -63,9 +63,9 @@ fn render_explained(e: &Explain) -> String {
 fn render_known_unexplained(code: &str, summary: &str) -> String {
     format!(
         "{code}\n\n{summary}\n\n\
-         No extended explanation is written for this code yet. See the diagnostic \
-         index for every code and its summary:\n\n    {}/book/reference/diagnostics/\n",
-        diagnostics::BOOK_BASE_URL
+         No extended explanation is written for this code yet. Its page links the \
+         other codes in its category:\n\n    {}\n",
+        diagnostics::href(code)
     )
 }
 
@@ -85,8 +85,8 @@ pub fn run(code: &str) -> ExitCode {
             emsg!(
                 "error: `{code}` is not a diagnostic code the compiler emits.\n\
                  Diagnostic codes look like `bynk.resolve.unknown_type`; see \
-                 {}/book/reference/diagnostics/ for the full list.",
-                diagnostics::BOOK_BASE_URL
+                 {} for the full list.",
+                diagnostics::href("")
             );
             ExitCode::FAILURE
         }
@@ -105,7 +105,7 @@ mod tests {
         assert!(out.contains(e.blurb));
         assert!(out.contains("Example:"));
         // The hosted href is the offline-visible "learn more" target.
-        assert!(out.contains("https://bynk-lang.org/book/reference/types/"));
+        assert!(out.contains("https://bynk-lang.org/d/bynk.resolve.unknown_type"));
     }
 
     #[test]
@@ -118,6 +118,10 @@ mod tests {
         let out = render_known_unexplained(code, "The in-browser compiler panicked internally.");
         assert!(out.contains(code));
         assert!(out.contains("No extended explanation"));
+        assert!(
+            out.contains("https://bynk-lang.org/d/bynk.wasm.panic\n"),
+            "{out}"
+        );
     }
 
     #[test]

@@ -239,12 +239,16 @@ Each page ends with links to the reference sections that govern the code.
 Those targets are docs structure, so they move out of the compiler:
 `Explain` loses `page` and `anchor`, and the site keeps a data file
 (`site/src/data/diagnostic-links.json`, code → one or more site paths). The
-site build fails when a registry code has no page or a link does not resolve,
-which keeps the drift guard the `page`/`anchor` fields provide today.
-`Explain::href` and `diagnostics::href` return `/d/<code>`.
+site builds a page for every code in `site/src/generated/diagnostics.json`,
+which the compiler renders; a docs-consistency test fails when that file is
+stale, or when a link in the data file names a code outside the registry or a
+page or heading that does not exist. That keeps the drift guard the
+`page`/`anchor` fields gave. `Explain::href` and `diagnostics::href` return
+`/d/<code>`. (Slice 4 serves the pages at `/book/reference/diagnostics/<code>/`;
+slice 5 moves them with the rest of Reference, and `/d/` follows.)
 
-Fold each troubleshooting page's content into its code's `Explain` entry,
-then retire `book/troubleshooting/` behind one splat redirect. `bynk explain`,
+Slice 4b then folds each troubleshooting page's content into its code's
+`Explain` entry, and retires `book/troubleshooting/` behind one splat redirect. `bynk explain`,
 the editor's Explain panel and the website then show the same text from one
 source.
 
@@ -343,7 +347,8 @@ and 4 may be built before the freeze lifts is the maintainer's decision.
 | 1 | Contents complete: list the 18 missing pages; add the completeness check | No | 0 |
 | 2 | Regroup the sidebar into Start, Learn Bynk, Concepts, Guides; replace "How these docs are organised" with a short Book front page | No | 1 |
 | 3 | Releases: one page per release tag and an `unreleased` page that `xtask stamp` writes; a release cut renames it; redirect the changelog URL | Yes | 0 |
-| 4 | Diagnostics: a generated page for every code; the `/d/<code>` contract (L1–L3); `page`/`anchor` move from `Explain` to the site's data file; fold in troubleshooting | Yes | 0 |
+| 4 | Diagnostics: a generated page for every code; the `/d/<code>` contract (L1–L3); `page`/`anchor` move from `Explain` to the site's data file | Yes | 0 |
+| 4b | Fold the troubleshooting pages into their codes' `Explain` entries; retire `book/troubleshooting/` behind one splat redirect | Yes | 4 |
 | 5 | Reference consolidation: move `book/reference`, `book/spec` and `/docs/` to `/reference/`; its own contents; sidebar surfaces; splat redirects. Move the Concepts pages to `/book/concepts/`, one rule each. Repository links rewritten (L5) | Yes | 2, 3, 4 |
 | 6 | Theme package from the design system tokens, published to GitHub Packages; light and dark following the reader's setting; docs site adopts it | No | 0 |
 | 7 | Blog adopts the theme; cross-site search | No | 6 |

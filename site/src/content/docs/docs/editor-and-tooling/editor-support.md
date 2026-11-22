@@ -46,7 +46,9 @@ The extension activates on `.bynk` files and on any workspace containing a
 signatures, go-to-definition, and format-on-save (honouring
 `editor.formatOnSave`).
 
-When a diagnostic's code has a curated explanation, the lightbulb offers
+Every diagnostic's code is a link to that code's page on this site, which says
+what the code means and links the Book pages that explain it. When the code
+has a curated explanation, the lightbulb also offers
 **Explain `<code>`**. It opens the explanation in a panel beside the editor,
 from the installed toolchain and without a network: the same text
 `bynk explain <code>` prints. **Bynk: Explain Diagnostic Code…** looks up any

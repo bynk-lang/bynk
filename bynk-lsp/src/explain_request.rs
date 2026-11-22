@@ -54,7 +54,7 @@ pub struct WireExplanation {
     /// The blurb, then the example as a fenced `bynk` block. Carries no link
     /// and no raw HTML; the client renders the "Read more" link from `href`.
     pub markdown: String,
-    /// The hosted-Book page for this code, the same URL as the diagnostic's
+    /// The code's own page, `https://bynk-lang.org/d/<code>`, the same URL as the diagnostic's
     /// `codeDescription` and `bynk explain`'s "Learn more" line.
     pub href: String,
 }
@@ -137,7 +137,7 @@ mod tests {
         for line in e.example.lines() {
             assert!(w.markdown.contains(line), "example line {line:?} missing");
         }
-        assert_eq!(w.href, "https://bynk-lang.org/book/reference/types/");
+        assert_eq!(w.href, "https://bynk-lang.org/d/bynk.resolve.unknown_type");
     }
 
     #[test]

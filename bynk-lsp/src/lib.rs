@@ -6143,13 +6143,13 @@ fn is_bynk_toml(uri: &Url) -> bool {
     path.file_name().and_then(|n| n.to_str()) == Some("bynk.toml")
 }
 
-/// The `codeDescription` link for a diagnostic `code` (#853): a clickable link
-/// to the code's Book explanation when the compiler curates one, else `None`
-/// (the designed graceful-fallback state — an uncurated code renders no link,
-/// which is not an error). Split out from [`make_diagnostic`] so the
-/// mapped→`Some` / uncurated→`None` contract is directly testable.
+/// The `codeDescription` link for a diagnostic `code` (#853, #3876): a link to
+/// the code's own page, `https://bynk-lang.org/d/<code>`, for every code in the
+/// registry, curated or not; `None` for a string that is not a registered code.
+/// Split out from [`make_diagnostic`] so the contract is directly testable.
 fn code_description(code: &str) -> Option<CodeDescription> {
-    let href = Url::parse(&bynk_syntax::diagnostics::explain(code)?.href()).ok()?;
+    bynk_syntax::diagnostics::lookup(code)?;
+    let href = Url::parse(&bynk_syntax::diagnostics::href(code)).ok()?;
     Some(CodeDescription { href })
 }
 
@@ -6158,33 +6158,32 @@ mod code_description_tests {
     use super::code_description;
 
     #[test]
-    fn mapped_code_gets_a_valid_book_link() {
+    fn a_code_links_to_its_own_page() {
         let cd = code_description("bynk.resolve.unknown_type")
-            .expect("a curated code produces a codeDescription");
-        assert_eq!(cd.href.scheme(), "https");
-        assert_eq!(cd.href.host_str(), Some("bynk-lang.org"));
-        assert!(cd.href.path().starts_with("/book/"));
+            .expect("a registered code produces a codeDescription");
+        assert_eq!(
+            cd.href.as_str(),
+            "https://bynk-lang.org/d/bynk.resolve.unknown_type"
+        );
     }
 
     #[test]
-    fn uncurated_code_gets_no_link() {
-        // A real code with no curated explanation, and a nonsense code, both
-        // fall back to no link (graceful — not an error).
-        assert!(code_description("bynk.wasm.panic").is_none());
+    fn an_uncurated_code_links_too_and_an_unknown_one_does_not() {
+        // #3876: every registered code has a page, curated or not.
+        assert!(code_description("bynk.wasm.panic").is_some());
         assert!(code_description("bynk.not.a_real_code").is_none());
     }
 
     #[test]
-    fn every_curated_explanation_yields_a_parseable_url() {
-        // Guards that no curated href ever silently drops its link because
-        // `Url::parse` rejected it.
-        for e in bynk_syntax::diagnostics::EXPLANATIONS {
+    fn every_registered_code_yields_a_parseable_url() {
+        // Guards that no code ever silently drops its link because `Url::parse`
+        // rejected it.
+        for d in bynk_syntax::diagnostics::REGISTRY {
             assert!(
-                code_description(e.code).is_some(),
-                "curated explanation `{}` produced no codeDescription — its href \
-                 `{}` did not parse as a URL",
-                e.code,
-                e.href()
+                code_description(d.code).is_some(),
+                "`{}` produced no codeDescription — its href `{}` did not parse",
+                d.code,
+                bynk_syntax::diagnostics::href(d.code)
             );
         }
     }
