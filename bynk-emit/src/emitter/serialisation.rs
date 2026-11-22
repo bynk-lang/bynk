@@ -650,18 +650,25 @@ type DepthCodecs = std::collections::HashSet<String>;
 #[derive(Clone, Copy)]
 struct Depth<'a> {
     codecs: &'a DepthCodecs,
-    /// The depth argument a callee in `codecs` receives: `depth + 1` from a
-    /// named type's codec, which is one level of nesting, and `depth` from a
-    /// container's (`List_Dir`), which is not.
-    next: &'static str,
+    /// Whether the depth argument a callee in `codecs` receives is `depth + 1` (a named type's
+    /// codec, which is one level of nesting) or `depth` (a container's, `List_Dir`, which is not).
+    level: bool,
 }
 
 /// #2656: the `depth` a codec passes on, or `None` when `depth` is not in
 /// scope or `suffix` does not take one.
 fn depth_arg(depth: Option<Depth<'_>>, suffix: &str) -> Option<TsExpr> {
-    depth
-        .filter(|d| d.codecs.contains(suffix))
-        .map(|d| ident(d.next))
+    depth.filter(|d| d.codecs.contains(suffix)).map(|d| {
+        if d.level {
+            binary(
+                TsBinaryOp::Add,
+                ident("depth"),
+                TsExpr::Lit(TsLit::Num("1".to_string())),
+            )
+        } else {
+            ident("depth")
+        }
+    })
 }
 
 /// #2656: the [`Depth`] context for the body of the codec named `suffix`:
@@ -669,10 +676,7 @@ fn depth_arg(depth: Option<Depth<'_>>, suffix: &str) -> Option<TsExpr> {
 /// type's codec (record or sum, generic instantiations included), which counts
 /// one level, and false for a container's.
 fn depth_for<'a>(codecs: &'a DepthCodecs, suffix: &str, level: bool) -> Option<Depth<'a>> {
-    codecs.contains(suffix).then_some(Depth {
-        codecs,
-        next: if level { "depth + 1" } else { "depth" },
-    })
+    codecs.contains(suffix).then_some(Depth { codecs, level })
 }
 
 /// #2656: `depth: number = 0`, the trailing parameter of a codec on a type
@@ -716,10 +720,13 @@ fn serialise_params(ty: TsType, depth: Option<Depth<'_>>) -> Vec<TsParam> {
     params
 }
 
-/// #2656: the text of the nesting bound's test, `depth >= <bound>`. Raw text,
-/// as `TsBinaryOp` has no `>=`.
+/// #2656: the nesting bound's test, `depth >= <bound>`.
 fn depth_exceeded() -> TsExpr {
-    ident(format!("depth >= {MAX_RECURSIVE_NESTING}"))
+    binary(
+        TsBinaryOp::GreaterThanEq,
+        ident("depth"),
+        TsExpr::Lit(TsLit::Num(MAX_RECURSIVE_NESTING.to_string())),
+    )
 }
 
 /// #2656: the `expected` of the nesting bound's `StructuralMismatch`.
@@ -1342,7 +1349,7 @@ fn emit_field_refinement_checks(
     // value holds a `bigint`, which cannot be JSON-stringified.
     let shown = if base == Some(BaseType::Decimal) {
         ru.note_decimal("__bynkDecimalToString");
-        ident(format!("__bynkDecimalToString({value})"))
+        call(ident("__bynkDecimalToString"), vec![ident(value.clone())])
     } else {
         ident(value.clone())
     };
@@ -1625,8 +1632,9 @@ fn emit_record_codec(
             // `bynk-ts/src/printer.rs`'s own `Conditional` render arm)
             // never adds parens around either branch regardless of that
             // branch's own shape.
+            let d_name = format!("__d_{fname}");
             body.push(TsStmt::const_stmt(
-                TsBindingName::Ident(format!("__d_{fname}")),
+                TsBindingName::Ident(d_name.clone()),
                 Some(TsType::named("__JsonValue")),
                 TsExpr::Conditional {
                     test: Box::new(in_expr(str_lit(fname.clone()), ident("obj"))),
@@ -1635,7 +1643,7 @@ fn emit_record_codec(
                 },
                 None,
             ));
-            format!("__d_{fname}")
+            d_name
         } else {
             format!("obj[\"{fname}\"]")
         };
@@ -3097,11 +3105,11 @@ pub(crate) fn deserialise_expr_via(
         // — a bare `HttpResult` in type position is `tsc`'s TS2314, not the
         // `any`-compatible cast the other three residual types get. This
         // arm already holds the element type (`TypeRef::HttpResult(Box<
-        // TypeRef>, Span)`, `bynk-syntax/src/ast.rs:2196`), so it renders
-        // through `ts_type_ref` — the same real-type-name printer every
+        // TypeRef>, Span)`, `bynk-syntax/src/ast.rs:2196`), so it builds
+        // `HttpResult<T>` through `http_result_ty` — the same type node every
         // other `HttpResult<...>` position in this file already uses —
         // instead of dropping the payload.
-                TypeRef::HttpResult(inner, _) => ok_unknown_cast(http_result_ty(inner)),
+        TypeRef::HttpResult(inner, _) => ok_unknown_cast(http_result_ty(inner)),
         TypeRef::QueueResult(_) => ok_unknown_cast(TsType::named("QueueResult")),
         // #1883, slice 1a: unreachable in a checked program
         // (`bynk.types.asset_at_boundary`).

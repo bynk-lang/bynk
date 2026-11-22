@@ -414,7 +414,7 @@ fn guard_if_stmt(
     let value_entry = if decimal {
         bynk_ts::TsObjectEntry::prop(
             "value".to_string(),
-            bynk_ts::TsExpr::Ident("__bynkDecimalToString(value)".to_string()),
+            hist_call(hist_id("__bynkDecimalToString"), vec![hist_id("value")]),
         )
     } else {
         bynk_ts::TsObjectEntry::Shorthand("value".to_string())
@@ -790,7 +790,7 @@ pub(crate) fn emit_forwarded_methods(
         let ret = ts_ty_to_ts_type(f.return_ty, tys);
         let call = bynk_ts::TsExpr::Call {
             callee: Box::new(bynk_ts::TsExpr::Member {
-                object: Box::new(bynk_ts::TsExpr::Ident(format!("__Commons{type_name}"))),
+                object: Box::new(bynk_ts::TsExpr::Ident(super::commons_alias(type_name))),
                 property: f.name.clone(),
             }),
             args,
@@ -3310,11 +3310,7 @@ pub(crate) fn emit_service(
             // stays opaque text" precedent this track uses elsewhere, not a
             // gap this slice leaves unclosed.
             ActorSeamIr::Sum(members) => {
-                append_deps_field(
-                    &mut deps_members,
-                    "who",
-                    bynk_ts::TsType::named(actor_sum_ts_union(members)),
-                );
+                append_deps_field(&mut deps_members, "who", actor_sum_ts_union(members));
             }
             // I3 (#1971): a `call` sum. `Caller` carries the calling context's
             // name; a foreign caller is its actor alone.
@@ -4854,6 +4850,21 @@ fn agent_key_assign(
             ty: key_ty.clone(),
         },
         None,
+    )
+}
+
+/// #1818: `globalThis.Object.assign(new <Agent>(state), { __key: key })`, the bundle factory's
+/// instance that learns its key.
+fn object_assign_key(agent: &str) -> bynk_ts::TsExpr {
+    hist_call(
+        hist_member(hist_member(hist_id("globalThis"), "Object"), "assign"),
+        vec![
+            bynk_ts::TsExpr::New {
+                callee: Box::new(hist_id(agent)),
+                args: vec![hist_id("state")],
+            },
+            bynk_ts::TsExpr::object(vec![("__key".to_string(), hist_id("key"))]),
+        ],
     )
 }
 
@@ -8021,10 +8032,7 @@ fn emit_agent_factory(
             return_type: None,
             body: Box::new(bynk_ts::TsArrowBody::Expr(Box::new(if reads_key {
                 // #1818: the bundle instance learns its key here.
-                bynk_ts::TsExpr::Ident(format!(
-                    "globalThis.Object.assign(new {}(state), {{ __key: key }})",
-                    a.name.name
-                ))
+                object_assign_key(&a.name.name)
             } else {
                 bynk_ts::TsExpr::New {
                     callee: Box::new(bynk_ts::TsExpr::Ident(a.name.name.clone())),
@@ -8913,6 +8921,13 @@ fn state_field_init_value(
     }
 }
 
+/// The agent's collection-field description const (`__entryFieldsOf<Agent>`, #3189). The one
+/// spelling: the declaration ([`AgentStateNames::fields_const`]) and the inspect branch read it
+/// through here (1A.39b, Decision C).
+fn entry_fields_const(agent: &str) -> String {
+    format!("__entryFieldsOf{agent}")
+}
+
 /// The names of an agent's state registry and fresh-state factory.
 struct AgentStateNames {
     /// The per-agent state registry (`__agentStates…`).
@@ -9143,7 +9158,7 @@ fn emit_agent_state_record(
     // Per-entry storage (#3189): which fields are collections, and which index
     // posting records belong to which `Map`. The runtime codec splits a state record
     // by this on commit and joins it back on load.
-    let fields_const = format!("__entryFieldsOf{}", a.name.name);
+    let fields_const = entry_fields_const(&a.name.name);
     let mut spec: Vec<String> = Vec::new();
     // A held `Map[K, Connection]` keeps its connection ids inline in the state record:
     // its values are live connections, not stored data, so it is not a per-entry field.
@@ -9517,15 +9532,26 @@ impl WsOpenHost<'_> {
 /// shape, `{ tag: "User", identity: UserId }` or `{ tag: "Visitor" }`, joined
 /// as a union. The HTTP wrapper builds this value and the WebSocket Durable
 /// Object rebuilds it, so both read the one shape.
-fn actor_sum_ts_union(members: &[bynk_check::actors::SumMember]) -> String {
-    members
-        .iter()
-        .map(|m| match m.identity_type() {
-            Some(id) => format!("{{ tag: \"{}\", identity: {id} }}", m.actor_name),
-            None => format!("{{ tag: \"{}\" }}", m.actor_name),
-        })
-        .collect::<Vec<_>>()
-        .join(" | ")
+fn actor_sum_ts_union(members: &[bynk_check::actors::SumMember]) -> bynk_ts::TsType {
+    bynk_ts::TsType::union(
+        members
+            .iter()
+            .map(|m| match m.identity_type() {
+                Some(id) => tag_member(&m.actor_name, Some(bynk_ts::TsType::named(id))),
+                None => tag_member(&m.actor_name, None),
+            })
+            .collect(),
+    )
+}
+
+/// One member of an actor sum: `{ tag: "<name>"; identity: <ty> }`, or `{ tag: "<name>" }`.
+fn tag_member(tag: &str, identity: Option<bynk_ts::TsType>) -> bynk_ts::TsType {
+    let mut props = vec![bynk_ts::TsTypeMember::prop(
+        "tag",
+        bynk_ts::TsType::string_literal(tag),
+    )];
+    props.extend(identity.map(|id| bynk_ts::TsTypeMember::prop("identity", id)));
+    bynk_ts::TsType::Object(props)
 }
 
 /// The DO method name a hosted `on open` lowers to (`__wsOpen_<Service>`). The
@@ -9810,11 +9836,7 @@ fn emit_ws_do_method(
         );
     }
     if let Some(members) = &host.sum {
-        append_deps_field(
-            &mut deps_members,
-            "who",
-            bynk_ts::TsType::named(actor_sum_ts_union(members)),
-        );
+        append_deps_field(&mut deps_members, "who", actor_sum_ts_union(members));
     }
     // #3045: the body hands its `deps` on to an agent handler that emits (or emits
     // itself), so `deps` must carry `__eventsDispatch` as an HTTP handler's does.
@@ -9917,7 +9939,7 @@ fn inspect_branch_stmt(
                 callee: Box::new(bynk_ts::TsExpr::Ident("__inspectAgent".to_string())),
                 args: vec![
                     bynk_ts::TsExpr::Ident("this.state".to_string()),
-                    bynk_ts::TsExpr::Ident(format!("__entryFieldsOf{}", a.name.name)),
+                    bynk_ts::TsExpr::Ident(entry_fields_const(&a.name.name)),
                     info,
                     bynk_ts::TsExpr::Ident("url".to_string()),
                 ],
@@ -10304,7 +10326,7 @@ fn ws_open_fetch_branch_stmt(host: &WsOpenHost<'_>, tys: TyRender<'_>) -> bynk_t
         Some(principal_entry(
             "who",
             "__payload",
-            bynk_ts::TsType::named(actor_sum_ts_union(members)),
+            actor_sum_ts_union(members),
         ))
     } else {
         host.seam
@@ -10367,11 +10389,7 @@ fn ws_open_fetch_branch_stmt(host: &WsOpenHost<'_>, tys: TyRender<'_>) -> bynk_t
 /// actor binds one (else `{}`).
 fn ws_attachment_deps_arg(host: &WsOpenHost<'_>) -> bynk_ts::TsExpr {
     let principal = if let Some(members) = &host.sum {
-        Some(principal_entry(
-            "who",
-            "__att",
-            bynk_ts::TsType::named(actor_sum_ts_union(members)),
-        ))
+        Some(principal_entry("who", "__att", actor_sum_ts_union(members)))
     } else {
         host.seam
             .as_ref()
@@ -11409,19 +11427,19 @@ context demo {
 
 /// I3 (#1971): the TypeScript type of a `call` handler's resolved actor sum
 /// (`deps.who`): `Caller` carries the calling context's name, a foreign
-/// caller is its actor alone. Opaque text, as the HTTP sum's union is.
+/// caller is its actor alone. A `TsType` node, as the HTTP sum's union is.
 pub(crate) fn call_sum_ts_type(members: &[bynk_check::actors::CallSumMember]) -> bynk_ts::TsType {
-    let union = members
-        .iter()
-        .map(|m| match m {
-            bynk_check::actors::CallSumMember::Caller => {
-                "{ tag: \"Caller\", identity: string }".to_string()
-            }
-            bynk_check::actors::CallSumMember::Foreign(f) => format!("{{ tag: \"{}\" }}", f.actor),
-        })
-        .collect::<Vec<_>>()
-        .join(" | ");
-    bynk_ts::TsType::named(union)
+    bynk_ts::TsType::union(
+        members
+            .iter()
+            .map(|m| match m {
+                bynk_check::actors::CallSumMember::Caller => {
+                    tag_member("Caller", Some(bynk_ts::TsType::named("string")))
+                }
+                bynk_check::actors::CallSumMember::Foreign(f) => tag_member(&f.actor, None),
+            })
+            .collect(),
+    )
 }
 
 /// #3066: a suite's own `type` and `const` declarations, as TypeScript for the

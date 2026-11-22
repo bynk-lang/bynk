@@ -32,7 +32,7 @@ export const orderId = {
 };
 
 export const echo = {
-  async call(o: Order, deps: { who: { tag: "Caller", identity: string } | { tag: "Legacy" } }): globalThis.Promise<Order> {
+  async call(o: Order, deps: { who: { tag: "Caller"; identity: string } | { tag: "Legacy" } }): globalThis.Promise<Order> {
     return o;
   },
 };

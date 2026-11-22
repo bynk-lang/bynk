@@ -130,7 +130,7 @@ export class Room {
     return undefined;
   }
 
-  async __wsOpen_chat(connection: Connection<Frame>, room: RoomKey, deps: { who: { tag: "User", identity: UserId } | { tag: "Visitor" } }): globalThis.Promise<void> {
+  async __wsOpen_chat(connection: Connection<Frame>, room: RoomKey, deps: { who: { tag: "User"; identity: UserId } | { tag: "Visitor" } }): globalThis.Promise<void> {
     const nobody: Option<string> = None;
     const name = ((__d) => {
       switch (__d.tag) {
@@ -148,7 +148,7 @@ export class Room {
     return undefined;
   }
 
-  async __wsMessage_chat(connection: Connection<Frame>, room: RoomKey, frame: Frame, deps: { who: { tag: "User", identity: UserId } | { tag: "Visitor" } }): globalThis.Promise<void> {
+  async __wsMessage_chat(connection: Connection<Frame>, room: RoomKey, frame: Frame, deps: { who: { tag: "User"; identity: UserId } | { tag: "Visitor" } }): globalThis.Promise<void> {
     const name = ((__d) => {
       switch (__d.tag) {
         case "User": {
@@ -172,7 +172,7 @@ export class Room {
       const __payload = globalThis.JSON.parse(request.headers.get("X-Bynk-Ws-Open") ?? "{}") as { args: unknown[]; who: unknown };
       const connection = __acceptHibernatableConnection<Frame>(this.state, __pair.server, { identity: "", args: __payload.args, who: __payload.who });
       const env = this.__env as unknown as globalThis.Record<string, unknown>;
-      await this.__wsOpen_chat(connection, __payload.args[0] as RoomKey, { who: __payload.who as { tag: "User", identity: UserId } | { tag: "Visitor" }, ...{ env: env as never } });
+      await this.__wsOpen_chat(connection, __payload.args[0] as RoomKey, { who: __payload.who as { tag: "User"; identity: UserId } | { tag: "Visitor" }, ...{ env: env as never } });
       return __webSocketUpgradeResponse(__pair.client);
     }
     if (url.pathname.startsWith("/_bynk/agent/")) {
@@ -203,7 +203,7 @@ export class Room {
     }
     const __dec = __deserialise_Frame(__json, "frame");
     if (__dec.tag === "Err") { ws.close(1008, "invalid frame"); return; }
-    await this.__wsMessage_chat(connection, __att.args[0] as RoomKey, __dec.value, { who: __att.who as { tag: "User", identity: UserId } | { tag: "Visitor" }, ...{ env: env as never } });
+    await this.__wsMessage_chat(connection, __att.args[0] as RoomKey, __dec.value, { who: __att.who as { tag: "User"; identity: UserId } | { tag: "Visitor" }, ...{ env: env as never } });
   }
 }
 

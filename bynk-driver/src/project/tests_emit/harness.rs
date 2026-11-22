@@ -18,6 +18,12 @@ use bynk_syntax::span::Span;
 use bynk_ts::{TsArrowBody, TsBindingName, TsDecl, TsExpr, TsStmt, TsType};
 use std::sync::Arc;
 
+/// A participant's `env_<ns>` binding in the integration harness: the one spelling its
+/// declaration and every reference use (1A.39b, Decision C).
+fn env_binding(ns: &str) -> String {
+    format!("env_{ns}")
+}
+
 /// Emit the `__makeHarness()` factory: an in-process env per participant whose
 /// Service Bindings call the sibling participants' real Worker `fetch` and whose
 /// Durable-Object namespaces back the participant's own agents in memory, plus a
@@ -70,7 +76,7 @@ pub(super) fn emit_integration_harness<'a>(
     for p in participants {
         let ns = test_ns(p);
         body.push(TsStmt::const_stmt(
-            TsBindingName::Ident(format!("env_{ns}")),
+            TsBindingName::Ident(env_binding(&ns)),
             Some(TsType::named("any")),
             TsExpr::object(vec![]),
             None,
@@ -78,7 +84,7 @@ pub(super) fn emit_integration_harness<'a>(
     }
     for p in participants {
         let ns = test_ns(p);
-        let env = format!("env_{ns}");
+        let env = env_binding(&ns);
         if with_env {
             body.push(expr_stmt(call(
                 ident("globalThis.Object.assign"),
@@ -132,7 +138,7 @@ pub(super) fn emit_integration_harness<'a>(
                     let dns = test_ns(context);
                     service_binding_forward(
                         &format!("worker_{dns}"),
-                        &format!("env_{dns}"),
+                        &env_binding(&dns),
                         sends(context),
                     )
                 }
@@ -305,13 +311,13 @@ pub(super) fn emit_integration_harness<'a>(
         let binding = bynk_emit::emitter::wrangler::service_binding(p).name;
         body.push(TsStmt::assign(
             member(ident("rootEnv"), binding),
-            service_binding_forward(&format!("worker_{ns}"), &format!("env_{ns}"), sends(p)),
+            service_binding_forward(&format!("worker_{ns}"), &env_binding(&ns), sends(p)),
             None,
         ));
     }
     let mut fields = vec![("env".to_string(), ident("rootEnv"))];
     for p in exposed {
-        let env = format!("env_{}", test_ns(p));
+        let env = env_binding(&test_ns(p));
         fields.push((env.clone(), ident(env)));
     }
     body.push(TsStmt::return_stmt(Some(TsExpr::object(fields)), None));

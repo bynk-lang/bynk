@@ -6,7 +6,7 @@ import { Ok, type Result } from "../__bynk_runtime/result.js";
 import * as shop_clock from "./clock.js";
 
 export const status = {
-  async call(id: string, deps: { who: { tag: "Caller", identity: string } | { tag: "Legacy" } | { tag: "Ledger" } }): globalThis.Promise<Result<string, string>> {
+  async call(id: string, deps: { who: { tag: "Caller"; identity: string } | { tag: "Legacy" } | { tag: "Ledger" } }): globalThis.Promise<Result<string, string>> {
     switch (deps.who.tag) {
       case "Caller": {
         const name = deps.who.identity;
