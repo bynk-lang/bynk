@@ -134,7 +134,15 @@ pub(in crate::emitter) fn lower_int_kernel(
                 IntOp::AndNot => "__bynkIntAndNot",
                 IntOp::Shl => "__bynkIntShl",
                 IntOp::Shr => "__bynkIntShr",
-                _ => "__bynkIntPow",
+                // `Pow`, and the operations the arm's pattern never lets through (they keep the
+                // helper the wildcard gave them).
+                IntOp::Pow
+                | IntOp::ToFloat
+                | IntOp::ToString
+                | IntOp::Abs
+                | IntOp::Min
+                | IntOp::Max
+                | IntOp::Clamp => "__bynkIntPow",
             };
             cx.note_int();
             Some(plain_call(helper, kids))
@@ -609,7 +617,21 @@ fn regex_arm(op: StringOp, literal: &str, kids: Vec<bynk_ts::TsExpr>) -> Option<
                 vec![recv, regex_node(literal, "y", false)],
             )
         }
-        _ => return None,
+        StringOp::Length
+        | StringOp::Split
+        | StringOp::Trim
+        | StringOp::ToUpper
+        | StringOp::ToLower
+        | StringOp::Contains
+        | StringOp::StartsWith
+        | StringOp::EndsWith
+        | StringOp::Replace
+        | StringOp::Slice
+        | StringOp::IndexOf
+        | StringOp::Chars
+        | StringOp::Concat
+        | StringOp::PercentEncode
+        | StringOp::PercentDecode => return None,
     })
 }
 

@@ -997,7 +997,34 @@ fn param_independent(e: &Expr, pname: &str) -> bool {
         | ExprKind::DurationLit { .. } => true,
         ExprKind::Ident(id) => id.name != pname,
         ExprKind::FieldAccess { receiver, .. } => param_independent(receiver, pname),
-        _ => false,
+        ExprKind::DecimalLit { .. }
+        | ExprKind::InterpStr(..)
+        | ExprKind::Call { .. }
+        | ExprKind::Lambda(..)
+        | ExprKind::BinOp(..)
+        | ExprKind::UnaryOp(..)
+        | ExprKind::Paren(..)
+        | ExprKind::Block(..)
+        | ExprKind::If { .. }
+        | ExprKind::Ok(..)
+        | ExprKind::Err(..)
+        | ExprKind::Question(..)
+        | ExprKind::RecordConstruction { .. }
+        | ExprKind::MethodCall { .. }
+        | ExprKind::Match { .. }
+        | ExprKind::Is { .. }
+        | ExprKind::Some(..)
+        | ExprKind::None
+        | ExprKind::UnitLit
+        | ExprKind::RecordSpread { .. }
+        | ExprKind::EffectPure(..)
+        | ExprKind::Expect(..)
+        | ExprKind::Val { .. }
+        | ExprKind::Wire(..)
+        | ExprKind::ListLit(..)
+        | ExprKind::Observation(..)
+        | ExprKind::Faults(..)
+        | ExprKind::Trace { .. } => false,
     }
 }
 

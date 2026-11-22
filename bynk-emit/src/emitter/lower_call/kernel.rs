@@ -118,13 +118,10 @@ fn lower_effect_kernel_call(
                         .unwrap_or_else(|| format!("offset {}", e.span.start)),
                 )
             };
-            let err_raw = match &recv_ty {
-                Ty::Effect(inner) => match &*tys.get(*inner) {
-                    Ty::Result(_, err) => Some(err.display(tys.types()).to_string()),
-                    _ => None,
-                },
-                _ => None,
-            };
+            let err_raw = recv_ty
+                .as_effect()
+                .and_then(|inner| tys.get(inner).as_result())
+                .map(|(_, err)| err.display(tys.types()).to_string());
             let mut children = vec![recv, cx.exec_node(), site];
             if let Some(raw) = &err_raw {
                 children.push(str_node(raw.as_str()));
@@ -398,13 +395,12 @@ fn lower_effect_result_kernel(
     let et = ts_ty_to_ts_type(err, tys);
     // The call's checked type is `Effect[Result[a, b]]`; peel `(a, b)` for the
     // transformed parameter's TS type.
-    let peeled = match cx.commons().expr_ty(e.id).as_deref() {
-        Some(Ty::Effect(inner)) => match &*tys.get(*inner) {
-            Ty::Result(a, b) => Some((*a, *b)),
-            _ => None,
-        },
-        _ => None,
-    };
+    let peeled = cx
+        .commons()
+        .expr_ty(e.id)
+        .as_deref()
+        .and_then(Ty::as_effect)
+        .and_then(|inner| tys.get(inner).as_result());
     let (a_ts, b_ts) = match peeled {
         Some((a, b)) => (ts_ty_to_ts_type(a, tys), ts_ty_to_ts_type(b, tys)),
         // A missing fact (1A.34); the placeholder keeps lowering going.
@@ -494,12 +490,10 @@ fn lower_effect_result_kernel(
 /// it is legal only as an array item, so a receiver is never one today. Shared with the scalar
 /// kernels (1A.29).
 pub(super) fn receiver_object(recv: TsExpr) -> TsExpr {
-    match recv {
-        TsExpr::Await(_)
-        | TsExpr::Unary { .. }
-        | TsExpr::Lit(TsLit::Num(_) | TsLit::Raw(_))
-        | TsExpr::Spread(_) => paren(recv),
-        other => other,
+    if recv.needs_receiver_brackets() {
+        paren(recv)
+    } else {
+        recv
     }
 }
 

@@ -705,10 +705,7 @@ fn note_ground_roots(t: bynk_check::checker::TyId, cx: &LowerCtx) {
 /// row has no `Bool` field.
 fn sql_bool_pass(t: bynk_check::checker::TyId, cx: &LowerCtx) -> Vec<TsStmt> {
     let tys = cx.ty_render();
-    let row = match &*tys.get(t) {
-        Ty::List(r) => *r,
-        _ => t,
-    };
+    let row = tys.get(t).as_list().unwrap_or(t);
     let Ty::Named { name, .. } = &*tys.get(row) else {
         return Vec::new();
     };
@@ -805,10 +802,7 @@ fn apply_to_rows(pass: &str) -> TsStmt {
 /// codec to refuse. Empty when the row has neither.
 fn pg_row_pass(t: bynk_check::checker::TyId, cx: &LowerCtx) -> Vec<TsStmt> {
     let tys = cx.ty_render();
-    let row = match &*tys.get(t) {
-        Ty::List(r) => *r,
-        _ => t,
-    };
+    let row = tys.get(t).as_list().unwrap_or(t);
     let Ty::Named { name, .. } = &*tys.get(row) else {
         return Vec::new();
     };

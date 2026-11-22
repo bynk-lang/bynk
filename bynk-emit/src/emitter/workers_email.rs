@@ -11,10 +11,6 @@
 //! Kept out of `workers_entry.rs`, whose entry builder is near its length
 //! ceiling.
 
-// 1A.37a: this file has no wildcard enum arm; the attribute keeps it that way until the
-// crate opts in to the workspace lints (1A.37b).
-#![deny(clippy::wildcard_enum_match_arm)]
-
 use bynk_syntax::ast::ServiceProtocol;
 use bynk_ts::{TsArrowBody, TsBindingName, TsExpr, TsLit, TsParam, TsStmt, TsType};
 

@@ -17,10 +17,6 @@
 //! of each iteration, so a closure created in one iteration keeps that
 //! iteration's values.
 
-// 1A.37a: this file has no wildcard enum arm; the attribute keeps it that way until the
-// crate opts in to the workspace lints (1A.37b).
-#![deny(clippy::wildcard_enum_match_arm)]
-
 use std::collections::HashSet;
 use std::rc::Rc;
 

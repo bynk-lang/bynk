@@ -14,7 +14,7 @@ use super::super::emit::{flatten_emit_ident_chain, test_scaffold_ns};
 use super::super::lower::Pre;
 use super::super::lower_ctx::LowerCtx;
 use super::super::lower_list::{call, id, member, paren};
-use super::super::{TypeBody, TypeDecl, UnaryOp, *};
+use super::super::{TypeBody, TypeDecl, *};
 
 /// v0.6 cross-context service call: receiver is an alias or the dotted name
 /// of a consumed context. In bundle mode, lower to
@@ -78,20 +78,9 @@ pub(in crate::emitter) fn lower_cross_context_service_call(
 
 /// #2039: whether `t` names any type in `renames`, at any depth.
 fn type_ref_names_any(t: &TypeRef, renames: &HashMap<String, String>) -> bool {
-    match t {
-        TypeRef::Named(id) => renames.contains_key(&id.name),
-        TypeRef::Option(inner, _) | TypeRef::List(inner, _) | TypeRef::Effect(inner, _) => {
-            type_ref_names_any(inner, renames)
-        }
-        TypeRef::Result(a, b, _) | TypeRef::Map(a, b, _) => {
-            type_ref_names_any(a, renames) || type_ref_names_any(b, renames)
-        }
-        // #2072: a generic record (`Page[Cents]`), its head and arguments.
-        TypeRef::App { name, args, .. } => {
-            renames.contains_key(&name.name) || args.iter().any(|a| type_ref_names_any(a, renames))
-        }
-        _ => false,
-    }
+    let mut names = HashSet::new();
+    type_ref_names(t, &mut names);
+    names.iter().any(|n| renames.contains_key(n))
 }
 
 /// #2039, #2043: whether a cross-context argument holds a part the checker
@@ -102,19 +91,7 @@ fn type_ref_names_any(t: &TypeRef, renames: &HashMap<String, String>) -> bool {
 pub(crate) fn holds_callee_typed(e: &Expr, cx: &LowerCtx) -> bool {
     // A compile-time literal, a negated number (`-3`) included, as the
     // checker's `const_literal` reads one.
-    let literal = match &e.kind {
-        ExprKind::IntLit { .. }
-        | ExprKind::FloatLit { .. }
-        | ExprKind::DecimalLit { .. }
-        | ExprKind::StrLit(_) => true,
-        ExprKind::UnaryOp(UnaryOp::Neg, inner) => {
-            matches!(
-                inner.kind,
-                ExprKind::IntLit { .. } | ExprKind::FloatLit { .. } | ExprKind::DecimalLit { .. }
-            )
-        }
-        _ => false,
-    };
+    let literal = e.kind.refinable_literal().is_some();
     match &e.kind {
         _ if literal => matches!(
             cx.commons().expr_ty(e.id).as_deref(),
@@ -143,7 +120,34 @@ pub(crate) fn holds_callee_typed(e: &Expr, cx: &LowerCtx) -> bool {
             .iter()
             .filter_map(|f| f.value.as_ref())
             .any(|v| holds_callee_typed(v, cx)),
-        _ => false,
+        ExprKind::IntLit { .. }
+        | ExprKind::FloatLit { .. }
+        | ExprKind::DecimalLit { .. }
+        | ExprKind::DurationLit { .. }
+        | ExprKind::StrLit(..)
+        | ExprKind::InterpStr(..)
+        | ExprKind::BoolLit(..)
+        | ExprKind::Ident(..)
+        | ExprKind::Call { .. }
+        | ExprKind::Lambda(..)
+        | ExprKind::BinOp(..)
+        | ExprKind::UnaryOp(..)
+        | ExprKind::Block(..)
+        | ExprKind::If { .. }
+        | ExprKind::Question(..)
+        | ExprKind::FieldAccess { .. }
+        | ExprKind::Match { .. }
+        | ExprKind::Is { .. }
+        | ExprKind::None
+        | ExprKind::UnitLit
+        | ExprKind::RecordSpread { .. }
+        | ExprKind::EffectPure(..)
+        | ExprKind::Expect(..)
+        | ExprKind::Val { .. }
+        | ExprKind::Wire(..)
+        | ExprKind::Observation(..)
+        | ExprKind::Faults(..)
+        | ExprKind::Trace { .. } => false,
     }
 }
 
@@ -731,7 +735,24 @@ fn type_ref_names(r: &TypeRef, out: &mut HashSet<String>) {
                 type_ref_names(a, out);
             }
         }
-        _ => {}
+        TypeRef::Base(..)
+        | TypeRef::HttpResult(..)
+        | TypeRef::QueueResult(..)
+        | TypeRef::Asset(..)
+        | TypeRef::RequestHeaders(..)
+        | TypeRef::RequestQuery(..)
+        | TypeRef::RequestCookies(..)
+        | TypeRef::TokenClaims(..)
+        | TypeRef::BoundaryRejection(..)
+        | TypeRef::Set(..)
+        | TypeRef::Query(..)
+        | TypeRef::Stream(..)
+        | TypeRef::Connection(..)
+        | TypeRef::History(..)
+        | TypeRef::ValidationError(..)
+        | TypeRef::DecodeError(..)
+        | TypeRef::Unit(..)
+        | TypeRef::Fn(..) => {}
     }
 }
 
@@ -739,9 +760,11 @@ fn type_ref_names(r: &TypeRef, out: &mut HashSet<String>) {
 /// (For generics like `Result[T, E]`, we don't emit a cast at the outer
 /// layer — TypeScript handles the variance through the intersection.)
 pub(crate) fn type_ref_named_root(r: &TypeRef) -> Option<&str> {
-    match r {
-        TypeRef::Named(id) => Some(id.name.as_str()),
-        _ => None,
+    // One shape is asked for: a type named directly.
+    if let TypeRef::Named(id) = r {
+        Some(id.name.as_str())
+    } else {
+        None
     }
 }
 

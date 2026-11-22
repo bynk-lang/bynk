@@ -870,6 +870,24 @@ impl CommonsItem {
         }
     }
 
+    /// The `actor` declaration, when the item is one.
+    pub fn as_actor(&self) -> Option<&ActorDecl> {
+        match self {
+            CommonsItem::Actor(a) => Some(a),
+            CommonsItem::Type(_)
+            | CommonsItem::Fn(_)
+            | CommonsItem::Capability(_)
+            | CommonsItem::Provider(_)
+            | CommonsItem::Service(_)
+            | CommonsItem::Agent(_)
+            | CommonsItem::Messages(_)
+            | CommonsItem::Event(_)
+            | CommonsItem::Asset(_)
+            | CommonsItem::Embed(_)
+            | CommonsItem::Const(_) => None,
+        }
+    }
+
     /// The `messages` block, when the item is one.
     pub fn as_messages(&self) -> Option<&MessagesDecl> {
         match self {
@@ -4130,6 +4148,247 @@ impl ExprKind {
             lexeme: value.to_string(),
         }
     }
+
+    /// The link of a plain access chain (`a`, `a.b`, `(a.b).c`) this expression is, if it
+    /// is one: a root name, a field read off an inner expression, or a bracketed inner
+    /// expression. Every other expression is not part of a chain.
+    ///
+    /// The emitter asks this to decide whether a receiver is a repeatable, side-effect-free
+    /// lvalue it can name more than once; they follow the links inwards through
+    /// [`ChainLink::Field`] and [`ChainLink::Paren`] until a root, or a non-link, ends the walk.
+    pub fn chain_link(&self) -> Option<ChainLink<'_>> {
+        match self {
+            ExprKind::Ident(id) => Some(ChainLink::Root(id)),
+            ExprKind::FieldAccess { receiver, field } => Some(ChainLink::Field { receiver, field }),
+            ExprKind::Paren(inner) => Some(ChainLink::Paren(inner)),
+            ExprKind::IntLit { .. }
+            | ExprKind::FloatLit { .. }
+            | ExprKind::DecimalLit { .. }
+            | ExprKind::DurationLit { .. }
+            | ExprKind::StrLit(..)
+            | ExprKind::InterpStr(..)
+            | ExprKind::BoolLit(..)
+            | ExprKind::Call { .. }
+            | ExprKind::Lambda(..)
+            | ExprKind::BinOp(..)
+            | ExprKind::UnaryOp(..)
+            | ExprKind::Block(..)
+            | ExprKind::If { .. }
+            | ExprKind::Ok(..)
+            | ExprKind::Err(..)
+            | ExprKind::Question(..)
+            | ExprKind::RecordConstruction { .. }
+            | ExprKind::MethodCall { .. }
+            | ExprKind::Match { .. }
+            | ExprKind::Is { .. }
+            | ExprKind::Some(..)
+            | ExprKind::None
+            | ExprKind::UnitLit
+            | ExprKind::RecordSpread { .. }
+            | ExprKind::EffectPure(..)
+            | ExprKind::Expect(..)
+            | ExprKind::Val { .. }
+            | ExprKind::Wire(..)
+            | ExprKind::ListLit(..)
+            | ExprKind::Observation(..)
+            | ExprKind::Faults(..)
+            | ExprKind::Trace { .. } => None,
+        }
+    }
+
+    /// The compile-time number or string a refined type may admit as a literal, with
+    /// its sign: an integer, float, decimal or string literal, or a negated number
+    /// (`-3`). The checker folds the sign in its own constant reading, so a lowering
+    /// that routes the literal through `unsafe` must see the negated form as one
+    /// literal. Every other expression, a negated string included, is not one.
+    pub fn refinable_literal(&self) -> Option<RefinableLiteral<'_>> {
+        match self {
+            ExprKind::StrLit(s) => Some(RefinableLiteral::Str(s)),
+            ExprKind::UnaryOp(op, inner) => match op {
+                UnaryOp::Neg => inner.kind.number_literal(true),
+                UnaryOp::Not => None,
+            },
+            ExprKind::IntLit { .. } | ExprKind::FloatLit { .. } | ExprKind::DecimalLit { .. } => {
+                self.number_literal(false)
+            }
+            ExprKind::DurationLit { .. }
+            | ExprKind::InterpStr(..)
+            | ExprKind::BoolLit(..)
+            | ExprKind::Ident(..)
+            | ExprKind::Call { .. }
+            | ExprKind::Lambda(..)
+            | ExprKind::BinOp(..)
+            | ExprKind::Paren(..)
+            | ExprKind::Block(..)
+            | ExprKind::If { .. }
+            | ExprKind::Ok(..)
+            | ExprKind::Err(..)
+            | ExprKind::Question(..)
+            | ExprKind::RecordConstruction { .. }
+            | ExprKind::FieldAccess { .. }
+            | ExprKind::MethodCall { .. }
+            | ExprKind::Match { .. }
+            | ExprKind::Is { .. }
+            | ExprKind::Some(..)
+            | ExprKind::None
+            | ExprKind::UnitLit
+            | ExprKind::RecordSpread { .. }
+            | ExprKind::EffectPure(..)
+            | ExprKind::Expect(..)
+            | ExprKind::Val { .. }
+            | ExprKind::Wire(..)
+            | ExprKind::ListLit(..)
+            | ExprKind::Observation(..)
+            | ExprKind::Faults(..)
+            | ExprKind::Trace { .. } => None,
+        }
+    }
+
+    /// An integer, float or decimal literal, read with the given sign.
+    fn number_literal(&self, negated: bool) -> Option<RefinableLiteral<'_>> {
+        match self {
+            ExprKind::IntLit { value, .. } => Some(RefinableLiteral::Int {
+                value: *value,
+                negated,
+            }),
+            ExprKind::FloatLit { lexeme, .. } => Some(RefinableLiteral::Float { lexeme, negated }),
+            ExprKind::DecimalLit { coef, scale, .. } => Some(RefinableLiteral::Decimal {
+                coef,
+                scale: *scale,
+                negated,
+            }),
+            ExprKind::DurationLit { .. }
+            | ExprKind::StrLit(..)
+            | ExprKind::InterpStr(..)
+            | ExprKind::BoolLit(..)
+            | ExprKind::Ident(..)
+            | ExprKind::Call { .. }
+            | ExprKind::Lambda(..)
+            | ExprKind::BinOp(..)
+            | ExprKind::UnaryOp(..)
+            | ExprKind::Paren(..)
+            | ExprKind::Block(..)
+            | ExprKind::If { .. }
+            | ExprKind::Ok(..)
+            | ExprKind::Err(..)
+            | ExprKind::Question(..)
+            | ExprKind::RecordConstruction { .. }
+            | ExprKind::FieldAccess { .. }
+            | ExprKind::MethodCall { .. }
+            | ExprKind::Match { .. }
+            | ExprKind::Is { .. }
+            | ExprKind::Some(..)
+            | ExprKind::None
+            | ExprKind::UnitLit
+            | ExprKind::RecordSpread { .. }
+            | ExprKind::EffectPure(..)
+            | ExprKind::Expect(..)
+            | ExprKind::Val { .. }
+            | ExprKind::Wire(..)
+            | ExprKind::ListLit(..)
+            | ExprKind::Observation(..)
+            | ExprKind::Faults(..)
+            | ExprKind::Trace { .. } => None,
+        }
+    }
+
+    /// The two expressions that choose between branches, `match` and `if`: the shape of
+    /// each, or `None` for any other expression. The emitter writes a tail `match` or
+    /// `if` as statements rather than as an expression, and asks this where it decides.
+    pub fn branching(&self) -> Option<Branching<'_>> {
+        match self {
+            ExprKind::Match { discriminant, arms } => Some(Branching::Match { discriminant, arms }),
+            ExprKind::If {
+                cond,
+                then_block,
+                else_block,
+            } => Some(Branching::If {
+                cond,
+                then_block,
+                else_block,
+            }),
+            ExprKind::IntLit { .. }
+            | ExprKind::FloatLit { .. }
+            | ExprKind::DecimalLit { .. }
+            | ExprKind::DurationLit { .. }
+            | ExprKind::StrLit(..)
+            | ExprKind::InterpStr(..)
+            | ExprKind::BoolLit(..)
+            | ExprKind::Ident(..)
+            | ExprKind::Call { .. }
+            | ExprKind::Lambda(..)
+            | ExprKind::BinOp(..)
+            | ExprKind::UnaryOp(..)
+            | ExprKind::Paren(..)
+            | ExprKind::Block(..)
+            | ExprKind::Ok(..)
+            | ExprKind::Err(..)
+            | ExprKind::Question(..)
+            | ExprKind::RecordConstruction { .. }
+            | ExprKind::FieldAccess { .. }
+            | ExprKind::MethodCall { .. }
+            | ExprKind::Is { .. }
+            | ExprKind::Some(..)
+            | ExprKind::None
+            | ExprKind::UnitLit
+            | ExprKind::RecordSpread { .. }
+            | ExprKind::EffectPure(..)
+            | ExprKind::Expect(..)
+            | ExprKind::Val { .. }
+            | ExprKind::Wire(..)
+            | ExprKind::ListLit(..)
+            | ExprKind::Observation(..)
+            | ExprKind::Faults(..)
+            | ExprKind::Trace { .. } => None,
+        }
+    }
+}
+
+/// A branching expression, as [`ExprKind::branching`] reads it.
+#[derive(Debug, Clone, Copy)]
+pub enum Branching<'a> {
+    /// `match discriminant { arms }`.
+    Match {
+        discriminant: &'a Expr,
+        arms: &'a [MatchArm],
+    },
+    /// `if cond { then_block } else { else_block }`.
+    If {
+        cond: &'a Expr,
+        then_block: &'a Block,
+        else_block: &'a Block,
+    },
+}
+
+/// A literal [`ExprKind::refinable_literal`] reads: its data, borrowed from the expression.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum RefinableLiteral<'a> {
+    /// An integer literal; `negated` when written `-n`.
+    Int { value: i64, negated: bool },
+    /// A float literal, as its source lexeme; `negated` when written `-x`.
+    Float { lexeme: &'a str, negated: bool },
+    /// A decimal literal's coefficient digits and scale; `negated` when written `-d`.
+    Decimal {
+        coef: &'a str,
+        scale: u32,
+        negated: bool,
+    },
+    /// A string literal's value.
+    Str(&'a str),
+}
+
+/// One link of a plain access chain, as [`ExprKind::chain_link`] reads it.
+#[derive(Debug, Clone, Copy)]
+pub enum ChainLink<'a> {
+    /// The name the chain starts at.
+    Root(&'a Ident),
+    /// `receiver.field`: the chain continues in `receiver`.
+    Field {
+        receiver: &'a Expr,
+        field: &'a Ident,
+    },
+    /// `(inner)`: the chain continues in `inner`.
+    Paren(&'a Expr),
 }
 
 #[derive(Debug, Clone)]
@@ -5658,6 +5917,21 @@ agent Counter {
     }
 
     #[test]
+    fn an_actor_answers_as_actor_and_nothing_else() {
+        let items = items(
+            r#"context a
+
+type UserId = String
+
+actor Participant { auth = Bearer(secret = "AUTH_SECRET"), identity = UserId }
+"#,
+        );
+        let actors: Vec<bool> = items.iter().map(|i| i.as_actor().is_some()).collect();
+        assert_eq!(actors, vec![false, true]);
+        assert!(items[1].as_service().is_none() && items[1].as_capability().is_none());
+    }
+
+    #[test]
     fn a_messages_block_answers_as_messages_and_nothing_else() {
         let items = items(
             r#"commons m
@@ -5671,5 +5945,197 @@ messages "en" @reference {
         assert!(items[0].as_messages().is_some());
         assert!(items[0].as_service().is_none() && items[0].as_agent().is_none());
         assert!(items[0].as_capability().is_none() && items[0].handlers().is_empty());
+    }
+}
+
+/// [`ExprKind::chain_link`] answers for the three chain links and `None` for every other
+/// expression.
+#[cfg(test)]
+mod expr_kind_accessor_tests {
+    use super::*;
+
+    fn expr(kind: ExprKind) -> Expr {
+        Expr {
+            id: ExprId::SYNTHETIC,
+            kind,
+            span: Span::new(0, 0),
+        }
+    }
+
+    fn ident(name: &str) -> Ident {
+        Ident {
+            name: name.to_string(),
+            span: Span::new(0, 0),
+        }
+    }
+
+    #[test]
+    fn a_name_a_field_read_and_a_bracket_are_links() {
+        let root = ExprKind::Ident(ident("a"));
+        assert!(matches!(
+            root.chain_link(),
+            Some(ChainLink::Root(id)) if id.name == "a"
+        ));
+        let field = ExprKind::FieldAccess {
+            receiver: Box::new(expr(ExprKind::Ident(ident("a")))),
+            field: ident("b"),
+        };
+        assert!(matches!(
+            field.chain_link(),
+            Some(ChainLink::Field { receiver, field }) if field.name == "b"
+                && matches!(&receiver.kind, ExprKind::Ident(id) if id.name == "a")
+        ));
+        let paren = ExprKind::Paren(Box::new(expr(ExprKind::Ident(ident("a")))));
+        assert!(matches!(paren.chain_link(), Some(ChainLink::Paren(_))));
+    }
+
+    #[test]
+    fn nothing_else_is_a_link() {
+        let inner = || Box::new(expr(ExprKind::Ident(ident("a"))));
+        for kind in [
+            ExprKind::int_lit(1),
+            ExprKind::StrLit("s".to_string()),
+            ExprKind::BoolLit(true),
+            ExprKind::None,
+            ExprKind::UnitLit,
+            ExprKind::Some(inner()),
+            ExprKind::Ok(inner()),
+            ExprKind::Question(inner()),
+            ExprKind::UnaryOp(UnaryOp::Neg, inner()),
+            ExprKind::BinOp(BinOp::Add, inner(), inner()),
+        ] {
+            assert!(kind.chain_link().is_none(), "{kind:?}");
+        }
+    }
+
+    #[test]
+    fn refinable_literal_reads_numbers_strings_and_negated_numbers() {
+        let neg = |k: ExprKind| ExprKind::UnaryOp(UnaryOp::Neg, Box::new(expr(k)));
+        let float = || ExprKind::FloatLit {
+            value: 1.5,
+            lexeme: "1.5".to_string(),
+        };
+        let decimal = || ExprKind::DecimalLit {
+            coef: "125".to_string(),
+            scale: 2,
+            lexeme: "1.25".to_string(),
+        };
+        assert_eq!(
+            ExprKind::int_lit(7).refinable_literal(),
+            Some(RefinableLiteral::Int {
+                value: 7,
+                negated: false
+            })
+        );
+        assert_eq!(
+            neg(ExprKind::int_lit(7)).refinable_literal(),
+            Some(RefinableLiteral::Int {
+                value: 7,
+                negated: true
+            })
+        );
+        assert_eq!(
+            float().refinable_literal(),
+            Some(RefinableLiteral::Float {
+                lexeme: "1.5",
+                negated: false
+            })
+        );
+        assert_eq!(
+            neg(float()).refinable_literal(),
+            Some(RefinableLiteral::Float {
+                lexeme: "1.5",
+                negated: true
+            })
+        );
+        assert_eq!(
+            decimal().refinable_literal(),
+            Some(RefinableLiteral::Decimal {
+                coef: "125",
+                scale: 2,
+                negated: false
+            })
+        );
+        assert_eq!(
+            neg(decimal()).refinable_literal(),
+            Some(RefinableLiteral::Decimal {
+                coef: "125",
+                scale: 2,
+                negated: true
+            })
+        );
+        assert_eq!(
+            ExprKind::StrLit("s".to_string()).refinable_literal(),
+            Some(RefinableLiteral::Str("s"))
+        );
+    }
+
+    #[test]
+    fn refinable_literal_refuses_the_rest() {
+        let inner = || Box::new(expr(ExprKind::int_lit(1)));
+        for kind in [
+            // A negated string, a `not`, and a doubly negated number are not literals.
+            ExprKind::UnaryOp(
+                UnaryOp::Neg,
+                Box::new(expr(ExprKind::StrLit("s".to_string()))),
+            ),
+            ExprKind::UnaryOp(UnaryOp::Not, inner()),
+            ExprKind::UnaryOp(
+                UnaryOp::Neg,
+                Box::new(expr(ExprKind::UnaryOp(UnaryOp::Neg, inner()))),
+            ),
+            ExprKind::BoolLit(true),
+            ExprKind::UnitLit,
+            ExprKind::None,
+            ExprKind::Ident(ident("a")),
+            ExprKind::Paren(inner()),
+            ExprKind::Some(inner()),
+        ] {
+            assert!(kind.refinable_literal().is_none(), "{kind:?}");
+        }
+    }
+
+    fn block(tail: ExprKind) -> Block {
+        Block {
+            statements: Vec::new(),
+            tail: Box::new(expr(tail)),
+            span: Span::new(0, 0),
+            tail_leading_comments: Vec::new(),
+            implicit_tail: false,
+        }
+    }
+
+    #[test]
+    fn branching_reads_match_and_if_and_nothing_else() {
+        let scrutinee = || Box::new(expr(ExprKind::Ident(ident("x"))));
+        let if_kind = ExprKind::If {
+            cond: scrutinee(),
+            then_block: Box::new(block(ExprKind::int_lit(1))),
+            else_block: Box::new(block(ExprKind::int_lit(2))),
+        };
+        assert!(matches!(
+            if_kind.branching(),
+            Some(Branching::If { cond, .. }) if matches!(&cond.kind, ExprKind::Ident(_))
+        ));
+        let match_kind = ExprKind::Match {
+            discriminant: scrutinee(),
+            arms: Vec::new(),
+        };
+        assert!(matches!(
+            match_kind.branching(),
+            Some(Branching::Match { arms, .. }) if arms.is_empty()
+        ));
+        for kind in [
+            ExprKind::Block(block(ExprKind::int_lit(1))),
+            ExprKind::Paren(scrutinee()),
+            ExprKind::Is {
+                value: scrutinee(),
+                pattern: Box::new(Pattern::Wildcard(Span::new(0, 0))),
+            },
+            ExprKind::Ident(ident("x")),
+            ExprKind::None,
+        ] {
+            assert!(kind.branching().is_none(), "{kind:?}");
+        }
     }
 }

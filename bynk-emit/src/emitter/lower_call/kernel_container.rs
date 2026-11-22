@@ -149,10 +149,7 @@ pub(in crate::emitter) fn lower_option_kernel(
                 "an `Option.map` call",
                 "Option[_]",
                 inner,
-                |ty| match ty {
-                    Ty::Option(b) => Some(*b),
-                    _ => None,
-                },
+                Ty::as_option,
             );
             let b = ts_ty_to_ts_type(b, tys);
             let kids = operands(&mut pre, cx, &[receiver, f]);
@@ -180,10 +177,7 @@ pub(in crate::emitter) fn lower_option_kernel(
                 "an `Option.andThen` call",
                 "Option[_]",
                 inner,
-                |ty| match ty {
-                    Ty::Option(b) => Some(*b),
-                    _ => None,
-                },
+                Ty::as_option,
             );
             let b = ts_ty_to_ts_type(b, tys);
             let kids = operands(&mut pre, cx, &[receiver, f]);
@@ -225,10 +219,7 @@ pub(in crate::emitter) fn lower_option_kernel(
                 "an `Option.okOr` call",
                 "Result[_, _]",
                 inner,
-                |ty| match ty {
-                    Ty::Result(_, err) => Some(*err),
-                    _ => None,
-                },
+                |ty| ty.as_result().map(|(_, err)| err),
             );
             let err = ts_ty_to_ts_type(err, tys);
             let kids = operands(&mut pre, cx, &[receiver, error]);
@@ -304,17 +295,9 @@ pub(in crate::emitter) fn lower_result_kernel(
     let built: Option<bynk_ts::TsExpr> = match (op, args) {
         (ResultOp::Map, [f]) => {
             // The call's checked type is `Result[B, E]` — peel for B.
-            let b = call_ty(
-                e,
-                cx,
-                "a `Result.map` call",
-                "Result[_, _]",
-                ok,
-                |ty| match ty {
-                    Ty::Result(b, _) => Some(*b),
-                    _ => None,
-                },
-            );
+            let b = call_ty(e, cx, "a `Result.map` call", "Result[_, _]", ok, |ty| {
+                ty.as_result().map(|(ok, _)| ok)
+            });
             let b = ts_ty_to_ts_type(b, tys);
             let kids = operands(&mut pre, cx, &[receiver, f]);
             Some({
@@ -332,17 +315,9 @@ pub(in crate::emitter) fn lower_result_kernel(
             })
         }
         (ResultOp::AndThen, [f]) => {
-            let b = call_ty(
-                e,
-                cx,
-                "a `Result.andThen` call",
-                "Result[_, _]",
-                ok,
-                |ty| match ty {
-                    Ty::Result(b, _) => Some(*b),
-                    _ => None,
-                },
-            );
+            let b = call_ty(e, cx, "a `Result.andThen` call", "Result[_, _]", ok, |ty| {
+                ty.as_result().map(|(ok, _)| ok)
+            });
             let b = ts_ty_to_ts_type(b, tys);
             let kids = operands(&mut pre, cx, &[receiver, f]);
             Some({
@@ -361,17 +336,9 @@ pub(in crate::emitter) fn lower_result_kernel(
         }
         (ResultOp::MapErr, [f]) => {
             // The call's checked type is `Result[T, F]` — peel for F.
-            let fty = call_ty(
-                e,
-                cx,
-                "a `Result.mapErr` call",
-                "Result[_, _]",
-                ok,
-                |ty| match ty {
-                    Ty::Result(_, f) => Some(*f),
-                    _ => None,
-                },
-            );
+            let fty = call_ty(e, cx, "a `Result.mapErr` call", "Result[_, _]", ok, |ty| {
+                ty.as_result().map(|(_, err)| err)
+            });
             let fnode = ts_ty_to_ts_type(fty, tys);
             let kids = operands(&mut pre, cx, &[receiver, f]);
             Some({

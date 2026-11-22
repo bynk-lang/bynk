@@ -575,6 +575,195 @@ impl Ty {
             _ => None,
         }
     }
+
+    /// The payload `T` of an `Option[T]`, or `None` for any other type.
+    pub fn as_option(&self) -> Option<TyId> {
+        match self {
+            Ty::Option(t) => Some(*t),
+            Ty::Error
+            | Ty::Never
+            | Ty::Base(..)
+            | Ty::Named { .. }
+            | Ty::Result(..)
+            | Ty::Effect(..)
+            | Ty::HttpResult(..)
+            | Ty::QueueResult
+            | Ty::HttpOutcome(..)
+            | Ty::BoundaryRejection
+            | Ty::Asset
+            | Ty::RequestHeaders
+            | Ty::RequestQuery
+            | Ty::RequestCookies
+            | Ty::TokenClaims
+            | Ty::List(..)
+            | Ty::Map(..)
+            | Ty::Set(..)
+            | Ty::Query(..)
+            | Ty::Stream(..)
+            | Ty::Connection(..)
+            | Ty::TestConnection(..)
+            | Ty::ValidationError
+            | Ty::DecodeError
+            | Ty::Unit
+            | Ty::Actor(..)
+            | Ty::ActorSum(..)
+            | Ty::Fn { .. }
+            | Ty::Var(..) => None,
+        }
+    }
+
+    /// The element `T` of a `List[T]`, or `None` for any other type.
+    pub fn as_list(&self) -> Option<TyId> {
+        match self {
+            Ty::List(t) => Some(*t),
+            Ty::Error
+            | Ty::Never
+            | Ty::Base(..)
+            | Ty::Named { .. }
+            | Ty::Result(..)
+            | Ty::Option(..)
+            | Ty::Effect(..)
+            | Ty::HttpResult(..)
+            | Ty::QueueResult
+            | Ty::HttpOutcome(..)
+            | Ty::BoundaryRejection
+            | Ty::Asset
+            | Ty::RequestHeaders
+            | Ty::RequestQuery
+            | Ty::RequestCookies
+            | Ty::TokenClaims
+            | Ty::Map(..)
+            | Ty::Set(..)
+            | Ty::Query(..)
+            | Ty::Stream(..)
+            | Ty::Connection(..)
+            | Ty::TestConnection(..)
+            | Ty::ValidationError
+            | Ty::DecodeError
+            | Ty::Unit
+            | Ty::Actor(..)
+            | Ty::ActorSum(..)
+            | Ty::Fn { .. }
+            | Ty::Var(..) => None,
+        }
+    }
+
+    /// The payload `T` of an `Effect[T]`, or `None` for any other type.
+    pub fn as_effect(&self) -> Option<TyId> {
+        match self {
+            Ty::Effect(t) => Some(*t),
+            Ty::Error
+            | Ty::Never
+            | Ty::Base(..)
+            | Ty::Named { .. }
+            | Ty::Result(..)
+            | Ty::Option(..)
+            | Ty::HttpResult(..)
+            | Ty::QueueResult
+            | Ty::HttpOutcome(..)
+            | Ty::BoundaryRejection
+            | Ty::Asset
+            | Ty::RequestHeaders
+            | Ty::RequestQuery
+            | Ty::RequestCookies
+            | Ty::TokenClaims
+            | Ty::List(..)
+            | Ty::Map(..)
+            | Ty::Set(..)
+            | Ty::Query(..)
+            | Ty::Stream(..)
+            | Ty::Connection(..)
+            | Ty::TestConnection(..)
+            | Ty::ValidationError
+            | Ty::DecodeError
+            | Ty::Unit
+            | Ty::Actor(..)
+            | Ty::ActorSum(..)
+            | Ty::Fn { .. }
+            | Ty::Var(..) => None,
+        }
+    }
+
+    /// The `(T, E)` of a `Result[T, E]`, or `None` for any other type.
+    pub fn as_result(&self) -> Option<(TyId, TyId)> {
+        match self {
+            Ty::Result(ok, err) => Some((*ok, *err)),
+            Ty::Error
+            | Ty::Never
+            | Ty::Base(..)
+            | Ty::Named { .. }
+            | Ty::Option(..)
+            | Ty::Effect(..)
+            | Ty::HttpResult(..)
+            | Ty::QueueResult
+            | Ty::HttpOutcome(..)
+            | Ty::BoundaryRejection
+            | Ty::Asset
+            | Ty::RequestHeaders
+            | Ty::RequestQuery
+            | Ty::RequestCookies
+            | Ty::TokenClaims
+            | Ty::List(..)
+            | Ty::Map(..)
+            | Ty::Set(..)
+            | Ty::Query(..)
+            | Ty::Stream(..)
+            | Ty::Connection(..)
+            | Ty::TestConnection(..)
+            | Ty::ValidationError
+            | Ty::DecodeError
+            | Ty::Unit
+            | Ty::Actor(..)
+            | Ty::ActorSum(..)
+            | Ty::Fn { .. }
+            | Ty::Var(..) => None,
+        }
+    }
+
+    /// The base type a scalar-shaped type is made of: a base type itself, or a
+    /// refined or opaque named type over one. [`Ty::base`] is the same question
+    /// minus the opaque case, which does not widen.
+    pub fn scalar_base(&self) -> Option<BaseType> {
+        match self {
+            Ty::Base(b) => Some(*b),
+            Ty::Named {
+                kind: NamedKind::Refined(b) | NamedKind::Opaque(b),
+                ..
+            } => Some(*b),
+            Ty::Named {
+                kind: NamedKind::Record | NamedKind::Sum,
+                ..
+            }
+            | Ty::Error
+            | Ty::Never
+            | Ty::Result(..)
+            | Ty::Option(..)
+            | Ty::Effect(..)
+            | Ty::HttpResult(..)
+            | Ty::QueueResult
+            | Ty::HttpOutcome(..)
+            | Ty::BoundaryRejection
+            | Ty::Asset
+            | Ty::RequestHeaders
+            | Ty::RequestQuery
+            | Ty::RequestCookies
+            | Ty::TokenClaims
+            | Ty::List(..)
+            | Ty::Map(..)
+            | Ty::Set(..)
+            | Ty::Query(..)
+            | Ty::Stream(..)
+            | Ty::Connection(..)
+            | Ty::TestConnection(..)
+            | Ty::ValidationError
+            | Ty::DecodeError
+            | Ty::Unit
+            | Ty::Actor(..)
+            | Ty::ActorSum(..)
+            | Ty::Fn { .. }
+            | Ty::Var(..) => None,
+        }
+    }
 }
 
 /// P6.0 (design/tracks/the-ir.md §6, #1139): a resolved classification of a
@@ -7478,5 +7667,67 @@ mod pure_helper_pins {
         assert!(!numeric_mix(Some(BaseType::Int), Some(BaseType::Int)));
         assert!(!numeric_mix(Some(BaseType::Float), Some(BaseType::Float)));
         assert!(!numeric_mix(None, Some(BaseType::Int)));
+    }
+}
+
+/// The shape accessors on [`Ty`] (`as_option`, `as_list`, `as_effect`, `as_result`,
+/// `scalar_base`): each answers for the variant it names and `None` for every other.
+#[cfg(test)]
+mod ty_accessor_tests {
+    use super::*;
+
+    #[test]
+    fn each_shape_accessor_answers_only_for_its_own_variant() {
+        let tys = Types::new();
+        let int = tys.intern(Ty::Base(BaseType::Int));
+        let string = tys.intern(Ty::Base(BaseType::String));
+        let option = Ty::Option(int);
+        let list = Ty::List(int);
+        let effect = Ty::Effect(int);
+        let result = Ty::Result(int, string);
+
+        assert_eq!(option.as_option(), Some(int));
+        assert_eq!(list.as_list(), Some(int));
+        assert_eq!(effect.as_effect(), Some(int));
+        assert_eq!(result.as_result(), Some((int, string)));
+
+        for other in [&list, &effect, &result, &Ty::Unit, &Ty::Base(BaseType::Int)] {
+            assert_eq!(other.as_option(), None);
+        }
+        for other in [&option, &effect, &result, &Ty::Set(int), &Ty::Unit] {
+            assert_eq!(other.as_list(), None);
+        }
+        for other in [&option, &list, &result, &Ty::Query(int), &Ty::Unit] {
+            assert_eq!(other.as_effect(), None);
+        }
+        for other in [&option, &list, &effect, &Ty::Map(int, string), &Ty::Unit] {
+            assert_eq!(other.as_result(), None);
+        }
+    }
+
+    #[test]
+    fn scalar_base_reads_base_refined_and_opaque_but_not_records_or_sums() {
+        let named = |kind| Ty::Named {
+            name: "T".to_string(),
+            kind,
+            args: vec![],
+        };
+        assert_eq!(
+            Ty::Base(BaseType::String).scalar_base(),
+            Some(BaseType::String)
+        );
+        assert_eq!(
+            named(NamedKind::Refined(BaseType::Int)).scalar_base(),
+            Some(BaseType::Int)
+        );
+        assert_eq!(
+            named(NamedKind::Opaque(BaseType::Bytes)).scalar_base(),
+            Some(BaseType::Bytes)
+        );
+        assert_eq!(named(NamedKind::Record).scalar_base(), None);
+        assert_eq!(named(NamedKind::Sum).scalar_base(), None);
+        assert_eq!(Ty::Unit.scalar_base(), None);
+        // `base` is the same question minus the opaque case, which does not widen.
+        assert_eq!(named(NamedKind::Opaque(BaseType::Bytes)).base(), None);
     }
 }

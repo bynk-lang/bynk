@@ -4,7 +4,7 @@
 //! builder, and the pieces the sibling kernels will want (comparator binding,
 //! keyed-helper choice, key-function types) are plain functions here.
 
-use bynk_check::checker::{NamedKind, Ty, TyId, Types};
+use bynk_check::checker::{Ty, TyId, Types};
 use bynk_check::kernel_op::ListOp;
 use bynk_ts::{
     TsArrowBody, TsBinaryOp, TsBindingName, TsExpr, TsLit, TsParam, TsStmt, TsType, TsUnaryOp,
@@ -21,15 +21,12 @@ use super::{BaseType, Expr};
 /// output-array element annotation. A call whose checked type is not that shape
 /// is a missing checker fact (1A.34).
 pub(super) fn list_ok_elem(call_ty: Option<TyId>, tys: TyRender<'_>, at: FaultSite<'_>) -> TsType {
-    match call_ty.map(|t| tys.get(t)).as_deref() {
-        Some(Ty::Effect(inner)) => match &*tys.get(*inner) {
-            Ty::Result(ok, _) => match &*tys.get(*ok) {
-                Ty::List(u) => ts_ty_to_ts_type(*u, tys),
-                _ => ts_ty_to_ts_type(*ok, tys),
-            },
-            _ => ts_ty_to_ts_type(*inner, tys),
+    match call_ty.and_then(|t| tys.get(t).as_effect()) {
+        Some(inner) => match tys.get(inner).as_result() {
+            Some((ok, _)) => ts_ty_to_ts_type(tys.get(ok).as_list().unwrap_or(ok), tys),
+            None => ts_ty_to_ts_type(inner, tys),
         },
-        _ => {
+        None => {
             at.missing_fact_ty("`Effect[Result[List[_], _]]` type for a short-circuit collect call")
         }
     }
@@ -258,9 +255,13 @@ pub(super) fn method_sort(array: TsExpr, compare: TsExpr) -> TsExpr {
 /// The comparator when it is a bare identifier (a runtime comparator or an
 /// in-scope witness), which is then substituted directly rather than bound.
 fn bare_comparator(cmp: &TsExpr) -> Option<&TsExpr> {
-    match cmp {
-        TsExpr::Ident(name) if name.chars().all(|c| c.is_alphanumeric() || c == '_') => Some(cmp),
-        _ => None,
+    // One shape is asked for: a plain identifier.
+    if let TsExpr::Ident(name) = cmp
+        && name.chars().all(|c| c.is_alphanumeric() || c == '_')
+    {
+        Some(cmp)
+    } else {
+        None
     }
 }
 
@@ -566,12 +567,14 @@ fn list_traverse_all(a: &ListArm, f: &Expr, pre: &mut Pre, cx: &mut LowerCtx) ->
     let tys = cx.ty_render();
     // The call's checked type is `Effect[List[Result[B, E]]]` — peel to
     // the `Result[B, E]` TS for the output-array annotation.
-    let res = match cx.commons().expr_ty(e.id).as_deref() {
-        Some(Ty::Effect(inner)) => match &*tys.get(*inner) {
-            Ty::List(el) => ts_ty_to_ts_type(*el, tys),
-            _ => ts_ty_to_ts_type(*inner, tys),
-        },
-        _ => cx.missing_fact_ty(e.span, "`Effect[List[_]]` type for a `traverseAll` call"),
+    let res = match cx
+        .commons()
+        .expr_ty(e.id)
+        .as_deref()
+        .and_then(Ty::as_effect)
+    {
+        Some(inner) => ts_ty_to_ts_type(tys.get(inner).as_list().unwrap_or(inner), tys),
+        None => cx.missing_fact_ty(e.span, "`Effect[List[_]]` type for a `traverseAll` call"),
     };
     let recv = pre.lower_node(a.receiver, cx);
     let f = pre.lower_node(f, cx);
@@ -636,19 +639,22 @@ fn settle_thunks(a: &ListArm, f: TsExpr) -> TsExpr {
 fn list_sequence(a: &ListArm, name: ListOp, pre: &mut Pre, cx: &mut LowerCtx) -> bynk_ts::TsExpr {
     let e = a.e;
     let tys = cx.ty_render();
-    let (ok, err) = match cx.commons().expr_ty(e.id).as_deref() {
-        Some(Ty::Result(ok, err)) => {
-            let ok_ty = match &*tys.get(*ok) {
-                Ty::List(t) => ts_ty_to_ts_type(*t, tys),
-                _ => ts_ty_to_ts_type(*ok, tys),
+    let (ok, err) = match cx
+        .commons()
+        .expr_ty(e.id)
+        .as_deref()
+        .and_then(Ty::as_result)
+    {
+        Some((ok, err)) => {
+            let ok_ty = ts_ty_to_ts_type(tys.get(ok).as_list().unwrap_or(ok), tys);
+            let err_elem = if name == ListOp::SequenceAll {
+                tys.get(err).as_list().unwrap_or(err)
+            } else {
+                err
             };
-            let err_ty = match &*tys.get(*err) {
-                Ty::List(t) if name == ListOp::SequenceAll => ts_ty_to_ts_type(*t, tys),
-                _ => ts_ty_to_ts_type(*err, tys),
-            };
-            (ok_ty, err_ty)
+            (ok_ty, ts_ty_to_ts_type(err_elem, tys))
         }
-        _ => {
+        None => {
             let missing = cx.missing_fact_ty(e.span, "`Result` type for a `sequence` call");
             (missing.clone(), missing)
         }
@@ -1536,24 +1542,19 @@ pub(super) fn kernel_key_comparator(key: &Expr, cx: &LowerCtx) -> Option<TsExpr>
 /// `List`, a record, a sum, a type parameter) takes the keyed helpers in
 /// `keys.ts`; a plain-keyed site emits exactly what it did before.
 pub(super) fn key_is_plain(ty: TyId, tys: &Types) -> bool {
-    match &*tys.get(ty) {
-        Ty::Base(b) => !matches!(b, BaseType::Bytes | BaseType::Decimal),
-        Ty::Named {
-            kind: NamedKind::Refined(b) | NamedKind::Opaque(b),
-            ..
-        } => !matches!(b, BaseType::Bytes | BaseType::Decimal),
-        _ => false,
-    }
+    tys.get(ty)
+        .scalar_base()
+        .is_some_and(|b| !matches!(b, BaseType::Bytes | BaseType::Decimal))
 }
 
 /// The result type of a function-typed argument (a kernel's key function).
 pub(super) fn key_fn_ret(key: &Expr, cx: &LowerCtx) -> Option<TyId> {
     let tys = cx.ty_render();
     let fn_ty = cx.commons().expr_types.get(&key.id)?.ty;
-    match &*tys.get(fn_ty) {
-        Ty::Fn { ret, .. } => Some(*ret),
-        _ => None,
-    }
+    let Ty::Fn { ret, .. } = &*tys.get(fn_ty) else {
+        return None;
+    };
+    Some(*ret)
 }
 
 /// Whether a kernel keyed by the result of `key` hashes through the plain

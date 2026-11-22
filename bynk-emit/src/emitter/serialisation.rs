@@ -10,10 +10,6 @@
 //! Helpers live in the *owning* module — commons modules emit helpers for
 //! commons types, context modules emit helpers for the types they declare.
 
-// 1A.37a: this file has no wildcard enum arm; the attribute keeps it that way until the
-// crate opts in to the workspace lints (1A.37b).
-#![deny(clippy::wildcard_enum_match_arm)]
-
 use std::sync::Arc;
 
 use bynk_syntax::ast::{BaseType, PredKind, TypeBody, TypeDecl, TypeRef};
@@ -3202,7 +3198,10 @@ pub(crate) fn deserialise_expr_via(
             // only past job (interpolating into a hand-built `format!`) is
             // gone.
             let predicate: Option<TsExpr> = match b {
-                BaseType::Float => Some(call(member(ident("globalThis.Number"), "isFinite"), vec![ident("__v")])),
+                BaseType::Float => Some(call(
+                    member(ident("globalThis.Number"), "isFinite"),
+                    vec![ident("__v")],
+                )),
                 // v0.86 (ADR 0112 D6): a `Duration` is whole milliseconds —
                 // reject a non-integer from the wire, as a refined `Int` does.
                 // #1657: whole *and* within ±(2^53 − 1), the `Int` domain.
@@ -3220,7 +3219,9 @@ pub(crate) fn deserialise_expr_via(
             let expected = match b {
                 BaseType::Int | BaseType::Duration | BaseType::Instant => "safe integer",
                 BaseType::Float => "finite number",
-                BaseType::String | BaseType::Bool | BaseType::Bytes | BaseType::Decimal => typeof_str,
+                BaseType::String | BaseType::Bool | BaseType::Bytes | BaseType::Decimal => {
+                    typeof_str
+                }
             };
             let typeof_v = || TsExpr::Unary {
                 op: TsUnaryOp::Typeof,
@@ -3292,7 +3293,18 @@ pub(crate) fn deserialise_expr_via(
         // Everything else is rejected by the checker's codec-domain rule (the
         // `Json` path) or by the boundary rules (the workers path). Shared by
         // three callers, so the message names the type rather than one caller.
-        other @ TypeRef::RequestHeaders(_) | other @ TypeRef::RequestQuery(_) | other @ TypeRef::RequestCookies(_) | other @ TypeRef::TokenClaims(_) | other @ TypeRef::BoundaryRejection(_) | other @ TypeRef::Query(..) | other @ TypeRef::Stream(..) | other @ TypeRef::Connection(..) | other @ TypeRef::History(..) | other @ TypeRef::Fn(..) => unreachable!("non-codable type reached a codec lowering: {other:?}"),
+        other @ (
+            TypeRef::RequestHeaders(_)
+            | TypeRef::RequestQuery(_)
+            | TypeRef::RequestCookies(_)
+            | TypeRef::TokenClaims(_)
+            | TypeRef::BoundaryRejection(_)
+            | TypeRef::Query(..)
+            | TypeRef::Stream(..)
+            | TypeRef::Connection(..)
+            | TypeRef::History(..)
+            | TypeRef::Fn(..)
+        ) => unreachable!("non-codable type reached a codec lowering: {other:?}"),
     }
 }
 
