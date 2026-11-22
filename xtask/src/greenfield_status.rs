@@ -1,6 +1,6 @@
 //! `cargo xtask greenfield-status` — the probe harness (track doc §8, proposal #999).
 //!
-//! Twenty-six probes measuring the tree against `design/bynk-greenfield-compiler.md`:
+//! Twenty-seven probes measuring the tree against `design/bynk-greenfield-compiler.md`:
 //! the twelve in track doc §8, `emit_abi_shapes` (ADR 0310's probe, #999 Decision E —
 //! this slice measures the emit-ABI enumeration guard but does not wire it; wiring is
 //! packaging-track work), phase 7's own four — `ts_writes`, `ts_any`,
@@ -14,11 +14,11 @@
 //! crate-hygiene track's M-3 ratchet, `model_readers_beyond_emit` (B1, #2939), and its H-3 gate,
 //! `unused_deps` (A4, #2976).
 //!
-//! **Twenty-six are gated**, committed and diffed: `workspace_lints`, `fs_below_driver`,
+//! **Twenty-seven are gated**, committed and diffed: `workspace_lints`, `fs_below_driver`,
 //! `options_sources`, `hoist_sinks`, `span_keyed_maps`, `emit_diagnostics`,
 //! `ide_emit_edge`, `ast_importers`, `emit_abi_shapes`, `ts_writes`, `ts_any`,
 //! `verbatim_origins`, `verbatim_sites`, `incremental_query_types`,
-//! `unconsumed_ir_items`, `diagnostic_coverage`, `model_readers_beyond_emit`, `unused_deps`, `explained_codes`, `ts_raw_sites_emit`, `ts_raw_sites_testgen`, `ts_text_idents`, `emit_thread_locals`, `emit_silent_fallbacks`, `emit_print_calls`, `import_prediction_fns`. Ten of these are
+//! `unconsumed_ir_items`, `diagnostic_coverage`, `model_readers_beyond_emit`, `unused_deps`, `explained_codes`, `ts_raw_sites_emit`, `ts_raw_sites_testgen`, `ts_text_idents`, `emit_thread_locals`, `emit_silent_fallbacks`, `emit_print_calls`, `import_prediction_fns`, `deploy_kind_accessors`. Ten of these are
 //! zero/closure-shaped — a boolean, or a count pinned at a small, argued floor
 //! (`ast_importers` = 5, `emit_abi_shapes` = 1). Phase 7's own four are the same shape:
 //! each converged toward an argued floor over dozens of slices, the same trajectory
@@ -42,7 +42,7 @@
 //! **Two kinds of gate** (#3679, amending ADR 0389/0390). Every gated probe is
 //! *exact-match*: a live reading that differs from its committed row fails unless a
 //! pending file names it in `probes:`. The [`GROWTH_PROBES`] (`ts_writes`, `ts_any`,
-//! `emit_abi_shapes`, `verbatim_sites`, `ts_raw_sites_emit`, `ts_raw_sites_testgen`, `ts_text_idents`, `span_keyed_maps`, `emit_thread_locals`, `emit_silent_fallbacks`, `emit_print_calls`, `import_prediction_fns`) are also *directional*:
+//! `emit_abi_shapes`, `verbatim_sites`, `ts_raw_sites_emit`, `ts_raw_sites_testgen`, `ts_text_idents`, `span_keyed_maps`, `emit_thread_locals`, `emit_silent_fallbacks`, `emit_print_calls`, `import_prediction_fns`, `deploy_kind_accessors`) are also *directional*:
 //! `growth_probes_never_rise` (`xtask/tests/greenfield_status.rs`) fails when the
 //! live leading count exceeds the committed one unless a pending file *raises* the
 //! probe with a reason (`raises:`), which the stamp then records in
@@ -117,7 +117,7 @@ pub fn run(root: &Path) -> Report {
 /// The gated probes' names, in [`run_gated`]'s order — what a pending file's
 /// `probes` key may cite. `greenfield_status_table_is_current` asserts this
 /// matches the probes [`run_gated`] actually returns, so the two cannot drift.
-pub const GATED_PROBES: [&str; 26] = [
+pub const GATED_PROBES: [&str; 27] = [
     "workspace_lints",
     "fs_below_driver",
     "options_sources",
@@ -138,6 +138,7 @@ pub const GATED_PROBES: [&str; 26] = [
     "emit_silent_fallbacks",
     "emit_print_calls",
     "import_prediction_fns",
+    "deploy_kind_accessors",
     "incremental_query_types",
     "unconsumed_ir_items",
     "diagnostic_coverage",
@@ -148,12 +149,12 @@ pub const GATED_PROBES: [&str; 26] = [
 
 /// The gated probes that only a reasoned, recorded `raises:` may increase
 /// (#3679, ADR 0389/0390 amended): `ts_writes`, `ts_any`, `emit_abi_shapes`,
-/// `verbatim_sites`, `ts_raw_sites_emit` and `ts_raw_sites_testgen` (the split of `ts_raw_sites`, #3681), `ts_text_idents` (#3681), `span_keyed_maps`, `emit_thread_locals` (1A.19), `emit_silent_fallbacks` (1A.34), `emit_print_calls` (1A.35b), `import_prediction_fns` (1A.36a). Probes already at a zero or closure
+/// `verbatim_sites`, `ts_raw_sites_emit` and `ts_raw_sites_testgen` (the split of `ts_raw_sites`, #3681), `ts_text_idents` (#3681), `span_keyed_maps`, `emit_thread_locals` (1A.19), `emit_silent_fallbacks` (1A.34), `emit_print_calls` (1A.35b), `import_prediction_fns` (1A.36a), `deploy_kind_accessors` (1D.1a). Probes already at a zero or closure
 /// floor are excluded (their exact-match row pins them), as are
 /// `verbatim_origins` (an argued floor of 2) and `model_readers_beyond_emit`
 /// (which has the opposite direction). A subset of [`GATED_PROBES`], pinned by
 /// a unit test.
-pub const GROWTH_PROBES: [&str; 12] = [
+pub const GROWTH_PROBES: [&str; 13] = [
     "ts_writes",
     "ts_any",
     "emit_abi_shapes",
@@ -166,9 +167,10 @@ pub const GROWTH_PROBES: [&str; 12] = [
     "emit_silent_fallbacks",
     "emit_print_calls",
     "import_prediction_fns",
+    "deploy_kind_accessors",
 ];
 
-/// The twenty-six gated (zero/closure/ratchet) probes only — what [`gated_disagreements`] diffs.
+/// The twenty-seven gated (zero/closure/ratchet) probes only — what [`gated_disagreements`] diffs.
 pub fn run_gated(root: &Path) -> Vec<Probe> {
     vec![
         workspace_lints(root),
@@ -191,6 +193,7 @@ pub fn run_gated(root: &Path) -> Vec<Probe> {
         emit_silent_fallbacks(root),
         emit_print_calls(root),
         import_prediction_fns(root),
+        deploy_kind_accessors(root),
         incremental_query_types(root),
         unconsumed_ir_items(root),
         diagnostic_coverage(root),
@@ -2576,6 +2579,55 @@ fn import_prediction_fns_violations(files: &[(PathBuf, String)]) -> usize {
     })
 }
 
+/// 1D.1 (#3929, the ruling on Decision A): the production sites in `bynk/src/deploy/**` that
+/// call or define a per-kind ledger accessor (`recorded_kv`, `record_r2`, `forget_vectorize`,
+/// `allocate_ratelimit`, …), each of which a `ResourceKind` replaces with its `LedgerTable`. It
+/// read 68 on `main` before 1D.1a; each 1D.1 slice deletes its kinds' accessors, and 1D.1e takes
+/// it to 0. A growth probe ([`GROWTH_PROBES`]): it may only fall unless a pending file `raises:`
+/// it with a reason, so a converted kind's accessor cannot come back and an unconverted kind
+/// cannot grow one.
+///
+/// Counts non-comment lines outside `#[cfg(test)]` modules and wholly-test files
+/// ([`is_whole_test_file`]) in `bynk/src/deploy` that match [`DEPLOY_KIND_ACCESSOR`]. Text-level
+/// gaps, as for the other line scanners: two sites on one line count once.
+fn deploy_kind_accessors(root: &Path) -> Probe {
+    Probe {
+        name: "deploy_kind_accessors",
+        gated: true,
+        reads: deploy_kind_accessors_violations(&rust_files_relative(
+            &root.join("bynk/src/deploy"),
+        ))
+        .to_string(),
+    }
+}
+
+/// A call or definition of a per-kind ledger accessor: #3929's "Tooling delta" pattern.
+const DEPLOY_KIND_ACCESSOR: &str = r"\b(recorded_(kv|kv_binding|r2|d1|vectorize|hyperdrive|ratelimit|stored_secret|mtls_certificate|ai_search|container_image)|record_(kv|r2|vectorize|d1|hyperdrive|stored_secret|ai_search|mtls_certificate|container_image|queue|reused_queue)|forget_(kv|vectorize|hyperdrive|undeclared_ratelimits)|allocate_ratelimit)\(";
+
+/// [`deploy_kind_accessors`]'s counting logic over an explicit file list, paths relative to
+/// `bynk/src/deploy`.
+fn deploy_kind_accessors_violations(files: &[(PathBuf, String)]) -> usize {
+    let accessor = regex::Regex::new(DEPLOY_KIND_ACCESSOR).expect("the accessor pattern compiles");
+    // Deploy's test modules are `pub(crate) mod tests`, so other modules' tests can share their
+    // helpers; [`test_mod_ranges`] reads a test module by its `mod ` line, so the visibility is
+    // dropped here rather than there, where it would move the probes that already read it.
+    let production: Vec<(PathBuf, String)> = files
+        .iter()
+        .filter(|(path, _)| !is_whole_test_file(&path.to_string_lossy().replace('\\', "/")))
+        .map(|(path, contents)| {
+            let contents: Vec<&str> = contents
+                .lines()
+                .map(|line| {
+                    line.strip_prefix("pub(crate) mod ")
+                        .map_or(line, |_| &line[11..])
+                })
+                .collect();
+            (path.clone(), contents.join("\n"))
+        })
+        .collect();
+    production_lines_matching(&production, |line| accessor.is_match(line))
+}
+
 /// Named identifiers imported from the compiler-generated firstparty/runtime relative
 /// modules (`./bynk.js`, `./runtime.js`, `./bynk/locale/types.js`, `./cloudflare.js`,
 /// or their `../` forms) — `import type { A, B }`/`import { A, B }` braces, stripping
@@ -4160,7 +4212,7 @@ pub fn render_table(report: &Report) -> String {
          `ts_raw_sites` split into `ts_raw_sites_emit`/`ts_raw_sites_testgen` and `emit_thread_locals` \
          added by 1A.19; `emit_silent_fallbacks` added by 1A.34; `emit_print_calls` added by 1A.35b \
          (`lowering_text_bridge` and `stmt_text_lines`, added by #3694 and #3711, were retired at 0 by 1A.35b); \
-         `import_prediction_fns` added by 1A.36a. Twenty-six \
+         `import_prediction_fns` added by 1A.36a; `deploy_kind_accessors` added by 1D.1a. Twenty-seven \
          probes are gated — a disagreement between this file and a fresh run fails \
          `greenfield_status_table_is_current` (`xtask/tests/greenfield_status.rs`). \
          Five are trend probes, reported only.\n\n",
@@ -4545,7 +4597,8 @@ mod tests {
         | `emit_thread_locals` | yes | 2 |\n\
         | `emit_silent_fallbacks` | yes | 15 |\n\
         | `emit_print_calls` | yes | 30 |\n\
-        | `import_prediction_fns` | yes | 8 |\n";
+        | `import_prediction_fns` | yes | 8 |\n\
+        | `deploy_kind_accessors` | yes | 68 |\n";
 
     fn growth_live(ts_writes: &str, abi: &str) -> Vec<Probe> {
         vec![
@@ -4561,6 +4614,7 @@ mod tests {
             gated("emit_silent_fallbacks", "15"),
             gated("emit_print_calls", "30"),
             gated("import_prediction_fns", "8"),
+            gated("deploy_kind_accessors", "68"),
         ]
     }
 
@@ -4748,6 +4802,37 @@ mod tests {
         assert_eq!(
             count("fn f() { TsStmt::raw_usingx(T); TsStmt::rawish(T); }\n"),
             0
+        );
+    }
+
+    #[test]
+    fn deploy_kind_accessors_counts_accessor_sites_outside_tests_and_comments() {
+        let count = |src: &str| deploy_kind_accessors_violations(&files_of(&[("ledger.rs", src)]));
+        // A definition and a call, of each family.
+        let src = "pub(crate) fn recorded_kv_binding<'a>(\n\
+                   let id = recorded_d1(lock, w, b, e);\n\
+                   lock.record_queue(env, q);\n\
+                   lock.forget_vectorize(env, w, b, i);\n\
+                   let (id, new) = lock.allocate_ratelimit(env, w, b);\n";
+        assert_eq!(count(src), 5);
+        // A word boundary and a call: a longer name, a path and a mention are not accessors.
+        assert_eq!(
+            count("fn my_recorded_kv() {}\nlet f = record_kv;\nlock.recorded::<Kv>(e, w, b);\n"),
+            0
+        );
+        // A comment, a test module (deploy's are `pub(crate)`) and a wholly-test file do not count.
+        let src = "// record_kv(\n#[cfg(test)]\nmod tests {\n    fn t() { lock.record_kv(a, b, c, d); }\n}\n";
+        assert_eq!(count(src), 0);
+        let src =
+            "#[cfg(test)]\npub(crate) mod tests {\n    fn t() { lock.record_kv(a, b, c, d); }\n}\n";
+        assert_eq!(count(src), 0);
+        assert_eq!(
+            deploy_kind_accessors_violations(&files_of(&[
+                ("hyperdrive/tests.rs", "lock.record_hyperdrive(a);\n"),
+                ("snapshot_tests.rs", "recorded_r2(l, w, b, e);\n"),
+                ("hyperdrive.rs", "lock.record_hyperdrive(a);\n"),
+            ])),
+            1
         );
     }
 
