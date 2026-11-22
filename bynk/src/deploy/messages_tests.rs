@@ -38,9 +38,9 @@ const fn answer(code: i32, stdout: &'static str, stderr: &'static str) -> Answer
     }
 }
 
-/// How wrangler is reached in a case.
+/// How the case's wrangler is scripted.
 #[derive(Clone, Copy)]
-enum Wrangler {
+enum Script {
     /// No wrangler at all (`Provenance::Missing`).
     Missing,
     /// A wrangler path that cannot be started.
@@ -51,31 +51,31 @@ enum Wrangler {
 }
 
 /// The failure shapes every operation is run through, with the reply for any arguments.
-const SHAPES: &[(&str, Wrangler)] = &[
-    ("wrangler missing", Wrangler::Missing),
-    ("wrangler does not start", Wrangler::NotStartable),
+const SHAPES: &[(&str, Script)] = &[
+    ("wrangler missing", Script::Missing),
+    ("wrangler does not start", Script::NotStartable),
     (
         "exits 1, stderr only",
-        Wrangler::Answers(&[("*", answer(1, "", "it went wrong on stderr\n"))]),
+        Script::Answers(&[("*", answer(1, "", "it went wrong on stderr\n"))]),
     ),
     (
         "exits 1, stdout only",
-        Wrangler::Answers(&[("*", answer(1, "it went wrong on stdout\n", ""))]),
+        Script::Answers(&[("*", answer(1, "it went wrong on stdout\n", ""))]),
     ),
     (
         "exits 1, both streams",
-        Wrangler::Answers(&[(
+        Script::Answers(&[(
             "*",
             answer(1, "  and on stdout  \n", "\n  wrong on stderr\n"),
         )]),
     ),
     (
         "exits 3, silent",
-        Wrangler::Answers(&[("*", answer(3, "", ""))]),
+        Script::Answers(&[("*", answer(3, "", ""))]),
     ),
     (
         "killed by SIGTERM, silent",
-        Wrangler::Answers(&[(
+        Script::Answers(&[(
             "*",
             Answer {
                 exit: Exit::Signal("TERM"),
@@ -86,7 +86,7 @@ const SHAPES: &[(&str, Wrangler)] = &[
     ),
     (
         "exits 0, unreadable output",
-        Wrangler::Answers(&[("*", answer(0, "nothing this reads\n", ""))]),
+        Script::Answers(&[("*", answer(0, "nothing this reads\n", ""))]),
     ),
 ];
 
@@ -109,11 +109,11 @@ impl Scratch {
     }
 
     /// The wrangler a case runs, written to disk where it is a script.
-    fn provenance(&self, wrangler: Wrangler) -> Provenance {
+    fn provenance(&self, wrangler: Script) -> Provenance {
         match wrangler {
-            Wrangler::Missing => Provenance::Missing,
-            Wrangler::NotStartable => Provenance::Path(self.dir.join("no-such-wrangler")),
-            Wrangler::Answers(answers) => {
+            Script::Missing => Provenance::Missing,
+            Script::NotStartable => Provenance::Path(self.dir.join("no-such-wrangler")),
+            Script::Answers(answers) => {
                 let mut script = format!(
                     "#!/bin/sh\nprintf '%s\\n' \"$*\" >> '{}'\ncase \"$*\" in\n",
                     self.log().display()
@@ -160,7 +160,7 @@ fn shown<T: Debug, E: Display>(result: Result<T, E>) -> String {
 }
 
 /// One operation of the fixture: its name and how to run it from a project root.
-type Run = fn(&Provenance, &Path) -> String;
+type Run = fn(&dyn CloudflareApi, &Path) -> String;
 
 fn decl() -> VectorizeDecl {
     VectorizeDecl {
@@ -175,23 +175,19 @@ fn decl() -> VectorizeDecl {
 
 /// Every operation the resource kinds run through wrangler, by the name the fixture gives it.
 const OPERATIONS: &[(&str, Run)] = &[
-    ("queues create", |p, root| {
-        shown(create_queue(p, "jobs", root))
+    ("queues create", |p, _| shown(create_queue(p, "jobs"))),
+    ("queues info", |p, _| {
+        format!("{:?}", queue_exists(p, "jobs"))
     }),
-    ("queues info", |p, root| {
-        format!("{:?}", queue_exists(p, "jobs", root))
+    ("queues delete", |p, _| shown(delete_queue(p, "jobs"))),
+    ("kv namespace create", |p, _| {
+        shown(create_kv(p, "shop-api"))
     }),
-    ("queues delete", |p, root| {
-        shown(delete_queue(p, "jobs", root))
+    ("kv namespace list", |p, _| {
+        format!("{:?}", live_kv_namespace_ids(p))
     }),
-    ("kv namespace create", |p, root| {
-        shown(create_kv(p, "shop-api", root))
-    }),
-    ("kv namespace list", |p, root| {
-        format!("{:?}", live_kv_namespace_ids(p, root))
-    }),
-    ("kv namespace delete", |p, root| {
-        shown(delete_kv_namespace(p, "0123abcd", root))
+    ("kv namespace delete", |p, _| {
+        shown(delete_kv_namespace(p, "0123abcd"))
     }),
     ("d1 migrations apply (default)", |p, root| {
         shown(apply_d1_migrations(p, root, "DB", "default"))
@@ -199,49 +195,44 @@ const OPERATIONS: &[(&str, Run)] = &[
     ("d1 migrations apply (--env staging)", |p, root| {
         shown(apply_d1_migrations(p, root, "DB", "staging"))
     }),
-    ("d1 create", |p, root| shown(create_d1(p, "shop-db", root))),
-    ("r2 bucket create", |p, root| {
-        shown(create_r2_bucket(p, "shop-files", None, root))
+    ("d1 create", |p, _| shown(create_d1(p, "shop-db"))),
+    ("r2 bucket create", |p, _| {
+        shown(create_r2_bucket(p, "shop-files", None))
     }),
-    ("r2 bucket create (--jurisdiction eu)", |p, root| {
-        shown(create_r2_bucket(p, "shop-files", Some("eu"), root))
+    ("r2 bucket create (--jurisdiction eu)", |p, _| {
+        shown(create_r2_bucket(p, "shop-files", Some("eu")))
     }),
-    ("vectorize list", |p, root| {
-        shown(index_exists(p, "docs", root))
+    ("vectorize list", |p, _| shown(index_exists(p, "docs"))),
+    ("vectorize get", |p, _| shown(read_index_config(p, "docs"))),
+    ("vectorize create", |p, _| {
+        shown(create_index(p, "docs", &decl()))
     }),
-    ("vectorize get", |p, root| {
-        shown(read_index_config(p, "docs", root))
+    ("vectorize list-metadata-index", |p, _| {
+        shown(existing_metadata_indexes(p, "docs"))
     }),
-    ("vectorize create", |p, root| {
-        shown(create_index(p, "docs", &decl(), root))
+    ("vectorize create-metadata-index", |p, _| {
+        shown(create_metadata_index(p, "docs", "category:string"))
     }),
-    ("vectorize list-metadata-index", |p, root| {
-        shown(existing_metadata_indexes(p, "docs", root))
+    ("vectorize create-metadata-index (not name:type)", |p, _| {
+        shown(create_metadata_index(p, "docs", "category"))
     }),
-    ("vectorize create-metadata-index", |p, root| {
-        shown(create_metadata_index(p, "docs", "category:string", root))
-    }),
-    (
-        "vectorize create-metadata-index (not name:type)",
-        |p, root| shown(create_metadata_index(p, "docs", "category", root)),
-    ),
-    ("vectorize delete", |p, root| {
-        shown(delete_vectorize_index(p, "docs", root))
+    ("vectorize delete", |p, _| {
+        shown(delete_vectorize_index(p, "docs"))
     }),
 ];
 
 /// The replies each operation treats specially: its success, and the failures it reads as a
 /// success or answers with a message of its own.
-const SPECIAL: &[(&str, &str, Wrangler)] = &[
+const SPECIAL: &[(&str, &str, Script)] = &[
     (
         "queues create",
         "created",
-        Wrangler::Answers(&[("*", answer(0, "Created queue jobs.\n", ""))]),
+        Script::Answers(&[("*", answer(0, "Created queue jobs.\n", ""))]),
     ),
     (
         "queues create",
         "already exists, on stderr",
-        Wrangler::Answers(&[(
+        Script::Answers(&[(
             "*",
             answer(
                 1,
@@ -253,22 +244,22 @@ const SPECIAL: &[(&str, &str, Wrangler)] = &[
     (
         "queues create",
         "already exists, on stdout",
-        Wrangler::Answers(&[("*", answer(1, "Queue already exists\n", ""))]),
+        Script::Answers(&[("*", answer(1, "Queue already exists\n", ""))]),
     ),
     (
         "queues info",
         "found",
-        Wrangler::Answers(&[("*", answer(0, "Queue jobs\n", ""))]),
+        Script::Answers(&[("*", answer(0, "Queue jobs\n", ""))]),
     ),
     (
         "queues delete",
         "deleted",
-        Wrangler::Answers(&[("*", answer(0, "Deleted queue jobs.\n", ""))]),
+        Script::Answers(&[("*", answer(0, "Deleted queue jobs.\n", ""))]),
     ),
     (
         "queues delete",
         "does not exist",
-        Wrangler::Answers(&[(
+        Script::Answers(&[(
             "*",
             answer(
                 1,
@@ -280,7 +271,7 @@ const SPECIAL: &[(&str, &str, Wrangler)] = &[
     (
         "kv namespace create",
         "TOML snippet",
-        Wrangler::Answers(&[(
+        Script::Answers(&[(
             "*",
             answer(
                 0,
@@ -292,7 +283,7 @@ const SPECIAL: &[(&str, &str, Wrangler)] = &[
     (
         "kv namespace create",
         "JSON snippet",
-        Wrangler::Answers(&[(
+        Script::Answers(&[(
             "*",
             answer(
                 0,
@@ -304,7 +295,7 @@ const SPECIAL: &[(&str, &str, Wrangler)] = &[
     (
         "kv namespace list",
         "two namespaces",
-        Wrangler::Answers(&[(
+        Script::Answers(&[(
             "*",
             answer(0, "[{\"id\":\"b2\",\"title\":\"x\"},{\"id\":\"a1\"}]\n", ""),
         )]),
@@ -312,27 +303,27 @@ const SPECIAL: &[(&str, &str, Wrangler)] = &[
     (
         "kv namespace delete",
         "deleted",
-        Wrangler::Answers(&[("*", answer(0, "Deleted.\n", ""))]),
+        Script::Answers(&[("*", answer(0, "Deleted.\n", ""))]),
     ),
     (
         "kv namespace delete",
         "not found, code 10013",
-        Wrangler::Answers(&[("*", answer(1, "", "namespace not found [code: 10013]\n"))]),
+        Script::Answers(&[("*", answer(1, "", "namespace not found [code: 10013]\n"))]),
     ),
     (
         "kv namespace delete",
         "not found, prose",
-        Wrangler::Answers(&[("*", answer(1, "", "Namespace Not Found\n"))]),
+        Script::Answers(&[("*", answer(1, "", "Namespace Not Found\n"))]),
     ),
     (
         "d1 migrations apply (default)",
         "applied",
-        Wrangler::Answers(&[("*", answer(0, "Migrations applied.\n", ""))]),
+        Script::Answers(&[("*", answer(0, "Migrations applied.\n", ""))]),
     ),
     (
         "d1 create",
         "created",
-        Wrangler::Answers(&[(
+        Script::Answers(&[(
             "*",
             answer(
                 0,
@@ -344,7 +335,7 @@ const SPECIAL: &[(&str, &str, Wrangler)] = &[
     (
         "d1 create",
         "created, JSON snippet",
-        Wrangler::Answers(&[(
+        Script::Answers(&[(
             "*",
             answer(
                 0,
@@ -356,7 +347,7 @@ const SPECIAL: &[(&str, &str, Wrangler)] = &[
     (
         "d1 create",
         "already exists, listed",
-        Wrangler::Answers(&[
+        Script::Answers(&[
             (
                 "d1\\ create*",
                 answer(
@@ -378,7 +369,7 @@ const SPECIAL: &[(&str, &str, Wrangler)] = &[
     (
         "d1 create",
         "already exists, not listed",
-        Wrangler::Answers(&[
+        Script::Answers(&[
             (
                 "d1\\ create*",
                 answer(1, "", "database with that name already exists\n"),
@@ -389,7 +380,7 @@ const SPECIAL: &[(&str, &str, Wrangler)] = &[
     (
         "d1 create",
         "already exists, listing fails",
-        Wrangler::Answers(&[
+        Script::Answers(&[
             (
                 "d1\\ create*",
                 answer(1, "", "database with that name already exists\n"),
@@ -400,7 +391,7 @@ const SPECIAL: &[(&str, &str, Wrangler)] = &[
     (
         "d1 create",
         "already exists, listing silent",
-        Wrangler::Answers(&[
+        Script::Answers(&[
             (
                 "d1\\ create*",
                 answer(1, "", "database with that name already exists\n"),
@@ -411,12 +402,12 @@ const SPECIAL: &[(&str, &str, Wrangler)] = &[
     (
         "r2 bucket create",
         "created",
-        Wrangler::Answers(&[("*", answer(0, "Created bucket.\n", ""))]),
+        Script::Answers(&[("*", answer(0, "Created bucket.\n", ""))]),
     ),
     (
         "r2 bucket create",
         "already exists, and you own it",
-        Wrangler::Answers(&[(
+        Script::Answers(&[(
             "*",
             answer(
                 1,
@@ -428,7 +419,7 @@ const SPECIAL: &[(&str, &str, Wrangler)] = &[
     (
         "r2 bucket create",
         "already exists, not yours",
-        Wrangler::Answers(&[(
+        Script::Answers(&[(
             "*",
             answer(1, "", "The bucket already exists and is not available.\n"),
         )]),
@@ -436,7 +427,7 @@ const SPECIAL: &[(&str, &str, Wrangler)] = &[
     (
         "vectorize list",
         "listed",
-        Wrangler::Answers(&[(
+        Script::Answers(&[(
             "*",
             answer(0, "[{\"name\":\"other\"},{\"name\":\"docs\"}]\n", ""),
         )]),
@@ -444,17 +435,17 @@ const SPECIAL: &[(&str, &str, Wrangler)] = &[
     (
         "vectorize list",
         "not listed",
-        Wrangler::Answers(&[("*", answer(0, "[{\"name\":\"other\"}]\n", ""))]),
+        Script::Answers(&[("*", answer(0, "[{\"name\":\"other\"}]\n", ""))]),
     ),
     (
         "vectorize list",
         "no permission, code 10000",
-        Wrangler::Answers(&[("*", answer(1, "", "Authentication error [code: 10000]\n"))]),
+        Script::Answers(&[("*", answer(1, "", "Authentication error [code: 10000]\n"))]),
     ),
     (
         "vectorize get",
         "config at the top level",
-        Wrangler::Answers(&[(
+        Script::Answers(&[(
             "*",
             answer(0, "{\"dimensions\":768,\"metric\":\"COSINE\"}\n", ""),
         )]),
@@ -462,7 +453,7 @@ const SPECIAL: &[(&str, &str, Wrangler)] = &[
     (
         "vectorize get",
         "config nested",
-        Wrangler::Answers(&[(
+        Script::Answers(&[(
             "*",
             answer(
                 0,
@@ -474,12 +465,12 @@ const SPECIAL: &[(&str, &str, Wrangler)] = &[
     (
         "vectorize create",
         "created",
-        Wrangler::Answers(&[("*", answer(0, "Created index docs.\n", ""))]),
+        Script::Answers(&[("*", answer(0, "Created index docs.\n", ""))]),
     ),
     (
         "vectorize list-metadata-index",
         "listed",
-        Wrangler::Answers(&[(
+        Script::Answers(&[(
             "*",
             answer(
                 0,
@@ -491,12 +482,12 @@ const SPECIAL: &[(&str, &str, Wrangler)] = &[
     (
         "vectorize create-metadata-index",
         "created",
-        Wrangler::Answers(&[("*", answer(0, "Enqueued.\n", ""))]),
+        Script::Answers(&[("*", answer(0, "Enqueued.\n", ""))]),
     ),
     (
         "vectorize create-metadata-index",
         "already exists",
-        Wrangler::Answers(&[(
+        Script::Answers(&[(
             "*",
             answer(1, "", "metadata index already exists [code: 40024]\n"),
         )]),
@@ -504,7 +495,7 @@ const SPECIAL: &[(&str, &str, Wrangler)] = &[
     (
         "vectorize delete",
         "deleted",
-        Wrangler::Answers(&[
+        Script::Answers(&[
             (
                 "vectorize\\ list*",
                 answer(0, "[{\"name\":\"docs\"}]\n", ""),
@@ -515,12 +506,12 @@ const SPECIAL: &[(&str, &str, Wrangler)] = &[
     (
         "vectorize delete",
         "already gone",
-        Wrangler::Answers(&[("vectorize\\ list*", answer(0, "[]\n", ""))]),
+        Script::Answers(&[("vectorize\\ list*", answer(0, "[]\n", ""))]),
     ),
     (
         "vectorize delete",
         "the delete fails",
-        Wrangler::Answers(&[
+        Script::Answers(&[
             (
                 "vectorize\\ list*",
                 answer(0, "[{\"name\":\"docs\"}]\n", ""),
@@ -534,10 +525,10 @@ const SPECIAL: &[(&str, &str, Wrangler)] = &[
 ];
 
 /// One case as the fixture shows it.
-fn case(operation: &str, run: Run, shape: &str, wrangler: Wrangler) -> String {
+fn case(operation: &str, run: Run, shape: &str, wrangler: Script) -> String {
     let scratch = Scratch::new();
     let provenance = scratch.provenance(wrangler);
-    let result = run(&provenance, &scratch.dir);
+    let result = run(&Wrangler::new(&provenance, &scratch.dir), &scratch.dir);
     let mut out = format!("== {operation} · {shape}\n");
     for call in scratch.calls().lines() {
         out.push_str(&format!("   call: {call}\n"));

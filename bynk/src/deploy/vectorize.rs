@@ -96,28 +96,12 @@ pub(crate) fn drift_message(
     )
 }
 
-/// Run `wrangler vectorize <args…>` from the project root; its stdout on
-/// success, and what wrangler said on failure.
-fn vectorize_command(
-    provenance: &Provenance,
-    args: &[&str],
-    project_root: &Path,
-) -> Result<String, String> {
-    let Some(mut command) = workers::wrangler_command(provenance, "vectorize") else {
-        return Err("wrangler not found".into());
-    };
-    // As for the other resources: run from the project root, where wrangler
-    // cannot load and reject a generated config that is still incomplete.
-    let output = command
-        .args(args)
-        .current_dir(project_root)
-        .output()
-        .map_err(|e| e.to_string())?;
-    if output.status.success() {
-        Ok(String::from_utf8_lossy(&output.stdout).into_owned())
-    } else {
-        Err(with_permission_hint(wrangler_said(&output)))
-    }
+/// One Vectorize call: its stdout on success, and what wrangler said on failure, with the
+/// permission hint when it says the token lacks it. The adapter runs it from the project root,
+/// where wrangler cannot load and reject a generated config that is still incomplete.
+fn vectorize_command(api: &dyn CloudflareApi, op: VectorizeOp<'_>) -> Result<String, String> {
+    api.vectorize(op)
+        .map_err(|e| with_permission_hint(e.to_string()))
 }
 
 /// #3495: Cloudflare answers a token without the Vectorize permission with a
@@ -133,90 +117,62 @@ fn with_permission_hint(said: String) -> String {
 }
 
 /// Whether the account has an index called `name`.
-pub(crate) fn index_exists(
-    provenance: &Provenance,
-    name: &str,
-    project_root: &Path,
-) -> Result<bool, String> {
-    let out = vectorize_command(provenance, &["list", "--json"], project_root)?;
+pub(crate) fn index_exists(api: &dyn CloudflareApi, name: &str) -> Result<bool, String> {
+    let out = vectorize_command(api, VectorizeOp::List)?;
     let names = parse_index_names(&out)
         .ok_or("could not read the list of Vectorize indexes from wrangler's output")?;
     Ok(names.iter().any(|n| n == name))
 }
 
 pub(crate) fn read_index_config(
-    provenance: &Provenance,
+    api: &dyn CloudflareApi,
     name: &str,
-    project_root: &Path,
 ) -> Result<IndexConfig, String> {
-    let out = vectorize_command(provenance, &["get", name, "--json"], project_root)?;
+    let out = vectorize_command(api, VectorizeOp::Get { name })?;
     parse_index_config(&out).ok_or_else(|| {
         format!("could not read the dimensions and metric of `{name}` from wrangler's output, so it was not checked against the source")
     })
 }
 
 pub(crate) fn create_index(
-    provenance: &Provenance,
+    api: &dyn CloudflareApi,
     name: &str,
     declared: &VectorizeDecl,
-    project_root: &Path,
 ) -> Result<(), String> {
-    let dimensions = declared.dimensions.to_string();
     vectorize_command(
-        provenance,
-        &[
-            "create",
+        api,
+        VectorizeOp::Create {
             name,
-            "--dimensions",
-            &dimensions,
-            "--metric",
-            &declared.metric,
-        ],
-        project_root,
+            dimensions: declared.dimensions,
+            metric: &declared.metric,
+        },
     )
     .map(|_| ())
 }
 
 pub(crate) fn existing_metadata_indexes(
-    provenance: &Provenance,
+    api: &dyn CloudflareApi,
     name: &str,
-    project_root: &Path,
 ) -> Result<Vec<String>, String> {
-    let out = vectorize_command(
-        provenance,
-        &["list-metadata-index", name, "--json"],
-        project_root,
-    )?;
+    let out = vectorize_command(api, VectorizeOp::ListMetadataIndex { name })?;
     parse_metadata_indexes(&out)
         .ok_or_else(|| "could not read the metadata indexes from wrangler's output".to_string())
 }
 
 pub(crate) fn create_metadata_index(
-    provenance: &Provenance,
+    api: &dyn CloudflareApi,
     name: &str,
     entry: &str,
-    project_root: &Path,
 ) -> Result<(), String> {
     let (property, ty) = entry
         .split_once(':')
         .ok_or_else(|| format!("`{entry}` is not `name:type`"))?;
-    match vectorize_command(
-        provenance,
-        &[
-            "create-metadata-index",
-            name,
-            "--propertyName",
-            property,
-            "--type",
-            ty,
-        ],
-        project_root,
-    ) {
+    match api.vectorize(VectorizeOp::CreateMetadataIndex { name, property, ty }) {
         Ok(_) => Ok(()),
         // Listed between the listing and this request (Cloudflare builds them
         // asynchronously): the property is there, which is what was wanted.
-        Err(e) if e.contains("metadata index already exists") => Ok(()),
-        Err(e) => Err(e),
+        Err(e) if e.already_exists() => Ok(()),
+        Err(e) => Err(with_permission_hint(e.to_string())),
     }
 }
 
@@ -241,17 +197,16 @@ pub(crate) const METADATA_INDEX_PACING: Pacing = Pacing {
 /// listed on `name`, backing off between polls. `Err` is what could not be read,
 /// or the entries still unlisted at the timeout.
 fn wait_for_metadata_indexes(
-    provenance: &Provenance,
+    api: &dyn CloudflareApi,
     name: &str,
     wanted: &[String],
-    project_root: &Path,
     pacing: Pacing,
 ) -> Result<(), String> {
     let start = Instant::now();
     let mut delay = pacing.first;
     let mut announced = false;
     loop {
-        let listed = existing_metadata_indexes(provenance, name, project_root)?;
+        let listed = existing_metadata_indexes(api, name)?;
         let pending: Vec<&String> = wanted.iter().filter(|w| !listed.contains(*w)).collect();
         if pending.is_empty() {
             if announced {
@@ -295,17 +250,13 @@ fn wait_for_metadata_indexes(
 
 /// Delete the index `name` (`--prune`, after its confirmation). One already
 /// gone is success, as for a queue: the ledger entry goes either way.
-pub(crate) fn delete_vectorize_index(
-    provenance: &Provenance,
-    name: &str,
-    project_root: &Path,
-) -> Result<(), String> {
-    match index_exists(provenance, name, project_root) {
+pub(crate) fn delete_vectorize_index(api: &dyn CloudflareApi, name: &str) -> Result<(), String> {
+    match index_exists(api, name) {
         Ok(false) => return Ok(()),
         Ok(true) => {}
         Err(e) => return Err(e),
     }
-    vectorize_command(provenance, &["delete", name, "--force"], project_root).map(|_| ())
+    vectorize_command(api, VectorizeOp::Delete { name }).map(|_| ())
 }
 
 /// The metadata indexes the declaration wants that the index lacks, and those
@@ -422,8 +373,7 @@ pub(crate) fn apply_vectorize_adoptions(
 /// with the command that makes it, and not created: the index is not ours to
 /// change.
 fn adopt_index(
-    provenance: &Provenance,
-    project_root: &Path,
+    api: &dyn CloudflareApi,
     worker: &str,
     decl: &VectorizeDecl,
     name: &str,
@@ -434,13 +384,13 @@ fn adopt_index(
             decl.binding
         ))
     };
-    if !index_exists(provenance, name, project_root).map_err(&fail)? {
+    if !index_exists(api, name).map_err(&fail)? {
         return Err(DeployFailure::driver(format!(
             "the Vectorize index `{name}`, which bynk.toml adopts for `{worker}`'s `{}`, does not exist on the account; an adopted index is never created, so create it with `wrangler vectorize create {name} --dimensions {} --metric {}`, or remove the `index` entry to have the deploy create one",
             decl.binding, decl.dimensions, decl.metric
         )));
     }
-    let found = read_index_config(provenance, name, project_root).map_err(&fail)?;
+    let found = read_index_config(api, name).map_err(&fail)?;
     if found.dimensions != decl.dimensions || found.metric != normalise_metric(&decl.metric) {
         return Err(DeployFailure::driver(drift_message(
             name,
@@ -450,7 +400,7 @@ fn adopt_index(
             decl,
         )));
     }
-    let existing = existing_metadata_indexes(provenance, name, project_root).map_err(&fail)?;
+    let existing = existing_metadata_indexes(api, name).map_err(&fail)?;
     let (missing, _) = metadata_index_changes(&decl.indexed, &existing);
     for entry in &missing {
         if let Some((property, ty)) = entry.split_once(':') {
@@ -522,10 +472,10 @@ pub(crate) fn apply_vectorize_index(
     step: &VectorizeIndexStep<'_>,
 ) -> Result<Applied<Vectorize>, DeployFailure> {
     let (worker, decl) = (cx.worker, step.decl);
-    let (provenance, project_root) = (cx.tools.provenance, cx.tools.project_root);
+    let api = cx.tools.api;
     let physical = step.physical.clone();
     if decl.adopt.is_some() {
-        adopt_index(provenance, project_root, worker, decl, &physical)?;
+        adopt_index(api, worker, decl, &physical)?;
         let already = step
             .recorded
             .as_ref()
@@ -547,11 +497,9 @@ pub(crate) fn apply_vectorize_index(
             decl.binding
         ))
     };
-    let existed =
-        index_exists(provenance, &physical, project_root).map_err(|e| fail("look up", e))?;
+    let existed = index_exists(api, &physical).map_err(|e| fail("look up", e))?;
     if existed {
-        let found =
-            read_index_config(provenance, &physical, project_root).map_err(|e| fail("check", e))?;
+        let found = read_index_config(api, &physical).map_err(|e| fail("check", e))?;
         let matches =
             found.dimensions == decl.dimensions && found.metric == normalise_metric(&decl.metric);
         if !matches {
@@ -564,7 +512,7 @@ pub(crate) fn apply_vectorize_index(
             )));
         }
     } else {
-        create_index(provenance, &physical, decl, project_root).map_err(|e| fail("create", e))?;
+        create_index(api, &physical, decl).map_err(|e| fail("create", e))?;
     }
     // Recorded before the push, as every created resource is: an
     // interrupted run never forgets an index it made.
@@ -624,34 +572,32 @@ fn provision_metadata_indexes(
     pacing: Pacing,
 ) -> Result<(), DeployFailure> {
     let (worker, environment) = (cx.worker, cx.environment);
-    let (provenance, project_root) = (cx.tools.provenance, cx.tools.project_root);
+    let api = cx.tools.api;
     let fail = |what: &str, e: String| {
         DeployFailure::driver(format!(
             "could not {what} the Vectorize index `{physical}` for `{worker}`'s `{}`: {e}",
             decl.binding
         ))
     };
-    let existing = existing_metadata_indexes(provenance, physical, project_root)
+    let existing = existing_metadata_indexes(api, physical)
         .map_err(|e| fail("read the metadata indexes of", e))?;
     let (missing, removed) = metadata_index_changes(&decl.indexed, &existing);
     if let Some(message) = type_change_message(physical, &missing, &removed) {
         return Err(DeployFailure::driver(message));
     }
     for entry in &missing {
-        create_metadata_index(provenance, physical, entry, project_root)
+        create_metadata_index(api, physical, entry)
             .map_err(|e| fail(&format!("create the metadata index `{entry}` on"), e))?;
     }
     if !missing.is_empty() {
         // Only now is the index safe to write to: a vector upserted before a
         // metadata index is listed is silently left out of it.
-        wait_for_metadata_indexes(provenance, physical, &missing, project_root, pacing).map_err(
-            |e| {
-                DeployFailure::driver(format!(
-                    "the Vectorize index `{physical}` for `{worker}`'s `{}`: {e}",
-                    decl.binding
-                ))
-            },
-        )?;
+        wait_for_metadata_indexes(api, physical, &missing, pacing).map_err(|e| {
+            DeployFailure::driver(format!(
+                "the Vectorize index `{physical}` for `{worker}`'s `{}`: {e}",
+                decl.binding
+            ))
+        })?;
     }
     // Vectors can predate a metadata index only if something already wrote
     // to the index: an adopted one, or one this project's Worker was
@@ -684,11 +630,11 @@ fn provision_metadata_indexes(
 }
 
 /// Each of `worker`'s `Vectorize` indexes, as the deploy provisions them, waiting `pacing` for
-/// their metadata indexes: what the stand-in tests drive.
+/// their metadata indexes: what the recording-fake tests drive.
 #[cfg(test)]
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn provision_vectorize_indexes_paced(
-    provenance: &Provenance,
+    api: &dyn CloudflareApi,
     project_root: &Path,
     worker: &str,
     declared: &Resources,
@@ -700,7 +646,8 @@ pub(crate) fn provision_vectorize_indexes_paced(
     let project = BTreeMap::new();
     let site = Site {
         tools: Tools {
-            provenance,
+            api,
+            provenance: &Provenance::Missing,
             project_root,
         },
         environment,

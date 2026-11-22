@@ -221,6 +221,7 @@ mod tests {
         provision_kind::<AiSearch>(
             Site {
                 tools: Tools {
+                    api: &Wrangler::new(&provenance, Path::new("/nonexistent")),
                     provenance: &provenance,
                     project_root: Path::new("/nonexistent"),
                 },

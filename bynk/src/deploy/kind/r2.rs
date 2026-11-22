@@ -244,13 +244,7 @@ impl ResourceKind for R2 {
             return Ok(Applied::nothing());
         }
         let physical = r2_bucket_name(environment, &bucket.name);
-        create_r2_bucket(
-            cx.tools.provenance,
-            &physical,
-            bucket.jurisdiction.as_deref(),
-            cx.tools.project_root,
-        )
-        .map_err(|e| {
+        create_r2_bucket(cx.tools.api, &physical, bucket.jurisdiction.as_deref()).map_err(|e| {
             DeployFailure::driver(format!(
                 "could not create the R2 bucket `{physical}` for `{worker}`'s `{}`: {e}",
                 bucket.binding
@@ -407,39 +401,15 @@ pub(crate) fn r2_bucket_problem(
 /// the same end state. Run from the project root, as KV and queues are, so
 /// wrangler cannot load and reject an incomplete config.
 pub(crate) fn create_r2_bucket(
-    provenance: &Provenance,
+    api: &dyn CloudflareApi,
     name: &str,
     jurisdiction: Option<&str>,
-    project_root: &Path,
 ) -> Result<(), String> {
-    let Some(mut command) = workers::wrangler_command(provenance, "r2") else {
-        return Err("wrangler not found".into());
-    };
-    command.arg("bucket").arg("create").arg(name);
-    if let Some(jurisdiction) = jurisdiction {
-        command.arg("--jurisdiction").arg(jurisdiction);
+    match api.r2_create(name, jurisdiction) {
+        Ok(()) => Ok(()),
+        Err(e) if e.already_exists() => Ok(()),
+        Err(e) => Err(e.to_string()),
     }
-    let output = command
-        .current_dir(project_root)
-        .output()
-        .map_err(|e| e.to_string())?;
-    if output.status.success() {
-        return Ok(());
-    }
-    let said = wrangler_said(&output);
-    if r2_bucket_already_exists(&said) {
-        return Ok(());
-    }
-    Err(said)
-}
-
-/// Does this `wrangler r2 bucket create` failure just mean the bucket is
-/// already there (and ours)? Cloudflare answers "The bucket you tried to
-/// create already exists, and you own it." (code 10004); a bucket another
-/// account owns says it is "not available" instead, and stays a failure.
-fn r2_bucket_already_exists(said: &str) -> bool {
-    let said = said.to_ascii_lowercase();
-    said.contains("already exists") && said.contains("you own it")
 }
 
 #[cfg(test)]
@@ -448,6 +418,17 @@ mod tests {
 
     #[test]
     fn an_existing_bucket_you_own_is_success_and_anothers_is_not() {
+        let r2_bucket_already_exists = |stderr: &str| {
+            crate::cloudflare::fake::failed(
+                &crate::cloudflare::Op::R2Create {
+                    name: "b",
+                    jurisdiction: None,
+                },
+                "",
+                stderr,
+            )
+            .already_exists()
+        };
         assert!(r2_bucket_already_exists(
             "The bucket you tried to create already exists, and you own it. [code: 10004]"
         ));
@@ -624,6 +605,7 @@ mod tests {
                 lock: &lock,
                 live: (),
                 tools: Tools {
+                    api: &Wrangler::new(&provenance, Path::new("/nonexistent")),
                     provenance: &provenance,
                     project_root: Path::new("/nonexistent"),
                 },

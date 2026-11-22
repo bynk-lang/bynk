@@ -1,9 +1,8 @@
-//! #3479: the Vectorize deploy path, against a fake `wrangler` that logs each
-//! call and answers `vectorize` subcommands from files beside it. The shapes it
+//! #3479: the Vectorize deploy path, against a recording fake account
+//! (`cloudflare::fake::Recording`, 1D.3a) that logs each call and answers the
+//! `vectorize` ones. The shapes it
 //! answers with are the ones `parse_*` reads; whether Cloudflare's wrangler
 //! prints them is not something a test can pin.
-
-#![cfg_attr(not(unix), allow(unused))]
 
 use super::*;
 use std::path::PathBuf;
@@ -26,47 +25,106 @@ fn resources(indexed: &[&str]) -> Resources {
     }
 }
 
-/// A directory holding a fake `wrangler` and the JSON it answers with.
-#[cfg(unix)]
-struct Fake {
-    dir: PathBuf,
+/// What the fake account answers the Vectorize calls with, and what it has seen: the shapes
+/// `parse_*` reads.
+#[derive(Default)]
+struct Account {
+    list: String,
+    get: String,
+    meta: String,
+    /// What `list-metadata-index` answers once a `create-metadata-index` has run: on the `n`th
+    /// poll, or from then on.
+    after: BTreeMap<usize, String>,
+    after_all: Option<String>,
+    created: bool,
+    polls: usize,
+    /// `create-metadata-index` answers that the index is already there.
+    exists: bool,
 }
 
-#[cfg(unix)]
+impl Account {
+    fn answer(&mut self, op: &crate::cloudflare::Op<'_>) -> crate::cloudflare::fake::Reply {
+        use crate::cloudflare::Op;
+        let Op::Vectorize(call) = op else {
+            return Err(crate::cloudflare::WranglerError::exit(
+                op,
+                crate::cloudflare::error::Exit::Code(2),
+                "",
+                "",
+            ));
+        };
+        Ok(match call {
+            VectorizeOp::List => self.list.clone(),
+            VectorizeOp::Get { .. } => self.get.clone(),
+            VectorizeOp::CreateMetadataIndex { .. } => {
+                self.created = true;
+                if self.exists {
+                    return Err(crate::cloudflare::fake::failed(
+                        op,
+                        "",
+                        "metadata index already exists for this name [code: 40004]",
+                    ));
+                }
+                String::new()
+            }
+            VectorizeOp::ListMetadataIndex { .. } if self.created => {
+                let n = self.polls;
+                self.polls += 1;
+                self.after
+                    .get(&n)
+                    .or(self.after_all.as_ref())
+                    .unwrap_or(&self.meta)
+                    .clone()
+            }
+            VectorizeOp::ListMetadataIndex { .. } => self.meta.clone(),
+            VectorizeOp::Create { .. } | VectorizeOp::Delete { .. } => String::new(),
+        })
+    }
+}
+
+/// A recording fake account and a directory for the ledger the run writes.
+struct Fake {
+    dir: PathBuf,
+    account: std::rc::Rc<std::cell::RefCell<Account>>,
+    api: crate::cloudflare::fake::Recording,
+}
+
 impl Fake {
     fn new(tag: &str, list: &str, get: &str, meta: &str) -> Self {
         let dir = std::env::temp_dir().join(format!("bynk-vz-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("list.json"), list).unwrap();
-        std::fs::write(dir.join("get.json"), get).unwrap();
-        std::fs::write(dir.join("meta.json"), meta).unwrap();
-        let script = dir.join("wrangler");
-        // Not `fs::write`: ETXTBSY under parallel tests (see the helper).
-        crate::test_support::write_executable(
-            &script,
-            "#!/bin/sh\nd=$(dirname \"$0\")\necho \"$@\" >> \"$d/calls.log\"\n[ \"$1\" = vectorize ] || exit 2\ncase \"$2\" in\n  list) cat \"$d/list.json\";;\n  get) cat \"$d/get.json\";;\n  create-metadata-index) touch \"$d/created\"; if [ -f \"$d/exists\" ]; then echo \"metadata index already exists for this name [code: 40004]\" >&2; exit 1; fi;;\n  list-metadata-index)\n    if [ -f \"$d/created\" ]; then\n      n=$(cat \"$d/polls\" 2>/dev/null || echo 0); echo $((n+1)) > \"$d/polls\"\n      if [ -f \"$d/after.$n.json\" ]; then cat \"$d/after.$n.json\"; elif [ -f \"$d/after.json\" ]; then cat \"$d/after.json\"; else cat \"$d/meta.json\"; fi\n    else cat \"$d/meta.json\"; fi;;\n  *) exit 0;;\nesac\n",
-        );
-        Self { dir }
-    }
-
-    fn provenance(&self) -> Provenance {
-        Provenance::Path(self.dir.join("wrangler"))
+        let account = std::rc::Rc::new(std::cell::RefCell::new(Account {
+            list: list.into(),
+            get: get.into(),
+            meta: meta.into(),
+            ..Account::default()
+        }));
+        let answering = account.clone();
+        let api =
+            crate::cloudflare::fake::Recording::new(move |op| answering.borrow_mut().answer(op));
+        Self { dir, account, api }
     }
 
     fn calls(&self) -> Vec<String> {
-        std::fs::read_to_string(self.dir.join("calls.log"))
-            .unwrap_or_default()
-            .lines()
-            .map(str::to_string)
-            .collect()
+        self.api.calls()
     }
 
     /// What `list-metadata-index` answers once a `create-metadata-index` has
     /// run, as a `n`th poll (`Some(n)`) or from then on (`None`).
     fn after(&self, poll: Option<usize>, json: &str) {
-        let name = poll.map_or("after.json".to_string(), |n| format!("after.{n}.json"));
-        std::fs::write(self.dir.join(name), json).unwrap();
+        let mut account = self.account.borrow_mut();
+        match poll {
+            Some(n) => {
+                account.after.insert(n, json.to_string());
+            }
+            None => account.after_all = Some(json.to_string()),
+        }
+    }
+
+    /// `create-metadata-index` answers that the index is already there.
+    fn metadata_index_exists(&self) {
+        self.account.borrow_mut().exists = true;
     }
 
     fn polls(&self) -> usize {
@@ -104,7 +162,7 @@ impl Fake {
     ) -> Result<(), DeployFailure> {
         let lock_path = self.dir.join("bynk.lock");
         provision_vectorize_indexes_paced(
-            &self.provenance(),
+            &self.api,
             &self.dir,
             "shop",
             declared,
@@ -113,6 +171,12 @@ impl Fake {
             environment,
             pacing,
         )
+    }
+}
+
+impl Drop for Fake {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.dir);
     }
 }
 
@@ -154,7 +218,6 @@ fn metadata_index_changes_are_additions_and_removals() {
     assert_eq!((missing, removed), (d(&["a:string"]), d(&["c:boolean"])));
 }
 
-#[cfg(unix)]
 #[test]
 fn a_missing_index_is_created_with_its_configuration_then_its_metadata_indexes() {
     let fake = Fake::new("create", "[]", MATCHING, "[]");
@@ -191,7 +254,6 @@ fn a_missing_index_is_created_with_its_configuration_then_its_metadata_indexes()
     );
 }
 
-#[cfg(unix)]
 #[test]
 fn a_matching_index_is_reused_and_never_created_again() {
     let fake = Fake::new(
@@ -216,7 +278,6 @@ fn a_matching_index_is_reused_and_never_created_again() {
     );
 }
 
-#[cfg(unix)]
 #[test]
 fn a_dimension_or_metric_mismatch_fails_and_changes_nothing() {
     for found in [
@@ -253,7 +314,6 @@ fn a_dimension_or_metric_mismatch_fails_and_changes_nothing() {
     }
 }
 
-#[cfg(unix)]
 #[test]
 fn an_unreadable_configuration_fails_rather_than_passing() {
     let fake = Fake::new("opaque", r#"[{"name":"shop-docs"}]"#, "{}", "[]");
@@ -266,7 +326,6 @@ fn an_unreadable_configuration_fails_rather_than_passing() {
     );
 }
 
-#[cfg(unix)]
 #[test]
 fn a_later_metadata_index_is_created_and_a_removed_one_is_left() {
     let fake = Fake::new(
@@ -291,16 +350,15 @@ fn a_later_metadata_index_is_created_and_a_removed_one_is_left() {
     assert!(calls.iter().all(|c| !c.contains("delete-metadata-index")));
 }
 
-#[cfg(unix)]
 #[test]
 fn pruning_deletes_an_existing_index_and_is_quiet_about_one_already_gone() {
     let fake = Fake::new("prune", r#"[{"name":"shop-old"}]"#, MATCHING, "[]");
-    delete_vectorize_index(&fake.provenance(), "shop-old", &fake.dir).unwrap();
+    delete_vectorize_index(&fake.api, "shop-old").unwrap();
     assert!(
         fake.calls()
             .contains(&"vectorize delete shop-old --force".to_string())
     );
-    delete_vectorize_index(&fake.provenance(), "shop-gone", &fake.dir).unwrap();
+    delete_vectorize_index(&fake.api, "shop-gone").unwrap();
     assert_eq!(
         fake.calls().iter().filter(|c| c.contains("delete")).count(),
         1
@@ -418,7 +476,6 @@ fn moving_back_to_a_left_index_does_not_make_the_live_one_an_orphan() {
     );
 }
 
-#[cfg(unix)]
 fn adopting(name: &str, indexed: &[&str]) -> Resources {
     let mut declared = resources(indexed);
     declared.vectorize_indexes[0].adopt = Some(name.to_string());
@@ -426,7 +483,6 @@ fn adopting(name: &str, indexed: &[&str]) -> Resources {
 }
 
 #[test]
-#[cfg(unix)]
 fn an_adopted_index_that_matches_is_recorded_as_adopted_and_never_touched() {
     let fake = Fake::new(
         "adopt",
@@ -473,7 +529,6 @@ fn a_retyped_metadata_index_is_refused_before_anything_is_created() {
     assert_eq!(type_change_message("shop-docs", &m, &r), None);
 }
 
-#[cfg(unix)]
 #[test]
 fn it_waits_for_every_new_metadata_index_to_be_listed_before_returning() {
     // `create-metadata-index` only enqueues: the listing is empty for two
@@ -500,7 +555,6 @@ fn it_waits_for_every_new_metadata_index_to_be_listed_before_returning() {
     assert_eq!(fake.polls(), 5, "{:?}", fake.calls());
 }
 
-#[cfg(unix)]
 #[test]
 fn an_index_that_never_appears_fails_the_deploy_and_says_to_run_it_again() {
     let fake = Fake::new("timeout", "[]", MATCHING, "[]");
@@ -531,7 +585,6 @@ fn an_index_that_never_appears_fails_the_deploy_and_says_to_run_it_again() {
     );
 }
 
-#[cfg(unix)]
 #[test]
 fn a_deploy_that_creates_no_metadata_index_does_not_wait() {
     let fake = Fake::new(
@@ -546,13 +599,12 @@ fn a_deploy_that_creates_no_metadata_index_does_not_wait() {
     assert_eq!(fake.polls(), 1, "{:?}", fake.calls());
 }
 
-#[cfg(unix)]
 #[test]
 fn a_metadata_index_listed_between_the_listing_and_the_create_is_not_a_failure() {
     // Cloudflare answers `already exists` for a property that has just become
     // listed; the deploy goes on to wait for it rather than failing.
     let fake = Fake::new("exists", "[]", MATCHING, "[]");
-    std::fs::write(fake.dir.join("exists"), "").unwrap();
+    fake.metadata_index_exists();
     fake.after(
         None,
         r#"[{"propertyName":"category","indexType":"String"}]"#,
@@ -563,7 +615,6 @@ fn a_metadata_index_listed_between_the_listing_and_the_create_is_not_a_failure()
 }
 
 #[test]
-#[cfg(unix)]
 fn an_adopted_index_that_is_missing_fails_and_is_not_created() {
     let fake = Fake::new("adopt-missing", "[]", MATCHING, "[]");
     let mut lock = DeployLock::default();
@@ -588,7 +639,6 @@ fn an_adopted_index_that_is_missing_fails_and_is_not_created() {
 }
 
 #[test]
-#[cfg(unix)]
 fn an_adopted_index_that_drifted_fails_and_a_missing_metadata_index_is_not_created() {
     let drifted = Fake::new(
         "adopt-drift",

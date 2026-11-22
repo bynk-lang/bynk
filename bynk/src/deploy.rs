@@ -30,6 +30,7 @@ use std::process::{ExitCode, Stdio};
 use bynk_check::contract_compat::{Compatibility, ServiceShape, check_call};
 use serde::{Deserialize, Serialize};
 
+use crate::cloudflare::{CloudflareApi, VectorizeOp, Wrangler};
 use crate::doctor::{self, Capability, Context, DoctorOptions, Report};
 use crate::probe::{self, Provenance, Toolbox};
 use crate::report::{self, Format};
