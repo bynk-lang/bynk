@@ -35,7 +35,8 @@ for (const page of PAGES) {
   const html = fs.readFileSync(path.join(dist, page), "utf8");
   for (const href of new Set(hrefs(html))) {
     if (!href.startsWith("/") || href.startsWith("//") || href.startsWith("/blog/") || href === "/blog") continue;
-    const [pathname, fragment] = href.split("#");
+    const [withQuery, fragment] = href.split("#");
+    const pathname = withQuery.split("?")[0];
     checked++;
     const file = fileFor(pathname);
     if (!file) {

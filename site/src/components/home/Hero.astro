@@ -13,7 +13,7 @@ import { readSource, playgroundLink } from "../../lib/examples.mjs";
 
 const SNIPPET = "site/src/snippets/home/greeter.bynk";
 
-const { hero } = Astro.locals.starlightRoute.entry.data;
+const { hero, title } = Astro.locals.starlightRoute.entry.data;
 const code = readSource(SNIPPET);
 const runHref = await playgroundLink(code);
 const actions = hero?.actions ?? [];
@@ -22,7 +22,7 @@ const actions = hero?.actions ?? [];
 <div class="home-hero not-content">
   <div class="words">
     <p class="eyebrow">Pre-1.0 · specified in small increments</p>
-    <h1 id="_top">{hero?.title}</h1>
+    <h1 id="_top">{hero?.title ?? title}</h1>
     {hero?.tagline && <p class="lede" set:html={hero.tagline} />}
     {
       actions.length > 0 && (

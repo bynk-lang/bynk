@@ -1,7 +1,9 @@
 ---
 // "Four ways in" (web presence slice 8): one card for each surface, with three
-// deep links into it. The link checker in the site's CI (check-home-links.mjs)
-// fails the build if any of them stops resolving.
+// deep links into it. The site's CI (scripts/check-shell-links.mjs) fails if
+// any of the docs links stops resolving. The Blog card's posts are on the
+// blog, another build, so nothing here checks them: if a post's slug changes
+// there, change it here.
 const ways = [
   {
     eyebrow: "Learn",

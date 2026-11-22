@@ -36,7 +36,23 @@ async function load() {
     const data = JSON.parse(text);
     const posts = Array.isArray(data) ? data : data.posts;
     if (!Array.isArray(posts)) throw new Error("no posts array");
-    return posts.filter((p) => p && typeof p.title === "string" && typeof p.url === "string" && p.date);
+    // Keep only well-formed posts, so nothing from the list can fail the
+    // page as it renders: a parseable date, a version that is a string, and
+    // a URL on the blog itself (relative under /blog/, or absolute on
+    // bynk-lang.org/blog/).
+    return posts.filter(
+      (p) =>
+        p &&
+        typeof p.title === "string" &&
+        typeof p.url === "string" &&
+        /^(https:\/\/bynk-lang\.org)?\/blog\//.test(p.url) &&
+        typeof p.date === "string" &&
+        !Number.isNaN(Date.parse(p.date)) &&
+        (p.summary === undefined || typeof p.summary === "string") &&
+        (p.series === undefined || typeof p.series === "string") &&
+        (p.level === undefined || typeof p.level === "string") &&
+        (p.bynkVersion === undefined || typeof p.bynkVersion === "string"),
+    );
   } catch (e) {
     console.warn(`[blog-posts] could not read ${source} (${e instanceof Error ? e.message : e}); "From the blog" shows only its link`);
     return [];
