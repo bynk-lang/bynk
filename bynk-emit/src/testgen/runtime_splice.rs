@@ -109,6 +109,11 @@ impl TestRuntimeModule {
         self.row().2
     }
 
+    /// The module's text as one statement, ready to splice into a generated test module.
+    pub(super) fn splice(self) -> TsStmt {
+        TsStmt::raw(self.source().to_string(), None)
+    }
+
     /// The modules this one's text uses names from, which a test module has to splice first.
     pub(super) fn deps(self) -> Vec<TestRuntimeModule> {
         self.row()
@@ -122,11 +127,6 @@ impl TestRuntimeModule {
             })
             .collect()
     }
-}
-
-/// A module's text as one statement, ready to splice into a generated test module.
-pub(super) fn splice(module: TestRuntimeModule) -> TsStmt {
-    TsStmt::raw(module.source().to_string(), None)
 }
 
 /// Debug check (Decision C): every fragment spliced into `stmts` comes after each fragment it
@@ -174,7 +174,7 @@ pub(super) fn checked_program(stmts: Vec<TsStmt>) -> TsProgram {
 /// environment).
 pub(super) fn run_id_stmt(remote: bool) -> TsStmt {
     if remote {
-        splice(TestRuntimeModule::RunId)
+        TestRuntimeModule::RunId.splice()
     } else {
         TsStmt::const_stmt(
             TsBindingName::Ident("__bynkRunId".to_string()),

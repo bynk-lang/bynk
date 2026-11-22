@@ -142,10 +142,10 @@ pub(super) fn emit_system_job_support(
     }
     let mut code = Vec::new();
     if !drivers.is_empty() {
-        code.push(splice(TestRuntimeModule::Jobs));
+        code.push(TestRuntimeModule::Jobs.splice());
         // #3328: only a target with an email service carries the email driver.
         if !services.email.is_empty() {
-            code.push(splice(TestRuntimeModule::JobsEmail));
+            code.push(TestRuntimeModule::JobsEmail.splice());
         }
         code.extend(drivers);
     }

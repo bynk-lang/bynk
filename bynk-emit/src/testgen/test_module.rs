@@ -356,7 +356,7 @@ pub(super) fn emit_test_module(
     // fires (property helpers, history helpers, observation helpers, stub
     // helpers, or — if this module has none of those — the deps factory,
     // always last in that chain and so the guaranteed fallback).
-    stmts.push(splice(TestRuntimeModule::Expectation));
+    stmts.push(TestRuntimeModule::Expectation.splice());
     // #1883, slice 3: the embedded files and `__bynkAssetGet`, for an asset
     // fetch in a case.
     if let Some(text) = &asset_harness {
@@ -377,7 +377,7 @@ pub(super) fn emit_test_module(
     // double its deps carry as `__exec`, and the settle helper that awaits
     // the collected `waitUntil` promises after each addressed call.
     if uses_send {
-        stmts.push(splice(TestRuntimeModule::Send));
+        stmts.push(TestRuntimeModule::Send.splice());
     }
     // #2137: a module whose cases `advance Clock` gets the harness clock, and
     // its `Clock` double reads it (fresh per case, from the epoch).
@@ -399,9 +399,9 @@ pub(super) fn emit_test_module(
     let virtual_time = module_is_virtual_time(target_name, target_kind, stubs, unit_tables);
     if virtual_time {
         runtime_use.note_virtual_time();
-        stmts.push(splice(TestRuntimeModule::VirtualTime));
+        stmts.push(TestRuntimeModule::VirtualTime.splice());
     } else if uses_advance {
-        stmts.push(splice(TestRuntimeModule::Clock));
+        stmts.push(TestRuntimeModule::Clock.splice());
     }
     let uses_advance = uses_advance || virtual_time;
     let mut suppress_next_blank = true;
@@ -433,7 +433,7 @@ pub(super) fn emit_test_module(
             .iter()
             .any(|&i| parsed[i].test().is_some_and(|t| !t.properties.is_empty()));
     if has_properties {
-        let mut stmt = splice(TestRuntimeModule::Property);
+        let mut stmt = TestRuntimeModule::Property.splice();
         if suppress_next_blank {
             stmt.no_blank_before = true;
             suppress_next_blank = false;
@@ -449,7 +449,7 @@ pub(super) fn emit_test_module(
             .is_some_and(|t| t.properties.iter().any(prop_is_history))
     });
     if has_history_properties {
-        let mut stmt = splice(TestRuntimeModule::History);
+        let mut stmt = TestRuntimeModule::History.splice();
         if suppress_next_blank {
             stmt.no_blank_before = true;
             suppress_next_blank = false;

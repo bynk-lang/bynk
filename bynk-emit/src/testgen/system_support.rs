@@ -133,7 +133,7 @@ pub(super) type RouteBodyMap =
 /// #1479: `code` is now real [`TsStmt`]s (was pre-printed `String`) — the
 /// HS256 signer block (`__bynkNow`/`__b64url`/`__bytesB64url`/
 /// `__bynkSignHs256`) is committed `.ts` source (`runtime/src/testing/
-/// jwt_signer.ts`, #1485), spliced in via [`splice`] and
+/// jwt_signer.ts`, #1485), spliced in via [`TestRuntimeModule::splice`] and
 /// carried as one [`bynk_ts::TsStmtKind::Raw`] statement, the same carrier
 /// this track's earlier still-`String`-typed-sibling conversions already
 /// used.
@@ -1349,19 +1349,19 @@ pub(super) fn emit_system_http_support(
     // at `runtime/src/testing/jwt_signer.ts`, the same committed-`.ts`-file
     // treatment `expectation_runtime_helpers`/`stub_runtime_helpers` already
     // get, rather than an unexplained raw string literal with `\`-continuations.
-    let mut code = vec![splice(TestRuntimeModule::JwtSigner)];
+    let mut code = vec![TestRuntimeModule::JwtSigner.splice()];
     // #3052: the test issuer an `Oidc` route's drivers mint tokens with.
     if has_oidc {
         // The remote flag is the first line of the issuer's text, so the two print as one block.
         let mut remote_flag = oidc_remote_flag(remote);
         remote_flag.no_blank_before = true;
         code.push(remote_flag);
-        let mut issuer = splice(TestRuntimeModule::OidcIssuer);
+        let mut issuer = TestRuntimeModule::OidcIssuer.splice();
         issuer.no_blank_before = true;
         code.push(issuer);
     }
     if signs_hmac {
-        let mut signer = splice(TestRuntimeModule::HmacSigner);
+        let mut signer = TestRuntimeModule::HmacSigner.splice();
         signer.no_blank_before = true;
         code.push(signer);
     }
