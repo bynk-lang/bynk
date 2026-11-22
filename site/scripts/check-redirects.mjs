@@ -47,8 +47,10 @@ const PER_RULE_LIMIT = 5;
  */
 
 /**
- * Parse a `_redirects` file: one `from to [code]` rule per line; `#` comments
- * and blank lines are ignored. Malformed lines are returned, not thrown.
+ * Parse a `_redirects` file: one `from to [code]` rule per line; lines that
+ * start with `#` and blank lines are ignored. Cloudflare has no trailing
+ * comments, so a `#` after a rule makes too many fields and the line is
+ * malformed (Cloudflare would drop it). Malformed lines are returned, not thrown.
  * @param {string} text
  * @returns {{ rules: Rule[], malformed: { line: number, text: string, reason: string }[] }}
  */
@@ -58,8 +60,8 @@ export function parseRedirects(text) {
   const malformed = [];
   text.split("\n").forEach((raw, i) => {
     const line = i + 1;
-    const body = raw.replace(/#.*$/, "").trim();
-    if (body === "") return;
+    const body = raw.trim();
+    if (body === "" || body.startsWith("#")) return;
     const fields = body.split(/\s+/);
     if (fields.length < 2 || fields.length > 3) {
       malformed.push({ line, text: raw, reason: "expected `from to [code]`" });
@@ -205,14 +207,21 @@ export function checkRedirects(rules, routes, options = {}) {
   //    before Cloudflare's own `/x` → `/x/`, so a rule for the slashless form
   //    hides the page too.
   const pages = [...routes].filter((r) => r.endsWith("/") || !/\.[a-z0-9]+$/i.test(r));
+  /** @type {Map<Rule, number>} */
+  const shadowed = new Map();
   for (const page of pages) {
     const forms = page.endsWith("/") && page !== "/" ? [page, page.slice(0, -1)] : [page];
     for (const form of forms) {
       const hit = applyRedirects(rules, form);
       if (hit && !allowShadow.has(hit.rule.from)) {
-        report(hit.rule, `shadows the live page ${page} (a request for ${form} is redirected)`);
+        const n = (shadowed.get(hit.rule) ?? 0) + 1;
+        shadowed.set(hit.rule, n);
+        if (n <= PER_RULE_LIMIT) report(hit.rule, `shadows the live page ${page} (a request for ${form} is redirected)`);
       }
     }
+  }
+  for (const [rule, n] of shadowed) {
+    if (n > PER_RULE_LIMIT) report(rule, `… and ${n - PER_RULE_LIMIT} more live paths it shadows`);
   }
 
   rules.forEach((rule, index) => {
@@ -245,7 +254,9 @@ export function checkRedirects(rules, routes, options = {}) {
         const toFilled = fillPattern(toPrefix, values);
         const fromFilled = fillPattern(fromPrefix, values);
         for (const page of pages) {
+          // `/new` as a prefix must not pick up `/newer/…`.
           if (!page.startsWith(toFilled)) continue;
+          if (!toFilled.endsWith("/") && page !== toFilled && page[toFilled.length] !== "/") continue;
           const old = fromFilled + page.slice(toFilled.length);
           tried.push(old);
           if (old.endsWith("/") && old.length > 1) tried.push(old.slice(0, -1));

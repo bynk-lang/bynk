@@ -272,8 +272,11 @@ rest are Rust drift-guard tests and Node `--check` scripts that CI runs.
    still exists, can never apply because an earlier rule catches its paths, or
    sends a reader to a page that does not exist. For a `/*` splat it maps every
    page under the target folder back to its old path, with and without the
-   trailing slash; for `/d/:code` it tries a few registry codes. Run it after
-   `npm run build` whenever you move or retire a page.
+   trailing slash; for `/d/:code` it tries a few registry codes. It knows only
+   the pages that exist now, not the old ones, so it cannot tell that a page
+   which used to be under a moved folder has no counterpart at the new
+   address; check that by hand when a move also renames or drops pages. Run it
+   after `npm run build` whenever you move or retire a page.
 
 4. **Drift checks.** `node site/scripts/generate-sidebar.mjs --check` and
    `node site/scripts/build-llms-full.mjs --check` fail CI if the committed

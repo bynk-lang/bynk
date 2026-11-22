@@ -6,8 +6,11 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 
-import { applyRedirects, checkRedirects, parseRedirects, resolves } from "./check-redirects.mjs";
+import { applyRedirects, checkRedirects, distRoutes, parseRedirects, resolves, sampleCodes } from "./check-redirects.mjs";
 
 const rules = (/** @type {string} */ text) => {
   const parsed = parseRedirects(text);
@@ -18,13 +21,26 @@ const target = (/** @type {string} */ text, /** @type {string} */ path) => apply
 
 // --- parsing ---------------------------------------------------------------
 
-test("comments and blank lines are ignored; the status defaults to 302", () => {
-  const parsed = parseRedirects("# a comment\n\n/a /b 301\n/c /d   # trailing comment\n");
+test("comment lines and blank lines are ignored; the status defaults to 302", () => {
+  const parsed = parseRedirects("# a comment\n  # indented comment\n\n/a /b 301\n/c /d\n");
   assert.deepEqual(parsed.rules, [
-    { from: "/a", to: "/b", code: 301, line: 3 },
-    { from: "/c", to: "/d", code: 302, line: 4 },
+    { from: "/a", to: "/b", code: 301, line: 4 },
+    { from: "/c", to: "/d", code: 302, line: 5 },
   ]);
   assert.deepEqual(parsed.malformed, []);
+});
+
+// Cloudflare only treats a line that starts with `#` as a comment; it would
+// drop a rule with a trailing comment, so the checker must not pass it.
+test("a trailing comment makes the rule malformed", () => {
+  const { rules: parsed, malformed } = parseRedirects("/c /d 301 # moved\n/e /f # moved\n");
+  assert.deepEqual(parsed, []);
+  assert.deepEqual(malformed.map((m) => m.line), [1, 2]);
+});
+
+test("a #fragment in a target is kept", () => {
+  assert.equal(target("/old/ /new/#part 301\n", "/old/"), "/new/#part");
+  assert.ok(resolves(new Set(["/new/"]), "/new/#part"));
 });
 
 test("malformed lines are reported with their line number", () => {
@@ -129,6 +145,22 @@ test("a rule for a live page's slashless form shadows it too", () => {
   assert.match(problems[0].problem, /shadows the live page \/book\/ \(a request for \/book is redirected\)/);
 });
 
+test("a splat prefix without a slash does not take pages from a longer folder", () => {
+  // Were /newer/x/ taken as a page under `/new`, its "old path" /older/x/
+  // would be tried for the splat rule and land on the missing /gone/.
+  const site = new Set(["/new/", "/newer/x/"]);
+  const text = "/older/x/ /gone/ 301\n/old /new/ 301\n/old* /new:splat 301\n";
+  const problems = checkRedirects(rules(text), site, SAMPLES);
+  assert.deepEqual(problems.map((p) => p.line), [1], problems.map((p) => p.problem).join("\n"));
+});
+
+test("shadow reports are capped per rule", () => {
+  const site = new Set(Array.from({ length: 20 }, (_, i) => `/reference/p${i}/`));
+  const problems = checkRedirects(rules("/reference/* /book/ 301\n"), new Set([...site, "/book/"]), SAMPLES);
+  assert.equal(problems.filter((p) => p.problem.startsWith("shadows")).length, 5);
+  assert.ok(problems.some((p) => p.problem === "… and 35 more live paths it shadows"));
+});
+
 test("a splat over a live folder is reported", () => {
   const problems = problemsFor(`/reference/spec/* /book/ 301\n${GOOD}`);
   assert.ok(problems.some((p) => /shadows the live page \/reference\/spec\/grammar\//.test(p.problem)));
@@ -182,4 +214,30 @@ test("a placeholder with no sample values is reported", () => {
 
 test("the rustdoc targets are exempt", () => {
   assert.deepEqual(problemsFor("/docs/api /reference/api/ 301\n/docs/api/* /reference/api/:splat 301\n"), []);
+});
+
+// --- the route model and the sample codes -----------------------------------
+
+test("distRoutes maps index.html to the folder, x.html to /x and assets to themselves", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "redirects-"));
+  try {
+    for (const rel of ["index.html", "book/index.html", "book/a/index.html", "404.html", "llms.txt", "_astro/x.css"]) {
+      fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
+      fs.writeFileSync(path.join(dir, rel), "");
+    }
+    assert.deepEqual([...distRoutes(dir)].sort(), ["/", "/404", "/_astro/x.css", "/book/", "/book/a/", "/llms.txt"]);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("sampleCodes takes the first, middle and last registry codes", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "redirects-"));
+  try {
+    const file = path.join(dir, "diagnostics.json");
+    fs.writeFileSync(file, JSON.stringify(["a", "b", "c", "d", "e"].map((code) => ({ code }))));
+    assert.deepEqual(sampleCodes(file), ["a", "c", "e"]);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
