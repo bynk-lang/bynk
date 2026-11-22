@@ -167,8 +167,13 @@ impl Listings for RestListings {
             KindId::Queue => self.paged("/queues", "queue_name"),
             KindId::Vectorize => self.paged("/vectorize/v2/indexes", "name"),
             // Neither a Hyperdrive config's name nor a rate limiter's id is checked against the
-            // account: the plan never asks.
-            KindId::Hyperdrive | KindId::RateLimit => Err(format!(
+            // account, nor anything linked or adopted: the plan never asks.
+            KindId::Hyperdrive
+            | KindId::RateLimit
+            | KindId::StoredSecret
+            | KindId::AiSearch
+            | KindId::MtlsCertificate
+            | KindId::ContainerImage => Err(format!(
                 "the account's {} are not listed",
                 kind.account_noun()
             )),

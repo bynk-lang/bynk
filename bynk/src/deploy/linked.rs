@@ -584,38 +584,6 @@ pub(crate) fn link_mtls_for_run(
     links.problems.is_empty().then_some(links.linked)
 }
 
-/// Record the instances `worker`'s `AiSearch` bindings were linked to, before
-/// the push. Looked up in [`link_ai_search_for_run`], which stops the run when
-/// one is missing, so reaching here means each was found.
-pub(crate) fn record_ai_search_links(
-    worker: &str,
-    declared: &Resources,
-    lock: &mut DeployLock,
-    lock_path: &Path,
-    environment: &str,
-) -> Result<(), DeployFailure> {
-    let mut changed = false;
-    for decl in &declared.ai_search {
-        changed |= lock.record_ai_search(
-            environment,
-            worker,
-            &decl.binding,
-            AiSearchLink {
-                instance: decl.instance.clone(),
-            },
-        );
-    }
-    if changed {
-        write_lock(lock_path, lock).map_err(|e| {
-            DeployFailure::driver(format!(
-                "linked `{worker}`'s AI Search instances but could not record them in {}: {e}",
-                lock_path.display()
-            ))
-        })?;
-    }
-    Ok(())
-}
-
 /// The account lookups a run does before it confirms: every stored secret and (#3513 A) every mTLS
 /// certificate of `order` resolved against the account, and (#3302) every `@allowedSenders` domain
 /// checked, each problem printed, `None` when any was found (the run stops there, with nothing
@@ -663,138 +631,6 @@ fn link_stored_secrets_for_run(
             None
         }
     }
-}
-
-/// Record what `worker`'s stored secrets were linked to and write the stores'
-/// ids into its generated config, before the push. Linked in
-/// [`link_stored_secrets`], so a binding with no id here is a bug, not a user
-/// error.
-pub(crate) fn record_links(
-    worker: &str,
-    declared: &Resources,
-    linked: &BTreeMap<(String, String), String>,
-    lock: &mut DeployLock,
-    lock_path: &Path,
-    config: &Path,
-    environment: &str,
-) -> Result<(), DeployFailure> {
-    let mut store_ids = BTreeMap::new();
-    let mut changed = false;
-    for decl in &declared.stored_secrets {
-        let Some(store_id) = linked.get(&(worker.to_string(), decl.binding.clone())) else {
-            return Err(DeployFailure::driver(format!(
-                "`{}` of `{worker}` was not linked to a Secrets Store before the push",
-                decl.binding
-            )));
-        };
-        changed |= lock.record_stored_secret(
-            environment,
-            worker,
-            &decl.binding,
-            StoredSecretLink {
-                store: decl.store.clone(),
-                store_id: store_id.clone(),
-                secret: decl.secret.clone(),
-            },
-        );
-        store_ids.insert(decl.binding.clone(), store_id.clone());
-    }
-    if changed {
-        write_lock(lock_path, lock).map_err(|e| {
-            DeployFailure::driver(format!(
-                "linked `{worker}`'s Secrets Store secrets but could not record them in {}: {e}",
-                lock_path.display()
-            ))
-        })?;
-    }
-    if !store_ids.is_empty() && !materialise_stored_secret_stores(config, &store_ids) {
-        return Err(DeployFailure::driver(format!(
-            "could not materialise the Secrets Store ids into `{worker}`'s generated configuration"
-        )));
-    }
-    Ok(())
-}
-
-/// Record what `worker`'s linked resources (stored secrets, mTLS certificates, AI Search instances)
-/// were linked to, before the push, writing the ids into its generated config. All were looked up
-/// in [`link_for_run`] and [`link_ai_search_for_run`], which stop the run when one is missing.
-pub(crate) fn record_linked_resources(
-    worker: &str,
-    declared: &Resources,
-    linked: &BTreeMap<(String, String), String>,
-    lock: &mut DeployLock,
-    lock_path: &Path,
-    config: &Path,
-    environment: &str,
-) -> Result<(), DeployFailure> {
-    record_links(
-        worker,
-        declared,
-        linked,
-        lock,
-        lock_path,
-        config,
-        environment,
-    )?;
-    record_mtls_links(
-        worker,
-        declared,
-        linked,
-        lock,
-        lock_path,
-        config,
-        environment,
-    )?;
-    record_ai_search_links(worker, declared, lock, lock_path, environment)
-}
-
-/// Record the certificates `worker`'s `MtlsCertificate` bindings were linked to, and write their ids
-/// into its generated config, before the push. Linked in [`link_mtls`], so a binding with no id
-/// here is a bug, not a user error. Only a certificate's name and id are recorded: no key
-/// material crossed the wire, so none can be written.
-pub(crate) fn record_mtls_links(
-    worker: &str,
-    declared: &Resources,
-    linked: &BTreeMap<(String, String), String>,
-    lock: &mut DeployLock,
-    lock_path: &Path,
-    config: &Path,
-    environment: &str,
-) -> Result<(), DeployFailure> {
-    let mut ids = BTreeMap::new();
-    let mut changed = false;
-    for decl in &declared.mtls_certificates {
-        let Some(id) = linked.get(&(worker.to_string(), decl.binding.clone())) else {
-            return Err(DeployFailure::driver(format!(
-                "`{}` of `{worker}` was not linked to an mTLS certificate before the push",
-                decl.binding
-            )));
-        };
-        changed |= lock.record_mtls_certificate(
-            environment,
-            worker,
-            &decl.binding,
-            MtlsCertificateLink {
-                certificate: decl.certificate.clone(),
-                certificate_id: id.clone(),
-            },
-        );
-        ids.insert(decl.binding.clone(), id.clone());
-    }
-    if changed {
-        write_lock(lock_path, lock).map_err(|e| {
-            DeployFailure::driver(format!(
-                "linked `{worker}`'s mTLS certificates but could not record them in {}: {e}",
-                lock_path.display()
-            ))
-        })?;
-    }
-    if !ids.is_empty() && !materialise_mtls_certificates(config, &ids) {
-        return Err(DeployFailure::driver(format!(
-            "could not materialise the mTLS certificate ids into `{worker}`'s generated configuration"
-        )));
-    }
-    Ok(())
 }
 
 /// Whether any Worker of `order` has a linked secret to look up.
@@ -1044,6 +880,36 @@ mod tests {
         dir
     }
 
+    /// Record `K`'s links of `worker`, as the deploy does before the push, and write the ids they
+    /// bind into `config`.
+    fn link_kind<K: ResourceKind>(
+        worker: &str,
+        declared: &Resources,
+        linked: &BTreeMap<(String, String), String>,
+        lock: &mut DeployLock,
+        lock_path: &Path,
+        config: &Path,
+        environment: &str,
+    ) -> Result<(), DeployFailure> {
+        let provenance = Provenance::Path("/nonexistent/wrangler".into());
+        let project = BTreeMap::new();
+        let site = Site {
+            tools: Tools {
+                provenance: &provenance,
+                project_root: Path::new("/nonexistent"),
+            },
+            environment,
+            worker,
+            project: &project,
+        };
+        let lives = Lives {
+            linked: Some(linked),
+            ..Lives::default()
+        };
+        let bound = provision_kind::<K>(site, declared, lock, lock_path, lives)?;
+        K::materialise(config, worker, &bound)
+    }
+
     const CONFIG: &str = "name = \"shop\"\n\n[[secrets_store_secrets]]\nbinding = \"SECRET_STRIPE_KEY\"\nstore_id = \"payments\" # the store's name; its id is set at deploy time\nsecret_name = \"stripe-live\"\n";
 
     #[test]
@@ -1062,11 +928,13 @@ mod tests {
         )]);
         let mut lock = DeployLock::default();
         let lock_path = dir.join(LOCK_FILE);
-        record_links(
+        link_kind::<StoredSecret>(
             "shop", &declared, &linked, &mut lock, &lock_path, &config, "staging",
         )
         .unwrap();
-        let link = recorded_stored_secret(&lock, "shop", "SECRET_STRIPE_KEY", "staging").unwrap();
+        let link = lock
+            .recorded::<StoredSecret>("staging", "shop", "SECRET_STRIPE_KEY")
+            .unwrap();
         assert_eq!(
             (
                 link.store.as_str(),
@@ -1086,7 +954,7 @@ mod tests {
         );
         // A second run with the same link changes nothing.
         let before = std::fs::read_to_string(&lock_path).unwrap();
-        record_links(
+        link_kind::<StoredSecret>(
             "shop", &declared, &linked, &mut lock, &lock_path, &config, "staging",
         )
         .unwrap();
@@ -1096,12 +964,12 @@ mod tests {
             ("shop".to_string(), "SECRET_STRIPE_KEY".to_string()),
             "store-2".to_string(),
         )]);
-        record_links(
+        link_kind::<StoredSecret>(
             "shop", &declared, &relinked, &mut lock, &lock_path, &config, "staging",
         )
         .unwrap();
         assert_eq!(
-            recorded_stored_secret(&lock, "shop", "SECRET_STRIPE_KEY", "staging")
+            lock.recorded::<StoredSecret>("staging", "shop", "SECRET_STRIPE_KEY")
                 .unwrap()
                 .store_id,
             "store-2"
@@ -1119,7 +987,7 @@ mod tests {
             "payments",
             "stripe-live",
         )]);
-        let err = record_links(
+        let err = link_kind::<StoredSecret>(
             "shop",
             &declared,
             &BTreeMap::new(),
@@ -1295,22 +1163,39 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("bynk-ai-search-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("bynk.deploy.lock");
+        let config = dir.join("wrangler.toml");
         let mut lock = DeployLock::default();
-        record_ai_search_links("shop-ask", &declared, &mut lock, &path, "production").unwrap();
+        link_kind::<AiSearch>(
+            "shop-ask",
+            &declared,
+            &BTreeMap::new(),
+            &mut lock,
+            &path,
+            &config,
+            "production",
+        )
+        .unwrap();
         assert_eq!(
-            recorded_ai_search(&lock, "shop-ask", "AI_SEARCH_KB", "production"),
+            lock.recorded::<AiSearch>("production", "shop-ask", "AI_SEARCH_KB"),
             Some(&AiSearchLink {
                 instance: "support-docs".into()
             })
         );
-        assert!(!lock.record_ai_search(
-            "production",
+        // A repeat is not a change: the ledger is not written again.
+        std::fs::remove_file(&path).unwrap();
+        link_kind::<AiSearch>(
             "shop-ask",
-            "AI_SEARCH_KB",
-            AiSearchLink {
-                instance: "support-docs".into()
-            }
-        ));
+            &declared,
+            &BTreeMap::new(),
+            &mut lock,
+            &path,
+            &config,
+            "production",
+        )
+        .unwrap();
+        assert!(!path.exists());
+        // Nothing is bound: the config names the instance already.
+        assert!(!config.exists());
         std::fs::remove_dir_all(&dir).ok();
     }
 
@@ -1331,7 +1216,7 @@ mod tests {
             "c-123".to_string(),
         )]);
         let mut lock = DeployLock::default();
-        record_mtls_links(
+        link_kind::<MtlsCertificate>(
             "shop",
             &declared,
             &linked,
@@ -1346,7 +1231,7 @@ mod tests {
             certificate_id: "c-123".into(),
         };
         assert_eq!(
-            recorded_mtls_certificate(&lock, "shop", "MTLS_BACKEND", "production"),
+            lock.recorded::<MtlsCertificate>("production", "shop", "MTLS_BACKEND"),
             Some(&link)
         );
         // The id replaced the name in the config the push reads, and nothing else changed.
@@ -1355,7 +1240,6 @@ mod tests {
             text.contains("certificate_id = \"c-123\" # the certificate's name"),
             "{text}"
         );
-        assert!(!lock.record_mtls_certificate("production", "shop", "MTLS_BACKEND", link));
         // The ledger carries a name and an id, never key material, and omits the section when empty.
         let written = std::fs::read_to_string(&path).unwrap();
         assert!(written.contains("mtls_certificate_links"), "{written}");
@@ -1368,8 +1252,21 @@ mod tests {
                 .unwrap()
                 .contains("mtls_certificate_links")
         );
+        // A repeat is not a change: the ledger is not written again.
+        std::fs::remove_file(&path).unwrap();
+        link_kind::<MtlsCertificate>(
+            "shop",
+            &declared,
+            &linked,
+            &mut lock,
+            &path,
+            &config,
+            "production",
+        )
+        .unwrap();
+        assert!(!path.exists());
         // A binding the run did not link is a bug, named.
-        let err = record_mtls_links(
+        let err = link_kind::<MtlsCertificate>(
             "shop",
             &declared,
             &BTreeMap::new(),

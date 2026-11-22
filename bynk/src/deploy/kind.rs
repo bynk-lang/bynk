@@ -29,20 +29,28 @@
 use super::*;
 use bynk_driver::emsg;
 
+mod ai_search;
+mod container_image;
 mod d1;
 mod hyperdrive;
 mod kv;
+mod mtls_certificate;
 mod queue;
 mod r2;
 mod ratelimit;
+mod stored_secret;
 mod vectorize;
 
+pub(crate) use ai_search::*;
+pub(crate) use container_image::*;
 pub(crate) use d1::*;
 pub(crate) use hyperdrive::*;
 pub(crate) use kv::*;
+pub(crate) use mtls_certificate::*;
 pub(crate) use queue::*;
 pub(crate) use r2::*;
 pub(crate) use ratelimit::*;
+pub(crate) use stored_secret::*;
 pub(crate) use vectorize::*;
 
 /// Each kind of resource the deploy names on the account. Field-less, matched exhaustively.
@@ -58,6 +66,10 @@ pub(crate) enum KindId {
     Vectorize,
     Hyperdrive,
     RateLimit,
+    StoredSecret,
+    AiSearch,
+    MtlsCertificate,
+    ContainerImage,
 }
 
 impl KindId {
@@ -71,6 +83,10 @@ impl KindId {
             KindId::Vectorize => "Vectorize indexes",
             KindId::Hyperdrive => "Hyperdrive configs",
             KindId::RateLimit => "rate limiters",
+            KindId::StoredSecret => "Secrets Store secrets",
+            KindId::AiSearch => "AI Search instances",
+            KindId::MtlsCertificate => "mTLS certificates",
+            KindId::ContainerImage => "container images",
         }
     }
 }
@@ -304,6 +320,9 @@ pub(crate) struct Lives<'a> {
     /// The queues this run has already attempted to make, across Workers: a queue two contexts
     /// consume is one queue, made once per run (ADR 0194 D2). `None` attempts every queue.
     pub(crate) queues: Option<&'a std::cell::RefCell<BTreeSet<String>>>,
+    /// The ids each stored secret's Secrets Store and each mTLS certificate was linked to before
+    /// the run confirmed, by `(worker, binding)` ([`link_for_run`]). `None` links nothing.
+    pub(crate) linked: Option<&'a BTreeMap<(String, String), String>>,
 }
 
 impl<'a> Lives<'a> {
@@ -492,6 +511,11 @@ pub(crate) enum Slot {
     /// The orphan report's Workers, which it lists after Hyperdrive's orphans and before the
     /// queues.
     WorkerOrphans,
+    /// The plan's Analytics Engine datasets, after the queues and before the stored secrets.
+    Datasets,
+    /// The plan's foreign Service Bindings, email addresses and Durable Object classes, after the
+    /// mTLS certificates and before the containers.
+    BindingsAndObjects,
 }
 
 /// An orphan of a kind that reports none (a rate limiter is forgotten after the push instead):
@@ -517,6 +541,12 @@ pub(crate) fn for_each_kind(v: &mut impl KindVisitor) {
     v.visit::<RateLimit>();
     v.slot(Slot::WorkerOrphans);
     v.visit::<Queue>();
+    v.slot(Slot::Datasets);
+    v.visit::<StoredSecret>();
+    v.visit::<AiSearch>();
+    v.visit::<MtlsCertificate>();
+    v.slot(Slot::BindingsAndObjects);
+    v.visit::<ContainerImage>();
 }
 
 /// Fill each kind's lines of `context`, for Worker `cx.worker`'s declarations `declared`, with what
@@ -551,11 +581,17 @@ pub(crate) fn fill_kind_lines<'r>(
     });
 }
 
-/// Each kind's lines of `context` in the short format.
-pub(crate) fn short_kind_lines(context: &ContextPlan<'_>, out: &mut String) {
+/// Each kind's lines of `context` in the short format, with `slots` printing the plan's other
+/// lines at each [`Slot`].
+pub(crate) fn short_kind_lines(
+    context: &ContextPlan<'_>,
+    out: &mut String,
+    slots: &mut dyn FnMut(Slot, &mut String),
+) {
     struct Short<'p, 'r> {
         context: &'p ContextPlan<'r>,
         out: &'p mut String,
+        slots: &'p mut dyn FnMut(Slot, &mut String),
     }
     impl KindVisitor for Short<'_, '_> {
         fn visit<K: ResourceKind>(&mut self) {
@@ -563,8 +599,15 @@ pub(crate) fn short_kind_lines(context: &ContextPlan<'_>, out: &mut String) {
                 K::short_line(line, self.out);
             }
         }
+        fn slot(&mut self, slot: Slot) {
+            (self.slots)(slot, self.out);
+        }
     }
-    for_each_kind(&mut Short { context, out });
+    for_each_kind(&mut Short {
+        context,
+        out,
+        slots,
+    });
 }
 
 /// The listings each kind's lines of `context` ask of the account.
@@ -698,6 +741,8 @@ pub(crate) fn short_kind_orphans(
         fn slot(&mut self, slot: Slot) {
             match slot {
                 Slot::WorkerOrphans => (self.workers)(self.out),
+                // The plan's lines, not its orphans.
+                Slot::Datasets | Slot::BindingsAndObjects => {}
             }
         }
     }
@@ -998,7 +1043,13 @@ mod tests {
                 "Hyperdrive",
                 "RateLimit",
                 "WorkerOrphans",
-                "Queue"
+                "Queue",
+                "Datasets",
+                "StoredSecret",
+                "AiSearch",
+                "MtlsCertificate",
+                "BindingsAndObjects",
+                "ContainerImage",
             ]
         );
     }
