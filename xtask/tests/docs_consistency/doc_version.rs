@@ -42,7 +42,7 @@ fn current_version_banners_agree_with_the_release() {
         ),
         ("book/spec/index.md", format!("current version, v{mm}")),
         (
-            "book/reference/changelog.md",
+            "book/reference/releases/index.md",
             format!("written against **v{mm}**"),
         ),
         // The LLM primer (#2464) is served from `site/public/`, outside the

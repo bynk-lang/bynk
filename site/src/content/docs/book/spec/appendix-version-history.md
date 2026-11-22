@@ -15,8 +15,8 @@ in version control; the **design decisions** they recorded live on as the
 decision records in `design/decisions/`.
 
 The per-increment history — the notable change in each version from v0.5
-onwards — is the
-[version compatibility & changelog](/book/reference/changelog/). It is reused
+onwards — is in the [releases](/book/reference/releases/), one page per
+release. It is reused
 here rather than duplicated; this appendix adds only the framing that the
 specification is authoritative.
 

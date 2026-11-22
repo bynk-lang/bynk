@@ -184,7 +184,8 @@
   - [TypeScript client](reference/typescript-client.md)
   - [HTTP client](reference/http-client.md)
   - [Diagnostic index](reference/diagnostics.md)
-  - [Version compatibility & changelog](reference/changelog.md)
+  - [Releases](reference/releases/index.md)
+    - {release pages}
   - [Upgrading](reference/upgrading.md)
 
 # Specification

@@ -113,6 +113,16 @@ fn main() -> ExitCode {
         }
         Some("bench") => bench(&args[1..]),
         Some("release-notes") => release_notes(&args[1..]),
+        Some("release-page") => {
+            // Dry-run by default, like `stamp`: a typo'd flag must not read as
+            // "no --apply given" when the maintainer meant to write.
+            if let Some(bad) = args[1..].iter().find(|a| *a != "--apply") {
+                eprintln!("xtask release-page: unknown argument {bad:?}");
+                usage();
+                return ExitCode::from(2);
+            }
+            release_page(args.iter().any(|a| a == "--apply"))
+        }
         Some("manifest-schema") => {
             if let Some(bad) = args[1..].iter().find(|a| *a != "--check") {
                 eprintln!("xtask manifest-schema: unknown argument {bad:?}");
@@ -985,9 +995,58 @@ fn release_notes(args: &[String]) -> ExitCode {
     ExitCode::SUCCESS
 }
 
+/// `release-page [--apply]`: cut the Book's Unreleased page into the page for
+/// the workspace's current version, before that version is tagged (#3868).
+/// Without `--apply`, says what it would write.
+fn release_page(apply: bool) -> ExitCode {
+    use xtask::release_pages::{INDEX_PAGE, UNRELEASED_PAGE, cut, release_page, today_utc};
+    let root = repo_root();
+    let read = |rel: &str| {
+        std::fs::read_to_string(root.join(rel)).map_err(|e| format!("cannot read {rel}: {e}"))
+    };
+    let result = (|| -> Result<(), String> {
+        let version = xtask::stamp::parse_workspace_version(&read("Cargo.toml")?)
+            .ok_or("Cargo.toml has no [workspace.package] version")?;
+        let page = release_page(version);
+        if root.join(&page).exists() {
+            return Err(format!(
+                "{page} already exists: v{version} has been cut. Merge a change that bumps \
+                 the version before cutting the next release."
+            ));
+        }
+        let cut = cut(&read(UNRELEASED_PAGE)?, &read(INDEX_PAGE)?, version, &today_utc())?;
+        let rows = cut.release.lines().filter(|l| l.starts_with("| **v")).count();
+        if !apply {
+            println!(
+                "Would cut v{version} ({rows} increments): write {page}, empty {UNRELEASED_PAGE} \
+                 and add the release to {INDEX_PAGE}.\nRun again with --apply to write them."
+            );
+            return Ok(());
+        }
+        let write = |rel: &str, text: &str| {
+            std::fs::write(root.join(rel), text).map_err(|e| format!("cannot write {rel}: {e}"))
+        };
+        write(&page, &cut.release)?;
+        write(UNRELEASED_PAGE, &cut.unreleased)?;
+        write(INDEX_PAGE, &cut.index)?;
+        println!(
+            "Cut v{version} ({rows} increments) into {page}.\n\
+             Commit it, merge it, then tag that merge commit v{version}."
+        );
+        Ok(())
+    })();
+    match result {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(e) => {
+            eprintln!("release-page: {e}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
 fn usage() {
     eprintln!(
-        "usage: cargo xtask <check-pending | ci [--fast] | fn-lengths [--apply] | greenfield-status [--apply | --list-unasserted | --check-growth [--base REV] | --trend-only [--apply]] | manifest-schema [--check] | editor-contract [--check | --tag T --out F] | stamp [--apply] | release-notes <vX.Y.Z> | bench [--sizes N,N,…] [--shape independent|linked|both] [--runs N] [--edits N] [--record] | bench-runtime [--sizes-only] [--record] [--runs N] [--requests N] [--startups N] | tier-probe>"
+        "usage: cargo xtask <check-pending | ci [--fast] | fn-lengths [--apply] | greenfield-status [--apply | --list-unasserted | --check-growth [--base REV] | --trend-only [--apply]] | manifest-schema [--check] | editor-contract [--check | --tag T --out F] | stamp [--apply] | release-notes <vX.Y.Z> | release-page [--apply] | bench [--sizes N,N,…] [--shape independent|linked|both] [--runs N] [--edits N] [--record] | bench-runtime [--sizes-only] [--record] [--runs N] [--requests N] [--startups N] | tier-probe>"
     );
 }
 

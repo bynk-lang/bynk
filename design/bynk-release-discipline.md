@@ -91,11 +91,14 @@ cut when the work it ships is whole:**
 
 1. **When a track retires.** The retirement PR is the point at which a track's
    slices are all merged and its spine closes, so the version on `main` after it
-   merges is a coherent unit. The maintainer tags it (`git tag vX.Y.Z` on a
-   commit whose CI is green).
+   merges is a coherent unit. The maintainer cuts its page in the Book first:
+   `cargo xtask release-page --apply` turns the Book's Unreleased page into the
+   page for the current version (#3868). They merge that, then tag the merge
+   commit (`git tag vX.Y.Z` on a commit whose CI is green). `release.yml`
+   refuses a tag whose page is missing.
 2. **When a user-facing fix needs to reach users** before the track it sits in
    retires: a broken download, a crash in a released `bynkc`, a security fix.
-   That release is tagged from `main` as soon as the fix merges.
+   That release is cut and tagged the same way as soon as the fix merges.
 3. **What the tag does.** `release.yml` does the rest from the tag: it builds
    the binaries, cuts the GitHub Release, publishes the crates and the grammar,
    moves the VS Code extension's server pin to the new release, and tells the

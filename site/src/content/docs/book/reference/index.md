@@ -27,7 +27,7 @@ the `bynk.toml` manifest, emission, and the editor tooling — see the
 - [Diagnostic index](/book/reference/diagnostics/) — every `bynk.*` code (generated).
 - [HTTP client](/book/reference/http-client/) — the typed TypeScript client `bynk client` generates for a project's `from http` routes, for a front end.
 - [TypeScript client](/book/reference/typescript-client/) — the typed client a non-Bynk Worker calls a context through, and `bynk.foreign.toml` pins.
-- [Version compatibility & changelog](/book/reference/changelog/).
+- [Releases](/book/reference/releases/) — every release, newest first, and the increments each one shipped.
 
 The `bynk.toml` manifest and [Emission](/docs/emission/) — the TypeScript each
 construct compiles to — are documented under [Developer Documentation](/docs/).
