@@ -5,7 +5,7 @@ import * as r_counter from "./r/counter.js";
 import * as r_other from "./r/other.js";
 
 export function composeApp() {
-  const r_otherDeps = {  };
+  const r_otherDeps = {};
   const r_otherSurface = r_other.__makeSurface(r_otherDeps);
   const r_counterDeps = { surface: { other: r_otherSurface } };
   const r_counterSurface = r_counter.__makeSurface(r_counterDeps);

@@ -7,11 +7,11 @@ import * as shop_till from "./shop/till.js";
 import * as shop_wraps from "./shop/wraps.js";
 
 export function composeApp() {
-  const shop_depotDeps = {  };
+  const shop_depotDeps = {};
   const shop_depotSurface = shop_depot.__makeSurface(shop_depotDeps);
-  const shop_quotesDeps = {  };
+  const shop_quotesDeps = {};
   const shop_quotesSurface = shop_quotes.__makeSurface(shop_quotesDeps);
-  const shop_wrapsDeps = {  };
+  const shop_wrapsDeps = {};
   const shop_wrapsSurface = shop_wraps.__makeSurface(shop_wrapsDeps);
   const shop_tillDeps = { surface: { depot: shop_depotSurface, quotes: shop_quotesSurface, wraps: shop_wrapsSurface } };
   const shop_tillSurface = shop_till.__makeSurface(shop_tillDeps);

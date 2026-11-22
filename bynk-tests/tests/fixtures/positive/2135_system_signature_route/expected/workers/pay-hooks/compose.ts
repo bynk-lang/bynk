@@ -7,7 +7,7 @@ export interface Env {
 }
 
 export function compose(env: Env) {
-  const deps = {  };
+  const deps = {};
   return {
     async http_POST_webhooks_processor(body: handlers.Notice) {
       return handlers.webhooks.http_POST_webhooks_processor(body, deps);

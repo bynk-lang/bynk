@@ -7,7 +7,7 @@ export interface Env {
 }
 
 export function compose(env: Env) {
-  const deps = {  };
+  const deps = {};
   return {
     async paged(__caller: string, page: handlers.Page<handlers.Cents>) {
       return handlers.paged.call(page, { ...deps, identity: __caller });

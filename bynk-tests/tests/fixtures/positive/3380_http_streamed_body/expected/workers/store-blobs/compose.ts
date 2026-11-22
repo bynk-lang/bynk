@@ -7,7 +7,7 @@ export interface Env {
 }
 
 export function compose(env: Env) {
-  const deps = {  };
+  const deps = {};
   return {
     async http_PUT_blobs_Param_name(name: string, body: AsyncIterable<globalThis.Uint8Array>) {
       return handlers.blobs.http_PUT_blobs_Param_name(name, body, deps);

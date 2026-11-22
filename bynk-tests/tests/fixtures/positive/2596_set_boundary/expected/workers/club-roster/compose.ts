@@ -7,7 +7,7 @@ export interface Env {
 }
 
 export function compose(env: Env) {
-  const deps = {  };
+  const deps = {};
   return {
     async members(extra: ReadonlySet<string>) {
       return handlers.members.call(extra, deps);

@@ -8,7 +8,7 @@ export interface Env {
 }
 
 export function compose(env: Env) {
-  const deps = {  };
+  const deps = {};
   return {
     async many(__caller: string, all: readonly handlers.Cents[], one: Option<handlers.Cents>, by_name: ReadonlyMap<string, handlers.Cents>) {
       return handlers.many.call(all, one, by_name, { ...deps, identity: __caller });

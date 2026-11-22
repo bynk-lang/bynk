@@ -7,7 +7,7 @@ export interface Env {
 }
 
 export function compose(env: Env) {
-  const deps = {  };
+  const deps = {};
   return {
     async http_POST_photos(body: handlers.PhotoForm) {
       return handlers.site.http_POST_photos(body, deps);

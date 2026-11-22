@@ -7,7 +7,7 @@ export interface Env {
 }
 
 export function compose(env: Env) {
-  const deps = {  };
+  const deps = {};
   return {
     async results(input: handlers.ApiResult<handlers.User>) {
       return handlers.results.call(input, deps);

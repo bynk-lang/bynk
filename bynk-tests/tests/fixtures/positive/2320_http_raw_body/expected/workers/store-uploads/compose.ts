@@ -10,7 +10,7 @@ export interface Env {
 }
 
 export function compose(env: Env) {
-  const deps = {  };
+  const deps = {};
   return {
     async http_PUT_api_Param_org_Param_package(org: string, __id_package: string, body: globalThis.Uint8Array) {
       return handlers.uploads.http_PUT_api_Param_org_Param_package(org, __id_package, body, deps);
