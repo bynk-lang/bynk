@@ -134,14 +134,15 @@ A body whose `target` is `https://sho.rt/abc123` is now answered with `400` and
 
 ## Three more tools
 
-You'll use these in the next chapter, when the shortener can look things up:
+You'll use these in [Add a stateful agent](/book/tutorials/05-stateful-agent/), when the shortener can look things up:
 
 - **`?` on an `Option` answers `404`.** Inside a handler that returns an
   `HttpResult`, `found?` gives the value if there is one, and otherwise ends the
   handler with `NotFound`. That is right for "the thing you asked for isn't
   there", and only there.
-- **`let … else` names another answer.** When a missing value means something
-  other than `404`, say what:
+- **`let … else` says what to do when a value is missing.** Outside an HTTP
+  handler, `?` on an `Option` isn't available, and inside one, a missing value
+  may mean something other than `404`. Either way, say what the answer is:
 
   ```bynk,fragment
   let Some(url) = target else { Err(NotFound) }
@@ -237,10 +238,10 @@ fallible steps with `?` and `.mapErr`, and one function, `failure`, decides the
 HTTP status for every `LinkError`. The handler is two lines, and every error it
 can meet has an answer the compiler has checked.
 
-The API still mints the same code and forgets it. Next, we give the shortener a
-memory, and the tools from this chapter keep its handlers short.
+The API still mints the same code, `abc123`, for every link. Next, the
+shortener reaches outside itself for a random one.
 
-➡️ **Next: [Add a stateful agent](/book/tutorials/05-stateful-agent/)**
+➡️ **Next: [Reach out with capabilities](/book/tutorials/capabilities/)**
 
 ---
 

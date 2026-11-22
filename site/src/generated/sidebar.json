@@ -52,11 +52,15 @@
         "link": "/book/tutorials/failure-and-result/"
       },
       {
-        "label": "6. Add a stateful agent",
+        "label": "6. Reach out with capabilities",
+        "link": "/book/tutorials/capabilities/"
+      },
+      {
+        "label": "7. Add a stateful agent",
         "link": "/book/tutorials/05-stateful-agent/"
       },
       {
-        "label": "7. Test it",
+        "label": "8. Test it",
         "link": "/book/tutorials/06-testing/"
       }
     ]
