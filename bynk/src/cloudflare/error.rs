@@ -311,6 +311,18 @@ mod tests {
     }
 
     #[test]
+    fn a_push_lost_its_upload_only_on_wranglers_10007() {
+        assert!(push_lost_its_upload(
+            "Uploaded x (0.86 sec)\n✘ [ERROR] This Worker does not exist on your account. [code: 10007]"
+        ));
+        assert!(!push_lost_its_upload(
+            "references Worker 'y' which was not found [code: 10143]"
+        ));
+        assert!(!push_lost_its_upload("[code: 10090]"));
+        assert!(!push_lost_its_upload("10007 without the bracket form"));
+    }
+
+    #[test]
     fn a_failure_says_both_streams_trimmed_or_its_exit() {
         let op = Op::KvList;
         assert_eq!(exit(&op, 1, " out \n", "\n err ").said(), "err\nout");
@@ -376,6 +388,15 @@ mod tests {
     }
 
     use super::super::api::VectorizeOp;
+}
+
+/// Whether a failed push's teed output says the Worker it just uploaded does not exist: wrangler's
+/// lookup after the upload racing the script's creation (#3562, code 10007 only; a legacy
+/// environment's 10090 is not this race). The push's output is the text it streamed, not a
+/// [`WranglerError`], so this reads that text; it lives here so that every match on wrangler's
+/// words is in this module (1D.3c). Before 1D.3c, `first_deploy::NOT_FOUND`.
+pub(crate) fn push_lost_its_upload(said: &str) -> bool {
+    said.contains("[code: 10007]")
 }
 
 /// Any failure of a call to Cloudflare (#4043, Decision E): a wrangler call, a REST call, or a

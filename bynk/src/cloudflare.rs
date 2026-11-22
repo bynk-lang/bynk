@@ -33,7 +33,7 @@ pub(crate) use api::Op;
 pub(crate) use api::{CloudflareApi, PushCall, VectorizeOp};
 #[cfg(test)]
 pub(crate) use error::WranglerError;
-pub(crate) use error::{CloudflareError, Exit, Failure};
+pub(crate) use error::{CloudflareError, Exit, Failure, push_lost_its_upload};
 pub(crate) use process::{Wrangler, spawn_command};
 pub(crate) use rest::Rest;
 #[cfg(test)]

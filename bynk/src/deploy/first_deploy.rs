@@ -62,13 +62,12 @@ impl ScriptVersions for RestVersions {
     }
 }
 
-/// Wrangler's code for "the Worker does not exist".
-const NOT_FOUND: &str = "[code: 10007]";
-
 /// Whether a failed first push was in fact the upload that created the Worker:
 /// the rule in the module doc, pure so it is tested without wrangler or a network.
 pub(crate) fn upload_survived(said: &str, before: &ScriptState, after: &ScriptState) -> bool {
-    said.contains(NOT_FOUND) && *before == ScriptState::Absent && *after == ScriptState::Present(1)
+    crate::cloudflare::push_lost_its_upload(said)
+        && *before == ScriptState::Absent
+        && *after == ScriptState::Present(1)
 }
 
 /// A first push being watched: the script's name, and that it did not exist
