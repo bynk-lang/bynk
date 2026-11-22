@@ -14,11 +14,11 @@
 //! crate-hygiene track's M-3 ratchet, `model_readers_beyond_emit` (B1, #2939), and its H-3 gate,
 //! `unused_deps` (A4, #2976).
 //!
-//! **Thirty-two are gated**, committed and diffed: `workspace_lints`, `fs_below_driver`,
+//! **Thirty-three are gated**, committed and diffed: `workspace_lints`, `fs_below_driver`,
 //! `options_sources`, `hoist_sinks`, `span_keyed_maps`, `emit_diagnostics`,
 //! `ide_emit_edge`, `ast_importers`, `emit_abi_shapes`, `ts_writes`, `ts_any`,
 //! `verbatim_origins`, `verbatim_sites`, `incremental_query_types`,
-//! `unconsumed_ir_items`, `diagnostic_coverage`, `model_readers_beyond_emit`, `unused_deps`, `explained_codes`, `ts_raw_sites_emit`, `ts_raw_sites_testgen`, `ts_text_idents`, `emit_thread_locals`, `emit_silent_fallbacks`, `emit_print_calls`, `testgen_print_calls`, `import_prediction_fns`, `deploy_kind_accessors`, `env_protocol_literals`, `tool_spawn_sites`, `deploy_ledger_writes`, `cloudflare_client_sites`. Ten of these are
+//! `unconsumed_ir_items`, `diagnostic_coverage`, `model_readers_beyond_emit`, `unused_deps`, `explained_codes`, `ts_raw_sites_emit`, `ts_raw_sites_testgen`, `ts_text_idents`, `emit_thread_locals`, `emit_silent_fallbacks`, `emit_print_calls`, `testgen_print_calls`, `import_prediction_fns`, `node_builder_defs`, `deploy_kind_accessors`, `env_protocol_literals`, `tool_spawn_sites`, `deploy_ledger_writes`, `cloudflare_client_sites`. Ten of these are
 //! zero/closure-shaped — a boolean, or a count pinned at a small, argued floor
 //! (`ast_importers` = 5, `emit_abi_shapes` = 1). Phase 7's own four are the same shape:
 //! each converged toward an argued floor over dozens of slices, the same trajectory
@@ -42,7 +42,7 @@
 //! **Two kinds of gate** (#3679, amending ADR 0389/0390). Every gated probe is
 //! *exact-match*: a live reading that differs from its committed row fails unless a
 //! pending file names it in `probes:`. The [`GROWTH_PROBES`] (`ts_writes`, `ts_any`,
-//! `emit_abi_shapes`, `verbatim_sites`, `ts_raw_sites_emit`, `ts_raw_sites_testgen`, `ts_text_idents`, `span_keyed_maps`, `emit_thread_locals`, `emit_silent_fallbacks`, `emit_print_calls`, `testgen_print_calls`, `import_prediction_fns`, `deploy_kind_accessors`, `env_protocol_literals`, `tool_spawn_sites`, `deploy_ledger_writes`, `cloudflare_client_sites`) are also *directional*:
+//! `emit_abi_shapes`, `verbatim_sites`, `ts_raw_sites_emit`, `ts_raw_sites_testgen`, `ts_text_idents`, `span_keyed_maps`, `emit_thread_locals`, `emit_silent_fallbacks`, `emit_print_calls`, `testgen_print_calls`, `import_prediction_fns`, `node_builder_defs`, `deploy_kind_accessors`, `env_protocol_literals`, `tool_spawn_sites`, `deploy_ledger_writes`, `cloudflare_client_sites`) are also *directional*:
 //! `growth_probes_never_rise` (`xtask/tests/greenfield_status.rs`) fails when the
 //! live leading count exceeds the committed one unless a pending file *raises* the
 //! probe with a reason (`raises:`), which the stamp then records in
@@ -117,7 +117,7 @@ pub fn run(root: &Path) -> Report {
 /// The gated probes' names, in [`run_gated`]'s order — what a pending file's
 /// `probes` key may cite. `greenfield_status_table_is_current` asserts this
 /// matches the probes [`run_gated`] actually returns, so the two cannot drift.
-pub const GATED_PROBES: [&str; 32] = [
+pub const GATED_PROBES: [&str; 33] = [
     "workspace_lints",
     "fs_below_driver",
     "options_sources",
@@ -139,6 +139,7 @@ pub const GATED_PROBES: [&str; 32] = [
     "emit_print_calls",
     "testgen_print_calls",
     "import_prediction_fns",
+    "node_builder_defs",
     "deploy_kind_accessors",
     "env_protocol_literals",
     "tool_spawn_sites",
@@ -154,12 +155,12 @@ pub const GATED_PROBES: [&str; 32] = [
 
 /// The gated probes that only a reasoned, recorded `raises:` may increase
 /// (#3679, ADR 0389/0390 amended): `ts_writes`, `ts_any`, `emit_abi_shapes`,
-/// `verbatim_sites`, `ts_raw_sites_emit` and `ts_raw_sites_testgen` (the split of `ts_raw_sites`, #3681), `ts_text_idents` (#3681), `span_keyed_maps`, `emit_thread_locals` (1A.19), `emit_silent_fallbacks` (1A.34), `emit_print_calls` (1A.35b), `testgen_print_calls` (1B.2a), `import_prediction_fns` (1A.36a), `deploy_kind_accessors` (1D.1a), `env_protocol_literals` (1D.5a), `tool_spawn_sites` (1D.5b), `deploy_ledger_writes` (1D.2a), `cloudflare_client_sites` (1D.3a). Probes already at a zero or closure
+/// `verbatim_sites`, `ts_raw_sites_emit` and `ts_raw_sites_testgen` (the split of `ts_raw_sites`, #3681), `ts_text_idents` (#3681), `span_keyed_maps`, `emit_thread_locals` (1A.19), `emit_silent_fallbacks` (1A.34), `emit_print_calls` (1A.35b), `testgen_print_calls` (1B.2a), `import_prediction_fns` (1A.36a), `node_builder_defs` (1B.4a), `deploy_kind_accessors` (1D.1a), `env_protocol_literals` (1D.5a), `tool_spawn_sites` (1D.5b), `deploy_ledger_writes` (1D.2a), `cloudflare_client_sites` (1D.3a). Probes already at a zero or closure
 /// floor are excluded (their exact-match row pins them), as are
 /// `verbatim_origins` (an argued floor of 2) and `model_readers_beyond_emit`
 /// (which has the opposite direction). A subset of [`GATED_PROBES`], pinned by
 /// a unit test.
-pub const GROWTH_PROBES: [&str; 18] = [
+pub const GROWTH_PROBES: [&str; 19] = [
     "ts_writes",
     "ts_any",
     "emit_abi_shapes",
@@ -173,6 +174,7 @@ pub const GROWTH_PROBES: [&str; 18] = [
     "emit_print_calls",
     "testgen_print_calls",
     "import_prediction_fns",
+    "node_builder_defs",
     "deploy_kind_accessors",
     "env_protocol_literals",
     "tool_spawn_sites",
@@ -180,7 +182,7 @@ pub const GROWTH_PROBES: [&str; 18] = [
     "cloudflare_client_sites",
 ];
 
-/// The thirty-two gated (zero/closure/ratchet) probes only — what [`gated_disagreements`] diffs.
+/// The thirty-three gated (zero/closure/ratchet) probes only — what [`gated_disagreements`] diffs.
 pub fn run_gated(root: &Path) -> Vec<Probe> {
     vec![
         workspace_lints(root),
@@ -204,6 +206,7 @@ pub fn run_gated(root: &Path) -> Vec<Probe> {
         emit_print_calls(root),
         testgen_print_calls(root),
         import_prediction_fns(root),
+        node_builder_defs(root),
         deploy_kind_accessors(root),
         env_protocol_literals(root),
         tool_spawn_sites(root),
@@ -2632,6 +2635,232 @@ fn import_prediction_fns_violations(files: &[(PathBuf, String)]) -> usize {
     })
 }
 
+/// 1B.4a (#4051, Decision E): the production helpers in `bynk-emit` that are one `bynk_ts`
+/// constructor over their parameters, each a local spelling of a shape `ts_build` defines once
+/// (`ident`, `str_lit`, `member`, `call`, `const_`, ...), plus each `as` rename in a
+/// `use crate::ts_build::{..}` clause. Before 1B.4a every file defined its own, in up to five
+/// spellings; 1B.4a leaves only the renames, so the probe reads what is left to spell once, and
+/// 1B.4b (Phase 2) takes it to 0. A growth probe ([`GROWTH_PROBES`]): a new local wrapper in a
+/// later slice needs a `raises:` line.
+///
+/// A *definition* counts when it lies outside `ts_build.rs` and outside `#[cfg(test)]` modules,
+/// is a `fn` returning `TsExpr` or `TsStmt`, and has a body of at most eight lines that
+/// applies exactly one constructor: a `Ts*` variant or associated function, or two for one shape
+/// (`TsExpr::Lit(TsLit::Str(..))`), with any `Box::new`, `Some`, `vec![..]` around its arguments, or one call to a helper that is itself a builder
+/// (`id` over `ident_node`, `ne` over `binary`). The body has no string literal, `self`, `let`,
+/// `match`, `if`, loop, iterator or `format!`, and no `.clone()`, so it is a function of its
+/// parameters alone; a path value must be a `Ts*` one (`TsBinaryOp::StrictEq`, not
+/// `VerbatimOrigin::FormFieldSpecs`). A helper that composes two constructors (`if_then`,
+/// `applied`, `tag_const`) says something about a construct, not about TypeScript, and does
+/// not count. Text-level gaps, as for the other line scanners: a signature split over more than
+/// twelve lines is missed, and the helpers a body calls are known by name only.
+fn node_builder_defs(root: &Path) -> Probe {
+    Probe {
+        name: "node_builder_defs",
+        gated: true,
+        reads: node_builder_defs_count(&codegen_family_files(root)).to_string(),
+    }
+}
+
+/// [`node_builder_defs`]'s counting logic over an explicit file list.
+fn node_builder_defs_count(files: &[(PathBuf, String)]) -> usize {
+    let (defs, aliases) = node_builder_defs_found(files);
+    defs.len() + aliases
+}
+
+/// The `(file, line, name)` of each counted definition, and the number of `as` renames in
+/// `use ..::ts_build::{..}` clauses. [`node_builder_defs_count`] sums them; a test reads the
+/// names.
+fn node_builder_defs_found(files: &[(PathBuf, String)]) -> (Vec<(PathBuf, usize, String)>, usize) {
+    use std::collections::BTreeSet;
+    struct Candidate {
+        file: PathBuf,
+        line: usize,
+        name: String,
+        helper_calls: Vec<String>,
+        constructs: bool,
+    }
+    let call = regex::Regex::new(r"((?:\w+::)*\w+)\s*[({]").expect("call pattern");
+    let path_value = regex::Regex::new(r"(?:\w+::)+\w+").expect("path pattern");
+    let forbidden = regex::Regex::new(
+        r#""|\bself\b|\blet\b|\bmatch\b|\bif\b|\bfor\b|\bloop\b|\bwhile\b|format!|\.iter|\.map\(|\.collect|\.clone\(\)"#,
+    )
+    .expect("forbidden pattern");
+    let ret = regex::Regex::new(r"->\s*(?:bynk_ts::)?Ts(?:Expr|Stmt)\s*$").expect("return pattern");
+    let fn_name = regex::Regex::new(r"\bfn\s+(\w+)").expect("fn pattern");
+    let ts_alias =
+        regex::Regex::new(r"use\s+(?:crate|super|self)(?:::\w+)*::ts_build::(\{[^;]*\}|[^;]*)\s*;")
+            .expect("use pattern");
+    let rename = regex::Regex::new(r"\w+\s+as\s+\w+").expect("rename pattern");
+
+    let mut known: BTreeSet<String> = BTreeSet::new();
+    let mut candidates: Vec<Candidate> = Vec::new();
+    let mut aliases = 0usize;
+    for (path, contents) in files {
+        let is_ts_build = path.file_name().is_some_and(|n| n == "ts_build.rs");
+        let lines: Vec<&str> = contents.lines().collect();
+        let ranges = test_mod_ranges(&lines);
+        let production: Vec<&str> = lines
+            .iter()
+            .enumerate()
+            .map(|(i, l)| {
+                if in_test_range(i, &ranges) || is_line_comment(l) {
+                    ""
+                } else {
+                    *l
+                }
+            })
+            .collect();
+        if is_ts_build {
+            for l in &production {
+                if let Some(c) = fn_name.captures(l) {
+                    known.insert(c[1].to_string());
+                }
+            }
+            continue;
+        }
+        let text = production.join("\n");
+        for m in ts_alias.captures_iter(&text) {
+            aliases += rename.find_iter(&m[1]).count();
+        }
+        let mut i = 0;
+        while i < production.len() {
+            let Some(name) = fn_name.captures(production[i]).map(|c| c[1].to_string()) else {
+                i += 1;
+                continue;
+            };
+            // The signature runs to the first `{`; the body to its matching `}`.
+            let mut head = String::new();
+            let mut end = i;
+            let mut opened = None;
+            while end < production.len() && end < i + 12 {
+                if let Some(at) = production[end].find('{') {
+                    head.push_str(&production[end][..at]);
+                    opened = Some((end, at));
+                    break;
+                }
+                head.push_str(production[end]);
+                head.push(' ');
+                end += 1;
+            }
+            let Some((open_line, open_at)) = opened else {
+                i += 1;
+                continue;
+            };
+            if !ret.is_match(head.trim_end()) {
+                i += 1;
+                continue;
+            }
+            let mut depth = 0i32;
+            let mut body = String::new();
+            let mut closed = false;
+            let mut body_lines = 0usize;
+            'scan: for (offset, line) in production[open_line..].iter().enumerate() {
+                body_lines += 1;
+                if body_lines > 9 {
+                    break;
+                }
+                let from = if offset == 0 { open_at } else { 0 };
+                for ch in line[from..].chars() {
+                    match ch {
+                        '{' => {
+                            depth += 1;
+                            if depth == 1 {
+                                continue;
+                            }
+                        }
+                        '}' => {
+                            depth -= 1;
+                            if depth == 0 {
+                                closed = true;
+                                break 'scan;
+                            }
+                        }
+                        _ => {}
+                    }
+                    body.push(ch);
+                }
+                body.push('\n');
+            }
+            if !closed || body_lines > 9 || forbidden.is_match(&body) {
+                i += 1;
+                continue;
+            }
+            // A path value (not a call) must be a `Ts*` one.
+            let bad_path = path_value.find_iter(&body).any(|m| {
+                let rest = body[m.end()..].trim_start();
+                let is_call = rest.starts_with('(') || rest.starts_with('{');
+                !is_call && !m.as_str().trim_start_matches("bynk_ts::").starts_with("Ts")
+            });
+            if bad_path {
+                i += 1;
+                continue;
+            }
+            let mut helper_calls = Vec::new();
+            let mut constructs = false;
+            let mut ctor_tokens = 0usize;
+            for c in call.captures_iter(&body) {
+                let at = c.get(1).map_or(0, |m| m.start());
+                // A method call (`s.into()`) is neither a constructor nor a helper.
+                if body[..at].ends_with('.') {
+                    continue;
+                }
+                let callee = &c[1];
+                let local = callee.trim_start_matches("bynk_ts::");
+                if local.starts_with("Ts") {
+                    constructs = true;
+                    ctor_tokens += 1;
+                } else if !matches!(callee, "Box::new" | "Some" | "Ok" | "Vec::new" | "Box") {
+                    helper_calls.push(callee.to_string());
+                }
+            }
+            // `TsExpr::Lit(TsLit::Str(..))` and `TsStmt::const_stmt(TsBindingName::Ident(..), ..)` are
+            // one shape; three or more nested constructors build a structure of their own.
+            if ctor_tokens > 2 {
+                i += 1;
+                continue;
+            }
+            candidates.push(Candidate {
+                file: path.clone(),
+                line: i + 1,
+                name,
+                helper_calls,
+                constructs,
+            });
+            i += 1;
+        }
+    }
+    // A candidate whose one call is a helper counts when that helper is itself a builder: a
+    // fixed point over the names `ts_build` defines and the one-constructor candidates.
+    for c in &candidates {
+        if c.helper_calls.is_empty() && c.constructs {
+            known.insert(c.name.clone());
+        }
+    }
+    loop {
+        let before = known.len();
+        for c in &candidates {
+            if !c.constructs && c.helper_calls.len() == 1 && known.contains(&c.helper_calls[0]) {
+                known.insert(c.name.clone());
+            }
+        }
+        if known.len() == before {
+            break;
+        }
+    }
+    let defs = candidates
+        .into_iter()
+        .filter(|c| {
+            (c.helper_calls.is_empty() && c.constructs)
+                || (!c.constructs
+                    && c.helper_calls.len() == 1
+                    && known.contains(&c.helper_calls[0]))
+        })
+        .map(|c| (c.file, c.line, c.name))
+        .collect();
+    (defs, aliases)
+}
+
 /// 1D.1 (#3929, the ruling on Decision A): the production sites in `bynk/src/deploy/**` that
 /// call or define a per-kind ledger accessor (`recorded_kv`, `record_r2`, `forget_vectorize`,
 /// `allocate_ratelimit`, …), each of which a `ResourceKind` replaces with its `LedgerTable`. It
@@ -4539,8 +4768,8 @@ pub fn render_table(report: &Report) -> String {
          (`lowering_text_bridge` and `stmt_text_lines`, added by #3694 and #3711, were retired at 0 by 1A.35b); \
          `import_prediction_fns` added by 1A.36a; `deploy_kind_accessors` added by 1D.1a; \
          `env_protocol_literals` added by 1D.5a; `tool_spawn_sites` added by 1D.5b; \
-         `deploy_ledger_writes` added by 1D.2a; `testgen_print_calls` added by 1B.2a; \
-         `cloudflare_client_sites` added by 1D.3a. Thirty-two \
+         `deploy_ledger_writes` added by 1D.2a; `testgen_print_calls` added by 1B.2a; `node_builder_defs` added by 1B.4a; \
+         `cloudflare_client_sites` added by 1D.3a. Thirty-three \
          probes are gated — a disagreement between this file and a fresh run fails \
          `greenfield_status_table_is_current` (`xtask/tests/greenfield_status.rs`). \
          Five are trend probes, reported only.\n\n",
@@ -4930,6 +5159,7 @@ mod tests {
         | `deploy_kind_accessors` | yes | 68 |\n\
         | `env_protocol_literals` | yes | 36 |\n\
         | `tool_spawn_sites` | yes | 20 |\n\
+        | `node_builder_defs` | yes | 195 |\n\
         | `deploy_ledger_writes` | yes | 25 |\n\
         | `cloudflare_client_sites` | yes | 34 |\n";
 
@@ -4948,6 +5178,7 @@ mod tests {
             gated("emit_print_calls", "30"),
             gated("testgen_print_calls", "43"),
             gated("import_prediction_fns", "8"),
+            gated("node_builder_defs", "195"),
             gated("deploy_kind_accessors", "68"),
             gated("env_protocol_literals", "36"),
             gated("tool_spawn_sites", "20"),
@@ -5328,6 +5559,83 @@ mod tests {
             ])),
             1,
             "`bynk revert`'s write is not the apply's"
+        );
+    }
+
+    #[test]
+    fn node_builder_defs_counts_one_constructor_wrappers_and_ts_build_renames() {
+        let count = |src: &str| node_builder_defs_count(&files_of(&[("emitter/a.rs", src)]));
+        // A wrapper over one constructor, in the spellings the emitter had: a variant, a
+        // struct variant, an associated function, a `bynk_ts::`-qualified one, and a body on
+        // one line.
+        let wrappers = "fn ident(s: impl Into<String>) -> TsExpr {\n    TsExpr::Ident(s.into())\n}\n\
+                        fn member(object: TsExpr, property: &str) -> TsExpr {\n    \
+                        TsExpr::Member {\n        object: Box::new(object),\n        \
+                        property: property.to_string(),\n    }\n}\n\
+                        pub(super) fn block(stmts: Vec<TsStmt>) -> TsStmt { TsStmt::block(stmts, None) }\n\
+                        fn hist_id(name: &str) -> bynk_ts::TsExpr {\n    \
+                        bynk_ts::TsExpr::Ident(name.to_string())\n}\n\
+                        fn strict_eq(a: TsExpr, b: TsExpr) -> TsExpr {\n    \
+                        TsExpr::Binary { op: TsBinaryOp::StrictEq, left: Box::new(a), right: Box::new(b) }\n}\n";
+        assert_eq!(count(wrappers), 5);
+        // A delegation to a builder counts (`id` over `ident_node`, `ne` over `binary`), once
+        // the helper is one; a delegation to something unknown does not.
+        let delegations = "fn ident_node(n: &str) -> TsExpr {\n    TsExpr::Ident(n.to_string())\n}\n\
+                           fn id(n: &str) -> TsExpr {\n    ident_node(n)\n}\n\
+                           fn ne(a: TsExpr, b: TsExpr) -> TsExpr {\n    \
+                           binary(TsBinaryOp::StrictNotEq, a, b)\n}\n\
+                           fn other(a: TsExpr) -> TsExpr {\n    somewhere_else(a)\n}\n";
+        assert_eq!(count(delegations), 2);
+        // Composed helpers (two constructors) are not wrappers.
+        let composed = "fn applied(f: TsExpr, x: TsExpr) -> TsExpr {\n    call(paren(f), vec![x])\n}\n\
+                        fn if_then(c: TsExpr, body: Vec<TsStmt>) -> TsStmt {\n    \
+                        TsStmt::if_stmt(c, block(body), None)\n}\n";
+        assert_eq!(count(composed), 0);
+        // A string constant, a constant origin, a clone, a branch and another return type are
+        // not functions of their parameters alone.
+        let others = "fn undefined() -> TsExpr {\n    TsExpr::Ident(\"undefined\".to_string())\n}\n\
+                      fn specs(s: String) -> TsExpr {\n    \
+                      TsExpr::VerbatimExpr(s, VerbatimOrigin::FormFieldSpecs)\n}\n\
+                      fn field(e: &TsExpr) -> TsExpr {\n    TsExpr::Paren(Box::new(e.clone()))\n}\n\
+                      fn pick(c: bool, e: TsExpr) -> TsExpr {\n    if c { TsExpr::Paren(Box::new(e)) } else { e }\n}\n\
+                      fn any_ty() -> TsType {\n    TsType::named(x)\n}\n";
+        assert_eq!(count(others), 0);
+        // A `#[cfg(test)]` copy and a comment do not count; nor does `ts_build.rs` itself.
+        let in_tests = "#[cfg(test)]\nmod tests {\n    fn ident(s: &str) -> TsExpr {\n        \
+                        TsExpr::Ident(s.to_string())\n    }\n}\n// fn id(n: &str) -> TsExpr { TsExpr::Ident(n) }\n";
+        assert_eq!(count(in_tests), 0);
+        let builders = files_of(&[(
+            "ts_build.rs",
+            "pub(crate) fn ident(s: impl Into<String>) -> TsExpr {\n    TsExpr::Ident(s.into())\n}\n",
+        )]);
+        assert_eq!(node_builder_defs_count(&builders), 0);
+        // A helper over a `ts_build` builder counts, because `ts_build` names it one.
+        let mixed = files_of(&[
+            (
+                "ts_build.rs",
+                "pub(crate) fn binary(op: TsBinaryOp, l: TsExpr, r: TsExpr) -> TsExpr {\n    \
+                 TsExpr::Binary { op, left: Box::new(l), right: Box::new(r) }\n}\n",
+            ),
+            (
+                "a.rs",
+                "fn ne(a: TsExpr, b: TsExpr) -> TsExpr {\n    binary(TsBinaryOp::StrictNotEq, a, b)\n}\n",
+            ),
+        ]);
+        assert_eq!(node_builder_defs_count(&mixed), 1);
+        // Each `as` rename in a `ts_build` import counts, in a clause or on its own line; a plain
+        // import and a rename from another module do not.
+        let uses = "use crate::ts_build::{ident as id, str_lit as lit_str, member};\n\
+                    use crate::ts_build::{\n    call as call_built,\n    paren,\n};\n\
+                    use super::ts_build::block as stmts;\n\
+                    use crate::ts_build::{call, index};\n\
+                    use crate::other::{thing as that};\n";
+        assert_eq!(count(uses), 4);
+        let in_test_use = "#[cfg(test)]\nmod tests {\n    use crate::ts_build::ident as id;\n}\n";
+        assert_eq!(count(in_test_use), 0);
+        // The same wrapper in two files is two definitions.
+        assert_eq!(
+            node_builder_defs_count(&files_of(&[("a.rs", wrappers), ("b.rs", wrappers)])),
+            10
         );
     }
 

@@ -36,8 +36,7 @@ use bynk_check::hints::HintSink;
 use bynk_check::index::RefSink;
 use bynk_check::locals::LocalsSink;
 use bynk_check::project_model::{
-    self, AdapterBinding, FnDecl, TypeDecl, UnitInfo, Visibility, handler_cross_caps,
-    resolve_consume_prefix,
+    self, AdapterBinding, FnDecl, TypeDecl, UnitInfo, Visibility, resolve_consume_prefix,
 };
 use bynk_check::requirements::RequirementSink;
 use bynk_check::resolver::{self, MethodTable as ResolverMethodTable};
@@ -1514,7 +1513,6 @@ fn finish_build(
             unit_tables,
             unit_consumed_context_types,
             unit_callees,
-            unit_event_subscriber_shapes,
             unit_uses,
             unit_flattened,
             adapter_bindings,
@@ -1527,8 +1525,10 @@ fn finish_build(
             agent_versions,
             d1_migrations,
             layout,
+            composed,
             ..
         } => {
+            let composed = composed.expect("a build with no errors has its compose plan");
             // #3477: a container's build paths are written from the output
             // directory, which has to be inside the project.
             let container_root = match worker_bindings::container_root(display_root, out_dir) {
@@ -1558,7 +1558,6 @@ fn finish_build(
                 unit_tables,
                 &unit_consumed_context_types,
                 unit_callees,
-                unit_event_subscriber_shapes,
                 unit_uses,
                 unit_flattened,
                 adapter_bindings,
@@ -1575,6 +1574,7 @@ fn finish_build(
                 &layout,
                 trace_requests,
                 inspect_agents,
+                composed,
             );
             // ADR 0117: surface non-failing warnings on the successful build
             // (errors is empty here — the guard arm above caught any).
@@ -2579,11 +2579,6 @@ enum RunChecks {
         // every call site's full classification project-wide for the rest
         // of the build on spec.
         unit_callees: HashMap<String, HashMap<ExprId, bynk_check::checker::Callee>>,
-        // P6.x (#1232): each unit's own declared event-subscriber service
-        // shapes, merged across its files — see `EventSubscriberShape`'s own
-        // doc comment. Threaded the same way as `unit_callees` immediately
-        // above.
-        unit_event_subscriber_shapes: HashMap<String, HashMap<String, EventSubscriberShape>>,
         unit_flattened: HashMap<String, HashMap<String, String>>,
         adapter_bindings: HashMap<String, AdapterBinding>,
         npm_deps: std::collections::BTreeMap<String, String>,
@@ -2606,6 +2601,9 @@ enum RunChecks {
         d1_migrations: bynk_check::d1_migrations::D1Migrations,
         // #3562: where each context's Worker is, as the checks above read it.
         layout: WorkerLayout,
+        // 1C.1a: the plan and binding model, derived once; `None` while the
+        // program has errors.
+        composed: Option<ComposedBuild>,
         // State-migrations S4 (#2259): each agent class's reconciled versions
         // and valid steps, keyed `<unit>.<Agent>`, for `bynk migrate status`.
         // Empty when the build has no lock.
@@ -3631,19 +3629,19 @@ fn run_checks(
     // participant, and emits a TypeScript module that stands the participants
     // up as in-process Workers and exercises the flow across the real wire.
     // #1959: each context's bindings, once: the integration harness binds them
-    // on each participant's `env`, and the duplicate check below reads them.
-    // Gated like that check: the KV input walks the provider graph.
+    // on each participant's `env`, and the duplicate check reads them.
     let event_subscribers =
         bynk_check::symbols::discover_event_subscribers(&unit_tables, &unit_consumes);
-    let context_bindings = errors.is_empty().then(|| {
-        worker_bindings::all_context_bindings(
-            &kinds,
-            &unit_tables,
-            &unit_consumes,
-            &unit_consumes_aliases,
-            &unit_flattened,
-            &unit_callees,
-            &event_subscribers,
+    // 1C.1a: the plan and the binding model, once; `build_output` takes them.
+    let derived = errors.is_empty().then(|| {
+        derive_bindings(
+            (&kinds, &unit_tables, &unit_consumes, &unit_consumes_aliases),
+            (
+                &unit_callees,
+                &unit_flattened,
+                &unit_event_subscriber_shapes,
+            ),
+            (&event_subscribers, &layout, &groups),
         )
     });
     let mut integration_errors: Vec<CompileError> = Vec::new();
@@ -3660,7 +3658,7 @@ fn run_checks(
         &mut emitted_barrels,
         &test_asset_files,
         IntegrationD1::new(&d1_migrations, d1_sql.as_deref()),
-        context_bindings.as_ref(),
+        derived.as_ref().map(|d| &d.0),
         &event_subscribers,
         remote_tests,
         project_mentions_encode_plain(&parsed),
@@ -3699,7 +3697,7 @@ fn run_checks(
     );
     // On Workers, each Worker's binding names are unique. Gated the same way:
     // the KV input walks the same provider graph.
-    if let Some(bindings) = context_bindings.as_ref().filter(|_| errors.is_empty()) {
+    if let Some((bindings, _)) = derived.as_ref().filter(|_| errors.is_empty()) {
         worker_bindings::phase_duplicate_bindings(
             target,
             (project_root, overlay),
@@ -3737,7 +3735,6 @@ fn run_checks(
         unit_tables,
         unit_consumed_context_types,
         unit_callees,
-        unit_event_subscriber_shapes,
         unit_flattened,
         adapter_bindings,
         npm_deps,
@@ -3749,6 +3746,7 @@ fn run_checks(
         agent_versions: schema_effective_versions.agents,
         d1_migrations,
         layout,
+        composed: derived.map(|d| d.1),
     }
 }
 
@@ -3827,6 +3825,7 @@ struct WorkersEmit<'a> {
     agent_versions: &'a HashMap<String, AgentVersions>,
     asset_files: Option<&'a BTreeMap<String, Vec<u8>>>,
     asset_served: &'a BTreeMap<String, String>,
+    bindings: &'a emitter::WorkerBindings,
     compatibility_flags: &'a [String],
     container_root: &'a str,
     context_bare_native: &'a HashMap<String, BTreeMap<Platform, String>>,
@@ -3870,6 +3869,7 @@ impl WorkersEmit<'_> {
         let WorkersEmit {
             adapter_bindings,
             agent_versions,
+            bindings: model,
             container_root,
             context_bare_native,
             context_singletons,
@@ -3994,6 +3994,13 @@ impl WorkersEmit<'_> {
         // project, which `wrangler` reaches from the Worker's output
         // directory.
         worker_bindings::locate_container_builds(&mut bindings, container_root);
+        // 1C.1a: the model, derived once, is what the build's old derivation
+        // would write, for every fixture, until 1C.1b switches to it.
+        debug_assert_eq!(
+            model.of(ctx_name),
+            bindings.as_slice(),
+            "the binding model of `{ctx_name}` differs from the build's derivation"
+        );
         // #2719: the context's handlers that hand work to the execution
         // context, from the checker's needs-context set.
         let ctx_uses_exec = planned_unit(compose_plan, ctx_name).exec.any_handler;
@@ -4235,6 +4242,11 @@ impl WorkersEmit<'_> {
         let first = members[0].0.context.as_str();
         let bindings = bynk_check::worker_bindings::merge_group_bindings(
             members.iter().map(|(parts, _)| parts.bindings.as_slice()),
+        );
+        debug_assert_eq!(
+            self.bindings.of_worker(&layout.dir(first)),
+            bindings.as_slice(),
+            "the binding model of Worker `{first}` differs from its members' merge"
         );
         let union = |of: fn(&MemberParts) -> &Vec<String>| -> Vec<String> {
             let mut all: Vec<String> = members.iter().flat_map(|(p, _)| of(p).clone()).collect();
@@ -4685,6 +4697,77 @@ fn planned_unit<'a>(plan: &'a emitter::ComposePlan, context: &str) -> &'a emitte
         .expect("the compose plan has a unit for every context with a checked table")
 }
 
+/// What `run_checks` derives once for the build (1C.1a, Decision C of #4031):
+/// the event subscribers, the composition plan decided from them, and every
+/// Worker's bindings decided from the plan.
+struct ComposedBuild {
+    event_subscribers: BTreeMap<(String, String), Vec<(String, String)>>,
+    plan: emitter::ComposePlan,
+    bindings: emitter::WorkerBindings,
+}
+
+/// The build's [`ComposedBuild`], with the bindings the checks still read from
+/// their old derivation ([`worker_bindings::all_context_bindings`], deleted in
+/// 1C.1b). The old derivation is compared with the model: every fixture that
+/// reaches here checks that the model is what the checks and the build have
+/// been using. Only on an otherwise clean program: the plan walks the provider
+/// graph, whose acyclicity the earlier checks establish.
+#[allow(clippy::type_complexity)]
+fn derive_bindings(
+    (kinds, unit_tables, unit_consumes, unit_consumes_aliases): (
+        &BTreeMap<String, UnitKind>,
+        &HashMap<String, UnitTable>,
+        &HashMap<String, Vec<String>>,
+        &HashMap<String, HashMap<String, String>>,
+    ),
+    (unit_callees, unit_flattened, unit_event_subscriber_shapes): (
+        &HashMap<String, HashMap<ExprId, bynk_check::checker::Callee>>,
+        &HashMap<String, HashMap<String, String>>,
+        &HashMap<String, HashMap<String, EventSubscriberShape>>,
+    ),
+    (event_subscribers, layout, groups): (
+        &BTreeMap<(String, String), Vec<(String, String)>>,
+        &WorkerLayout,
+        &BTreeMap<String, Vec<usize>>,
+    ),
+) -> (
+    BTreeMap<String, Vec<emitter::wrangler::WorkerBinding>>,
+    ComposedBuild,
+) {
+    let plan = emitter::ComposePlan::build(
+        kinds,
+        unit_consumes,
+        unit_consumes_aliases,
+        unit_tables,
+        unit_callees,
+        unit_flattened,
+        event_subscribers,
+        unit_event_subscriber_shapes,
+    );
+    debug_assert_plan_covers_groups(&plan, groups, kinds);
+    let bindings = emitter::WorkerBindings::derive(&plan, unit_tables, layout);
+    let old = worker_bindings::all_context_bindings(
+        kinds,
+        unit_tables,
+        unit_consumes,
+        unit_consumes_aliases,
+        unit_flattened,
+        unit_callees,
+        event_subscribers,
+    );
+    debug_assert_eq!(
+        bindings.by_context(),
+        &old,
+        "the binding model differs from the checks' derivation"
+    );
+    let composed = ComposedBuild {
+        event_subscribers: event_subscribers.clone(),
+        plan,
+        bindings,
+    };
+    (old, composed)
+}
+
 /// Makes that assumption explicit: the plan's contexts are the grouped ones.
 fn debug_assert_plan_covers_groups(
     plan: &emitter::ComposePlan,
@@ -4751,8 +4834,6 @@ fn build_output(
     unit_tables: HashMap<String, UnitTable>,
     unit_consumed_context_types: &HashMap<String, HashSet<String>>,
     unit_callees: HashMap<String, HashMap<ExprId, bynk_check::checker::Callee>>,
-    // P6.x (#1232): see `EventSubscriberShape`'s own doc comment.
-    unit_event_subscriber_shapes: HashMap<String, HashMap<String, EventSubscriberShape>>,
     // v0.177 (#643): needed to build each context's *own* combined type table,
     // so its contract hashes are computed from the same namespace a caller sees.
     unit_uses: HashMap<String, Vec<String>>,
@@ -4782,6 +4863,8 @@ fn build_output(
     // #3580: wrap each Worker's `fetch` in the request recorder.
     trace_requests: bool,
     inspect_agents: bool,
+    // 1C.1a: the plan and binding model `run_checks` derived.
+    composed: ComposedBuild,
 ) -> ProjectOutput {
     // #2554: the lock's warnings, returned on `ProjectOutput::warnings` for
     // `finish_build` to merge with the checker's.
@@ -4875,25 +4958,15 @@ fn build_output(
     );
 
     // Events track, slice 0 (spine #936): project-wide "who subscribes to
-    // what", built once and shared by both targets — Bundle mode's
-    // `composeApp` dispatches in-process; Workers mode uses it to size each
-    // publishing context's fan-out DO routing table and wrangler.toml
-    // Service Bindings.
-    let event_subscribers =
-        bynk_check::symbols::discover_event_subscribers(&unit_tables, &unit_consumes);
-
-    // 1B.1b (#3928): what each unit composes, decided once for both targets.
-    let compose_plan = emitter::ComposePlan::build(
-        &kinds,
-        &unit_consumes,
-        &unit_consumes_aliases,
-        &unit_tables,
-        &unit_callees,
-        &unit_flattened,
-        &event_subscribers,
-        &unit_event_subscriber_shapes,
-    );
-    debug_assert_plan_covers_groups(&compose_plan, &groups, &kinds);
+    // what", and 1B.1b (#3928) what each unit composes, both decided once in
+    // `run_checks` for both targets; 1C.1a (#4031) adds each Worker's bindings,
+    // with a container's build path from the project root set once (#3477).
+    let ComposedBuild {
+        event_subscribers,
+        plan: compose_plan,
+        mut bindings,
+    } = composed;
+    bindings.locate_containers(container_root);
     // #2137: the contexts a `system` harness stands up (test build only).
     let harness_clock_contexts =
         harness_clock_contexts(&parsed, &unit_tables, &unit_consumes, &kinds);
@@ -4920,6 +4993,7 @@ fn build_output(
                 agent_versions,
                 asset_files,
                 asset_served: &asset_served,
+                bindings: &bindings,
                 compatibility_flags,
                 compose_plan: &compose_plan,
                 container_root,
@@ -5098,131 +5172,8 @@ fn build_output(
 // P5.3 review (#1133): `resolve_consume_prefix` and `handler_cross_caps` used
 // to have their own copies here, byte-identical to `bynk-check::project_model`'s
 // (neither builds TypeScript, so neither had the codegen coupling that keeps
-// `instantiate_provider_ts_expr`/`native_platforms_of_context` below in this
-// crate) — deleted, every call site repointed at
+// `instantiate_provider_ts_expr` in `bynk-emit`) — deleted, every call site repointed at
 // `project_model::{resolve_consume_prefix, handler_cross_caps}`.
-
-/// v0.19 (decision 0017): the native platforms a context's **in-process
-/// closure** commits it to: every unit whose provider its compose would
-/// instantiate — local providers' `given` recursion plus the capabilities its
-/// handlers reference — mapped through [`firstparty::platform_of`]. Each
-/// platform carries an exemplar unit for the diagnostic message. Service
-/// `consumes` edges (RPC under `workers`) do not contribute — only the
-/// provider-instantiation walk, which is in-process by construction.
-#[allow(clippy::too_many_arguments)]
-fn native_platforms_of_context(
-    ctx: &str,
-    table: &UnitTable,
-    unit_tables: &HashMap<String, UnitTable>,
-    unit_consumes: &HashMap<String, Vec<String>>,
-    unit_consumes_aliases: &HashMap<String, HashMap<String, String>>,
-    unit_flattened: &HashMap<String, HashMap<String, String>>,
-    // S4a (#1966): count derived capabilities' base units. `true` for what
-    // threads `env`; `false` for whether the *bare* platform resource (the
-    // `KV` namespace) is used, which a named instance alone must not imply.
-    with_derived: bool,
-) -> std::collections::BTreeMap<Platform, String> {
-    let referenced = referenced_units_of_context(
-        ctx,
-        table,
-        unit_tables,
-        unit_consumes,
-        unit_consumes_aliases,
-        unit_flattened,
-        with_derived,
-    );
-    let mut out = std::collections::BTreeMap::new();
-    for unit in referenced {
-        if let Some(p) = bynk_check::firstparty::platform_of(&unit) {
-            out.entry(p).or_insert(unit);
-        }
-    }
-    out
-}
-
-/// #3300: the one-per-Worker capabilities (`Version`) context `ctx`'s
-/// closure reaches bare, as `(unit, capability)`, in order: the bare-resources
-/// walk's [`bare_singleton_marker`]s.
-fn bare_singletons_of_context(
-    ctx: &str,
-    table: &UnitTable,
-    unit_tables: &HashMap<String, UnitTable>,
-    unit_consumes: &HashMap<String, Vec<String>>,
-    unit_consumes_aliases: &HashMap<String, HashMap<String, String>>,
-    unit_flattened: &HashMap<String, HashMap<String, String>>,
-) -> Vec<(String, String)> {
-    referenced_units_of_context(
-        ctx,
-        table,
-        unit_tables,
-        unit_consumes,
-        unit_consumes_aliases,
-        unit_flattened,
-        false,
-    )
-    .iter()
-    .filter_map(|entry| {
-        parse_bare_singleton_marker(entry).map(|(u, c)| (u.to_string(), c.to_string()))
-    })
-    .collect()
-}
-
-/// The units (and, on the bare walk, [`bare_singleton_marker`]s) context
-/// `ctx`'s providers and cross-context capabilities instantiate.
-fn referenced_units_of_context(
-    ctx: &str,
-    table: &UnitTable,
-    unit_tables: &HashMap<String, UnitTable>,
-    unit_consumes: &HashMap<String, Vec<String>>,
-    unit_consumes_aliases: &HashMap<String, HashMap<String, String>>,
-    unit_flattened: &HashMap<String, HashMap<String, String>>,
-    with_derived: bool,
-) -> BTreeSet<String> {
-    // Arc F slice 2 (#1452): repointed at the tree-native twin — only the
-    // `referenced` side effect matters here, the returned `TsExpr` (vs. the
-    // old `String`) is discarded either way.
-    let mut referenced: BTreeSet<String> = BTreeSet::new();
-    let namespaces = if with_derived {
-        ProviderNamespaces::Bundle
-    } else {
-        ProviderNamespaces::BareResources
-    };
-    for cap in table.providers.keys() {
-        let _ = instantiate_provider_ts_expr(
-            ctx,
-            cap,
-            unit_tables,
-            unit_consumes,
-            unit_consumes_aliases,
-            unit_flattened,
-            namespaces,
-            None,
-            None,
-            &mut referenced,
-        );
-    }
-    let consumed = unit_consumes.get(ctx).cloned().unwrap_or_default();
-    let aliases = unit_consumes_aliases.get(ctx).cloned().unwrap_or_default();
-    let flattened = unit_flattened.get(ctx).cloned().unwrap_or_default();
-    for (key, cctx) in handler_cross_caps(table, ctx, &consumed, &aliases, &flattened) {
-        let _ = instantiate_provider_ts_expr(
-            &cctx,
-            &key,
-            unit_tables,
-            unit_consumes,
-            unit_consumes_aliases,
-            unit_flattened,
-            namespaces,
-            None,
-            None,
-            &mut referenced,
-        );
-    }
-    if with_derived {
-        referenced.extend(table.derived.values().map(|d| d.base_unit.clone()));
-    }
-    referenced
-}
 
 /// #527: the DO-side deps plan for one workers context. Capability providers
 /// cannot cross the DO wire (`{ args, deps }` is JSON — a provider's methods

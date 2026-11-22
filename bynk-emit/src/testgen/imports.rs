@@ -7,18 +7,15 @@
 use super::*;
 use crate::emitter::RuntimeUse;
 
-/// #1486: `emitter/workers.rs`'s own `append_missing_bindings`'s sibling
-/// duplicate — same reason that one and `emitter/workers_entry.rs`'s own copy
-/// don't share a single implementation (each doc comment explains why for its
-/// own file): folds `extra`'s comma-separated bindings (e.g.
-/// [`crate::emitter::BOUNDARY_CODEC_RUNTIME_IMPORTS`]) into `names` directly,
-/// skipping anything already present under the same "strip an optional `type
-/// ` prefix, compare bare names" dedup rule. `emit_test_module`/
-/// `emit_integration_module`'s own runtime-import statement is now a real
-/// `TsDecl::Import` built once every case has lowered (deferred, not spliced
-/// into already-printed text the way the pre-#1486 code's own
-/// `emitter::inject_runtime_imports` post-pass did — see each caller's own
-/// doc comment) — this is that deferred construction's own merge step.
+/// Folds `extra`'s comma-separated bindings (e.g.
+/// [`crate::emitter::BOUNDARY_CODEC_RUNTIME_IMPORTS`]) into `names` directly, skipping anything
+/// already present under the same "strip an optional `type ` prefix, compare bare names" dedup
+/// rule. This is the one copy (the Workers and Bundle ones went in 1A.36b-2): the merge step of
+/// the predicted runtime import of a `tests/*.test.ts` module, whose
+/// `emit_test_module`/`emit_integration_module` build the runtime-import statement as a real
+/// `TsDecl::Import` once every case has lowered. 1B.5 deletes it, with
+/// `append_runtime_use_imports`, once the case bodies are nodes and the import is derived from
+/// the tree.
 pub(super) fn append_missing_bindings(names: &mut Vec<String>, extra: &str) {
     fn bare(binding: &str) -> &str {
         binding

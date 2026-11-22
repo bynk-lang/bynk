@@ -8,11 +8,12 @@
 use bynk_check::kernel_op::{BytesOp, DecimalOp, DurationOp, FloatOp, InstantOp, IntOp, StringOp};
 use bynk_ts::{TsArrowBody, TsBinaryOp, TsExpr, TsType};
 
-use super::super::lower::{Lowered, Pre, str_node};
+use super::super::lower::{Lowered, Pre};
 use super::super::lower_ctx::LowerCtx;
-use super::super::lower_list::{arrow, call, id, member, param, spread, take, zero};
+use super::super::lower_list::{take, zero};
 use super::super::{Expr, ExprKind, rounding_mode};
 use super::kernel::receiver_object;
+use crate::ts_build::{arrow, call, ident as id, member, param, spread, str_lit as str_node};
 
 /// The receiver and then each argument, lowered in order.
 fn operands(pre: &mut Pre, cx: &mut LowerCtx, parts: &[&Expr]) -> Vec<bynk_ts::TsExpr> {

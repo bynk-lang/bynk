@@ -7,14 +7,18 @@
 use bynk_check::checker::{Callee, Ty};
 use bynk_check::kernel_op::{FormStatic, JsonStatic, StaticOp, YamlStatic};
 use bynk_ts::{
-    TsArrowBody, TsBinaryOp, TsBindingName, TsExpr, TsLit, TsParam, TsStmt, TsType, TsTypeMember,
-    TsUnaryOp, VerbatimOrigin,
+    TsArrowBody, TsBinaryOp, TsBindingName, TsExpr, TsLit, TsStmt, TsType, TsTypeMember, TsUnaryOp,
+    VerbatimOrigin,
 };
 
-use super::super::lower::{Pre, ident_node, member_node, str_node};
+use super::super::lower::{Pre, member_node};
 use super::super::lower_ctx::LowerCtx;
 use super::super::ts_types::ts_ty_to_ts_type;
 use super::super::{BaseType, Expr, TypeBody, TypeRef, ty_to_type_ref};
+use crate::ts_build::{
+    binary, block, call, const_typed as const_, ident as ident_node, index, member, or_expr as or,
+    param, raw_lit as raw, str_lit as str_node, strict_eq,
+};
 
 /// v0.22b: the typed JSON codec (ADR 0045). `encode` dispatches to the
 /// module-local `serialise_*` helpers + `JSON.stringify`; `decode[T]` to
@@ -168,48 +172,6 @@ pub(in super::super) enum DecodeSource {
     Form,
 }
 
-/// `a.b`.
-fn member(object: TsExpr, property: &str) -> TsExpr {
-    TsExpr::Member {
-        object: Box::new(object),
-        property: property.to_string(),
-    }
-}
-
-/// `callee(args)`.
-fn call(callee: TsExpr, args: Vec<TsExpr>) -> TsExpr {
-    TsExpr::Call {
-        callee: Box::new(callee),
-        args,
-    }
-}
-
-/// `left === right`.
-fn strict_eq(left: TsExpr, right: TsExpr) -> TsExpr {
-    TsExpr::Binary {
-        op: TsBinaryOp::StrictEq,
-        left: Box::new(left),
-        right: Box::new(right),
-    }
-}
-
-/// `left || right`.
-fn or(left: TsExpr, right: TsExpr) -> TsExpr {
-    TsExpr::Binary {
-        op: TsBinaryOp::Or,
-        left: Box::new(left),
-        right: Box::new(right),
-    }
-}
-
-/// `object[index]`.
-fn index(object: TsExpr, index: TsExpr) -> TsExpr {
-    TsExpr::Index {
-        object: Box::new(object),
-        index: Box::new(index),
-    }
-}
-
 /// `globalThis.<name>`.
 fn global(name: &str) -> TsExpr {
     member_node("globalThis", name)
@@ -223,28 +185,6 @@ fn is_array(value: TsExpr) -> TsExpr {
 /// The `__JsonValue` type the decoder reads parse results and rows as.
 fn json_value_ty() -> TsType {
     TsType::named("__JsonValue")
-}
-
-/// A typed parameter.
-fn param(name: &str, ty: TsType) -> TsParam {
-    TsParam {
-        name: name.to_string(),
-        ty: Some(ty),
-        optional: false,
-        rest: false,
-        array_pattern: None,
-        default: None,
-    }
-}
-
-/// `{ stmts }` as a block statement.
-fn block(stmts: Vec<TsStmt>) -> TsStmt {
-    TsStmt::block(stmts, None)
-}
-
-/// `const <name>[: <ty>] = <init>;`.
-fn const_(name: &str, ty: Option<TsType>, init: TsExpr) -> TsStmt {
-    TsStmt::const_stmt(TsBindingName::Ident(name.to_string()), ty, init, None)
 }
 
 /// `return Err(<value>);`.
@@ -527,20 +467,6 @@ fn json_stringify(value: TsExpr) -> TsExpr {
     call(member(global("JSON"), "stringify"), vec![value])
 }
 
-/// A literal printed exactly as given: one of the fixed pieces of the `bynk eval` line.
-fn raw(text: &str) -> TsExpr {
-    TsExpr::Lit(TsLit::Raw(text.to_string()))
-}
-
-/// `left + right`.
-fn add(left: TsExpr, right: TsExpr) -> TsExpr {
-    TsExpr::Binary {
-        op: TsBinaryOp::Add,
-        left: Box::new(left),
-        right: Box::new(right),
-    }
-}
-
 /// #3585: the statement that reports a `bynk eval` case's tail value: its
 /// `Json.encode` text and its type, as one NDJSON line. `None` when the value's
 /// type is unknown to the lowering, so the case runs without reporting.
@@ -552,7 +478,8 @@ pub(crate) fn eval_value_line(
     let ty = cx.commons().expr_types.get(&tail.id).map(|te| te.ty)?;
     let shown = bynk_check::symbols::display_type_names_in(&cx.commons().tys().display(ty));
     // `console.log('{"type":"eval-value","valueType":' + JSON.stringify(<type>)` …
-    let head = add(
+    let head = binary(
+        TsBinaryOp::Add,
         raw("'{\"type\":\"eval-value\",\"valueType\":'"),
         call(member(global("JSON"), "stringify"), vec![str_node(shown)]),
     );
@@ -563,14 +490,19 @@ pub(crate) fn eval_value_line(
     // no value.
     let Some(json) = json_encode(pre, tail, cx, false) else {
         let _ = pre.lower_node(tail, cx);
-        return Some(log(add(head, raw("'}'"))));
+        return Some(log(binary(TsBinaryOp::Add, head, raw("'}'"))));
     };
     // The encoder names `JsonValue` and `BoundaryError`, whether or not the
     // value's type needs a closure of codecs of its own.
     cx.runtime_use().note_json_codec();
     cx.runtime_use().note_boundary_codec();
-    Some(log(add(
-        add(add(head, raw("',\"value\":'")), json),
+    Some(log(binary(
+        TsBinaryOp::Add,
+        binary(
+            TsBinaryOp::Add,
+            binary(TsBinaryOp::Add, head, raw("',\"value\":'")),
+            json,
+        ),
         raw("'}'"),
     )))
 }

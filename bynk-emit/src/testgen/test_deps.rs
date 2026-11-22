@@ -77,7 +77,7 @@ pub(super) fn emit_test_deps(
         given_doubles
             .borrow_mut()
             .push((owner.to_string(), cap.to_string(), cap.to_string()));
-        Some(call(ident(format!("__bynkTest_{cap}")), Vec::new()))
+        Some(call(ident(test_cap_factory(cap)), Vec::new()))
     };
     // Each top-level entry: its deps key, the `(unit, capability)` it is, and
     // how its value is built.
@@ -217,7 +217,7 @@ pub(super) fn emit_test_deps(
                 let (owner, base) = derived.map_or((unit, cap), |d| (&d.base_unit, &d.base_cap));
                 doubles.push((owner.clone(), base.clone(), cap.clone()));
                 let args = double_args(derived);
-                Some(call(ident(format!("__bynkTest_{cap}")), args))
+                Some(call(ident(test_cap_factory(cap)), args))
             }
             TopDep::Placeholder => None,
         };
@@ -496,8 +496,14 @@ pub(super) fn emit_ns_destructure_renamed(
         let pattern = value_names
             .iter()
             .flat_map(|n| match renames.get(n) {
-                Some(alias) if declared.contains(n) => vec![format!("{n}: {alias}"), n.clone()],
-                Some(alias) => vec![format!("{n}: {alias}")],
+                Some(alias) => {
+                    let entry = format!("{n}: {alias}");
+                    if declared.contains(n) {
+                        vec![entry, n.clone()]
+                    } else {
+                        vec![entry]
+                    }
+                }
                 None => vec![n.clone()],
             })
             .collect();

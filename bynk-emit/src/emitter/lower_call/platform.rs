@@ -11,24 +11,14 @@ use bynk_ts::{TsExpr, TsLit, TsStmt, TsType};
 use super::super::emit::flatten_emit_ident_chain;
 use super::super::lower::Pre;
 use super::super::lower_ctx::LowerCtx;
-use super::super::lower_list::{
-    binary, block_arrow, call, const_, expr_stmt, id, member, param, paren, ret,
-};
 use super::super::ts_types::ts_type_ref_to_ts_type;
 use super::super::{Expr, ExprKind, Ident, TypeBody, TypeRef, test_scaffold_ns};
 use super::codec_statics::{DecodeSource, json_decoder_fn};
 use super::cross_context::type_ref_named_root;
-
-/// `"text"`: raw text, which the printer escapes (the one escaper, `escape_ts_literal`, that
-/// `escape_ts_string` re-exports, so the node and text forms cannot disagree).
-fn lit_str(text: &str) -> TsExpr {
-    TsExpr::Lit(TsLit::Str(text.to_string()))
-}
-
-/// A numeric literal printed verbatim.
-fn lit_num(digits: impl ToString) -> TsExpr {
-    TsExpr::Lit(TsLit::Num(digits.to_string()))
-}
+use crate::ts_build::{
+    arrow_with, binary, block_arrow, call, const_typed as const_, expr_stmt, ident as id, member,
+    num_lit as lit_num, param, paren, ret, str_lit as lit_str,
+};
 
 /// `"text" as const`: a string-literal tag that keeps its literal type.
 fn tag_const(text: &str) -> TsExpr {
@@ -47,7 +37,7 @@ fn object(entries: Vec<(&str, TsExpr)>) -> TsExpr {
 
 /// `a.b.c` as a member chain over `root`.
 fn chain(root: TsExpr, path: &[&str]) -> TsExpr {
-    path.iter().fold(root, |object, name| member(object, name))
+    path.iter().fold(root, |object, name| member(object, *name))
 }
 
 /// Lower every argument, in order.
@@ -147,7 +137,7 @@ pub(in crate::emitter) fn decode_capability_reply(
     };
     let payload = reply.payload.display(cx.commons().tys());
     let codec = cx.codec(reply.payload);
-    crate::emitter::lower_list::call(
+    crate::ts_build::call(
         id("__bynkCapabilityReply"),
         vec![
             call,
@@ -439,10 +429,7 @@ pub(in crate::emitter) fn lower_signed_cookie_call(
                 now,
             ],
         );
-        call(
-            paren(crate::emitter::lower_list::arrow_with(vec![], true, issue)),
-            vec![],
-        )
+        call(paren(arrow_with(vec![], true, issue)), vec![])
     })
 }
 

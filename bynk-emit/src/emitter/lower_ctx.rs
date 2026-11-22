@@ -1,10 +1,9 @@
 //! `LowerCtx`: the per-body lowering context and its `impl`.
 
 use super::ctx::*;
-use super::lower::str_node;
-use super::lower_list::{call, id};
 use super::ts_types::ts_ty_to_ts_type;
 use super::*;
+use crate::ts_build::{call, ident as id, str_lit as str_node};
 use bynk_check::firstparty::FirstPartyCap;
 
 /// Per-body lowering context: what module we are emitting into ([`ModuleCtx`]),
@@ -1593,7 +1592,7 @@ impl<'a> LowerCtx<'a> {
     /// expression.
     pub(super) fn is_receiver_ref(&mut self, value: &Expr) -> Lowered {
         if let Some(t) = self.is_receiver_temps.get(&value.span) {
-            return Lowered::node(super::lower::ident_node(t));
+            return Lowered::node(crate::ts_build::ident(t));
         }
         let mut pre = Pre::new();
         let lowered = pre.lower_node(value, self);
@@ -1606,7 +1605,7 @@ impl<'a> LowerCtx<'a> {
         let tmp = self.fresh();
         self.declare_is_temp(value, &tmp, lowered, &mut pre);
         self.is_receiver_temps.insert(value.span, tmp.clone());
-        pre.finish(super::lower::ident_node(&tmp))
+        pre.finish(crate::ts_build::ident(&tmp))
     }
 
     /// Declare an `is` receiver temp holding `lowered`: a `const` in place, or,
@@ -1642,7 +1641,7 @@ impl<'a> LowerCtx<'a> {
         let n = lowered;
         if hoisting {
             pre.push_node(bynk_ts::TsStmt::assign(
-                super::lower::ident_node(tmp),
+                crate::ts_build::ident(tmp),
                 n,
                 None,
             ));
@@ -1663,14 +1662,14 @@ impl<'a> LowerCtx<'a> {
     /// temp first and both the check and the binding read the temp.
     pub(super) fn is_receiver_ref_forced(&mut self, value: &Expr) -> Lowered {
         if let Some(t) = self.is_receiver_temps.get(&value.span) {
-            return Lowered::node(super::lower::ident_node(t));
+            return Lowered::node(crate::ts_build::ident(t));
         }
         let mut pre = Pre::new();
         let lowered = pre.lower_node(value, self);
         let tmp = self.fresh();
         self.declare_is_temp(value, &tmp, lowered, &mut pre);
         self.is_receiver_temps.insert(value.span, tmp.clone());
-        pre.finish(super::lower::ident_node(&tmp))
+        pre.finish(crate::ts_build::ident(&tmp))
     }
 
     /// v0.13: true when `value is Name` is a *refinement* check — the value is a

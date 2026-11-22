@@ -68,12 +68,14 @@ use bynk_syntax::ast::{
 use ctx::UnitFacts;
 use ts_types::{TyRender, asset_ts_type, ts_base};
 
+pub(crate) mod bindings;
 pub mod client;
 pub mod commons_barrel;
 pub(crate) mod compose;
 pub mod containers;
 pub mod contracts;
 pub(crate) mod events_fanout;
+pub(crate) mod harness_names;
 pub mod http_client;
 pub mod secrets;
 pub mod serialisation;
@@ -84,7 +86,9 @@ pub(crate) mod workers_entry;
 pub mod workers_group;
 pub mod wrangler;
 
+pub use bindings::WorkerBindings;
 pub use compose::bundle::emit_composition_root;
+pub use compose::closure::{bare_singletons_of_context, native_platforms_of_context};
 pub use compose::workers::emit_worker_compose;
 pub use compose::{
     ComposeFacts, ComposePlan, ComposeUnit, ComposeUnitFacts, ConsumedSurface, EventPlan,
@@ -3252,11 +3256,9 @@ pub const INT_RUNTIME_IMPORTS: &str = ", __bynkIntDiv, __bynkToInt, __bynkIntDiv
 /// arms — `Unit` and the runtime-owned error types — additionally annotate the
 /// result (`Ok(undefined) as Result<void, BoundaryError>`), which `compose.ts`'s
 /// structural list never carries; `Result` is in the group for those. The dedupe
-/// every real caller applies this group through (`emitter/workers.rs`'s own
-/// `append_missing_bindings`, `project/tests_emit.rs`'s own copy — #1486
-/// retired this doc's own `inject_runtime_imports`, the pre-conversion
-/// post-print-text-splice mechanism both are the tree-level successor to)
-/// makes it free wherever it is already imported.
+/// every real caller applies this group through (`testgen/imports.rs`'s
+/// `append_missing_bindings`, the one copy, which 1B.5 deletes) makes it free wherever it is
+/// already imported.
 pub const BOUNDARY_CODEC_RUNTIME_IMPORTS: &str = ", Ok, Err, type Result, type __BoundaryError";
 
 /// #914: the names the `Json.decode[T]` wrapper puts in the module — its own
