@@ -247,6 +247,37 @@ mod tests {
         assert_eq!(f.classes, ["Cart"]);
     }
 
+    /// #3970: a declared Hyperdrive binding's recorded config id is in the facts, so
+    /// `bynk revert` can tell when the config has since been replaced.
+    #[test]
+    fn build_facts_records_a_hyperdrive_configs_id() {
+        let mut lock = DeployLock::default();
+        lock.record::<Hyperdrive>(
+            "default",
+            "shop",
+            "HYPERDRIVE_MAIN",
+            HyperdriveRecord {
+                name: "shop-main".into(),
+                id: "id-1".into(),
+                adopted: false,
+                superseded: Vec::new(),
+            },
+        );
+        let f = build_facts(
+            "shop",
+            "default",
+            &Resources::default().hyperdrive(&["HYPERDRIVE_MAIN"]),
+            &ContractsManifest::default(),
+            &lock,
+            &BTreeMap::new(),
+            &bynk_project::worker_layout::WorkerLayout::identity(),
+        );
+        assert_eq!(
+            f.ids.get("HYPERDRIVE_MAIN").map(String::as_str),
+            Some("id-1")
+        );
+    }
+
     /// #3686: a group's Worker carries its members' agent versions, which the
     /// ledger and `bynk migrate` key by the group's directory.
     #[test]
