@@ -63,7 +63,7 @@ impl ReaderDir {
     pub const fn path(self) -> &'static str {
         match self {
             ReaderDir::Runtime => "bynk-emit/runtime/src",
-            ReaderDir::TestRuntime => "bynk-driver/src/project/test_runtime",
+            ReaderDir::TestRuntime => "bynk-emit/src/testgen/test_runtime",
             ReaderDir::Std => "bynk-std/lib",
         }
     }
@@ -185,7 +185,7 @@ const CLOUDFLARE_BINDING: Reader = Reader {
 };
 
 /// The generated test main, which emits the readers of the names it reads.
-const TEST_MAIN: &str = "bynk-driver::project::tests_emit::test_main";
+const TEST_MAIN: &str = "bynk-emit::testgen::test_main";
 
 const fn process(
     name: &'static str,
@@ -506,7 +506,7 @@ mod tests {
         );
         assert_eq!(
             test_runtime("property.ts").path(),
-            "bynk-driver/src/project/test_runtime/property.ts"
+            "bynk-emit/src/testgen/test_runtime/property.ts"
         );
     }
 }

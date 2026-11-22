@@ -7,7 +7,7 @@
 //! output.
 //!
 //! * **Tree == imported**, for every module the emitter or the driver builds bar the driver's
-//!   `tests/*.test.ts` modules (predicted until 1B.2) and the runtime's own files. A name the
+//!   `tests/*.test.ts` modules (predicted until 1B.5) and the runtime's own files. A name the
 //!   tree uses and the module does not import is an under-import ([`KNOWN_UNDER_IMPORTS`], empty
 //!   since #3807); a name imported and not used is an over-import ([`NOT_EQUAL_OK`], empty).
 //!   Each over-import is classed by whether it still appears as a whole word in the printed
@@ -372,7 +372,7 @@ fn the_tree_derived_imports_are_the_imported_ones() {
     );
 
     // 1A.36b-2: for every module the emitter builds, the tree set is the imported set. Nothing
-    // is predicted outside the driver's `tests/*.test.ts` modules (1B.2) and the runtime's own
+    // is predicted outside the test harness's `tests/*.test.ts` modules (1B.5) and the runtime's own
     // files, so no such module imports a name its tree does not use, runtime or not. A module
     // that does is listed in [`NOT_EQUAL_OK`] with its reason; none is known.
     let over_imported: Vec<String> = found
@@ -429,13 +429,13 @@ fn the_tree_derived_imports_are_the_imported_ones() {
 }
 
 /// A module the driver generates for `test` and `integration test` units
-/// (`tests/<unit>.test.ts`): opaque test text, whose imports stay predicted until 1B.2.
+/// (`tests/<unit>.test.ts`): opaque test text, whose imports stay predicted until 1B.5.
 fn is_driver_test_module(module: &str) -> bool {
     module.starts_with("tests/") && module.ends_with(".test.ts")
 }
 
 /// Whether a module's runtime import is still predicted rather than derived: the driver's test
-/// modules only (1B.2). Every module the emitter builds, the Worker `index.ts` and `compose.ts`
+/// modules only (1B.5). Every module the emitter builds, the Worker `index.ts` and `compose.ts`
 /// included since 1A.36b-2, takes its runtime import from its tree.
 fn predicts_its_runtime_imports(module: &str) -> bool {
     is_driver_test_module(module)

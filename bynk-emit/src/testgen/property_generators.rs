@@ -33,7 +33,14 @@ pub(super) fn int_bounds(refinement: Option<&Refinement>) -> (i64, i64, i64) {
                     hi = b.value;
                     floor = a.value;
                 }
-                _ => {}
+                PredKind::Matches(_)
+                | PredKind::InRangeF(..)
+                | PredKind::InRangeD(..)
+                | PredKind::MinLength(_)
+                | PredKind::MaxLength(_)
+                | PredKind::Length(_)
+                | PredKind::NonEmpty
+                | PredKind::IsoDate => {}
             }
         }
     }
@@ -60,7 +67,14 @@ pub(super) fn float_bounds(refinement: Option<&Refinement>) -> (f64, f64) {
                     lo = a.value;
                     hi = b.value;
                 }
-                _ => {}
+                PredKind::Matches(_)
+                | PredKind::InRange(..)
+                | PredKind::InRangeD(..)
+                | PredKind::MinLength(_)
+                | PredKind::MaxLength(_)
+                | PredKind::Length(_)
+                | PredKind::NonEmpty
+                | PredKind::IsoDate => {}
             }
         }
     }
@@ -78,7 +92,14 @@ pub(super) fn str_min(refinement: Option<&Refinement>) -> i64 {
             match p.kind {
                 PredKind::NonEmpty => min = min.max(1),
                 PredKind::MinLength(k) | PredKind::Length(k) => min = min.max(k),
-                _ => {}
+                PredKind::Matches(_)
+                | PredKind::InRange(..)
+                | PredKind::InRangeF(..)
+                | PredKind::InRangeD(..)
+                | PredKind::MaxLength(_)
+                | PredKind::NonNegative
+                | PredKind::Positive
+                | PredKind::IsoDate => {}
             }
         }
     }
@@ -127,7 +148,14 @@ pub(super) fn decimal_bounds(refinement: Option<&Refinement>) -> (i128, i128, u3
                         hi = y;
                     }
                 }
-                _ => {}
+                PredKind::Matches(_)
+                | PredKind::InRange(..)
+                | PredKind::InRangeF(..)
+                | PredKind::MinLength(_)
+                | PredKind::MaxLength(_)
+                | PredKind::Length(_)
+                | PredKind::NonEmpty
+                | PredKind::IsoDate => {}
             }
         }
     }
@@ -179,7 +207,7 @@ pub(super) fn base_draw_ts(base: BaseType, refinement: Option<&Refinement>) -> T
                 ))
             ))
         }
-        _ => ident(base_canon(base)),
+        BaseType::Duration | BaseType::Instant | BaseType::Bytes => ident(base_canon(base)),
     }
 }
 
@@ -206,7 +234,7 @@ pub(super) fn base_canon_ts(base: BaseType, refinement: Option<&Refinement>) -> 
             let c = 0i128.clamp(lo, hi);
             ident(format!("{{ coefficient: {c}n, scale: {scale} }}"))
         }
-        other => ident(base_canon(other)),
+        BaseType::Duration | BaseType::Instant | BaseType::Bytes => ident(base_canon(base)),
     }
 }
 
@@ -290,7 +318,7 @@ pub(super) fn ty_draws_bigint(
     tys: &Arc<Types>,
 ) -> bool {
     match &*tys.get(t) {
-        checker::Ty::Base(BaseType::Int) => true,
+        checker::Ty::Base(base) => matches!(base, BaseType::Int),
         checker::Ty::Named { name, .. } => matches!(
             types.get(name).map(|d| &d.body),
             Some(TypeBody::Refined {
@@ -301,7 +329,34 @@ pub(super) fn ty_draws_bigint(
                 ..
             })
         ),
-        _ => false,
+        checker::Ty::Error
+        | checker::Ty::Never
+        | checker::Ty::Result(..)
+        | checker::Ty::Option(_)
+        | checker::Ty::Effect(_)
+        | checker::Ty::HttpResult(_)
+        | checker::Ty::QueueResult
+        | checker::Ty::HttpOutcome(_)
+        | checker::Ty::BoundaryRejection
+        | checker::Ty::Asset
+        | checker::Ty::RequestHeaders
+        | checker::Ty::RequestQuery
+        | checker::Ty::RequestCookies
+        | checker::Ty::TokenClaims
+        | checker::Ty::List(_)
+        | checker::Ty::Map(..)
+        | checker::Ty::Set(_)
+        | checker::Ty::Query(_)
+        | checker::Ty::Stream(_)
+        | checker::Ty::Connection(_)
+        | checker::Ty::TestConnection(_)
+        | checker::Ty::ValidationError
+        | checker::Ty::DecodeError
+        | checker::Ty::Unit
+        | checker::Ty::Actor(_)
+        | checker::Ty::ActorSum(_)
+        | checker::Ty::Fn { .. }
+        | checker::Ty::Var(_) => false,
     }
 }
 
@@ -576,7 +631,34 @@ pub(super) fn gen_ts_for_ty(
                 }
             }
         }
-        _ => ident("undefined"),
+        checker::Ty::Error
+        | checker::Ty::Never
+        | checker::Ty::Result(..)
+        | checker::Ty::Option(_)
+        | checker::Ty::Effect(_)
+        | checker::Ty::HttpResult(_)
+        | checker::Ty::QueueResult
+        | checker::Ty::HttpOutcome(_)
+        | checker::Ty::BoundaryRejection
+        | checker::Ty::Asset
+        | checker::Ty::RequestHeaders
+        | checker::Ty::RequestQuery
+        | checker::Ty::RequestCookies
+        | checker::Ty::TokenClaims
+        | checker::Ty::List(_)
+        | checker::Ty::Map(..)
+        | checker::Ty::Set(_)
+        | checker::Ty::Query(_)
+        | checker::Ty::Stream(_)
+        | checker::Ty::Connection(_)
+        | checker::Ty::TestConnection(_)
+        | checker::Ty::ValidationError
+        | checker::Ty::DecodeError
+        | checker::Ty::Unit
+        | checker::Ty::Actor(_)
+        | checker::Ty::ActorSum(_)
+        | checker::Ty::Fn { .. }
+        | checker::Ty::Var(_) => ident("undefined"),
     }
 }
 
@@ -671,7 +753,34 @@ pub(super) fn canon_ts_for_ty(
                 }
             }
         }
-        _ => ident("undefined"),
+        checker::Ty::Error
+        | checker::Ty::Never
+        | checker::Ty::Result(..)
+        | checker::Ty::Option(_)
+        | checker::Ty::Effect(_)
+        | checker::Ty::HttpResult(_)
+        | checker::Ty::QueueResult
+        | checker::Ty::HttpOutcome(_)
+        | checker::Ty::BoundaryRejection
+        | checker::Ty::Asset
+        | checker::Ty::RequestHeaders
+        | checker::Ty::RequestQuery
+        | checker::Ty::RequestCookies
+        | checker::Ty::TokenClaims
+        | checker::Ty::List(_)
+        | checker::Ty::Map(..)
+        | checker::Ty::Set(_)
+        | checker::Ty::Query(_)
+        | checker::Ty::Stream(_)
+        | checker::Ty::Connection(_)
+        | checker::Ty::TestConnection(_)
+        | checker::Ty::ValidationError
+        | checker::Ty::DecodeError
+        | checker::Ty::Unit
+        | checker::Ty::Actor(_)
+        | checker::Ty::ActorSum(_)
+        | checker::Ty::Fn { .. }
+        | checker::Ty::Var(_) => ident("undefined"),
     }
 }
 
@@ -800,7 +909,12 @@ pub(super) fn binding_gen(
                             ),
                         )
                     }
-                    _ => (
+                    BaseType::Float
+                    | BaseType::Bool
+                    | BaseType::Duration
+                    | BaseType::Instant
+                    | BaseType::Bytes
+                    | BaseType::Decimal => (
                         vec![canon_ts_for_ty(ty, types, test_suites::PROP_GEN_DEPTH, tys)],
                         TsExpr::array(vec![]),
                     ),
@@ -810,12 +924,46 @@ pub(super) fn binding_gen(
                 let canon = canon_ts_for_ty(ty, types, test_suites::PROP_GEN_DEPTH, tys);
                 (vec![canon.clone()], TsExpr::array(vec![canon]))
             }
-            _ => (
+            Some(TypeBody::Record(_)) | None => (
                 vec![canon_ts_for_ty(ty, types, test_suites::PROP_GEN_DEPTH, tys)],
                 TsExpr::array(vec![]),
             ),
         },
-        _ => (Vec::new(), TsExpr::array(vec![])),
+        checker::Ty::Base(
+            BaseType::Float
+            | BaseType::Duration
+            | BaseType::Instant
+            | BaseType::Bytes
+            | BaseType::Decimal,
+        )
+        | checker::Ty::Error
+        | checker::Ty::Never
+        | checker::Ty::Result(..)
+        | checker::Ty::Option(_)
+        | checker::Ty::Effect(_)
+        | checker::Ty::HttpResult(_)
+        | checker::Ty::QueueResult
+        | checker::Ty::HttpOutcome(_)
+        | checker::Ty::BoundaryRejection
+        | checker::Ty::Asset
+        | checker::Ty::RequestHeaders
+        | checker::Ty::RequestQuery
+        | checker::Ty::RequestCookies
+        | checker::Ty::TokenClaims
+        | checker::Ty::List(_)
+        | checker::Ty::Map(..)
+        | checker::Ty::Set(_)
+        | checker::Ty::Query(_)
+        | checker::Ty::Stream(_)
+        | checker::Ty::Connection(_)
+        | checker::Ty::TestConnection(_)
+        | checker::Ty::ValidationError
+        | checker::Ty::DecodeError
+        | checker::Ty::Unit
+        | checker::Ty::Actor(_)
+        | checker::Ty::ActorSum(_)
+        | checker::Ty::Fn { .. }
+        | checker::Ty::Var(_) => (Vec::new(), TsExpr::array(vec![])),
     };
     BindingGen {
         boundaries,
@@ -863,13 +1011,15 @@ pub(super) fn gen_descriptor_entry(name: Option<TsExpr>, bg: &BindingGen) -> TsE
             // other `gen_ts` shape, but it keeps matching if that
             // formatting quirk is ever normalised away (the same cleanup
             // #1321/#1327/#1390 already invite for its other two copies).
-            body: Box::new(TsArrowBody::Expr(Box::new(match &bg.gen_ts {
-                o @ TsExpr::Object { .. } => TsExpr::Paren(Box::new(o.clone())),
-                o @ TsExpr::Ident(s) if s.trim_start().starts_with('{') => {
-                    TsExpr::Paren(Box::new(o.clone()))
-                }
-                e => e.clone(),
-            }))),
+            body: Box::new(TsArrowBody::Expr(Box::new(
+                if matches!(&bg.gen_ts, TsExpr::Object { .. })
+                    || matches!(&bg.gen_ts, TsExpr::Ident(s) if s.trim_start().starts_with('{'))
+                {
+                    TsExpr::Paren(Box::new(bg.gen_ts.clone()))
+                } else {
+                    bg.gen_ts.clone()
+                },
+            ))),
         },
     ));
     entries.push((

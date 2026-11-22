@@ -3,13 +3,13 @@
 //! Crate-hygiene D1 (#2982, PR 2): split out of `tests_emit.rs`.
 
 use super::*;
-use bynk_emit::emitter::wrangler::{BindingSource, WorkerBinding};
+use crate::emitter::wrangler::{BindingSource, WorkerBinding};
 // #1759: every namespace a test module imports, from one definition.
+use crate::emitter::emit::test_scaffold_ns as test_ns;
 use bynk_check::checker::Types;
 use bynk_check::d1_migrations::{D1Migrations, d1_database_name};
 use bynk_check::test_suites::{self};
 use bynk_check::wire_format;
-use bynk_emit::emitter::emit::test_scaffold_ns as test_ns;
 use bynk_syntax::ast::{
     BaseType, Block, Commons, CommonsForm, Expr, ExprKind, FnDecl, FnName, Ident, PropertyDecl,
     QualifiedName, Trivia, TypeBody, TypeDecl, TypeRef,
@@ -111,11 +111,11 @@ pub(super) fn emit_integration_harness<'a>(
                 })
                 .map(String::as_str),
         );
-        let callees = bindings_of(p).iter().filter_map(|b| match &b.source {
-            BindingSource::Service { context } if participants.contains(context) => {
-                Some(context.as_str())
-            }
-            _ => None,
+        let callees = bindings_of(p).iter().filter_map(|b| {
+            let BindingSource::Service { context } = &b.source else {
+                return None;
+            };
+            participants.contains(context).then_some(context.as_str())
         });
         for key in callers
             .filter_map(wire_format::edge_key_from)
@@ -124,7 +124,7 @@ pub(super) fn emit_integration_harness<'a>(
         {
             body.push(TsStmt::assign(
                 member(ident(env.clone()), &key),
-                str_lit(bynk_emit::LOCAL_CALL_KEY),
+                str_lit(crate::LOCAL_CALL_KEY),
                 None,
             ));
         }
@@ -302,13 +302,13 @@ pub(super) fn emit_integration_harness<'a>(
     {
         body.push(TsStmt::assign(
             member(ident("rootEnv"), &key),
-            str_lit(bynk_emit::LOCAL_CALL_KEY),
+            str_lit(crate::LOCAL_CALL_KEY),
             None,
         ));
     }
     for p in participants {
         let ns = test_ns(p);
-        let binding = bynk_emit::emitter::wrangler::service_binding(p).name;
+        let binding = crate::emitter::wrangler::service_binding(p).name;
         body.push(TsStmt::assign(
             member(ident("rootEnv"), binding),
             service_binding_forward(&format!("worker_{ns}"), &env_binding(&ns), sends(p)),
@@ -351,7 +351,7 @@ pub(super) fn emit_remote_harness(participants: &[String]) -> Vec<TsStmt> {
         "function __buildHarness() {\n  const rootEnv: { [binding: string]: __ServiceBinding } = {};\n",
     );
     for p in participants {
-        let binding = bynk_emit::emitter::wrangler::service_binding(p).name;
+        let binding = crate::emitter::wrangler::service_binding(p).name;
         let worker = worker_dir_name(p);
         text.push_str(&format!(
             "  rootEnv.{binding} = __bynkRemoteBinding({worker:?});\n"
@@ -360,9 +360,9 @@ pub(super) fn emit_remote_harness(participants: &[String]) -> Vec<TsStmt> {
     text.push_str("  return { env: rootEnv };\n}\n");
     text.push_str("let __bynkHarness: ReturnType<typeof __buildHarness> | undefined;\nfunction __makeHarness() {\n  return (__bynkHarness ??= __buildHarness());\n}\n");
     vec![
-        TsStmt::raw(include_str!("../test_runtime/remote.ts").to_string(), None),
+        TsStmt::raw(include_str!("test_runtime/remote.ts").to_string(), None),
         // #2138 (track §3.6): the `--settle` retry the case bodies use.
-        TsStmt::raw(include_str!("../test_runtime/settle.ts").to_string(), None),
+        TsStmt::raw(include_str!("test_runtime/settle.ts").to_string(), None),
         TsStmt::raw(text, None),
     ]
 }
@@ -444,7 +444,7 @@ pub(super) fn sanitise_suite(s: &str) -> String {
 }
 
 /// Discovered, named test ready to be invoked from the top-level runner.
-pub(crate) struct RunnableTest {
+pub struct RunnableTest {
     /// Joined target name (e.g., `commerce.payment`), or `system · <suite>`
     /// for a wired (`system`) suite — the runner's module identity and sort key.
     pub(super) target_name: String,
@@ -458,7 +458,7 @@ pub(crate) struct RunnableTest {
     /// integration, which the runner prefixes with `system · ` (#2185).
     pub(super) suite_name: String,
     /// #2138: the cases a remote build skipped (`--skip-unsupported`), and why.
-    pub(super) skipped: Vec<crate::project::RemoteSkip>,
+    pub(super) skipped: Vec<crate::emit_model::RemoteSkip>,
     /// #2138: under `--against dev`, the distinct `env` maps of its cases.
     pub(super) envs: Vec<BTreeMap<String, String>>,
     /// #2138: a remote build's module, whose cases report `retries`.
@@ -476,7 +476,7 @@ pub(crate) struct RunnableTest {
     pub(super) cases: Vec<DiscoveredCase>,
     /// #2842: the snapshot files (`snapshots/…snap.json`) the module's suites take
     /// a snapshot into. The module exports `__bynkSnapshotReport` iff non-empty.
-    pub(crate) snapshot_files: Vec<String>,
+    pub snapshot_files: Vec<String>,
 }
 
 /// v0.67: the `path:line:col` of a test-name literal, structured for discovery.
@@ -495,7 +495,7 @@ pub(super) fn discovered_location(source: &str, rel_path: &str, span: Span) -> T
 /// v0.67: fold the combined runnable manifest into the discovery suites, ordered
 /// by the runner's sort key (`target_name`) so the discovery document matches a
 /// run's suite order.
-pub(crate) fn discovery_manifest(tests: &[RunnableTest]) -> Vec<DiscoveredSuite> {
+pub fn discovery_manifest(tests: &[RunnableTest]) -> Vec<DiscoveredSuite> {
     let mut sorted: Vec<&RunnableTest> = tests.iter().collect();
     sorted.sort_by(|a, b| a.target_name.cmp(&b.target_name));
     sorted
@@ -580,9 +580,16 @@ pub(super) fn target_sum_handlers(table: Option<&UnitTable>) -> HashSet<(String,
                 bynk_model::IrHandlerKind::Http { method, path }
                     if bynk_check::actors::sum_members_for(h, &t.actors).is_some() =>
                 {
-                    bynk_emit::emitter::http_handler_method_name_ir(method, &path)
+                    crate::emitter::http_handler_method_name_ir(method, &path)
                 }
-                _ => continue,
+                bynk_model::IrHandlerKind::Call
+                | bynk_model::IrHandlerKind::Http { .. }
+                | bynk_model::IrHandlerKind::Cron { .. }
+                | bynk_model::IrHandlerKind::Message
+                | bynk_model::IrHandlerKind::Open
+                | bynk_model::IrHandlerKind::Close
+                | bynk_model::IrHandlerKind::Event
+                | bynk_model::IrHandlerKind::Rejected => continue,
             };
             out.insert((name.clone(), key));
         }
@@ -601,7 +608,7 @@ pub(super) fn target_sum_handlers(table: Option<&UnitTable>) -> HashSet<(String,
                     name.clone(),
                     format!(
                         "nobinder:{}",
-                        bynk_emit::emitter::http_handler_method_name_ir(method, &path)
+                        crate::emitter::http_handler_method_name_ir(method, &path)
                     ),
                 ));
             }
@@ -618,7 +625,7 @@ pub(super) fn target_sum_handlers(table: Option<&UnitTable>) -> HashSet<(String,
                     name.clone(),
                     format!(
                         "oidc:{}",
-                        bynk_emit::emitter::http_handler_method_name_ir(method, &path)
+                        crate::emitter::http_handler_method_name_ir(method, &path)
                     ),
                 ));
             }
@@ -630,12 +637,14 @@ pub(super) fn target_sum_handlers(table: Option<&UnitTable>) -> HashSet<(String,
 /// v0.119: `Some((run_var, agent_name))` when `prop` is a history property — its
 /// single `for all` binding is `run: History[Agent]`.
 pub(super) fn prop_history_binding(prop: &PropertyDecl) -> Option<(&str, &str)> {
-    prop.forall.bindings.iter().find_map(|b| match &b.type_ref {
-        TypeRef::History(inner, _) => match &**inner {
-            TypeRef::Named(id) => Some((b.name.name.as_str(), id.name.as_str())),
-            _ => None,
-        },
-        _ => None,
+    prop.forall.bindings.iter().find_map(|b| {
+        let TypeRef::History(inner, _) = &b.type_ref else {
+            return None;
+        };
+        let TypeRef::Named(id) = &**inner else {
+            return None;
+        };
+        Some((b.name.name.as_str(), id.name.as_str()))
     })
 }
 
@@ -716,9 +725,36 @@ pub(super) fn numeric_or_scalar_base(
         checker::Ty::Base(b) => Some(*b),
         checker::Ty::Named { name, .. } => match &types.get(name)?.body {
             TypeBody::Refined { base, .. } | TypeBody::Opaque { base, .. } => Some(*base),
-            _ => None,
+            TypeBody::Record(_) | TypeBody::Sum(_) => None,
         },
-        _ => None,
+        checker::Ty::Error
+        | checker::Ty::Never
+        | checker::Ty::Result(..)
+        | checker::Ty::Option(_)
+        | checker::Ty::Effect(_)
+        | checker::Ty::HttpResult(_)
+        | checker::Ty::QueueResult
+        | checker::Ty::HttpOutcome(_)
+        | checker::Ty::BoundaryRejection
+        | checker::Ty::Asset
+        | checker::Ty::RequestHeaders
+        | checker::Ty::RequestQuery
+        | checker::Ty::RequestCookies
+        | checker::Ty::TokenClaims
+        | checker::Ty::List(_)
+        | checker::Ty::Map(..)
+        | checker::Ty::Set(_)
+        | checker::Ty::Query(_)
+        | checker::Ty::Stream(_)
+        | checker::Ty::Connection(_)
+        | checker::Ty::TestConnection(_)
+        | checker::Ty::ValidationError
+        | checker::Ty::DecodeError
+        | checker::Ty::Unit
+        | checker::Ty::Actor(_)
+        | checker::Ty::ActorSum(_)
+        | checker::Ty::Fn { .. }
+        | checker::Ty::Var(_) => None,
     }
 }
 
@@ -813,9 +849,9 @@ fn push_dataset_var(body: &mut Vec<TsStmt>, env: &str, binding: &WorkerBinding, 
     body.push(TsStmt::assign(
         member(
             ident(env.to_string()),
-            bynk_emit::emitter::wrangler::dataset_var_name(&binding.name),
+            crate::emitter::wrangler::dataset_var_name(&binding.name),
         ),
-        str_lit(bynk_emit::emitter::wrangler::analytics_dataset_name(
+        str_lit(crate::emitter::wrangler::analytics_dataset_name(
             &bynk_project::worker_dir_name(context),
             &binding.name,
         )),

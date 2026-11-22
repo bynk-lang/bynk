@@ -12,6 +12,10 @@
 //! plus diagnostics — this crate originates none of its own (P5.5,
 //! `design/tracks/semantics-in-the-checker.md` §3.5, R10.1).
 //!
+//! `testgen` generates the test harness: each suite's test module, the test entry and the
+//! discovery manifest, with the test-runtime fragments they embed. The driver calls it, and
+//! keeps orchestration, file I/O and process spawning (1B.2a, #4028).
+//!
 //! Extracted from `bynkc` as slice 4 of the crate-decomposition track over
 //! `bynk-syntax` + `bynk-check`. Behaviour is unchanged; `bynk` depends on this
 //! crate and re-exports its modules so its public API (`compile_project`,
@@ -26,6 +30,7 @@ struct ReadmeDoctests;
 
 pub mod emit_model;
 pub mod emitter;
+pub mod testgen;
 
 #[cfg(test)]
 pub(crate) mod testkit;

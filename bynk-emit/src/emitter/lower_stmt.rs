@@ -1053,7 +1053,7 @@ fn statement(body: &mut Body, stmt: &Statement, cx: &mut LowerCtx) {
             ));
         }
         Statement::Advance(a) => {
-            // #2137: move the case's harness clock (`project/test_runtime/clock.ts`),
+            // #2137: move the case's harness clock (`testgen/test_runtime/clock.ts`),
             // which every participant's `Clock` reads at `system` and the
             // `Clock` double reads below it. A negative amount faults there.
             let mut pre = Pre::new();

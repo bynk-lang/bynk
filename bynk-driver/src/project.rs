@@ -40,8 +40,15 @@ use bynk_check::project_model::{
     resolve_consume_prefix,
 };
 use bynk_check::requirements::RequirementSink;
-use bynk_check::resolver::{self, MethodTable as ResolverMethodTable, ResolvedCommons};
+use bynk_check::resolver::{self, MethodTable as ResolverMethodTable};
 use bynk_emit::emitter;
+use bynk_emit::emitter::commons_barrel::{
+    duplicated_export_reexports, emit_commons_barrel, merged_unit_helpers,
+};
+use bynk_emit::testgen::{
+    IntegrationD1, RunnableTest, TestAssetFiles, discovery_manifest, emit_test_main,
+    process_integration_tests, process_tests,
+};
 use bynk_model::CapRefIr;
 use bynk_model::EventSubscriberShape;
 use bynk_model::FnSig;
@@ -75,8 +82,8 @@ use bynk_ts::{TsDecl, TsProgram, TsStmt};
 // Pipeline-driving types (`diagnostics`'s `Mode`/`ErrorSink`/
 // `ProjectAnalysis`/`ProjectFailure`) stay here too.
 mod diagnostics;
+mod remote_tests;
 mod schema_registry;
-mod tests_emit;
 mod worker_bindings;
 
 use bynk_check::symbols::*;
@@ -84,20 +91,21 @@ pub(crate) use bynk_emit::emit_model::StagedFile;
 use bynk_emit::emit_model::*;
 pub use bynk_emit::emit_model::{
     Artefacts, DiscoveredCase, DiscoveredSuite, Document, ImportExt, ProjectOutput, RemoteSkip,
-    TestLocation, WORKER_ASSETS_DIR, is_worker_asset_path, is_worker_migration_path,
+    RemoteTests, TestLocation, WORKER_ASSETS_DIR, is_worker_asset_path, is_worker_migration_path,
     node_wasm_shim, sibling_path, wasm_shim_path, worker_assets_dir,
 };
 use bynk_emit::emit_model::{WASM_MODULES_DTS, worker_reaches_wasm_module, workers_wasm_shim};
 use bynk_project::discovery::*;
 use bynk_project::paths::*;
 use diagnostics::*;
-use tests_emit::*;
 
 // External facade: items referenced as `crate::project::X` from outside this
 // module (emitter, main, lib) must stay reachable at that path.
+// 1B.2a (#4028): the suffix is defined beside the test-harness generation that reads it.
 pub use bynk_check::project_model::BuildTarget;
 pub use bynk_check::schema_registry::{AgentVersions, MigrationStep};
 pub use bynk_check::symbols::{FileDeclIndex, UnitTable};
+pub use bynk_emit::testgen::SMOKE_SUITE_SUFFIX;
 // #1883, slice 1b: the `assets/` folder helpers, for the driver and testkit.
 pub use bynk_project::assets;
 pub use bynk_project::{
@@ -272,33 +280,6 @@ pub struct CompileOptions {
     /// and refuses (or, under `--skip-unsupported`, skips) a case that uses
     /// what a remote run can't honour. `None` for every other build.
     pub remote_tests: Option<RemoteTests>,
-}
-
-/// #2685: the tail of the synthesised smoke suite's file name (`<stem>.smoke.bynk`), which a
-/// test build reads to name its typed routes to the decoder.
-pub const SMOKE_SUITE_SUFFIX: &str = ".smoke.bynk";
-
-/// #2138: how a remote test build treats a `system` case it can't run
-/// against a real runtime ([`CompileOptions::remote_tests`]).
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct RemoteTests {
-    /// `--skip-unsupported`: skip such a case, recording why
-    /// ([`DiscoveredSuite::skipped`]), instead of refusing it.
-    pub skip_unsupported: bool,
-    /// The named target's declared `vars`, which each case's `env` must agree
-    /// with (`bynk_check::test_env::remote_env_disagreement`).
-    pub vars: BTreeMap<String, String>,
-    /// The names of the named target's secrets, which a case's `env` may not
-    /// set.
-    pub secrets: Vec<String>,
-    /// `--against dev`: the runner starts the Workers itself and applies each
-    /// case's `env` to them, so `env` is not checked against `vars`; each
-    /// suite instead reports the distinct `env` maps its cases run with
-    /// ([`DiscoveredSuite::envs`]), one `bynk dev` per map.
-    pub dev: bool,
-    /// Under `dev`, build only the cases whose `env` is exactly this map: the
-    /// group one `bynk dev` serves.
-    pub only_env: Option<BTreeMap<String, String>>,
 }
 
 impl CompileOptions {
@@ -2807,6 +2788,31 @@ fn platform_lock_phase(
     );
 }
 
+/// Each adapter binding's module specifier, for the test passes: the platform bindings (`bynk` and
+/// `bynk.*`) are not imported by a test module, `bynk.crypto` is. Moved out of `run_checks`
+/// unchanged, so that it does not grow past its function-length ceiling (1B.2a, #4028).
+fn test_binding_modules(
+    adapter_bindings: &HashMap<String, AdapterBinding>,
+) -> HashMap<String, String> {
+    adapter_bindings
+        .iter()
+        .filter(|(name, _)| {
+            let first_party = bynk_check::firstparty::BYNK_UNIT;
+            name.as_str() == bynk_check::firstparty::CRYPTO_UNIT
+                || (name.as_str() != first_party
+                    && !name
+                        .strip_prefix(first_party)
+                        .is_some_and(|rest| rest.starts_with('.')))
+        })
+        .map(|(name, b)| {
+            (
+                name.clone(),
+                emitter::ts_specifier(&b.output_path.with_extension("")),
+            )
+        })
+        .collect()
+}
+
 #[allow(clippy::too_many_arguments)]
 fn run_checks(
     // R3.9 (#1113): one `(root, prefix)` pair per `Roots::trees` entry, not a
@@ -3576,23 +3582,7 @@ fn run_checks(
     // a KV namespace), so a test keeps its double. `bynk.crypto` is the exception
     // (K4): its binding is Web Crypto over the test's own bytes, deterministic and
     // I/O-free, so a test runs it for real and a fake would check nothing.
-    let test_binding_modules: HashMap<String, String> = adapter_bindings
-        .iter()
-        .filter(|(name, _)| {
-            let first_party = bynk_check::firstparty::BYNK_UNIT;
-            name.as_str() == bynk_check::firstparty::CRYPTO_UNIT
-                || (name.as_str() != first_party
-                    && !name
-                        .strip_prefix(first_party)
-                        .is_some_and(|rest| rest.starts_with('.')))
-        })
-        .map(|(name, b)| {
-            (
-                name.clone(),
-                emitter::ts_specifier(&b.output_path.with_extension("")),
-            )
-        })
-        .collect();
+    let test_binding_modules = test_binding_modules(&adapter_bindings);
     let (test_outputs, runnable_tests) = process_tests(
         &test_groups,
         &parsed,
@@ -3616,6 +3606,7 @@ fn run_checks(
         &schema_effective_versions.events,
         &unit_callees,
         &unit_event_subscriber_shapes,
+        project_mentions_encode_plain(&parsed),
         &mut test_errors,
         &mut refs,
         tys,
@@ -3668,10 +3659,11 @@ fn run_checks(
         &groups,
         &mut emitted_barrels,
         &test_asset_files,
-        tests_emit::IntegrationD1::new(&d1_migrations, d1_sql.as_deref()),
+        IntegrationD1::new(&d1_migrations, d1_sql.as_deref()),
         context_bindings.as_ref(),
         &event_subscribers,
         remote_tests,
+        project_mentions_encode_plain(&parsed),
         &mut integration_errors,
         &mut refs,
         tys,

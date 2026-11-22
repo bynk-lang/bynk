@@ -299,6 +299,24 @@ impl ParsedFile {
             .any(|it| matches!(it, CommonsItem::Messages(_)))
     }
 
+    /// 1B.2a (#4028): does this file declare an `agent`? The commons barrel's merged helpers
+    /// read this and [`declares_services`](Self::declares_services), as the `messages`
+    /// emitter reads [`declares_messages`](Self::declares_messages), so that the production
+    /// barrel need not name the AST.
+    pub fn declares_agents(&self) -> bool {
+        self.items()
+            .iter()
+            .any(|it| matches!(it, CommonsItem::Agent(_)))
+    }
+
+    /// 1B.2a (#4028): does this file declare a `service`? See
+    /// [`declares_agents`](Self::declares_agents).
+    pub fn declares_services(&self) -> bool {
+        self.items()
+            .iter()
+            .any(|it| matches!(it, CommonsItem::Service(_)))
+    }
+
     pub fn uses(&self) -> &Vec<UsesDecl> {
         match &self.unit {
             SourceUnit::Commons(c) => &c.uses,
