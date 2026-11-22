@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0887](0887-the-test-runtime-is-first-party-runtime-code.md) | **The test runtime is first-party runtime code** (v0.640.52) — Test-runtime code is authored as type-checked modules under the runtime's `src/testing/`, spliced into generated test modules as generated text, and guarded so every module is checked | Accepted (v0.640.52) |
 | [0886](0886-docs-and-blog-licences.md) | **The documentation's prose is CC BY 4.0 and its snippets MIT, as the blog's; Bynk stays MIT or Apache-2.0** (v0.640.40) — Writing on both sites is CC BY 4.0, code snippets on both are MIT, and the toolchain and everything else in bynk-lang/bynk stays dual-licensed MIT or Apache-2.0 | Accepted (v0.640.40) |
 | [0885](0885-where-test-generation-lives.md) | **Test-harness generation is `bynk-emit::testgen`, and the driver only orchestrates it** (v0.640.38) — The test modules, entry and discovery manifest are generated in `bynk-emit`; the driver keeps orchestration, I/O and spawning; `bynk-emit` has no dependency on `bynk-driver`, including for its tests | Accepted (v0.640.38) |
 | [0884](0884-deploy-site-from-queue.md) | **The docs site deploys from the merge queue's passed run, and always ships the newest green commit** (v0.640.36) — A queue merge deploys when it lands; other commits wait for their own run on main; every deploy ships the newest green commit | Accepted (v0.640.36) |
