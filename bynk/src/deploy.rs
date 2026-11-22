@@ -175,6 +175,8 @@ pub(crate) fn local_session_key(binding: &str) -> String {
 
 #[cfg(all(test, unix))]
 mod apply_tests;
+#[cfg(all(test, unix))]
+mod messages_tests;
 #[cfg(test)]
 mod snapshot_tests;
 #[cfg(test)]

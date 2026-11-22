@@ -652,7 +652,11 @@ pub(crate) fn kv_namespace_noun(worker: &str, binding: &str) -> String {
     }
 }
 
-fn create_kv(provenance: &Provenance, name: &str, project_root: &Path) -> Result<String, String> {
+pub(crate) fn create_kv(
+    provenance: &Provenance,
+    name: &str,
+    project_root: &Path,
+) -> Result<String, String> {
     let Some(mut command) = workers::wrangler_command(provenance, "kv") else {
         return Err("wrangler not found".into());
     };

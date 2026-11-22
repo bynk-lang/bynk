@@ -406,7 +406,7 @@ pub(crate) fn r2_bucket_problem(
 /// by the name the config binds, so a created bucket and an existing one are
 /// the same end state. Run from the project root, as KV and queues are, so
 /// wrangler cannot load and reject an incomplete config.
-fn create_r2_bucket(
+pub(crate) fn create_r2_bucket(
     provenance: &Provenance,
     name: &str,
     jurisdiction: Option<&str>,

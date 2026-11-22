@@ -382,7 +382,11 @@ pub(crate) fn apply_d1_migrations(
 /// Create the D1 database `name` and return its `database_id`, or adopt the
 /// one already there under that name (P4a, #2602). Run from the project root,
 /// as KV and buckets are.
-fn create_d1(provenance: &Provenance, name: &str, project_root: &Path) -> Result<String, String> {
+pub(crate) fn create_d1(
+    provenance: &Provenance,
+    name: &str,
+    project_root: &Path,
+) -> Result<String, String> {
     let Some(mut command) = workers::wrangler_command(provenance, "d1") else {
         return Err("wrangler not found".into());
     };

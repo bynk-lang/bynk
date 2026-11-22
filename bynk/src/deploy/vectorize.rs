@@ -133,14 +133,18 @@ fn with_permission_hint(said: String) -> String {
 }
 
 /// Whether the account has an index called `name`.
-fn index_exists(provenance: &Provenance, name: &str, project_root: &Path) -> Result<bool, String> {
+pub(crate) fn index_exists(
+    provenance: &Provenance,
+    name: &str,
+    project_root: &Path,
+) -> Result<bool, String> {
     let out = vectorize_command(provenance, &["list", "--json"], project_root)?;
     let names = parse_index_names(&out)
         .ok_or("could not read the list of Vectorize indexes from wrangler's output")?;
     Ok(names.iter().any(|n| n == name))
 }
 
-fn read_index_config(
+pub(crate) fn read_index_config(
     provenance: &Provenance,
     name: &str,
     project_root: &Path,
@@ -151,7 +155,7 @@ fn read_index_config(
     })
 }
 
-fn create_index(
+pub(crate) fn create_index(
     provenance: &Provenance,
     name: &str,
     declared: &VectorizeDecl,
@@ -173,7 +177,7 @@ fn create_index(
     .map(|_| ())
 }
 
-fn existing_metadata_indexes(
+pub(crate) fn existing_metadata_indexes(
     provenance: &Provenance,
     name: &str,
     project_root: &Path,
@@ -187,7 +191,7 @@ fn existing_metadata_indexes(
         .ok_or_else(|| "could not read the metadata indexes from wrangler's output".to_string())
 }
 
-fn create_metadata_index(
+pub(crate) fn create_metadata_index(
     provenance: &Provenance,
     name: &str,
     entry: &str,
