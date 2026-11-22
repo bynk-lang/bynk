@@ -2028,6 +2028,52 @@ impl TsExpr {
         TsExpr::RawUsing(text.into(), names)
     }
 
+    /// Whether this expression must be bracketed to be the object of a member access
+    /// (`<expr>.name`, `<expr>(..)`). The printer brackets a binary, a cast, an arrow, a
+    /// conditional or an assignment there itself, but not an `await`, a unary operator or a
+    /// number literal (`Num` or `Raw`), which would read as `await f().op()` or `1.op()`: those
+    /// are the forms that keep a bracket the caller writes. A `Spread` is included
+    /// defensively: it is legal only as an array item, so a receiver is never one today.
+    pub fn needs_receiver_brackets(&self) -> bool {
+        match self {
+            TsExpr::Await(_)
+            | TsExpr::Unary { .. }
+            | TsExpr::Lit(TsLit::Num(_) | TsLit::Raw(_))
+            | TsExpr::Spread(_) => true,
+            TsExpr::Lit(TsLit::Str(_) | TsLit::Null | TsLit::Bool(_))
+            | TsExpr::Ident(..)
+            | TsExpr::VerbatimExpr(..)
+            | TsExpr::RawUsing(..)
+            | TsExpr::Member { .. }
+            | TsExpr::OptionalMember { .. }
+            | TsExpr::TypeApp { .. }
+            | TsExpr::DefaultIife { .. }
+            | TsExpr::LinesArray(..)
+            | TsExpr::Index { .. }
+            | TsExpr::OptionalIndex { .. }
+            | TsExpr::Arrow { .. }
+            | TsExpr::Call { .. }
+            | TsExpr::New { .. }
+            | TsExpr::Object { .. }
+            | TsExpr::Array { .. }
+            | TsExpr::TemplateLit { .. }
+            | TsExpr::As { .. }
+            | TsExpr::AsConst(..)
+            | TsExpr::Binary { .. }
+            | TsExpr::Conditional { .. }
+            | TsExpr::MultilineConditional { .. }
+            | TsExpr::Paren(..)
+            | TsExpr::NonNull(..)
+            | TsExpr::Assign { .. }
+            | TsExpr::AddAssign { .. }
+            | TsExpr::NullishAssign { .. }
+            | TsExpr::Sequence(..)
+            | TsExpr::OptionalCall { .. }
+            | TsExpr::Function { .. }
+            | TsExpr::Yield(..) => false,
+        }
+    }
+
     /// The ordinary, single-line object literal, `Prop`-only — every entry
     /// is `key: value`. `events_fanout.rs`'s own entries (and this crate's
     /// own printer tests) are all this shape; kept taking a plain
@@ -3336,6 +3382,44 @@ pub enum VerbatimOrigin {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Only an `await`, a unary operator, a number literal (`Num` or `Raw`) and a spread need
+    /// a bracket before a member access; every other kind of expression does not.
+    #[test]
+    fn receiver_brackets_are_needed_for_await_unary_number_and_spread_only() {
+        let id = || TsExpr::Ident("a".to_string());
+        for needs in [
+            TsExpr::Await(Box::new(id())),
+            TsExpr::Unary {
+                op: TsUnaryOp::Not,
+                expr: Box::new(id()),
+            },
+            TsExpr::Lit(TsLit::Num("1".to_string())),
+            TsExpr::Lit(TsLit::Raw("0x1".to_string())),
+            TsExpr::Spread(Box::new(id())),
+        ] {
+            assert!(needs.needs_receiver_brackets(), "{needs:?}");
+        }
+        for fine in [
+            id(),
+            TsExpr::Lit(TsLit::Str("s".to_string())),
+            TsExpr::Lit(TsLit::Null),
+            TsExpr::Lit(TsLit::Bool(true)),
+            TsExpr::Paren(Box::new(id())),
+            TsExpr::Member {
+                object: Box::new(id()),
+                property: "p".to_string(),
+            },
+            TsExpr::Call {
+                callee: Box::new(id()),
+                args: vec![],
+            },
+            TsExpr::array(vec![]),
+            TsExpr::object(vec![]),
+        ] {
+            assert!(!fine.needs_receiver_brackets(), "{fine:?}");
+        }
+    }
 
     /// The tree compares structurally (1A.35b): two separately built, equal trees are equal, a
     /// difference anywhere inside is not, and a node never equals a different node that prints
