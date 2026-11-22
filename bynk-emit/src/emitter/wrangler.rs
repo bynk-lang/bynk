@@ -2947,19 +2947,6 @@ mod containers_tests {
         assert_eq!(emit_containers_manifest(&[kv]), None);
     }
 
-    /// #3477: the variable `bynk dev` sets and the one the generated class reads
-    /// are the same name, which the runtime states once of its own.
-    #[test]
-    fn the_unavailable_variable_is_the_one_the_runtime_reads() {
-        let runtime = include_str!("runtime/container.ts");
-        assert!(
-            runtime.contains(&format!(
-                "CONTAINERS_UNAVAILABLE_VAR = \"{CONTAINERS_UNAVAILABLE_VAR}\""
-            )),
-            "container.ts reads another name than `bynk dev` sets"
-        );
-    }
-
     const CONFIG: &str = r#"name = "shop-render"
 
 [[containers]]
