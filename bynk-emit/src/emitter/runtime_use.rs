@@ -1,22 +1,26 @@
 //! Which runtime helpers an emitted module's *callers other than its own header* need.
 //!
-//! A unit module's runtime import is derived from its built tree (1A.36b-1,
-//! `runtime_header`), so nothing here decides it. What these notes still serve:
+//! A module the emitter builds takes its runtime import from its built tree: a unit module
+//! since 1A.36b-1 (`runtime_header`), the Worker `index.ts` and `compose.ts` since 1A.36b-2.
+//! So nothing here decides an import the emitter writes. What these notes still serve:
 //!
-//! - the Worker modules (`workers.rs`, `workers_entry.rs`), whose import lists are
-//!   assembled from them until 1A.36b-2;
-//! - the driver's test modules (`tests_emit`), whose imports stay predicted until 1B.2;
+//! - the driver's test modules (`tests_emit`, `system_support.rs` above all), whose imports stay
+//!   predicted until 1B.2: every flag below with a reader is read there;
 //! - emission itself: `plain_json`, `virtual_time` and the codec roots decide what is
 //!   *emitted*, not what is imported.
+//!
+//! A Worker module's own `RuntimeUse` (`workers.rs`, `workers_entry.rs`) is a sink: the codec
+//! producers shared with the unit modules take one to note into, and nothing reads it back.
 //!
 //! The groups the notes carry are the `Bytes` helpers (`__bynkBytesEqual` and friends,
 //! v0.110 / ADR 0142), the structural-equality walker (`__bynkEq`, #1652), the `Instant`,
 //! percent-encoding, request and cookie helpers, the boundary-codec group (`Ok`, `Err`,
 //! `Result`, `BoundaryError`, #914) an *inlined* deserialiser builds, and the JSON-codec
 //! group (`Ok`, `Err`, `Result`, `JsonValue`, `DecodeError`, #914) the `Json.decode[T]`
-//! wrapper names. The notes whose only reader was a unit module's header (the ICU
-//! formatters, the session-cookie helpers and the two trace helpers) are gone, the tree
-//! carrying the fact.
+//! wrapper names. The notes whose only reader was an emitter-built module's header (the ICU
+//! formatters, the session-cookie helpers and the two trace helpers, 1A.36b-1) are gone, the
+//! tree carrying the fact. 1A.36b-2 found no further note whose only reader was a Worker
+//! header: the driver reads each one that remains.
 //!
 //! #917 adds a differently-shaped piece of state, riding this same shared reference for
 //! the same reason: a test-scaffold module's `Json.decode`/`Json.encode` on a named type has

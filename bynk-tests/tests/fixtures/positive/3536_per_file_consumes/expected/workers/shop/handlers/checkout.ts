@@ -7,7 +7,6 @@ import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callSe
 import { TimedOut } from "../../../bynk.js";
 
 import * as bynk from "../../../bynk.js";
-import type * as pay from "../../pay/handlers.js";
 
 export function late(t: TimedOut): boolean {
   return true;

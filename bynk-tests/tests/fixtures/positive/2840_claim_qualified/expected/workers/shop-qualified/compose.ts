@@ -2,7 +2,6 @@
 // composition root for `shop.qualified` Worker.
 
 import type { __D1Database } from "../../__bynk_runtime/storage.js";
-import type { __ServiceBinding } from "../../__bynk_runtime/boundary.js";
 import * as handlers from "./handlers.js";
 import * as bynk__binding from "../../bynk-cloudflare.js";
 

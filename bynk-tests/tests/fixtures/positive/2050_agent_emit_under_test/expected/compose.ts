@@ -2,7 +2,6 @@
 // composition root
 
 import * as app from "./app.js";
-import * as bynk__binding from "./bynk-cloudflare.js";
 
 export function composeApp() {
   const appDeps = { __eventsDispatch: async (events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number } }>) => { for (const ev of events) { switch (ev.type) { } } } };

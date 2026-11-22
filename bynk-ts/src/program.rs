@@ -151,6 +151,52 @@ impl TsProgram {
         out
     }
 
+    /// Drop every import this program never uses (1A.36b-2): an entry of a named import whose
+    /// local name no other statement uses, and a namespace import whose alias none does. A named
+    /// import left with no entry goes altogether. The order of what stays is kept, and so is
+    /// each import's `type` prefix; a default import is left alone.
+    ///
+    /// A use is what [`crate::unbound_names_in`] reports over the program without its imports,
+    /// so text the tree cannot see (a `Verbatim` or `Raw` statement, bar the names
+    /// `raw_using` declares) uses nothing. It is how a module whose imports were assembled from
+    /// facts that cannot all hold at once (a fixed header, an import the driver adds for a
+    /// feature a body may not reach) ends up importing what its tree uses and no more.
+    pub fn prune_unused_imports(&mut self) {
+        fn local(spec: &str) -> &str {
+            let spec = spec.trim();
+            let spec = spec.strip_prefix("type ").unwrap_or(spec).trim();
+            spec.rsplit(" as ").next().unwrap_or(spec).trim()
+        }
+        let used: std::collections::BTreeSet<String> =
+            crate::unbound_names_in(&self.without_imports().stmts, |_| true)
+                .into_iter()
+                .collect();
+        self.stmts.retain_mut(|stmt| {
+            let TsStmtKind::Decl(decl) = &mut stmt.kind else {
+                return true;
+            };
+            match decl {
+                TsDecl::Import { names, .. } => {
+                    names.retain(|n| used.contains(local(n)));
+                    !names.is_empty()
+                }
+                TsDecl::ImportNamespace { alias, .. } => used.contains(alias.as_str()),
+                TsDecl::ImportDefault { .. }
+                | TsDecl::ReExport { .. }
+                | TsDecl::ExportNames { .. }
+                | TsDecl::ReExportAll { .. }
+                | TsDecl::Export(_)
+                | TsDecl::Interface { .. }
+                | TsDecl::ConstDecl { .. }
+                | TsDecl::Class { .. }
+                | TsDecl::Function { .. }
+                | TsDecl::TypeAlias { .. }
+                | TsDecl::ExportDefault(_)
+                | TsDecl::DeclareConst { .. } => true,
+            }
+        });
+    }
+
     /// The local names the top-level named imports from a specifier `from_matches`
     /// accepts bind (`X`, `type X`, `X as Y` bind `X`, `X`, `Y`): what a module takes
     /// from one place, such as the runtime (1A.36b-1).
@@ -3367,5 +3413,71 @@ mod tests {
             vec!["a".to_string()],
             vec![TsExpr::Ident("too_many".to_string())],
         );
+    }
+
+    /// 1A.36b-2: an import the tree never uses is dropped, entry by entry; what stays keeps its
+    /// order and its `type` prefix, and a namespace goes with its alias.
+    #[test]
+    fn unused_imports_are_pruned_entry_by_entry() {
+        let import = |type_only: bool, names: &[&str], from: &str| {
+            TsStmt::decl(
+                TsDecl::Import {
+                    type_only,
+                    names: names.iter().map(|n| n.to_string()).collect(),
+                    from: from.to_string(),
+                },
+                None,
+            )
+        };
+        let namespace = |alias: &str, from: &str| {
+            TsStmt::decl(
+                TsDecl::ImportNamespace {
+                    type_only: false,
+                    alias: alias.to_string(),
+                    from: from.to_string(),
+                },
+                None,
+            )
+        };
+        let mut program = TsProgram {
+            stmts: vec![
+                import(false, &["Ok", "type Result", "Err", "x as y"], "./r.js"),
+                import(true, &["Unused"], "./u.js"),
+                namespace("used_ns", "./a.js"),
+                namespace("unused_ns", "./b.js"),
+                TsStmt::expr_stmt(
+                    TsExpr::Call {
+                        callee: Box::new(TsExpr::Ident("Ok".to_string())),
+                        args: vec![TsExpr::Ident("y".to_string())],
+                    },
+                    None,
+                ),
+                TsStmt::expr_stmt(
+                    TsExpr::Member {
+                        object: Box::new(TsExpr::Ident("used_ns".to_string())),
+                        property: "f".to_string(),
+                    },
+                    None,
+                ),
+                TsStmt::decl(
+                    TsDecl::ExportNames {
+                        names: vec!["type Result".to_string()],
+                    },
+                    None,
+                ),
+            ],
+        };
+        program.prune_unused_imports();
+        let printed = crate::print(&program, "", "", "").text;
+        assert!(
+            printed.contains("import { Ok, type Result, x as y } from \"./r.js\";"),
+            "{printed}"
+        );
+        assert!(printed.contains("import * as used_ns"), "{printed}");
+        assert!(
+            !printed.contains("Unused") && !printed.contains("unused_ns"),
+            "{printed}"
+        );
+        assert!(!printed.contains("Err"), "{printed}");
     }
 }

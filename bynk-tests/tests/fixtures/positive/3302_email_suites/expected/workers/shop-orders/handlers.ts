@@ -5,7 +5,7 @@ import { Ok, Err, Some, type Result } from "../../__bynk_runtime/result.js";
 import type { __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 
-import { EmailAttachment, EmailError, EmailMessage } from "../../bynk/cloudflare.js";
+import { EmailError } from "../../bynk/cloudflare.js";
 
 import * as bynk_cloudflare from "../../bynk/cloudflare.js";
 import { __serialise_EmailError, __deserialise_EmailError } from "../../bynk/cloudflare.js";

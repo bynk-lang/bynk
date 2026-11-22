@@ -4,8 +4,6 @@
 import { Ok, Err, type Result } from "../../__bynk_runtime/result.js";
 import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService } from "../../__bynk_runtime/boundary.js";
 
-import type * as shop_ledger from "../shop-ledger/handlers.js";
-
 export const log = {
   async call(amount: number, deps: { env: { SHOP_LEDGER: __ServiceBinding } }): globalThis.Promise<Result<number, string>> {
     const r = await __callService(deps.env.SHOP_LEDGER, "authorise", ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(amount), __deserialise_Result_Int_String, "shop.audit", "3042f1b7519e621d", deps.env, "shop.ledger");

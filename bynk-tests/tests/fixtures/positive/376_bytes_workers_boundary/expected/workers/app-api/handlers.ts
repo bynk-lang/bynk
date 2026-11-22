@@ -5,8 +5,6 @@ import { Ok, Err, type Result } from "../../__bynk_runtime/result.js";
 import { __bynkBytesToBase64 } from "../../__bynk_runtime/bytes.js";
 import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService } from "../../__bynk_runtime/boundary.js";
 
-import type * as app_blobs from "../app-blobs/handlers.js";
-
 export const upload = {
   async call(payload: globalThis.Uint8Array, deps: { env: { APP_BLOBS: __ServiceBinding } }): globalThis.Promise<Result<number, void>> {
     const n = await __callService(deps.env.APP_BLOBS, "objects", __bynkBytesToBase64(payload) as __JsonValue, __deserialise_Result_Int_Unit, "app.api", "b27f41b7d9f34c77", deps.env, "app.blobs");

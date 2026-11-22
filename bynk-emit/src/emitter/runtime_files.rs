@@ -27,6 +27,12 @@ fn module_of(name: &str) -> Option<&'static str> {
         .map(|i| RUNTIME_EXPORTS[i].1)
 }
 
+/// Every name a runtime module exports. The import-shadow test reads it to find a runtime name
+/// a module spells in text its tree cannot see.
+pub fn runtime_export_names() -> impl Iterator<Item = &'static str> {
+    RUNTIME_EXPORTS.iter().map(|(name, _)| *name)
+}
+
 /// Whether `name` is a name a runtime module exports.
 pub(crate) fn is_runtime_export(name: &str) -> bool {
     module_of(name).is_some()

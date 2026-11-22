@@ -4,13 +4,8 @@
 import { Ok, Err, type Result } from "../../__bynk_runtime/result.js";
 import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService } from "../../__bynk_runtime/boundary.js";
 
-import { type Tag } from "../ev-kinds/handlers.js";
-import { type Item } from "../ev-store/handlers.js";
-
 import type * as ev_kinds from "../ev-kinds/handlers.js";
 import type * as ev_store from "../ev-store/handlers.js";
-
-export { type Item, type Tag };
 
 export const bound = {
   async call(deps: { env: { EV_STORE: __ServiceBinding } }): globalThis.Promise<number> {

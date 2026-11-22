@@ -13,7 +13,6 @@ import * as handlers_shop_fees from "../../shop-fees/handlers.js";
 import * as handlers_shop_orders from "../../shop-orders/handlers.js";
 
 import type * as shop_fees from "../../shop-fees/handlers.js";
-import type * as shop_payment from "../../shop-payment/handlers.js";
 
 export interface BookState {
   readonly last: Option<Line>;

@@ -6,7 +6,6 @@ import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callSe
 
 import { type Code } from "../lib/handlers.js";
 
-import type * as app from "../app/handlers.js";
 import type * as lib from "../lib/handlers.js";
 
 export { type Code };

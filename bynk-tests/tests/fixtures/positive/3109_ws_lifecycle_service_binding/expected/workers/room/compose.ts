@@ -2,7 +2,6 @@
 // composition root for `room` Worker.
 
 import type { __ServiceBinding } from "../../__bynk_runtime/boundary.js";
-import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 import { __serialiseAgentKey } from "../../__bynk_runtime/agent.js";
 import { __verifyBearerJwtHs256 } from "../../__bynk_runtime/auth.js";
 import * as handlers from "./handlers.js";

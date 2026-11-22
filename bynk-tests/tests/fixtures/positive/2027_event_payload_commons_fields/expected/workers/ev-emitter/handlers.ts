@@ -7,8 +7,6 @@ import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 
 import { Line as __CommonsLine, Qty as __CommonsQty, Tag as __CommonsTag, someTag } from "../../ev/values.js";
 
-import * as bynk from "../../bynk.js";
-
 export type Line = __CommonsLine & { readonly __ctxBrand?: "ev.emitter" };
 export type Qty = __CommonsQty & { readonly __ctxBrand?: "ev.emitter" };
 export const Qty = {

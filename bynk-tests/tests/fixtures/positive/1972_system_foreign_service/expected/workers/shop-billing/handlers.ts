@@ -7,7 +7,7 @@ import { __readStored, __commitStored } from "../../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult } from "../../__bynk_runtime/agent.js";
 
-import { Method, Request, Response } from "../../bynk.js";
+import { Method } from "../../bynk.js";
 import * as bynk_cloudflare__binding from "../../bynk/cloudflare.binding.js";
 
 import * as bynk_cloudflare from "../../bynk/cloudflare.js";

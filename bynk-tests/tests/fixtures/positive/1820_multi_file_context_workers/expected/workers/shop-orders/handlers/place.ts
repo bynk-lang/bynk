@@ -12,7 +12,6 @@ import type { Stamp } from "./stamp.js";
 import { Note as __CommonsNote } from "../../../shop/values.js";
 
 import type * as shop_fees from "../../shop-fees/handlers.js";
-import type * as shop_payment from "../../shop-payment/handlers.js";
 import { __serialise_Note, __deserialise_Note } from "../../../shop/values.js";
 
 export type Note = __CommonsNote & { readonly __ctxBrand?: "shop.orders" };

@@ -5,11 +5,10 @@ import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runt
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService } from "../../__bynk_runtime/boundary.js";
 
-import { Order as __CommonsOrder } from "../../t/orders.js";
 import { Cents as __CommonsCents, Delta as __CommonsDelta } from "../../t/values.js";
 
 import type * as t_pay from "../t-pay/handlers.js";
-import { __serialise_Order, __deserialise_Order } from "../../t/orders.js";
+import { __serialise_Order } from "../../t/orders.js";
 import { __serialise_Cents, __deserialise_Cents, __serialise_Delta, __deserialise_Delta } from "../../t/values.js";
 
 export type Cents = __CommonsCents & { readonly __ctxBrand?: "t.bare" };
@@ -20,7 +19,6 @@ export type Delta = __CommonsDelta & { readonly __ctxBrand?: "t.bare" };
 export const Delta = {
   of(value: number): Result<Delta, ValidationError> { return __CommonsDelta.of(value); },
 };
-export type Order = __CommonsOrder & { readonly __ctxBrand?: "t.bare" };
 
 export const optional = {
   async call(deps: { env: { T_PAY: __ServiceBinding }; identity: string }): globalThis.Promise<number> {

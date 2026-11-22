@@ -3,8 +3,6 @@
 
 import type { Result } from "./__bynk_runtime/result.js";
 
-import * as bynk from "./bynk.js";
-
 export interface Report {
   readonly tempC: number;
   readonly summary: string;

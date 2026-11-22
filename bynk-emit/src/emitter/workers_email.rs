@@ -48,9 +48,6 @@ pub(super) fn collect_routes(table: &UnitTable) -> Vec<EmailRoute> {
     routes
 }
 
-/// The runtime names the entry imports.
-pub(super) const RUNTIME_IMPORTS: [&str; 2] = ["__handleEmail", "type __InboundMessage"];
-
 /// `async email(message, env, ctx) { … }`: build the surface, then hand the
 /// message to the runtime with one route per service.
 pub(super) fn emit_email_handler(

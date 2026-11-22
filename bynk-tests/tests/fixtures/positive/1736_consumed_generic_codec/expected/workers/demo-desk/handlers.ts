@@ -4,11 +4,7 @@
 import { Ok, Err, type Result } from "../../__bynk_runtime/result.js";
 import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService } from "../../__bynk_runtime/boundary.js";
 
-import { type Envelope } from "../demo-vault/handlers.js";
-
 import type * as demo_vault from "../demo-vault/handlers.js";
-
-export { type Envelope };
 
 /**
  * #1736: consumes demo.vault's generic types across the boundary, in both

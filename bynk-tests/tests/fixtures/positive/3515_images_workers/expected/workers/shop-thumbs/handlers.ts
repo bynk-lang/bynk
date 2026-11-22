@@ -6,7 +6,7 @@ import { __bynkBytesToBase64, __bynkBytesFromBase64 } from "../../__bynk_runtime
 import type { __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 
-import { ImageFit, ImageFormat, OutputOptions, Overlay, TransformOptions } from "../../bynk/cloudflare.js";
+import { ImageFit, ImageFormat } from "../../bynk/cloudflare.js";
 
 import * as bynk_cloudflare from "../../bynk/cloudflare.js";
 

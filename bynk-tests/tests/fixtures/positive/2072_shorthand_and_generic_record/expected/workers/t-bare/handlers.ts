@@ -7,8 +7,6 @@ import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callSe
 
 import { Page as __CommonsPage } from "../../t/pages.js";
 import { Cents as __CommonsCents } from "../../t/values.js";
-
-import type * as t_pay from "../t-pay/handlers.js";
 import { __serialise_Cents, __deserialise_Cents } from "../../t/values.js";
 
 export type Cents = __CommonsCents & { readonly __ctxBrand?: "t.bare" };

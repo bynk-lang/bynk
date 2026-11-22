@@ -8,8 +8,6 @@ import type { __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 import { __cookieValue } from "../../__bynk_runtime/http.js";
 
-import { Cookie } from "../../bynk.js";
-
 export type Theme =
     { readonly tag: "Light" }
   | { readonly tag: "Dark" };

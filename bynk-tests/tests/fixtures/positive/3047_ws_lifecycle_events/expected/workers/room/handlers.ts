@@ -10,8 +10,6 @@ import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout,
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult, __AGENT_WIRE_PASS, __dispatchToEventsFanout } from "../../__bynk_runtime/agent.js";
 import { type Connection, __resolveConnection, __connIdOf, __acceptHibernatableConnection, __newWebSocketPair, __webSocketUpgradeResponse, __WorkersConnection } from "../../__bynk_runtime/connection.js";
 
-import * as bynk from "../../bynk.js";
-
 export type UserId = string & { readonly __brand: "room.UserId" };
 
 export const UserId = {

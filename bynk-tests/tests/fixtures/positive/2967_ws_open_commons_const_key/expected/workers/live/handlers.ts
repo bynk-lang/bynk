@@ -9,8 +9,6 @@ import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout,
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult, __decodeAgentKey, __AGENT_WIRE_PASS } from "../../__bynk_runtime/agent.js";
 import { type Connection, __resolveConnection, __connIdOf, __acceptHibernatableConnection, __newWebSocketPair, __webSocketUpgradeResponse } from "../../__bynk_runtime/connection.js";
 
-import { LOBBY } from "../../rooms.js";
-
 export interface Frame {
   readonly text: string;
 }

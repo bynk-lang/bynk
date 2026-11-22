@@ -47,18 +47,8 @@ mod par;
 /// `(source, target, module, unbound names, issue)`. `source` is a fixture
 /// directory name or a [`repros`] name.
 const KNOWN: &[(&str, &str, &str, &[&str], u32)] = &[
-    // Pre-existing, and visible to `name_closure` since 1A.32a made the service
-    // objects nodes: a boundary cast in a handler body names a namespace the module
-    // never imports. (#3807's `2704_recursive_cycle_across_files` case, a namespace
-    // import of a file that does not declare the member, is masked rather than fixed: the
-    // import target is now the smallest path, which happens to declare it.)
-    (
-        "2901_alias_caller_plain",
-        "bundle",
-        "edge.ts",
-        &["lib"],
-        3807,
-    ),
+    // 1A.36b-2 deleted #3807's `2901_alias_caller_plain` entry: a namespace the body uses is
+    // imported because the body uses it, so the boundary cast's `lib` is bound.
 ];
 
 /// Minimal projects for open defects no positive fixture exhibits:
@@ -361,5 +351,36 @@ fn every_emitted_module_binds_every_name_it_uses() {
          Known defects that no longer report (delete their `KNOWN` entries):\n{}",
         unexpected.join("\n"),
         fixed.join("\n"),
+    );
+}
+
+/// #3807 (1A.36b-2): on the bundle target, a service handler's boundary cast
+/// (`x as unknown as lib.Code`) names the consumed context's namespace, and the module imports
+/// that namespace because its tree uses it. The module used to import it only where a prediction
+/// said so, and the cast's `lib` went unbound (TS2304).
+#[test]
+fn a_boundary_cast_binds_the_namespace_it_names_on_the_bundle_target() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/positive/2901_alias_caller_plain");
+    let out = compile_project_fixture(&dir, BuildTarget::Bundle).expect("compiles for bundle");
+    let edge = out
+        .artefacts
+        .docs
+        .iter()
+        .find_map(|(path, doc)| match doc {
+            bynk_driver::project::Document::Ts(p) if module_key(path) == "edge.ts" => Some(p),
+            _ => None,
+        })
+        .expect("edge.ts is emitted");
+    assert!(
+        bynk_ts::print(edge, "", "", "")
+            .text
+            .contains("as unknown as lib.Code"),
+        "the boundary cast this test is about is gone"
+    );
+    assert!(
+        edge.imported_names().contains("lib"),
+        "edge.ts uses `lib` and must import it: {:?}",
+        edge.imported_names()
     );
 }

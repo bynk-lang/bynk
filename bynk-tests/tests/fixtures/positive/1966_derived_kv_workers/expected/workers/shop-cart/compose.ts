@@ -2,7 +2,6 @@
 // composition root for `shop.cart` Worker.
 
 import type { __KVNamespace } from "../../__bynk_runtime/storage.js";
-import type { __ServiceBinding } from "../../__bynk_runtime/boundary.js";
 import * as handlers from "./handlers.js";
 import * as bynk_cloudflare__binding from "../../bynk/cloudflare.binding.js";
 

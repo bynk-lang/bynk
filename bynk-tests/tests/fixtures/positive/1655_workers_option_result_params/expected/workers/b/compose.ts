@@ -2,7 +2,6 @@
 // composition root for `b` Worker.
 
 import type { Option, Result } from "../../__bynk_runtime/result.js";
-import type { __ServiceBinding } from "../../__bynk_runtime/boundary.js";
 import * as handlers from "./handlers.js";
 
 export interface Env {

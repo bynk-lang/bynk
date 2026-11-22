@@ -3,8 +3,6 @@
 
 import type { Result } from "./__bynk_runtime/result.js";
 
-import * as bynk from "./bynk.js";
-
 export interface Claims {
   readonly sub: string;
   readonly exp: number;

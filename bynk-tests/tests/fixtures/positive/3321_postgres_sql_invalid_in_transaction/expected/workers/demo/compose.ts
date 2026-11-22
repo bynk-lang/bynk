@@ -2,7 +2,6 @@
 // composition root for `demo` Worker.
 
 import type { __Hyperdrive } from "../../__bynk_runtime/storage.js";
-import type { __ServiceBinding } from "../../__bynk_runtime/boundary.js";
 import { __pgExecute } from "../../__bynk_runtime/postgres.js";
 import * as handlers from "./handlers.js";
 import * as bynk_cloudflare__binding from "../../bynk/cloudflare.binding.js";

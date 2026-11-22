@@ -3,7 +3,7 @@
 
 import { Some } from "../__bynk_runtime/result.js";
 
-import { EmailReply, EmailVerdict, InboundEmail } from "../bynk/cloudflare.js";
+import { EmailVerdict, InboundEmail } from "../bynk/cloudflare.js";
 
 export const support = {
   async queue_support_0(mail: InboundEmail, deps: {}): globalThis.Promise<EmailVerdict> {

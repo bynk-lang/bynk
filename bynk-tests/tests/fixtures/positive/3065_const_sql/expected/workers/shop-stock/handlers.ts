@@ -6,7 +6,7 @@ import type { DecodeError } from "../../__bynk_runtime/errors.js";
 import type { __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary.js";
 
 import { SqlReadError, SqlStatement } from "../../bynk/cloudflare.js";
-import { CreateSql, HiddenTail, Tail } from "../../shop/queries.js";
+import { CreateSql } from "../../shop/queries.js";
 
 import * as bynk_cloudflare from "../../bynk/cloudflare.js";
 import { __serialise_SqlError, __deserialise_SqlError, __serialise_SqlReadError, __deserialise_SqlReadError } from "../../bynk/cloudflare.js";

@@ -4,14 +4,8 @@
 import { Ok, Err, type Result } from "../../__bynk_runtime/result.js";
 import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService } from "../../__bynk_runtime/boundary.js";
 
-import { type Base } from "../shop-base/handlers.js";
-import { type Order } from "../shop-order/handlers.js";
-
 import type * as shop_base from "../shop-base/handlers.js";
-import type * as shop_ledger from "../shop-ledger/handlers.js";
 import type * as shop_order from "../shop-order/handlers.js";
-
-export { type Base, type Order };
 
 export const check = {
   async call(id: string, deps: { env: { SHOP_LEDGER: __ServiceBinding; SHOP_ORDER: __ServiceBinding } }): globalThis.Promise<number> {

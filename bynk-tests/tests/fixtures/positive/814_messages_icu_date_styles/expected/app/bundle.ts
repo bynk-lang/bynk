@@ -3,7 +3,7 @@
 
 import { __formatIcuDate } from "../__bynk_runtime/messages.js";
 
-import { render as __bynkLocaleRender, renderArg as __bynkRenderArg } from "../bynk/locale.js";
+import { render as __bynkLocaleRender } from "../bynk/locale.js";
 import type { LocaleTag as __bynkLocaleTag, Message as __bynkMessage, MessageArg as __bynkMessageArg } from "../bynk/locale/types.js";
 
 const __messagesByLocale: globalThis.Record<string, globalThis.Record<string, (params: ReadonlyMap<string, __bynkMessageArg>) => string>> = {

@@ -5,8 +5,7 @@ import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runt
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService } from "../../__bynk_runtime/boundary.js";
 
-import { type Batch } from "../ev-store/handlers.js";
-import { Line as __CommonsLine, Page as __CommonsPage, Qty as __CommonsQty, Tag as __CommonsTag, someTag } from "../../ev/values.js";
+import { Line as __CommonsLine, Page as __CommonsPage, Qty as __CommonsQty, someTag } from "../../ev/values.js";
 
 import type * as ev_store from "../ev-store/handlers.js";
 import { __serialise_Line, __deserialise_Line, __serialise_Qty, __deserialise_Qty, __serialise_Tag, __deserialise_Tag } from "../../ev/values.js";
@@ -17,13 +16,6 @@ export type Qty = __CommonsQty & { readonly __ctxBrand?: "ev.client" };
 export const Qty = {
   of(value: number): Result<Qty, ValidationError> { return __CommonsQty.of(value); },
 };
-export type Tag = __CommonsTag & { readonly __ctxBrand?: "ev.client" };
-export const Tag = {
-  of(value: string): Result<Tag, ValidationError> { return __CommonsTag.of(value); },
-  unsafe(value: string): Tag { return __CommonsTag.unsafe(value); },
-};
-
-export { type Batch };
 
 export const take = {
   async call(ls: readonly Line[], first: Option<Line>, byKey: ReadonlyMap<string, Line>, qtys: readonly Qty[], page: Page<Line>, deps: {}): globalThis.Promise<number> {

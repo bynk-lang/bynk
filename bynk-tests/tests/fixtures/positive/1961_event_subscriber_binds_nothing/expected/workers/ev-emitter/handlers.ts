@@ -3,8 +3,6 @@
 
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 
-import * as bynk from "../../bynk.js";
-
 export interface Pinged {
   readonly n: number;
 }

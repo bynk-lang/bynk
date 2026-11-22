@@ -8,8 +8,6 @@ import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout,
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult, __decodeAgentKey } from "../../__bynk_runtime/agent.js";
 
-import type * as ag_doubler from "../ag-doubler/handlers.js";
-
 export interface CallsState {
   readonly n: number;
 }

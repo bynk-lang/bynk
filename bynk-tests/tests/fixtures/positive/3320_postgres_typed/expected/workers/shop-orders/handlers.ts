@@ -7,7 +7,7 @@ import type { DecodeError } from "../../__bynk_runtime/errors.js";
 import type { __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 
-import { PgStatement, PgValue } from "../../bynk/cloudflare.js";
+import { PgValue } from "../../bynk/cloudflare.js";
 
 import * as bynk_cloudflare from "../../bynk/cloudflare.js";
 

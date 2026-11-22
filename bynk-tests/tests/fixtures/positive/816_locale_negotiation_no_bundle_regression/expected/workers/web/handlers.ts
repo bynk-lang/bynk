@@ -4,11 +4,8 @@
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 
 import { message, render } from "../../bynk/locale.js";
-import { Message as __CommonsMessage } from "../../bynk/locale/types.js";
 
 import * as bynk from "../../bynk.js";
-
-export type Message = __CommonsMessage & { readonly __ctxBrand?: "web" };
 
 export const api = {
   async http_GET_greet(deps: { Locale: bynk.Locale }): globalThis.Promise<HttpResult<string>> {

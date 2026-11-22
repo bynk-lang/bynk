@@ -6,7 +6,6 @@ import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callSe
 
 import { type Placed, type Tallied } from "../shop-order/handlers.js";
 
-import type * as shop_ledger from "../shop-ledger/handlers.js";
 import type * as shop_order from "../shop-order/handlers.js";
 
 export { type Placed, type Tallied };

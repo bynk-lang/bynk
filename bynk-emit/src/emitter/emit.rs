@@ -7336,7 +7336,7 @@ struct AgentDispatchFacts<'a> {
     /// The handler reads the agent's key (`self.key`).
     reads_key: bool,
     /// The `given` capability dependencies the RPC branch rebuilds, if any.
-    given_deps_expr: &'a Option<String>,
+    given_deps_expr: &'a Option<GivenDeps>,
     /// Whether the RPC branch rebuilds the agent's environment at all.
     rpc_rebuilds_env: bool,
     /// Whether a handler body emits events directly.
@@ -8958,7 +8958,15 @@ pub(crate) fn emit_agent(
     // providers take the Worker `env` — workerd passes it as the DO
     // constructor's second argument. Bundle mode constructs with `state`
     // only and never uses the fetch path, so the parameter stays optional.
-    let given_deps_expr = ctx.agent_given_deps.get(&a.name.name).cloned();
+    let given_deps_expr: Option<GivenDeps> = ctx.agent_given_deps.get(&a.name.name).map(|expr| {
+        (
+            expr.clone(),
+            ctx.agent_given_deps_names
+                .get(&a.name.name)
+                .cloned()
+                .unwrap_or_default(),
+        )
+    });
     // Events track, slice 0 (spine #936): the same wire problem #527 already
     // solved for capability providers hits `deps.__eventsDispatch` too — it is
     // a function, so it does not survive the DO's JSON wire either. An agent
@@ -9704,14 +9712,20 @@ fn events_deps_const_stmt() -> bynk_ts::TsStmt {
 }
 
 /// `const __givenDeps = <expr>;` — the agent's `given` providers rebuilt in-process.
-fn given_deps_const_stmt(expr: &str) -> bynk_ts::TsStmt {
+fn given_deps_const_stmt((expr, names): &GivenDeps) -> bynk_ts::TsStmt {
+    // The expression is the driver's printed text; the namespaces it spells are declared beside
+    // it (1A.36b-2), so the module's imports follow the tree.
     bynk_ts::TsStmt::const_stmt(
         bynk_ts::TsBindingName::Ident("__givenDeps".to_string()),
         None,
-        bynk_ts::TsExpr::Ident(expr.to_string()),
+        bynk_ts::TsExpr::raw_using(expr.clone(), names.clone()),
         None,
     )
 }
+
+/// An agent's DO-side `given` deps expression and the namespaces (binding modules, other Workers'
+/// handlers) it names, both from the driver's deps plan.
+type GivenDeps = (String, Vec<String>);
 
 /// The in-DO deps a WebSocket entry point (`on open`'s fetch branch,
 /// `webSocketMessage`, `webSocketClose`) rebuilds from the DO's own `env`, as the
@@ -9723,7 +9737,7 @@ fn given_deps_const_stmt(expr: &str) -> bynk_ts::TsStmt {
 /// `deps` type need not name them.
 #[derive(Clone, Default)]
 struct WsDepsRebuild {
-    given: Option<String>,
+    given: Option<GivenDeps>,
     uses_emit: bool,
     /// #3109: a body reaches `deps.env` (Service Bindings, DO namespaces).
     reaches_env: bool,

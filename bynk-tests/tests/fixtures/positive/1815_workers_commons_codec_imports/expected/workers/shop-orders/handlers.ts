@@ -8,23 +8,18 @@ import { __readStored, __commitStored } from "../../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService } from "../../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult } from "../../__bynk_runtime/agent.js";
 
-import { Line as __CommonsLine, priced } from "../../shop/model.js";
-import { Cents as __CommonsCents, CustomerId as __CommonsCustomerId, someone } from "../../shop/values.js";
+import { priced } from "../../shop/model.js";
+import { CustomerId as __CommonsCustomerId, someone } from "../../shop/values.js";
 
 import type * as shop_payment from "../shop-payment/handlers.js";
 import { __serialise_CustomerId, __deserialise_CustomerId } from "../../shop/values.js";
-import { __serialise_Cents, __deserialise_Cents } from "../../shop/values.js";
+import { __serialise_Cents } from "../../shop/values.js";
 
-export type Cents = __CommonsCents & { readonly __ctxBrand?: "shop.orders" };
-export const Cents = {
-  of(value: number): Result<Cents, ValidationError> { return __CommonsCents.of(value); },
-};
 export type CustomerId = __CommonsCustomerId & { readonly __ctxBrand?: "shop.orders" };
 export const CustomerId = {
   of(value: string): Result<CustomerId, ValidationError> { return __CommonsCustomerId.of(value); },
   unsafe(value: string): CustomerId { return __CommonsCustomerId.unsafe(value); },
 };
-export type Line = __CommonsLine & { readonly __ctxBrand?: "shop.orders" };
 
 export interface OrderState {
   readonly owner: Option<CustomerId>;

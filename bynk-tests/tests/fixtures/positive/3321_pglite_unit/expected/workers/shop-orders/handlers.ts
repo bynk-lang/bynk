@@ -6,7 +6,7 @@ import { __bynkPgRow } from "../../__bynk_runtime/time.js";
 import type { DecodeError } from "../../__bynk_runtime/errors.js";
 import type { __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary.js";
 
-import { PgError, PgReadError, PgRun, PgStatement, PgValue } from "../../bynk/cloudflare.js";
+import { PgError, PgReadError, PgRun, PgValue } from "../../bynk/cloudflare.js";
 
 import * as bynk_cloudflare from "../../bynk/cloudflare.js";
 import { __serialise_PgError, __deserialise_PgError, __serialise_PgReadError, __deserialise_PgReadError, __serialise_PgRun, __deserialise_PgRun } from "../../bynk/cloudflare.js";

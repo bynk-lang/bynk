@@ -15,13 +15,10 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use super::internal_fault::undefined_node;
 use super::workers_entry::wire_ident;
 use crate::emit_model::{ImportExt, LocaleNegotiationArgs};
+use crate::emitter::RuntimeUse;
 use crate::emitter::http_handler_method_name_ir;
 use crate::emitter::wrangler::{
     BindingSource, WorkerBinding, agent_binding, binding_ts_type, events_fanout_binding,
-    singleton_is,
-};
-use crate::emitter::{
-    BOUNDARY_CODEC_RUNTIME_IMPORTS, BYTES_RUNTIME_IMPORTS, JSON_CODEC_RUNTIME_IMPORTS, RuntimeUse,
 };
 use bynk_check::symbols::MessageBundleInfo;
 use bynk_check::symbols::UnitTable;
@@ -234,35 +231,6 @@ fn secret_probe_expr(secret: &str) -> TsExpr {
     nullish(explicit, global_probe)
 }
 
-/// `missing_bindings`'s own dedup logic (`crate::emitter`), reimplemented
-/// over a `Vec<String>` of already-real import names instead of over
-/// already-printed text — #1321's own real need: `compose.ts`'s header
-/// import is now a `TsDecl::Import` node built once, so the post-pass that
-/// appends codec-family runtime names (#914) can no longer splice into
-/// printed text (`crate::emitter::inject_runtime_imports`'s own mechanism)
-/// and instead mutates the node's `names` directly, before `emit_worker_compose`
-/// pushes it into the program. Same "strip an optional `type ` prefix,
-/// compare bare names" dedup rule, so a name already present (bare or
-/// `type`-prefixed) is never added twice — `sum_parses_body`'s own `"type
-/// JsonValue"` colliding with `JSON_CODEC_RUNTIME_IMPORTS`'s own `"type
-/// JsonValue"` is the real, reachable case this guards.
-fn append_missing_bindings(names: &mut Vec<String>, extra: &str) {
-    fn bare(binding: &str) -> &str {
-        binding
-            .trim()
-            .strip_prefix("type ")
-            .unwrap_or(binding.trim())
-    }
-    let present: HashSet<&str> = names.iter().map(|n| bare(n)).collect();
-    let wanted: Vec<String> = extra
-        .split(',')
-        .map(str::trim)
-        .filter(|b| !b.is_empty() && !present.contains(bare(b)))
-        .map(str::to_string)
-        .collect();
-    names.extend(wanted);
-}
-
 /// The events a publishing handler hands its fan-out. A group's one fan-out
 /// serves every publishing member, so a member names itself on each event
 /// (`publisher`), as two members may declare an event of one name (#3562, G3-1).
@@ -432,155 +400,8 @@ pub fn emit_worker_compose(
         cross_cap_exprs.push((cap.clone(), expr));
     }
 
-    // v0.47/v0.52: a context with a Bearer handler — or a sum with a Bearer
-    // member — imports the JWT verifier; a sum with a Signature member imports
-    // the HMAC verifier. Any verifying wrapper returns `HttpResult` (the 401/400
-    // shaping the entry maps).
-    let sum_handlers: Vec<Vec<bynk_check::actors::SumMember>> = table
-        .services
-        .values()
-        .flat_map(|s| s.handlers.iter())
-        .filter_map(|h| bynk_check::actors::sum_members_for(h, &table.actors))
-        .collect();
-    use bynk_check::actors::SumMemberSeam;
-    let has_bearer = table.services.values().any(|s| {
-        s.handlers
-            .iter()
-            .any(|h| bynk_check::actors::bearer_seam_for(h, &table.actors).is_some())
-    }) || sum_handlers
-        .iter()
-        .flatten()
-        .any(|m| matches!(m.seam, SumMemberSeam::Bearer { .. }));
-    let has_sum_signature = sum_handlers
-        .iter()
-        .flatten()
-        .any(|m| matches!(m.seam, SumMemberSeam::Signature(_)));
-    let has_sum = !sum_handlers.is_empty();
-    // v0.151: a single-actor `Oidc` handler's HTTP wrapper fetches the JWKS and
-    // verifies an RS256/ES256 JWT before the body runs (fail-closed → 401).
-    let has_oidc = table.services.values().any(|s| {
-        s.handlers
-            .iter()
-            .any(|h| bynk_check::actors::oidc_seam_for(h, &table.actors).is_some())
-    });
-    let signed_cookie_imports = signed_cookie_runtime_imports(table);
-    // A sum wrapper references `JsonValue` only when it parses a `body`.
-    let sum_parses_body = sum_handlers.iter().flatten().any(|m| m.needs_body())
-        || table
-            .services
-            .values()
-            .flat_map(|s| s.handlers.iter())
-            .any(|h| {
-                bynk_check::actors::sum_members_for(h, &table.actors).is_some()
-                    && h.params.iter().any(|p| p.name.name == "body")
-            });
-    // #914: the sum wrapper's body codec is emitted *below* the import line, and
-    // for anything but a named type it inlines `Ok`/`Err`/`Result`/`BoundaryError`
-    // (plus the base64 helpers for a `Bytes`). Those cannot be predicted from the
-    // handler signature without restating the codec's own arm table, so they are
-    // recorded as the codec emits and injected into the import line as a post-pass
-    // — the same shape `emit_project` and `emit_worker_entry` already use.
     let runtime_use = RuntimeUse::default();
-    let mut runtime_imports: Vec<String> = Vec::new();
-    // #1944: each type an `Env` member names is declared from the same
-    // binding list the members come from, so a binding can never be typed
-    // by a name this file does not import or define.
     let binds = |kind: fn(&BindingSource) -> bool| bindings.iter().any(|b| kind(&b.source));
-    runtime_imports.extend(platform_binding_imports(bindings));
-    runtime_imports.push("type __ServiceBinding".to_string());
-    runtime_imports.extend(email_identity_import(table));
-    if has_bearer || has_sum || has_oidc || !signed_cookie_imports.is_empty() {
-        runtime_imports.push("HttpResult".to_string());
-    }
-    if has_bearer {
-        runtime_imports.push("__verifyBearerJwtHs256".to_string());
-    }
-    runtime_imports.extend(signed_cookie_imports);
-    if has_oidc {
-        runtime_imports.push("__verifyOidcJwt".to_string());
-    }
-    // #2380 (L5): a capturing `Oidc` seam passes the token's claims on; one
-    // with `trustFrom` reads its trust roots from the environment first.
-    let oidc_seams: Vec<bynk_check::actors::OidcSeam> = table
-        .services
-        .values()
-        .flat_map(|s| s.handlers.iter())
-        .filter_map(|h| bynk_check::actors::oidc_seam_for(h, &table.actors))
-        .collect();
-    if oidc_seams.iter().any(|seam| seam.binder.is_some()) {
-        runtime_imports.push("__tokenClaims".to_string());
-    }
-    if oidc_seams.iter().any(|seam| seam.trust_from.is_some()) {
-        runtime_imports.push("__oidcTrust".to_string());
-    }
-    if has_sum_signature {
-        runtime_imports.push("__verifySignatureHmacSha256".to_string());
-    }
-    if sum_parses_body {
-        runtime_imports.push("type __JsonValue".to_string());
-    }
-    // A capped sum route reads its body through the counting reader.
-    let sum_reads_capped = table.services.values().any(|svc| {
-        svc.handlers.iter().any(|h| {
-            bynk_check::actors::sum_members_for(h, &table.actors).is_some()
-                && bynk_model::lower_route_limit_ir(h)
-                    .or(svc.limits.as_ref().and_then(|p| p.max_body()))
-                    .is_some()
-                && (h.params.iter().any(|p| p.name.name == "body")
-                    || bynk_check::actors::sum_members_for(h, &table.actors)
-                        .is_some_and(|ms| ms.iter().any(|m| m.needs_body())))
-        })
-    });
-    if sum_reads_capped {
-        runtime_imports.push("__readBodyCapped".to_string());
-    }
-    // v0.104 (real-time track slice 3b): a `from websocket` upgrade route resolves
-    // the hosting Durable Object by serialising the transfer key, exactly as agent
-    // call sites do. P6.30 (design/tracks/the-ir.md §6a): reads the checker-
-    // classified `IrHandlerKind` (P6.24a's own pure, unconditional mirror) rather
-    // than matching the raw AST `HandlerKind` directly.
-    let has_ws_open = table.services.values().any(|s| {
-        s.handlers.iter().any(|h| {
-            matches!(
-                bynk_model::lower_handler_kind_ir(&h.kind),
-                bynk_model::IrHandlerKind::Open
-            )
-        })
-    });
-    if has_ws_open {
-        runtime_imports.push("__serialiseAgentKey".to_string());
-    }
-    // Events track, slice 0 (spine #936, ADR 0284): a context whose handlers
-    // emit gets its own fan-out DO binding (`emitter::events_fanout`) and a
-    // `deps.__eventsDispatch` that calls into it — mirrors `unit_table_uses_
-    // emit`'s Bundle-mode gate on `composeApp`'s `__eventsDispatch` closure,
-    // so the two targets agree on when the field exists.
-    if uses_emit {
-        runtime_imports.push("__dispatchToEventsFanout".to_string());
-    }
-    // #1655 (runtime-semantics track S6): `compose.ts` re-declares each
-    // handler's parameters (not its return type), qualifying user types with
-    // `handlers.` but naming the runtime's own generic and error types bare.
-    // Before, nothing imported them, so an `Option[…]`/`Result[…]` parameter
-    // failed `tsc` on this target (TS2749/TS2304) while bundle was clean.
-    // Import every runtime type a parameter mentions, as a type; a name already
-    // imported as a value (`HttpResult`) covers its type too.
-    let mut signature_types: std::collections::BTreeSet<&'static str> = Default::default();
-    for service in table.services.values() {
-        for h in &service.handlers {
-            for p in &h.params {
-                collect_runtime_type_names(&p.type_ref, &mut signature_types);
-            }
-        }
-    }
-    for name in signature_types {
-        if !runtime_imports
-            .iter()
-            .any(|i| i.trim_start_matches("type ") == name)
-        {
-            runtime_imports.push(format!("type {name}"));
-        }
-    }
 
     // Only consumed *contexts* become Service Bindings — a consumed adapter is
     // not a Worker (its capability is provided in-process via the binding).
@@ -594,9 +415,8 @@ pub fn emit_worker_compose(
     // request's execution context and threads its `waitUntil` into `deps.__exec`.
 
     // -- Build the `compose` function's own body (Decision A/B: real nodes
-    // throughout) before assembling the header — `runtime_imports`' own
-    // post-pass (below) needs `runtime_use`'s final state, which only
-    // exists once every wrapper has been built. --
+    // throughout) before assembling the header: the runtime import is read off the
+    // finished tree (below). --
 
     let mut body: Vec<TsStmt> = Vec::new();
 
@@ -849,105 +669,6 @@ pub fn emit_worker_compose(
         return_entries,
     ))));
 
-    // #914: fold in whatever the wrappers' codecs actually reached for —
-    // the tree-node analogue of the old text post-pass (this file's own
-    // `append_missing_bindings`'s own doc explains why it can't reuse
-    // `crate::emitter::inject_runtime_imports` unchanged).
-    if runtime_use.boundary_codec() {
-        append_missing_bindings(&mut runtime_imports, BOUNDARY_CODEC_RUNTIME_IMPORTS);
-    }
-    if runtime_use.json_codec() {
-        append_missing_bindings(&mut runtime_imports, JSON_CODEC_RUNTIME_IMPORTS);
-    }
-    if runtime_use.bytes() {
-        append_missing_bindings(&mut runtime_imports, BYTES_RUNTIME_IMPORTS);
-    }
-    if runtime_use.bytes_ops() {
-        append_missing_bindings(
-            &mut runtime_imports,
-            crate::emitter::BYTES_OPS_RUNTIME_IMPORTS,
-        );
-    }
-    let time = crate::emitter::time_runtime_imports(&runtime_use);
-    append_missing_bindings(&mut runtime_imports, &time);
-    if runtime_use.iso_date() {
-        append_missing_bindings(
-            &mut runtime_imports,
-            crate::emitter::ISO_DATE_RUNTIME_IMPORTS,
-        );
-    }
-    if runtime_use.yaml() {
-        append_missing_bindings(&mut runtime_imports, crate::emitter::YAML_RUNTIME_IMPORTS);
-    }
-    if runtime_use.settle_all() {
-        append_missing_bindings(
-            &mut runtime_imports,
-            crate::emitter::SETTLE_ALL_RUNTIME_IMPORTS,
-        );
-    }
-    append_missing_bindings(
-        &mut runtime_imports,
-        crate::emitter::effect_runtime_imports(&runtime_use),
-    );
-    if runtime_use.fault() {
-        append_missing_bindings(&mut runtime_imports, crate::emitter::FAULT_RUNTIME_IMPORTS);
-    }
-    if runtime_use.url_ops() {
-        append_missing_bindings(
-            &mut runtime_imports,
-            crate::emitter::URL_OPS_RUNTIME_IMPORTS,
-        );
-    }
-    if runtime_use.request_headers() {
-        append_missing_bindings(
-            &mut runtime_imports,
-            crate::emitter::REQUEST_HEADERS_RUNTIME_IMPORTS,
-        );
-    }
-    if runtime_use.request_cookies() {
-        append_missing_bindings(
-            &mut runtime_imports,
-            crate::emitter::REQUEST_COOKIES_RUNTIME_IMPORTS,
-        );
-    }
-    if runtime_use.request_query() {
-        append_missing_bindings(
-            &mut runtime_imports,
-            crate::emitter::REQUEST_QUERY_RUNTIME_IMPORTS,
-        );
-    }
-    if runtime_use.query_string() {
-        append_missing_bindings(
-            &mut runtime_imports,
-            crate::emitter::QUERY_STRING_RUNTIME_IMPORTS,
-        );
-    }
-    if runtime_use.form_codec() {
-        append_missing_bindings(
-            &mut runtime_imports,
-            crate::emitter::FORM_CODEC_RUNTIME_IMPORTS,
-        );
-    }
-    if runtime_use.multipart_form() {
-        append_missing_bindings(
-            &mut runtime_imports,
-            crate::emitter::MULTIPART_FORM_RUNTIME_IMPORTS,
-        );
-    }
-    if runtime_use.cookie_string() {
-        append_missing_bindings(
-            &mut runtime_imports,
-            crate::emitter::COOKIE_STRING_RUNTIME_IMPORTS,
-        );
-    }
-    if runtime_use.eq() {
-        append_missing_bindings(&mut runtime_imports, crate::emitter::EQ_RUNTIME_IMPORTS);
-    }
-    if runtime_use.int() {
-        append_missing_bindings(&mut runtime_imports, crate::emitter::INT_RUNTIME_IMPORTS);
-    }
-    append_missing_bindings(&mut runtime_imports, &runtime_use.cmp_imports());
-
     let mut compose_params = vec![TsParam::new("env".to_string(), Some(TsType::named("Env")))];
     // Locale capability track, slice 2 (#882): `request` is threaded
     // independently of `exec` — the two-way independence matters because
@@ -999,13 +720,8 @@ pub fn emit_worker_compose(
         format!("composition root for `{context}` Worker."),
         None,
     ));
-    for stmt in crate::emitter::runtime_files::runtime_import_stmts(
-        false,
-        &runtime_imports,
-        COMPOSE_RUNTIME_SPECIFIER,
-    ) {
-        program.push(stmt);
-    }
+    // The runtime import goes here, once the rest of the module is built (below).
+    let runtime_import_at = program.stmts.len();
     program.push(TsStmt::decl(
         TsDecl::ImportNamespace {
             type_only: false,
@@ -1130,6 +846,24 @@ pub fn emit_worker_compose(
         })),
         None,
     ));
+
+    // 1A.36b-2: the runtime import is what the module's tree uses (`derived_worker_runtime_names`);
+    // its position is after the banner, before the other imports.
+    let names = crate::emitter::runtime_header::derived_worker_runtime_names(
+        &program.stmts[runtime_import_at..],
+    );
+    for (i, stmt) in crate::emitter::runtime_files::runtime_import_stmts(
+        false,
+        &names,
+        COMPOSE_RUNTIME_SPECIFIER,
+    )
+    .into_iter()
+    .enumerate()
+    {
+        program.stmts.insert(runtime_import_at + i, stmt);
+    }
+    // Each fixed import (`handlers`, a provider's namespace) is kept only if the tree uses it.
+    program.prune_unused_imports();
 
     (program, needs_request)
 }
@@ -1438,16 +1172,6 @@ fn message_wrapper(
         h,
         email_actors(service, actors),
     ))
-}
-
-/// #3328: an email handler's compose wrapper takes the minted identity, so a
-/// Worker with an email service imports its type.
-fn email_identity_import(table: &UnitTable) -> Option<String> {
-    table
-        .services
-        .values()
-        .any(|s| matches!(s.protocol, ServiceProtocol::Email { .. }))
-        .then(|| "type __SenderIdentity".to_string())
 }
 
 /// `Some(actors)` for a `from email` service (see [`emit_queue_wrapper`]).
@@ -2396,36 +2120,6 @@ fn session_deps_entry(table: &UnitTable) -> Option<TsObjectEntry> {
     ))
 }
 
-/// #3386: the runtime names the compose wrappers of a context's single-actor `SignedCookie`
-/// handlers import: the cookie reader and verifier, and (for a `POST`/`PUT`/`PATCH`/`DELETE`
-/// route, the only ones that carry it) the CSRF check. Empty when the context has none.
-fn signed_cookie_runtime_imports(table: &UnitTable) -> Vec<String> {
-    let methods: Vec<bynk_model::IrHttpMethod> = table
-        .services
-        .values()
-        .flat_map(|s| s.handlers.iter())
-        .filter(|h| bynk_check::actors::signed_cookie_seam_for(h, &table.actors).is_some())
-        .filter_map(|h| match bynk_model::lower_handler_kind_ir(&h.kind) {
-            bynk_model::IrHandlerKind::Http { method, .. } => Some(method),
-            _ => None,
-        })
-        .collect();
-    if methods.is_empty() {
-        return Vec::new();
-    }
-    let mut names = vec![
-        "__verifySignedCookie".to_string(),
-        "__sessionCookieOf".to_string(),
-    ];
-    if methods
-        .iter()
-        .any(|m| !matches!(m, bynk_model::IrHttpMethod::Get))
-    {
-        names.push("__csrfAllowed".to_string());
-    }
-    names
-}
-
 /// #3386: the compose entry for one `SignedCookie` handler. A credentialed `cors` origin is one
 /// the CSRF check trusts.
 fn signed_cookie_entry(
@@ -2949,69 +2643,6 @@ pub(crate) fn named_types_in(r: &TypeRef) -> Vec<String> {
     out
 }
 
-/// #1655: the runtime types a type reference names unqualified when rendered
-/// by [`qualified_ts_type_ref`] (every user type is `handlers.`-qualified; these
-/// are the runtime's own). `Stream`/`Query`/`History` render without a runtime
-/// name, and `Effect` is peeled.
-fn collect_runtime_type_names(r: &TypeRef, out: &mut std::collections::BTreeSet<&'static str>) {
-    match r {
-        TypeRef::Result(t, e, _) => {
-            out.insert("Result");
-            collect_runtime_type_names(t, out);
-            collect_runtime_type_names(e, out);
-        }
-        TypeRef::Option(t, _) => {
-            out.insert("Option");
-            collect_runtime_type_names(t, out);
-        }
-        TypeRef::HttpResult(t, _) => {
-            out.insert("HttpResult");
-            collect_runtime_type_names(t, out);
-        }
-        TypeRef::Connection(t, _) => {
-            out.insert("Connection");
-            collect_runtime_type_names(t, out);
-        }
-        TypeRef::QueueResult(_) => {
-            out.insert("QueueResult");
-        }
-        TypeRef::ValidationError(_) => {
-            out.insert("ValidationError");
-        }
-        // #1883, slice 1a: structural (`asset_ts_type`), no runtime import.
-        TypeRef::Asset(_)
-        | TypeRef::RequestHeaders(_)
-        | TypeRef::RequestQuery(_)
-        | TypeRef::RequestCookies(_)
-        | TypeRef::TokenClaims(_)
-        | TypeRef::BoundaryRejection(_) => {}
-        TypeRef::DecodeError(_) => {
-            out.insert("DecodeError");
-        }
-        TypeRef::Effect(t, _)
-        | TypeRef::List(t, _)
-        | TypeRef::Set(t, _)
-        | TypeRef::Query(t, _)
-        | TypeRef::Stream(t, _) => collect_runtime_type_names(t, out),
-        TypeRef::Map(k, v, _) => {
-            collect_runtime_type_names(k, out);
-            collect_runtime_type_names(v, out);
-        }
-        TypeRef::Fn(params, ret, _) => {
-            for p in params {
-                collect_runtime_type_names(p, out);
-            }
-            collect_runtime_type_names(ret, out);
-        }
-        TypeRef::App { args, .. } => {
-            for a in args {
-                collect_runtime_type_names(a, out);
-            }
-        }
-        TypeRef::Base(..) | TypeRef::Named(_) | TypeRef::History(..) | TypeRef::Unit(_) => {}
-    }
-}
-
 /// P7.2: [`crate::emitter::ts_types::ts_type_ref_qualified_ts_type`] over `r`, scoped
 /// to `r`'s own named types — the minimal correct qualification for a single
 /// type-ref rendered in isolation, the same helper `emit_call_wrapper` uses
@@ -3034,83 +2665,6 @@ fn collect_runtime_type_names(r: &TypeRef, out: &mut std::collections::BTreeSet<
 fn qualified_ts_type_ref(r: &TypeRef) -> TsType {
     let scope: HashSet<String> = named_types_in(r).into_iter().collect();
     crate::emitter::ts_types::ts_type_ref_qualified_ts_type(r, &scope, "handlers")
-}
-
-/// #1944: the runtime types the `Env` members of `bindings` name for the
-/// platform resources (KV, R2, rate limiters, queue producers, Analytics
-/// datasets, D1, Version metadata), each once, in a fixed order, as
-/// `type __X` import entries, then the driver a `Postgres` instance is given.
-fn platform_binding_imports(bindings: &[WorkerBinding]) -> Vec<String> {
-    let binds = |kind: fn(&BindingSource) -> bool| bindings.iter().any(|b| kind(&b.source));
-    let kinds: [(crate::emitter::wrangler::BindingKind, &str); 15] = [
-        (
-            |s| matches!(s, BindingSource::Kv | BindingSource::KvInstance { .. }),
-            "__KVNamespace",
-        ),
-        (
-            |s| matches!(s, BindingSource::R2Instance { .. }),
-            "__R2Bucket",
-        ),
-        (
-            |s| matches!(s, BindingSource::RateLimitInstance { .. }),
-            "__RateLimiter",
-        ),
-        (
-            |s| matches!(s, BindingSource::QueueProducer { .. }),
-            "__QueueProducer",
-        ),
-        (
-            |s| matches!(s, BindingSource::AnalyticsDataset { .. }),
-            "__AnalyticsDataset",
-        ),
-        (
-            |s| matches!(s, BindingSource::D1Database { .. }),
-            "__D1Database",
-        ),
-        (
-            |s| matches!(s, BindingSource::StoredSecret { .. }),
-            "__SecretsStoreSecret",
-        ),
-        (|s| matches!(s, BindingSource::Email { .. }), "__SendEmail"),
-        (
-            |s| {
-                matches!(
-                    s,
-                    BindingSource::Postgres { .. } | BindingSource::MySql { .. }
-                )
-            },
-            "__Hyperdrive",
-        ),
-        (
-            |s| matches!(s, BindingSource::VectorizeIndex { .. }),
-            "__VectorizeIndex",
-        ),
-        (
-            |s| matches!(s, BindingSource::AiSearchInstance { .. }),
-            "__AiSearchInstance",
-        ),
-        (|s| singleton_is(s, "Version"), "__WorkerVersionMetadata"),
-        (|s| singleton_is(s, "Ai"), "__WorkerAiBinding"),
-        (|s| singleton_is(s, "Images"), "__WorkerImagesBinding"),
-        (|s| singleton_is(s, "AnalyticsSql"), "__AnalyticsSqlBinding"),
-    ];
-    let mut imports: Vec<String> = kinds
-        .into_iter()
-        .filter(|(kind, _)| binds(*kind))
-        .map(|(_, ty)| format!("type {ty}"))
-        .collect();
-    // Hyperdrive H1 (#3318): a Worker with a `Postgres` instance hands the
-    // runtime's driver to the binding, so `postgres` is in the build of exactly
-    // the Workers that have one.
-    if binds(|s| matches!(s, BindingSource::Postgres { .. })) {
-        imports.push("__pgExecute".to_string());
-    }
-    // Hyperdrive H5 (#3322): and `mysql` in the build of exactly the Workers
-    // with a `MySql` instance.
-    if binds(|s| matches!(s, BindingSource::MySql { .. })) {
-        imports.push("__mysqlExecute".to_string());
-    }
-    imports
 }
 
 #[cfg(test)]

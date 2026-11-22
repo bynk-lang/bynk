@@ -4,11 +4,9 @@
 import { Ok, Err, type Result } from "../../__bynk_runtime/result.js";
 import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService } from "../../__bynk_runtime/boundary.js";
 
-import { Pair as __CommonsPair, pairOf } from "../../demo/shapes.js";
+import { pairOf } from "../../demo/shapes.js";
 
 import type * as demo_vault from "../demo-vault/handlers.js";
-
-export type Pair<A, B> = __CommonsPair<A, B> & { readonly __ctxBrand?: "demo.desk" };
 
 /**
  * #1703 review: consumes a context with a generic type, and `uses` a commons

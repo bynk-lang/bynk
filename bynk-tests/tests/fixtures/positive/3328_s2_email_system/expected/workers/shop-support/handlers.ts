@@ -4,7 +4,7 @@
 import { Some } from "../../__bynk_runtime/result.js";
 import { __bynkEq } from "../../__bynk_runtime/equality.js";
 
-import { DmarcVerdict, EmailReply, EmailVerdict, InboundEmail } from "../../bynk/cloudflare.js";
+import { DmarcVerdict, EmailVerdict, InboundEmail } from "../../bynk/cloudflare.js";
 import { __serialise_EmailReply, __deserialise_EmailReply, __serialise_EmailVerdict, __deserialise_EmailVerdict, __serialise_InboundAttachment, __deserialise_InboundAttachment, __serialise_InboundEmail, __deserialise_InboundEmail } from "../../bynk/cloudflare.js";
 
 export { type InboundEmail };

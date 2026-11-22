@@ -4,8 +4,6 @@
 import { Ok, Err, type Result } from "../../__bynk_runtime/result.js";
 import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService } from "../../__bynk_runtime/boundary.js";
 
-import type * as app_b from "../app-b/handlers.js";
-
 export const ask = {
   async call(ping: string, deps: { env: { APP_B: __ServiceBinding } }): globalThis.Promise<Result<string, string>> {
     const r = await __callService(deps.env.APP_B, "whoami", ping as __JsonValue, __deserialise_Result_String_String, "app.a", "317bdd3de84d2176", deps.env, "app.b");

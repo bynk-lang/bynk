@@ -5,8 +5,6 @@ import { Ok, Err } from "../../__bynk_runtime/result.js";
 import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService } from "../../__bynk_runtime/boundary.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 
-import type * as compat_widgets from "../compat-widgets/handlers.js";
-
 export const favicon: { readonly url: string } = { url: "/favicon.ico" };
 
 export const web = {

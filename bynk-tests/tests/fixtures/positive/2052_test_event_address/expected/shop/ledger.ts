@@ -7,7 +7,7 @@ import { __readStored, __commitStored } from "../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
-import { Claim, EventEnvelope } from "../bynk.js";
+import { EventEnvelope } from "../bynk.js";
 import { Placed } from "./order.js";
 
 import * as bynk from "../bynk.js";

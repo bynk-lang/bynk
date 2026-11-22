@@ -5,8 +5,6 @@ import { Ok, Err, Some, type Result } from "../../__bynk_runtime/result.js";
 import type { __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 
-import { QueueSend } from "../../bynk/cloudflare.js";
-
 import * as bynk_cloudflare from "../../bynk/cloudflare.js";
 
 export interface Placed {

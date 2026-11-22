@@ -546,8 +546,8 @@ impl Walk {
     /// an upper-case letter or `_`, outside string literals and not a member
     /// (`.name`) or a key (`name:`, `name?:`). A qualified head (`ns.T`) is the
     /// use of a namespace and records the member, as for a structured name.
-    /// Lower-case words are keywords, primitives, parameters and `typeof`
-    /// operands, none of them an import of a generated module.
+    /// Lower-case words are keywords, primitives and parameters (a `typeof`
+    /// operand is a use of the value it names), none of them an import of a generated module.
     fn use_type_text(&mut self, text: &str) {
         let bytes = text.as_bytes();
         let ident = |b: u8| b.is_ascii_alphanumeric() || b == b'_' || b == b'$';
@@ -562,6 +562,11 @@ impl Walk {
             .filter(|w| w[1] == "in" || w[0] == "infer")
             .map(|w| if w[0] == "infer" { w[1] } else { w[0] })
             .collect();
+        // The unmatched `{`, `(` and `[` before the cursor: a word followed by `:`
+        // is an object key only when the nearest of them is `{`. Elsewhere the
+        // colon belongs to a conditional type (`A extends B ? C : D`), a
+        // parameter or a tuple label.
+        let mut openers: Vec<u8> = Vec::new();
         let mut i = 0;
         while i < bytes.len() {
             let b = bytes[i];
@@ -579,9 +584,31 @@ impl Walk {
                         i += 1;
                     }
                     let word = &text[start..i];
+                    // `typeof x` uses the value `x` (a namespace, for
+                    // `typeof ns.__makeSurface`), never a type.
+                    if word == "typeof" {
+                        let operand = text[i..].trim_start();
+                        if let Some(name) = leading_ident(operand) {
+                            if !self.in_scope(name) {
+                                self.used_values.insert(name.to_string());
+                                if let Some(member) = operand[name.len()..]
+                                    .strip_prefix('.')
+                                    .and_then(leading_ident)
+                                {
+                                    self.qualified
+                                        .insert((name.to_string(), member.to_string()));
+                                }
+                            }
+                            i = text.len() - operand.len() + name.len();
+                        }
+                        continue;
+                    }
                     let after_dot = start > 0 && bytes[start - 1] == b'.';
                     let rest = text[i..].trim_start();
-                    let is_key = rest.starts_with(':') || rest.starts_with("?:");
+                    let after_question = text[..start].trim_end().ends_with('?');
+                    let is_key = openers.last() == Some(&b'{')
+                        && !after_question
+                        && (rest.starts_with(':') || rest.starts_with("?:"));
                     if after_dot || is_key || !(b.is_ascii_uppercase() || b == b'_') {
                         continue;
                     }
@@ -593,6 +620,14 @@ impl Walk {
                         self.qualified
                             .insert((word.to_string(), member.to_string()));
                     }
+                }
+                b'{' | b'(' | b'[' => {
+                    openers.push(b);
+                    i += 1;
+                }
+                b'}' | b')' | b']' => {
+                    openers.pop();
+                    i += 1;
                 }
                 _ => i += 1,
             }
@@ -1336,6 +1371,19 @@ mod tests {
             None,
         )]);
         assert_eq!(unbound_names(&p), ["missing"]);
+        // The same operand inside type text: a namespace spelled only there.
+        let over = |name: &str| program(vec![function_over(TsType::named(name))]);
+        assert_eq!(
+            unbound_names(&over(
+                "globalThis.ReturnType<typeof commerce_payment.__makeSurface>"
+            )),
+            ["commerce_payment"]
+        );
+        let bound = program(vec![
+            import(&["commerce_payment"]),
+            function_over(TsType::named("Array<typeof commerce_payment.f>")),
+        ]);
+        assert!(unbound_names(&bound).is_empty());
     }
 
     #[test]
@@ -1529,6 +1577,28 @@ mod tests {
             function_over(TsType::named("Option<A>")),
         ]);
         assert!(unbound_names(&p).is_empty(), "{:?}", unbound_names(&p));
+    }
+
+    /// 1A.36b-2: a capitalised word before `:` is a key only inside `{ }`. In a conditional type
+    /// the colon separates the branches, so the true branch is a use.
+    #[test]
+    fn a_conditional_type_branch_is_a_use_not_a_key() {
+        let over = |name: &str| program(vec![function_over(TsType::named(name))]);
+        assert_eq!(
+            unbound_names(&over("A extends B ? C : D")),
+            ["A", "B", "C", "D"]
+        );
+        // Inside an object type the same shape stays a key and a conditional value is a use.
+        assert_eq!(
+            unbound_names(&over("{ Key: A extends B ? C : D }")),
+            ["A", "B", "C", "D"]
+        );
+        assert!(unbound_names(&over("{ Key?: string; Other: number }")).is_empty());
+        // A key after a nested group closes is still a key.
+        assert_eq!(
+            unbound_names(&over("{ F: (x: X) => Y; K: Z }")),
+            ["X", "Y", "Z"]
+        );
     }
 
     /// 1A.36b-1: the global tables hide a name the module imports that shares a global's name,

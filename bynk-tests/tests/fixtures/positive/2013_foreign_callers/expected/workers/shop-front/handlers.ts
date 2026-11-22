@@ -4,8 +4,6 @@
 import { Ok, Err, type Result } from "../../__bynk_runtime/result.js";
 import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService } from "../../__bynk_runtime/boundary.js";
 
-import type * as shop_orders from "../shop-orders/handlers.js";
-
 export const ask = {
   async call(id: string, deps: { env: { SHOP_ORDERS: __ServiceBinding } }): globalThis.Promise<Result<string, string>> {
     const r = await __callService(deps.env.SHOP_ORDERS, "status", id as __JsonValue, __deserialise_Result_String_String, "shop.front", "226b9939f85e69ea", deps.env, "shop.orders");

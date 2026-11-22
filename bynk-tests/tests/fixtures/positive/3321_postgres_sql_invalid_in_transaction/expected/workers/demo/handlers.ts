@@ -4,7 +4,7 @@
 import { Ok, Err, type Result } from "../../__bynk_runtime/result.js";
 import type { __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary.js";
 
-import { PgError, PgRun, PgStatement, PgValue } from "../../bynk/cloudflare.js";
+import { PgError, PgRun, PgValue } from "../../bynk/cloudflare.js";
 
 import * as bynk_cloudflare from "../../bynk/cloudflare.js";
 import { __serialise_PgError, __deserialise_PgError, __serialise_PgRun, __deserialise_PgRun } from "../../bynk/cloudflare.js";

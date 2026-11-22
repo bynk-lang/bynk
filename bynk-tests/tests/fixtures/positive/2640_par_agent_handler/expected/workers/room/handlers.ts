@@ -9,7 +9,7 @@ import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout,
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult } from "../../__bynk_runtime/agent.js";
 
-import { Method, Request, Response } from "../../bynk.js";
+import { Method } from "../../bynk.js";
 import * as bynk__binding from "../../bynk-cloudflare.js";
 
 import * as bynk from "../../bynk.js";

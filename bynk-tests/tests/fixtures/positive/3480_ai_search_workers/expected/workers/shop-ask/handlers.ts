@@ -5,7 +5,7 @@ import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runt
 import type { __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 
-import { ChatMessage, ChatRole, Condition, FilterOp, MetaValue, RetrievalType, SearchHit, SearchOptions } from "../../bynk/cloudflare.js";
+import { ChatRole, FilterOp, MetaValue, RetrievalType, SearchHit } from "../../bynk/cloudflare.js";
 
 import * as bynk_cloudflare from "../../bynk/cloudflare.js";
 

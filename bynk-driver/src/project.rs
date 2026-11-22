@@ -2071,6 +2071,7 @@ fn emit_unit(
         target,
         local_agents: info.table.agents.keys().cloned().collect(),
         agent_given_deps: agent_deps_plan.map(|p| p.exprs.clone()).unwrap_or_default(),
+        agent_given_deps_names: agent_deps_plan.map(|p| p.names.clone()).unwrap_or_default(),
         extra_imports,
         agent_method_givens: info
             .table
@@ -5206,6 +5207,10 @@ pub struct AgentDepsPlan {
     /// agent name → TS object-literal expression for its `given` deps
     /// (e.g. `{ Clock: new bynk__binding.ClockProvider() }`).
     pub exprs: HashMap<String, String>,
+    /// agent name → the namespace aliases its expression spells (`bynk__binding`,
+    /// `handlers_shop_orders`). The emitter declares them with the text, so each module's imports
+    /// follow its tree (1A.36b-2).
+    pub names: HashMap<String, Vec<String>>,
     /// Imports the expressions need in `handlers.ts` (binding modules,
     /// other Workers' handlers). Same relative depth as `compose.ts`.
     pub imports: Vec<ExtraImport>,
@@ -5251,6 +5256,7 @@ fn plan_agent_given_deps(
 
     let mut referenced: BTreeSet<String> = BTreeSet::new();
     let mut exprs: HashMap<String, String> = HashMap::new();
+    let mut names: HashMap<String, Vec<String>> = HashMap::new();
     // P6.35 (design/tracks/the-ir.md §6a): no explicit `&AgentDecl` annotation
     // needed — the loop body's own `a.handlers` field access below already
     // pins the element type through inference.
@@ -5292,6 +5298,7 @@ fn plan_agent_given_deps(
         // struct's own shape and `emit_agent`'s `TsExpr::Ident(expr.clone())`
         // caller (`emitter/emit.rs`) both stay unchanged, the narrower of
         // the two options the issue named.
+        let mut agent_referenced: BTreeSet<String> = BTreeSet::new();
         let entries: Vec<(String, bynk_ts::TsExpr)> = caps
             .iter()
             .map(|(key, g)| {
@@ -5314,11 +5321,13 @@ fn plan_agent_given_deps(
                     ProviderNamespaces::Workers { harness_clock },
                     Some("env"),
                     None,
-                    &mut referenced,
+                    &mut agent_referenced,
                 );
                 (key.clone(), expr)
             })
             .collect();
+        referenced.extend(agent_referenced.iter().cloned());
+        names.insert(agent.clone(), agent_referenced.into_iter().collect());
         exprs.insert(
             agent.clone(),
             bynk_ts::print_expr(&bynk_ts::TsExpr::object(entries)),
@@ -5339,6 +5348,27 @@ fn plan_agent_given_deps(
         referenced.remove(name);
     }
     let up = if split { "../" } else { "" };
+    // The aliases each agent's expression spells: the namespace of every unit it references,
+    // bar this context's own where the module holds its providers itself (`self_ns` above).
+    let alias_of = |u: &str| {
+        let ns = u.replace('.', "_");
+        if adapter_bindings.contains_key(u) {
+            format!("{ns}__binding")
+        } else {
+            format!("handlers_{ns}")
+        }
+    };
+    let names: HashMap<String, Vec<String>> = names
+        .into_iter()
+        .map(|(agent, units)| {
+            let aliases = units
+                .iter()
+                .filter(|u| split || u.as_str() != name)
+                .map(|u| alias_of(u))
+                .collect();
+            (agent, aliases)
+        })
+        .collect();
     let mut imports = Vec::new();
     for u in &referenced {
         let ns = u.replace('.', "_");
@@ -5362,7 +5392,11 @@ fn plan_agent_given_deps(
             });
         }
     }
-    Some(AgentDepsPlan { exprs, imports })
+    Some(AgentDepsPlan {
+        exprs,
+        names,
+        imports,
+    })
 }
 
 // -- Small tree-construction helpers (#1327) ------------------------------
@@ -5865,6 +5899,8 @@ fn emit_composition_root(
         None,
     ));
 
+    // A namespace is imported for every unit the closure reaches; the tree keeps the ones it uses.
+    program.prune_unused_imports();
     Some(program)
 }
 

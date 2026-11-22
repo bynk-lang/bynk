@@ -5,8 +5,6 @@ import { Ok, Err, type Result } from "../../__bynk_runtime/result.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService } from "../../__bynk_runtime/boundary.js";
 
-import type * as shop_payment from "../shop-payment/handlers.js";
-
 export type OrderId = string & { readonly __brand: "shop.orders.OrderId" };
 
 export const OrderId = {

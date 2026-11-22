@@ -3,9 +3,7 @@
 
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 
-import { Item as __CommonsItem, describe } from "../../shop/pricing.js";
-
-export type Item = __CommonsItem & { readonly __ctxBrand?: "shop.till" };
+import { describe } from "../../shop/pricing.js";
 
 export const api = {
   async http_GET_tea(deps: {}): globalThis.Promise<HttpResult<string>> {

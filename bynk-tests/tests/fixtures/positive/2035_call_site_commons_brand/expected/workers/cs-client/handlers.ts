@@ -5,8 +5,7 @@ import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runt
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService } from "../../__bynk_runtime/boundary.js";
 
-import { type Batch, type Holder } from "../cs-store/handlers.js";
-import { Line as __CommonsLine, Page as __CommonsPage, Pair as __CommonsPair, Qty as __CommonsQty } from "../../cs/values.js";
+import { Line as __CommonsLine, Page as __CommonsPage, Qty as __CommonsQty } from "../../cs/values.js";
 
 import type * as cs_store from "../cs-store/handlers.js";
 import { __serialise_Line, __deserialise_Line, __serialise_Qty, __deserialise_Qty } from "../../cs/values.js";
@@ -14,13 +13,10 @@ import { __serialise_Pair, __deserialise_Pair } from "../../cs/values.js";
 
 export type Line = __CommonsLine & { readonly __ctxBrand?: "cs.client" };
 export type Page<T> = __CommonsPage<T> & { readonly __ctxBrand?: "cs.client" };
-export type Pair = __CommonsPair & { readonly __ctxBrand?: "cs.client" };
 export type Qty = __CommonsQty & { readonly __ctxBrand?: "cs.client" };
 export const Qty = {
   of(value: number): Result<Qty, ValidationError> { return __CommonsQty.of(value); },
 };
-
-export { type Batch, type Holder };
 
 export const go = {
   async call(deps: { env: { CS_STORE: __ServiceBinding } }): globalThis.Promise<number> {

@@ -1140,16 +1140,22 @@ pub(in crate::project) fn merged_unit_helpers(
         alias
     };
     if with_agents.len() > 1 {
-        let calls: Vec<String> = with_agents
+        let files: Vec<String> = with_agents
             .iter()
-            .map(|f| format!("  {}.__resetAgents();", alias_of(f, &mut stmts)))
+            .map(|f| alias_of(f, &mut stmts))
             .collect();
-        stmts.push(TsStmt::raw(
+        let calls: Vec<String> = files
+            .iter()
+            .map(|alias| format!("  {alias}.__resetAgents();"))
+            .collect();
+        // The text spells each file's namespace; they are declared with it.
+        let names: Vec<&str> = files.iter().map(String::as_str).collect();
+        stmts.push(TsStmt::raw_using(
             format!(
                 "export function __resetAgents(): void {{\n{}\n}}\n",
                 calls.join("\n")
             ),
-            None,
+            &names,
         ));
         defined.push("__resetAgents".to_string());
     }
@@ -1169,12 +1175,13 @@ pub(in crate::project) fn merged_unit_helpers(
             .map(|a| format!("...{a}.__makeSurface(deps)"))
             .collect::<Vec<_>>()
             .join(", ");
-        stmts.push(TsStmt::raw(
+        let names: Vec<&str> = files.iter().map(String::as_str).collect();
+        stmts.push(TsStmt::raw_using(
             format!(
                 "export type {deps} = {intersection};\n\
                  export function __makeSurface(deps: {deps}) {{\n  return {{ {spreads} }};\n}}\n"
             ),
-            None,
+            &names,
         ));
         defined.push("__makeSurface".to_string());
         defined.push(deps);

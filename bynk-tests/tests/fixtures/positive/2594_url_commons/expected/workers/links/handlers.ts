@@ -4,12 +4,11 @@
 import { Some, None, type Option } from "../../__bynk_runtime/result.js";
 import { __bynkEq } from "../../__bynk_runtime/equality.js";
 
-import { Method, Request } from "../../bynk.js";
-import { QueryParam as __CommonsQueryParam, Url as __CommonsUrl, format, formatQuery, param, params, parse, segments, withParam, withoutParam } from "../../bynk/url.js";
+import { Method } from "../../bynk.js";
+import { Url as __CommonsUrl, format, formatQuery, param, params, parse, segments, withParam, withoutParam } from "../../bynk/url.js";
 
 import * as bynk from "../../bynk.js";
 
-export type QueryParam = __CommonsQueryParam & { readonly __ctxBrand?: "links" };
 export type Url = __CommonsUrl & { readonly __ctxBrand?: "links" };
 
 export function hostOf(s: string): string {
