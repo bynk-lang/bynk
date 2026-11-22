@@ -391,6 +391,48 @@ fn diagnostic_links_name_registry_codes_and_real_pages() {
     }
 }
 
+/// A link to a code's page (`/book/reference/diagnostics/<code>/`) must name a
+/// registry code. The site's links validator cannot see these custom pages, so
+/// it skips them; this is the check in its place, over every page the site
+/// builds from (#3876).
+#[test]
+fn links_to_code_pages_name_registry_codes() {
+    const PREFIX: &str = "/book/reference/diagnostics/";
+    let content = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../site/src/content");
+    let mut files = vec![content];
+    let mut bad = Vec::new();
+    while let Some(path) = files.pop() {
+        if path.is_dir() {
+            files.extend(fs::read_dir(&path).unwrap().map(|e| e.unwrap().path()));
+            continue;
+        }
+        if !path.extension().is_some_and(|x| x == "md" || x == "mdx") {
+            continue;
+        }
+        let text = fs::read_to_string(&path).unwrap();
+        for (i, _) in text.match_indices(PREFIX) {
+            let rest = &text[i + PREFIX.len()..];
+            let end = rest
+                .find(|c: char| !(c.is_ascii_alphanumeric() || c == '.' || c == '_'))
+                .unwrap_or(rest.len());
+            let code = &rest[..end];
+            // The index itself (`…/diagnostics/` or `…/diagnostics/#anchor`).
+            if code.is_empty() {
+                continue;
+            }
+            if !REGISTRY.iter().any(|d| d.code == code) {
+                bad.push(format!("{}: {PREFIX}{code}/", path.display()));
+            }
+        }
+    }
+    assert!(
+        bad.is_empty(),
+        "links to a diagnostic code's page that is not in REGISTRY \
+         (bynk-syntax/src/diagnostics.rs):\n  {}",
+        bad.join("\n  ")
+    );
+}
+
 /// `site/src/generated/diagnostics.json`, the data behind each code's page
 /// (#3876), must match what the registry renders.
 #[test]

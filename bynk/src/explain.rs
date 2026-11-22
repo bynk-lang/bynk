@@ -63,9 +63,9 @@ fn render_explained(e: &Explain) -> String {
 fn render_known_unexplained(code: &str, summary: &str) -> String {
     format!(
         "{code}\n\n{summary}\n\n\
-         No extended explanation is written for this code yet. See the diagnostic \
-         index for every code and its summary:\n\n    {}\n",
-        diagnostics::href("")
+         No extended explanation is written for this code yet. Its page links the \
+         other codes in its category:\n\n    {}\n",
+        diagnostics::href(code)
     )
 }
 
@@ -118,6 +118,10 @@ mod tests {
         let out = render_known_unexplained(code, "The in-browser compiler panicked internally.");
         assert!(out.contains(code));
         assert!(out.contains("No extended explanation"));
+        assert!(
+            out.contains("https://bynk-lang.org/d/bynk.wasm.panic\n"),
+            "{out}"
+        );
     }
 
     #[test]

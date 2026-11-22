@@ -14,4 +14,5 @@
 # names may move, so the link stays a 302.
 /d /book/reference/diagnostics/ 302
 /d/ /book/reference/diagnostics/ 302
-/d/* /book/reference/diagnostics/:splat/ 302
+/d/:code /book/reference/diagnostics/:code/ 302
+/d/:code/ /book/reference/diagnostics/:code/ 302

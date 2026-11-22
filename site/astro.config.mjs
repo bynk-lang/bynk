@@ -65,8 +65,9 @@ export default defineConfig({
       // local builds), so the internal link-checker must not try to resolve into it.
       // A diagnostic code's page (`src/pages/book/reference/diagnostics/[code].astro`)
       // is a custom page, which the validator cannot see, so links to one are
-      // excluded too. Every such link is generated from the compiler's registry,
-      // and the page is built for every registry code, so none can dangle.
+      // excluded too. The page is built for every registry code, and the
+      // `diagnostics_registry` docs-consistency test checks that every such link
+      // in the site's content names a registry code, so none can dangle.
       plugins: [
         starlightLinksValidator({
           exclude: ["/docs/api/**", "/book/reference/diagnostics/*/"],
