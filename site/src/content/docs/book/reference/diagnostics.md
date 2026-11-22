@@ -82,7 +82,6 @@ There are **898** codes in total.
 | [`bynk.adapter.include_outside`](/book/reference/diagnostics/bynk.adapter.include_outside/) | An adapter `binding … includes [ … ]` path is absolute or climbs out of the adapter's directory with `..`. | [`binding_decl`](/book/reference/grammar/#rule-binding_decl) | — |
 | [`bynk.adapter.no_binding`](/book/reference/diagnostics/bynk.adapter.no_binding/) | An `adapter` declares an external provider but no `binding` module to supply it. | [`adapter_decl`](/book/reference/grammar/#rule-adapter_decl) | — |
 | [`bynk.adapter.provider_has_body`](/book/reference/diagnostics/bynk.adapter.provider_has_body/) | A provider inside an `adapter` has a Bynk body; adapter providers must be external. | [`provider_decl`](/book/reference/grammar/#rule-provider_decl) | — |
-| [`bynk.namespace.reserved`](/book/reference/diagnostics/bynk.namespace.reserved/) | A user unit is named `bynk` or `bynk.*`; the `bynk` root is reserved for the toolchain. |  | — |
 
 ## Agent storage
 
@@ -726,6 +725,7 @@ There are **898** codes in total.
 
 | Code | Summary | Construct | Severity |
 |---|---|---|---|
+| [`bynk.namespace.reserved`](/book/reference/diagnostics/bynk.namespace.reserved/) | A user unit is named `bynk` or `bynk.*`; the `bynk` root is reserved for the toolchain. |  | — |
 | [`bynk.project.contracts_lock_corrupt`](/book/reference/diagnostics/bynk.project.contracts_lock_corrupt/) | `bynk.contracts.lock` (the older service contracts a callee still accepts) is missing its version field, empty, truncated, unparseable, or of an unsupported version — restore it from version control rather than deleting it, since a callee that forgets the contracts it accepts refuses its live callers. |  | — |
 | [`bynk.project.contracts_lock_oversized`](/book/reference/diagnostics/bynk.project.contracts_lock_oversized/) | `bynk.contracts.lock` has one service accepting more older contracts than the build keeps comfortably (warning). |  | Warning |
 | [`bynk.project.contracts_lock_stale`](/book/reference/diagnostics/bynk.project.contracts_lock_stale/) | `bynk.contracts.lock` lists an older contract the service no longer accepts, because it is unreadable or no longer compatible with the contract the service has now; the entry is ignored (warning). |  | Warning |

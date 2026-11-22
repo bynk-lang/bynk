@@ -10749,7 +10749,7 @@ pub fn category(code: &str) -> &str {
 fn category_title(cat: &str) -> &'static str {
     match cat {
         "actor" => "Actors",
-        "adapter" | "namespace" => "Adapters",
+        "adapter" => "Adapters",
         "agent" | "agents" => "Agents",
         "asset" => "Static assets",
         "boundary" => "Boundaries",
@@ -10777,7 +10777,7 @@ fn category_title(cat: &str) -> &'static str {
         "observe" => "Observation",
         "package" => "Packages",
         "parse" => "Parser",
-        "project" => "Project",
+        "namespace" | "project" => "Project",
         "property" => "Properties (generative tests)",
         "provider" => "Providers",
         "queue" => "Queue",

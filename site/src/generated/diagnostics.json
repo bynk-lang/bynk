@@ -4529,8 +4529,8 @@
   },
   {
     "blurb": "The `bynk` root belongs to the toolchain: its own libraries, such as `bynk.list`, and the platform adapters live there and are added to a build when a unit consumes them. A unit of yours named `bynk` or `bynk.<anything>` could collide with one of them, so the name is refused for every kind of unit. Rename the unit so its first segment is not `bynk`, and move its file to match.",
-    "category": "Adapters",
-    "categoryAnchor": "adapters",
+    "category": "Project",
+    "categoryAnchor": "project",
     "code": "bynk.namespace.reserved",
     "constructs": [],
     "example": "// bynk/foo.bynk\ncommons bynk.foo    // ✗ `bynk` is the toolchain's namespace\n\n// shop/foo.bynk\ncommons shop.foo    // ✓",
