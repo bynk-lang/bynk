@@ -160,29 +160,32 @@ pub(crate) struct ContextPlan<'a> {
     /// #3301: one line per Secrets Store secret the Worker reads, in binding
     /// order. Linked: found on the account before the push, never created,
     /// never deleted. Whether it exists is asked after authenticating, so the
-    /// plan, which stays offline under `--dry-run`, does not claim it.
+    /// plan, which stays offline under `--dry-run`, does not claim it. Filled by
+    /// [`StoredSecret`] (1D.1e, #3929).
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    stored_secrets: Vec<PlanStoredSecret<'a>>,
+    pub(crate) stored_secrets: Vec<PlanStoredSecret<'a>>,
     /// #3480: one line per AI Search instance the Worker queries, in binding
     /// order. Linked: found on the account before the push, never created,
     /// never deleted, and asked after authenticating, so the plan does not
-    /// claim it exists.
+    /// claim it exists. Filled by [`AiSearch`] (1D.1e, #3929).
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    ai_search: Vec<PlanAiSearch<'a>>,
+    pub(crate) ai_search: Vec<PlanAiSearch<'a>>,
     /// #3513 A: one line per mTLS certificate the Worker presents, in binding order. Linked: found
     /// on the account before the push and never uploaded, and asked after authenticating, so the
-    /// plan, which stays offline under `--dry-run`, does not claim it exists.
+    /// plan, which stays offline under `--dry-run`, does not claim it exists. Filled by
+    /// [`MtlsCertificate`] (1D.1e, #3929).
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    mtls_certificates: Vec<PlanMtlsCertificate<'a>>,
+    pub(crate) mtls_certificates: Vec<PlanMtlsCertificate<'a>>,
     /// #1796: one line per Durable Object class the push declares in
     /// `exports`, in class-name order. Empty for a context with no agent and
     /// no events fan-out.
     durable_objects: Vec<PlanDurableObject<'a>>,
     /// #3477: one line per container, in class-name order: where its image comes
     /// from and the instance type Bynk passes when it starts. The application
-    /// itself is `wrangler deploy`'s to reconcile, which the line says.
+    /// itself is `wrangler deploy`'s to reconcile, which the line says. Filled by
+    /// [`ContainerImage`] (1D.1e, #3929).
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    containers: Vec<PlanContainer<'a>>,
+    pub(crate) containers: Vec<PlanContainer<'a>>,
     /// State-migrations S3 (#2248): each class an `agent New replaces Old`
     /// renames — the push moves its stored data. In old-name order.
     #[serde(
@@ -227,31 +230,6 @@ pub(crate) struct ContextPlan<'a> {
     /// refused unless `--prune` confirms it ([`confirm_address_removals`]).
     #[serde(skip_serializing_if = "Vec::is_empty")]
     removed_email_addresses: Vec<String>,
-}
-
-/// #3480: one `AiSearch` instance's link. No action: `bynk deploy` neither
-/// creates nor changes the instance.
-#[derive(Debug, Serialize)]
-struct PlanAiSearch<'a> {
-    binding: &'a str,
-    instance: &'a str,
-}
-
-/// #3513 A: one `MtlsCertificate` instance's link. No action: `bynk deploy` neither uploads nor
-/// changes the certificate.
-#[derive(Debug, Serialize)]
-struct PlanMtlsCertificate<'a> {
-    binding: &'a str,
-    certificate: &'a str,
-}
-
-/// #3301: one `StoredSecret` instance's link. No action: `bynk deploy`
-/// neither creates nor changes the store or the secret.
-#[derive(Debug, Serialize)]
-struct PlanStoredSecret<'a> {
-    binding: &'a str,
-    store: &'a str,
-    secret: &'a str,
 }
 
 /// Interop I5 (#1972): one Service Binding to a foreign Worker. No action:
@@ -310,32 +288,6 @@ struct PlanDurableObject<'a> {
     /// D1's principle). A consumer reading the plan learns that this line is
     /// not a claim that the namespace exists or doesn't, without having to
     /// know the ADR.
-    reconciled_by: &'static str,
-}
-
-/// #3477: one container the push declares.
-#[derive(Debug, Serialize)]
-struct PlanContainer<'a> {
-    /// The generated Durable Object class.
-    class: &'a str,
-    /// The capability's name, the key `[deploy.containers.<Cap>]` takes.
-    capability: &'a str,
-    /// The `@build` directory the image is built from when it is not adopted.
-    build: &'a str,
-    /// The digest-pinned image adopted for this environment, if any. When
-    /// present nothing is built.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    adopted: Option<&'a str>,
-    /// The image the ledger recorded this container as adopted when it was last
-    /// pushed, when it is not the one in `adopted` (a changed or dropped
-    /// adoption). Informational: the push starts new instances on the new image.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    previously_adopted: Option<String>,
-    /// The instance type passed to `start()`: `@instanceType`, else the
-    /// platform's default (`lite`).
-    instance: &'a str,
-    /// Always `Cloudflare`: the application is `wrangler deploy`'s to create
-    /// and update, not Bynk's, as for a Durable Object class.
     reconciled_by: &'static str,
 }
 
@@ -1220,6 +1172,7 @@ pub fn run(
         kv: live_kv.as_ref(),
         hyperdrive: hyperdrive_run,
         queues: Some(&attempted_queues),
+        linked: Some(&linked_stores),
     };
 
     // Provision → wire → push, per context, in dependency order. Each context's
@@ -1340,7 +1293,6 @@ pub fn run(
             &opts.wrangler_args,
             &opts.environment,
             lives,
-            &linked_stores,
         ) {
             Ok(Pushed::Ok) => {
                 record_pushed_contracts(
@@ -2283,86 +2235,53 @@ pub(crate) fn plan_report(plan: &Plan<'_>, format: DeployFormat) -> String {
                 }
             });
             for context in &plan.contexts {
-                short_kind_lines(context, &mut out);
-                for dataset in &context.datasets {
-                    out.push_str(&format!(
-                        "dataset {} ({}; created on first write)\n",
-                        dataset.dataset, dataset.binding
-                    ));
-                }
-                // #3301: linked, not provisioned — the account owns both.
-                for secret in &context.stored_secrets {
-                    out.push_str(&format!(
-                        "stored secret {} {} in store {} (linked; not created)\n",
-                        secret.binding, secret.secret, secret.store
-                    ));
-                }
-                // #3480: linked, not provisioned — the account owns it. The
-                // plan is built offline (#3494), so it has not looked the
-                // instance up: it says "will link", never "linked", and only a real
-                // deploy checks that the instance exists. The same line prints
-                // on a real run, before that lookup, so it is worded for both.
-                for search in &context.ai_search {
-                    out.push_str(&format!(
-                        "will link ai-search {} ({}; not created; not checked in a dry run)\n",
-                        search.instance, search.binding
-                    ));
-                }
-                // #3513 A: linked the same way, and worded for the same reason: the plan has
-                // not looked the certificate up.
-                for cert in &context.mtls_certificates {
-                    out.push_str(&format!(
-                        "will link mtls-certificate {} ({}; not created; not checked in a dry run)\n",
-                        cert.certificate, cert.binding
-                    ));
-                }
-                // Interop I5 (#1972): bound, not provisioned — the Worker is
-                // not Bynk's, so the line says so rather than an action.
-                for service in &context.foreign_services {
-                    out.push_str(&format!(
-                        "service {} {} (foreign Worker; not provisioned)\n",
-                        service.binding, service.worker
-                    ));
-                }
-                // #3328: Email Routing rules, reconciled by the push.
-                for address in &context.email_addresses {
-                    out.push_str(&format!(
-                        "email address {address} (Email Routing rule; advisory — wrangler reconciles it)\n"
-                    ));
-                }
-                for address in &context.removed_email_addresses {
-                    out.push_str(&format!(
-                        "email address {address} removed (its Email Routing rule is deleted by the push; needs --prune)\n"
-                    ));
-                }
-                // Between the provisioning lines and the push, because that is
-                // where it happens: the `exports` declaration rides the config
-                // `wrangler deploy` reads rather than being a step of its own.
-                // Flagged advisory in place — a reader must not take it for a
-                // claim that the namespace does or doesn't exist yet (#1796,
-                // ADR 0194 D1's principle).
-                for object in &context.durable_objects {
-                    out.push_str(&format!(
-                        "durable object {} ({}; advisory — {} reconciles it)\n",
-                        object.class, object.storage, object.reconciled_by
-                    ));
-                }
-                // #3477: each container, naming where its image comes from and
-                // the instance type passed at start, so the size is visible
-                // before the confirmation. The rates are Cloudflare's to state.
-                for container in &context.containers {
-                    let mut image = match container.adopted {
-                        Some(reference) => format!("adopted {reference}"),
-                        None => format!("build from {}", container.build),
-                    };
-                    if let Some(was) = &container.previously_adopted {
-                        image.push_str(&format!(", was adopted {was}"));
+                // Each kind's lines, with the datasets after the queues and the bindings and
+                // Durable Object classes between the linked kinds and the containers.
+                short_kind_lines(context, &mut out, &mut |slot, out| match slot {
+                    Slot::Datasets => {
+                        for dataset in &context.datasets {
+                            out.push_str(&format!(
+                                "dataset {} ({}; created on first write)\n",
+                                dataset.dataset, dataset.binding
+                            ));
+                        }
                     }
-                    out.push_str(&format!(
-                        "container {} (image: {image}; instance {}; reconciled by {})\n",
-                        container.class, container.instance, container.reconciled_by
-                    ));
-                }
+                    Slot::BindingsAndObjects => {
+                        // Interop I5 (#1972): bound, not provisioned — the Worker is
+                        // not Bynk's, so the line says so rather than an action.
+                        for service in &context.foreign_services {
+                            out.push_str(&format!(
+                                "service {} {} (foreign Worker; not provisioned)\n",
+                                service.binding, service.worker
+                            ));
+                        }
+                        // #3328: Email Routing rules, reconciled by the push.
+                        for address in &context.email_addresses {
+                            out.push_str(&format!(
+                                "email address {address} (Email Routing rule; advisory — wrangler reconciles it)\n"
+                            ));
+                        }
+                        for address in &context.removed_email_addresses {
+                            out.push_str(&format!(
+                                "email address {address} removed (its Email Routing rule is deleted by the push; needs --prune)\n"
+                            ));
+                        }
+                        // Between the provisioning lines and the push, because that is
+                        // where it happens: the `exports` declaration rides the config
+                        // `wrangler deploy` reads rather than being a step of its own.
+                        // Flagged advisory in place — a reader must not take it for a
+                        // claim that the namespace does or doesn't exist yet (#1796,
+                        // ADR 0194 D1's principle).
+                        for object in &context.durable_objects {
+                            out.push_str(&format!(
+                                "durable object {} ({}; advisory — {} reconciles it)\n",
+                                object.class, object.storage, object.reconciled_by
+                            ));
+                        }
+                    }
+                    // Before the queues, in the orphan report only.
+                    Slot::WorkerOrphans => {}
+                });
                 // State-migrations S3 (#2248): the declared class renames and
                 // deletions, stated for what they do to stored data.
                 for rename in &context.renamed_durable_objects {
@@ -2612,31 +2531,9 @@ pub(crate) fn derive_plan<'a>(
                             dataset: analytics_dataset_name(environment, &dataset.name),
                         })
                         .collect(),
-                    stored_secrets: declared
-                        .stored_secrets
-                        .iter()
-                        .map(|s| PlanStoredSecret {
-                            binding: &s.binding,
-                            store: &s.store,
-                            secret: &s.secret,
-                        })
-                        .collect(),
-                    ai_search: declared
-                        .ai_search
-                        .iter()
-                        .map(|s| PlanAiSearch {
-                            binding: &s.binding,
-                            instance: &s.instance,
-                        })
-                        .collect(),
-                    mtls_certificates: declared
-                        .mtls_certificates
-                        .iter()
-                        .map(|c| PlanMtlsCertificate {
-                            binding: &c.binding,
-                            certificate: &c.certificate,
-                        })
-                        .collect(),
+                    stored_secrets: Vec::new(),
+                    ai_search: Vec::new(),
+                    mtls_certificates: Vec::new(),
                     durable_objects: declared
                         .durable_objects
                         .iter()
@@ -2646,26 +2543,7 @@ pub(crate) fn derive_plan<'a>(
                             reconciled_by: "Cloudflare",
                         })
                         .collect(),
-                    containers: declared
-                        .containers
-                        .iter()
-                        .map(|c| PlanContainer {
-                            class: &c.class,
-                            capability: &c.capability,
-                            build: &c.build,
-                            adopted: c.adopt.as_deref(),
-                            previously_adopted: recorded_container_image(
-                                lock,
-                                worker,
-                                &c.capability,
-                                environment,
-                            )
-                            .filter(|was| Some(*was) != c.adopt.as_deref())
-                            .map(str::to_string),
-                            instance: c.instance_type.as_deref().unwrap_or("lite"),
-                            reconciled_by: "Cloudflare",
-                        })
-                        .collect(),
+                    containers: Vec::new(),
                     renamed_durable_objects: declared
                         .renamed_durable_objects
                         .iter()
@@ -2999,7 +2877,7 @@ pub(crate) mod tests {
         );
         // A recorded adoption that is dropped shows beside the new line.
         let mut recorded = DeployLock::default();
-        recorded.record_container_image("default", "shop", "Renderer", Some(image));
+        recorded.record::<ContainerImage>("default", "shop", "Renderer", image.to_string());
         declared.get_mut("shop").unwrap().containers[0].adopt = None;
         let again = plan_report(&plan_of(&order, &declared, &recorded), DeployFormat::Short);
         assert!(

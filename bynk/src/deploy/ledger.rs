@@ -884,109 +884,6 @@ impl DeployLock {
             .and_then(|env| env.workers.get(worker))
             .and_then(|record| record.contracts.as_ref())
     }
-
-    /// #3477: record that `worker`'s `Container` `capability` runs the adopted
-    /// `image` in `environment`, or, with `None`, that it is built again (the
-    /// adoption was dropped).
-    pub(crate) fn record_container_image(
-        &mut self,
-        environment: &str,
-        worker: &str,
-        capability: &str,
-        image: Option<&str>,
-    ) {
-        match image {
-            Some(image) => {
-                self.environments
-                    .entry(environment.to_string())
-                    .or_default()
-                    .container_images
-                    .entry(worker.to_string())
-                    .or_default()
-                    .insert(capability.to_string(), image.to_string());
-            }
-            None => {
-                let Some(env) = self.environments.get_mut(environment) else {
-                    return;
-                };
-                if let Some(images) = env.container_images.get_mut(worker) {
-                    images.remove(capability);
-                    if images.is_empty() {
-                        env.container_images.remove(worker);
-                    }
-                }
-            }
-        }
-    }
-
-    /// #3301: record the store `worker`'s `StoredSecret` `binding` was linked
-    /// to. `true` when that changed the ledger.
-    pub(crate) fn record_stored_secret(
-        &mut self,
-        environment: &str,
-        worker: &str,
-        binding: &str,
-        link: StoredSecretLink,
-    ) -> bool {
-        let links = self
-            .environments
-            .entry(environment.to_string())
-            .or_default()
-            .stored_secret_links
-            .entry(worker.to_string())
-            .or_default();
-        if links.get(binding) == Some(&link) {
-            return false;
-        }
-        links.insert(binding.to_string(), link);
-        true
-    }
-
-    /// #3480: record the instance `worker`'s `AiSearch` `binding` was linked
-    /// to. `true` when that changed the ledger.
-    pub(crate) fn record_ai_search(
-        &mut self,
-        environment: &str,
-        worker: &str,
-        binding: &str,
-        link: AiSearchLink,
-    ) -> bool {
-        let links = self
-            .environments
-            .entry(environment.to_string())
-            .or_default()
-            .ai_search_links
-            .entry(worker.to_string())
-            .or_default();
-        if links.get(binding) == Some(&link) {
-            return false;
-        }
-        links.insert(binding.to_string(), link);
-        true
-    }
-
-    /// #3513 A: record the certificate `worker`'s `MtlsCertificate` `binding` was linked to.
-    /// `true` when that changed the ledger.
-    pub(crate) fn record_mtls_certificate(
-        &mut self,
-        environment: &str,
-        worker: &str,
-        binding: &str,
-        link: MtlsCertificateLink,
-    ) -> bool {
-        let links = self
-            .environments
-            .entry(environment.to_string())
-            .or_default()
-            .mtls_certificate_links
-            .entry(worker.to_string())
-            .or_default();
-        if links.get(binding) == Some(&link) {
-            return false;
-        }
-        links.insert(binding.to_string(), link);
-        true
-    }
 }
 
 /// Slice 5: every ledger entry for this environment that the current build no
@@ -1159,61 +1056,6 @@ pub(crate) fn find_orphans(
     orphans
 }
 
-/// The adopted image recorded for `worker`'s `Container` `capability` in
-/// `environment` (#3477).
-pub(crate) fn recorded_container_image<'a>(
-    lock: &'a DeployLock,
-    worker: &str,
-    capability: &str,
-    environment: &str,
-) -> Option<&'a str> {
-    lock.environments
-        .get(environment)
-        .and_then(|env| env.container_images.get(worker))
-        .and_then(|images| images.get(capability))
-        .map(String::as_str)
-}
-
-/// The store recorded for `worker`'s `StoredSecret` `binding` (#3301).
-pub(crate) fn recorded_stored_secret<'a>(
-    lock: &'a DeployLock,
-    worker: &str,
-    binding: &str,
-    environment: &str,
-) -> Option<&'a StoredSecretLink> {
-    lock.environments
-        .get(environment)
-        .and_then(|env| env.stored_secret_links.get(worker))
-        .and_then(|links| links.get(binding))
-}
-
-/// The certificate recorded for `worker`'s `MtlsCertificate` `binding` (#3513 A).
-pub(crate) fn recorded_mtls_certificate<'a>(
-    lock: &'a DeployLock,
-    worker: &str,
-    binding: &str,
-    environment: &str,
-) -> Option<&'a MtlsCertificateLink> {
-    lock.environments
-        .get(environment)
-        .and_then(|env| env.mtls_certificate_links.get(worker))
-        .and_then(|links| links.get(binding))
-}
-
-/// The instance recorded for `worker`'s `AiSearch` `binding` (#3480).
-#[cfg(test)]
-pub(crate) fn recorded_ai_search<'a>(
-    lock: &'a DeployLock,
-    worker: &str,
-    binding: &str,
-    environment: &str,
-) -> Option<&'a AiSearchLink> {
-    lock.environments
-        .get(environment)
-        .and_then(|env| env.ai_search_links.get(worker))
-        .and_then(|links| links.get(binding))
-}
-
 pub(crate) fn read_lock(path: &Path) -> Result<DeployLock, String> {
     if !path.exists() {
         return Ok(DeployLock {
@@ -1337,7 +1179,7 @@ pub fn materialise_mtls_for_dev(
     let mut ids = BTreeMap::new();
     let mut unlinked = Vec::new();
     for binding in bindings {
-        match recorded_mtls_certificate(&lock, worker, &binding, environment) {
+        match lock.recorded::<MtlsCertificate>(environment, worker, &binding) {
             Some(link) => {
                 ids.insert(binding, link.certificate_id.clone());
             }
@@ -1452,7 +1294,7 @@ pub fn materialise_deploy_state(
     }
     let mut store_ids = BTreeMap::new();
     for (binding, _, _) in &stored {
-        let Some(link) = recorded_stored_secret(&lock, worker, binding, environment) else {
+        let Some(link) = lock.recorded::<StoredSecret>(environment, worker, binding) else {
             return Err(format!(
                 "remote Secrets Store secret `{binding}` for `{worker}` has not been linked under environment `{environment}`; run `bynk deploy --env {environment}` first"
             ));
@@ -2510,7 +2352,7 @@ pub(crate) mod tests {
             version: 1,
             ..Default::default()
         };
-        lock.record_mtls_certificate(
+        lock.record::<MtlsCertificate>(
             "default",
             "shop",
             "MTLS_BACKEND",
@@ -2565,7 +2407,7 @@ pub(crate) mod tests {
             secret: "stripe-live".into(),
         };
         // Linked only under `staging`: the default environment is refused.
-        lock.record_stored_secret("staging", "shop-cart", "SECRET_STRIPE_KEY", link("store-s"));
+        lock.record::<StoredSecret>("staging", "shop-cart", "SECRET_STRIPE_KEY", link("store-s"));
         std::fs::write(dir.join(LOCK_FILE), toml::to_string_pretty(&lock).unwrap()).unwrap();
         let err = materialise_deploy_state(&dir, "shop-cart", &config, "default")
             .expect_err("an unlinked stored secret must not pass");

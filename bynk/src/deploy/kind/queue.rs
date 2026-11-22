@@ -245,7 +245,9 @@ impl ResourceKind for Queue {
         let fresh = std::cell::RefCell::new(BTreeSet::new());
         let attempted = cx.live.unwrap_or(&fresh);
         let mut created = BTreeSet::new();
-        for queue in unattempted_queues(declared, &mut attempted.borrow_mut()) {
+        // Bound first, so the borrow of the run's attempts ends before any queue is made.
+        let todo = unattempted_queues(declared, &mut attempted.borrow_mut());
+        for queue in todo {
             if attempt_create(cx, &queue)? {
                 created.insert(queue);
             }
@@ -403,5 +405,57 @@ mod tests {
                 "bynk: will delete queue `old-staging`".to_string()
             ))
         );
+    }
+
+    /// The one-queue path the trait requires records what `provision_all` records, so the two
+    /// cannot drift. Each queue counts as attempted already this run, so nothing asks wrangler.
+    #[test]
+    fn one_queue_alone_is_recorded_as_a_workers_queues_are() {
+        let declared = Resources::default()
+            .consumes(&["jobs"])
+            .produces(&["outbound"]);
+        let provenance = Provenance::Path("/nonexistent/wrangler".into());
+        let project = BTreeMap::new();
+        let dir = std::env::temp_dir().join(format!("bynk-queue-one-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join(LOCK_FILE);
+        let run = |lock: &mut DeployLock, alone: bool| {
+            let attempted = std::cell::RefCell::new(BTreeSet::from([
+                "jobs".to_string(),
+                "outbound".to_string(),
+            ]));
+            let mut cx = ApplyCx {
+                environment: "default",
+                worker: "shop",
+                project: &project,
+                lock,
+                lock_path: &path,
+                live: Some(&attempted),
+                tools: Tools {
+                    provenance: &provenance,
+                    project_root: Path::new("/nonexistent"),
+                },
+            };
+            if alone {
+                for decl in Queue::declared(&declared) {
+                    Queue::provision(&mut cx, decl).unwrap();
+                }
+            } else {
+                Queue::provision_all(&mut cx, &declared).unwrap();
+            }
+        };
+        let (mut alone, mut together) = (DeployLock::default(), DeployLock::default());
+        run(&mut alone, true);
+        run(&mut together, false);
+        let env = &alone.environments["default"];
+        // Consumed and found: reused. Only sent to and not made by this run: not recorded.
+        assert!(env.reused_queues.contains("jobs"));
+        assert!(!env.queues.contains("outbound") && !env.reused_queues.contains("outbound"));
+        assert_eq!(
+            toml::to_string(&alone).unwrap(),
+            toml::to_string(&together).unwrap()
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

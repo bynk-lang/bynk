@@ -116,11 +116,10 @@ pub(crate) fn deploy_one(
     // at all — re-provision rather than inject a dead id. `None` means the fetch
     // was skipped or failed; the recorded id is trusted unconditionally, as it
     // always was pre-slice-5. `lives.hyperdrive` is what each `Postgres` binding
-    // wants (#3319), and the API to ask.
+    // wants (#3319), and the API to ask. `lives.linked` is the Secrets Store and
+    // mTLS certificate each `(worker, binding)` linked to, as its id, found before
+    // anything was pushed ([`link_for_run`], #3301, #3513 A).
     lives: Lives<'_>,
-    // #3301: the Secrets Store each `(worker, binding)` linked to, as its id,
-    // found before anything was pushed ([`link_for_run`]).
-    linked_stores: &BTreeMap<(String, String), String>,
 ) -> Result<Pushed, DeployFailure> {
     let worker_dir = workers_dir.join(worker);
     let config = worker_dir.join("wrangler.toml");
@@ -150,15 +149,11 @@ pub(crate) fn deploy_one(
     // #3301, #3513 A, #3480: each stored secret's store, mTLS certificate and AI Search instance,
     // found before the run, recorded and (the first two) bound by their ids. Nothing is created or
     // uploaded here: the account owns them.
-    record_linked_resources(
-        worker,
-        declared,
-        linked_stores,
-        lock,
-        lock_path,
-        &config,
-        environment,
-    )?;
+    let stores = provision_kind::<StoredSecret>(site, declared, lock, lock_path, lives)?;
+    StoredSecret::materialise(&config, worker, &stores)?;
+    let certificates = provision_kind::<MtlsCertificate>(site, declared, lock, lock_path, lives)?;
+    MtlsCertificate::materialise(&config, worker, &certificates)?;
+    provision_kind::<AiSearch>(site, declared, lock, lock_path, lives)?;
     // P3 (#2342): each rate limiter's `namespace_id`, allocated in the ledger
     // (no account call: the id is ours to choose) and recorded before the
     // push, so an interrupted run never allocates a second one and resets
@@ -210,7 +205,10 @@ pub(crate) fn deploy_one(
     }
     // #3479: an adopted index keeps the name it has on the account.
     materialise_adopted_vectorize(&config, worker, declared, environment)?;
-    adopt_containers_for_push(&config, worker, declared, lock, lock_path, environment)?;
+    // #3477: an adopted container image replaces the Dockerfile `wrangler` would build, in the
+    // configuration it is about to read, and is recorded before the push.
+    materialise_adopted_containers(&config, worker, declared, environment)?;
+    provision_kind::<ContainerImage>(site, declared, lock, lock_path, lives)?;
     // P4b (#2608): each database's pending migrations, applied once it is
     // bound (and, for a named environment, once `[env.<name>]` binds it) and
     // before the push, so the new code never meets the old schema. Wrangler
@@ -1466,7 +1464,6 @@ mod tests {
                 kv: live_kv_ids.as_ref(),
                 ..Lives::default()
             },
-            &BTreeMap::new(),
         );
         let calls = std::fs::read_to_string(&log)
             .unwrap_or_default()
@@ -2166,7 +2163,6 @@ mod tests {
             &[],
             environment,
             Lives::default(),
-            &BTreeMap::new(),
         );
         let read = |path: &Path| -> Vec<String> {
             std::fs::read_to_string(path)
