@@ -7,6 +7,7 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.640.34** | Search on bynk-lang.org now covers the blog as well as the docs, with blog posts marked "Blog · …" and ranked after the docs; the blog's search covers the docs the same way. The docs site's pages now declare British English (`lang="en-GB"`), as the blog's do (web presence track, slice 7, #4022). |
 | **v0.640.33** | Internal restructuring: npm, pnpm, bun, yarn, `tsc`, `tsx`, `node` and `git` are spawned from one module; no lookup, message or fetched package changes |
 | **v0.640.32** | The Book's diagrams wear the Bynk design system. Hairline panels, muted lines and Instrument Sans replace Mermaid's lilac default, in light and dark, and they follow the site's theme toggle. |
 | **v0.640.31** | `bynk revert` refuses a version bound to a Hyperdrive config that the ledger has since replaced or pruned, as it already did for KV, D1 and rate limiters (#3970) |
