@@ -1,0 +1,53 @@
+---
+// "What Bynk checks for you" (web presence slice 8): the four claims the home
+// page used to make as cards, in the mockup's plainer grid.
+const checks = [
+  {
+    title: "Architecture in the language",
+    text: "Contexts, services and agents are first-class constructs, so your architecture is written down and checked by the compiler.",
+  },
+  {
+    title: "Illegal states, unrepresentable",
+    text: "Refined types, sum types, opaque types and exhaustiveness rule out the states you never meant to allow.",
+  },
+  {
+    title: "No bespoke runtime",
+    text: "Bynk compiles to typed TypeScript and deploys to Cloudflare Workers: nothing new to trust underneath.",
+  },
+  {
+    title: "Honest and spec-first",
+    text: "Bynk grows in small, specified increments. Features that are not here yet are deferred, not forgotten.",
+  },
+];
+---
+
+<section class="home-section not-content" aria-labelledby="checks">
+  <h2 id="checks">What Bynk checks for you</h2>
+  <div class="checks">
+    {
+      checks.map((c) => (
+        <div>
+          <h3>{c.title}</h3>
+          <p>{c.text}</p>
+        </div>
+      ))
+    }
+  </div>
+</section>
+
+<style>
+  .checks {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+    gap: 1.5rem 2rem;
+  }
+  h3 {
+    margin: 0 0 0.5rem;
+    font-size: var(--sl-text-lg);
+  }
+  p {
+    margin: 0;
+    color: var(--bynk-ink-muted);
+    font-size: var(--sl-text-sm);
+  }
+</style>

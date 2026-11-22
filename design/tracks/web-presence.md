@@ -294,6 +294,12 @@ page.
   `en-GB` so the indexes share a language; blog results are titled
   "Blog · …". The merge is on only in the deploys, because a merged index
   that fails to load leaves Pagefind with no results at all.
+- **One shell.** The theme draws the header (Book, Examples, Reference and
+  Blog; search; Playground ↗), a footer strip on every page of both sites,
+  and the home page's site map. Each site sets its own licence line: the docs'
+  prose is CC BY 4.0 and their snippets MIT, as the blog's, and Bynk itself
+  stays MIT or Apache-2.0. The docs home page follows the "Home" mockup, and
+  lists the blog's newest posts from the blog's `posts.json` (slice 8).
 
 ## 9. Checks
 

@@ -1,0 +1,117 @@
+---
+// "Four ways in" (web presence slice 8): one card for each surface, with three
+// deep links into it. The link checker in the site's CI (check-home-links.mjs)
+// fails the build if any of them stops resolving.
+const ways = [
+  {
+    eyebrow: "Learn",
+    title: "The Book",
+    href: "/book/",
+    blurb: "Tutorial chapters from first program to tested service, then a guide for each part of the language.",
+    links: [
+      { label: "Compile your first program", href: "/book/tutorials/01-first-program/" },
+      { label: "Model your data with types", href: "/book/tutorials/03-modelling-data/" },
+      { label: "Add a stateful agent", href: "/book/tutorials/05-stateful-agent/" },
+    ],
+  },
+  {
+    eyebrow: "Run",
+    title: "Examples",
+    href: "/by-example/",
+    blurb: "Short snippets you can run in the page, and complete projects to read from end to end.",
+    links: [
+      { label: "Refined types", href: "/by-example/snippets/refined-type/" },
+      { label: "Sum types and match", href: "/by-example/snippets/sum-type-and-match/" },
+      { label: "Project: link shortener", href: "/by-example/projects/link-shortener/" },
+    ],
+  },
+  {
+    eyebrow: "Look up",
+    title: "Reference",
+    href: "/reference/",
+    blurb: "Exact answers: syntax, types, adapters, the CLI, every diagnostic and the specification.",
+    links: [
+      { label: "Refined-type API", href: "/reference/refined-types/" },
+      { label: "Diagnostic index", href: "/reference/diagnostics/" },
+      { label: "The bynk CLI", href: "/reference/tooling/bynk-cli/" },
+    ],
+  },
+  {
+    eyebrow: "Understand",
+    title: "Blog",
+    href: "/blog/",
+    blurb: "The thinking behind Bynk, one idea at a time, in series you can read in order.",
+    links: [
+      { label: "Check once, trust everywhere", href: "/blog/posts/validation/" },
+      { label: "Who gets the penny?", href: "/blog/posts/money/" },
+      { label: "Getting started with Bynk", href: "/blog/posts/getting-started/" },
+    ],
+  },
+];
+---
+
+<section class="home-section not-content" aria-labelledby="ways-in">
+  <p class="eyebrow">Four ways in</p>
+  <h2 id="ways-in">Pick the page for what you are doing</h2>
+  <div class="ways">
+    {
+      ways.map((way) => (
+        <article class="way">
+          <p class="eyebrow accent">{way.eyebrow}</p>
+          <h3>
+            <a href={way.href}>{way.title}</a>
+          </h3>
+          <p class="blurb">{way.blurb}</p>
+          <ul>
+            {way.links.map((link) => (
+              <li>
+                <a href={link.href}>{link.label}</a>
+              </li>
+            ))}
+          </ul>
+        </article>
+      ))
+    }
+  </div>
+</section>
+
+<style>
+  .ways {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+    gap: 1rem;
+  }
+  .way {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding: 1.5rem;
+    background: var(--bynk-surface-panel);
+    border: 1px solid var(--bynk-line);
+    border-radius: 0.5rem;
+  }
+  h3 {
+    margin: 0;
+    font-size: var(--sl-text-h4);
+  }
+  h3 a {
+    color: var(--bynk-ink);
+    text-decoration: none;
+  }
+  h3 a:hover {
+    color: var(--bynk-accent);
+  }
+  .blurb {
+    margin: 0;
+    color: var(--bynk-ink-muted);
+    font-size: var(--sl-text-sm);
+  }
+  ul {
+    margin: 0;
+    padding: 0.25rem 0 0;
+    list-style: none;
+    display: grid;
+    gap: 0.375rem;
+    font-size: var(--sl-text-sm);
+  }
+</style>

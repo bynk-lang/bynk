@@ -85,7 +85,11 @@ CI remains the authority. The toolchain is pinned in `rust-toolchain.toml`.
 ## Licence
 
 Licensed under either of Apache-2.0 ([LICENSE-APACHE](LICENSE-APACHE)) or MIT
-([LICENSE-MIT](LICENSE-MIT)), at your option. Unless you explicitly state
-otherwise, any contribution intentionally submitted for inclusion in the work by
-you, as defined in the Apache-2.0 license, shall be dual licensed as above,
-without any additional terms or conditions.
+([LICENSE-MIT](LICENSE-MIT)), at your option, except the documentation's prose
+(the pages in `site/src/content/`), which is [CC BY 4.0](LICENSE-CC-BY-4.0.md),
+and its code snippets (code blocks in those pages, and `site/src/snippets/`),
+which are [MIT](LICENSE-MIT). Unless you explicitly state otherwise, any
+contribution intentionally submitted for inclusion in the work by you, as
+defined in the Apache-2.0 licence, shall be licensed in the same way, without
+any additional terms or conditions. The README's "Licence" section has the
+details.

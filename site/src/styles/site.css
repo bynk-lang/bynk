@@ -1,7 +1,7 @@
 /* The docs site's own touches, on top of the Bynk site theme
- * (@bynk-lang/site-theme), which carries the brand: tokens, colours, fonts,
- * headings, quotations and code blocks. Keep this file to what is particular
- * to this site. */
+ * (@bynk-lang/site-theme), which carries the brand and the page shell:
+ * tokens, colours, fonts, headings, quotations, code blocks, the header and
+ * the footer. Keep this file to what is particular to this site. */
 
 /* A little more vertical rhythm between content blocks than Starlight's
  * default. */
@@ -9,14 +9,43 @@
   --sl-content-gap-y: 1.25rem;
 }
 
-/* The landing hero: more breathing room, and a tagline that wraps evenly
- * rather than leaving a short last line. Scoped to the splash template, so
- * Book pages are untouched. */
-.hero {
-  --sl-hero-gap: clamp(1.5rem, 6vw, 4rem);
+/* The home page's sections (src/components/home/): a section heading with an
+ * optional eyebrow above it, and generous space between sections. */
+.home-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  margin-top: 4rem;
+}
+.home-section h2 {
+  margin: 0;
+  font-size: var(--sl-text-h2);
+}
+.home-section .eyebrow,
+.home-hero .eyebrow {
+  margin: 0;
+  font-size: var(--sl-text-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--bynk-ink-muted);
+}
+.home-section .eyebrow.accent {
+  color: var(--bynk-accent);
 }
 
-.hero .tagline {
-  max-width: 38ch;
-  text-wrap: balance;
+/* The home page's components sit outside Markdown (`not-content`), so they
+ * take the theme's link colour here. */
+.home-hero a:not(.sl-link-button),
+.home-section a {
+  color: var(--bynk-accent);
+}
+.home-hero a:not(.sl-link-button):hover,
+.home-section a:hover {
+  color: var(--bynk-ink);
+}
+/* Card titles and whole-card links stay in ink; only their hover is teal. */
+.home-section h3 a,
+.home-section a.post {
+  color: var(--bynk-ink);
 }

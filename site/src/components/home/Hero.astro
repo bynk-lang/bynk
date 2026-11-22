@@ -1,0 +1,142 @@
+---
+// The home page's hero (web presence slice 8), as the "Home" mockup draws it:
+// the words on the left, a real program on the right. Starlight shows a Hero
+// only on a page with `hero` in its frontmatter, and only the home page has
+// one, so this override touches nothing else.
+//
+// The words come from index.mdx's frontmatter: `hero.title` is the heading,
+// `hero.tagline` the paragraph under it, and `hero.actions` the buttons. The
+// program is `src/snippets/home/greeter.bynk`, which the snippets gate
+// compiles as the playground does, so the panel's "Checked" stays true.
+import { Code, LinkButton } from "@astrojs/starlight/components";
+import { readSource, playgroundLink } from "../../lib/examples.mjs";
+
+const SNIPPET = "site/src/snippets/home/greeter.bynk";
+
+const { hero } = Astro.locals.starlightRoute.entry.data;
+const code = readSource(SNIPPET);
+const runHref = await playgroundLink(code);
+const actions = hero?.actions ?? [];
+---
+
+<div class="home-hero not-content">
+  <div class="words">
+    <p class="eyebrow">Pre-1.0 · specified in small increments</p>
+    <h1 id="_top">{hero?.title}</h1>
+    {hero?.tagline && <p class="lede" set:html={hero.tagline} />}
+    {
+      actions.length > 0 && (
+        <div class="actions">
+          {actions.map(({ text, link, icon, variant, attrs }) => (
+            <LinkButton href={link} variant={variant} icon={icon?.name} {...attrs}>
+              {text}
+            </LinkButton>
+          ))}
+        </div>
+      )
+    }
+  </div>
+  <figure class="panel">
+    <figcaption class="panel-head">
+      <span class="file">greeter.bynk</span>
+      <a href={runHref} rel="noopener">Open in playground ↗</a>
+    </figcaption>
+    <Code code={code} lang="bynk" />
+    <p class="panel-foot">
+      <span><span class="tick" aria-hidden="true">✓</span> Checked</span>
+      <span>Compiles to TypeScript</span>
+      <span>Runs on Cloudflare Workers</span>
+    </p>
+  </figure>
+</div>
+
+<style>
+  .home-hero {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 3.5rem;
+    padding-block: 2rem 1rem;
+  }
+  .words {
+    flex: 1 1 22rem;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+  .eyebrow {
+    margin: 0;
+    font-size: var(--sl-text-xs);
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--bynk-ink-muted);
+  }
+  h1 {
+    margin: 0;
+    font-size: clamp(2.25rem, 4.5vw, 3rem);
+    line-height: 1.06;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--bynk-ink);
+    text-wrap: balance;
+  }
+  .lede {
+    margin: 0;
+    font-size: var(--sl-text-lg);
+    line-height: 1.6;
+    color: var(--bynk-ink-muted);
+    max-width: 38rem;
+  }
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: center;
+  }
+  .panel {
+    flex: 1 1 28rem;
+    min-width: 0;
+    margin: 0;
+    background: var(--bynk-surface-panel);
+    border: 1px solid var(--bynk-line);
+    border-radius: 0.875rem;
+    overflow: hidden;
+  }
+  .panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--bynk-line);
+    font-size: var(--sl-text-sm);
+  }
+  .file {
+    font-family: var(--bynk-font-mono);
+    color: var(--bynk-ink-muted);
+  }
+  /* The panel is the frame: the code block inside drops its own. */
+  .panel :global(.expressive-code) {
+    margin: 0;
+  }
+  .panel :global(.expressive-code .frame),
+  .panel :global(.expressive-code pre) {
+    border: 0;
+    border-radius: 0;
+  }
+  .panel-foot {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.25rem;
+    margin: 0;
+    padding: 0.75rem 1rem;
+    border-top: 1px solid var(--bynk-line);
+    font-size: var(--sl-text-xs);
+    color: var(--bynk-ink-muted);
+  }
+  .tick {
+    color: var(--bynk-accent);
+  }
+</style>

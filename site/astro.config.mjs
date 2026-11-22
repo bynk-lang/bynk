@@ -88,14 +88,17 @@ export default defineConfig({
           }
         : {}),
       // The brand comes from the theme plugin below; this adds only the
-      // site's own touches (the landing hero).
+      // site's own touches (the home page's sections).
       customCss: ["./src/styles/site.css"],
       // The theme supplies the Head (fonts), Header (wordmark and cross-site
-      // nav) and SiteTitle. The Sidebar stays the site's own: it is scoped to
-      // the surface being viewed (Book / By Example / Reference) instead of
-      // listing every surface on every page.
+      // nav), SiteTitle and Footer. The Sidebar stays the site's own: it is
+      // scoped to the surface being viewed (Book / By Example / Reference)
+      // instead of listing every surface on every page. The Hero is the home
+      // page's (only the home page has one): its words beside a checked
+      // program, as the site mockup draws it (web presence slice 8).
       components: {
         Sidebar: "./src/components/Sidebar.astro",
+        Hero: "./src/components/home/Hero.astro",
       },
       // Build-time internal link checking (the link-check gate): a broken
       // in-site link fails `astro build`. The whole Book is migrated, so it is
@@ -109,7 +112,15 @@ export default defineConfig({
       // `diagnostics_registry` docs-consistency test checks that every such link
       // in the site's content names a registry code, so none can dangle.
       plugins: [
-        bynkSiteTheme(),
+        bynkSiteTheme({
+          // The writing is CC BY 4.0, its code snippets MIT, and Bynk itself
+          // MIT or Apache-2.0 (README, "Licence").
+          licence: [
+            { label: "Docs CC BY 4.0", href: "https://github.com/bynk-lang/bynk/blob/main/LICENSE-CC-BY-4.0.md" },
+            { label: "Snippets MIT", href: "https://github.com/bynk-lang/bynk/blob/main/LICENSE-MIT" },
+            { label: "Bynk MIT or Apache-2.0", href: "https://github.com/bynk-lang/bynk#licence" },
+          ],
+        }),
         starlightLinksValidator({
           exclude: ["/reference/api/**", "/reference/diagnostics/*/"],
         }),

@@ -1548,6 +1548,11 @@ jobs:
         # exist.
         env:
           BYNK_MERGE_SEARCH: "1"
+      # The header, the site map and the home page draw their links from
+      # components, which the link validator above doesn't see (web presence
+      # slice 8): check them against the built pages.
+      - name: Check the shell's and home page's links resolve
+        run: node scripts/check-shell-links.mjs
       # Search merges the blog's Pagefind index (web presence slice 7), and
       # Pagefind loads it with this site's code, so the two should share a
       # minor version. A warning, not a failure: the blog deploys on its own.

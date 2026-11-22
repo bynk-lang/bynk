@@ -1,0 +1,8 @@
+context greeter
+
+service api from http {
+  on GET("/hello/:name") (name: String)
+      -> Effect[HttpResult[String]] by Visitor {
+    Ok("Hello, \(name)!")
+  }
+}
