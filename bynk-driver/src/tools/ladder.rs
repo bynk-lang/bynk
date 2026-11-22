@@ -109,7 +109,7 @@ impl Rung {
         cmd
     }
 
-    /// Why this rung, found on PATH, did not start ([`start_failure`]).
+    /// Why this rung, found on PATH, did not start.
     pub fn start_failure(&self, e: &std::io::Error) -> String {
         start_failure(&self.path, e)
     }
