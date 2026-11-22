@@ -3,9 +3,9 @@
 
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import type { ValidationError, DecodeError } from "../__bynk_runtime/errors.js";
-import { __makeIntegrationAnalytics } from "../__bynk_runtime/storage.js";
 import { __callService, type __JsonValue, type __BoundaryError, type __ServiceBinding } from "../__bynk_runtime/boundary.js";
 import { __responseToHttpResult, __responseToHttpOutcome, __responseToUnauthOutcome, __requestHeaderPairs } from "../__bynk_runtime/http.js";
+import { __makeIntegrationAnalytics } from "../__bynk_runtime/testing/bindings.js";
 import * as __ns_shop_cart from "../workers/shop-cart/handlers.js";
 import worker___ns_shop_cart from "../workers/shop-cart/index.js";
 

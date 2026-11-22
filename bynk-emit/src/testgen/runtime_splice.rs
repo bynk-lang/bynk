@@ -185,7 +185,8 @@ pub(super) fn run_id_stmt(remote: bool) -> TsStmt {
     }
 }
 
-/// #3052: `const __bynkOidcRemote: boolean = <remote>;`, the flag the issuer's text reads.
+/// #3052: `const __bynkOidcRemote: boolean = <remote>;`, the flag the `system` drivers pass to
+/// `__bynkOidcToken` (the issuer's text takes it as a parameter and does not read it itself).
 pub(super) fn oidc_remote_flag(remote: bool) -> TsStmt {
     TsStmt::const_stmt(
         TsBindingName::Ident("__bynkOidcRemote".to_string()),
@@ -242,25 +243,36 @@ mod tests {
         }
     }
 
-    /// Every dependency of a module is a module, and none depends on itself.
+    /// The dependency graph has no cycle of any length: a depth-first walk that meets a module
+    /// it is still inside has found one.
     #[test]
-    fn dependencies_are_modules_and_acyclic() {
-        for module in TestRuntimeModule::ALL {
-            let deps = module.deps();
-            assert!(
-                !deps.contains(&module),
-                "{} depends on itself",
-                module.name()
-            );
-            for dep in deps {
-                assert!(
-                    !dep.deps().contains(&module),
-                    "{} and {} depend on each other",
-                    module.name(),
-                    dep.name()
-                );
+    fn the_dependency_graph_has_no_cycle() {
+        fn visit(
+            module: TestRuntimeModule,
+            path: &mut Vec<TestRuntimeModule>,
+            done: &mut Vec<TestRuntimeModule>,
+        ) {
+            if done.contains(&module) {
+                return;
             }
+            assert!(
+                !path.contains(&module),
+                "a dependency cycle through `{}`: {:?}",
+                module.name(),
+                path.iter().map(|m| m.name()).collect::<Vec<_>>()
+            );
+            path.push(module);
+            for dep in module.deps() {
+                visit(dep, path, done);
+            }
+            path.pop();
+            done.push(module);
         }
+        let mut done = Vec::new();
+        for module in TestRuntimeModule::ALL {
+            visit(module, &mut Vec::new(), &mut done);
+        }
+        assert_eq!(done.len(), TestRuntimeModule::ALL.len());
     }
 
     /// The generated declaration in `harness.ts` is the name `snapshot_harness` writes.

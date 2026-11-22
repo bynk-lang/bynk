@@ -174,7 +174,7 @@ pub const FIRST_PARTY_NPM: &[FirstPartyNpm] = &[
     FirstPartyNpm {
         package: "@electric-sql/pglite",
         version: "0.5.16",
-        runtime_module: "pglite",
+        runtime_module: "testing/pglite",
         reached_by: Reach::TestPostgresDouble,
     },
 ];

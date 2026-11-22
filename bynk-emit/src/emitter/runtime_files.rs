@@ -287,10 +287,7 @@ pub fn closure_files(reached: &BTreeSet<(String, String)>) -> Vec<(PathBuf, Stri
                 continue;
             };
             for line in src.lines().filter(|l| l.starts_with("import ")) {
-                if let Some(dep) = line
-                    .rsplit_once("\"./")
-                    .and_then(|(_, t)| t.strip_suffix(".ts\";"))
-                {
+                if let Some(dep) = imported_module(m, line) {
                     want.push(dep);
                 }
             }
@@ -300,6 +297,33 @@ pub fn closure_files(reached: &BTreeSet<(String, String)>) -> Vec<(PathBuf, Stri
         }
     }
     files
+}
+
+/// The runtime module an `import … from "<relative>.ts";` line of `module`'s source names, resolved
+/// against the module's own directory: `./result.ts` from `storage`, `../storage.ts` and
+/// `./pglite.ts` from `testing/bindings`.
+fn imported_module(module: &str, line: &str) -> Option<&'static str> {
+    let spec = line
+        .rsplit_once('"')
+        .and_then(|(head, _)| head.rsplit_once('"'))
+        .map(|(_, spec)| spec)?;
+    let spec = spec.strip_suffix(".ts")?;
+    let mut parts: Vec<&str> = module.split('/').collect();
+    parts.pop();
+    for seg in spec.split('/') {
+        match seg {
+            "." | "" => {}
+            ".." => {
+                parts.pop()?;
+            }
+            name => parts.push(name),
+        }
+    }
+    let resolved = parts.join("/");
+    RUNTIME_MODULES
+        .iter()
+        .find(|(n, _)| *n == resolved)
+        .map(|(n, _)| *n)
 }
 
 /// Always a `.ts` file: specifiers say `.js` (resolved by `tsc` / stripped by

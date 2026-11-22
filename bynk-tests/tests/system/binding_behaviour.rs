@@ -17,6 +17,8 @@
 
 #[path = "../require/mod.rs"]
 mod require;
+#[path = "../support/runtime_js.rs"]
+mod runtime_js;
 #[path = "../stdlib_scaffold/mod.rs"]
 mod stdlib_scaffold;
 #[path = "../tools/mod.rs"]
@@ -100,6 +102,7 @@ fn every_binding_operation_is_tested_and_passes() {
     let mut uncovered = Vec::new();
     for platform in stdlib_scaffold::PLATFORMS {
         let out = stdlib_scaffold::compile(platform, &dir, true);
+        runtime_js::stage_test_doubles(&out);
         for file in &shared {
             fs::copy(file, out.join(file.file_name().unwrap())).unwrap();
         }
