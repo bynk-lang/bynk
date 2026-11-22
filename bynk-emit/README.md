@@ -66,7 +66,11 @@ bynk-driver = "0.640"
 bynk-emit = "0.640"
 ```
 
-```rust
+<!-- Not a doctest: it drives `bynk-driver`, which `bynk-emit` does not depend on, even for its tests
+(#4028). It runs as `integration::emit_readme_example` in `bynk-tests`, which also checks that it still
+matches this block. -->
+
+```rust,ignore
 use std::collections::HashMap;
 use std::path::PathBuf;
 

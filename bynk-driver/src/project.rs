@@ -101,10 +101,10 @@ use diagnostics::*;
 
 // External facade: items referenced as `crate::project::X` from outside this
 // module (emitter, main, lib) must stay reachable at that path.
-// 1B.2a (#4028): the suffix is defined beside the test-harness generation that reads it.
 pub use bynk_check::project_model::BuildTarget;
 pub use bynk_check::schema_registry::{AgentVersions, MigrationStep};
 pub use bynk_check::symbols::{FileDeclIndex, UnitTable};
+// 1B.2a (#4028): the suffix is defined beside the test-harness generation that reads it.
 pub use bynk_emit::testgen::SMOKE_SUITE_SUFFIX;
 // #1883, slice 1b: the `assets/` folder helpers, for the driver and testkit.
 pub use bynk_project::assets;

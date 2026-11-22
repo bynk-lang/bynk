@@ -458,7 +458,7 @@ pub(super) fn platform_or_placeholder(owner: &str, cap: &str) -> TopDep {
 /// checked. `type_names` (a subset of `value_names`) gets the alias;
 /// `value_names` is unconditionally destructured with no cast.
 /// #1479: returns real [`TsStmt`]s (was `out: &mut String`) — every caller
-/// now appends via `crate::emitter::extend_printed_at(out, stmts, 2)`, the
+/// now appends via `crate::testgen::case_body::extend_printed_at(out, stmts, 2)`, the
 /// same depth-2 this scaffold body's own statements always printed at.
 /// #1703: each type name carries its type parameters, so a generic type's
 /// alias is generic too (`type Box<A> = ns.Box<A>;`). A bare alias of a generic
@@ -727,7 +727,7 @@ pub(super) fn extend_hidden_destructures(
             continue;
         };
         let type_names = aliased_types(table, |n| names.contains(n));
-        crate::emitter::extend_printed_at(
+        crate::testgen::case_body::extend_printed_at(
             out,
             emit_ns_destructure(&test_ns(owner), names, &type_names),
             2,

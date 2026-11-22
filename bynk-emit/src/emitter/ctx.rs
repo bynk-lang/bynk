@@ -34,7 +34,7 @@ pub(crate) struct ModuleCtx<'a> {
     pub(super) runtime_use: &'a RuntimeUse,
     /// v0.8 build target. In workers mode cross-context calls lower to
     /// `callService(...)` instead of `deps.surface.<key>.<method>(...)`.
-    pub(super) target: BuildTarget,
+    pub(crate) target: BuildTarget,
     /// #527: agent → method → the method's `given` caps (mirrors
     /// [`crate::emit_model::EmitProjectCtx::agent_method_givens`]). Consulted by
     /// the agent-call lowering to record capability requirements.
@@ -138,7 +138,7 @@ impl<'a> ModuleCtx<'a> {
         )
     }
 
-    pub(super) fn new(
+    pub(crate) fn new(
         commons: &'a TypedCommons,
         cross_context: &'a bynk_check::resolver::CrossContextInfo,
         runtime_use: &'a RuntimeUse,
@@ -225,12 +225,12 @@ pub(crate) struct TestShared {
     /// field (Locale capability track, slice 1, #844 review) rather than
     /// overloading `assert_loc.is_some()`, since that conflated "has a location"
     /// with "is test scaffolding" for a caller that has no location to give.
-    pub(super) test_scaffold: bool,
+    pub(crate) test_scaffold: bool,
     /// v0.59: the source text and project-relative path of the file the body
     /// came from, so an `assert` can emit a real `path:line:col` location (for
     /// `--format json` click-through) rather than a bare byte offset. Stays
     /// `None` for a predicate scaffold, which emits no `assert`.
-    pub(super) assert_loc: Option<AssertLoc>,
+    pub(crate) assert_loc: Option<AssertLoc>,
 }
 
 /// The `store`-agent sub-state of an [`BodyMode::AgentHandler`] body: present

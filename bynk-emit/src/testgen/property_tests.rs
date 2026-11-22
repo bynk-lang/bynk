@@ -210,7 +210,7 @@ pub(super) fn emit_test_property_function(
             typed.expr_types.extend(where_types);
             typed.callees.extend(where_callees);
         }
-        let (src, _) = emitter::lower_block_to_async_body(
+        let (src, _) = case_body::lower_block_to_async_body(
             &synth,
             &TypeRef::Base(BaseType::Bool, w.span),
             &mut typed,
@@ -270,7 +270,7 @@ pub(super) fn emit_test_property_function(
     // still binds through `assert_loc`).
     // #2024: the `for all` binders share the body closure's scope.
     harness_bound.extend(binding_names.iter().cloned());
-    let (body_src, _body_smb) = emitter::lower_test_case_body(
+    let (body_src, _body_smb) = case_body::lower_test_case_body(
         &prop.forall.body,
         &mut typed,
         &cross,
@@ -530,7 +530,7 @@ pub(super) fn emit_test_history_property_function(
         .unwrap_or_default();
     // #2024: the driven history's binder shares the body closure's scope.
     harness_bound.insert(run_var.to_string());
-    let (body_src, _body_smb) = emitter::lower_test_case_body(
+    let (body_src, _body_smb) = case_body::lower_test_case_body(
         &prop.forall.body,
         &mut typed,
         &cross,
@@ -760,7 +760,7 @@ pub(super) fn emit_contract_attack_function(
             tail_leading_comments: Vec::new(),
             implicit_tail: false,
         };
-        let (src, _) = emitter::lower_block_to_async_body(
+        let (src, _) = case_body::lower_block_to_async_body(
             &synth,
             &TypeRef::Base(BaseType::Bool, w.span),
             &mut typed,

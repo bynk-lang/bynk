@@ -908,7 +908,7 @@ fn par_node(parts: Vec<ParPart>, pattern: &[String], hoisted: bool) -> bynk_ts::
     }
 }
 
-pub(super) fn emit_statement(out: &mut String, stmt: &Statement, cx: &mut LowerCtx, indent: usize) {
+pub(crate) fn emit_statement(out: &mut String, stmt: &Statement, cx: &mut LowerCtx, indent: usize) {
     let mut body = Body::new();
     statement(&mut body, stmt, cx);
     render(&body, out, indent, cx);

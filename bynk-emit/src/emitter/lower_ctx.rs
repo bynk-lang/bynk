@@ -167,7 +167,7 @@ pub(crate) struct LowerCtx<'a> {
 }
 
 impl<'a> LowerCtx<'a> {
-    pub(super) fn new(module: ModuleCtx<'a>, mode: BodyMode) -> Self {
+    pub(crate) fn new(module: ModuleCtx<'a>, mode: BodyMode) -> Self {
         Self {
             module,
             mode,
@@ -1327,7 +1327,7 @@ impl<'a> LowerCtx<'a> {
         self.in_test_scaffold() || self.suite_fn
     }
 
-    pub(super) fn with_source_map(mut self, map: Option<&'a RefCell<SourceMapBuilder>>) -> Self {
+    pub(crate) fn with_source_map(mut self, map: Option<&'a RefCell<SourceMapBuilder>>) -> Self {
         self.source_map = map;
         self
     }
@@ -1458,7 +1458,7 @@ impl<'a> LowerCtx<'a> {
     /// into its own local `String` — `lower_if`'s value-position wrapper,
     /// `build_match_iife`'s — before splicing it elsewhere must not call this
     /// with that buffer's own length (render it with `render_text`).
-    pub(super) fn record_span(&self, out_len: usize, span: bynk_syntax::span::Span) {
+    pub(crate) fn record_span(&self, out_len: usize, span: bynk_syntax::span::Span) {
         if let Some(map) = self.source_map {
             map.borrow_mut().record(out_len, span);
         }

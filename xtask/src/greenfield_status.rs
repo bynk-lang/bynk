@@ -1842,8 +1842,9 @@ fn emit_abi_shapes(root: &Path) -> Probe {
 /// argued individually the same way [`AST_IMPORTER_EXCEPTIONS`] is, not assumed from a
 /// path prefix: `emitter/wrangler.rs` writes `wrangler.toml`; `emitter/secrets.rs`
 /// writes `bynk-secrets.json`; `emitter/contracts.rs` writes `bynk-contracts.json`;
-/// `testkit.rs` builds a `.bynk` source fixture — a compiler *input* for tests, not
-/// output. P7.3 (#1303): `emitter/toml_doc.rs` writes `wrangler.toml` text too —
+/// `testkit.rs` built a `.bynk` source fixture — a compiler *input* for tests, not
+/// output — until 1B.2b (#4028) moved that helper to `bynk-tests` and the file stopped
+/// having a `format!` to exclude. P7.3 (#1303): `emitter/toml_doc.rs` writes `wrangler.toml` text too —
 /// `emitter/wrangler.rs`'s own writes moved here when it stopped building the TOML text
 /// directly and started building a typed `TomlDocument` for this module to print — same
 /// rationale, same exclusion.
@@ -1860,7 +1861,6 @@ const TS_WRITES_EXCLUDED_FILES: &[&str] = &[
     "emitter/toml_doc.rs",
     "emitter/secrets.rs",
     "emitter/contracts.rs",
-    "testkit.rs",
 ];
 
 /// Is `rel_path` (relative to `bynk-emit/src`) one of [`TS_WRITES_EXCLUDED_FILES`]?
@@ -2305,8 +2305,10 @@ fn ts_raw_sites_testgen(root: &Path) -> Probe {
 /// production emission: `bynk-emit::testgen` (`testgen.rs`, `testgen/**`), which 1B.2a moved
 /// there from the driver's `project/tests_emit/**`.
 fn is_testgen_path(rel: &Path) -> bool {
-    rel.components()
-        .any(|c| c.as_os_str().to_string_lossy().starts_with("testgen"))
+    rel.components().any(|c| {
+        let c = c.as_os_str().to_string_lossy();
+        c == "testgen" || c == "testgen.rs"
+    })
 }
 
 /// `bynk-emit/src`'s files, split by [`is_testgen_path`] (1B.2a, Decision D of #4028): the
@@ -2512,11 +2514,12 @@ fn ts_text_idents_violations(files: &[(PathBuf, String)]) -> usize {
 /// baseline lists them. A growth probe ([`GROWTH_PROBES`]): it may only fall unless a pending
 /// file `raises:` it with a reason, so a round trip cannot creep back in.
 ///
-/// **End state (1A.39a):** the probe reads 1. The one line is `extend_printed_at` in `emitter.rs`,
-/// the driver's test-harness entry: it prints the statements the driver asks for, at a depth.
-/// 1B.2a moved the harness into `bynk-emit::testgen` and the probe skips that module
-/// ([`emit_files_by_origin`]), as [`ts_raw_sites_emit`] does; the harness's own 43 are read by
-/// [`testgen_print_calls`]. 1B.2b moves `extend_printed_at` there too, and this probe then reads 0.
+/// **End state (1B.2b):** the probe reads 0. The one line it read after 1A.39a was
+/// `extend_printed_at`, the test harness's entry that prints the statements it is given, at a
+/// depth. 1B.2a moved the harness into `bynk-emit::testgen` and the probe skips that module
+/// ([`emit_files_by_origin`]), as [`ts_raw_sites_emit`] does; 1B.2b moved `extend_printed_at`
+/// there too (`testgen/case_body.rs`), and [`testgen_print_calls`] reads it with the harness's own
+/// 43, so it reads 44.
 /// The final program print (`bynk_ts::print`) and `lower_block_to_async_body` count no line.
 ///
 /// Counts non-comment lines outside `#[cfg(test)]` modules in `bynk-emit/src` that contain
@@ -2540,6 +2543,7 @@ fn emit_print_calls(root: &Path) -> Probe {
 /// old reading the move reclassifies, as `ts_raw_sites_testgen` is of `ts_raw_sites`: the two
 /// readings sum to what one probe over `bynk-emit/src` would read. A growth probe
 /// ([`GROWTH_PROBES`]): it may only fall unless a pending file `raises:` it with a reason.
+/// 1B.2b moved `extend_printed_at` in (`testgen/case_body.rs`), so it reads 44.
 /// 1B.5 converts the harness to nodes and takes it to its argued floor.
 fn testgen_print_calls(root: &Path) -> Probe {
     Probe {
@@ -5305,12 +5309,31 @@ mod tests {
         );
     }
 
+    /// 1B.2b (#4028), from the 1B.2a review: removes its directory when dropped, so a failing
+    /// assertion does not leave a temp tree behind for the next run's process id to meet.
+    struct TempTree(PathBuf);
+
+    impl TempTree {
+        fn new(name: &str) -> Self {
+            let dir = std::env::temp_dir().join(format!("{name}-{}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&dir);
+            TempTree(dir)
+        }
+    }
+
+    impl Drop for TempTree {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
     /// 1B.2a (Decision D of #4028): the four production probes that read `bynk-emit/src` skip
     /// the harness, and `testgen_print_calls` reads it alone, so their sum is what one probe
     /// over the crate would read.
     #[test]
     fn the_harness_is_read_apart_from_production_emission() {
-        let dir = std::env::temp_dir().join(format!("bynk-testgen-split-{}", std::process::id()));
+        let tree = TempTree::new("bynk-testgen-split");
+        let dir = tree.0.clone();
         let src = dir.join("bynk-emit/src");
         for (rel, text) in [
             ("emitter/emit.rs", "fn f() { print_stmt(&s); }\n"),
@@ -5328,7 +5351,6 @@ mod tests {
         assert_eq!(testgen_print_calls(&dir).reads, "3");
         assert_eq!(emit_files_by_origin(&dir, false).len(), 1);
         assert_eq!(emit_files_by_origin(&dir, true).len(), 2);
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// The harness's prediction functions, silent fallbacks and AST imports are not production
@@ -5336,7 +5358,8 @@ mod tests {
     /// skip it.
     #[test]
     fn production_probes_skip_testgen_files() {
-        let dir = std::env::temp_dir().join(format!("bynk-testgen-skip-{}", std::process::id()));
+        let tree = TempTree::new("bynk-testgen-skip");
+        let dir = tree.0.clone();
         let src = dir.join("bynk-emit/src");
         let body = "use bynk_syntax::ast::Expr;\nfn block_uses_run_id() {}\n\
                     fn f() { x.unwrap_or_else(|| ident(\"undefined\")); }\n";
@@ -5348,7 +5371,6 @@ mod tests {
         assert_eq!(import_prediction_fns(&dir).reads, "1");
         assert_eq!(emit_silent_fallbacks(&dir).reads, "1");
         assert_eq!(ast_importer_files(&dir).len(), 1);
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
@@ -5359,6 +5381,16 @@ mod tests {
         assert!(!is_testgen_path(Path::new("emitter/commons_barrel.rs")));
         assert!(!is_testgen_path(Path::new("project/tests_emit/harness.rs")));
         assert!(!is_testgen_path(Path::new("project/tests_emit.rs")));
+    }
+
+    /// 1B.2b (#4028), from the 1B.2a review: a component that merely *starts with* `testgen`
+    /// is not the module, so a production helper named that way is still production emission.
+    #[test]
+    fn is_testgen_path_matches_the_component_not_a_prefix() {
+        assert!(!is_testgen_path(Path::new("emitter/testgen_helpers.rs")));
+        assert!(!is_testgen_path(Path::new("testgen_helpers/x.rs")));
+        assert!(!is_testgen_path(Path::new("emitter/testgenerator.rs")));
+        assert!(is_testgen_path(Path::new("testgen/test_runtime/x.rs")));
     }
 
     #[test]
@@ -7194,7 +7226,8 @@ commons app.demo {
         assert!(is_ts_writes_excluded_file(Path::new(
             "emitter/contracts.rs"
         )));
-        assert!(is_ts_writes_excluded_file(Path::new("testkit.rs")));
+        // `testkit.rs` left the list in 1B.2b: it holds no `format!` any more.
+        assert!(!is_ts_writes_excluded_file(Path::new("testkit.rs")));
         // Name proximity to a file that used to be excluded must not false-positive:
         // `emitter/lower.rs` (the emitter's own lowering pass) is genuinely
         // TS-producing and must stay counted — unlike `ir/lower.rs` (the checker→IR

@@ -63,10 +63,14 @@ mod integration {
     mod consumes_per_file;
     #[path = "contract_hash.rs"]
     mod contract_hash;
+    #[path = "contracts_lock.rs"]
+    mod contracts_lock;
     #[path = "cross_context_nodes.rs"]
     mod cross_context_nodes;
     #[path = "debug_metadata.rs"]
     mod debug_metadata;
+    #[path = "declaration_pipeline.rs"]
+    mod declaration_pipeline;
     #[path = "diagnose_project.rs"]
     mod diagnose_project;
     #[path = "diagnostic_hints.rs"]
@@ -79,6 +83,10 @@ mod integration {
     mod duration;
     #[path = "e2e.rs"]
     mod e2e;
+    #[path = "emit_pipeline_helpers.rs"]
+    mod emit_pipeline_helpers;
+    #[path = "emit_readme_example.rs"]
+    mod emit_readme_example;
     #[path = "eq_bound_migration.rs"]
     mod eq_bound_migration;
     #[path = "events_schema_registry_behaviour.rs"]
@@ -123,6 +131,8 @@ mod integration {
     mod kernel_scalar_nodes;
     #[path = "key_bound_fixes.rs"]
     mod key_bound_fixes;
+    #[path = "lenient_option_decode.rs"]
+    mod lenient_option_decode;
     #[path = "locals_capture.rs"]
     mod locals_capture;
     #[path = "method_index.rs"]
@@ -133,10 +143,14 @@ mod integration {
     mod ord_bound_fixes;
     #[path = "platform_nodes.rs"]
     mod platform_nodes;
+    #[path = "platform_pipeline.rs"]
+    mod platform_pipeline;
     #[path = "provider_agent_cross_context_target.rs"]
     mod provider_agent_cross_context_target;
     #[path = "query_kernel_registry.rs"]
     mod query_kernel_registry;
+    #[path = "query_pipeline.rs"]
+    mod query_pipeline;
     #[path = "record_default_nodes.rs"]
     mod record_default_nodes;
     #[path = "recursive_codec_depth_agreement.rs"]
@@ -153,6 +167,8 @@ mod integration {
     mod reserved_builtin_type_name;
     #[path = "reserved_route_syntax.rs"]
     mod reserved_route_syntax;
+    #[path = "runtime_import_pipeline.rs"]
+    mod runtime_import_pipeline;
     #[path = "semantic_tokens_index.rs"]
     mod semantic_tokens_index;
     #[path = "snippets.rs"]
@@ -173,6 +189,8 @@ mod integration {
     mod suggestions;
     #[path = "suite_diagnostics_attributed.rs"]
     mod suite_diagnostics_attributed;
+    #[path = "suite_lowering_pipeline.rs"]
+    mod suite_lowering_pipeline;
     #[path = "test_calls_nodes.rs"]
     mod test_calls_nodes;
     #[path = "test_domain_nodes.rs"]
@@ -185,6 +203,10 @@ mod integration {
     mod unit_context_facts;
     #[path = "wire_shape_drift.rs"]
     mod wire_shape_drift;
+    #[path = "workers_compose.rs"]
+    mod workers_compose;
+    #[path = "workers_entry_pipeline.rs"]
+    mod workers_entry_pipeline;
     #[path = "write_output_reconciliation_behaviour.rs"]
     mod write_output_reconciliation_behaviour;
     #[path = "ws_open_key_target.rs"]

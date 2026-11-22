@@ -239,7 +239,7 @@ pub(super) fn emit_stub_class(
         let return_ty = ts_type_ref_qualified_multi_ts_type(&op.return_type, &sig_type_ns);
 
         let mut body_text = String::new();
-        crate::emitter::extend_printed_at(
+        crate::testgen::case_body::extend_printed_at(
             &mut body_text,
             emit_ns_destructure(&scope_ns, &scope_names, &scope_type_names),
             2,
@@ -254,7 +254,7 @@ pub(super) fn emit_stub_class(
                 used_commons_destructures(&owning_unit, unit_tables, unit_uses, &mut HashSet::new())
             {
                 taken.extend(names.iter().chain(types.iter().map(|(n, _)| n)).cloned());
-                crate::emitter::extend_printed_at(
+                crate::testgen::case_body::extend_printed_at(
                     &mut body_text,
                     emit_ns_destructure(&ns, &names, &types),
                     2,
@@ -286,7 +286,7 @@ pub(super) fn emit_stub_class(
                 .filter(|o| names.contains(*o) && taken.insert((*o).clone()))
                 .cloned()
                 .collect();
-            crate::emitter::extend_printed_at(
+            crate::testgen::case_body::extend_printed_at(
                 &mut body_text,
                 emit_ns_destructure_renamed(&test_ns(u), &names, &types, &renames, &declared),
                 2,
@@ -619,7 +619,7 @@ pub(super) fn lower_stub_value_block(
             for c in items.consts {
                 typed.consts.insert(c.name.name.clone(), c.clone());
             }
-            emitter::extend_printed_at(
+            case_body::extend_printed_at(
                 &mut suite_decls,
                 emitter::emit_suite_decls(
                     items.types,
@@ -661,7 +661,7 @@ pub(super) fn lower_stub_value_block(
     // v0.70: `stub` value scaffolding is not user test logic, so its source
     // map is discarded — it stays unmapped (a deliberate scope cut).
     let body =
-        emitter::lower_block_to_async_body(&block, ret_type, &mut typed, &cross, runtime_use).0;
+        case_body::lower_block_to_async_body(&block, ret_type, &mut typed, &cross, runtime_use).0;
     // #3111: the codecs the value reached for beyond the always-present ones.
     let late_codecs = suite_late_codecs(items, &typed, runtime_use, roots_mark);
     let aliases: String = fixtures

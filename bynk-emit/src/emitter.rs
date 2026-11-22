@@ -107,17 +107,17 @@ pub mod ctx;
 mod default_value;
 mod internal_fault;
 mod lower;
-mod lower_call;
-mod lower_ctx;
+pub(crate) mod lower_call;
+pub(crate) mod lower_ctx;
 mod lower_list;
-mod lower_stmt;
+pub(crate) mod lower_stmt;
 pub(crate) mod runtime_header;
 pub(crate) mod runtime_use;
 mod tco;
 pub mod ts_types;
 mod zero_value;
 pub use internal_fault::{InternalFault, MISSING_CHECKER_FACT};
-pub use lower::*;
+pub(crate) use lower::*;
 pub use runtime_use::RuntimeUse;
 pub mod emit;
 pub(crate) use bynk_check::icu::{self, *};
@@ -226,20 +226,6 @@ pub fn runtime_import_for(from_source: &Path, ext: ImportExt) -> String {
     } else {
         let prefix: String = "../".repeat(depth);
         format!("{prefix}runtime.{ext}")
-    }
-}
-
-/// #1478: appends `stmts` to `out`, printing each at `depth` — the shared
-/// "consume a real-node-returning callee's own output" step. #1479 adds the
-/// `depth` parameter (was hardcoded to 0): `project/tests_emit.rs`'s own
-/// scaffold-body callees (e.g. `emit_ns_destructure`) print nested inside a
-/// generated function body, at that body's own depth — its own remaining
-/// callers, `emit`/`emit_project` converted off this (#1486) to a real
-/// `Vec<TsStmt>`/`TsProgram` collected and printed once via `bynk_ts::print`
-/// instead.
-pub fn extend_printed_at(out: &mut String, stmts: Vec<bynk_ts::TsStmt>, depth: usize) {
-    for stmt in stmts {
-        out.push_str(&bynk_ts::print_stmt(&stmt, depth));
     }
 }
 
@@ -3701,7 +3687,7 @@ mod runtime_tests {
 /// below is the case that got wrong.
 #[cfg(test)]
 mod conditional_runtime_import_tests {
-    use crate::testkit::{emit_bundle, emit_source};
+    use crate::testkit::emit_source;
 
     /// The runtime import lines of the emitted module, joined: one `import …
     /// from "./__bynk_runtime/<module>.js"` per module it uses.
@@ -3817,97 +3803,6 @@ mod conditional_runtime_import_tests {
         assert!(
             !runtime_import_line(&ts).contains("__bynkBytes"),
             "a marker inside a string literal is not a helper reference: {ts}"
-        );
-    }
-
-    // -- the ICU formatters ---------------------------------------------------
-
-    const ICU_HELPERS: [&str; 3] = ["__selectPluralArm", "__formatIcuNumber", "__formatIcuDate"];
-
-    /// The case the per-arm recording exists for. A `select` placeholder lowers to
-    /// `Object.hasOwn` over an arm table and calls no formatter, so a bundle whose
-    /// only ICU construct is a `select` must import none of the three — recording
-    /// once per placeholder instead of per arm would import all three here.
-    #[test]
-    fn a_select_only_bundle_imports_no_icu_formatter() {
-        let ts = emit_bundle(
-            "messages \"en\" @reference {\n  \"greeting\" => \"{g, select, male {He} female {She} other {They}} liked this.\"\n}\n",
-        );
-        assert!(
-            ts.contains("globalThis.Object.hasOwn"),
-            "the select arm table should have been emitted, else this proves nothing: {ts}"
-        );
-        for helper in ICU_HELPERS {
-            assert!(
-                !runtime_import_line(&ts).contains(helper),
-                "a select-only bundle calls no formatter, so `{helper}` must not be imported: {ts}"
-            );
-        }
-    }
-
-    /// The opposite direction: a `plural` placeholder does call a formatter. The
-    /// import is what the tree spells (1A.36b-1), so the dispatch and the number
-    /// formatter its `#` uses come in, and the date formatter, which no arm calls,
-    /// does not.
-    #[test]
-    fn a_plural_bundle_imports_the_icu_formatters_it_calls() {
-        let ts = emit_bundle(
-            "messages \"en\" @reference {\n  \"cart\" => \"You have {n, plural, one {# item} other {# items}} in your cart\"\n}\n",
-        );
-        assert!(
-            ts.contains("__selectPluralArm("),
-            "the plural dispatch should have been emitted: {ts}"
-        );
-        for helper in ["__selectPluralArm", "__formatIcuNumber"] {
-            assert!(
-                runtime_import_line(&ts).contains(helper),
-                "`{helper}` should be imported for a plural bundle: {ts}"
-            );
-        }
-        assert!(
-            !runtime_import_line(&ts).contains("__formatIcuDate"),
-            "no arm formats a date: {ts}"
-        );
-    }
-
-    /// A bundle with no ICU dispatch at all — a plain `{name}` placeholder goes
-    /// through `renderArg`, not a formatter.
-    #[test]
-    fn a_plain_placeholder_bundle_imports_no_icu_formatter() {
-        let ts =
-            emit_bundle("messages \"en\" @reference {\n  \"hello\" => \"Hello, {name}!\"\n}\n");
-        for helper in ICU_HELPERS {
-            assert!(
-                !runtime_import_line(&ts).contains(helper),
-                "`{helper}` must not be imported for a bundle with no ICU dispatch: {ts}"
-            );
-        }
-    }
-}
-
-/// #1832: the import collector reaches a match-arm guard, so a function named
-/// only in a guard is imported.
-#[cfg(test)]
-mod guard_import_tests {
-    use crate::testkit::emit_project;
-
-    #[test]
-    fn a_function_named_only_in_a_guard_is_imported() {
-        let out = emit_project(
-            &[
-                ("d/lim.bynk", "commons d.lim\n\nfn lim() -> Int { 9 }\n"),
-                (
-                    "d/app.bynk",
-                    "commons d.app\n\nuses d.lim\n\nfn g(n: Int) -> Int {\n  match n {\n    k if k > lim() => 1\n    _ => 0\n  }\n}\n",
-                ),
-            ],
-            bynk_check::project_model::BuildTarget::Bundle,
-        );
-        let app = out.text("d/app.ts");
-        assert!(
-            app.lines()
-                .any(|l| l.starts_with("import") && l.contains("lim") && l.contains("./lim.js")),
-            "{app}"
         );
     }
 }

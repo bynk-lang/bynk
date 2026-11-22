@@ -284,7 +284,6 @@ name = "bynk-emit"
 version = "0.640.41"
 dependencies = [
  "bynk-check",
- "bynk-driver",
  "bynk-model",
  "bynk-project",
  "bynk-syntax",
