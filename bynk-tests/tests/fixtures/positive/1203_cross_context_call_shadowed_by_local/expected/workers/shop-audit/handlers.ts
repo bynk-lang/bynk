@@ -4,8 +4,6 @@
 import { Ok, Err, type Result } from "../../__bynk_runtime/result.js";
 import type { __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary.js";
 
-import type * as shop_ledger from "../shop-ledger/handlers.js";
-
 export interface LocalLedger {
   readonly balance: number;
 }

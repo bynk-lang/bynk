@@ -6,8 +6,6 @@ import type { __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary
 import { __bynkCapabilityReply, __bynkCodecOption } from "../../__bynk_runtime/codec.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 
-import { Claim } from "../../bynk.js";
-
 import * as bynk from "../../bynk.js";
 
 export interface Receipt {

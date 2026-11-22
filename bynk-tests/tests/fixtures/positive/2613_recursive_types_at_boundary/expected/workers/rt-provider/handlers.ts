@@ -9,8 +9,6 @@ import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout,
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult } from "../../__bynk_runtime/agent.js";
 
 import { Dir as __CommonsDir, Expr as __CommonsExpr, Index as __CommonsIndex, Tree as __CommonsTree } from "../../rt/shapes.js";
-
-import * as bynk from "../../bynk.js";
 import { __serialise_Dir, __deserialise_Dir, __serialise_Expr, __deserialise_Expr, __serialise_Index, __deserialise_Index, __serialise_Stmt, __deserialise_Stmt, __serialise_Tree, __deserialise_Tree } from "../../rt/shapes.js";
 
 export type Dir = __CommonsDir & { readonly __ctxBrand?: "rt.provider" };

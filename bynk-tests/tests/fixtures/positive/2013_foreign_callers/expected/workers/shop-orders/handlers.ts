@@ -4,8 +4,6 @@
 import { Ok, Err, type Result } from "../../__bynk_runtime/result.js";
 import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService } from "../../__bynk_runtime/boundary.js";
 
-import type * as shop_clock from "../shop-clock/handlers.js";
-
 export const status = {
   async call(id: string, deps: { who: { tag: "Caller", identity: string } | { tag: "Legacy" } | { tag: "Ledger" } }): globalThis.Promise<Result<string, string>> {
     switch (deps.who.tag) {

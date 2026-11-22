@@ -3,7 +3,6 @@
 
 import * as commerce_notifications from "./commerce/notifications.js";
 import * as commerce_order from "./commerce/order.js";
-import * as bynk__binding from "./bynk-cloudflare.js";
 
 export function composeApp() {
   const commerce_orderDeps = { __eventsDispatch: async (events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number } }>) => { for (const ev of events) { switch (ev.type) { case "PaymentConfirmed": { try { await commerce_notifications.OnPayment.event(ev.payload as any, ev.envelope, commerce_notificationsDeps); } catch (e) { globalThis.console.error("EventsFanout delivery failed", { event: ev.type, service: "OnPayment", error: String(e) }); } break; } } } } };

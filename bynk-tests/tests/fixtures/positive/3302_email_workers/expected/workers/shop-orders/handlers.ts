@@ -4,8 +4,6 @@
 import { Some } from "../../__bynk_runtime/result.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 
-import { EmailMessage } from "../../bynk/cloudflare.js";
-
 import * as bynk_cloudflare from "../../bynk/cloudflare.js";
 
 export type Mail = bynk_cloudflare.Email;

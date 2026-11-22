@@ -4,7 +4,7 @@
 import { Some, None, type Option } from "../../__bynk_runtime/result.js";
 import { __bynkBytesDecodeUtf8 } from "../../__bynk_runtime/bytes.js";
 
-import { FetchOptions, Method, Redirect, Request } from "../../bynk.js";
+import { Method, Redirect } from "../../bynk.js";
 
 import * as bynk from "../../bynk.js";
 

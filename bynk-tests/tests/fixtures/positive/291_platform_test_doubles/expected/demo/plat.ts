@@ -5,7 +5,7 @@ import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime
 import type { __JsonValue, __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { __bynkCapabilityReply } from "../__bynk_runtime/codec.js";
 
-import { Method, Request } from "../bynk.js";
+import { Method } from "../bynk.js";
 
 import * as bynk from "../bynk.js";
 import * as bynk_cloudflare from "../bynk/cloudflare.js";

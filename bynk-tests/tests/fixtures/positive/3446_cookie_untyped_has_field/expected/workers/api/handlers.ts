@@ -5,8 +5,6 @@ import { Ok, Err, Some, type Result } from "../../__bynk_runtime/result.js";
 import type { __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 
-import { Cookie } from "../../bynk.js";
-
 export type Theme =
     { readonly tag: "Light" }
   | { readonly tag: "Dark" };

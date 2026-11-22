@@ -5,7 +5,6 @@ import { Ok, Err } from "../../../__bynk_runtime/result.js";
 import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService } from "../../../__bynk_runtime/boundary.js";
 
 import type * as shop_clock from "../../shop-clock/handlers.js";
-import type * as shop_payment from "../../shop-payment/handlers.js";
 
 export const refund = {
   async call(qty: number, deps: { Clock: shop_clock.Clock; env: { SHOP_PAYMENT: __ServiceBinding } }): globalThis.Promise<boolean> {

@@ -5,7 +5,7 @@ import { None, type Option } from "../../__bynk_runtime/result.js";
 import { __bynkBytesDecodeUtf8 } from "../../__bynk_runtime/bytes.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 
-import { Method, Request } from "../../bynk.js";
+import { Method } from "../../bynk.js";
 
 import * as bynk_cloudflare from "../../bynk/cloudflare.js";
 

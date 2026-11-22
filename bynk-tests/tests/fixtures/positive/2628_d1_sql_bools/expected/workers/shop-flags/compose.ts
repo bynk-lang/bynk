@@ -3,7 +3,6 @@
 
 import type { Option } from "../../__bynk_runtime/result.js";
 import type { __D1Database } from "../../__bynk_runtime/storage.js";
-import type { __ServiceBinding } from "../../__bynk_runtime/boundary.js";
 import * as handlers from "./handlers.js";
 import * as bynk_cloudflare__binding from "../../bynk/cloudflare.binding.js";
 

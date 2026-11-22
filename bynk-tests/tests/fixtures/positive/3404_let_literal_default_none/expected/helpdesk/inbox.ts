@@ -3,7 +3,7 @@
 
 import { Some } from "../__bynk_runtime/result.js";
 
-import { EmailReply, EmailVerdict, InboundEmail } from "../bynk/cloudflare.js";
+import { EmailVerdict, InboundEmail } from "../bynk/cloudflare.js";
 
 export function triage(mail: InboundEmail, verified: boolean): EmailVerdict {
   return (verified ? EmailVerdict.Reply({ text: Some("Thanks"), subject: { tag: "None" as const }, html: { tag: "None" as const } }) : EmailVerdict.Accept);

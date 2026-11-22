@@ -2,11 +2,8 @@
 // context app.greet
 
 import { message, render } from "../bynk/locale.js";
-import { Message as __CommonsMessage } from "../bynk/locale/types.js";
 
 import * as bynk from "../bynk.js";
-
-export type Message = __CommonsMessage & { readonly __ctxBrand?: "app.greet" };
 
 export const greeting = {
   async call(deps: { Locale: bynk.Locale }): globalThis.Promise<string> {

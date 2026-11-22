@@ -2,8 +2,6 @@
 // context rec.provider
 
 import { Tree as __CommonsTree } from "../../rec/shapes.js";
-
-import * as bynk from "../../bynk.js";
 import { __serialise_Tree, __deserialise_Tree } from "../../rec/shapes.js";
 
 export type Tree = __CommonsTree & { readonly __ctxBrand?: "rec.provider" };

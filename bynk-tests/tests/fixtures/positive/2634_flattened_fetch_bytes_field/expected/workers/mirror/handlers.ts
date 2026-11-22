@@ -3,7 +3,7 @@
 
 import { None } from "../../__bynk_runtime/result.js";
 
-import { FetchOptions, Method, Redirect, Request } from "../../bynk.js";
+import { Method, Redirect } from "../../bynk.js";
 
 import * as bynk from "../../bynk.js";
 

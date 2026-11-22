@@ -4,8 +4,6 @@
 import { Ok, Err, type Result } from "../../__bynk_runtime/result.js";
 import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService } from "../../__bynk_runtime/boundary.js";
 
-import type * as club_roster from "../club-roster/handlers.js";
-
 export const count = {
   async call(deps: { env: { CLUB_ROSTER: __ServiceBinding } }): globalThis.Promise<number> {
     const all = await __callService(deps.env.CLUB_ROSTER, "members", __serialise_Set_String(new globalThis.Set<string>(["cy", "ada"])), __deserialise_Set_String, "club.front", "a47af6d47d577cc2", deps.env, "club.roster");

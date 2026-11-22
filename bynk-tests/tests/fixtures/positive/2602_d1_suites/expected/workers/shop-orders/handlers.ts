@@ -7,7 +7,7 @@ import type { DecodeError } from "../../__bynk_runtime/errors.js";
 import type { __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 
-import { SqlError, SqlRun, SqlStatement, SqlValue } from "../../bynk/cloudflare.js";
+import { SqlError, SqlRun, SqlValue } from "../../bynk/cloudflare.js";
 
 import * as bynk_cloudflare from "../../bynk/cloudflare.js";
 import { __serialise_SqlError, __deserialise_SqlError, __serialise_SqlRun, __deserialise_SqlRun } from "../../bynk/cloudflare.js";

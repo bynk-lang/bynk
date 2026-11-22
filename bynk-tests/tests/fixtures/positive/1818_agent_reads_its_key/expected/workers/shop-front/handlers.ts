@@ -4,8 +4,6 @@
 import { Ok, Err } from "../../__bynk_runtime/result.js";
 import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService } from "../../__bynk_runtime/boundary.js";
 
-import type * as shop_one from "../shop-one/handlers.js";
-
 export const label = {
   async call(id: string, deps: { env: { SHOP_ONE: __ServiceBinding } }): globalThis.Promise<string> {
     return __callService(deps.env.SHOP_ONE, "label", id as __JsonValue, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j), "shop.front", "f639af6dc8c31504", deps.env, "shop.one");

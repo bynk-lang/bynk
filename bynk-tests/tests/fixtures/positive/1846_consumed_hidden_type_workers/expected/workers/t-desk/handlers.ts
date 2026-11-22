@@ -6,7 +6,7 @@ import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService } from "../../__bynk_runtime/boundary.js";
 
 import type * as t_vault from "../t-vault/handlers.js";
-import { __serialise_CurrencyCode, __deserialise_CurrencyCode, __serialise_Money, __deserialise_Money } from "../../t/money.js";
+import { __serialise_Money, __deserialise_Money } from "../../t/money.js";
 
 export type Code = string & { readonly __brand: "t.desk.Code" };
 

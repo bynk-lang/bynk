@@ -9,8 +9,6 @@ import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout,
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult, __dispatchToEventsFanout } from "../../__bynk_runtime/agent.js";
 
-import * as bynk from "../../bynk.js";
-
 export interface Bumped {
   readonly n: number;
 }

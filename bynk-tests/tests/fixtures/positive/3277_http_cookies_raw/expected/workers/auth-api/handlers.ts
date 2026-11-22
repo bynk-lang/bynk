@@ -5,8 +5,6 @@ import { Ok, Err, type Result } from "../../__bynk_runtime/result.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 
-import { Cookie } from "../../bynk.js";
-
 export type Token = string & { readonly __brand: "auth.api.Token" };
 
 export const Token = {

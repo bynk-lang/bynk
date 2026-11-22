@@ -3,7 +3,7 @@
 
 import { Some, None, type Option } from "../__bynk_runtime/result.js";
 
-import { R2Condition, R2Object, R2Put } from "../bynk/cloudflare.js";
+import { R2Condition, R2Object } from "../bynk/cloudflare.js";
 
 import * as bynk_cloudflare from "../bynk/cloudflare.js";
 

@@ -4,8 +4,6 @@
 import { Some, None } from "../../__bynk_runtime/result.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 
-import { DataPoint } from "../../bynk/cloudflare.js";
-
 import * as bynk_cloudflare from "../../bynk/cloudflare.js";
 
 /**

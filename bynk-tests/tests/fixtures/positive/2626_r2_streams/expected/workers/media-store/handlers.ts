@@ -6,7 +6,7 @@ import { __bynkBytesDecodeUtf8, __bynkBytesConcat } from "../../__bynk_runtime/b
 import type { __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 
-import { R2Condition, R2Put, R2Upload, R2UploadOptions } from "../../bynk/cloudflare.js";
+import { R2Condition } from "../../bynk/cloudflare.js";
 
 import * as bynk_cloudflare from "../../bynk/cloudflare.js";
 

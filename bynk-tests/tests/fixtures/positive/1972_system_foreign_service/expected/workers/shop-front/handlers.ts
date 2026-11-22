@@ -4,8 +4,6 @@
 import { Ok, Err } from "../../__bynk_runtime/result.js";
 import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService } from "../../__bynk_runtime/boundary.js";
 
-import type * as shop_billing from "../shop-billing/handlers.js";
-
 export const close = {
   async call(id: string, deps: { env: { SHOP_BILLING: __ServiceBinding } }): globalThis.Promise<number> {
     return __callService(deps.env.SHOP_BILLING, "settle", id as __JsonValue, (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j), "shop.front", "cfa1f336e5dedf97", deps.env, "shop.billing");

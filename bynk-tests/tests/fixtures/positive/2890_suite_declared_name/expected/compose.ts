@@ -2,7 +2,6 @@
 // composition root
 
 import * as app from "./app.js";
-import * as lib from "./lib.js";
 import * as bynk_crypto__binding from "./bynk/crypto-cloudflare.binding.js";
 
 export function composeApp() {

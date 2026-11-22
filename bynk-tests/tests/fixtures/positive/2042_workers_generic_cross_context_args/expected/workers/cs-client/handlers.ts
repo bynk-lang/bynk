@@ -5,8 +5,6 @@ import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runt
 import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService } from "../../__bynk_runtime/boundary.js";
 
 import { Line as __CommonsLine, Page as __CommonsPage } from "../../cs/values.js";
-
-import type * as cs_store from "../cs-store/handlers.js";
 import { __serialise_Line, __deserialise_Line, __serialise_Qty, __deserialise_Qty } from "../../cs/values.js";
 
 export type Line = __CommonsLine & { readonly __ctxBrand?: "cs.client" };

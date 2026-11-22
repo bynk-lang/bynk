@@ -4,7 +4,7 @@
 import { Some } from "../__bynk_runtime/result.js";
 import { __bynkEq } from "../__bynk_runtime/equality.js";
 
-import { DmarcVerdict, EmailReply, EmailVerdict, InboundEmail } from "../bynk/cloudflare.js";
+import { DmarcVerdict, EmailVerdict, InboundEmail } from "../bynk/cloudflare.js";
 
 export function triage(mail: InboundEmail, dmarc: DmarcVerdict): EmailVerdict {
   return (__bynkEq(dmarc, DmarcVerdict.DmarcPass) ? EmailVerdict.Reply({ text: Some("Thanks"), subject: { tag: "None" as const }, html: { tag: "None" as const } }) : EmailVerdict.Accept);

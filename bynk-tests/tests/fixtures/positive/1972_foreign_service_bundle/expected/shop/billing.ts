@@ -3,7 +3,7 @@
 
 import { Some, None } from "../__bynk_runtime/result.js";
 
-import { Method, Request } from "../bynk.js";
+import { Method } from "../bynk.js";
 
 import * as bynk_cloudflare from "../bynk/cloudflare.js";
 

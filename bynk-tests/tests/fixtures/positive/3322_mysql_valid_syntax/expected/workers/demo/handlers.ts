@@ -4,7 +4,7 @@
 import { Ok, Err, type Result } from "../../__bynk_runtime/result.js";
 import type { __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary.js";
 
-import { MySqlError, MySqlRun, MySqlStatement, MySqlValue } from "../../bynk/cloudflare.js";
+import { MySqlError, MySqlRun, MySqlValue } from "../../bynk/cloudflare.js";
 
 import * as bynk_cloudflare from "../../bynk/cloudflare.js";
 import { __serialise_MySqlError, __deserialise_MySqlError, __serialise_MySqlRun, __deserialise_MySqlRun } from "../../bynk/cloudflare.js";

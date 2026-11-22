@@ -5,8 +5,6 @@ import { Ok, Err, Some, None, type Result } from "../../__bynk_runtime/result.js
 import type { __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 
-import { DataPoint } from "../../bynk/cloudflare.js";
-
 import * as bynk_cloudflare from "../../bynk/cloudflare.js";
 
 export type Signups = bynk_cloudflare.Analytics;

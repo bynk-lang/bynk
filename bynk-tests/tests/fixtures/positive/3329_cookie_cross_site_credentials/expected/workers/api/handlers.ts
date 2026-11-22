@@ -4,7 +4,7 @@
 import { None } from "../../__bynk_runtime/result.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 
-import { Cookie, SameSite } from "../../bynk.js";
+import { SameSite } from "../../bynk.js";
 
 export const api = {
   async http_POST_login(deps: {}): globalThis.Promise<HttpResult<string>> {

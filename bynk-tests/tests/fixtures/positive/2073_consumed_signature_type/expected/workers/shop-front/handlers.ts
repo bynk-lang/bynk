@@ -4,12 +4,11 @@
 import { Ok, Err, type Result } from "../../__bynk_runtime/result.js";
 import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService } from "../../__bynk_runtime/boundary.js";
 
-import { type Order, type Region } from "../shop-order/handlers.js";
+import { type Region } from "../shop-order/handlers.js";
 
-import type * as shop_ledger from "../shop-ledger/handlers.js";
 import type * as shop_order from "../shop-order/handlers.js";
 
-export { type Order, type Region };
+export { type Region };
 
 export const check = {
   async call(id: string, deps: { env: { SHOP_LEDGER: __ServiceBinding } }): globalThis.Promise<boolean> {

@@ -2,7 +2,6 @@
 // composition root
 
 import * as shop_backend from "./shop/backend.js";
-import * as bynk__binding from "./bynk-cloudflare.js";
 import * as bynk_cloudflare__binding from "./bynk/cloudflare.binding.js";
 
 export function composeApp(env?: unknown) {

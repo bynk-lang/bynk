@@ -4,12 +4,8 @@
 import { Ok, Err } from "../../__bynk_runtime/result.js";
 import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService } from "../../__bynk_runtime/boundary.js";
 
-import { Amount as __CommonsAmount } from "../../lib/money.js";
-
 import type * as shop_quotes from "../shop-quotes/handlers.js";
-import { __serialise_Amount, __deserialise_Amount, __serialise_Box, __deserialise_Box } from "../../lib/money.js";
-
-export type Amount = __CommonsAmount & { readonly __ctxBrand?: "shop.till" };
+import { __serialise_Amount, __deserialise_Amount, __deserialise_Box } from "../../lib/money.js";
 
 export const total = {
   async call(deps: { env: { SHOP_QUOTES: __ServiceBinding } }): globalThis.Promise<number> {

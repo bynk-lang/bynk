@@ -6,8 +6,6 @@ import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService } from "../../__bynk_runtime/boundary.js";
 
 import { Cents as __CommonsCents } from "../../lib/money.js";
-
-import type * as boundary_provider from "../boundary-provider/handlers.js";
 import { __serialise_Cents, __deserialise_Cents } from "../../lib/money.js";
 
 export type Cents = __CommonsCents & { readonly __ctxBrand?: "boundary.consumer" };

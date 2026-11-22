@@ -3,8 +3,6 @@
 
 import { None, type Option } from "../../__bynk_runtime/result.js";
 
-import * as bynk from "../../bynk.js";
-
 export type Region =
     { readonly tag: "Domestic" }
   | { readonly tag: "International" };

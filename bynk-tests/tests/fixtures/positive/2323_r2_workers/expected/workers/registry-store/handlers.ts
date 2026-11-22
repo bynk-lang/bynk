@@ -10,7 +10,7 @@ import { __attachLazy } from "../../__bynk_runtime/lazy.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult } from "../../__bynk_runtime/agent.js";
 
-import { R2Condition, R2Object, R2Put } from "../../bynk/cloudflare.js";
+import { R2Condition, R2Object } from "../../bynk/cloudflare.js";
 import * as bynk_cloudflare__binding from "../../bynk/cloudflare.binding.js";
 
 import * as bynk_cloudflare from "../../bynk/cloudflare.js";
