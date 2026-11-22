@@ -2038,6 +2038,10 @@ pub enum TsArrowBody {
     /// witness decoder have always had, and it records no source-map checkpoints. Unlike
     /// [`TsArrowBody::Block`], which holds statements that each print on one line, it admits any
     /// statement and never falls back to the multi-line form.
+    ///
+    /// **It trims every printed line**, so a statement that holds a template literal spanning
+    /// lines (or any text with significant leading whitespace) would be rewritten. A debug build
+    /// asserts that no statement prints one.
     Flat(Vec<TsStmt>),
 }
 

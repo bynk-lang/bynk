@@ -26,7 +26,7 @@ export const Note = {
 };
 
 export const api = {
-  async http_GET_notes_Param_id(id: string, deps: { who: { tag: "User", identity: UserId } | { tag: "Visitor" } }): globalThis.Promise<HttpResult<Note>> {
+  async http_GET_notes_Param_id(id: string, deps: { who: { tag: "User"; identity: UserId } | { tag: "Visitor" } }): globalThis.Promise<HttpResult<Note>> {
     switch (deps.who.tag) {
       case "User": {
         const u = deps.who.identity;
