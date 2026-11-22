@@ -25,16 +25,17 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::{self, IsTerminal, Write};
 use std::path::Path;
-use std::process::{ExitCode, Stdio};
+use std::process::ExitCode;
 
 use bynk_check::contract_compat::{Compatibility, ServiceShape, check_call};
 use serde::{Deserialize, Serialize};
 
-use crate::cloudflare::{CloudflareApi, VectorizeOp, Wrangler};
+use crate::cloudflare::{CloudflareApi, Exit, Failure, PushCall, VectorizeOp, Wrangler};
 use crate::doctor::{self, Capability, Context, DoctorOptions, Report};
-use crate::probe::{self, Provenance, Toolbox};
+#[cfg(test)]
+use crate::probe::Provenance;
+use crate::probe::{self, Toolbox};
 use crate::report::{self, Format};
-use crate::shell::exit_status_byte;
 use crate::workers;
 
 const LOCK_FILE: &str = "bynk.deploy.lock";

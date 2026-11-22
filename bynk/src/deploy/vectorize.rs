@@ -645,11 +645,7 @@ pub(crate) fn provision_vectorize_indexes_paced(
 ) -> Result<(), DeployFailure> {
     let project = BTreeMap::new();
     let site = Site {
-        tools: Tools {
-            api,
-            provenance: &Provenance::Missing,
-            project_root,
-        },
+        tools: Tools { api, project_root },
         environment,
         worker,
         project: &project,

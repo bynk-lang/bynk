@@ -547,7 +547,6 @@ const SPECIAL: &[(&str, &str, Script)] = &[
 /// What an operation of the rest of wrangler (1D.3b) runs with: the account operations, wrangler
 /// as the run resolved it, and the scratch project root.
 struct Cx<'a> {
-    #[allow(dead_code)]
     api: &'a dyn CloudflareApi,
     provenance: &'a Provenance,
     root: &'a Path,
@@ -568,18 +567,11 @@ fn failed<T: Debug>(result: Result<T, DeployFailure>) -> String {
 /// `rollback` and the migration sweep's secrets, pinned before they move.
 const OPERATIONS_B: &[(&str, RunB)] = &[
     ("deploy", |c| {
-        failed(push(
-            c.provenance,
-            c.root,
-            "api",
-            &[],
-            "default",
-            (None, false),
-        ))
+        failed(push(c.api, c.root, "api", &[], "default", (None, false)))
     }),
     ("deploy (--env staging, with arguments)", |c| {
         failed(push(
-            c.provenance,
+            c.api,
             c.root,
             "api",
             &["--var".into(), "A:1".into()],
@@ -591,7 +583,7 @@ const OPERATIONS_B: &[(&str, RunB)] = &[
         let file = c.root.join("secrets.json");
         std::fs::write(&file, "{}").unwrap();
         failed(push(
-            c.provenance,
+            c.api,
             c.root,
             "api",
             &[],
@@ -600,31 +592,20 @@ const OPERATIONS_B: &[(&str, RunB)] = &[
         ))
     }),
     ("triggers deploy", |c| {
-        failed(deploy_forgiven_triggers(
-            c.provenance,
-            c.root,
-            "api",
-            "staging",
-        ))
+        failed(deploy_forgiven_triggers(c.api, c.root, "api", "staging"))
     }),
-    ("whoami", |c| format!("{:?}", whoami(c.provenance))),
+    ("whoami", |c| format!("{:?}", whoami(c.api))),
     ("deployments list", |c| {
-        format!("{:?}", worker_presence(c.provenance, "billing", c.root))
+        format!("{:?}", worker_presence(c.api, "billing"))
     }),
     ("secret list (default)", |c| {
-        format!("{:?}", list_secrets(c.provenance, c.root, "default"))
+        format!("{:?}", list_secrets(c.api, c.root, "default"))
     }),
     ("secret list (--env staging)", |c| {
-        format!("{:?}", list_secrets(c.provenance, c.root, "staging"))
+        format!("{:?}", list_secrets(c.api, c.root, "staging"))
     }),
     ("secret put", |c| {
-        shown(set_secret(
-            c.provenance,
-            c.root,
-            "TOKEN",
-            "s3cret",
-            "staging",
-        ))
+        shown(set_secret(c.api, c.root, "TOKEN", "s3cret", "staging"))
     }),
     ("rollback", |c| {
         let account = crate::deploy::revert::LiveAccount {

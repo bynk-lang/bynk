@@ -99,7 +99,7 @@ pub fn run(tb: &dyn Toolbox, project_root: &Path, opts: &TailOptions) -> ExitCod
     };
     let deployed = crate::deploy::deployed_worker_name(&opts.environment, &worker);
 
-    let Some(mut cmd) = workers::wrangler_command(&probe.provenance, "tail") else {
+    let Some(mut cmd) = crate::cloudflare::spawn_command(&probe.provenance, "tail") else {
         emsg!("bynk: error: wrangler not found (run `bynk doctor --only deploy`)");
         return ExitCode::FAILURE;
     };

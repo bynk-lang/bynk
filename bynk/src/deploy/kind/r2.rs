@@ -606,7 +606,6 @@ mod tests {
                 live: (),
                 tools: Tools {
                     api: &Wrangler::new(&provenance, Path::new("/nonexistent")),
-                    provenance: &provenance,
                     project_root: Path::new("/nonexistent"),
                 },
             },

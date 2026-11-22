@@ -440,7 +440,6 @@ fn apply(environment: &str, fail_call: Option<usize>, fail_write: Option<usize>)
                 &mut RunCx {
                     tools: Tools {
                         api: &Wrangler::new(&provenance, &scratch.root),
-                        provenance: &provenance,
                         project_root: &scratch.root,
                     },
                     workers_dir: &workers_dir,
@@ -483,7 +482,6 @@ fn apply(environment: &str, fail_call: Option<usize>, fail_write: Option<usize>)
         prune_orphans(
             Tools {
                 api: &Wrangler::new(&provenance, &scratch.root),
-                provenance: &provenance,
                 project_root: &scratch.root,
             },
             &mut writer,

@@ -876,7 +876,6 @@ fn deploy(
     let api = Wrangler::new(&probe.provenance, project_root);
     let tools = Tools {
         api: &api,
-        provenance: &probe.provenance,
         project_root,
     };
     // Slice 5, DECISION B: the account's live KV ids, read once per run.
@@ -908,7 +907,7 @@ fn deploy(
         &KeysCx {
             order: &order,
             resources: &resources,
-            provenance: &probe.provenance,
+            api: &api,
             workers_dir: &workers_dir,
             lock: &lock,
             opts,
@@ -3451,23 +3450,43 @@ pub(crate) mod tests {
 
     /// Only Cloudflare's "Worker not found" codes read as missing.
     #[test]
-    fn classify_worker_listing_reads_only_not_found_as_missing() {
-        assert_eq!(classify_worker_listing(true, ""), WorkerPresence::Present);
+    fn worker_presence_reads_only_not_found_as_missing() {
+        use crate::cloudflare::fake::{Recording, failed};
+        let answering = |stderr: &'static str| {
+            Recording::new(move |op| {
+                if stderr.is_empty() {
+                    Ok(String::new())
+                } else {
+                    Err(failed(op, "", stderr))
+                }
+            })
+        };
         assert_eq!(
-            classify_worker_listing(
-                false,
-                "A request to the Cloudflare API (/accounts/x/workers/scripts/legacy-billing/deployments) failed.\n  This Worker does not exist on your account. [code: 10007]"
+            worker_presence(&answering(""), "billing"),
+            WorkerPresence::Present
+        );
+        assert_eq!(
+            worker_presence(
+                &answering(
+                    "A request to the Cloudflare API (/accounts/x/workers/scripts/legacy-billing/deployments) failed.\n  This Worker does not exist on your account. [code: 10007]"
+                ),
+                "billing"
             ),
             WorkerPresence::Missing
         );
         assert_eq!(
-            classify_worker_listing(false, "… [code: 10090]"),
+            worker_presence(&answering("… [code: 10090]"), "billing"),
             WorkerPresence::Missing
         );
         assert!(matches!(
-            classify_worker_listing(false, "fetch failed"),
+            worker_presence(&answering("fetch failed"), "billing"),
             WorkerPresence::Unknown(_)
         ));
+        let missing = Recording::new(|op| Err(crate::cloudflare::WranglerError::missing(op)));
+        assert_eq!(
+            worker_presence(&missing, "billing"),
+            WorkerPresence::Unknown("wrangler not found".into())
+        );
     }
 
     // ---- v0.177 (#643): the deploy-time contract-skew gate ----

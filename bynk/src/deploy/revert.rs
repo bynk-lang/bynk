@@ -1134,26 +1134,10 @@ impl Account for LiveAccount<'_> {
     }
 
     fn rollback(&self, script: &str, version: &str) -> Result<(), String> {
-        let Some(mut command) = workers::wrangler_command(self.provenance, "rollback") else {
-            return Err("wrangler not found".to_string());
-        };
-        let output = command
-            .args([
-                version,
-                "--name",
-                script,
-                "--message",
-                "bynk revert",
-                "--yes",
-            ])
-            .current_dir(self.root)
-            .output()
-            .map_err(|e| e.to_string())?;
-        if output.status.success() {
-            Ok(())
-        } else {
-            Err(String::from_utf8_lossy(&output.stderr).trim().to_string())
-        }
+        // What wrangler wrote to stderr: `rollback` reports there alone.
+        Wrangler::new(self.provenance, self.root)
+            .rollback(script, version)
+            .map_err(|e| e.stderr_only())
     }
 }
 

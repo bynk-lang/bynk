@@ -709,7 +709,7 @@ pub(crate) struct Secrets<'a> {
 /// except the advisory presence read.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn prepare_bindings(
-    provenance: &Provenance,
+    api: &dyn CloudflareApi,
     worker_dir: &Path,
     worker: &str,
     declared: &Resources,
@@ -742,7 +742,7 @@ pub(crate) fn prepare_bindings(
     // before the loop, so this reuses that answer.
     let present = match secrets.listed.get(worker) {
         Some(listed) => listed.clone(),
-        None => list_secrets(provenance, worker_dir, environment),
+        None => list_secrets(api, worker_dir, environment),
     };
     let mut prepared = Vec::new();
     // I2 (#1971): this Worker's end of each edge being keyed, first, so a
@@ -855,14 +855,14 @@ pub(crate) fn binding_put_failure(
 /// it: everything that can fail for a reason the user can fix — a missing value,
 /// a malformed file — has already happened by the time this runs.
 pub(crate) fn apply_secrets(
-    provenance: &Provenance,
+    api: &dyn CloudflareApi,
     worker_dir: &Path,
     worker: &str,
     prepared: &[(String, String)],
     environment: &str,
 ) -> Result<(), DeployFailure> {
     for (binding_name, value) in prepared {
-        set_secret(provenance, worker_dir, binding_name, value, environment).map_err(|e| {
+        set_secret(api, worker_dir, binding_name, value, environment).map_err(|e| {
             DeployFailure::driver(binding_put_failure(environment, worker, binding_name, &e))
         })?;
         eprintln!(

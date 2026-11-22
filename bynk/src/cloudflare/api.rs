@@ -3,7 +3,7 @@
 
 use std::path::Path;
 
-use super::error::{OpKind, WranglerError};
+use super::error::{Exit, OpKind, WranglerError};
 
 /// Every account operation the resource kinds drive. Today each is a wrangler call
 /// ([`super::Wrangler`]); 1D.4 moves them to REST one kind at a time, behind these same methods.
@@ -41,6 +41,89 @@ pub(crate) trait CloudflareApi {
     fn r2_create(&self, name: &str, jurisdiction: Option<&str>) -> Result<(), WranglerError>;
     /// One of the six Vectorize calls: what it printed.
     fn vectorize(&self, op: VectorizeOp<'_>) -> Result<String, WranglerError>;
+
+    // The Worker (1D.3b).
+
+    /// `deploy [args…] [--secrets-file <f>] [--env <e>]`, from the Worker's directory: how it
+    /// ended, and what it wrote to stderr when that was teed. The process control is the
+    /// adapter's: stderr is copied through and kept when `tee` asks, and with a secrets file
+    /// SIGINT and SIGTERM are held until wrangler exits, a SIGTERM being passed on to it, so the
+    /// caller can always remove the file. The caller decides what the exit means.
+    fn push(&self, call: PushCall<'_>) -> Result<PushRun, WranglerError>;
+    /// `triggers deploy [--env <e>]`, from the Worker's directory.
+    fn triggers_deploy(&self, worker_dir: &Path, environment: &str) -> Result<(), WranglerError>;
+    /// `whoami`: `Ok` when wrangler is authenticated. Answered by the exit code alone.
+    fn whoami(&self) -> Result<(), WranglerError>;
+    /// `deployments list --name <name> --json`: `Ok` when the account has the Worker; the
+    /// caller reads a missing one from the error ([`WranglerError::worker_not_found`]).
+    fn worker_deployments(&self, name: &str) -> Result<(), WranglerError>;
+    /// `rollback <version> --name <script> --message "bynk revert" --yes`.
+    fn rollback(&self, script: &str, version: &str) -> Result<(), WranglerError>;
+
+    // Secrets.
+
+    /// `secret list --format json [--env <e>]`, from the Worker's directory: what it printed.
+    fn secret_list(&self, worker_dir: &Path, environment: &str) -> Result<String, WranglerError>;
+    /// `secret put <name> [--env <e>]`, from the Worker's directory, the value on stdin and never
+    /// in argv (ADR 0195 D1).
+    fn secret_put(
+        &self,
+        worker_dir: &Path,
+        name: &str,
+        value: &str,
+        environment: &str,
+    ) -> Result<(), WranglerError>;
+    /// `secret <verb> <name> --name <script>` against a deployed Worker by name, run in `dir`
+    /// (an empty directory, so no project config is read), `stdin` on stdin.
+    fn named_secret(
+        &self,
+        dir: &Path,
+        verb: &str,
+        script: &str,
+        name: &str,
+        stdin: &str,
+    ) -> Result<(), WranglerError>;
+
+    // `bynk dev`'s local state.
+
+    /// `d1 migrations apply <binding> --local [--persist-to …]`, from the Worker's directory,
+    /// stdin closed.
+    fn d1_migrations_apply_local(
+        &self,
+        worker_dir: &Path,
+        binding: &str,
+        persist: &[String],
+    ) -> Result<(), WranglerError>;
+    /// `secrets-store secret list <store> [--persist-to …]`, from the Worker's directory, stdin
+    /// closed: what it printed.
+    fn secrets_store_list_local(
+        &self,
+        worker_dir: &Path,
+        store: &str,
+        persist: &[String],
+    ) -> Result<String, WranglerError>;
+}
+
+/// One `wrangler deploy`.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct PushCall<'a> {
+    pub(crate) worker_dir: &'a Path,
+    pub(crate) args: &'a [String],
+    /// A first deploy's secrets, uploaded with the Worker (#2055).
+    pub(crate) secrets_file: Option<&'a Path>,
+    pub(crate) environment: &'a str,
+    /// Copy wrangler's stderr through and keep it (#3562's watch of a first deploy).
+    pub(crate) tee: bool,
+}
+
+/// How a `wrangler deploy` ended.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct PushRun {
+    pub(crate) exit: Exit,
+    /// What wrangler wrote to stderr, when the call teed it.
+    pub(crate) said: String,
+    /// A signal `bynk` received while it held them for a secrets-file upload.
+    pub(crate) signalled: Option<i32>,
 }
 
 /// The six Vectorize calls.
@@ -101,6 +184,51 @@ pub(crate) enum Op<'a> {
         jurisdiction: Option<&'a str>,
     },
     Vectorize(VectorizeOp<'a>),
+    Push {
+        args: &'a [String],
+        secrets_file: Option<&'a Path>,
+        environment: &'a str,
+    },
+    TriggersDeploy {
+        environment: &'a str,
+    },
+    Whoami,
+    WorkerDeployments {
+        name: &'a str,
+    },
+    Rollback {
+        script: &'a str,
+        version: &'a str,
+    },
+    SecretList {
+        environment: &'a str,
+    },
+    SecretPut {
+        name: &'a str,
+        environment: &'a str,
+    },
+    NamedSecret {
+        verb: &'a str,
+        script: &'a str,
+        name: &'a str,
+    },
+    D1MigrationsApplyLocal {
+        binding: &'a str,
+        persist: &'a [String],
+    },
+    SecretsStoreListLocal {
+        store: &'a str,
+        persist: &'a [String],
+    },
+}
+
+/// `--env <environment>` for a named environment; nothing for the default one.
+fn env_args(environment: &str) -> Vec<String> {
+    if environment == "default" {
+        Vec::new()
+    } else {
+        vec!["--env".to_string(), environment.to_string()]
+    }
 }
 
 impl Op<'_> {
@@ -176,6 +304,61 @@ impl Op<'_> {
                 });
                 argv
             }
+            Op::Push {
+                args,
+                secrets_file,
+                environment,
+            } => {
+                let mut argv = words(&["deploy"]);
+                argv.extend(args.iter().cloned());
+                if let Some(file) = secrets_file {
+                    argv.push("--secrets-file".to_string());
+                    argv.push(file.to_string_lossy().into_owned());
+                }
+                argv.extend(env_args(environment));
+                argv
+            }
+            Op::TriggersDeploy { environment } => {
+                let mut argv = words(&["triggers", "deploy"]);
+                argv.extend(env_args(environment));
+                argv
+            }
+            Op::Whoami => words(&["whoami"]),
+            Op::WorkerDeployments { name } => {
+                words(&["deployments", "list", "--name", name, "--json"])
+            }
+            Op::Rollback { script, version } => words(&[
+                "rollback",
+                version,
+                "--name",
+                script,
+                "--message",
+                "bynk revert",
+                "--yes",
+            ]),
+            Op::SecretList { environment } => {
+                let mut argv = words(&["secret", "list", "--format", "json"]);
+                argv.extend(env_args(environment));
+                argv
+            }
+            Op::SecretPut { name, environment } => {
+                let mut argv = words(&["secret", "put", name]);
+                argv.extend(env_args(environment));
+                argv
+            }
+            Op::NamedSecret { verb, script, name } => {
+                words(&["secret", verb, name, "--name", script])
+            }
+            Op::D1MigrationsApplyLocal { binding, persist } => {
+                let mut argv = words(&["d1", "migrations", "apply", binding, "--local"]);
+                argv.extend(persist.iter().cloned());
+                argv
+            }
+            Op::SecretsStoreListLocal { store, persist } => {
+                let mut argv = words(&["secrets-store", "secret", "list", store]);
+                argv.extend(persist.iter().cloned());
+                argv
+            }
         }
     }
 
@@ -201,6 +384,16 @@ impl Op<'_> {
                 OpKind::VectorizeCreateMetadataIndex
             }
             Op::Vectorize(VectorizeOp::Delete { .. }) => OpKind::VectorizeDelete,
+            Op::Push { .. } => OpKind::Push,
+            Op::TriggersDeploy { .. } => OpKind::TriggersDeploy,
+            Op::Whoami => OpKind::Whoami,
+            Op::WorkerDeployments { .. } => OpKind::WorkerDeployments,
+            Op::Rollback { .. } => OpKind::Rollback,
+            Op::SecretList { .. } => OpKind::SecretList,
+            Op::SecretPut { .. } => OpKind::SecretPut,
+            Op::NamedSecret { .. } => OpKind::NamedSecret,
+            Op::D1MigrationsApplyLocal { .. } => OpKind::D1MigrationsApplyLocal,
+            Op::SecretsStoreListLocal { .. } => OpKind::SecretsStoreListLocal,
         }
     }
 
@@ -288,6 +481,83 @@ mod tests {
             ),
         ];
         for (op, line) in cases {
+            assert_eq!(op.line(), *line);
+        }
+        let args = ["--var".to_string(), "A:1".to_string()];
+        let persist = ["--persist-to".to_string(), "state".to_string()];
+        let file = Path::new("/tmp/s/secrets.json");
+        let rest: &[(Op<'_>, &str)] = &[
+            (
+                Op::Push {
+                    args: &[],
+                    secrets_file: None,
+                    environment: "default",
+                },
+                "deploy",
+            ),
+            (
+                Op::Push {
+                    args: &args,
+                    secrets_file: Some(file),
+                    environment: "staging",
+                },
+                "deploy --var A:1 --secrets-file /tmp/s/secrets.json --env staging",
+            ),
+            (
+                Op::TriggersDeploy {
+                    environment: "staging",
+                },
+                "triggers deploy --env staging",
+            ),
+            (Op::Whoami, "whoami"),
+            (
+                Op::WorkerDeployments { name: "billing" },
+                "deployments list --name billing --json",
+            ),
+            (
+                Op::Rollback {
+                    script: "s",
+                    version: "v",
+                },
+                "rollback v --name s --message bynk revert --yes",
+            ),
+            (
+                Op::SecretList {
+                    environment: "default",
+                },
+                "secret list --format json",
+            ),
+            (
+                Op::SecretPut {
+                    name: "T",
+                    environment: "staging",
+                },
+                "secret put T --env staging",
+            ),
+            (
+                Op::NamedSecret {
+                    verb: "delete",
+                    script: "s",
+                    name: "K",
+                },
+                "secret delete K --name s",
+            ),
+            (
+                Op::D1MigrationsApplyLocal {
+                    binding: "DB",
+                    persist: &persist,
+                },
+                "d1 migrations apply DB --local --persist-to state",
+            ),
+            (
+                Op::SecretsStoreListLocal {
+                    store: "st",
+                    persist: &[],
+                },
+                "secrets-store secret list st",
+            ),
+        ];
+        for (op, line) in rest {
             assert_eq!(op.line(), *line);
         }
     }

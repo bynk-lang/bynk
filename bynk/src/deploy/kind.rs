@@ -229,15 +229,12 @@ pub(crate) struct OrphanCx<'l> {
     pub(crate) resources: &'l BTreeMap<String, Resources>,
 }
 
-/// The tools a kind's account calls go through: the account operations ([`CloudflareApi`], 1D.3a)
-/// and, until 1D.3b moves the rest behind them, what today's remaining wrangler calls take.
+/// The tools a kind's account calls go through: the account operations ([`CloudflareApi`], 1D.3)
+/// and the project root.
 #[derive(Clone, Copy)]
 pub(crate) struct Tools<'a> {
-    /// The account operations (1D.3a, #4043): what the resource kinds ask Cloudflare.
+    /// The account operations (1D.3, #4043): every call the apply makes to Cloudflare.
     pub(crate) api: &'a dyn CloudflareApi,
-    /// Wrangler as the run resolved it, for the calls 1D.3b moves behind `api`: the push, the
-    /// secrets, the triggers and the Worker's presence.
-    pub(crate) provenance: &'a Provenance,
     pub(crate) project_root: &'a Path,
 }
 

@@ -2,13 +2,12 @@
 //! Decisions B and D): Cloudflare's REST API and the deployed Workers over
 //! HTTPS, and `wrangler secret put`/`delete` for the run's key.
 
-use std::io::Write;
 use std::path::PathBuf;
-use std::process::Stdio;
 use std::sync::Arc;
 use std::time::Duration;
 
 use super::sweep::{Cloudflare, Namespace, Secrets, Wake};
+use crate::cloudflare::CloudflareApi;
 use crate::probe::Provenance;
 
 pub(crate) const API: &str = "https://api.cloudflare.com/client/v4";
@@ -377,48 +376,11 @@ pub(crate) struct WranglerSecrets {
 
 impl WranglerSecrets {
     fn run(&self, verb: &str, script: &str, name: &str, stdin: &str) -> Result<(), String> {
-        let Some(mut command) = crate::workers::wrangler_command(&self.provenance, "secret") else {
-            return Err("wrangler not found".into());
-        };
-        std::fs::create_dir_all(&self.scratch).map_err(|e| e.to_string())?;
-        command
-            .arg(verb)
-            .arg(name)
-            .arg("--name")
-            .arg(script)
-            .current_dir(&self.scratch)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
-        let mut child = command.spawn().map_err(|e| e.to_string())?;
-        {
-            // The value goes on stdin, never argv (ADR 0195 D1); a `delete`
-            // sends nothing, so its confirmation takes Wrangler's
-            // non-interactive default.
-            let mut pipe = child
-                .stdin
-                .take()
-                .ok_or("could not open wrangler's stdin")?;
-            pipe.write_all(stdin.as_bytes())
-                .map_err(|e| e.to_string())?;
-        }
-        let output = child.wait_with_output().map_err(|e| e.to_string())?;
-        if output.status.success() {
-            return Ok(());
-        }
-        let said = [
-            String::from_utf8_lossy(&output.stderr).trim().to_string(),
-            String::from_utf8_lossy(&output.stdout).trim().to_string(),
-        ]
-        .into_iter()
-        .filter(|s| !s.is_empty())
-        .collect::<Vec<_>>()
-        .join("\n");
-        Err(if said.is_empty() {
-            format!("wrangler secret {verb} failed")
-        } else {
-            said
-        })
+        // The value goes on stdin, never argv (ADR 0195 D1); a `delete` sends nothing, so its
+        // confirmation takes Wrangler's non-interactive default.
+        crate::cloudflare::Wrangler::new(&self.provenance, &self.scratch)
+            .named_secret(&self.scratch, verb, script, name, stdin)
+            .map_err(|e| e.said_or(&format!("wrangler secret {verb} failed")))
     }
 }
 
@@ -435,6 +397,7 @@ impl Secrets for WranglerSecrets {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+    use std::io::Write;
     use std::io::{BufRead, BufReader, Read};
 
     /// A one-thread HTTP stub: answers each request by its path from
