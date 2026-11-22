@@ -328,9 +328,10 @@ You saw fresh-state initialisation and the single end-of-handler commit in the
 emitted code. And the agent's failures went through the same `failure` function
 as the rest, so every handler stays short.
 
-We have asserted that all this works — now let us prove it.
+Everything lives in one context so far. Next, we split the HTTP edge from the
+part that keeps the links.
 
-➡️ **Next: [Test it](/book/tutorials/06-testing/)**
+➡️ **Next: [Split into contexts](/book/tutorials/contexts/)**
 
 ---
 
