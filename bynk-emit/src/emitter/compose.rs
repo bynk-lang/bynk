@@ -16,7 +16,9 @@ pub(crate) mod bundle;
 pub(crate) mod plan;
 pub(crate) mod workers;
 
-pub use plan::{ComposeFacts, ComposePlan, ComposeUnit, ConsumedSurface, ExecNeeds};
+pub use plan::{
+    ComposeFacts, ComposePlan, ComposeUnit, ComposeUnitFacts, ConsumedSurface, ExecNeeds,
+};
 
 /// The `deps` object of a unit that has no entries. Both renderers spell it
 /// `{  }` (a double space, not the tight `{}` an empty `TsExpr::Object`

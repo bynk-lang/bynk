@@ -85,7 +85,9 @@ pub mod wrangler;
 
 pub use compose::bundle::emit_composition_root;
 pub use compose::workers::emit_worker_compose;
-pub use compose::{ComposeFacts, ComposePlan, ComposeUnit, ConsumedSurface, ExecNeeds};
+pub use compose::{
+    ComposeFacts, ComposePlan, ComposeUnit, ComposeUnitFacts, ConsumedSurface, ExecNeeds,
+};
 pub use containers::{container_class_names, emit_containers_ts};
 pub use events_fanout::{Publisher, emit_events_fanout_do, emit_group_events_fanout_do};
 pub use secrets::emit_secrets_manifest;

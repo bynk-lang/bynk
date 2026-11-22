@@ -5082,6 +5082,7 @@ pub fn resolve_consume_prefix(
 /// — see [`resolve_consume_prefix`]'s doc.
 pub fn handler_cross_caps(
     table: &UnitTable,
+    declaring_unit: &str,
     consumed: &[String],
     aliases: &HashMap<String, String>,
     flattened: &HashMap<String, String>,
@@ -5089,12 +5090,26 @@ pub fn handler_cross_caps(
     let mut out = BTreeMap::new();
     for s in table.services.values() {
         for h in &s.handlers {
-            scan_cross_caps(&mut out, &h.given, consumed, aliases, flattened);
+            scan_cross_caps(
+                &mut out,
+                &h.given,
+                declaring_unit,
+                consumed,
+                aliases,
+                flattened,
+            );
         }
     }
     for a in table.agents.values() {
         for h in &a.handlers {
-            scan_cross_caps(&mut out, &h.given, consumed, aliases, flattened);
+            scan_cross_caps(
+                &mut out,
+                &h.given,
+                declaring_unit,
+                consumed,
+                aliases,
+                flattened,
+            );
         }
     }
     out
@@ -5107,13 +5122,21 @@ pub fn handler_cross_caps(
 /// through a provider's own recursive instantiation.
 pub fn provider_cross_caps(
     table: &UnitTable,
+    declaring_unit: &str,
     consumed: &[String],
     aliases: &HashMap<String, String>,
     flattened: &HashMap<String, String>,
 ) -> BTreeMap<String, String> {
     let mut out = BTreeMap::new();
     for p in table.providers.values() {
-        scan_cross_caps(&mut out, &p.given, consumed, aliases, flattened);
+        scan_cross_caps(
+            &mut out,
+            &p.given,
+            declaring_unit,
+            consumed,
+            aliases,
+            flattened,
+        );
     }
     out
 }
@@ -5122,6 +5145,7 @@ pub fn provider_cross_caps(
 fn scan_cross_caps(
     out: &mut BTreeMap<String, String>,
     given: &[CapRef],
+    declaring_unit: &str,
     consumed: &[String],
     aliases: &HashMap<String, String>,
     flattened: &HashMap<String, String>,
@@ -5132,7 +5156,11 @@ fn scan_cross_caps(
         // buffering) and never calls through a constructed provider —
         // there is no `EventsProvider` for compose to build, so the
         // first-party `Events` must never become a compose deps entry.
-        if c.key() == "Events" && flattened.get(c.key()).map(String::as_str) == Some("bynk") {
+        // The canonical first-party rule (1A.33), which also covers a
+        // capability declared by `bynk` itself.
+        if firstparty::resolve(c.key(), declaring_unit, flattened)
+            == Some(firstparty::FirstPartyCap::Events)
+        {
             continue;
         }
         if let Some(p) = c.prefix() {
@@ -5246,7 +5274,7 @@ fn native_platforms_of_context(
     let consumed = unit_consumes.get(ctx).cloned().unwrap_or_default();
     let aliases = unit_consumes_aliases.get(ctx).cloned().unwrap_or_default();
     let flattened = unit_flattened.get(ctx).cloned().unwrap_or_default();
-    for (key, cctx) in handler_cross_caps(table, &consumed, &aliases, &flattened) {
+    for (key, cctx) in handler_cross_caps(table, ctx, &consumed, &aliases, &flattened) {
         collect_given_closure(
             &cctx,
             &key,
@@ -5769,7 +5797,8 @@ pub fn composition_root_trigger(
         let consumed = unit_consumes.get(name).cloned().unwrap_or_default();
         let aliases = unit_consumes_aliases.get(name).cloned().unwrap_or_default();
         let flattened = unit_flattened.get(name).cloned().unwrap_or_default();
-        let uses_cross_cap = !handler_cross_caps(table, &consumed, &aliases, &flattened).is_empty()
+        let uses_cross_cap = !handler_cross_caps(table, name, &consumed, &aliases, &flattened)
+            .is_empty()
             || table.providers.values().any(|p| {
                 p.given.iter().any(|g| {
                     g.is_cross_context()
@@ -8757,5 +8786,96 @@ mod lock_unit_tests {
         assert_eq!(units[0].group, None);
         assert_eq!(units[0].members, ["a.x"]);
         assert_eq!(units[0].native.len(), 2);
+    }
+}
+
+#[cfg(test)]
+mod cross_caps_first_party_tests {
+    //! The first-party `Events` skip in `scan_cross_caps` is
+    //! `firstparty::resolve`, the single definition of bynk's own capabilities
+    //! (1A.33): a capability flattened from `bynk`, or declared by `bynk`
+    //! itself, never becomes a compose deps entry.
+    use super::*;
+    use bynk_syntax::ast::{CapRef, Ident, ProviderDecl};
+    use bynk_syntax::span::Span;
+
+    fn ident(name: &str) -> Ident {
+        Ident {
+            name: name.to_string(),
+            span: Span::default(),
+        }
+    }
+
+    fn bare(name: &str) -> CapRef {
+        CapRef {
+            context: None,
+            name: ident(name),
+            span: Span::default(),
+        }
+    }
+
+    fn flattened_from(unit: &str, caps: &[&str]) -> HashMap<String, String> {
+        caps.iter()
+            .map(|c| (c.to_string(), unit.to_string()))
+            .collect()
+    }
+
+    fn scan(declaring_unit: &str, flattened: &HashMap<String, String>) -> BTreeMap<String, String> {
+        let mut out = BTreeMap::new();
+        scan_cross_caps(
+            &mut out,
+            &[bare("Events"), bare("Ledger")],
+            declaring_unit,
+            &[],
+            &HashMap::new(),
+            flattened,
+        );
+        out
+    }
+
+    #[test]
+    fn a_flattened_bynk_events_is_skipped_and_other_flattened_caps_are_kept() {
+        let flattened = flattened_from("bynk", &["Events"]);
+        let mut flattened = flattened;
+        flattened.insert("Ledger".to_string(), "bank".to_string());
+        let got = scan("shop", &flattened);
+        assert_eq!(got.keys().collect::<Vec<_>>(), ["Ledger"]);
+    }
+
+    #[test]
+    fn an_events_declared_by_bynk_itself_is_skipped_without_being_flattened() {
+        let mut flattened = HashMap::new();
+        flattened.insert("Ledger".to_string(), "bank".to_string());
+        let got = scan("bynk", &flattened);
+        assert_eq!(got.keys().collect::<Vec<_>>(), ["Ledger"]);
+    }
+
+    #[test]
+    fn an_events_flattened_from_another_unit_is_not_first_party() {
+        let flattened = flattened_from("other", &["Events", "Ledger"]);
+        let got = scan("shop", &flattened);
+        assert_eq!(got.keys().collect::<Vec<_>>(), ["Events", "Ledger"]);
+    }
+
+    #[test]
+    fn a_providers_given_skips_a_flattened_bynk_events_too() {
+        let mut table = UnitTable::default();
+        table.providers.insert(
+            "Billing".to_string(),
+            ProviderDecl {
+                capability: ident("Billing"),
+                provider_name: ident("BillingImpl"),
+                given: vec![bare("Events"), bare("Ledger")],
+                ops: Vec::new(),
+                external: false,
+                documentation: None,
+                span: Span::default(),
+                trivia: Default::default(),
+            },
+        );
+        let mut flattened = flattened_from("bynk", &["Events"]);
+        flattened.insert("Ledger".to_string(), "bank".to_string());
+        let got = provider_cross_caps(&table, "shop", &[], &HashMap::new(), &flattened);
+        assert_eq!(got.keys().collect::<Vec<_>>(), ["Ledger"]);
     }
 }

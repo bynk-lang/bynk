@@ -116,7 +116,7 @@ pub fn emit_worker_compose(
     let unit = plan
         .units
         .get(context)
-        .unwrap_or_else(|| panic!("the compose plan has no unit `{context}`"));
+        .unwrap_or_else(|| panic!("the compose plan has no unit `{context}`: every context with a checked table is planned in `build_output`"));
     // v0.15: cross-context capabilities this Worker uses (in handlers or in a
     // local provider's `given`) → `deps_key → consumed_context`. Their
     // providers are instantiated locally (model A1). Divergence 3 of #3928,

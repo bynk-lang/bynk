@@ -3973,7 +3973,7 @@ impl WorkersEmit<'_> {
         };
         // #1187's slice 6 plumbing: computed once, reused by every
         // Workers-target emitter below that needs it.
-        let ctx_uses_emit = compose_plan.units[ctx_name].publishes;
+        let ctx_uses_emit = planned_unit(compose_plan, ctx_name).publishes;
         // #1944: every binding this Worker declares, once — its
         // `Env` interface and its `wrangler.toml` are both built from
         // it, and the duplicate check read the same list.
@@ -4004,7 +4004,7 @@ impl WorkersEmit<'_> {
         worker_bindings::locate_container_builds(&mut bindings, container_root);
         // #2719: the context's handlers that hand work to the execution
         // context, from the checker's needs-context set.
-        let ctx_uses_exec = compose_plan.units[ctx_name].exec.any_handler;
+        let ctx_uses_exec = planned_unit(compose_plan, ctx_name).exec.any_handler;
         // #2969: the file of each used commons that declares each of its
         // functions and constants, so `compose.ts` imports a commons
         // constant from its declaring module, as `handlers.ts` does,
@@ -4685,6 +4685,28 @@ fn own_handles_events(table: &UnitTable) -> bool {
     })
 }
 
+/// The plan's unit for a context the driver is emitting. Every grouped context
+/// has a checked `UnitTable`, so the plan covers it.
+fn planned_unit<'a>(plan: &'a emitter::ComposePlan, context: &str) -> &'a emitter::ComposeUnit {
+    plan.units
+        .get(context)
+        .expect("the compose plan has a unit for every context with a checked table")
+}
+
+/// Makes that assumption explicit: the plan's contexts are the grouped ones.
+fn debug_assert_plan_covers_groups(
+    plan: &emitter::ComposePlan,
+    groups: &BTreeMap<String, Vec<usize>>,
+    kinds: &BTreeMap<String, UnitKind>,
+) {
+    debug_assert!(
+        plan.contexts().map(|(n, _)| n).eq(groups
+            .keys()
+            .filter(|n| kinds.get(*n) == Some(&UnitKind::Context))),
+        "the compose plan's contexts are the grouped contexts"
+    );
+}
+
 /// v0.6 §6.3: emit a composition root when the project has at least one
 /// context that consumes another context's service surface. The compose file
 /// imports each context, instantiates its providers, assembles its deps
@@ -4884,7 +4906,7 @@ fn build_output(
         &unit_callees,
         &unit_flattened,
     );
-
+    debug_assert_plan_covers_groups(&compose_plan, &groups, &kinds);
     // #2137: the contexts a `system` harness stands up (test build only).
     let harness_clock_contexts =
         harness_clock_contexts(&parsed, &unit_tables, &unit_consumes, &kinds);
@@ -5197,7 +5219,7 @@ fn referenced_units_of_context(
     let consumed = unit_consumes.get(ctx).cloned().unwrap_or_default();
     let aliases = unit_consumes_aliases.get(ctx).cloned().unwrap_or_default();
     let flattened = unit_flattened.get(ctx).cloned().unwrap_or_default();
-    for (key, cctx) in handler_cross_caps(table, &consumed, &aliases, &flattened) {
+    for (key, cctx) in handler_cross_caps(table, ctx, &consumed, &aliases, &flattened) {
         let _ = instantiate_provider_ts_expr(
             &cctx,
             &key,

@@ -37,7 +37,7 @@ pub struct ExecNeeds {
 
 /// What the builder reads off one unit's checked table. Plain data.
 #[derive(Debug, Clone, Default)]
-pub struct UnitFacts {
+pub struct ComposeUnitFacts {
     pub is_context: bool,
     /// The units it consumes, in declaration order.
     pub consumes: Vec<String>,
@@ -64,7 +64,7 @@ pub struct UnitFacts {
 #[derive(Debug, Clone, Default)]
 pub struct ComposeFacts {
     /// Every unit that has a checked table, by name.
-    pub units: BTreeMap<String, UnitFacts>,
+    pub units: BTreeMap<String, ComposeUnitFacts>,
     /// Whether a Bundle build has a composition root at all
     /// (`composition_root_trigger`).
     pub bundle_root: bool,
@@ -99,7 +99,7 @@ impl ComposeFacts {
             let handlers = || table.services.values().flat_map(|s| s.handlers.iter());
             units.insert(
                 name.clone(),
-                UnitFacts {
+                ComposeUnitFacts {
                     is_context: kinds.get(name) == Some(&UnitKind::Context),
                     has_services: composed_in_bundle_root(table),
                     has_agents: !table.agents.is_empty(),
@@ -118,9 +118,11 @@ impl ComposeFacts {
                     },
                     providers: crate::emitter::topo_order_providers(&table.providers),
                     derived,
-                    handler_cross_caps: handler_cross_caps(table, &consumes, &aliases, &flattened),
+                    handler_cross_caps: handler_cross_caps(
+                        table, name, &consumes, &aliases, &flattened,
+                    ),
                     provider_cross_caps: provider_cross_caps(
-                        table, &consumes, &aliases, &flattened,
+                        table, name, &consumes, &aliases, &flattened,
                     ),
                     consumes,
                     aliases,
@@ -231,7 +233,7 @@ impl ComposePlan {
         }
     }
 
-    fn decide_unit(f: &UnitFacts, facts: &ComposeFacts) -> ComposeUnit {
+    fn decide_unit(f: &ComposeUnitFacts, facts: &ComposeFacts) -> ComposeUnit {
         ComposeUnit {
             is_context: f.is_context,
             consumes: f.consumes.clone(),
@@ -250,7 +252,7 @@ impl ComposePlan {
 }
 
 /// A consumed context that has services is a surface of the consumer's `deps`.
-fn surfaces(f: &UnitFacts, facts: &ComposeFacts) -> Vec<ConsumedSurface> {
+fn surfaces(f: &ComposeUnitFacts, facts: &ComposeFacts) -> Vec<ConsumedSurface> {
     let mut alias_for: HashMap<&String, &String> = HashMap::new();
     for (alias, target) in &f.aliases {
         alias_for.insert(target, alias);
@@ -318,16 +320,16 @@ fn bundle_order(facts: &ComposeFacts) -> Vec<String> {
 mod tests {
     use super::*;
 
-    fn ctx(consumes: &[&str]) -> UnitFacts {
-        UnitFacts {
+    fn ctx(consumes: &[&str]) -> ComposeUnitFacts {
+        ComposeUnitFacts {
             is_context: true,
             has_services: true,
             consumes: consumes.iter().map(|s| s.to_string()).collect(),
-            ..UnitFacts::default()
+            ..ComposeUnitFacts::default()
         }
     }
 
-    fn facts(units: Vec<(&str, UnitFacts)>) -> ComposeFacts {
+    fn facts(units: Vec<(&str, ComposeUnitFacts)>) -> ComposeFacts {
         ComposeFacts {
             units: units.into_iter().map(|(n, f)| (n.to_string(), f)).collect(),
             bundle_root: true,
