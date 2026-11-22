@@ -1,0 +1,99 @@
+== default ==
+orphan kv gone
+orphan kv gone KV_CACHE
+orphan kv shop KV_OLD
+orphan r2 shop R2_OLD (shop-old, jurisdiction eu; not deleted)
+orphan r2 shop R2_ARCHIVE (shop-archive-was, jurisdiction fedramp; not deleted)
+orphan vectorize gone VECTORIZE_GONE (gone-index; deleted by --prune)
+orphan vectorize shop VECTORIZE_DOCS (shop-docs-v0; deleted by --prune)
+orphan vectorize shop VECTORIZE_OLD (shared-old; adopted, never deleted)
+orphan d1 shop D1_OLD (shop-old; not deleted)
+orphan d1 shop D1_ORDERS (shop-orders-was; not deleted)
+orphan hyperdrive gone HYPERDRIVE_GONE (gone-main; deleted by --prune)
+orphan hyperdrive shop HYPERDRIVE_MAIN (shop-main-was; deleted by --prune)
+orphan hyperdrive shop HYPERDRIVE_OLD (shared-pg; adopted, never deleted)
+orphan worker gone-core (contexts gone, gone.admin)
+orphan queue old-jobs
+kv create shop-cart-sessions (KV_SESSIONS)
+ratelimit allocate RATELIMIT_CHECKOUT
+queue reuse shared-feed
+secret set BYNK_CALL_FROM_SHOP (managed)
+deploy shop-cart
+kv reuse shop
+kv create shop-cart (KV_CART)
+kv reuse shop-sessions (KV_SESSIONS)
+r2 recreate shop-archive (R2_ARCHIVE) in jurisdiction eu — the old bucket and its objects stay where they are
+r2 reuse shop-files (R2_FILES)
+r2 reuse shop-new (R2_NEW)
+vectorize reuse shop-docs (VECTORIZE_DOCS, 768, cosine; metadata indexes category)
+vectorize reuse shop-new (VECTORIZE_NEW, 384, euclidean)
+d1 reuse shop-new (D1_NEW)
+d1 reuse shop-orders (D1_ORDERS)
+d1 migrate shop-orders (2 files; pending ones applied before the push)
+hyperdrive adopt hd-adopted (HYPERDRIVE_ADOPTED)
+hyperdrive reuse shop-main (HYPERDRIVE_MAIN)
+hyperdrive create shop-new (HYPERDRIVE_NEW)
+ratelimit reuse RATELIMIT_LOGIN (namespace 1001)
+ratelimit allocate RATELIMIT_SIGNUP
+queue reuse intake
+queue reuse outbound
+queue reuse shared-feed
+dataset shop-events (ANALYTICS_EVENTS; created on first write)
+stored secret SECRET_STRIPE_KEY stripe_key in store default_secrets_store (linked; not created)
+will link ai-search kb (AI_SEARCH_KB; not created; not checked in a dry run)
+will link mtls-certificate backend-client (MTLS_BACKEND; not created; not checked in a dry run)
+service PAYMENTS payments-worker (foreign Worker; not provisioned)
+email address orders@example.com (Email Routing rule; advisory — wrangler reconciles it)
+email address returns@example.com removed (its Email Routing rule is deleted by the push; needs --prune)
+durable object Cart (sqlite; advisory — Cloudflare reconciles it)
+container __BynkContainer_Renderer (image: adopted registry.example/renderer@sha256:bbbb, was adopted registry.example/renderer@sha256:aaaa; instance lite; reconciled by Cloudflare)
+container __BynkContainer_Thumbnailer (image: build from containers/thumbnailer; instance standard; reconciled by Cloudflare)
+rename durable object Basket → Cart (already applied by an earlier deploy; the tombstone stays until Cloudflare reports it stale)
+delete durable object shop.Legacy (already deleted by an earlier deploy; the tombstone stays until Cloudflare reports it stale)
+secret set API_TOKEN (declared)
+secret set BYNK_CALL_TO_SHOP__CART (managed)
+redeploy shop
+order shop-cart → shop
+bynk: warning: the KV namespace `shop-cart` (`KV_CART` of `shop`) is already on the account, but `bynk.deploy.lock` does not record it, and Cloudflare refuses a second namespace of one title: the deploy cannot create it. Delete the namespace if it holds nothing you need, or rename the capability
+== staging ==
+orphan queue old-jobs-staging
+kv create shop-cart-sessions-staging (KV_SESSIONS)
+ratelimit allocate RATELIMIT_CHECKOUT
+queue create shared-feed-staging
+secret set BYNK_CALL_FROM_SHOP (managed)
+deploy shop-cart-staging
+kv reuse shop-staging
+kv create shop-cart-staging (KV_CART)
+kv reuse shop-sessions-staging (KV_SESSIONS)
+r2 create shop-archive-staging (R2_ARCHIVE) in jurisdiction eu
+r2 create shop-files-staging (R2_FILES)
+r2 create shop-new-staging (R2_NEW)
+vectorize create shop-docs-staging (VECTORIZE_DOCS, 768, cosine; metadata indexes category)
+vectorize create shop-new-staging (VECTORIZE_NEW, 384, euclidean)
+d1 create shop-new-staging (D1_NEW)
+d1 reuse shop-orders-staging (D1_ORDERS)
+d1 migrate shop-orders-staging (2 files; pending ones applied before the push)
+hyperdrive adopt hd-adopted (HYPERDRIVE_ADOPTED)
+hyperdrive create shop-main-staging (HYPERDRIVE_MAIN)
+hyperdrive create shop-new-staging (HYPERDRIVE_NEW)
+ratelimit reuse RATELIMIT_LOGIN (namespace 2001)
+ratelimit allocate RATELIMIT_SIGNUP
+queue create intake-staging
+queue create outbound-staging
+queue create shared-feed-staging
+dataset shop-events_staging (ANALYTICS_EVENTS; created on first write)
+stored secret SECRET_STRIPE_KEY stripe_key in store default_secrets_store (linked; not created)
+will link ai-search kb (AI_SEARCH_KB; not created; not checked in a dry run)
+will link mtls-certificate backend-client (MTLS_BACKEND; not created; not checked in a dry run)
+service PAYMENTS payments-worker (foreign Worker; not provisioned)
+email address orders@example.com (Email Routing rule; advisory — wrangler reconciles it)
+durable object Cart (sqlite; advisory — Cloudflare reconciles it)
+container __BynkContainer_Renderer (image: adopted registry.example/renderer@sha256:bbbb; instance lite; reconciled by Cloudflare)
+container __BynkContainer_Thumbnailer (image: build from containers/thumbnailer; instance standard; reconciled by Cloudflare)
+rename durable object Basket → Cart (moves its stored data)
+delete durable object shop.Legacy (all stored data; irreversible)
+secret set API_TOKEN (declared)
+secret set BYNK_CALL_TO_SHOP__CART (managed)
+redeploy shop-staging
+order shop-cart-staging → shop-staging
+bynk: warning: could not list the account's R2 buckets in jurisdiction eu (Cloudflare answered 403); the plan says what `bynk.deploy.lock` records for them

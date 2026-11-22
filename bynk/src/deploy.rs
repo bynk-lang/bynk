@@ -168,6 +168,8 @@ pub(crate) fn local_session_key(binding: &str) -> String {
 }
 
 #[cfg(test)]
+mod snapshot_tests;
+#[cfg(test)]
 mod tests {
     use super::*;
     use config::tests::project;
