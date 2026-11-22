@@ -10,9 +10,10 @@ use bynk_check::actors::CallSitePrincipal;
 use bynk_check::checker::{Callee, HandlerAddress, NamedKind, Ty, TyId, TypedCommons};
 use bynk_check::kernel_op::{IntrinsicNs, StaticOp};
 use bynk_syntax::ast::{
-    BaseType, BinOp, Block, Expr, ExprKind, FaultsExpr, FieldInit, Ident, InterpPart, LambdaExpr,
-    LiteralValue, MatchArm, ObservationExpr, ObservationMatcher, Pattern, PatternBindingKind,
-    PredKind, Refinement, TypeBody, TypeDecl, TypeRef, UnaryOp,
+    BaseType, BinOp, Block, ChainLink, Expr, ExprKind, FaultsExpr, FieldInit, Ident, InterpPart,
+    LambdaExpr, LiteralValue, MatchArm, ObservationExpr, ObservationMatcher, Pattern,
+    PatternBindingKind, PredKind, RefinableLiteral, Refinement, TypeBody, TypeDecl, TypeRef,
+    UnaryOp,
 };
 
 use bynk_model::is_effectful_return;
@@ -279,7 +280,13 @@ pub fn lower_integration_case_body(
                             cx.resolved_local_name(&l.name.name)
                                 .unwrap_or_else(|| crate::emitter::ts_ident(&l.name.name)),
                         ),
-                        _ => None,
+                        bynk_syntax::ast::Statement::Let(..)
+                        | bynk_syntax::ast::Statement::EffectLet(..)
+                        | bynk_syntax::ast::Statement::Expect(..)
+                        | bynk_syntax::ast::Statement::Do(..)
+                        | bynk_syntax::ast::Statement::Assign(..)
+                        | bynk_syntax::ast::Statement::Advance(..)
+                        | bynk_syntax::ast::Statement::Par(..) => None,
                     })
                     .collect(),
                 bynk_syntax::ast::Statement::Let(l) | bynk_syntax::ast::Statement::EffectLet(l)
@@ -290,7 +297,12 @@ pub fn lower_integration_case_body(
                             .unwrap_or_else(|| crate::emitter::ts_ident(&l.name.name)),
                     ]
                 }
-                _ => Vec::new(),
+                bynk_syntax::ast::Statement::Let(..)
+                | bynk_syntax::ast::Statement::EffectLet(..)
+                | bynk_syntax::ast::Statement::Expect(..)
+                | bynk_syntax::ast::Statement::Do(..)
+                | bynk_syntax::ast::Statement::Assign(..)
+                | bynk_syntax::ast::Statement::Advance(..) => Vec::new(),
             });
         }
         cx.record_span(out.len(), block.tail.span);
@@ -386,7 +398,11 @@ fn settle_kind(
         {
             SettleKind::Safe
         }
-        _ => SettleKind::Unsafe,
+        Statement::EffectLet(..)
+        | Statement::Do(..)
+        | Statement::Assign(..)
+        | Statement::Advance(..)
+        | Statement::Par(..) => SettleKind::Unsafe,
     }
 }
 
@@ -488,11 +504,11 @@ fn peel_result_err(
     ty: bynk_check::checker::TyId,
     tys: &Arc<Types>,
 ) -> Option<bynk_check::checker::TyId> {
-    use bynk_check::checker::Ty;
-    match &*tys.get(ty) {
-        Ty::Result(_, e) => Some(*e),
-        Ty::Effect(inner) => peel_result_err(*inner, tys),
-        _ => None,
+    let ty = tys.get(ty);
+    if let Some((_, e)) = ty.as_result() {
+        Some(e)
+    } else {
+        peel_result_err(ty.as_effect()?, tys)
     }
 }
 
@@ -736,26 +752,25 @@ pub(super) fn expect_source_text_raw(cx: &LowerCtx, span: bynk_syntax::span::Spa
 
 /// A compile-time literal that v0.9.4 may admit as a refined type (int, float,
 /// decimal or string), as a node (1A.17, Decision D). `None` for anything else.
+///
+/// A negated numeric literal is admissible at compile time (the checker folds the
+/// sign in `const_literal`), so the lowering must route it through `unsafe` like
+/// any other admitted literal; [`ExprKind::refinable_literal`] reads it as one.
 fn lower_const_literal_node(e: &Expr) -> Option<bynk_ts::TsExpr> {
-    match &e.kind {
-        ExprKind::IntLit { value: n, .. } => Some(num_lit(n.to_string())),
+    let sign = |negated: bool| if negated { "-" } else { "" };
+    Some(match e.kind.refinable_literal()? {
+        RefinableLiteral::Int { value, negated } => num_lit(format!("{}{value}", sign(negated))),
         // v0.21: the stored lexeme verbatim.
-        ExprKind::FloatLit { lexeme, .. } => Some(num_lit(lexeme.clone())),
-        ExprKind::DecimalLit { coef, scale, .. } => Some(decimal_lit(coef, *scale)),
-        ExprKind::StrLit(s) => Some(str_node(s.as_str())),
-        // A negated numeric literal — admissible at compile time (the
-        // checker folds the sign in `const_literal`), so the lowering must
-        // route it through `unsafe` like any other admitted literal.
-        ExprKind::UnaryOp(UnaryOp::Neg, inner) => match &inner.kind {
-            ExprKind::IntLit { value: n, .. } => Some(num_lit(format!("-{n}"))),
-            ExprKind::FloatLit { lexeme, .. } => Some(num_lit(format!("-{lexeme}"))),
-            ExprKind::DecimalLit { coef, scale, .. } => {
-                Some(decimal_lit(&format!("-{coef}"), *scale))
-            }
-            _ => None,
-        },
-        _ => None,
-    }
+        RefinableLiteral::Float { lexeme, negated } => {
+            num_lit(format!("{}{lexeme}", sign(negated)))
+        }
+        RefinableLiteral::Decimal {
+            coef,
+            scale,
+            negated,
+        } => decimal_lit(&format!("{}{coef}", sign(negated)), scale),
+        RefinableLiteral::Str(s) => str_node(s),
+    })
 }
 
 /// A literal's data, destructured from its `ExprKind` by `lower_expr`'s own
@@ -1732,7 +1747,7 @@ fn refined_default(decl: &TypeDecl) -> Option<bynk_ts::TsExpr> {
         TypeBody::Refined {
             base, refinement, ..
         } => refinement_default(*base, refinement.as_ref()),
-        _ => None,
+        TypeBody::Record(..) | TypeBody::Sum(..) | TypeBody::Opaque { .. } => None,
     }
 }
 
@@ -1761,7 +1776,14 @@ fn refinement_default(base: BaseType, refinement: Option<&Refinement>) -> Option
                             lo = lo.max(a.value);
                             hi = hi.min(b.value);
                         }
-                        _ => {}
+                        PredKind::Matches(..)
+                        | PredKind::InRangeF(..)
+                        | PredKind::InRangeD(..)
+                        | PredKind::MinLength(..)
+                        | PredKind::MaxLength(..)
+                        | PredKind::Length(..)
+                        | PredKind::NonEmpty
+                        | PredKind::IsoDate => {}
                     }
                 }
             }
@@ -1781,7 +1803,12 @@ fn refinement_default(base: BaseType, refinement: Option<&Refinement>) -> Option
                         PredKind::NonEmpty => len = len.max(1),
                         PredKind::MinLength(k) | PredKind::Length(k) => len = len.max(k),
                         PredKind::Matches(_) | PredKind::IsoDate => return None,
-                        _ => {}
+                        PredKind::InRange(..)
+                        | PredKind::InRangeF(..)
+                        | PredKind::InRangeD(..)
+                        | PredKind::MaxLength(..)
+                        | PredKind::NonNegative
+                        | PredKind::Positive => {}
                     }
                 }
             }
@@ -1803,7 +1830,14 @@ fn refinement_default(base: BaseType, refinement: Option<&Refinement>) -> Option
                             lo = lo.max(a.value);
                             hi = hi.min(b.value);
                         }
-                        _ => {}
+                        PredKind::Matches(..)
+                        | PredKind::InRange(..)
+                        | PredKind::InRangeD(..)
+                        | PredKind::MinLength(..)
+                        | PredKind::MaxLength(..)
+                        | PredKind::Length(..)
+                        | PredKind::NonEmpty
+                        | PredKind::IsoDate => {}
                     }
                 }
             }
@@ -1847,7 +1881,15 @@ fn refinement_default(base: BaseType, refinement: Option<&Refinement>) -> Option
                                 hi = Some(hi.map_or(v, |h| h.min(v)));
                             }
                         }
-                        _ => {}
+                        PredKind::Matches(..)
+                        | PredKind::InRange(..)
+                        | PredKind::InRangeF(..)
+                        | PredKind::MinLength(..)
+                        | PredKind::MaxLength(..)
+                        | PredKind::Length(..)
+                        | PredKind::NonNegative
+                        | PredKind::NonEmpty
+                        | PredKind::IsoDate => {}
                     }
                 }
             }
@@ -1981,7 +2023,35 @@ fn mock_value_of(
                 ),
             }
         }
-        _ => return None,
+        Ty::Base(BaseType::Bytes | BaseType::Duration | BaseType::Instant)
+        | Ty::Error
+        | Ty::Never
+        | Ty::Result(..)
+        | Ty::Option(..)
+        | Ty::Effect(..)
+        | Ty::HttpResult(..)
+        | Ty::QueueResult
+        | Ty::HttpOutcome(..)
+        | Ty::BoundaryRejection
+        | Ty::Asset
+        | Ty::RequestHeaders
+        | Ty::RequestQuery
+        | Ty::RequestCookies
+        | Ty::TokenClaims
+        | Ty::List(..)
+        | Ty::Map(..)
+        | Ty::Set(..)
+        | Ty::Query(..)
+        | Ty::Stream(..)
+        | Ty::Connection(..)
+        | Ty::TestConnection(..)
+        | Ty::ValidationError
+        | Ty::DecodeError
+        | Ty::Unit
+        | Ty::Actor(..)
+        | Ty::ActorSum(..)
+        | Ty::Fn { .. }
+        | Ty::Var(..) => return None,
     })
 }
 
@@ -2269,13 +2339,13 @@ fn lower_ufcs_method_call(
         Vec::new()
     } else {
         let recv_args: Option<Vec<TyId>> =
-            cx.commons()
-                .expr_types
-                .get(&receiver.id)
-                .and_then(|te| match &*tys.get(te.ty) {
-                    Ty::Named { args, .. } => Some(args.clone()),
-                    _ => None,
-                });
+            cx.commons().expr_types.get(&receiver.id).and_then(|te| {
+                if let Ty::Named { args, .. } = &*tys.get(te.ty) {
+                    Some(args.clone())
+                } else {
+                    None
+                }
+            });
         match recv_args {
             Some(recv_args) => recv_args
                 .iter()
@@ -2327,7 +2397,29 @@ fn ts_spelling_in_scope_everywhere(t: TyId, tys: &Arc<Types>) -> bool {
         Ty::Result(a, b) | Ty::Map(a, b) => {
             ts_spelling_in_scope_everywhere(*a, tys) && ts_spelling_in_scope_everywhere(*b, tys)
         }
-        _ => false,
+        Ty::Error
+        | Ty::Never
+        | Ty::Named { .. }
+        | Ty::Effect(..)
+        | Ty::HttpResult(..)
+        | Ty::QueueResult
+        | Ty::HttpOutcome(..)
+        | Ty::BoundaryRejection
+        | Ty::Asset
+        | Ty::RequestHeaders
+        | Ty::RequestQuery
+        | Ty::RequestCookies
+        | Ty::TokenClaims
+        | Ty::Query(..)
+        | Ty::Stream(..)
+        | Ty::Connection(..)
+        | Ty::TestConnection(..)
+        | Ty::ValidationError
+        | Ty::DecodeError
+        | Ty::Actor(..)
+        | Ty::ActorSum(..)
+        | Ty::Fn { .. }
+        | Ty::Var(..) => false,
     }
 }
 
@@ -2713,7 +2805,12 @@ fn emit_is_test_bindings(
                         }
                         (None, pairs)
                     }
-                    _ => (None, Vec::new()),
+                    Pattern::Wildcard(..)
+                    | Pattern::Binding(..)
+                    | Pattern::Literal { .. }
+                    | Pattern::Range(..)
+                    | Pattern::Refined { .. }
+                    | Pattern::Or(..) => (None, Vec::new()),
                 };
                 let cond = if i == last {
                     None
@@ -2737,11 +2834,12 @@ fn emit_is_test_bindings(
 /// matches, arithmetic, …) must be lifted to a temp before use; see
 /// `LowerCtx::is_receiver_ref`.
 pub(crate) fn is_simple_is_receiver(value: &Expr) -> bool {
-    match &value.kind {
-        ExprKind::Ident(_) => true,
-        ExprKind::FieldAccess { receiver, .. } => is_simple_is_receiver(receiver),
-        ExprKind::Paren(inner) => is_simple_is_receiver(inner),
-        _ => false,
+    match value.kind.chain_link() {
+        Some(ChainLink::Root(_)) => true,
+        Some(ChainLink::Field { receiver, .. } | ChainLink::Paren(receiver)) => {
+            is_simple_is_receiver(receiver)
+        }
+        None => false,
     }
 }
 
@@ -2753,11 +2851,11 @@ pub(crate) fn is_simple_is_receiver(value: &Expr) -> bool {
 /// TypeScript that surfaced as a distant `tsc` error, and now fails here, like the emitter's other
 /// broken invariants.
 pub(super) fn path_for_is(value: &Expr) -> PatPath {
-    match &value.kind {
-        ExprKind::Ident(id) => PatPath::ident(&ts_ident(&id.name)),
-        ExprKind::FieldAccess { receiver, field } => path_for_is(receiver).member(&field.name),
-        ExprKind::Paren(inner) => path_for_is(inner),
-        _ => panic!(
+    match value.kind.chain_link() {
+        Some(ChainLink::Root(id)) => PatPath::ident(&ts_ident(&id.name)),
+        Some(ChainLink::Field { receiver, field }) => path_for_is(receiver).member(&field.name),
+        Some(ChainLink::Paren(inner)) => path_for_is(inner),
+        None => panic!(
             "bynk internal error (#1668): the `is` receiver at {:?} is not a simple \
              lvalue and was not lifted to a temp before its bindings were gathered \
              — the condition must be lowered first",
@@ -3415,7 +3513,16 @@ fn short_circuit(op: BinOp, l: bynk_ts::TsExpr, r: bynk_ts::TsExpr) -> bynk_ts::
         BinOp::And => (bynk_ts::TsBinaryOp::And, false),
         BinOp::Or => (bynk_ts::TsBinaryOp::Or, false),
         BinOp::Implies => (bynk_ts::TsBinaryOp::Or, true),
-        _ => unreachable!("only the short-circuit operators reach `short_circuit`"),
+        BinOp::Eq
+        | BinOp::NotEq
+        | BinOp::Lt
+        | BinOp::LtEq
+        | BinOp::Gt
+        | BinOp::GtEq
+        | BinOp::Add
+        | BinOp::Sub
+        | BinOp::Mul
+        | BinOp::Div => unreachable!("only the short-circuit operators reach `short_circuit`"),
     };
     {
         let c = vec![l, r];
@@ -3616,7 +3723,16 @@ fn lower_bin_op(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut LowerCtx) -> Lowered
                     r,
                     cx,
                 ),
-                _ => unreachable!("guarded by the outer `matches!`"),
+                BinOp::Eq
+                | BinOp::NotEq
+                | BinOp::Lt
+                | BinOp::LtEq
+                | BinOp::Gt
+                | BinOp::GtEq
+                | BinOp::Add
+                | BinOp::Sub
+                | BinOp::Mul
+                | BinOp::Div => unreachable!("guarded by the outer `matches!`"),
             };
             return pre.finish(ident_node(&value));
         }
@@ -3665,7 +3781,17 @@ pub(super) fn build_value_bin_op(
         .map(|_| match op {
             BinOp::Add => "__bynkDecimalAdd",
             BinOp::Sub => "__bynkDecimalSub",
-            _ => "__bynkDecimalMul",
+            BinOp::Implies
+            | BinOp::Or
+            | BinOp::And
+            | BinOp::Eq
+            | BinOp::NotEq
+            | BinOp::Lt
+            | BinOp::LtEq
+            | BinOp::Gt
+            | BinOp::GtEq
+            | BinOp::Mul
+            | BinOp::Div => "__bynkDecimalMul",
         });
     // Slice 1A.5 (#3703): each value-operator branch builds a node. The
     // `cx.note_*` side effects fire here, once.
@@ -4271,12 +4397,16 @@ fn lower_field_access(e: &Expr, receiver: &Expr, field: &Ident, cx: &mut LowerCt
 /// which would silently emit a string where a `number` is expected.
 fn map_key_ty(e: &Expr, cx: &LowerCtx) -> Option<TyId> {
     let tys = cx.ty_render();
-    match &*tys.get(cx.commons().expr_types.get(&e.id).map(|te| te.ty)?) {
-        Ty::Query(inner) => match &*tys.get(*inner) {
-            Ty::Named { name, args, .. } if name == MAP_ENTRY && !args.is_empty() => Some(args[0]),
-            _ => Some(*inner),
-        },
-        _ => None,
+    let Ty::Query(inner) = &*tys.get(cx.commons().expr_types.get(&e.id).map(|te| te.ty)?) else {
+        return None;
+    };
+    if let Ty::Named { name, args, .. } = &*tys.get(*inner)
+        && name == MAP_ENTRY
+        && !args.is_empty()
+    {
+        Some(args[0])
+    } else {
+        Some(*inner)
     }
 }
 
@@ -4536,30 +4666,28 @@ fn lower_lambda(e: &Expr, lambda: &LambdaExpr, cx: &mut LowerCtx) -> bynk_ts::Ts
     // receiver temp inside the lambda is read only inside it, and hoisting its
     // declaration out would share one slot between the lambda's invocations.
     let saved_hoist = cx.is_temp_hoist.take();
-    let result: bynk_ts::TsExpr = match &lambda.body.kind {
-        ExprKind::Block(b) => {
-            // The body keeps its marks (1A.15, Decision D).
-            let body = block_body(b, cx, is_async);
-            lambda_node(
-                params,
-                is_async,
-                bynk_ts::TsArrowBody::Multiline(body.into_stmts()),
-            )
-        }
-        _ => {
-            let lowered = lower_expr(&lambda.body, cx);
-            let hoisted = lowered.pre;
-            let value = lowered.expr;
-            let body = if hoisted.is_empty() {
-                // An object-literal body is bracketed by the printer.
-                bynk_ts::TsArrowBody::Expr(Box::new(value))
-            } else {
-                let mut stmts: Vec<bynk_ts::TsStmt> = hoisted.into_iter().collect();
-                stmts.push(bynk_ts::TsStmt::return_stmt(Some(value), None));
-                bynk_ts::TsArrowBody::Multiline(stmts)
-            };
-            lambda_node(params, is_async, body)
-        }
+    // A block body or an expression body: one shape tested, nothing to decide per construct.
+    let result: bynk_ts::TsExpr = if let ExprKind::Block(b) = &lambda.body.kind {
+        // The body keeps its marks (1A.15, Decision D).
+        let body = block_body(b, cx, is_async);
+        lambda_node(
+            params,
+            is_async,
+            bynk_ts::TsArrowBody::Multiline(body.into_stmts()),
+        )
+    } else {
+        let lowered = lower_expr(&lambda.body, cx);
+        let hoisted = lowered.pre;
+        let value = lowered.expr;
+        let body = if hoisted.is_empty() {
+            // An object-literal body is bracketed by the printer.
+            bynk_ts::TsArrowBody::Expr(Box::new(value))
+        } else {
+            let mut stmts: Vec<bynk_ts::TsStmt> = hoisted.into_iter().collect();
+            stmts.push(bynk_ts::TsStmt::return_stmt(Some(value), None));
+            bynk_ts::TsArrowBody::Multiline(stmts)
+        };
+        lambda_node(params, is_async, body)
     };
     cx.is_temp_hoist = saved_hoist;
     cx.tail_slot = saved_slot;
@@ -4741,14 +4869,7 @@ pub(super) fn and_join(tests: Vec<bynk_ts::TsExpr>) -> bynk_ts::TsExpr {
 /// [`refined_check_as_bool`] the base a `_ where predicate` pattern's
 /// scrutinee actually has.
 fn literal_base_of_ty(ty: TyId, tys: &Arc<Types>) -> Option<BaseType> {
-    let base = match &*tys.get(ty) {
-        Ty::Base(b) => *b,
-        Ty::Named {
-            kind: NamedKind::Refined(b),
-            ..
-        } => *b,
-        _ => return None,
-    };
+    let base = tys.get(ty).base()?;
     matches!(base, BaseType::Int | BaseType::String | BaseType::Bool).then_some(base)
 }
 
@@ -4778,10 +4899,7 @@ fn record_field_ty(path_ty: Option<TyId>, field: &str, cx: &LowerCtx) -> Option<
 
 /// #2680: the element type of the list at static type `path_ty`.
 fn list_elem_ty(path_ty: Option<TyId>, cx: &LowerCtx) -> Option<TyId> {
-    match &*cx.commons().tys().get(path_ty?) {
-        Ty::List(elem) => Some(*elem),
-        _ => None,
-    }
+    cx.commons().tys().get(path_ty?).as_list()
 }
 
 /// Emit the boolean tests that must hold for `pattern` to match the value at
@@ -5419,7 +5537,17 @@ fn refined_check_as_bool(
                 PredKind::InRange(..) | PredKind::InRangeF(..) if base != BaseType::Decimal => {
                     TsExpr::Paren(Box::new(cond))
                 }
-                _ => cond,
+                PredKind::Matches(..)
+                | PredKind::InRange(..)
+                | PredKind::InRangeF(..)
+                | PredKind::InRangeD(..)
+                | PredKind::MinLength(..)
+                | PredKind::MaxLength(..)
+                | PredKind::Length(..)
+                | PredKind::NonNegative
+                | PredKind::Positive
+                | PredKind::NonEmpty
+                | PredKind::IsoDate => cond,
             });
         }
     }
@@ -6110,12 +6238,10 @@ fn minus_neg() -> Int { 5 - -3 }
     fn a_negated_decimal_is_a_call_over_a_genuine_identifier() {
         let arg = node(decimal_lit("120", 2));
         let neg = t_runtime_ctor_call(None, "__bynkDecimalNeg", arg);
-        match &neg {
-            bynk_ts::TsExpr::Call { callee, .. } => {
-                assert!(matches!(&**callee, bynk_ts::TsExpr::Ident(n) if n == "__bynkDecimalNeg"));
-            }
-            _ => panic!("a node child gives a call node"),
-        }
+        let bynk_ts::TsExpr::Call { callee, .. } = &neg else {
+            panic!("a node child gives a call node");
+        };
+        assert!(matches!(&**callee, bynk_ts::TsExpr::Ident(n) if n == "__bynkDecimalNeg"));
         assert_eq!(
             neg.printed(),
             "__bynkDecimalNeg({ coefficient: 120n, scale: 2 })"
@@ -6127,12 +6253,10 @@ fn minus_neg() -> Int { 5 - -3 }
         let ok = t_runtime_ctor_call(None, "Ok", node(num_lit("1".into())));
         assert_eq!(ok.printed(), "Ok(1)");
         let http = t_runtime_ctor_call(Some("HttpResult"), "Ok", node(id("v")));
-        match &http {
-            bynk_ts::TsExpr::Call { callee, .. } => {
-                assert!(matches!(**callee, bynk_ts::TsExpr::Member { .. }))
-            }
-            _ => panic!("expected a call node"),
-        }
+        let bynk_ts::TsExpr::Call { callee, .. } = &http else {
+            panic!("expected a call node");
+        };
+        assert!(matches!(**callee, bynk_ts::TsExpr::Member { .. }));
         assert_eq!(http.printed(), "HttpResult.Ok(v)");
         assert_eq!(
             t_runtime_ctor_call(None, "Err", node(id("e"))).printed(),
@@ -6297,13 +6421,11 @@ fn minus(x: Int) -> Int { 5 - - -x }
         }
         // Decimal, `Int /` and structural `==`: a call over a genuine identifier.
         let call = t_helper_call("__bynkDecimalAdd", n("a"), n("b"));
-        match &call {
-            bynk_ts::TsExpr::Call { callee, args } => {
-                assert!(matches!(&**callee, bynk_ts::TsExpr::Ident(h) if h == "__bynkDecimalAdd"));
-                assert_eq!(args.len(), 2);
-            }
-            _ => panic!("a node pair gives a call node"),
-        }
+        let bynk_ts::TsExpr::Call { callee, args } = &call else {
+            panic!("a node pair gives a call node");
+        };
+        assert!(matches!(&**callee, bynk_ts::TsExpr::Ident(h) if h == "__bynkDecimalAdd"));
+        assert_eq!(args.len(), 2);
         assert_eq!(call.printed(), "__bynkDecimalAdd(a, b)");
         // Structural `!=`: `Unary(Not, Call)`.
         let ne = super::negated(super::helper_call("__bynkEq", vec![n("a"), n("b")]));

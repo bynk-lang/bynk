@@ -10,8 +10,8 @@ use bynk_check::actors::CallSitePrincipal;
 use bynk_check::checker::{Callee, NamedKind, Ty, TyId};
 use bynk_check::kernel_op::{StaticOp, TokenClaimsStatic};
 use bynk_syntax::ast::{
-    BaseType, BinOp, Block, Expr, ExprKind, MatchArm, Pattern, PatternBindingKind, Statement,
-    TypeBody,
+    BaseType, BinOp, Block, Branching, ChainLink, Expr, ExprKind, MatchArm, Pattern,
+    PatternBindingKind, Statement, TypeBody,
 };
 use bynk_syntax::span::Span;
 
@@ -290,15 +290,15 @@ fn emit_block_inner(body: &mut Body, block: &Block, cx: &mut LowerCtx, async_tai
     // Tail position: match → inline switch, if → inline if, otherwise return expr.
     // Anchor the tail's generated lines to the tail expression's span (slice 1).
     body.push(Item::Mark(block.tail.span));
-    match &block.tail.kind {
-        ExprKind::Match { discriminant, arms } => {
+    match block.tail.kind.branching() {
+        Some(Branching::Match { discriminant, arms }) => {
             match_tail(body, discriminant, arms, cx, async_tail);
         }
-        ExprKind::If {
+        Some(Branching::If {
             cond,
             then_block,
             else_block,
-        } if ternary_shaped(cond, then_block, else_block, cx)
+        }) if ternary_shaped(cond, then_block, else_block, cx)
             && !cx.tco.as_ref().is_some_and(|p| p.has_call_in(&block.tail)) =>
         {
             // T2.1 (R6.2): the shape *could* be a ternary. Whether it actually
@@ -332,16 +332,16 @@ fn emit_block_inner(body: &mut Body, block: &Block, cx: &mut LowerCtx, async_tai
                 push_if(body, cond_expr, then_body, else_body);
             }
         }
-        ExprKind::If {
+        Some(Branching::If {
             cond,
             then_block,
             else_block,
-        } => {
+        }) => {
             if_tail(body, cond, then_block, else_block, cx, async_tail);
         }
         // #3193: a self tail call is a `continue`, not a `return`.
-        _ if super::tco::emit_continue(body, &block.tail, cx) => {}
-        _ => {
+        None if super::tco::emit_continue(body, &block.tail, cx) => {}
+        None => {
             let tail = lower_tail_expr(&block.tail, cx, async_tail);
             body.extend(tail.pre_items());
             push_tail(body, cx, tail.expr);
@@ -484,7 +484,39 @@ fn lower_tail_expr(e: &Expr, cx: &mut LowerCtx, async_tail: bool) -> Lowered {
             let slot = hoist_if_slot(&mut pre, slot_ty, cond_expr, then_tail, else_tail, cx);
             pre.finish(bynk_ts::TsExpr::Ident(slot))
         }
-        _ => lower_expr(e, cx),
+        ExprKind::IntLit { .. }
+        | ExprKind::FloatLit { .. }
+        | ExprKind::DecimalLit { .. }
+        | ExprKind::DurationLit { .. }
+        | ExprKind::StrLit(..)
+        | ExprKind::InterpStr(..)
+        | ExprKind::BoolLit(..)
+        | ExprKind::Ident(..)
+        | ExprKind::Call { .. }
+        | ExprKind::Lambda(..)
+        | ExprKind::BinOp(..)
+        | ExprKind::UnaryOp(..)
+        | ExprKind::Block(..)
+        | ExprKind::If { .. }
+        | ExprKind::Ok(..)
+        | ExprKind::Err(..)
+        | ExprKind::Question(..)
+        | ExprKind::RecordConstruction { .. }
+        | ExprKind::FieldAccess { .. }
+        | ExprKind::MethodCall { .. }
+        | ExprKind::Match { .. }
+        | ExprKind::Is { .. }
+        | ExprKind::Some(..)
+        | ExprKind::None
+        | ExprKind::UnitLit
+        | ExprKind::RecordSpread { .. }
+        | ExprKind::Expect(..)
+        | ExprKind::Val { .. }
+        | ExprKind::Wire(..)
+        | ExprKind::ListLit(..)
+        | ExprKind::Observation(..)
+        | ExprKind::Faults(..)
+        | ExprKind::Trace { .. } => lower_expr(e, cx),
     }
 }
 
@@ -506,18 +538,24 @@ fn lower_tail_expr(e: &Expr, cx: &mut LowerCtx, async_tail: bool) -> Lowered {
 fn async_tail_slot_ty(e: &Expr, cx: &LowerCtx) -> Option<bynk_ts::TsType> {
     use bynk_ts::TsType;
     let tys = cx.ty_render();
-    match cx.commons().expr_ty(e.id).as_deref() {
-        Some(Ty::Effect(inner)) => {
-            let inner_ty = match &*tys.get(*inner) {
-                Ty::Unit => TsType::named("void"),
-                _ => ts_ty_to_ts_type(*inner, tys),
+    match cx
+        .commons()
+        .expr_ty(e.id)
+        .as_deref()
+        .and_then(Ty::as_effect)
+    {
+        Some(inner) => {
+            let inner_ty = if matches!(&*tys.get(inner), Ty::Unit) {
+                TsType::named("void")
+            } else {
+                ts_ty_to_ts_type(inner, tys)
             };
             Some(TsType::union(vec![
                 inner_ty.clone(),
                 TsType::named_with_args("globalThis.Promise", vec![inner_ty]),
             ]))
         }
-        _ => checked_ty_node(e, cx),
+        None => checked_ty_node(e, cx),
     }
 }
 
@@ -605,12 +643,17 @@ pub(super) fn arms_contain_question(arms: &[MatchArm]) -> bool {
 }
 
 fn expr_contains_question(e: &Expr) -> bool {
-    match &e.kind {
-        ExprKind::Question(_) => true,
-        ExprKind::Lambda(_) => false,
-        _ => bynk_syntax::ast::expr_children(e)
+    // A `?` is found, a lambda is not entered (its `?` returns from the lambda), and every
+    // other expression is searched through its children: the generic walk, not a decision per
+    // construct, so it is tested for the two shapes rather than listing the rest.
+    if matches!(e.kind, ExprKind::Question(_)) {
+        true
+    } else if matches!(e.kind, ExprKind::Lambda(_)) {
+        false
+    } else {
+        bynk_syntax::ast::expr_children(e)
             .into_iter()
-            .any(expr_contains_question),
+            .any(expr_contains_question)
     }
 }
 
@@ -651,14 +694,14 @@ pub(super) fn ternary_shaped(
 /// can host an expression and its hoisted statements, but not an emitted
 /// `switch` or `if`/`else`.
 fn tail_lowers_as_expression(e: &Expr, cx: &LowerCtx) -> bool {
-    match &e.kind {
-        ExprKind::Match { .. } => false,
-        ExprKind::If {
+    match e.kind.branching() {
+        Some(Branching::Match { .. }) => false,
+        Some(Branching::If {
             cond,
             then_block,
             else_block,
-        } => ternary_shaped(cond, then_block, else_block, cx),
-        _ => true,
+        }) => ternary_shaped(cond, then_block, else_block, cx),
+        None => true,
     }
 }
 
@@ -774,7 +817,11 @@ fn emit_par(body: &mut Body, p: &bynk_syntax::ast::ParStmt, cx: &mut LowerCtx) {
                 (value, None)
             }
             // The checker refuses every other statement in a `par` block.
-            _ => {
+            Statement::Let(..)
+            | Statement::Expect(..)
+            | Statement::Assign(..)
+            | Statement::Advance(..)
+            | Statement::Par(..) => {
                 cx.emitted_await = saved_await;
                 continue;
             }
@@ -1204,7 +1251,13 @@ fn comparison_op_symbol(op: BinOp) -> Option<&'static str> {
         BinOp::LtEq => Some("<="),
         BinOp::Gt => Some(">"),
         BinOp::GtEq => Some(">="),
-        _ => None,
+        BinOp::Implies
+        | BinOp::Or
+        | BinOp::And
+        | BinOp::Add
+        | BinOp::Sub
+        | BinOp::Mul
+        | BinOp::Div => None,
     }
 }
 
@@ -1225,9 +1278,13 @@ fn cond_has_is_bindings(e: &Expr, cx: &LowerCtx) -> bool {
     [true, false].into_iter().any(|when_true| {
         bynk_check::narrowing::matched_is_tests(e, when_true)
             .into_iter()
-            .any(|t| match &t.kind {
-                ExprKind::Is { value, pattern } => pattern_is_has_bindings(pattern, value, cx),
-                _ => false,
+            .any(|t| {
+                // One shape is asked for: an `is` test, whose pattern has bindings.
+                if let ExprKind::Is { value, pattern } = &t.kind {
+                    pattern_is_has_bindings(pattern, value, cx)
+                } else {
+                    false
+                }
             })
     })
 }
@@ -1257,7 +1314,11 @@ fn pattern_is_has_bindings(pattern: &Pattern, value: &Expr, cx: &LowerCtx) -> bo
         Pattern::Or(alts, _) => alts
             .iter()
             .any(|alt| pattern_is_has_bindings(alt, value, cx)),
-        _ => false,
+        Pattern::Wildcard(..)
+        | Pattern::Binding(..)
+        | Pattern::Literal { .. }
+        | Pattern::Range(..)
+        | Pattern::Refined { .. } => false,
     }
 }
 
@@ -1312,11 +1373,12 @@ pub(super) fn is_literal_match(disc_ty: &Option<TyId>, tys: &Arc<Types>) -> bool
 /// across a `switch` (a variable or a property path rooted in one). Calls and
 /// other computed expressions are not narrowable and must be bound to a temp.
 fn is_narrowable_path(e: &Expr) -> bool {
-    match &e.kind {
-        ExprKind::Ident(_) => true,
-        ExprKind::FieldAccess { receiver, .. } => is_narrowable_path(receiver),
-        ExprKind::Paren(inner) => is_narrowable_path(inner),
-        _ => false,
+    match e.kind.chain_link() {
+        Some(ChainLink::Root(_)) => true,
+        Some(ChainLink::Field { receiver, .. } | ChainLink::Paren(receiver)) => {
+            is_narrowable_path(receiver)
+        }
+        None => false,
     }
 }
 
@@ -1567,20 +1629,20 @@ fn match_body(body: &mut Body, arm_body: &MatchBody, cx: &mut LowerCtx, async_ta
             // written as statements, as a block tail would be, so its
             // `continue` is not inside an arrow.
             if cx.tail_slot.is_none() && cx.tco.as_ref().is_some_and(|p| p.has_call_in(e)) {
-                match &e.kind {
-                    ExprKind::Match { discriminant, arms } => {
+                match e.kind.branching() {
+                    Some(Branching::Match { discriminant, arms }) => {
                         match_tail(body, discriminant, arms, cx, async_tail);
                         return;
                     }
-                    ExprKind::If {
+                    Some(Branching::If {
                         cond,
                         then_block,
                         else_block,
-                    } => {
+                    }) => {
                         if_tail(body, cond, then_block, else_block, cx, async_tail);
                         return;
                     }
-                    _ => {}
+                    None => {}
                 }
             }
             let tail = lower_tail_expr(e, cx, async_tail);
@@ -1709,7 +1771,23 @@ fn mentions_decimal(ty: TyId, cx: &LowerCtx) -> bool {
             TypeRef::App { name, args, .. } => {
                 by_name(&name.name, cx, seen) || args.iter().any(|a| by_ref(a, cx, seen))
             }
-            _ => false,
+            TypeRef::Effect(..)
+            | TypeRef::HttpResult(..)
+            | TypeRef::QueueResult(..)
+            | TypeRef::Asset(..)
+            | TypeRef::RequestHeaders(..)
+            | TypeRef::RequestQuery(..)
+            | TypeRef::RequestCookies(..)
+            | TypeRef::TokenClaims(..)
+            | TypeRef::BoundaryRejection(..)
+            | TypeRef::Query(..)
+            | TypeRef::Stream(..)
+            | TypeRef::Connection(..)
+            | TypeRef::History(..)
+            | TypeRef::ValidationError(..)
+            | TypeRef::DecodeError(..)
+            | TypeRef::Unit(..)
+            | TypeRef::Fn(..) => false,
         }
     }
     fn by_ty(ty: TyId, cx: &LowerCtx, seen: &mut HashSet<String>) -> bool {
@@ -1721,7 +1799,29 @@ fn mentions_decimal(ty: TyId, cx: &LowerCtx) -> bool {
             Ty::Named { name, args, .. } => {
                 by_name(name, cx, seen) || args.iter().any(|a| by_ty(*a, cx, seen))
             }
-            _ => false,
+            Ty::Error
+            | Ty::Never
+            | Ty::Effect(..)
+            | Ty::HttpResult(..)
+            | Ty::QueueResult
+            | Ty::HttpOutcome(..)
+            | Ty::BoundaryRejection
+            | Ty::Asset
+            | Ty::RequestHeaders
+            | Ty::RequestQuery
+            | Ty::RequestCookies
+            | Ty::TokenClaims
+            | Ty::Query(..)
+            | Ty::Stream(..)
+            | Ty::Connection(..)
+            | Ty::TestConnection(..)
+            | Ty::ValidationError
+            | Ty::DecodeError
+            | Ty::Unit
+            | Ty::Actor(..)
+            | Ty::ActorSum(..)
+            | Ty::Fn { .. }
+            | Ty::Var(..) => false,
         }
     }
     by_ty(ty, cx, &mut HashSet::new())

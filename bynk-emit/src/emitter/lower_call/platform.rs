@@ -15,8 +15,9 @@ use super::super::lower_list::{
     binary, block_arrow, call, const_, expr_stmt, id, member, param, paren, ret,
 };
 use super::super::ts_types::ts_type_ref_to_ts_type;
-use super::super::{CommonsItem, Expr, ExprKind, Ident, TypeBody, TypeRef, test_scaffold_ns};
+use super::super::{Expr, ExprKind, Ident, TypeBody, TypeRef, test_scaffold_ns};
 use super::codec_statics::{DecodeSource, json_decoder_fn};
+use super::cross_context::type_ref_named_root;
 
 /// `"text"`: raw text, which the printer escapes (the one escaper, `escape_ts_literal`, that
 /// `escape_ts_string` re-exports, so the node and text forms cannot disagree).
@@ -406,11 +407,10 @@ pub(in crate::emitter) fn lower_signed_cookie_call(
     else {
         return None;
     };
-    let seam = cx.commons().commons.items.iter().find_map(|i| match i {
-        CommonsItem::Actor(a) if a.name.name == actor => {
-            bynk_check::actors::signed_cookie_seam_of(a, None)
-        }
-        _ => None,
+    let seam = cx.commons().commons.items.iter().find_map(|i| {
+        i.as_actor()
+            .filter(|a| a.name.name == actor)
+            .and_then(|a| bynk_check::actors::signed_cookie_seam_of(a, None))
     })?;
     if !issue {
         return Some(call(
@@ -481,9 +481,11 @@ pub(in crate::emitter) fn lower_cookie_field_call(
             call(id("Some"), vec![lit_num(0)]),
         ));
     }
-    let leaf = match &f.type_ref {
-        TypeRef::Option(inner, _) => inner.as_ref(),
-        other => other,
+    // One shape is peeled: an `Option` layer around the field's type.
+    let leaf = if let TypeRef::Option(inner, _) = &f.type_ref {
+        inner.as_ref()
+    } else {
+        &f.type_ref
     };
     let kind = crate::emitter::workers_entry::query_leaf_kind(leaf, types, false);
     let value = pre.lower_node(args.first()?, cx);
@@ -563,10 +565,8 @@ pub(in crate::emitter) fn lower_events_emit_call(
     {
         let event_name = type_args
             .first()
-            .and_then(|t| match t {
-                TypeRef::Named(ident) => Some(ident.name.clone()),
-                _ => None,
-            })
+            .and_then(type_ref_named_root)
+            .map(str::to_string)
             .unwrap_or_else(|| {
                 // `Events.emit[E]` names an event the checker resolved: absent, a missing
                 // fact (1A.34). The name is only a placeholder then.

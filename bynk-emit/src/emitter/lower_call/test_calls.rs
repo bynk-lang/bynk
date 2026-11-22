@@ -193,9 +193,13 @@ fn handler_facts(cx: &LowerCtx, service: &str) -> Option<HandlerFacts> {
         .map(|handlers| HandlerFacts {
             cron: handlers
                 .iter()
-                .filter_map(|h| match h {
-                    bynk_model::IrHandlerKind::Cron { expr } => Some(expr.clone()),
-                    _ => None,
+                .filter_map(|h| {
+                    // One shape is read: a cron handler's expression.
+                    if let bynk_model::IrHandlerKind::Cron { expr } = h {
+                        Some(expr.clone())
+                    } else {
+                        None
+                    }
                 })
                 .collect(),
             has_message: handlers

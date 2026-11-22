@@ -419,7 +419,14 @@ impl<'a> LowerCtx<'a> {
             | BodyMode::GivenFn { handler }
             | BodyMode::AgentHandler { handler, .. }
             | BodyMode::WsDoMethod { handler, .. } => Some(handler),
-            _ => None,
+            BodyMode::Method
+            | BodyMode::FreeFn
+            | BodyMode::StaticInit
+            | BodyMode::Invariant { .. }
+            | BodyMode::Transition { .. }
+            | BodyMode::PredicateScaffold { .. }
+            | BodyMode::TestCase { .. }
+            | BodyMode::IntegrationCase { .. } => None,
         }
     }
 
@@ -430,7 +437,14 @@ impl<'a> LowerCtx<'a> {
             | BodyMode::GivenFn { handler }
             | BodyMode::AgentHandler { handler, .. }
             | BodyMode::WsDoMethod { handler, .. } => Some(handler),
-            _ => None,
+            BodyMode::Method
+            | BodyMode::FreeFn
+            | BodyMode::StaticInit
+            | BodyMode::Invariant { .. }
+            | BodyMode::Transition { .. }
+            | BodyMode::PredicateScaffold { .. }
+            | BodyMode::TestCase { .. }
+            | BodyMode::IntegrationCase { .. } => None,
         }
     }
 
@@ -463,7 +477,16 @@ impl<'a> LowerCtx<'a> {
             BodyMode::FreeFn | BodyMode::GivenFn { .. } | BodyMode::Method => {
                 bynk_ts::TsExpr::Ident("__exec".to_string())
             }
-            _ => bynk_ts::TsExpr::Member {
+            BodyMode::StaticInit
+            | BodyMode::Invariant { .. }
+            | BodyMode::Transition { .. }
+            | BodyMode::ServiceHandler { .. }
+            | BodyMode::ProviderOp { .. }
+            | BodyMode::AgentHandler { .. }
+            | BodyMode::WsDoMethod { .. }
+            | BodyMode::PredicateScaffold { .. }
+            | BodyMode::TestCase { .. }
+            | BodyMode::IntegrationCase { .. } => bynk_ts::TsExpr::Member {
                 object: Box::new(self.cap_deps_node()),
                 property: "__exec".to_string(),
             },
@@ -535,7 +558,16 @@ impl<'a> LowerCtx<'a> {
             BodyMode::PredicateScaffold { test }
             | BodyMode::TestCase { test, .. }
             | BodyMode::IntegrationCase { test, .. } => Some(test),
-            _ => None,
+            BodyMode::Method
+            | BodyMode::FreeFn
+            | BodyMode::GivenFn { .. }
+            | BodyMode::StaticInit
+            | BodyMode::Invariant { .. }
+            | BodyMode::Transition { .. }
+            | BodyMode::ServiceHandler { .. }
+            | BodyMode::ProviderOp { .. }
+            | BodyMode::AgentHandler { .. }
+            | BodyMode::WsDoMethod { .. } => None,
         }
     }
 
@@ -606,7 +638,18 @@ impl<'a> LowerCtx<'a> {
     pub(crate) fn invariant_state(&self) -> Option<(&str, &HashSet<String>)> {
         match &self.mode {
             BodyMode::Invariant { name, fields } => Some((name.as_str(), fields)),
-            _ => None,
+            BodyMode::Method
+            | BodyMode::FreeFn
+            | BodyMode::GivenFn { .. }
+            | BodyMode::StaticInit
+            | BodyMode::Transition { .. }
+            | BodyMode::ServiceHandler { .. }
+            | BodyMode::ProviderOp { .. }
+            | BodyMode::AgentHandler { .. }
+            | BodyMode::WsDoMethod { .. }
+            | BodyMode::PredicateScaffold { .. }
+            | BodyMode::TestCase { .. }
+            | BodyMode::IntegrationCase { .. } => None,
         }
     }
 
@@ -615,7 +658,18 @@ impl<'a> LowerCtx<'a> {
     pub(crate) fn transition_states(&self) -> Option<(&str, &str)> {
         match &self.mode {
             BodyMode::Transition { old, new } => Some((old.as_str(), new.as_str())),
-            _ => None,
+            BodyMode::Method
+            | BodyMode::FreeFn
+            | BodyMode::GivenFn { .. }
+            | BodyMode::StaticInit
+            | BodyMode::Invariant { .. }
+            | BodyMode::ServiceHandler { .. }
+            | BodyMode::ProviderOp { .. }
+            | BodyMode::AgentHandler { .. }
+            | BodyMode::WsDoMethod { .. }
+            | BodyMode::PredicateScaffold { .. }
+            | BodyMode::TestCase { .. }
+            | BodyMode::IntegrationCase { .. } => None,
         }
     }
 
@@ -625,14 +679,36 @@ impl<'a> LowerCtx<'a> {
             BodyMode::TestCase {
                 observation_trace, ..
             } => observation_trace.as_deref(),
-            _ => None,
+            BodyMode::Method
+            | BodyMode::FreeFn
+            | BodyMode::GivenFn { .. }
+            | BodyMode::StaticInit
+            | BodyMode::Invariant { .. }
+            | BodyMode::Transition { .. }
+            | BodyMode::ServiceHandler { .. }
+            | BodyMode::ProviderOp { .. }
+            | BodyMode::AgentHandler { .. }
+            | BodyMode::WsDoMethod { .. }
+            | BodyMode::PredicateScaffold { .. }
+            | BodyMode::IntegrationCase { .. } => None,
         }
     }
 
     pub(super) fn agent_store(&self) -> Option<&AgentStoreState> {
         match &self.mode {
             BodyMode::AgentHandler { store, .. } => store.as_deref(),
-            _ => None,
+            BodyMode::Method
+            | BodyMode::FreeFn
+            | BodyMode::GivenFn { .. }
+            | BodyMode::StaticInit
+            | BodyMode::Invariant { .. }
+            | BodyMode::Transition { .. }
+            | BodyMode::ServiceHandler { .. }
+            | BodyMode::ProviderOp { .. }
+            | BodyMode::WsDoMethod { .. }
+            | BodyMode::PredicateScaffold { .. }
+            | BodyMode::TestCase { .. }
+            | BodyMode::IntegrationCase { .. } => None,
         }
     }
 
@@ -723,7 +799,18 @@ impl<'a> LowerCtx<'a> {
             BodyMode::AgentHandler {
                 in_agent_handler, ..
             } => *in_agent_handler,
-            _ => false,
+            BodyMode::Method
+            | BodyMode::FreeFn
+            | BodyMode::GivenFn { .. }
+            | BodyMode::StaticInit
+            | BodyMode::Invariant { .. }
+            | BodyMode::Transition { .. }
+            | BodyMode::ServiceHandler { .. }
+            | BodyMode::ProviderOp { .. }
+            | BodyMode::WsDoMethod { .. }
+            | BodyMode::PredicateScaffold { .. }
+            | BodyMode::TestCase { .. }
+            | BodyMode::IntegrationCase { .. } => false,
         }
     }
 
@@ -733,7 +820,18 @@ impl<'a> LowerCtx<'a> {
             BodyMode::AgentHandler {
                 agent_key_field, ..
             } => agent_key_field.as_deref(),
-            _ => None,
+            BodyMode::Method
+            | BodyMode::FreeFn
+            | BodyMode::GivenFn { .. }
+            | BodyMode::StaticInit
+            | BodyMode::Invariant { .. }
+            | BodyMode::Transition { .. }
+            | BodyMode::ServiceHandler { .. }
+            | BodyMode::ProviderOp { .. }
+            | BodyMode::WsDoMethod { .. }
+            | BodyMode::PredicateScaffold { .. }
+            | BodyMode::TestCase { .. }
+            | BodyMode::IntegrationCase { .. } => None,
         }
     }
 
@@ -741,7 +839,18 @@ impl<'a> LowerCtx<'a> {
     pub(crate) fn ws_self_agent(&self) -> Option<&str> {
         match &self.mode {
             BodyMode::WsDoMethod { ws_self_agent, .. } => ws_self_agent.as_deref(),
-            _ => None,
+            BodyMode::Method
+            | BodyMode::FreeFn
+            | BodyMode::GivenFn { .. }
+            | BodyMode::StaticInit
+            | BodyMode::Invariant { .. }
+            | BodyMode::Transition { .. }
+            | BodyMode::ServiceHandler { .. }
+            | BodyMode::ProviderOp { .. }
+            | BodyMode::AgentHandler { .. }
+            | BodyMode::PredicateScaffold { .. }
+            | BodyMode::TestCase { .. }
+            | BodyMode::IntegrationCase { .. } => None,
         }
     }
 
@@ -756,7 +865,17 @@ impl<'a> LowerCtx<'a> {
                 deps_identity_binder,
                 ..
             } => deps_identity_binder.as_deref(),
-            _ => None,
+            BodyMode::Method
+            | BodyMode::FreeFn
+            | BodyMode::GivenFn { .. }
+            | BodyMode::StaticInit
+            | BodyMode::Invariant { .. }
+            | BodyMode::Transition { .. }
+            | BodyMode::ProviderOp { .. }
+            | BodyMode::AgentHandler { .. }
+            | BodyMode::PredicateScaffold { .. }
+            | BodyMode::TestCase { .. }
+            | BodyMode::IntegrationCase { .. } => None,
         }
     }
 
@@ -769,7 +888,17 @@ impl<'a> LowerCtx<'a> {
             | BodyMode::WsDoMethod {
                 actor_sum_binder, ..
             } => actor_sum_binder.as_deref(),
-            _ => None,
+            BodyMode::Method
+            | BodyMode::FreeFn
+            | BodyMode::GivenFn { .. }
+            | BodyMode::StaticInit
+            | BodyMode::Invariant { .. }
+            | BodyMode::Transition { .. }
+            | BodyMode::ProviderOp { .. }
+            | BodyMode::AgentHandler { .. }
+            | BodyMode::PredicateScaffold { .. }
+            | BodyMode::TestCase { .. }
+            | BodyMode::IntegrationCase { .. } => None,
         }
     }
 
@@ -777,7 +906,18 @@ impl<'a> LowerCtx<'a> {
     pub(crate) fn is_test_service(&self, name: &str) -> bool {
         match &self.mode {
             BodyMode::TestCase { test_services, .. } => test_services.contains(name),
-            _ => false,
+            BodyMode::Method
+            | BodyMode::FreeFn
+            | BodyMode::GivenFn { .. }
+            | BodyMode::StaticInit
+            | BodyMode::Invariant { .. }
+            | BodyMode::Transition { .. }
+            | BodyMode::ServiceHandler { .. }
+            | BodyMode::ProviderOp { .. }
+            | BodyMode::AgentHandler { .. }
+            | BodyMode::WsDoMethod { .. }
+            | BodyMode::PredicateScaffold { .. }
+            | BodyMode::IntegrationCase { .. } => false,
         }
     }
 
@@ -789,7 +929,18 @@ impl<'a> LowerCtx<'a> {
             BodyMode::TestCase { sum_handlers, .. } => {
                 sum_handlers.contains(&(service.to_string(), key.to_string()))
             }
-            _ => false,
+            BodyMode::Method
+            | BodyMode::FreeFn
+            | BodyMode::GivenFn { .. }
+            | BodyMode::StaticInit
+            | BodyMode::Invariant { .. }
+            | BodyMode::Transition { .. }
+            | BodyMode::ServiceHandler { .. }
+            | BodyMode::ProviderOp { .. }
+            | BodyMode::AgentHandler { .. }
+            | BodyMode::WsDoMethod { .. }
+            | BodyMode::PredicateScaffold { .. }
+            | BodyMode::IntegrationCase { .. } => false,
         }
     }
 
@@ -800,7 +951,18 @@ impl<'a> LowerCtx<'a> {
             BodyMode::TestCase { sum_handlers, .. } => {
                 sum_handlers.contains(&(service.to_string(), format!("nobinder:{key}")))
             }
-            _ => false,
+            BodyMode::Method
+            | BodyMode::FreeFn
+            | BodyMode::GivenFn { .. }
+            | BodyMode::StaticInit
+            | BodyMode::Invariant { .. }
+            | BodyMode::Transition { .. }
+            | BodyMode::ServiceHandler { .. }
+            | BodyMode::ProviderOp { .. }
+            | BodyMode::AgentHandler { .. }
+            | BodyMode::WsDoMethod { .. }
+            | BodyMode::PredicateScaffold { .. }
+            | BodyMode::IntegrationCase { .. } => false,
         }
     }
 
@@ -811,7 +973,18 @@ impl<'a> LowerCtx<'a> {
             BodyMode::TestCase { sum_handlers, .. } => {
                 sum_handlers.contains(&(service.to_string(), format!("oidc:{key}")))
             }
-            _ => false,
+            BodyMode::Method
+            | BodyMode::FreeFn
+            | BodyMode::GivenFn { .. }
+            | BodyMode::StaticInit
+            | BodyMode::Invariant { .. }
+            | BodyMode::Transition { .. }
+            | BodyMode::ServiceHandler { .. }
+            | BodyMode::ProviderOp { .. }
+            | BodyMode::AgentHandler { .. }
+            | BodyMode::WsDoMethod { .. }
+            | BodyMode::PredicateScaffold { .. }
+            | BodyMode::IntegrationCase { .. } => false,
         }
     }
 
@@ -850,7 +1023,18 @@ impl<'a> LowerCtx<'a> {
                 test_service_handlers,
                 ..
             } => test_service_handlers.get(name).map(Vec::as_slice),
-            _ => None,
+            BodyMode::Method
+            | BodyMode::FreeFn
+            | BodyMode::GivenFn { .. }
+            | BodyMode::StaticInit
+            | BodyMode::Invariant { .. }
+            | BodyMode::Transition { .. }
+            | BodyMode::ServiceHandler { .. }
+            | BodyMode::ProviderOp { .. }
+            | BodyMode::AgentHandler { .. }
+            | BodyMode::WsDoMethod { .. }
+            | BodyMode::PredicateScaffold { .. }
+            | BodyMode::IntegrationCase { .. } => None,
         }
     }
 
@@ -862,7 +1046,18 @@ impl<'a> LowerCtx<'a> {
                 system_http_services,
                 ..
             } => system_http_services.contains(name),
-            _ => false,
+            BodyMode::Method
+            | BodyMode::FreeFn
+            | BodyMode::GivenFn { .. }
+            | BodyMode::StaticInit
+            | BodyMode::Invariant { .. }
+            | BodyMode::Transition { .. }
+            | BodyMode::ServiceHandler { .. }
+            | BodyMode::ProviderOp { .. }
+            | BodyMode::AgentHandler { .. }
+            | BodyMode::WsDoMethod { .. }
+            | BodyMode::PredicateScaffold { .. }
+            | BodyMode::TestCase { .. } => false,
         }
     }
 
@@ -879,7 +1074,18 @@ impl<'a> LowerCtx<'a> {
                     .position(|e| e == expr)?;
                 Some(format!("__sysdrive_schedule_{service}_{idx}"))
             }
-            _ => None,
+            BodyMode::Method
+            | BodyMode::FreeFn
+            | BodyMode::GivenFn { .. }
+            | BodyMode::StaticInit
+            | BodyMode::Invariant { .. }
+            | BodyMode::Transition { .. }
+            | BodyMode::ServiceHandler { .. }
+            | BodyMode::ProviderOp { .. }
+            | BodyMode::AgentHandler { .. }
+            | BodyMode::WsDoMethod { .. }
+            | BodyMode::PredicateScaffold { .. }
+            | BodyMode::TestCase { .. } => None,
         }
     }
 
@@ -893,7 +1099,19 @@ impl<'a> LowerCtx<'a> {
             {
                 Some(format!("__sysdrive_message_{service}"))
             }
-            _ => None,
+            BodyMode::Method
+            | BodyMode::FreeFn
+            | BodyMode::GivenFn { .. }
+            | BodyMode::StaticInit
+            | BodyMode::Invariant { .. }
+            | BodyMode::Transition { .. }
+            | BodyMode::ServiceHandler { .. }
+            | BodyMode::ProviderOp { .. }
+            | BodyMode::AgentHandler { .. }
+            | BodyMode::WsDoMethod { .. }
+            | BodyMode::PredicateScaffold { .. }
+            | BodyMode::TestCase { .. }
+            | BodyMode::IntegrationCase { .. } => None,
         }
     }
 
@@ -904,7 +1122,18 @@ impl<'a> LowerCtx<'a> {
             BodyMode::IntegrationCase {
                 system_http_routes, ..
             } => system_http_routes.contains(route),
-            _ => false,
+            BodyMode::Method
+            | BodyMode::FreeFn
+            | BodyMode::GivenFn { .. }
+            | BodyMode::StaticInit
+            | BodyMode::Invariant { .. }
+            | BodyMode::Transition { .. }
+            | BodyMode::ServiceHandler { .. }
+            | BodyMode::ProviderOp { .. }
+            | BodyMode::AgentHandler { .. }
+            | BodyMode::WsDoMethod { .. }
+            | BodyMode::PredicateScaffold { .. }
+            | BodyMode::TestCase { .. } => false,
         }
     }
 
@@ -918,7 +1147,18 @@ impl<'a> LowerCtx<'a> {
                 system_http_route_body,
                 ..
             } => system_http_route_body.get(route),
-            _ => None,
+            BodyMode::Method
+            | BodyMode::FreeFn
+            | BodyMode::GivenFn { .. }
+            | BodyMode::StaticInit
+            | BodyMode::Invariant { .. }
+            | BodyMode::Transition { .. }
+            | BodyMode::ServiceHandler { .. }
+            | BodyMode::ProviderOp { .. }
+            | BodyMode::AgentHandler { .. }
+            | BodyMode::WsDoMethod { .. }
+            | BodyMode::PredicateScaffold { .. }
+            | BodyMode::TestCase { .. } => None,
         }
     }
 
@@ -929,7 +1169,18 @@ impl<'a> LowerCtx<'a> {
                 system_http_type_ns,
                 ..
             } => system_http_type_ns.as_str(),
-            _ => "",
+            BodyMode::Method
+            | BodyMode::FreeFn
+            | BodyMode::GivenFn { .. }
+            | BodyMode::StaticInit
+            | BodyMode::Invariant { .. }
+            | BodyMode::Transition { .. }
+            | BodyMode::ServiceHandler { .. }
+            | BodyMode::ProviderOp { .. }
+            | BodyMode::AgentHandler { .. }
+            | BodyMode::WsDoMethod { .. }
+            | BodyMode::PredicateScaffold { .. }
+            | BodyMode::TestCase { .. } => "",
         }
     }
 
@@ -971,7 +1222,19 @@ impl<'a> LowerCtx<'a> {
                     None => bynk_ts::TsExpr::object(vec![]),
                 },
             ),
-            _ => None,
+            BodyMode::Method
+            | BodyMode::FreeFn
+            | BodyMode::GivenFn { .. }
+            | BodyMode::StaticInit
+            | BodyMode::Invariant { .. }
+            | BodyMode::Transition { .. }
+            | BodyMode::ServiceHandler { .. }
+            | BodyMode::ProviderOp { .. }
+            | BodyMode::AgentHandler { .. }
+            | BodyMode::WsDoMethod { .. }
+            | BodyMode::PredicateScaffold { .. }
+            | BodyMode::TestCase { .. }
+            | BodyMode::IntegrationCase { .. } => None,
         }
     }
 
@@ -999,7 +1262,18 @@ impl<'a> LowerCtx<'a> {
                 .sum_routes
                 .get(route)
                 .map(|primary| str_node(self.call_site_actor.as_deref().unwrap_or(primary))),
-            _ => None,
+            BodyMode::Method
+            | BodyMode::FreeFn
+            | BodyMode::GivenFn { .. }
+            | BodyMode::StaticInit
+            | BodyMode::Invariant { .. }
+            | BodyMode::Transition { .. }
+            | BodyMode::ServiceHandler { .. }
+            | BodyMode::ProviderOp { .. }
+            | BodyMode::AgentHandler { .. }
+            | BodyMode::WsDoMethod { .. }
+            | BodyMode::PredicateScaffold { .. }
+            | BodyMode::TestCase { .. } => None,
         }
     }
 
@@ -1436,11 +1710,13 @@ impl<'a> LowerCtx<'a> {
     /// #2617: whether a simple `is` receiver (an ident or a field-access
     /// chain ending at one) starts at a constant.
     pub(crate) fn roots_at_const(&self, value: &Expr) -> bool {
-        match &value.kind {
-            ExprKind::Ident(_) => self.const_ref(value).is_some(),
-            ExprKind::FieldAccess { receiver, .. } => self.roots_at_const(receiver),
-            ExprKind::Paren(inner) => self.roots_at_const(inner),
-            _ => false,
+        match value.kind.chain_link() {
+            Some(bynk_syntax::ast::ChainLink::Root(_)) => self.const_ref(value).is_some(),
+            Some(
+                bynk_syntax::ast::ChainLink::Field { receiver, .. }
+                | bynk_syntax::ast::ChainLink::Paren(receiver),
+            ) => self.roots_at_const(receiver),
+            None => false,
         }
     }
     /// The receiver as a [`PatPath`]: its temp, or the simple lvalue chain.

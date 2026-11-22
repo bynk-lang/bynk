@@ -893,12 +893,9 @@ impl Arm<'_> {
     // `Result` outcome (an `Err` is a value, so nothing rejects).
     fn traverse_all(self) -> bynk_ts::TsExpr {
         let tys = self.tys;
-        let res = match self.result_ty.map(|t| tys.get(t)).as_deref() {
-            Some(Ty::Effect(inner)) => match &*tys.get(*inner) {
-                Ty::List(el) => ts_ty_to_ts_type(*el, tys),
-                _ => ts_ty_to_ts_type(*inner, tys),
-            },
-            _ => self
+        let res = match self.result_ty.and_then(|t| tys.get(t).as_effect()) {
+            Some(inner) => ts_ty_to_ts_type(tys.get(inner).as_list().unwrap_or(inner), tys),
+            None => self
                 .fault_site()
                 .missing_fact_ty("`Effect[List[_]]` type for a `traverseAll` call"),
         };
@@ -1076,7 +1073,33 @@ mod tests {
                 let result = env.tys.intern(Ty::Result(list, int));
                 Some(env.tys.intern(Ty::Effect(result)))
             }
-            _ => None,
+            QueryOp::Map
+            | QueryOp::Filter
+            | QueryOp::FlatMap
+            | QueryOp::SortBy
+            | QueryOp::SortByDescending
+            | QueryOp::Take
+            | QueryOp::Skip
+            | QueryOp::Distinct
+            | QueryOp::DistinctBy
+            | QueryOp::JoinOn
+            | QueryOp::LeftJoin
+            | QueryOp::Join
+            | QueryOp::GroupBy
+            | QueryOp::Collect
+            | QueryOp::First
+            | QueryOp::FirstOrElse
+            | QueryOp::Count
+            | QueryOp::Fold
+            | QueryOp::Any
+            | QueryOp::All
+            | QueryOp::Sum
+            | QueryOp::Min
+            | QueryOp::Max
+            | QueryOp::Average
+            | QueryOp::ForEach
+            | QueryOp::ParTraverse
+            | QueryOp::ParTraverseAll => None,
         }
     }
 
