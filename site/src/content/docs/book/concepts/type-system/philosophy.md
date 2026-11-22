@@ -19,7 +19,7 @@ the outside world must pass through [`.of`](/reference/glossary/#term-of-unsafe)
 which returns a [`Result`](/reference/glossary/#term-result-option). The type
 system thereby forces validation to happen exactly once, at the edge, and
 everything inside the edge can assume validity. See
-[The refined-literal admission model](/book/guides/type-system/refined-literal-admission/).
+[The refined-literal admission model](/book/concepts/type-system/refined-literal-admission/).
 
 ## Opacity: identity matters
 
@@ -129,4 +129,4 @@ identity over a base), **sum** (tagged variants), and **record** (named fields,
 which can nest) — and `Result`/`Option` make failure and absence part of the type
 rather than hidden control flow. The **admission boundary** sits on refined types:
 a literal is checked at compile time, while untrusted input must go through `.of`.
-See [the refined-construction flow](/book/guides/type-system/refined-literal-admission/).
+See [the refined-construction flow](/book/concepts/type-system/refined-literal-admission/).

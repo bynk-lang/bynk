@@ -26,7 +26,7 @@ a working result. They are grouped by what you are building:
 New to Bynk? Work through [Learn Bynk](/book/tutorials/01-first-program/)
 first. To understand why a part of the language works the way it does, read its
 **Concepts** page, starting with
-[how a Bynk program is shaped](/book/guides/program-structure/how-a-program-is-shaped/).
+[how a Bynk program is shaped](/book/concepts/program-structure/how-a-program-is-shaped/).
 For exact rules, see the [Reference](/reference/) and the
 [Specification](/reference/spec/).
 

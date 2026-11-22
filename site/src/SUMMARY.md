@@ -21,33 +21,33 @@
 
 # Concepts
 
-- [Program structure](guides/program-structure/index.md)
-  - [How a Bynk program is shaped](guides/program-structure/how-a-program-is-shaped.md)
-- [The type system](guides/type-system/index.md)
-  - [The type-system philosophy](guides/type-system/philosophy.md)
-  - [The refined-literal admission model](guides/type-system/refined-literal-admission.md)
-  - [Recursion and iteration](guides/type-system/recursion-and-iteration.md)
-  - [Understand ordering your own types](guides/type-system/ordering-your-own-types.md)
-- [Effects & capabilities](guides/effects-and-capabilities/index.md)
-  - [Understand the capability model](guides/effects-and-capabilities/understand-the-capability-model.md)
-  - [Synchronous and asynchronous sends](guides/effects-and-capabilities/synchronous-and-asynchronous-sends.md)
-  - [What a join guarantees on failure](guides/effects-and-capabilities/what-a-join-guarantees-on-failure.md)
-  - [What a timeout stops](guides/effects-and-capabilities/what-a-timeout-stops.md)
-- [Agents & state](guides/agents-and-state/index.md)
-  - [The agent model](guides/agents-and-state/the-agent-model.md)
-  - [Understand: invariants as contracts](guides/agents-and-state/understand-invariants.md)
-- [Entry points](guides/entry-points/index.md)
-- [Actors & access control](guides/actors/index.md)
-- [Events](guides/events/index.md)
-  - [Understand events](guides/events/understand-events.md)
-- [Localisation](guides/localisation/index.md)
-  - [Understand localisation](guides/localisation/understand-localisation.md)
-- [Testing](guides/testing/index.md)
-  - [The testing philosophy](guides/testing/philosophy.md)
-- [Projects, build & deployment](guides/projects-build-and-deployment/index.md)
-  - [Why compile to TypeScript](guides/projects-build-and-deployment/why-compile-to-typescript.md)
-- [Bynk compared to TypeScript](about/bynk-compared-to-typescript.md)
-- [Bynk compared to the alternatives](about/bynk-compared-to-the-alternatives.md)
+- [Concepts](concepts/index.md)
+  - Program structure
+    - [How a Bynk program is shaped](concepts/program-structure/how-a-program-is-shaped.md)
+  - The type system
+    - [The type-system philosophy](concepts/type-system/philosophy.md)
+    - [The refined-literal admission model](concepts/type-system/refined-literal-admission.md)
+    - [Recursion and iteration](concepts/type-system/recursion-and-iteration.md)
+    - [Understand ordering your own types](concepts/type-system/ordering-your-own-types.md)
+  - Effects & capabilities
+    - [Understand the capability model](concepts/effects-and-capabilities/understand-the-capability-model.md)
+    - [Synchronous and asynchronous sends](concepts/effects-and-capabilities/synchronous-and-asynchronous-sends.md)
+    - [What a join guarantees on failure](concepts/effects-and-capabilities/what-a-join-guarantees-on-failure.md)
+    - [What a timeout stops](concepts/effects-and-capabilities/what-a-timeout-stops.md)
+  - Agents & state
+    - [The agent model](concepts/agents-and-state/the-agent-model.md)
+    - [Understand: invariants as contracts](concepts/agents-and-state/understand-invariants.md)
+  - Events
+    - [Understand events](concepts/events/understand-events.md)
+  - Localisation
+    - [Understand localisation](concepts/localisation/understand-localisation.md)
+  - Testing
+    - [The testing philosophy](concepts/testing/philosophy.md)
+  - Projects, build & deployment
+    - [Why compile to TypeScript](concepts/projects-build-and-deployment/why-compile-to-typescript.md)
+  - Bynk compared
+    - [Bynk compared to TypeScript](concepts/about/bynk-compared-to-typescript.md)
+    - [Bynk compared to the alternatives](concepts/about/bynk-compared-to-the-alternatives.md)
 
 # Guides
 
@@ -152,6 +152,17 @@
     - [Contract skew across independently deployed contexts](guides/projects-build-and-deployment/contract-skew.md)
     - [Target Cloudflare Workers](guides/projects-build-and-deployment/cloudflare-workers.md)
     - [Adopt Bynk beside a TypeScript Worker](guides/projects-build-and-deployment/adopt-beside-a-typescript-worker.md)
+  - By topic
+    - [Program structure](guides/program-structure/index.md)
+    - [The type system](guides/type-system/index.md)
+    - [Effects & capabilities](guides/effects-and-capabilities/index.md)
+    - [Agents & state](guides/agents-and-state/index.md)
+    - [Entry points](guides/entry-points/index.md)
+    - [Actors & access control](guides/actors/index.md)
+    - [Events](guides/events/index.md)
+    - [Localisation](guides/localisation/index.md)
+    - [Testing](guides/testing/index.md)
+    - [Projects, build & deployment](guides/projects-build-and-deployment/index.md)
 
 # About Bynk
 

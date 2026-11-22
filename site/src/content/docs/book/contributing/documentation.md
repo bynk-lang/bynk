@@ -17,9 +17,12 @@ up: the language, architecture, adapters, tooling, diagnostics, the
 specification and the releases, under `site/src/content/docs/reference/`.
 [Diátaxis](https://diataxis.fr/) governs each page — one mode per page — and
 the part a page sits in says which mode it is. A new page goes in the part for
-its mode: an explanation in Concepts, under its concern; a how-to in Guides,
-under the group for the task. The page's file stays in its concern's folder
-under `guides/`; only `SUMMARY.md` decides where it shows.
+its mode, and its folder follows: an explanation in Concepts, as
+`book/concepts/<concern>/<page>.md` (served at `/book/concepts/…`); a how-to in
+Guides, as `book/guides/<concern>/<page>.md`, listed under the group for the
+task. Each concern's hub, `book/guides/<concern>/index.md`, gathers both and
+stays in Guides, under "By topic". Within a part, `SUMMARY.md` decides where a
+page shows.
 
 ## Build and preview locally
 
@@ -169,7 +172,7 @@ its captured transcript:
    The plugin resolves the `diagnostics/…` suffix against `site/src/` (the
    `includeBase` set in `astro.config.mjs`), so only the `diagnostics/` part of
    the path matters. See
-   [the agent model](/book/guides/agents-and-state/the-agent-model/) for a live
+   [the agent model](/book/concepts/agents-and-state/the-agent-model/) for a live
    example to copy.
 
 The `.txt` transcripts are **generated — never hand-edit them**;
@@ -198,7 +201,7 @@ persuasive shape in the Book. Two panels:
 Weave it into the prose where the page already *asserts* the bug, so the
 demonstration replaces the assertion rather than bolting on. Keep it to
 explanation pages; reference stays dry. See
-[the type-system philosophy](/book/guides/type-system/philosophy/) for the
+[the type-system philosophy](/book/concepts/type-system/philosophy/) for the
 device in use.
 
 ## The guardrails

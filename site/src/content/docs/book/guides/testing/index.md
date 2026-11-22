@@ -5,7 +5,7 @@ Test a unit in isolation with `stub` clauses, or dial up the tier to run its rea
 collaborators — in one context, or wired across the real cross-context edge.
 
 **Understand**
-- [The testing philosophy](/book/guides/testing/philosophy/)
+- [The testing philosophy](/book/concepts/testing/philosophy/)
 
 **Do**
 - [Write tests and stub collaborators](/book/guides/testing/write-tests/)

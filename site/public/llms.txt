@@ -389,7 +389,7 @@ Built-in type names, reserved in type position: `Asset` `BoundaryRejection`
 
 ## Optional
 
-- [Why Bynk exists](/book/about/why-bynk-exists/) and [Bynk compared to TypeScript](/book/about/bynk-compared-to-typescript/): motivation and contrasts.
+- [Why Bynk exists](/book/about/why-bynk-exists/) and [Bynk compared to TypeScript](/book/concepts/about/bynk-compared-to-typescript/): motivation and contrasts.
 - [Versioning & roadmap](/book/about/versioning-and-roadmap/): what is shipped vs deferred to v1.
 - [Planned features (non-normative)](/reference/spec/appendix-planned/): sagas and event replay are designed but not yet implemented.
 - [Diagnostic index](/reference/diagnostics/): every diagnostic code, each with a page saying what it means and how to fix it (`https://bynk-lang.org/d/<code>`).

@@ -219,5 +219,5 @@ a memory — somewhere to actually store a link.
 ---
 
 *Why does admission work this way, rather than overloading `.of`? See
-[The refined-literal admission model](/book/guides/type-system/refined-literal-admission/).
-For the philosophy, see [The type-system philosophy](/book/guides/type-system/philosophy/).*
+[The refined-literal admission model](/book/concepts/type-system/refined-literal-admission/).
+For the philosophy, see [The type-system philosophy](/book/concepts/type-system/philosophy/).*

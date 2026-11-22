@@ -211,5 +211,5 @@ From here:
 ---
 
 *For the reasoning behind `Val[T]` and test isolation, see
-[The testing philosophy](/book/guides/testing/philosophy/). For exact rules,
+[The testing philosophy](/book/concepts/testing/philosophy/). For exact rules,
 see the [testing reference](/reference/testing/).*

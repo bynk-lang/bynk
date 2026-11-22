@@ -310,6 +310,6 @@ We have asserted that all this works — now let us prove it.
 ---
 
 *For what an agent really is and why state must be zeroable, see
-[The agent model](/book/guides/agents-and-state/the-agent-model/). For exact rules, see the
+[The agent model](/book/concepts/agents-and-state/the-agent-model/). For exact rules, see the
 [agents reference](/reference/agents/). For capabilities and providers, see
 the [how-to guides](/book/guides/effects-and-capabilities/).*

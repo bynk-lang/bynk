@@ -2,7 +2,7 @@
 
 What compiled Bynk costs at run time, against hand-written TypeScript doing the
 same work. The results are published on the book's
-[comparison page](../../site/src/content/docs/book/about/bynk-compared-to-the-alternatives.md)
+[comparison page](../../site/src/content/docs/book/concepts/about/bynk-compared-to-the-alternatives.md)
 and recorded per release in [`design/benchmarks/runtime/`](../../design/benchmarks/runtime/) as
 `v<version>.json`. Compiler and editor speed are a separate matter (#3168).
 

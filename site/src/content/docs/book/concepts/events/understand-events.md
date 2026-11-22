@@ -504,6 +504,6 @@ still skipped.
 
 **See also:**
 [First-party `bynk` capabilities](/reference/bynk-capabilities/),
-[Understand the capability model](/book/guides/effects-and-capabilities/understand-the-capability-model/),
-[Understand: invariants as contracts](/book/guides/agents-and-state/understand-invariants/),
+[Understand the capability model](/book/concepts/effects-and-capabilities/understand-the-capability-model/),
+[Understand: invariants as contracts](/book/concepts/agents-and-state/understand-invariants/),
 [Diagnostics](/reference/diagnostics/).

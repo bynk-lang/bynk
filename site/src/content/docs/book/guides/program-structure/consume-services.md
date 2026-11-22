@@ -189,4 +189,4 @@ target details.
 ## Related
 
 - Reference: [type system](/reference/types/).
-- Explanation: [How a Bynk program is shaped](/book/guides/program-structure/how-a-program-is-shaped/).
+- Explanation: [How a Bynk program is shaped](/book/concepts/program-structure/how-a-program-is-shaped/).

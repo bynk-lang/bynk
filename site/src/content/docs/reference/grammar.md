@@ -275,7 +275,7 @@ commons shop {
 }
 ```
 
-**See also.** [How a Bynk program is shaped](/book/guides/program-structure/how-a-program-is-shaped/) · [Lay out a project](/book/guides/projects-build-and-deployment/layout/).
+**See also.** [How a Bynk program is shaped](/book/concepts/program-structure/how-a-program-is-shaped/) · [Lay out a project](/book/guides/projects-build-and-deployment/layout/).
 
 ### item_fragment {#rule-_item_fragment}
 
@@ -319,7 +319,7 @@ service sweeper from cron {
 **Static semantics.**
 {{#grammar-semantics context_decl}}
 
-**See also.** [How a Bynk program is shaped](/book/guides/program-structure/how-a-program-is-shaped/).
+**See also.** [How a Bynk program is shaped](/book/concepts/program-structure/how-a-program-is-shaped/).
 
 ### adapter_decl {#rule-adapter_decl}
 
@@ -505,7 +505,7 @@ type Status =
 **Static semantics.**
 {{#grammar-semantics type_decl}}
 
-**See also.** [Type system](/reference/types/) · [Define sum, record, and opaque types](/book/guides/type-system/define-types/) · [The type-system philosophy](/book/guides/type-system/philosophy/).
+**See also.** [Type system](/reference/types/) · [Define sum, record, and opaque types](/book/guides/type-system/define-types/) · [The type-system philosophy](/book/concepts/type-system/philosophy/).
 
 ### type_body {#rule-_type_body}
 
@@ -619,7 +619,7 @@ expressions.
 **Static semantics.**
 {{#grammar-semantics refinement}}
 
-**See also.** [The refined-literal admission model](/book/guides/type-system/refined-literal-admission/).
+**See also.** [The refined-literal admission model](/book/concepts/type-system/refined-literal-admission/).
 
 ### refinement_pred {#rule-_refinement_pred}
 
@@ -753,7 +753,7 @@ A function may call itself. A direct self call in tail position runs as a loop,
 in constant stack, for pure and `Effect` functions alike; mutual recursion,
 non-tail recursion and a function with an `ensures` clause keep direct recursion,
 bounded by the host's stack. See
-[Recursion and iteration](/book/guides/type-system/recursion-and-iteration/).
+[Recursion and iteration](/book/concepts/type-system/recursion-and-iteration/).
 
 **See also.** [Operators & built-ins](/reference/operators/).
 
@@ -932,7 +932,7 @@ syntactically permitted in a `commons`/`adapter` body too, the same way
 3b) reuses `store_annotation`; `N`'s legality (a positive `Int` literal,
 `@schema` alone, at most once) is a checker concern, not a grammar one.
 
-**See also.** [Understand events](/book/guides/events/understand-events/).
+**See also.** [Understand events](/book/concepts/events/understand-events/).
 
 ### asset_decl {#rule-asset_decl}
 
@@ -1179,7 +1179,7 @@ argument is also an inclusive range (`via schema(2..4)`, `(2..)`, `(..4)`), the
 same [`int_range`](#rule-int_range) a `match` pattern uses (events slice 4b,
 #990), or `_`, which matches every version.
 
-**See also.** [Understand events](/book/guides/events/understand-events/).
+**See also.** [Understand events](/book/concepts/events/understand-events/).
 
 ### cors_policy {#rule-cors_policy}
 
@@ -1413,7 +1413,7 @@ connection.
 form (params/`by`/`given`/body all uniform); the checker verifies the
 parameter's type against the header's event type.
 
-**See also.** [Understand events](/book/guides/events/understand-events/).
+**See also.** [Understand events](/book/concepts/events/understand-events/).
 
 ## Agents
 
@@ -1453,7 +1453,7 @@ agent Counter {
 **Static semantics.**
 {{#grammar-semantics agent_decl}}
 
-**See also.** [Agents](/reference/agents/) · [Build a stateful agent](/book/guides/agents-and-state/stateful-agent/) · [The agent model](/book/guides/agents-and-state/the-agent-model/).
+**See also.** [Agents](/reference/agents/) · [Build a stateful agent](/book/guides/agents-and-state/stateful-agent/) · [The agent model](/book/concepts/agents-and-state/the-agent-model/).
 
 ### key_decl {#rule-key_decl}
 
