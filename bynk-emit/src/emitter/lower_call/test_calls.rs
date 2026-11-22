@@ -12,6 +12,9 @@ use bynk_check::checker::{Callee, HandlerAddress, Ty, WsAddress};
 use bynk_model::IrHttpMethod;
 use bynk_ts::{TsExpr, TsObjectEntry};
 
+use super::super::harness_names::{
+    SysdriveKind, route_with, sysdrive_name, wrong_method_driver_name,
+};
 use super::super::internal_fault::undefined_node;
 use super::super::lower::{Pre, settle_helper, settle_with, str_node};
 use super::super::lower_ctx::LowerCtx;
@@ -19,16 +22,6 @@ use super::super::lower_list::{any_ty, arrow, call, id, member, param, paren, ta
 use super::super::{Expr, ExprKind, Ident, TypeRef};
 
 // ---- Names ----
-
-/// The name of a `system`-tier driver: `<driver>_<service>_<key>`.
-fn sysdrive_name(driver: &str, service: &str, key: &str) -> String {
-    format!("{driver}_{service}_{key}")
-}
-
-/// The generic `405` driver of a service (#707).
-fn wrong_method_driver_name(service: &str) -> String {
-    format!("__sysdrive_wrongmethod_{service}")
-}
 
 /// The module's event-delivery helper for a service (#2052).
 fn event_helper_name(service: &str) -> String {
@@ -313,17 +306,15 @@ fn wrong_method_call(service: &str, verb: IrHttpMethod, path: &str) -> bynk_ts::
 /// Slice C: a `Wire(…)` argument drives the *raw* driver (input sent unvalidated, result decodes
 /// to an `HttpOutcome`). #821: the two axes are independent. #2135: `by Forged` / `by Stale`
 /// drive the signing driver that sends a wrong or a stale signature.
-fn system_driver(cx: &LowerCtx, has_wire: bool) -> String {
-    let driver = match (cx.call_site_no_credential, has_wire) {
-        (true, true) => "__sysdrive_rawnoauth".to_string(),
-        (true, false) => "__sysdrive_noauth".to_string(),
-        (false, true) => "__sysdrive_raw".to_string(),
-        (false, false) => "__sysdrive".to_string(),
+fn system_driver(cx: &LowerCtx, has_wire: bool) -> SysdriveKind<'static> {
+    let kind = match (cx.call_site_bad_signature, cx.call_site_no_credential) {
+        (Some(bad), _) => bad,
+        (None, true) => "noauth",
+        (None, false) => "",
     };
-    match (cx.call_site_bad_signature, has_wire) {
-        (Some(v), true) => format!("__sysdrive_raw{v}"),
-        (Some(v), false) => format!("__sysdrive_{v}"),
-        (None, _) => driver,
+    SysdriveKind {
+        raw: has_wire,
+        kind,
     }
 }
 
@@ -357,7 +348,7 @@ impl RawSlots {
             cx.system_http_route_body(&(
                 route.0.clone(),
                 route.1.clone(),
-                format!("{}{suffix}", route.2),
+                route_with(&route.2, suffix),
             ))
             .cloned()
         };
@@ -479,7 +470,7 @@ pub(in crate::emitter) fn lower_system_http_call(
         .iter()
         .any(|a| matches!(&a.kind, ExprKind::Wire(_)));
     let driver = system_driver(cx, has_wire);
-    let slots = RawSlots::new(cx, &route, driver.starts_with("__sysdrive_raw"));
+    let slots = RawSlots::new(cx, &route, driver.raw);
     let mut all: Vec<bynk_ts::TsExpr> = args[1..]
         .iter()
         .enumerate()
@@ -493,7 +484,7 @@ pub(in crate::emitter) fn lower_system_http_call(
     let extra = (
         route.0.clone(),
         route.1.clone(),
-        format!("{path}{}", crate::emitter::EXTRA_HEADERS_ROUTE_SUFFIX),
+        route_with(path, crate::emitter::EXTRA_HEADERS_ROUTE_SUFFIX),
     );
     if cx.has_system_http_route(&extra) {
         let sends_extra = matches!(
@@ -526,7 +517,7 @@ pub(in crate::emitter) fn lower_system_http_call(
         all.extend(cx.system_http_claims_arg(&route));
         all.extend(cx.system_http_sum_actor_arg(&route));
     }
-    let name = sysdrive_name(&driver, &svc.name, &key);
+    let name = sysdrive_name(driver, &svc.name, &key);
     Some({
         let nodes = all;
         call(TsExpr::Ident(name.clone()), nodes)
@@ -860,7 +851,7 @@ mod tests {
     #[test]
     fn driver_names_are_composed_by_their_naming_functions() {
         assert_eq!(
-            sysdrive_name("__sysdrive_noauth", "api", "http_GET_open"),
+            sysdrive_name(SysdriveKind::typed("noauth"), "api", "http_GET_open"),
             "__sysdrive_noauth_api_http_GET_open"
         );
         assert_eq!(

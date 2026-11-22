@@ -18,12 +18,6 @@ use bynk_syntax::span::Span;
 use bynk_ts::{TsArrowBody, TsBindingName, TsDecl, TsExpr, TsStmt, TsType};
 use std::sync::Arc;
 
-/// A participant's `env_<ns>` binding in the integration harness: the one spelling its
-/// declaration and every reference use (1A.39b, Decision C).
-fn env_binding(ns: &str) -> String {
-    format!("env_{ns}")
-}
-
 /// Emit the `__makeHarness()` factory: an in-process env per participant whose
 /// Service Bindings call the sibling participants' real Worker `fetch` and whose
 /// Durable-Object namespaces back the participant's own agents in memory, plus a
@@ -137,7 +131,7 @@ pub(super) fn emit_integration_harness<'a>(
                     }
                     let dns = test_ns(context);
                     service_binding_forward(
-                        &format!("worker_{dns}"),
+                        &worker_binding_name(&dns),
                         &env_binding(&dns),
                         sends(context),
                     )
@@ -311,7 +305,7 @@ pub(super) fn emit_integration_harness<'a>(
         let binding = crate::emitter::wrangler::service_binding(p).name;
         body.push(TsStmt::assign(
             member(ident("rootEnv"), binding),
-            service_binding_forward(&format!("worker_{ns}"), &env_binding(&ns), sends(p)),
+            service_binding_forward(&worker_binding_name(&ns), &env_binding(&ns), sends(p)),
             None,
         ));
     }
@@ -824,7 +818,7 @@ pub(super) fn json_codec_qual_for_target(
             if let Some(table) = unit_tables.get(u) {
                 for n in table.types.keys() {
                     if own || (is_public_type(table, n) && !left_out(n)) {
-                        qual.entry(n.clone()).or_insert_with(|| format!("{ns}."));
+                        qual.entry(n.clone()).or_insert_with(|| ns_qualifier(&ns));
                     }
                 }
             }

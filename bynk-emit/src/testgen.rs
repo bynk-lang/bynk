@@ -36,6 +36,9 @@ use std::sync::Arc;
 use crate::emit_model::*;
 use crate::emitter;
 use crate::emitter::RuntimeUse;
+use crate::emitter::harness_names::{
+    SysdriveKind, route_with, sysdrive_name, wrong_method_driver_name,
+};
 use crate::emitter::wrangler::WorkerBinding;
 use bynk_check::checker;
 use bynk_check::checker::ExprId;
@@ -63,6 +66,7 @@ mod case_body;
 mod harness;
 mod imports;
 mod integration_module;
+mod names;
 mod property_generators;
 mod property_tests;
 mod stubs;
@@ -77,6 +81,7 @@ pub use self::harness::discovery_manifest;
 use self::harness::*;
 use self::imports::*;
 use self::integration_module::*;
+use self::names::*;
 use self::property_generators::*;
 use self::property_tests::*;
 use self::stubs::*;

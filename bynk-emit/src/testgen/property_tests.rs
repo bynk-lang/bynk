@@ -807,7 +807,7 @@ pub(super) fn emit_contract_attack_function(
     out.push_str("    };\n");
 
     let rel_path_fwd = rel_path.replace('\\', "/");
-    let name = format!("contract {}", fname.name);
+    let name = contract_case_name(&fname.name);
     let return_run = TsStmt::return_stmt(
         Some(await_expr(call(
             ident("__bynkRunProperty"),

@@ -2051,6 +2051,21 @@ impl TsExpr {
         TsExpr::RawUsing(text.into(), names)
     }
 
+    /// A `bigint` literal: the digits of `n` (a leading `-` allowed), printed with the `n` suffix.
+    pub fn bigint(n: impl std::fmt::Display) -> Self {
+        let digits = n.to_string();
+        debug_assert!(
+            !digits.is_empty()
+                && digits
+                    .strip_prefix('-')
+                    .unwrap_or(&digits)
+                    .bytes()
+                    .all(|b| b.is_ascii_digit()),
+            "a bigint literal holds decimal digits only: {digits:?}"
+        );
+        TsExpr::Lit(TsLit::BigInt(digits))
+    }
+
     /// Whether this expression must be bracketed to be the object of a member access
     /// (`<expr>.name`, `<expr>(..)`). The printer brackets a binary, a cast, an arrow, a
     /// conditional or an assignment there itself, but not an `await`, a unary operator or a
@@ -2061,7 +2076,7 @@ impl TsExpr {
         match self {
             TsExpr::Await(_)
             | TsExpr::Unary { .. }
-            | TsExpr::Lit(TsLit::Num(_) | TsLit::Raw(_))
+            | TsExpr::Lit(TsLit::Num(_) | TsLit::BigInt(_) | TsLit::Raw(_))
             | TsExpr::Spread(_) => true,
             TsExpr::Lit(TsLit::Str(_) | TsLit::Null | TsLit::Bool(_))
             | TsExpr::Ident(..)
@@ -2498,6 +2513,9 @@ pub enum TsLit {
     /// grammar is not this crate's problem to re-derive; the caller passes
     /// the exact digits it wants printed.
     Num(String),
+    /// A `bigint` literal: the decimal digits, with an optional leading `-`, and no suffix. The
+    /// printer adds the `n`. Build it with [`TsExpr::bigint`].
+    BigInt(String),
     Null,
     Bool(bool),
     /// The complete literal text, printed exactly as given — no quoting, no
@@ -3442,6 +3460,7 @@ mod tests {
                 expr: Box::new(id()),
             },
             TsExpr::Lit(TsLit::Num("1".to_string())),
+            TsExpr::bigint(1),
             TsExpr::Lit(TsLit::Raw("0x1".to_string())),
             TsExpr::Spread(Box::new(id())),
         ] {

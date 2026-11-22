@@ -126,7 +126,7 @@ fn paren(e: TsExpr) -> TsExpr {
 
 /// A `bigint` literal: `digits` plus the `n` suffix.
 fn bigint(digits: &str) -> TsExpr {
-    TsExpr::Lit(TsLit::Num(format!("{digits}n")))
+    TsExpr::bigint(digits)
 }
 
 /// `(recv).property`.
