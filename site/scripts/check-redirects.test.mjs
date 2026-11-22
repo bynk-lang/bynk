@@ -10,7 +10,18 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { applyRedirects, checkRedirects, distRoutes, parseRedirects, resolves, sampleCodes } from "./check-redirects.mjs";
+import {
+  applyRedirects,
+  checkPublished,
+  checkRedirects,
+  distRoutes,
+  formatPublished,
+  pagesOf,
+  parsePublished,
+  parseRedirects,
+  resolves,
+  sampleCodes,
+} from "./check-redirects.mjs";
 
 const rules = (/** @type {string} */ text) => {
   const parsed = parseRedirects(text);
@@ -240,4 +251,79 @@ test("sampleCodes takes the first, middle and last registry codes", () => {
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
+});
+
+// --- the published-routes list (#4010) -------------------------------------
+
+const BUILT = new Set(["/", "/book/", "/reference/", "/reference/spec/", "/reference/spec/grammar/", "/404", "/llms.txt"]);
+const LISTED = ["/", "/book/", "/reference/", "/reference/spec/", "/reference/spec/grammar/"];
+const published = (/** @type {string} */ text, /** @type {string[]} */ list, built = BUILT) =>
+  checkPublished(rules(text), built, list).map((p) => p.problem);
+
+test("the list parses one route per line and skips comments", () => {
+  assert.deepEqual(parsePublished("# header\n\n/a/\n  /b/  \n# more\n"), ["/a/", "/b/"]);
+});
+
+test("the list is written sorted, deduplicated, under its header", () => {
+  const text = formatPublished(["/b/", "/a/", "/b/"]);
+  assert.ok(text.startsWith("# Every page"));
+  assert.deepEqual(parsePublished(text), ["/a/", "/b/"]);
+});
+
+test("pages are folders, not assets, the 404 page or the rustdoc", () => {
+  const built = new Set([...BUILT, "/pagefind/fragment/en_01.pf_fragment", "/_redirects", "/reference/api/", "/reference/api/bynk_syntax/"]);
+  assert.deepEqual(pagesOf(built).sort(), LISTED);
+});
+
+test("a listed rustdoc route is not checked (CI builds no rustdoc)", () => {
+  assert.deepEqual(published("", [...LISTED, "/reference/api/bynk_syntax/"]), []);
+});
+
+test("a rule over the 404 page or an asset is reported as shadowing it", () => {
+  const problems = checkRedirects(rules("/404 /book/ 301\n/llms.txt /book/ 301\n"), SITE, SAMPLES).map((p) => p.problem);
+  assert.ok(problems.includes("shadows the live page /404 (a request for /404 is redirected)"), problems.join("\n"));
+  assert.ok(problems.includes("shadows the live page /llms.txt (a request for /llms.txt is redirected)"), problems.join("\n"));
+});
+
+test("a list that matches the build has no problems", () => {
+  assert.deepEqual(published("", LISTED), []);
+});
+
+test("a published page that moved with a rule is fine", () => {
+  const text = "/book/spec /reference/spec/ 301\n/book/spec/* /reference/spec/:splat 301\n";
+  assert.deepEqual(published(text, [...LISTED, "/book/spec/", "/book/spec/grammar/"]), []);
+});
+
+// The gap the review on #4008 named: the old page has no counterpart under
+// the new folder, so the splat sends its readers nowhere.
+test("a published page dropped in a move is reported", () => {
+  const text = "/book/spec /reference/spec/ 301\n/book/spec/* /reference/spec/:splat 301\n";
+  const problems = published(text, [...LISTED, "/book/spec/lexical/"]);
+  assert.deepEqual(problems, [
+    "/book/spec/lexical/ was published, is no longer a page, and the rule on line 2 (/book/spec/*) sends it to /reference/spec/lexical/, which is not a page",
+    "/book/spec/lexical was published, is no longer a page, and the rule on line 2 (/book/spec/*) sends it to /reference/spec/lexical, which is not a page",
+  ]);
+});
+
+test("a published page with no rule at all is reported, in both forms", () => {
+  assert.deepEqual(published("", [...LISTED, "/gone/"]), [
+    "/gone/ was published, is no longer a page, and no rule redirects it",
+    "/gone was published, is no longer a page, and no rule redirects it",
+  ]);
+});
+
+test("a published page redirected to a rustdoc page is fine", () => {
+  assert.deepEqual(published("/docs/api/* /reference/api/:splat 301\n/docs/api /reference/api/ 301\n", [...LISTED, "/docs/api/x/"]), []);
+});
+
+test("a built page missing from the list is reported, with the fix", () => {
+  const problems = published("", LISTED.filter((r) => r !== "/reference/spec/grammar/"));
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /^1 built page\(s\) missing from the published list \(\/reference\/spec\/grammar\/\); run `node scripts\/check-redirects\.mjs --update`/);
+});
+
+test("a long list of unlisted pages is summarised", () => {
+  const built = new Set(Array.from({ length: 8 }, (_, i) => `/p${i}/`));
+  const [problem] = published("", [], built);
+  assert.match(problem, /^8 built page\(s\) missing .* and 3 more\)/);
 });
