@@ -29,7 +29,7 @@ Track slice T0.0 (#999); `ts_writes`/`ts_any` added by P7.0 (#1296); `verbatim_o
 | `emit_print_calls` | yes | 0 |
 | `testgen_print_calls` | yes | 44 |
 | `import_prediction_fns` | yes | 0 |
-| `node_builder_defs` | yes | 169 |
+| `node_builder_defs` | yes | 68 |
 | `deploy_kind_accessors` | yes | 0 |
 | `env_protocol_literals` | yes | 4 |
 | `tool_spawn_sites` | yes | 12 (wrangler 2, process control 8, self re-execution 2, other 0) |
