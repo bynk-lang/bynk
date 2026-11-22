@@ -1,11 +1,13 @@
 # Draft: the `from cron` service — review and proposed increments
 
 > **Status: long-form draft** (`design/proposals/README.md` §"Drafting
-> long-form proposals"). Untracked; promote to issues and delete once
-> reviewed. It covers one language feature end to end and cuts the work into
-> five increments, each written to the increment-proposal template so it can be
-> lifted into its own issue. Increments 3–5 depend on increment 3's type; 1 and
-> 2 stand alone. No version or ADR number is pre-allocated.
+> long-form proposals"). Committed temporarily for line-by-line review on
+> bynk-lang/bynk#3869, not as an exception to the untracked-draft rule; promote
+> to issues and delete once reviewed. It covers one language feature end to
+> end and cuts the work into five increments, each written to the
+> increment-proposal template so it can be lifted into its own issue.
+> Increments 4 and 5 depend on increment 3's type; 1, 2 and 3 stand alone. No
+> version or ADR number is pre-allocated.
 
 ## The feature under review
 
@@ -71,8 +73,9 @@ From the Cron Triggers, `scheduled` handler and limits pages:
 A correction to the initial review: the exact-string duplicate check is
 **right**, not a gap. Cloudflare dispatches on the exact string, so
 `"0 0 * * *"` and `"0  0 * * *"` are two triggers with two dispatch keys and
-nothing is ambiguous. Increment 3 removes the oddity anyway by making the
-predicate admit only single-space separation.
+nothing is ambiguous. Increment 3 still proposes admitting only single-space
+separation (DECISION 3C), and says plainly that this breaks schedules that
+compile and fire correctly today.
 
 ## Sequencing
 
@@ -233,7 +236,10 @@ this is the line that explains a trigger edited outside `wrangler.toml`.
 **[DECISION 2F] The test double records a cron `Err` report without failing
 the case or counting it as a detached failure (Recommended).** The address
 already yields the `Result` (ADR 0522 B) and the case asserts on it; counting
-it again would report one `Err` twice. ADR 0478 stands.
+it again would report one `Err` twice. ADR 0478 stands. A *throwing* run
+fails its case exactly once: the rethrow is what fails it, as today, and the
+report the catch path makes is recorded by the double but not counted as a
+second failure or as a detached failure.
 
 ### The deltas
 
@@ -334,6 +340,11 @@ trailing space (Recommended).** The string then is what Cloudflare echoes in
 `event.cron`, so no normalisation is needed anywhere, and the exact-string
 duplicate check means what it says. Rejected: normalising in the emitter,
 which would hand the handler (increment 4) a string the author didn't write.
+This is a **breaking change**: today's check splits on any whitespace, so a
+double space, a tab, or a leading or trailing space compiles, deploys and fires
+correctly. Such a schedule becomes `bynk.cron.invalid_schedule`, with a fix-it
+note giving the single-spaced form. The alternative that breaks nothing is to
+keep accepting any whitespace and normalise in the emitter, at the cost above.
 
 **[DECISION 3D] In `schedule(…)`, a violation keeps the code
 `bynk.cron.invalid_schedule` (Recommended),** now naming the failing field
@@ -376,8 +387,13 @@ forms are valid. Each can be silenced by writing the name or an explicit list.
   relaxed later, an admission can't be withdrawn).
 - The Rust rule and the TS twin disagree → a property test over generated
   strings, as ADR 0727 does for `IsoDate`.
-- A schedule that compiled before now fails → only an invalid one, which
-  already failed at deploy.
+- A schedule that compiled before now fails. For an invalid one (`61 * * * *`)
+  this costs nothing, since it already failed at deploy. **A valid one with
+  irregular whitespace also fails (3C), and that one works today** → the error
+  carries a fix-it note with the single-spaced form, and `upgrading.md` and the
+  changelog list it as a breaking change. The same applies to anything else
+  the old field count admitted that Cloudflare also accepts; spacing is the
+  confirmed case, and the edge-case pinning above should look for others.
 
 ### Docs delta
 
@@ -385,7 +401,8 @@ forms are valid. Each can be silenced by writing the name or an explicit list.
   full: fields, characters, Sunday = 1, UTC, `*/45`), `types.md` or the prelude
   list (`CronSchedule`); troubleshooting `cron-errors.md` (the sharper
   `invalid_schedule`, the two warnings); spec static semantics and runtime
-  library. Changelog and version history.
+  library. Changelog and version history; `upgrading.md` (the whitespace
+  break, 3C).
 
 ### Tooling delta
 
@@ -404,6 +421,9 @@ forms are valid. Each can be silenced by writing the name or an explicit list.
 - Every example on Cloudflare's page is admitted; `61 * * * *`, `* * * * 0`,
   `5-1 * * * *`, `*/0 * * * *`, `? * * * *`, `@daily`, a six-field string and a
   double space are refused, each with its field named.
+- A schedule with irregular whitespace (`"0  2 * * *"`, a tab, a trailing
+  space), which compiles today, is refused with the single-spaced form in
+  the fix-it note; a fixture pins it.
 - `.of`, `Json.decode`, an HTTP boundary and `is` agree with the compile-time
   rule (property test).
 - Warnings fire on `* * * * 5` and `*/45 * * * *`, and not on `* * * * FRI`.
@@ -421,7 +441,9 @@ forms are valid. Each can be silenced by writing the name or an explicit list.
 - **Addresses:** a handler can't see which schedule fired it, so a run key
   for `Idempotency.claim` must repeat the schedule literal by hand.
 - **Realises:** a handler may declare `schedule: CronSchedule` alongside or
-  instead of `at: Instant`, and `"\(schedule)@\(at)"` is a ready-made run key.
+  instead of `at: Instant`, and `"\(schedule)@\(at.toEpochMillis())"` is a
+  ready-made run key. (`Instant` is not interpolable, `checker.rs:4968`, so
+  the `toEpochMillis()` is required.)
 
 ### The surface
 
@@ -429,7 +451,7 @@ forms are valid. Each can be silenced by writing the name or an explicit list.
 service sweeper from cron {
   on schedule("0 2 * * *") (schedule: CronSchedule, at: Instant)
       -> Effect[Result[(), SweepError]] given Idempotency {
-    let claim <- Idempotency.claim("\(schedule)@\(at.toEpochMillis())", 1.hours)
+    let claim <- Idempotency.claim("sweeper:\(schedule)@\(at.toEpochMillis())", 1.hours)
     match claim {
       Claimed => sweep(at),
       AlreadyClaimed => Ok(()),
@@ -477,6 +499,12 @@ carry several schedules or a schedule comes from a constant (increment 5).
 
 - Authors read `schedule` as "the next run" → the reference says plainly it is
   the expression that fired this run.
+- In a worker group, two members may share an expression and both run
+  (`group_triggers.rs:15`). They share one Worker and so one idempotency
+  store (the `<worker>-idempotency` database), and both see the same
+  `schedule` and `at`, so the recipe's run key collides and one member skips
+  its run → the recipe puts the service name in the key, and the guide says
+  why.
 
 ### Docs delta
 
