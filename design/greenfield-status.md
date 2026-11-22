@@ -4,7 +4,7 @@
 
 # Greenfield status
 
-Track slice T0.0 (#999); `ts_writes`/`ts_any` added by P7.0 (#1296); `verbatim_origins`/`verbatim_sites` added by P7.5 (#1307); `incremental_query_types`/`keystroke_latency` added by P8.0 (#1510); `unconsumed_ir_items` added by Slice D3 of the IR cutover (#1542); `diagnostic_coverage` added by #1662; `model_readers_beyond_emit` added by crate-hygiene B1 (#2939); `unused_deps` added by crate-hygiene A4 (#2976); `explained_codes` added by #3163; `ts_raw_sites`/`ts_text_idents` added by #3681; `ts_raw_sites` split into `ts_raw_sites_emit`/`ts_raw_sites_testgen` and `emit_thread_locals` added by 1A.19; `emit_silent_fallbacks` added by 1A.34; `emit_print_calls` added by 1A.35b (`lowering_text_bridge` and `stmt_text_lines`, added by #3694 and #3711, were retired at 0 by 1A.35b); `import_prediction_fns` added by 1A.36a; `deploy_kind_accessors` added by 1D.1a; `env_protocol_literals` added by 1D.5a; `tool_spawn_sites` added by 1D.5b; `deploy_ledger_writes` added by 1D.2a. Thirty probes are gated — a disagreement between this file and a fresh run fails `greenfield_status_table_is_current` (`xtask/tests/greenfield_status.rs`). Five are trend probes, reported only.
+Track slice T0.0 (#999); `ts_writes`/`ts_any` added by P7.0 (#1296); `verbatim_origins`/`verbatim_sites` added by P7.5 (#1307); `incremental_query_types`/`keystroke_latency` added by P8.0 (#1510); `unconsumed_ir_items` added by Slice D3 of the IR cutover (#1542); `diagnostic_coverage` added by #1662; `model_readers_beyond_emit` added by crate-hygiene B1 (#2939); `unused_deps` added by crate-hygiene A4 (#2976); `explained_codes` added by #3163; `ts_raw_sites`/`ts_text_idents` added by #3681; `ts_raw_sites` split into `ts_raw_sites_emit`/`ts_raw_sites_testgen` and `emit_thread_locals` added by 1A.19; `emit_silent_fallbacks` added by 1A.34; `emit_print_calls` added by 1A.35b (`lowering_text_bridge` and `stmt_text_lines`, added by #3694 and #3711, were retired at 0 by 1A.35b); `import_prediction_fns` added by 1A.36a; `deploy_kind_accessors` added by 1D.1a; `env_protocol_literals` added by 1D.5a; `tool_spawn_sites` added by 1D.5b; `deploy_ledger_writes` added by 1D.2a; `testgen_print_calls` added by 1B.2a. Thirty-one probes are gated — a disagreement between this file and a fresh run fails `greenfield_status_table_is_current` (`xtask/tests/greenfield_status.rs`). Five are trend probes, reported only.
 
 | Probe | Gated | Reads |
 |---|---|---|
@@ -27,6 +27,7 @@ Track slice T0.0 (#999); `ts_writes`/`ts_any` added by P7.0 (#1296); `verbatim_o
 | `emit_thread_locals` | yes | 0 |
 | `emit_silent_fallbacks` | yes | 0 |
 | `emit_print_calls` | yes | 1 |
+| `testgen_print_calls` | yes | 43 |
 | `import_prediction_fns` | yes | 0 |
 | `deploy_kind_accessors` | yes | 0 |
 | `env_protocol_literals` | yes | 4 |
