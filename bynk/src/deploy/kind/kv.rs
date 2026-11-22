@@ -91,6 +91,8 @@ impl ResourceKind for Kv {
     type Orphan = OrphanKv;
     /// The account's namespace ids, when they were read ([`live_kv_namespace_ids`]).
     type Live = Option<BTreeSet<String>>;
+    /// The namespace id.
+    type Bound = String;
 
     fn declared(r: &Resources) -> Vec<&str> {
         kv_bindings(r).collect()
@@ -290,7 +292,10 @@ impl ResourceKind for Kv {
 
     /// Reuses the recorded id when [`should_trust_recorded_kv`]; otherwise creates the namespace
     /// under its current title and records it.
-    fn provision(cx: &mut ApplyCx<'_, Kv>, binding: &str) -> Result<Provisioned, DeployFailure> {
+    fn provision(
+        cx: &mut ApplyCx<'_, Kv>,
+        binding: &str,
+    ) -> Result<Provisioned<String>, DeployFailure> {
         let (worker, environment) = (cx.worker, cx.environment);
         let recorded = cx
             .ledger()
@@ -639,7 +644,7 @@ fn parse_kv_id(output: &str) -> Option<String> {
 /// account-wide list, so calling it from inside `deploy_one` would pay one
 /// identical round-trip per KV-bearing context on every redeploy. `run()`
 /// calls this once, before the per-context loop, and threads the result
-/// through — see `deploy_one`'s `live_kv_ids` parameter.
+/// through — see `deploy_one`'s `live_kv` parameter ([`Kv`]'s `live`).
 ///
 /// `None` means "could not ask" (no wrangler, network/auth failure, or an
 /// unparseable response) — read the same way [`list_secrets`]'s `None` is:

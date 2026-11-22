@@ -100,11 +100,6 @@ pub(crate) fn build_facts(
         declared,
         &mut ids,
     );
-    for d1 in &declared.d1_databases {
-        if let Some(record) = recorded_d1(lock, worker, &d1.binding, environment) {
-            ids.insert(d1.binding.clone(), record.id.clone());
-        }
-    }
     for binding in &declared.ratelimits {
         if let Some(id) = recorded_ratelimit(lock, worker, binding, environment) {
             ids.insert(binding.clone(), id.to_string());
