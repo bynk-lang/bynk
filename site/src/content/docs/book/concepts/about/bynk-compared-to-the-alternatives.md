@@ -10,7 +10,7 @@ such as Effect; a mature language that reaches Workers, such as Rust; or the
 Cloudflare primitives by hand. This page takes each in turn, and is candid about
 where Bynk is younger and where it is not yet finished. (For the
 language-level comparison with plain TypeScript, see
-[Bynk compared to TypeScript](/book/about/bynk-compared-to-typescript/).)
+[Bynk compared to TypeScript](/book/concepts/about/bynk-compared-to-typescript/).)
 
 ## Bynk vs Encore
 
@@ -28,7 +28,7 @@ Where they differ is **what enforces the shape**:
 - **Bynk is a language; Encore is a framework in a host language.** Bynk's
   guarantees live in the type system — [refined](/reference/glossary/#term-refined-type) and
   [opaque](/reference/glossary/#term-opaque-type) types, errors-as-values, single-owner
-  [agent state](/book/guides/agents-and-state/the-agent-model/), tracked effects — so the illegal
+  [agent state](/book/concepts/agents-and-state/the-agent-model/), tracked effects — so the illegal
   shape does not compile. Encore layers structure and static analysis on top of Go
   or TypeScript, but the host language's escape hatches remain: you can still
   reach for shared mutable state, throw an exception, or cross a boundary the
@@ -172,7 +172,7 @@ niche.
 ## Bynk vs Durable Objects, Workflows and the Agents SDK, by hand
 
 Bynk is not a replacement for these Cloudflare products so much as a typed way
-to use the first of them. An [`agent`](/book/guides/agents-and-state/the-agent-model/)
+to use the first of them. An [`agent`](/book/concepts/agents-and-state/the-agent-model/)
 compiles to a Durable Object on the Workers target. Written by hand, a
 [Durable Object](https://developers.cloudflare.com/durable-objects/) is
 "a special kind of Cloudflare Worker which uniquely combines compute with
@@ -322,7 +322,7 @@ you would rather a mistake fail to compile than be caught in review.
 ## See also
 
 - [Why Bynk exists](/book/about/why-bynk-exists/) — the motivation behind the design.
-- [Bynk compared to TypeScript](/book/about/bynk-compared-to-typescript/) — the
+- [Bynk compared to TypeScript](/book/concepts/about/bynk-compared-to-typescript/) — the
   language-level comparison.
 - [Versioning & roadmap](/book/about/versioning-and-roadmap/) — where Bynk is on
   the road to 1.0.

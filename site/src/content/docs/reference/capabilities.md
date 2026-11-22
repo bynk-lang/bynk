@@ -139,7 +139,7 @@ interleave between the two; run the loop with `forEach` instead, where a single-
 slow sibling; that is what keeps every effect inside the handler's lifetime and the
 fault a program sees independent of timing. Effects that completed before the fault
 keep their effects, exactly as in a sequence of `<-`s. See
-[what a join guarantees on failure](/book/guides/effects-and-capabilities/what-a-join-guarantees-on-failure/).
+[what a join guarantees on failure](/book/concepts/effects-and-capabilities/what-a-join-guarantees-on-failure/).
 
 ## Bounding an effect — `within` {#within}
 

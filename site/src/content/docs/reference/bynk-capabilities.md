@@ -17,7 +17,7 @@ There are three units:
 | **`bynk.crypto`** *(experimental)* | `consumes bynk.crypto { … }` | Portable — `cloudflare`, `node` and `browser`, over Web Crypto. |
 
 For *why* a capability is the unit of outside-world access, see
-[Understand the capability model](/book/guides/effects-and-capabilities/understand-the-capability-model/);
+[Understand the capability model](/book/concepts/effects-and-capabilities/understand-the-capability-model/);
 for the general `capability` / `provides` / `given` rules, see
 [Capabilities & providers](/reference/capabilities/).
 
@@ -34,7 +34,7 @@ environment), so code that stays on this surface is portable.
 | **`Logger`** | `info(msg: String) -> Effect[()]` · `error(msg: String) -> Effect[()]` · `warn(msg: String) -> Effect[()]` · `debug(msg: String) -> Effect[()]` · `log(level: LogLevel, msg: String, fields: Map[String, String]) -> Effect[()]` — a structured record (experimental). See [Log levels and structured fields](#log-levels-and-structured-fields). |
 | **`Fetch`** | `send(req: Request) -> Effect[Result[Response, FetchError]]` — an outbound HTTP request · `sendWith(req: Request, options: FetchOptions) -> Effect[Result[Response, FetchError]]` — with a timeout and a redirect policy (experimental) · `receiveBytes(req: Request, options: FetchOptions) -> Effect[Result[BytesResponse, FetchError]]` · `sendBytes(req: Request, body: Bytes, options: FetchOptions) -> Effect[Result[BytesResponse, FetchError]]` — binary bodies (experimental) · `receiveStream(req: Request, options: FetchOptions) -> Effect[Result[StreamResponse, FetchError]]` · `sendStream(req: Request, body: Stream[Bytes], options: FetchOptions) -> Effect[Result[StreamResponse, FetchError]]` — streamed bodies (experimental). See [Timeouts and redirects](#timeouts-and-redirects), [Binary bodies](#binary-bodies) and [Streamed bodies](#streamed-bodies). |
 | **`Secrets`** | `get(name: String) -> Effect[Option[String]]` — read configuration/secrets; `None` if unset. |
-| **`Locale`** | `current() -> Effect[LocaleTag]` — the locale to render messages in. On Cloudflare, negotiated from the request's `Accept-Language` against a context's message bundle; a fixed `"en"` on every other platform, and on Cloudflare without a detectable bundle. See [Understand localisation](/book/guides/localisation/understand-localisation/). |
+| **`Locale`** | `current() -> Effect[LocaleTag]` — the locale to render messages in. On Cloudflare, negotiated from the request's `Accept-Language` against a context's message bundle; a fixed `"en"` on every other platform, and on Cloudflare without a detectable bundle. See [Understand localisation](/book/concepts/localisation/understand-localisation/). |
 | **`Idempotency`** | `dedup[T](key: String) -> Effect[Option[T]]` · `remember[T](key: String, value: T, expiresAfter: Duration) -> Effect[()]` · `claim(key: String, expiresAfter: Duration) -> Effect[Claim]` — mechanical dedup for at-least-once delivery. See below. |
 | **`Events`** | `emit[E](event: E) -> Effect[()]` — emit an `event` declared by the calling context, fire-and-forget. See below. |
 
@@ -222,7 +222,7 @@ never inferred from the value's type. Only the context that declares an event
 may emit it, even though the type is visible cross-context for subscription
 (`bynk.event.emit_outside_owner` otherwise); emission is released only if the
 emitting handler itself commits, so an aborted handler emits nothing. See
-[Understand events](/book/guides/events/understand-events/) for the full
+[Understand events](/book/concepts/events/understand-events/) for the full
 model, the subscriber side (`from Events(E)`, `on event`), and how delivery
 differs between Cloudflare and Bundle targets.
 
@@ -264,7 +264,7 @@ type EventEnvelope = {
 ```
 
 `EventEnvelope` is an `on event` handler's optional second parameter — see
-[Understand events](/book/guides/events/understand-events/#the-envelope-and-idempotent-handling).
+[Understand events](/book/concepts/events/understand-events/#the-envelope-and-idempotent-handling).
 
 ### Request and response headers
 
@@ -2607,4 +2607,4 @@ consuming that bundle should `uses` only `bynk.locale.types`, since
 
 **See also:** [Capabilities & providers](/reference/capabilities/),
 [Adapters](/reference/adapters/),
-[Understand the capability model](/book/guides/effects-and-capabilities/understand-the-capability-model/).
+[Understand the capability model](/book/concepts/effects-and-capabilities/understand-the-capability-model/).

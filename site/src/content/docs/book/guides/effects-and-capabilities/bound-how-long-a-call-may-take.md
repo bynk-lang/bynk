@@ -96,4 +96,4 @@ is a stub waiting on `after` or `never`; a call into a real provider is waited f
 [testing](/reference/testing/#stub-latency).
 
 For what a timeout does and does not stop, read
-[what a timeout stops](/book/guides/effects-and-capabilities/what-a-timeout-stops/).
+[what a timeout stops](/book/concepts/effects-and-capabilities/what-a-timeout-stops/).

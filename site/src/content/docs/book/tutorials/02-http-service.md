@@ -211,4 +211,4 @@ will start modelling the shortener's data in earnest.
 ---
 
 *Curious why a context maps to a Worker, or how the boundary validation fits the
-design? See [How a Bynk program is shaped](/book/guides/program-structure/how-a-program-is-shaped/).*
+design? See [How a Bynk program is shaped](/book/concepts/program-structure/how-a-program-is-shaped/).*

@@ -137,4 +137,4 @@ named `private` mean what they always did.
 
 - [Spec §5.1c — Unit-private declarations](/reference/spec/static-semantics/#private-declarations)
 - [Grammar reference — `visibility_modifier`](/reference/grammar/#rule-visibility_modifier)
-- [How a Bynk program is shaped](/book/guides/program-structure/how-a-program-is-shaped/)
+- [How a Bynk program is shaped](/book/concepts/program-structure/how-a-program-is-shaped/)

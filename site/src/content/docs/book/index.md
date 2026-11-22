@@ -16,7 +16,7 @@ The book has four parts to read, and three to look things up in:
   and how to install it.
 - **[Learn Bynk](/book/tutorials/01-first-program/)** — a tutorial that builds
   one service, chapter by chapter. Read it in order.
-- **[Concepts](/book/guides/program-structure/)** — the ideas behind each part
+- **[Concepts](/book/concepts/)** — the ideas behind each part
   of the language: why it works the way it does.
 - **[Guides](/book/guides/)** — how to do a particular task, grouped by what
   you are building.
@@ -36,7 +36,7 @@ If you are not sure where to start:
 - **Coming from TypeScript?** Read
   [Coming from TypeScript](/book/introduction/coming-from-typescript/).
 - **Evaluating Bynk?** Read [Why Bynk exists](/book/about/why-bynk-exists/),
-  then [Bynk compared to TypeScript](/book/about/bynk-compared-to-typescript/).
+  then [Bynk compared to TypeScript](/book/concepts/about/bynk-compared-to-typescript/).
 - **Have a specific task?** Go to the [Guides](/book/guides/).
 
 > [!NOTE]

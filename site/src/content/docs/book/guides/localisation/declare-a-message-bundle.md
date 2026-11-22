@@ -4,7 +4,7 @@ title: Declare a message bundle
 A **message bundle** is a `messages` block per locale, declared inside a
 `commons`. The compiler turns the set into a lookup and generates a
 `render(tag, msg)` for that commons. For the model behind it, see
-[Understand localisation](/book/guides/localisation/understand-localisation/).
+[Understand localisation](/book/concepts/localisation/understand-localisation/).
 
 ## The smallest bundle
 
@@ -198,6 +198,6 @@ The `@reference`, completeness and placeholder checks all run across the merged
 commons, not per file.
 
 **See also:**
-[Understand localisation](/book/guides/localisation/understand-localisation/),
+[Understand localisation](/book/concepts/localisation/understand-localisation/),
 [Format with ICU](/book/guides/localisation/format-with-icu/),
 [Diagnostics](/reference/diagnostics/).

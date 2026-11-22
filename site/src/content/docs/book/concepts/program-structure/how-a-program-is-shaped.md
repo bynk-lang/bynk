@@ -58,7 +58,7 @@ a running, deployable piece of your system.
 
 - **Services** group request handlers. A handler is an `on call` (an internal
   entry point) or an `from http` (an HTTP endpoint).
-- **Agents** own state, keyed by identity. See [The agent model](/book/guides/agents-and-state/the-agent-model/).
+- **Agents** own state, keyed by identity. See [The agent model](/book/concepts/agents-and-state/the-agent-model/).
 - **Capabilities** are dependencies a handler asks for with `given` — an
   interface the context needs but does not itself implement.
 - **[Providers](/reference/glossary/#term-provider)** (`provides`) supply an
@@ -119,5 +119,5 @@ structure onto the target:
   boundary.
 
 See [Target Cloudflare Workers](/book/guides/projects-build-and-deployment/cloudflare-workers/) for the
-target details, and [Why compile to TypeScript](/book/guides/projects-build-and-deployment/why-compile-to-typescript/) for
+target details, and [Why compile to TypeScript](/book/concepts/projects-build-and-deployment/why-compile-to-typescript/) for
 why the runtime is what it is.
