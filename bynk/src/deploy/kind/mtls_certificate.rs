@@ -68,6 +68,7 @@ impl ResourceKind for MtlsCertificate {
     /// The certificate's id, which the config binds it by.
     type Bound = String;
     type Change = TableChange<MtlsCertificateTable>;
+    type Step<'r> = MtlsCertificateStep<'r>;
 
     fn declared(r: &Resources) -> Vec<&MtlsCertificateDecl> {
         r.mtls_certificates.iter().collect()
@@ -121,34 +122,34 @@ impl ResourceKind for MtlsCertificate {
         match *orphan {}
     }
 
-    /// One link alone, recorded at once. The deploy links a Worker's together
-    /// ([`ResourceKind::provision_all`]).
-    fn provision<'r>(
-        cx: &StepCx<'_, '_, MtlsCertificate>,
-        decl: Self::Decl<'r>,
-    ) -> Result<Provisioned<'r, MtlsCertificate>, DeployFailure> {
-        let worker = cx.worker;
-        let (link, bound) = link(cx, decl)?;
-        let mut links = Links::new();
-        links.link(cx, &decl.binding, link);
-        let provisioned = Provisioned::bound(&decl.binding, bound);
-        Ok(
-            match links.commit(
-                worker,
-                format!("linked `{worker}`'s mTLS certificates but could not record them"),
-            ) {
-                Some(commit) => provisioned.with(commit),
-                None => provisioned,
-            },
-        )
+    /// One step for all the Worker's links, written once when any changed.
+    fn steps<'r>(
+        _cx: &PlanCx<'_>,
+        declared: &'r Resources,
+        _live: Self::Live<'_>,
+    ) -> Vec<MtlsCertificateStep<'r>> {
+        if declared.mtls_certificates.is_empty() {
+            return Vec::new();
+        }
+        vec![MtlsCertificateStep {
+            decls: declared.mtls_certificates.iter().collect(),
+        }]
+    }
+
+    fn steps_of<'p, 'r>(steps: &'p WorkerSteps<'r>) -> &'p [MtlsCertificateStep<'r>] {
+        &steps.mtls_certificates
+    }
+
+    fn steps_mut<'p, 'r>(steps: &'p mut WorkerSteps<'r>) -> &'p mut Vec<MtlsCertificateStep<'r>> {
+        &mut steps.mtls_certificates
     }
 
     /// Each link recorded, the ledger written once when any changed, before the push.
-    fn provision_all<'r>(
+    fn apply(
         cx: &StepCx<'_, '_, MtlsCertificate>,
-        declared: &'r Resources,
-    ) -> Option<Result<Provisioned<'r, MtlsCertificate>, DeployFailure>> {
-        Some(provision_links(cx, declared))
+        step: &MtlsCertificateStep<'_>,
+    ) -> Result<Applied<MtlsCertificate>, DeployFailure> {
+        apply_links(cx, &step.decls)
     }
 
     fn materialise(
@@ -165,26 +166,26 @@ impl ResourceKind for MtlsCertificate {
     }
 }
 
-/// [`MtlsCertificate`]'s `provision_all`: each of the Worker's links, written once when any changed.
-fn provision_links<'r>(
+/// [`MtlsCertificate`]'s step: each of the Worker's links, written once when any changed.
+fn apply_links(
     cx: &StepCx<'_, '_, MtlsCertificate>,
-    declared: &'r Resources,
-) -> Result<Provisioned<'r, MtlsCertificate>, DeployFailure> {
+    decls: &[&MtlsCertificateDecl],
+) -> Result<Applied<MtlsCertificate>, DeployFailure> {
     let worker = cx.worker;
-    let mut provisioned = Provisioned::nothing();
+    let mut applied = Applied::nothing();
     let mut links = Links::new();
-    for decl in &declared.mtls_certificates {
+    for &decl in decls {
         let (link, id) = link(cx, decl)?;
         links.link(cx, &decl.binding, link);
-        provisioned.bound.push((decl.binding.clone(), id));
+        applied.bound.push((decl.binding.clone(), id));
     }
     if let Some(commit) = links.commit(
         worker,
         format!("linked `{worker}`'s mTLS certificates but could not record them"),
     ) {
-        provisioned = provisioned.with(commit);
+        applied = applied.with(commit);
     }
-    Ok(provisioned)
+    Ok(applied)
 }
 
 /// What `decl` was linked to, as the ledger records it, and the certificate id. Linked before the
@@ -219,6 +220,13 @@ fn link(
 pub(crate) struct PlanMtlsCertificate<'a> {
     pub(crate) binding: &'a str,
     pub(crate) certificate: &'a str,
+}
+
+/// A Worker's links' step (1D.2b): each declaration, linked to the id found before the run
+/// confirmed.
+#[derive(Debug, Clone)]
+pub(crate) struct MtlsCertificateStep<'r> {
+    pub(crate) decls: Vec<&'r MtlsCertificateDecl>,
 }
 
 #[cfg(test)]

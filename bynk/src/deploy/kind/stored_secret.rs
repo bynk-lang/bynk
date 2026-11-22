@@ -64,6 +64,7 @@ impl ResourceKind for StoredSecret {
     /// The store's id, which the config binds the secret by.
     type Bound = String;
     type Change = TableChange<StoredSecretTable>;
+    type Step<'r> = StoredSecretStep<'r>;
 
     fn declared(r: &Resources) -> Vec<&StoredSecretDecl> {
         r.stored_secrets.iter().collect()
@@ -117,34 +118,34 @@ impl ResourceKind for StoredSecret {
         match *orphan {}
     }
 
-    /// One link alone, recorded at once. The deploy links a Worker's together
-    /// ([`ResourceKind::provision_all`]).
-    fn provision<'r>(
-        cx: &StepCx<'_, '_, StoredSecret>,
-        decl: Self::Decl<'r>,
-    ) -> Result<Provisioned<'r, StoredSecret>, DeployFailure> {
-        let worker = cx.worker;
-        let (link, bound) = link(cx, decl)?;
-        let mut links = Links::new();
-        links.link(cx, &decl.binding, link);
-        let provisioned = Provisioned::bound(&decl.binding, bound);
-        Ok(
-            match links.commit(
-                worker,
-                format!("linked `{worker}`'s Secrets Store secrets but could not record them"),
-            ) {
-                Some(commit) => provisioned.with(commit),
-                None => provisioned,
-            },
-        )
+    /// One step for all the Worker's links, written once when any changed.
+    fn steps<'r>(
+        _cx: &PlanCx<'_>,
+        declared: &'r Resources,
+        _live: Self::Live<'_>,
+    ) -> Vec<StoredSecretStep<'r>> {
+        if declared.stored_secrets.is_empty() {
+            return Vec::new();
+        }
+        vec![StoredSecretStep {
+            decls: declared.stored_secrets.iter().collect(),
+        }]
+    }
+
+    fn steps_of<'p, 'r>(steps: &'p WorkerSteps<'r>) -> &'p [StoredSecretStep<'r>] {
+        &steps.stored_secrets
+    }
+
+    fn steps_mut<'p, 'r>(steps: &'p mut WorkerSteps<'r>) -> &'p mut Vec<StoredSecretStep<'r>> {
+        &mut steps.stored_secrets
     }
 
     /// Each link recorded, the ledger written once when any changed, before the push.
-    fn provision_all<'r>(
+    fn apply(
         cx: &StepCx<'_, '_, StoredSecret>,
-        declared: &'r Resources,
-    ) -> Option<Result<Provisioned<'r, StoredSecret>, DeployFailure>> {
-        Some(provision_links(cx, declared))
+        step: &StoredSecretStep<'_>,
+    ) -> Result<Applied<StoredSecret>, DeployFailure> {
+        apply_links(cx, &step.decls)
     }
 
     fn materialise(
@@ -161,26 +162,26 @@ impl ResourceKind for StoredSecret {
     }
 }
 
-/// [`StoredSecret`]'s `provision_all`: each of the Worker's links, written once when any changed.
-fn provision_links<'r>(
+/// [`StoredSecret`]'s step: each of the Worker's links, written once when any changed.
+fn apply_links(
     cx: &StepCx<'_, '_, StoredSecret>,
-    declared: &'r Resources,
-) -> Result<Provisioned<'r, StoredSecret>, DeployFailure> {
+    decls: &[&StoredSecretDecl],
+) -> Result<Applied<StoredSecret>, DeployFailure> {
     let worker = cx.worker;
-    let mut provisioned = Provisioned::nothing();
+    let mut applied = Applied::nothing();
     let mut links = Links::new();
-    for decl in &declared.stored_secrets {
+    for &decl in decls {
         let (link, id) = link(cx, decl)?;
         links.link(cx, &decl.binding, link);
-        provisioned.bound.push((decl.binding.clone(), id));
+        applied.bound.push((decl.binding.clone(), id));
     }
     if let Some(commit) = links.commit(
         worker,
         format!("linked `{worker}`'s Secrets Store secrets but could not record them"),
     ) {
-        provisioned = provisioned.with(commit);
+        applied = applied.with(commit);
     }
-    Ok(provisioned)
+    Ok(applied)
 }
 
 /// What `decl` was linked to, as the ledger records it, and the store id. Linked before the run
@@ -216,6 +217,13 @@ pub(crate) struct PlanStoredSecret<'a> {
     pub(crate) binding: &'a str,
     pub(crate) store: &'a str,
     pub(crate) secret: &'a str,
+}
+
+/// A Worker's links' step (1D.2b): each declaration, linked to the id found before the run
+/// confirmed.
+#[derive(Debug, Clone)]
+pub(crate) struct StoredSecretStep<'r> {
+    pub(crate) decls: Vec<&'r StoredSecretDecl>,
 }
 
 #[cfg(test)]

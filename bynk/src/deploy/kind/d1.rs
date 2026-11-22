@@ -93,6 +93,7 @@ impl ResourceKind for D1 {
     /// The database's account-facing name and its id, which the config binds it by.
     type Bound = (String, String);
     type Change = TableChange<D1Table>;
+    type Step<'r> = D1Step<'r>;
 
     fn declared(r: &Resources) -> Vec<&D1Decl> {
         r.d1_databases.iter().collect()
@@ -113,18 +114,29 @@ impl ResourceKind for D1 {
     fn live_in<'a>(_lives: Lives<'a>) -> Self::Live<'a> {}
 
     fn plan_line<'r>(cx: &PlanCx<'_>, db: Self::Decl<'r>, _live: ()) -> PlanD1<'r> {
-        let database = d1_database_name(cx.ledger.environment, &db.name);
-        let recorded = cx.ledger.recorded::<D1>(cx.worker, &db.binding);
+        let step = d1_step(cx, db);
         PlanD1 {
             binding: &db.binding,
-            action: if recorded.is_some_and(|r| r.name == database) {
-                "reuse"
-            } else {
-                "create"
-            },
-            database,
+            action: step.action(),
+            database: step.database,
             migrations: &db.migrations,
         }
+    }
+
+    fn steps<'r>(cx: &PlanCx<'_>, declared: &'r Resources, _live: ()) -> Vec<D1Step<'r>> {
+        declared
+            .d1_databases
+            .iter()
+            .map(|db| d1_step(cx, db))
+            .collect()
+    }
+
+    fn steps_of<'p, 'r>(steps: &'p WorkerSteps<'r>) -> &'p [D1Step<'r>] {
+        &steps.d1
+    }
+
+    fn steps_mut<'p, 'r>(steps: &'p mut WorkerSteps<'r>) -> &'p mut Vec<D1Step<'r>> {
+        &mut steps.d1
     }
 
     /// The database's line, then (P4b, #2608) its migrations, applied after the database is
@@ -225,19 +237,10 @@ impl ResourceKind for D1 {
     /// derived from this project's, so it is this project's. A database the
     /// ledger already holds under this environment's name is not asked of
     /// the account again.
-    fn provision<'r>(
-        cx: &StepCx<'_, '_, D1>,
-        db: Self::Decl<'r>,
-    ) -> Result<Provisioned<'r, D1>, DeployFailure> {
-        let (worker, environment) = (cx.worker, cx.environment);
-        let physical = d1_database_name(environment, &db.name);
-        let recorded = cx
-            .ledger()
-            .recorded::<D1>(worker, &db.binding)
-            .filter(|recorded| recorded.name == physical)
-            .map(|recorded| recorded.id.clone());
-        if let Some(id) = recorded {
-            return Ok(Provisioned::bound(&db.binding, (physical, id)));
+    fn apply(cx: &StepCx<'_, '_, D1>, step: &D1Step<'_>) -> Result<Applied<D1>, DeployFailure> {
+        let (worker, db, physical) = (cx.worker, step.db, step.database.clone());
+        if let Some(id) = &step.recorded {
+            return Ok(Applied::bound(&db.binding, (physical, id.clone())));
         }
         let id = create_d1(cx.tools.provenance, &physical, cx.tools.project_root).map_err(|e| {
             DeployFailure::driver(format!(
@@ -250,7 +253,7 @@ impl ResourceKind for D1 {
             D1Record::of(&physical, &id),
             &format!("created the D1 database `{physical}`"),
         );
-        Ok(Provisioned::bound(&db.binding, (physical, id)).with(record))
+        Ok(Applied::bound(&db.binding, (physical, id)).with(record))
     }
 
     fn materialise(
@@ -452,6 +455,42 @@ fn parse_d1_listed_id(json: &str, name: &str) -> Option<String> {
 fn d1_database_already_exists(said: &str) -> bool {
     said.to_ascii_lowercase()
         .contains("database with that name already exists")
+}
+
+/// One D1 database's step (1D.2b): the declaration, its name in this environment, and the id the
+/// ledger records for it under that name, if it does.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct D1Step<'r> {
+    pub(crate) db: &'r D1Decl,
+    pub(crate) database: String,
+    /// Reused when `Some`; created (or adopted, by name) and recorded when `None`.
+    pub(crate) recorded: Option<String>,
+}
+
+impl D1Step<'_> {
+    /// The plan's word for the step.
+    pub(crate) fn action(&self) -> &'static str {
+        if self.recorded.is_some() {
+            "reuse"
+        } else {
+            "create"
+        }
+    }
+}
+
+/// `worker`'s step for `db`, from the ledger.
+fn d1_step<'r>(cx: &PlanCx<'_>, db: &'r D1Decl) -> D1Step<'r> {
+    let database = d1_database_name(cx.ledger.environment, &db.name);
+    let recorded = cx
+        .ledger
+        .recorded::<D1>(cx.worker, &db.binding)
+        .filter(|recorded| recorded.name == database)
+        .map(|recorded| recorded.id.clone());
+    D1Step {
+        db,
+        database,
+        recorded,
+    }
 }
 
 #[cfg(test)]
@@ -674,7 +713,15 @@ mod tests {
             name: "shop-orders".to_string(),
             migrations: Vec::new(),
         };
-        let done = D1::provision(
+        let step = d1_step(
+            &PlanCx {
+                ledger: LedgerView::of(&lock, "default"),
+                worker: "shop",
+            },
+            &db,
+        );
+        assert_eq!(step.action(), "reuse");
+        let done = D1::apply(
             &StepCx {
                 environment: "default",
                 worker: "shop",
@@ -686,7 +733,7 @@ mod tests {
                     project_root: Path::new("/nonexistent"),
                 },
             },
-            &db,
+            &step,
         )
         .expect("nothing to create");
         assert_eq!(

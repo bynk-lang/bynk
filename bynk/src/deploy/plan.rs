@@ -112,7 +112,7 @@ pub(crate) struct Plan<'a> {
     /// rejects a Worker uploaded before its binding target. Each Worker by
     /// its [`deployed_worker_name`] (#2028).
     order: Vec<String>,
-    contexts: Vec<ContextPlan<'a>>,
+    pub(crate) contexts: Vec<ContextPlan<'a>>,
     /// #3494: what checking the plan against the account found to say, printed
     /// after it.
     #[serde(skip)]
@@ -230,6 +230,16 @@ pub(crate) struct ContextPlan<'a> {
     /// refused unless `--prune` confirms it ([`confirm_address_removals`]).
     #[serde(skip_serializing_if = "Vec::is_empty")]
     removed_email_addresses: Vec<String>,
+    /// 1D.2b (#4001): what the apply executes for this context. Never printed.
+    #[serde(skip)]
+    pub(crate) steps: WorkerSteps<'a>,
+}
+
+impl<'a> ContextPlan<'a> {
+    /// The steps the apply executes for this context ([`apply_worker`]).
+    pub(crate) fn steps(&self) -> &WorkerSteps<'a> {
+        &self.steps
+    }
 }
 
 /// Interop I5 (#1972): one Service Binding to a foreign Worker. No action:
@@ -1152,12 +1162,13 @@ pub fn run(
         return ExitCode::FAILURE;
     }
 
+    let tools = Tools {
+        provenance: &probe.provenance,
+        project_root,
+    };
     // Slice 5, DECISION B: the account's live KV ids, read once per run.
     let live_kv = Kv::read_live(
-        Tools {
-            provenance: &probe.provenance,
-            project_root,
-        },
+        tools,
         &ProjectCx {
             ledger: LedgerView::of(&lock, &opts.environment),
             resources: &resources,
@@ -1265,22 +1276,20 @@ pub fn run(
     let mut resolved_secrets = BTreeMap::new();
     sweep_and_report_stale_uploads();
     let mut writer = LedgerWriter::new(&mut lock, &lock_path);
-    for (i, worker) in order.iter().enumerate() {
+    for (i, (worker, context)) in order.iter().zip(&plan.contexts).enumerate() {
         if order.len() > 1 {
             eprint!(
                 "{}",
                 deploying_notice(&opts.environment, worker, i + 1, order.len())
             );
         }
-        match deploy_one(
-            &probe.provenance,
-            project_root,
-            &workers_dir,
-            worker,
-            &resources[worker],
-            &resources,
-            &mut writer,
-            &mut Secrets {
+        // 1D.2b (#4001): each context's plan is what is applied.
+        let run = &mut RunCx {
+            tools,
+            workers_dir: &workers_dir,
+            project: &resources,
+            writer: &mut writer,
+            secrets: &mut Secrets {
                 source: &secret_source,
                 force: opts.force,
                 edge_keys: &edge_keys,
@@ -1290,10 +1299,11 @@ pub fn run(
                 resolved: &mut resolved_secrets,
                 with_upload: secrets_file_supported(&probe),
             },
-            &opts.wrangler_args,
-            &opts.environment,
+            wrangler_args: &opts.wrangler_args,
+            environment: &opts.environment,
             lives,
-        ) {
+        };
+        match apply_worker(run, context) {
             Ok(Pushed::Ok) => {
                 // P3 (#2342): e.g. a rate limiter's id the source dropped is free again.
                 let pushed = PushedWorker::of(worker, &workers_dir, &groups, &resources[worker]);
@@ -2621,6 +2631,10 @@ pub(crate) fn derive_plan<'a>(
                         worker,
                         &declared.email_addresses,
                     ),
+                    steps: WorkerSteps {
+                        worker: Some((worker, declared)),
+                        ..WorkerSteps::default()
+                    },
                 };
                 // 1D.1 (#3929): each converted kind's lines.
                 let cx = PlanCx {

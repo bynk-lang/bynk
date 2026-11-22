@@ -162,6 +162,11 @@ impl ResourceKind for RateLimit {
     /// The `namespace_id`.
     type Bound = String;
     type Change = TableChange<RateLimitTable>;
+    type Step<'r> = RateLimitStep<'r>;
+
+    const GUARDS: &'static [&'static str] = &[
+        "an unrecorded limiter's id is allocated at apply, unique across every environment of the ledger, including ids earlier Workers allocated in this run",
+    ];
 
     fn declared(r: &Resources) -> Vec<&str> {
         r.ratelimits.iter().map(String::as_str).collect()
@@ -235,40 +240,42 @@ impl ResourceKind for RateLimit {
         match *orphan {}
     }
 
-    /// One limiter alone, recorded at once. The deploy provisions a Worker's limiters together
-    /// ([`ResourceKind::provision_all`]).
-    fn provision<'r>(
-        cx: &StepCx<'_, '_, RateLimit>,
-        binding: Self::Decl<'r>,
-    ) -> Result<Provisioned<'r, RateLimit>, DeployFailure> {
-        let mut pending = BTreeMap::new();
-        let (id, allocated) = allocate(cx, &mut pending, binding);
-        let provisioned = Provisioned::bound(binding, id);
-        Ok(if allocated {
-            provisioned.with(record_allocated(cx.worker, pending))
-        } else {
-            provisioned
-        })
+    /// One step for all the Worker's limiters, whose ids are recorded in one write.
+    fn steps<'r>(_cx: &PlanCx<'_>, declared: &'r Resources, _live: ()) -> Vec<RateLimitStep<'r>> {
+        if declared.ratelimits.is_empty() {
+            return Vec::new();
+        }
+        vec![RateLimitStep {
+            bindings: declared.ratelimits.iter().map(String::as_str).collect(),
+        }]
+    }
+
+    fn steps_of<'p, 'r>(steps: &'p WorkerSteps<'r>) -> &'p [RateLimitStep<'r>] {
+        &steps.ratelimits
+    }
+
+    fn steps_mut<'p, 'r>(steps: &'p mut WorkerSteps<'r>) -> &'p mut Vec<RateLimitStep<'r>> {
+        &mut steps.ratelimits
     }
 
     /// Every limiter's id allocated (no account call: the id is ours to choose), then recorded in
     /// one write before the push.
-    fn provision_all<'r>(
+    fn apply(
         cx: &StepCx<'_, '_, RateLimit>,
-        declared: &'r Resources,
-    ) -> Option<Result<Provisioned<'r, RateLimit>, DeployFailure>> {
+        step: &RateLimitStep<'_>,
+    ) -> Result<Applied<RateLimit>, DeployFailure> {
         let mut pending = BTreeMap::new();
-        let mut provisioned = Provisioned::nothing();
+        let mut applied = Applied::nothing();
         let mut ledger_changed = false;
-        for binding in &declared.ratelimits {
+        for binding in &step.bindings {
             let (id, allocated) = allocate(cx, &mut pending, binding);
             ledger_changed |= allocated;
-            provisioned.bound.push((binding.clone(), id));
+            applied.bound.push((binding.to_string(), id));
         }
         if ledger_changed {
-            provisioned = provisioned.with(record_allocated(cx.worker, pending));
+            applied = applied.with(record_allocated(cx.worker, pending));
         }
-        Some(Ok(provisioned))
+        Ok(applied)
     }
 
     /// A limiter holds no data and has no account resource, so a removed instance needs nothing
@@ -313,6 +320,13 @@ pub(crate) struct PlanRateLimit<'a> {
     /// The recorded id, when `reuse`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) namespace_id: Option<String>,
+}
+
+/// A Worker's rate limiters' step (1D.2b): each limiter's binding. Their ids are allocated when
+/// the step is applied, since an id must be unique across what earlier Workers in this run took.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct RateLimitStep<'r> {
+    pub(crate) bindings: Vec<&'r str>,
 }
 
 #[cfg(test)]

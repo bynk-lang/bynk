@@ -63,6 +63,7 @@ impl ResourceKind for AiSearch {
     /// Nothing: the config binds the instance by the name it already carries.
     type Bound = ();
     type Change = TableChange<AiSearchTable>;
+    type Step<'r> = AiSearchStep<'r>;
 
     fn declared(r: &Resources) -> Vec<&AiSearchDecl> {
         r.ai_search.iter().collect()
@@ -116,57 +117,57 @@ impl ResourceKind for AiSearch {
         match *orphan {}
     }
 
-    /// One link alone, recorded at once. The deploy links a Worker's together
-    /// ([`ResourceKind::provision_all`]).
-    fn provision<'r>(
-        cx: &StepCx<'_, '_, AiSearch>,
-        decl: Self::Decl<'r>,
-    ) -> Result<Provisioned<'r, AiSearch>, DeployFailure> {
-        let worker = cx.worker;
-        let (link, bound) = link(cx, decl)?;
-        let mut links = Links::new();
-        links.link(cx, &decl.binding, link);
-        let provisioned = Provisioned::bound(&decl.binding, bound);
-        Ok(
-            match links.commit(
-                worker,
-                format!("linked `{worker}`'s AI Search instances but could not record them"),
-            ) {
-                Some(commit) => provisioned.with(commit),
-                None => provisioned,
-            },
-        )
+    /// One step for all the Worker's links, written once when any changed.
+    fn steps<'r>(
+        _cx: &PlanCx<'_>,
+        declared: &'r Resources,
+        _live: Self::Live<'_>,
+    ) -> Vec<AiSearchStep<'r>> {
+        if declared.ai_search.is_empty() {
+            return Vec::new();
+        }
+        vec![AiSearchStep {
+            decls: declared.ai_search.iter().collect(),
+        }]
+    }
+
+    fn steps_of<'p, 'r>(steps: &'p WorkerSteps<'r>) -> &'p [AiSearchStep<'r>] {
+        &steps.ai_search
+    }
+
+    fn steps_mut<'p, 'r>(steps: &'p mut WorkerSteps<'r>) -> &'p mut Vec<AiSearchStep<'r>> {
+        &mut steps.ai_search
     }
 
     /// Each link recorded, the ledger written once when any changed, before the push.
-    fn provision_all<'r>(
+    fn apply(
         cx: &StepCx<'_, '_, AiSearch>,
-        declared: &'r Resources,
-    ) -> Option<Result<Provisioned<'r, AiSearch>, DeployFailure>> {
-        Some(provision_links(cx, declared))
+        step: &AiSearchStep<'_>,
+    ) -> Result<Applied<AiSearch>, DeployFailure> {
+        apply_links(cx, &step.decls)
     }
 }
 
-/// [`AiSearch`]'s `provision_all`: each of the Worker's links, written once when any changed.
-fn provision_links<'r>(
+/// [`AiSearch`]'s step: each of the Worker's links, written once when any changed.
+fn apply_links(
     cx: &StepCx<'_, '_, AiSearch>,
-    declared: &'r Resources,
-) -> Result<Provisioned<'r, AiSearch>, DeployFailure> {
+    decls: &[&AiSearchDecl],
+) -> Result<Applied<AiSearch>, DeployFailure> {
     let worker = cx.worker;
-    let mut provisioned = Provisioned::nothing();
+    let mut applied = Applied::nothing();
     let mut links = Links::new();
-    for decl in &declared.ai_search {
+    for &decl in decls {
         let (link, id) = link(cx, decl)?;
         links.link(cx, &decl.binding, link);
-        provisioned.bound.push((decl.binding.clone(), id));
+        applied.bound.push((decl.binding.clone(), id));
     }
     if let Some(commit) = links.commit(
         worker,
         format!("linked `{worker}`'s AI Search instances but could not record them"),
     ) {
-        provisioned = provisioned.with(commit);
+        applied = applied.with(commit);
     }
-    Ok(provisioned)
+    Ok(applied)
 }
 
 /// What `decl` was linked to, as the ledger records it. Looked up before the run confirmed
@@ -189,6 +190,13 @@ fn link(
 pub(crate) struct PlanAiSearch<'a> {
     pub(crate) binding: &'a str,
     pub(crate) instance: &'a str,
+}
+
+/// A Worker's links' step (1D.2b): each declaration, linked to the id found before the run
+/// confirmed.
+#[derive(Debug, Clone)]
+pub(crate) struct AiSearchStep<'r> {
+    pub(crate) decls: Vec<&'r AiSearchDecl>,
 }
 
 #[cfg(test)]

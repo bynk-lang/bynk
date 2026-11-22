@@ -1,5 +1,4 @@
 use super::*;
-use bynk_driver::emsg;
 
 /// How one context's push ended, short of failing.
 #[derive(Debug, PartialEq, Eq)]
@@ -59,282 +58,6 @@ pub(crate) fn wrangler_outcome(
             code,
         }),
     }
-}
-
-/// #3073: the `--var` that sets the facts this version carries about itself,
-/// for `bynk revert`.
-fn facts_args(
-    project_root: &Path,
-    worker_dir: &Path,
-    worker: &str,
-    environment: &str,
-    declared: &Resources,
-    lock: &DeployLock,
-) -> Vec<String> {
-    facts::var_args(&facts::build_facts(
-        worker,
-        environment,
-        declared,
-        &read_contracts_manifest(worker_dir).unwrap_or_default(),
-        lock,
-        &schema_agent_versions(project_root),
-        // #3686: a group's Worker carries its members' agent versions.
-        &bynk_project::worker_layout::WorkerLayout::for_project(
-            project_root,
-            &std::collections::HashMap::new(),
-        ),
-    ))
-}
-
-/// Provision and push exactly one context. Slice 0's body, lifted so the
-/// multi-context loop and `--context` share one path.
-///
-/// The phase order is the contract (ADR 0194 D3): everything the upload needs
-/// to already exist — the KV namespace, the queues a `[[queues.consumers]]`
-/// binding would otherwise fail against — is provisioned first; Durable
-/// Object namespaces are not provisioned at all, because Cloudflare creates
-/// them from the `exports` declaration in the same config `wrangler deploy`
-/// is pushing (#1796).
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn deploy_one(
-    provenance: &Provenance,
-    project_root: &Path,
-    workers_dir: &Path,
-    worker: &str,
-    declared: &Resources,
-    // #2059: the whole project, for the cross-environment title check a
-    // create re-runs ([`cross_environment_title_clash`]).
-    project: &BTreeMap<String, Resources>,
-    // 1D.2a (#4001): the ledger, through the deploy's one writer.
-    writer: &mut LedgerWriter<'_>,
-    secrets: &mut Secrets<'_>,
-    wrangler_args: &[String],
-    environment: &str,
-    // Slice 5, DECISION B: `lives.kv` is `Some` when `run()` fetched the
-    // account's live KV namespace ids once, up front ([`Kv::read_live`]). A
-    // recorded id absent from that set is exactly as untrustworthy as no record
-    // at all — re-provision rather than inject a dead id. `None` means the fetch
-    // was skipped or failed; the recorded id is trusted unconditionally, as it
-    // always was pre-slice-5. `lives.hyperdrive` is what each `Postgres` binding
-    // wants (#3319), and the API to ask. `lives.linked` is the Secrets Store and
-    // mTLS certificate each `(worker, binding)` linked to, as its id, found before
-    // anything was pushed ([`link_for_run`], #3301, #3513 A).
-    lives: Lives<'_>,
-) -> Result<Pushed, DeployFailure> {
-    let worker_dir = workers_dir.join(worker);
-    let config = worker_dir.join("wrangler.toml");
-    // Every KV namespace the Worker binds: the bare `KV`, then each derived
-    // instance (S4b, #1967), each its own namespace with its own ledger entry.
-    let site = Site {
-        tools: Tools {
-            provenance,
-            project_root,
-        },
-        environment,
-        worker,
-        project,
-    };
-    let kv_ids = provision_kind::<Kv>(site, declared, writer, lives)?;
-    // P5 (#2323): each `R2` bucket, made by name and recorded before the push.
-    provision_kind::<R2>(site, declared, writer, lives)?;
-    // #3479: each `Vectorize` index, created with its fixed configuration or
-    // checked against it, and its metadata indexes made before any vector.
-    provision_kind::<Vectorize>(site, declared, writer, lives)?;
-    // P4a (#2602): each `D1` database, its minted id recorded before the push, then bound.
-    let d1 = provision_kind::<D1>(site, declared, writer, lives)?;
-    D1::materialise(&config, worker, &d1)?;
-    // #3319: each `Postgres` binding's Hyperdrive config, bound by its id.
-    let hyperdrive_ids = provision_kind::<Hyperdrive>(site, declared, writer, lives)?;
-    Hyperdrive::materialise(&config, worker, &hyperdrive_ids)?;
-    // #3301, #3513 A, #3480: each stored secret's store, mTLS certificate and AI Search instance,
-    // found before the run, recorded and (the first two) bound by their ids. Nothing is created or
-    // uploaded here: the account owns them.
-    let stores = provision_kind::<StoredSecret>(site, declared, writer, lives)?;
-    StoredSecret::materialise(&config, worker, &stores)?;
-    let certificates = provision_kind::<MtlsCertificate>(site, declared, writer, lives)?;
-    MtlsCertificate::materialise(&config, worker, &certificates)?;
-    provision_kind::<AiSearch>(site, declared, writer, lives)?;
-    // P3 (#2342): each rate limiter's `namespace_id`, allocated in the ledger
-    // (no account call: the id is ours to choose) and recorded before the
-    // push, so an interrupted run never allocates a second one and resets
-    // its counters. One the source no longer declares is forgotten only once
-    // the push has succeeded (`plan::run`): until then the live Worker still
-    // binds its id, which must not be handed to another limiter.
-    let ratelimit_ids = provision_kind::<RateLimit>(site, declared, writer, lives)?;
-    RateLimit::materialise(&config, worker, &ratelimit_ids)?;
-    Kv::materialise(&config, worker, &kv_ids)?;
-    // Reconciled against the account on every run, never against the ledger,
-    // once per run and not once per consuming context, environment-qualified,
-    // and recorded before the push ([`Queue`]'s `provision_all`). `wrangler
-    // deploy` will not create a queue for us: it checks and fails with "To
-    // create it, run: wrangler queues create", so this step is the one that
-    // makes such a project deployable at all.
-    provision_kind::<Queue>(site, declared, writer, lives)?;
-    // Slice 4 (DECISION B+C): Cloudflare does not inherit bindings into a named
-    // environment, so a non-default `--env` needs its own `[env.<name>]` table —
-    // synthesised here, not by the emitter, since the environment name is a
-    // deploy-time concept the compiler never sees. The top-level stanza is left
-    // untouched; it continues to serve the plain, no-`--env` `bynk deploy`.
-    if environment != "default" {
-        let config_text = std::fs::read_to_string(&config).map_err(|e| {
-            DeployFailure::driver(format!(
-                "could not read `{worker}`'s generated configuration: {e}"
-            ))
-        })?;
-        let foreign: BTreeSet<String> = declared
-            .foreign_services
-            .iter()
-            .map(|f| f.binding.clone())
-            .collect();
-        let synthesised = synthesise_environment_block(
-            &config_text,
-            environment,
-            &kv_ids,
-            &foreign,
-        )
-        .map_err(|e| {
-            DeployFailure::driver(format!(
-                "could not synthesise the `[env.{environment}]` configuration for `{worker}`: {e}"
-            ))
-        })?;
-        std::fs::write(&config, synthesised).map_err(|e| {
-            DeployFailure::driver(format!(
-                "could not write `{worker}`'s `[env.{environment}]` configuration: {e}"
-            ))
-        })?;
-    }
-    // #3479: an adopted index keeps the name it has on the account.
-    materialise_adopted_vectorize(&config, worker, declared, environment)?;
-    // #3477: an adopted container image replaces the Dockerfile `wrangler` would build, in the
-    // configuration it is about to read, and is recorded before the push.
-    materialise_adopted_containers(&config, worker, declared, environment)?;
-    provision_kind::<ContainerImage>(site, declared, writer, lives)?;
-    // P4b (#2608): each database's pending migrations, applied once it is
-    // bound (and, for a named environment, once `[env.<name>]` binds it) and
-    // before the push, so the new code never meets the old schema. Wrangler
-    // records what it applied in the database itself, so the ledger doesn't.
-    for db in declared
-        .d1_databases
-        .iter()
-        .filter(|db| !db.migrations.is_empty())
-    {
-        let physical = d1_database_name(environment, &db.name);
-        apply_d1_migrations(provenance, &worker_dir, &db.binding, environment).map_err(|e| {
-            DeployFailure::driver(format!(
-                "could not apply the migrations of the D1 database `{physical}` for `{worker}`'s `{}`, so nothing was pushed: {e}",
-                db.binding
-            ))
-        })?;
-    }
-    // Secrets straddle the push, and which side depends on whether the Worker
-    // already exists (ADR 0195 D6).
-    //
-    // `wrangler secret put` against a Worker that is not on the account yet does
-    // not fail — it creates a **stub draft Worker** (`export default { fetch()
-    // {} }`) and puts the secret on that. Non-interactively it does so without
-    // asking (its confirm falls back to yes), and interactively it prompts
-    // mid-deploy — where a decline makes it exit **0** having set nothing, which
-    // `deploy` would read as success and push behind. Neither is a thing to do
-    // on a plan that said "deploy `api`".
-    //
-    // So: a Worker the ledger has pushed before exists, and its secrets are set
-    // **before** the push, as the phase order intends — the running code never
-    // sees a request without them.
-    //
-    // A first deploy uploads its secrets **with** the push (#2055):
-    // `wrangler deploy --secrets-file` puts them in the new Worker's first
-    // version, so it is never live without them. Setting them after the push,
-    // as this did before, left a new Worker serving for a few seconds with no
-    // auth secret (fail-closed, answering 401, but contrary to what the guide
-    // promised). The file is the only way in for a Worker that does not exist
-    // yet, and it is used only there: a value piped to `secret put` never
-    // touches disk, and a file — however briefly, 0600, in a private temp
-    // directory — does, so a redeploy keeps the stdin path.
-    //
-    // What does **not** straddle is the deciding and resolving: `prepare_bindings`
-    // runs before the push on *both* paths, so a missing value is found before
-    // anything is uploaded.
-    let first_deploy = !writer.lock().is_deployed(environment, worker);
-    let prepared = prepare_bindings(
-        provenance,
-        &worker_dir,
-        worker,
-        declared,
-        secrets,
-        first_deploy,
-        environment,
-    )?;
-    let deployed = deployed_worker_name(environment, worker);
-    let facts_args = facts_args(
-        project_root,
-        &worker_dir,
-        worker,
-        environment,
-        declared,
-        writer.lock(),
-    );
-    let wrangler_args: Vec<String> = wrangler_args.iter().cloned().chain(facts_args).collect();
-    let wrangler_args = wrangler_args.as_slice();
-    if !first_deploy {
-        apply_secrets(provenance, &worker_dir, worker, &prepared, environment)?;
-        return push(
-            provenance,
-            &worker_dir,
-            worker,
-            wrangler_args,
-            environment,
-            (None, false),
-        );
-    }
-    if prepared.is_empty() {
-        return push(
-            provenance,
-            &worker_dir,
-            worker,
-            wrangler_args,
-            environment,
-            (None, true),
-        );
-    }
-    if !secrets.with_upload {
-        // An installed wrangler older than `--secrets-file`: the old order,
-        // said out loud, since the guide promises otherwise.
-        emsg!(
-            "bynk: warning: this wrangler is older than {SECRETS_FILE_MIN}, which cannot upload secrets with a new Worker, so `{deployed}` will be live for a moment before its secrets are set. Upgrade wrangler to close that window."
-        );
-        let pushed = push(
-            provenance,
-            &worker_dir,
-            worker,
-            wrangler_args,
-            environment,
-            (None, true),
-        )?;
-        if pushed == Pushed::Ok {
-            apply_secrets(provenance, &worker_dir, worker, &prepared, environment)?;
-        }
-        return Ok(pushed);
-    }
-    let file = SecretsFile::write(&prepared).map_err(|e| {
-        DeployFailure::driver(format!(
-            "could not write the secrets for `{deployed}`'s first version to a temporary file: {e}"
-        ))
-    })?;
-    let pushed = push(
-        provenance,
-        &worker_dir,
-        worker,
-        wrangler_args,
-        environment,
-        (Some(file.path()), true),
-    );
-    // Removed whatever the push did, before anything else can fail.
-    drop(file);
-    let pushed = pushed?;
-    if pushed == Pushed::Ok {
-        report_first_version_bindings(&prepared, &deployed);
-    }
-    Ok(pushed)
 }
 
 /// #2055: the first wrangler whose `deploy` takes `--secrets-file`
@@ -432,7 +155,7 @@ impl Drop for SecretsFile {
 /// a first deploy uploads its secrets with the Worker (#2055), and `--env` for a
 /// non-default environment (slice 4) — the one place Wrangler needs telling
 /// which of the synthesised `[env.<name>]` tables to read.
-fn push(
+pub(crate) fn push(
     provenance: &Provenance,
     worker_dir: &Path,
     worker: &str,
@@ -983,7 +706,7 @@ pub(crate) fn set_secret(
 /// `bynk.schema.lock` (what the build just compiled against). Empty when the
 /// project has no lock or it cannot be read: the facts then record no agents,
 /// and a revert treats the version as having none to compare.
-fn schema_agent_versions(project_root: &Path) -> BTreeMap<String, i64> {
+pub(crate) fn schema_agent_versions(project_root: &Path) -> BTreeMap<String, i64> {
     let Ok(existing) = bynk_driver::schema_lock::read(project_root) else {
         return BTreeMap::new();
     };
@@ -1313,7 +1036,7 @@ mod tests {
 
     // ---- #2037: the bare namespace's title on the provisioning command ----
     //
-    // `deploy_one` against a stand-in `wrangler` that records its arguments
+    // the apply of one context against a stand-in `wrangler` that records its arguments
     // and answers `kv namespace create` with an id. Nothing reaches
     // Cloudflare.
 
@@ -1341,7 +1064,7 @@ mod tests {
         }
     }
 
-    /// What `deploy_one` ran, one line per `wrangler` invocation, and the
+    /// What the apply ran, one line per `wrangler` invocation, and the
     /// ledger it left, for one Worker `api` that binds only the bare `KV`.
     #[cfg(unix)]
     fn provision_bare_kv(environment: &str, lock: DeployLock) -> (Vec<String>, DeployLock) {
@@ -1351,7 +1074,7 @@ mod tests {
         (calls, lock)
     }
 
-    /// `deploy_one` for Worker `api` declaring `declared` (the whole project),
+    /// The apply of Worker `api` declaring `declared` (the whole project),
     /// with the account's live KV ids `live_kv_ids`: the `wrangler`
     /// invocations, the ledger it left, and its outcome.
     #[cfg(unix)]
@@ -1439,30 +1162,44 @@ mod tests {
         let listed = BTreeMap::from([("api".to_string(), Some(BTreeSet::new()))]);
         let mut resolved = BTreeMap::new();
         let project = BTreeMap::from([("api".to_string(), declared)]);
-        let pushed = deploy_one(
-            &Provenance::Path(fake),
-            &root,
-            &workers_dir,
-            "api",
-            &project["api"],
+        // 1D.2b (#4001): as `run` applies a context, its plan's steps.
+        let order = ["api".to_string()];
+        let plan = derive_plan(
+            &order,
             &project,
-            &mut LedgerWriter::new(&mut lock, &root.join(LOCK_FILE)),
-            &mut Secrets {
-                source: &source,
-                force: false,
-                edge_keys: &edge_keys,
-                foreign_keys: &foreign_keys,
-                foreign_secrets: &foreign_secrets,
-                listed: &listed,
-                resolved: &mut resolved,
-                with_upload: true,
-            },
-            &[],
+            &lock,
+            &SecretSource::default(),
+            false,
             environment,
-            Lives {
-                kv: live_kv_ids.as_ref(),
-                ..Lives::default()
+        );
+        let provenance = Provenance::Path(fake);
+        let pushed = apply_worker(
+            &mut RunCx {
+                tools: Tools {
+                    provenance: &provenance,
+                    project_root: &root,
+                },
+                workers_dir: &workers_dir,
+                project: &project,
+                writer: &mut LedgerWriter::new(&mut lock, &root.join(LOCK_FILE)),
+                secrets: &mut Secrets {
+                    source: &source,
+                    force: false,
+                    edge_keys: &edge_keys,
+                    foreign_keys: &foreign_keys,
+                    foreign_secrets: &foreign_secrets,
+                    listed: &listed,
+                    resolved: &mut resolved,
+                    with_upload: true,
+                },
+                wrangler_args: &[],
+                environment,
+                lives: Lives {
+                    kv: live_kv_ids.as_ref(),
+                    ..Lives::default()
+                },
             },
+            &plan.contexts[0],
         );
         let calls = std::fs::read_to_string(&log)
             .unwrap_or_default()
@@ -1882,7 +1619,7 @@ mod tests {
         (declared, lock)
     }
 
-    /// Staging's bare id has gone from the account, so `deploy_one` would
+    /// Staging's bare id has gone from the account, so the apply would
     /// create it again as `api-staging`, the title the default environment's
     /// instance holds. Refused before any `kv namespace create` or push.
     #[cfg(unix)]
@@ -2050,14 +1787,14 @@ mod tests {
 
     // ---- #2055: a new Worker's first version carries its secrets ----
     //
-    // `deploy_one` against a stand-in `wrangler` that records its arguments,
+    // the apply of one context against a stand-in `wrangler` that records its arguments,
     // drains a `secret put`'s stdin, and notes whether a `--secrets-file` it
     // is handed exists and names the secret. Nothing reaches Cloudflare.
 
     const BINDING: &str = "LEDGER_CALL";
     const PLANTED: &str = "planted-2055";
 
-    /// What one `deploy_one` of a Worker `api` with one secret to set left
+    /// What one apply of a Worker `api` with one secret to set left
     /// behind.
     #[cfg(unix)]
     struct BindingRun {
@@ -2140,27 +1877,41 @@ mod tests {
         let listed = BTreeMap::from([("api".to_string(), Some(BTreeSet::new()))]);
         let mut resolved = BTreeMap::new();
         let project = BTreeMap::from([("api".to_string(), Resources::default())]);
-        let pushed = deploy_one(
-            &Provenance::Path(fake),
-            &root,
-            &workers_dir,
-            "api",
-            &project["api"],
+        // 1D.2b (#4001): as `run` applies a context, its plan's steps.
+        let order = ["api".to_string()];
+        let plan = derive_plan(
+            &order,
             &project,
-            &mut LedgerWriter::new(&mut lock, &root.join(LOCK_FILE)),
-            &mut Secrets {
-                source: &source,
-                force: false,
-                edge_keys: &edge_keys,
-                foreign_keys: &foreign_keys,
-                foreign_secrets: &foreign_secrets,
-                listed: &listed,
-                resolved: &mut resolved,
-                with_upload,
-            },
-            &[],
+            &lock,
+            &SecretSource::default(),
+            false,
             environment,
-            Lives::default(),
+        );
+        let provenance = Provenance::Path(fake);
+        let pushed = apply_worker(
+            &mut RunCx {
+                tools: Tools {
+                    provenance: &provenance,
+                    project_root: &root,
+                },
+                workers_dir: &workers_dir,
+                project: &project,
+                writer: &mut LedgerWriter::new(&mut lock, &root.join(LOCK_FILE)),
+                secrets: &mut Secrets {
+                    source: &source,
+                    force: false,
+                    edge_keys: &edge_keys,
+                    foreign_keys: &foreign_keys,
+                    foreign_secrets: &foreign_secrets,
+                    listed: &listed,
+                    resolved: &mut resolved,
+                    with_upload,
+                },
+                wrangler_args: &[],
+                environment,
+                lives: Lives::default(),
+            },
+            &plan.contexts[0],
         );
         let read = |path: &Path| -> Vec<String> {
             std::fs::read_to_string(path)

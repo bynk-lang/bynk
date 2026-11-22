@@ -137,6 +137,7 @@ impl ResourceKind for Hyperdrive {
     /// The config's id, which the config binds it by.
     type Bound = String;
     type Change = HyperdriveChange;
+    type Step<'r> = HyperdriveStep<'r>;
 
     fn declared(r: &Resources) -> Vec<&HyperdriveDecl> {
         r.hyperdrive.iter().collect()
@@ -165,23 +166,42 @@ impl ResourceKind for Hyperdrive {
         decl: Self::Decl<'r>,
         run: HyperdriveRun<'_>,
     ) -> PlanHyperdrive<'r> {
-        let physical = config_name(cx.ledger.environment, cx.worker, decl);
-        let recorded = cx.ledger.recorded::<Hyperdrive>(cx.worker, &decl.binding);
+        let step = hyperdrive_step(cx, decl, run);
         let want = run
             .wants
             .get(&(cx.worker.to_string(), decl.binding.clone()));
         PlanHyperdrive {
             binding: &decl.binding,
-            action: action(recorded, &physical, want),
+            action: step.action,
             config: match want {
                 Some(Want::Adopt { id }) => id.clone(),
-                _ => physical,
+                _ => step.physical,
             },
             connection_env: match want {
                 Some(Want::Connection { variable, .. }) => Some(variable.clone()),
                 _ => None,
             },
         }
+    }
+
+    fn steps<'r>(
+        cx: &PlanCx<'_>,
+        declared: &'r Resources,
+        run: HyperdriveRun<'_>,
+    ) -> Vec<HyperdriveStep<'r>> {
+        declared
+            .hyperdrive
+            .iter()
+            .map(|decl| hyperdrive_step(cx, decl, run))
+            .collect()
+    }
+
+    fn steps_of<'p, 'r>(steps: &'p WorkerSteps<'r>) -> &'p [HyperdriveStep<'r>] {
+        &steps.hyperdrive
+    }
+
+    fn steps_mut<'p, 'r>(steps: &'p mut WorkerSteps<'r>) -> &'p mut Vec<HyperdriveStep<'r>> {
+        &mut steps.hyperdrive
     }
 
     fn short_line(h: &PlanHyperdrive<'_>, out: &mut String) {
@@ -296,16 +316,16 @@ impl ResourceKind for Hyperdrive {
 
     /// Make, update or adopt the config, record what was done before the push (an interrupted
     /// run never makes a second config), and bind it by its id.
-    fn provision<'r>(
+    fn apply(
         cx: &StepCx<'_, '_, Hyperdrive>,
-        decl: Self::Decl<'r>,
-    ) -> Result<Provisioned<'r, Hyperdrive>, DeployFailure> {
-        let (worker, environment, run) = (cx.worker, cx.environment, cx.live);
-        let binding = &decl.binding;
-        let physical = config_name(environment, worker, decl);
+        step: &HyperdriveStep<'_>,
+    ) -> Result<Applied<Hyperdrive>, DeployFailure> {
+        let (worker, run) = (cx.worker, cx.live);
+        let binding = &step.decl.binding;
+        let physical = step.physical.clone();
         let want = run.wants.get(&(worker.to_string(), binding.clone()));
-        let recorded = cx.ledger().recorded::<Hyperdrive>(worker, binding).cloned();
-        let todo = action(recorded.as_ref(), &physical, want);
+        let recorded = step.recorded.clone();
+        let todo = step.action;
         let record = |record: HyperdriveRecord, done: &str| {
             Commit::recorded(
                 HyperdriveChange::Record(TableChange::insert(worker, binding, record)),
@@ -389,11 +409,7 @@ impl ResourceKind for Hyperdrive {
                 )));
             }
         };
-        let provisioned = Provisioned::bound(binding, id);
-        Ok(match commit {
-            Some(commit) => provisioned.with(commit),
-            None => provisioned,
-        })
+        Ok(Applied::bound(binding, id).with_any(commit))
     }
 
     fn materialise(
@@ -411,6 +427,39 @@ impl ResourceKind for Hyperdrive {
 
     fn bound_id(record: &HyperdriveRecord) -> Option<&str> {
         Some(&record.id)
+    }
+}
+
+/// One Hyperdrive config's step (1D.2b): the declaration, the config's name, what the ledger
+/// records for it, and what [`action`] decided from those and the run's wants. The plan's line
+/// shows the same action: it is decided once, here.
+#[derive(Debug, Clone)]
+pub(crate) struct HyperdriveStep<'r> {
+    pub(crate) decl: &'r HyperdriveDecl,
+    pub(crate) physical: String,
+    pub(crate) recorded: Option<HyperdriveRecord>,
+    pub(crate) action: &'static str,
+}
+
+/// `cx.worker`'s step for `decl`, from the ledger and what `run` wants.
+fn hyperdrive_step<'r>(
+    cx: &PlanCx<'_>,
+    decl: &'r HyperdriveDecl,
+    run: HyperdriveRun<'_>,
+) -> HyperdriveStep<'r> {
+    let physical = config_name(cx.ledger.environment, cx.worker, decl);
+    let recorded = cx
+        .ledger
+        .recorded::<Hyperdrive>(cx.worker, &decl.binding)
+        .cloned();
+    let want = run
+        .wants
+        .get(&(cx.worker.to_string(), decl.binding.clone()));
+    HyperdriveStep {
+        decl,
+        action: action(recorded.as_ref(), &physical, want),
+        physical,
+        recorded,
     }
 }
 

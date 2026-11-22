@@ -434,28 +434,32 @@ fn apply(environment: &str, fail_call: Option<usize>, fail_write: Option<usize>)
     };
     let failure = write_watch::watching(watch, || {
         let mut writer = LedgerWriter::new(&mut lock, &lock_path);
-        for worker in &order {
-            let pushed = deploy_one(
-                &provenance,
-                &scratch.root,
-                &workers_dir,
-                worker,
-                &resources[worker],
-                &resources,
-                &mut writer,
-                &mut Secrets {
-                    source: &source,
-                    force: false,
-                    edge_keys: &edge_keys,
-                    foreign_keys: &foreign_keys,
-                    foreign_secrets: &foreign_secrets,
-                    listed: &listed,
-                    resolved: &mut resolved,
-                    with_upload: true,
+        // 1D.2b (#4001): each context's plan applied, as `run` applies it.
+        for (worker, context) in order.iter().zip(&plan.contexts) {
+            let pushed = apply_worker(
+                &mut RunCx {
+                    tools: Tools {
+                        provenance: &provenance,
+                        project_root: &scratch.root,
+                    },
+                    workers_dir: &workers_dir,
+                    project: &resources,
+                    writer: &mut writer,
+                    secrets: &mut Secrets {
+                        source: &source,
+                        force: false,
+                        edge_keys: &edge_keys,
+                        foreign_keys: &foreign_keys,
+                        foreign_secrets: &foreign_secrets,
+                        listed: &listed,
+                        resolved: &mut resolved,
+                        with_upload: true,
+                    },
+                    wrangler_args: &[],
+                    environment,
+                    lives,
                 },
-                &[],
-                environment,
-                lives,
+                context,
             );
             match pushed {
                 // As `run` records a Worker that pushed (it has no agent moves to record).

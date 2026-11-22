@@ -111,6 +111,11 @@ impl ResourceKind for Kv {
     /// The namespace id.
     type Bound = String;
     type Change = TableChange<KvTable>;
+    type Step<'r> = KvStep<'r>;
+
+    const GUARDS: &'static [&'static str] = &[
+        "a `reuse` whose recorded id the account's live ids lack is created again, after the cross-environment title check",
+    ];
 
     fn declared(r: &Resources) -> Vec<&str> {
         kv_bindings(r).collect()
@@ -137,15 +142,30 @@ impl ResourceKind for Kv {
         binding: Self::Decl<'r>,
         _live: Option<&BTreeSet<String>>,
     ) -> PlanKv<'r> {
+        let step = kv_step(cx, binding);
         PlanKv {
             binding,
-            action: if cx.ledger.recorded::<Kv>(cx.worker, binding).is_some() {
-                "reuse"
-            } else {
-                "create"
-            },
+            action: step.action(),
             namespace: kv_title(cx.worker, binding, cx.ledger.environment),
         }
+    }
+
+    fn steps<'r>(
+        cx: &PlanCx<'_>,
+        declared: &'r Resources,
+        _live: Self::Live<'_>,
+    ) -> Vec<KvStep<'r>> {
+        kv_bindings(declared)
+            .map(|binding| kv_step(cx, binding))
+            .collect()
+    }
+
+    fn steps_of<'p, 'r>(steps: &'p WorkerSteps<'r>) -> &'p [KvStep<'r>] {
+        &steps.kv
+    }
+
+    fn steps_mut<'p, 'r>(steps: &'p mut WorkerSteps<'r>) -> &'p mut Vec<KvStep<'r>> {
+        &mut steps.kv
     }
 
     fn short_line(kv: &PlanKv<'_>, out: &mut String) {
@@ -306,20 +326,20 @@ impl ResourceKind for Kv {
         )))
     }
 
-    /// Reuses the recorded id when [`should_trust_recorded_kv`]; otherwise creates the namespace
-    /// under its current title and records it.
-    fn provision<'r>(
-        cx: &StepCx<'_, '_, Kv>,
-        binding: Self::Decl<'r>,
-    ) -> Result<Provisioned<'r, Kv>, DeployFailure> {
-        let (worker, environment) = (cx.worker, cx.environment);
-        let recorded = cx
-            .ledger()
-            .recorded::<Kv>(worker, binding)
-            .map(|kv| kv.id.clone());
-        if should_trust_recorded_kv(recorded.as_deref(), cx.live) {
+    /// The step's decision, unless its guard says otherwise: a recorded id is reused when
+    /// [`should_trust_recorded_kv`]; otherwise the namespace is created under its current title and
+    /// recorded.
+    fn apply(cx: &StepCx<'_, '_, Kv>, step: &KvStep<'_>) -> Result<Applied<Kv>, DeployFailure> {
+        let (worker, environment, binding) = (cx.worker, cx.environment, step.binding);
+        let recorded = match &step.decision {
+            KvDecision::Reuse { id } => Some(id.as_str()),
+            KvDecision::Create => None,
+        };
+        // The guard (#4001 Decision B): the live ids are read after the confirmation, so the plan,
+        // offline under `--dry-run`, cannot see that a recorded namespace has gone.
+        if should_trust_recorded_kv(recorded, cx.live) {
             let id = recorded.expect("trust_recorded is only true when recorded is Some");
-            return Ok(Provisioned::bound(binding, id));
+            return Ok(Applied::bound(binding, id.to_string()));
         }
         // #2059: the plan-time check covered only namespaces with no recorded id. One whose
         // recorded id has gone from the account is created again here, under its current title,
@@ -338,7 +358,7 @@ impl ResourceKind for Kv {
         .map_err(|e| DeployFailure::driver(format!("could not create {what}: {e}")))?;
         // Recorded before the push, so an interrupted run never makes a second namespace.
         let record = cx.recording(binding, KvNamespace::of(&id), &format!("created {what}"));
-        Ok(Provisioned::bound(binding, id).with(record))
+        Ok(Applied::bound(binding, id).with(record))
     }
 
     fn materialise(
@@ -427,7 +447,7 @@ pub(crate) fn kv_bindings(declared: &Resources) -> impl Iterator<Item = &str> {
 }
 
 /// Slice 5, DECISION B, extracted for direct testing (review, #840): should
-/// `deploy_one` trust a recorded KV id, or treat it as though nothing were
+/// the apply trust a recorded KV id, or treat it as though nothing were
 /// recorded at all?
 ///
 /// - No record at all → never trust (nothing to trust).
@@ -445,6 +465,43 @@ pub(crate) fn should_trust_recorded_kv(
         (Some(id), Some(live)) => live.contains(id),
         (Some(_), None) => true,
         (None, _) => false,
+    }
+}
+
+/// One KV namespace's step (1D.2b): its binding, and what the ledger decided for it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct KvStep<'r> {
+    pub(crate) binding: &'r str,
+    pub(crate) decision: KvDecision,
+}
+
+/// What the ledger decides for one KV namespace.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum KvDecision {
+    /// The ledger records the namespace: bind its id.
+    Reuse { id: String },
+    /// It does not: make one.
+    Create,
+}
+
+impl KvStep<'_> {
+    /// The plan's word for the step.
+    pub(crate) fn action(&self) -> &'static str {
+        match self.decision {
+            KvDecision::Reuse { .. } => "reuse",
+            KvDecision::Create => "create",
+        }
+    }
+}
+
+/// `worker`'s step for `binding`, from the ledger.
+fn kv_step<'r>(cx: &PlanCx<'_>, binding: &'r str) -> KvStep<'r> {
+    KvStep {
+        binding,
+        decision: match cx.ledger.recorded::<Kv>(cx.worker, binding) {
+            Some(kv) => KvDecision::Reuse { id: kv.id.clone() },
+            None => KvDecision::Create,
+        },
     }
 }
 
@@ -476,7 +533,7 @@ pub(crate) struct PlanKv<'a> {
 ///   already recorded here is not created, so it cannot fail; that clash is
 ///   refused by the other environment's deploy instead. A recorded namespace
 ///   whose id has gone from the account is created again, and that is only
-///   known once the deploy fetches the live ids, so `deploy_one` runs
+///   known once the deploy fetches the live ids, so the apply runs
 ///   [`cross_environment_title_clash`] again at that point (#2059).
 ///
 /// Checked across the whole project, not just `--context`'s selection, since
@@ -520,7 +577,7 @@ pub(crate) fn kv_title_collision(
 /// `environment`, take a title another environment the ledger knows holds or
 /// would create? The message names both namespaces and both environments.
 ///
-/// Also run by `deploy_one` at the moment it decides to create (#2059), since
+/// Also run by the KV step at the moment it decides to create (#2059), since
 /// that is the only point that knows a recorded id has gone from the account
 /// and its namespace is about to be created again. There `live_kv_ids` is the
 /// account's live ids, when fetched: another environment's recorded namespace
@@ -649,10 +706,10 @@ fn parse_kv_id(output: &str) -> Option<String> {
 /// Every KV namespace id currently on the account — slice 5, DECISION B.
 ///
 /// Fetched **once per `bynk deploy` run**, not once per context: this is an
-/// account-wide list, so calling it from inside `deploy_one` would pay one
+/// account-wide list, so calling it from inside each KV step would pay one
 /// identical round-trip per KV-bearing context on every redeploy. `run()`
 /// calls this once, before the per-context loop, and threads the result
-/// through — see `deploy_one`'s `live_kv` parameter ([`Kv`]'s `live`).
+/// through — see `Lives::kv` ([`Kv`]'s `live`).
 ///
 /// `None` means "could not ask" (no wrangler, network/auth failure, or an
 /// unparseable response) — read the same way [`list_secrets`]'s `None` is:
@@ -1034,7 +1091,13 @@ mod tests {
         let resources = project(vec![("shop", Resources::default().needs_kv())]);
         // Unchecked (no live ids) and checked against an account that has it alike.
         for live in [None, Some(BTreeSet::from(["bare".to_string()]))] {
-            let done = Kv::provision(
+            let step = KvStep {
+                binding: "KV",
+                decision: KvDecision::Reuse {
+                    id: "bare".to_string(),
+                },
+            };
+            let done = Kv::apply(
                 &StepCx {
                     environment: "default",
                     worker: "shop",
@@ -1043,14 +1106,11 @@ mod tests {
                     live: live.as_ref(),
                     tools,
                 },
-                "KV",
+                &step,
             )
             .expect("nothing to create");
             assert_eq!(done.bound, [("KV".to_string(), "bare".to_string())]);
-            assert!(
-                done.commits.is_empty() && done.then.is_none(),
-                "nothing to record"
-            );
+            assert!(done.commits.is_empty(), "nothing to record");
         }
     }
 

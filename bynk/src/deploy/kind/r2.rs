@@ -92,6 +92,7 @@ impl ResourceKind for R2 {
     /// Nothing: the config binds a bucket by the name it already carries.
     type Bound = ();
     type Change = TableChange<R2Table>;
+    type Step<'r> = R2Step<'r>;
 
     fn declared(r: &Resources) -> Vec<&R2Decl> {
         r.r2_buckets.iter().collect()
@@ -114,10 +115,26 @@ impl ResourceKind for R2 {
     fn plan_line<'r>(cx: &PlanCx<'_>, bucket: Self::Decl<'r>, _live: ()) -> PlanR2<'r> {
         PlanR2 {
             binding: &bucket.binding,
-            action: r2_action(cx.ledger, cx.worker, bucket),
+            action: r2_step(cx, bucket).decision.action(),
             bucket: r2_bucket_name(cx.ledger.environment, &bucket.name),
             jurisdiction: bucket.jurisdiction.as_deref(),
         }
+    }
+
+    fn steps<'r>(cx: &PlanCx<'_>, declared: &'r Resources, _live: ()) -> Vec<R2Step<'r>> {
+        declared
+            .r2_buckets
+            .iter()
+            .map(|bucket| r2_step(cx, bucket))
+            .collect()
+    }
+
+    fn steps_of<'p, 'r>(steps: &'p WorkerSteps<'r>) -> &'p [R2Step<'r>] {
+        &steps.r2
+    }
+
+    fn steps_mut<'p, 'r>(steps: &'p mut WorkerSteps<'r>) -> &'p mut Vec<R2Step<'r>> {
+        &mut steps.r2
     }
 
     fn short_line(r2: &PlanR2<'_>, out: &mut String) {
@@ -221,13 +238,10 @@ impl ResourceKind for R2 {
     /// account again. Buckets are named as `environment` names them in the config
     /// the push reads: the top level already carries the default environment's, and
     /// the synthesised `[env.<name>]` block the rest.
-    fn provision<'r>(
-        cx: &StepCx<'_, '_, R2>,
-        bucket: Self::Decl<'r>,
-    ) -> Result<Provisioned<'r, R2>, DeployFailure> {
-        let (worker, environment) = (cx.worker, cx.environment);
-        if r2_action(cx.ledger(), worker, bucket) == "reuse" {
-            return Ok(Provisioned::nothing());
+    fn apply(cx: &StepCx<'_, '_, R2>, step: &R2Step<'_>) -> Result<Applied<R2>, DeployFailure> {
+        let (worker, environment, bucket) = (cx.worker, cx.environment, step.bucket);
+        if step.decision == R2Decision::Reuse {
+            return Ok(Applied::nothing());
         }
         let physical = r2_bucket_name(environment, &bucket.name);
         create_r2_bucket(
@@ -242,7 +256,7 @@ impl ResourceKind for R2 {
                 bucket.binding
             ))
         })?;
-        Ok(Provisioned::nothing().with(cx.recording(
+        Ok(Applied::nothing().with(cx.recording(
             &bucket.binding,
             R2Bucket::of(&physical, bucket.jurisdiction.as_deref()),
             &format!("created the R2 bucket `{physical}`"),
@@ -269,7 +283,7 @@ pub(crate) struct PlanR2<'a> {
     /// `R2_<SNAKE>`.
     pub(crate) binding: &'a str,
     /// `create`, `reuse`, or `recreate`: a changed `@jurisdiction` makes a new
-    /// bucket, and the objects of the old one do not move (see [`r2_action`]).
+    /// bucket, and the objects of the old one do not move (see [`R2Decision`]).
     /// #3494: a bucket of its name the account already holds is `reuse`.
     pub(crate) action: &'static str,
     /// The bucket's account-facing name, [`r2_bucket_name`]d.
@@ -282,18 +296,57 @@ pub(crate) struct PlanR2<'a> {
 /// `environment`. The name is the identity, so a recorded bucket under the
 /// same jurisdiction is `reuse`; one recorded under another is `recreate`,
 /// since a bucket's jurisdiction is fixed when it is made.
-pub(crate) fn r2_action(ledger: LedgerView<'_>, worker: &str, bucket: &R2Decl) -> &'static str {
+fn r2_decision(ledger: LedgerView<'_>, worker: &str, bucket: &R2Decl) -> R2Decision {
     let environment = ledger.environment;
     match ledger.recorded::<R2>(worker, &bucket.binding) {
-        None => "create",
+        None => R2Decision::Create,
         Some(recorded)
             if recorded.name == r2_bucket_name(environment, &bucket.name)
                 && recorded.jurisdiction == bucket.jurisdiction =>
         {
-            "reuse"
+            R2Decision::Reuse
         }
-        Some(recorded) if recorded.name == r2_bucket_name(environment, &bucket.name) => "recreate",
-        Some(_) => "create",
+        Some(recorded) if recorded.name == r2_bucket_name(environment, &bucket.name) => {
+            R2Decision::Recreate
+        }
+        Some(_) => R2Decision::Create,
+    }
+}
+
+/// One R2 bucket's step (1D.2b): the declaration, and what the ledger decided for it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct R2Step<'r> {
+    pub(crate) bucket: &'r R2Decl,
+    pub(crate) decision: R2Decision,
+}
+
+/// What the ledger decides for one R2 bucket.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum R2Decision {
+    /// The ledger records it, under the same jurisdiction: nothing to ask the account.
+    Reuse,
+    /// The ledger does not, or records another name: made by name and recorded.
+    Create,
+    /// The ledger records it under another jurisdiction: a new bucket beside the old.
+    Recreate,
+}
+
+impl R2Decision {
+    /// The plan's word for the decision.
+    pub(crate) fn action(self) -> &'static str {
+        match self {
+            R2Decision::Reuse => "reuse",
+            R2Decision::Create => "create",
+            R2Decision::Recreate => "recreate",
+        }
+    }
+}
+
+/// `worker`'s step for `bucket`, from the ledger.
+fn r2_step<'r>(cx: &PlanCx<'_>, bucket: &'r R2Decl) -> R2Step<'r> {
+    R2Step {
+        bucket,
+        decision: r2_decision(cx.ledger, cx.worker, bucket),
     }
 }
 
@@ -555,7 +608,15 @@ mod tests {
             name: "shop-files".to_string(),
             jurisdiction: None,
         };
-        let done = R2::provision(
+        let step = r2_step(
+            &PlanCx {
+                ledger: LedgerView::of(&lock, "default"),
+                worker: "shop",
+            },
+            &bucket,
+        );
+        assert_eq!(step.decision, R2Decision::Reuse);
+        let done = R2::apply(
             &StepCx {
                 environment: "default",
                 worker: "shop",
@@ -567,7 +628,7 @@ mod tests {
                     project_root: Path::new("/nonexistent"),
                 },
             },
-            &bucket,
+            &step,
         )
         .expect("nothing to create");
         assert!(
