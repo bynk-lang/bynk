@@ -1,0 +1,7 @@
+# Cloudflare Pages redirects for bynk-lang.org (web presence track, link rule L2).
+# A page that moved or retired keeps working here. Tree moves use one splat
+# rule; a single page gets a rule only where something is known to link to it.
+
+# Retired in slice 2 (#3865); the Book's front page now says how the Book is laid out.
+/book/introduction/how-these-docs-are-organised/ /book/ 301
+/book/introduction/how-these-docs-are-organised /book/ 301

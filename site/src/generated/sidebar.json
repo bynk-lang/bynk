@@ -4,11 +4,15 @@
     "link": "/book/"
   },
   {
-    "label": "Getting started",
+    "label": "Start",
     "items": [
       {
         "label": "What is Bynk?",
         "link": "/book/introduction/what-is-bynk/"
+      },
+      {
+        "label": "Why Bynk exists",
+        "link": "/book/about/why-bynk-exists/"
       },
       {
         "label": "Anatomy of a Bynk service",
@@ -21,10 +25,6 @@
       {
         "label": "Install",
         "link": "/book/introduction/install/"
-      },
-      {
-        "label": "How these docs are organised",
-        "link": "/book/introduction/how-these-docs-are-organised/"
       }
     ]
   },
@@ -58,14 +58,25 @@
     ]
   },
   {
-    "label": "Guides",
+    "label": "Concepts",
     "items": [
       {
-        "label": "Overview",
-        "link": "/book/guides/"
+        "label": "Program structure",
+        "collapsed": true,
+        "items": [
+          {
+            "label": "Overview",
+            "link": "/book/guides/program-structure/"
+          },
+          {
+            "label": "How a Bynk program is shaped",
+            "link": "/book/guides/program-structure/how-a-program-is-shaped/"
+          }
+        ]
       },
       {
         "label": "The type system",
+        "collapsed": true,
         "items": [
           {
             "label": "Overview",
@@ -79,6 +90,145 @@
             "label": "The refined-literal admission model",
             "link": "/book/guides/type-system/refined-literal-admission/"
           },
+          {
+            "label": "Recursion and iteration",
+            "link": "/book/guides/type-system/recursion-and-iteration/"
+          },
+          {
+            "label": "Understand ordering your own types",
+            "link": "/book/guides/type-system/ordering-your-own-types/"
+          }
+        ]
+      },
+      {
+        "label": "Effects & capabilities",
+        "collapsed": true,
+        "items": [
+          {
+            "label": "Overview",
+            "link": "/book/guides/effects-and-capabilities/"
+          },
+          {
+            "label": "Understand the capability model",
+            "link": "/book/guides/effects-and-capabilities/understand-the-capability-model/"
+          },
+          {
+            "label": "Synchronous and asynchronous sends",
+            "link": "/book/guides/effects-and-capabilities/synchronous-and-asynchronous-sends/"
+          },
+          {
+            "label": "What a join guarantees on failure",
+            "link": "/book/guides/effects-and-capabilities/what-a-join-guarantees-on-failure/"
+          },
+          {
+            "label": "What a timeout stops",
+            "link": "/book/guides/effects-and-capabilities/what-a-timeout-stops/"
+          }
+        ]
+      },
+      {
+        "label": "Agents & state",
+        "collapsed": true,
+        "items": [
+          {
+            "label": "Overview",
+            "link": "/book/guides/agents-and-state/"
+          },
+          {
+            "label": "The agent model",
+            "link": "/book/guides/agents-and-state/the-agent-model/"
+          },
+          {
+            "label": "Understand: invariants as contracts",
+            "link": "/book/guides/agents-and-state/understand-invariants/"
+          }
+        ]
+      },
+      {
+        "label": "Entry points",
+        "link": "/book/guides/entry-points/"
+      },
+      {
+        "label": "Actors & access control",
+        "link": "/book/guides/actors/"
+      },
+      {
+        "label": "Events",
+        "collapsed": true,
+        "items": [
+          {
+            "label": "Overview",
+            "link": "/book/guides/events/"
+          },
+          {
+            "label": "Understand events",
+            "link": "/book/guides/events/understand-events/"
+          }
+        ]
+      },
+      {
+        "label": "Localisation",
+        "collapsed": true,
+        "items": [
+          {
+            "label": "Overview",
+            "link": "/book/guides/localisation/"
+          },
+          {
+            "label": "Understand localisation",
+            "link": "/book/guides/localisation/understand-localisation/"
+          }
+        ]
+      },
+      {
+        "label": "Testing",
+        "collapsed": true,
+        "items": [
+          {
+            "label": "Overview",
+            "link": "/book/guides/testing/"
+          },
+          {
+            "label": "The testing philosophy",
+            "link": "/book/guides/testing/philosophy/"
+          }
+        ]
+      },
+      {
+        "label": "Projects, build & deployment",
+        "collapsed": true,
+        "items": [
+          {
+            "label": "Overview",
+            "link": "/book/guides/projects-build-and-deployment/"
+          },
+          {
+            "label": "Why compile to TypeScript",
+            "link": "/book/guides/projects-build-and-deployment/why-compile-to-typescript/"
+          }
+        ]
+      },
+      {
+        "label": "Bynk compared to TypeScript",
+        "link": "/book/about/bynk-compared-to-typescript/"
+      },
+      {
+        "label": "Bynk compared to the alternatives",
+        "link": "/book/about/bynk-compared-to-the-alternatives/"
+      }
+    ]
+  },
+  {
+    "label": "Guides",
+    "items": [
+      {
+        "label": "Overview",
+        "link": "/book/guides/"
+      },
+      {
+        "label": "Data and types",
+        "collapsed": true,
+        "items": [
           {
             "label": "Define and validate untrusted input",
             "link": "/book/guides/type-system/define-and-validate/"
@@ -128,10 +278,6 @@
             "link": "/book/guides/type-system/match-on-a-lists-shape/"
           },
           {
-            "label": "Recursion and iteration",
-            "link": "/book/guides/type-system/recursion-and-iteration/"
-          },
-          {
             "label": "Match on a range of numbers",
             "link": "/book/guides/type-system/match-on-a-range-of-numbers/"
           },
@@ -140,16 +286,12 @@
             "link": "/book/guides/type-system/narrow-with-is/"
           },
           {
-            "label": "Declare Eq on a generic that compares",
-            "link": "/book/guides/type-system/declare-eq-bounds/"
-          },
-          {
-            "label": "Understand ordering your own types",
-            "link": "/book/guides/type-system/ordering-your-own-types/"
-          },
-          {
             "label": "Key a map by a record",
             "link": "/book/guides/type-system/key-a-map-by-a-record/"
+          },
+          {
+            "label": "Declare Eq on a generic that compares",
+            "link": "/book/guides/type-system/declare-eq-bounds/"
           },
           {
             "label": "Generic code that crosses the boundary",
@@ -166,16 +308,9 @@
         ]
       },
       {
-        "label": "Program structure",
+        "label": "Structuring code",
+        "collapsed": true,
         "items": [
-          {
-            "label": "Overview",
-            "link": "/book/guides/program-structure/"
-          },
-          {
-            "label": "How a Bynk program is shaped",
-            "link": "/book/guides/program-structure/how-a-program-is-shaped/"
-          },
           {
             "label": "Consume another context's services",
             "link": "/book/guides/program-structure/consume-services/"
@@ -191,47 +326,6 @@
           {
             "label": "Design a library's public surface",
             "link": "/book/guides/program-structure/design-a-public-surface/"
-          }
-        ]
-      },
-      {
-        "label": "Effects & capabilities",
-        "items": [
-          {
-            "label": "Overview",
-            "link": "/book/guides/effects-and-capabilities/"
-          },
-          {
-            "label": "Understand the capability model",
-            "link": "/book/guides/effects-and-capabilities/understand-the-capability-model/"
-          },
-          {
-            "label": "Synchronous and asynchronous sends",
-            "link": "/book/guides/effects-and-capabilities/synchronous-and-asynchronous-sends/"
-          },
-          {
-            "label": "What a join guarantees on failure",
-            "link": "/book/guides/effects-and-capabilities/what-a-join-guarantees-on-failure/"
-          },
-          {
-            "label": "What a timeout stops",
-            "link": "/book/guides/effects-and-capabilities/what-a-timeout-stops/"
-          },
-          {
-            "label": "Run independent calls at the same time",
-            "link": "/book/guides/effects-and-capabilities/run-independent-calls-at-the-same-time/"
-          },
-          {
-            "label": "Bound how long a call may take",
-            "link": "/book/guides/effects-and-capabilities/bound-how-long-a-call-may-take/"
-          },
-          {
-            "label": "Ask two sources and take the first answer",
-            "link": "/book/guides/effects-and-capabilities/ask-two-sources-and-take-the-first-answer/"
-          },
-          {
-            "label": "Compose a provider from other capabilities",
-            "link": "/book/guides/effects-and-capabilities/compose-a-provider/"
           },
           {
             "label": "Share a handler step that logs or queries",
@@ -240,121 +334,13 @@
           {
             "label": "Share a capability across contexts",
             "link": "/book/guides/effects-and-capabilities/share-across-contexts/"
-          },
-          {
-            "label": "Wrap a library as an adapter",
-            "link": "/book/guides/effects-and-capabilities/wrap-a-library/"
-          },
-          {
-            "label": "Run a model from a Worker",
-            "link": "/book/guides/effects-and-capabilities/run-a-model-from-a-worker/"
-          },
-          {
-            "label": "Run a container from a Worker",
-            "link": "/book/guides/effects-and-capabilities/run-a-container-from-a-worker/"
-          },
-          {
-            "label": "Call Workers AI through an adapter",
-            "link": "/book/guides/effects-and-capabilities/call-workers-ai-through-an-adapter/"
-          },
-          {
-            "label": "Search by meaning with Vectorize and Workers AI",
-            "link": "/book/guides/effects-and-capabilities/search-by-meaning-with-vectorize/"
-          },
-          {
-            "label": "Answer questions from your documents with AI Search",
-            "link": "/book/guides/effects-and-capabilities/answer-questions-from-your-documents/"
-          },
-          {
-            "label": "Use more than one KV namespace",
-            "link": "/book/guides/effects-and-capabilities/use-several-kv-namespaces/"
-          },
-          {
-            "label": "Call a Worker outside the project",
-            "link": "/book/guides/effects-and-capabilities/call-a-foreign-worker/"
-          },
-          {
-            "label": "Call an mTLS origin",
-            "link": "/book/guides/effects-and-capabilities/call-an-mtls-origin/"
-          },
-          {
-            "label": "Read your analytics in the Worker",
-            "link": "/book/guides/effects-and-capabilities/read-your-analytics-in-the-worker/"
-          },
-          {
-            "label": "Store files in R2",
-            "link": "/book/guides/effects-and-capabilities/store-files-in-r2/"
-          },
-          {
-            "label": "Query rows into a record without repeating the columns",
-            "link": "/book/guides/effects-and-capabilities/query-rows-into-a-record/"
-          },
-          {
-            "label": "Connect an existing Postgres database",
-            "link": "/book/guides/effects-and-capabilities/connect-an-existing-postgres-database/"
-          },
-          {
-            "label": "Connect an existing MySQL database",
-            "link": "/book/guides/effects-and-capabilities/connect-an-existing-mysql-database/"
-          },
-          {
-            "label": "Apply webhook events that arrive late, twice or out of order",
-            "link": "/book/guides/effects-and-capabilities/apply-webhook-events-out-of-order/"
-          },
-          {
-            "label": "Rate-limit a route",
-            "link": "/book/guides/effects-and-capabilities/rate-limit-a-route/"
-          },
-          {
-            "label": "Deduplicate at-least-once deliveries",
-            "link": "/book/guides/effects-and-capabilities/deduplicate-at-least-once-deliveries/"
-          },
-          {
-            "label": "Send transactional email",
-            "link": "/book/guides/effects-and-capabilities/send-transactional-email/"
-          },
-          {
-            "label": "Cache responses at Cloudflare's edge",
-            "link": "/book/guides/effects-and-capabilities/cache-at-the-edge/"
-          },
-          {
-            "label": "Sign and verify data",
-            "link": "/book/guides/effects-and-capabilities/sign-and-verify-data/"
           }
         ]
       },
       {
-        "label": "Agents & state",
+        "label": "Handling requests",
+        "collapsed": true,
         "items": [
-          {
-            "label": "Overview",
-            "link": "/book/guides/agents-and-state/"
-          },
-          {
-            "label": "The agent model",
-            "link": "/book/guides/agents-and-state/the-agent-model/"
-          },
-          {
-            "label": "Build a stateful agent",
-            "link": "/book/guides/agents-and-state/stateful-agent/"
-          },
-          {
-            "label": "Model an agent as a state machine",
-            "link": "/book/guides/agents-and-state/state-machine/"
-          },
-          {
-            "label": "Understand: invariants as contracts",
-            "link": "/book/guides/agents-and-state/understand-invariants/"
-          }
-        ]
-      },
-      {
-        "label": "Entry points",
-        "items": [
-          {
-            "label": "Overview",
-            "link": "/book/guides/entry-points/"
-          },
           {
             "label": "Handle an HTTP request",
             "link": "/book/guides/entry-points/http/"
@@ -380,6 +366,10 @@
             "link": "/book/guides/entry-points/branch-on-the-callers-country/"
           },
           {
+            "label": "Serve a page from an HTML file",
+            "link": "/book/guides/entry-points/serve-a-page/"
+          },
+          {
             "label": "Run a task on a schedule (cron)",
             "link": "/book/guides/entry-points/cron/"
           },
@@ -394,20 +384,13 @@
           {
             "label": "Receive email",
             "link": "/book/guides/entry-points/receive-email/"
-          },
-          {
-            "label": "Serve a page from an HTML file",
-            "link": "/book/guides/entry-points/serve-a-page/"
           }
         ]
       },
       {
-        "label": "Actors & access control",
+        "label": "Callers and access",
+        "collapsed": true,
         "items": [
-          {
-            "label": "Overview",
-            "link": "/book/guides/actors/"
-          },
           {
             "label": "Serve public and authenticated routes",
             "link": "/book/guides/actors/public-and-authenticated/"
@@ -435,20 +418,147 @@
           {
             "label": "Know which context called you",
             "link": "/book/guides/actors/cross-context-callers/"
+          },
+          {
+            "label": "Sign and verify data",
+            "link": "/book/guides/effects-and-capabilities/sign-and-verify-data/"
+          }
+        ]
+      },
+      {
+        "label": "Storing data",
+        "collapsed": true,
+        "items": [
+          {
+            "label": "Use more than one KV namespace",
+            "link": "/book/guides/effects-and-capabilities/use-several-kv-namespaces/"
+          },
+          {
+            "label": "Store files in R2",
+            "link": "/book/guides/effects-and-capabilities/store-files-in-r2/"
+          },
+          {
+            "label": "Query rows into a record without repeating the columns",
+            "link": "/book/guides/effects-and-capabilities/query-rows-into-a-record/"
+          },
+          {
+            "label": "Connect an existing Postgres database",
+            "link": "/book/guides/effects-and-capabilities/connect-an-existing-postgres-database/"
+          },
+          {
+            "label": "Connect an existing MySQL database",
+            "link": "/book/guides/effects-and-capabilities/connect-an-existing-mysql-database/"
+          }
+        ]
+      },
+      {
+        "label": "Calling out",
+        "collapsed": true,
+        "items": [
+          {
+            "label": "Compose a provider from other capabilities",
+            "link": "/book/guides/effects-and-capabilities/compose-a-provider/"
+          },
+          {
+            "label": "Wrap a library as an adapter",
+            "link": "/book/guides/effects-and-capabilities/wrap-a-library/"
+          },
+          {
+            "label": "Call a Worker outside the project",
+            "link": "/book/guides/effects-and-capabilities/call-a-foreign-worker/"
+          },
+          {
+            "label": "Call an mTLS origin",
+            "link": "/book/guides/effects-and-capabilities/call-an-mtls-origin/"
+          },
+          {
+            "label": "Send transactional email",
+            "link": "/book/guides/effects-and-capabilities/send-transactional-email/"
+          },
+          {
+            "label": "Read your analytics in the Worker",
+            "link": "/book/guides/effects-and-capabilities/read-your-analytics-in-the-worker/"
+          }
+        ]
+      },
+      {
+        "label": "AI and search",
+        "collapsed": true,
+        "items": [
+          {
+            "label": "Run a model from a Worker",
+            "link": "/book/guides/effects-and-capabilities/run-a-model-from-a-worker/"
+          },
+          {
+            "label": "Call Workers AI through an adapter",
+            "link": "/book/guides/effects-and-capabilities/call-workers-ai-through-an-adapter/"
+          },
+          {
+            "label": "Search by meaning with Vectorize and Workers AI",
+            "link": "/book/guides/effects-and-capabilities/search-by-meaning-with-vectorize/"
+          },
+          {
+            "label": "Answer questions from your documents with AI Search",
+            "link": "/book/guides/effects-and-capabilities/answer-questions-from-your-documents/"
+          },
+          {
+            "label": "Run a container from a Worker",
+            "link": "/book/guides/effects-and-capabilities/run-a-container-from-a-worker/"
+          }
+        ]
+      },
+      {
+        "label": "Reliability",
+        "collapsed": true,
+        "items": [
+          {
+            "label": "Run independent calls at the same time",
+            "link": "/book/guides/effects-and-capabilities/run-independent-calls-at-the-same-time/"
+          },
+          {
+            "label": "Bound how long a call may take",
+            "link": "/book/guides/effects-and-capabilities/bound-how-long-a-call-may-take/"
+          },
+          {
+            "label": "Ask two sources and take the first answer",
+            "link": "/book/guides/effects-and-capabilities/ask-two-sources-and-take-the-first-answer/"
+          },
+          {
+            "label": "Deduplicate at-least-once deliveries",
+            "link": "/book/guides/effects-and-capabilities/deduplicate-at-least-once-deliveries/"
+          },
+          {
+            "label": "Apply webhook events that arrive late, twice or out of order",
+            "link": "/book/guides/effects-and-capabilities/apply-webhook-events-out-of-order/"
+          },
+          {
+            "label": "Rate-limit a route",
+            "link": "/book/guides/effects-and-capabilities/rate-limit-a-route/"
+          },
+          {
+            "label": "Cache responses at Cloudflare's edge",
+            "link": "/book/guides/effects-and-capabilities/cache-at-the-edge/"
+          }
+        ]
+      },
+      {
+        "label": "Agents and state",
+        "collapsed": true,
+        "items": [
+          {
+            "label": "Build a stateful agent",
+            "link": "/book/guides/agents-and-state/stateful-agent/"
+          },
+          {
+            "label": "Model an agent as a state machine",
+            "link": "/book/guides/agents-and-state/state-machine/"
           }
         ]
       },
       {
         "label": "Localisation",
+        "collapsed": true,
         "items": [
-          {
-            "label": "Overview",
-            "link": "/book/guides/localisation/"
-          },
-          {
-            "label": "Understand localisation",
-            "link": "/book/guides/localisation/understand-localisation/"
-          },
           {
             "label": "Declare a message bundle",
             "link": "/book/guides/localisation/declare-a-message-bundle/"
@@ -460,29 +570,9 @@
         ]
       },
       {
-        "label": "Events",
-        "items": [
-          {
-            "label": "Overview",
-            "link": "/book/guides/events/"
-          },
-          {
-            "label": "Understand events",
-            "link": "/book/guides/events/understand-events/"
-          }
-        ]
-      },
-      {
         "label": "Testing",
+        "collapsed": true,
         "items": [
-          {
-            "label": "Overview",
-            "link": "/book/guides/testing/"
-          },
-          {
-            "label": "The testing philosophy",
-            "link": "/book/guides/testing/philosophy/"
-          },
           {
             "label": "Write tests and mock collaborators",
             "link": "/book/guides/testing/write-tests/"
@@ -510,16 +600,9 @@
         ]
       },
       {
-        "label": "Projects, build & deployment",
+        "label": "Projects and deployment",
+        "collapsed": true,
         "items": [
-          {
-            "label": "Overview",
-            "link": "/book/guides/projects-build-and-deployment/"
-          },
-          {
-            "label": "Why compile to TypeScript",
-            "link": "/book/guides/projects-build-and-deployment/why-compile-to-typescript/"
-          },
           {
             "label": "Start a new project",
             "link": "/book/guides/projects-build-and-deployment/start-a-project/"
@@ -577,6 +660,7 @@
       },
       {
         "label": "Syntax & grammar",
+        "collapsed": true,
         "items": [
           {
             "label": "Overview",
@@ -735,6 +819,7 @@
       },
       {
         "label": "§7 Meaning by translation",
+        "collapsed": true,
         "items": [
           {
             "label": "Overview",
@@ -769,27 +854,6 @@
       {
         "label": "Appendix B — Version history",
         "link": "/book/spec/appendix-version-history/"
-      }
-    ]
-  },
-  {
-    "label": "About Bynk",
-    "items": [
-      {
-        "label": "Why Bynk exists",
-        "link": "/book/about/why-bynk-exists/"
-      },
-      {
-        "label": "Bynk compared to TypeScript",
-        "link": "/book/about/bynk-compared-to-typescript/"
-      },
-      {
-        "label": "Bynk compared to the alternatives",
-        "link": "/book/about/bynk-compared-to-the-alternatives/"
-      },
-      {
-        "label": "Versioning & roadmap",
-        "link": "/book/about/versioning-and-roadmap/"
       }
     ]
   },
@@ -879,6 +943,15 @@
       {
         "label": "bynk.transition.* errors",
         "link": "/book/troubleshooting/transition-errors/"
+      }
+    ]
+  },
+  {
+    "label": "About Bynk",
+    "items": [
+      {
+        "label": "Versioning & roadmap",
+        "link": "/book/about/versioning-and-roadmap/"
       }
     ]
   },

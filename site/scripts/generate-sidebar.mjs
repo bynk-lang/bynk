@@ -44,6 +44,8 @@ function slugFor(pagePath) {
  * - `# Part` headers (after the `# Summary` title) open a part.
  * - a bare `[Title](path.md)` before any part is the prefix chapter (Book root).
  * - `- [Title](path.md)` items nest by indentation (2 spaces per level).
+ * - `- Label` (no link) is a group with no page of its own: the items nested
+ *   beneath it are its contents (web presence track, slice 2).
  * - `---` separators are ignored.
  */
 function parseSummary(text) {
@@ -63,6 +65,11 @@ function parseSummary(text) {
     const item = /^(\s*)-\s+\[(.+?)\]\((.+?)\)\s*$/.exec(line);
     if (item) {
       current?.entries.push({ depth: item[1].length / 2, label: clean(item[2]), path: item[3] });
+      continue;
+    }
+    const group = /^(\s*)-\s+([^\[\s].*?)\s*$/.exec(line);
+    if (group) {
+      current?.entries.push({ depth: group[1].length / 2, label: clean(group[2]), path: null });
       continue;
     }
     const bare = /^\[(.+?)\]\((.+?)\)\s*$/.exec(line);
@@ -86,11 +93,19 @@ function buildTree(entries) {
 
 /** A tree node → a Starlight sidebar entry. A node with children becomes a group
  *  whose own page is surfaced as a leading "Overview" link (stock Starlight groups
- *  carry no link of their own). */
+ *  carry no link of their own). A label with no page is a plain group. Groups
+ *  inside a part start collapsed, so a part's groups can be scanned at a glance;
+ *  Starlight opens the one holding the current page. */
 function toEntry(node) {
+  if (node.path === null) {
+    if (node.children.length === 0)
+      throw new Error(`site/src/SUMMARY.md: the group "${node.label}" has no pages beneath it.`);
+    return { label: node.label, collapsed: true, items: node.children.map(toEntry) };
+  }
   if (node.children.length === 0) return { label: node.label, link: slugFor(node.path) };
   return {
     label: node.label,
+    collapsed: true,
     items: [{ label: "Overview", link: slugFor(node.path) }, ...node.children.map(toEntry)],
   };
 }
@@ -99,7 +114,7 @@ function toEntry(node) {
  *  wraps a single index page (e.g. `# Guides` → `[Guides](guides/index.md)` + its
  *  subsections) so the sidebar reads "Guides › …" rather than "Guides › Guides". */
 function partItems(children) {
-  if (children.length === 1 && children[0].children.length > 0) {
+  if (children.length === 1 && children[0].path !== null && children[0].children.length > 0) {
     const only = children[0];
     return [{ label: "Overview", link: slugFor(only.path) }, ...only.children.map(toEntry)];
   }
@@ -129,26 +144,40 @@ function bookPages(dir = BOOK, rel = "") {
  *  for a page written as `.mdx`, and both are the same route. */
 const routeOf = (pagePath) => slugFor(pagePath.replace(/\.mdx$/, ".md"));
 
+/** Values that occur more than once, each once, in first-seen order. */
+function repeated(values) {
+  const seen = new Set();
+  const twice = new Set();
+  for (const v of values) (seen.has(v) ? twice : seen).add(v);
+  return [...twice];
+}
+
 /**
- * Compare SUMMARY.md with the pages on disk (web presence track, slice 1).
- * Returns the pages no contents lists (`unlisted`) and the SUMMARY entries
- * with no page (`missing`). The prefix chapter is the Book root, `index.md`,
+ * Compare SUMMARY.md with the pages on disk (web presence track, slices 1–2).
+ * Returns the pages no contents lists (`unlisted`), the SUMMARY entries with
+ * no page (`missing`), the pages SUMMARY lists more than once (`listedTwice`),
+ * and the routes two files on disk both claim (`sharedRoutes`, e.g. `foo.md`
+ * beside `foo/index.md`). The prefix chapter is the Book root, `index.md`,
  * whatever file name SUMMARY gives it.
  */
 function completeness(text, pages = bookPages()) {
   const { prefix, parts } = parseSummary(text);
-  const entries = parts.flatMap((p) => p.entries.map((e) => e.path));
+  const entries = parts.flatMap((p) => p.entries.map((e) => e.path)).filter((p) => p !== null);
   const listed = new Set(entries.map(routeOf));
   if (prefix) listed.add("/book/");
   const onDisk = new Map(pages.map((p) => [routeOf(p), p]));
   return {
     unlisted: [...onDisk].filter(([route]) => !listed.has(route)).map(([, p]) => p).sort(),
     missing: entries.filter((e) => !onDisk.has(routeOf(e))),
+    listedTwice: repeated(entries.map(routeOf)),
+    sharedRoutes: repeated(pages.map(routeOf)).map((route) =>
+      pages.filter((p) => routeOf(p) === route),
+    ),
   };
 }
 
 function reportCompleteness(text) {
-  const { unlisted, missing } = completeness(text);
+  const { unlisted, missing, listedTwice, sharedRoutes } = completeness(text);
   const problems = [];
   if (unlisted.length)
     problems.push(
@@ -160,13 +189,24 @@ function reportCompleteness(text) {
     problems.push(
       "These site/src/SUMMARY.md entries name no page:\n" + missing.map((p) => `  ${p}`).join("\n"),
     );
+  if (listedTwice.length)
+    problems.push(
+      "These pages are listed more than once in site/src/SUMMARY.md; list each once:\n" +
+        listedTwice.map((r) => `  ${r}`).join("\n"),
+    );
+  if (sharedRoutes.length)
+    problems.push(
+      "These Book files would serve the same page; keep one of each pair:\n" +
+        sharedRoutes.map((files) => `  ${files.join(" and ")}`).join("\n"),
+    );
   return problems;
 }
 
 function main(argv) {
   const check = argv.includes("--check");
   const text = fs.readFileSync(SUMMARY, "utf8");
-  const rendered = JSON.stringify(buildSidebar(text), null, 2) + "\n";
+  const sidebar = buildSidebar(text);
+  const rendered = JSON.stringify(sidebar, null, 2) + "\n";
   const problems = reportCompleteness(text);
   if (check) {
     const current = fs.existsSync(OUT) ? fs.readFileSync(OUT, "utf8") : "";
@@ -180,13 +220,13 @@ function main(argv) {
       console.error(problems.join("\n\n"));
       process.exit(1);
     }
-    console.log("sidebar.json is up to date, and every Book page is in SUMMARY.md.");
+    console.log("sidebar.json is up to date, and every Book page is in SUMMARY.md once.");
     return;
   }
   if (problems.length) console.warn(problems.join("\n\n") + "\n");
   fs.mkdirSync(path.dirname(OUT), { recursive: true });
   fs.writeFileSync(OUT, rendered);
-  console.log(`wrote sidebar.json (${buildSidebar(fs.readFileSync(SUMMARY, "utf8")).length} top-level entries).`);
+  console.log(`wrote sidebar.json (${sidebar.length} top-level entries).`);
 }
 
 main(process.argv.slice(2));
