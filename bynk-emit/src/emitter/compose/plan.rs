@@ -80,6 +80,7 @@ pub struct ComposeFacts {
 
 impl ComposeFacts {
     /// Read the facts off the checked project tables.
+    #[allow(clippy::too_many_arguments)]
     pub fn from_tables(
         kinds: &BTreeMap<String, UnitKind>,
         unit_consumes: &HashMap<String, Vec<String>>,
@@ -224,6 +225,7 @@ pub struct ComposePlan {
 
 impl ComposePlan {
     /// Build the plan from the checked project tables.
+    #[allow(clippy::too_many_arguments)]
     pub fn build(
         kinds: &BTreeMap<String, UnitKind>,
         unit_consumes: &HashMap<String, Vec<String>>,
