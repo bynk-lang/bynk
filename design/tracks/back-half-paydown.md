@@ -215,11 +215,14 @@ binding model has one compose path to serve.
 
 | Slice | Change |
 |---|---|
+| **1B.1a** | The compose functions move, mechanically (#3928, Decisions A, B and H; part one of three). `emit_worker_compose`, `fanout_events` and `worker_cross_caps` move from `workers.rs` into `bynk-emit/src/emitter/compose/workers.rs`; `emit_composition_root` and its helpers (`deps_entry_sort_key`, `bundle_process_exec_entry`, `process_exec_import`, `event_names_in_order`, `context_binds_caller`) move from `bynk-driver/src/project.rs` into `compose/bundle.rs`, and the driver calls it. Nothing in the Bundle root reads a driver-only type, so it takes its existing arguments and needs no parameter struct. Function bodies are unchanged. Byte-identical output; no probe moves. The `fn-length-ceilings.txt` entries move with the functions (`emit_worker_compose` 846 to its real 608). |
 | **1B.1** | A target-neutral composition model, `ComposePlan`: units, their dependencies, event subscriptions with the envelope and isolation rules, and bindings. Both `emit_composition_root` (Bundle) and `emit_worker_compose` (Workers) render from it. The envelope and failure-isolation rules then exist once. |
-| **1B.2** | Move test-harness generation (`project/tests_emit/*`), `emit_composition_root` and the per-Worker emission out of `bynk-driver` and into a `bynk-emit::testgen` module (Q3). The driver keeps orchestration, file I/O and process spawning. This removes `bynk-emit`'s dev-dependency on `bynk-driver`. |
+| **1B.2** | Move test-harness generation (`project/tests_emit/*`) and the per-Worker emission out of `bynk-driver` and into a `bynk-emit::testgen` module (Q3). `testgen` takes only the test harness: the Bundle composition root is production output and already moved into `bynk-emit::emitter::compose` in 1B.1a (#3928, Decision B). The driver keeps orchestration, file I/O and process spawning. This removes `bynk-emit`'s dev-dependency on `bynk-driver`. |
 | **1B.3** | Turn the test runtime into real, type-checked modules under `bynk-emit/runtime/src/testing/`. Move the `makeIntegration*` / `makeTestState` fakes out of production `storage.ts` into it. Delete the driver's TS lexer (`names_ident`) and its text patching of emitted TypeScript (`merge_cookie`). Bring `http_client_runtime.ts` under the runtime's `tsconfig.json` and `bundle.mjs --check`, and add a guard that every test-runtime module is type-checked whether or not a fixture uses it (absorbs the retired P0.6). |
-| **1B.4** | Deduplicate the shared node builders (`str_lit`, `ident`, `member`, `call`) and `append_missing_bindings` (three copies) into one `bynk-emit` module. |
+| **1B.4** | Deduplicate the shared node builders (`str_lit`, `ident`, `member`, `call`) and `append_missing_bindings` (now one copy, in `system_support.rs`; the Workers and Bundle copies went in 1A.36b-2) into one `bynk-emit` module. |
 | **1B.5** | Test-harness generation builds nodes, after 1B.2: the `TsStmt::raw(` sites in `bynk-emit::testgen` are converted or kept with a stated foreign-text reason. A track-exit item (§8), not a lifting condition. Lowers `ts_raw_sites_testgen`. Added 2026-11-18. |
+
+**Note (#3928).** The lowering twin `lower_workers_cross_context_call` / `lower_cross_context_call` (review §2.3) is lowering, not composition, and no 1B row owns it yet.
 
 ### 1C. One binding model (review §4)
 
