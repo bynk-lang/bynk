@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.640.11** | Generated modules and Worker entry files no longer import names they do not use; each import list now follows from the module's code |
 | **v0.640.10** | Generated modules no longer import runtime names they do not use; each module's runtime import now follows from its code |
 | **v0.640.9** | Groundwork for deriving each generated module's imports from its code instead of predicting them; the generated code and its source maps are byte for byte unchanged |
 | **v0.640.8** | The state-migration step functions the compiler writes into an agent's module are built as trees, not text, so each statement of a step prints on its own line and its `catch` is braced; their tokens are unchanged; a foreign client whose decoders return a consumed type now imports `Result` and `__BoundaryError`, which it used without importing |

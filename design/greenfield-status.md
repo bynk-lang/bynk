@@ -26,7 +26,7 @@ Track slice T0.0 (#999); `ts_writes`/`ts_any` added by P7.0 (#1296); `verbatim_o
 | `ts_text_idents` | yes | 12 |
 | `emit_thread_locals` | yes | 0 |
 | `emit_silent_fallbacks` | yes | 0 |
-| `emit_print_calls` | yes | 28 |
+| `emit_print_calls` | yes | 27 |
 | `import_prediction_fns` | yes | 0 |
 | `incremental_query_types` | yes | unit_signature present; shared_cache migrated; stability_test present; definition/project levels absent (deleted by #1537) |
 | `unconsumed_ir_items` | yes | 0 |
