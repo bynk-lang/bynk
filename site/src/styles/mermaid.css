@@ -1,0 +1,138 @@
+/* The Book's Mermaid diagrams, in the Bynk design system.
+ *
+ * This is not a page stylesheet. `astro.config.mjs` reads it and hands it to
+ * Mermaid as `themeCSS`, so Mermaid nests every rule here under the diagram's
+ * own id (`#mermaid-0 .node rect`) and appends it after its theme's rules. Same
+ * specificity, later in the sheet: these win without `!important`, and a
+ * diagram's own `classDef` or `style` still wins over them.
+ *
+ * The values are the `--bynk-*` tokens, not colours. The SVG is inlined in
+ * the page, so they resolve against the page's tokens and switch with them:
+ * with the reader's `prefers-color-scheme`, and with Starlight's theme toggle.
+ *
+ * The rules of the system apply: shapes are panels drawn with a hairline, not
+ * fills; the lines and arrows are the muted ink; no amber, which belongs to the
+ * primary action. The diagrams in use are flowcharts and state diagrams; the
+ * rules for each are below. */
+
+/* Type: the interface face, in ink. Mermaid sizes the boxes at build time in
+ * the same face (the config loads it into Mermaid's page), so a label fits its
+ * box. That page has no `--bynk-*` tokens, so the fallback is the face it
+ * measures in; without it the text would be measured in the browser's default
+ * face. */
+& {
+  font-family: var(--bynk-font-sans, "Instrument Sans Variable", sans-serif);
+  fill: var(--bynk-ink);
+}
+.label,
+.label text,
+span,
+p,
+.nodeLabel,
+.cluster-label,
+.edgeLabel,
+.label div .edgeLabel {
+  font-family: var(--bynk-font-sans, "Instrument Sans Variable", sans-serif);
+  fill: var(--bynk-ink);
+  color: var(--bynk-ink);
+}
+
+/* Shapes: flowchart nodes (boxes, decisions), state boxes. */
+.node rect,
+.node circle,
+.node ellipse,
+.node polygon,
+.node path,
+g.stateGroup rect,
+.statediagram-cluster rect {
+  fill: var(--bynk-surface-panel);
+  stroke: var(--bynk-line-strong);
+  stroke-width: 1px;
+}
+.node .neo-node,
+.statediagram-state .divider {
+  stroke: var(--bynk-line-strong);
+}
+
+/* Groups (flowchart subgraphs, composite states): a step back from the nodes
+ * they hold. */
+.cluster rect,
+.statediagram-cluster.statediagram-cluster .inner,
+.statediagram-cluster.statediagram-cluster-alt .inner,
+.stateGroup .composit,
+.stateGroup .alt-composit {
+  fill: var(--bynk-surface-ground);
+  stroke: var(--bynk-line);
+}
+.cluster text,
+.cluster span,
+.cluster-label text,
+.cluster-label span {
+  fill: var(--bynk-ink-muted);
+  color: var(--bynk-ink-muted);
+}
+
+/* Lines and arrowheads: the muted ink. */
+.flowchart-link,
+.edgePath .path,
+.transition,
+g.stateGroup line {
+  stroke: var(--bynk-ink-muted);
+}
+.marker,
+.marker.cross,
+.arrowheadPath,
+defs [id$="-barbEnd"],
+[id$="-dependencyStart"],
+[id$="-dependencyEnd"] {
+  fill: var(--bynk-ink-muted);
+  stroke: var(--bynk-ink-muted);
+}
+
+/* Edge labels: muted text on the page's ground, so a label interrupts its line
+ * cleanly instead of sitting in a tinted box. */
+.edgeLabel,
+.edgeLabel p,
+.labelBkg {
+  background-color: var(--bynk-surface-ground);
+  color: var(--bynk-ink-muted);
+}
+.edgeLabel rect,
+.edgeLabel .label rect,
+.stateLabel .box {
+  fill: var(--bynk-surface-ground);
+  opacity: 1;
+}
+.edgeLabel span,
+.edgeLabel .label text,
+.statediagram .edgeLabel {
+  fill: var(--bynk-ink-muted);
+  color: var(--bynk-ink-muted);
+}
+
+/* State diagrams: the start is a solid dot, the end a ringed one, both in ink. */
+.node circle.state-start,
+.node .fork-join {
+  fill: var(--bynk-ink);
+  stroke: var(--bynk-ink);
+}
+.node circle.state-end {
+  fill: var(--bynk-ink);
+  stroke: var(--bynk-surface-ground);
+}
+.end-state-inner {
+  fill: var(--bynk-surface-ground);
+}
+
+/* Notes: a raised panel. */
+.state-note,
+.statediagram-note rect {
+  fill: var(--bynk-surface-raised);
+  stroke: var(--bynk-line);
+}
+.state-note text,
+.statediagram-note text,
+.statediagram-note .nodeLabel {
+  fill: var(--bynk-ink);
+  color: var(--bynk-ink);
+}
