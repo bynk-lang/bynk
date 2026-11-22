@@ -109,5 +109,8 @@ mod tests {
         assert_eq!(test_cap_factory("Clock"), "__bynkTest_Clock");
         assert_eq!(body_field("b"), "body: b, ");
         assert_eq!(prop_runner_name("p_1"), "__prop_p_1");
+        // A base type has no renamed fields, so there is no extra argument.
+        let int = TypeRef::Base(bynk_syntax::ast::BaseType::Int, Default::default());
+        assert_eq!(renamed_specs_arg(&int, &HashMap::new()), "");
     }
 }

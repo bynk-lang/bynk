@@ -18,7 +18,7 @@ pub(super) struct SystemJobSupport {
 /// #2136: one driver per cron handler and per queue service of the `system`
 /// target, calling the participant Worker's real entry point with a
 /// platform-shaped event and the harness's execution-context double, which it
-/// settles (ADR 0478). The runtime half lives at `emitter/test_runtime/jobs.ts`.
+/// settles (ADR 0478). The runtime half lives at `runtime/src/testing/jobs.ts`.
 ///
 /// - `__sysdrive_schedule_<svc>_<index>(at?)` calls `scheduled({ cron,
 ///   scheduledTime }, env, ctx)` and yields the `Result` the test build's
@@ -47,7 +47,7 @@ pub(super) fn emit_system_job_support(
     };
     let ns = test_ns(target);
     let worker = worker_binding_name(&ns);
-    let env = format!("__h.env_{ns}");
+    let env = format!("__h.{}", env_binding(&ns));
     let type_ns = ns_qualifier(&ns);
     let mut svc_names: Vec<&String> = table.services.keys().collect();
     svc_names.sort();
@@ -142,16 +142,10 @@ pub(super) fn emit_system_job_support(
     }
     let mut code = Vec::new();
     if !drivers.is_empty() {
-        code.push(TsStmt::raw(
-            include_str!("test_runtime/jobs.ts").to_string(),
-            None,
-        ));
+        code.push(splice(TestRuntimeModule::Jobs));
         // #3328: only a target with an email service carries the email driver.
         if !services.email.is_empty() {
-            code.push(TsStmt::raw(
-                include_str!("test_runtime/jobs_email.ts").to_string(),
-                None,
-            ));
+            code.push(splice(TestRuntimeModule::JobsEmail));
         }
         code.extend(drivers);
     }

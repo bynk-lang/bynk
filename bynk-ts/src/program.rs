@@ -1595,6 +1595,15 @@ impl TsStmt {
         }
     }
 
+    /// The text of a `Raw` statement, `None` for every other kind.
+    pub fn raw_text(&self) -> Option<&str> {
+        if let TsStmtKind::Raw(text, _) = &self.kind {
+            Some(text)
+        } else {
+            None
+        }
+    }
+
     /// The one constructor for a `Raw`-kinded statement — `text` is printed
     /// verbatim, exactly as given (see `TsStmtKind::Raw`'s own doc for
     /// why this is a distinct kind from `Verbatim`, not a reuse of it).
