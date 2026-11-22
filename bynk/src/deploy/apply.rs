@@ -24,7 +24,7 @@
 //! names the guard ([`ResourceKind::GUARDS`]).
 
 use super::*;
-use bynk_driver::emsg;
+use bynk_driver::{colour, emsg};
 
 /// The ledger and where it lives: the one place the deploy writes it (1D.2a, #4001).
 pub(crate) struct LedgerWriter<'l> {
@@ -274,6 +274,195 @@ pub(crate) fn record_pushed(
     })
 }
 
+/// What `run` applies a plan with (1D.2c, #4001 Decision E): the plan and its upload order, the
+/// options, the tools, the project and what the run decided before the confirmation.
+pub(crate) struct PlanApply<'a> {
+    pub(crate) plan: &'a Plan<'a>,
+    pub(crate) order: &'a [String],
+    pub(crate) opts: &'a DeployOptions,
+    pub(crate) tools: Tools<'a>,
+    pub(crate) workers_dir: &'a Path,
+    pub(crate) resources: &'a BTreeMap<String, Resources>,
+    pub(crate) groups: &'a GroupNames,
+    pub(crate) moves: &'a [AgentMove],
+    pub(crate) keys: &'a Keys,
+    pub(crate) secret_source: &'a SecretSource,
+    /// Whether this wrangler takes `--secrets-file` ([`secrets_file_supported`]).
+    pub(crate) with_upload: bool,
+    pub(crate) runner: &'static str,
+    pub(crate) lives: Lives<'a>,
+}
+
+/// Provision → wire → push, per context of the plan, in dependency order, each pushed Worker
+/// recorded (moved from `run` unchanged). `Err` is the code the run exits with.
+pub(crate) fn apply_plan(
+    apply: &PlanApply<'_>,
+    writer: &mut LedgerWriter<'_>,
+) -> Result<(), ExitCode> {
+    let PlanApply {
+        plan,
+        order,
+        opts,
+        tools,
+        workers_dir,
+        resources,
+        groups,
+        moves,
+        keys,
+        secret_source,
+        with_upload,
+        runner,
+        lives,
+    } = *apply;
+    let env = opts.environment.as_str();
+    // Shared across the loop so two contexts wanting the same secret prompt
+    // once. Dropped with the run — nothing here is ever written (ADR 0195 D1).
+    let mut resolved_secrets = BTreeMap::new();
+    for (i, (worker, context)) in order.iter().zip(&plan.contexts).enumerate() {
+        if order.len() > 1 {
+            eprint!(
+                "{}",
+                deploying_notice(&opts.environment, worker, i + 1, order.len())
+            );
+        }
+        // 1D.2b (#4001): each context's plan is what is applied, for the Worker the run records.
+        debug_assert_eq!(
+            context.steps().worker.map(|(w, _)| w),
+            Some(worker.as_str()),
+            "a plan's contexts follow its order"
+        );
+        let run = &mut RunCx {
+            tools,
+            workers_dir,
+            project: resources,
+            writer,
+            secrets: &mut Secrets {
+                source: secret_source,
+                force: opts.force,
+                edge_keys: &keys.edge_keys,
+                foreign_keys: &keys.foreign_keys,
+                foreign_secrets: &keys.foreign_secrets,
+                listed: &keys.listed,
+                resolved: &mut resolved_secrets,
+                with_upload,
+            },
+            wrangler_args: &opts.wrangler_args,
+            environment: &opts.environment,
+            lives,
+        };
+        match apply_worker(run, context) {
+            Ok(Pushed::Ok) => {
+                // P3 (#2342): e.g. a rate limiter's id the source dropped is free again.
+                let pushed = PushedWorker::of(worker, workers_dir, groups, &resources[worker]);
+                let recorded = record_pushed(writer, &opts.environment, &pushed, |lock| {
+                    record_fresh_moves(lock, opts, worker, moves)
+                });
+                // I3 (#1971): the secrets just minted for this context's
+                // foreign callers, handed to their operators.
+                for caller in &resources[worker].foreign_callers {
+                    if let Some(ForeignKey::Set {
+                        value,
+                        minted: true,
+                    }) = keys
+                        .foreign_keys
+                        .get(&(worker.clone(), caller.binding.clone()))
+                    {
+                        colour::eprint(&foreign_hand_off(env, worker, caller, value, runner));
+                    }
+                }
+                if let Err(e) = recorded {
+                    colour::eprint(&unrecorded_deploy_failure(
+                        &opts.environment,
+                        worker,
+                        &writer.path().display().to_string(),
+                        &e,
+                    ));
+                    return Err(ExitCode::FAILURE);
+                }
+            }
+            // A shared Ctrl-C. Stop, but report nothing and exit cleanly: the
+            // user asked for this, and the terminal signalled us too. `worker`
+            // is deliberately *not* recorded as deployed — the push was cut
+            // short, so whether it landed is unknown, and the ledger only ever
+            // claims what it watched succeed.
+            Ok(Pushed::Interrupted) => return Err(ExitCode::SUCCESS),
+            Err(f) => {
+                emsg!("bynk: error: {}", f.message);
+                // Stop rather than push on: everything left in the order either
+                // binds to what just failed or would be uploaded into a
+                // topology that is not what the plan described. `worker` itself
+                // is excluded — the line above already named it as the failure,
+                // and listing it here again as "not deployed" would double-count
+                // it against the number.
+                colour::eprint(&stopped_report(&opts.environment, &order[i + 1..]));
+                // #2004 review: a run that re-keyed an edge and stopped between
+                // its two ends leaves them refusing each other. The next plain
+                // run sees a key on each end and keeps both, so say how to
+                // repair it.
+                if let Some(hint) =
+                    interrupted_rotation_hint(&opts.environment, &keys.edge_keys, &order[..i])
+                {
+                    colour::eprint(&hint);
+                }
+                // I3 (#1971): a secret minted for this context's foreign
+                // caller may already be set, and the next run would keep it
+                // without ever showing it, so hand it off now.
+                for caller in &resources[worker].foreign_callers {
+                    if let Some(ForeignKey::Set {
+                        value,
+                        minted: true,
+                    }) = keys
+                        .foreign_keys
+                        .get(&(worker.clone(), caller.binding.clone()))
+                    {
+                        colour::eprint(&foreign_binding_maybe_set_notice(env, worker, caller));
+                        colour::eprint(&foreign_hand_off(env, worker, caller, value, runner));
+                    }
+                }
+                // Wrangler's own code, not a flat 1 (slice 0's contract).
+                return Err(ExitCode::from(f.code));
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// `--prune`, once every context has pushed (moved from `run` unchanged).
+pub(crate) fn prune_plan(
+    apply: &PlanApply<'_>,
+    writer: &mut LedgerWriter<'_>,
+) -> Result<(), ExitCode> {
+    let PlanApply {
+        plan,
+        opts,
+        tools,
+        lives,
+        ..
+    } = *apply;
+    // Slice 5: pruning is project-wide, independent of `--context` — the
+    // orphan report already is (DECISION A), so pruning follows it. Runs
+    // only after every selected context has pushed cleanly: a failed deploy
+    // above already returned, so a mid-flight ledger never reaches this.
+    if opts.prune && plan.orphans.has_prunable() {
+        if !confirm_prune(opts.yes, &plan.orphans, &opts.environment) {
+            return Err(ExitCode::FAILURE);
+        }
+        if let Err(e) = prune_orphans(
+            tools.provenance,
+            tools.project_root,
+            writer,
+            &opts.environment,
+            &plan.orphans,
+            lives,
+        ) {
+            emsg!("bynk: error: {}", e.message);
+            return Err(ExitCode::from(e.code));
+        }
+    }
+    Ok(())
+}
+
 /// What a run applies every Worker with (1D.2b, #4001 Decision D): the tools, the ledger's one
 /// writer, the secrets, the push's arguments, the environment, the whole project (for the check
 /// across it a KV create re-runs) and what the run read of the account.
@@ -302,9 +491,12 @@ pub(crate) fn apply_worker(
     context: &ContextPlan<'_>,
 ) -> Result<Pushed, DeployFailure> {
     let steps = context.steps();
-    let (worker, declared) = steps
-        .worker
-        .expect("a derived plan names each context's Worker");
+    let Some((worker, declared)) = steps.worker else {
+        return Err(DeployFailure::driver(format!(
+            "the plan for `{}` names no Worker to apply",
+            context.worker
+        )));
+    };
     let worker_dir = run.workers_dir.join(worker);
     let mut apply = ApplyWorker {
         config: worker_dir.join("wrangler.toml"),
