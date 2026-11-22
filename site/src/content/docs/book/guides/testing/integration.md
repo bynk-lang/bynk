@@ -36,7 +36,7 @@ Neither tier crosses into **another context**. A consumed context isn't stood up
 in-process, and `stub` doubles capabilities, not a context's services, so a
 `unit` or `integration` case, or a `property`, that reaches another context's
 service (directly, or through a service or agent handler that calls one) is
-[`bynk.tier.cross_context_needs_system`](/book/troubleshooting/integration-errors/#bynktiercross_context_needs_system).
+[`bynk.tier.cross_context_needs_system`](/book/reference/diagnostics/bynk.tier.cross_context_needs_system/).
 That flow belongs in a `system` suite.
 
 ## `system`: a suite of its own
@@ -56,7 +56,7 @@ suite shop.orders as system {
 
 A `system` suite holds `system` cases only. A suite that mixes them with `unit`
 or `integration` cases is
-[`bynk.tier.mixed_system_suite`](/book/troubleshooting/integration-errors/#bynktiermixed_system_suite):
+[`bynk.tier.mixed_system_suite`](/book/reference/diagnostics/bynk.tier.mixed_system_suite/):
 keep each target's in-process cases and its `system` cases in separate suites.
 
 ### Configuring the Workers: a fake provider
@@ -106,7 +106,7 @@ step up to `system` beside lower-tier ones.
 
 Tiers are a **`case`-only** affordance. A `property` *generates* and does not
 promote, so a suite-level `as` binds its `case` members only; an `as` on a
-`property` header [does not parse](/book/troubleshooting/integration-errors/#a-tier-on-a-property).
+`property` header does not parse.
 To check a generated input end to end, promote *that witness* as a concrete
 `case … as integration`.
 
@@ -120,7 +120,7 @@ dependency graph. (The old `suite integration "…" { wires … }` form and its
 
 A `system` case whose inferred set is fewer than two contexts — the target and at
 least one consumed context — is
-[`bynk.tier.system_needs_wire`](/book/troubleshooting/integration-errors/#bynktiersystem_needs_wire):
+[`bynk.tier.system_needs_wire`](/book/reference/diagnostics/bynk.tier.system_needs_wire/):
 `system` describes the *cross-context, wired* tier, so it needs a wire to cross.
 To exercise one context's real collaborators without a wire, use `as integration`.
 
@@ -247,4 +247,4 @@ bindings, type-checks everything with `tsc --strict`, and runs it on Node. No
 
 See the [testing reference](/book/reference/testing/#tiers-the-as-tier-clause), the
 [`stub`](/book/reference/testing/#stub) seam override, and
-[`bynk.tier.*` / `bynk.stub.*` errors](/book/troubleshooting/integration-errors/).
+[`bynk.tier.*`](/book/reference/diagnostics/#test-tiers) and [`bynk.stub.*`](/book/reference/diagnostics/#stubs) errors.

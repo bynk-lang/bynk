@@ -250,7 +250,8 @@ slice 5 moves them with the rest of Reference, and `/d/` follows.)
 Slice 4b then folds each troubleshooting page's content into its code's
 `Explain` entry, and retires `book/troubleshooting/` behind one splat redirect. `bynk explain`,
 the editor's Explain panel and the website then show the same text from one
-source.
+source. Error help is written once, in the explanation; material about a
+construct rather than one error goes to that construct's reference page.
 
 ## 7. Releases
 

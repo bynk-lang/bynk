@@ -83,7 +83,7 @@ initialises automatically. Either the type has a zero (`Int`→`0`, `Bool`→`fa
 `=`. A field whose type excludes its zero (for example a refined
 `type Limit = Int where Positive`, which excludes `0`) and which has no
 initialiser is rejected with
-[`bynk.agents.non_zeroable_state_field`](/book/troubleshooting/agents-non-zeroable-state-field/).
+[`bynk.agents.non_zeroable_state_field`](/book/reference/diagnostics/bynk.agents.non_zeroable_state_field/).
 
 When you need "not set yet", use `Option`:
 
@@ -360,4 +360,4 @@ let n <- c.increment()
 
 - Tutorial: [Add a stateful agent](/book/tutorials/05-stateful-agent/).
 - Reference: [agents](/book/reference/agents/).
-- Troubleshooting: [`bynk.agents.non_zeroable_state_field`](/book/troubleshooting/agents-non-zeroable-state-field/).
+- Diagnostics: [`bynk.agents.non_zeroable_state_field`](/book/reference/diagnostics/bynk.agents.non_zeroable_state_field/).

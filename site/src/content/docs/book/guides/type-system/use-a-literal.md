@@ -7,7 +7,7 @@ without calling `.of` or handling a `Result`.
 When you write a literal in a position whose expected type is a refined type,
 Bynk checks the literal against the predicate **at compile time** and admits it
 directly. A valid literal compiles; an invalid one is a compile error
-([`bynk.refine.literal_violates`](/book/troubleshooting/refine-literal-violates/)).
+([`bynk.refine.literal_violates`](/book/reference/diagnostics/bynk.refine.literal_violates/)).
 
 ## Where admission applies
 

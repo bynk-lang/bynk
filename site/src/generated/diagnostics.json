@@ -1,8 +1,8 @@
 [
   {
     "blurb": "A `Bearer` actor's identity is minted from the token's `sub` claim, which is a string, so the identity type must be one a string can become: a refined or opaque `String`. Any other type has no way to be built from the claim, and an actor with no `identity` at all is refused for the same reason. Declare a type over `String`, such as `type UserId = String where NonEmpty`, and name it as the `identity`. An `Oidc` actor has the same rule under `bynk.actor.oidc_identity_not_string_constructible`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Actors",
+    "categoryAnchor": "actors",
     "code": "bynk.actor.bearer_identity_not_string_constructible",
     "constructs": [],
     "example": "type Age = Int where NonNegative\nactor User { auth = Bearer(secret = \"JWT_KEY\"), identity = Age }      // ✗ a token's `sub` is a string, not an `Int`\n\ntype UserId = String where NonEmpty\nactor User { auth = Bearer(secret = \"JWT_KEY\"), identity = UserId }   // ✓ minted from `sub`",
@@ -11,8 +11,8 @@
   },
   {
     "blurb": "A `Bearer` actor checks a JWT signed with a shared key, so the compiler needs to know which key. Name the environment variable that holds it: `Bearer(secret = \"JWT_KEY\")`. The string is the variable's name, never the key itself, so no secret is written in the source; the `Secrets` capability reads the value at run time. An `Oidc` actor needs no secret, because it checks the provider's public keys, and a `Signature` actor has its own `bynk.actor.signature_missing_secret`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Actors",
+    "categoryAnchor": "actors",
     "code": "bynk.actor.bearer_missing_secret",
     "constructs": [],
     "example": "type UserId = String where NonEmpty\n\nactor User { auth = Bearer, identity = UserId }                         // ✗ no signing secret named\n\nactor User { auth = Bearer(secret = \"JWT_KEY\"), identity = UserId }     // ✓ the env var that holds the key",
@@ -21,8 +21,8 @@
   },
   {
     "blurb": "A `by` clause with a binder, `by who: Visitor`, adds a name to the handler body beside its parameters. If the binder is spelt like a parameter it would hide it, so a body that read `body` would silently get the actor instead of the request body. The compiler refuses the clash rather than choose one. Rename the binder or the parameter. A `by` with no binder, `by Visitor`, adds no name and cannot clash.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Actors",
+    "categoryAnchor": "actors",
     "code": "bynk.actor.binder_shadows_param",
     "constructs": [],
     "example": "on POST(\"/echo\") (body: String) -> Effect[HttpResult[String]] by body: Visitor {   // ✗ `body` is already a parameter\n\non POST(\"/echo\") (body: String) -> Effect[HttpResult[String]] by who: Visitor {   // ✓ a name of its own",
@@ -31,8 +31,8 @@
   },
   {
     "blurb": "`by` names who is calling and has the compiler verify it at the edge of the program: an HTTP request, a queue message, a cron tick. An agent handler is not an edge. It is reached only from a service or another agent, which has already been through its own check, so there is no caller left to verify and the clause would be silently ignored. The compiler refuses it instead of letting it look like protection. Remove the clause, and put the `by` on the service handler that calls the agent, passing on whatever the agent needs as an argument.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Actors",
+    "categoryAnchor": "actors",
     "code": "bynk.actor.by_on_agent",
     "constructs": [],
     "example": "on call bump() -> Effect[Int] by v: Visitor {   // ✗ an agent handler has no actor\n\non call bump() -> Effect[Int] {                // ✓ the service in front of it holds the `by`",
@@ -41,8 +41,8 @@
   },
   {
     "blurb": "Peers in a `by who: A | B` clause are told apart by their authentication scheme, so two peers of the same scheme can't both be reached: the second would never be chosen. Keep one peer per scheme, or fold the two into a single actor. A catch-all peer placed too early is a different mistake, `bynk.actor.unreachable_sum_arm`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Actors",
+    "categoryAnchor": "actors",
     "code": "bynk.actor.duplicate_sum_scheme",
     "constructs": [],
     "example": "type UserId = String where NonEmpty\nactor One { auth = Bearer(secret = \"KEY_A\"), identity = UserId }\nactor Two { auth = Bearer(secret = \"KEY_B\"), identity = UserId }\n\nservice api from http {\n  on POST(\"/x\") () -> Effect[HttpResult[String]] by who: One | Two {   // ✗ two `Bearer` peers\n\nservice api from http {\n  on POST(\"/x\") () -> Effect[HttpResult[String]] by who: One | Visitor {   // ✓ one peer per scheme",
@@ -51,8 +51,8 @@
   },
   {
     "blurb": "A foreign caller signs its calls under a key named from the context's name, `BYNK_CALL_TO_<CONTEXT>`. The name must therefore be lower-case letters and digits in dot-separated segments, each starting with a letter, with single underscores between runs: no `__`, and no trailing `_`. Rename the context, or move the foreign actor to one whose name qualifies.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Actors",
+    "categoryAnchor": "actors",
     "code": "bynk.actor.foreign_context_name_unkeyable",
     "constructs": [],
     "example": "context shop.orders_\nactor Legacy { auth = Foreign(secret = \"LEGACY_CALL_KEY\") }   // ✗ no key can be named from `shop.orders_`\n\ncontext shop.orders\nactor Legacy { auth = Foreign(secret = \"LEGACY_CALL_KEY\") }   // ✓",
@@ -61,8 +61,8 @@
   },
   {
     "blurb": "A context tells its foreign callers apart by the secret their calls are signed under, and `bynk deploy` mints one secret per name. Two actors on one secret could each pass for the other, so a foreign actor's secret may be no other actor's. Give each its own variable.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Actors",
+    "categoryAnchor": "actors",
     "code": "bynk.actor.foreign_duplicate_secret",
     "constructs": [],
     "example": "actor Legacy { auth = Foreign(secret = \"SHARED_KEY\") }\nactor Ledger { auth = Foreign(secret = \"SHARED_KEY\") }          // ✗ `Legacy` already uses it\n\nactor Ledger { auth = Foreign(secret = \"LEDGER_CALL_KEY\") }     // ✓ its own variable",
@@ -71,8 +71,8 @@
   },
   {
     "blurb": "A `Foreign` actor is its own identity: a handler tells foreign callers apart by matching on its `by` sum, not by a value carried in. So `identity` is refused, where a `Bearer` actor takes one from its token. Remove it.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Actors",
+    "categoryAnchor": "actors",
     "code": "bynk.actor.foreign_identity_unsupported",
     "constructs": [],
     "example": "type Who = String where NonEmpty\n\nactor Legacy { auth = Foreign(secret = \"LEGACY_CALL_KEY\"), identity = Who }   // ✗ the actor is the identity\n\nactor Legacy { auth = Foreign(secret = \"LEGACY_CALL_KEY\") }                   // ✓",
@@ -81,8 +81,8 @@
   },
   {
     "blurb": "A `Foreign` actor is a caller that is not Bynk. Its calls are signed, and the context checks each one against a secret, so the actor must name the environment variable that holds it. The string is the variable's name, never the key, and `bynk deploy` mints the key and sets it. With no name the context has nothing to check a call against. A secret that is not a string is `bynk.actor.foreign_secret_not_string`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Actors",
+    "categoryAnchor": "actors",
     "code": "bynk.actor.foreign_missing_secret",
     "constructs": [],
     "example": "actor Legacy { auth = Foreign }                                // ✗ no secret named\n\nactor Legacy { auth = Foreign(secret = \"LEGACY_CALL_KEY\") }    // ✓ the env var that holds the key",
@@ -91,8 +91,8 @@
   },
   {
     "blurb": "A foreign caller sends its actor's name as its caller, and a Bynk context's name is lower case. An actor named like a context could pass for one. Start the actor's name with a capital letter.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Actors",
+    "categoryAnchor": "actors",
     "code": "bynk.actor.foreign_name_is_context_name",
     "constructs": [],
     "example": "actor legacy { auth = Foreign(secret = \"LEGACY_CALL_KEY\") }   // ✗ reads as a context name\n\nactor Legacy { auth = Foreign(secret = \"LEGACY_CALL_KEY\") }   // ✓ capitalised",
@@ -101,8 +101,8 @@
   },
   {
     "blurb": "`bynk deploy` mints the keys that Bynk contexts sign their calls to each other with, and names them `BYNK_CALL_FROM_…` and `BYNK_CALL_TO_…`. A foreign caller's secret in that range could collide with one of them, so those names are kept for contexts. Pick another name, such as `LEGACY_CALL_KEY`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Actors",
+    "categoryAnchor": "actors",
     "code": "bynk.actor.foreign_reserved_secret",
     "constructs": [],
     "example": "actor Legacy { auth = Foreign(secret = \"BYNK_CALL_FROM_LEGACY\") }   // ✗ a `BYNK_CALL_` key name\n\nactor Legacy { auth = Foreign(secret = \"LEGACY_CALL_KEY\") }         // ✓ any other name",
@@ -111,8 +111,8 @@
   },
   {
     "blurb": "A `Foreign` actor's `secret` is the name of an environment variable, so it is written as a string. A number or any other expression names no variable. Put the variable's name in quotes. A `secret` left out altogether is `bynk.actor.foreign_missing_secret`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Actors",
+    "categoryAnchor": "actors",
     "code": "bynk.actor.foreign_secret_not_string",
     "constructs": [],
     "example": "actor Legacy { auth = Foreign(secret = 42) }                   // ✗ not a variable name\n\nactor Legacy { auth = Foreign(secret = \"LEGACY_CALL_KEY\") }    // ✓ a string",
@@ -121,8 +121,8 @@
   },
   {
     "blurb": "An actor's identity is a value only its context can mint, from a verified token or caller, so its type has to be one that context owns. A built-in such as `Int`, or a type from another context, could be built by anyone, so the identity would prove nothing. Declare the identity as a type in this context, such as `type PrincipalId = Int where NonNegative`, and name that.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Actors",
+    "categoryAnchor": "actors",
     "code": "bynk.actor.identity_not_sealed",
     "constructs": [],
     "example": "actor Principal { auth = Internal, identity = Int }   // ✗ `Int` is not owned by this context\n\ntype PrincipalId = Int where NonNegative\nactor Principal { auth = Internal, identity = PrincipalId }   // ✓ minted only here",
@@ -131,8 +131,8 @@
   },
   {
     "blurb": "An HTTP handler can be reached by anyone, and Bynk has no safe default for who is calling, so each one must say, with a `by` clause, which actor it expects. The compiler then emits the verification before the body runs. A public route writes `by v: Visitor`; an authenticated one names an `actor` it declares. Set it once on the header, `service api from http by Visitor`, and every handler without its own `by` inherits it. A WebSocket `on open` handler needs one too. The internal protocols (`call`, cron, queue) have a default.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Actors",
+    "categoryAnchor": "actors",
     "code": "bynk.actor.missing_by_on_http",
     "constructs": [],
     "example": "service api from http {\n  on GET(\"/health\") () -> Effect[HttpResult[String]] {   // ✗ who may call this?\n    Ok(\"up\")\n  }\n}\n\nservice api from http {\n  on GET(\"/health\") () -> Effect[HttpResult[String]] by v: Visitor {   // ✓ anyone, said outright\n    Ok(\"up\")\n  }\n}",
@@ -141,8 +141,8 @@
   },
   {
     "blurb": "An `Oidc` actor's identity is minted from the verified token's `sub` claim, which is a string, so the identity type must be a refined or opaque `String`. An actor with no `identity` is refused too. Declare a type over `String`, such as `type UserId = String where NonEmpty`, and name it. A `Bearer` actor has the same rule under `bynk.actor.bearer_identity_not_string_constructible`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Actors",
+    "categoryAnchor": "actors",
     "code": "bynk.actor.oidc_identity_not_string_constructible",
     "constructs": [],
     "example": "type Age = Int where NonNegative\nactor User { auth = Oidc(issuer = \"https://issuer.example\", audience = \"my-api\", jwks = \"https://issuer.example/jwks\"), identity = Age }   // ✗ `sub` is a string, not an `Int`\n\ntype UserId = String where NonEmpty\nactor User { auth = Oidc(issuer = \"https://issuer.example\", audience = \"my-api\", jwks = \"https://issuer.example/jwks\"), identity = UserId }   // ✓ minted from `sub`",
@@ -151,8 +151,8 @@
   },
   {
     "blurb": "A provider signs tokens for many services, and each token is issued for one. An `Oidc` actor therefore names its `audience`, the `aud` claim a token must carry, so a token issued for some other API is refused here even though its signature is valid. Add `audience = \"…\"` with the identifier your provider uses for this API. The issuer and key set have their own codes, `bynk.actor.oidc_missing_issuer` and `bynk.actor.oidc_missing_jwks`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Actors",
+    "categoryAnchor": "actors",
     "code": "bynk.actor.oidc_missing_audience",
     "constructs": [],
     "example": "type UserId = String where NonEmpty\nactor User { auth = Oidc(issuer = \"https://issuer.example\", jwks = \"https://issuer.example/jwks\"), identity = UserId }   // ✗ no audience\n\nactor User { auth = Oidc(issuer = \"https://issuer.example\", audience = \"my-api\", jwks = \"https://issuer.example/jwks\"), identity = UserId }   // ✓ the `aud` this API accepts",
@@ -161,8 +161,8 @@
   },
   {
     "blurb": "A valid signature shows that some key signed a token, not that your provider issued it. An `Oidc` actor therefore names its `issuer`, the `iss` claim a token must carry, and refuses any other. Add `issuer = \"…\"` with the provider's issuer URL. The other required settings have their own codes, `bynk.actor.oidc_missing_audience` and `bynk.actor.oidc_missing_jwks`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Actors",
+    "categoryAnchor": "actors",
     "code": "bynk.actor.oidc_missing_issuer",
     "constructs": [],
     "example": "type UserId = String where NonEmpty\nactor User { auth = Oidc(audience = \"my-api\", jwks = \"https://issuer.example/jwks\"), identity = UserId }   // ✗ no issuer\n\nactor User { auth = Oidc(issuer = \"https://issuer.example\", audience = \"my-api\", jwks = \"https://issuer.example/jwks\"), identity = UserId }   // ✓ the `iss` a token must carry",
@@ -171,8 +171,8 @@
   },
   {
     "blurb": "An `Oidc` actor holds no shared secret. It checks a token's signature against the provider's public keys, a JSON Web Key Set that the verifier fetches from a URL, so the actor must say where it is. Add `jwks = \"…\"`, for example the provider's `/.well-known/jwks.json`. The `issuer` and `audience` are required as well, under `bynk.actor.oidc_missing_issuer` and `bynk.actor.oidc_missing_audience`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Actors",
+    "categoryAnchor": "actors",
     "code": "bynk.actor.oidc_missing_jwks",
     "constructs": [],
     "example": "type UserId = String where NonEmpty\nactor User { auth = Oidc(issuer = \"https://issuer.example\", audience = \"my-api\"), identity = UserId }   // ✗ nowhere to fetch the public keys\n\nactor User { auth = Oidc(issuer = \"https://issuer.example\", audience = \"my-api\", jwks = \"https://issuer.example/jwks\"), identity = UserId }   // ✓ the provider's key set",
@@ -181,8 +181,8 @@
   },
   {
     "blurb": "A multi-actor `by` clause tries its peers in turn on a request it reads once. An `Oidc` actor must first fetch the provider's keys, which that path does not yet support, so an `Oidc` actor stands alone on its route. Give the route a single `by who: Member`, and serve any anonymous route separately.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Actors",
+    "categoryAnchor": "actors",
     "code": "bynk.actor.oidc_not_in_sum",
     "constructs": [],
     "example": "type UserId = String where NonEmpty\nactor Member { auth = Oidc(issuer = \"https://issuer.example\", audience = \"my-api\", jwks = \"https://issuer.example/jwks\"), identity = UserId }\n\nservice api from http {\n  on POST(\"/x\") () -> Effect[HttpResult[String]] by who: Member | Visitor {   // ✗ an `Oidc` peer in a sum\n\nservice api from http {\n  on POST(\"/x\") () -> Effect[HttpResult[String]] by who: Member {   // ✓ alone",
@@ -191,8 +191,8 @@
   },
   {
     "blurb": "`trustFrom` names a variable that holds trust roots as JSON. A variable an actor uses as its `secret` holds a signing key, and one variable cannot be both. Give `trustFrom` a variable of its own.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Actors",
+    "categoryAnchor": "actors",
     "code": "bynk.actor.oidc_trust_from_is_secret",
     "constructs": [],
     "example": "type UserId = String where NonEmpty\ntype WorkloadId = String where NonEmpty\n\nactor User { auth = Bearer(secret = \"JWT_KEY\"), identity = UserId }\nactor Workload { auth = Oidc(issuer = \"https://i.test\", audience = \"a\", jwks = \"https://i.test/jwks\", trustFrom = \"JWT_KEY\"), identity = WorkloadId }   // ✗ `JWT_KEY` is a key\n\nactor Workload { auth = Oidc(issuer = \"https://i.test\", audience = \"a\", jwks = \"https://i.test/jwks\", trustFrom = \"OIDC_TRUST\"), identity = WorkloadId }   // ✓",
@@ -201,8 +201,8 @@
   },
   {
     "blurb": "`trustFrom` names an environment variable whose JSON, when set, replaces the actor's declared trust roots at run time, as in a test or staging deployment. A variable is named by a string, so a number or other expression names nothing. Write the variable's name in quotes.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Actors",
+    "categoryAnchor": "actors",
     "code": "bynk.actor.oidc_trust_from_not_string",
     "constructs": [],
     "example": "type WorkloadId = String where NonEmpty\n\nactor Workload { auth = Oidc(issuer = \"https://i.test\", audience = \"a\", jwks = \"https://i.test/jwks\", trustFrom = 5), identity = WorkloadId }   // ✗ not a name\n\nactor Workload { auth = Oidc(issuer = \"https://i.test\", audience = \"a\", jwks = \"https://i.test/jwks\", trustFrom = \"OIDC_TRUST\"), identity = WorkloadId }   // ✓",
@@ -211,8 +211,8 @@
   },
   {
     "blurb": "An `actor` says who may call a handler and what the compiler then knows about them. Only a context has handlers, and an actor's identity is sealed to the context that declares it, so only a context may declare one. A `commons` is shared code that other units `uses`. Move the `actor` into the context whose services take it.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Actors",
+    "categoryAnchor": "actors",
     "code": "bynk.actor.outside_context",
     "constructs": [],
     "example": "commons shop\n\nactor User { auth = None }   // ✗ a commons has no handlers\n\ncontext shop\n\nactor User { auth = None }   // ✓ declared where it is used",
@@ -221,8 +221,8 @@
   },
   {
     "blurb": "`actor Admin = User where …` adds an authorisation check on a token's claims, and only a `Bearer` actor carries claims. So the base must be a declared `Bearer` actor: not `Visitor`, `Internal` or `Signature`, and not another refinement. Name a `Bearer` actor as the base, declaring it if need be.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Actors",
+    "categoryAnchor": "actors",
     "code": "bynk.actor.refinement_base_unsupported",
     "constructs": [],
     "example": "type UserId = String where NonEmpty\nactor User { auth = Bearer(secret = \"JWT_KEY\"), identity = UserId }\n\nactor Admin = Visitor where hasClaim(\"admin\")   // ✗ `Visitor` carries no claims\n\nactor Admin = User where hasClaim(\"admin\")   // ✓ a `Bearer` actor",
@@ -231,8 +231,8 @@
   },
   {
     "blurb": "A refinement actor has its base's scheme and only narrows it, and peers of a sum are told apart by scheme, so it can't stand beside its base as another choice. Name the base as the peer and test the extra condition in its arm, or give the refined route its own `by who: Admin`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Actors",
+    "categoryAnchor": "actors",
     "code": "bynk.actor.refinement_in_sum",
     "constructs": [],
     "example": "type UserId = String where NonEmpty\nactor User { auth = Bearer(secret = \"JWT_KEY\"), identity = UserId }\nactor Admin = User where hasClaim(\"admin\")\n\nservice api from http {\n  on POST(\"/x\") () -> Effect[HttpResult[String]] by who: User | Admin {   // ✗ `Admin` refines `User`\n\nservice api from http {\n  on POST(\"/x\") () -> Effect[HttpResult[String]] by who: Admin {   // ✓ its own route",
@@ -241,8 +241,8 @@
   },
   {
     "blurb": "A refinement actor's `where` is checked against a token's claims, which are untyped JSON, so the predicate is a closed vocabulary: `hasClaim(\"name\")` and `claimEquals(\"name\", \"value\")`, composed with `&&`, `||` and `!`. Express the condition with those. Anything else, such as a call to a function of your own, is refused.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Actors",
+    "categoryAnchor": "actors",
     "code": "bynk.actor.refinement_predicate_unsupported",
     "constructs": [],
     "example": "type UserId = String where NonEmpty\nactor User { auth = Bearer(secret = \"JWT_KEY\"), identity = UserId }\n\nactor Admin = User where isAdmin(user)   // ✗ not a claim predicate\n\nactor Admin = User where hasClaim(\"admin\")   // ✓",
@@ -251,8 +251,8 @@
   },
   {
     "blurb": "A scheme's config values are strings and integers, except that a `SignedCookie` also takes a duration (`ttl = 12.hours`) and a bare name (`sameSite = Lax`). Every other scheme reads a string or an integer, so a duration or a bare name would be dropped without a word: a `Signature` `tolerance = 5.minutes` would read as no tolerance at all, and the replay window would be off. Write a `Signature` tolerance in whole seconds, and quote a string.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Actors",
+    "categoryAnchor": "actors",
     "code": "bynk.actor.scheme_arg_kind",
     "constructs": [],
     "example": "actor Hook { auth = Signature(secret = \"K\", header = \"X-Sig\", timestamp = \"X-Ts\", tolerance = 5.minutes) }   // ✗ a duration\n\nactor Hook { auth = Signature(secret = \"K\", header = \"X-Sig\", timestamp = \"X-Ts\", tolerance = 300) }   // ✓ seconds",
@@ -261,8 +261,8 @@
   },
   {
     "blurb": "Each protocol admits only the schemes that can be verified on it. HTTP takes `None` (`Visitor`), `Bearer`, `Signature` and `Oidc`; a WebSocket takes `None` and `Bearer`; `call` takes `Internal` and `Foreign`; cron and queue take `Internal`. A `Visitor` on cron is wrong because nothing public calls a cron handler: the platform does. Use the actor made for the protocol: `Scheduler` for cron, `Producer` for queue, `Caller` for `on call`. `Caller` is admitted on `on call` only.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Actors",
+    "categoryAnchor": "actors",
     "code": "bynk.actor.scheme_not_admissible",
     "constructs": [],
     "example": "service jobs from cron {\n  on schedule(\"* * * * *\") () -> Effect[Result[(), String]] by v: Visitor {   // ✗ cron takes an `Internal` actor\n    Ok(())\n  }\n}\n\nservice jobs from cron {\n  on schedule(\"* * * * *\") () -> Effect[Result[(), String]] by s: Scheduler {   // ✓ the cron actor\n    Ok(())\n  }\n}",
@@ -271,8 +271,8 @@
   },
   {
     "blurb": "A signature shows that a request is authentic, not who sent it, so a `Signature` actor has no principal to give an identity. The event is the handler's `body`. Remove `identity`. For an actor that carries a principal, see `bynk.actor.bearer_identity_not_string_constructible`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Actors",
+    "categoryAnchor": "actors",
     "code": "bynk.actor.signature_identity_unsupported",
     "constructs": [],
     "example": "actor Hook { auth = Signature(secret = \"WEBHOOK_KEY\", header = \"X-Sig\"), identity = String }   // ✗ no principal\n\nactor Hook { auth = Signature(secret = \"WEBHOOK_KEY\", header = \"X-Sig\") }                       // ✓",
@@ -281,8 +281,8 @@
   },
   {
     "blurb": "A `Signature` actor reads the sender's signature from a request header, and the header's name is the sender's choice, so the actor must say which one. Add `header = \"…\"` with the name of the header that carries the HMAC. Without it the compiler has no way to find the signature to check the body against.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Actors",
+    "categoryAnchor": "actors",
     "code": "bynk.actor.signature_missing_header",
     "constructs": [],
     "example": "actor Hook { auth = Signature(secret = \"WEBHOOK_KEY\") }   // ✗ which header holds the signature?\n\nactor Hook { auth = Signature(secret = \"WEBHOOK_KEY\", header = \"X-Sig\") }   // ✓",
@@ -291,8 +291,8 @@
   },
   {
     "blurb": "A `Signature` actor checks an HMAC of the request body, so the compiler needs the key to check it against. Name the environment variable that holds it: `secret = \"WEBHOOK_KEY\"`. The string is the variable's name, never the key itself, so no secret is written in the source. A `Bearer` actor has its own `bynk.actor.bearer_missing_secret`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Actors",
+    "categoryAnchor": "actors",
     "code": "bynk.actor.signature_missing_secret",
     "constructs": [],
     "example": "actor Hook { auth = Signature(header = \"X-Sig\") }   // ✗ no signing secret named\n\nactor Hook { auth = Signature(secret = \"WEBHOOK_KEY\", header = \"X-Sig\") }   // ✓ the env var that holds the key",
@@ -301,8 +301,8 @@
   },
   {
     "blurb": "A `Signature` is an HMAC over the raw request body, so the handler must take that body: one with no `body` parameter would vouch for data it never reads. Add `(body: T)`, where `T` is the payload's type. A route that takes no payload has nothing for a signature to protect.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Actors",
+    "categoryAnchor": "actors",
     "code": "bynk.actor.signature_requires_body",
     "constructs": [],
     "example": "actor Hook { auth = Signature(secret = \"WEBHOOK_KEY\", header = \"X-Sig\") }\n\nservice api from http {\n  on POST(\"/x\") () -> Effect[HttpResult[String]] by Hook {   // ✗ no `body` parameter\n  on POST(\"/x\") (body: String) -> Effect[HttpResult[String]] by Hook {   // ✓ the signed payload",
@@ -311,8 +311,8 @@
   },
   {
     "blurb": "`tolerance` is how many seconds old a signed request may be before it is refused, which limits replay of a captured one. The age is read from a timestamp header, so `tolerance` needs `timestamp = \"…\"` naming it; alone it has nothing to compare against. Add the `timestamp`, or drop `tolerance` and accept that a captured request can be replayed.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Actors",
+    "categoryAnchor": "actors",
     "code": "bynk.actor.signature_tolerance_without_timestamp",
     "constructs": [],
     "example": "actor Hook { auth = Signature(secret = \"WEBHOOK_KEY\", header = \"X-Sig\", tolerance = 300) }   // ✗ age of what?\n\nactor Hook { auth = Signature(secret = \"WEBHOOK_KEY\", header = \"X-Sig\", timestamp = \"X-Time\", tolerance = 300) }   // ✓",
@@ -321,8 +321,8 @@
   },
   {
     "blurb": "Each `SignedCookie` key takes one kind of value: `secret`, `previous` and `cookie` are strings, `ttl` is a duration, and `sameSite` is `Lax`, `Strict` or `Unrestricted`. Fix the value or remove the key.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Actors",
+    "categoryAnchor": "actors",
     "code": "bynk.actor.signed_cookie_bad_arg",
     "constructs": [],
     "example": "actor User { auth = SignedCookie(secret = 5, ttl = 12.hours), identity = UserId }   // ✗\n\nactor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 12.hours), identity = UserId }   // ✓",
@@ -331,8 +331,8 @@
   },
   {
     "blurb": "A cookie name is an RFC 6265 token: letters, digits and a few punctuation characters, with no space, `=`, `;`, `,` or quote. A browser would drop or misread anything else. The default, `__Host-session`, is always legal.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Actors",
+    "categoryAnchor": "actors",
     "code": "bynk.actor.signed_cookie_bad_name",
     "constructs": [],
     "example": "actor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 12.hours, cookie = \"my session\"), identity = UserId }   // ✗\n\nactor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 12.hours), identity = UserId }   // ✓",
@@ -341,8 +341,8 @@
   },
   {
     "blurb": "`ttl` must be a `Duration` literal that is positive and a whole number of seconds, because it becomes both a `Max-Age` and a signed expiry in seconds. Write `12.hours` or `30.minutes`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Actors",
+    "categoryAnchor": "actors",
     "code": "bynk.actor.signed_cookie_bad_ttl",
     "constructs": [],
     "example": "actor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 1500.milliseconds), identity = UserId }   // ✗\n\nactor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 12.hours), identity = UserId }   // ✓",
@@ -351,8 +351,8 @@
   },
   {
     "blurb": "A `SignedCookie` config names each key once. A repeated `secret` or `ttl` would have the first value win and the second ignored without a word, in the scheme that guards a session. Keep the one you mean.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Actors",
+    "categoryAnchor": "actors",
     "code": "bynk.actor.signed_cookie_duplicate_key",
     "constructs": [],
     "example": "actor User { auth = SignedCookie(secret = \"A\", secret = \"B\", ttl = 12.hours), identity = UserId }   // ✗ two secrets\n\nactor User { auth = SignedCookie(secret = \"A\", ttl = 12.hours), identity = UserId }   // ✓",
@@ -361,8 +361,8 @@
   },
   {
     "blurb": "The identity is minted from the cookie's `sub` claim, which is a string, so it must be a refined or opaque `String` type that this context owns. Declare `identity = T`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Actors",
+    "categoryAnchor": "actors",
     "code": "bynk.actor.signed_cookie_identity_not_string_constructible",
     "constructs": [],
     "example": "actor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 12.hours) }   // ✗\n\nactor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 12.hours), identity = UserId }   // ✓",
@@ -371,8 +371,8 @@
   },
   {
     "blurb": "`User.issue(identity)` signs a cookie that expires, so it reads the current time from the `Clock` capability, and a handler's dependencies are always visible in its `given` clause (and a test can stub the clock to know exactly the cookie it gets). Add `consumes bynk { Clock }` to the context and `given Clock` to the handler.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Actors",
+    "categoryAnchor": "actors",
     "code": "bynk.actor.signed_cookie_issue_needs_clock",
     "constructs": [],
     "example": "let c <- User.issue(body)   // ✗ the handler lists no `given Clock`\n\nlet c <- User.issue(body)   // ✓ with `given Clock` on the handler",
@@ -381,8 +381,8 @@
   },
   {
     "blurb": "The signing key reaches a service handler, which is where a request arrives and a `Set-Cookie` is sent. A provider or an agent holds only the capabilities in its `given`, so `User.issue(identity)` there would find no key and fault on every request. Issue the cookie in the handler.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Actors",
+    "categoryAnchor": "actors",
     "code": "bynk.actor.signed_cookie_issue_outside_handler",
     "constructs": [],
     "example": "User.issue(id)   // ✗ in a provider or an agent\n\nlet c <- User.issue(body)   // ✓ in a service handler",
@@ -391,8 +391,8 @@
   },
   {
     "blurb": "A `SignedCookie` actor signs the session cookies it issues and verifies the ones it receives, so it needs a key. `secret` names the environment variable holding it, never the key itself. `bynk deploy` mints a random 32-byte key for it when the variable is unset, so you never choose one.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Actors",
+    "categoryAnchor": "actors",
     "code": "bynk.actor.signed_cookie_missing_secret",
     "constructs": [],
     "example": "actor User { auth = SignedCookie(ttl = 12.hours), identity = UserId }   // ✗\n\nactor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 12.hours), identity = UserId }   // ✓",
@@ -401,8 +401,8 @@
   },
   {
     "blurb": "A session cookie that never expires is the failure a language should not allow by omission, so `ttl` is required. It is how long an issued cookie is valid: the browser's `Max-Age` and the signed expiry both come from it. A stateless cookie cannot be revoked before it expires, so keep it short.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Actors",
+    "categoryAnchor": "actors",
     "code": "bynk.actor.signed_cookie_missing_ttl",
     "constructs": [],
     "example": "actor User { auth = SignedCookie(secret = \"SESSION_KEY\"), identity = UserId }   // ✗\n\nactor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 12.hours), identity = UserId }   // ✓",
@@ -411,8 +411,8 @@
   },
   {
     "blurb": "A multi-actor `by` clause tries its peers in turn. A cookie is an ambient credential, so the CSRF check must apply only when the cookie is what authenticated the request, and that per-arm rule is not built yet. A `SignedCookie` actor therefore stands alone on its route: give it a single `by who: User` and serve any anonymous route separately.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Actors",
+    "categoryAnchor": "actors",
     "code": "bynk.actor.signed_cookie_not_in_sum",
     "constructs": [],
     "example": "on POST(\"/x\") () -> Effect[HttpResult[String]] by who: User | Visitor {   // ✗ a `SignedCookie` peer in a sum\n\non POST(\"/x\") () -> Effect[HttpResult[String]] by who: User {   // ✓ alone",
@@ -421,8 +421,8 @@
   },
   {
     "blurb": "A route guarded by a session cookie answers one user, so a shared cache must not store its response, or it would serve one user's answer to another. Use `scope: private`, which lets only the browser keep it, or drop `@cache`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Actors",
+    "categoryAnchor": "actors",
     "code": "bynk.actor.signed_cookie_public_cache",
     "constructs": [],
     "example": "@cache(maxAge: 5.minutes, scope: public)   // ✗ a shared cache would replay it\n\n@cache(maxAge: 5.minutes, scope: private)   // ✓",
@@ -431,8 +431,8 @@
   },
   {
     "blurb": "A `SignedCookie` actor reads its session cookie at the boundary, verifies it and hands the handler only the identity, so the signed value never reaches handler code. A `cookies` record on the same route that names that cookie (by its own name or `@name`) would ask for the raw value, so it is refused, and the router leaves the cookie out of a raw `RequestCookies` view too. Read the identity from the `by` binder, and keep other cookies (a theme, a language) in the record.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Actors",
+    "categoryAnchor": "actors",
     "code": "bynk.actor.signed_cookie_read_directly",
     "constructs": [],
     "example": "type Prefs = {\n  @name(\"__Host-session\") session: Option[String],   // ✗ the session cookie\n  theme: Option[String],\n}\n\ntype Prefs = {\n  theme: Option[String],   // ✓ other cookies only\n}",
@@ -441,8 +441,8 @@
   },
   {
     "blurb": "A session key signs one actor's cookies and nothing else. If two actors shared a variable, a cookie issued for one would verify for the other, and a Bearer token could be replayed as a cookie. Give each actor its own variable; `previous` is the key being rotated out, so it differs from `secret` too.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Actors",
+    "categoryAnchor": "actors",
     "code": "bynk.actor.signed_cookie_secret_shared",
     "constructs": [],
     "example": "actor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 12.hours), identity = UserId }\nactor Admin { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 1.hours), identity = UserId }   // ✗ same key\n\nactor Admin { auth = SignedCookie(secret = \"ADMIN_SESSION_KEY\", ttl = 1.hours), identity = UserId }   // ✓",
@@ -451,8 +451,8 @@
   },
   {
     "blurb": "A stateless signed cookie cannot be revoked before it expires: a copy a user already took keeps working for the whole `ttl`. Beyond 30 days that is a long exposure, so it warns. Shorten the `ttl`, or keep the session on the server (see `examples/sessions`) if you need to log out everywhere.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Actors",
+    "categoryAnchor": "actors",
     "code": "bynk.actor.signed_cookie_ttl_long",
     "constructs": [],
     "example": "actor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 31.days), identity = UserId }   // ⚠ long-lived\n\nactor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 12.hours), identity = UserId }   // ✓",
@@ -461,8 +461,8 @@
   },
   {
     "blurb": "A `SignedCookie` takes `secret`, `ttl`, `cookie`, `previous` and `sameSite`, and nothing else. The set is closed so a misspelt option is refused rather than ignored. The cookie's `Domain` and `Path` are not configurable on purpose: the issued cookie is always host-only and `Path=/`, which keeps a `__Host-` name valid.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Actors",
+    "categoryAnchor": "actors",
     "code": "bynk.actor.signed_cookie_unknown_key",
     "constructs": [],
     "example": "actor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 12.hours, domain = \"example.com\"), identity = UserId }   // ✗\n\nactor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 12.hours), identity = UserId }   // ✓",
@@ -471,8 +471,8 @@
   },
   {
     "blurb": "A `__Host-` cookie name tells the browser to keep the cookie only if it is `Secure`, host-only and `Path=/`, so a sibling subdomain cannot set or overwrite it. An unprefixed session cookie is open to cookie tossing from any subdomain, which is rarely intended. The default is `__Host-session`; drop `cookie` or give it a `__Host-` name.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Actors",
+    "categoryAnchor": "actors",
     "code": "bynk.actor.signed_cookie_unprefixed",
     "constructs": [],
     "example": "actor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 12.hours, cookie = \"session\"), identity = UserId }   // ⚠ not `__Host-`\n\nactor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 12.hours), identity = UserId }   // ✓ `__Host-session` by default",
@@ -481,8 +481,8 @@
   },
   {
     "blurb": "A `SignedCookie` actor's session cookie is minted by `Actor.issue(identity)`, which signs it with the actor's key, and removed by `Actor.expire()`, and the CSRF check keys off that actor. A cookie record's `R.field.cookie(v)` or `R.field.expire()` whose field is read under the session cookie's name would write or clear the credential without any of that, so it is refused. Keep the session cookie out of the record and use the actor's own members.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Actors",
+    "categoryAnchor": "actors",
     "code": "bynk.actor.signed_cookie_write_directly",
     "constructs": [],
     "example": "type Prefs = {\n  @name(\"__Host-session\") session: Option[String],\n  theme: Option[String],\n}\n\nOk(\"x\").withCookie(Prefs.session.cookie(\"forged\"))   // ✗ the session cookie\n\nOk(\"x\").withCookie(Prefs.theme.cookie(\"dark\"))        // ✓ another cookie",
@@ -491,8 +491,8 @@
   },
   {
     "blurb": "A `Cookie { name: \"__Host-session\", … }` literal named like a `SignedCookie` actor's session cookie would write or clear the credential by hand, without the actor's signing key, expiry or CSRF seam, so it is refused. Write it with `Actor.issue(identity)` and remove it with `Actor.expire()`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Actors",
+    "categoryAnchor": "actors",
     "code": "bynk.actor.signed_cookie_write_literal",
     "constructs": [],
     "example": "Ok(\"x\").withCookie(Cookie { name: \"__Host-session\", value: \"forged\" })   // ✗ the actor's cookie\n\nOk(\"x\").withCookie(Cookie { name: \"theme\", value: \"dark\" })            // ✓ another cookie",
@@ -501,8 +501,8 @@
   },
   {
     "blurb": "`by A | B` tries the actors in order and the first that verifies the caller wins. Which one that was is only known when a request arrives, so the handler learns it through the binder and `match`es on it. With no binder the answer would be thrown away and the sum would do nothing a single actor does not. Add one, `by who: A | B`, and match `who` in the body. A single actor needs no binder.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Actors",
+    "categoryAnchor": "actors",
     "code": "bynk.actor.sum_requires_binder",
     "constructs": [],
     "example": "on GET(\"/x\") () -> Effect[HttpResult[String]] by User | Visitor {       // ✗ which one was it?\n\non GET(\"/x\") () -> Effect[HttpResult[String]] by who: User | Visitor {   // ✓ `who` is the resolved actor",
@@ -511,8 +511,8 @@
   },
   {
     "blurb": "A `by` clause must name an actor the compiler can find: one declared with `actor` in this context, or a prelude actor (`Visitor`, `Caller`, `Scheduler` or `Producer`). Anything else is a misspelling or a missing declaration. The compiler will not guess, because the actor decides how callers are verified. Fix the spelling, or declare the actor first with `actor Name { auth = … }`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Actors",
+    "categoryAnchor": "actors",
     "code": "bynk.actor.unknown_actor",
     "constructs": [],
     "example": "on GET(\"/health\") () -> Effect[HttpResult[String]] by v: Visitr {     // ✗ no actor of that name\n\non GET(\"/health\") () -> Effect[HttpResult[String]] by v: Visitor {   // ✓ the prelude actor",
@@ -521,8 +521,8 @@
   },
   {
     "blurb": "An actor's `auth` names how its callers are verified, and the compiler writes that check itself, so the scheme must be one it knows: `None`, `Internal`, `Bearer`, `Signature`, `Oidc`, `Foreign` or `SignedCookie`. There are no user-defined schemes, and a name outside the set is usually a typo or a scheme borrowed from another framework. Choose the one that matches how callers prove who they are, such as `Bearer` for a JWT signed with a shared key; the actors page lists what each one needs.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Actors",
+    "categoryAnchor": "actors",
     "code": "bynk.actor.unknown_scheme",
     "constructs": [],
     "example": "actor Robot { auth = Bogus }   // ✗ not a scheme the compiler knows\n\nactor Robot { auth = None }    // ✓ one of the seven",
@@ -531,8 +531,8 @@
   },
   {
     "blurb": "In `by who: A | B` the peers are tried in order and the first to verify wins. `Visitor`, or any other `None` peer, accepts everyone, so a peer after it can never be reached and its check would never run. Put the catch-all last. A repeated scheme is a different mistake, `bynk.actor.duplicate_sum_scheme`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Actors",
+    "categoryAnchor": "actors",
     "code": "bynk.actor.unreachable_sum_arm",
     "constructs": [],
     "example": "type UserId = String where NonEmpty\nactor User { auth = Bearer(secret = \"JWT_KEY\"), identity = UserId }\n\nservice api from http {\n  on POST(\"/x\") () -> Effect[HttpResult[String]] by who: Visitor | User {   // ✗ `Visitor` accepts everyone first\n\nservice api from http {\n  on POST(\"/x\") () -> Effect[HttpResult[String]] by who: User | Visitor {   // ✓ the catch-all last",
@@ -541,8 +541,8 @@
   },
   {
     "blurb": "Adapter dependencies run from adapter to adapter. An adapter sits at the host boundary and is wired in process beside its binding, but a context is a deployment unit with services of its own, so it cannot be consumed from there. Consume a capability that another adapter exports, or put the code that needs a context in a context.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Adapters",
+    "categoryAnchor": "adapters",
     "code": "bynk.adapter.consumes_context",
     "constructs": [
       "consumes_decl"
@@ -553,8 +553,8 @@
   },
   {
     "blurb": "An adapter depends on another adapter's capabilities, never on its services, so its `consumes` must say which: `consumes logging { Log }`. The whole-unit form and `as Alias` belong to contexts. Braces that select only types are refused too, since they name no capability. List the capabilities the adapter needs.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Adapters",
+    "categoryAnchor": "adapters",
     "code": "bynk.adapter.consumes_requires_selection",
     "constructs": [
       "consumes_decl"
@@ -565,8 +565,8 @@
   },
   {
     "blurb": "An adapter wraps foreign code, so it holds only what describes that boundary: capabilities, the types that cross it, external providers and helper functions. A `service`, an `agent` or an `actor` has behaviour, state and an address of its own, and those belong to a context. Move the item into a context that `consumes` the adapter's capability, and leave the adapter as an interface to the foreign code.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Adapters",
+    "categoryAnchor": "adapters",
     "code": "bynk.adapter.disallowed_item",
     "constructs": [
       "adapter_decl"
@@ -577,8 +577,8 @@
   },
   {
     "blurb": "An adapter's `binding` names the one TypeScript module that supplies its external providers, so there is one clause. With two, the compiler would have no way to say which module a provider comes from. Merge them into one clause; the module it names can import whatever others it needs.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Adapters",
+    "categoryAnchor": "adapters",
     "code": "bynk.adapter.duplicate_binding",
     "constructs": [
       "binding_decl"
@@ -589,8 +589,8 @@
   },
   {
     "blurb": "Each module is listed once: the compiler generates one loader, `./x.wasm.js`, per file. Two entries for one file add nothing, and `./a.wasm` and `a.wasm` are the same file once the path is normalised. Remove the repeat, or correct the name if a different module was meant.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Adapters",
+    "categoryAnchor": "adapters",
     "code": "bynk.adapter.include_duplicate",
     "constructs": [
       "binding_decl"
@@ -601,8 +601,8 @@
   },
   {
     "blurb": "`includes` is for WebAssembly modules. The compiler generates a loader for each, `./x.wasm.js`, that gives the binding a compiled module, and it picks them by the `.wasm` extension. Any other file has no such loader. Name a `.wasm` module.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Adapters",
+    "categoryAnchor": "adapters",
     "code": "bynk.adapter.include_kind",
     "constructs": [
       "binding_decl"
@@ -613,8 +613,8 @@
   },
   {
     "blurb": "`includes` ships WebAssembly modules beside the binding, so each file it names has to exist: the path is read relative to the adapter's source file. A misspelt name, or a module left out of the tree, is the usual cause. Correct the path, or add the file.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Adapters",
+    "categoryAnchor": "adapters",
     "code": "bynk.adapter.include_missing",
     "constructs": [
       "binding_decl"
@@ -625,8 +625,8 @@
   },
   {
     "blurb": "An included module is part of the adapter's own tree, and, for a dependency, of the tree the lock checksums. So each path is relative to the adapter's file and stays inside its directory: no absolute path, and no `..`. Move the module into the adapter's directory, or a subdirectory of it, and name it from there.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Adapters",
+    "categoryAnchor": "adapters",
     "code": "bynk.adapter.include_outside",
     "constructs": [
       "binding_decl"
@@ -637,8 +637,8 @@
   },
   {
     "blurb": "An external provider, `provides Jwt = JoseJwt` with no body, is written in TypeScript, not Bynk. The adapter's `binding` clause names that TypeScript module, resolved relative to the adapter's source file, and the compiler reads it to wire the provider in. The code fires when the clause is missing, and when the named file cannot be read. Add `binding \"./tokens.binding.ts\"` and create the file, exporting a class named for the provider.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Adapters",
+    "categoryAnchor": "adapters",
     "code": "bynk.adapter.no_binding",
     "constructs": [
       "adapter_decl"
@@ -649,8 +649,8 @@
   },
   {
     "blurb": "An adapter wraps code written in TypeScript. Its provider has no body: `provides Jwt = JoseJwt`, and the binding exports a class of that name. A Bynk body would be a second implementation beside the binding's. Remove the body and implement the operations in the binding, or, for a provider written in Bynk, move it to a context. An external provider in a context is `bynk.context.external_provider`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Adapters",
+    "categoryAnchor": "adapters",
     "code": "bynk.adapter.provider_has_body",
     "constructs": [
       "provider_decl"
@@ -798,7 +798,7 @@
     "summary": "A `migrate` step reads a schema version the lock does not record below the agent's current version."
   },
   {
-    "blurb": "bynk.schema.lock records the stored shape of every agent class, version by version, and a build compares the new shape against it. A deployed instance holds data in the recorded shape, so a change that data can still be read through, such as a new field, is additive and just bumps the version. A change it cannot be read through, such as a field removed, retyped or renamed, would orphan or misread what is stored, so the build refuses it. A rename looks like a removal plus an addition, and the message names the pairing it infers. Keep the old field and add the new one, or carry the data across with a `migrate from N` step, which records the change as a non-additive version.",
+    "blurb": "bynk.schema.lock records the stored shape of every agent class, version by version, and a build compares the new shape against it. A deployed instance holds data in the recorded shape, so a change that data can still be read through, such as a new field, is additive and just bumps the version. A change it cannot be read through, such as a field removed, retyped or renamed, would orphan or misread what is stored, so the build refuses it. A rename looks like a removal plus an addition, and the message names the pairing it infers. Give an added record field a default, keep the old field and add the new one, or carry the data across with a `migrate from N` step, which records the change as a non-additive version. For a class that was never deployed, delete its entry from the schema lock, and the next build records the new shape afresh.",
     "category": "Agents",
     "categoryAnchor": "agents",
     "code": "bynk.agent.non_additive_state_change",
@@ -904,7 +904,7 @@
     "summary": "An agent `store` field initialiser is not a static value of the field's type."
   },
   {
-    "blurb": "A key that has never been used is initialised automatically the first time it is touched, so every `store Cell[T]` field needs a starting value. With no initialiser, the compiler supplies a zero (`0`, `false`, `\"\"`, `None`, or a record of zeroed fields), but only where that zero is a valid value of the type. An opaque type, a sum other than `Option`, and a refined type that rules its zero out have none, and the compiler will not invent a value that the type's own constructors might refuse. Say what \"not set yet\" means: wrap the type in `Option`, where `None` is the zero, or give the field an initialiser, `store name: Cell[T] = value`.",
+    "blurb": "A key that has never been used is initialised automatically the first time it is touched, so every `store Cell[T]` field needs a starting value. With no initialiser, the compiler supplies a zero (`0`, `false`, `\"\"`, `None`, or a record of zeroed fields), but only where that zero is a valid value of the type. An opaque type, a sum other than `Option`, and a refined type that rules its zero out have none, and the compiler will not invent a value that the type's own constructors might refuse. Say what \"not set yet\" means: wrap the type in `Option`, where `None` is the zero, give the field an initialiser, `store name: Cell[T] = value`, or relax a refinement so that its zero is allowed (`NonNegative` admits `0`; `Positive` does not).",
     "category": "Agents",
     "categoryAnchor": "agents",
     "code": "bynk.agents.non_zeroable_state_field",
@@ -1302,7 +1302,7 @@
     "summary": "Two `consumes` aliases collide."
   },
   {
-    "blurb": "`consumes payment { Gateway }` brings `Gateway` in by its bare name, so that `given Gateway` reads it. If the context already declares a capability of that name, or a second consumed unit supplies one, the bare name would mean two things. Reach it qualified instead, `given payment.Gateway`, or rename the local one.",
+    "blurb": "`consumes payment { Gateway }` brings `Gateway` in by its bare name, so that `given Gateway` reads it. If the context already declares a capability of that name, or a second consumed unit supplies one, the bare name would mean two things. Reach it qualified instead, `given payment.Gateway`, rename the local one, or consume the unit under an alias instead of selecting names from it, `consumes payment as pay`, and write `given pay.Gateway`.",
     "category": "Consumes",
     "categoryAnchor": "consumes",
     "code": "bynk.consumes.capability_name_clash",
@@ -1614,7 +1614,7 @@
     "summary": "A contract predicate does not have type `Bool`."
   },
   {
-    "blurb": "A function's `ensures` is checked at every call, in production and in every test that reaches it. A test that calls the function and `expect`s the same predicate adds nothing and has to be kept in step with the contract. The compiler flags the repeat. Delete the test, or keep a case only for a specific value a reader should see, such as `expect discount(100, 10) == 90`.",
+    "blurb": "A function's `ensures` is checked at every call, in production and in every test that reaches it. A test that calls the function and `expect`s the same predicate adds nothing and has to be kept in step with the contract. The compiler flags the repeat. The check is narrow: it fires only on a syntactic restatement over the same arguments. Delete the test, or keep a case only for a specific value a reader should see, such as `expect discount(100, 10) == 90`.",
     "category": "Contracts",
     "categoryAnchor": "contracts",
     "code": "bynk.contract.restated_by_test",
@@ -1763,8 +1763,8 @@
   },
   {
     "blurb": null,
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Deployment",
+    "categoryAnchor": "deployment",
     "code": "bynk.deploy.agent_move_refused",
     "constructs": [],
     "example": null,
@@ -1773,8 +1773,8 @@
   },
   {
     "blurb": "A `[deploy.workers.<key>]` group folds its members into one Worker, and a Worker has one assets directory. So a fixed asset path (`at \"/…\"`) names one file across the whole group: two members serving different files at one path would leave the Worker unable to say which to send. A path that would be a folder of another member's file is refused for the same reason. Give one of the assets another path, or put the contexts in different groups.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Deployment",
+    "categoryAnchor": "deployment",
     "code": "bynk.deploy.asset_path_conflict",
     "constructs": [],
     "example": "// bynk.toml\n[deploy.workers.core]\ncontexts = [\"shop.orders\", \"shop.billing\"]\n\n// shop/orders.bynk\nasset terms = \"assets/orders-terms.txt\" at \"/terms.txt\"\n\n// shop/billing.bynk\nasset terms = \"assets/billing-terms.txt\" at \"/terms.txt\"           // ✗ `shop.orders` serves `/terms.txt`\nasset terms = \"assets/billing-terms.txt\" at \"/billing/terms.txt\"   // ✓",
@@ -1783,8 +1783,8 @@
   },
   {
     "blurb": "A `[deploy.workers.<key>]` group folds its members into one Worker, and a Worker has one `wrangler.toml`, so its members share one set of binding names. Two members that declare a binding the same way share it. Two that declare different bindings under one name are refused, because one name cannot bind two things. An agent is the usual case: each agent class is a Durable Object binding named after the class, and a class belongs to the context that declares it, so two members cannot each declare an agent of the same name. Rename one, or put the contexts in different groups.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Deployment",
+    "categoryAnchor": "deployment",
     "code": "bynk.deploy.binding_collision",
     "constructs": [],
     "example": "// bynk.toml\n[deploy.workers.core]\ncontexts = [\"shop.orders\", \"shop.billing\"]\n\n// shop/orders.bynk\nagent Cart { … }\n\n// shop/billing.bynk\nagent Cart { … }     // ✗ `shop.orders` already binds `Cart`\nagent Ledger { … }   // ✓",
@@ -1793,8 +1793,8 @@
   },
   {
     "blurb": "Each `[deploy.workers.<key>]` group becomes one Worker, and a context is deployed in exactly one Worker: its routes, its services and its agents' state belong to one script. A context listed in two groups would be deployed twice, as two copies that share nothing. List it in one group. A context in no group stays its own Worker.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Deployment",
+    "categoryAnchor": "deployment",
     "code": "bynk.deploy.context_in_two_groups",
     "constructs": [],
     "example": "[deploy.workers.core]\ncontexts = [\"shop.orders\", \"shop.billing\"]\n\n[deploy.workers.edge]\ncontexts = [\"shop.orders\"]     // ✗ already in `core`\n\ncontexts = [\"shop.gateway\"]    // ✓",
@@ -1803,8 +1803,8 @@
   },
   {
     "blurb": null,
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Deployment",
+    "categoryAnchor": "deployment",
     "code": "bynk.deploy.contract_skew",
     "constructs": [],
     "example": null,
@@ -1813,8 +1813,8 @@
   },
   {
     "blurb": "A route or custom domain sends the requests that match it to one Worker. If two `[deploy.workers.<key>]` groups claimed the same one, only one Worker could have it, and which would depend on the order they were deployed in. So each route and each custom domain is claimed once across all the groups. Hosts are compared without regard to case, and the same host with a different path is a different route. Remove the repeat, or give one group another route.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Deployment",
+    "categoryAnchor": "deployment",
     "code": "bynk.deploy.duplicate_hostname",
     "constructs": [],
     "example": "[deploy.workers.core]\ncontexts = [\"shop.orders\"]\nroutes = [\"shop.example.com/*\"]\n\n[deploy.workers.edge]\ncontexts = [\"shop.billing\"]\nroutes = [\"shop.example.com/*\"]           // ✗ `core` claims it\n\nroutes = [\"shop.example.com/billing/*\"]   // ✓ another path, another route",
@@ -1823,8 +1823,8 @@
   },
   {
     "blurb": "A `[deploy.workers.<key>]` group is a Worker made of the contexts it lists. A group that lists none would be a Worker with nothing to run, and its key would still claim a Worker name and a deploy record. That is almost always a mistake: contexts left out, or a group that should have been deleted. List the group's contexts, or remove the table.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Deployment",
+    "categoryAnchor": "deployment",
     "code": "bynk.deploy.empty_group",
     "constructs": [],
     "example": "[deploy.workers.core]\ncontexts = []                                  // ✗ no context\n\ncontexts = [\"shop.orders\", \"shop.billing\"]   // ✓",
@@ -1833,8 +1833,8 @@
   },
   {
     "blurb": null,
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Deployment",
+    "categoryAnchor": "deployment",
     "code": "bynk.deploy.foreign_contract_skew",
     "constructs": [],
     "example": null,
@@ -1843,8 +1843,8 @@
   },
   {
     "blurb": "Each Worker on Cloudflare is one script with one name. A group's Worker is named by its `name`, or by its key when it has none, and a context in no group is a Worker of its own, named after the context with each `.` as `-` (`shop.billing` is `shop-billing`). Two Workers with one name would overwrite each other on deploy. So a group's key or `name` may not be another group's Worker name, nor the Worker of a context in no group. Choose another key or `name`, or put that context in the group.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Deployment",
+    "categoryAnchor": "deployment",
     "code": "bynk.deploy.group_name_conflict",
     "constructs": [],
     "example": "[deploy.workers.core]\ncontexts = [\"shop.orders\"]\n\n[deploy.workers.edge]\ncontexts = [\"shop.billing\"]\nname = \"core\"         // ✗ `core` is already a Worker's name\n\nname = \"shop-edge\"    // ✓",
@@ -1853,8 +1853,8 @@
   },
   {
     "blurb": "A WebSocket upgrade request names no service, and a `from websocket` service has no path of its own, so a Worker hands every upgrade to its one WebSocket service. A `[deploy.workers.<key>]` group folds its members into one Worker, so at most one member may declare a `from websocket` service, and that one takes every upgrade, whatever its path. Put the contexts in different groups, or leave one in no group so that it is a Worker of its own. Within one context, a second WebSocket service is `bynk.service.websocket_multiple`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Deployment",
+    "categoryAnchor": "deployment",
     "code": "bynk.deploy.multiple_websocket_members",
     "constructs": [],
     "example": "// bynk.toml\n[deploy.workers.live]\ncontexts = [\"live.chat\", \"live.scores\"]\n\n// live/chat.bynk\nservice chat from websocket(in: Frame, out: Frame) { … }\n\n// live/scores.bynk\ncontext live.scores   // ✗ the second member of `live` with a WebSocket service\nservice scores from websocket(in: Frame, out: Frame) { … }\n\n// bynk.toml\ncontexts = [\"live.chat\"]   // ✓ `live.scores` is a Worker of its own",
@@ -1863,8 +1863,8 @@
   },
   {
     "blurb": "A `[deploy.workers.<key>]` group lists the contexts to deploy together as one Worker, and only a context is deployed. A `commons` is compiled into each context that uses it, and an adapter into each context that consumes it, so neither has a Worker of its own to share. Remove the entry: the contexts that use the commons carry it with them.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Deployment",
+    "categoryAnchor": "deployment",
     "code": "bynk.deploy.not_a_context",
     "constructs": [],
     "example": "[deploy.workers.core]\ncontexts = [\"shop.orders\", \"money\"]   // ✗ `money` is a commons\n\ncontexts = [\"shop.orders\"]            // ✓",
@@ -1873,8 +1873,8 @@
   },
   {
     "blurb": "A `[deploy.workers.<key>]` group folds its members into one Worker, which answers each HTTP method and path with one handler. Two members that declare the same method and path would give the Worker two handlers for one request, so the later one is refused. Change one of the routes, often by giving each context a path prefix of its own, or put the contexts in different groups. Within one context the same clash is `bynk.http.duplicate_route`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Deployment",
+    "categoryAnchor": "deployment",
     "code": "bynk.deploy.route_conflict",
     "constructs": [],
     "example": "// bynk.toml\n[deploy.workers.core]\ncontexts = [\"shop.orders\", \"shop.billing\"]\n\n// shop/orders.bynk\non GET(\"/status\") () -> Effect[HttpResult[String]] by who: Visitor { … }\n\n// shop/billing.bynk\non GET(\"/status\") () -> Effect[HttpResult[String]] by who: Visitor { … }           // ✗ `shop.orders` answers `GET /status`\non GET(\"/billing/status\") () -> Effect[HttpResult[String]] by who: Visitor { … }   // ✓",
@@ -1883,8 +1883,8 @@
   },
   {
     "blurb": "A service is called by its name alone: a call from another context goes to `/_bynk/call/<service>`, and the address names no context. A `[deploy.workers.<key>]` group folds its members into one Worker, which answers all their services, so two members with a service of the same name would leave it unable to tell the calls apart. Rename one of the services, or put the contexts in different groups.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Deployment",
+    "categoryAnchor": "deployment",
     "code": "bynk.deploy.service_name_conflict",
     "constructs": [],
     "example": "// bynk.toml\n[deploy.workers.core]\ncontexts = [\"shop.orders\", \"shop.billing\"]\n\n// shop/orders.bynk\nservice lookup { … }\n\n// shop/billing.bynk\nservice lookup { … }    // ✗ `shop.orders` has a `lookup`\nservice invoice { … }   // ✓",
@@ -1893,8 +1893,8 @@
   },
   {
     "blurb": "A `[deploy.workers.<key>]` group names its members by their qualified context names, and each must be a context the project declares. A name that matches none is usually a typo, or a context that has since been renamed, and a group cannot deploy a context that does not exist. The note suggests the nearest name. Correct the entry, or remove it.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Deployment",
+    "categoryAnchor": "deployment",
     "code": "bynk.deploy.unknown_context",
     "constructs": [],
     "example": "[deploy.workers.core]\ncontexts = [\"shop.ordres\"]   // ✗ no such context\n\ncontexts = [\"shop.orders\"]   // ✓",
@@ -1903,8 +1903,8 @@
   },
   {
     "blurb": "`bynk deploy` uploads each Worker after the Workers it binds to, since a Service Binding must name a script that already exists. So the Workers' bindings must run one way: a cycle has no order to deploy in. Contexts cannot consume each other in a cycle (that is `bynk.context.consumes_cycle`), but a `[deploy.workers.<key>]` group folds its members into one Worker, and that can close a cycle among contexts that have none: if a member of `front` calls a member of `back`, and another member of `back` calls a member of `front`, the two Workers bind to each other. Move a context out of its group, or into the other, so the calls between Workers run one way. A publisher's Worker also binds to its subscribers, so a subscriber that calls its publisher can close a cycle too.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Deployment",
+    "categoryAnchor": "deployment",
     "code": "bynk.deploy.worker_cycle",
     "constructs": [],
     "example": "// bynk.toml\n[deploy.workers.front]\ncontexts = [\"shop.web\", \"shop.prices\"]\n\n[deploy.workers.back]\ncontexts = [\"shop.stock\", \"shop.reports\"]\n\n// shop/web.bynk\nconsumes shop.stock\n\n// shop/reports.bynk\ncontext shop.reports   // ✗ `back` binds to `front`, and `front` to `back`\nconsumes shop.prices\n\n// bynk.toml\n[deploy.workers.front]\ncontexts = [\"shop.web\"]                                    // ✓\n\n[deploy.workers.back]\ncontexts = [\"shop.stock\", \"shop.reports\", \"shop.prices\"]   // ✓ calls run from `front` to `back` only",
@@ -1913,8 +1913,8 @@
   },
   {
     "blurb": null,
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Deployment",
+    "categoryAnchor": "deployment",
     "code": "bynk.deploy.workers_ignored_on_bundle",
     "constructs": [],
     "example": null,
@@ -2231,8 +2231,8 @@
   },
   {
     "blurb": "An `on event` handler takes the event payload and, optionally, a second parameter of type `EventEnvelope`, which carries the emission's metadata: its event id, publisher, time and schema version. Any other count, or any other type in second place, has nothing to receive it. Remove the extra parameter or type it `EventEnvelope`. A wrong first parameter is `bynk.event.handler_param_type_mismatch`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Events",
+    "categoryAnchor": "events",
     "code": "bynk.event.bad_params",
     "constructs": [],
     "example": "consumes bynk\n\nevent Paid = { id: String }\n\nservice onPaid from Events(Paid) {\n  on event(e: Paid, env: String) -> Effect[()] {   // ✗ the second parameter must be `EventEnvelope`\n  on event(e: Paid, env: EventEnvelope) -> Effect[()] {   // ✓",
@@ -2241,8 +2241,8 @@
   },
   {
     "blurb": "`via schema(N)` filters a subscription by the envelope's `schemaVersion`. Versions count up from 1, so every bound must be a positive `Int` literal: `schema(0)` or `schema(0..3)` names a version no event has. Write a version, a range such as `schema(2..4)`, or `_` for every version. A range whose lower bound is above its upper one is `bynk.types.empty_range_pattern`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Events",
+    "categoryAnchor": "events",
     "code": "bynk.event.bad_schema_dispatch",
     "constructs": [],
     "example": "service OnPaid from Events(Paid) via schema(0) {    // ✗ versions start at 1\nservice OnPaid from Events(Paid) via schema(1) {    // ✓\n    on event(e: Paid) -> Effect[()] { … }\n}",
@@ -2251,8 +2251,8 @@
   },
   {
     "blurb": "`@schema(N)` states the version an event is at, so that the number can be reviewed in the source and is checked against the version the registry computes. `N` must be one positive `Int` literal, given by position, and `@schema` may appear once on an event: `@schema(0)`, `@schema(\"2\")`, `@schema(v: 2)` and a second `@schema` are all refused. Write `@schema(2)`, or drop the annotation, since the registry tracks the version anyway.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Events",
+    "categoryAnchor": "events",
     "code": "bynk.event.bad_schema_version",
     "constructs": [],
     "example": "event Paid @schema(0) = {    // ✗ versions start at 1\nevent Paid @schema(1) = {    // ✓\n    id: String,\n}\n\nconst Version: Int = 1\nevent Refunded @schema(Version) = {    // ✓ an `Int` constant bound to a literal\n    id: String,\n}",
@@ -2261,8 +2261,8 @@
   },
   {
     "blurb": "A `from Events(E)` service has exactly one `on event` handler. To react to an event in two ways, declare two services, each subscribing to it: every subscriber is delivered to independently. So the second handler is refused here, and the fix is to move it into a service of its own.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Events",
+    "categoryAnchor": "events",
     "code": "bynk.event.duplicate_handler",
     "constructs": [
       "event_handler"
@@ -2273,8 +2273,8 @@
   },
   {
     "blurb": "`Events.emit[E]` takes an `event` type. A plain `type` declared in the same context is refused: nothing could subscribe to it, since a `from Events(…)` header names events, so the emission would silently go nowhere. Declare the type with `event` instead, or name the event you meant. A name that is not declared in this context at all is `bynk.event.emit_outside_owner`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Events",
+    "categoryAnchor": "events",
     "code": "bynk.event.emit_not_an_event",
     "constructs": [],
     "example": "type Receipt = { id: String }\nevent Paid = { id: String }\n\nEvents.emit[Receipt](Receipt { id: id })   // ✗ `Receipt` is a `type`, not an `event`\nEvents.emit[Paid](Paid { id: id })         // ✓ an `event` of this context",
@@ -2283,8 +2283,8 @@
   },
   {
     "blurb": "Only the context that declares an event may emit it. A consumer can see the event through `consumes`, to subscribe to it with `from Events(…)`, but being able to name a type does not make it yours to forge: other contexts then could not trust that an event came from its owner. Emit an event of your own, or call a service of the owning context and let it emit.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Events",
+    "categoryAnchor": "events",
     "code": "bynk.event.emit_outside_owner",
     "constructs": [],
     "example": "// orders.bynk\ncontext orders\n\nexports transparent { Paid }\n\nevent Paid = { id: String }\n\n// mailer.bynk\ncontext mailer\n\nconsumes orders\nconsumes bynk { Events }\n\nevent Sent = { id: String }\n\nEvents.emit[Paid](Paid { id: \"x\" })   // ✗ `Paid` belongs to `orders`\nEvents.emit[Sent](Sent { id: \"x\" })   // ✓ `Sent` is declared here",
@@ -2293,8 +2293,8 @@
   },
   {
     "blurb": "An `on event` handler's first parameter is the event itself, so its type must be the one the `from Events(E)` header names. A subscription pattern is checked against that event, and the body reads `e` at that type. Make the parameter `E`, or change the header to the event you mean to handle. The optional second parameter is `EventEnvelope`; other mistakes there are `bynk.event.bad_params`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Events",
+    "categoryAnchor": "events",
     "code": "bynk.event.handler_param_type_mismatch",
     "constructs": [],
     "example": "event Paid = { id: String }\nevent Refunded = { id: String }\n\nservice onPaid from Events(Paid) {\n    on event(e: Refunded) -> Effect[()] { … }   // ✗ the header says `Paid`\n    on event(e: Paid) -> Effect[()] { … }       // ✓\n}",
@@ -2303,8 +2303,8 @@
   },
   {
     "blurb": null,
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Events",
+    "categoryAnchor": "events",
     "code": "bynk.event.non_additive_schema_change",
     "constructs": [],
     "example": null,
@@ -2313,8 +2313,8 @@
   },
   {
     "blurb": "An `event` is declared in a context, and only that context may emit it, so an event belongs to its owner. A `commons` is shared code that other units `uses`, with no owner to emit from, so one may not declare an event. Declare the event in the context that raises it. Other contexts subscribe by consuming that context.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Events",
+    "categoryAnchor": "events",
     "code": "bynk.event.outside_context",
     "constructs": [],
     "example": "commons shop\n\nevent Paid = { id: String }   // ✗ a commons has no owner to emit it\n\ncontext shop\n\nevent Paid = { id: String }   // ✓ declared where it is emitted",
@@ -2323,8 +2323,8 @@
   },
   {
     "blurb": "A subscription pattern narrows delivery by field: `from Events(Paid { region: Domestic, .. })` runs the handler only when `region` is `Domestic`. The listed fields combine with AND, so naming one twice would ask for two values at once, or say the same thing twice, and is refused rather than guessed at. List each field once. To accept several values, leave the field out of the pattern and `match` on it in the handler.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Events",
+    "categoryAnchor": "events",
     "code": "bynk.event.pattern_duplicate_field",
     "constructs": [],
     "example": "service OnPaid from Events(Paid { region: Domestic, region: International, .. }) {    // ✗ `region` twice\nservice OnPaid from Events(Paid { region: Domestic, .. }) {                            // ✓\n    on event(e: Paid) -> Effect[()] { … }\n}",
@@ -2333,8 +2333,8 @@
   },
   {
     "blurb": "A subscription pattern compares a field with a literal or a variant, so the value must be of the field's type: an `Int` literal for an `Int` field, a `String` for a `String`, a variant of the field's own sum type. A value of any other type could never match an emission. Write one of the field's type.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Events",
+    "categoryAnchor": "events",
     "code": "bynk.event.pattern_type_mismatch",
     "constructs": [],
     "example": "event Paid = { id: String, amount: Int }\n\nservice onPaid from Events(Paid { amount: \"10\", .. }) {   // ✗ `amount` is an `Int`\n\nservice onPaid from Events(Paid { amount: 10, .. }) {   // ✓",
@@ -2343,8 +2343,8 @@
   },
   {
     "blurb": "A subscription pattern filters on the event's own fields, so each name in it must be one the event declares. A name that matches none could never filter anything, and is usually a misspelling; the diagnostic lists the declared fields. Use one of them.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Events",
+    "categoryAnchor": "events",
     "code": "bynk.event.pattern_unknown_field",
     "constructs": [],
     "example": "event Paid = { id: String, amount: Int }\n\nservice onPaid from Events(Paid { total: 10, .. }) {   // ✗ `Paid` has no field `total`\n\nservice onPaid from Events(Paid { amount: 10, .. }) {   // ✓",
@@ -2353,8 +2353,8 @@
   },
   {
     "blurb": "A pattern that tests a sum-typed field names a variant of that type, and an emission can only carry the variants the type declares. A name it lacks, often a misspelling, could never match. Use a variant the type declares. A variant that carries a payload is refused too, as `bynk.event.pattern_variant_payload`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Events",
+    "categoryAnchor": "events",
     "code": "bynk.event.pattern_unknown_variant",
     "constructs": [],
     "example": "type Region =\n    | Domestic\n    | International\n    | Refunded(reason: String)\nevent Paid = { id: String, region: Region }\n\nservice onPaid from Events(Paid { region: Region.Nowhere, .. }) {   // ✗ `Region` has no `Nowhere`\n\nservice onPaid from Events(Paid { region: Region.Domestic, .. }) {   // ✓",
@@ -2363,8 +2363,8 @@
   },
   {
     "blurb": "A pattern can test only which variant a field holds, not what it carries. For a variant with a payload that would admit emissions the pattern looks as if it excludes, so only payload-free variants are allowed. Subscribe to a payload-free variant, or drop the pattern and read the field in the handler's body.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Events",
+    "categoryAnchor": "events",
     "code": "bynk.event.pattern_variant_payload",
     "constructs": [],
     "example": "type Region =\n    | Domestic\n    | International\n    | Refunded(reason: String)\nevent Paid = { id: String, region: Region }\n\nservice onPaid from Events(Paid { region: Region.Refunded, .. }) {   // ✗ `Refunded` carries a `reason`\n\nservice onPaid from Events(Paid { region: Region.Domestic, .. }) {   // ✓ no payload",
@@ -2373,8 +2373,8 @@
   },
   {
     "blurb": "Emission is fire-and-forget: nothing receives a subscriber's result, so an `on event` handler returns `Effect[()]` and anything else is refused. Return `Effect.pure(())` once its work is done, and move a value it computes into an effect the handler performs, such as a write. A handler that does not return an `Effect` at all is `bynk.service.return_not_effect`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Events",
+    "categoryAnchor": "events",
     "code": "bynk.event.return_not_effect_unit",
     "constructs": [
       "event_handler"
@@ -2385,8 +2385,8 @@
   },
   {
     "blurb": null,
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Events",
+    "categoryAnchor": "events",
     "code": "bynk.event.schema_version_mismatch",
     "constructs": [],
     "example": null,
@@ -2395,8 +2395,8 @@
   },
   {
     "blurb": "The only annotation an event accepts is `@schema(N)`, which asserts its schema version. Names like `@indexed` belong to agent state and mean nothing on an event, so a stray or misspelt one would be silently ignored if it were not refused. Remove the annotation, or use `@schema` with a positive integer.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Events",
+    "categoryAnchor": "events",
     "code": "bynk.event.unknown_annotation",
     "constructs": [],
     "example": "event Paid @indexed = { id: String }   // ✗ not an event annotation\n\nevent Paid @schema(1) = { id: String }   // ✓",
@@ -2405,8 +2405,8 @@
   },
   {
     "blurb": "A `from Events(E)` header must name an event declared in this context or in a context it `consumes`. A name that matches neither would be a subscription that never receives anything, and nothing would say so; it is almost always a misspelling, or a `consumes` that is missing. Fix the name, or add `consumes` for the context whose `event` it is.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Events",
+    "categoryAnchor": "events",
     "code": "bynk.event.unknown_subscription",
     "constructs": [],
     "example": "context mailer\n\nconsumes orders\n\nservice onPaid from Events(Payd) {   // ✗ no event `Payd`\n\nservice onPaid from Events(Paid) {   // ✓ the event `orders` declares",
@@ -2705,8 +2705,8 @@
   },
   {
     "blurb": "A generic function with an `Ord` bound, named as a value, is instantiated where it stands, from the function type expected there. When that type is still open, because the receiving parameter's own type is not fixed yet, there is no `T` to choose, and a guess could order by the wrong type. Wrap the function in a lambda, which is checked after the other arguments, or annotate the expected function type.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Generics",
+    "categoryAnchor": "generics",
     "code": "bynk.generics.ambiguous_instantiation",
     "constructs": [
       "fn_decl"
@@ -2717,8 +2717,8 @@
   },
   {
     "blurb": "A capability operation is carried out by its provider, written in TypeScript, so it has no Bynk body for a bound to serve; an `Ord` bound would also add a hidden comparator argument. Only `Key` and `Codable` are accepted, and both are handled at the call site. Remove the bound, and compare in the code that calls the operation.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Generics",
+    "categoryAnchor": "generics",
     "code": "bynk.generics.bound_on_capability_op",
     "constructs": [
       "capability_op"
@@ -2729,8 +2729,8 @@
   },
   {
     "blurb": "A `Codable` parameter of a capability operation is encoded at the call site, so the provider receives plain JSON. Putting `T` in the return type asks the call site to decode the provider's reply back into `T`, and that is accepted only for the standard library's own operations, whose providers are reviewed with the runtime and which declare what a reply that does not decode means. A capability you declare returns plain data, such as a `String`, and you decode it where the call is made with `Json.decode`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Generics",
+    "categoryAnchor": "generics",
     "code": "bynk.generics.codable_op_return_not_first_party",
     "constructs": [
       "capability_op"
@@ -2741,8 +2741,8 @@
   },
   {
     "blurb": "The type parameters of one declaration are told apart by name, and a repeat would collapse into a single parameter, so `Pair[T, T]` would force both fields to the same type with no sign of it. Give each parameter its own name. A method's own type parameter may not reuse a name from its receiver type either, as that would make the two ambiguous.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Generics",
+    "categoryAnchor": "generics",
     "code": "bynk.generics.duplicate_type_param",
     "constructs": [],
     "example": "type Pair[T, T] = { a: T, b: T }    // ✗ `T` declared twice\n\ntype Pair[A, B] = { a: A, b: B }    // ✓ one name for each",
@@ -2751,8 +2751,8 @@
   },
   {
     "blurb": "Type parameters are for a type whose shape can mention them: a record, `{ value: T }`, or a sum whose variants carry payloads. A refined, opaque or alias type has a fixed base, so a parameter would have nowhere to go. Give the type a record or sum body that uses its parameters, or drop the parameters.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Generics",
+    "categoryAnchor": "generics",
     "code": "bynk.generics.generic_non_record",
     "constructs": [
       "type_decl"
@@ -2763,8 +2763,8 @@
   },
   {
     "blurb": "`embeds E as V` lets `?` wrap an `E` error in the variant `V`, picking the variant by the error's type. In a generic sum that conversion would have to hold for every instantiation, which is not supported. Drop the `embeds` clause and wrap the error by hand where it is needed, with `.mapErr(Payment)`, or make the sum non-generic.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Generics",
+    "categoryAnchor": "generics",
     "code": "bynk.generics.generic_sum_embeds",
     "constructs": [
       "type_decl"
@@ -2775,8 +2775,8 @@
   },
   {
     "blurb": "A capability operation's reply policy, `@onUndecodable(miss)` or `@onUndecodable(fault)`, says what a reply that does not decode as the operation's payload type means. It belongs to the standard library's own operations, where the provider is reviewed with the runtime, so a capability you declare takes no annotation. Remove it.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Generics",
+    "categoryAnchor": "generics",
     "code": "bynk.generics.internal_op_annotation",
     "constructs": [
       "capability_op"
@@ -2787,8 +2787,8 @@
   },
   {
     "blurb": "A static method on a generic type (one with no `self`) is generic over the type's parameters, and a call has to be able to fix each of them: from its arguments, from the type the call is expected to have, or from explicit type arguments. If the method's parameter and return types never mention one of the type's parameters, nothing in a call can determine it, so the declaration is refused once, here, rather than every call being ambiguous. Mention the parameter in the signature, or make the method a free function. An instance method (with `self`) is not affected, since the receiver carries the type. A call that leaves a parameter open anyway is `bynk.generics.uninferable_type_arg`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Generics",
+    "categoryAnchor": "generics",
     "code": "bynk.generics.method_on_generic_type",
     "constructs": [
       "fn_decl"
@@ -2798,9 +2798,9 @@
     "summary": "A *static* method on a generic type never mentions one of the type's parameters in its parameter or return types, so no call could determine it from the arguments or the expected type. Mention the parameter in the signature, or make the method a free function (constrained-generics slice 4; instance methods are supported, #594)."
   },
   {
-    "blurb": "`Json.encode` and `Json.decode` work only on types that cross the JSON boundary, and a type parameter might be a function, an `Effect` or another type that does not. So a type parameter that is encoded or decoded, or passed to a `Codable`-bounded parameter of another generic or of a capability operation, must be declared `T: Codable` (or `where A: Codable` for a receiver type's parameter), and a call must instantiate it with a type that is `Codable`. At run time the bound costs a hidden codec argument, so a refined type is still revalidated on decode. `Codable` does not imply `Eq`, so the diagnostic's fix writes `T: Eq + Codable` beside an existing `Eq`. It is the `Json` counterpart of `bynk.generics.missing_eq_bound`, `bynk.generics.missing_ord_bound` and `bynk.generics.missing_key_bound`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "blurb": "`Json.encode` and `Json.decode` work only on types that cross the JSON boundary, and a type parameter might be a function, an `Effect` or another type that does not. So a type parameter that is encoded or decoded, or passed to a `Codable`-bounded parameter of another generic or of a capability operation, must be declared `T: Codable` (or `where A: Codable` for a receiver type's parameter), and a call must instantiate it with a type that is `Codable`. At run time the bound costs a hidden codec argument, so a refined type is still revalidated on decode. `Codable` does not imply `Eq`, so the diagnostic's fix writes `T: Eq + Codable` beside an existing `Eq`, and `bynk check --fix` applies it across a project. It is the `Json` counterpart of `bynk.generics.missing_eq_bound`, `bynk.generics.missing_ord_bound` and `bynk.generics.missing_key_bound`.",
+    "category": "Generics",
+    "categoryAnchor": "generics",
     "code": "bynk.generics.missing_codable_bound",
     "constructs": [
       "fn_decl"
@@ -2810,9 +2810,9 @@
     "summary": "A type parameter is encoded or decoded with `Json.encode`/`Json.decode`, or passed to a `Codable`-bounded parameter of another generic or of a capability operation, but is not declared `Codable` (`[T: Codable]`, or `where A: Codable` for a receiver type's parameter). The diagnostic carries a machine-applicable fix that declares `Codable`, beside an existing `Eq`, which `Codable` does not imply (constrained-generics slice 3)."
   },
   {
-    "blurb": "`==` and `!=` work on a type parameter only if the function says so with an `Eq` bound. A type parameter stands for any type, and some types cannot be compared: a function, an `Effect`, a `Query`, a `Stream` or a held `Connection`. The bound puts that requirement in the signature, where a caller, hover and signature help can see it, instead of leaving it to fail inside the body. The same rule applies when a generic passes its own parameter to an `Eq`-bounded parameter of another generic, so a bound appears at every link of a chain of calls. Declare `T: Eq`; `T: Ord` and `T: Key` also allow `==`. The diagnostic's fix adds the bound.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "blurb": "`==` and `!=` work on a type parameter only if the function says so with an `Eq` bound. A type parameter stands for any type, and some types cannot be compared: a function, an `Effect`, a `Query`, a `Stream` or a held `Connection`. The bound puts that requirement in the signature, where a caller, hover and signature help can see it, instead of leaving it to fail inside the body. The same rule applies when a generic passes its own parameter to an `Eq`-bounded parameter of another generic, so a bound appears at every link of a chain of calls. Declare `T: Eq`; `T: Ord` and `T: Key` also allow `==`. The diagnostic's fix adds the bound, and `bynk check --fix` applies it across a project.",
+    "category": "Generics",
+    "categoryAnchor": "generics",
     "code": "bynk.generics.missing_eq_bound",
     "constructs": [
       "fn_decl"
@@ -2823,8 +2823,8 @@
   },
   {
     "blurb": "A `Map` key or a `Set` element must be a type that can be held under a canonical encoding, and a type parameter might be a function or another type that cannot. So a type parameter that reaches a `Map` key or a `Set` element, in a signature, a generic type's field, or a `distinct`, `groupBy` or join key, must be declared `K: Key`, and a call must instantiate it with a key type. `Key` implies `Eq`, so an existing `Eq` bound is replaced rather than joined (`K: Eq + Key` is a warning). The diagnostic's fix declares the bound, and `bynk check --fix` applies it across a project.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Generics",
+    "categoryAnchor": "generics",
     "code": "bynk.generics.missing_key_bound",
     "constructs": [
       "fn_decl"
@@ -2834,9 +2834,9 @@
     "summary": "A type parameter keys a `Map` or `Set` (a `Map` key, a `Set` element, a `distinct`/`groupBy`/join key), or is passed to a `Key`-bounded parameter of another generic, but is not declared `Key` (`[K: Key]`, or `where A: Key` for a receiver type's parameter; on the type for a generic type's own parameter). The diagnostic carries a machine-applicable fix that declares `Key`, replacing an existing `Eq`, which `Key` implies (constrained-generics slice 2)."
   },
   {
-    "blurb": "`<`, `<=`, `>` and `>=` work on a type parameter only if the function says so with an `Ord` bound. A type parameter stands for any type, and many types have no total order: a function, an `Effect`, a `Bool`, a record that does not `derives Ord`. The bound puts the requirement in the signature, where a caller, hover and signature help can see it, and a call must instantiate it with an orderable type. The same rule covers an ordering key and a parameter passed on to an `Ord`-bounded parameter of another generic, so the bound appears at every link of a chain of calls. Declare `T: Ord`; it implies `Eq`, so an existing `Eq` is replaced (`T: Eq + Ord` is only a warning). The diagnostic's fix adds the bound.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "blurb": "`<`, `<=`, `>` and `>=` work on a type parameter only if the function says so with an `Ord` bound. A type parameter stands for any type, and many types have no total order: a function, an `Effect`, a `Bool`, a record that does not `derives Ord`. The bound puts the requirement in the signature, where a caller, hover and signature help can see it, and a call must instantiate it with an orderable type. The same rule covers an ordering key and a parameter passed on to an `Ord`-bounded parameter of another generic, so the bound appears at every link of a chain of calls. Declare `T: Ord`; it implies `Eq`, so an existing `Eq` is replaced (`T: Eq + Ord` is only a warning). The diagnostic's fix adds the bound, and `bynk check --fix` applies it across a project.",
+    "category": "Generics",
+    "categoryAnchor": "generics",
     "code": "bynk.generics.missing_ord_bound",
     "constructs": [
       "fn_decl"
@@ -2847,8 +2847,8 @@
   },
   {
     "blurb": "A generic type may refer to itself only uniformly: the self-reference must pass the declaration's own type parameters through unchanged and in order, as `Weird[T]` inside `Weird[T]`. Anything else is polymorphic recursion, such as `Weird[List[T]]` inside `Weird[T]`, or `Pair[B, A]` inside `Pair[A, B]`, and it generates an unbounded set of instantiations, so it is refused at the declaration. The same holds for mutually recursive generics: a partner may be applied only to the declaration's own parameters or to types that mention none, never to a type that wraps one of them.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Generics",
+    "categoryAnchor": "generics",
     "code": "bynk.generics.polymorphic_recursion",
     "constructs": [],
     "example": "type Weird[T] = { value: T, next: Option[Weird[List[T]]] }   // ✗ a different instantiation\n\ntype Weird[T] = { value: T, next: Option[Weird[T]] }         // ✓ parameters passed through",
@@ -2857,8 +2857,8 @@
   },
   {
     "blurb": "A recursive generic type, a record or sum that contains itself, declares and works inside a context, but it has no codec yet. So it is refused wherever a codec is required: a service or agent handler signature, an agent `store` field or key, an event field, an actor identity type, a `Json.encode` or `Json.decode` target, or a `Codable` witness. The error fires once per use, and when the type is reached through another type, its note names the field path. To cross a boundary today, use a concrete recursive type, or keep the generic one inside the context.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Generics",
+    "categoryAnchor": "generics",
     "code": "bynk.generics.recursive_generic_at_boundary",
     "constructs": [],
     "example": "type Tree[A] =\n    | Leaf\n    | Node(left: Tree[A], value: A, right: Tree[A])\n\nservice s {\n    on call(t: Tree[Int]) -> Effect[Int] { … }   // ✗ no codec for a recursive generic\n}\n\ntype IntTree =\n    | Leaf\n    | Node(left: IntTree, value: Int, right: IntTree)\n\nservice s {\n    on call(t: IntTree) -> Effect[Int] { … }     // ✓ a concrete recursive type\n}",
@@ -2867,8 +2867,8 @@
   },
   {
     "blurb": null,
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Generics",
+    "categoryAnchor": "generics",
     "code": "bynk.generics.redundant_eq_bound",
     "constructs": [
       "fn_decl"
@@ -2879,8 +2879,8 @@
   },
   {
     "blurb": "A generic type is applied to exactly as many type arguments as it declares parameters: `Box[T]` takes one. Too many, too few, arguments on a type that is not generic, and a generic type named with no arguments at all are all refused, since each argument fills one parameter. A type parameter such as `T` is not itself generic, so `T[Int]` is refused too. Give the arguments the declaration asks for.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Generics",
+    "categoryAnchor": "generics",
     "code": "bynk.generics.type_arg_count",
     "constructs": [
       "applied_type_ref"
@@ -2891,8 +2891,8 @@
   },
   {
     "blurb": "The type arguments of a generic call do not fit. The checker infers each type parameter from the arguments, and an argument that contradicts what an earlier one settled is refused: `pick(1, \"one\")` cannot make `T` both `Int` and `String`. The same code covers explicit type arguments of the wrong number (`pick[Int, Int](…)`), type arguments given to a function that is not generic, and a type parameter named like a declared type. Make the arguments agree, give the type argument explicitly where the inference is not what you meant, or rename the parameter.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Generics",
+    "categoryAnchor": "generics",
     "code": "bynk.generics.type_arg_mismatch",
     "constructs": [
       "call"
@@ -2903,8 +2903,8 @@
   },
   {
     "blurb": "A call to a generic function leaves a type parameter undetermined. Bynk fixes a type parameter from the arguments and, failing that, from the type the call is expected to have; it never guesses. `none()` has no argument that mentions `T`, and `let x = none()` gives it no expected type, so there is nothing to choose `T` from. The error also fires when a lambda's parameter types depend on a parameter that the other arguments leave open. Give the type argument explicitly with `none[Int]()`, or annotate the binding so the expected type supplies it: `let x: Option[Int] = none()`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Generics",
+    "categoryAnchor": "generics",
     "code": "bynk.generics.uninferable_type_arg",
     "constructs": [
       "call"
@@ -2915,8 +2915,8 @@
   },
   {
     "blurb": "A bound after a type parameter, `T: C`, must name one of the four constraints Bynk has: `Eq`, `Ord`, `Key` and `Codable`. There are no user-defined constraints or interfaces, so a name like `Hashable` or `Comparable` is refused rather than silently ignored; ignoring it would let a function compile that promised more than the compiler could check. The same code is reported for a `derives` clause that names anything but `Ord`; naming `Eq`, `Key` or `Codable` there is `bynk.types.derives_automatic`, because they hold automatically. Pick the constraint that matches what the body does: `Eq` for `==`, `Ord` for ordering, `Key` for a `Map` key or `Set` element, `Codable` for `Json`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Generics",
+    "categoryAnchor": "generics",
     "code": "bynk.generics.unknown_constraint",
     "constructs": [
       "type_param"
@@ -2927,8 +2927,8 @@
   },
   {
     "blurb": "A `where` clause bounds a type parameter, so it must name one: the function's own, or, for a method, its receiver type's. A name that is neither is usually a misspelling. Correct it, or declare the parameter in the brackets after the function's name. A bound that does not exist is `bynk.generics.unknown_constraint`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Generics",
+    "categoryAnchor": "generics",
     "code": "bynk.generics.unknown_where_param",
     "constructs": [
       "where_clause"
@@ -3093,8 +3093,8 @@
   },
   {
     "blurb": "`for all run: History[T]` generates a run of calls to an agent's handlers and drives them against a fresh instance. Only an agent has handlers to sequence, so `T` must be one declared in scope. For a value, a plain `for all x: T` generates the value. Name the agent.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "History properties",
+    "categoryAnchor": "history-properties",
     "code": "bynk.history.not_an_agent",
     "constructs": [],
     "example": "// tests/t.test.bynk\nfor all run: History[Amount] { … }   // ✗ `Amount` is a value type\nfor all run: History[Wallet] { … }   // ✓ an agent",
@@ -3102,9 +3102,9 @@
     "summary": "A `for all run: History[T]` names a `T` that is not an agent — only an agent has handlers to sequence and reachable states to observe (testing track slice 7, ADR 0155)."
   },
   {
-    "blurb": "To drive an agent the runner must make an argument for every handler, drawing each from its parameter's refinement domain. One parameter with no generator, such as a `Matches` pattern, stops it for the whole agent, since any handler may be chosen. Give that parameter a refinement that has one, such as `Length(3)`. The same rule applies to a value `for all`, where a type that cannot be generated is `bynk.val.needs_pin`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "blurb": "To drive an agent the runner must make an argument for every handler, drawing each from its parameter's refinement domain. One parameter with no generator, such as a `Matches` pattern, stops it for the whole agent, since any handler may be chosen. Give that parameter a refinement that has one, such as `Length(3)`, or test that handler with a `case` and a pinned value instead. The same rule applies to a value `for all`, where a type that cannot be generated is `bynk.val.needs_pin`.",
+    "category": "History properties",
+    "categoryAnchor": "history-properties",
     "code": "bynk.history.not_generable",
     "constructs": [],
     "example": "// demo/wallet.bynk\ntype Code = String where Matches(\"[A-Z]{3}\")\n\n// tests/t.test.bynk\nfor all run: History[Wallet] { … }   // ✗ `setLabel` takes a `Code`, which has no generator\n\n// demo/wallet.bynk\ntype Code = String where Length(3)   // ✓ a refinement with a generator",
@@ -3113,8 +3113,8 @@
   },
   {
     "blurb": "`History[Agent]` is a generator, not a value type: it stands for a run the test runner makes for a `for all` binding. So it may appear only as the type of that binding inside a `property`, never in a function signature, a field or a `let`. Move the check into a `property` and assert over `run`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "History properties",
+    "categoryAnchor": "history-properties",
     "code": "bynk.history.outside_property",
     "constructs": [],
     "example": "// demo/wallet.bynk\nfn peek(w: History[Wallet]) -> Int { 0 }   // ✗ not a value type\n\n// tests/t.test.bynk\nfor all run: History[Wallet] { … }         // ✓ in a `property`",
@@ -3123,8 +3123,8 @@
   },
   {
     "blurb": "Every state a driven run reaches has already passed the agent's `invariant` and `transition` checks, so a history property that only asserts the same thing over `run` cannot fail. The compiler flags it, and the check is deliberately narrow, so a near-copy may pass. Assert something the per-state rules do not say, such as a protocol across steps: a spend is accepted only after a top-up.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "History properties",
+    "categoryAnchor": "history-properties",
     "code": "bynk.history.restates_invariant",
     "constructs": [],
     "example": "// demo/wallet.bynk\ninvariant nonneg: balance >= 0\n\n// tests/t.test.bynk\nfor all run: History[Wallet] { expect run.all((s) => s.new.balance >= 0) }   // ✗ the invariant says this\nfor all run: History[Wallet] { expect run.all((s) => (s.call is Spend && s.accepted) implies run.upTo(s).any((p) => p.call is TopUp && p.accepted)) }   // ✓ a protocol across steps",
@@ -4529,8 +4529,8 @@
   },
   {
     "blurb": "The `bynk` root belongs to the toolchain: its own libraries, such as `bynk.list`, and the platform adapters live there and are added to a build when a unit consumes them. A unit of yours named `bynk` or `bynk.<anything>` could collide with one of them, so the name is refused for every kind of unit. Rename the unit so its first segment is not `bynk`, and move its file to match.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Adapters",
+    "categoryAnchor": "adapters",
     "code": "bynk.namespace.reserved",
     "constructs": [],
     "example": "// bynk/foo.bynk\ncommons bynk.foo    // ✗ `bynk` is the toolchain's namespace\n\n// shop/foo.bynk\ncommons shop.foo    // ✓",
@@ -4589,8 +4589,8 @@
   },
   {
     "blurb": "The key of a `[dependencies]` entry is the alias a unit reaches the package by, as in `lib.notify`. If one of the project's own units also starts with that word, `shop.cart` for an alias `shop`, then `shop.…` could mean the package or the unit, and the compiler will not choose. Rename the alias, which is the key, or rename the unit.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Packages",
+    "categoryAnchor": "packages",
     "code": "bynk.package.alias_shadows_unit",
     "constructs": [],
     "example": "[dependencies]\nshop = { package = \"acme/lib\", path = \"pkg/lib\" }   // ✗ the project has a unit `shop`\n\nlib = { package = \"acme/lib\", path = \"pkg/lib\" }    // ✓ an alias no unit starts with",
@@ -4599,8 +4599,8 @@
   },
   {
     "blurb": null,
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Packages",
+    "categoryAnchor": "packages",
     "code": "bynk.package.checksum_mismatch",
     "constructs": [],
     "example": null,
@@ -4609,8 +4609,8 @@
   },
   {
     "blurb": "A package's units are resolved against the packages it depends on, so the package graph needs an order: no package may depend, directly or through others, on itself or on the project. A cycle usually means two packages each want something of the other. Move what both need into a third package that each of them depends on, or merge the two.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Packages",
+    "categoryAnchor": "packages",
     "code": "bynk.package.dependency_cycle",
     "constructs": [],
     "example": "# packages/money/bynk.toml\n[dependencies]\ntax = { package = \"acme/tax\", path = \"../tax\" }\n\n# packages/tax/bynk.toml\n[dependencies]\nmoney = { package = \"acme/money\", path = \"../money\" }   // ✗ `acme/money` depends on `acme/tax`\n\ncore = { package = \"acme/core\", path = \"../core\" }      // ✓ what both need, in a package of its own",
@@ -4619,8 +4619,8 @@
   },
   {
     "blurb": "A path dependency points at a directory that is a package: it has its own `bynk.toml` with a `[package]` table. The path is read from the manifest that names it. The entry is refused when there is no readable `bynk.toml` there, when it is not valid, or when it has no `[package]`. Correct the path, or add the manifest to the package.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Packages",
+    "categoryAnchor": "packages",
     "code": "bynk.package.dependency_not_found",
     "constructs": [],
     "example": "[dependencies]\nlib = { package = \"acme/lib\", path = \"pkg/libs\" }   // ✗ no `bynk.toml` at `pkg/libs`\n\nlib = { package = \"acme/lib\", path = \"pkg/lib\" }    // ✓ the package's directory",
@@ -4629,8 +4629,8 @@
   },
   {
     "blurb": "A `[dev-dependencies]` package is there for the project's suites, and a deployable build leaves suites out, so a package that only suites need is never compiled into it. A context or commons that reached one would break that build, so only a suite may. If the source needs the package, move its entry to `[dependencies]`; otherwise keep the use in a suite.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Packages",
+    "categoryAnchor": "packages",
     "code": "bynk.package.dev_dependency_in_source",
     "constructs": [],
     "example": "// bynk.toml\n[dev-dependencies]\nlib = { package = \"acme/lib\", path = \"pkg/lib\" }\n\n// shop.bynk\nuses lib.notify      // ✗ a `[dev-dependencies]` alias is for suites\n\n// bynk.toml\n[dependencies]       // ✓ the entry moved here\nlib = { package = \"acme/lib\", path = \"pkg/lib\" }",
@@ -4639,8 +4639,8 @@
   },
   {
     "blurb": "A build holds one copy of each package, so every dependency on a package must reach it in the same directory. Two entries that name one package but point at different directories would give two copies, with two sets of types where there should be one. Point both at the same directory, or drop one. Two aliases onto one directory are fine.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Packages",
+    "categoryAnchor": "packages",
     "code": "bynk.package.duplicate_source",
     "constructs": [],
     "example": "[dependencies]\nlib = { package = \"acme/lib\", path = \"pkg/lib\" }\nutil = { package = \"acme/lib\", path = \"vendor/lib\" }   // ✗ `acme/lib` from a second directory\n\nutil = { package = \"acme/lib\", path = \"pkg/lib\" }      // ✓ the same directory",
@@ -4649,8 +4649,8 @@
   },
   {
     "blurb": null,
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Packages",
+    "categoryAnchor": "packages",
     "code": "bynk.package.git_failed",
     "constructs": [],
     "example": null,
@@ -4659,8 +4659,8 @@
   },
   {
     "blurb": null,
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Packages",
+    "categoryAnchor": "packages",
     "code": "bynk.package.lock_invalid",
     "constructs": [],
     "example": null,
@@ -4669,8 +4669,8 @@
   },
   {
     "blurb": null,
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Packages",
+    "categoryAnchor": "packages",
     "code": "bynk.package.lock_out_of_date",
     "constructs": [],
     "example": null,
@@ -4679,8 +4679,8 @@
   },
   {
     "blurb": "A path dependency gives the package's name twice: `package = \"acme/lib\"` in your `[dependencies]`, and `name` under `[package]` in the manifest at that path. They must agree, so that what you asked for is what you get. A mismatch usually means the path is the wrong directory, or the package was renamed. Correct whichever is wrong.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Packages",
+    "categoryAnchor": "packages",
     "code": "bynk.package.name_mismatch",
     "constructs": [],
     "example": "[dependencies]\nmoney = { package = \"acme/money\", path = \"pkg/lib\" }   // ✗ `pkg/lib` is the package `acme/lib`\n\nmoney = { package = \"acme/lib\", path = \"pkg/lib\" }     // ✓ the name it declares",
@@ -4689,8 +4689,8 @@
   },
   {
     "blurb": null,
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Packages",
+    "categoryAnchor": "packages",
     "code": "bynk.package.not_fetched",
     "constructs": [],
     "example": null,
@@ -4699,8 +4699,8 @@
   },
   {
     "blurb": "A package lists in `exports` the units it offers to its users, and keeps the rest free to change, as a library keeps its internals. A unit that exists but is not listed is refused, so a consumer cannot come to rely on it. Use one of the exported units, or ask the package to export it. Leaving `exports` out shares every commons and adapter. A name the package does not declare at all is `bynk.package.unknown_unit`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Packages",
+    "categoryAnchor": "packages",
     "code": "bynk.package.unit_not_exported",
     "constructs": [],
     "example": "exports = [\"notify\"]      // in the package's `bynk.toml`\n\nuses lib.internal     // ✗ not in `exports`\n\nuses lib.notify       // ✓ an exported unit",
@@ -4709,8 +4709,8 @@
   },
   {
     "blurb": "A dependency is reached as `alias.unit`, where the unit is a commons or adapter the package declares. A name after the alias that matches none of them is refused, most often because it is misspelt. The diagnostic's note lists the units the package shares. A unit that exists but is not exported is `bynk.package.unit_not_exported`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Packages",
+    "categoryAnchor": "packages",
     "code": "bynk.package.unknown_unit",
     "constructs": [],
     "example": "commons notify          // in the package `acme/lib`\n\nuses lib.notifiy      // ✗ the package declares no `notifiy`\n\nuses lib.notify       // ✓",
@@ -4719,8 +4719,8 @@
   },
   {
     "blurb": null,
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Packages",
+    "categoryAnchor": "packages",
     "code": "bynk.package.unsafe_source",
     "constructs": [],
     "example": null,
@@ -4729,8 +4729,8 @@
   },
   {
     "blurb": "A dependency may not declare an `asset` or an `embed`, because the path would be resolved against the project that consumes it, whose `assets/` or `embeds/` folder is not the package's. Move the file into your own project, and have the package take its content as an argument.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Packages",
+    "categoryAnchor": "packages",
     "code": "bynk.package.unsupported_in_dependency",
     "constructs": [],
     "example": "commons board                           // in the package `acme/lib`\n\nasset style = \"assets/board.css\"        // ✗ a dependency cannot declare one\nfn sheet() -> String { style.url }\n\ncommons board\n\nfn sheet(url: String) -> String { url } // ✓ the project supplies the URL",
@@ -4739,8 +4739,8 @@
   },
   {
     "blurb": null,
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Packages",
+    "categoryAnchor": "packages",
     "code": "bynk.package.version_conflict",
     "constructs": [],
     "example": null,
@@ -5788,14 +5788,14 @@
     "summary": "`bynk.toml`'s `[unstable] allow` lists a path that names no standard-library unit, exported item or operation."
   },
   {
-    "blurb": null,
+    "blurb": "A `for all q: Quantity` property draws only valid values of `Quantity`, so a body that just asserts the type's refinement, `expect q > 0` over `Int where Positive`, cannot fail and proves nothing about your code. The compiler flags it. The check is narrow: it fires only when the body is that one `expect`, restating `Positive` or `NonNegative` over the bound value, so a near-copy may pass. Assert something about what your code does with the value, or delete the property.",
     "category": "Properties (generative tests)",
     "categoryAnchor": "properties-generative-tests",
     "code": "bynk.property.restates_refinement",
     "constructs": [
       "for_all"
     ],
-    "example": null,
+    "example": "// demo.bynk\ntype Quantity = Int where Positive\n\n// tests/demo.test.bynk\nfor all q: Quantity { expect q > 0 }            // ✗ the type already says this\nfor all q: Quantity { expect double(q) > q }    // ✓ a claim about `double`",
     "severity": "error",
     "summary": "A `property` merely re-checks a refinement its type already guarantees."
   },
@@ -5824,7 +5824,7 @@
     "summary": "A provider calls an agent handler that needs a capability the provider's `given` does not list."
   },
   {
-    "blurb": "A provider's `given` lists the capabilities it is built from, and the context builds providers in dependency order. A capability that depends on itself, directly or through other providers, has no order to be built in, so every provider on the cycle is reported. Break the cycle by removing the `given`, or by depending on a different capability. Dependencies on other contexts follow `consumes`, which has its own check, `bynk.context.consumes_cycle`.",
+    "blurb": "A provider's `given` lists the capabilities it is built from, and the context builds providers in dependency order. A capability that depends on itself, directly or through other providers, has no order to be built in, so every provider on the cycle is reported. Break the cycle: remove a `given` one side does not really need, move the part both need into a third capability that each depends on, or merge the two if they are one thing. Dependencies on other contexts follow `consumes`, which has its own check, `bynk.context.consumes_cycle`.",
     "category": "Providers",
     "categoryAnchor": "providers",
     "code": "bynk.provider.dependency_cycle",
@@ -6172,9 +6172,9 @@
     "summary": "`bynk.lock` locks a registry version that its registry withdrew (a takedown: yanked, and its archive deleted), and its tree isn't in the store."
   },
   {
-    "blurb": "A project installs one version of each npm package, so every adapter that `requires` a package must give the same range for it. Two adapters that ask for `jose` at `^4` and `^5` leave the build with no version that satisfies both, so the second is refused and names the first. Give both the same range. A package the toolchain itself pins, such as the one its own bindings use, must be required at that exact version.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "blurb": "A project installs one version of each npm package, so every adapter that `requires` a package must give the same range for it. Two adapters that ask for `jose` at `^4` and `^5` leave the build with no version that satisfies both, so the second is refused and names the first. Ranges are compared as written, so `^5` and `^5.0.0` conflict too. The same code reports one adapter that lists a package twice at different ranges. Give both the same range. A package the toolchain itself pins, such as the one its own bindings use, must be required at that exact version.",
+    "category": "npm requirements",
+    "categoryAnchor": "npm-requirements",
     "code": "bynk.requires.conflicting_range",
     "constructs": [
       "binding_decl"
@@ -6184,9 +6184,9 @@
     "summary": "Two adapter `binding … requires { … }` entries give different version ranges for one npm package."
   },
   {
-    "blurb": "An adapter in a git or registry dependency requires an npm package your project hasn't approved. A dependency's adapters bring their npm packages into your build's `package.json`, and the next `npm install` runs whatever those packages run; so an npm package from someone else's code enters only after you approve it once. The approval is one package at one range, recorded in `bynk.lock` (`approved = true`), so a changed range asks again. Your own adapters and path dependencies need no approval.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "blurb": "An adapter in a git or registry dependency requires an npm package your project hasn't approved. A dependency's adapters bring their npm packages into your build's `package.json`, and the next `npm install` runs whatever those packages run; so an npm package from someone else's code enters only after you approve it once. The approval is one package at one range, recorded in `bynk.lock` (`approved = true`), so a changed range asks again. Review the package (the note names the dependencies that brought it in), run `bynk approve jose`, and commit `bynk.lock`. Your own adapters and path dependencies need no approval.",
+    "category": "npm requirements",
+    "categoryAnchor": "npm-requirements",
     "code": "bynk.requires.unapproved",
     "constructs": [
       "binding_decl"
@@ -6197,8 +6197,8 @@
   },
   {
     "blurb": "An adapter's `requires` states the npm versions its binding is written against, and the build installs exactly what it says. `*`, `x`, `latest` and a range with no digit in it accept whatever version is newest on the day, so two builds of the same source can differ. Name a range that has a version in it, such as `^5.2.0`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "npm requirements",
+    "categoryAnchor": "npm-requirements",
     "code": "bynk.requires.unpinned_dependency",
     "constructs": [
       "binding_decl"
@@ -6950,8 +6950,8 @@
   },
   {
     "blurb": "Each storage annotation is for one kind of store: `@ttl` for a `Cache`, `@retain` for a `Log` and `@indexed` for a `Map`. On any other kind it has nothing to act on: a `Map` has no expiry, for one. Move the annotation to a field of the kind it belongs to, or change the field's kind if that is what you meant.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Agent storage",
+    "categoryAnchor": "agent-storage",
     "code": "bynk.store.annotation_kind_mismatch",
     "constructs": [],
     "example": "store sessions: Map[String, Int] @ttl(30.minutes)     // ✗ `@ttl` is for a `Cache`\n\nstore sessions: Cache[String, Int] @ttl(30.minutes)   // ✓",
@@ -6960,8 +6960,8 @@
   },
   {
     "blurb": "A storage annotation has a fixed set of kinds it applies to and a meaning that arrives in stages. `@bounded` is recognised on `Queue` and `Log`, but nothing acts on it yet, so it is refused rather than accepted and ignored. Leave it off. To limit a `Log`, use `@retain`, which drops entries older than a period. A known annotation on the wrong kind is `bynk.store.annotation_kind_mismatch`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Agent storage",
+    "categoryAnchor": "agent-storage",
     "code": "bynk.store.annotation_unsupported",
     "constructs": [],
     "example": "store trail: Log[Event] @bounded(100)     // ✗ `@bounded` is recognised but has no effect yet\n\nstore trail: Log[Event] @retain(30.days)   // ✓ keep 30 days of entries",
@@ -6970,8 +6970,8 @@
   },
   {
     "blurb": "A `Cache` entry expires, and every operation on it but `remove` reads the clock to decide whether an entry is still live. So a handler that uses a `Cache` must declare `given Clock`, the same way one that reads the time itself would; the dependency is explicit even though the body never names the clock. Add `given Clock` to the handler's signature.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Agent storage",
+    "categoryAnchor": "agent-storage",
     "code": "bynk.store.cache_needs_clock",
     "constructs": [],
     "example": "consumes bynk { Clock }\n\nstore live: Cache[String, Int] @ttl(5.minutes)\n\non call touch() -> Effect[()] {\n    let _ <- live.put(\"a\", 1)   // ✗ expiry reads the clock, which the handler does not declare\n    Effect.pure(())\n}\n\non call touch() -> Effect[()] given Clock {   // ✓ declare the clock\n    let _ <- live.put(\"a\", 1)\n    Effect.pure(())\n}",
@@ -6980,8 +6980,8 @@
   },
   {
     "blurb": "A `Cache` is a keyed store whose entries expire, so it needs `@ttl(<duration>)`, how long an entry lives. Without an expiry it would only be a `Map`. The argument must be a `Duration` literal such as `5.minutes`; a bare number (`@ttl(5)`) or a computed value is refused too, because the lifetime has to be known when the program compiles. Add the annotation, or declare a `Map` if entries should be kept until removed.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Agent storage",
+    "categoryAnchor": "agent-storage",
     "code": "bynk.store.cache_ttl_required",
     "constructs": [],
     "example": "store live: Cache[String, Int]   // ✗ no lifetime for the entries\n\nstore live: Cache[String, Int] @ttl(5.minutes)   // ✓\n\nconst Life: Duration = 5.minutes\nstore quick: Cache[String, Int] @ttl(Life)   // ✓ a `Duration` constant bound to a literal",
@@ -6990,8 +6990,8 @@
   },
   {
     "blurb": "Each storage kind takes a fixed number of type arguments: `Cell[T]`, `Set[T]` and `Log[T]` take one, and `Map[K, V]` and `Cache[K, V]` take two. The checker reads the arguments by position, so a wrong count cannot be guessed at and is refused where the field is declared. Give the kind the arguments it takes. To keep a key with a value use `Map`, and to hold a single value use `Cell[T]`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Agent storage",
+    "categoryAnchor": "agent-storage",
     "code": "bynk.store.kind_arity",
     "constructs": [],
     "example": "store total: Cell[String, Int]   // ✗ a `Cell` takes one type argument\n\nstore total: Cell[Int]   // ✓ one",
@@ -7000,8 +7000,8 @@
   },
   {
     "blurb": "`Queue` is a recognised storage kind but is not yet implemented. The working kinds are `Cell`, `Map`, `Set`, `Log` and `Cache`, so a `store` of any other known kind is refused. Use one of them: an append-only `Log` is the closest to a queue. A name that is no storage kind at all is `bynk.store.unknown_kind`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Agent storage",
+    "categoryAnchor": "agent-storage",
     "code": "bynk.store.kind_unsupported",
     "constructs": [],
     "example": "store pending: Queue[Event]                 // ✗ not yet supported\n\nstore pending: Log[Event] @retain(30.days)   // ✓ an append-only sequence",
@@ -7010,8 +7010,8 @@
   },
   {
     "blurb": "`Log.append` stamps each entry with the time it was written, so it reads the clock and the handler has to declare `given Clock`. The window reads (`since`, `before`, `between`) take explicit `Instant`s and need no clock. Add `given Clock` to the handler that appends.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Agent storage",
+    "categoryAnchor": "agent-storage",
     "code": "bynk.store.log_needs_clock",
     "constructs": [],
     "example": "consumes bynk { Clock }\n\nstore trail: Log[String]\n\non call opened() -> Effect[()] {\n    let _ <- trail.append(\"opened\")   // ✗ the stamp reads the clock\n    Effect.pure(())\n}\n\non call opened() -> Effect[()] given Clock {   // ✓ declare the clock\n    let _ <- trail.append(\"opened\")\n    Effect.pure(())\n}",
@@ -7020,8 +7020,8 @@
   },
   {
     "blurb": "A store `Map` or `Cache` key, or a store `Set` element, must be `String`, `Int` or a refined or opaque type over them. A store collection is saved as a JSON object keyed by the key's string form, and a record has no stable string form, so it cannot be a key (a composite key is not supported yet). Key by one of the record's id fields, or by an enum's name as a `String`. A value `Map` or `Set` follows a wider rule, `bynk.types.not_keyable`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Agent storage",
+    "categoryAnchor": "agent-storage",
     "code": "bynk.store.unkeyable_key",
     "constructs": [],
     "example": "type Point = { x: Int, y: Int }\n\nstore cells: Map[Point, Int]   // ✗ a record has no stable string key\n\nstore cells: Map[String, Int]   // ✓ key by a string, such as an id",
@@ -7030,8 +7030,8 @@
   },
   {
     "blurb": "A `store` field takes one of four annotations: `@indexed`, `@ttl`, `@retain` and `@bounded`. The set is closed, so a name outside it, usually a misspelling or one borrowed from another system, is refused rather than ignored. Use the annotation that says what you mean: `@retain` for how long a `Log` keeps entries, `@ttl` for a `Cache`. A known one on the wrong kind is `bynk.store.annotation_kind_mismatch`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Agent storage",
+    "categoryAnchor": "agent-storage",
     "code": "bynk.store.unknown_annotation",
     "constructs": [],
     "example": "store audit: Log[String] @keep(7.days)     // ✗ not a storage annotation\n\nstore audit: Log[String] @retain(7.days)   // ✓ how long a `Log` keeps entries",
@@ -7040,8 +7040,8 @@
   },
   {
     "blurb": "The type of a `store` field names a storage kind, which says how the state is persisted and which operations it has; it is not an ordinary type. The kinds are `Cell`, `Map`, `Set`, `Log` and `Cache`; `Queue` is reserved but not yet supported (`bynk.store.kind_unsupported`). A `List` or a record is not one, because nothing would say how to read or update it atomically. Pick the kind that matches how you use the data: `Set` for membership, `Map` for lookup by key, `Log` to append, `Cell` for one value.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Agent storage",
+    "categoryAnchor": "agent-storage",
     "code": "bynk.store.unknown_kind",
     "constructs": [],
     "example": "store tags: List[String]   // ✗ `List` is not a storage kind\n\nstore tags: Set[String]   // ✓ a storage kind",
@@ -7050,8 +7050,8 @@
   },
   {
     "blurb": "A `store Map` field is read as a lazy query through exactly three accessors: `.entries` (each a `MapEntry` with `.key` and `.value`), `.keys` and `.values`. Any other name after the field is refused. Its effectful operations, such as `put` and `get`, are method calls, not accessors. Use one of the three, or call an operation. A wrong method name on a store is `bynk.store.unknown_op`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Agent storage",
+    "categoryAnchor": "agent-storage",
     "code": "bynk.store.unknown_map_accessor",
     "constructs": [],
     "example": "store items: Map[String, Item]\n\nitems.names.collect()   // ✗ a `Map` has no `.names`\n\nitems.keys.collect()   // ✓ the keys, as a query",
@@ -7060,8 +7060,8 @@
   },
   {
     "blurb": "A `store` field's methods are its storage operations, which are effectful (await with `<-`), and each kind has a fixed set. `Map` and `Cache` take `put`, `get`, `update`, `upsert`, `remove`, `contains` and `size` (a `Map` also takes query operations); `Set` takes `add`, `remove`, `contains` and `size`; a `Cell` takes only `update`, being read by name and written with `:=`; a `Log` takes `append` and lazy query reads. Any other name is refused, even one the same type has as a plain value. For a read-modify-write use `update`, or `upsert` when the key may be absent. A wrong key query (`.entries`, `.keys`, `.values`) is `bynk.store.unknown_map_accessor`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Agent storage",
+    "categoryAnchor": "agent-storage",
     "code": "bynk.store.unknown_op",
     "constructs": [],
     "example": "let _ <- counts.increment(\"k\")   // ✗ a `Map` store has no `increment`\n\nlet _ <- counts.upsert(\"k\", 1, (v) => v + 1)   // ✓ add one, starting from 1",
@@ -7070,8 +7070,8 @@
   },
   {
     "blurb": "`stub … returns <value> after <delay>` makes the stubbed call complete only once the harness clock has advanced by that delay, so the delay must be a `Duration`, such as `3.seconds`. A bare number has no unit, so it is refused rather than guessed at as milliseconds or seconds.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Stubs",
+    "categoryAnchor": "stubs",
     "code": "bynk.stub.after_type",
     "constructs": [],
     "example": "// demo/meter.bynk\ncapability Meter { … }\n\n// tests/meter.test.bynk\nstub Meter.read() returns 7 after 3           // ✗ no unit\nstub Meter.read() returns 7 after 3.seconds   // ✓",
@@ -7080,8 +7080,8 @@
   },
   {
     "blurb": "At the `system` tier each context runs as the Worker it deploys as, and that Worker builds its own capability providers, so there is no seam for a `stub` to override. A `stub` there would be accepted and then ignored, so it is refused. Move the case to a suite below `system`, where a `stub` replaces the seam, or remove the stub and test the real provider.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Stubs",
+    "categoryAnchor": "stubs",
     "code": "bynk.stub.at_system",
     "constructs": [
       "stub_clause"
@@ -7092,8 +7092,8 @@
   },
   {
     "blurb": "`returns each […]` gives one outcome per call, in order, and the last outcome repeats once the list runs out. An empty list has no outcome to repeat, so the first call would have nothing to return. List at least one. To return an empty list as a single value, write `returns []`, without `each`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Stubs",
+    "categoryAnchor": "stubs",
     "code": "bynk.stub.bad_sequence",
     "constructs": [],
     "example": "// demo/meter.bynk\ncapability Meter { … }\n\n// tests/meter.test.bynk\nstub Meter.read() returns each []    // ✗ no outcomes\nstub Meter.read() returns each [7]   // ✓ at least one",
@@ -7102,8 +7102,8 @@
   },
   {
     "blurb": "A `stub` gives an operation a fixed answer, but an operation with its own type parameter, `fn dedup[T](…)`, answers in whatever type the caller names, and a fixed value cannot be that. Such an operation cannot be stubbed. Test through the capability's real provider, and stub the other, non-generic operations of the capability if you need to.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Stubs",
+    "categoryAnchor": "stubs",
     "code": "bynk.stub.generic_op",
     "constructs": [],
     "example": "// tests/orders.test.bynk\nstub Idempotency.dedup(_) returns None   // ✗ `dedup` has its own type parameter\n\ncase \"reserve returns the cached value\" {\n    let result <- reserve.call()   // ✓ the real provider answers\n    expect result is None\n}",
@@ -7112,8 +7112,8 @@
   },
   {
     "blurb": "A `stub` substitutes one of the capabilities the unit under test depends on: one the context declares, or reaches through a `consumes`. Any other name, including a misspelt one, leaves nothing to substitute. A commons has no capabilities, so it cannot be stubbed at all. Name a capability of the target, or add the `consumes` it needs. See `bynk.stub.unknown_op` for a wrong operation.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Stubs",
+    "categoryAnchor": "stubs",
     "code": "bynk.stub.not_a_seam",
     "constructs": [],
     "example": "// demo/meter.bynk\ncapability Meter { … }\n\n// tests/meter.test.bynk\nstub Gauge.read() returns 7   // ✗ the context has no `Gauge`\nstub Meter.read() returns 7   // ✓",
@@ -7122,8 +7122,8 @@
   },
   {
     "blurb": "A `stub … returns <value>` stands in for a real provider, so the value must have the type the operation declares, as the real result would. `Meter.read` yields an `Int`, so it returns `7`, not a string; the `Effect` is supplied for you. Change the value, or stub the operation you meant. To inject a failure, write `fails` instead of a value.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Stubs",
+    "categoryAnchor": "stubs",
     "code": "bynk.stub.rhs_type",
     "constructs": [],
     "example": "// demo/meter.bynk\ncapability Meter { … }\n\n// tests/meter.test.bynk\nstub Meter.read() returns \"seven\"   // ✗ a String, not an Int\nstub Meter.read() returns 7         // ✓",
@@ -7132,8 +7132,8 @@
   },
   {
     "blurb": "`stub Cap.op(…)` overrides one operation of a capability, so `op` must be declared by that capability. A misspelt or renamed operation matches nothing, so the stub is refused instead of leaving the default provider in place unannounced. Use the operation name the capability declares. See `bynk.stub.not_a_seam` when the capability itself is the wrong one.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Stubs",
+    "categoryAnchor": "stubs",
     "code": "bynk.stub.unknown_op",
     "constructs": [],
     "example": "// demo/meter.bynk\ncapability Meter { … }\n\n// tests/meter.test.bynk\nstub Meter.reed() returns 7   // ✗ Meter has no `reed`\nstub Meter.read() returns 7   // ✓",
@@ -7344,8 +7344,8 @@
   },
   {
     "blurb": "An actor that declares an `identity` stands for one particular caller, and the handler reads that identity. A case that acts as the actor must therefore say which caller, as in `by User(\"bob\")`; a bare `by User` leaves the handler nothing to read. A handler that binds its caller (`by c: Caller`) wants the calling context's name the same way. Add the identity. The reverse mistake is `bynk.test.actor_no_identity`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Tests",
+    "categoryAnchor": "tests",
     "code": "bynk.test.actor_identity_required",
     "constructs": [
       "case"
@@ -7356,8 +7356,8 @@
   },
   {
     "blurb": "A case supplies an identity only when the actor has one to give. An actor that declares no `identity`, and the failure principals `Nobody`, `Forged`, `Stale` and `Expired`, which present a missing or bad credential and so no verified caller, take no argument. Write `by Nobody`, not `by Nobody(\"bob\")`. For an actor that does declare an identity and is given none, see `bynk.test.actor_identity_required`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Tests",
+    "categoryAnchor": "tests",
     "code": "bynk.test.actor_no_identity",
     "constructs": [
       "case"
@@ -7368,8 +7368,8 @@
   },
   {
     "blurb": "`advance` moves the harness clock, the single time source a test owns, so it names `Clock` and nothing else. No other capability has virtual time to move. To shape what another capability returns, use a `stub`. The clock only moves forward.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Tests",
+    "categoryAnchor": "tests",
     "code": "bynk.test.advance_not_clock",
     "constructs": [
       "advance_stmt"
@@ -7380,8 +7380,8 @@
   },
   {
     "blurb": "`advance Clock by <amount>` moves the harness clock forward by a `Duration`. A bare number does not say what unit it counts, so it is refused. Write a duration literal such as `5.minutes`. See `bynk.test.advance_not_clock` for naming a capability other than `Clock`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Tests",
+    "categoryAnchor": "tests",
     "code": "bynk.test.advance_not_duration",
     "constructs": [
       "advance_stmt"
@@ -7392,8 +7392,8 @@
   },
   {
     "blurb": "`advance Clock by …` moves the harness clock, which only a `case` owns. A `property` runs its body once per generated input and has no clock of its own, and non-test code reads real time. Put the time-dependent step in a `case`. `bynk.test.advance_not_clock` and `bynk.test.advance_not_duration` cover the other ways to get `advance` wrong.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Tests",
+    "categoryAnchor": "tests",
     "code": "bynk.test.advance_outside_case",
     "constructs": [
       "advance_stmt"
@@ -7404,8 +7404,8 @@
   },
   {
     "blurb": "An asset is served by the platform before the Worker runs, and only to `GET`: it answers every other method with `405`. A case fetches one with `api.GET(asset)`, and a different method is refused, since the answer would be the platform's `405` and nothing your code decides. Use `GET`, and pass the asset alone. A `by` clause on the fetch is `bynk.test.principal_on_asset`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Tests",
+    "categoryAnchor": "tests",
     "code": "bynk.test.asset_address_method",
     "constructs": [
       "case"
@@ -7416,8 +7416,8 @@
   },
   {
     "blurb": "A service with an `on call` handler is internal to a deployment: it has no public route, and a `system` case can only send requests through the Worker's front door. So `svc.call(…)` is refused in one. Call it at `unit` or `integration`, or drive an http route that reaches it. For the event equivalent, see `bynk.test.event_needs_in_process`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Tests",
+    "categoryAnchor": "tests",
     "code": "bynk.test.call_needs_in_process",
     "constructs": [
       "case"
@@ -7428,8 +7428,8 @@
   },
   {
     "blurb": null,
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Tests",
+    "categoryAnchor": "tests",
     "code": "bynk.test.credential_needs_system",
     "constructs": [
       "case"
@@ -7440,8 +7440,8 @@
   },
   {
     "blurb": "`svc.event(e)` hands an event straight to a subscriber. At `system`, an event reaches a subscriber only through its publisher's fan-out across the deployed Workers, so there is no direct delivery to make. Drive the handler that publishes the event, or deliver the event at `unit` or `integration`. For the `on call` equivalent, see `bynk.test.call_needs_in_process`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Tests",
+    "categoryAnchor": "tests",
     "code": "bynk.test.event_needs_in_process",
     "constructs": [
       "case"
@@ -7452,8 +7452,8 @@
   },
   {
     "blurb": "`svc.event(e)` delivers an event through the handler the service subscribes with, so it takes the one event named in the service's `from Events(E)` header. Delivering a different event would test a path the service does not have. Pass the subscribed event, or test the service that does subscribe to the one you meant.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Tests",
+    "categoryAnchor": "tests",
     "code": "bynk.test.event_not_subscribed",
     "constructs": [
       "case"
@@ -7464,8 +7464,8 @@
   },
   {
     "blurb": "`svc.event(e)` delivers an event in a default envelope, whose `publisherId` is the context that publishes the event to the target: its own, or the one context it consumes that declares it. When two consumed contexts both declare the event there is no single publisher to name, so the case must build the envelope itself. Pass `svc.event(e, env)`, with an `EventEnvelope` whose `publisherId` names the one you mean; the target must consume `EventEnvelope` from `bynk`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Tests",
+    "categoryAnchor": "tests",
     "code": "bynk.test.event_publisher_ambiguous",
     "constructs": [
       "case"
@@ -7476,8 +7476,8 @@
   },
   {
     "blurb": "`by Expired` sends an expired token, so it needs a route whose seam checks one: a `Bearer` or `Oidc` actor. A public route, or one guarded by a `Signature` actor, has no token to expire; for a `Signature` route `by Stale` sends a stale signature. Drive a route guarded by a `Bearer` or `Oidc` actor. See `bynk.test.nobody_needs_secured_route` for the same limit on `Nobody`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Tests",
+    "categoryAnchor": "tests",
     "code": "bynk.test.expired_needs_bearer_route",
     "constructs": [
       "case"
@@ -7488,8 +7488,8 @@
   },
   {
     "blurb": "A case sends a credential only through its `by` clause: the driver builds the `Authorization` header (or the signature headers) from the actor it acts as. Sending an `Authorization` header as an extra request header, in `RequestHeaders.of`, would give the request two competing credentials, so it is refused. Choose the actor with `by`, and keep `RequestHeaders` for other headers.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Tests",
+    "categoryAnchor": "tests",
     "code": "bynk.test.extra_headers_authorization",
     "constructs": [
       "case"
@@ -7500,8 +7500,8 @@
   },
   {
     "blurb": "`expect <call> faults` claims that a handler throws. At `system` a fault reaches the case as an error response from the deployed Worker, not a throw, so claim it at `unit` or `integration`, or assert the response. A claim driven `by Nobody`, `Forged` or `Stale` fails at every tier: only a `system` case reaches the auth seam that refuses the request. Assert `Rejected(Unauthorized)` in a `system` case instead.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Tests",
+    "categoryAnchor": "tests",
     "code": "bynk.test.faults_needs_in_process",
     "constructs": [
       "case"
@@ -7512,8 +7512,8 @@
   },
   {
     "blurb": "`by Forged` and `by Stale` send a bad credential to a real auth seam, so the route must have a seam that can refuse it. `Forged` needs a `Signature`, `Bearer` or `Oidc` actor. `Stale` needs a `Signature` actor, since only a signature carries a timestamp to age. On any other route there is nothing to refuse and the case would test nothing, so it is refused. Drive a route with the right seam. See `bynk.test.stale_needs_timestamp` for a `Signature` actor with no timestamp.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Tests",
+    "categoryAnchor": "tests",
     "code": "bynk.test.forged_needs_signature_route",
     "constructs": [
       "case"
@@ -7524,8 +7524,8 @@
   },
   {
     "blurb": "`by Forged`, `by Stale` and the other bad-credential principals send a forged or out-of-date credential to the real auth seam, which only a `system` case reaches. In process the seam is skipped and the identity is simply given, so there is nothing to refuse. Move the case to `system` with `as system`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Tests",
+    "categoryAnchor": "tests",
     "code": "bynk.test.forged_needs_system",
     "constructs": [
       "case"
@@ -7536,8 +7536,8 @@
   },
   {
     "blurb": "`by NoSubject` sends two correctly signed, unexpired tokens whose `sub` the seam must refuse: one empty, one missing. Only an `Oidc` actor's seam is driven with these tokens, so on any other route, a `Bearer` or `Signature` one or a public one, the case is refused. Drive a route guarded by an `Oidc` actor. The same holds for `bynk.test.wrong_issuer_needs_oidc_route`, `bynk.test.wrong_audience_needs_oidc_route` and `bynk.test.wrong_algorithm_needs_oidc_route`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Tests",
+    "categoryAnchor": "tests",
     "code": "bynk.test.no_subject_needs_oidc_route",
     "constructs": [
       "case"
@@ -7548,8 +7548,8 @@
   },
   {
     "blurb": "`by Nobody` sends no credential so that a route's auth seam answers `401`. A public route, guarded by `Visitor`, has no seam that refuses anyone, so the case would test nothing and is refused. Use `by Nobody` on a route guarded by a `Bearer`, `Oidc` or `Signature` actor, and act as `Visitor` on a public one. For the other failure principals, see `bynk.test.expired_needs_bearer_route`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Tests",
+    "categoryAnchor": "tests",
     "code": "bynk.test.nobody_needs_secured_route",
     "constructs": [
       "case"
@@ -7560,8 +7560,8 @@
   },
   {
     "blurb": "`D1.peek` reads a D1 database, so it names a capability derived from `D1` (`capability Orders = D1`). A capability on another binding, such as `Kv`, has no database for it to read.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Tests",
+    "categoryAnchor": "tests",
     "code": "bynk.test.peek_not_a_database",
     "constructs": [
       "case"
@@ -7572,8 +7572,8 @@
   },
   {
     "blurb": "`D1.peek(<participant>.<Capability>)` stands as the value of a `let`, and the case reads through the handle that binds. A `D1.peek` anywhere else, as an argument or the receiver of a call, has no handle to keep.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Tests",
+    "categoryAnchor": "tests",
     "code": "bynk.test.peek_not_bound",
     "constructs": [
       "case"
@@ -7584,8 +7584,8 @@
   },
   {
     "blurb": "`D1.peek(<participant>.<Capability>)` gives an `integration` or `system` case a read-only handle on a participant's test database. Only those tiers stand one up, so the handle is refused in a `unit` case, a `property`, and in the app's own code. A `unit` case reads the capability it stubs.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Tests",
+    "categoryAnchor": "tests",
     "code": "bynk.test.peek_outside_case",
     "constructs": [
       "case"
@@ -7596,8 +7596,8 @@
   },
   {
     "blurb": "`D1.peek` names a capability as `<participant>.<Capability>`, where the participant is one of the suite's and declares the capability. The participant or the capability is not one.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Tests",
+    "categoryAnchor": "tests",
     "code": "bynk.test.peek_unknown_capability",
     "constructs": [
       "case"
@@ -7608,8 +7608,8 @@
   },
   {
     "blurb": "A `D1.peek` handle is read-only: it offers `all`, `first`, `select[T]` and `firstAs[T]`, and a statement that would write (`INSERT`, `UPDATE`, `DELETE`, a schema change) is refused, as is `run` or `batch`. A case makes the app write by driving the app.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Tests",
+    "categoryAnchor": "tests",
     "code": "bynk.test.peek_write",
     "constructs": [
       "case"
@@ -7620,8 +7620,8 @@
   },
   {
     "blurb": "`TokenClaims.of([…])` supplies the claims an `Oidc` actor's token carries, which the handler reads and the actor's rules check. A `Bearer` actor's token holds an identity and nothing else, so there is no claim set to fill, and the argument is refused. Drop the claims, or test a route guarded by an `Oidc` actor. See `bynk.test.actor_no_identity` for the other extra argument.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Tests",
+    "categoryAnchor": "tests",
     "code": "bynk.test.principal_claims_not_oidc",
     "constructs": [],
     "example": "// tests/api.test.bynk\nlet r <- api.GET(\"/me\") by User(\"bob\", TokenClaims.of([\"repository: acme/money\"]))   // ✗ a Bearer actor\nlet r <- api.GET(\"/me\") by User(\"bob\")                                               // ✓",
@@ -7630,8 +7630,8 @@
   },
   {
     "blurb": "A handler guarded by an actor runs as that actor, so a case must act as it, with the identity type it declares. `by Visitor` carries no identity, so it cannot stand in for `User`, and an actor outside the handler's `by` sum is no member of it. Act as the actor the handler names. To exercise an unauthenticated request instead, use `by Nobody` in a `system` case.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Tests",
+    "categoryAnchor": "tests",
     "code": "bynk.test.principal_identity_mismatch",
     "constructs": [
       "case"
@@ -7642,8 +7642,8 @@
   },
   {
     "blurb": "An asset is public: the platform serves it before the Worker runs, so no actor's seam ever sees the request. A `by` clause on an asset fetch would name a principal that nothing checks, so it is refused. Drop the `by`. To test who may reach something, drive a route, not an asset. A method other than `GET` is `bynk.test.asset_address_method`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Tests",
+    "categoryAnchor": "tests",
     "code": "bynk.test.principal_on_asset",
     "constructs": [
       "case"
@@ -7654,8 +7654,8 @@
   },
   {
     "blurb": "A wrong-method test, such as `DELETE` on a path declared only for `GET`, expects the `405` the router returns before any handler is chosen. No handler runs, so there is no actor to act as, and a `by` clause would suggest otherwise. Drop the `by` clause. To test who may call a route, address a method it does declare.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Tests",
+    "categoryAnchor": "tests",
     "code": "bynk.test.principal_on_wrong_method",
     "constructs": [
       "case"
@@ -7666,8 +7666,8 @@
   },
   {
     "blurb": "A handler declared `by u: User` runs as a verified actor, and a `case` has no real caller, so it must say who is calling with a call-site `by`. The same applies to a handler guarded by an actor sum: name one of its members. Append `by <Actor>(<identity>)` to the call.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Tests",
+    "categoryAnchor": "tests",
     "code": "bynk.test.principal_required",
     "constructs": [
       "case"
@@ -7678,8 +7678,8 @@
   },
   {
     "blurb": null,
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Tests",
+    "categoryAnchor": "tests",
     "code": "bynk.test.remote_clock_dependent",
     "constructs": [
       "case"
@@ -7690,8 +7690,8 @@
   },
   {
     "blurb": null,
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Tests",
+    "categoryAnchor": "tests",
     "code": "bynk.test.remote_unsupported_advance",
     "constructs": [
       "case"
@@ -7702,8 +7702,8 @@
   },
   {
     "blurb": null,
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Tests",
+    "categoryAnchor": "tests",
     "code": "bynk.test.remote_unsupported_asset",
     "constructs": [
       "case"
@@ -7714,8 +7714,8 @@
   },
   {
     "blurb": null,
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Tests",
+    "categoryAnchor": "tests",
     "code": "bynk.test.remote_unsupported_call",
     "constructs": [
       "case"
@@ -7726,8 +7726,8 @@
   },
   {
     "blurb": null,
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Tests",
+    "categoryAnchor": "tests",
     "code": "bynk.test.remote_unsupported_env",
     "constructs": [
       "case"
@@ -7738,8 +7738,8 @@
   },
   {
     "blurb": null,
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Tests",
+    "categoryAnchor": "tests",
     "code": "bynk.test.remote_unsupported_peek",
     "constructs": [
       "case"
@@ -7750,8 +7750,8 @@
   },
   {
     "blurb": null,
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Tests",
+    "categoryAnchor": "tests",
     "code": "bynk.test.remote_unsupported_queue",
     "constructs": [
       "case"
@@ -7762,8 +7762,8 @@
   },
   {
     "blurb": null,
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Tests",
+    "categoryAnchor": "tests",
     "code": "bynk.test.remote_unsupported_schedule",
     "constructs": [
       "case"
@@ -7774,8 +7774,8 @@
   },
   {
     "blurb": "A test addresses an http route by method and route pattern, as in `api.POST(\"/items\", body)`. The first argument must be that pattern as a string literal, so a number or a variable is refused. The same code covers other addresses used the wrong way, such as fetching an asset through a service that is not `from http`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Tests",
+    "categoryAnchor": "tests",
     "code": "bynk.test.service_bad_address",
     "constructs": [
       "case"
@@ -7786,8 +7786,8 @@
   },
   {
     "blurb": "`svc.call(…)` in a test runs the service's `on call` handler, so it takes that handler's parameters, and the number of arguments is checked as for any call. Add or remove arguments to match the handler. The asset address, `svc.GET(asset)`, takes the asset alone, and this code covers extra arguments there too.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Tests",
+    "categoryAnchor": "tests",
     "code": "bynk.test.service_call_arity",
     "constructs": [
       "case"
@@ -7798,8 +7798,8 @@
   },
   {
     "blurb": "A case reaches a service through the address its protocol has. `svc.call(…)` runs an `on call` handler, so it needs one; a `from http` service is driven by route (`api.POST(\"/items\", body)`), a `from cron` service by its schedule, a `from queue` service by message. Use the address the service has. The Book's table of addresses lists each.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Tests",
+    "categoryAnchor": "tests",
     "code": "bynk.test.service_no_call_handler",
     "constructs": [
       "case"
@@ -7810,8 +7810,8 @@
   },
   {
     "blurb": "A case addresses an http route by the pattern its handler declares, `\"/items\"`, not a concrete URL, and a cron or queue service by its own address. A path that no route in the service declares, for any method, is refused. To test the `405` for a wrong method, use a declared path with a method it lacks.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Tests",
+    "categoryAnchor": "tests",
     "code": "bynk.test.service_unknown_route",
     "constructs": [
       "case"
@@ -7822,8 +7822,8 @@
   },
   {
     "blurb": null,
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Tests",
+    "categoryAnchor": "tests",
     "code": "bynk.test.smoke_undeclared_status",
     "constructs": [
       "case"
@@ -7834,8 +7834,8 @@
   },
   {
     "blurb": "A snapshot is stored under its case and its name, so each `matches snapshot` in one case needs a name of its own. Two with the same name would compare against, and update, the same stored value. Give the repeat a distinct name.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Tests",
+    "categoryAnchor": "tests",
     "code": "bynk.test.snapshot_duplicate_name",
     "constructs": [
       "snapshot_expr"
@@ -7846,8 +7846,8 @@
   },
   {
     "blurb": "A snapshot is keyed by its case and name, so it holds one value. A `property` runs its body once for each generated input, so there is no single value to store. Snapshot a fixed value in a `case`, and let the property assert what holds for every input.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Tests",
+    "categoryAnchor": "tests",
     "code": "bynk.test.snapshot_in_property",
     "constructs": [
       "snapshot_expr"
@@ -7858,8 +7858,8 @@
   },
   {
     "blurb": "A snapshot is stored under its name, so the name must be a string literal: the compiler then knows every snapshot a suite takes. A variable or other expression is refused. Write the name as a literal.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Tests",
+    "categoryAnchor": "tests",
     "code": "bynk.test.snapshot_name_not_literal",
     "constructs": [
       "snapshot_expr"
@@ -7870,8 +7870,8 @@
   },
   {
     "blurb": "A snapshot is stored in a file beside its unit suite and compared by the unit harness, so `matches snapshot` works only in a unit-tier `case` of a suite that tests a unit. A `system` case, or an integration or system suite, has no store to compare against. Take the snapshot in a unit case. See `bynk.test.snapshot_in_property` for the other place it is refused.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Tests",
+    "categoryAnchor": "tests",
     "code": "bynk.test.snapshot_needs_unit_suite",
     "constructs": [
       "snapshot_expr"
@@ -7882,8 +7882,8 @@
   },
   {
     "blurb": "A snapshot stores the value as the JSON text `Json.encode` produces, so the value must be `Codable`: base types, named types and the built-in containers over them. A `Stream`, a function, an `Effect` or `()` has no such text. Snapshot a `Codable` value instead, such as a list.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Tests",
+    "categoryAnchor": "tests",
     "code": "bynk.test.snapshot_not_codable",
     "constructs": [
       "snapshot_expr"
@@ -7894,8 +7894,8 @@
   },
   {
     "blurb": "A `Signature` actor refuses a stale request by reading a timestamp header and comparing it with a `tolerance`. `by Stale` signs a request in the past, so it means something only when the actor declares both; without them the seam has no window to refuse it by, and the case would test nothing. Add `timestamp = \"<Header>\"` and `tolerance = <seconds>` to the actor, or test the signature itself with `by Forged`. On a route with no `Signature` actor, see `bynk.test.forged_needs_signature_route`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Tests",
+    "categoryAnchor": "tests",
     "code": "bynk.test.stale_needs_timestamp",
     "constructs": [
       "case"
@@ -7906,8 +7906,8 @@
   },
   {
     "blurb": "At `system` the driver mints an `Oidc` actor's token itself, writing its claims from the `\"name: value\"` lines of the `TokenClaims.of([…])` in the `by` clause. A `TokenClaims` held in a variable is opaque: it can be read with `get` and `has`, but its lines cannot be recovered, so the driver has nothing to mint from and the case is refused rather than sent with no claims. Write `TokenClaims.of([…])` in the principal, or move the case to `integration`, where the handler is given the value as it is.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Tests",
+    "categoryAnchor": "tests",
     "code": "bynk.test.system_claims_need_literal",
     "constructs": [
       "case"
@@ -7918,8 +7918,8 @@
   },
   {
     "blurb": "A call-site `by <Actor>` makes the case act as that actor, so it must name an `actor` the target context declares, or one of the prelude actors such as `Visitor` and `Caller`. Any other name, often a misspelling, has no identity to supply. Correct the name or declare the actor.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Tests",
+    "categoryAnchor": "tests",
     "code": "bynk.test.unknown_actor",
     "constructs": [
       "case"
@@ -7930,8 +7930,8 @@
   },
   {
     "blurb": "`Wire(…)` delivers raw text to an http body or path segment. A queue message, a cron tick, an `on call` or an event has no raw text form: it is a typed value, and `Wire` would hand it to a typed decoder as a string and fail confusingly at run time. Pass the typed value. To drive an http route with raw text, see `bynk.test.wire_needs_system`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Tests",
+    "categoryAnchor": "tests",
     "code": "bynk.test.wire_http_only",
     "constructs": [
       "case"
@@ -7942,8 +7942,8 @@
   },
   {
     "blurb": "`Wire(…)` hands raw text to the real boundary, before any decoding, so that a case can check what the boundary refuses. Only a `system` case has a real boundary: below it the handler is called directly, and the text would go in unchecked. Promote the case with `as system`, or pass a typed value instead. For other addresses, see `bynk.test.wire_http_only`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Tests",
+    "categoryAnchor": "tests",
     "code": "bynk.test.wire_needs_system",
     "constructs": [
       "case"
@@ -7954,8 +7954,8 @@
   },
   {
     "blurb": "`by WrongAlgorithm` sends two otherwise valid tokens under an algorithm the seam must refuse: one with `alg: none`, and one `HS256`-signed with the JWKS public key as the secret. Only an `Oidc` actor's seam is driven with these tokens, so on any other route, a `Bearer` or `Signature` one or a public one, the case is refused. Drive a route guarded by an `Oidc` actor. The same holds for `bynk.test.wrong_issuer_needs_oidc_route`, `bynk.test.wrong_audience_needs_oidc_route` and `bynk.test.no_subject_needs_oidc_route`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Tests",
+    "categoryAnchor": "tests",
     "code": "bynk.test.wrong_algorithm_needs_oidc_route",
     "constructs": [
       "case"
@@ -7966,8 +7966,8 @@
   },
   {
     "blurb": "`by WrongAudience` sends a correctly signed, unexpired token whose `aud` is not the actor's audience. Only an `Oidc` actor has an audience to check: a `Bearer` token has none, and a `Signature` or public route has no token. On any other route the case is refused. Drive a route guarded by an `Oidc` actor. The same holds for `bynk.test.wrong_issuer_needs_oidc_route`, `bynk.test.wrong_algorithm_needs_oidc_route` and `bynk.test.no_subject_needs_oidc_route`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Tests",
+    "categoryAnchor": "tests",
     "code": "bynk.test.wrong_audience_needs_oidc_route",
     "constructs": [
       "case"
@@ -7978,8 +7978,8 @@
   },
   {
     "blurb": "`by WrongIssuer` sends a correctly signed, unexpired token whose `iss` is not the actor's issuer. Only an `Oidc` actor has an issuer to check: a `Bearer` token has none, and a `Signature` or public route has no token. On any other route the case is refused. Drive a route guarded by an `Oidc` actor. The same holds for `bynk.test.wrong_audience_needs_oidc_route`, `bynk.test.wrong_algorithm_needs_oidc_route` and `bynk.test.no_subject_needs_oidc_route`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Tests",
+    "categoryAnchor": "tests",
     "code": "bynk.test.wrong_issuer_needs_oidc_route",
     "constructs": [
       "case"
@@ -7990,8 +7990,8 @@
   },
   {
     "blurb": "A WebSocket connection's principal is given once, at `open`, and the connection carries it from there, as the platform recovers it from the socket. So `message` and `close` take no `by`: a case that named one could present a principal production never sees. Drop the `by`. To act as another principal, open a new `TestConnection`.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Tests",
+    "categoryAnchor": "tests",
     "code": "bynk.test.ws_lifecycle_by",
     "constructs": [
       "case"
@@ -8002,8 +8002,8 @@
   },
   {
     "blurb": "`svc.open(tc, …)`, `svc.message` and `svc.close` drive a `from websocket` service in process, against a `TestConnection`. A deployed WebSocket is a real upgrade through the Worker and a Durable Object, which a `system` case does not drive, so the address has nothing to run. Drive the service in a case at `unit` or `integration` instead.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Tests",
+    "categoryAnchor": "tests",
     "code": "bynk.test.ws_needs_in_process",
     "constructs": [
       "case"
@@ -8014,8 +8014,8 @@
   },
   {
     "blurb": "Below `system` a case runs in one process. No other context is stood up, and a `stub` doubles capabilities, not another context's services. So a `unit` or `integration` case, or a `property`, that reaches another context, directly or through a service or agent handler, has nothing to call. Promote the case to a `system` suite, which wires the contexts, or test the unit that does not cross.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Test tiers",
+    "categoryAnchor": "test-tiers",
     "code": "bynk.tier.cross_context_needs_system",
     "constructs": [
       "case"
@@ -8026,8 +8026,8 @@
   },
   {
     "blurb": "A `system` case runs against deployed Workers and addresses services by their context path, which no `unit` or `integration` case can. So a suite holds either `system` cases only or none: a case of another tier in a `system` suite, or a `system` case among others, is refused. Move it into a suite of its own.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Test tiers",
+    "categoryAnchor": "test-tiers",
     "code": "bynk.tier.mixed_system_suite",
     "constructs": [
       "case"
@@ -8038,8 +8038,8 @@
   },
   {
     "blurb": "A `system` case exists to cross a real serialise, JSON, deserialise boundary. A target has one if it consumes another context, or exposes an `http`, `queue` or `email` service. One with neither has nothing to cross, so a `system` suite adds nothing over `unit`. Run the suite at `unit` or `integration`, or give the target a service that has a boundary.",
-    "category": "Other",
-    "categoryAnchor": "other",
+    "category": "Test tiers",
+    "categoryAnchor": "test-tiers",
     "code": "bynk.tier.system_needs_wire",
     "constructs": [],
     "example": "suite commerce.payment as system {   // ✗ no other context, and no `http`, `queue` or `email` service\n    case \"authorises\" { … }\n}\n\nsuite commerce.payment as integration {   // ✓ real collaborators, no wire\n    case \"authorises\" { … }\n}",

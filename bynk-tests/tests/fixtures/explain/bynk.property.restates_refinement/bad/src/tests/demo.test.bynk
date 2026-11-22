@@ -1,0 +1,5 @@
+suite demo {
+  property "quantities" {
+    for all q: Quantity { expect q > 0 }
+  }
+}

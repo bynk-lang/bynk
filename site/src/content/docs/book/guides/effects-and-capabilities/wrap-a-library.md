@@ -148,4 +148,4 @@ binding that loads it. Only `.wasm` files can be included.
 ## See also
 
 - [Adapters reference](/book/reference/adapters/)
-- [Adapter & binding errors](/book/troubleshooting/adapter-errors/)
+- [Adapter errors](/book/reference/diagnostics/#adapters)

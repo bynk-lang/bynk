@@ -62,7 +62,7 @@ positions where the expected type is a refined type, a literal is checked agains
 the predicate and admitted. Those positions are the return position, a `let` with
 a type annotation, an `Ok`/`Some`/`Err` payload, and a refined-typed call
 argument. A valid literal compiles (lowering to an inline brand cast); an invalid
-one is a compile error, [`bynk.refine.literal_violates`](/book/troubleshooting/refine-literal-violates/).
+one is a compile error, [`bynk.refine.literal_violates`](/book/reference/diagnostics/bynk.refine.literal_violates/).
 
 ```mermaid
 flowchart TD

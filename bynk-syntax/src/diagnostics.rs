@@ -18,8 +18,8 @@
 use crate::error::Severity;
 
 /// One documented diagnostic: its stable code and a one-line summary of the
-/// cause. Richer "cause and fix" material for the common diagnostics lives in
-/// the troubleshooting how-to guides.
+/// cause. The longer lesson, the cause and the fix with an example, is the
+/// code's [`Explain`] entry.
 pub struct DiagnosticInfo {
     pub code: &'static str,
     pub summary: &'static str,
@@ -696,15 +696,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.agent.non_additive_state_change",
-        blurb: "bynk.schema.lock records the stored shape of every agent class, version by \
-                version, and a build compares the new shape against it. A deployed instance holds \
-                data in the recorded shape, so a change that data can still be read through, such \
-                as a new field, is additive and just bumps the version. A change it cannot be read \
-                through, such as a field removed, retyped or renamed, would orphan or misread what \
-                is stored, so the build refuses it. A rename looks like a removal plus an \
-                addition, and the message names the pairing it infers. Keep the old field and add \
-                the new one, or carry the data across with a `migrate from N` step, which records \
-                the change as a non-additive version.",
+        blurb: "bynk.schema.lock records the stored shape of every agent class, version by version, and a build compares the new shape against it. A deployed instance holds data in the recorded shape, so a change that data can still be read through, such as a new field, is additive and just bumps the version. A change it cannot be read through, such as a field removed, retyped or renamed, would orphan or misread what is stored, so the build refuses it. A rename looks like a removal plus an addition, and the message names the pairing it infers. Give an added record field a default, keep the old field and add the new one, or carry the data across with a `migrate from N` step, which records the change as a non-additive version. For a class that was never deployed, delete its entry from the schema lock, and the next build records the new shape afresh.",
         example: "agent Cart {                        // ✗ `owner` is gone: its stored value would be orphaned\n\
                   \x20\x20key id: String\n\
                   \n\
@@ -794,15 +786,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.agents.non_zeroable_state_field",
-        blurb: "A key that has never been used is initialised automatically the first time it is \
-                touched, so every `store Cell[T]` field needs a starting value. With no \
-                initialiser, the compiler supplies a zero (`0`, `false`, `\"\"`, `None`, or a \
-                record of zeroed fields), but only where that zero is a valid value of the type. \
-                An opaque type, a sum other than `Option`, and a refined type that rules its zero \
-                out have none, and the compiler will not invent a value that the type's own \
-                constructors might refuse. Say what \"not set yet\" means: wrap the type in \
-                `Option`, where `None` is the zero, or give the field an initialiser, \
-                `store name: Cell[T] = value`.",
+        blurb: "A key that has never been used is initialised automatically the first time it is touched, so every `store Cell[T]` field needs a starting value. With no initialiser, the compiler supplies a zero (`0`, `false`, `\"\"`, `None`, or a record of zeroed fields), but only where that zero is a valid value of the type. An opaque type, a sum other than `Option`, and a refined type that rules its zero out have none, and the compiler will not invent a value that the type's own constructors might refuse. Say what \"not set yet\" means: wrap the type in `Option`, where `None` is the zero, give the field an initialiser, `store name: Cell[T] = value`, or relax a refinement so that its zero is allowed (`NonNegative` admits `0`; `Positive` does not).",
         example: "type Secret = opaque String\n\n\
                   store secret: Cell[Secret]                // ✗ no zero value for an opaque type\n\n\
                   store secret: Cell[Option[Secret]]        // ✓ `None` until it is set",
@@ -1161,7 +1145,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.consumes.capability_name_clash",
-        blurb: "`consumes payment { Gateway }` brings `Gateway` in by its bare name, so that `given Gateway` reads it. If the context already declares a capability of that name, or a second consumed unit supplies one, the bare name would mean two things. Reach it qualified instead, `given payment.Gateway`, or rename the local one.",
+        blurb: "`consumes payment { Gateway }` brings `Gateway` in by its bare name, so that `given Gateway` reads it. If the context already declares a capability of that name, or a second consumed unit supplies one, the bare name would mean two things. Reach it qualified instead, `given payment.Gateway`, rename the local one, or consume the unit under an alias instead of selecting names from it, `consumes payment as pay`, and write `given pay.Gateway`.",
         example: "// shop.bynk\ncontext shop\n\nconsumes payment { Gateway }    // ✗ this context declares a `Gateway` too\n\ncapability Gateway {\n    fn notify() -> Effect[()]\n}\n\nconsumes payment                // ✓ reach it as `payment.Gateway`",
     },
     Explain {
@@ -1454,7 +1438,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.contract.restated_by_test",
-        blurb: "A function's `ensures` is checked at every call, in production and in every test that reaches it. A test that calls the function and `expect`s the same predicate adds nothing and has to be kept in step with the contract. The compiler flags the repeat. Delete the test, or keep a case only for a specific value a reader should see, such as `expect discount(100, 10) == 90`.",
+        blurb: "A function's `ensures` is checked at every call, in production and in every test that reaches it. A test that calls the function and `expect`s the same predicate adds nothing and has to be kept in step with the contract. The compiler flags the repeat. The check is narrow: it fires only on a syntactic restatement over the same arguments. Delete the test, or keep a case only for a specific value a reader should see, such as `expect discount(100, 10) == 90`.",
         example: "// demo/c.bynk\nfn discount(p: Int, pct: Int) -> Int\n    ensures never_above: result <= p\n    { … }\n\n// tests/c.test.bynk\nlet r = discount(100, 10)\nexpect r <= 100    // ✗ repeats `never_above`\nexpect r == 90     // ✓ a specific witnessed value",
     },
     Explain {
@@ -2046,16 +2030,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.generics.missing_codable_bound",
-        blurb: "`Json.encode` and `Json.decode` work only on types that cross the JSON boundary, and a type \
-                parameter might be a function, an `Effect` or another type that does not. So a type \
-                parameter that is encoded or decoded, or passed to a `Codable`-bounded parameter of \
-                another generic or of a capability operation, must be declared `T: Codable` (or \
-                `where A: Codable` for a receiver type's parameter), and a call must instantiate it with a \
-                type that is `Codable`. At run time the bound costs a hidden codec argument, so a refined \
-                type is still revalidated on decode. `Codable` does not imply `Eq`, so the diagnostic's \
-                fix writes `T: Eq + Codable` beside an existing `Eq`. It is the `Json` counterpart of \
-                `bynk.generics.missing_eq_bound`, `bynk.generics.missing_ord_bound` and \
-                `bynk.generics.missing_key_bound`.",
+        blurb: "`Json.encode` and `Json.decode` work only on types that cross the JSON boundary, and a type parameter might be a function, an `Effect` or another type that does not. So a type parameter that is encoded or decoded, or passed to a `Codable`-bounded parameter of another generic or of a capability operation, must be declared `T: Codable` (or `where A: Codable` for a receiver type's parameter), and a call must instantiate it with a type that is `Codable`. At run time the bound costs a hidden codec argument, so a refined type is still revalidated on decode. `Codable` does not imply `Eq`, so the diagnostic's fix writes `T: Eq + Codable` beside an existing `Eq`, and `bynk check --fix` applies it across a project. It is the `Json` counterpart of `bynk.generics.missing_eq_bound`, `bynk.generics.missing_ord_bound` and `bynk.generics.missing_key_bound`.",
         example: "fn encode[T](v: T) -> String {\n    \
                     Json.encode(v)                  // ✗ `T` could be a function\n}\n\n\
                   fn encode[T: Codable](v: T) -> String {\n    \
@@ -2063,14 +2038,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.generics.missing_eq_bound",
-        blurb: "`==` and `!=` work on a type parameter only if the function says so with an `Eq` bound. \
-                A type parameter stands for any type, and some types cannot be compared: a function, an \
-                `Effect`, a `Query`, a `Stream` or a held `Connection`. The bound puts that requirement \
-                in the signature, where a caller, hover and signature help can see it, instead of leaving \
-                it to fail inside the body. The same rule applies when a generic passes its own parameter \
-                to an `Eq`-bounded parameter of another generic, so a bound appears at every link of a \
-                chain of calls. Declare `T: Eq`; `T: Ord` and `T: Key` also allow `==`. The \
-                diagnostic's fix adds the bound.",
+        blurb: "`==` and `!=` work on a type parameter only if the function says so with an `Eq` bound. A type parameter stands for any type, and some types cannot be compared: a function, an `Effect`, a `Query`, a `Stream` or a held `Connection`. The bound puts that requirement in the signature, where a caller, hover and signature help can see it, instead of leaving it to fail inside the body. The same rule applies when a generic passes its own parameter to an `Eq`-bounded parameter of another generic, so a bound appears at every link of a chain of calls. Declare `T: Eq`; `T: Ord` and `T: Key` also allow `==`. The diagnostic's fix adds the bound, and `bynk check --fix` applies it across a project.",
         example: "fn same[T](a: T, b: T) -> Bool {\n    a == b                  // ✗ `T` could be a function\n}\n\n\
                   fn same[T: Eq](a: T, b: T) -> Bool {\n    a == b                  // ✓ the bound is in the signature\n}",
     },
@@ -2088,15 +2056,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.generics.missing_ord_bound",
-        blurb: "`<`, `<=`, `>` and `>=` work on a type parameter only if the function says so with an `Ord` bound. \
-                A type parameter stands for any type, and many types have no total order: a function, an \
-                `Effect`, a `Bool`, a record that does not `derives Ord`. The bound puts the requirement \
-                in the signature, where a caller, hover and signature help can see it, and a call must \
-                instantiate it with an orderable type. The same rule covers an ordering key and a \
-                parameter passed on to an `Ord`-bounded parameter of another generic, so the bound \
-                appears at every link of a chain of calls. Declare `T: Ord`; it implies `Eq`, so an \
-                existing `Eq` is replaced (`T: Eq + Ord` is only a warning). The diagnostic's fix adds \
-                the bound.",
+        blurb: "`<`, `<=`, `>` and `>=` work on a type parameter only if the function says so with an `Ord` bound. A type parameter stands for any type, and many types have no total order: a function, an `Effect`, a `Bool`, a record that does not `derives Ord`. The bound puts the requirement in the signature, where a caller, hover and signature help can see it, and a call must instantiate it with an orderable type. The same rule covers an ordering key and a parameter passed on to an `Ord`-bounded parameter of another generic, so the bound appears at every link of a chain of calls. Declare `T: Ord`; it implies `Eq`, so an existing `Eq` is replaced (`T: Eq + Ord` is only a warning). The diagnostic's fix adds the bound, and `bynk check --fix` applies it across a project.",
         example: "fn bigger[T](a: T, b: T) -> Bool {\n    \
                     a > b                            // ✗ `T` has no order\n}\n\n\
                   fn bigger[T: Ord](a: T, b: T) -> Bool {\n    \
@@ -2288,7 +2248,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.history.not_generable",
-        blurb: "To drive an agent the runner must make an argument for every handler, drawing each from its parameter's refinement domain. One parameter with no generator, such as a `Matches` pattern, stops it for the whole agent, since any handler may be chosen. Give that parameter a refinement that has one, such as `Length(3)`. The same rule applies to a value `for all`, where a type that cannot be generated is `bynk.val.needs_pin`.",
+        blurb: "To drive an agent the runner must make an argument for every handler, drawing each from its parameter's refinement domain. One parameter with no generator, such as a `Matches` pattern, stops it for the whole agent, since any handler may be chosen. Give that parameter a refinement that has one, such as `Length(3)`, or test that handler with a `case` and a pinned value instead. The same rule applies to a value `for all`, where a type that cannot be generated is `bynk.val.needs_pin`.",
         example: "// demo/wallet.bynk\ntype Code = String where Matches(\"[A-Z]{3}\")\n\n// tests/t.test.bynk\nfor all run: History[Wallet] { … }   // ✗ `setLabel` takes a `Code`, which has no generator\n\n// demo/wallet.bynk\ntype Code = String where Length(3)   // ✓ a refinement with a generator",
     },
     Explain {
@@ -3962,6 +3922,11 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "[unstable]\nallow = [\"bynk.cloudflare.RateLimt\"]    // ✗ no such item\n\nallow = [\"bynk.cloudflare.RateLimit\"]   // ✓",
     },
     Explain {
+        code: "bynk.property.restates_refinement",
+        blurb: "A `for all q: Quantity` property draws only valid values of `Quantity`, so a body that just asserts the type's refinement, `expect q > 0` over `Int where Positive`, cannot fail and proves nothing about your code. The compiler flags it. The check is narrow: it fires only when the body is that one `expect`, restating `Positive` or `NonNegative` over the bound value, so a near-copy may pass. Assert something about what your code does with the value, or delete the property.",
+        example: "// demo.bynk\ntype Quantity = Int where Positive\n\n// tests/demo.test.bynk\nfor all q: Quantity { expect q > 0 }            // ✗ the type already says this\nfor all q: Quantity { expect double(q) > q }    // ✓ a claim about `double`",
+    },
+    Explain {
         code: "bynk.property.where_not_bool",
         blurb: "A `where` clause on `for all` discards each generated input \
                 that fails it, so it must be a `Bool`. A filter of another \
@@ -3991,7 +3956,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.provider.dependency_cycle",
-        blurb: "A provider's `given` lists the capabilities it is built from, and the context builds providers in dependency order. A capability that depends on itself, directly or through other providers, has no order to be built in, so every provider on the cycle is reported. Break the cycle by removing the `given`, or by depending on a different capability. Dependencies on other contexts follow `consumes`, which has its own check, `bynk.context.consumes_cycle`.",
+        blurb: "A provider's `given` lists the capabilities it is built from, and the context builds providers in dependency order. A capability that depends on itself, directly or through other providers, has no order to be built in, so every provider on the cycle is reported. Break the cycle: remove a `given` one side does not really need, move the part both need into a third capability that each depends on, or merge the two if they are one thing. Dependencies on other contexts follow `consumes`, which has its own check, `bynk.context.consumes_cycle`.",
         example: "capability Clock {\n    fn now() -> Effect[Int]\n}\n\nprovides Clock = Fixed given Clock {   // ✗ `Clock` is built from itself\n    fn now() -> Effect[Int] { Effect.pure(0) }\n}\n\nprovides Clock = Fixed {               // ✓ built from nothing\n    fn now() -> Effect[Int] { Effect.pure(0) }\n}",
     },
     Explain {
@@ -4119,19 +4084,12 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.requires.conflicting_range",
-        blurb: "A project installs one version of each npm package, so every adapter that `requires` a package must give the same range for it. Two adapters that ask for `jose` at `^4` and `^5` leave the build with no version that satisfies both, so the second is refused and names the first. Give both the same range. A package the toolchain itself pins, such as the one its own bindings use, must be required at that exact version.",
+        blurb: "A project installs one version of each npm package, so every adapter that `requires` a package must give the same range for it. Two adapters that ask for `jose` at `^4` and `^5` leave the build with no version that satisfies both, so the second is refused and names the first. Ranges are compared as written, so `^5` and `^5.0.0` conflict too. The same code reports one adapter that lists a package twice at different ranges. Give both the same range. A package the toolchain itself pins, such as the one its own bindings use, must be required at that exact version.",
         example: "// auth.bynk\nbinding \"./auth.binding.ts\" requires { \"jose\": \"^5\" }\n\n// tokens.bynk\nbinding \"./tokens.binding.ts\" requires { \"jose\": \"^4\" }   // ✗ `auth` already requires `^5`\n\nbinding \"./tokens.binding.ts\" requires { \"jose\": \"^5\" }   // ✓ one range",
     },
     Explain {
         code: "bynk.requires.unapproved",
-        blurb: "An adapter in a git or registry dependency requires an npm package \
-                your project hasn't approved. A dependency's adapters bring their \
-                npm packages into your build's `package.json`, and the next \
-                `npm install` runs whatever those packages run; so an npm package \
-                from someone else's code enters only after you approve it once. \
-                The approval is one package at one range, recorded in `bynk.lock` \
-                (`approved = true`), so a changed range asks again. Your own \
-                adapters and path dependencies need no approval.",
+        blurb: "An adapter in a git or registry dependency requires an npm package your project hasn't approved. A dependency's adapters bring their npm packages into your build's `package.json`, and the next `npm install` runs whatever those packages run; so an npm package from someone else's code enters only after you approve it once. The approval is one package at one range, recorded in `bynk.lock` (`approved = true`), so a changed range asks again. Review the package (the note names the dependencies that brought it in), run `bynk approve jose`, and commit `bynk.lock`. Your own adapters and path dependencies need no approval.",
         example: "# bynk.lock, as a fetch wrote it — the build fails until approved\n\
                   [[npm]]\npackage = \"jose\"\nrange = \"^5.2.0\"\n\
                   required-by = [\"acme/money:tokens\"]\n\n\
@@ -10790,6 +10748,8 @@ pub fn category(code: &str) -> &str {
 /// A human-readable heading for a category segment.
 fn category_title(cat: &str) -> &'static str {
     match cat {
+        "actor" => "Actors",
+        "adapter" | "namespace" => "Adapters",
         "agent" | "agents" => "Agents",
         "asset" => "Static assets",
         "boundary" => "Boundaries",
@@ -10799,18 +10759,23 @@ fn category_title(cat: &str) -> &'static str {
         "context" => "Contexts",
         "contract" => "Contracts",
         "cron" => "Cron",
+        "deploy" => "Deployment",
         "doc" => "Doc comments",
         "effect" => "Effects",
         "embed" => "Embedded text",
+        "event" => "Events",
         "expect" => "Expectations",
         "exports" => "Exports",
+        "generics" => "Generics",
         "given" => "Given capabilities",
+        "history" => "History properties",
         "http" => "HTTP",
         "internal" => "Internal errors",
         "lex" => "Lexer",
         "messages" => "Message bundles",
         "mock" => "Mocks (collaborators)",
         "observe" => "Observation",
+        "package" => "Packages",
         "parse" => "Parser",
         "project" => "Project",
         "property" => "Properties (generative tests)",
@@ -10818,10 +10783,15 @@ fn category_title(cat: &str) -> &'static str {
         "queue" => "Queue",
         "record_spread" => "Record spread",
         "refine" => "Refinement",
+        "requires" => "npm requirements",
         "resolve" => "Resolution",
         "service" => "Services",
         "stability" => "Stability",
+        "store" => "Agent storage",
+        "stub" => "Stubs",
         "suite" => "Suites and cases",
+        "test" => "Tests",
+        "tier" => "Test tiers",
         "transition" => "Transitions (step invariants)",
         "types" => "Type checking",
         "uses" => "Uses",
@@ -10854,10 +10824,9 @@ pub fn render_markdown() -> String {
     );
     out.push_str(
         "Every diagnostic code the compiler can emit, with a one-line summary of \
-         the cause, grouped by category. Each code links to its own page: its \
-         explanation and example where one is written, and the reference sections \
-         that govern it. For step-by-step cause-and-fix guidance on the most common \
-         ones, see the [troubleshooting guides](../troubleshooting/index.md). \
+         the cause, grouped by category. Each code links to its own page: what the \
+         code means, how to fix it and an example where an explanation is written, \
+         and the Book pages that explain it. \
          `bynk explain <code>` prints a code's explanation in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or \
          **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.\n\n",
     );

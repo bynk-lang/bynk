@@ -63,4 +63,4 @@ its parameter stays unbounded and keeps accepting functions.
 
 Reference: [Generics and bounds](/book/reference/generics/). If you are upgrading
 older code, see
-[`bynk.generics.missing_eq_bound`](/book/troubleshooting/generics-missing-eq-bound/).
+[`bynk.generics.missing_eq_bound`](/book/reference/diagnostics/bynk.generics.missing_eq_bound/).

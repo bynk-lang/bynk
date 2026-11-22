@@ -11,8 +11,8 @@ time by a small remark plugin, so writing a page is mostly writing prose.
 It is organised **by kind first, then by concern** (see the
 [book's front page](/book/)). **Start** and **Learn Bynk** are read in order;
 **Concepts** holds the explanation pages, grouped by concern; **Guides** holds
-the how-to pages, grouped by what the reader is building; the **Reference**,
-**Specification** and **Troubleshooting** are kept whole for looking things up.
+the how-to pages, grouped by what the reader is building; the **Reference** and
+**Specification** are kept whole for looking things up.
 [Diátaxis](https://diataxis.fr/) governs each page — one mode per page — and
 the part a page sits in says which mode it is. A new page goes in the part for
 its mode: an explanation in Concepts, under its concern; a how-to in Guides,
@@ -239,7 +239,10 @@ rest are Rust drift-guard tests and Node `--check` scripts that CI runs.
    Each diagnostic code also has a page of its own, at
    `/book/reference/diagnostics/<code>/`, which `/d/<code>` redirects to and
    which every tool links (the editor, `bynk explain`, the MCP tools and the
-   playground). The pages are rendered by
+   playground). What a code means and how to fix it is written once, in its
+   `Explain` entry in `bynk-syntax/src/diagnostics.rs`, which `bynk explain`,
+   the editor's Explain panel and the code's page all show; the Book has no
+   separate page per error. The pages are rendered by
    `site/src/pages/book/reference/diagnostics/[code].astro` from
    `site/src/generated/diagnostics.json`, which `diagnostics_registry.rs`
    guards like the index page. A page lists the Book pages that explain its

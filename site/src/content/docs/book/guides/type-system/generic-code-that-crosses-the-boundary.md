@@ -68,7 +68,7 @@ call, as `sendBatch` does.
   `bynk.generics.codable_op_return_not_first_party`: return plain data and decode it
   where you call the operation.
 - If you forget the bound, `bynk check --fix` adds it
-  ([`bynk.generics.missing_codable_bound`](/book/troubleshooting/generics-missing-codable-bound/)).
+  ([`bynk.generics.missing_codable_bound`](/book/reference/diagnostics/bynk.generics.missing_codable_bound/)).
 
 ## Related
 
