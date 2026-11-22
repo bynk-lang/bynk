@@ -165,8 +165,8 @@ impl ResourceKind for Hyperdrive {
         &orphans.hyperdrive
     }
 
-    fn orphans_in_mut(orphans: &mut Orphans) -> &mut Vec<OrphanHyperdrive> {
-        &mut orphans.hyperdrive
+    fn set_orphans(orphans: &mut Orphans, found: Vec<OrphanHyperdrive>) {
+        orphans.hyperdrive = found;
     }
 
     /// A config with its Worker or on its own; one a replacement left behind is an orphan while

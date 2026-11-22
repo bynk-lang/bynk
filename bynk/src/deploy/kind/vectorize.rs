@@ -189,8 +189,8 @@ impl ResourceKind for Vectorize {
         &orphans.vectorize
     }
 
-    fn orphans_in_mut(orphans: &mut Orphans) -> &mut Vec<OrphanVectorize> {
-        &mut orphans.vectorize
+    fn set_orphans(orphans: &mut Orphans, found: Vec<OrphanVectorize>) {
+        orphans.vectorize = found;
     }
 
     /// An index with its Worker or on its own; one a changed name left behind is an orphan

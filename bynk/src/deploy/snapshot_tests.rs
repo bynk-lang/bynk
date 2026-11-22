@@ -120,7 +120,7 @@ impl on_account::Listings for Account {
             (KindId::D1, None) => &["shop-new"],
             (KindId::Vectorize, None) => &["shop-new"],
             (KindId::Queue, None) => &["outbound"],
-            (KindId::Hyperdrive, None) => &[],
+            (KindId::Hyperdrive, None) | (KindId::RateLimit, None) => &[],
             (_, Some(_)) => return Err("Cloudflare answered 403".to_string()),
         };
         Ok(names.iter().map(|n| n.to_string()).collect())

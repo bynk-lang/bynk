@@ -292,7 +292,6 @@ fn recorded_id(
 ) -> Option<String> {
     // 1D.1 (#3929): each converted kind's, first.
     recorded_bound_id(LedgerView::of(lock, environment), worker, binding)
-        .or_else(|| recorded_ratelimit(lock, worker, binding, environment).map(str::to_string))
 }
 
 /// Every check for one Worker. A refusal is any finding with verdict
