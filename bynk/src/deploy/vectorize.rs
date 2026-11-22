@@ -508,33 +508,130 @@ pub(crate) fn materialise_adopted_vectorize(
     })
 }
 
-/// Each `Vectorize` index of `worker`: created when the account has none of
-/// that name, checked against the declaration when it has (a mismatch fails the
-/// deploy and changes nothing), recorded in the ledger before the push, then its
-/// metadata indexes made before any vector can be written.
-pub(crate) fn provision_vectorize_indexes(
-    provenance: &Provenance,
-    project_root: &Path,
-    worker: &str,
-    declared: &Resources,
-    lock: &mut DeployLock,
-    lock_path: &Path,
-    environment: &str,
+/// One `Vectorize` index (1D.1c: [`Vectorize`]'s provisioning): created when the account has
+/// none of that name, checked against the declaration when it has (a mismatch fails the deploy and
+/// changes nothing), recorded in the ledger before the push, then its metadata indexes made before
+/// any vector can be written. `pacing` is how long the metadata indexes are waited for.
+pub(crate) fn provision_vectorize_index(
+    cx: &mut ApplyCx<'_, '_, Vectorize>,
+    decl: &VectorizeDecl,
+    pacing: Pacing,
 ) -> Result<(), DeployFailure> {
-    provision_vectorize_indexes_paced(
-        provenance,
-        project_root,
-        worker,
-        declared,
-        lock,
-        lock_path,
-        environment,
-        METADATA_INDEX_PACING,
-    )
+    let (worker, environment) = (cx.worker, cx.environment);
+    let (provenance, project_root) = (cx.tools.provenance, cx.tools.project_root);
+    let physical = decl.physical_name(environment);
+    if decl.adopt.is_some() {
+        adopt_index(provenance, project_root, worker, decl, &physical)?;
+        let already = cx
+            .ledger()
+            .recorded::<Vectorize>(worker, &decl.binding)
+            .is_some_and(|r| r.name == physical && r.adopted);
+        if !already {
+            cx.record(
+                &decl.binding,
+                VectorizeRecord::of(&physical, true),
+                &format!("adopted the Vectorize index `{physical}`"),
+            )?;
+        }
+        return Ok(());
+    }
+    let fail = |what: &str, e: String| {
+        DeployFailure::driver(format!(
+            "could not {what} the Vectorize index `{physical}` for `{worker}`'s `{}`: {e}",
+            decl.binding
+        ))
+    };
+    let existed =
+        index_exists(provenance, &physical, project_root).map_err(|e| fail("look up", e))?;
+    if existed {
+        let found =
+            read_index_config(provenance, &physical, project_root).map_err(|e| fail("check", e))?;
+        let matches =
+            found.dimensions == decl.dimensions && found.metric == normalise_metric(&decl.metric);
+        if !matches {
+            return Err(DeployFailure::driver(drift_message(
+                &physical,
+                worker,
+                &decl.binding,
+                &found,
+                decl,
+            )));
+        }
+    } else {
+        create_index(provenance, &physical, decl, project_root).map_err(|e| fail("create", e))?;
+    }
+    // Recorded before the push, as every created resource is: an
+    // interrupted run never forgets an index it made.
+    let already = cx
+        .ledger()
+        .recorded::<Vectorize>(worker, &decl.binding)
+        .is_some_and(|r| r.name == physical);
+    if !already {
+        // An index already on the account was not made by this deploy, so
+        // it is recorded as adopted: never pruned.
+        cx.record(
+            &decl.binding,
+            VectorizeRecord::of(&physical, existed),
+            &format!("provisioned the Vectorize index `{physical}`"),
+        )?;
+    }
+    let existing = existing_metadata_indexes(provenance, &physical, project_root)
+        .map_err(|e| fail("read the metadata indexes of", e))?;
+    let (missing, removed) = metadata_index_changes(&decl.indexed, &existing);
+    if let Some(message) = type_change_message(&physical, &missing, &removed) {
+        return Err(DeployFailure::driver(message));
+    }
+    for entry in &missing {
+        create_metadata_index(provenance, &physical, entry, project_root)
+            .map_err(|e| fail(&format!("create the metadata index `{entry}` on"), e))?;
+    }
+    if !missing.is_empty() {
+        // Only now is the index safe to write to: a vector upserted before a
+        // metadata index is listed is silently left out of it.
+        wait_for_metadata_indexes(provenance, &physical, &missing, project_root, pacing).map_err(
+            |e| {
+                DeployFailure::driver(format!(
+                    "the Vectorize index `{physical}` for `{worker}`'s `{}`: {e}",
+                    decl.binding
+                ))
+            },
+        )?;
+    }
+    // Vectors can predate a metadata index only if something already wrote
+    // to the index: an adopted one, or one this project's Worker was
+    // deployed against. An index this very project created and never
+    // deployed has none, which is also the state a deploy that timed out
+    // above is re-run from.
+    let may_hold_vectors = cx
+        .ledger()
+        .recorded::<Vectorize>(worker, &decl.binding)
+        .is_some_and(|r| r.adopted)
+        || cx.lock.is_deployed(environment, worker);
+    if existed && may_hold_vectors && !missing.is_empty() {
+        emsg!(
+            "bynk: warning: `{physical}` already existed, so vectors written before {} will not be filterable on {} until they are written again (upsert them)",
+            if missing.len() == 1 {
+                "its metadata index"
+            } else {
+                "those metadata indexes"
+            },
+            missing.join(", ")
+        );
+    }
+    if !removed.is_empty() {
+        emsg!(
+            "bynk: note: `{physical}` has metadata indexes the source no longer lists ({}); they are left in place, and a query that filters on one still works",
+            removed.join(", ")
+        );
+    }
+    Ok(())
 }
 
+/// Each of `worker`'s `Vectorize` indexes, as the deploy provisions them, waiting `pacing` for
+/// their metadata indexes: what the stand-in tests drive.
+#[cfg(test)]
 #[allow(clippy::too_many_arguments)]
-fn provision_vectorize_indexes_paced(
+pub(crate) fn provision_vectorize_indexes_paced(
     provenance: &Provenance,
     project_root: &Path,
     worker: &str,
@@ -544,110 +641,24 @@ fn provision_vectorize_indexes_paced(
     environment: &str,
     pacing: Pacing,
 ) -> Result<(), DeployFailure> {
+    let project = BTreeMap::new();
     for decl in &declared.vectorize_indexes {
-        let physical = decl.physical_name(environment);
-        if decl.adopt.is_some() {
-            adopt_index(provenance, project_root, worker, decl, &physical)?;
-            let already = recorded_vectorize(lock, worker, &decl.binding, environment)
-                .is_some_and(|r| r.name == physical && r.adopted);
-            if !already {
-                lock.record_vectorize(environment, worker, &decl.binding, &physical, true);
-                write_lock(lock_path, lock).map_err(|e| {
-                    DeployFailure::driver(format!(
-                        "adopted the Vectorize index `{physical}` but could not record it in {}: {e}",
-                        lock_path.display()
-                    ))
-                })?;
-            }
-            continue;
-        }
-        let fail = |what: &str, e: String| {
-            DeployFailure::driver(format!(
-                "could not {what} the Vectorize index `{physical}` for `{worker}`'s `{}`: {e}",
-                decl.binding
-            ))
-        };
-        let existed =
-            index_exists(provenance, &physical, project_root).map_err(|e| fail("look up", e))?;
-        if existed {
-            let found = read_index_config(provenance, &physical, project_root)
-                .map_err(|e| fail("check", e))?;
-            let matches = found.dimensions == decl.dimensions
-                && found.metric == normalise_metric(&decl.metric);
-            if !matches {
-                return Err(DeployFailure::driver(drift_message(
-                    &physical,
-                    worker,
-                    &decl.binding,
-                    &found,
-                    decl,
-                )));
-            }
-        } else {
-            create_index(provenance, &physical, decl, project_root)
-                .map_err(|e| fail("create", e))?;
-        }
-        // Recorded before the push, as every created resource is: an
-        // interrupted run never forgets an index it made.
-        let already = recorded_vectorize(lock, worker, &decl.binding, environment)
-            .is_some_and(|r| r.name == physical);
-        if !already {
-            // An index already on the account was not made by this deploy, so
-            // it is recorded as adopted: never pruned.
-            lock.record_vectorize(environment, worker, &decl.binding, &physical, existed);
-            write_lock(lock_path, lock).map_err(|e| {
-                DeployFailure::driver(format!(
-                    "provisioned the Vectorize index `{physical}` but could not record it in {}: {e}",
-                    lock_path.display()
-                ))
-            })?;
-        }
-        let existing = existing_metadata_indexes(provenance, &physical, project_root)
-            .map_err(|e| fail("read the metadata indexes of", e))?;
-        let (missing, removed) = metadata_index_changes(&decl.indexed, &existing);
-        if let Some(message) = type_change_message(&physical, &missing, &removed) {
-            return Err(DeployFailure::driver(message));
-        }
-        for entry in &missing {
-            create_metadata_index(provenance, &physical, entry, project_root)
-                .map_err(|e| fail(&format!("create the metadata index `{entry}` on"), e))?;
-        }
-        if !missing.is_empty() {
-            // Only now is the index safe to write to: a vector upserted before a
-            // metadata index is listed is silently left out of it.
-            wait_for_metadata_indexes(provenance, &physical, &missing, project_root, pacing)
-                .map_err(|e| {
-                    DeployFailure::driver(format!(
-                        "the Vectorize index `{physical}` for `{worker}`'s `{}`: {e}",
-                        decl.binding
-                    ))
-                })?;
-        }
-        // Vectors can predate a metadata index only if something already wrote
-        // to the index: an adopted one, or one this project's Worker was
-        // deployed against. An index this very project created and never
-        // deployed has none, which is also the state a deploy that timed out
-        // above is re-run from.
-        let may_hold_vectors = recorded_vectorize(lock, worker, &decl.binding, environment)
-            .is_some_and(|r| r.adopted)
-            || lock.is_deployed(environment, worker);
-        if existed && may_hold_vectors && !missing.is_empty() {
-            emsg!(
-                "bynk: warning: `{physical}` already existed, so vectors written before {} will not be filterable on {} until they are written again (upsert them)",
-                if missing.len() == 1 {
-                    "its metadata index"
-                } else {
-                    "those metadata indexes"
+        provision_vectorize_index(
+            &mut ApplyCx {
+                environment,
+                worker,
+                project: &project,
+                lock,
+                lock_path,
+                live: (),
+                tools: Tools {
+                    provenance,
+                    project_root,
                 },
-                missing.join(", ")
-            );
-        }
-        if !removed.is_empty() {
-            emsg!(
-                "bynk: note: `{physical}` has metadata indexes the source no longer lists ({}); they are left in place, and a query that filters on one still works",
-                removed.join(", ")
-            );
-        }
+            },
+            decl,
+            pacing,
+        )?;
     }
     Ok(())
 }

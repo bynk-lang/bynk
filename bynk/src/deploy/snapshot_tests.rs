@@ -120,6 +120,7 @@ impl on_account::Listings for Account {
             (KindId::D1, None) => &["shop-new"],
             (KindId::Vectorize, None) => &["shop-new"],
             (KindId::Queue, None) => &["outbound"],
+            (KindId::Hyperdrive, None) => &[],
             (_, Some(_)) => return Err("Cloudflare answered 403".to_string()),
         };
         Ok(names.iter().map(|n| n.to_string()).collect())
@@ -141,7 +142,12 @@ fn plan_text(format: DeployFormat) -> String {
             false,
             environment,
         )
-        .with_hyperdrive(&order, &resources, &lock, &hyperdrive_wants());
+        .with_lives(
+            &order,
+            &resources,
+            &lock,
+            Lives::for_plan(&hyperdrive_wants()),
+        );
         let on = on_account::OnAccount::read(&plan.account_listings(), &Account);
         let plan = plan.checked_against(&on);
         out.push_str(&format!("== {environment} ==\n"));

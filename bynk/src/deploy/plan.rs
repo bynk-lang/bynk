@@ -132,17 +132,19 @@ pub(crate) struct ContextPlan<'a> {
     /// (1D.1b, #3929).
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub(crate) r2: Vec<PlanR2<'a>>,
-    /// #3479: one line per Vectorize index the Worker binds, in binding order.
+    /// #3479: one line per Vectorize index the Worker binds, in binding order. Filled by
+    /// [`Vectorize`] (1D.1c, #3929).
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    vectorize: Vec<PlanVectorize<'a>>,
+    pub(crate) vectorize: Vec<PlanVectorize<'a>>,
     /// P4a (#2602): one line per D1 database the Worker binds, in binding
     /// order. Filled by [`D1`] (1D.1b, #3929).
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub(crate) d1: Vec<PlanD1<'a>>,
     /// #3319: one line per Hyperdrive config the Worker binds (a `Postgres`
-    /// instance), in binding order. Never the connection string.
+    /// instance), in binding order. Never the connection string. Filled by [`Hyperdrive`]
+    /// (1D.1c, #3929).
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    hyperdrive: Vec<PlanHyperdrive<'a>>,
+    pub(crate) hyperdrive: Vec<PlanHyperdrive<'a>>,
     /// P3 (#2342): one line per rate limiter the Worker binds, in binding
     /// order.
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -274,47 +276,6 @@ struct PlanRateLimit<'a> {
     /// The recorded id, when `reuse`.
     #[serde(skip_serializing_if = "Option::is_none")]
     namespace_id: Option<String>,
-}
-
-/// #3479: one Vectorize index. The name is the identity and the configuration
-/// is fixed at creation, so `reuse` states that an index of the name is there;
-/// whether it still matches is checked by the deploy, which fails on a
-/// mismatch.
-#[derive(Debug, Serialize)]
-struct PlanVectorize<'a> {
-    /// `VECTORIZE_<SNAKE>`.
-    binding: &'a str,
-    /// `create`, `adopt` (an existing index `bynk.toml` names, which is never
-    /// created, changed or deleted) or `reuse` (the one the ledger recorded, or
-    /// #3494 one of its name the account already holds, which the deploy
-    /// adopts).
-    action: &'static str,
-    /// The index's account-facing name, [`vectorize_index_name`]d.
-    index: String,
-    dimensions: i64,
-    metric: &'a str,
-    /// The metadata indexes created before any vector.
-    #[serde(skip_serializing_if = "<[_]>::is_empty")]
-    indexed: &'a [String],
-}
-
-/// #3319: one Hyperdrive config.
-#[derive(Debug, Serialize)]
-struct PlanHyperdrive<'a> {
-    /// `HYPERDRIVE_<SNAKE>`.
-    binding: &'a str,
-    /// `create` (a config made from the connection string), `sync` (the
-    /// recorded config, updated from the variable again), `reuse` (the
-    /// recorded config, nothing to sync) or `adopt` (a config `bynk.toml`
-    /// names by id).
-    action: &'static str,
-    /// The config's account-facing name, or for an adopted config its id.
-    /// Never the connection string, or any part of it.
-    config: String,
-    /// The environment variable the connection string is read from, named so
-    /// the plan says where a change would come from. A name, not a value.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    connection_env: Option<String>,
 }
 
 /// P3b (#2582): one Analytics Engine dataset.
@@ -1185,7 +1146,12 @@ pub fn run(
         opts.force,
         &opts.environment,
     )
-    .with_hyperdrive(&order, &resources, &lock, &hyperdrive_wants)
+    .with_lives(
+        &order,
+        &resources,
+        &lock,
+        Lives::for_plan(&hyperdrive_wants),
+    )
     .checked_against_account();
     print_plan_then_forward_warnings(&plan, opts, &order, &resources, project_root);
     if opts.dry_run {
@@ -1262,7 +1228,7 @@ pub fn run(
     }
 
     // Slice 5, DECISION B: the account's live KV ids, read once per run.
-    let live_kv = Kv::live(
+    let live_kv = Kv::read_live(
         Tools {
             provenance: &probe.provenance,
             project_root,
@@ -1273,6 +1239,11 @@ pub fn run(
             order: &order,
         },
     );
+    // 1D.1 (#3929): what the run read once, for each kind.
+    let lives = Lives {
+        kv: live_kv.as_ref(),
+        hyperdrive: hyperdrive_run,
+    };
 
     // Provision → wire → push, per context, in dependency order. Each context's
     // state is written to the ledger as it lands (ADR 0180's incremental
@@ -1395,9 +1366,8 @@ pub fn run(
             },
             &opts.wrangler_args,
             &opts.environment,
-            &live_kv,
+            lives,
             &linked_stores,
-            &hyperdrive_run,
         ) {
             Ok(Pushed::Ok) => {
                 record_pushed_contracts(
@@ -1494,18 +1464,7 @@ pub fn run(
             &lock_path,
             &opts.environment,
             &plan.orphans,
-        ) {
-            emsg!("bynk: error: {}", e.message);
-            return ExitCode::from(e.code);
-        }
-        // #3319: a Hyperdrive config holds no data, so one the deploy made is
-        // deleted with the rest; an adopted one never is.
-        if let Err(e) = hyperdrive::prune_run(
-            &hyperdrive_run,
-            &mut lock,
-            &lock_path,
-            &opts.environment,
-            &plan.orphans,
+            lives,
         ) {
             emsg!("bynk: error: {}", e.message);
             return ExitCode::from(e.code);
@@ -2336,36 +2295,7 @@ pub(crate) fn plan_report(plan: &Plan<'_>, format: DeployFormat) -> String {
             // fact about the account regardless of what this run is about to
             // do, and a reader should see it before the noise of what's being
             // pushed (slice 5).
-            short_kind_orphans(&plan.shown_orphans, &mut out, &mut |slot, out| match slot {
-                Legacy::Vectorize => {
-                    for v in &plan.shown_orphans.vectorize {
-                        out.push_str(&format!(
-                            "orphan vectorize {} {} ({}{})\n",
-                            v.worker,
-                            v.binding,
-                            v.index,
-                            if v.adopted {
-                                "; adopted, never deleted"
-                            } else {
-                                "; deleted by --prune"
-                            }
-                        ));
-                    }
-                }
-            });
-            for h in &plan.shown_orphans.hyperdrive {
-                out.push_str(&format!(
-                    "orphan hyperdrive {} {} ({}{})\n",
-                    h.worker,
-                    h.binding,
-                    h.config,
-                    if h.adopted {
-                        "; adopted, never deleted"
-                    } else {
-                        "; deleted by --prune"
-                    }
-                ));
-            }
+            short_kind_orphans(&plan.shown_orphans, &mut out);
             for worker in &plan.shown_orphans.workers {
                 // #3562: a removed group's members, from the ledger.
                 let members = plan.shown_orphans.worker_contexts.get(worker);
@@ -2385,33 +2315,7 @@ pub(crate) fn plan_report(plan: &Plan<'_>, format: DeployFormat) -> String {
                 out.push_str(&format!("orphan queue {queue}\n"));
             }
             for context in &plan.contexts {
-                short_kind_lines(context, &mut out, &mut |slot, out| match slot {
-                    Legacy::Vectorize => {
-                        for v in &context.vectorize {
-                            out.push_str(&format!(
-                                "vectorize {} {} ({}, {}, {}",
-                                v.action, v.index, v.binding, v.dimensions, v.metric
-                            ));
-                            if !v.indexed.is_empty() {
-                                out.push_str(&format!(
-                                    "; metadata indexes {}",
-                                    v.indexed.join(", ")
-                                ));
-                            }
-                            out.push_str(")\n");
-                        }
-                    }
-                });
-                for h in &context.hyperdrive {
-                    out.push_str(&format!(
-                        "hyperdrive {} {} ({}",
-                        h.action, h.config, h.binding
-                    ));
-                    if let Some(variable) = &h.connection_env {
-                        out.push_str(&format!("; from `{variable}`"));
-                    }
-                    out.push_str(")\n");
-                }
+                short_kind_lines(context, &mut out);
                 for limiter in &context.ratelimits {
                     match &limiter.namespace_id {
                         Some(id) => out.push_str(&format!(
@@ -2625,50 +2529,12 @@ fn account_name_problem(
     lock: &DeployLock,
     environment: &str,
 ) -> Option<String> {
-    kind_name_problem(
-        &ProjectCx {
-            ledger: LedgerView::of(lock, environment),
-            resources,
-            order: &[],
-        },
-        &|slot| match slot {
-            Legacy::Vectorize => vectorize_index_problem(resources, lock, environment),
-        },
-    )
+    kind_name_problem(&ProjectCx {
+        ledger: LedgerView::of(lock, environment),
+        resources,
+        order: &[],
+    })
     .or_else(|| analytics_dataset_problem(resources, lock, environment))
-}
-
-/// #3319: the plan lines of `worker`'s Hyperdrive configs. `wants` is empty
-/// when the deploy has not read `bynk.toml`'s settings (a bare [`derive_plan`]),
-/// and then a config is a `create` or a `reuse` by the ledger alone.
-fn hyperdrive_plan<'a>(
-    worker: &str,
-    declared: &'a Resources,
-    lock: &DeployLock,
-    environment: &str,
-    wants: &hyperdrive::Wants,
-) -> Vec<PlanHyperdrive<'a>> {
-    declared
-        .hyperdrive
-        .iter()
-        .map(|decl| {
-            let physical = hyperdrive::config_name(environment, worker, decl);
-            let recorded = recorded_hyperdrive(lock, worker, &decl.binding, environment);
-            let want = wants.get(&(worker.to_string(), decl.binding.clone()));
-            PlanHyperdrive {
-                binding: &decl.binding,
-                action: hyperdrive::action(recorded, &physical, want),
-                config: match want {
-                    Some(hyperdrive::Want::Adopt { id }) => id.clone(),
-                    _ => physical,
-                },
-                connection_env: match want {
-                    Some(hyperdrive::Want::Connection { variable, .. }) => Some(variable.clone()),
-                    _ => None,
-                },
-            }
-        })
-        .collect()
 }
 
 impl<'a> Plan<'a> {
@@ -2681,9 +2547,6 @@ impl<'a> Plan<'a> {
             kind_listings(c, &mut wanted);
             if c.queues.iter().any(|q| creates(q.action)) {
                 wanted.insert((KindId::Queue, None));
-            }
-            if c.vectorize.iter().any(|v| creates(v.action)) {
-                wanted.insert((KindId::Vectorize, None));
             }
         }
         wanted
@@ -2700,9 +2563,6 @@ impl<'a> Plan<'a> {
         for c in &mut self.contexts {
             for q in &mut c.queues {
                 q.action = held_verb(q.action, on.holds(KindId::Queue, None, &q.queue));
-            }
-            for v in &mut c.vectorize {
-                v.action = held_verb(v.action, on.holds(KindId::Vectorize, None, &v.index));
             }
             check_kind_lines(c, on, &mut self.account_notes);
         }
@@ -2739,18 +2599,22 @@ impl<'a> Plan<'a> {
         &self.account_notes
     }
 
-    /// #3319: show each Hyperdrive config as `bynk.toml` and the environment
-    /// say it will be handled (a `sync` from the variable, an `adopt`), once the deploy has read them.
-    pub(crate) fn with_hyperdrive(
+    /// Each converted kind's lines again, with what the run has read in `lives`: for
+    /// Hyperdrive (#3319), each config as `bynk.toml` and the environment say it will be handled
+    /// (a `sync` from the variable, an `adopt`), once the deploy has read them.
+    pub(crate) fn with_lives(
         mut self,
         order: &[String],
         resources: &'a BTreeMap<String, Resources>,
         lock: &DeployLock,
-        wants: &hyperdrive::Wants,
+        lives: Lives<'_>,
     ) -> Self {
         for (worker, context) in order.iter().zip(self.contexts.iter_mut()) {
-            context.hyperdrive =
-                hyperdrive_plan(worker, &resources[worker], lock, self.environment, wants);
+            let cx = PlanCx {
+                ledger: LedgerView::of(lock, self.environment),
+                worker,
+            };
+            fill_kind_lines(context, &resources[worker], &cx, lives);
         }
         self
     }
@@ -2796,38 +2660,9 @@ pub(crate) fn derive_plan<'a>(
                     worker: deployed_worker_name(environment, worker),
                     kv: Vec::new(),
                     r2: Vec::new(),
-                    vectorize: declared
-                        .vectorize_indexes
-                        .iter()
-                        .map(|v| {
-                            let index = v.physical_name(environment);
-                            let recorded =
-                                recorded_vectorize(lock, worker, &v.binding, environment);
-                            PlanVectorize {
-                                binding: &v.binding,
-                                action: if v.adopt.is_some() {
-                                    // Adopted stays `adopt` once recorded, as Hyperdrive's does.
-                                    "adopt"
-                                } else if recorded.is_some_and(|r| r.name == index) {
-                                    "reuse"
-                                } else {
-                                    "create"
-                                },
-                                index,
-                                dimensions: v.dimensions,
-                                metric: &v.metric,
-                                indexed: &v.indexed,
-                            }
-                        })
-                        .collect(),
+                    vectorize: Vec::new(),
                     d1: Vec::new(),
-                    hyperdrive: hyperdrive_plan(
-                        worker,
-                        declared,
-                        lock,
-                        environment,
-                        &hyperdrive::Wants::new(),
-                    ),
+                    hyperdrive: Vec::new(),
                     ratelimits: declared
                         .ratelimits
                         .iter()
@@ -3016,7 +2851,7 @@ pub(crate) fn derive_plan<'a>(
                     ledger: LedgerView::of(lock, environment),
                     worker,
                 };
-                fill_kind_lines(&mut context, declared, &cx);
+                fill_kind_lines(&mut context, declared, &cx, Lives::default());
                 context
             })
             .collect(),
@@ -3073,69 +2908,6 @@ pub(crate) fn analytics_dataset_problem(
                     return Some(format!(
                         "`{other_binding}` of `{other_worker}` would write to the Analytics Engine dataset `{there}`, which `{}` of `{worker}` writes to in environment `{other_env}`; rename one capability",
                         dataset.binding
-                    ));
-                }
-            }
-        }
-    }
-    None
-}
-
-/// #3479: why the indexes the build declares cannot all be made in
-/// `environment`, or `None`: a name Cloudflare would refuse (the environment's
-/// suffix can push a derived name past 64 bytes), or one name for two
-/// instances, which would silently share an index. Checked within the build and
-/// against every index the ledger records in any environment.
-pub(crate) fn vectorize_index_problem(
-    resources: &BTreeMap<String, Resources>,
-    lock: &DeployLock,
-    environment: &str,
-) -> Option<String> {
-    let mut seen: BTreeMap<String, (&str, &str, bool)> = BTreeMap::new();
-    for (worker, declared) in resources {
-        for index in &declared.vectorize_indexes {
-            let name = index.physical_name(environment);
-            if let Some(why) = vectorize_index_name_problem(&name) {
-                // #3479: an adopted name is the developer's, so the remedy is
-                // the `bynk.toml` entry, not the capability's name.
-                let remedy = if index.adopt.is_some() {
-                    "name an index whose name the platform takes in `[deploy.vectorize]`"
-                } else {
-                    "rename the capability or the context"
-                };
-                return Some(format!(
-                    "Vectorize index `{name}` (`{}` of `{worker}`) cannot be used: {why}; {remedy}",
-                    index.binding
-                ));
-            }
-            let adopted = index.adopt.is_some();
-            // Adopters may share an index (it is another system's, or
-            // another environment's); a created index is one capability's.
-            if let Some((other_worker, other_binding, other_adopted)) =
-                seen.insert(name.clone(), (worker, &index.binding, adopted))
-                && !(adopted && other_adopted)
-            {
-                return Some(format!(
-                    "`{}` of `{worker}` and `{other_binding}` of `{other_worker}` would both be the Vectorize index `{name}`; index names are scoped to the account, so rename one capability, or adopt the index for both in `[deploy.vectorize]`",
-                    index.binding
-                ));
-            }
-            for (other_env, env) in &lock.environments {
-                let clash = env
-                    .vectorize_instances
-                    .iter()
-                    .flat_map(|(w, instances)| instances.iter().map(move |(b, r)| (w, b, r)))
-                    .find(|(w, b, r)| {
-                        r.name == name
-                            && !(r.adopted && adopted)
-                            && (other_env != environment
-                                || w.as_str() != worker
-                                || **b != index.binding)
-                    });
-                if let Some((other_worker, other_binding, _)) = clash {
-                    return Some(format!(
-                        "`{}` of `{worker}` would be the Vectorize index `{name}`, which `{other_binding}` of `{other_worker}` already holds in environment `{other_env}`; index names are scoped to the account, so rename one capability, or adopt the index for both in `[deploy.vectorize]`",
-                        index.binding
                     ));
                 }
             }
@@ -3396,7 +3168,12 @@ pub(crate) mod tests {
             )]),
         )]);
         let mut lock = DeployLock::default();
-        lock.record_vectorize("default", "shop", "VECTORIZE_OLD", "shop-old", false);
+        lock.record::<Vectorize>(
+            "default",
+            "shop",
+            "VECTORIZE_OLD",
+            VectorizeRecord::of("shop-old", false),
+        );
         let fresh = plan_report(&plan_of(&order, &declared, &lock), DeployFormat::Short);
         assert!(
             fresh.contains("vectorize create shop-docs (VECTORIZE_DOCS, 768, cosine; metadata indexes category:string)\n"),
@@ -3406,7 +3183,12 @@ pub(crate) mod tests {
             fresh.contains("orphan vectorize shop VECTORIZE_OLD (shop-old; deleted by --prune)\n"),
             "{fresh}"
         );
-        lock.record_vectorize("default", "shop", "VECTORIZE_DOCS", "shop-docs", false);
+        lock.record::<Vectorize>(
+            "default",
+            "shop",
+            "VECTORIZE_DOCS",
+            VectorizeRecord::of("shop-docs", false),
+        );
         let again = plan_report(&plan_of(&order, &declared, &lock), DeployFormat::Short);
         assert!(
             again.contains("vectorize reuse shop-docs (VECTORIZE_DOCS, 768, cosine; metadata indexes category:string)\n"),
@@ -3435,7 +3217,12 @@ pub(crate) mod tests {
         );
         // Once recorded, an adopted index is still planned as `adopt`.
         let mut recorded = DeployLock::default();
-        recorded.record_vectorize("default", "shop", "VECTORIZE_DOCS", "docs-prod", true);
+        recorded.record::<Vectorize>(
+            "default",
+            "shop",
+            "VECTORIZE_DOCS",
+            VectorizeRecord::of("docs-prod", true),
+        );
         let again = plan_report(&plan_of(&order, &adopted, &recorded), DeployFormat::Short);
         assert!(
             again.contains("vectorize adopt docs-prod (VECTORIZE_DOCS, 768, cosine"),
@@ -3594,7 +3381,12 @@ pub(crate) mod tests {
             )]),
         )]);
         let mut lock = DeployLock::default();
-        lock.record_vectorize("default", "shop", "VECTORIZE_DOCS", "shop-docs", false);
+        lock.record::<Vectorize>(
+            "default",
+            "shop",
+            "VECTORIZE_DOCS",
+            VectorizeRecord::of("shop-docs", false),
+        );
         let account = Account {
             names: Vec::new(),
             asked: Default::default(),

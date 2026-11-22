@@ -377,7 +377,7 @@ pub(crate) fn first_unrecorded<'a>(
         resources[worker].hyperdrive.iter().find_map(|decl| {
             let want = wants.get(&(worker.clone(), decl.binding.clone()));
             let physical = config_name(environment, worker, decl);
-            let recorded = recorded_hyperdrive(lock, worker, &decl.binding, environment);
+            let recorded = lock.recorded::<Hyperdrive>(environment, worker, &decl.binding);
             (action(recorded, &physical, want) == "create"
                 && matches!(want, Some(Want::Connection { .. })))
             .then_some((worker.as_str(), decl.binding.as_str()))
@@ -486,16 +486,16 @@ impl HyperdriveApi for RestHyperdrive {
 
 /// What a deploy run carries for Hyperdrive: what each binding wants, and the
 /// API to ask (absent when nothing needs it, so a project without `Postgres`
-/// needs no token).
+/// needs no token). [`Hyperdrive`]'s `Live`; the default wants nothing and asks
+/// nothing, as a bare plan does.
+#[derive(Clone, Copy)]
 pub(crate) struct HyperdriveRun<'a> {
     pub(crate) wants: &'a Wants,
     pub(crate) api: Option<&'a dyn HyperdriveApi>,
 }
 
-#[cfg(test)]
-impl HyperdriveRun<'static> {
-    /// A run with no `Postgres` bindings.
-    pub(crate) fn none() -> HyperdriveRun<'static> {
+impl Default for HyperdriveRun<'_> {
+    fn default() -> Self {
         static EMPTY: Wants = Wants::new();
         HyperdriveRun {
             wants: &EMPTY,
@@ -504,135 +504,8 @@ impl HyperdriveRun<'static> {
     }
 }
 
-/// Make, update or adopt each `Postgres` binding's config, record what was
-/// done before the push (an interrupted run never makes a second config), and
-/// write each id into the Worker's generated config.
-impl HyperdriveRun<'_> {
-    /// [`provision`], over this run.
-    pub(crate) fn provision(
-        &self,
-        worker: &str,
-        declared: &Resources,
-        lock: &mut DeployLock,
-        lock_path: &Path,
-        config: &Path,
-        environment: &str,
-    ) -> Result<(), DeployFailure> {
-        provision(self, worker, declared, lock, lock_path, config, environment)
-    }
-}
-
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn provision(
-    run: &HyperdriveRun<'_>,
-    worker: &str,
-    declared: &Resources,
-    lock: &mut DeployLock,
-    lock_path: &Path,
-    config: &Path,
-    environment: &str,
-) -> Result<(), DeployFailure> {
-    let mut ids = BTreeMap::new();
-    for decl in &declared.hyperdrive {
-        let binding = &decl.binding;
-        let physical = config_name(environment, worker, decl);
-        let want = run.wants.get(&(worker.to_string(), binding.clone()));
-        let recorded = recorded_hyperdrive(lock, worker, binding, environment).cloned();
-        let todo = action(recorded.as_ref(), &physical, want);
-        let id = match (todo, want) {
-            ("reuse", _) => match &recorded {
-                Some(record) => record.id.clone(),
-                None => {
-                    return Err(DeployFailure::driver(format!(
-                        "no Hyperdrive config is recorded for `{worker}`'s `{binding}`"
-                    )));
-                }
-            },
-            ("adopt", Some(Want::Adopt { id })) => {
-                let api = need_api(run, worker, binding)?;
-                let name = api
-                    .name_of(id)
-                    .map_err(|e| {
-                        DeployFailure::driver(format!(
-                            "could not look up the Hyperdrive config `{id}` for `{worker}`'s `{binding}`: {e}"
-                        ))
-                    })?
-                    .ok_or_else(|| {
-                        DeployFailure::driver(format!(
-                            "the Hyperdrive config `{id}` that bynk.toml names for `{worker}`'s `{binding}` does not exist on this account"
-                        ))
-                    })?;
-                record(
-                    lock,
-                    lock_path,
-                    environment,
-                    worker,
-                    binding,
-                    HyperdriveRecord {
-                        name,
-                        id: id.clone(),
-                        adopted: true,
-                        superseded: Vec::new(),
-                    },
-                )?;
-                id.clone()
-            }
-            ("create", Some(Want::Connection { origin, raw, .. })) => {
-                let api = need_api(run, worker, binding)?;
-                let id = api.create(&physical, origin).map_err(|e| {
-                    DeployFailure::driver(format!(
-                        "could not create the Hyperdrive config `{physical}` for `{worker}`'s `{binding}`: {}",
-                        scrub(&e, &[raw.expose(), origin.password.expose()])
-                    ))
-                })?;
-                record(
-                    lock,
-                    lock_path,
-                    environment,
-                    worker,
-                    binding,
-                    HyperdriveRecord {
-                        name: physical.clone(),
-                        id: id.clone(),
-                        adopted: false,
-                        superseded: Vec::new(),
-                    },
-                )?;
-                id
-            }
-            ("sync", Some(Want::Connection { origin, raw, .. })) => {
-                let api = need_api(run, worker, binding)?;
-                let Some(old) = recorded else {
-                    return Err(DeployFailure::driver(format!(
-                        "no Hyperdrive config is recorded for `{worker}`'s `{binding}`"
-                    )));
-                };
-                api.update(&old.id, &physical, origin).map_err(|e| {
-                    DeployFailure::driver(format!(
-                        "could not sync the Hyperdrive config `{physical}` for `{worker}`'s `{binding}`: {}",
-                        scrub(&e, &[raw.expose(), origin.password.expose()])
-                    ))
-                })?;
-                record(lock, lock_path, environment, worker, binding, old.clone())?;
-                old.id
-            }
-            _ => {
-                return Err(DeployFailure::driver(format!(
-                    "no Hyperdrive settings were read for `{worker}`'s `{binding}`"
-                )));
-            }
-        };
-        ids.insert(binding.clone(), id);
-    }
-    if !ids.is_empty() && !materialise_hyperdrive_ids(config, &ids) {
-        return Err(DeployFailure::driver(format!(
-            "could not materialise the Hyperdrive config ids into `{worker}`'s generated configuration"
-        )));
-    }
-    Ok(())
-}
-
-fn need_api<'a>(
+/// The run's API, or why a binding that needs one cannot be served.
+pub(crate) fn need_api<'a>(
     run: &HyperdriveRun<'a>,
     worker: &str,
     binding: &str,
@@ -640,24 +513,6 @@ fn need_api<'a>(
     run.api.ok_or_else(|| {
         DeployFailure::driver(format!(
             "no Cloudflare API client for `{worker}`'s `{binding}`'s Hyperdrive config"
-        ))
-    })
-}
-
-fn record(
-    lock: &mut DeployLock,
-    lock_path: &Path,
-    environment: &str,
-    worker: &str,
-    binding: &str,
-    record: HyperdriveRecord,
-) -> Result<(), DeployFailure> {
-    let name = record.name.clone();
-    lock.record_hyperdrive(environment, worker, binding, record);
-    write_lock(lock_path, lock).map_err(|e| {
-        DeployFailure::driver(format!(
-            "changed the Hyperdrive config `{name}` but could not record it in {}: {e}",
-            lock_path.display()
         ))
     })
 }
@@ -735,20 +590,6 @@ pub(crate) fn api_for_run(
     })
 }
 
-/// Delete the orphaned configs `--prune` named, if the run holds an API.
-pub(crate) fn prune_run(
-    run: &HyperdriveRun<'_>,
-    lock: &mut DeployLock,
-    lock_path: &Path,
-    environment: &str,
-    orphans: &Orphans,
-) -> Result<(), DeployFailure> {
-    match run.api {
-        Some(api) => prune(api, lock, lock_path, environment, &orphans.hyperdrive),
-        None => Ok(()),
-    }
-}
-
 impl<'a> HyperdriveRun<'a> {
     /// A run over `wants`, asking `api`.
     pub(crate) fn new(wants: &'a Wants, api: Option<&'a RestHyperdrive>) -> Self {
@@ -770,7 +611,7 @@ pub(crate) fn needs_api(
 ) -> bool {
     order.iter().any(|worker| {
         resources[worker].hyperdrive.iter().any(|decl| {
-            let recorded = recorded_hyperdrive(lock, worker, &decl.binding, environment);
+            let recorded = lock.recorded::<Hyperdrive>(environment, worker, &decl.binding);
             let physical = config_name(environment, worker, decl);
             let want = wants.get(&(worker.clone(), decl.binding.clone()));
             action(recorded, &physical, want) != "reuse"
@@ -778,9 +619,40 @@ pub(crate) fn needs_api(
     })
 }
 
-/// Delete each orphaned config `--prune` just named (never an adopted one: it
-/// is not the project's), and strip it from the ledger. Already gone is
-/// success, as for a queue (DECISION E): the ledger entry goes either way.
+/// Each of `worker`'s `Postgres` bindings provisioned over `run`, as the deploy does it, and
+/// their ids written into `config`: what the tests drive.
+#[cfg(test)]
+pub(crate) fn provision(
+    run: &HyperdriveRun<'_>,
+    worker: &str,
+    declared: &Resources,
+    lock: &mut DeployLock,
+    lock_path: &Path,
+    config: &Path,
+    environment: &str,
+) -> Result<(), DeployFailure> {
+    let provenance = crate::probe::Provenance::Path("/nonexistent/wrangler".into());
+    let project = BTreeMap::new();
+    let site = Site {
+        tools: Tools {
+            provenance: &provenance,
+            project_root: Path::new("/nonexistent"),
+        },
+        environment,
+        worker,
+        project: &project,
+    };
+    let lives = Lives {
+        hyperdrive: *run,
+        ..Lives::default()
+    };
+    let ids = provision_kind::<Hyperdrive>(site, declared, lock, lock_path, lives)?;
+    Hyperdrive::materialise(config, worker, &ids)
+}
+
+/// Each orphaned config `--prune` deletes, through `api`, as the deploy does it: what the tests
+/// drive.
+#[cfg(test)]
 pub(crate) fn prune(
     api: &dyn HyperdriveApi,
     lock: &mut DeployLock,
@@ -788,21 +660,28 @@ pub(crate) fn prune(
     environment: &str,
     orphans: &[OrphanHyperdrive],
 ) -> Result<(), DeployFailure> {
-    for orphan in orphans.iter().filter(|o| !o.adopted) {
-        api.delete(&orphan.id).map_err(|e| {
-            DeployFailure::driver(format!(
-                "could not delete the orphaned Hyperdrive config `{}` of `{}`'s `{}`: {e}",
-                orphan.config, orphan.worker, orphan.binding
-            ))
-        })?;
-        lock.forget_hyperdrive(environment, &orphan.worker, &orphan.binding, &orphan.id);
-        write_lock(lock_path, lock).map_err(|e| {
-            DeployFailure::driver(format!(
-                "deleted the orphaned Hyperdrive config `{}` but could not record it in {}: {e}",
-                orphan.config,
-                lock_path.display()
-            ))
-        })?;
+    let provenance = crate::probe::Provenance::Path("/nonexistent/wrangler".into());
+    let project = BTreeMap::new();
+    let wants = Wants::new();
+    for orphan in orphans.iter().filter(|o| Hyperdrive::prunable(o)) {
+        Hyperdrive::prune(
+            &mut ApplyCx {
+                environment,
+                worker: &orphan.worker,
+                project: &project,
+                lock,
+                lock_path,
+                live: HyperdriveRun {
+                    wants: &wants,
+                    api: Some(api),
+                },
+                tools: Tools {
+                    provenance: &provenance,
+                    project_root: Path::new("/nonexistent"),
+                },
+            },
+            orphan,
+        )?;
     }
     Ok(())
 }
