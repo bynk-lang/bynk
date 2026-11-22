@@ -1499,6 +1499,10 @@ jobs:
       # Books (web presence track, slice 3).
       - name: Test the sidebar generator
         run: node --test scripts/generate-sidebar.test.mjs
+      # The _redirects checker's own tests: the first-match rule matcher and
+      # each check, on small in-memory sites.
+      - name: Test the redirects checker
+        run: node --test scripts/check-redirects.test.mjs
       # llms.txt is hand-authored; verify its /book/ links still resolve.
       - name: Check llms.txt links resolve
         run: node scripts/check-llms-links.mjs
@@ -1522,6 +1526,11 @@ jobs:
           save: ${{ github.event_name != 'merge_group' }}
       - name: Build (astro build — render + Pagefind + link-check)
         run: npm run build
+      # public/_redirects (Cloudflare Pages) against the built dist/: no rule
+      # shadows a live page or never applies, and every target (each page under
+      # a splat's folder, sample :code values) lands on a built page.
+      - name: Check _redirects against the build
+        run: node scripts/check-redirects.mjs
 
   grammar:
     # Run the tree-sitter corpus so grammar drift fails a PR. Without this the
