@@ -182,7 +182,10 @@ Worker's `queue` entry (ADR 0522).
 
 **Non-goals**
 
-- Exactly-once delivery. Duplicates are made harmless (§7.4), not impossible.
+- Exactly-once delivery. Duplicates of one emission are made harmless
+  (§7.4), not impossible. A service publisher's retried call is a new
+  emission with new `eventId`s, which the runtime cannot recognise (§5.2), so
+  a subscriber of a service publisher still needs business-key idempotency.
 - Ordering guarantees (§14, Q4).
 - Replay from a durable log. Out of scope; a later track may build one.
 - Consuming a dead-letter queue from Bynk source. A follow-up (§14, Q5).
@@ -321,19 +324,39 @@ hand-off:                            │
   attempted with a short, bounded retry. If it still fails, the handler
   faults: the caller sees a failure and its own retry is the recovery
   (§14, Q1).
+- **A service's partial hand-off duplicates.** Subscribers' chunks are
+  independent, so a hand-off can succeed for subscriber X and fail for Y.
+  The handler faults, the caller retries, the body runs again and emits again
+  with fresh `eventId`s, and X receives the event twice under two ids. The
+  `eventId` claim (§7.4) cannot see this. It is stated plainly: an event from
+  a service publisher can reach a subscriber more than once as distinct
+  emissions, and a subscriber that must act once keys its own `claim` on a
+  business key (for example `invoiceId`), not on `env.eventId`. An agent
+  publisher does not have this problem: its outbox resends the same messages
+  with the same `eventId`s.
 
 ### 5.3 Subscriber side
 
 The `queue` entry gains an arm per subscriber queue. For each message:
 
-1. **Verify** the signature (§7.2). Failure: ack, report a fault, count, never
-   handle, never dead-letter.
-2. **Deduplicate** on `eventId` per subscriber (§7.4). A repeat: ack and log.
-3. **Decode** envelope and payload. Failure on a verified message: send to the
-   dead-letter queue at once, then ack (#3878 B).
-4. **Guard** with the pattern and `via schema`, as today. A miss: ack.
-5. **Run** the handler. Success: ack. Fault: retry, until `retries`, then the
-   platform moves it to the dead-letter queue.
+1. **Verify** the signature and the `ts` window (§7.2). Failure: ack, report
+   a fault, count, never handle, never dead-letter. No claim is taken.
+2. **Deduplicate** on `eventId` per subscriber (§7.4). A claim marked done:
+   ack and log. A claim still held in progress by another delivery: retry
+   after `retryDelay`, never ack.
+3. **Decode** envelope and payload, and run the identity checks (§7.2).
+   Decode failure on a verified message: send to the dead-letter queue at
+   once, mark the claim done, then ack (#3878 B). Identity failure: release
+   the claim, then treat as a bad signature (step 1).
+4. **Guard** with the pattern and `via schema`, as today. A miss: mark the
+   claim done, then ack.
+5. **Run** the handler. Success: mark the claim done, then ack. Fault: release
+   the claim and retry, until `retries`, then the platform moves it to the
+   dead-letter queue.
+
+An ack of a message that holds a claim always follows a done mark, and a
+retry always follows a release, so the claim's state never disagrees with the
+queue's.
 
 The `/_bynk/event/` route stays for one release for the migration (§8), then
 goes.
@@ -371,7 +394,11 @@ are written.
 - **Durable Object alarms:** one pending alarm per object; an alarm handler
   that throws is retried by the platform. The retry count and backoff, and
   whether `setAlarm` inside `storage.transaction` commits atomically with the
-  writes: *to confirm*.
+  writes: *to confirm*. The outbox does not depend on the answer: if it is
+  not atomic, the runtime arms the alarm before the transaction instead. An
+  alarm that fires with an empty outbox does nothing, so a spurious alarm is
+  harmless, and arming first means no committed entry is ever left without
+  one.
 - **Durable Object value size** for an outbox entry on SQLite-backed storage:
   *to confirm*. One entry per message keeps each under the 128 KB message cap
   in any case.
@@ -383,9 +410,16 @@ are written.
 - Subscriber queues are named `bynk-ev-<readable>-<digest>`, where
   `<readable>` is the subscriber's context and service, lower-cased with
   every non-alphanumeric run written `-`, truncated so the whole name, the
-  `-dlq` suffix and the longest `-<env>` suffix fit 63 characters, and
+  `-dlq` suffix and a fixed environment allowance fit 63 characters, and
   `<digest>` is the first 8 hex digits of SHA-256 over `<context>/<service>`.
   The digest keeps the name injective after truncation and folding.
+- The environment set is open (`env_qualify` takes any `--env` name), so the
+  compiler cannot know the longest suffix. It reserves a fixed allowance
+  instead (proposed: 16 characters, `-` included), and `bynk deploy` refuses
+  an environment whose suffix would exceed it in a project with event
+  subscribers, naming the limit. If the allowance proves too tight, the
+  fallback is a digest-only name, `bynk-ev-<digest>`, which leaves room for
+  any reasonable suffix and gives up only readability.
 - Each subscriber queue has a dead-letter queue, `<name>-dlq`.
 - Deploy environment-qualifies both with `env_qualify`, creates them before
   the push (as `provisioning.rs:245-270` does), and records them in the
@@ -416,6 +450,21 @@ Shared with #3899 (D). One format, one signer, one verifier:
   SHA-256 of `body`.
 - Signing the queue name stops a message being moved between subscribers or
   between environments.
+- The edge key proves only that the message came from the context named in
+  `from`. Because the key is per edge and the event `type` lives inside
+  `body`, the subscriber also checks, after decoding and before the guard,
+  that `type`'s owning context is `from` (owner-only emission, ADR 0289,
+  enforced at the subscriber as well as at compile time), that
+  `envelope.publisherId` is `from`, and that `envelope.eventId` is `id`.
+  Without the last check the claim would key on one id while the handler saw
+  another. A failure is treated like a bad signature: ack, report, count,
+  never handle, never dead-letter.
+- `ts` bounds replay. A message whose `ts` is older than the done claim's
+  lifetime (§7.4) less a margin (proposed: one hour) is rejected. Inside that
+  window the `eventId` claim rejects a replay; outside it the timestamp does,
+  so a captured message has no moment at which it is accepted twice. The
+  lifetime is at least the retention period plus the maximum delay, so no
+  legitimate message, however long it waited, falls outside the window.
 - `body` is carried as text so the signature covers exact bytes and needs no
   JSON canonicalisation. #3899 says "canonical body"; the two increments
   settle on one choice (§14, Q2).
@@ -426,7 +475,8 @@ Shared with #3899 (D). One format, one signer, one verifier:
 
 The publisher encodes each message in the handler, before commit. Every part
 of the wrapper is known then: `from` and the queue name are compile-time
-constants, `sig` and `ts` are fixed width. An emission whose largest message
+constants, `sig` is fixed width and `ts` is bounded (a count of seconds, at
+most 11 digits). An emission whose largest message
 would exceed the cap faults the handler before commit. Nothing is written,
 nothing is sent, and the caller sees the fault. `EventEnvelope.trace` (#3895)
 is part of the envelope, so it rides inside `body` and counts towards the cap.
@@ -434,16 +484,35 @@ is part of the envelope, so it rides inside `body` and counts towards the cap.
 ### 7.4 Deduplication
 
 The subscriber runtime claims `eventId` per subscriber service in the
-`Idempotency` store before decoding the payload, for at least the retention
-period plus the maximum delay. It is settled like an author's `claim`:
-released if the handler faults (so the retry runs), kept if it succeeds. This
-rejects replays by anyone who can read the queue and makes the platform's own
-duplicates harmless. On Cloudflare the store is the D1 database a Worker
-already gets for `Idempotency` (`reference/bynk-capabilities.md:83-86`); each
-delivery costs one round trip to it.
+`Idempotency` store before decoding the payload. The claim has two states:
+
+- **In progress**, a lease taken when the delivery starts and long enough to
+  cover the consumer's wall-time limit. An invocation that dies without a
+  catchable fault (CPU or wall-time limit, isolate eviction, out of memory, a
+  deploy that cuts it off) cannot release it, so the lease lapses on its own.
+  Author claims already behave this way
+  (`reference/bynk-capabilities.md:119-124`).
+- **Done**, marked when the message is acknowledged (§5.3) and held for at
+  least the retention period plus the maximum delay. This is the lifetime the
+  `ts` window of §7.2 is measured against.
+
+A delivery that finds a done claim is a repeat and is acknowledged. One that
+finds a live lease is retried after `retryDelay`, never acknowledged, so a
+redelivery that arrives before a dead invocation's lease lapses is postponed,
+not dropped. A fault releases the claim at once. The lease length, and
+whether a retry against a live lease counts towards `retries`, are recorded
+with D2. This rejects replays inside the window by anyone who can read the
+queue and makes the platform's own duplicates harmless, without letting a
+crash turn a redelivery into a loss. On Cloudflare the store is the D1
+database a Worker already gets for `Idempotency`
+(`reference/bynk-capabilities.md:83-86`); each delivery costs a round trip to
+take the claim and one to settle it.
 
 An author's own `Idempotency.claim(env.eventId, …)` stays legal and becomes
-redundant for redelivery. The guide says so.
+redundant for redelivery of one emission. It does not cover a service
+publisher's retried call, which is a new emission with new `eventId`s
+(§5.2); a subscriber of a service publisher that must act once claims a
+business key. The guide says both.
 
 ## 8. Migration and deploy
 
@@ -481,8 +550,11 @@ as today: at most once. That is the last time.
   entries, applying `retries` and the dead-letter queue, so a case can observe
   a retry and a dead-letter.
 - `system`, trust: a case delivers an unsigned message, one signed by another
-  context, one moved from another queue, and a replay. Each is acknowledged
-  and never handled.
+  context, one moved from another queue, one whose `type` belongs to a
+  context other than `from`, a replay inside the claim's lifetime and one
+  older than the `ts` window. Each is acknowledged and never handled.
+- `system`, crash: a case ends a handler without a fault while its lease is
+  held and checks that the redelivery runs once the lease lapses.
 - `workerd`: an extension of `bynkc/tests/events_ordering_workerd.rs`
   (ADR 0290) checks completeness under concurrent emission and drops the
   in-batch order assertion.
@@ -510,8 +582,10 @@ as today: at most once. That is the last time.
 - **Queue sprawl.** Two queues per subscriber service per environment, against
   the account limit.
 - **Service faults after side effects.** A service whose hand-off fails faults
-  after its body ran. A caller's retry runs the body again. Authors who need
-  commit atomicity emit from an agent; the guide says so.
+  after its body ran. A caller's retry runs the body again, and any subscriber
+  whose chunk had already been sent receives the event a second time under a
+  new `eventId` (§5.2). Authors who need commit atomicity emit from an agent;
+  the guide says so.
 - **Shared format with #3899.** If the two increments diverge, there are two
   verification paths. Settled together (§13).
 
@@ -542,8 +616,14 @@ as today: at most once. That is the last time.
   its own queue, before decoding (§7.2). Anything that does not verify is
   acknowledged, reported and counted, never handled, never dead-lettered, so
   the dead-letter queue holds only genuine messages.
-- Replays: rejected by the `eventId` claim (§7.4). A timestamp window cannot
-  do this, because messages legitimately wait for days.
+- Identity: `type`'s owner, `envelope.publisherId` and `envelope.eventId`
+  must agree with the signed `from` and `id` (§7.2), so a key held for one
+  edge cannot carry another context's event.
+- Replays: rejected by the `eventId` claim within its lifetime, and by the
+  signed `ts` beyond it (§7.2, §7.4). A short timestamp window alone cannot
+  do this, because messages legitimately wait for days; a window as long as
+  the claim's lifetime closes the gap the claim's expiry would otherwise
+  leave.
 
 **Not protected**
 
@@ -581,13 +661,18 @@ becomes true end to end.
   problem.
 - **D2. The guarantee.** At least once from a committed agent emission; for a
   service, durable hand-off or a handler fault; best effort and in process on
-  `bundle`. Duplicates are absorbed by the runtime's `eventId` claim.
+  `bundle`. Duplicates of one emission are absorbed by the runtime's
+  `eventId` claim, whose in-progress lease and done mark keep a crash
+  mid-handler from dropping a redelivery (§7.4). A service publisher's
+  retried call is a new emission and is not absorbed (§5.2).
 - **D3. Ordering.** Best effort. Amends ADR 0290 by withdrawing both partial
   guarantees.
 - **D4. Trust for internal queues.** Reserved names refused at compile time;
   the signed-message format shared with #3899, bound to the destination
-  queue, under the ADR 0485 edge key; verification before decoding; replay
-  rejection by claim; rotation window.
+  queue, under the ADR 0485 edge key; verification before decoding; identity
+  checks binding `type`'s owner, `publisherId` and `eventId` to the signed
+  fields; replay rejection by claim within its lifetime and by `ts` beyond
+  it; rotation window.
 
 Recorded in their slices: the outbox's storage layout and alarm protocol
 (slice 2); the predicate generation (slice 3); `EventDelivery` and the
@@ -600,8 +685,12 @@ Proposed for review, not settled. Each is closed under review in this PR.
 1. **The publisher's step.**
    *Proposed:* agents use a transactional outbox: pending messages written in
    the commit's `storage.transaction`, an alarm set as a backstop, an in-line
-   hand-off after commit that deletes what it sent. Services attempt the
-   hand-off after the body with a short bounded retry, then fault the handler.
+   hand-off after commit that deletes what it sent. If Slice 0 finds that
+   `setAlarm` is not atomic with the transaction, the alarm is armed before
+   it instead (§6). Services attempt the hand-off after the body with a short
+   bounded retry, then fault the handler. A partial hand-off followed by the
+   caller's retry can duplicate under new `eventId`s, which a subscriber of a
+   service publisher absorbs with a business-key claim (§5.2).
    *Why:* the agent outbox is the only design that makes "committed" and
    "handed off" the same fact, and `EntryOverlay.flush` already gives one
    transaction to join. A service has no commit to join, so the honest rule is
@@ -618,8 +707,10 @@ Proposed for review, not settled. Each is closed under review in this PR.
    recorded in the ledger as Bynk-created; every message signed with HMAC
    under the edge key, covering the destination queue, the event type (inside
    `body`), `eventId`, and the body (§7.2); verification before decoding;
-   replays rejected by the `eventId` claim; previous key accepted for the
-   retention window. The format is #3899's, with `body` carried as text.
+   the subscriber checks that `type`'s owner, `envelope.publisherId` and
+   `envelope.eventId` agree with `from` and `id`; replays rejected by the
+   `eventId` claim and, past its lifetime, by the signed `ts`; previous key
+   accepted for the retention window. The format is #3899's, with `body` carried as text.
    *Why:* a queue has no headers and is writable by anything on the account,
    so the proof has to travel in the body and bind to one queue. Sharing
    #3899's format gives one verifier. Text avoids canonicalising JSON.
@@ -717,7 +808,8 @@ Proposed for review, not settled. Each is closed under review in this PR.
     `system` it is admitted and drives the queue entry, yielding `Ack`,
     `Retry(reason)` or `Undecodable`; emissions from a driver are drained
     through a queue double that applies retries and the dead-letter queue;
-    trust cases cover unsigned, mis-signed, moved and replayed messages (§9).
+    trust cases cover unsigned, mis-signed, moved and replayed messages, and
+   one carrying another context's event type (§9).
     *Why:* it reuses ADR 0522's queue path, so `system` exercises the real
     entry, and the outcome names match the queue tier. *Rejected:* keeping
     `bynk.test.event_needs_in_process`, which would leave the new path
