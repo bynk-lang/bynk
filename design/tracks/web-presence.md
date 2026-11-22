@@ -169,7 +169,8 @@ footer.
    4. Make illegal states unrepresentable
    5. Handle failure with `Result` (new; written in slice 9, at
       `tutorials/failure-and-result.md`)
-   6. Reach out with capabilities (new)
+   6. Reach out with capabilities (new; written in slice 10, at
+      `tutorials/capabilities.md`)
    7. Add a stateful agent
    8. Split into contexts (new)
    9. Test it
