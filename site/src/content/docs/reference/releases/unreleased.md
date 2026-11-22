@@ -7,6 +7,7 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.640.40** | bynk-lang.org has a new home page, built to the site mockup — the hero beside a checked program, "Four ways in" to the Book, Examples, Reference and Blog, "What Bynk checks for you", and the blog's newest posts — and both sites share one header and footer from `@bynk-lang/site-theme` 0.3.0. The documentation's prose is now licensed CC BY 4.0 and its code snippets MIT, as the blog's are; Bynk itself stays MIT or Apache-2.0 (web presence track, slice 8, #4025). |
 | **v0.640.39** | Internal restructuring of `bynk deploy`; no change to plans, provisioning or `bynk.deploy.lock` |
 | **v0.640.38** | Internal restructuring: test-harness generation moves from the driver into `bynk-emit::testgen`; no emitted output changes |
 | **v0.640.37** | Internal restructuring of `bynk deploy`; no change to plans, provisioning or `bynk.deploy.lock` |

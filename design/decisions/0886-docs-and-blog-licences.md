@@ -1,11 +1,6 @@
----
-level: patch
-changelog: bynk-lang.org has a new home page, built to the site mockup — the hero beside a checked program, "Four ways in" to the Book, Examples, Reference and Blog, "What Bynk checks for you", and the blog's newest posts — and both sites share one header and footer from `@bynk-lang/site-theme` 0.3.0. The documentation's prose is now licensed CC BY 4.0 and its code snippets MIT, as the blog's are; Bynk itself stays MIT or Apache-2.0 (web presence track, slice 8, #4025).
----
+# 0886 — The documentation's prose is CC BY 4.0 and its snippets MIT, as the blog's; Bynk stays MIT or Apache-2.0
 
-## ADR: docs-and-blog-licences
-title: The documentation's prose is CC BY 4.0 and its snippets MIT, as the blog's; Bynk stays MIT or Apache-2.0
-summary: Writing on both sites is CC BY 4.0, code snippets on both are MIT, and the toolchain and everything else in bynk-lang/bynk stays dual-licensed MIT or Apache-2.0
+- **Status:** Accepted (v0.640.40)
 
 **Context.** Everything in bynk-lang/bynk was dual-licensed MIT or
 Apache-2.0, the documentation's prose included. The blog licensed its posts
