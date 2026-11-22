@@ -24,7 +24,7 @@ const DELIVERY_FAILED: &str = "EventsFanout delivery failed";
 /// whether a delivery to it carries the event's envelope.
 ///
 /// Every subscription is delivered in isolation (ADR 0284): that is the rule
-/// of [`isolated_delivery`], not a per-subscription choice, so it is not a
+/// of `isolated_delivery`, not a per-subscription choice, so it is not a
 /// field here.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EventSubscription {
