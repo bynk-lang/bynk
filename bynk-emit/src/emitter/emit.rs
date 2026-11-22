@@ -4942,13 +4942,8 @@ fn classify_agent_store<'a>(
             // for the identical reason.
             let ts = store_field_ty
                 .get(n.name.as_str())
-                .and_then(|kind| match kind {
-                    StoreKindIr::Map(_, v_ty) => held_frame_ty(*v_ty, tys.types()),
-                    StoreKindIr::Cell(_)
-                    | StoreKindIr::Set(_)
-                    | StoreKindIr::Cache(..)
-                    | StoreKindIr::Log(..) => None,
-                })
+                .and_then(|kind| kind.map_value())
+                .and_then(|v_ty| held_frame_ty(v_ty, tys.types()))
                 .map(|frame_ty| ts_ty_to_ts_type(frame_ty, tys))
                 .unwrap_or_else(|| ts_type_ref_to_ts_type(held_frame_ty_ref(v), None));
             (n.name.clone(), ts)
@@ -4985,13 +4980,8 @@ fn classify_agent_store<'a>(
         .map(|(n, v)| {
             let ts = store_field_ty
                 .get(n.name.as_str())
-                .and_then(|kind| match kind {
-                    StoreKindIr::Map(_, v_ty) => Some(ts_ty_to_ts_type(*v_ty, tys)),
-                    StoreKindIr::Cell(_)
-                    | StoreKindIr::Set(_)
-                    | StoreKindIr::Cache(..)
-                    | StoreKindIr::Log(..) => None,
-                })
+                .and_then(|kind| kind.map_value())
+                .map(|v_ty| ts_ty_to_ts_type(v_ty, tys))
                 .unwrap_or_else(|| ts_type_ref_to_ts_type(v, None));
             (n.name.clone(), ts)
         })
@@ -5118,13 +5108,8 @@ fn classify_agent_store<'a>(
         .map(|(n, v, _)| {
             let ts = store_field_ty
                 .get(n.name.as_str())
-                .and_then(|kind| match kind {
-                    StoreKindIr::Log(elem_ty, _) => Some(ts_ty_to_ts_type(*elem_ty, tys)),
-                    StoreKindIr::Cell(_)
-                    | StoreKindIr::Map(..)
-                    | StoreKindIr::Set(_)
-                    | StoreKindIr::Cache(..) => None,
-                })
+                .and_then(|kind| kind.log_element())
+                .map(|elem_ty| ts_ty_to_ts_type(elem_ty, tys))
                 .unwrap_or_else(|| ts_type_ref_to_ts_type(v, None));
             (n.name.clone(), ts)
         })

@@ -1247,6 +1247,50 @@ fn emit_queue_wrapper(
     }
 }
 
+/// The TypeScript literal of a `WebSocket` open key written as a literal
+/// (`classify_open_key` admits only a string, an integer or a boolean).
+fn open_key_literal(e: &bynk_syntax::ast::Expr) -> TsExpr {
+    match &e.kind {
+        ExprKind::StrLit(v) => str_lit(v.clone()),
+        ExprKind::IntLit { value, .. } => num_lit(value.to_string()),
+        ExprKind::BoolLit(b) => ident(b.to_string()),
+        ExprKind::FloatLit { .. }
+        | ExprKind::DecimalLit { .. }
+        | ExprKind::DurationLit { .. }
+        | ExprKind::InterpStr(_)
+        | ExprKind::Ident(_)
+        | ExprKind::Call { .. }
+        | ExprKind::Lambda(_)
+        | ExprKind::BinOp(..)
+        | ExprKind::UnaryOp(..)
+        | ExprKind::Paren(_)
+        | ExprKind::Block(_)
+        | ExprKind::If { .. }
+        | ExprKind::Ok(_)
+        | ExprKind::Err(_)
+        | ExprKind::Question(_)
+        | ExprKind::RecordConstruction { .. }
+        | ExprKind::FieldAccess { .. }
+        | ExprKind::MethodCall { .. }
+        | ExprKind::Match { .. }
+        | ExprKind::Is { .. }
+        | ExprKind::Some(_)
+        | ExprKind::None
+        | ExprKind::UnitLit
+        | ExprKind::RecordSpread { .. }
+        | ExprKind::EffectPure(_)
+        | ExprKind::Expect(_)
+        | ExprKind::Val { .. }
+        | ExprKind::Wire(_)
+        | ExprKind::ListLit(..)
+        | ExprKind::Observation(_)
+        | ExprKind::Faults(_)
+        | ExprKind::Trace { .. } => {
+            unreachable!("classify_open_key returns only these literals")
+        }
+    }
+}
+
 /// v0.104 (real-time track slice 3b): emit the WebSocket upgrade route — the
 /// edge half of DECISION A. The upgrade authenticates the actor **in the Worker,
 /// before any request reaches the Durable Object** (the safety boundary): it
@@ -1693,45 +1737,7 @@ fn emit_websocket_upgrade(
                 call(ident(alias), vec![])
             }
         },
-        WsOpenKey::Literal(e) => match &e.kind {
-            ExprKind::StrLit(v) => str_lit(v.clone()),
-            ExprKind::IntLit { value, .. } => num_lit(value.to_string()),
-            ExprKind::BoolLit(b) => ident(b.to_string()),
-            ExprKind::FloatLit { .. }
-            | ExprKind::DecimalLit { .. }
-            | ExprKind::DurationLit { .. }
-            | ExprKind::InterpStr(_)
-            | ExprKind::Ident(_)
-            | ExprKind::Call { .. }
-            | ExprKind::Lambda(_)
-            | ExprKind::BinOp(..)
-            | ExprKind::UnaryOp(..)
-            | ExprKind::Paren(_)
-            | ExprKind::Block(_)
-            | ExprKind::If { .. }
-            | ExprKind::Ok(_)
-            | ExprKind::Err(_)
-            | ExprKind::Question(_)
-            | ExprKind::RecordConstruction { .. }
-            | ExprKind::FieldAccess { .. }
-            | ExprKind::MethodCall { .. }
-            | ExprKind::Match { .. }
-            | ExprKind::Is { .. }
-            | ExprKind::Some(_)
-            | ExprKind::None
-            | ExprKind::UnitLit
-            | ExprKind::RecordSpread { .. }
-            | ExprKind::EffectPure(_)
-            | ExprKind::Expect(_)
-            | ExprKind::Val { .. }
-            | ExprKind::Wire(_)
-            | ExprKind::ListLit(..)
-            | ExprKind::Observation(_)
-            | ExprKind::Faults(_)
-            | ExprKind::Trace { .. } => {
-                unreachable!("classify_open_key returns only these literals")
-            }
-        },
+        WsOpenKey::Literal(e) => open_key_literal(e),
         WsOpenKey::Other => unreachable!("rejected above"),
     };
     let args_json: Vec<TsExpr> = h

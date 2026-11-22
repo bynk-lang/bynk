@@ -621,48 +621,17 @@ pub fn instantiate_provider_ts_expr(
         // to would quietly read the default `KV`, so two instances would share
         // a namespace. The one other shape is a test module's placeholder for
         // a provider it cannot build, which has no binding to carry.
-        match &mut expr {
-            bynk_ts::TsExpr::New { args, .. } => args.push(bynk_ts::TsExpr::Lit(
-                bynk_ts::TsLit::Str(inst.binding.clone()),
-            )),
-            bynk_ts::TsExpr::As { .. } if matches!(namespaces, ProviderNamespaces::Test { .. }) => {
-            }
-            bynk_ts::TsExpr::Ident(_)
-            | bynk_ts::TsExpr::VerbatimExpr(..)
-            | bynk_ts::TsExpr::RawUsing(..)
-            | bynk_ts::TsExpr::Member { .. }
-            | bynk_ts::TsExpr::OptionalMember { .. }
-            | bynk_ts::TsExpr::TypeApp { .. }
-            | bynk_ts::TsExpr::DefaultIife { .. }
-            | bynk_ts::TsExpr::LinesArray(_)
-            | bynk_ts::TsExpr::Index { .. }
-            | bynk_ts::TsExpr::OptionalIndex { .. }
-            | bynk_ts::TsExpr::Arrow { .. }
-            | bynk_ts::TsExpr::Call { .. }
-            | bynk_ts::TsExpr::Object { .. }
-            | bynk_ts::TsExpr::Array { .. }
-            | bynk_ts::TsExpr::TemplateLit { .. }
-            | bynk_ts::TsExpr::Await(_)
-            | bynk_ts::TsExpr::As { .. }
-            | bynk_ts::TsExpr::AsConst(_)
-            | bynk_ts::TsExpr::Unary { .. }
-            | bynk_ts::TsExpr::Binary { .. }
-            | bynk_ts::TsExpr::Conditional { .. }
-            | bynk_ts::TsExpr::MultilineConditional { .. }
-            | bynk_ts::TsExpr::Paren(_)
-            | bynk_ts::TsExpr::Spread(_)
-            | bynk_ts::TsExpr::NonNull(_)
-            | bynk_ts::TsExpr::Assign { .. }
-            | bynk_ts::TsExpr::AddAssign { .. }
-            | bynk_ts::TsExpr::NullishAssign { .. }
-            | bynk_ts::TsExpr::Lit(_)
-            | bynk_ts::TsExpr::Sequence(_)
-            | bynk_ts::TsExpr::OptionalCall { .. }
-            | bynk_ts::TsExpr::Function { .. }
-            | bynk_ts::TsExpr::Yield(_) => panic!(
+        if let bynk_ts::TsExpr::New { args, .. } = &mut expr {
+            args.push(bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(
+                inst.binding.clone(),
+            )));
+        } else if !(matches!(expr, bynk_ts::TsExpr::As { .. })
+            && matches!(namespaces, ProviderNamespaces::Test { .. }))
+        {
+            panic!(
                 "derived capability `{cap}`: base `{}.{}` is not built by a construction, so binding `{}` has nowhere to go",
                 inst.base_unit, inst.base_cap, inst.binding
-            ),
+            );
         }
         return expr;
     }
