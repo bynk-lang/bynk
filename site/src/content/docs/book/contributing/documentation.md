@@ -26,6 +26,17 @@ page shows.
 
 ## Build and preview locally
 
+The site's brand comes from `@bynk-lang/site-theme`, which is published to
+GitHub Packages, and GitHub Packages needs a token even to read. Create a
+classic personal access token with only the `read:packages` scope, and add it
+to your **user-level** `~/.npmrc` (never the project's):
+
+```ini
+//npm.pkg.github.com/:_authToken=YOUR_TOKEN
+```
+
+`site/.npmrc` already tells npm that `@bynk-lang` packages live there.
+
 Everything runs from `site/`:
 
 ```sh
@@ -50,7 +61,20 @@ renderer, and the `bynk` syntax highlighter.
 Highlighting for `bynk` fenced blocks comes from a TextMate grammar
 (`site/src/grammars/bynk.tmLanguage.json`), a copy of the VS Code extension's
 ([bynk-lang/vscode-bynk](https://github.com/bynk-lang/vscode-bynk)), so code on the page matches the editor.
-Refresh the copy from the extension when its grammar changes.
+Refresh the copy from the extension when its grammar changes. The site theme
+ships the same grammar, and CI fails if the two copies differ, so refresh the
+theme's in the same change.
+
+## The brand
+
+The colours, fonts, header, wordmark and code themes are not in this
+repository. They come from
+[`@bynk-lang/site-theme`](https://github.com/bynk-lang/site-theme), a
+Starlight plugin the blog uses too, so the two sites cannot drift apart. A
+brand change is made there, released, and taken here by bumping the version
+in `site/package.json`. What is particular to this site stays here: the
+`Sidebar` override, scoped to the surface being viewed, and
+`site/src/styles/site.css`, for the landing hero. Both win over the theme's.
 
 ## The sidebar
 
