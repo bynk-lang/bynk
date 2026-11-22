@@ -1045,7 +1045,7 @@ A case's effective tier is `case.tier ?? suite.tier ?? unit`. Between `unit` and
   collaborators' realness and whether sends cross a serialisation boundary change.
 
 See [Test tiers](/book/guides/testing/integration/) for the full guide, and
-[`bynk.tier.*` errors](/book/troubleshooting/integration-errors/).
+[`bynk.tier.*` errors](/book/reference/diagnostics/#test-tiers).
 
 ## `stub` — per-seam test doubles {#stub}
 
@@ -1165,7 +1165,7 @@ stub Pricing.quote(_) never                        // never completes
 - Latency exists where `stub` does: `unit` and `integration`. At `system`, and under
   `bynk test --against`, `within` reads real time; test the timeout path at `unit`.
 
-See [`bynk.stub.*` errors](/book/troubleshooting/integration-errors/).
+See [`bynk.stub.*` errors](/book/reference/diagnostics/#stubs).
 
 ## Helper functions in a suite {#helpers}
 
@@ -1576,7 +1576,7 @@ case "placing an order stores it" {
 literal (`bynk.val.pin_not_literal`), must satisfy the refinement
 (`bynk.val.literal_violates`), and is only accepted where the kind supports it
 (`bynk.val.pin_unsupported`). See
-[`bynk.val.*` errors](/book/troubleshooting/val-errors/).
+[`bynk.val.*` errors](/book/reference/diagnostics/#value-fabrication).
 
 ### `@example` — a value for a pattern {#val-example}
 
@@ -1667,7 +1667,7 @@ type already guarantees (e.g. `for all q: Quantity { expect q > 0 }` when
 On failure a property reports the case count, the run's root seed, and a **shrunk**
 counterexample with a copy-paste reproduce line — see
 [Run your tests](/book/guides/testing/run-tests/) and
-[`bynk.val.*` errors](/book/troubleshooting/val-errors/).
+[`bynk.val.*` errors](/book/reference/diagnostics/#value-fabrication).
 
 ## History properties — `for all run: History[Agent]` {#history-properties}
 
@@ -1740,7 +1740,7 @@ you need one, belongs to a policy / `system`-tier guarantee, not a history prope
 
 On failure a history property reports the run count, the run's root seed, and a
 **shrunk minimal sequence** with a reproduce line — see
-[`bynk.history.*` errors](/book/troubleshooting/history-errors/). Single-agent
+[`bynk.history.*` errors](/book/reference/diagnostics/#history-properties). Single-agent
 histories are the v1 surface; multi-agent / cross-context protocols are a named
 follow-on.
 
@@ -1798,7 +1798,7 @@ per-call postcondition can express. A `case`/`property` that merely restates a
 contract already declared at the source is redundant and flagged
 `bynk.contract.restated_by_test` (a conservative, syntactic check).
 
-See [`bynk.contract.*` errors](/book/troubleshooting/contract-errors/).
+See [`bynk.contract.*` errors](/book/reference/diagnostics/#contracts).
 
 ## Step invariants — `transition` {#transitions}
 
@@ -1830,7 +1830,7 @@ agent state is valid but not necessarily reachable, so behavioural generation ov
 transitions is a runner-driven handler-sequence concern, not value fabrication.
 
 Full reference: [Agent invariants → Step invariants](/book/reference/agent-invariants/#step-invariants).
-See [`bynk.transition.*` errors](/book/troubleshooting/transition-errors/).
+See [`bynk.transition.*` errors](/book/reference/diagnostics/#transitions-step-invariants).
 
 ## Observation — `expect Cap.op called …` {#observation}
 
@@ -1898,7 +1898,7 @@ directly, so observation adds no production cost. Observation is *scenario-speci
 — a claim about one case; a *universal* guarantee ("every payment audits, on every
 path") is a policy, not a test.
 
-See [`bynk.observe.*` errors](/book/troubleshooting/observation-errors/).
+See [`bynk.observe.*` errors](/book/reference/diagnostics/#observation).
 
 ## System tests — a flow across Workers {#system-tests}
 

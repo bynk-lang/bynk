@@ -96,7 +96,7 @@ and the compiler says so — verbatim, captured from `bynk`:
 ```
 
 The fix is to give the field a starting value
-([`bynk.agents.non_zeroable_state_field`](/book/troubleshooting/agents-non-zeroable-state-field/)).
+([`bynk.agents.non_zeroable_state_field`](/book/reference/diagnostics/bynk.agents.non_zeroable_state_field/)).
 
 ## Why "not set yet" is `Option`, not a special case
 

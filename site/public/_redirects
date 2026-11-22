@@ -16,3 +16,8 @@
 /d/ /book/reference/diagnostics/ 302
 /d/:code /book/reference/diagnostics/:code/ 302
 /d/:code/ /book/reference/diagnostics/:code/ 302
+
+# The troubleshooting pages were folded into each code's explanation in slice 4b
+# (#3907); every code now has its own page, listed on the Diagnostic index.
+/book/troubleshooting /book/reference/diagnostics/ 302
+/book/troubleshooting/* /book/reference/diagnostics/ 302

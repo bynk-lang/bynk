@@ -169,7 +169,9 @@
   ],
   "bynk.adapter.disallowed_item": [
     "/book/reference/adapters/#anatomy",
-    "/book/troubleshooting/adapter-errors/"
+    "/book/reference/adapters/",
+    "/book/guides/effects-and-capabilities/wrap-a-library/",
+    "/book/guides/projects-build-and-deployment/share-code-between-projects/#approve-a-dependencys-npm-packages"
   ],
   "bynk.adapter.duplicate_binding": [
     "/book/reference/adapters/#anatomy"
@@ -188,11 +190,15 @@
   ],
   "bynk.adapter.no_binding": [
     "/book/reference/adapters/#anatomy",
-    "/book/troubleshooting/adapter-errors/"
+    "/book/reference/adapters/",
+    "/book/guides/effects-and-capabilities/wrap-a-library/",
+    "/book/guides/projects-build-and-deployment/share-code-between-projects/#approve-a-dependencys-npm-packages"
   ],
   "bynk.adapter.provider_has_body": [
     "/book/reference/adapters/#anatomy",
-    "/book/troubleshooting/adapter-errors/"
+    "/book/reference/adapters/",
+    "/book/guides/effects-and-capabilities/wrap-a-library/",
+    "/book/guides/projects-build-and-deployment/share-code-between-projects/#approve-a-dependencys-npm-packages"
   ],
   "bynk.agent.class_conflict": [
     "/book/reference/agents/#renaming-and-removing-an-agent"
@@ -228,8 +234,12 @@
     "/book/reference/agents/#migrations"
   ],
   "bynk.agent.non_additive_state_change": [
+    "/book/reference/agents/#reading-a-refused-change",
     "/book/reference/agents/#migrations",
-    "/book/troubleshooting/agent-non-additive-state-change/"
+    "/book/guides/program-structure/add-an-option/",
+    "/book/reference/agents/#changes-that-need-no-migration",
+    "/book/spec/static-semantics/#543-rehydration-validation-v097",
+    "/book/guides/agents-and-state/stateful-agent/"
   ],
   "bynk.agent.outside_context": [
     "/book/reference/agents/#declaration"
@@ -251,12 +261,16 @@
   ],
   "bynk.agents.bad_state_initialiser": [
     "/book/reference/agents/#state-initialisation",
-    "/book/troubleshooting/agents-bad-state-initialiser/",
-    "/book/troubleshooting/agents-non-zeroable-state-field/"
+    "/book/reference/agents/",
+    "/book/guides/agents-and-state/state-machine/",
+    "/book/guides/agents-and-state/stateful-agent/",
+    "/book/guides/agents-and-state/the-agent-model/"
   ],
   "bynk.agents.non_zeroable_state_field": [
     "/book/reference/agents/#state-initialisation",
-    "/book/troubleshooting/agents-non-zeroable-state-field/"
+    "/book/guides/agents-and-state/stateful-agent/",
+    "/book/reference/agents/",
+    "/book/guides/agents-and-state/the-agent-model/"
   ],
   "bynk.asset.duplicate": [
     "/book/reference/assets/#declaring-an-asset"
@@ -353,7 +367,9 @@
   ],
   "bynk.consumes.capability_name_clash": [
     "/book/guides/effects-and-capabilities/share-across-contexts/#consume-it-with-a-qualified-given",
-    "/book/troubleshooting/adapter-errors/"
+    "/book/reference/adapters/",
+    "/book/guides/effects-and-capabilities/wrap-a-library/",
+    "/book/guides/projects-build-and-deployment/share-code-between-projects/#approve-a-dependencys-npm-packages"
   ],
   "bynk.consumes.capability_not_selected": [
     "/book/guides/program-structure/consume-services/#rename-an-exported-type-that-clashes-with-one-of-yours"
@@ -420,7 +436,9 @@
   ],
   "bynk.context.external_provider": [
     "/book/reference/capabilities/#providing-a-capability",
-    "/book/troubleshooting/adapter-errors/"
+    "/book/reference/adapters/",
+    "/book/guides/effects-and-capabilities/wrap-a-library/",
+    "/book/guides/projects-build-and-deployment/share-code-between-projects/#approve-a-dependencys-npm-packages"
   ],
   "bynk.context.opaque_inspection": [
     "/book/reference/types/#opaque-types"
@@ -429,40 +447,39 @@
     "/book/reference/types/"
   ],
   "bynk.contract.duplicate_name": [
-    "/book/reference/testing/#contracts",
-    "/book/troubleshooting/contract-errors/"
+    "/book/reference/testing/#contracts"
   ],
   "bynk.contract.impure_predicate": [
-    "/book/reference/testing/#contracts",
-    "/book/troubleshooting/contract-errors/"
+    "/book/reference/testing/#contracts"
   ],
   "bynk.contract.not_bool": [
-    "/book/reference/testing/#contracts",
-    "/book/troubleshooting/contract-errors/"
+    "/book/reference/testing/#contracts"
   ],
   "bynk.contract.restated_by_test": [
-    "/book/reference/testing/#contracts",
-    "/book/troubleshooting/contract-errors/"
+    "/book/reference/testing/#contracts"
   ],
   "bynk.contract.result_in_requires": [
-    "/book/reference/testing/#contracts",
-    "/book/troubleshooting/contract-errors/"
+    "/book/reference/testing/#contracts"
   ],
   "bynk.cron.bad_params": [
     "/book/reference/cron/#handler-form",
-    "/book/troubleshooting/cron-errors/"
+    "/book/guides/entry-points/cron/",
+    "/book/reference/cron/"
   ],
   "bynk.cron.duplicate_schedule": [
     "/book/reference/cron/#handler-form",
-    "/book/troubleshooting/cron-errors/"
+    "/book/guides/entry-points/cron/",
+    "/book/reference/cron/"
   ],
   "bynk.cron.invalid_schedule": [
     "/book/reference/cron/#handler-form",
-    "/book/troubleshooting/cron-errors/"
+    "/book/guides/entry-points/cron/",
+    "/book/reference/cron/"
   ],
   "bynk.cron.return_not_effect_result": [
     "/book/reference/cron/#handler-form",
-    "/book/troubleshooting/cron-errors/"
+    "/book/guides/entry-points/cron/",
+    "/book/reference/cron/"
   ],
   "bynk.d1.migration_name": [
     "/book/reference/bynk-capabilities/#schema-migrations"
@@ -652,11 +669,12 @@
   ],
   "bynk.expect.outside_case": [
     "/book/reference/testing/#expect",
-    "/book/troubleshooting/observation-errors/"
+    "/book/reference/testing/#observation"
   ],
   "bynk.exports.capability_not_provided": [
     "/book/guides/effects-and-capabilities/share-across-contexts/#export-the-capability-from-the-providing-context",
-    "/book/troubleshooting/exports-capability-errors/"
+    "/book/guides/effects-and-capabilities/share-across-contexts/",
+    "/book/reference/capabilities/"
   ],
   "bynk.exports.conflicting_visibility": [
     "/book/reference/types/#opaque-types"
@@ -672,7 +690,8 @@
   ],
   "bynk.exports.undeclared_capability": [
     "/book/guides/effects-and-capabilities/share-across-contexts/#export-the-capability-from-the-providing-context",
-    "/book/troubleshooting/exports-capability-errors/"
+    "/book/guides/effects-and-capabilities/share-across-contexts/",
+    "/book/reference/capabilities/"
   ],
   "bynk.exports.undeclared_type": [
     "/book/reference/types/#opaque-types"
@@ -721,19 +740,23 @@
   ],
   "bynk.generics.missing_codable_bound": [
     "/book/reference/generics/#codable",
-    "/book/troubleshooting/generics-missing-codable-bound/"
+    "/book/guides/type-system/generic-code-that-crosses-the-boundary/"
   ],
   "bynk.generics.missing_eq_bound": [
     "/book/reference/generics/#bounds",
-    "/book/troubleshooting/generics-missing-eq-bound/"
+    "/book/reference/generics/",
+    "/book/guides/type-system/declare-eq-bounds/"
   ],
   "bynk.generics.missing_key_bound": [
     "/book/reference/generics/#key",
-    "/book/troubleshooting/generics-missing-key-bound/"
+    "/book/reference/types/#keys",
+    "/book/guides/type-system/key-a-map-by-a-record/"
   ],
   "bynk.generics.missing_ord_bound": [
     "/book/reference/generics/#ord",
-    "/book/troubleshooting/generics-missing-ord-bound/"
+    "/book/reference/generics/",
+    "/book/reference/types/#ordering-your-own-types",
+    "/book/guides/type-system/ordering-your-own-types/"
   ],
   "bynk.generics.polymorphic_recursion": [
     "/book/guides/type-system/recursive-generic-types/"
@@ -742,8 +765,12 @@
     "/book/guides/type-system/recursive-generic-types/#where-it-cannot-go-yet"
   ],
   "bynk.generics.redundant_eq_bound": [
-    "/book/troubleshooting/generics-missing-key-bound/",
-    "/book/troubleshooting/generics-missing-ord-bound/"
+    "/book/reference/generics/#key",
+    "/book/reference/types/#keys",
+    "/book/guides/type-system/key-a-map-by-a-record/",
+    "/book/reference/generics/",
+    "/book/reference/types/#ordering-your-own-types",
+    "/book/guides/type-system/ordering-your-own-types/"
   ],
   "bynk.generics.type_arg_count": [
     "/book/reference/generics/#type-parameters"
@@ -762,7 +789,7 @@
   ],
   "bynk.given.cross_context_unknown_capability": [
     "/book/reference/capabilities/",
-    "/book/troubleshooting/exports-capability-errors/"
+    "/book/guides/effects-and-capabilities/share-across-contexts/"
   ],
   "bynk.given.fn_outside_context": [
     "/book/reference/capabilities/#capabilities-in-functions"
@@ -801,20 +828,16 @@
     "/book/reference/websocket/#sending-and-broadcasting"
   ],
   "bynk.history.not_an_agent": [
-    "/book/reference/testing/#history-properties",
-    "/book/troubleshooting/history-errors/"
+    "/book/reference/testing/#history-properties"
   ],
   "bynk.history.not_generable": [
-    "/book/reference/testing/#history-properties",
-    "/book/troubleshooting/history-errors/"
+    "/book/reference/testing/#history-properties"
   ],
   "bynk.history.outside_property": [
-    "/book/reference/testing/#history-properties",
-    "/book/troubleshooting/history-errors/"
+    "/book/reference/testing/#history-properties"
   ],
   "bynk.history.restates_invariant": [
-    "/book/reference/testing/#history-properties",
-    "/book/troubleshooting/history-errors/"
+    "/book/reference/testing/#history-properties"
   ],
   "bynk.http.body_kind_conflict": [
     "/book/reference/http/#raw-request-bodies"
@@ -1160,27 +1183,24 @@
   ],
   "bynk.namespace.reserved": [
     "/book/spec/static-semantics/",
-    "/book/troubleshooting/adapter-errors/"
+    "/book/reference/adapters/",
+    "/book/guides/effects-and-capabilities/wrap-a-library/",
+    "/book/guides/projects-build-and-deployment/share-code-between-projects/#approve-a-dependencys-npm-packages"
   ],
   "bynk.observe.impure_with": [
-    "/book/reference/testing/#observation",
-    "/book/troubleshooting/observation-errors/"
+    "/book/reference/testing/#observation"
   ],
   "bynk.observe.not_a_seam": [
-    "/book/reference/testing/#observation",
-    "/book/troubleshooting/observation-errors/"
+    "/book/reference/testing/#observation"
   ],
   "bynk.observe.trace_outside_test": [
-    "/book/reference/testing/#observation",
-    "/book/troubleshooting/observation-errors/"
+    "/book/reference/testing/#observation"
   ],
   "bynk.observe.unknown_op": [
-    "/book/reference/testing/#observation",
-    "/book/troubleshooting/observation-errors/"
+    "/book/reference/testing/#observation"
   ],
   "bynk.observe.with_not_bool": [
-    "/book/reference/testing/#observation",
-    "/book/troubleshooting/observation-errors/"
+    "/book/reference/testing/#observation"
   ],
   "bynk.package.alias_shadows_unit": [
     "/book/guides/projects-build-and-deployment/share-code-between-projects/#what-the-checks-catch"
@@ -1298,7 +1318,9 @@
   ],
   "bynk.parse.expected_token": [
     "/book/reference/grammar/#rule-fn_decl",
-    "/book/troubleshooting/integration-errors/"
+    "/book/guides/testing/integration/",
+    "/book/reference/testing/#stub",
+    "/book/reference/testing/#tiers-the-as-tier-clause"
   ],
   "bynk.parse.expected_type": [
     "/book/reference/grammar/#rule-_type_ref"
@@ -1317,8 +1339,10 @@
   ],
   "bynk.parse.handler_in_agent": [
     "/book/reference/agents/#declaration",
-    "/book/troubleshooting/cron-errors/",
-    "/book/troubleshooting/queue-errors/"
+    "/book/guides/entry-points/cron/",
+    "/book/reference/cron/",
+    "/book/reference/queue/",
+    "/book/guides/entry-points/queue/"
   ],
   "bynk.parse.invariant_after_handler": [
     "/book/reference/agent-invariants/#declaration"
@@ -1393,8 +1417,7 @@
     "/book/reference/agents/#declaration"
   ],
   "bynk.parse.transition_after_handler": [
-    "/book/reference/agent-invariants/#step-invariants",
-    "/book/troubleshooting/transition-errors/"
+    "/book/reference/agent-invariants/#step-invariants"
   ],
   "bynk.parse.unexpected_eof": [
     "/book/reference/grammar/#rule-commons_decl"
@@ -1448,18 +1471,23 @@
     "/docs/manifest/#unstable"
   ],
   "bynk.property.restates_refinement": [
-    "/book/troubleshooting/val-errors/"
+    "/book/reference/testing/#val-example",
+    "/book/reference/testing/",
+    "/book/guides/testing/write-tests/"
   ],
   "bynk.property.where_not_bool": [
     "/book/reference/testing/#properties",
-    "/book/troubleshooting/val-errors/"
+    "/book/reference/testing/#val-example",
+    "/book/reference/testing/",
+    "/book/guides/testing/write-tests/"
   ],
   "bynk.provider.agent_call_undeclared_capability": [
     "/book/guides/effects-and-capabilities/compose-a-provider/#the-rules"
   ],
   "bynk.provider.dependency_cycle": [
     "/book/guides/effects-and-capabilities/compose-a-provider/#the-rules",
-    "/book/troubleshooting/provider-dependency-cycle/"
+    "/book/guides/effects-and-capabilities/compose-a-provider/",
+    "/book/reference/capabilities/"
   ],
   "bynk.provider.extra_operation": [
     "/book/reference/capabilities/#providing-a-capability"
@@ -1487,19 +1515,23 @@
   ],
   "bynk.queue.bad_params": [
     "/book/reference/queue/#handler-form",
-    "/book/troubleshooting/queue-errors/"
+    "/book/reference/queue/",
+    "/book/guides/entry-points/queue/"
   ],
   "bynk.queue.duplicate_consumer": [
     "/book/reference/queue/#handler-form",
-    "/book/troubleshooting/queue-errors/"
+    "/book/reference/queue/",
+    "/book/guides/entry-points/queue/"
   ],
   "bynk.queue.invalid_name": [
     "/book/reference/queue/#handler-form",
-    "/book/troubleshooting/queue-errors/"
+    "/book/reference/queue/",
+    "/book/guides/entry-points/queue/"
   ],
   "bynk.queue.return_not_queue_result": [
     "/book/reference/queue/#handler-form",
-    "/book/troubleshooting/queue-errors/"
+    "/book/reference/queue/",
+    "/book/guides/entry-points/queue/"
   ],
   "bynk.race.in_agent_handler": [
     "/book/reference/capabilities/#race"
@@ -1524,23 +1556,32 @@
   ],
   "bynk.refine.literal_violates": [
     "/book/reference/refined-types/#literal-admission",
-    "/book/troubleshooting/refine-literal-violates/",
-    "/book/troubleshooting/val-errors/"
+    "/book/guides/type-system/define-and-validate/",
+    "/book/guides/type-system/use-a-literal/",
+    "/book/reference/refined-types/",
+    "/book/reference/testing/#val-example",
+    "/book/reference/testing/",
+    "/book/guides/testing/write-tests/"
   ],
   "bynk.registry.withdrawn": [
     "/book/guides/projects-build-and-deployment/run-a-private-registry/#withdraw-a-version"
   ],
   "bynk.requires.conflicting_range": [
     "/book/guides/projects-build-and-deployment/share-code-between-projects/#a-dependency-that-wraps-an-npm-library",
-    "/book/troubleshooting/adapter-errors/"
+    "/book/reference/adapters/",
+    "/book/guides/effects-and-capabilities/wrap-a-library/",
+    "/book/guides/projects-build-and-deployment/share-code-between-projects/#approve-a-dependencys-npm-packages"
   ],
   "bynk.requires.unapproved": [
     "/book/guides/projects-build-and-deployment/share-code-between-projects/#approve-a-dependencys-npm-packages",
-    "/book/troubleshooting/adapter-errors/"
+    "/book/reference/adapters/",
+    "/book/guides/effects-and-capabilities/wrap-a-library/"
   ],
   "bynk.requires.unpinned_dependency": [
     "/book/reference/adapters/#anatomy",
-    "/book/troubleshooting/adapter-errors/"
+    "/book/reference/adapters/",
+    "/book/guides/effects-and-capabilities/wrap-a-library/",
+    "/book/guides/projects-build-and-deployment/share-code-between-projects/#approve-a-dependencys-npm-packages"
   ],
   "bynk.resolve.ambiguous_variant": [
     "/book/reference/types/#shared-variant-names"
@@ -1655,7 +1696,8 @@
   ],
   "bynk.resolve.unconsumed_context": [
     "/book/guides/program-structure/consume-services/#declare-the-dependency-and-call-the-service",
-    "/book/troubleshooting/exports-capability-errors/"
+    "/book/guides/effects-and-capabilities/share-across-contexts/",
+    "/book/reference/capabilities/"
   ],
   "bynk.resolve.unknown_field": [
     "/book/reference/types/#record-types"
@@ -1779,26 +1821,31 @@
   ],
   "bynk.stub.at_system": [
     "/book/reference/testing/#stub",
-    "/book/troubleshooting/integration-errors/"
+    "/book/guides/testing/integration/",
+    "/book/reference/testing/#tiers-the-as-tier-clause"
   ],
   "bynk.stub.bad_sequence": [
     "/book/reference/testing/#stub",
-    "/book/troubleshooting/integration-errors/"
+    "/book/guides/testing/integration/",
+    "/book/reference/testing/#tiers-the-as-tier-clause"
   ],
   "bynk.stub.generic_op": [
     "/book/reference/capabilities/#generic-operations"
   ],
   "bynk.stub.not_a_seam": [
     "/book/reference/testing/#stub",
-    "/book/troubleshooting/integration-errors/"
+    "/book/guides/testing/integration/",
+    "/book/reference/testing/#tiers-the-as-tier-clause"
   ],
   "bynk.stub.rhs_type": [
     "/book/reference/testing/#stub",
-    "/book/troubleshooting/integration-errors/"
+    "/book/guides/testing/integration/",
+    "/book/reference/testing/#tiers-the-as-tier-clause"
   ],
   "bynk.stub.unknown_op": [
     "/book/reference/testing/#stub",
-    "/book/troubleshooting/integration-errors/"
+    "/book/guides/testing/integration/",
+    "/book/reference/testing/#tiers-the-as-tier-clause"
   ],
   "bynk.suite.const_name_clash": [
     "/book/reference/testing/#suite-types-consts"
@@ -1985,35 +2032,33 @@
   ],
   "bynk.tier.cross_context_needs_system": [
     "/book/reference/testing/#tiers-the-as-tier-clause",
-    "/book/troubleshooting/integration-errors/"
+    "/book/guides/testing/integration/",
+    "/book/reference/testing/#stub"
   ],
   "bynk.tier.mixed_system_suite": [
     "/book/reference/testing/#tiers-the-as-tier-clause",
-    "/book/troubleshooting/integration-errors/"
+    "/book/guides/testing/integration/",
+    "/book/reference/testing/#stub"
   ],
   "bynk.tier.system_needs_wire": [
     "/book/reference/testing/#tiers-the-as-tier-clause",
-    "/book/troubleshooting/integration-errors/"
+    "/book/guides/testing/integration/",
+    "/book/reference/testing/#stub"
   ],
   "bynk.transition.cross_agent_reference": [
-    "/book/reference/agent-invariants/#step-invariants",
-    "/book/troubleshooting/transition-errors/"
+    "/book/reference/agent-invariants/#step-invariants"
   ],
   "bynk.transition.duplicate_name": [
-    "/book/reference/agent-invariants/#step-invariants",
-    "/book/troubleshooting/transition-errors/"
+    "/book/reference/agent-invariants/#step-invariants"
   ],
   "bynk.transition.impure_predicate": [
-    "/book/reference/agent-invariants/#step-invariants",
-    "/book/troubleshooting/transition-errors/"
+    "/book/reference/agent-invariants/#step-invariants"
   ],
   "bynk.transition.no_step_reference": [
-    "/book/reference/agent-invariants/#step-invariants",
-    "/book/troubleshooting/transition-errors/"
+    "/book/reference/agent-invariants/#step-invariants"
   ],
   "bynk.transition.not_bool": [
-    "/book/reference/agent-invariants/#step-invariants",
-    "/book/troubleshooting/transition-errors/"
+    "/book/reference/agent-invariants/#step-invariants"
   ],
   "bynk.types.argument_mismatch": [
     "/book/reference/types/"
@@ -2176,7 +2221,8 @@
   ],
   "bynk.types.is_base_mismatch": [
     "/book/reference/refined-types/#narrowing-with-is",
-    "/book/troubleshooting/is-base-mismatch/"
+    "/book/guides/type-system/narrow-with-is/",
+    "/book/reference/refined-types/"
   ],
   "bynk.types.is_literal_pattern": [
     "/book/guides/type-system/narrow-with-is/"
@@ -2246,18 +2292,21 @@
   ],
   "bynk.types.not_codable": [
     "/book/reference/generics/#bounds",
-    "/book/troubleshooting/generics-missing-codable-bound/"
+    "/book/reference/generics/#codable",
+    "/book/guides/type-system/generic-code-that-crosses-the-boundary/"
   ],
   "bynk.types.not_comparable": [
     "/book/reference/operators/"
   ],
   "bynk.types.not_keyable": [
     "/book/reference/types/#keys",
-    "/book/troubleshooting/generics-missing-key-bound/"
+    "/book/reference/generics/#key",
+    "/book/guides/type-system/key-a-map-by-a-record/"
   ],
   "bynk.types.not_orderable": [
     "/book/reference/types/#ordering-your-own-types",
-    "/book/troubleshooting/generics-missing-ord-bound/"
+    "/book/reference/generics/",
+    "/book/guides/type-system/ordering-your-own-types/"
   ],
   "bynk.types.ok_value_mismatch": [
     "/book/guides/type-system/result-and-optionals/#construct-values"
@@ -2399,42 +2448,60 @@
   ],
   "bynk.val.agent_not_generable": [
     "/book/reference/testing/#properties",
-    "/book/troubleshooting/val-errors/"
+    "/book/reference/testing/#val-example",
+    "/book/reference/testing/",
+    "/book/guides/testing/write-tests/"
   ],
   "bynk.val.arity": [
     "/book/reference/testing/#val",
-    "/book/troubleshooting/val-errors/"
+    "/book/reference/testing/#val-example",
+    "/book/reference/testing/",
+    "/book/guides/testing/write-tests/"
   ],
   "bynk.val.generic_type": [
     "/book/reference/testing/#val"
   ],
   "bynk.val.literal_violates": [
     "/book/reference/testing/#val",
-    "/book/troubleshooting/val-errors/"
+    "/book/reference/testing/#val-example",
+    "/book/reference/testing/",
+    "/book/guides/testing/write-tests/"
   ],
   "bynk.val.needs_pin": [
     "/book/reference/testing/#val",
-    "/book/troubleshooting/val-errors/"
+    "/book/reference/testing/#val-example",
+    "/book/reference/testing/",
+    "/book/guides/testing/write-tests/"
   ],
   "bynk.val.outside_test": [
     "/book/reference/testing/#val",
-    "/book/troubleshooting/val-errors/"
+    "/book/reference/testing/#val-example",
+    "/book/reference/testing/",
+    "/book/guides/testing/write-tests/"
   ],
   "bynk.val.pin_not_literal": [
     "/book/reference/testing/#val",
-    "/book/troubleshooting/val-errors/"
+    "/book/reference/testing/#val-example",
+    "/book/reference/testing/",
+    "/book/guides/testing/write-tests/"
   ],
   "bynk.val.pin_unsupported": [
     "/book/reference/testing/#val",
-    "/book/troubleshooting/val-errors/"
+    "/book/reference/testing/#val-example",
+    "/book/reference/testing/",
+    "/book/guides/testing/write-tests/"
   ],
   "bynk.val.unknown_type": [
     "/book/reference/testing/#val",
-    "/book/troubleshooting/val-errors/"
+    "/book/reference/testing/#val-example",
+    "/book/reference/testing/",
+    "/book/guides/testing/write-tests/"
   ],
   "bynk.val.unsupported_kind": [
     "/book/reference/testing/#val",
-    "/book/troubleshooting/val-errors/"
+    "/book/reference/testing/#val-example",
+    "/book/reference/testing/",
+    "/book/guides/testing/write-tests/"
   ],
   "bynk.visibility.private_in_public": [
     "/book/guides/program-structure/design-a-public-surface/#keep-private-types-out-of-public-signatures"

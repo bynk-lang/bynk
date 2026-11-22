@@ -125,7 +125,7 @@ fn clamp[T: Ord](x: T, lo: T, hi: T) -> T {
 about it). Callers must pass an orderable type; `top` over a record without
 `derives Ord` is rejected at the call. If you forget the bound, the compiler
 points at the comparison and offers the fix: see
-[`bynk.generics.missing_ord_bound`](/book/troubleshooting/generics-missing-ord-bound/).
+[`bynk.generics.missing_ord_bound`](/book/reference/diagnostics/bynk.generics.missing_ord_bound/).
 
 ## Three edge cases
 

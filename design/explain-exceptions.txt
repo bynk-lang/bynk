@@ -26,7 +26,6 @@ bynk.lex.multiline_indent: always arrives with a second diagnostic, so the examp
 bynk.lex.multiline_in_hole: always arrives with a second diagnostic, so the example gate cannot isolate it
 bynk.lex.multiline_close_not_own_line: always arrives with a second diagnostic, so the example gate cannot isolate it
 bynk.lex.unterminated_interpolation: always arrives with a second diagnostic, so the example gate cannot isolate it
-bynk.property.restates_refinement: bynk-wasm's `index_anchors_are_the_expected_slugs` needs one unexplained `bynk.property.*` code to reach the index's `#properties-generative-tests` section, and this is the only one
 bynk.package.checksum_mismatch: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example
 bynk.package.git_failed: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example
 bynk.package.lock_invalid: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example
