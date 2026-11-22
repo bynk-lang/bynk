@@ -460,7 +460,7 @@ mod tests {
             assert!(
                 entry.name.starts_with("BYNK_TEST_")
                     || entry.name.starts_with("BYNK_SMOKE_")
-                    || entry.name.ends_with("SNAPSHOTS")
+                    || entry.name.starts_with("BYNK_UPDATE_")
                     || entry.name.starts_with("BYNK_SNAPSHOT_"),
                 "{}",
                 entry.name

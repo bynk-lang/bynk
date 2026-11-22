@@ -9,13 +9,14 @@
 //! - **Every token is accounted for.** Each `BYNK_` or `__BYNK_` token in a
 //!   reader directory is a table name (an entry, or a prefix family's fixed
 //!   member) or one of the runtime's own constants in [`RUNTIME_CONSTANTS`].
-//! - **Every entry is still read.** Each reader an entry lists still spells the
-//!   entry's name.
+//! - **Every entry is still read.** Each reader an entry lists still spells, in
+//!   code rather than a comment, the entry's name, or each fixed member of a
+//!   prefix family that readers look up by name (the `BYNK_DEV_ACK_` five).
 //!
 //! The directories scanned are `env_protocol::ReaderDir::ALL`, so a reader that
 //! moves (1B.3 moves the test runtime into `bynk-emit`) changes one line there.
 
-use bynk_project::env_protocol::{self, Entry, PROTOCOL, ReaderDir};
+use bynk_project::env_protocol::{self, Entry, PROTOCOL, ReaderDir, Shape};
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
@@ -58,12 +59,46 @@ fn unaccounted(src: &str) -> Vec<String> {
         .collect()
 }
 
-/// Whether `src` spells `entry`'s name as a whole token (`BYNK_DEV` is not read
-/// by a file that spells only `BYNK_DEV_ACK_AI`). A prefix family's fixed
-/// members need not be spelt: `BYNK_CALL_FROM_BYNK__DEV` is derived from the
-/// prefix at run time.
-fn reads(entry: &Entry, src: &str) -> bool {
-    tokens(src).contains(&entry.name)
+/// Fixed members of a prefix family that no reader spells, because the reader
+/// derives them from the prefix at run time.
+const DERIVED_MEMBERS: &[&str] = &[env_protocol::CALL_FROM_BYNK_DEV];
+
+/// The names a reader of `entry` must spell: each fixed member a reader looks
+/// up by name (the five `BYNK_DEV_ACK_` acknowledgements), else the entry's own
+/// name.
+fn required(entry: &Entry) -> Vec<&'static str> {
+    let members: Vec<&'static str> = match entry.shape {
+        Shape::Exact => Vec::new(),
+        Shape::Prefix { members } => members
+            .iter()
+            .copied()
+            .filter(|m| !DERIVED_MEMBERS.contains(m))
+            .collect(),
+    };
+    if members.is_empty() {
+        vec![entry.name]
+    } else {
+        members
+    }
+}
+
+/// The names `entry` requires ([`required`]) that `src` does not spell as a
+/// whole token in code: `BYNK_DEV` is not read by a file that spells only
+/// `BYNK_DEV_ACK_AI`, and a name in a `//` or `*` comment line is not a read.
+fn unread(entry: &Entry, src: &str) -> Vec<&'static str> {
+    let code: String = src
+        .lines()
+        .filter(|line| {
+            let t = line.trim_start();
+            !(t.starts_with("//") || t.starts_with('*') || t.starts_with("/*"))
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    let spelt: BTreeSet<&str> = tokens(&code).into_iter().collect();
+    required(entry)
+        .into_iter()
+        .filter(|name| !spelt.contains(name))
+        .collect()
 }
 
 fn ts_files(dir: &Path, out: &mut Vec<PathBuf>) {
@@ -128,8 +163,8 @@ fn every_entry_is_still_read_where_the_table_says() {
                 problems.push(format!("{}: reader {path} does not exist", entry.name));
                 continue;
             };
-            if !reads(entry, &src) {
-                problems.push(format!("{path} no longer reads `{}`", entry.name));
+            for name in unread(entry, &src) {
+                problems.push(format!("{path} no longer reads `{name}`"));
             }
         }
     }
@@ -154,10 +189,37 @@ fn a_misspelt_name_is_refused() {
 #[test]
 fn a_reader_that_stops_reading_its_name_is_refused() {
     let seed = env_protocol::entry_of(env_protocol::TEST_SEED).unwrap();
-    assert!(!reads(seed, "process.env.BYNK_TEST_SEDE"));
-    assert!(reads(seed, "process.env.BYNK_TEST_SEED"));
-    // A longer name is not the exact one.
+    assert_eq!(
+        unread(seed, "process.env.BYNK_TEST_SEDE"),
+        [env_protocol::TEST_SEED]
+    );
+    assert!(unread(seed, "process.env.BYNK_TEST_SEED").is_empty());
+    // A longer name is not the exact one, and a comment is not a read.
     let dev = env_protocol::entry_of(env_protocol::DEV).unwrap();
-    assert!(!reads(dev, "env.BYNK_DEV_ACK_AI"));
-    assert!(reads(dev, "env.BYNK_DEV === \"1\""));
+    assert_eq!(unread(dev, "env.BYNK_DEV_ACK_AI"), [env_protocol::DEV]);
+    assert_eq!(
+        unread(dev, "// sets `BYNK_DEV` on every Worker\n * BYNK_DEV"),
+        [env_protocol::DEV]
+    );
+    assert!(unread(dev, "if (vars?.BYNK_DEV !== \"1\") return;").is_empty());
+}
+
+#[test]
+fn a_family_is_read_only_if_each_member_looked_up_by_name_is() {
+    let acks = env_protocol::entry_of(env_protocol::DEV_ACK_AI).unwrap();
+    let all = "\"BYNK_DEV_ACK_AI\" \"BYNK_DEV_ACK_VECTORIZE\" \"BYNK_DEV_ACK_AI_SEARCH\" \
+               \"BYNK_DEV_ACK_MTLS\" \"BYNK_DEV_ACK_ANALYTICS_SQL\"";
+    assert!(unread(acks, all).is_empty());
+    // The prefix alone, in a comment, does not read the family.
+    assert_eq!(
+        unread(acks, "// `BYNK_DEV_ACK_<KIND>`").len(),
+        5,
+        "every member is unread"
+    );
+    let without_mtls = all.replace("\"BYNK_DEV_ACK_MTLS\"", "");
+    assert_eq!(unread(acks, &without_mtls), [env_protocol::DEV_ACK_MTLS]);
+    // A member derived at run time is not required: the prefix is.
+    let from = env_protocol::entry_of(env_protocol::CALL_FROM_PREFIX).unwrap();
+    assert!(unread(from, "export const EDGE_FROM_PREFIX = \"BYNK_CALL_FROM_\";").is_empty());
+    assert_eq!(unread(from, ""), [env_protocol::CALL_FROM_PREFIX]);
 }
