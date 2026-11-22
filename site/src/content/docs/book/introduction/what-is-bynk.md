@@ -43,12 +43,12 @@ capability, a stateful agent, and an HTTP service — read
   (types carrying a predicate), *[opaque types](/reference/glossary/#term-opaque-type)*,
   and *errors-as-values* ([`Result`](/reference/glossary/#term-result-option),
   `Ok`/`Some`/`None`) so that whole classes of bug cannot be
-  expressed. See [The type-system philosophy](/book/guides/type-system/philosophy/).
+  expressed. See [The type-system philosophy](/book/concepts/type-system/philosophy/).
 - **Architecture in the language.** Contexts, services, and stateful *agents*
-  are first-class. See [How a Bynk program is shaped](/book/guides/program-structure/how-a-program-is-shaped/).
+  are first-class. See [How a Bynk program is shaped](/book/concepts/program-structure/how-a-program-is-shaped/).
 - **Compiles to TypeScript.** You get JavaScript-ecosystem interop and a
   natural fit for Cloudflare Workers, with a static type system in front of it.
-  See [Why compile to TypeScript](/book/guides/projects-build-and-deployment/why-compile-to-typescript/).
+  See [Why compile to TypeScript](/book/concepts/projects-build-and-deployment/why-compile-to-typescript/).
 - **Testing is built in.** `suite`/`case` blocks, `expect`, generative
   `property`/`for all`, the `as <tier>` dial, per-seam `stub` test doubles, and
   [`Val[T]`](/reference/glossary/#term-val) value fabrication ship with the

@@ -1,35 +1,25 @@
 //! The Bundle composition root (`compose.ts`, `composeApp()`).
 //!
-//! Moved here from `bynk-driver/src/project.rs` unchanged by back-half
-//! paydown 1B.1a (Decision B of #3928): it is the Bundle target's production
-//! output, and everything it reads is reachable from `bynk-emit`.
+//! Moved here from `bynk-driver/src/project.rs` by back-half paydown 1B.1a
+//! (Decision B of #3928): it is the Bundle target's production output.
+//! Since 1B.1b it reads the units, their dependencies and their cross-context
+//! capabilities from the [`ComposePlan`]; the order of a unit's `deps` entries,
+//! the spelling of each provider and the `__exec` condition are this
+//! renderer's own (divergences 1, 2, 3 and 4 of #3928).
 
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use crate::emit_model::*;
 use crate::emitter;
-use bynk_check::checker::ExprId;
-use bynk_check::project_model::{self, AdapterBinding, handler_cross_caps};
+use crate::emitter::compose::{ComposePlan, empty_deps};
+use bynk_check::project_model::AdapterBinding;
 use bynk_check::symbols::UnitTable;
 use bynk_model::EventSubscriberShape;
 use bynk_project::paths::commons_dir_for;
-use bynk_project::roots::UnitKind;
 use bynk_ts::{TsDecl, TsExpr, TsParam, TsProgram, TsStmt, TsType};
 
-/// v0.54 (#655): whether a context's services declare an `on call … by c: Caller`
-/// handler, whose emitted `deps` carries the calling context's qualified name as
-/// its `CallerId` identity (ADR 0092); in bundle mode the compose root supplies
-/// that name to `__makeSurface`, mirroring the `X-Bynk-Caller` header a Worker
-/// reads at its entry. Delegates to the *same*
-/// [`any_service_binds_caller`](crate::emitter::any_service_binds_caller) the
-/// emitter's `emit_make_surface` calls, so the compose root and the surface can
-/// never disagree on which providers take the extra `__caller` argument.
-fn context_binds_caller(table: &UnitTable) -> bool {
-    crate::emitter::any_service_binds_caller(table.services.values(), &table.actors)
-}
-
 // -- Small tree-construction helpers (#1327) ------------------------------
-/// Sort key for a `{ns}Deps` entry, mirroring the pre-conversion code's own
+/// Divergence 1 of #3928, the Bundle's entry order: sort key for a `{ns}Deps` entry, mirroring the pre-conversion code's own
 /// `Vec<String>::sort()` over the fully rendered `"{key}: {value}"` text
 /// rather than the bare key alone (review of #1328: `deps_entries.sort_by(|a,
 /// b| a.0.cmp(&b.0))` is NOT equivalent — it silently reorders whenever one
@@ -52,17 +42,11 @@ fn deps_entry_sort_key(key: &str) -> String {
 /// The bundle has no platform execution context, so what it is handed is kept
 /// alive by the process; a fault in it, with no handler left to raise it to, is
 /// reported by the same reporter `e.detach()` uses (#3541), not a logger of the
-/// shim's own. `None` when no handler of the context needs one.
-fn bundle_process_exec_entry(table: &UnitTable) -> Option<(String, TsExpr)> {
-    table
-        .services
-        .values()
-        .any(|s| {
-            s.handlers
-                .iter()
-                .any(|h| crate::emitter::call_handler_needs_exec(&table.exec_plan, h))
-        })
-        .then(|| ("__exec".to_string(), ident("__bynkProcessExec()")))
+/// shim's own. Divergence 4 of #3928: the Bundle gives it to a unit whose
+/// `call` handler needs one (the Workers `compose` to any handler), and as
+/// `__bynkProcessExec()`, not the request's `exec`.
+fn bundle_process_exec_entry(needs_exec: bool) -> Option<(String, TsExpr)> {
+    needs_exec.then(|| ("__exec".to_string(), ident("__bynkProcessExec()")))
 }
 
 /// The composition root's import of `__bynkProcessExec` from the runtime.
@@ -86,12 +70,10 @@ fn event_names_in_order(table: &UnitTable) -> Vec<&String> {
 
 #[allow(clippy::too_many_arguments)]
 pub fn emit_composition_root(
-    groups: &BTreeMap<String, Vec<usize>>,
-    kinds: &BTreeMap<String, UnitKind>,
+    plan: &ComposePlan,
     unit_consumes: &HashMap<String, Vec<String>>,
     unit_consumes_aliases: &HashMap<String, HashMap<String, String>>,
     unit_tables: &HashMap<String, UnitTable>,
-    unit_callees: &HashMap<String, HashMap<ExprId, bynk_check::checker::Callee>>,
     // P6.x (#1232): see `EventSubscriberShape`'s own doc comment. Read by
     // `wants_envelope` below instead of walking a *different, already-
     // consumed* unit's raw `UnitTable` directly.
@@ -109,20 +91,9 @@ pub fn emit_composition_root(
     // own per-Worker fan-out wiring, so it is shared rather than rebuilt).
     event_subscribers: &BTreeMap<(String, String), Vec<(String, String)>>,
 ) -> Option<TsProgram> {
-    project_model::composition_root_trigger(
-        kinds,
-        unit_consumes,
-        unit_consumes_aliases,
-        unit_tables,
-        unit_callees,
-        unit_flattened,
-    )?;
-
-    let mut contexts: Vec<&String> = groups
-        .keys()
-        .filter(|n| kinds.get(*n) == Some(&UnitKind::Context))
-        .collect();
-    contexts.sort();
+    if !plan.bundle_root {
+        return None;
+    }
 
     // The composeApp body is built first so the provider expressions can
     // record every unit namespace they reference (v0.18: an external
@@ -140,54 +111,28 @@ pub fn emit_composition_root(
     };
     let env_ident = if thread_env { Some("env") } else { None };
 
-    // Build each context's deps and surface in dependency-respecting order:
-    // a context that consumes another must come after the consumed context,
-    // so its `surface` field can reference the already-built surface.
-    let mut ordered: Vec<String> = Vec::new();
-    let mut visited: HashSet<String> = HashSet::new();
-    fn visit(
-        node: &str,
-        unit_consumes: &HashMap<String, Vec<String>>,
-        visited: &mut HashSet<String>,
-        out: &mut Vec<String>,
-    ) {
-        if visited.contains(node) {
-            return;
-        }
-        visited.insert(node.to_string());
-        if let Some(targets) = unit_consumes.get(node) {
-            for t in targets {
-                visit(t, unit_consumes, visited, out);
-            }
-        }
-        out.push(node.to_string());
-    }
-    for c in &contexts {
-        visit(c, unit_consumes, &mut visited, &mut ordered);
-    }
-
     let mut body: Vec<TsStmt> = Vec::new();
     // #3541: whether a context took the bundle's process execution context.
     let mut process_exec_used = false;
 
-    for ctx_name in &ordered {
-        if kinds.get(ctx_name.as_str()) != Some(&UnitKind::Context) {
-            continue;
-        }
+    // The plan's order puts a consumed context before its consumer, and holds
+    // only the contexts the root composes: a context's deps object exists only
+    // to feed its `__makeSurface`, so a capability-only context (no services)
+    // needs neither (v0.15). The bundle's `bynk.capability.not_provided` check
+    // skips the same ones.
+    for ctx_name in &plan.bundle_order {
         let Some(table) = unit_tables.get(ctx_name.as_str()) else {
             continue;
         };
-        // A context's deps object exists only to feed its `__makeSurface`; a
-        // capability-only context (no services) needs neither (v0.15). The
-        // bundle's `bynk.capability.not_provided` check skips the same ones.
-        if !project_model::composed_in_bundle_root(table) {
-            continue;
-        }
+        let unit = &plan.units[ctx_name];
         let ns = ctx_name.replace('.', "_");
 
-        let mut deps_entries: Vec<(String, TsExpr)> = table
+        // Divergence 2 of #3928, provider spelling: each provider is one
+        // inline expression, recursing through its `given` (the Workers
+        // `compose` builds a `const` per provider in dependency order).
+        let mut deps_entries: Vec<(String, TsExpr)> = unit
             .providers
-            .keys()
+            .iter()
             .map(|cap| {
                 let expr = instantiate_provider_ts_expr(
                     ctx_name,
@@ -206,39 +151,27 @@ pub fn emit_composition_root(
             .collect();
         // v0.15: cross-context capabilities used directly by handlers become
         // top-level deps fields, instantiated from the providing context.
-        {
-            let consumed = unit_consumes
-                .get(ctx_name.as_str())
-                .cloned()
-                .unwrap_or_default();
-            let aliases = unit_consumes_aliases
-                .get(ctx_name.as_str())
-                .cloned()
-                .unwrap_or_default();
-            let flattened = unit_flattened
-                .get(ctx_name.as_str())
-                .cloned()
-                .unwrap_or_default();
-            for (key, cctx) in handler_cross_caps(table, &consumed, &aliases, &flattened) {
-                let expr = instantiate_provider_ts_expr(
-                    &cctx,
-                    &key,
-                    unit_tables,
-                    unit_consumes,
-                    unit_consumes_aliases,
-                    unit_flattened,
-                    ProviderNamespaces::Bundle,
-                    env_ident,
-                    None, // Bundle mode has no inbound request (Decision A)
-                    &mut referenced_units,
-                );
-                deps_entries.push((key, expr));
-            }
+        // Divergence 3 of #3928, the cross-capability set: the handlers' only.
+        // A provider's own cross-context `given` is reached through that
+        // provider's recursive expression, not as a top-level field (the
+        // Workers `compose` also lifts the providers').
+        for (key, cctx) in &unit.handler_cross_caps {
+            let expr = instantiate_provider_ts_expr(
+                cctx,
+                key,
+                unit_tables,
+                unit_consumes,
+                unit_consumes_aliases,
+                unit_flattened,
+                ProviderNamespaces::Bundle,
+                env_ident,
+                None, // Bundle mode has no inbound request (Decision A)
+                &mut referenced_units,
+            );
+            deps_entries.push((key.clone(), expr));
         }
         // S4a (#1966): each derived capability's instance.
-        let mut derived: Vec<&String> = table.derived.keys().collect();
-        derived.sort();
-        for cap in derived {
+        for cap in &unit.derived {
             let expr = instantiate_provider_ts_expr(
                 ctx_name,
                 cap,
@@ -264,7 +197,7 @@ pub fn emit_composition_root(
         // has run, so declaration order here doesn't matter). A publisher
         // with no subscribers still gets the field — its type is required —
         // just with an empty switch.
-        if unit_table_uses_emit(table, unit_callees.get(ctx_name)) {
+        if unit.publishes {
             let mut cases = String::new();
             for name in event_names_in_order(table) {
                 let Some(subs) = event_subscribers.get(&(ctx_name.clone(), name.clone())) else {
@@ -351,81 +284,53 @@ pub fn emit_composition_root(
             };
             deps_entries.push(("__eventsDispatch".to_string(), arrow));
         }
-        if let Some(entry) = bundle_process_exec_entry(table) {
+        if let Some(entry) = bundle_process_exec_entry(unit.exec.call_handler) {
             process_exec_used = true;
             deps_entries.push(entry);
         }
         deps_entries.sort_by_cached_key(|(k, _)| deps_entry_sort_key(k));
 
+        // Divergence 6 of #3928, the consumed surfaces: only the Bundle's
+        // `deps` carries a consumed context's surface (the Workers reach it
+        // through a Service Binding).
         let mut surface_entries: Vec<(String, TsExpr)> = Vec::new();
-        if let Some(targets) = unit_consumes.get(ctx_name.as_str()) {
-            let aliases = unit_consumes_aliases
-                .get(ctx_name.as_str())
-                .cloned()
-                .unwrap_or_default();
-            let mut alias_for: HashMap<String, String> = HashMap::new();
-            for (alias, target) in &aliases {
-                alias_for.insert(target.clone(), alias.clone());
-            }
-            let mut sorted_targets = targets.clone();
-            sorted_targets.sort();
-            for t in &sorted_targets {
-                let Some(other) = unit_tables.get(t) else {
-                    continue;
-                };
-                if other.services.is_empty() {
-                    continue;
-                }
-                let surface_key = alias_for
-                    .get(t)
-                    .cloned()
-                    .unwrap_or_else(|| t.rsplit('.').next().unwrap_or(t.as_str()).to_string());
-                let t_ns = t.replace('.', "_");
-                // v0.54 (#655): a consumed context with an `on call … by c: Caller`
-                // handler needs the *caller's* qualified name (this context) threaded
-                // into that handler's deps as its `CallerId` identity (ADR 0092). The
-                // shared `{t_ns}Surface` (built for the top-level entry with the
-                // provider's own name) would carry the wrong caller, so build a
-                // per-consumer surface instead. A caller-free provider keeps the
-                // shared instance — byte-unchanged.
-                let entry = if context_binds_caller(other) {
-                    method_call(
-                        ident(t_ns.clone()),
-                        "__makeSurface",
-                        vec![ident(format!("{t_ns}Deps")), str_lit(ctx_name.as_str())],
-                    )
-                } else {
-                    ident(format!("{t_ns}Surface"))
-                };
-                surface_entries.push((surface_key, entry));
-            }
+        for surface in &unit.surfaces {
+            let t_ns = surface.target.replace('.', "_");
+            // v0.54 (#655): a consumed context with an `on call … by c: Caller`
+            // handler needs the *caller's* qualified name (this context) threaded
+            // into that handler's deps as its `CallerId` identity (ADR 0092). The
+            // shared `{t_ns}Surface` (built for the top-level entry with the
+            // provider's own name) would carry the wrong caller, so build a
+            // per-consumer surface instead. A caller-free provider keeps the
+            // shared instance — byte-unchanged.
+            let entry = if surface.per_caller {
+                method_call(
+                    ident(t_ns.clone()),
+                    "__makeSurface",
+                    vec![ident(format!("{t_ns}Deps")), str_lit(ctx_name.as_str())],
+                )
+            } else {
+                ident(format!("{t_ns}Surface"))
+            };
+            surface_entries.push((surface.key.clone(), entry));
         }
         if !surface_entries.is_empty() {
             deps_entries.push(("surface".to_string(), TsExpr::object(surface_entries)));
         }
-        // #1327: the pre-conversion `format!("  const {ns}Deps = {{ {} }};",
-        // deps_entries.join(", "))` template always has a space on each side
-        // of its `{}` slot — with zero entries that literally produces
-        // `"{  }"` (a *double* space), not the tight `"{}"` the ordinary
-        // single-line `TsExpr::Object` empty-entries shortcut renders — the
-        // same real, reachable quirk `workers.rs`'s own conversion (#1321)
-        // found and carried for its own `deps` object, reachable here too (a
-        // services-having context with no providers, no cross-caps, no
-        // emit, and no consumed-service surface — `98_cross_context_call_
-        // with_alias` and 6 other real fixtures hit exactly this).
+        // `{  }` for no entries: see `compose::empty_deps`.
         let deps_init = if deps_entries.is_empty() {
-            ident("{  }")
+            empty_deps()
         } else {
             TsExpr::object(deps_entries)
         };
         body.push(const_(format!("{ns}Deps"), deps_init));
-        if !table.services.is_empty() {
+        if unit.has_services {
             // The top-level entry addresses the context directly; there is no
             // calling context, so a `by c: Caller` handler reached this way reads
             // the context's own qualified name (a stable, non-empty `CallerId`
             // within the single-trust-domain bundle).
             let mut make_surface_args = vec![ident(format!("{ns}Deps"))];
-            if context_binds_caller(table) {
+            if unit.binds_caller {
                 make_surface_args.push(str_lit(ctx_name.as_str()));
             }
             body.push(const_(
@@ -446,11 +351,8 @@ pub fn emit_composition_root(
 
     // Export per-context surfaces under a top-level object.
     let mut return_entries: Vec<(String, TsExpr)> = Vec::new();
-    for ctx_name in &contexts {
-        let Some(table) = unit_tables.get(ctx_name.as_str()) else {
-            continue;
-        };
-        if table.services.is_empty() {
+    for (ctx_name, unit) in plan.contexts() {
+        if !unit.has_services {
             continue;
         }
         let ns = ctx_name.replace('.', "_");
@@ -475,7 +377,7 @@ pub fn emit_composition_root(
     }
 
     // Import every context as a namespace.
-    for ctx_name in &contexts {
+    for (ctx_name, _) in plan.contexts() {
         let dir = emitter::ts_specifier(&commons_dir_for(ctx_name));
         let ns = ctx_name.replace('.', "_");
         program.push(TsStmt::decl(
@@ -492,10 +394,9 @@ pub fn emit_composition_root(
     // v0.18: plus every adapter the provider expressions referenced through
     // the transitive given-closure (an adapter's external provider may depend
     // on another adapter's capability, spec §4.5).
-    let mut consumed_adapters: Vec<String> = unit_consumes
-        .iter()
-        .filter(|(name, _)| kinds.get(*name) == Some(&UnitKind::Context))
-        .flat_map(|(_, targets)| targets.iter().cloned())
+    let mut consumed_adapters: Vec<String> = plan
+        .contexts()
+        .flat_map(|(_, unit)| unit.consumes.iter().cloned())
         .chain(referenced_units.iter().cloned())
         .filter(|t| adapter_bindings.contains_key(t))
         .collect();

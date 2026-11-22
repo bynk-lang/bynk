@@ -171,4 +171,4 @@ With that model in hand, the recipes below are mechanical.
 
 **See also:** [Capabilities & providers reference](/reference/capabilities/),
 [Adapters reference](/reference/adapters/),
-[How a Bynk program is shaped](/book/guides/program-structure/how-a-program-is-shaped/).
+[How a Bynk program is shaped](/book/concepts/program-structure/how-a-program-is-shaped/).

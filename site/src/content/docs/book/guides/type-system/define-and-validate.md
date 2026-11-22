@@ -95,4 +95,4 @@ the rejected value is not reachable from Bynk yet:
 - To admit a value you *do* know at compile time, see
   [Use a literal where a refined type is expected](/book/guides/type-system/use-a-literal/).
 - Reference: [refined-type API](/reference/refined-types/).
-- Why it works this way: [The type-system philosophy](/book/guides/type-system/philosophy/).
+- Why it works this way: [The type-system philosophy](/book/concepts/type-system/philosophy/).

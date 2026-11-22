@@ -77,4 +77,4 @@ commons shop {
 
 - Tutorial: [Model your data with types](/book/tutorials/03-modelling-data/).
 - Reference: [type system](/reference/types/).
-- Rationale: [The type-system philosophy](/book/guides/type-system/philosophy/).
+- Rationale: [The type-system philosophy](/book/concepts/type-system/philosophy/).

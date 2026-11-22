@@ -107,7 +107,7 @@ A literal that violates the predicate is a compile error
 literals only — integers, strings, booleans, and `()` — not arithmetic
 expressions or identifiers.
 
-See [The refined-literal admission model](/book/guides/type-system/refined-literal-admission/)
+See [The refined-literal admission model](/book/concepts/type-system/refined-literal-admission/)
 for the rationale.
 
 ## Across a context boundary

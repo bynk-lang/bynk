@@ -574,4 +574,4 @@ the agent boundary, not from an ingress. A `by` on an agent handler is rejected
 A fresh key's state falls back to the compiled zero value on first access. On the
 `bundle` target an agent uses an in-process state registry; on `workers` it
 compiles to a Cloudflare Durable Object keyed by the agent key. See
-[emission](/reference/tooling/emission/) and [The agent model](/book/guides/agents-and-state/the-agent-model/).
+[emission](/reference/tooling/emission/) and [The agent model](/book/concepts/agents-and-state/the-agent-model/).

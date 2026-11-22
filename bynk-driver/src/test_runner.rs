@@ -12,6 +12,7 @@
 //! found but won't start is reported as such rather than as missing.
 
 use crate::emsg;
+use bynk_project::env_protocol;
 use std::path::{Path, PathBuf};
 use std::process::{Command as ProcCommand, ExitCode, Stdio};
 
@@ -1401,14 +1402,14 @@ fn finish_runner(
     timeout: Option<std::time::Duration>,
 ) -> std::io::Result<ExitCode> {
     if let Some(hex) = seed_hex {
-        cmd.env("BYNK_TEST_SEED", hex);
+        cmd.env(env_protocol::TEST_SEED, hex);
     }
     // #2138: the remote harness reads each Worker's URL from here; the
     // target's secrets are already in the inherited environment.
     if let Some(run) = remote {
-        cmd.env("BYNK_TEST_TARGETS", run.targets_json());
+        cmd.env(env_protocol::TEST_TARGETS, run.targets_json());
         cmd.env(crate::remote::SECRETS_ENV, run.secrets_json());
-        cmd.env("BYNK_TEST_SETTLE_MS", run.settle_ms.to_string());
+        cmd.env(env_protocol::TEST_SETTLE_MS, run.settle_ms.to_string());
         // #2138: the run's own `run.id`, always set, so a value left in the
         // environment never makes two runs share one.
         cmd.env(crate::remote::RUN_ID_ENV, &run.run_id);
@@ -1438,7 +1439,7 @@ fn finish_runner(
     }
     if format == TestFormat::Ndjson {
         // #2267: forward each event as the runner writes it.
-        cmd.env("BYNK_TEST_FORMAT", "ndjson");
+        cmd.env(env_protocol::TEST_FORMAT, "ndjson");
         let mut events = crate::test_stream::Stream::new(crate::test_stream::StreamContext {
             discovered,
             skipped: selected_skips
@@ -1466,7 +1467,7 @@ fn finish_runner(
         return Ok(exit_from(status.success()));
     }
     if format == TestFormat::Json {
-        cmd.env("BYNK_TEST_FORMAT", "ndjson");
+        cmd.env(env_protocol::TEST_FORMAT, "ndjson");
         let out = output_within(cmd.stdout(Stdio::piped()).stderr(Stdio::piped()), timeout)?;
         let stdout = String::from_utf8_lossy(&out.stdout);
         let stderr = String::from_utf8_lossy(&out.stderr);
@@ -1757,7 +1758,7 @@ fn run_with_coverage(
     }
     cmd.env("NODE_V8_COVERAGE", &cov_dir);
     if let Some(hex) = seed_hex {
-        cmd.env("BYNK_TEST_SEED", hex);
+        cmd.env(env_protocol::TEST_SEED, hex);
     }
     filter.apply(program, &mut cmd);
 
@@ -1767,7 +1768,7 @@ fn run_with_coverage(
     };
 
     let code = if json {
-        cmd.env("BYNK_TEST_FORMAT", "ndjson");
+        cmd.env(env_protocol::TEST_FORMAT, "ndjson");
         let out = match cmd.stdout(Stdio::piped()).stderr(Stdio::piped()).output() {
             Ok(o) => o,
             Err(e) => {
@@ -1867,7 +1868,7 @@ fn run_inspect(
     eprintln!("  (Requires Node \u{2265} 22.6 for TypeScript type-stripping.)");
     let mut cmd = ProcCommand::new(node);
     if let Some(hex) = seed_hex {
-        cmd.env("BYNK_TEST_SEED", hex);
+        cmd.env(env_protocol::TEST_SEED, hex);
     }
     if smoke {
         cmd.env(crate::smoke::STRICT_WIRE_ENV, "1");

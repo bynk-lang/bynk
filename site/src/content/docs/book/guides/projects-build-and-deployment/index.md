@@ -5,7 +5,7 @@ Lay out a multi-file project, build it to TypeScript, and deploy to Cloudflare
 Workers.
 
 **Understand**
-- [Why compile to TypeScript](/book/guides/projects-build-and-deployment/why-compile-to-typescript/)
+- [Why compile to TypeScript](/book/concepts/projects-build-and-deployment/why-compile-to-typescript/)
 
 **Do**
 - [Start a new project](/book/guides/projects-build-and-deployment/start-a-project/)

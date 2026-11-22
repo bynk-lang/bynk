@@ -7,6 +7,8 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.640.28** | Internal restructuring of the code generator; the Bundle and Workers composition roots now read one composition plan, with no change to generated output |
+| **v0.640.27** | The Book's explanation pages moved to [/book/concepts/](/book/concepts/), one folder per topic, with a Concepts front page; their old `/book/guides/…` and `/book/about/…` URLs redirect. Each topic's hub page, which gathers its explanations and how-tos, stays in Guides under "By topic" (web presence track, slice 5b, #4002). |
 | **v0.640.26** | Internal restructuring of `bynk deploy`; no change to plans or `bynk.deploy.lock` |
 | **v0.640.25** | Internal restructuring of the code generator; the Bundle and Workers composition roots now live together in bynk-emit, with no change to generated output |
 | **v0.640.24** | The Reference is one surface at [/reference/](/reference/), with its own contents and sidebar, in seven sections — Language, Architecture, Adapters, Tooling, Diagnostics, Specification and Releases. The Book's reference and specification and the Developer Docs moved there as folders (`/book/reference/` → `/reference/`, `/book/spec/` → `/reference/spec/`, `/docs/` → `/reference/tooling/`), and every old URL redirects. The header reads Book, By Example, Reference; `bynk book` searches the Reference too; and the links the toolchain prints (a generated client's header comment, the first-party capabilities link, the manifest schema's documentation link, the diagnostic index) take the new form (web presence track, slice 5, #3935). |

@@ -1133,10 +1133,9 @@ pub fn read_test_postgres(project_root: &Path) -> TestPostgres {
 
 /// The `[test]` table's `targets`, each checked for shape: `url` a table of
 /// strings (at least one), `secrets` a list of strings, `production` a
-/// boolean, `vars` a table of strings, and nothing else.
-/// #3513 B: the prefix of the `[vars]` entries `bynk` writes for `Analytics.dataset()`.
-const RESERVED_DATASET_VAR_PREFIX: &str = "BYNK_DATASET_";
-
+/// boolean, `vars` a table of strings, and nothing else. A `vars` name may not
+/// start with [`crate::env_protocol::DATASET_PREFIX`] (#3513 B): `bynk` writes
+/// those for `Analytics.dataset()`.
 fn test_targets_from(
     table: &toml::Table,
 ) -> Result<BTreeMap<String, TestTarget>, ProjectPathsError> {
@@ -1182,10 +1181,11 @@ fn test_targets_from(
                     if let Some(reserved) = target
                         .vars
                         .keys()
-                        .find(|k| k.starts_with(RESERVED_DATASET_VAR_PREFIX))
+                        .find(|k| k.starts_with(crate::env_protocol::DATASET_PREFIX))
                     {
                         return Err(bad(&format!(
-                            "`vars.{reserved}` is reserved: `{RESERVED_DATASET_VAR_PREFIX}…` names are set by `bynk` to carry each `Analytics` dataset's name"
+                            "`vars.{reserved}` is reserved: `{}…` names are set by `bynk` to carry each `Analytics` dataset's name",
+                            crate::env_protocol::DATASET_PREFIX
                         )));
                     }
                 }

@@ -109,5 +109,5 @@ finished first.
 
 ## See also
 
-- [What a join guarantees on failure](/book/guides/effects-and-capabilities/what-a-join-guarantees-on-failure/)
+- [What a join guarantees on failure](/book/concepts/effects-and-capabilities/what-a-join-guarantees-on-failure/)
 - [Reference: joining independent effects](/reference/capabilities/#par)

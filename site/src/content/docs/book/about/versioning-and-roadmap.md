@@ -70,7 +70,7 @@ the planning backlogs (`bynk-tooling-proposal-queue.md`,
   against the computed value rather than trusting it outright — and
   `via schema(N)` version-aware dispatch, filtering delivery by the
   envelope's version. See
-  [Understand events](/book/guides/events/understand-events/).
+  [Understand events](/book/concepts/events/understand-events/).
   Range-valued `via schema(...)` patterns and `via schema(_)` (slice 4b,
   [#990](https://github.com/bynk-lang/bynk/issues/990), with integer range
   patterns, [#2699](https://github.com/bynk-lang/bynk/issues/2699)) are in.

@@ -403,7 +403,7 @@ capability you declare, are the open follow-ups.
 
 - Guide: [Declare `Eq` on a generic that compares](/book/guides/type-system/declare-eq-bounds/).
 - Guide: [Key a map by a record](/book/guides/type-system/key-a-map-by-a-record/).
-- Guide: [Understand ordering your own types](/book/guides/type-system/ordering-your-own-types/).
+- Guide: [Understand ordering your own types](/book/concepts/type-system/ordering-your-own-types/).
 - Guide: [Generic code that crosses the boundary](/book/guides/type-system/generic-code-that-crosses-the-boundary/).
 - Diagnostics: [`bynk.generics.missing_codable_bound`](/reference/diagnostics/bynk.generics.missing_codable_bound/),
   [`bynk.generics.missing_eq_bound`](/reference/diagnostics/bynk.generics.missing_eq_bound/),

@@ -79,7 +79,7 @@ A [static asset](#assets) fetch yields an `HttpResult[()]`.
 ### Delivering an event — `svc.event(e)` {#event-address}
 
 A case delivers one event to a `from Events(E)` service with `svc.event(e)`, or
-`svc.event(e, env)` to choose its [envelope](/book/guides/events/understand-events/#the-envelope-and-idempotent-handling).
+`svc.event(e, env)` to choose its [envelope](/book/concepts/events/understand-events/#the-envelope-and-idempotent-handling).
 The event goes through the service's generated handler, the same path the
 fan-out uses, so the subscription's pattern filter and `via schema(N)` guard
 apply. An event they reject reaches no handler code.

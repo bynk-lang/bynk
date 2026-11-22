@@ -205,5 +205,5 @@ Right now a `code` is any old `String`. Next we sharpen that: how do we stop an
 ---
 
 *For the reasoning behind opacity, sums, and immutable records, see
-[The type-system philosophy](/book/guides/type-system/philosophy/). For
+[The type-system philosophy](/book/concepts/type-system/philosophy/). For
 exact rules, see the [type system reference](/reference/types/).*

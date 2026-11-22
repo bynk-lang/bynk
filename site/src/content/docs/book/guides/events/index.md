@@ -7,12 +7,12 @@ Events(E)`**. Delivery is fire-and-forget across contexts — the emitting
 handler never learns whether, or how, a subscriber ran.
 
 **Understand**
-- [Understand events](/book/guides/events/understand-events/)
+- [Understand events](/book/concepts/events/understand-events/)
 
 **Worked example:** [`bynk-tests/tests/events_behaviour.rs`](https://github.com/bynk-lang/bynk/blob/main/bynk-tests/tests/events_behaviour.rs)
 — a publisher, a subscriber, and the release-at-commit/abort-suppression proof,
 compiled and run under real `tsc` + `node`.
 
 **See also:** [First-party `bynk` capabilities](/reference/bynk-capabilities/),
-[Understand the capability model](/book/guides/effects-and-capabilities/understand-the-capability-model/),
+[Understand the capability model](/book/concepts/effects-and-capabilities/understand-the-capability-model/),
 [Diagnostics](/reference/diagnostics/).

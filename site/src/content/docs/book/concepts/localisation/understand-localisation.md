@@ -158,4 +158,4 @@ at render time rather than failing the build.
 [Declare a message bundle](/book/guides/localisation/declare-a-message-bundle/),
 [Format with ICU](/book/guides/localisation/format-with-icu/),
 [First-party `bynk` capabilities](/reference/bynk-capabilities/),
-[Understand the capability model](/book/guides/effects-and-capabilities/understand-the-capability-model/).
+[Understand the capability model](/book/concepts/effects-and-capabilities/understand-the-capability-model/).

@@ -60,7 +60,7 @@ test for "available never goes negative"; the invariant *is* that guarantee.
 - They are **not** cross-agent. A property like "the sum of reservations across
   all `Inventory` agents equals the original stock" is eventually-consistent and
   belongs to a saga or external monitoring — see
-  [the agent model](/book/guides/agents-and-state/the-agent-model/).
+  [the agent model](/book/concepts/agents-and-state/the-agent-model/).
 - They are **not** transactional rollback. A fault means the *offending commit*
   is never written, not that the whole handler is undone (effects already sent
   stand). See [Agent invariants](/reference/agent-invariants/).
