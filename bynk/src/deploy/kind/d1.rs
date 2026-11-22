@@ -165,8 +165,8 @@ impl ResourceKind for D1 {
         &orphans.d1
     }
 
-    fn orphans_in_mut(orphans: &mut Orphans) -> &mut Vec<OrphanD1> {
-        &mut orphans.d1
+    fn set_orphans(orphans: &mut Orphans, found: Vec<OrphanD1>) {
+        orphans.d1 = found;
     }
 
     /// Each recorded database its Worker no longer declares (or whose Worker is gone), then each

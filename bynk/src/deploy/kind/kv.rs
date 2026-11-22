@@ -208,8 +208,8 @@ impl ResourceKind for Kv {
         &orphans.kv
     }
 
-    fn orphans_in_mut(orphans: &mut Orphans) -> &mut Vec<OrphanKv> {
-        &mut orphans.kv
+    fn set_orphans(orphans: &mut Orphans, found: Vec<OrphanKv>) {
+        orphans.kv = found;
     }
 
     /// The bare namespace with its Worker, or on its own once the live Worker stops using the

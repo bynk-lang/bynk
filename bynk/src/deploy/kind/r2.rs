@@ -154,8 +154,8 @@ impl ResourceKind for R2 {
         &orphans.r2
     }
 
-    fn orphans_in_mut(orphans: &mut Orphans) -> &mut Vec<OrphanR2> {
-        &mut orphans.r2
+    fn set_orphans(orphans: &mut Orphans, found: Vec<OrphanR2>) {
+        orphans.r2 = found;
     }
 
     /// Each recorded bucket its Worker no longer declares (or whose Worker is gone), then each

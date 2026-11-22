@@ -165,7 +165,7 @@ pub(crate) struct Environment {
     /// out-of-band comes back rather than being skipped on this set's word.
     /// Additive and `default`ed, so a slice-0 or slice-2 ledger still reads.
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
-    queues: BTreeSet<String>,
+    pub(crate) queues: BTreeSet<String>,
     /// #2579: the subset of [`Environment::queues`] this project only found
     /// already on the account, never created. `--prune` leaves them alone: a
     /// queue another Worker owns must not be deleted, with its undelivered
@@ -177,7 +177,7 @@ pub(crate) struct Environment {
     /// stays here, harmlessly: `--prune` never reaches it. Additive and
     /// `default`ed, so an older ledger still reads.
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
-    reused_queues: BTreeSet<String>,
+    pub(crate) reused_queues: BTreeSet<String>,
     /// State-migrations S3 (#2248, #2253 review): per Worker, the agent classes
     /// whose `deleted` tombstone a successful push carried in this
     /// environment. A `removed agent` declaration stays in source (and its
@@ -987,109 +987,6 @@ impl DeployLock {
         links.insert(binding.to_string(), link);
         true
     }
-
-    /// P3 (#2342): the `namespace_id` for `worker`'s rate limiter `binding`
-    /// in `environment`: the recorded one, else a new one — the first id from
-    /// its [`ratelimit_seed`] upward (wrapping within the span) that no rate
-    /// limiter in any environment of this ledger holds — recorded now. `true`
-    /// when it was allocated.
-    pub(crate) fn allocate_ratelimit(
-        &mut self,
-        environment: &str,
-        worker: &str,
-        binding: &str,
-    ) -> (String, bool) {
-        if let Some(id) = recorded_ratelimit(self, worker, binding, environment) {
-            return (id.to_string(), false);
-        }
-        let taken: BTreeSet<&str> = self
-            .environments
-            .values()
-            .flat_map(|env| env.ratelimit_instances.values())
-            .flat_map(|instances| instances.values())
-            .map(|r| r.namespace_id.as_str())
-            .collect();
-        let seed = ratelimit_seed(environment, worker, binding) - FIRST_RATELIMIT_NAMESPACE;
-        let id = (0..RATELIMIT_NAMESPACE_SPAN)
-            .map(|k| {
-                (FIRST_RATELIMIT_NAMESPACE + (seed + k) % RATELIMIT_NAMESPACE_SPAN).to_string()
-            })
-            .find(|n| !taken.contains(n.as_str()))
-            .expect("an unused id");
-        self.environments
-            .entry(environment.to_string())
-            .or_default()
-            .ratelimit_instances
-            .entry(worker.to_string())
-            .or_default()
-            .insert(
-                binding.to_string(),
-                RateLimitNamespace {
-                    namespace_id: id.clone(),
-                },
-            );
-        (id, true)
-    }
-
-    /// P3 (#2342): forget `worker`'s rate limiters that `declared` no longer
-    /// names. A limiter holds no data and has no account resource, so a
-    /// removed instance needs nothing deleted, only its row dropped (its id
-    /// is then free again). `true` when anything was forgotten.
-    pub(crate) fn forget_undeclared_ratelimits(
-        &mut self,
-        environment: &str,
-        worker: &str,
-        declared: &[String],
-    ) -> bool {
-        let Some(env) = self.environments.get_mut(environment) else {
-            return false;
-        };
-        let Some(instances) = env.ratelimit_instances.get_mut(worker) else {
-            return false;
-        };
-        let before = instances.len();
-        instances.retain(|binding, _| declared.contains(binding));
-        let changed = instances.len() != before;
-        if instances.is_empty() {
-            env.ratelimit_instances.remove(worker);
-        }
-        changed
-    }
-
-    pub(crate) fn has_queue(&self, environment: &str, queue: &str) -> bool {
-        self.environments
-            .get(environment)
-            .is_some_and(|env| env.queues.contains(queue))
-    }
-
-    /// Note that this project has created `queue`. Returns whether the ledger
-    /// changed, so a re-run that provisions nothing also writes nothing.
-    pub(crate) fn record_queue(&mut self, environment: &str, queue: &str) -> bool {
-        let env = self
-            .environments
-            .entry(environment.to_string())
-            .or_default();
-        // Created by this run, so whatever the ledger held before it is
-        // stale: the queue is Bynk's to prune now.
-        let was_reused = env.reused_queues.remove(queue);
-        env.queues.insert(queue.to_string()) || was_reused
-    }
-
-    /// Note that `queue` was already on the account when this project met it
-    /// (#2579): confirmed to exist, so the plan says `reuse`, but not Bynk's to
-    /// prune. A queue the ledger already holds is left as it was, whichever
-    /// way. Returns whether the ledger changed.
-    pub(crate) fn record_reused_queue(&mut self, environment: &str, queue: &str) -> bool {
-        let env = self
-            .environments
-            .entry(environment.to_string())
-            .or_default();
-        if !env.queues.insert(queue.to_string()) {
-            return false;
-        }
-        env.reused_queues.insert(queue.to_string());
-        true
-    }
 }
 
 /// Slice 5: every ledger entry for this environment that the current build no
@@ -1150,7 +1047,7 @@ impl Orphans {
     /// `confirm_prune`'s prompt at all — `Delete 0 resource(s)?` is a bug,
     /// not a valid state.
     pub(crate) fn has_prunable(&self) -> bool {
-        kinds_have_prunable(self) || !self.queues.is_empty()
+        kinds_have_prunable(self)
     }
 
     /// These orphans as the account names them under `environment`, for the
@@ -1194,11 +1091,7 @@ impl Orphans {
                 .iter()
                 .map(|(worker, state)| (self.shown_worker(environment, worker), state.clone()))
                 .collect(),
-            queues: self
-                .queues
-                .iter()
-                .map(|queue| env_qualify(environment, queue))
-                .collect(),
+            queues: Vec::new(),
         };
         show_kind_orphans(self, environment, &mut shown);
         shown
@@ -1225,16 +1118,6 @@ pub(crate) fn find_orphans(
     let Some(env) = lock.environments.get(environment) else {
         return Orphans::default();
     };
-    // P2 (#2578): a queue a context only sends to is as live as a consumed one.
-    let live_queues: BTreeSet<&str> = resources
-        .values()
-        .flat_map(|r| {
-            r.queues
-                .iter()
-                .chain(&r.producer_queues)
-                .map(String::as_str)
-        })
-        .collect();
     let mut orphans = Orphans {
         r2: Vec::new(),
         vectorize: Vec::new(),
@@ -1269,13 +1152,7 @@ pub(crate) fn find_orphans(
             })
             .map(|(worker, record)| (worker.clone(), record.fresh_agents.clone()))
             .collect(),
-        queues: env
-            .queues
-            .iter()
-            .filter(|queue| !live_queues.contains(queue.as_str()))
-            .filter(|queue| !env.reused_queues.contains(queue.as_str()))
-            .cloned()
-            .collect(),
+        queues: Vec::new(),
     };
     // 1D.1 (#3929): each converted kind's orphans.
     find_kind_orphans(&OrphanCx { env, resources }, &mut orphans);
@@ -1335,21 +1212,6 @@ pub(crate) fn recorded_ai_search<'a>(
         .get(environment)
         .and_then(|env| env.ai_search_links.get(worker))
         .and_then(|links| links.get(binding))
-}
-
-/// The `namespace_id` recorded for `worker`'s rate limiter `binding` (P3,
-/// #2342).
-pub(crate) fn recorded_ratelimit<'a>(
-    lock: &'a DeployLock,
-    worker: &str,
-    binding: &str,
-    environment: &str,
-) -> Option<&'a str> {
-    lock.environments
-        .get(environment)
-        .and_then(|env| env.ratelimit_instances.get(worker))
-        .and_then(|instances| instances.get(binding))
-        .map(|r| r.namespace_id.as_str())
 }
 
 pub(crate) fn read_lock(path: &Path) -> Result<DeployLock, String> {
@@ -1552,7 +1414,10 @@ pub fn materialise_deploy_state(
     let lock = read_lock(&project_root.join(LOCK_FILE))?;
     let mut limiter_ids = BTreeMap::new();
     for binding in limiters {
-        let Some(id) = recorded_ratelimit(&lock, worker, &binding, environment) else {
+        let Some(id) = lock
+            .recorded::<RateLimit>(environment, worker, &binding)
+            .map(|r| r.namespace_id.as_str())
+        else {
             return Err(format!(
                 "remote rate limiter `{binding}` for `{worker}` has not been provisioned under environment `{environment}`; run `bynk deploy --env {environment}` first"
             ));
@@ -1677,14 +1542,7 @@ pub fn materialise_deploy_state(
 pub(crate) fn confirm_prune(yes: bool, orphans: &Orphans, environment: &str) -> bool {
     // 1D.1 (#3929): each converted kind's, in the list's order (ruled for 1D.1c), first.
     let kinds = announce_prunable_kinds(orphans, environment);
-    for queue in &orphans.queues {
-        // The name `prune_orphans` deletes, not the ledger key (#2028).
-        emsg!(
-            "bynk: will delete queue `{}`",
-            env_qualify(environment, queue)
-        );
-    }
-    confirm_deletion_prompt(yes, kinds + orphans.queues.len())
+    confirm_deletion_prompt(yes, kinds)
 }
 
 /// The `--yes`-or-ask tail of [`confirm_prune`], shared with the Email Routing
@@ -1737,24 +1595,6 @@ pub(crate) fn prune_orphans(
         orphans,
         lives,
     )?;
-    for queue in &orphans.queues {
-        let physical = env_qualify(environment, queue);
-        delete_queue(provenance, &physical, project_root).map_err(|e| {
-            DeployFailure::driver(format!(
-                "could not delete the orphaned queue `{physical}`: {e}"
-            ))
-        })?;
-        if let Some(env) = lock.environments.get_mut(environment) {
-            env.queues.remove(queue);
-            env.reused_queues.remove(queue);
-        }
-        write_lock(lock_path, lock).map_err(|e| {
-            DeployFailure::driver(format!(
-                "deleted the orphaned queue `{physical}` but could not record it in {}: {e}",
-                lock_path.display()
-            ))
-        })?;
-    }
     Ok(())
 }
 
@@ -1816,7 +1656,12 @@ pub(crate) mod tests {
 
     /// Mark `queue` as one this project has already created.
     pub(crate) fn with_queue(mut lock: DeployLock, queue: &str) -> DeployLock {
-        lock.record_queue("default", queue);
+        QueueTable::created(
+            lock.environments
+                .entry(String::from("default"))
+                .or_default(),
+            queue,
+        );
         lock
     }
 
@@ -1858,14 +1703,14 @@ pub(crate) mod tests {
         let mut lock = DeployLock::default();
         let api = ratelimit_seed("default", "api", "RATELIMIT_A");
         assert_eq!(
-            lock.allocate_ratelimit("default", "api", "RATELIMIT_A"),
+            allocate_in(&mut lock, "default", "api", "RATELIMIT_A"),
             (api.to_string(), true)
         );
         assert_eq!(
-            lock.allocate_ratelimit("default", "api", "RATELIMIT_A"),
+            allocate_in(&mut lock, "default", "api", "RATELIMIT_A"),
             (api.to_string(), false)
         );
-        let staging = lock.allocate_ratelimit("staging", "api", "RATELIMIT_A").0;
+        let staging = allocate_in(&mut lock, "staging", "api", "RATELIMIT_A").0;
         assert_ne!(staging, api.to_string(), "each environment its own");
         // A seed another limiter in the ledger already holds probes upward.
         let mut crowded = DeployLock::default();
@@ -1885,11 +1730,14 @@ pub(crate) mod tests {
                 )]),
             );
         assert_eq!(
-            crowded.allocate_ratelimit("default", "web", "RATELIMIT_B"),
+            allocate_in(&mut crowded, "default", "web", "RATELIMIT_B"),
             ((seed + 1).to_string(), true)
         );
-        assert!(lock.forget_undeclared_ratelimits("default", "api", &[]));
-        assert!(!lock.forget_undeclared_ratelimits("default", "api", &[]));
+        // Forgotten after the push once the source declares none: twice is harmless.
+        let none = Resources::default();
+        for _ in 0..2 {
+            RateLimit::after_push(lock.environments.get_mut("default").unwrap(), "api", &none);
+        }
         assert!(
             !lock.environments["default"]
                 .ratelimit_instances
@@ -1905,12 +1753,14 @@ pub(crate) mod tests {
     fn two_projects_ledgers_do_not_start_their_limiters_at_one_id() {
         let mut shop = DeployLock::default();
         let mut registry = DeployLock::default();
-        let a = shop
-            .allocate_ratelimit("default", "shop-cart", "RATELIMIT_LOGIN")
-            .0;
-        let b = registry
-            .allocate_ratelimit("default", "registry-publish", "RATELIMIT_LOGIN")
-            .0;
+        let a = allocate_in(&mut shop, "default", "shop-cart", "RATELIMIT_LOGIN").0;
+        let b = allocate_in(
+            &mut registry,
+            "default",
+            "registry-publish",
+            "RATELIMIT_LOGIN",
+        )
+        .0;
         assert_ne!(a, b);
         for id in [&a, &b] {
             let n: u64 = id.parse().unwrap();
@@ -2041,7 +1891,7 @@ pub(crate) mod tests {
             Some("abc")
         );
         assert!(!lock.is_deployed("default", "api"));
-        assert!(!lock.has_queue("default", "intake"));
+        assert!(lock.recorded::<Queue>("default", "", "intake").is_none());
     }
 
     #[test]
@@ -2053,8 +1903,18 @@ pub(crate) mod tests {
             version: 1,
             ..Default::default()
         };
-        lock.record_queue("default", "job-intake");
-        lock.record_queue("default", "job-retry");
+        QueueTable::created(
+            lock.environments
+                .entry(String::from("default"))
+                .or_default(),
+            "job-intake",
+        );
+        QueueTable::created(
+            lock.environments
+                .entry(String::from("default"))
+                .or_default(),
+            "job-retry",
+        );
         let text = toml::to_string_pretty(&lock).unwrap();
         assert!(
             text.contains("[environments.default]") && text.contains("queues = ["),
@@ -2430,7 +2290,12 @@ pub(crate) mod tests {
             ..Default::default()
         };
         lock.record_deployed("staging", "api", None);
-        lock.record_queue("staging", "jobs");
+        QueueTable::created(
+            lock.environments
+                .entry(String::from("staging"))
+                .or_default(),
+            "jobs",
+        );
         lock.environments
             .entry("staging".into())
             .or_default()
@@ -2445,7 +2310,7 @@ pub(crate) mod tests {
         // "default" was never touched — a `--env staging` run must not
         // fabricate or leak into the section a plain `bynk deploy` reads.
         assert!(!lock.is_deployed("default", "api"));
-        assert!(!lock.has_queue("default", "jobs"));
+        assert!(lock.recorded::<Queue>("default", "", "jobs").is_none());
         assert_eq!(
             lock.recorded::<Kv>("default", "api", "KV")
                 .map(|kv| kv.id.as_str()),
@@ -2453,7 +2318,7 @@ pub(crate) mod tests {
         );
 
         assert!(lock.is_deployed("staging", "api"));
-        assert!(lock.has_queue("staging", "jobs"));
+        assert!(lock.recorded::<Queue>("staging", "", "jobs").is_some());
         assert_eq!(
             lock.recorded::<Kv>("staging", "api", "KV")
                 .map(|kv| kv.id.as_str()),
@@ -2557,7 +2422,7 @@ pub(crate) mod tests {
             err.contains("`RATELIMIT_LOGIN`") && err.contains("bynk deploy"),
             "{err}"
         );
-        lock.allocate_ratelimit("default", "shop", "RATELIMIT_LOGIN");
+        allocate_in(&mut lock, "default", "shop", "RATELIMIT_LOGIN");
         std::fs::write(dir.join(LOCK_FILE), toml::to_string_pretty(&lock).unwrap()).unwrap();
         assert!(materialise_deploy_state(&dir, "shop", &config, "default").unwrap());
         let text = std::fs::read_to_string(&config).unwrap();
@@ -3231,7 +3096,12 @@ pub(crate) mod tests {
             version: 1,
             ..Default::default()
         };
-        lock.record_queue("default", "jobs");
+        QueueTable::created(
+            lock.environments
+                .entry(String::from("default"))
+                .or_default(),
+            "jobs",
+        );
         let resources = BTreeMap::from([
             ("orders".into(), Resources::default().consumes(&["jobs"])),
             ("billing".into(), Resources::default().consumes(&["jobs"])),
@@ -3251,7 +3121,12 @@ pub(crate) mod tests {
             version: 1,
             ..Default::default()
         };
-        lock.record_queue("default", "order-events");
+        QueueTable::created(
+            lock.environments
+                .entry(String::from("default"))
+                .or_default(),
+            "order-events",
+        );
         let resources = BTreeMap::from([(
             "shop".into(),
             Resources::default().produces(&["order-events"]),
@@ -3265,7 +3140,12 @@ pub(crate) mod tests {
             version: 1,
             ..Default::default()
         };
-        lock.record_queue("default", "stale-jobs");
+        QueueTable::created(
+            lock.environments
+                .entry(String::from("default"))
+                .or_default(),
+            "stale-jobs",
+        );
         let resources = BTreeMap::from([("orders".into(), Resources::default())]);
 
         let orphans = find_orphans(&lock, "default", &resources);
@@ -3280,20 +3160,40 @@ pub(crate) mod tests {
             version: 1,
             ..Default::default()
         };
-        assert!(lock.record_reused_queue("default", "theirs"));
-        assert!(!lock.record_reused_queue("default", "theirs"));
-        lock.record_queue("default", "ours");
+        assert!(QueueTable::reused(
+            lock.environments
+                .entry(String::from("default"))
+                .or_default(),
+            "theirs"
+        ));
+        assert!(!QueueTable::reused(
+            lock.environments
+                .entry(String::from("default"))
+                .or_default(),
+            "theirs"
+        ));
+        QueueTable::created(
+            lock.environments
+                .entry(String::from("default"))
+                .or_default(),
+            "ours",
+        );
         let resources = BTreeMap::from([("orders".into(), Resources::default())]);
 
         assert!(
-            lock.has_queue("default", "theirs"),
+            lock.recorded::<Queue>("default", "", "theirs").is_some(),
             "the plan still says reuse"
         );
         let orphans = find_orphans(&lock, "default", &resources);
         assert_eq!(orphans.queues, names(&["ours"]));
 
         // Recreated by a later run (deleted out-of-band), it becomes Bynk's.
-        assert!(lock.record_queue("default", "theirs"));
+        assert!(QueueTable::created(
+            lock.environments
+                .entry(String::from("default"))
+                .or_default(),
+            "theirs"
+        ));
         let orphans = find_orphans(&lock, "default", &resources);
         assert_eq!(orphans.queues, names(&["ours", "theirs"]));
     }
@@ -3304,7 +3204,12 @@ pub(crate) mod tests {
             version: 1,
             ..Default::default()
         };
-        lock.record_reused_queue("default", "theirs");
+        QueueTable::reused(
+            lock.environments
+                .entry(String::from("default"))
+                .or_default(),
+            "theirs",
+        );
         let text = toml::to_string_pretty(&lock).unwrap();
         assert!(text.contains("reused_queues"));
         assert_eq!(toml::from_str::<DeployLock>(&text).unwrap(), lock);
