@@ -1,11 +1,6 @@
----
-level: patch
-changelog: The docs site deploys a merge within minutes, from the merge queue's passed run, instead of waiting for the next CI run on `main` to pass
----
+# 0884 — The docs site deploys from the merge queue's passed run, and always ships the newest green commit
 
-## ADR: deploy-site-from-queue
-title: The docs site deploys from the merge queue's passed run, and always ships the newest green commit
-summary: A queue merge deploys when it lands; other commits wait for their own run on main; every deploy ships the newest green commit
+- **Status:** Accepted (v0.640.36)
 
 **Context.** `deploy-site.yml` ran only when a CI push run on `main` passed, and it deployed the commit that run tested. CI on `main` shares one concurrency group. `cancel-in-progress` is already off for `main`, but GitHub keeps only one *pending* run per group, and a newer push cancels the run still waiting. Each merge through the queue is followed about 60 s later by the `bynk-stamp` bot's commit, and a push run takes 25 to 60 minutes. So on a busy day most of `main`'s runs are cancelled before they start, and the site waits for whichever run next manages to finish. On 22 November 2026, every push run on `main` from 14:48 to 15:40 UTC was cancelled this way. Web presence slice 6 (#4012, f647e57d) landed at 14:45, and the site served the old build until 56012501's run passed at 15:50. The queue had passed f647e57d itself at 14:45:29.
 

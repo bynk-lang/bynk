@@ -7,6 +7,7 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.640.36** | The docs site deploys a merge within minutes, from the merge queue's passed run, instead of waiting for the next CI run on `main` to pass |
 | **v0.640.35** | Internal restructuring of the code generator; events, the envelope rule and subscriber failure isolation are decided once, and the Bundle root's event dispatch is laid out by the printer |
 | **v0.640.34** | Search on bynk-lang.org now covers the blog as well as the docs, with blog posts marked "Blog · …" and ranked after the docs; the blog's search covers the docs the same way. The docs site's pages now declare British English (`lang="en-GB"`), as the blog's do (web presence track, slice 7, #4022). |
 | **v0.640.33** | Internal restructuring: npm, pnpm, bun, yarn, `tsc`, `tsx`, `node` and `git` are spawned from one module; no lookup, message or fetched package changes |

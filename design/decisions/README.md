@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0884](0884-deploy-site-from-queue.md) | **The docs site deploys from the merge queue's passed run, and always ships the newest green commit** (v0.640.36) — A queue merge deploys when it lands; other commits wait for their own run on main; every deploy ships the newest green commit | Accepted (v0.640.36) |
 | [0883](0883-one-site-theme-package.md) | **The docs site and the blog share one theme package, @bynk-lang/site-theme, published to GitHub Packages** (v0.640.30) — The Bynk brand for Starlight sites lives in bynk-lang/site-theme as a Starlight plugin both sites depend on; a site's own CSS and component overrides win over the theme's | Accepted (v0.640.30) |
 | [0882](0882-compiler-links-name-codes.md) | **The compiler links a diagnostic by its code, at /d/<code>, and the site decides where that goes** (v0.640.15) — Every tool links a code as `https://bynk-lang.org/d/<code>`; the site serves a page per registry code and keeps the code-to-Book-page links in its own data file | Accepted (v0.640.15) |
 | [0881](0881-release-pages-cut-before-tagging.md) | **Release notes are one page per release, cut from Unreleased before the release is tagged** (v0.640.14) — The Book keeps one page per release tag plus an Unreleased page the stamp writes; `cargo xtask release-page` cuts Unreleased before tagging, and `release.yml` refuses a tag without its page | Accepted (v0.640.14) |
