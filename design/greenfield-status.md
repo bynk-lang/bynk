@@ -28,7 +28,7 @@ Track slice T0.0 (#999); `ts_writes`/`ts_any` added by P7.0 (#1296); `verbatim_o
 | `emit_silent_fallbacks` | yes | 0 |
 | `emit_print_calls` | yes | 1 |
 | `import_prediction_fns` | yes | 0 |
-| `deploy_kind_accessors` | yes | 11 |
+| `deploy_kind_accessors` | yes | 0 |
 | `incremental_query_types` | yes | unit_signature present; shared_cache migrated; stability_test present; definition/project levels absent (deleted by #1537) |
 | `unconsumed_ir_items` | yes | 0 |
 | `diagnostic_coverage` | yes | unasserted=28 (asserted 870/898) |
