@@ -208,11 +208,6 @@ pub(crate) struct Environment {
     email_addresses: BTreeMap<String, BTreeSet<String>>,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
-pub(crate) struct KvNamespace {
-    pub(crate) id: String,
-}
-
 /// P3 (#2342): the `namespace_id` this project allocated for one rate limiter.
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub(crate) struct RateLimitNamespace {
@@ -890,25 +885,6 @@ impl DeployLock {
             .and_then(|record| record.contracts.as_ref())
     }
 
-    /// Record the namespace `id` this project created for `worker`'s KV
-    /// `binding`: the bare `KV` in [`Environment::kv`], an instance in
-    /// [`Environment::kv_instances`] (S4b, #1967).
-    pub(crate) fn record_kv(&mut self, environment: &str, worker: &str, binding: &str, id: &str) {
-        let env = self
-            .environments
-            .entry(environment.to_string())
-            .or_default();
-        let namespace = KvNamespace { id: id.to_string() };
-        if is_bare_kv(binding) {
-            env.kv.insert(worker.to_string(), namespace);
-        } else {
-            env.kv_instances
-                .entry(worker.to_string())
-                .or_default()
-                .insert(binding.to_string(), namespace);
-        }
-    }
-
     /// P5 (#2323): record the bucket this project created for `worker`'s `R2`
     /// `binding`.
     pub(crate) fn record_r2(
@@ -1286,23 +1262,6 @@ impl DeployLock {
         changed
     }
 
-    /// Forget `worker`'s KV `binding`, dropping a Worker's instance map once
-    /// it is empty, so a pruned ledger is the file it would have been had the
-    /// instance never existed.
-    fn forget_kv(&mut self, environment: &str, worker: &str, binding: &str) {
-        let Some(env) = self.environments.get_mut(environment) else {
-            return;
-        };
-        if is_bare_kv(binding) {
-            env.kv.remove(worker);
-        } else if let Some(instances) = env.kv_instances.get_mut(worker) {
-            instances.remove(binding);
-            if instances.is_empty() {
-                env.kv_instances.remove(worker);
-            }
-        }
-    }
-
     pub(crate) fn has_queue(&self, environment: &str, queue: &str) -> bool {
         self.environments
             .get(environment)
@@ -1389,16 +1348,6 @@ pub(crate) struct Orphans {
     pub(crate) queues: Vec<String>,
 }
 
-/// One recorded KV namespace the build no longer declares (S4b, #1967): the
-/// bare one of a removed Worker (`binding` absent), or a derived instance,
-/// whose Worker may still be live — a capability removed or renamed.
-#[derive(Debug, PartialEq, Eq, Serialize)]
-pub(crate) struct OrphanKv {
-    pub(crate) worker: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) binding: Option<String>,
-}
-
 /// One recorded R2 bucket the build no longer declares (P5, #2323): a
 /// capability removed or renamed, or a whole Worker gone.
 #[derive(Debug, PartialEq, Eq, Serialize)]
@@ -1449,15 +1398,6 @@ pub(crate) struct OrphanHyperdrive {
     pub(crate) adopted: bool,
 }
 
-impl OrphanKv {
-    /// The binding whose ledger entry this is: `KV` for the bare namespace.
-    pub(crate) fn binding(&self) -> &str {
-        self.binding
-            .as_deref()
-            .unwrap_or(bynk_emit::emitter::wrangler::KV_BINDING_NAME)
-    }
-}
-
 impl Orphans {
     /// Whether `--prune` would actually delete anything. **Not** the same as
     /// checking whether every field is empty (review, #840): `workers`
@@ -1466,7 +1406,7 @@ impl Orphans {
     /// `confirm_prune`'s prompt at all — `Delete 0 resource(s)?` is a bug,
     /// not a valid state.
     pub(crate) fn has_prunable(&self) -> bool {
-        !self.kv.is_empty()
+        kinds_have_prunable(self)
             || !self.queues.is_empty()
             || self.hyperdrive.iter().any(|h| !h.adopted)
             || self.vectorize.iter().any(|v| !v.adopted)
@@ -1489,15 +1429,8 @@ impl Orphans {
     }
 
     pub(crate) fn as_named_in(&self, environment: &str) -> Orphans {
-        Orphans {
-            kv: self
-                .kv
-                .iter()
-                .map(|kv| OrphanKv {
-                    worker: kv.worker.clone(),
-                    binding: kv.binding.clone(),
-                })
-                .collect(),
+        let mut shown = Orphans {
+            kv: Vec::new(),
             r2: self
                 .r2
                 .iter()
@@ -1534,7 +1467,9 @@ impl Orphans {
                 .iter()
                 .map(|queue| env_qualify(environment, queue))
                 .collect(),
-        }
+        };
+        show_kind_orphans(self, environment, &mut shown);
+        shown
     }
 }
 
@@ -1568,21 +1503,6 @@ pub(crate) fn find_orphans(
                 .map(String::as_str)
         })
         .collect();
-    // S4b (#1967): an instance is orphaned with its Worker, or on its own
-    // when its Worker no longer declares it.
-    let instance_orphans = env.kv_instances.iter().flat_map(|(worker, instances)| {
-        instances
-            .keys()
-            .filter(move |binding| {
-                resources
-                    .get(worker)
-                    .is_none_or(|r| !r.kv_instances.contains(binding))
-            })
-            .map(move |binding| OrphanKv {
-                worker: worker.clone(),
-                binding: Some(binding.clone()),
-            })
-    });
     // P5 (#2323): a bucket likewise, with its Worker or on its own.
     let r2_orphans = env
         .r2_instances
@@ -1700,23 +1620,12 @@ pub(crate) fn find_orphans(
             })
         })
         .collect();
-    Orphans {
+    let mut orphans = Orphans {
         r2: r2_orphans,
         vectorize: vectorize_orphans,
         d1: d1_orphans,
         hyperdrive: hyperdrive_orphans,
-        // The bare namespace likewise: with its Worker, or on its own once
-        // the live Worker stops using the bare `Kv` (review of #1974).
-        kv: env
-            .kv
-            .keys()
-            .filter(|worker| resources.get(worker.as_str()).is_none_or(|r| !r.needs_kv))
-            .map(|worker| OrphanKv {
-                worker: worker.clone(),
-                binding: None,
-            })
-            .chain(instance_orphans)
-            .collect(),
+        kv: Vec::new(),
         workers: env
             .workers
             .keys()
@@ -1752,7 +1661,10 @@ pub(crate) fn find_orphans(
             .filter(|queue| !env.reused_queues.contains(queue.as_str()))
             .cloned()
             .collect(),
-    }
+    };
+    // 1D.1 (#3929): each converted kind's orphans.
+    find_kind_orphans(&OrphanCx { env, resources }, &mut orphans);
+    orphans
 }
 
 /// The bucket recorded for `worker`'s `R2` `binding` (P5, #2323).
@@ -1875,73 +1787,6 @@ pub(crate) fn recorded_ratelimit<'a>(
         .and_then(|env| env.ratelimit_instances.get(worker))
         .and_then(|instances| instances.get(binding))
         .map(|r| r.namespace_id.as_str())
-}
-
-/// Whether `binding` is the bare `Kv`'s, as opposed to a derived instance's.
-pub(crate) fn is_bare_kv(binding: &str) -> bool {
-    binding == bynk_emit::emitter::wrangler::KV_BINDING_NAME
-}
-
-/// The namespace id recorded for `worker`'s KV `binding` (S4b, #1967): the
-/// bare `KV`, or a derived instance.
-pub(crate) fn recorded_kv_binding<'a>(
-    lock: &'a DeployLock,
-    worker: &str,
-    binding: &str,
-    environment: &str,
-) -> Option<&'a str> {
-    if is_bare_kv(binding) {
-        return recorded_kv(lock, worker, environment);
-    }
-    lock.environments
-        .get(environment)
-        .and_then(|env| env.kv_instances.get(worker))
-        .and_then(|instances| instances.get(binding))
-        .map(|kv| kv.id.as_str())
-}
-
-/// Every KV binding `declared` names, the bare `KV` first, then its instances
-/// in binding order (S4b, #1967): the order a deploy provisions them and the
-/// plan lists them.
-pub(crate) fn kv_bindings(declared: &Resources) -> impl Iterator<Item = &str> {
-    declared
-        .needs_kv
-        .then_some(bynk_emit::emitter::wrangler::KV_BINDING_NAME)
-        .into_iter()
-        .chain(declared.kv_instances.iter().map(String::as_str))
-}
-
-pub(crate) fn recorded_kv<'a>(
-    lock: &'a DeployLock,
-    worker: &str,
-    environment: &str,
-) -> Option<&'a str> {
-    lock.environments
-        .get(environment)
-        .and_then(|env| env.kv.get(worker))
-        .map(|kv| kv.id.as_str())
-}
-
-/// Slice 5, DECISION B, extracted for direct testing (review, #840): should
-/// `deploy_one` trust a recorded KV id, or treat it as though nothing were
-/// recorded at all?
-///
-/// - No record at all → never trust (nothing to trust).
-/// - A record, and the live fetch never ran or failed (`None`) → trust it,
-///   unconditionally — exactly pre-slice-5 behaviour, so a fetch outage
-///   never blocks a deploy that would have succeeded before this slice.
-/// - A record, and a live id set — trust it only if the id is actually in
-///   that set. Absent means Cloudflare no longer recognises it: re-provision,
-///   the same as an unrecorded id would.
-pub(crate) fn should_trust_recorded_kv(
-    recorded: Option<&str>,
-    live_kv_ids: Option<&BTreeSet<String>>,
-) -> bool {
-    match (recorded, live_kv_ids) {
-        (Some(id), Some(live)) => live.contains(id),
-        (Some(_), None) => true,
-        (None, _) => false,
-    }
 }
 
 pub(crate) fn read_lock(path: &Path) -> Result<DeployLock, String> {
@@ -2233,7 +2078,10 @@ pub fn materialise_deploy_state(
     }
     let mut ids = BTreeMap::new();
     for binding in needed {
-        let Some(id) = recorded_kv_binding(&lock, worker, &binding, environment) else {
+        let Some(id) = lock
+            .recorded::<Kv>(environment, worker, &binding)
+            .map(|kv| kv.id.as_str())
+        else {
             let what = if is_bare_kv(&binding) {
                 format!("remote KV for `{worker}`")
             } else {
@@ -2264,16 +2112,8 @@ pub fn materialise_deploy_state(
 /// [`confirm`] already uses, just with its own prompt so a script that only
 /// meant to authorise *creation* cannot accidentally also authorise deletion.
 pub(crate) fn confirm_prune(yes: bool, orphans: &Orphans, environment: &str) -> bool {
-    for kv in &orphans.kv {
-        match &kv.binding {
-            None => emsg!("bynk: will delete KV namespace for `{}`", kv.worker),
-            Some(binding) => eprintln!(
-                "bynk: will delete KV namespace `{}` for `{}`'s `{binding}`",
-                kv_title(&kv.worker, binding, environment),
-                kv.worker
-            ),
-        }
-    }
+    // 1D.1 (#3929): each converted kind's, first.
+    let kinds = announce_prunable_kinds(orphans, environment);
     for queue in &orphans.queues {
         // The name `prune_orphans` deletes, not the ledger key (#2028).
         emsg!(
@@ -2301,7 +2141,7 @@ pub(crate) fn confirm_prune(yes: bool, orphans: &Orphans, environment: &str) -> 
     }
     confirm_deletion_prompt(
         yes,
-        orphans.kv.len() + orphans.queues.len() + hyperdrive.len() + vectorize.len(),
+        kinds + orphans.queues.len() + hyperdrive.len() + vectorize.len(),
     )
 }
 
@@ -2341,26 +2181,17 @@ pub(crate) fn prune_orphans(
     environment: &str,
     orphans: &Orphans,
 ) -> Result<(), DeployFailure> {
-    for orphan in &orphans.kv {
-        let (worker, binding) = (orphan.worker.as_str(), orphan.binding());
-        let Some(id) = recorded_kv_binding(lock, worker, binding, environment).map(str::to_owned)
-        else {
-            continue;
-        };
-        let what = match &orphan.binding {
-            None => format!("the orphaned KV namespace for `{worker}`"),
-            Some(binding) => format!("the orphaned KV namespace `{binding}` for `{worker}`"),
-        };
-        delete_kv_namespace(provenance, &id, project_root)
-            .map_err(|e| DeployFailure::driver(format!("could not delete {what}: {e}")))?;
-        lock.forget_kv(environment, worker, binding);
-        write_lock(lock_path, lock).map_err(|e| {
-            DeployFailure::driver(format!(
-                "deleted {what} but could not record it in {}: {e}",
-                lock_path.display()
-            ))
-        })?;
-    }
+    // 1D.1 (#3929): each converted kind's, first.
+    prune_kind_orphans(
+        Tools {
+            provenance,
+            project_root,
+        },
+        lock,
+        lock_path,
+        environment,
+        orphans,
+    )?;
     // #3479: each orphaned index the deploy made (never an adopted one), named
     // as the account has it; gone already is success, as for a queue.
     for orphan in orphans.vectorize.iter().filter(|o| !o.adopted) {
@@ -2433,7 +2264,12 @@ pub(crate) mod tests {
         worker: &str,
         binding: &str,
     ) -> DeployLock {
-        lock.record_kv("default", worker, binding, &format!("{binding}-id"));
+        lock.record::<Kv>(
+            "default",
+            worker,
+            binding,
+            KvNamespace::of(&format!("{binding}-id")),
+        );
         lock
     }
 
@@ -2672,7 +2508,11 @@ pub(crate) mod tests {
         "#,
         )
         .expect("a slice-0 ledger must still parse");
-        assert_eq!(recorded_kv(&lock, "api", "default"), Some("abc"));
+        assert_eq!(
+            lock.recorded::<Kv>("default", "api", "KV")
+                .map(|kv| kv.id.as_str()),
+            Some("abc")
+        );
         assert!(!lock.is_deployed("default", "api"));
         assert!(!lock.has_queue("default", "intake"));
     }
@@ -3079,11 +2919,19 @@ pub(crate) mod tests {
         // fabricate or leak into the section a plain `bynk deploy` reads.
         assert!(!lock.is_deployed("default", "api"));
         assert!(!lock.has_queue("default", "jobs"));
-        assert_eq!(recorded_kv(&lock, "api", "default"), None);
+        assert_eq!(
+            lock.recorded::<Kv>("default", "api", "KV")
+                .map(|kv| kv.id.as_str()),
+            None
+        );
 
         assert!(lock.is_deployed("staging", "api"));
         assert!(lock.has_queue("staging", "jobs"));
-        assert_eq!(recorded_kv(&lock, "api", "staging"), Some("kv-staging"));
+        assert_eq!(
+            lock.recorded::<Kv>("staging", "api", "KV")
+                .map(|kv| kv.id.as_str()),
+            Some("kv-staging")
+        );
     }
 
     /// #837 review: `materialise_deploy_state` (shared with `bynk dev --
@@ -3209,7 +3057,12 @@ pub(crate) mod tests {
             version: 1,
             ..Default::default()
         };
-        lock.record_kv("default", "shop-cart", "KV_SESSIONS", "sess");
+        lock.record::<Kv>(
+            "default",
+            "shop-cart",
+            "KV_SESSIONS",
+            KvNamespace::of("sess"),
+        );
         std::fs::write(dir.join(LOCK_FILE), toml::to_string_pretty(&lock).unwrap()).unwrap();
 
         // One instance unrecorded: refused, naming it, and nothing written.
@@ -3225,7 +3078,12 @@ pub(crate) mod tests {
                 .contains("<KV_SESSIONS_ID>")
         );
 
-        lock.record_kv("default", "shop-cart", "KV_PRICE_CACHE", "price");
+        lock.record::<Kv>(
+            "default",
+            "shop-cart",
+            "KV_PRICE_CACHE",
+            KvNamespace::of("price"),
+        );
         std::fs::write(dir.join(LOCK_FILE), toml::to_string_pretty(&lock).unwrap()).unwrap();
         assert!(materialise_deploy_state(&dir, "shop-cart", &config, "default").unwrap());
         let parsed: toml::Table = std::fs::read_to_string(&config).unwrap().parse().unwrap();
@@ -3343,7 +3201,8 @@ pub(crate) mod tests {
         let pre_s4b = "version = 1\n\n[environments.default.kv.api]\nid = \"abc\"\n";
         let lock: DeployLock = toml::from_str(pre_s4b).expect("a pre-S4b ledger reads");
         assert_eq!(
-            recorded_kv_binding(&lock, "api", "KV", "default"),
+            lock.recorded::<Kv>("default", "api", "KV")
+                .map(|kv| kv.id.as_str()),
             Some("abc")
         );
         assert_eq!(toml::to_string_pretty(&lock).unwrap(), pre_s4b);
@@ -3361,22 +3220,30 @@ pub(crate) mod tests {
             "shop-cart",
         );
         let before = toml::to_string_pretty(&lock).unwrap();
-        lock.record_kv("default", "shop-cart", "KV_SESSIONS", "sess");
+        lock.record::<Kv>(
+            "default",
+            "shop-cart",
+            "KV_SESSIONS",
+            KvNamespace::of("sess"),
+        );
         let text = toml::to_string_pretty(&lock).unwrap();
         assert!(
             text.contains("[environments.default.kv_instances.shop-cart.KV_SESSIONS]"),
             "{text}"
         );
         assert_eq!(
-            recorded_kv_binding(&lock, "shop-cart", "KV_SESSIONS", "default"),
+            lock.recorded::<Kv>("default", "shop-cart", "KV_SESSIONS")
+                .map(|kv| kv.id.as_str()),
             Some("sess")
         );
         assert_eq!(
-            recorded_kv_binding(&lock, "shop-cart", "KV", "default"),
+            lock.recorded::<Kv>("default", "shop-cart", "KV")
+                .map(|kv| kv.id.as_str()),
             Some("ns-id")
         );
         assert_eq!(
-            recorded_kv_binding(&lock, "shop-cart", "KV_OTHER", "default"),
+            lock.recorded::<Kv>("default", "shop-cart", "KV_OTHER")
+                .map(|kv| kv.id.as_str()),
             None
         );
         assert_eq!(
@@ -3384,7 +3251,7 @@ pub(crate) mod tests {
             lock,
             "the instance table round-trips"
         );
-        lock.forget_kv("default", "shop-cart", "KV_SESSIONS");
+        lock.forget::<Kv>("default", "shop-cart", "KV_SESSIONS");
         assert_eq!(toml::to_string_pretty(&lock).unwrap(), before);
     }
 

@@ -290,8 +290,8 @@ fn recorded_id(
     binding: &str,
     environment: &str,
 ) -> Option<String> {
-    recorded_kv_binding(lock, worker, binding, environment)
-        .map(str::to_string)
+    // 1D.1 (#3929): each converted kind's, first.
+    recorded_bound_id(LedgerView::of(lock, environment), worker, binding)
         .or_else(|| recorded_d1(lock, worker, binding, environment).map(|d| d.id.clone()))
         .or_else(|| recorded_ratelimit(lock, worker, binding, environment).map(str::to_string))
 }
@@ -1819,7 +1819,8 @@ mod tests {
             f.ids.insert("KV".into(), "kv-old".into());
         });
         let mut f = Fx::new(facts(|_| {}), target);
-        f.lock.record_kv("default", "shop", "KV", "kv-new");
+        f.lock
+            .record::<Kv>("default", "shop", "KV", KvNamespace::of("kv-new"));
         assert!(f.run().iter().any(|x| x.check == "ids"
             && x.code == Some("bynk.revert.id_unrecorded")
             && x.is_refusal()
@@ -1831,7 +1832,8 @@ mod tests {
                 f.ids.insert("KV".into(), "kv-1".into());
             }),
         );
-        g.lock.record_kv("default", "shop", "KV", "kv-1");
+        g.lock
+            .record::<Kv>("default", "shop", "KV", KvNamespace::of("kv-1"));
         assert!(refusals(&g.run()).is_empty());
     }
 

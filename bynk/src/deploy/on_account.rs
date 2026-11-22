@@ -20,38 +20,16 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use super::kind::KindId;
 use crate::migrate::live::{self, Credentials, Rest};
 
-/// A kind of resource whose account-facing name the plan derives.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) enum Kind {
-    Kv,
-    R2,
-    D1,
-    Queue,
-    Vectorize,
-}
-
-impl Kind {
-    /// The kind as a note names it.
-    fn noun(self) -> &'static str {
-        match self {
-            Kind::Kv => "KV namespaces",
-            Kind::R2 => "R2 buckets",
-            Kind::D1 => "D1 databases",
-            Kind::Queue => "queues",
-            Kind::Vectorize => "Vectorize indexes",
-        }
-    }
-}
-
 /// One listing: a kind, and for R2 the jurisdiction (`None` is the default).
-pub(crate) type Listing = (Kind, Option<String>);
+pub(crate) type Listing = (KindId, Option<String>);
 
 /// The account's names of one kind.
 pub(crate) trait Listings {
     /// Every name of `kind` on the account; an R2 bucket's within `jurisdiction`.
-    fn names(&self, kind: Kind, jurisdiction: Option<&str>) -> Result<BTreeSet<String>, String>;
+    fn names(&self, kind: KindId, jurisdiction: Option<&str>) -> Result<BTreeSet<String>, String>;
 }
 
 /// The names the account holds, for the listings a plan asked for.
@@ -74,7 +52,7 @@ impl OnAccount {
                 Err(e) => on.notes.push(format!(
                     "bynk: warning: could not list the account's {}{} ({e}); the plan says what \
                      `bynk.deploy.lock` records for them",
-                    kind.noun(),
+                    kind.account_noun(),
                     jurisdiction
                         .as_deref()
                         .map(|j| format!(" in jurisdiction {j}"))
@@ -87,7 +65,12 @@ impl OnAccount {
 
     /// Whether the account holds `name` of `kind` (within `jurisdiction`), or
     /// `None` for a listing not read: unknown, never read as absent.
-    pub(crate) fn holds(&self, kind: Kind, jurisdiction: Option<&str>, name: &str) -> Option<bool> {
+    pub(crate) fn holds(
+        &self,
+        kind: KindId,
+        jurisdiction: Option<&str>,
+        name: &str,
+    ) -> Option<bool> {
         self.names
             .get(&(kind, jurisdiction.map(str::to_string)))
             .map(|names| names.contains(name))
@@ -176,13 +159,13 @@ impl RestListings {
 }
 
 impl Listings for RestListings {
-    fn names(&self, kind: Kind, jurisdiction: Option<&str>) -> Result<BTreeSet<String>, String> {
+    fn names(&self, kind: KindId, jurisdiction: Option<&str>) -> Result<BTreeSet<String>, String> {
         match kind {
-            Kind::Kv => self.paged("/storage/kv/namespaces?per_page=100", "title"),
-            Kind::R2 => self.buckets(jurisdiction),
-            Kind::D1 => self.paged("/d1/database?per_page=100", "name"),
-            Kind::Queue => self.paged("/queues", "queue_name"),
-            Kind::Vectorize => self.paged("/vectorize/v2/indexes", "name"),
+            KindId::Kv => self.paged("/storage/kv/namespaces?per_page=100", "title"),
+            KindId::R2 => self.buckets(jurisdiction),
+            KindId::D1 => self.paged("/d1/database?per_page=100", "name"),
+            KindId::Queue => self.paged("/queues", "queue_name"),
+            KindId::Vectorize => self.paged("/vectorize/v2/indexes", "name"),
         }
     }
 }
@@ -206,7 +189,7 @@ mod tests {
         ]);
         let listings = RestListings(rest(base));
         assert_eq!(
-            listings.names(Kind::Kv, None).unwrap(),
+            listings.names(KindId::Kv, None).unwrap(),
             BTreeSet::from(["shop".to_string(), "shop-staging".to_string()])
         );
         assert_eq!(seen.lock().unwrap().len(), 2);
@@ -233,7 +216,7 @@ mod tests {
             ),
         ]);
         let listings = RestListings(rest(base));
-        let names = listings.names(Kind::D1, None).unwrap();
+        let names = listings.names(KindId::D1, None).unwrap();
         assert_eq!(names.len(), 101);
         assert!(names.contains("shop-orders"));
         assert_eq!(seen.lock().unwrap().len(), 2, "no third page asked for");
@@ -254,7 +237,7 @@ mod tests {
         ]);
         let listings = RestListings(rest(base));
         assert_eq!(
-            listings.names(Kind::R2, None).unwrap(),
+            listings.names(KindId::R2, None).unwrap(),
             BTreeSet::from(["shop-files".to_string(), "shop-files-staging".to_string()]),
             "{:?}",
             seen.lock().unwrap()
@@ -264,9 +247,9 @@ mod tests {
     struct Fake;
 
     impl Listings for Fake {
-        fn names(&self, kind: Kind, _: Option<&str>) -> Result<BTreeSet<String>, String> {
+        fn names(&self, kind: KindId, _: Option<&str>) -> Result<BTreeSet<String>, String> {
             match kind {
-                Kind::D1 => Err("Cloudflare answered 403".into()),
+                KindId::D1 => Err("Cloudflare answered 403".into()),
                 _ => Ok(BTreeSet::from(["shop-docs".to_string()])),
             }
         }
@@ -274,12 +257,16 @@ mod tests {
 
     #[test]
     fn a_failed_listing_is_one_note_and_reads_as_unknown() {
-        let wanted = BTreeSet::from([(Kind::Vectorize, None), (Kind::D1, None)]);
+        let wanted = BTreeSet::from([(KindId::Vectorize, None), (KindId::D1, None)]);
         let on = OnAccount::read(&wanted, &Fake);
-        assert_eq!(on.holds(Kind::Vectorize, None, "shop-docs"), Some(true));
-        assert_eq!(on.holds(Kind::Vectorize, None, "shop-notes"), Some(false));
-        assert_eq!(on.holds(Kind::Kv, None, "shop-docs"), None, "not asked for");
-        assert_eq!(on.holds(Kind::D1, None, "shop-docs"), None, "not read");
+        assert_eq!(on.holds(KindId::Vectorize, None, "shop-docs"), Some(true));
+        assert_eq!(on.holds(KindId::Vectorize, None, "shop-notes"), Some(false));
+        assert_eq!(
+            on.holds(KindId::Kv, None, "shop-docs"),
+            None,
+            "not asked for"
+        );
+        assert_eq!(on.holds(KindId::D1, None, "shop-docs"), None, "not read");
         assert_eq!(on.notes.len(), 1, "{:?}", on.notes);
         assert!(on.notes[0].contains("D1 databases"), "{}", on.notes[0]);
         assert!(on.notes[0].contains("403"), "{}", on.notes[0]);
