@@ -10,31 +10,35 @@ Welcome to the official guide and reference for **Bynk** — a statically typed,
 architecture-first language that compiles to typed TypeScript for Cloudflare
 Workers.
 
-This book follows the [Diátaxis](https://diataxis.fr/) framework, grouped
-concern-first: each guide section keeps its explanation, its recipes, and its
-reference together rather than splitting them across the book. If you are not
-sure where to start:
+The book has four parts to read, and three to look things up in:
 
-- **New to Bynk?** Begin with [What is Bynk?](/book/introduction/what-is-bynk/),
-  then work through the [Tutorials](/book/tutorials/01-first-program/) in order.
-- **Have a specific task?** Jump to the [Guides](/book/guides/).
-- **Need exact behaviour?** Consult the [Reference](/book/reference/).
-- **Want to understand the *why*?** Each guide section opens with an
-  *Understand* page — e.g. [the type-system philosophy](/book/guides/type-system/philosophy/).
+- **[Start](/book/introduction/what-is-bynk/)** — what Bynk is, why it exists,
+  and how to install it.
+- **[Learn Bynk](/book/tutorials/01-first-program/)** — a tutorial that builds
+  one service, chapter by chapter. Read it in order.
+- **[Concepts](/book/guides/program-structure/)** — the ideas behind each part
+  of the language: why it works the way it does.
+- **[Guides](/book/guides/)** — how to do a particular task, grouped by what
+  you are building.
+- **[Reference](/book/reference/)**, the
+  **[Specification](/book/spec/)** and
+  **[Troubleshooting](/book/troubleshooting/)** — exact rules, and what a
+  diagnostic means and how to fix it.
 
-Or choose a path by background:
+Each page does one of those jobs, following [Diátaxis](https://diataxis.fr/):
+a tutorial teaches, a concept explains, a guide gets a task done, and the
+reference states the rules.
 
+If you are not sure where to start:
+
+- **New to Bynk?** Read [What is Bynk?](/book/introduction/what-is-bynk/), then
+  work through [Learn Bynk](/book/tutorials/01-first-program/) in order.
 - **Coming from TypeScript?** Read
   [Coming from TypeScript](/book/introduction/coming-from-typescript/).
-- **New to typed or functional ideas?** Start at
-  [Tutorial 1](/book/tutorials/01-first-program/), keeping the
-  [glossary](/book/reference/glossary/) to hand.
 - **Evaluating Bynk?** Read [Why Bynk exists](/book/about/why-bynk-exists/),
   then [Bynk compared to TypeScript](/book/about/bynk-compared-to-typescript/).
+- **Have a specific task?** Go to the [Guides](/book/guides/).
 
 > [!NOTE]
 > Meet an unfamiliar term? The [glossary](/book/reference/glossary/) defines Bynk's
 > load-bearing vocabulary, one line each.
-
-For a one-screen tour of how the book is laid out and how to read it, see
-[How these docs are organised](/book/introduction/how-these-docs-are-organised/).

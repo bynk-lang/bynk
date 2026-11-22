@@ -8,12 +8,16 @@ This Book lives in `site/` and is built with [Astro](https://astro.build/) and
 includes, diagnostic transcripts, callouts, diagrams — are expanded at build
 time by a small remark plugin, so writing a page is mostly writing prose.
 
-It is organised **by concern** (see
-[How these docs are organised](/book/introduction/how-these-docs-are-organised/)):
-a guided tutorial spine, then one **Guides** section per concern that co-locates
-that topic's explanation and how-to pages, with the **Reference** and
-**Specification** kept whole as lookup catalogues. [Diátaxis](https://diataxis.fr/)
-still governs each page — one mode per page — it just sits inside a concern now.
+It is organised **by kind first, then by concern** (see the
+[book's front page](/book/)). **Start** and **Learn Bynk** are read in order;
+**Concepts** holds the explanation pages, grouped by concern; **Guides** holds
+the how-to pages, grouped by what the reader is building; the **Reference**,
+**Specification** and **Troubleshooting** are kept whole for looking things up.
+[Diátaxis](https://diataxis.fr/) governs each page — one mode per page — and
+the part a page sits in says which mode it is. A new page goes in the part for
+its mode: an explanation in Concepts, under its concern; a how-to in Guides,
+under the group for the task. The page's file stays in its concern's folder
+under `guides/`; only `SUMMARY.md` decides where it shows.
 
 ## Build and preview locally
 

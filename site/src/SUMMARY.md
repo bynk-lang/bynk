@@ -2,13 +2,13 @@
 
 [Introduction](introduction.md)
 
-# Getting started
+# Start
 
 - [What is Bynk?](introduction/what-is-bynk.md)
+- [Why Bynk exists](about/why-bynk-exists.md)
 - [Anatomy of a Bynk service](introduction/anatomy-of-a-service.md)
 - [Coming from TypeScript](introduction/coming-from-typescript.md)
 - [Install](introduction/install.md)
-- [How these docs are organised](introduction/how-these-docs-are-organised.md)
 
 # Learn Bynk
 
@@ -19,12 +19,40 @@
 - [5. Add a stateful agent](tutorials/05-stateful-agent.md)
 - [6. Test it](tutorials/06-testing.md)
 
+# Concepts
+
+- [Program structure](guides/program-structure/index.md)
+  - [How a Bynk program is shaped](guides/program-structure/how-a-program-is-shaped.md)
+- [The type system](guides/type-system/index.md)
+  - [The type-system philosophy](guides/type-system/philosophy.md)
+  - [The refined-literal admission model](guides/type-system/refined-literal-admission.md)
+  - [Recursion and iteration](guides/type-system/recursion-and-iteration.md)
+  - [Understand ordering your own types](guides/type-system/ordering-your-own-types.md)
+- [Effects & capabilities](guides/effects-and-capabilities/index.md)
+  - [Understand the capability model](guides/effects-and-capabilities/understand-the-capability-model.md)
+  - [Synchronous and asynchronous sends](guides/effects-and-capabilities/synchronous-and-asynchronous-sends.md)
+  - [What a join guarantees on failure](guides/effects-and-capabilities/what-a-join-guarantees-on-failure.md)
+  - [What a timeout stops](guides/effects-and-capabilities/what-a-timeout-stops.md)
+- [Agents & state](guides/agents-and-state/index.md)
+  - [The agent model](guides/agents-and-state/the-agent-model.md)
+  - [Understand: invariants as contracts](guides/agents-and-state/understand-invariants.md)
+- [Entry points](guides/entry-points/index.md)
+- [Actors & access control](guides/actors/index.md)
+- [Events](guides/events/index.md)
+  - [Understand events](guides/events/understand-events.md)
+- [Localisation](guides/localisation/index.md)
+  - [Understand localisation](guides/localisation/understand-localisation.md)
+- [Testing](guides/testing/index.md)
+  - [The testing philosophy](guides/testing/philosophy.md)
+- [Projects, build & deployment](guides/projects-build-and-deployment/index.md)
+  - [Why compile to TypeScript](guides/projects-build-and-deployment/why-compile-to-typescript.md)
+- [Bynk compared to TypeScript](about/bynk-compared-to-typescript.md)
+- [Bynk compared to the alternatives](about/bynk-compared-to-the-alternatives.md)
+
 # Guides
 
 - [Guides](guides/index.md)
-  - [The type system](guides/type-system/index.md)
-    - [The type-system philosophy](guides/type-system/philosophy.md)
-    - [The refined-literal admission model](guides/type-system/refined-literal-admission.md)
+  - Data and types
     - [Define and validate untrusted input](guides/type-system/define-and-validate.md)
     - [Decode untrusted JSON into a typed value](guides/type-system/decode-json.md)
     - [Read a YAML settings file into a typed value](guides/type-system/decode-yaml.md)
@@ -37,70 +65,33 @@
     - [Match on a record's fields](guides/type-system/match-on-a-records-fields.md)
     - [Destructure a record with `let`](guides/type-system/destructure-a-record-with-let.md)
     - [Match on a list's shape](guides/type-system/match-on-a-lists-shape.md)
-    - [Recursion and iteration](guides/type-system/recursion-and-iteration.md)
     - [Match on a range of numbers](guides/type-system/match-on-a-range-of-numbers.md)
     - [Narrow and bind with `is`](guides/type-system/narrow-with-is.md)
-    - [Declare `Eq` on a generic that compares](guides/type-system/declare-eq-bounds.md)
-    - [Understand ordering your own types](guides/type-system/ordering-your-own-types.md)
     - [Key a map by a record](guides/type-system/key-a-map-by-a-record.md)
+    - [Declare `Eq` on a generic that compares](guides/type-system/declare-eq-bounds.md)
     - [Generic code that crosses the boundary](guides/type-system/generic-code-that-crosses-the-boundary.md)
     - [Constructors for generic types](guides/type-system/constructors-for-generic-types.md)
     - [Recursive generic types](guides/type-system/recursive-generic-types.md)
-  - [Program structure](guides/program-structure/index.md)
-    - [How a Bynk program is shaped](guides/program-structure/how-a-program-is-shaped.md)
+  - Structuring code
     - [Consume another context's services](guides/program-structure/consume-services.md)
     - [Add an option without breaking callers](guides/program-structure/add-an-option.md)
     - [Document your code](guides/program-structure/document-your-code.md)
     - [Design a library's public surface](guides/program-structure/design-a-public-surface.md)
-  - [Effects & capabilities](guides/effects-and-capabilities/index.md)
-    - [Understand the capability model](guides/effects-and-capabilities/understand-the-capability-model.md)
-    - [Synchronous and asynchronous sends](guides/effects-and-capabilities/synchronous-and-asynchronous-sends.md)
-    - [What a join guarantees on failure](guides/effects-and-capabilities/what-a-join-guarantees-on-failure.md)
-    - [What a timeout stops](guides/effects-and-capabilities/what-a-timeout-stops.md)
-    - [Run independent calls at the same time](guides/effects-and-capabilities/run-independent-calls-at-the-same-time.md)
-    - [Bound how long a call may take](guides/effects-and-capabilities/bound-how-long-a-call-may-take.md)
-    - [Ask two sources and take the first answer](guides/effects-and-capabilities/ask-two-sources-and-take-the-first-answer.md)
-    - [Compose a provider from other capabilities](guides/effects-and-capabilities/compose-a-provider.md)
     - [Share a handler step that logs or queries](guides/effects-and-capabilities/share-a-handler-step.md)
     - [Share a capability across contexts](guides/effects-and-capabilities/share-across-contexts.md)
-    - [Wrap a library as an adapter](guides/effects-and-capabilities/wrap-a-library.md)
-    - [Run a model from a Worker](guides/effects-and-capabilities/run-a-model-from-a-worker.md)
-    - [Run a container from a Worker](guides/effects-and-capabilities/run-a-container-from-a-worker.md)
-    - [Call Workers AI through an adapter](guides/effects-and-capabilities/call-workers-ai-through-an-adapter.md)
-    - [Search by meaning with Vectorize and Workers AI](guides/effects-and-capabilities/search-by-meaning-with-vectorize.md)
-    - [Answer questions from your documents with AI Search](guides/effects-and-capabilities/answer-questions-from-your-documents.md)
-    - [Use more than one KV namespace](guides/effects-and-capabilities/use-several-kv-namespaces.md)
-    - [Call a Worker outside the project](guides/effects-and-capabilities/call-a-foreign-worker.md)
-    - [Call an mTLS origin](guides/effects-and-capabilities/call-an-mtls-origin.md)
-    - [Read your analytics in the Worker](guides/effects-and-capabilities/read-your-analytics-in-the-worker.md)
-    - [Store files in R2](guides/effects-and-capabilities/store-files-in-r2.md)
-    - [Query rows into a record without repeating the columns](guides/effects-and-capabilities/query-rows-into-a-record.md)
-    - [Connect an existing Postgres database](guides/effects-and-capabilities/connect-an-existing-postgres-database.md)
-    - [Connect an existing MySQL database](guides/effects-and-capabilities/connect-an-existing-mysql-database.md)
-    - [Apply webhook events that arrive late, twice or out of order](guides/effects-and-capabilities/apply-webhook-events-out-of-order.md)
-    - [Rate-limit a route](guides/effects-and-capabilities/rate-limit-a-route.md)
-    - [Deduplicate at-least-once deliveries](guides/effects-and-capabilities/deduplicate-at-least-once-deliveries.md)
-    - [Send transactional email](guides/effects-and-capabilities/send-transactional-email.md)
-    - [Cache responses at Cloudflare's edge](guides/effects-and-capabilities/cache-at-the-edge.md)
-    - [Sign and verify data](guides/effects-and-capabilities/sign-and-verify-data.md)
-  - [Agents & state](guides/agents-and-state/index.md)
-    - [The agent model](guides/agents-and-state/the-agent-model.md)
-    - [Build a stateful agent](guides/agents-and-state/stateful-agent.md)
-    - [Model an agent as a state machine](guides/agents-and-state/state-machine.md)
-    - [Understand: invariants as contracts](guides/agents-and-state/understand-invariants.md)
-  - [Entry points](guides/entry-points/index.md)
+  - Handling requests
     - [Handle an HTTP request](guides/entry-points/http.md)
     - [Accept an HTML form](guides/entry-points/accept-a-form.md)
     - [Accept a file upload](guides/entry-points/accept-a-file-upload.md)
     - [Stream a large upload](guides/entry-points/stream-a-large-upload.md)
     - [Call your API from a front end](guides/entry-points/call-from-a-front-end.md)
     - [Branch on the caller's country](guides/entry-points/branch-on-the-callers-country.md)
+    - [Serve a page from an HTML file](guides/entry-points/serve-a-page.md)
     - [Run a task on a schedule (cron)](guides/entry-points/cron.md)
     - [Process a queued message](guides/entry-points/queue.md)
     - [Handle a WebSocket connection](guides/entry-points/websocket.md)
     - [Receive email](guides/entry-points/receive-email.md)
-    - [Serve a page from an HTML file](guides/entry-points/serve-a-page.md)
-  - [Actors & access control](guides/actors/index.md)
+  - Callers and access
     - [Serve public and authenticated routes](guides/actors/public-and-authenticated.md)
     - [Authenticate with OIDC / JWKS](guides/actors/authenticate-with-oidc.md)
     - [Authenticate a browser with a signed cookie](guides/actors/authenticate-with-a-signed-cookie.md)
@@ -108,22 +99,48 @@
     - [Serve several kinds of caller from one route](guides/actors/multiple-callers.md)
     - [Add an authorisation invariant](guides/actors/authorisation.md)
     - [Know which context called you](guides/actors/cross-context-callers.md)
-  - [Localisation](guides/localisation/index.md)
-    - [Understand localisation](guides/localisation/understand-localisation.md)
+    - [Sign and verify data](guides/effects-and-capabilities/sign-and-verify-data.md)
+  - Storing data
+    - [Use more than one KV namespace](guides/effects-and-capabilities/use-several-kv-namespaces.md)
+    - [Store files in R2](guides/effects-and-capabilities/store-files-in-r2.md)
+    - [Query rows into a record without repeating the columns](guides/effects-and-capabilities/query-rows-into-a-record.md)
+    - [Connect an existing Postgres database](guides/effects-and-capabilities/connect-an-existing-postgres-database.md)
+    - [Connect an existing MySQL database](guides/effects-and-capabilities/connect-an-existing-mysql-database.md)
+  - Calling out
+    - [Compose a provider from other capabilities](guides/effects-and-capabilities/compose-a-provider.md)
+    - [Wrap a library as an adapter](guides/effects-and-capabilities/wrap-a-library.md)
+    - [Call a Worker outside the project](guides/effects-and-capabilities/call-a-foreign-worker.md)
+    - [Call an mTLS origin](guides/effects-and-capabilities/call-an-mtls-origin.md)
+    - [Send transactional email](guides/effects-and-capabilities/send-transactional-email.md)
+    - [Read your analytics in the Worker](guides/effects-and-capabilities/read-your-analytics-in-the-worker.md)
+  - AI and search
+    - [Run a model from a Worker](guides/effects-and-capabilities/run-a-model-from-a-worker.md)
+    - [Call Workers AI through an adapter](guides/effects-and-capabilities/call-workers-ai-through-an-adapter.md)
+    - [Search by meaning with Vectorize and Workers AI](guides/effects-and-capabilities/search-by-meaning-with-vectorize.md)
+    - [Answer questions from your documents with AI Search](guides/effects-and-capabilities/answer-questions-from-your-documents.md)
+    - [Run a container from a Worker](guides/effects-and-capabilities/run-a-container-from-a-worker.md)
+  - Reliability
+    - [Run independent calls at the same time](guides/effects-and-capabilities/run-independent-calls-at-the-same-time.md)
+    - [Bound how long a call may take](guides/effects-and-capabilities/bound-how-long-a-call-may-take.md)
+    - [Ask two sources and take the first answer](guides/effects-and-capabilities/ask-two-sources-and-take-the-first-answer.md)
+    - [Deduplicate at-least-once deliveries](guides/effects-and-capabilities/deduplicate-at-least-once-deliveries.md)
+    - [Apply webhook events that arrive late, twice or out of order](guides/effects-and-capabilities/apply-webhook-events-out-of-order.md)
+    - [Rate-limit a route](guides/effects-and-capabilities/rate-limit-a-route.md)
+    - [Cache responses at Cloudflare's edge](guides/effects-and-capabilities/cache-at-the-edge.md)
+  - Agents and state
+    - [Build a stateful agent](guides/agents-and-state/stateful-agent.md)
+    - [Model an agent as a state machine](guides/agents-and-state/state-machine.md)
+  - Localisation
     - [Declare a message bundle](guides/localisation/declare-a-message-bundle.md)
     - [Format with ICU](guides/localisation/format-with-icu.md)
-  - [Events](guides/events/index.md)
-    - [Understand events](guides/events/understand-events.md)
-  - [Testing](guides/testing/index.md)
-    - [The testing philosophy](guides/testing/philosophy.md)
+  - Testing
     - [Write tests and mock collaborators](guides/testing/write-tests.md)
     - [Test a flow across Workers](guides/testing/integration.md)
     - [Run your tests](guides/testing/run-tests.md)
     - [Check what a request stored](guides/testing/check-what-the-app-stored.md)
     - [Try an expression against your project](guides/testing/try-an-expression.md)
     - [Test against a running system](guides/testing/against-a-running-system.md)
-  - [Projects, build & deployment](guides/projects-build-and-deployment/index.md)
-    - [Why compile to TypeScript](guides/projects-build-and-deployment/why-compile-to-typescript.md)
+  - Projects and deployment
     - [Start a new project](guides/projects-build-and-deployment/start-a-project.md)
     - [Lay out a project](guides/projects-build-and-deployment/layout.md)
     - [Share code between projects](guides/projects-build-and-deployment/share-code-between-projects.md)
@@ -188,13 +205,6 @@
   - [Appendix A — Planned features](spec/appendix-planned.md)
   - [Appendix B — Version history](spec/appendix-version-history.md)
 
-# About Bynk
-
-- [Why Bynk exists](about/why-bynk-exists.md)
-- [Bynk compared to TypeScript](about/bynk-compared-to-typescript.md)
-- [Bynk compared to the alternatives](about/bynk-compared-to-the-alternatives.md)
-- [Versioning & roadmap](about/versioning-and-roadmap.md)
-
 # Troubleshooting
 
 - [Troubleshooting](troubleshooting/index.md)
@@ -218,6 +228,10 @@
   - [`bynk.history.*` errors](troubleshooting/history-errors.md)
   - [`bynk.observe.*` errors](troubleshooting/observation-errors.md)
   - [`bynk.transition.*` errors](troubleshooting/transition-errors.md)
+
+# About Bynk
+
+- [Versioning & roadmap](about/versioning-and-roadmap.md)
 
 ---
 
