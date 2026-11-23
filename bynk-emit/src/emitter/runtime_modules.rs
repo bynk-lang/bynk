@@ -380,6 +380,7 @@ pub(crate) const RUNTIME_EXPORTS: &[(&str, &str)] = &[
     ("__bynkIntShl", "int"),
     ("__bynkIntShr", "int"),
     ("__bynkIntXor", "int"),
+    ("__bynkIsCron", "time"),
     ("__bynkIsDecimal", "decimal"),
     ("__bynkIsIsoDate", "time"),
     ("__bynkJoinOn", "keys"),

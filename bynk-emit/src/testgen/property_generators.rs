@@ -41,7 +41,8 @@ pub(super) fn int_bounds(refinement: Option<&Refinement>) -> (i64, i64, i64) {
                 | PredKind::MaxLength(_)
                 | PredKind::Length(_)
                 | PredKind::NonEmpty
-                | PredKind::IsoDate => {}
+                | PredKind::IsoDate
+                | PredKind::Cron => {}
             }
         }
     }
@@ -75,7 +76,8 @@ pub(super) fn float_bounds(refinement: Option<&Refinement>) -> (f64, f64) {
                 | PredKind::MaxLength(_)
                 | PredKind::Length(_)
                 | PredKind::NonEmpty
-                | PredKind::IsoDate => {}
+                | PredKind::IsoDate
+                | PredKind::Cron => {}
             }
         }
     }
@@ -100,7 +102,8 @@ pub(super) fn str_min(refinement: Option<&Refinement>) -> i64 {
                 | PredKind::MaxLength(_)
                 | PredKind::NonNegative
                 | PredKind::Positive
-                | PredKind::IsoDate => {}
+                | PredKind::IsoDate
+                | PredKind::Cron => {}
             }
         }
     }
@@ -163,7 +166,8 @@ pub(super) fn decimal_bounds(refinement: Option<&Refinement>) -> (i128, i128, u3
                 | PredKind::MaxLength(_)
                 | PredKind::Length(_)
                 | PredKind::NonEmpty
-                | PredKind::IsoDate => {}
+                | PredKind::IsoDate
+                | PredKind::Cron => {}
             }
         }
     }

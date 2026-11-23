@@ -21,7 +21,11 @@ service sweeper from cron {
 
 The schedule is a standard five-field cron expression
 (`minute hour day-of-month month day-of-week`). `*/5 * * * *` runs every five
-minutes; `0 0 * * *` runs at midnight.
+minutes; `0 0 * * *` runs at midnight. Schedules run in UTC, fields are separated
+by exactly one space, and the day of week counts `1` as Sunday (write `MON-FRI`
+rather than numbers). The compiler checks every field, so `61 * * * *` is
+`bynk.cron.invalid_schedule`; see [the syntax](/reference/cron/#schedule-syntax).
+The type `CronSchedule` names a valid schedule.
 
 ## Get the scheduled time
 

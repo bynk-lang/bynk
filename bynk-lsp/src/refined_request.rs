@@ -111,6 +111,8 @@ pub enum Predicate {
     Matches { pattern: String },
     /// A calendar date that exists, exactly `YYYY-MM-DD` (#2867).
     IsoDate,
+    /// A valid Cloudflare cron schedule (#3873).
+    Cron,
 }
 
 /// A `range` bound: a JSON integer for an `Int` type, a number for a `Float`.
@@ -148,6 +150,7 @@ impl Predicate {
             PredKind::Length(n) => Predicate::Length { length: *n },
             PredKind::Matches(p) => Predicate::Matches { pattern: p.clone() },
             PredKind::IsoDate => Predicate::IsoDate,
+            PredKind::Cron => Predicate::Cron,
         }
     }
 }
@@ -255,6 +258,7 @@ fn clause(kind: &PredKind) -> Clause {
         PredKind::Length(n) => format!("length = {n}"),
         PredKind::Matches(re) => format!("the whole string matches /{re}/"),
         PredKind::IsoDate => "a calendar date, YYYY-MM-DD".to_string(),
+        PredKind::Cron => "a cron schedule: five fields, minute hour day-of-month month day-of-week".to_string(),
     };
     Clause {
         source: bynk_fmt::refinement_to_string(&Refinement {
@@ -457,6 +461,25 @@ fn examples(base: BaseType, r: &Refinement) -> (Vec<String>, Option<String>) {
                 }
                 let note = out.is_empty().then(|| {
                     "No sample date satisfies every clause; type a candidate below.".to_string()
+                });
+                return (out, note);
+            }
+            // #3873: random strings are never schedules; offer real ones.
+            if preds.clone().any(|k| matches!(k, PredKind::Cron)) {
+                let re = preds
+                    .clone()
+                    .find_map(|k| match k {
+                        PredKind::Matches(p) => Some(p),
+                        _ => None,
+                    })
+                    .and_then(|p| regress::Regex::new(&format!("^(?:{p})$")).ok());
+                for d in ["0 2 * * MON-FRI", "*/15 * * * *", "0 0 1 JAN *"] {
+                    if re.as_ref().is_none_or(|re| re.find(d).is_some()) {
+                        push(d.to_string(), &mut out);
+                    }
+                }
+                let note = out.is_empty().then(|| {
+                    "No sample schedule satisfies every clause; type a candidate below.".to_string()
                 });
                 return (out, note);
             }

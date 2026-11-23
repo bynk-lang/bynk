@@ -36,6 +36,7 @@ the base's own type: `0`, `0.0` or `0.00d`.
 | `Length(n)` | length = n |
 | `Matches(regex)` | the whole string matches `regex` (anchored) |
 | `IsoDate` | a calendar date, exactly `YYYY-MM-DD` (years 0000-9999), and a date that exists |
+| `Cron` | a valid Cloudflare cron schedule: five fields separated by exactly one space ([cron](/reference/cron/)) |
 
 `IsoDate` is the date half of RFC 3339 and the date rule `Instant.fromIso`
 applies: months and days must exist (`2028-02-29` and `2000-02-29` do,
@@ -45,11 +46,18 @@ time; `.of`, `Json.decode` and the HTTP boundary (a `400 RefinementViolation`)
 apply the same rule. A `Day` stays a `String` everywhere else. For the day's
 first instant, `Instant.fromIso("\(day)T00:00:00Z")` is always `Some`.
 
+`Cron` admits exactly the schedules Cloudflare's cron triggers accept, which a
+`Matches` regex cannot express (a range must run low to high, a step must be at
+least one, `L`, `W` and `#` appear only in certain fields). A literal is checked
+at compile time, and `.of`, `Json.decode` and the HTTP boundary apply the same
+rule. The prelude type `CronSchedule = String where Cron` names it. OpenAPI
+exports `Cron` as `type: string` with `x-bynk-format: cron`.
+
 A predicate must apply to the base type (`bynk.types.predicate_base_mismatch`).
 An `InRange` with `lo > hi` is rejected (`bynk.types.inverted_range`), as is a set
 of predicates that admit no value (`bynk.types.empty_refinement`) or a negative
 length (`bynk.types.negative_length`). An invalid regex is
-`bynk.types.invalid_regex`. A `Matches` or `IsoDate` refinement may be followed
+`bynk.types.invalid_regex`. A `Matches`, `IsoDate` or `Cron` refinement may be followed
 by `@example("…")`, a test witness for `Val` that the compiler checks against
 the refinement ([`@example`](/reference/testing/#val-example)). The emitted boundary check runs a `Matches` regex
 under the platform's backtracking `RegExp`, on untrusted input, so the compiler

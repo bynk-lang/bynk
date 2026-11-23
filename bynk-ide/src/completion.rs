@@ -1090,7 +1090,9 @@ pub fn in_refinement_annotation_position(line_prefix: &str) -> bool {
     }
     let before = &line_prefix[..at];
     before.contains(" where ")
-        && (before.contains("Matches(") || before.contains("IsoDate"))
+        && (before.contains("Matches(")
+            || before.contains("IsoDate")
+            || before.contains("Cron"))
         && !before.contains("@example")
 }
 
@@ -2093,6 +2095,7 @@ fn predicate_name_candidates() -> Vec<Completion> {
         "Positive",
         "NonEmpty",
         "IsoDate",
+        "Cron",
     ]
     .into_iter()
     .map(|k| {

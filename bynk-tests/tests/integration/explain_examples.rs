@@ -102,6 +102,14 @@ const WARNING_ONLY: &[(&str, &str)] = &[
         "a warning; `positive/3446_cookie_untyped_has_field` holds it with `expected_warnings.txt`",
     ),
     (
+        "bynk.cron.numeric_weekday",
+        "a warning; `positive/4058_cron_schedule_warnings` holds it with `expected_warnings.txt`",
+    ),
+    (
+        "bynk.cron.uneven_step",
+        "a warning; `positive/4058_cron_schedule_warnings` holds it with `expected_warnings.txt`",
+    ),
+    (
         "bynk.http.cookie_domain_widens",
         "a warning; `positive/3329_cookie_domain_widens` holds it with `expected_warnings.txt`",
     ),

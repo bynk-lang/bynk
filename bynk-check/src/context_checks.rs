@@ -6735,6 +6735,58 @@ fn validate_raw_args(ann: &Annotation, errors: &mut Vec<CompileError>) {
     }
 }
 
+/// #3873: the schedule must be valid Cloudflare cron syntax
+/// ([`bynk_syntax::cron::is_cron_expression`]); the message names the failing
+/// field. A valid one may draw the two advisory warnings (`numeric_weekday`,
+/// `uneven_step`), both silenced by writing a name or an explicit list.
+fn check_cron_schedule(handler: &Handler, expr: &str, errors: &mut Vec<CompileError>) {
+    match bynk_syntax::cron::is_cron_expression(expr) {
+        Err(fault) => {
+            let mut err = CompileError::new(
+                "bynk.cron.invalid_schedule",
+                handler.span,
+                format!("cron schedule `{expr}` is invalid: {}", fault.message()),
+            )
+            .with_note(
+                "the fields are: minute hour day-of-month month day-of-week, separated by exactly one space",
+            );
+            let single_spaced = expr.split_whitespace().collect::<Vec<_>>().join(" ");
+            if single_spaced != expr && bynk_syntax::cron::is_cron_expression(&single_spaced).is_ok()
+            {
+                err = err.with_note(format!(
+                    "write it with single spaces: `{single_spaced}` (Cloudflare matches the schedule character for character)"
+                ));
+            }
+            errors.push(err);
+        }
+        Ok(()) => {
+            if bynk_syntax::cron::numeric_weekday(expr) {
+                errors.push(
+                    CompileError::new(
+                        "bynk.cron.numeric_weekday",
+                        handler.span,
+                        format!("cron schedule `{expr}` names a day of the week by number"),
+                    )
+                    .with_note(
+                        "on Cloudflare `1` is Sunday, so a number is a day earlier than standard cron's (`5` is Thursday, not Friday); write the name (`FRI`) to be explicit",
+                    ),
+                );
+            }
+            if let Some(when) = bynk_syntax::cron::uneven_step(expr) {
+                errors.push(
+                    CompileError::new(
+                        "bynk.cron.uneven_step",
+                        handler.span,
+                        format!("cron schedule `{expr}` has an uneven step"),
+                    )
+                    .with_note(when)
+                    .with_note("list the times you mean, or use a step that divides the field's range"),
+                );
+            }
+        }
+    }
+}
+
 /// Validate an `on cron "expr" (at: Int?) -> Effect[Result[(), E]]` handler
 /// (v0.10a §4.1): at most one `Int` parameter (the scheduled time, Unix epoch
 /// milliseconds), a structurally well-formed schedule, and the unit-Result
@@ -6767,21 +6819,7 @@ fn validate_cron_handler(handler: &Handler, expr: &str, errors: &mut Vec<Compile
             .with_note("wrap it in your own time type inside the body if you want stronger typing"),
         );
     }
-    // The schedule must be five whitespace-separated fields (light structural
-    // check; per-field validation is deferred — v0.10 §4.1, [DECISION 4]).
-    let fields = expr.split_whitespace().count();
-    if fields != 5 {
-        errors.push(
-            CompileError::new(
-                "bynk.cron.invalid_schedule",
-                handler.span,
-                format!(
-                    "cron expression `{expr}` must have exactly five whitespace-separated fields (got {fields})",
-                ),
-            )
-            .with_note("the fields are: minute hour day-of-month month day-of-week"),
-        );
-    }
+    check_cron_schedule(handler, expr, errors);
     // The return type must be `Effect[Result[(), E]]`.
     let return_ok = match &handler.return_type {
         TypeRef::Effect(inner, _) => match inner.as_ref() {

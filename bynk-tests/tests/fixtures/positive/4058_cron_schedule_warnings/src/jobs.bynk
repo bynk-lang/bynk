@@ -1,0 +1,18 @@
+context jobs
+
+service sweeper from cron {
+  // ⚠ a numeric day of week: Cloudflare's 5 is Thursday, not Friday.
+  on schedule("0 9 * * 5") () -> Effect[Result[(), String]] {
+    Ok(())
+  }
+
+  // ⚠ an uneven step: fires at :00 and :45, then :00 again.
+  on schedule("*/45 * * * *") () -> Effect[Result[(), String]] {
+    Ok(())
+  }
+
+  // No warning: the day is named, and the step divides the range.
+  on schedule("*/15 * * * FRI") () -> Effect[Result[(), String]] {
+    Ok(())
+  }
+}

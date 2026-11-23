@@ -215,6 +215,14 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
         {
             return Some(content);
         }
+        // 3b. #3873: inside the string literal of `on schedule("…")`: the
+        //     schedule's fields, named. Before rung 4, which would otherwise
+        //     answer the literal with the handler's wire contract.
+        if let Some(text) = a.snapshots.get(a.rel)
+            && let Some(content) = describe_cron_schedule_literal(text, a.offset)
+        {
+            return Some(content);
+        }
         // 4. #855: the handler HEADER — the `on` keyword, the HTTP method /
         //    handler-kind token, and any route string literal. No earlier rung
         //    (nor any later lexical one) ever answers here today: `GET` lexes
@@ -428,6 +436,51 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
         .or_else(|| describe_fault_builtin(&name, &text[span.end..]))
         // #2867: the `IsoDate` refinement predicate, in a `where` clause.
         .or_else(|| describe_iso_date_predicate(&name, &text[..span.start]))
+        // #3873: the `Cron` predicate and the `CronSchedule` type, likewise.
+        .or_else(|| describe_cron_predicate(&name, &text[..span.start]))
+}
+
+/// #3873: hover for the `Cron` predicate name after `where` or `&&`: its rule.
+fn describe_cron_predicate(name: &str, before: &str) -> Option<String> {
+    if name != "Cron" {
+        return None;
+    }
+    let line = before.rsplit('\n').next().unwrap_or(before);
+    (line.contains("where") || line.trim_end().ends_with("&&")).then(|| {
+        "```bynk\nCron\n```\n\nA `String` refinement predicate: the value is a valid Cloudflare \
+         cron schedule. Five fields (`minute hour day-of-month month day-of-week`) separated by \
+         exactly one space; minute `0-59`, hour `0-23`, day of month `1-31` (also `L`, `W`), \
+         month `1-12` or `JAN`-`DEC`, day of week `1-7` with `1` = Sunday, or `SUN`-`SAT` \
+         (also `L`, `#`). `* , - /` work in every field. No seconds, year, `?` or `@daily`. \
+         Schedules run in UTC. Checked at compile time for a literal, and at runtime by `.of`, \
+         `Json.decode` and the HTTP boundary."
+            .to_string()
+    })
+}
+
+/// #3873: hover inside the string literal of `on schedule("…")`: the schedule's
+/// five fields, named. `None` off a schedule literal or for an invalid schedule
+/// (the checker reports that one).
+pub(crate) fn describe_cron_schedule_literal(text: &str, offset: usize) -> Option<String> {
+    let line_start = text[..offset].rfind('\n').map_or(0, |i| i + 1);
+    let line_end = text[offset..].find('\n').map_or(text.len(), |i| offset + i);
+    let line = &text[line_start..line_end];
+    let at = offset - line_start;
+    let open = line.find("schedule(\"")? + "schedule(\"".len();
+    let close = open + line[open..].find('"')?;
+    if at < open - 1 || at > close {
+        return None;
+    }
+    let fields = bynk_syntax::cron::describe_fields(&line[open..close])?;
+    let rows: Vec<String> = fields
+        .iter()
+        .map(|(name, text)| format!("- {name}: `{text}`"))
+        .collect();
+    Some(format!(
+        "```bynk\nschedule(\"{}\")\n```\n\nA cron schedule (UTC):\n\n{}",
+        &line[open..close],
+        rows.join("\n")
+    ))
 }
 
 /// #2867: hover for the `IsoDate` predicate name after `where` or `&&`: its rule

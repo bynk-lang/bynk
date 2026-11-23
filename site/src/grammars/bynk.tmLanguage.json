@@ -365,7 +365,7 @@
         },
         {
           "name": "support.function.predicate.bynk",
-          "match": "\\b(Matches|InRange|MinLength|MaxLength|Length|NonNegative|Positive|NonEmpty|IsoDate)\\b"
+          "match": "\\b(Matches|InRange|MinLength|MaxLength|Length|NonNegative|Positive|NonEmpty|IsoDate|Cron)\\b"
         },
         {
           "name": "entity.name.type.bynk",

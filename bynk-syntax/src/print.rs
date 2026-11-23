@@ -224,6 +224,7 @@ fn pred_to_string(p: &RefinementPred) -> String {
         PredKind::Positive => "Positive".to_string(),
         PredKind::NonEmpty => "NonEmpty".to_string(),
         PredKind::IsoDate => "IsoDate".to_string(),
+        PredKind::Cron => "Cron".to_string(),
     }
 }
 
