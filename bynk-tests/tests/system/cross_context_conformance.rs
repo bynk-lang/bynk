@@ -183,7 +183,7 @@ service OnPlaced from Events(Placed) {
 /// (`client` when under none), and cut at its stack.
 const DRIVER: &str = r#"import { AsyncLocalStorage } from "node:async_hooks";
 import { readFileSync } from "node:fs";
-import { signedHeaders } from "./out-js/__bynk_runtime/boundary.js";
+import { signedHeaders } from "./out/out-js/__bynk_runtime/boundary.js";
 
 const grouped = process.argv[2] === "grouped";
 const KEY = "edge-key";
@@ -214,12 +214,12 @@ const dir = (c) => c.replace(".", "-");
 let Fanout;
 const entries = {};
 if (grouped) {
-  const core = await import("./out-js/workers/core/index.js");
+  const core = await import("./out/out-js/workers/core/index.js");
   for (const c of CONTEXTS) entries[c] = core.default;
   Fanout = core.__EventsFanout;
 } else {
-  for (const c of CONTEXTS) entries[c] = (await import(`./out-js/workers/${dir(c)}/index.js`)).default;
-  Fanout = (await import("./out-js/workers/app-pub/index.js")).__EventsFanout;
+  for (const c of CONTEXTS) entries[c] = (await import(`./out/out-js/workers/${dir(c)}/index.js`)).default;
+  Fanout = (await import("./out/out-js/workers/app-pub/index.js")).__EventsFanout;
 }
 
 // A Worker holds only the keys `bynk deploy` would provision for it, read from the
@@ -429,7 +429,11 @@ fn observe(topology: &Topology) -> Option<(PathBuf, Vec<Value>)> {
         topology.name,
         text(&emitted)
     );
-    fs::write(root.join("out-js/package.json"), "{\"type\":\"module\"}").unwrap();
+    fs::write(
+        root.join("out/out-js/package.json"),
+        "{\"type\":\"module\"}",
+    )
+    .unwrap();
     fs::write(root.join("provisioned.json"), provisioned_keys(&root)?).unwrap();
     fs::write(root.join("run.mjs"), DRIVER).unwrap();
     let ran = Command::new("node")
