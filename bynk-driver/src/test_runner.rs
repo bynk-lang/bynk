@@ -903,16 +903,15 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
             format!("could not enable source maps for coverage: {e}"),
         );
     }
-    // Preferred: `tsc -p out/tsconfig.json` → `node out-js/tests/main.js`.
+    // Preferred: `tsc -p out/tsconfig.json` → `node out/out-js/tests/main.js`.
     // tsc gives us full type-checking before execution and matches what a
     // production deployment build would do. If tsc is missing, fall back to
     // tsx, which compiles-and-runs in one step. We also try npx-mediated
     // variants so a developer with `npm` available doesn't need a global
     // install. If nothing works, emit an actionable error message.
-    let out_js_root = output_root
-        .parent()
-        .map(|p| p.join("out-js"))
-        .unwrap_or_else(|| PathBuf::from("out-js"));
+    // #4159: inside the output root, so a run's JavaScript is private to it and two
+    // runs whose `--output`s share a parent cannot clobber each other.
+    let out_js_root = output_root.join("out-js");
     let main_js = out_js_root.join("tests").join("main.js");
 
     // #2146: tsc emits ES modules (the compile writes `out/package.json`

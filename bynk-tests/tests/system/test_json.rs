@@ -798,10 +798,7 @@ fn a_detached_failure_in_a_cron_or_queue_handler_is_counted() {
     }
     let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/positive/3541_detach_cron_queue");
-    // The runner compiles into `<output>/../out-js`, so a private parent keeps this run
-    // from sharing (and clobbering) `out-js` with every other test using the temp dir.
-    let root = std::env::temp_dir().join(format!("bynk-detach-jobs-{}", std::process::id()));
-    let scratch = root.join("out");
+    let scratch = std::env::temp_dir().join(format!("bynk-detach-jobs-{}", std::process::id()));
     let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
         .args(["test"])
         .arg(&fixture)
@@ -830,5 +827,52 @@ fn a_detached_failure_in_a_cron_or_queue_handler_is_counted() {
     assert_eq!(count("Err in a cron handler"), 1);
     assert_eq!(count("fault in a cron handler"), 1);
     assert_eq!(count("queue consumer"), 2);
-    let _ = std::fs::remove_dir_all(&root);
+    let _ = std::fs::remove_dir_all(&scratch);
+}
+
+/// #4159: the runner writes its compiled JavaScript inside `--output`, so runs
+/// whose `--output` directories share a parent do not clobber one another. Four
+/// concurrent `bynk test --format json` runs of one fixture, `--output`s side by
+/// side under one parent, must each end with a complete report. Needs a
+/// TypeScript runner; skips without one.
+#[test]
+fn concurrent_runs_sharing_an_output_parent_do_not_interfere() {
+    let have = |t: &str| which::which(t).is_ok();
+    if !(have("tsx") || (have("tsc") && have("node")) || have("npx")) {
+        eprintln!("skipped: no TypeScript runner on PATH");
+        return;
+    }
+    let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/positive/3541_detach_cron_queue");
+    let parent = std::env::temp_dir().join(format!("bynk-shared-parent-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&parent);
+    let runs: Vec<_> = (0..4)
+        .map(|i| {
+            let (fixture, output) = (fixture.clone(), parent.join(format!("out{i}")));
+            std::thread::spawn(move || {
+                Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
+                    .args(["test"])
+                    .arg(&fixture)
+                    .arg("--output")
+                    .arg(&output)
+                    .args(["--format", "json"])
+                    .output()
+                    .expect("run bynk test")
+            })
+        })
+        .collect();
+    for (i, run) in runs.into_iter().enumerate() {
+        let out = run.join().unwrap();
+        let doc: serde_json::Value = serde_json::from_slice(&out.stdout).expect("a JSON document");
+        assert!(
+            out.status.success() && doc["error"].is_null(),
+            "run {i} failed ({}):\n{}\n{}",
+            out.status,
+            String::from_utf8_lossy(&out.stderr),
+            String::from_utf8_lossy(&out.stdout)
+        );
+        let cases = doc["suites"][0]["cases"].as_array().map_or(0, Vec::len);
+        assert!(cases > 0, "run {i} reported a suite with no cases:\n{doc}");
+    }
+    let _ = std::fs::remove_dir_all(&parent);
 }

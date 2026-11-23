@@ -207,7 +207,7 @@ pub fn collect_coverage(
             continue;
         };
         // Hop 2: the emitter's `.ts.map`, mirrored under `out/` at the same rel
-        // path (tsc's `rootDir: "."`, `outDir: "../out-js"` keeps the tree 1:1).
+        // path (tsc's `rootDir: "."`, `outDir: "./out-js"` keeps the tree 1:1).
         let ts_rel = rel.with_extension("ts");
         let ts_map_path = append_ext(&out_root.join(&ts_rel), "map");
         let Some(ts_map) = std::fs::read_to_string(&ts_map_path)

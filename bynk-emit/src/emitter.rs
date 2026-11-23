@@ -204,8 +204,8 @@ pub fn emit_tsconfig() -> String {
 /// The runner overwrites the default `out/tsconfig.json` with this before `tsc`.
 pub fn emit_tsconfig_with_source_maps() -> String {
     TSCONFIG_JSON.replace(
-        "\"outDir\": \"../out-js\",",
-        "\"sourceMap\": true,\n    \"outDir\": \"../out-js\",",
+        "\"outDir\": \"./out-js\",",
+        "\"sourceMap\": true,\n    \"outDir\": \"./out-js\",",
     )
 }
 
@@ -221,11 +221,11 @@ const TSCONFIG_JSON: &str = r#"{
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": false,
-    "outDir": "../out-js",
+    "outDir": "./out-js",
     "rootDir": "."
   },
   "include": ["**/*.ts"],
-  "exclude": ["node_modules", "**/bynk-client.ts", "**/*.bynk-client.ts"]
+  "exclude": ["node_modules", "out-js", "**/bynk-client.ts", "**/*.bynk-client.ts"]
 }
 "#;
 
@@ -2288,7 +2288,7 @@ mod runtime_tests {
             cov.contains("\"sourceMap\": true"),
             "coverage config: {cov}"
         );
-        assert!(cov.contains("\"outDir\": \"../out-js\""));
+        assert!(cov.contains("\"outDir\": \"./out-js\""));
         assert!(!emit_tsconfig().contains("sourceMap"));
     }
 
