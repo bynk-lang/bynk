@@ -569,14 +569,14 @@ pub fn run(
     // previously re-rooted on the first `include` entry only, silently
     // dropping further includes and the whole `exclude` list.
     // #3100: the first build reports each context; a watch rebuild stays quiet.
-    if !crate::workers::compile_once_reporting(
+    let Some(model) = crate::workers::compile_built(
         project_root,
         &build_dir,
         dev_build(opts),
         bynk_driver::progress::terminal_sink(),
-    ) {
+    ) else {
         return ExitCode::FAILURE;
-    }
+    };
 
     // 3. Select the workers — every context by default, or the `--context`
     //    subset (#552, superseding ADR 0096 D3's select-or-default). Serving
@@ -605,7 +605,7 @@ pub fn run(
     // I2 (#1971): over every built Worker, not only the served ones, so a
     // context served here alone still admits a caller served by another
     // `bynk dev --context` session.
-    let local = match LocalKeys::read(&workers_dir, &available, project_root) {
+    let local = match LocalKeys::read(&workers_dir, &available, project_root, &model) {
         Ok(keys) => keys,
         Err(e) => {
             emsg!("bynk: error: {e}");
@@ -695,7 +695,7 @@ pub fn run(
         remote,
         environment: &opts.environment,
     };
-    if !dev_configs.write(true) {
+    if !dev_configs.write(Some(&model), true) {
         return ExitCode::FAILURE;
     }
 
@@ -885,6 +885,9 @@ pub fn run(
     // under a keystroke-to-glance.
     emsg!("bynk dev: watching for source changes (edit `.bynk` files to rebuild)");
     let mut fingerprint = watch_fingerprint(project_root);
+    // The model of the last good build, replaced only by a build that
+    // succeeds, as the build it describes is.
+    let mut model = model;
     let code = supervise(&mut children, &workers_dir, || {
         if let Some(r) = readiness.as_mut() {
             if let Some(written) = r.poll(crate::ready::probe) {
@@ -904,10 +907,13 @@ pub fn run(
             emsg!("bynk dev: change detected — rebuilding…");
             emit(opts.format, &DevEvent::Rebuilding);
             let rebuild = dev_build(opts);
-            if crate::workers::compile_once_reporting(project_root, &build_dir, rebuild, None) {
+            if let Some(rebuilt) =
+                crate::workers::compile_built(project_root, &build_dir, rebuild, None)
+            {
+                model = rebuilt;
                 // Interop I5 (#1972): a binding added since start has no
                 // stand-in until `bynk dev` restarts.
-                dev_configs.write(false);
+                dev_configs.write(Some(&model), false);
                 emsg!("bynk dev: rebuilt");
                 emit(opts.format, &DevEvent::RebuildOk);
             } else {
@@ -1016,12 +1022,13 @@ fn bind_dev_vectorize(
     serving: &[Serving],
     remote: bool,
     announce: bool,
+    model: Option<&bynk_emit::emit_model::WorkersBuild>,
 ) -> DevVectorize {
     if remote {
         return DevVectorize::Bound;
     }
     let names: Vec<String> = serving.iter().map(|s| s.worker.clone()).collect();
-    match crate::dev_vectorize::bind_for_dev(project_root, workers_dir, available, &names) {
+    match crate::dev_vectorize::bind_for_dev(project_root, workers_dir, available, &names, model) {
         Ok(bound) => {
             if announce && let Some(note) = crate::dev_vectorize::report_note(&bound) {
                 colour::eprintln(&note);
@@ -2035,10 +2042,15 @@ struct LocalKeys {
 }
 
 impl LocalKeys {
-    fn read(workers_dir: &Path, available: &[String], project_root: &Path) -> Result<Self, String> {
+    fn read(
+        workers_dir: &Path,
+        available: &[String],
+        project_root: &Path,
+        model: &bynk_emit::emit_model::WorkersBuild,
+    ) -> Result<Self, String> {
         Ok(Self {
-            edge: crate::deploy::local_edge_keys(workers_dir, available, project_root)?,
-            session: crate::deploy::local_session_keys(workers_dir, available)?,
+            edge: crate::deploy::local_edge_keys(workers_dir, available, project_root, model)?,
+            session: crate::deploy::local_session_keys(workers_dir, available, model)?,
         })
     }
 
@@ -2119,7 +2131,7 @@ impl DevConfigs<'_> {
     /// #3505: every change is made to the generated config, which nothing serves,
     /// and the served [`DEV_CONFIG`] is replaced whole only after the last of
     /// them, so `wrangler dev` never reloads with the deploy's names bound.
-    fn write(&self, announce: bool) -> bool {
+    fn write(&self, model: Option<&bynk_emit::emit_model::WorkersBuild>, announce: bool) -> bool {
         dev_config_patches(
             self.project_root,
             self.workers_dir,
@@ -2135,6 +2147,7 @@ impl DevConfigs<'_> {
             self.serving,
             self.remote,
             announce,
+            model,
         );
         if !bound.may_publish(announce) {
             if bound == DevVectorize::Unsafe && !announce {
@@ -3449,7 +3462,7 @@ mod tests {
             remote: false,
             environment: "default",
         };
-        assert!(configs.write(true));
+        assert!(configs.write(None, true));
         let served = workers.join("shop").join(DEV_CONFIG);
         let first = std::fs::read_to_string(&served).unwrap();
         assert!(first.contains("index_name = \"docs-dev\""), "{first}");
@@ -3467,7 +3480,7 @@ mod tests {
             "served before the rebind: {between}"
         );
 
-        assert!(configs.write(false));
+        assert!(configs.write(None, false));
         let after = std::fs::read_to_string(&served).unwrap();
         assert!(after.contains("index_name = \"docs-dev\""), "{after}");
         assert!(!after.contains("shop-docs"), "{after}");
@@ -3491,7 +3504,7 @@ mod tests {
             remote: false,
             environment: "default",
         };
-        assert!(configs.write(true));
+        assert!(configs.write(None, true));
         // `vars` that is not a table: the binding cannot edit the config.
         std::fs::write(
             workers.join("shop").join("wrangler.toml"),
@@ -3501,7 +3514,7 @@ mod tests {
             ),
         )
         .unwrap();
-        assert!(!configs.write(false));
+        assert!(!configs.write(None, false));
         let served = std::fs::read_to_string(workers.join("shop").join(DEV_CONFIG)).unwrap();
         assert!(!served.contains("shop-docs"), "{served}");
         assert!(!served.contains("VECTORIZE_DOCS"), "{served}");
@@ -3542,7 +3555,7 @@ mod tests {
             remote: false,
             environment: "default",
         };
-        assert!(configs.write(true));
+        assert!(configs.write(None, true));
         let served = std::fs::read_to_string(workers.join("shop").join(DEV_CONFIG)).unwrap();
         assert!(
             served.contains("service = \"bynk-stand-in-shop-legacy-billing\""),

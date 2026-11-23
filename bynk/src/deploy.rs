@@ -50,6 +50,7 @@ mod agent_move;
 mod apply;
 mod config;
 pub(crate) mod containers;
+mod declared;
 mod destinations;
 mod facts;
 mod first_deploy;
@@ -72,6 +73,7 @@ use agent_move::*;
 use apply::*;
 use config::*;
 use containers::*;
+use declared::*;
 use destinations::*;
 use gates::*;
 use graph::*;
@@ -93,6 +95,18 @@ pub use plan::{DeployFormat, DeployOptions, run};
 pub use revert::{RevertOptions, revert};
 // State-migrations S4 (#2259): `bynk migrate sweep` names deployed Workers as
 // `deploy` does, and mints its run's key as an edge key is minted.
+/// 1C.3a (#4040): `bynk-tests`' corpus check. `workers_dir` is the `workers/`
+/// directory a Workers build wrote and `build` the binding model it wrote it
+/// from; `Err` says where the model and the files disagree. Deleted with the
+/// parse it checks, in 1C.3b.
+#[doc(hidden)]
+pub fn check_binding_model(
+    workers_dir: &Path,
+    build: &bynk_emit::emit_model::WorkersBuild,
+) -> Result<(), String> {
+    declared::check_build(workers_dir, build)
+}
+
 pub(crate) use config::deployed_worker_name;
 pub(crate) use config::{VectorizeDecl, project_resources};
 
@@ -127,8 +141,9 @@ pub(crate) fn local_edge_keys(
     workers_dir: &Path,
     workers: &[String],
     project_root: &Path,
+    model: &bynk_emit::emit_model::WorkersBuild,
 ) -> Result<BTreeMap<String, Vec<String>>, String> {
-    let resources = project_resources_for(workers_dir, workers, project_root)?;
+    let resources = project_resources_for(workers_dir, workers, project_root, Some(model))?;
     let edges = project_edges(&resources);
     for edge in &edges {
         edge.ends()?;
@@ -157,8 +172,9 @@ pub(crate) fn local_edge_keys(
 pub(crate) fn local_session_keys(
     workers_dir: &Path,
     workers: &[String],
+    model: &bynk_emit::emit_model::WorkersBuild,
 ) -> Result<BTreeMap<String, Vec<String>>, String> {
-    let resources = project_resources(workers_dir, workers)?;
+    let resources = project_resources(workers_dir, workers, Some(model))?;
     Ok(workers
         .iter()
         .map(|w| {

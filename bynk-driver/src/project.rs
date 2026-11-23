@@ -4929,6 +4929,11 @@ fn build_output(
             emit.emit_all(&mut compiled, &mut lock_warnings, &mut staged_assets);
         }
     }
+    // 1C.3a (#4040): the model the Workers above were written from.
+    let workers = matches!(target, BuildTarget::Workers).then(|| WorkersBuild {
+        bindings,
+        layout: layout.clone(),
+    });
 
     // v0.17: copy each adapter binding verbatim into the output, beside the
     // adapter's emitted interface module, so compose's import resolves and the
@@ -5073,6 +5078,7 @@ fn build_output(
         // Likewise (#1078) — `Some` only when the registry was on.
         schema_lock: None,
         entry_handlers,
+        workers,
     }
 }
 
