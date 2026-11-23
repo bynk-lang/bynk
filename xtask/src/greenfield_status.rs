@@ -1769,6 +1769,10 @@ fn ast_importers(root: &Path) -> Probe {
 /// that is itself a split child maps to its own origin, not to the intermediate file). A row
 /// whose child is not an importer is inert, so a row never needs deleting while the track runs.
 const AST_IMPORTER_ORIGINS: &[(&str, &str)] = &[
+    // emitter/workers_entry.rs (2.4, #4089)
+    ("emitter/workers_entry/call.rs", "emitter/workers_entry.rs"),
+    ("emitter/workers_entry/queue.rs", "emitter/workers_entry.rs"),
+    ("emitter/workers_entry/wire.rs", "emitter/workers_entry.rs"),
     ("emitter/emit/types.rs", "emitter/emit.rs"),
     ("emitter/emit/functions.rs", "emitter/emit.rs"),
     // 2.2a (#4087): `lower.rs` split.
@@ -1778,10 +1782,9 @@ const AST_IMPORTER_ORIGINS: &[(&str, &str)] = &[
     ("emitter/lower/mock.rs", "emitter/lower.rs"),
     ("emitter/lower/expect.rs", "emitter/lower.rs"),
     ("emitter/lower/claims.rs", "emitter/lower.rs"),
-    // emitter/workers_entry.rs (2.4, #4089)
-    ("emitter/workers_entry/call.rs", "emitter/workers_entry.rs"),
-    ("emitter/workers_entry/queue.rs", "emitter/workers_entry.rs"),
-    ("emitter/workers_entry/wire.rs", "emitter/workers_entry.rs"),
+    ("emitter/emit/handlers.rs", "emitter/emit.rs"),
+    ("emitter/emit/messages.rs", "emitter/emit.rs"),
+    ("emitter/emit/capability.rs", "emitter/emit.rs"),
 ];
 
 /// How many distinct origins the importing files `rels` come from: a file named as a child in
