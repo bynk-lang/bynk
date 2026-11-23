@@ -15,9 +15,10 @@ deletes the prediction machinery that is then orphaned.
 **Imports (Decision E).** `emit_test_module` and `emit_integration_module` build
 their runtime import with `derived_test_runtime_names` — `unbound_names_in` over
 the finished tree, filtered by `is_runtime_export` and ranked by `TEST_ORDER` —
-and then prune every unused import, as every other generated module has since
-1A.36b-2. The participant namespace imports are kept, as ruled, until it is
-shown that dropping one cannot change evaluation order.
+so an unused runtime name is never imported, as in every other generated module
+since 1A.36b-2. The 88 unused participant namespace imports are kept, as ruled,
+until it is shown that dropping one cannot change evaluation order; the module
+is therefore not passed through `prune_unused_imports`, which would drop them.
 
 **The splice (Decision C).** `bundle.mjs` records the runtime names each
 `runtime/src/testing/` module imports as a fourth table column, and
@@ -87,8 +88,8 @@ foreign-text sites, each a `TsStmt::raw_using` that declares the names it spells
 the test-runtime splice, whose names come from the generated module table, and an
 authored test double's fixed body. The runtime import is then
 `unbound_names_in` over the finished module, filtered by `is_runtime_export` and
-ordered by `TEST_ORDER`, and an unused import is pruned — the same machinery the
-emitter's own modules use. A participant namespace import is kept even when the
+ordered by `TEST_ORDER` — the same machinery the emitter's own modules use, so an
+unused runtime name is never imported. A participant namespace import is kept even when the
 tree does not use it, because a participant module may run a side effect when it
 loads and dropping the import would change evaluation order; that is a separate
 question, not a paydown one.
@@ -103,8 +104,9 @@ printer debug-asserts that an `Ident` is an identifier path, and
 **Consequences.** This supersedes ADR 0885's consequence that test modules keep
 predicted imports and stay outside the identifier audit. A test module imports
 what its code uses: 2,586 runtime-name occurrences that no tree used are gone
-from the 371 corpus modules, and so are 88 unused namespace or default imports
-the prune reaches. `testgen/imports.rs`, 28 orphaned `RuntimeUse` queries with
+from the 371 corpus modules. The 88 unused participant namespace imports are
+kept (`import_shadow.rs` allows them by name, `is_kept_participant_namespace`).
+`testgen/imports.rs`, 28 orphaned `RuntimeUse` queries with
 their notes and fields, the 24 orphaned `*_RUNTIME_IMPORTS` constants, both
 import-group functions and the `derives_runtime_imports` gate are deleted:
 nothing in the emitter decides an import from a flag any more.
