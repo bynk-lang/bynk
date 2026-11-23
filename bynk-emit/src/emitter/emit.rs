@@ -36,8 +36,8 @@ use super::lower_stmt::{Body, Item, block_body_with_return, claim_scoped, functi
 use super::ts_types::{ts_base, ts_ty_to_ts_type, ts_type_ref_to_ts_type};
 use super::*;
 use crate::ts_build::{
-    as_expr as persist_cast, await_expr as hist_await, binary, call, const_, ident,
-    let_decl as hist_let, member, num_lit as hist_num, str_lit,
+    as_expr, await_expr as hist_await, binary, call, const_, ident, let_decl as hist_let, member,
+    num_lit as hist_num, str_lit,
 };
 
 /// P6.x (#1188): reads `shape` — `t`'s already-lowered `bynk-emit::ir::TypeShape`
@@ -6052,7 +6052,7 @@ fn migrate_old_field_entry(
             };
             let entries = call(
                 persist_global("Object.entries"),
-                vec![persist_cast(stored_at(str_lit(n)), persist_record_ty())],
+                vec![as_expr(stored_at(str_lit(n)), persist_record_ty())],
             );
             call(
                 member(entries, "map"),
@@ -6146,7 +6146,7 @@ fn migrate_decode_old(
             .collect();
         let decoded = serialisation::deserialise_expr(
             &old.type_ref,
-            &bynk_ts::TsExpr::Paren(Box::new(persist_cast(
+            &bynk_ts::TsExpr::Paren(Box::new(as_expr(
                 ident("__ow"),
                 bynk_ts::TsType::named("never"),
             ))),
@@ -6243,7 +6243,7 @@ fn migrate_step_try_body(
     }
     stmts.push(bynk_ts::TsStmt::assign(
         ident("__out"),
-        persist_cast(
+        as_expr(
             bynk_ts::TsExpr::object_entries(entries),
             bynk_ts::TsType::named(names.state_ty),
         ),
@@ -6283,7 +6283,7 @@ fn migration_step_decl(
     body.push(bynk_ts::TsStmt::const_stmt(
         bynk_ts::TsBindingName::Ident("__c".to_string()),
         None,
-        persist_cast(
+        as_expr(
             bynk_ts::TsExpr::object_entries(vec![
                 bynk_ts::TsObjectEntry::Spread(call(ident(names.zero_fn), Vec::new())),
                 bynk_ts::TsObjectEntry::Spread(ident("__picked")),
@@ -6447,7 +6447,7 @@ fn persist_global(path: &str) -> bynk_ts::TsExpr {
 
 /// `expr as unknown as ty`: the double cast that reinterprets a value at another type.
 fn persist_recast(expr: bynk_ts::TsExpr, ty: bynk_ts::TsType) -> bynk_ts::TsExpr {
-    persist_cast(persist_cast(expr, bynk_ts::TsType::named("unknown")), ty)
+    as_expr(as_expr(expr, bynk_ts::TsType::named("unknown")), ty)
 }
 
 /// `globalThis.Record<string, unknown>`.
@@ -6495,7 +6495,7 @@ fn persist_record_view() -> bynk_ts::TsExpr {
 
 /// `(<view>.<field> as ty)`: a collection field of the record view, cast.
 fn persist_field_as(field: &str, ty: bynk_ts::TsType) -> bynk_ts::TsExpr {
-    persist_cast(member(persist_record_view(), field), ty)
+    as_expr(member(persist_record_view(), field), ty)
 }
 
 /// `globalThis.Object.prototype.hasOwnProperty.call(stored, "name")`: whether the stored
@@ -6573,7 +6573,7 @@ fn hydrate_fn_decl(
         .map(|(n, _)| n.name.as_str())
         .collect();
     let record_at = |key: &str| {
-        persist_cast(
+        as_expr(
             bynk_ts::TsExpr::Index {
                 object: Box::new(ident("__r")),
                 index: Box::new(str_lit(key)),
@@ -6585,7 +6585,7 @@ fn hydrate_fn_decl(
         const_("__z", call(ident(zero_fn), Vec::new())),
         const_(
             "__w",
-            persist_cast(
+            as_expr(
                 ident("s"),
                 persist_writable(bynk_ts::TsType::named(state_ty.clone())),
             ),
@@ -6705,7 +6705,7 @@ fn agent_state_checks_and_entries(
         let mut block = persist_decode(d, agent_name);
         block.push(bynk_ts::TsStmt::assign(
             member(
-                bynk_ts::TsExpr::Paren(Box::new(persist_cast(
+                bynk_ts::TsExpr::Paren(Box::new(as_expr(
                     ident("s"),
                     persist_writable(persist_typeof_s()),
                 ))),

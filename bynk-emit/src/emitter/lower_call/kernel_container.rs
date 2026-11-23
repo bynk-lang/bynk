@@ -17,8 +17,8 @@ use super::super::ts_types::ts_ty_to_ts_type;
 use super::super::*;
 use super::kernel::receiver_object;
 use crate::ts_build::{
-    arrow, as_expr as cast, binary, call, cond_expr as cond, ident, member, new, param, paren,
-    spread, str_lit, type_app,
+    arrow, as_expr, binary, call, cond_expr as cond, ident, member, new, param, paren, spread,
+    str_lit, type_app,
 };
 
 /// The receiver and then each argument, lowered in order.
@@ -447,7 +447,7 @@ pub(in crate::emitter) fn lower_set_kernel(
                 let n = kids;
                 let [recv, x] = take::<2, _>(n);
                 let set = new(type_app(global("Set"), vec![elem_t.clone()]), vec![recv]);
-                paren(cast(
+                paren(as_expr(
                     call(member(set, "add"), vec![x]),
                     TsType::named_with_args("ReadonlySet", vec![elem_t.clone()]),
                 ))
@@ -465,7 +465,7 @@ pub(in crate::emitter) fn lower_set_kernel(
                     vec![param("__s", Some(set_ty))],
                     TsExpr::Sequence(vec![
                         call(member(ident("__s"), "delete"), vec![x]),
-                        cast(
+                        as_expr(
                             ident("__s"),
                             TsType::named_with_args("ReadonlySet", vec![elem_t.clone()]),
                         ),
@@ -485,7 +485,7 @@ pub(in crate::emitter) fn lower_set_kernel(
             Some({
                 let n = kids;
                 let [recv] = take::<1, _>(n);
-                paren(cast(
+                paren(as_expr(
                     TsExpr::Array {
                         items: vec![spread(recv)],
                         multiline: false,
@@ -544,7 +544,7 @@ pub(in crate::emitter) fn lower_map_kernel(
                     call(field("__m", "has"), vec![ident("__k")]),
                     call(
                         ident("Some"),
-                        vec![cast(
+                        vec![as_expr(
                             call(field("__m", "get"), vec![ident("__k")]),
                             val_t.clone(),
                         )],
