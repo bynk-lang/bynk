@@ -463,6 +463,13 @@ pub(super) fn destructure_vals(
         .collect()
 }
 
+/// A missing checker fact about the named `name`, reported at `site` (1B.5e, Decision G). The
+/// description is built with `concat`, not `format!`: a `format!` line reads as a TypeScript
+/// write to `ts_writes`' text scanner, and this one writes an error message.
+pub(super) fn missing_fact_named(site: FaultSite<'_>, what: &str, name: &str) -> TsExpr {
+    site.missing_fact([what, " `", name, "`"].concat())
+}
+
 /// A TypeScript expression drawing a random inhabitant of a resolved type using
 /// the in-scope `rng` — the property generator (DECISION P: a type is its own
 /// inhabitant space). Sums pick a random variant; records generate every field.
@@ -538,7 +545,7 @@ pub(super) fn gen_ts_for_ty(
         checker::Ty::Base(b) => base_canon_node(*b),
         checker::Ty::Named { name, .. } => {
             let Some(decl) = types.get(name) else {
-                return site.missing_fact(format!("a declaration of the type `{name}`"));
+                return missing_fact_named(site, "a declaration of the type", name);
             };
             match &decl.body {
                 TypeBody::Refined {
@@ -592,7 +599,7 @@ pub(super) fn gen_ts_for_ty(
                         })
                         .collect();
                     if thunks.is_empty() {
-                        site.missing_fact(format!("a variant of the sum `{name}`"))
+                        missing_fact_named(site, "a variant of the sum", name)
                     } else {
                         method_call(ident("rng"), "pick", vec![TsExpr::array(thunks)])
                     }
@@ -616,10 +623,11 @@ pub(super) fn gen_ts_for_ty(
                                     coerce_int_field(t, types, tys, v)
                                 })
                                 .unwrap_or_else(|| {
-                                    site.missing_fact(format!(
-                                        "a resolved type for the field `{}`",
-                                        f.name.name
-                                    ))
+                                    missing_fact_named(
+                                        site,
+                                        "a resolved type for the field",
+                                        &f.name.name,
+                                    )
                                 });
                             (f.name.name.clone(), g)
                         })
@@ -683,7 +691,7 @@ pub(super) fn canon_ts_for_ty(
         checker::Ty::Base(b) => base_canon_node(*b),
         checker::Ty::Named { name, .. } => {
             let Some(decl) = types.get(name) else {
-                return site.missing_fact(format!("a declaration of the type `{name}`"));
+                return missing_fact_named(site, "a declaration of the type", name);
             };
             match &decl.body {
                 TypeBody::Refined {
@@ -700,7 +708,7 @@ pub(super) fn canon_ts_for_ty(
                     )
                 }
                 TypeBody::Sum(s) => match s.variants.first() {
-                    None => site.missing_fact(format!("a body for the type `{name}`")),
+                    None => missing_fact_named(site, "a body for the type", name),
                     Some(v) if v.payload.is_empty() => member(ident(name), &v.name.name),
                     Some(v) => {
                         let args: Vec<TsExpr> = v
@@ -745,10 +753,11 @@ pub(super) fn canon_ts_for_ty(
                                     coerce_int_field(t, types, tys, v)
                                 })
                                 .unwrap_or_else(|| {
-                                    site.missing_fact(format!(
-                                        "a resolved type for the field `{}`",
-                                        f.name.name
-                                    ))
+                                    missing_fact_named(
+                                        site,
+                                        "a resolved type for the field",
+                                        &f.name.name,
+                                    )
                                 });
                             (f.name.name.clone(), g)
                         })

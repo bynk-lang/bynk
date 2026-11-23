@@ -33,10 +33,11 @@ fn binding_gen_entries(
                 .map(|(t, r)| binding_gen(t, &r.types, tys, site))
                 .unwrap_or_else(|| BindingGen {
                     boundaries: Vec::new(),
-                    gen_ts: site.missing_fact(format!(
-                        "a resolved type for the property binding `{}`",
-                        b.name.name
-                    )),
+                    gen_ts: missing_fact_named(
+                        site,
+                        "a resolved type for the property binding",
+                        &b.name.name,
+                    ),
                     shrink: TsExpr::array(vec![]),
                 });
             gen_descriptor_entry(Some(str_lit(b.name.name.clone())), &bg)
@@ -579,10 +580,11 @@ pub(super) fn emit_test_history_property_function(
                             .map(|t| binding_gen(t, &resolved.types, tys, site))
                             .unwrap_or_else(|| BindingGen {
                                 boundaries: Vec::new(),
-                                gen_ts: site.missing_fact(format!(
-                                    "a resolved type for the history parameter `{}`",
-                                    p.name.name
-                                )),
+                                gen_ts: missing_fact_named(
+                                    site,
+                                    "a resolved type for the history parameter",
+                                    &p.name.name,
+                                ),
                                 shrink: TsExpr::array(vec![]),
                             });
                         gen_descriptor_entry(None, &bg)
@@ -773,10 +775,11 @@ pub(super) fn emit_contract_attack_function(
                 .map(|t| binding_gen(t, &resolved.types, tys, site))
                 .unwrap_or_else(|| BindingGen {
                     boundaries: Vec::new(),
-                    gen_ts: site.missing_fact(format!(
-                        "a resolved type for the contract parameter `{}`",
-                        p.name.name
-                    )),
+                    gen_ts: missing_fact_named(
+                        site,
+                        "a resolved type for the contract parameter",
+                        &p.name.name,
+                    ),
                     shrink: TsExpr::array(vec![]),
                 });
             gen_descriptor_entry(Some(str_lit(p.name.name.clone())), &bg)

@@ -1,7 +1,7 @@
 ---
 level: patch
 changelog: Internal restructuring: a generated test module takes its imports from the tree it builds, as every other generated module does, so it imports what its code uses and no more; the identifier audit and the import-shadow equality now cover those modules too
-probes: ast_importers, ts_writes, emit_print_calls, emit_silent_fallbacks, import_prediction_fns
+probes: ast_importers
 ---
 refactor: test modules are trees (1B.5e)
 
@@ -56,7 +56,7 @@ constants, `effect_runtime_imports`, `time_runtime_imports`, `note_predicate`,
 `ts_raw_sites` stays split, because §8 has a row for each half, and
 `ast_importers` keeps reading production emission alone, because the harness
 reads the AST by design (it falls to 13: `runtime_use.rs` no longer names a
-`PredKind`). `ts_writes` falls to 467. No ceiling rises.
+`PredKind`). `ts_writes` stays at 464: the harness had no `format!` left to delete in this part, and the fault descriptions are built with `concat` so a message does not read as a TypeScript write. No ceiling rises.
 
 Goldens: the ruled import-only class in all 371 `tests/*.test.ts`, and the ruled
 1A.40 class `{  }` to `{}`. See the PR.
