@@ -1771,6 +1771,9 @@ fn ast_importers(root: &Path) -> Probe {
 const AST_IMPORTER_ORIGINS: &[(&str, &str)] = &[
     ("emitter/emit/types.rs", "emitter/emit.rs"),
     ("emitter/emit/functions.rs", "emitter/emit.rs"),
+    // 2.2a (#4087): `lower.rs` split.
+    ("emitter/lower/pattern.rs", "emitter/lower.rs"),
+    ("emitter/lower/is.rs", "emitter/lower.rs"),
 ];
 
 /// How many distinct origins the importing files `rels` come from: a file named as a child in
