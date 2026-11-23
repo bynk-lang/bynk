@@ -16,8 +16,8 @@ use super::super::lower_ctx::LowerCtx;
 use super::super::ts_types::ts_ty_to_ts_type;
 use super::super::{BaseType, Expr, TypeBody, TypeRef, ty_to_type_ref};
 use crate::ts_build::{
-    binary, block, call, const_typed, ident, index, member, or_expr, param, raw_lit as raw,
-    str_lit, strict_eq,
+    binary, block, call, const_typed, ident, index, member, or_expr, param, raw_lit, str_lit,
+    strict_eq,
 };
 
 /// v0.22b: the typed JSON codec (ADR 0045). `encode` dispatches to the
@@ -461,7 +461,7 @@ pub(crate) fn eval_value_line(
     // `console.log('{"type":"eval-value","valueType":' + JSON.stringify(<type>)` …
     let head = binary(
         TsBinaryOp::Add,
-        raw("'{\"type\":\"eval-value\",\"valueType\":'"),
+        raw_lit("'{\"type\":\"eval-value\",\"valueType\":'"),
         call(member(global("JSON"), "stringify"), vec![str_lit(shown)]),
     );
     let log = |arg: TsExpr| {
@@ -471,7 +471,7 @@ pub(crate) fn eval_value_line(
     // no value.
     let Some(json) = json_encode(pre, tail, cx, false) else {
         let _ = pre.lower_node(tail, cx);
-        return Some(log(binary(TsBinaryOp::Add, head, raw("'}'"))));
+        return Some(log(binary(TsBinaryOp::Add, head, raw_lit("'}'"))));
     };
     // The encoder names `JsonValue` and `BoundaryError`, whether or not the
     // value's type needs a closure of codecs of its own.
@@ -479,10 +479,10 @@ pub(crate) fn eval_value_line(
         TsBinaryOp::Add,
         binary(
             TsBinaryOp::Add,
-            binary(TsBinaryOp::Add, head, raw("',\"value\":'")),
+            binary(TsBinaryOp::Add, head, raw_lit("',\"value\":'")),
             json,
         ),
-        raw("'}'"),
+        raw_lit("'}'"),
     )))
 }
 
