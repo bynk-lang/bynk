@@ -1850,6 +1850,7 @@ fn mentions_decimal(ty: TyId, cx: &LowerCtx) -> bool {
 mod body_tests {
     use super::*;
     use crate::emitter::ctx::{BodyMode, ModuleCtx};
+    use crate::ts_build::ident;
     use bynk_check::checker::TypedCommons;
     use bynk_ts::SourceMapBuilder;
     use std::cell::RefCell;
@@ -2047,10 +2048,6 @@ mod body_tests {
                 assert_eq!(map.to_v3(&out, "t.js"), shifted.to_v3(&out, "t.js"));
             }
         }
-    }
-
-    fn ident(name: &str) -> bynk_ts::TsExpr {
-        bynk_ts::TsExpr::Ident(name.to_string())
     }
 
     fn node(stmt: bynk_ts::TsStmt) -> Item {
@@ -2705,6 +2702,7 @@ mod par_node_tests {
 #[cfg(test)]
 mod expect_item_tests {
     use super::*;
+    use crate::ts_build::ident;
 
     /// The item as the one line it prints to.
     fn line(item: Item) -> String {
@@ -2714,12 +2712,8 @@ mod expect_item_tests {
         }
     }
 
-    fn node_expr(name: &str) -> bynk_ts::TsExpr {
-        bynk_ts::TsExpr::Ident(name.to_string())
-    }
-
     fn node(name: &str) -> bynk_ts::TsExpr {
-        node_expr(name)
+        ident(name)
     }
 
     fn compare(lv: bynk_ts::TsExpr, rv: bynk_ts::TsExpr) -> ExpectDetail {
@@ -2812,7 +2806,7 @@ mod expect_item_tests {
     #[test]
     fn a_snapshot_name_is_spelled_as_the_printer_spells_a_string() {
         let name = "bell\u{7} \"q\"";
-        let check = snapshot_check(str_lit(name), node_expr("json"), "t:1:1", (0, 2), "v", name);
+        let check = snapshot_check(str_lit(name), ident("json"), "t:1:1", (0, 2), "v", name);
         let printed = bynk_ts::print_stmt(&check, 0);
         assert!(
             printed.contains("__bynkSnapshotCheck(\"bell\\u{7} \\\"q\\\"\", json)"),

@@ -5518,15 +5518,11 @@ fn minus_neg() -> Int { 5 - -3 }
         }
     }
 
-    fn id(n: &str) -> bynk_ts::TsExpr {
-        bynk_ts::TsExpr::Ident(n.to_string())
-    }
-
     fn bin(op: bynk_ts::TsBinaryOp, l: &str, r: &str) -> bynk_ts::TsExpr {
         bynk_ts::TsExpr::Binary {
             op,
-            left: Box::new(id(l)),
-            right: Box::new(id(r)),
+            left: Box::new(ident(l)),
+            right: Box::new(ident(r)),
         }
     }
 
@@ -5566,11 +5562,11 @@ fn minus_neg() -> Int { 5 - -3 }
         let bare = t_unary_op(UnaryOp::Neg, node(bin(Add, "a", "b")));
         assert_eq!(bare.printed(), "-(a + b)");
         // Nested unaries: `!!x`, `-!x`, and `-(-x)`, never the decrement `--x`.
-        let not_not = t_unary_op(UnaryOp::Not, t_unary_op(UnaryOp::Not, node(id("x"))));
+        let not_not = t_unary_op(UnaryOp::Not, t_unary_op(UnaryOp::Not, node(ident("x"))));
         assert_eq!(not_not.printed(), "!!x");
-        let neg_not = t_unary_op(UnaryOp::Neg, t_unary_op(UnaryOp::Not, node(id("x"))));
+        let neg_not = t_unary_op(UnaryOp::Neg, t_unary_op(UnaryOp::Not, node(ident("x"))));
         assert_eq!(neg_not.printed(), "-!x");
-        let neg_neg = t_unary_op(UnaryOp::Neg, t_unary_op(UnaryOp::Neg, node(id("x"))));
+        let neg_neg = t_unary_op(UnaryOp::Neg, t_unary_op(UnaryOp::Neg, node(ident("x"))));
         assert_eq!(neg_neg.printed(), "-(-x)");
     }
 
@@ -5592,21 +5588,21 @@ fn minus_neg() -> Int { 5 - -3 }
     fn constructor_calls_and_lists_are_nodes_over_node_children() {
         let ok = t_runtime_ctor_call(None, "Ok", node(num_lit("1")));
         assert_eq!(ok.printed(), "Ok(1)");
-        let http = t_runtime_ctor_call(Some("HttpResult"), "Ok", node(id("v")));
+        let http = t_runtime_ctor_call(Some("HttpResult"), "Ok", node(ident("v")));
         let bynk_ts::TsExpr::Call { callee, .. } = &http else {
             panic!("expected a call node");
         };
         assert!(matches!(**callee, bynk_ts::TsExpr::Member { .. }));
         assert_eq!(http.printed(), "HttpResult.Ok(v)");
         assert_eq!(
-            t_runtime_ctor_call(None, "Err", node(id("e"))).printed(),
+            t_runtime_ctor_call(None, "Err", node(ident("e"))).printed(),
             "Err(e)"
         );
         assert_eq!(
-            t_runtime_ctor_call(None, "Some", node(id("s"))).printed(),
+            t_runtime_ctor_call(None, "Some", node(ident("s"))).printed(),
             "Some(s)"
         );
-        let list = array(vec![node(id("a")), node(num_lit("2"))]);
+        let list = array(vec![node(ident("a")), node(num_lit("2"))]);
         assert_eq!(list.printed(), "[a, 2]");
     }
 
@@ -5741,7 +5737,7 @@ fn minus(x: Int) -> Int { 5 - - -x }
 
     #[test]
     fn each_value_operator_shape_is_a_node_over_node_children() {
-        let n = |s: &str| node(id(s));
+        let n = |s: &str| node(ident(s));
         // Plain operator and `Float /`: `Binary`.
         for (op, want) in [
             (BinOp::Add, "a + b"),
@@ -5778,7 +5774,7 @@ fn minus(x: Int) -> Int { 5 - - -x }
         ));
         assert_eq!(ne.printed(), "!__bynkEq(a, b)");
         // `Ord`: `cmp(l, r) < 0`.
-        let ord = super::ordered_comparison(BinOp::Lt, id("__cmp_P"), vec![n("a"), n("b")]);
+        let ord = super::ordered_comparison(BinOp::Lt, ident("__cmp_P"), vec![n("a"), n("b")]);
         assert!(matches!(&ord, bynk_ts::TsExpr::Binary { .. }));
         assert_eq!(ord.printed(), "__cmp_P(a, b) < 0");
     }
@@ -5788,10 +5784,11 @@ fn minus(x: Int) -> Int { 5 - - -x }
         // 1A.16: the comparator is itself a node, so a composite one is an
         // ordinary callee (the 1A.5 text path is closed).
         let cmp = bynk_ts::TsExpr::Call {
-            callee: Box::new(id("__bynkCmpList")),
-            args: vec![id("__bynkCmpInt")],
+            callee: Box::new(ident("__bynkCmpList")),
+            args: vec![ident("__bynkCmpInt")],
         };
-        let got = super::ordered_comparison(BinOp::Lt, cmp, vec![node(id("a")), node(id("b"))]);
+        let got =
+            super::ordered_comparison(BinOp::Lt, cmp, vec![node(ident("a")), node(ident("b"))]);
         assert_eq!(got.printed(), "__bynkCmpList(__bynkCmpInt)(a, b) < 0");
     }
 
@@ -6756,11 +6753,7 @@ mod list_kernel_tests {
 #[cfg(test)]
 mod leaf_node_tests {
     use super::*;
-    use bynk_ts::{TsExpr, print_expr, print_stmt};
-
-    fn ident(n: &str) -> TsExpr {
-        TsExpr::Ident(n.to_string())
-    }
+    use bynk_ts::{print_expr, print_stmt};
 
     /// `(recv as Extract<typeof recv, { tag: "V" }>)`: the variant a test already proved.
     #[test]
