@@ -300,7 +300,9 @@ feature work is frozen, such moves cost no merge conflicts.
   exception above), so that 1A.10–1A.13 edit one small module instead of `lower.rs`.
 - `emitter.rs`, split into headers, imports, boundary helpers and the project driver.
 - `workers_entry.rs`, split per handler kind: fetch, scheduled, queue, email, WebSocket.
-- `bynk-driver/src/project.rs`, which becomes what remains after 1B.2d.
+- `bynk-driver/src/project.rs`, which becomes what remains after 1B.2d: the check-and-emit
+  orchestration (it does no process spawning and almost no file I/O; the driver's other modules
+  do that). 2.7a moves the options, the entry points and the deps plan out, and 2.7b the pipeline.
 - `bynk/src/deploy/plan.rs` (2,270 production lines on the corrected measure, already under the
   3,000 target): optional and seam-driven (2.8), with orchestration separated from rendering.
 - `bynk/src/dev.rs` (2,291): optional (2.9); its proposal finds the seam.
@@ -333,7 +335,7 @@ production lines without saying why; from 2.0 the gate is mechanical. Settled by
 | **2.4** | `bynk-emit/src/emitter/workers_entry.rs` | 4,215 | — |
 | **2.5** | `bynk-emit/src/emitter.rs` | 3,215 | — |
 | **2.6** | `bynk-ts/src/printer.rs`, `bynk-ts/src/program.rs`. **2.6a (the tree) is done:** `program.rs` is a 441-line parent over `program/{stmt,expr,types,decl,verbatim,spans}.rs` (largest 1,133); the printer (2.6b) and its test split (2.6c) follow. | 3,629; 3,682 → 3,629; 441 | — |
-| **2.7** | `bynk-driver/src/project.rs` | 4,312 | — |
+| **2.7** | `bynk-driver/src/project.rs`, in two PRs. **2.7a done (#4136, part of #4108): `options`, `entry`, `in_memory`, `agent_deps` and the tests move out; `module_lines` 4,312 to 2,875.** 2.7b: `pipeline`, `unit`, `output` | 4,312 | — |
 | **2.8** | `bynk/src/deploy/plan.rs` (optional: under 3,000 already) | 2,271 | — |
 | **2.9** | `bynk/src/dev.rs` (optional) | 2,292 | — |
 
