@@ -14,8 +14,7 @@ visible in the type, not hidden in the control flow.
 
 Because the two cases are encoded in the type, you handle them by matching, and the
 compiler will not let you read a value that might not be there. `label` has to
-account for both `Some` and `None` before it can produce a `String`. Open it in the
-playground to confirm the missing case cannot be skipped, and press **Run** to label
+account for both `Some` and `None` before it can produce a `String`. Choose **Edit & run in-page** below (or open it in the playground) to confirm the missing case cannot be skipped, and press **Run** to label
 a present value and an absent one.
 
 <Example src="site/src/snippets/result-and-option.bynk" runnable embed />

@@ -12,8 +12,8 @@
 //! (`Error` unless built via the crate-private `warn` helper). The category
 //! shown in the generated reference is derived from the second dotted segment
 //! of the code; the grammar weave (`docs/grammar-semantics.json`, the
-//! `{{#grammar-semantics}}` directive, and the diagnostics page's Construct
-//! column) is generated from `grammar_symbol`.
+//! `{{#grammar-semantics}}` directive, and the "Grammar rules" line on each
+//! code's own page) is generated from `grammar_symbol`.
 
 use crate::error::Severity;
 
@@ -10826,45 +10826,38 @@ pub fn render_markdown() -> String {
         "Every diagnostic code the compiler can emit, with a one-line summary of \
          the cause, grouped by category. Each code links to its own page: what the \
          code means, how to fix it and an example where an explanation is written, \
-         and the Book pages that explain it. \
+         the grammar rules it governs, and the Book pages that explain it. \
          `bynk explain <code>` prints a code's explanation in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or \
          **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.\n\n",
     );
     out.push_str(&format!(
-        "There are **{}** codes in total.\n",
+        "There are **{}** codes in total. Every code is an error unless it is marked \
+         **Warning** or **Hint**.\n",
         REGISTRY.len()
     ));
+    // The site's filter box (`site/public/diagnostic-filter.js`) adds itself
+    // here, above the first category, and narrows the lists as you type.
+    out.push_str("\n<script type=\"module\" src=\"/diagnostic-filter.js\"></script>\n");
 
     for (title, infos) in &by_category {
         out.push_str(&format!("\n## {title}\n\n"));
-        out.push_str("| Code | Summary | Construct | Severity |\n|---|---|---|---|\n");
+        // One list item per code, not a table row: nearly 900 codes in a
+        // table overflowed the content column (#3876 review), and the
+        // category heading already groups them. A code's grammar constructs
+        // are on its own page.
         for info in infos {
-            // The construct column deep-links each governing production to its
-            // entry in the annotated grammar reference; generated from
-            // `grammar_symbol` (each value is an embeddable rule, so the
-            // `#rule-<raw>` anchor resolves — enforced in diagnostics_registry).
-            let construct = info
-                .grammar_symbol
-                .iter()
-                .map(|sym| format!("[`{sym}`](grammar.md#rule-{sym})"))
-                .collect::<Vec<_>>()
-                .join(", ");
             // Every code links to its own page (#3876), which the site
             // generates from `render_json` for every registry code.
-            let code_cell = format!("[`{0}`]({INDEX_PATH}{0}/)", info.code);
+            let code = format!("[`{0}`]({INDEX_PATH}{0}/)", info.code);
             // ADR 0117/finding #50: every code's severity, straight from the
-            // registry — `Error` (the overwhelming majority) renders as "—"
-            // to keep the common case unobtrusive; only a `warn`-built entry
-            // shows "Warning".
+            // registry. Errors are the overwhelming majority and go unmarked;
+            // a `warn`-built entry carries a "Warning" badge, a hint "Hint".
             let severity = match info.severity {
-                Severity::Error => "—",
-                Severity::Warning => "Warning",
-                Severity::Hint => "Hint",
+                Severity::Error => "",
+                Severity::Warning => "<span class=\"diagnostic-severity\">Warning</span> ",
+                Severity::Hint => "<span class=\"diagnostic-severity\">Hint</span> ",
             };
-            out.push_str(&format!(
-                "| {} | {} | {} | {} |\n",
-                code_cell, info.summary, construct, severity
-            ));
+            out.push_str(&format!("- {code} — {severity}{}\n", info.summary));
         }
     }
 

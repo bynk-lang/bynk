@@ -113,6 +113,22 @@ const paragraphs = d.blurb ? d.blurb.split(/\n\n+/) : [];
 
   <h2 id="see-also">See also</h2>
   <ul>
+    {
+      d.constructs.length > 0 && (
+        <li>
+          {d.constructs.length === 1 ? "The grammar rule it governs: " : "The grammar rules it governs: "}
+          {d.constructs.map((c, i) => (
+            <>
+              {i > 0 && ", "}
+              <a href={`/reference/grammar/#rule-${c}`}>
+                <code>{c}</code>
+              </a>
+            </>
+          ))}
+          .
+        </li>
+      )
+    }
     <li>
       Every code in its category, <a href={`/reference/diagnostics/#${d.categoryAnchor}`}>{d.category}</a>,
       on the <a href="/reference/diagnostics/">diagnostic index</a>.
