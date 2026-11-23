@@ -7,6 +7,7 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.640.58** | Internal restructuring: the test harness builds each case, property, history and contract-attack runner of a generated test module as typed nodes instead of text, so a property runner's statements now print at the function's own indent and a test module's source map points a nested statement at its own source line; no behaviour changes |
 | **v0.640.57** | Internal restructuring: the test harness builds more of a generated test module as typed nodes (the commons barrel's helpers, the harness memo, `__bynkEnv`, fixture and asset tables, the snapshot table, event delivery helpers, `__bynkCases`, the PGlite teardown), and four fixed snippets become type-checked test-runtime modules; a generated `tests/main.ts` now puts the detached-effect report statements on their own lines |
 | **v0.640.56** | Internal restructuring: the test harness decides which participant types a case names from the statements it built, and builds a `SignedCookie` actor's `Cookie` header as a value, instead of lexing and patching emitted TypeScript; no emitted output changes |
 | **v0.640.55** | Internal restructuring: the last predicate, call and cast text in the emitter is built as nodes; no behaviour changes |
