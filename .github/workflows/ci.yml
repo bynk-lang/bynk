@@ -12,8 +12,9 @@ name: CI
 #                  on the head SHA would let the PR merge without it.
 #   ready          A ready PR (including the push that makes it ready, and a
 #                  draft that `promote` marks ready in this same run): the
-#                  draft set plus the ready set (`ready-gate`): the Windows +
-#                  macOS legs (`test-os`), the Linux system tier, the
+#                  draft set plus the ready set (`ready-gate`): the Windows
+#                  leg, plus macOS when the repository variable
+#                  MACOS_ON_PRS is 'true' (`test-os`), the Linux system tier, the
 #                  Node floor and MSRV (on a global change). Off Linux the
 #                  legs run `ci-os`: the whole suite minus the corpus-wide
 #                  tsc/node passes, which are OS-independent and run on Linux
@@ -198,8 +199,9 @@ jobs:
       # legs are dropped from `test_os` instead.
       queue_passed: ${{ steps.queue.outputs.passed }}
       # JSON array of OSes for the test legs this run may need. The merge
-      # queue runs Linux only; every other event (PRs, push to main, the
-      # nightly) lists all three, except a stamp commit whose parent already
+      # queue runs Linux only; a PR lists Linux and Windows, plus macOS when
+      # the repository variable MACOS_ON_PRS is 'true'; a push to main and the
+      # nightly list all three, except a stamp commit whose parent already
       # passed macOS (see the step). On a push, an OS whose leg the queue
       # passed on this commit is dropped, so the array can be empty.
       # `test_linux` and `test_other` split it: the `test` job runs the Linux
@@ -217,7 +219,14 @@ jobs:
       # of defect that was actually reaching `main`.
       #
       # macOS stays post-merge: it has caught nothing in that window, and macOS
-      # runner concurrency is materially tighter than Linux/Windows.
+      # runner concurrency is materially tighter than Linux/Windows. A pull
+      # request's ready set therefore runs Windows only, unless the repository
+      # variable MACOS_ON_PRS is 'true'. The variable is the switch: the PR leg
+      # was on until November 2026, when ready PRs, the merge queue and pushes
+      # to `main` together left macOS jobs waiting 15+ min for a runner and then
+      # cancelled, blocking `CI green` on PRs that had passed everything else.
+      # Pushes to `main` and the nightly still run macOS, so a macOS-only break
+      # is caught within hours and the nightly opens its failure issue.
       #
       # The cost, measured rather than guessed: across the last five green
       # three-OS runs the Windows leg took 463-500s against Linux's 156-212s, so
@@ -542,8 +551,8 @@ jobs:
           fi
           echo "passed=$passed" >> "$GITHUB_OUTPUT"
       # Decide the test legs' OSes from the event: Linux only in the merge
-      # queue, all three OSes on everything else (PRs, push/main, schedule) —
-      # except a stamp commit whose parent already passed macOS (the step checks
+      # queue, Linux and Windows on a PR (plus macOS when MACOS_ON_PRS is
+      # 'true'), all three OSes on push/main and schedule, except a stamp commit whose parent already passed macOS (the step checks
       # the macOS leg only, and off the nightly that leg runs `ci-os`).
       #
       # The stamp commit changes no code: it rewrites version strings, the
@@ -583,8 +592,14 @@ jobs:
           HEAD_AUTHOR: ${{ github.event.head_commit.author.name }}
           PARENT_SHA: ${{ github.event.before }}
           QUEUE_PASSED: ${{ steps.queue.outputs.passed }}
+          MACOS_ON_PRS: ${{ vars.MACOS_ON_PRS }}
         run: |
           three='["ubuntu-latest","macos-latest","windows-latest"]'
+          # A pull request runs macOS only when MACOS_ON_PRS is 'true' (see the
+          # `test_os` comment above).
+          if [ "$EVENT" = "pull_request" ] && [ "$MACOS_ON_PRS" != "true" ]; then
+            three='["ubuntu-latest","windows-latest"]'
+          fi
           # Every exit goes through here: drop the legs the queue passed.
           emit() {
             value="$(jq -c --argjson passed "$QUEUE_PASSED" \
@@ -2226,7 +2241,7 @@ jobs:
           READY_SET: ${{ needs.ready-gate.outputs.run }}
         run: |
           if [ "$STAGE" = draft ] && [ "$READY_SET" != true ]; then
-            echo "::error::Draft PR: only the draft-stage checks ran. Mark the PR ready for review to run the full check (Windows, macOS, the Linux system tier, the Node floor); 'CI green' passes once it has."
+            echo "::error::Draft PR: only the draft-stage checks ran. Mark the PR ready for review to run the full check (Windows, macOS when MACOS_ON_PRS is 'true', the Linux system tier, the Node floor); 'CI green' passes once it has."
             exit 1
           fi
           echo "Stage $STAGE: the checks this stage requires have run."
