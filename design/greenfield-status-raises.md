@@ -5,6 +5,7 @@
 
 | Probe | From | To | Version | PR | Reason |
 |---|---|---|---|---|---|
+| ts_writes | 458 | 464 | v0.640.70 |  | 6 `format!` lines of hand-laid JSON (the group inspect listing and agents manifest, which `serde_json::to_string_pretty` wrote before the code moved into `bynk-emit`); they write JSON, not TypeScript |
 | ts_writes | 514 | 517 | v0.640.60 | #4070 | the block renderer's three `format!` calls moved from the CLI (`bynk/src/deploy/config.rs`) into `bynk-emit` (1C.2); they write TOML, not TypeScript, and are not new |
 | testgen_print_calls | 43 | 44 | v0.640.42 | #4055 | moved from production emission (1B.2b), not new |
 | ts_raw_sites_emit | 4 | 6 | v0.640.38 | #4030 | reclassified from ts_raw_sites_testgen: the production commons barrel (sum unchanged) |

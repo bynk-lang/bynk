@@ -7,6 +7,7 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.640.70** | Internal restructuring: the per-Worker emission moves from `bynk-driver` into `bynk-emit`, rendered from the binding model; no output changes |
 | **v0.640.69** | Internal restructuring of how `bynk deploy`, `bynk revert` and `bynk migrate` call Cloudflare's API; one REST client per run with typed errors and shared pagination, with no change to messages, requests or `bynk.deploy.lock` |
 | **v0.640.68** | Internal restructuring of `bynk deploy`, `bynk revert`, `bynk migrate`, `bynk dev` and `bynk tail`; every wrangler call goes through one Cloudflare module, with no change to plans, messages, provisioning or `bynk.deploy.lock` |
 | **v0.640.67** | Internal restructuring: the test harness builds the system suites' http, cron, queue and email drivers, their request-init objects, credentials and tokens as typed nodes instead of text, so a request's options object prints without a trailing comma and a driver's credential statements each print on their own line; no behaviour changes |
