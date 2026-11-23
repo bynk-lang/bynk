@@ -200,7 +200,14 @@ const canEmbed = embed && runHref;
     openBtn.addEventListener("click", () => {
       if (mount.querySelector("iframe")) return; // already open
       const frame = document.createElement("iframe");
-      frame.src = href;
+      // The playground's inline embed: just the editor, Run and the results, without
+      // its own wordmark, Share, menu or "Open in playground" (this page has those),
+      // in the page's light or dark theme. The snippet stays in the URL's fragment.
+      const src = new URL(href);
+      src.searchParams.set("embed", "inline");
+      const theme = document.documentElement.dataset.theme;
+      if (theme === "light" || theme === "dark") src.searchParams.set("theme", theme);
+      frame.src = src.href;
       frame.className = "bynk-embed-frame";
       frame.loading = "lazy";
       frame.title = "Bynk playground — live editor";
