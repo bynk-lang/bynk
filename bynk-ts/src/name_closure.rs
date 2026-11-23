@@ -1816,6 +1816,7 @@ mod tests {
     fn a_parenthesised_type_uses_the_names_it_holds() {
         let thunk = |name: &str| {
             TsType::paren(TsType::Fn {
+                rest: false,
                 names: vec![],
                 params: vec![],
                 ret: Box::new(TsType::named(name)),

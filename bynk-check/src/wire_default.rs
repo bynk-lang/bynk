@@ -1044,6 +1044,51 @@ mod tests {
         }
     }
 
+    /// The two walks agree on the other two entry points too (1A.40c, a #4069 nit): the event and
+    /// old-state path, whose defaults may not apply a user generic, and the generic-parameters
+    /// path, where a parameter stands for no value. Same verdict on every accepted and rejected
+    /// default, and the generic cases are where the three entry points differ.
+    #[test]
+    fn the_walks_agree_on_the_event_and_generic_params_paths() {
+        let params = ["T".to_string()];
+        let mut seen_generic_refusal = false;
+        let defaults = cases()
+            .into_iter()
+            .map(|(ty, init, _, _)| (ty, init))
+            .chain(REJECTIONS.iter().map(|(ty, init, _)| (*ty, *init)));
+        for (ty, init) in defaults {
+            let (types, e, t) = holder(ty, init);
+            let event_cx = Cx {
+                params: &[],
+                depth: 0,
+                generics: false,
+            };
+            let event = lower_event_field_default_wire(&e, &t, &types);
+            let event_tree = value_in(&e, &t, &types, event_cx);
+            assert_eq!(event.is_ok(), event_tree.is_ok(), "event: {ty} = {init}");
+            let params_cx = Cx {
+                params: &params,
+                depth: 0,
+                generics: true,
+            };
+            let generic = lower_field_default_wire_in(&e, &t, &types, &params);
+            let generic_tree = value_in(&e, &t, &types, params_cx);
+            assert_eq!(
+                generic.is_ok(),
+                generic_tree.is_ok(),
+                "params: {ty} = {init}"
+            );
+            // The record path accepts what the event path refuses (a default applying a user
+            // generic), so the three entry points are not one walk with the flag ignored.
+            seen_generic_refusal |=
+                lower_field_default_wire(&e, &t, &types).is_ok() && event.is_err();
+        }
+        assert!(
+            seen_generic_refusal,
+            "no case tells the event path from the record path"
+        );
+    }
+
     /// `(field type, default, the rejection)` the old renderer gave, kept verbatim.
     pub const REJECTIONS: &[(&str, &str, &str)] = &[
         (

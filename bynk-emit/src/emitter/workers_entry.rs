@@ -442,7 +442,7 @@ fn migrate_route(context: &str, member_mode: bool, migratable: &[(String, i64)])
                 TsExpr::Unary {
                     op: bynk_ts::TsUnaryOp::Typeof,
                     expr: Box::new(index_expr(
-                        ident("(env as unknown as globalThis.Record<string, unknown>)"),
+                        super::emit::record_cast(ident("env"), bynk_ts::TsType::named("unknown")),
                         str_lit(wf::MIGRATE_KEY),
                     )),
                 },
@@ -1699,7 +1699,7 @@ pub fn emit_worker_entry(
         let res = match &pm.rejected {
             Some(m) => await_expr(call(
                 ident("__renderRejection"),
-                vec![res, ident(format!("(why) => surface.{m}(why)"))],
+                vec![res, rejection_renderer(m)],
             )),
             None => res,
         };
@@ -2973,7 +2973,7 @@ fn stamp_rejection(
     let inner = match rejected {
         Some(m) => await_expr(call(
             ident("__renderRejection"),
-            vec![inner, ident(format!("(why) => surface.{m}(why)"))],
+            vec![inner, rejection_renderer(m)],
         )),
         None => inner,
     };
@@ -4201,6 +4201,15 @@ pub(crate) fn deserialise_call(t: &TypeRef, json: &TsExpr, path: &str, ru: &Runt
 /// [`deserialise_call`]'s encoding twin: `t`'s value, read from `value`, as JSON.
 fn serialise_call(t: &TypeRef, value: &TsExpr, ru: &RuntimeUse) -> TsExpr {
     crate::emitter::serialisation::serialise_expr_via(t, value, "handlers.", ru)
+}
+
+/// `(why) => surface.<m>(why)`: the service's `on rejected` handler, which `__renderRejection`
+/// calls with the refusal.
+fn rejection_renderer(m: &str) -> TsExpr {
+    crate::ts_build::arrow(
+        vec![crate::ts_build::param("why", None)],
+        method_call(ident("surface"), m, vec![ident("why")]),
+    )
 }
 
 #[cfg(test)]
