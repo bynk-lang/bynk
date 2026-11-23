@@ -7,8 +7,8 @@
 //! paydown 2.1, #4086) are re-exported here, so every `emitter::emit::X` and
 //! `emitter::X` path still resolves:
 //!
-//! - [`types`]: type, refined, record and sum declarations and their checks;
-//! - [`functions`]: attached methods, free functions, constants and contract guards.
+//! - `types`: type, refined, record and sum declarations and their checks;
+//! - `functions`: attached methods, free functions, constants and contract guards.
 //!
 //! What has not moved yet — capabilities, providers, services, contexts,
 //! agents, the WebSocket dispatch and the suite declarations — still lives
