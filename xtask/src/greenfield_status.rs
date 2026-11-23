@@ -1803,6 +1803,7 @@ const AST_IMPORTER_ORIGINS: &[(&str, &str)] = &[
     ("emitter/lower/operator.rs", "emitter/lower.rs"),
     ("emitter/lower/literal.rs", "emitter/lower.rs"),
     ("emitter/lower/ident.rs", "emitter/lower.rs"),
+    ("emitter/lower/calls.rs", "emitter/lower.rs"),
     ("emitter/emit/handlers.rs", "emitter/emit.rs"),
     ("emitter/emit/messages.rs", "emitter/emit.rs"),
     ("emitter/emit/capability.rs", "emitter/emit.rs"),
