@@ -1801,6 +1801,7 @@ const AST_IMPORTER_ORIGINS: &[(&str, &str)] = &[
     ("emitter/emit/messages.rs", "emitter/emit.rs"),
     ("emitter/emit/service.rs", "emitter/emit.rs"),
     ("emitter/emit/types.rs", "emitter/emit.rs"),
+    ("emitter/emit/websocket.rs", "emitter/emit.rs"),
 ];
 
 /// How many distinct origins the importing files `rels` come from: a file named as a child in
