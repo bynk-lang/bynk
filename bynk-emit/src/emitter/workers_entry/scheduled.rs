@@ -5,6 +5,7 @@ use crate::ts_build::{
     await_expr, call, const_, expr_stmt, ident, if_, member, method_call, return_, str_lit,
     strict_eq, strict_neq, switch_stmt,
 };
+use bynk_check::symbols::UnitTable;
 use bynk_ts::{TsExpr, TsObjectEntry, TsParam, TsStmt, TsSwitchCase, TsType, TsTypeMember};
 
 /// Emit the Worker `scheduled` handler aggregating every `on cron` handler in
@@ -117,4 +118,32 @@ pub(super) struct CronRoute {
     pub(super) expr: String,
     /// Whether the handler declares the optional scheduled-time parameter.
     pub(super) has_param: bool,
+}
+
+/// Collect the cron handlers across the services, carrying the per-service
+/// declaration index and sorting by schedule expression.
+pub(super) fn collect_cron_routes(table: &UnitTable, service_names: &[&String]) -> Vec<CronRoute> {
+    let mut cron_routes: Vec<CronRoute> = Vec::new();
+    for sname in service_names {
+        let service = table.services.get(*sname).unwrap();
+        let mut cron_idx = 0usize;
+        for h in &service.handlers {
+            // P6.31: dispatches on `IrHandlerKind`; `expr` is a plain `String`
+            // in both, so no AST re-derivation is needed here (unlike the
+            // `Http` arm above).
+            if let bynk_model::IrHandlerKind::Cron { expr } =
+                bynk_model::lower_handler_kind_ir(&h.kind)
+            {
+                cron_routes.push(CronRoute {
+                    service: (*sname).clone(),
+                    index: cron_idx,
+                    expr,
+                    has_param: !h.params.is_empty(),
+                });
+                cron_idx += 1;
+            }
+        }
+    }
+    cron_routes.sort_by(|a, b| a.expr.cmp(&b.expr));
+    cron_routes
 }
