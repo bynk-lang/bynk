@@ -24,6 +24,7 @@ pub mod fn_length;
 pub mod grammar;
 pub mod greenfield_status;
 pub mod manifest_schema;
+pub mod module_lines;
 pub mod release_notes;
 pub mod release_pages;
 pub mod site_page;

@@ -129,7 +129,7 @@ Small, mostly in `xtask`. It lands first because every later slice is measured b
 | **P0.2** | Count the raw-text escapes the TypeScript probes miss. Add two gated growth probes: `ts_raw_sites` (`TsStmt::raw(`) and `ts_text_idents` (`TsExpr::Ident(format!(`). `ts_writes`, `ts_any` and `verbatim_*` already scan `bynk-driver/src/project/**`, including `tests_emit/`, via `codegen_family_files` (#2982), so no widening is needed (#3681). | §1.3 |
 | **P0.3** | Refresh trend rows at stamp time (`cargo xtask stamp --apply` regenerates the whole table), and drop the deleted crates from `test_density`. | §1.2 |
 | **P0.4** | Opt `bynk-ts` (8 wildcard arms) and `bynk-model` (5) into `[lints] workspace = true`, after fixing their arms. | §1.2 |
-| **P0.5** | Add a `module_lines` probe: the largest source file per crate, and files at or above 2,000 lines. Report only (trend) in this phase; it becomes a ratchet in Phase 2. | §6.1 |
+| **P0.5** | Add a `module_lines` probe: the largest file overall, the three largest back-half files, and files at or above 2,000 lines. Report only (trend) in this phase; it becomes a ratchet in Phase 2. | §6.1 |
 | ~~**P0.6**~~ | **Retired into 1B.3** (#3689). The premise, that these files were unchecked, was wrong. The test-runtime fragments are type-checked under `tsc --strict` in context, because `bynk test` compiles each generated test module and fails on a `tsc` error. `http_client_runtime.ts` is checked by `system::http_client`. The residual gaps belong to 1B.3: the fragments aren't standalone modules, and a fragment no fixture includes goes unchecked. **Residual gaps closed by 1B.3a.** | §3 (corrected) |
 
 **Exit:** the ratchets are live, the trend rows are current, and `bynk-ts` and `bynk-model` deny
@@ -301,20 +301,43 @@ feature work is frozen, such moves cost no merge conflicts.
 - `emitter.rs`, split into headers, imports, boundary helpers and the project driver.
 - `workers_entry.rs`, split per handler kind: fetch, scheduled, queue, email, WebSocket.
 - `bynk-driver/src/project.rs`, which becomes what remains after 1B.2d.
-- `bynk/src/deploy/plan.rs`, which becomes what remains after 1D.2, with orchestration separated
-  from rendering.
+- `bynk/src/deploy/plan.rs` (2,270 production lines on the corrected measure, already under the
+  3,000 target): optional and seam-driven (2.8), with orchestration separated from rendering.
+- `bynk/src/dev.rs` (2,291): optional (2.9); its proposal finds the seam.
 
-**Ratchet.** From settling onwards, a Phase 1 slice must not push a file newly across 2,000
-production lines; if it does, its PR says why, as invariant 4 requires for probe rises. 1A and
-1B reshape the largest files, so this rule applies before the mechanism exists. P0.5's
-`module_lines` then becomes a mechanical ratchet when this phase starts. A file over the
-threshold may not grow, and no file may newly cross it. Settled by Q5:
+**Ratchet.** Done in 2.0 (#4085). A Phase 1 slice could not push a file newly across 2,000
+production lines without saying why; from 2.0 the gate is mechanical. Settled by Q5 and the
+2.0 rulings:
 
-- the measure is `module_lines`' production lines;
-- no file may newly cross **2,000** lines;
-- a file already over 2,000 gets a recorded ceiling that can only fall, as `fn-length-ceilings.txt`
-  works for functions;
-- the track-exit target is that no back-half file exceeds **3,000** lines.
+- the measure is `module_lines`' production lines, with `#[cfg(test)] pub(crate) mod tests {`
+  now recognised as test code (the scanner missed it; `deploy/plan.rs` reads 2,270, not 5,227);
+- no back-half file may newly cross **2,000** lines;
+- a file already over 2,000 has a recorded ceiling in `xtask/module-line-ceilings.txt` that can
+  only fall, as `fn-length-ceilings.txt` works for functions: a file may not grow past its
+  ceiling, and an entry whose file is under 2,000 (or gone) must be deleted. `cargo xtask
+  module-lines [--apply]` prints and rewrites it; `xtask/tests/module_lines_ratchet.rs` is the
+  gate;
+- the scope is the six back-half crates (10 ceilings today); the trend probe stays workspace-wide;
+- the track-exit target is that no back-half file exceeds **3,000** lines. It binds a *new*
+  entry now; the eight files already over it are in `GRANDFATHERED` in `xtask/src/module_lines.rs`
+  until exit, when the constant is deleted;
+- a split adds each new `bynk-emit` file to `AST_IMPORTER_ORIGINS` in `greenfield_status.rs`
+  (the origin table is empty until the first split), so `ast_importers` counts each origin once.
+
+| Slice | Target | Production lines | Waits for |
+|---|---|---:|---|
+| **2.0** | the ratchet. **Done in #4085.** | — | — |
+| **2.1** | `bynk-emit/src/emitter/emit.rs` | 10,717 | 1B.4b |
+| **2.2** | `bynk-emit/src/emitter/lower.rs` | 4,884 | 1B.4b |
+| **2.3** | `bynk-emit/src/emitter/serialisation.rs` | 4,232 | — |
+| **2.4** | `bynk-emit/src/emitter/workers_entry.rs` | 4,215 | — |
+| **2.5** | `bynk-emit/src/emitter.rs` | 3,215 | — |
+| **2.6** | `bynk-ts/src/printer.rs`, `bynk-ts/src/program.rs` | 3,629; 3,682 | — |
+| **2.7** | `bynk-driver/src/project.rs` | 4,312 | — |
+| **2.8** | `bynk/src/deploy/plan.rs` (optional: under 3,000 already) | 2,271 | — |
+| **2.9** | `bynk/src/dev.rs` (optional) | 2,292 | — |
+
+Each split lowers or deletes its target's ceiling with `cargo xtask module-lines --apply`.
 
 `bynk-ts/src/printer.rs` is in scope: it is large, but it is the best-tested file in the back
 half, so splitting it is low-risk.
@@ -354,9 +377,8 @@ out carries its unit tests with it.
 | Deploy: Cloudflare client layers | 2, untyped | one module: one operation trait and one REST client, typed errors (**met by 1D.3c**: `cloudflare_client_sites` reads 0) | 1 |
 | `bynk-emit` dev-dependency on `bynk-driver` | yes | no (**met by 1B.2b**) | no |
 | Crates denying wildcard arms | 2 (bynk-ts, bynk-model) | bynk-ts, bynk-model, bynk-emit (**met by 1A.37b**) | + bynk-driver, bynk |
-| Back-half files ≥ 5,000 lines | 6 | — | 0 |
-| Back-half files ≥ 3,000 lines (production) | per `module_lines` | — | 0 (Q5) |
-| Files newly crossing 2,000 production lines | — | — | 0, by ratchet (Q5) |
+| Back-half files ≥ 3,000 lines (production) | 8 (read by `module_lines`) | 8 | 0 (Q5) |
+| Files newly crossing 2,000 production lines | — | 0, by ratchet (**2.0**) | 0, by ratchet (Q5) |
 | bynk-emit unit tests per 1k production lines | 7.1 | — | per 3.4's floor |
 
 The store-head match is gone (1A.33): `emit.rs` no longer compares `f.kind.head.name` with `"Map"`, `"Set"`, `"Cache"`, `"Log"` or `"Cell"`; the agent store decisions read `StoreFieldIr`'s `StoreKindIr`. `bynk-model` still maps the head name to `StoreKindIr` once, which 1A.imports (1A.36) leaves as the single place.
