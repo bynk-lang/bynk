@@ -82,7 +82,7 @@ use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::module_lines::{BACK_HALF_CRATES, is_whole_test_file};
+use crate::module_lines::{BACK_HALF_CRATES, gated_stems, is_test_only_file};
 
 /// One probe's result. `gated` probes are diffed against the committed table by
 /// [`crate::greenfield_status::gated_disagreements`]; the rest are reported only.
@@ -1769,6 +1769,10 @@ fn ast_importers(root: &Path) -> Probe {
 /// that is itself a split child maps to its own origin, not to the intermediate file). A row
 /// whose child is not an importer is inert, so a row never needs deleting while the track runs.
 const AST_IMPORTER_ORIGINS: &[(&str, &str)] = &[
+    // emitter/workers_entry.rs (2.4, #4089)
+    ("emitter/workers_entry/call.rs", "emitter/workers_entry.rs"),
+    ("emitter/workers_entry/queue.rs", "emitter/workers_entry.rs"),
+    ("emitter/workers_entry/wire.rs", "emitter/workers_entry.rs"),
     // 2.2a (#4087): `lower.rs` split.
     ("emitter/lower/pattern.rs", "emitter/lower.rs"),
     ("emitter/lower/is.rs", "emitter/lower.rs"),
@@ -1993,8 +1997,13 @@ fn codegen_family_from(
     mut emit: Vec<(PathBuf, String)>,
     driver: Vec<(PathBuf, String)>,
 ) -> Vec<(PathBuf, String)> {
+    // Each half's declarations are read against its own paths (`bynk-emit/src`, `bynk-driver/src`).
+    let emit_gated = gated_stems(&emit);
+    let driver_gated = gated_stems(&driver);
+    emit.retain(|(p, _)| !is_family_test_file(p, &emit_gated));
+    let mut driver = driver;
+    driver.retain(|(p, _)| !is_family_test_file(p, &driver_gated));
     emit.extend(driver);
-    emit.retain(|(p, _)| !is_family_test_file(p));
     emit
 }
 
@@ -2006,8 +2015,8 @@ fn codegen_family_from(
 /// `*_tests.rs` or under a `tests/` directory would drop out of these probes, so that
 /// naming convention is load-bearing for them. Counting `bynk-emit`'s whole test files as production read
 /// `ts_writes` 464 and `ts_any` 24 where the production lines are 462 and 21.
-fn is_family_test_file(rel: &Path) -> bool {
-    crate::module_lines::is_whole_test_file(&rel.to_string_lossy().replace('\\', "/"))
+fn is_family_test_file(rel: &Path, gated: &std::collections::BTreeSet<String>) -> bool {
+    is_test_only_file(&rel.to_string_lossy().replace('\\', "/"), gated)
 }
 
 /// Relativises every path in [`rust_files`]'s output against `dir`, so [`ts_writes`]
@@ -2958,7 +2967,7 @@ fn node_builder_defs_found(files: &[(PathBuf, String)]) -> (Vec<(PathBuf, usize,
 /// cannot grow one.
 ///
 /// Counts non-comment lines outside `#[cfg(test)]` modules and wholly-test files
-/// ([`is_whole_test_file`]) in `bynk/src/deploy` that match [`DEPLOY_KIND_ACCESSOR`]. Text-level
+/// ([`is_test_only_file`]) in `bynk/src/deploy` that match [`DEPLOY_KIND_ACCESSOR`]. Text-level
 /// gaps, as for the other line scanners: two sites on one line count once, and a definition with
 /// generics (`fn recorded_r2<'a>(`) is not matched, which is how #3929's pattern read 68. Its
 /// callers are, so a kind is converted only once they are gone.
@@ -2983,9 +2992,10 @@ fn deploy_kind_accessors_violations(files: &[(PathBuf, String)]) -> usize {
     // Deploy's test modules are `pub(crate) mod tests`, so other modules' tests can share their
     // helpers; [`test_mod_ranges`] reads a test module by its `mod ` line, so the visibility is
     // dropped here rather than there, where it would move the probes that already read it.
+    let gated = gated_stems(files);
     let production: Vec<(PathBuf, String)> = files
         .iter()
-        .filter(|(path, _)| !is_whole_test_file(&path.to_string_lossy().replace('\\', "/")))
+        .filter(|(path, _)| !is_test_only_file(&path.to_string_lossy().replace('\\', "/"), &gated))
         .map(|(path, contents)| {
             let contents: Vec<&str> = contents
                 .lines()
@@ -3009,7 +3019,7 @@ fn deploy_kind_accessors_violations(files: &[(PathBuf, String)]) -> usize {
 /// needs a pending file that `raises:` it with a reason.
 ///
 /// Counts non-comment lines outside `#[cfg(test)]` modules and wholly-test files
-/// ([`is_whole_test_file`]) in `bynk/src/deploy` that match [`DEPLOY_LEDGER_WRITE`], less the line
+/// ([`is_test_only_file`]) in `bynk/src/deploy` that match [`DEPLOY_LEDGER_WRITE`], less the line
 /// that defines `write_lock`.
 fn deploy_ledger_writes(root: &Path) -> Probe {
     Probe {
@@ -3029,11 +3039,12 @@ fn deploy_ledger_writes_violations(files: &[(PathBuf, String)]) -> usize {
     let write = regex::Regex::new(DEPLOY_LEDGER_WRITE).expect("the write pattern compiles");
     let definition = regex::Regex::new(r"\bfn write_lock\(").expect("the definition compiles");
     // As for [`deploy_kind_accessors_violations`]: deploy's test modules are `pub(crate) mod tests`.
+    let gated = gated_stems(files);
     let production: Vec<(PathBuf, String)> = files
         .iter()
         .filter(|(path, _)| {
             let path = path.to_string_lossy().replace('\\', "/");
-            !is_whole_test_file(&path) && path != "revert.rs"
+            !is_test_only_file(&path, &gated) && path != "revert.rs"
         })
         .map(|(path, contents)| {
             let contents: Vec<&str> = contents
@@ -3062,7 +3073,7 @@ fn deploy_ledger_writes_violations(files: &[(PathBuf, String)]) -> usize {
 /// new site needs a pending file that `raises:` it with a reason.
 ///
 /// Counts non-comment lines outside `#[cfg(test)]` modules, wholly-test files
-/// ([`is_whole_test_file`]) and `bynk/src/cloudflare/`, less the lines that define
+/// ([`is_test_only_file`]) and `bynk/src/cloudflare/`, less the lines that define
 /// `wrangler_command` or declare the `Rest` type (`struct Rest {`, `impl … Rest {`). A REST
 /// construction spans several lines (its credentials, its agent); only its `Rest {` line counts.
 fn cloudflare_client_sites(root: &Path) -> Probe {
@@ -3085,11 +3096,12 @@ fn cloudflare_client_sites_violations(files: &[(PathBuf, String)]) -> usize {
         regex::Regex::new(r"\bfn wrangler_command\(|\bstruct Rest \{|\bimpl\b.*\bRest \{")
             .expect("the declaration pattern compiles");
     // As for [`deploy_kind_accessors_violations`]: the crate's test modules may be `pub(crate)`.
+    let gated = gated_stems(files);
     let production: Vec<(PathBuf, String)> = files
         .iter()
         .filter(|(path, _)| {
             let path = path.to_string_lossy().replace('\\', "/");
-            !is_whole_test_file(&path)
+            !is_test_only_file(&path, &gated)
                 && !path.starts_with("cloudflare/")
                 && path != "test_support.rs"
         })
@@ -3126,7 +3138,7 @@ fn cloudflare_client_sites_violations(files: &[(PathBuf, String)]) -> usize {
 /// new bare protocol literal fails the gate.
 ///
 /// Counts non-comment lines outside `#[cfg(test)]` modules (deploy's `pub(crate) mod tests`
-/// included) and wholly-test files ([`is_whole_test_file`]) in every workspace crate's `src/`,
+/// included) and wholly-test files ([`is_test_only_file`]) in every workspace crate's `src/`,
 /// except `xtask` (repo automation, not shipped), the test-only crates `bynk-tests` and
 /// `bynk-testkit`, the table itself, and `bynk-syntax/src/diagnostics.rs`, whose explanations
 /// name the edge-key families as prose, not as uses. Text-level gaps, as for the other line
@@ -3154,11 +3166,13 @@ const ENV_PROTOCOL_LITERALS_EXEMPT: [&str; 2] = [
 /// root.
 fn env_protocol_literals_violations(files: &[(PathBuf, String)]) -> usize {
     let token = regex::Regex::new(r"\b(__)?BYNK_[A-Z0-9_]+").expect("the token pattern compiles");
+    let gated = gated_stems(files);
     let production: Vec<(PathBuf, String)> = files
         .iter()
         .filter(|(path, _)| {
             let rel = path.to_string_lossy().replace('\\', "/");
-            !is_whole_test_file(&rel) && !ENV_PROTOCOL_LITERALS_EXEMPT.contains(&rel.as_str())
+            !is_test_only_file(&rel, &gated)
+                && !ENV_PROTOCOL_LITERALS_EXEMPT.contains(&rel.as_str())
         })
         .map(|(path, contents)| {
             // As in [`deploy_kind_accessors_violations`]: a `pub(crate) mod tests` is a test
@@ -3204,7 +3218,7 @@ fn env_protocol_literals_violations(files: &[(PathBuf, String)]) -> usize {
 ///
 /// Counts files, not lines, so the many construction lines of the one model count once. Skips
 /// `#[cfg(test)]` modules (deploy's `pub(crate) mod tests` included), wholly-test files
-/// ([`is_whole_test_file`]) and comment lines. Text-level gaps, as for the other line scanners.
+/// ([`is_test_only_file`]) and comment lines. Text-level gaps, as for the other line scanners.
 fn binding_kind_homes(root: &Path) -> Probe {
     let mut files = Vec::new();
     for krate in ["bynk-check", "bynk-emit", "bynk-driver", "bynk"] {
@@ -3231,10 +3245,11 @@ fn binding_kind_homes_files(files: &[(PathBuf, String)]) -> Vec<String> {
     .expect("the construction pattern compiles");
     let stanza = regex::Regex::new(r"\bstruct\s+\w+(Binding|Stanza|ManifestEntry)\b")
         .expect("the stanza pattern compiles");
+    let gated = gated_stems(files);
     let mut homes = Vec::new();
     for (path, contents) in files {
         let rel = path.to_string_lossy().replace('\\', "/");
-        if rel == BINDING_KIND_VOCABULARY || is_whole_test_file(&rel) {
+        if rel == BINDING_KIND_VOCABULARY || is_test_only_file(&rel, &gated) {
             continue;
         }
         // As in [`deploy_kind_accessors_violations`]: a `pub(crate) mod tests` is a test module,
@@ -3293,7 +3308,7 @@ fn binding_kind_homes_files(files: &[(PathBuf, String)]) -> Vec<String> {
 /// raw literal in a patcher fails the gate.
 ///
 /// Counts matches in the non-comment production text (outside `#[cfg(test)]` modules, deploy's
-/// `pub(crate) mod tests` included, and wholly-test files, [`is_whole_test_file`]). Text-level
+/// `pub(crate) mod tests` included, and wholly-test files, [`is_test_only_file`]). Text-level
 /// gaps, as for the other scanners.
 fn wrangler_key_literals(root: &Path) -> Probe {
     let mut files = Vec::new();
@@ -3328,10 +3343,11 @@ fn wrangler_key_literals_count(files: &[(PathBuf, String)]) -> usize {
         r#"TomlBlock::(?:table|array_table|keyed_table)\(\s*"(?:{key})"|\.(?:get|get_mut|entry|remove|insert)\(\s*"(?:{key})"|\[\s*"(?:{key})"\s*\]|\bin\s*\[[^\]]*"(?:{key})""#
     ))
     .expect("the key pattern compiles");
+    let gated = gated_stems(files);
     let mut count = 0;
     for (path, contents) in files {
         let rel = path.to_string_lossy().replace('\\', "/");
-        if is_whole_test_file(&rel) {
+        if is_test_only_file(&rel, &gated) {
             continue;
         }
         // As in [`binding_kind_homes_files`]: a `pub(crate) mod tests` is a test module.
@@ -3369,7 +3385,7 @@ fn wrangler_key_literals_count(files: &[(PathBuf, String)]) -> usize {
 ///
 /// Counts non-comment lines matching `Command::new(` or `ProcCommand::new(` (a word boundary
 /// before) outside `#[cfg(test)]` modules (deploy's `pub(crate) mod tests` included),
-/// wholly-test files ([`is_whole_test_file`]) and the test-only `test_support.rs`. Text-level gaps, as for the other line scanners:
+/// wholly-test files ([`is_test_only_file`]) and the test-only `test_support.rs`. Text-level gaps, as for the other line scanners:
 /// two spawns on one line count once, and a `Command` imported under another name is missed.
 fn tool_spawn_sites(root: &Path) -> Probe {
     let mut files = Vec::new();
@@ -3411,11 +3427,12 @@ fn tool_spawn_sites_reading(files: &[(PathBuf, String)]) -> String {
             .into_iter()
             .map(|r| (r, 0))
             .collect();
+    let gated = gated_stems(files);
     let mut total = 0usize;
     for (path, contents) in files {
         let rel = path.to_string_lossy().replace('\\', "/");
         // `bynk/src/test_support.rs` is declared `#[cfg(test)] mod test_support;`.
-        if is_whole_test_file(&rel)
+        if is_test_only_file(&rel, &gated)
             || rel.ends_with("/test_support.rs")
             || rel.starts_with("bynk-driver/src/tools/")
             || rel == "bynk-driver/src/probe.rs"
@@ -7868,6 +7885,54 @@ commons app.demo {
         let kept: Vec<_> = family.iter().map(|(p, _)| p.to_string_lossy()).collect();
         assert_eq!(kept, ["emitter/lower.rs", "project/entry.rs"]);
         assert_eq!(ts_writes_violations(&family), 2);
+    }
+
+    /// A module declared `#[cfg(test)] mod x;` is test code wherever it lives, as `module_lines`
+    /// reads it: every probe that skips whole test files skips it too, and a file that is not
+    /// declared that way still counts.
+    #[test]
+    fn a_declaration_gated_module_is_test_code_for_every_probe() {
+        use crate::module_lines::{gated_stems, is_test_only_file};
+        let files = files_of(&[
+            (
+                "bynk/src/dev.rs",
+                "#[cfg(test)]\nmod test_support;\nmod run;\n",
+            ),
+            ("bynk/src/dev/test_support.rs", ""),
+            ("bynk/src/dev/run.rs", ""),
+            ("bynk/src/dev/tests.rs", ""),
+        ]);
+        let gated = gated_stems(&files);
+        assert!(is_test_only_file("bynk/src/dev/test_support.rs", &gated));
+        assert!(is_test_only_file("bynk/src/dev/tests.rs", &gated));
+        assert!(!is_test_only_file("bynk/src/dev/run.rs", &gated));
+        assert!(!is_test_only_file("bynk/src/dev.rs", &gated));
+        // The binding probe: a construction in the gated file is not a home; in `run.rs` it is.
+        let field = "WorkerBinding { name, source: BindingSource::Kv }\n";
+        let parent = "#[cfg(test)]\nmod test_support;\nmod run;\n";
+        let homes = |support: &str, run: &str| {
+            binding_kind_homes_files(&files_of(&[
+                ("bynk/src/dev.rs", parent),
+                ("bynk/src/dev/test_support.rs", support),
+                ("bynk/src/dev/run.rs", run),
+            ]))
+            .len()
+        };
+        assert_eq!(homes(field, ""), 0);
+        assert_eq!(homes("", field), 1);
+        // The family probes: the same rule, read against each half's own paths.
+        let write = "fn f() { let _ = format!(\"x\"); }\n".to_string();
+        let file = |rel: &str, body: &str| (PathBuf::from(rel), body.to_string());
+        let family = codegen_family_from(
+            vec![
+                file("emitter.rs", "#[cfg(test)]\nmod fixtures;\n"),
+                file("emitter/fixtures.rs", &write),
+                file("emitter/lower.rs", &write),
+            ],
+            vec![],
+        );
+        let kept: Vec<_> = family.iter().map(|(p, _)| p.to_string_lossy()).collect();
+        assert_eq!(kept, ["emitter.rs", "emitter/lower.rs"]);
     }
 
     // --- ts_writes / ts_any (P7.0, #1296; testability + widening, review of #1297) --
