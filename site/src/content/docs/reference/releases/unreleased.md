@@ -7,6 +7,7 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.640.54** | Internal restructuring: the integration-test doubles (`makeIntegration*`) are no longer in the shipped `storage`, `agent` and `vectorize` runtime modules, so a build's `storage` module is about 670 lines smaller; the doubles are imported from `testing/bindings` and `testing/pglite`, and no production emission changes |
 | **v0.640.53** | Internal restructuring: a record field's wire default is built from its `DefaultValue` tree and the empty `deps` object prints as `{}`; no behaviour changes |
 | **v0.640.52** | Internal restructuring: the test runtime and the client runtime are authored as type-checked runtime modules and generated into the files bynk-emit embeds; no emitted output changes |
 | **v0.640.51** | Internal restructuring: the duplicate-binding check, the Workers build and the events fan-out read one binding model, and the old derivations are deleted; no emitted output changes |
