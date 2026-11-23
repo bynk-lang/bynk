@@ -1090,9 +1090,7 @@ pub fn in_refinement_annotation_position(line_prefix: &str) -> bool {
     }
     let before = &line_prefix[..at];
     before.contains(" where ")
-        && (before.contains("Matches(")
-            || before.contains("IsoDate")
-            || before.contains("Cron"))
+        && (before.contains("Matches(") || before.contains("IsoDate") || before.contains("Cron"))
         && !before.contains("@example")
 }
 

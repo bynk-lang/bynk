@@ -6751,7 +6751,8 @@ fn check_cron_schedule(handler: &Handler, expr: &str, errors: &mut Vec<CompileEr
                 "the fields are: minute hour day-of-month month day-of-week, separated by exactly one space",
             );
             let single_spaced = expr.split_whitespace().collect::<Vec<_>>().join(" ");
-            if single_spaced != expr && bynk_syntax::cron::is_cron_expression(&single_spaced).is_ok()
+            if single_spaced != expr
+                && bynk_syntax::cron::is_cron_expression(&single_spaced).is_ok()
             {
                 err = err.with_note(format!(
                     "write it with single spaces: `{single_spaced}` (Cloudflare matches the schedule character for character)"
@@ -6780,7 +6781,9 @@ fn check_cron_schedule(handler: &Handler, expr: &str, errors: &mut Vec<CompileEr
                         format!("cron schedule `{expr}` has an uneven step"),
                     )
                     .with_note(when)
-                    .with_note("list the times you mean, or use a step that divides the field's range"),
+                    .with_note(
+                        "list the times you mean, or use a step that divides the field's range",
+                    ),
                 );
             }
         }

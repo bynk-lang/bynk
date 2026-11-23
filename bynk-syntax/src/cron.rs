@@ -297,8 +297,12 @@ pub fn numeric_weekday(s: &str) -> bool {
     // the step after a `/` is not.
     dow.split(',').any(|item| {
         let body = item.split('/').next().unwrap_or("");
-        body.split('-')
-            .any(|p| p.trim_end_matches(['L', 'l']).split('#').next().is_some_and(|d| !d.is_empty() && d.bytes().all(|b| b.is_ascii_digit())))
+        body.split('-').any(|p| {
+            p.trim_end_matches(['L', 'l'])
+                .split('#')
+                .next()
+                .is_some_and(|d| !d.is_empty() && d.bytes().all(|b| b.is_ascii_digit()))
+        })
     })
 }
 
@@ -312,7 +316,10 @@ pub fn uneven_step(s: &str) -> Option<String> {
                 continue;
             };
             if n >= 1 && size % n != 0 {
-                let fires: Vec<String> = (0..size).step_by(n as usize).map(|v| v.to_string()).collect();
+                let fires: Vec<String> = (0..size)
+                    .step_by(n as usize)
+                    .map(|v| v.to_string())
+                    .collect();
                 return Some(format!(
                     "`*/{n}` in the {} field fires at {} and then restarts at 0 at the next {}, so the last gap is shorter than {n}",
                     kind.name(),
@@ -428,7 +435,9 @@ mod corpus {
     fn generate() -> String {
         let mut seed: u64 = 3873;
         let mut next = move || {
-            seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            seed = seed
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
             (seed >> 33) as usize
         };
         let atoms = [
@@ -438,17 +447,27 @@ mod corpus {
             "1,2", "1,", ",1", "0-30/5", "1-7/2", "*/", "-", "1-", "",
         ];
         let per_field: [&[&str]; 5] = [
-            &["*", "*/5", "*/15", "*/45", "0", "30", "59", "0-30", "5,10", "0-30/5"],
+            &[
+                "*", "*/5", "*/15", "*/45", "0", "30", "59", "0-30", "5,10", "0-30/5",
+            ],
             &["*", "*/6", "*/5", "0", "12", "23", "9-17", "0,12"],
-            &["*", "1", "15", "31", "L", "LW", "15W", "1-15", "*/2", "1,15"],
+            &[
+                "*", "1", "15", "31", "L", "LW", "15W", "1-15", "*/2", "1,15",
+            ],
             &["*", "1", "12", "JAN", "dec", "Jun", "JAN-MAR", "*/3", "1,6"],
-            &["*", "1", "7", "MON", "fri", "MON-FRI", "6L", "friL", "2#3", "1-5", "SUN,SAT"],
+            &[
+                "*", "1", "7", "MON", "fri", "MON-FRI", "6L", "friL", "2#3", "1-5", "SUN,SAT",
+            ],
         ];
         let mut out = String::new();
         let mut seen = std::collections::BTreeSet::new();
         let mut push = |s: String, out: &mut String| {
             if seen.insert(s.clone()) {
-                let verdict = if is_cron_expression(&s).is_ok() { "ok" } else { "bad" };
+                let verdict = if is_cron_expression(&s).is_ok() {
+                    "ok"
+                } else {
+                    "bad"
+                };
                 out.push_str(verdict);
                 out.push('\t');
                 out.push_str(&serde_json_string(&s));
@@ -456,8 +475,19 @@ mod corpus {
             }
         };
         for s in [
-            "* * * * *", "0 18 * * 6L", "0 18 * * friL", "59 23 LW * *", "@daily", "0 0 * * * *",
-            "* * * *", "", " ", "0  2 * * *", "0\t2 * * *", "0 2 * * * ", " 0 2 * * *",
+            "* * * * *",
+            "0 18 * * 6L",
+            "0 18 * * friL",
+            "59 23 LW * *",
+            "@daily",
+            "0 0 * * * *",
+            "* * * *",
+            "",
+            " ",
+            "0  2 * * *",
+            "0\t2 * * *",
+            "0 2 * * * ",
+            " 0 2 * * *",
         ] {
             push(s.to_string(), &mut out);
         }

@@ -817,10 +817,12 @@ pub(crate) fn check_string_refinement_consistency(
 /// it contains a `Matches` predicate, where bare `Val[T]` must be given an
 /// explicit pin instead.
 pub(crate) fn refinement_needs_pin(refinement: &Refinement) -> bool {
-    refinement
-        .predicates
-        .iter()
-        .any(|p| matches!(p.kind, PredKind::Matches(_) | PredKind::IsoDate | PredKind::Cron))
+    refinement.predicates.iter().any(|p| {
+        matches!(
+            p.kind,
+            PredKind::Matches(_) | PredKind::IsoDate | PredKind::Cron
+        )
+    })
 }
 
 /// #2686: the `@example(<arg>)` annotation's argument on a refinement, if

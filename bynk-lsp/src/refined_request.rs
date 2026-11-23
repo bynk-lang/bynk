@@ -258,7 +258,9 @@ fn clause(kind: &PredKind) -> Clause {
         PredKind::Length(n) => format!("length = {n}"),
         PredKind::Matches(re) => format!("the whole string matches /{re}/"),
         PredKind::IsoDate => "a calendar date, YYYY-MM-DD".to_string(),
-        PredKind::Cron => "a cron schedule: five fields, minute hour day-of-month month day-of-week".to_string(),
+        PredKind::Cron => {
+            "a cron schedule: five fields, minute hour day-of-month month day-of-week".to_string()
+        }
     };
     Clause {
         source: bynk_fmt::refinement_to_string(&Refinement {
