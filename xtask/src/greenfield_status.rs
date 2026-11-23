@@ -1770,7 +1770,10 @@ fn ast_importers(root: &Path) -> Probe {
 /// whose child is not an importer is inert, so a row never needs deleting while the track runs.
 const AST_IMPORTER_ORIGINS: &[(&str, &str)] = &[
     // emitter/emit.rs
+    ("emitter/emit/capability.rs", "emitter/emit.rs"),
     ("emitter/emit/functions.rs", "emitter/emit.rs"),
+    ("emitter/emit/handlers.rs", "emitter/emit.rs"),
+    ("emitter/emit/messages.rs", "emitter/emit.rs"),
     ("emitter/emit/types.rs", "emitter/emit.rs"),
     // emitter/lower.rs
     ("emitter/lower/claims.rs", "emitter/lower.rs"),

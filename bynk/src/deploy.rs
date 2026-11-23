@@ -21,7 +21,8 @@
 //!   gate that refuses a build breaking it (I4, #1970).
 //! - `provisioning.rs` — every call out to the `wrangler` CLI.
 //! - `secrets.rs` — which secrets a run sets, and where each value comes from.
-//! - `plan.rs` — the plan/apply flow that drives all of the above.
+//! - `plan.rs` — the plan/apply flow that drives all of the above, in `plan/`'s five children:
+//!   `run`, `model`, `keys`, `skew` and `messages`.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::{self, IsTerminal, Write};
@@ -32,12 +33,10 @@ use bynk_check::contract_compat::{Compatibility, ServiceShape, check_call};
 use serde::{Deserialize, Serialize};
 
 use crate::cloudflare::{CloudflareApi, Exit, Failure, PushCall, VectorizeOp, Wrangler};
-use crate::doctor::{self, Capability, Context, DoctorOptions, Report};
+use crate::doctor::{self, Capability, Context, DoctorOptions};
 #[cfg(test)]
 use crate::probe::Provenance;
 use crate::probe::{self, Toolbox};
-use crate::report::{self, Format};
-use crate::workers;
 
 const LOCK_FILE: &str = "bynk.deploy.lock";
 // P7.4 (#1305): every non-test use of the placeholder now goes through
@@ -76,7 +75,6 @@ use apply::*;
 use config::*;
 use containers::*;
 use declared::*;
-use destinations::*;
 use gates::*;
 use graph::*;
 use kind::*;
