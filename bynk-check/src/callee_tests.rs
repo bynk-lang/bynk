@@ -577,7 +577,7 @@ const JOBS: &str = r#"context cr.jobs
 type Delivery = { id: String }
 
 service worker from cron {
-  on schedule("*/5 * * * *") (at: Int) -> Effect[Result[(), String]] {
+  on schedule("*/5 * * * *") (at: Instant) -> Effect[Result[(), String]] {
     Ok(())
   }
 }
@@ -614,7 +614,7 @@ fn each_test_service_address_records_its_typed_form() {
                 "tests/jobs.bynk",
                 r#"suite cr.jobs as integration {
   case "every address" {
-    let a <- worker.schedule("*/5 * * * *", 960000)
+    let a <- worker.schedule("*/5 * * * *", Instant.fromEpochMillis(960000))
     let b <- deliveries.message(Delivery { id: "c" })
     let c <- api.GET("/count") by Visitor
     let d <- api.POST("/items", 3) by Visitor

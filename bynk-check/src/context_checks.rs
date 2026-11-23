@@ -6735,36 +6735,37 @@ fn validate_raw_args(ann: &Annotation, errors: &mut Vec<CompileError>) {
     }
 }
 
-/// Validate an `on cron "expr" (at: Int?) -> Effect[Result[(), E]]` handler
-/// (v0.10a §4.1): at most one `Int` parameter (the scheduled time, Unix epoch
-/// milliseconds), a structurally well-formed schedule, and the unit-Result
+/// Validate an `on schedule("expr") (at: Instant?) -> Effect[Result[(), E]]`
+/// handler (v0.10a §4.1): at most one `Instant` parameter (the scheduled time), a structurally well-formed schedule, and the unit-Result
 /// return shape. The service-only rule is enforced earlier, in the parser
 /// (`bynk.parse.handler_in_agent`).
 fn validate_cron_handler(handler: &Handler, expr: &str, errors: &mut Vec<CompileError>) {
     // A cron handler takes at most one parameter — the scheduled time, typed
-    // `Int` (epoch milliseconds). A scheduled trigger has no other payload.
+    // `Instant`. A scheduled trigger has no other payload.
     if handler.params.len() > 1 {
         errors.push(
             CompileError::new(
                 "bynk.cron.bad_params",
                 handler.params[1].span,
-                "`on cron` handlers take at most one parameter (the scheduled time)",
+                "`on schedule` handlers take at most one parameter (the scheduled time)",
             )
             .with_note("a scheduled trigger's only input is the time it fired"),
         );
     } else if let Some(p) = handler.params.first()
-        && !matches!(p.type_ref, TypeRef::Base(BaseType::Int, _))
+        && !matches!(p.type_ref, TypeRef::Base(BaseType::Instant, _))
     {
         errors.push(
             CompileError::new(
                 "bynk.cron.bad_params",
                 p.type_ref.span(),
                 format!(
-                    "an `on cron` parameter must be `Int` (the scheduled time in epoch milliseconds), got `{}`",
+                    "an `on schedule` parameter must be `Instant` (the scheduled time), got `{}`",
                     ts_type_ref_display(&p.type_ref),
                 ),
             )
-            .with_note("wrap it in your own time type inside the body if you want stronger typing"),
+            .with_note(
+                "declare it as `at: Instant`; where the body needs the number, use `at.toEpochMillis()`",
+            ),
         );
     }
     // The schedule must be five whitespace-separated fields (light structural

@@ -1851,8 +1851,8 @@ MUST supply the same two arguments, with the same codes and result. Constructing
 `RawTagged` MUST supply exactly three — a
 `Bytes` body, a `String` content-type, then a `String` entity tag — with the same
 codes and result; the tag's syntax is checked at run time
-([§7.4.3](/reference/spec/runtime-library/#743-httpresult)), not here. An cron handler MUST take at most one
-`Int` parameter, a valid five-field schedule, and return `Effect[Result[(), E]]`
+([§7.4.3](/reference/spec/runtime-library/#743-httpresult)), not here. A cron handler MUST take at most one
+`Instant` parameter, a valid five-field schedule, and return `Effect[Result[(), E]]`
 (the `bynk.cron.*` codes); an `on message` handler MUST take exactly one `message`
 parameter, a Cloudflare-valid queue name, and the same return shape (the `bynk.queue.*`
 codes).
@@ -2630,8 +2630,8 @@ In a `system`-tier `case`, a `svc.schedule("…", …)` address runs the cron
 handler through the participant Worker's `scheduled` entry point and yields the
 handler's `Result`, and a `svc.message(m)` address delivers `m`, after a JSON
 round trip, through its `queue` entry point and yields `Ack` or `Retry(reason)`
-as the consumer acknowledged or retried it. The scheduled time is required when
-the handler declares it, as at the other tiers.
+as the consumer acknowledged or retried it. The scheduled time, an `Instant`, is
+required when the handler declares it, as at the other tiers.
 
 An http address in a `system`-tier `case` presents the acting actor's
 credential: a signed token for a Bearer actor, a signature for a `Signature`

@@ -1456,8 +1456,8 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.cron.bad_params",
-        blurb: "A scheduled trigger carries one thing, the time it fired, so an `on schedule` handler takes at most one parameter, and it must be an `Int`: that time in milliseconds since the epoch. Drop the parameter, or type it `Int`. To act on a richer value, build it from the time inside the body.",
-        example: "on schedule(\"*/5 * * * *\") (label: String) -> Effect[Result[(), String]] { … }   // ✗ the parameter is the time\n\non schedule(\"*/5 * * * *\") (at: Int) -> Effect[Result[(), String]] { … }          // ✓",
+        blurb: "A scheduled trigger carries one thing, the time it fired, so an `on schedule` handler takes at most one parameter, and it must be an `Instant`: the time the schedule fired. Drop the parameter, or type it `Instant`. A parameter typed `Int` (the old spelling) is this error too: write `at: Instant`, and use `at.toEpochMillis()` where the body needs the number.",
+        example: "on schedule(\"*/5 * * * *\") (at: Int) -> Effect[Result[(), String]] { … }   // ✗ the time is an `Instant`\n\non schedule(\"*/5 * * * *\") (at: Instant) -> Effect[Result[(), String]] { … }          // ✓",
     },
     Explain {
         code: "bynk.cron.duplicate_schedule",

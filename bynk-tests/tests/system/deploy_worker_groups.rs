@@ -458,7 +458,7 @@ fn members_may_share_a_cron_expression() {
     write_project(&root, WORKERS_TARGET);
     let svc = |n: &str| {
         format!(
-            "service {n} from cron {{\n\ton schedule(\"*/5 * * * *\") (at: Int) -> Effect[Result[(), String]] {{\n\t\tEffect.pure(Ok(()))\n\t}}\n}}"
+            "service {n} from cron {{\n\ton schedule(\"*/5 * * * *\") (at: Instant) -> Effect[Result[(), String]] {{\n\t\tEffect.pure(Ok(()))\n\t}}\n}}"
         )
     };
     fs::write(
