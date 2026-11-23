@@ -7,6 +7,7 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.640.63** | Internal restructuring of `bynk deploy`; the resource kinds reach Cloudflare through one operation trait, with no change to plans, provisioning, messages or `bynk.deploy.lock` |
 | **v0.640.62** | Learn Bynk has its last new chapter, 10. [Deploy it](/book/tutorials/deploy/) — read the plan with `bynk deploy --dry-run`, deploy the two-context URL shortener to Cloudflare, watch it with `bynk tail` and undo a release with `bynk revert` — and the six older chapter files lose their numbers (`/book/tutorials/01-first-program/` is now `/book/tutorials/first-program/`), with a redirect from each old URL. The Book's `bynk,project=<name>` fence now refuses a project of one block and a project block marked `ignore`, `fail` or include-only (web presence track, slice 12, #4077). |
 | **v0.640.61** | Internal restructuring: the test harness builds a stub class and the platform capability doubles of a generated test module as typed nodes instead of text, so a stub class's methods are separated by a blank line; no behaviour changes |
 | **v0.640.60** | Internal restructuring: the `[env.*]` block of a named-environment deploy is rendered by the emitter from one table of `wrangler.toml` keys; `wrangler.toml` is unchanged |
