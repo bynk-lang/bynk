@@ -322,6 +322,7 @@ pub(super) fn ts_type_ref_to_ts_type(r: &TypeRef, qualify: Option<QualifyFn<'_>>
         // `bynk-tests/tests/fixtures/positive/302_query_annotated_let/expected/probe.ts:46`).
         TypeRef::Query(t, _) => {
             let fn_ty = TsType::Fn {
+                rest: false,
                 names: vec![],
                 params: vec![],
                 ret: Box::new(query_result_ty(ts_type_ref_to_ts_type(t, qualify))),
@@ -411,6 +412,7 @@ pub(super) fn ts_type_ref_to_ts_type(r: &TypeRef, qualify: Option<QualifyFn<'_>>
                 ret
             };
             TsType::Fn {
+                rest: false,
                 names: vec![],
                 params,
                 ret: Box::new(ret),
@@ -758,6 +760,7 @@ pub(super) fn ts_ty_to_ts_type(t: TyId, tys: TyRender<'_>) -> TsType {
         // the opaque-`Named` wrap this reuses, unchanged reasoning).
         Ty::Query(t) => {
             let fn_ty = TsType::Fn {
+                rest: false,
                 names: vec![],
                 params: vec![],
                 ret: Box::new(query_result_ty(ts_ty_to_ts_type(*t, tys))),
@@ -792,6 +795,7 @@ pub(super) fn ts_ty_to_ts_type(t: TyId, tys: TyRender<'_>) -> TsType {
         Ty::DecodeError => TsType::named("DecodeError"),
         Ty::Unit => TsType::named("void"),
         Ty::Fn { params, ret } => TsType::Fn {
+            rest: false,
             names: vec![],
             params: params.iter().map(|p| ts_ty_to_ts_type(*p, tys)).collect(),
             ret: Box::new(ts_ty_to_ts_type(*ret, tys)),

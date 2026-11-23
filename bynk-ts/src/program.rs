@@ -2616,9 +2616,14 @@ pub enum TsType {
     /// kernel's `fold`). Empty is the positional `a0, a1, …` form above, which
     /// every other site builds; otherwise one name per entry of `params`, in
     /// order.
+    ///
+    /// `rest` (1A.40c, #3996): the last parameter is a rest parameter, printed `...name: T`, so
+    /// the type spells a variadic function (`(...bynkArgs: unknown[]) => unknown`). Its name is
+    /// taken from `names`, so a rest `Fn` carries names; `false` is every other function type.
     Fn {
         params: Vec<TsType>,
         names: Vec<String>,
+        rest: bool,
         ret: Box<TsType>,
     },
     /// `A | B | C` — a type-position union. Added in review of #1315:

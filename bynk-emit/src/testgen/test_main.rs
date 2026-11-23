@@ -260,6 +260,7 @@ pub(super) fn build_run_function(entries: &[(String, String)]) -> Vec<TsStmt> {
                     TsParam::optional(
                         "onCase".to_string(),
                         Some(TsType::Fn {
+                            rest: false,
                             names: vec![],
                             params: vec![TsType::named("CaseResult")],
                             ret: Box::new(TsType::named("void")),
@@ -326,11 +327,11 @@ impl DetachReports {
         vec![
             TsObjectEntry::prop(
                 "detached_failures".to_string(),
-                ident("(detached.length > 0 ? detached.length : undefined)"),
+                detached_or_undefined(member(ident("detached"), "length")),
             ),
             TsObjectEntry::prop(
                 "detached".to_string(),
-                ident("(detached.length > 0 ? detached : undefined)"),
+                detached_or_undefined(ident("detached")),
             ),
         ]
     }
@@ -950,6 +951,20 @@ fn with_snapshot_report(human_branch: TsStmt, snapshot_report: &Option<String>) 
         ]),
         None => human_branch,
     }
+}
+
+/// `(detached.length > 0 ? <when_some> : undefined)`: a report field only a run with detached
+/// failures carries.
+fn detached_or_undefined(when_some: TsExpr) -> TsExpr {
+    crate::ts_build::paren(crate::ts_build::cond_expr(
+        crate::ts_build::binary(
+            bynk_ts::TsBinaryOp::GreaterThan,
+            member(ident("detached"), "length"),
+            crate::ts_build::num_lit(0),
+        ),
+        when_some,
+        ident("undefined"),
+    ))
 }
 
 #[cfg(test)]

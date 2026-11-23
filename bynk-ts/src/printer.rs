@@ -2693,11 +2693,19 @@ fn render_type(out: &mut String, ty: &TsType) {
                 out.push_str(" }");
             }
         }
-        TsType::Fn { params, names, ret } => {
+        TsType::Fn {
+            params,
+            names,
+            rest,
+            ret,
+        } => {
             out.push('(');
             for (i, p) in params.iter().enumerate() {
                 if i > 0 {
                     out.push_str(", ");
+                }
+                if *rest && i + 1 == params.len() {
+                    out.push_str("...");
                 }
                 match names.get(i) {
                     Some(name) => out.push_str(name),
@@ -4897,6 +4905,7 @@ mod tests {
         );
         assert_eq!(
             print_type(&TsType::readonly_array(TsType::Fn {
+                rest: false,
                 names: vec![],
                 params: vec![order()],
                 ret: Box::new(order()),
@@ -5003,6 +5012,7 @@ mod tests {
     #[test]
     fn print_type_renders_a_parenthesised_type() {
         let thunk = TsType::Fn {
+            rest: false,
             names: vec![],
             params: vec![],
             ret: Box::new(TsType::named("T")),
@@ -5060,6 +5070,7 @@ mod tests {
     #[test]
     fn print_type_renders_a_zero_param_function_type() {
         let ty = TsType::Fn {
+            rest: false,
             names: vec![],
             params: vec![],
             ret: Box::new(TsType::readonly_array(TsType::named("Order"))),
@@ -5073,11 +5084,45 @@ mod tests {
     #[test]
     fn print_type_renders_a_parametered_function_type_with_positional_names() {
         let ty = TsType::Fn {
+            rest: false,
             names: vec![],
             params: vec![TsType::named("string"), TsType::named("number")],
             ret: Box::new(TsType::named("void")),
         };
         assert_eq!(print_type(&ty), "(a0: string, a1: number) => void");
+    }
+
+    /// 1A.40c (#3996): `rest` makes the last parameter a rest parameter, `...name: T`, which the
+    /// agent method table's `(...bynkArgs: unknown[]) => unknown` needs; only the last one takes
+    /// the `...`, and `rest: false` is every other function type, unchanged.
+    #[test]
+    fn print_type_renders_a_rest_parameter_on_the_last_parameter_only() {
+        let rest = TsType::Fn {
+            rest: true,
+            names: vec!["first".to_string(), "bynkArgs".to_string()],
+            params: vec![
+                TsType::named("string"),
+                TsType::array(TsType::named("unknown")),
+            ],
+            ret: Box::new(TsType::named("unknown")),
+        };
+        assert_eq!(
+            print_type(&rest),
+            "(first: string, ...bynkArgs: unknown[]) => unknown"
+        );
+        let plain = TsType::Fn {
+            rest: false,
+            names: vec!["first".to_string(), "bynkArgs".to_string()],
+            params: vec![
+                TsType::named("string"),
+                TsType::array(TsType::named("unknown")),
+            ],
+            ret: Box::new(TsType::named("unknown")),
+        };
+        assert_eq!(
+            print_type(&plain),
+            "(first: string, bynkArgs: unknown[]) => unknown"
+        );
     }
 
     /// `TsType::Union`, added during review of #1315's own implementation —
@@ -5710,12 +5755,14 @@ mod tests {
     #[test]
     fn a_function_type_prints_its_names_when_it_has_them() {
         let named = TsType::Fn {
+            rest: false,
             params: vec![TsType::named("A"), TsType::named("T")],
             names: vec!["acc".to_string(), "x".to_string()],
             ret: Box::new(TsType::named("A")),
         };
         assert_eq!(print_type(&named), "(acc: A, x: T) => A");
         let positional = TsType::Fn {
+            rest: false,
             params: vec![TsType::named("A"), TsType::named("T")],
             names: vec![],
             ret: Box::new(TsType::named("A")),

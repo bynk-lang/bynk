@@ -2643,19 +2643,21 @@ fn import_prediction_fns_violations(files: &[(PathBuf, String)]) -> usize {
 /// 1B.4b (Phase 2) takes it to 0. A growth probe ([`GROWTH_PROBES`]): a new local wrapper in a
 /// later slice needs a `raises:` line.
 ///
-/// A *definition* counts when it lies outside `ts_build.rs` and outside `#[cfg(test)]` modules,
-/// is a `fn` returning `TsExpr` or `TsStmt`, and has a body of at most eight lines that
-/// applies exactly one constructor: a `Ts*` variant or associated function, or two for one shape
-/// (`TsExpr::Lit(TsLit::Str(..))`), with any `Box::new`, `Some`, `vec![..]` around its arguments, or one call to a helper that is itself a builder
-/// (`id` over `ident_node`, `ne` over `binary`). The body has no string literal, `self`, `let`,
-/// `match`, `if`, loop, iterator or `format!`, and no `.clone()`, so it is a function of its
-/// parameters alone; a path value must be a `Ts*` one (`TsBinaryOp::StrictEq`, not
-/// `VerbatimOrigin::FormFieldSpecs`). A helper with no parameters is a constant (`empty_deps`), not a builder. A helper that composes two constructors (`if_then`,
-/// `applied`, `tag_const`) says something about a construct, not about TypeScript, and does
-/// not count. Text-level gaps, as for the other line scanners: a signature split over more than
-/// twelve lines is missed, the helpers a body calls are known by name only, a wrapper with a
-/// `where` clause or one returning `TsStmt` through a type alias is missed, and a rename inside a
-/// nested `use` tree (`use crate::{ts_build::{ident as id}, ..}`) is not matched by the alias scan.
+/// A *definition* counts when it lies outside `ts_build.rs` and outside `#[cfg(test)]` modules, is
+/// a `fn` returning `TsExpr` or `TsStmt`, and has a body of at most eight lines that applies
+/// exactly one constructor: a `Ts*` variant or associated function, or two for one shape
+/// (`TsExpr::Lit(TsLit::Str(..))`), with any `Box::new`, `Some`, `vec![..]` around its arguments,
+/// or one call to a helper that is itself a builder (`id` over `ident_node`, `ne` over `binary`).
+/// The body has no string literal, `self`, `let`, `match`, `if`, loop, iterator or `format!`, and
+/// no `.clone()`, so it is a function of its parameters alone; a path value must be a `Ts*` one
+/// (`TsBinaryOp::StrictEq`, not `VerbatimOrigin::FormFieldSpecs`). A helper with no parameters is a
+/// constant (`empty_deps`, `plain_json_test`, `deserialise_path_param`), not a builder. A helper
+/// that composes two constructors (`if_then`, `applied`, `tag_const`) says something about a
+/// construct, not about TypeScript, and does not count. Text-level gaps, as for the other line
+/// scanners: a signature split over more than twelve lines is missed, the helpers a body calls are
+/// known by name only, a wrapper with a `where` clause or one returning `TsStmt` through a type
+/// alias is missed, and a rename inside a nested `use` tree (`use crate::{ts_build::{ident as id},
+/// ..}`) is not matched by the alias scan.
 fn node_builder_defs(root: &Path) -> Probe {
     Probe {
         name: "node_builder_defs",
