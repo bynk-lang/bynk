@@ -1618,8 +1618,13 @@ impl CookieHeader {
                 vec![crate::ts_build::str_lit("; ")],
             ),
         };
-        format!("\"cookie\": {}, ", bynk_ts::print_expr(&value))
+        format!("\"cookie\": {}, ", printed(&value))
     }
+}
+
+/// A driver's expression as the text spliced into its hand-shaped line.
+fn printed(expr: &TsExpr) -> String {
+    bynk_ts::print_expr(expr)
 }
 
 /// #3277: the `Cookie` header the typed system drivers send (a typed record's wire
@@ -1918,7 +1923,9 @@ fn push_session_refusal_drivers(
         ),
     ];
     for (name, pair) in variants {
-        let sign_stmt = crate::ts_build::const_("__cookie", pair);
+        // A raw statement, as before: its text carries no newline, so the next statement
+        // follows on the same line. That layout is pinned by the golden and not changed here.
+        let sign_stmt = TsStmt::raw(format!("const __cookie = {};", printed(&pair)), None);
         routes.push(sysdrive_driver(
             SysdriveKind::typed(name),
             sname,
