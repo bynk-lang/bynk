@@ -1006,18 +1006,42 @@ mod tests {
     use super::*;
     use serde_json::json;
 
+    /// Names that need escaping: a quote, a backslash, the short control escapes,
+    /// a control character with only a `\u00xx` form, and non-ASCII (which
+    /// `serde_json` writes as it is).
+    const AWKWARD: &[&str] = &[
+        "q\"uote",
+        "back\\slash",
+        "tab\tnl\ncr\r",
+        "bell\u{7}\u{1f}",
+        "caf\u{e9} \u{4e2d}\u{1f600}",
+    ];
+
+    fn classes(names: &[&str]) -> Vec<String> {
+        names.iter().map(|c| c.to_string()).collect()
+    }
+
     /// What `serde_json::to_string_pretty` printed for the group listing before
     /// the layout was written by hand: sorted keys, two-space indent, `[]` for
-    /// no classes.
+    /// no classes, and every awkward name escaped the same way (the writer
+    /// reuses `bynk_project::json_string`).
     #[test]
     fn the_group_inspect_listing_is_laid_out_as_pretty_json() {
-        let classes =
-            |names: &[&str]| -> Vec<String> { names.iter().map(|c| c.to_string()).collect() };
-        let (orders, pay) = (classes(&["Counter", "Ledger"]), classes(&[]));
-        let ours = render_inspect_members(&[("shop.orders", &orders), ("shop.pay", &pay)]);
+        let (orders, pay, odd) = (
+            classes(&["Counter", "Ledger"]),
+            classes(&[]),
+            classes(AWKWARD),
+        );
+        let odd_context = AWKWARD.join("/");
+        let ours = render_inspect_members(&[
+            ("shop.orders", &orders),
+            ("shop.pay", &pay),
+            (&odd_context, &odd),
+        ]);
         let theirs = serde_json::to_string_pretty(&json!({ "members": [
             { "context": "shop.orders", "classes": orders },
             { "context": "shop.pay", "classes": pay },
+            { "context": odd_context, "classes": odd },
         ] }))
         .unwrap()
             + "\n";
@@ -1026,19 +1050,19 @@ mod tests {
     }
 
     /// The agents manifest is what `serde_json` printed: contexts and classes in
-    /// order, and a name that needs escaping escaped.
+    /// order, and every awkward name escaped.
     #[test]
     fn the_agents_manifest_is_laid_out_as_pretty_json() {
+        let odd_context = AWKWARD.join("/");
         let agents = BTreeMap::from([
-            (
-                "shop.pay",
-                vec!["Counter".to_string(), "Ledger".to_string()],
-            ),
-            ("shop.\"odd\"", vec!["Tab\t".to_string()]),
+            ("shop.pay", classes(&["Counter", "Ledger"])),
+            (odd_context.as_str(), classes(AWKWARD)),
+            ("\u{e9}clair", classes(&["A"])),
         ]);
         let theirs = serde_json::to_string_pretty(&json!({ "agents": {
             "shop.pay": ["Counter", "Ledger"],
-            "shop.\"odd\"": ["Tab\t"],
+            odd_context.as_str(): AWKWARD,
+            "\u{e9}clair": ["A"],
         } }))
         .unwrap()
             + "\n";
