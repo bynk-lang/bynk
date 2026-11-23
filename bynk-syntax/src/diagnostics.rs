@@ -1467,7 +1467,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     Explain {
         code: "bynk.cron.invalid_schedule",
         blurb: "A cron schedule is Cloudflare's five-field syntax: minute `0-59`, hour `0-23`, day of month `1-31` (also `L` and `W`), month `1-12` or `JAN`-`DEC`, and day of week `1-7` with `1` as Sunday, or `SUN`-`SAT` (also `L` and `#`). `*`, `,`, `-` and `/` work in every field. There are no seconds, no year, no `?` and no `@daily`-style macros. Fields are separated by exactly one space, with none leading or trailing, because Cloudflare hands the handler that exact string back and dispatches on it character for character. Bynk checks all of this at compile time, so a schedule Cloudflare would reject is caught before deploy, not when it silently never runs; the message names the failing field. The same rule is the `Cron` refinement predicate, and `CronSchedule` is the type of a valid schedule. A bad parameter or return type on the handler is `bynk.cron.bad_params` or `bynk.cron.return_not_effect_result`.",
-        example: "on schedule(\"61 * * * *\") () -> Effect[Result[(), String]] { … }   // ✗ minute 61 is outside 0-59\n\non schedule(\"0  3 * * *\") () -> Effect[Result[(), String]] { … }   // ✗ two spaces between the fields\n\non schedule(\"0 3 * * *\") () -> Effect[Result[(), String]] { … }   // ✓ 03:00 UTC every day",
+        example: "on schedule(\"61 * * * *\") () -> Effect[Result[(), String]] { … }   // ✗ minute 61 is outside 0-59\n\non schedule(\"0 3 * * *\") () -> Effect[Result[(), String]] { … }   // ✓ 03:00 UTC every day",
     },
     Explain {
         code: "bynk.cron.numeric_weekday",
