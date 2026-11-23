@@ -18,7 +18,7 @@ use super::query::{
     query_key_cmp, query_keyed, query_other_elem,
 };
 use crate::ts_build::{
-    arrow, binary, block, block_arrow, call, const_typed as const_, expr_stmt, ident, member,
+    arrow, binary, block, block_arrow, call, const_typed, expr_stmt, ident, member,
     method_call as method_call_bare, param, paren, ret, str_lit, strict_neq as ne,
 };
 
@@ -227,9 +227,9 @@ fn lower_store_held_map_call(
                 let c = a;
                 let [k, v] = take(c);
                 async_iife(vec![
-                    const_("__k", None, string_of(k)),
-                    const_("__new", None, call(ident("__connIdOf"), vec![v])),
-                    const_(
+                    const_typed("__k", None, string_of(k)),
+                    const_typed("__new", None, call(ident("__connIdOf"), vec![v])),
+                    const_typed(
                         "__old",
                         None,
                         TsExpr::Await(Box::new(op(&m.node, "get", vec![ident("__k")]))),
@@ -241,7 +241,7 @@ fn lower_store_held_map_call(
                             ne(ident("__old"), ident("__new")),
                         ),
                         vec![
-                            const_("__c", None, resolve_connection(&f_node, ident("__old"))),
+                            const_typed("__c", None, resolve_connection(&f_node, ident("__old"))),
                             close_if_some(),
                         ],
                     ),
@@ -253,8 +253,8 @@ fn lower_store_held_map_call(
                 let c = a;
                 let [k] = take(c);
                 async_iife(vec![
-                    const_("__k", None, string_of(k)),
-                    const_(
+                    const_typed("__k", None, string_of(k)),
+                    const_typed(
                         "__cid",
                         None,
                         TsExpr::Await(Box::new(op(&m.node, "get", vec![ident("__k")]))),
@@ -262,7 +262,7 @@ fn lower_store_held_map_call(
                     if_then(
                         ne(ident("__cid"), undefined()),
                         vec![
-                            const_("__c", None, resolve_connection(&f_node, ident("__cid"))),
+                            const_typed("__c", None, resolve_connection(&f_node, ident("__cid"))),
                             close_if_some(),
                             awaited(op(&m.node, "remove", vec![ident("__k")])),
                         ],
@@ -283,7 +283,7 @@ fn lower_store_held_map_call(
                 let c = a;
                 let [k] = take(c);
                 sync_iife(vec![
-                    const_("__cid", None, op(&m.node, "get", vec![string_of(k)])),
+                    const_typed("__cid", None, op(&m.node, "get", vec![string_of(k)])),
                     ret(TsExpr::Conditional {
                         test: Box::new(ne(ident("__cid"), undefined())),
                         consequent: Box::new(resolve_connection(&f_node, ident("__cid"))),
@@ -371,9 +371,9 @@ fn lower_store_map_call(
                 let c = a;
                 let [k, v] = take(c);
                 async_iife(vec![
-                    const_("__k", None, string_of(k)),
-                    const_("__new", None, v),
-                    const_(
+                    const_typed("__k", None, string_of(k)),
+                    const_typed("__new", None, v),
+                    const_typed(
                         "__old",
                         None,
                         TsExpr::Await(Box::new(op(&m.node, "get", vec![ident("__k")]))),
@@ -410,8 +410,8 @@ fn lower_store_map_call(
                 let c = a;
                 let [k] = take(c);
                 async_iife(vec![
-                    const_("__k", None, string_of(k)),
-                    const_(
+                    const_typed("__k", None, string_of(k)),
+                    const_typed(
                         "__o",
                         None,
                         TsExpr::Await(Box::new(op(&m.node, "get", vec![ident("__k")]))),
@@ -458,7 +458,7 @@ fn lower_store_map_call(
                     alternate: Box::new(ident("None")),
                 };
                 async_iife(vec![
-                    const_("__k", None, string_of(k)),
+                    const_typed("__k", None, string_of(k)),
                     ret(call(
                         ident("__bynkThen"),
                         vec![
@@ -653,7 +653,7 @@ fn lower_store_cache_call(
         // operation reads it once, in its own `const __now`.
         let deps = cx.cap_deps_node();
         let now = || {
-            const_(
+            const_typed(
                 "__now",
                 None,
                 call(
@@ -686,7 +686,7 @@ fn lower_store_cache_call(
                 let [k] = take(c_);
                 async_iife(vec![
                     now(),
-                    const_(
+                    const_typed(
                         "__e",
                         None,
                         TsExpr::Await(Box::new(op(&c.node, "get", vec![string_of(k)]))),
@@ -703,7 +703,7 @@ fn lower_store_cache_call(
                 let [k] = take(c_);
                 async_iife(vec![
                     now(),
-                    const_(
+                    const_typed(
                         "__e",
                         None,
                         TsExpr::Await(Box::new(op(&c.node, "get", vec![string_of(k)]))),
@@ -741,7 +741,7 @@ fn lower_store_cache_call(
                 );
                 async_iife(vec![
                     now(),
-                    const_("__k", None, string_of(k)),
+                    const_typed("__k", None, string_of(k)),
                     awaited(op(&c.node, "modify", vec![ident("__k"), modify])),
                     done(),
                 ])
@@ -758,13 +758,13 @@ fn lower_store_cache_call(
                     vec![param("__e", None)],
                     false,
                     vec![
-                        const_("__cur", None, cur),
+                        const_typed("__cur", None, cur),
                         ret(stamped(apply(f, ident("__cur")), ttl)),
                     ],
                 );
                 async_iife(vec![
                     now(),
-                    const_("__k", None, string_of(k)),
+                    const_typed("__k", None, string_of(k)),
                     awaited(op(&c.node, "modify", vec![ident("__k"), modify])),
                     done(),
                 ])
@@ -814,7 +814,7 @@ fn lower_store_log_call(
                 let c = a;
                 let [v] = take(c);
                 let mut body = vec![
-                    const_("__now", None, now),
+                    const_typed("__now", None, now),
                     awaited(op(&g.node, "append", vec![v, ident("__now")])),
                 ];
                 if let Some(ms) = retain {

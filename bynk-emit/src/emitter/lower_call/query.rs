@@ -19,9 +19,9 @@ use super::super::lower_list::{
 use super::super::ts_types::{TyRender, ts_ty_to_ts_type};
 use super::super::{BaseType, Expr, Ident, RuntimeUse, TyId};
 use crate::ts_build::{
-    arrow, arrow_with, assign, binary, block, call, const_typed as const_, expr_stmt, for_await_of,
-    for_of, ident, let_init as let_, member, method_call as method_call_bare, param, paren, ret,
-    spread, str_lit,
+    arrow, arrow_with, assign, binary, block, call, const_typed, expr_stmt, for_await_of, for_of,
+    ident, let_init as let_, member, method_call as method_call_bare, param, paren, ret, spread,
+    str_lit,
 };
 
 /// v0.100 (real-time track slice 0): lower a `Stream[T]` op over a `source`
@@ -65,7 +65,7 @@ pub(in crate::emitter) fn lower_stream_method(
             let n = kids;
             let [source, count] = take::<2, _>(n);
             let mut body = stream_claim();
-            body.push(const_("__n", None, count));
+            body.push(const_typed("__n", None, count));
             body.push(TsStmt::if_stmt(
                 binary(TsBinaryOp::LessThanEq, ident("__n"), zero()),
                 block(vec![TsStmt::return_stmt(None, None)]),
@@ -95,7 +95,7 @@ pub(in crate::emitter) fn lower_stream_method(
             let n = kids;
             let [source] = take::<1, _>(n);
             let mut body = stream_claim();
-            body.push(const_("__r", None, TsExpr::array(vec![])));
+            body.push(const_typed("__r", None, TsExpr::array(vec![])));
             body.push(for_await_of(
                 "__e",
                 ident("__s"),
@@ -147,7 +147,7 @@ fn stream_claim() -> Vec<TsStmt> {
         index: Box::new(ident("__k")),
     };
     vec![
-        const_(
+        const_typed(
             "__m",
             None,
             TsExpr::As {
@@ -158,7 +158,7 @@ fn stream_claim() -> Vec<TsStmt> {
                 ty: symbol_flags,
             },
         ),
-        const_(
+        const_typed(
             "__k",
             None,
             call(
@@ -328,7 +328,7 @@ pub(in crate::emitter) fn held_values_source(recv: TsExpr, frame: &TsType) -> Ts
         generics: vec![],
         return_type: None,
         body: Box::new(TsArrowBody::Block(vec![
-            const_("__c", None, resolve),
+            const_typed("__c", None, resolve),
             ret(present),
         ])),
     };
@@ -550,7 +550,7 @@ impl Arm<'_> {
                 )],
             )));
             let body = vec![
-                const_("__parts", None, parts),
+                const_typed("__parts", None, parts),
                 ret(method_call_bare(ident("__parts"), "flat", vec![])),
             ];
             thunk_node(o, true, TsArrowBody::Multiline(body))
@@ -668,7 +668,7 @@ impl Arm<'_> {
                 "flatMap",
                 vec![arrow(vec![param("__t", None)], joined)],
             );
-            let body = vec![const_("__b", None, awaited_thunk(other)), ret(flat)];
+            let body = vec![const_typed("__b", None, awaited_thunk(other)), ret(flat)];
             thunk_node(o, true, TsArrowBody::Multiline(body))
         })
     }
@@ -707,7 +707,7 @@ impl Arm<'_> {
                 consequent: Box::new(call(ident("Some"), vec![first_of_a()])),
                 alternate: Box::new(ident("None")),
             };
-            let body = vec![const_("__a", None, q()), ret(found)];
+            let body = vec![const_typed("__a", None, q()), ret(found)];
             terminal_node(o, iife_over_q(false, body))
         })
     }
@@ -723,7 +723,7 @@ impl Arm<'_> {
                 consequent: Box::new(first_of_a()),
                 alternate: Box::new(paren(default)),
             };
-            let body = vec![const_("__a", None, q()), ret(found)];
+            let body = vec![const_typed("__a", None, q()), ret(found)];
             terminal_node(o, iife_over_q(false, body))
         })
     }
@@ -798,13 +798,13 @@ impl Arm<'_> {
             let kernel = |better: TsExpr| {
                 let take_key = TsStmt::if_stmt(better, assign(ident("__m"), ident("__k")), None);
                 let scan = block(vec![
-                    const_("__k", None, applied(key.clone(), ident("__x"))),
+                    const_typed("__k", None, applied(key.clone(), ident("__x"))),
                     take_key,
                 ]);
                 iife_over_q(
                     false,
                     vec![
-                        const_("__a", None, q()),
+                        const_typed("__a", None, q()),
                         TsStmt::if_stmt(
                             binary(TsBinaryOp::StrictEq, member(ident("__a"), "length"), zero()),
                             ret(ident("None")),
@@ -854,7 +854,7 @@ impl Arm<'_> {
                 value: Box::new(applied(key, ident("__x"))),
             });
             let body = vec![
-                const_("__a", None, q()),
+                const_typed("__a", None, q()),
                 TsStmt::if_stmt(
                     binary(TsBinaryOp::StrictEq, member(ident("__a"), "length"), zero()),
                     ret(ident("None")),
@@ -903,7 +903,7 @@ impl Arm<'_> {
                 vec![awaited_apply(f)],
             ));
             let body = vec![
-                const_(
+                const_typed(
                     "__out",
                     Some(TsType::array(res.clone())),
                     TsExpr::array(vec![]),
@@ -928,12 +928,12 @@ impl Arm<'_> {
         let u = list_ok_elem(self.result_ty, self.tys, self.fault_site());
         self.built(|o, [f]| {
             let step = vec![
-                const_("__r", None, awaited_apply(f)),
+                const_typed("__r", None, awaited_apply(f)),
                 bail_on_err(),
                 push_value(),
             ];
             let body = vec![
-                const_(
+                const_typed(
                     "__out",
                     Some(TsType::array(u.clone())),
                     TsExpr::array(vec![]),
@@ -950,8 +950,8 @@ impl Arm<'_> {
         self.built(|o, [f]| {
             let scan = vec![bail_on_err(), push_value()];
             let body = vec![
-                const_("__rs", None, settled(f)),
-                const_(
+                const_typed("__rs", None, settled(f)),
+                const_typed(
                     "__out",
                     Some(TsType::array(u.clone())),
                     TsExpr::array(vec![]),

@@ -14,7 +14,7 @@ use bynk_ts::{
 };
 
 use super::*;
-use crate::ts_build::{binary as compare, call, const_typed as const_of, ident, member, str_lit};
+use crate::ts_build::{binary as compare, call, const_typed, ident, member, str_lit};
 
 impl Gen {
     // -----------------------------------------------------------------
@@ -623,7 +623,7 @@ impl Gen {
         };
         let mut stmts = vec![
             wire_object_stmt("body"),
-            const_of(
+            const_typed(
                 "__form",
                 None,
                 TsExpr::New {
@@ -886,7 +886,7 @@ fn object_of(fields: Vec<(&str, TsExpr)>) -> TsExpr {
 
 /// `const __w_<arg>: { [k: string]: JsonValue } = {};`
 fn wire_object_stmt(arg: &str) -> TsStmt {
-    const_of(
+    const_typed(
         format!("__w_{arg}"),
         Some(TsType::Object(vec![TsTypeMember::index(
             "k",
@@ -921,7 +921,7 @@ fn field_spec(field: &str, wire: Option<String>) -> TsExpr {
 /// `const <local> = __checked(value, decoder, "at"); if (<local>.tag === "Err") return <local>;`
 fn checked_stmts(local: &str, value: TsExpr, decoder: TsExpr, at: &str) -> Vec<TsStmt> {
     vec![
-        const_of(
+        const_typed(
             local,
             None,
             call(ident("__checked"), vec![value, decoder, str_lit(at)]),

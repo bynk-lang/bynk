@@ -16,7 +16,7 @@ use super::super::{Expr, ExprKind, Ident, TypeBody, TypeRef, test_scaffold_ns};
 use super::codec_statics::{DecodeSource, json_decoder_fn};
 use super::cross_context::type_ref_named_root;
 use crate::ts_build::{
-    arrow_with, binary, block_arrow, call, const_typed as const_, expr_stmt, ident, member,
+    arrow_with, binary, block_arrow, call, const_typed, expr_stmt, ident, member,
     num_lit as lit_num, param, paren, ret, str_lit,
 };
 
@@ -343,8 +343,8 @@ pub(in crate::emitter) fn lower_d1_select_call(
             )
         };
         let mut body = vec![
-            const_("__decode", None, decoder),
-            const_(
+            const_typed("__decode", None, decoder),
+            const_typed(
                 "__r",
                 None,
                 TsExpr::Await(Box::new(call(
@@ -368,7 +368,7 @@ pub(in crate::emitter) fn lower_d1_select_call(
         } else {
             member(r(), "value")
         };
-        body.push(const_(
+        body.push(const_typed(
             "__d",
             None,
             call(ident("__decode"), vec![decode_arg]),

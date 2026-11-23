@@ -16,8 +16,8 @@ use super::super::lower_ctx::LowerCtx;
 use super::super::ts_types::ts_ty_to_ts_type;
 use super::super::{BaseType, Expr, TypeBody, TypeRef, ty_to_type_ref};
 use crate::ts_build::{
-    binary, block, call, const_typed as const_, ident, index, member, or_expr as or, param,
-    raw_lit as raw, str_lit, strict_eq,
+    binary, block, call, const_typed, ident, index, member, or_expr as or, param, raw_lit as raw,
+    str_lit, strict_eq,
 };
 
 /// v0.22b: the typed JSON codec (ADR 0045). `encode` dispatches to the
@@ -266,7 +266,7 @@ pub(in super::super) fn json_decoder_fn(
     };
     let mut body = parse;
     body.extend(row_pass);
-    body.push(const_("__r", None, des));
+    body.push(const_typed("__r", None, des));
     body.extend(decode_tail(&ts));
     Some(TsExpr::Arrow {
         params: vec![param("__s", TsType::named("string"))],
@@ -322,12 +322,12 @@ fn json_parse_step() -> Vec<TsStmt> {
 /// __p.value;`.
 fn parsed_result_step(parse: TsExpr) -> Vec<TsStmt> {
     vec![
-        const_("__p", None, parse),
+        const_typed("__p", None, parse),
         if_err(
             strict_eq(member(ident("__p"), "tag"), str_lit("Err")),
             member(ident("__p"), "error"),
         ),
-        const_("__j", Some(json_value_ty()), member(ident("__p"), "value")),
+        const_typed("__j", Some(json_value_ty()), member(ident("__p"), "value")),
     ]
 }
 
@@ -391,7 +391,7 @@ fn decode_tail(ts: &TsType) -> Vec<TsStmt> {
             ),
             None,
         ),
-        const_("__be", None, r("error")),
+        const_typed("__be", None, r("error")),
         return_err(mapped),
     ]
 }
@@ -562,7 +562,7 @@ fn plain_iife(pre: &mut Pre, id: u32, value: TsExpr, ser: TsExpr) -> TsExpr {
     let g = || ident("__g");
     let flag = || member(g(), "__bynkPlainJson");
     let body = vec![
-        const_(
+        const_typed(
             "__g",
             None,
             TsExpr::As {
@@ -573,7 +573,7 @@ fn plain_iife(pre: &mut Pre, id: u32, value: TsExpr, ser: TsExpr) -> TsExpr {
                 )]),
             },
         ),
-        const_("__was", None, flag()),
+        const_typed("__was", None, flag()),
         TsStmt::assign(flag(), TsExpr::Lit(TsLit::Bool(true)), None),
         TsStmt::try_finally(
             block(vec![TsStmt::return_stmt(
@@ -677,11 +677,11 @@ fn sql_bool_pass(t: bynk_check::checker::TyId, cx: &LowerCtx) -> Vec<TsStmt> {
         return_type: Some(TsType::named("void")),
         body: Box::new(TsArrowBody::Multiline(vec![
             skip,
-            const_("__row", None, as_row),
+            const_typed("__row", None, as_row),
             read_flags,
         ])),
     };
-    let mut stmts = vec![const_("__flags", None, flags)];
+    let mut stmts = vec![const_typed("__flags", None, flags)];
     stmts.push(apply_to_rows("__flags"));
     stmts
 }
@@ -732,7 +732,7 @@ fn pg_row_pass(t: bynk_check::checker::TyId, cx: &LowerCtx) -> Vec<TsStmt> {
             vec![ident("__o"), names(&instants), names(&ints)],
         )))),
     };
-    vec![const_("__fix", None, fix), apply_to_rows("__fix")]
+    vec![const_typed("__fix", None, fix), apply_to_rows("__fix")]
 }
 
 #[cfg(test)]

@@ -25,7 +25,7 @@ use super::query::{
     query_other_elem,
 };
 use crate::ts_build::{
-    arrow, binary, call, const_typed as const_, ident, member, param, paren, ret, spread, str_lit,
+    arrow, binary, call, const_typed, ident, member, param, paren, ret, spread, str_lit,
 };
 
 /// `within`, `race` and `detach` on an `Effect[T]` (#2683, #2711, #3437). `None`
@@ -456,7 +456,7 @@ fn lower_effect_result_kernel(
         (false, None) => applied,
     };
     let body = vec![
-        const_("__r", None, TsExpr::Await(Box::new(ident("__e")))),
+        const_typed("__r", None, TsExpr::Await(Box::new(ident("__e")))),
         ret(TsExpr::Conditional {
             test: Box::new(binary(
                 TsBinaryOp::StrictEq,

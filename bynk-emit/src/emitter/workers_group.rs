@@ -24,8 +24,8 @@
 //! known one answers `401` would let an unsigned caller list a group's services.
 
 use crate::ts_build::{
-    arrow_of as arrow, binary, block, call, const_typed as const_, expr_stmt, ident, if_, index,
-    member, method_call, new as new_, num_lit as num, param, paren, ret, str_lit,
+    arrow_of as arrow, binary, block, call, const_typed, expr_stmt, ident, if_, index, member,
+    method_call, new as new_, num_lit as num, param, paren, ret, str_lit,
 };
 use bynk_check::wire_format as wf;
 use bynk_ts::{
@@ -195,7 +195,7 @@ fn prefix_branch(prefix: &str, mut body: Vec<TsStmt>) -> TsStmt {
 /// unauthenticated request for an internal prefix (see the module doc).
 fn unclaimed(entry: &GroupEntry<'_>) -> TsStmt {
     let allow = |method: &str| TsExpr::object(vec![("allow".to_string(), str_lit(method))]);
-    let mut body = vec![const_(
+    let mut body = vec![const_typed(
         "path",
         None,
         member(
@@ -330,7 +330,7 @@ fn dispatch() -> TsStmt {
         "member",
         ident("__members"),
         block(vec![
-            const_(
+            const_typed(
                 "response",
                 None,
                 TsExpr::Await(Box::new(method_call(
@@ -371,7 +371,7 @@ fn dispatch() -> TsStmt {
         ],
         promise(response_ty()),
         vec![
-            const_(
+            const_typed(
                 "held",
                 Some(TsType::array(response_ty())),
                 TsExpr::array(vec![]),
@@ -432,7 +432,7 @@ fn loopback(entry: &GroupEntry<'_>) -> Vec<TsStmt> {
         )]),
     );
     vec![
-        const_(
+        const_typed(
             "__memberBindings",
             Some(TsType::readonly_array(ty("string"))),
             array(&names),
@@ -443,7 +443,7 @@ fn loopback(entry: &GroupEntry<'_>) -> Vec<TsStmt> {
             vec![param("env", ty("unknown")), param("ctx", ty("__Ctx"))],
             ty("unknown"),
             vec![
-                const_(
+                const_typed(
                     "inner",
                     Some(record()),
                     TsExpr::object_entries(vec![TsObjectEntry::Spread(paren(TsExpr::As {
@@ -541,7 +541,7 @@ fn with_allowed() -> TsStmt {
         vec![param("held", TsType::readonly_array(response_ty()))],
         response_ty(),
         vec![
-            const_("first", None, index(ident("held"), num(0))),
+            const_typed("first", None, index(ident("held"), num(0))),
             guard(
                 binary(
                     TsBinaryOp::StrictEq,
@@ -550,8 +550,8 @@ fn with_allowed() -> TsStmt {
                 ),
                 ret(ident("first")),
             ),
-            const_("methods", None, methods),
-            const_(
+            const_typed("methods", None, methods),
+            const_typed(
                 "merged",
                 None,
                 new_response(member(ident("first"), "body"), ident("first")),
@@ -717,12 +717,12 @@ fn email(members: &[(usize, &GroupMember)]) -> TsObjectEntry {
         ],
         Some(promise(ty("void"))),
         vec![
-            const_(
+            const_typed(
                 "to",
                 None,
                 method_call(member(ident("message"), "to"), "toLowerCase", vec![]),
             ),
-            const_(
+            const_typed(
                 "domain",
                 None,
                 method_call(
@@ -735,8 +735,8 @@ fn email(members: &[(usize, &GroupMember)]) -> TsObjectEntry {
                     )],
                 ),
             ),
-            const_("routes", Some(routes_ty), TsExpr::multiline_array(routes)),
-            const_("claimant", None, claimant),
+            const_typed("routes", Some(routes_ty), TsExpr::multiline_array(routes)),
+            const_typed("claimant", None, claimant),
             expr_stmt(TsExpr::Await(Box::new(method_call(
                 claiming,
                 "email",
@@ -874,7 +874,7 @@ fn member_table(members: &[(usize, &GroupMember)]) -> Vec<TsStmt> {
         if !m.addresses.is_empty() {
             handlers.push(ty("__Email"));
         }
-        stmts.push(tight(const_(
+        stmts.push(tight(const_typed(
             format!("__m{i}"),
             Some(TsType::intersection(handlers)),
             ident(format!("__entry{i}")),
@@ -901,7 +901,7 @@ fn member_table(members: &[(usize, &GroupMember)]) -> Vec<TsStmt> {
             ])
         })
         .collect();
-    stmts.push(const_(
+    stmts.push(const_typed(
         "__members",
         Some(row_ty),
         TsExpr::multiline_array(rows),

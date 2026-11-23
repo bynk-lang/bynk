@@ -14,8 +14,8 @@ use super::lower_ctx::LowerCtx;
 use super::ts_types::{TyRender, ts_ty_to_ts_type};
 use super::{BaseType, Expr};
 use crate::ts_build::{
-    arrow, arrow_with, assign, binary, block, block_arrow, call, const_typed as const_, expr_stmt,
-    for_of, ident, let_init, member, method_call, num_lit, param, paren, ret, spread,
+    arrow, arrow_with, assign, binary, block, block_arrow, call, const_typed, expr_stmt, for_of,
+    ident, let_init, member, method_call, num_lit, param, paren, ret, spread,
 };
 
 /// v0.150 (ADR 0174): peel a `traverseTry`/`parTraverseTry` call's checked type
@@ -484,7 +484,7 @@ fn list_traverse_all(a: &ListArm, f: &Expr, pre: &mut Pre, cx: &mut LowerCtx) ->
         let [recv, f] = take(n);
         let push = expr_stmt(method_call(ident("__out"), "push", vec![awaited_apply(f)]));
         let body = vec![
-            const_(
+            const_typed(
                 "__out",
                 Some(TsType::array(res.clone())),
                 TsExpr::array(vec![]),
@@ -559,7 +559,7 @@ fn list_sequence(a: &ListArm, name: ListOp, pre: &mut Pre, cx: &mut LowerCtx) ->
     {
         let n = vec![recv];
         let [recv] = take(n);
-        let ok_decl = const_(
+        let ok_decl = const_typed(
             "__ok",
             Some(TsType::array(ok.clone())),
             TsExpr::array(vec![]),
@@ -591,7 +591,7 @@ fn list_sequence(a: &ListArm, name: ListOp, pre: &mut Pre, cx: &mut LowerCtx) ->
             };
             vec![
                 ok_decl,
-                const_(
+                const_typed(
                     "__errs",
                     Some(TsType::array(err.clone())),
                     TsExpr::array(vec![]),
@@ -641,12 +641,12 @@ fn list_traverse_try(a: &ListArm, f: &Expr, pre: &mut Pre, cx: &mut LowerCtx) ->
         let n = vec![recv, f];
         let [recv, f] = take(n);
         let step = vec![
-            const_("__r", None, awaited_apply(f)),
+            const_typed("__r", None, awaited_apply(f)),
             bail_on_err(),
             push_value(),
         ];
         let body = vec![
-            const_(
+            const_typed(
                 "__out",
                 Some(TsType::array(u.clone())),
                 TsExpr::array(vec![]),
@@ -682,8 +682,8 @@ fn list_par_traverse_try(
         )));
         let scan = vec![bail_on_err(), push_value()];
         let body = vec![
-            const_("__rs", None, settled),
-            const_(
+            const_typed("__rs", None, settled),
+            const_typed(
                 "__out",
                 Some(TsType::array(u.clone())),
                 TsExpr::array(vec![]),
@@ -861,8 +861,8 @@ pub(super) fn distinct_by_body(elem: &TsType, iter: TsExpr, key: TsExpr) -> Vec<
         None,
     );
     vec![
-        const_("__seen", None, seen),
-        const_(
+        const_typed("__seen", None, seen),
+        const_typed(
             "__out",
             Some(TsType::array(elem.clone())),
             TsExpr::array(vec![]),
@@ -870,7 +870,10 @@ pub(super) fn distinct_by_body(elem: &TsType, iter: TsExpr, key: TsExpr) -> Vec<
         for_of(
             "__x",
             iter,
-            block(vec![const_("__k", None, applied(key, ident("__x"))), fresh]),
+            block(vec![
+                const_typed("__k", None, applied(key, ident("__x"))),
+                fresh,
+            ]),
         ),
         ret(ident("__out")),
     ]
@@ -964,8 +967,8 @@ pub(super) fn sort_plain_by(
         ordered(TsBinaryOp::GreaterThan, hi, zero()),
     );
     let body = vec![
-        const_("__ka", None, applied(key.clone(), ident("__a"))),
-        const_("__kb", None, applied(key, ident("__b"))),
+        const_typed("__ka", None, applied(key.clone(), ident("__a"))),
+        const_typed("__kb", None, applied(key, ident("__b"))),
         ret(outcome),
     ];
     let pair = block_arrow(
@@ -1080,7 +1083,7 @@ fn list_min_max(
             let kernel = |better: &dyn Fn() -> TsExpr| {
                 let take_key = TsStmt::if_stmt(better(), assign(ident("__m"), ident("__k")), None);
                 let scan = block(vec![
-                    const_("__k", None, applied(key.clone(), ident("__x"))),
+                    const_typed("__k", None, applied(key.clone(), ident("__x"))),
                     take_key,
                 ]);
                 vec![
@@ -1247,14 +1250,14 @@ pub(super) fn join_body(
         )),
     };
     let fill = block(vec![
-        const_("__k", None, string_of(applied(right, ident("__u")))),
+        const_typed("__k", None, string_of(applied(right, ident("__u")))),
         expr_stmt(method_call(paren(bucket), "push", vec![ident("__u")])),
     ]);
     let matches = TsExpr::Index {
         object: Box::new(ident("__h")),
         index: Box::new(string_of(applied(left, ident("__t")))),
     };
-    let found = const_(
+    let found = const_typed(
         "__m",
         None,
         binary(
@@ -1295,7 +1298,7 @@ pub(super) fn join_body(
         vec![found, ret(result)],
     );
     vec![
-        const_("__h", Some(record_of(u)), create_null()),
+        const_typed("__h", Some(record_of(u)), create_null()),
         for_of("__u", iter, fill),
         ret(probed(probe)),
     ]
@@ -1355,7 +1358,7 @@ fn list_join(
             "flatMap",
             vec![arrow(vec![param("__t", Some(a.elem.clone()))], joined)],
         );
-        let body = vec![const_("__b", Some(xs_ty(&u)), other), ret(flat)];
+        let body = vec![const_typed("__b", Some(xs_ty(&u)), other), ret(flat)];
         iife_block(vec![], false, body, vec![])
     }
 }
@@ -1393,7 +1396,7 @@ pub(super) fn group_by_body(elem: &TsType, iter: TsExpr, key: TsExpr, into: TsEx
         None,
     );
     let partition = block(vec![
-        const_("__k", None, string_of(applied(key.clone(), ident("__t")))),
+        const_typed("__k", None, string_of(applied(key.clone(), ident("__t")))),
         first_seen,
         expr_stmt(method_call(hash_slot(), "push", vec![ident("__t")])),
     ]);
@@ -1405,13 +1408,13 @@ pub(super) fn group_by_body(elem: &TsType, iter: TsExpr, key: TsExpr, into: TsEx
         vec![param("__k", None)],
         false,
         vec![
-            const_("__rows", None, hash_slot()),
+            const_typed("__rows", None, hash_slot()),
             ret(call(paren(into), vec![applied(key, rows), ident("__rows")])),
         ],
     );
     vec![
-        const_("__h", Some(record_of(elem)), create_null()),
-        const_(
+        const_typed("__h", Some(record_of(elem)), create_null()),
+        const_typed(
             "__order",
             Some(TsType::array(TsType::named("string"))),
             TsExpr::array(vec![]),
