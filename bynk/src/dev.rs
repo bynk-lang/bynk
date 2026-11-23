@@ -605,7 +605,7 @@ pub fn run(
     // I2 (#1971): over every built Worker, not only the served ones, so a
     // context served here alone still admits a caller served by another
     // `bynk dev --context` session.
-    let local = match LocalKeys::read(&workers_dir, &available, project_root, &model) {
+    let local = match LocalKeys::read(&workers_dir, &available, &model) {
         Ok(keys) => keys,
         Err(e) => {
             emsg!("bynk: error: {e}");
@@ -651,7 +651,7 @@ pub fn run(
 
     // #3477: a container Worker runs under Docker here, never `--remote`.
     let Some(containers) =
-        crate::dev_containers::for_session(&workers_dir, &serving, &opts.wrangler_args)
+        crate::dev_containers::for_session(&model, &serving, &opts.wrangler_args)
     else {
         return ExitCode::FAILURE;
     };
@@ -695,7 +695,7 @@ pub fn run(
         remote,
         environment: &opts.environment,
     };
-    if !dev_configs.write(Some(&model), true) {
+    if !dev_configs.write(&model, true) {
         return ExitCode::FAILURE;
     }
 
@@ -913,7 +913,7 @@ pub fn run(
                 model = rebuilt;
                 // Interop I5 (#1972): a binding added since start has no
                 // stand-in until `bynk dev` restarts.
-                dev_configs.write(Some(&model), false);
+                dev_configs.write(&model, false);
                 emsg!("bynk dev: rebuilt");
                 emit(opts.format, &DevEvent::RebuildOk);
             } else {
@@ -1022,7 +1022,7 @@ fn bind_dev_vectorize(
     serving: &[Serving],
     remote: bool,
     announce: bool,
-    model: Option<&bynk_emit::emit_model::WorkersBuild>,
+    model: &bynk_emit::emit_model::WorkersBuild,
 ) -> DevVectorize {
     if remote {
         return DevVectorize::Bound;
@@ -2045,11 +2045,10 @@ impl LocalKeys {
     fn read(
         workers_dir: &Path,
         available: &[String],
-        project_root: &Path,
         model: &bynk_emit::emit_model::WorkersBuild,
     ) -> Result<Self, String> {
         Ok(Self {
-            edge: crate::deploy::local_edge_keys(workers_dir, available, project_root, model)?,
+            edge: crate::deploy::local_edge_keys(workers_dir, available, model)?,
             session: crate::deploy::local_session_keys(workers_dir, available, model)?,
         })
     }
@@ -2131,7 +2130,7 @@ impl DevConfigs<'_> {
     /// #3505: every change is made to the generated config, which nothing serves,
     /// and the served [`DEV_CONFIG`] is replaced whole only after the last of
     /// them, so `wrangler dev` never reloads with the deploy's names bound.
-    fn write(&self, model: Option<&bynk_emit::emit_model::WorkersBuild>, announce: bool) -> bool {
+    fn write(&self, model: &bynk_emit::emit_model::WorkersBuild, announce: bool) -> bool {
         dev_config_patches(
             self.project_root,
             self.workers_dir,
@@ -3422,12 +3421,27 @@ mod tests {
         )
         .unwrap();
         std::fs::write(dir.join("wrangler.toml"), generated_shop_config(extra)).unwrap();
-        std::fs::write(
-            dir.join(bynk_emit::emitter::wrangler::VECTORIZE_MANIFEST),
-            "{ \"version\": 1, \"vectorize\": [{ \"binding\": \"VECTORIZE_DOCS\", \"dimensions\": 768, \"metric\": \"cosine\", \"indexed\": [] }] }",
-        )
-        .unwrap();
         (root, workers)
+    }
+
+    /// The build's model for that project: `shop` declares the `Docs` index.
+    fn shop_model() -> bynk_emit::emit_model::WorkersBuild {
+        use bynk_check::worker_bindings::{BindingSource, WorkerBinding};
+        bynk_emit::emit_model::WorkersBuild {
+            bindings: bynk_emit::emitter::WorkerBindings::of_workers(BTreeMap::from([(
+                "shop".to_string(),
+                vec![WorkerBinding {
+                    name: "VECTORIZE_DOCS".to_string(),
+                    source: BindingSource::VectorizeIndex {
+                        capability: "Docs".to_string(),
+                        dimensions: 768,
+                        metric: "cosine".to_string(),
+                        indexed: Vec::new(),
+                    },
+                }],
+            )])),
+            layout: bynk_project::worker_layout::WorkerLayout::identity(),
+        }
     }
 
     fn generated_shop_config(extra: &str) -> String {
@@ -3462,7 +3476,7 @@ mod tests {
             remote: false,
             environment: "default",
         };
-        assert!(configs.write(None, true));
+        assert!(configs.write(&shop_model(), true));
         let served = workers.join("shop").join(DEV_CONFIG);
         let first = std::fs::read_to_string(&served).unwrap();
         assert!(first.contains("index_name = \"docs-dev\""), "{first}");
@@ -3480,7 +3494,7 @@ mod tests {
             "served before the rebind: {between}"
         );
 
-        assert!(configs.write(None, false));
+        assert!(configs.write(&shop_model(), false));
         let after = std::fs::read_to_string(&served).unwrap();
         assert!(after.contains("index_name = \"docs-dev\""), "{after}");
         assert!(!after.contains("shop-docs"), "{after}");
@@ -3504,7 +3518,7 @@ mod tests {
             remote: false,
             environment: "default",
         };
-        assert!(configs.write(None, true));
+        assert!(configs.write(&shop_model(), true));
         // `vars` that is not a table: the binding cannot edit the config.
         std::fs::write(
             workers.join("shop").join("wrangler.toml"),
@@ -3514,7 +3528,7 @@ mod tests {
             ),
         )
         .unwrap();
-        assert!(!configs.write(None, false));
+        assert!(!configs.write(&shop_model(), false));
         let served = std::fs::read_to_string(workers.join("shop").join(DEV_CONFIG)).unwrap();
         assert!(!served.contains("shop-docs"), "{served}");
         assert!(!served.contains("VECTORIZE_DOCS"), "{served}");
@@ -3555,7 +3569,7 @@ mod tests {
             remote: false,
             environment: "default",
         };
-        assert!(configs.write(None, true));
+        assert!(configs.write(&shop_model(), true));
         let served = std::fs::read_to_string(workers.join("shop").join(DEV_CONFIG)).unwrap();
         assert!(
             served.contains("service = \"bynk-stand-in-shop-legacy-billing\""),
