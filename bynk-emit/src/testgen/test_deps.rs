@@ -327,9 +327,19 @@ pub(super) fn emit_test_deps(
                     )),
                 )],
                 None,
-                vec![TsStmt::raw(
-                    "for (const ev of events) await this.Events.emit(ev.payload);",
-                    None,
+                vec![crate::ts_build::for_of(
+                    "ev",
+                    crate::ts_build::ident("events"),
+                    crate::ts_build::expr_stmt(crate::ts_build::await_expr(
+                        crate::ts_build::method_call(
+                            crate::ts_build::member(crate::ts_build::ident("this"), "Events"),
+                            "emit",
+                            vec![crate::ts_build::member(
+                                crate::ts_build::ident("ev"),
+                                "payload",
+                            )],
+                        ),
+                    )),
                 )],
             )
             .inlined(),

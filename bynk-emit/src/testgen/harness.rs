@@ -327,12 +327,40 @@ pub(super) fn emit_integration_harness<'a>(
         },
         None,
     );
-    let mut memo = TsStmt::raw(
-        "let __bynkHarness: ReturnType<typeof __buildHarness> | undefined;\nfunction __makeHarness() {\n  return (__bynkHarness ??= __buildHarness());\n}\n".to_string(),
+    let mut stmts = vec![build];
+    stmts.extend(harness_memo());
+    stmts
+}
+
+/// The per-case memo of the harness: `let __bynkHarness: … | undefined;` and `__makeHarness`, which
+/// builds it on first use. The two sit on consecutive lines, directly after `__buildHarness`.
+fn harness_memo() -> Vec<TsStmt> {
+    use crate::ts_build::{ident, let_typed, paren, ret};
+    let mut slot = let_typed(
+        "__bynkHarness",
+        TsType::union(vec![
+            TsType::named_with_args("ReturnType", vec![TsType::type_of(ident("__buildHarness"))]),
+            TsType::named("undefined"),
+        ]),
+    );
+    let mut make = TsStmt::decl(
+        TsDecl::Function {
+            name: "__makeHarness".to_string(),
+            generics: Vec::new(),
+            params: Vec::new(),
+            return_type: None,
+            body: vec![ret(paren(TsExpr::NullishAssign {
+                target: Box::new(ident("__bynkHarness")),
+                value: Box::new(crate::ts_build::call(ident("__buildHarness"), Vec::new())),
+            }))],
+            is_async: false,
+            inline: false,
+        },
         None,
     );
-    memo.no_blank_before = true;
-    vec![build, memo]
+    slot.no_blank_before = true;
+    make.no_blank_before = true;
+    vec![slot, make]
 }
 
 /// #2138: the harness of a remote run — each participant's binding reaches
@@ -341,24 +369,46 @@ pub(super) fn emit_integration_harness<'a>(
 /// runtime. Memoised per case like the in-process harness, so a case body
 /// lowers identically against either.
 pub(super) fn emit_remote_harness(participants: &[String]) -> Vec<TsStmt> {
-    let mut text = String::from(
-        "function __buildHarness() {\n  const rootEnv: { [binding: string]: __ServiceBinding } = {};\n",
-    );
+    use crate::ts_build::{assign, const_typed, ident, member, ret, str_lit};
+    let mut body = vec![const_typed(
+        "rootEnv",
+        TsType::named("{ [binding: string]: __ServiceBinding }"),
+        TsExpr::object(Vec::new()),
+    )];
     for p in participants {
         let binding = crate::emitter::bindings::service_binding(p).name;
-        let worker = worker_dir_name(p);
-        text.push_str(&format!(
-            "  rootEnv.{binding} = __bynkRemoteBinding({worker:?});\n"
+        body.push(assign(
+            member(ident("rootEnv"), binding),
+            crate::ts_build::call(
+                ident("__bynkRemoteBinding"),
+                vec![str_lit(worker_dir_name(p))],
+            ),
         ));
     }
-    text.push_str("  return { env: rootEnv };\n}\n");
-    text.push_str("let __bynkHarness: ReturnType<typeof __buildHarness> | undefined;\nfunction __makeHarness() {\n  return (__bynkHarness ??= __buildHarness());\n}\n");
-    vec![
+    body.push(ret(TsExpr::object(vec![(
+        "env".to_string(),
+        ident("rootEnv"),
+    )])));
+    let build = TsStmt::decl(
+        TsDecl::Function {
+            name: "__buildHarness".to_string(),
+            generics: Vec::new(),
+            params: Vec::new(),
+            return_type: None,
+            body,
+            is_async: false,
+            inline: false,
+        },
+        None,
+    );
+    let mut stmts = vec![
         TestRuntimeModule::Remote.splice(),
         // #2138 (track §3.6): the `--settle` retry the case bodies use.
         TestRuntimeModule::Settle.splice(),
-        TsStmt::raw(text, None),
-    ]
+        build,
+    ];
+    stmts.extend(harness_memo());
+    stmts
 }
 
 /// Build the [`checker::TypedCommons`] used to lower integration case bodies —
@@ -881,5 +931,26 @@ mod tests {
         assert_eq!(sanitise_suite("a1B2"), "a1b2");
         assert_eq!(sanitise_suite("!!!"), "suite"); // empty after trim -> fallback
         assert_eq!(sanitise_suite(""), "suite");
+    }
+
+    /// No stored golden holds a remote harness, so its text is pinned here: the build, then the
+    /// memo, exactly as they were written as text before they were nodes (1B.5a).
+    #[test]
+    fn the_remote_harness_prints_as_it_always_did() {
+        let stmts = emit_remote_harness(&["shop".to_string(), "pay".to_string()]);
+        let printed: String = stmts[2..]
+            .iter()
+            .map(|s| bynk_ts::print_stmt(s, 0))
+            .collect();
+        let shop = crate::emitter::bindings::service_binding("shop").name;
+        let pay = crate::emitter::bindings::service_binding("pay").name;
+        assert_eq!(
+            printed,
+            format!(
+                "function __buildHarness() {{\n  const rootEnv: {{ [binding: string]: __ServiceBinding }} = {{}};\n  rootEnv.{shop} = __bynkRemoteBinding(\"{}\");\n  rootEnv.{pay} = __bynkRemoteBinding(\"{}\");\n  return {{ env: rootEnv }};\n}}\nlet __bynkHarness: ReturnType<typeof __buildHarness> | undefined;\nfunction __makeHarness() {{\n  return (__bynkHarness ??= __buildHarness());\n}}\n",
+                worker_dir_name("shop"),
+                worker_dir_name("pay"),
+            )
+        );
     }
 }
