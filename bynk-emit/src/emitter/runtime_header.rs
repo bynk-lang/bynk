@@ -1,6 +1,10 @@
 //! The runtime import of a generated module, derived from the module's tree
 //! (1A.36b-1, #3737 Decision A).
 //!
+//! Every module the emitter or the test harness builds derives its header this way: a unit
+//! module since 1A.36b-1, the Worker `index.ts` and `compose.ts` since 1A.36b-2, and the
+//! generated test modules (`tests/*.test.ts`, in [`TEST_ORDER`]) since 1B.5e.
+//!
 //! A module's header used to be guessed before its body existed, by predicates
 //! over the source and flags the producers noted as a side effect, and each
 //! guess had to agree exactly with what the body later spelled. The body is
@@ -20,32 +24,11 @@
 //! runtime export the printed code spells (outside strings and comments) is
 //! imported, so a name only text spells fails there rather than in `tsc`.
 //!
-//! # The gate
-//!
-//! [`derives_runtime_imports`] is the one place that says which modules this
-//! applies to. The driver's `tests/*.test.ts` modules are opaque test text whose
-//! header the driver curates from the same [`RuntimeUse`](super::runtime_use)
-//! notes the emitter once read, so they keep their predicted imports until 1B.5.
-//!
 //! [`split_runtime_import`]: super::runtime_files::split_runtime_import
 
-use bynk_project::UnitKind;
 use bynk_ts::TsStmt;
 
 use super::runtime_files::{is_runtime_export, is_type_only_export};
-
-/// Whether a unit of `kind` takes its runtime import from its tree.
-///
-/// Every kind is listed, so a new one has to be decided. A `Test` or
-/// `Integration` unit is built by `bynk-emit::testgen`, not through the
-/// emitter's header at all; it keeps its predicted imports until 1B.5 and must
-/// not be derived here.
-pub(crate) fn derives_runtime_imports(kind: UnitKind) -> bool {
-    match kind {
-        UnitKind::Commons | UnitKind::Context | UnitKind::Adapter => true,
-        UnitKind::Test | UnitKind::Integration => false,
-    }
-}
 
 /// The order runtime names have always had in a generated import list. A
 /// derived name takes its place here, so the names a module keeps stay in the
@@ -269,6 +252,107 @@ const WORKER_ORDER: &[&str] = &[
     "__requestQuery",
 ];
 
+/// The order runtime names have in a generated test module's import lines (1B.5e, #4054
+/// Decision E). It was read off the import lines the 371 `tests/*.test.ts` goldens had before
+/// their headers were derived, merged into one order that holds every pair those lines showed
+/// but one: `__JsonValue` came before `__BoundaryError` on an integration module's value line
+/// and after it on a unit module's `import type` line, and the integration order is kept (the
+/// ruled reordering of the unit modules). A name it does not list follows, alphabetically.
+const TEST_ORDER: &[&str] = &[
+    "HttpResult",
+    "Ok",
+    "Err",
+    "Some",
+    "None",
+    "Result",
+    "Option",
+    "TestConnection",
+    "ValidationError",
+    "DecodeError",
+    "__BynkKeyMap",
+    "__BynkKeySet",
+    "__DurableObjectNamespace",
+    "__DurableObjectState",
+    "__bynkBytesEqual",
+    "__bynkBytesToBase64",
+    "__bynkBytesFromBase64",
+    "__bynkBytesDecodeUtf8",
+    "__bynkBytesConcat",
+    "__bynkBytesCompare",
+    "__bynkBytesToHex",
+    "__bynkBytesFromHex",
+    "__bynkBytesToBase64Url",
+    "__bynkBytesFromBase64Url",
+    "__bynkCmpBytes",
+    "__bynkCmpDecimal",
+    "__bynkCmpFloat",
+    "__bynkCmpInt",
+    "__bynkCmpList",
+    "__bynkCmpOption",
+    "__bynkCmpRecord",
+    "__bynkCmpString",
+    "__bynkCmpSum",
+    "__bynkDecimalAbs",
+    "__bynkDecimalAdd",
+    "__bynkDecimalDiv",
+    "__bynkDecimalEqual",
+    "__bynkDecimalFromInt",
+    "__bynkDecimalMin",
+    "__bynkDecimalMul",
+    "__bynkDecimalNeg",
+    "__bynkDecimalParse",
+    "__bynkDecimalParseWire",
+    "__bynkDecimalRound",
+    "__bynkDecimalShow",
+    "__bynkDecimalSub",
+    "__bynkDecimalToFloat",
+    "__bynkDecimalToInt",
+    "__bynkDecimalToString",
+    "__bynkDistinctBy",
+    "__bynkEq",
+    "__bynkGroupBy",
+    "__bynkInstantToIso",
+    "__bynkInstantFromIso",
+    "__bynkJoinOn",
+    "__bynkMapInsert",
+    "__bynkSetInsert",
+    "__bynkSetOf",
+    "__bynkSetRemove",
+    "__bynkSettleAll",
+    "__callService",
+    "__JsonValue",
+    "__BoundaryError",
+    "__ServiceBinding",
+    "__makeIntegrationAi",
+    "__makeIntegrationAnalytics",
+    "__makeIntegrationD1",
+    "__makeIntegrationEmail",
+    "__makeIntegrationImages",
+    "__makeIntegrationKv",
+    "__makeIntegrationDoNamespace",
+    "__makeIntegrationQueue",
+    "__makeIntegrationR2",
+    "__makeIntegrationRateLimit",
+    "__makeIntegrationSecretsStoreSecret",
+    "__makeIntegrationVectorize",
+    "__makeIntegrationVersionMetadata",
+    "__makeTestState",
+    "__responseToHttpResult",
+    "__responseToHttpOutcome",
+    "__responseToUnauthOutcome",
+    "__requestHeaders",
+    "__requestCookies",
+    "__requestCookiesHeader",
+    "__requestQuery",
+    "__queryString",
+    "__multipartForm",
+    "__cookieString",
+    "__requestHeaderPairs",
+    "__requestQuerySearch",
+    "__signSessionCookie",
+    "__newSessionKey",
+];
+
 /// The runtime names `stmts` (a module's imports, if it has any besides the
 /// runtime's, and its body) use and do not bind, spelled as an import names
 /// them (`type X` for a type-only export) and in their historical order.
@@ -277,6 +361,11 @@ const WORKER_ORDER: &[&str] = &[
 /// runtime's even where it shares a global's name, so no global hides it.
 pub(crate) fn derived_runtime_names(stmts: &[TsStmt]) -> Vec<String> {
     names_in_order(stmts, |n| ORDER.iter().position(|o| *o == n))
+}
+
+/// [`derived_runtime_names`] for a generated test module (`tests/*.test.ts`), in [`TEST_ORDER`].
+pub(crate) fn derived_test_runtime_names(stmts: &[TsStmt]) -> Vec<String> {
+    names_in_order(stmts, |n| TEST_ORDER.iter().position(|o| *o == n))
 }
 
 /// [`derived_runtime_names`] for a Worker's `index.ts` or `compose.ts`, in [`WORKER_ORDER`].
@@ -442,16 +531,5 @@ mod tests {
             call("None"),
         ]);
         assert_eq!(derived_runtime_names(&stmts), ["None"]);
-    }
-
-    /// 1A.36b-1: the gate. Only the units the emitter's header serves derive
-    /// their imports; the driver's test units keep the imports it predicts.
-    #[test]
-    fn the_driver_test_units_are_gated_off() {
-        assert!(derives_runtime_imports(UnitKind::Commons));
-        assert!(derives_runtime_imports(UnitKind::Context));
-        assert!(derives_runtime_imports(UnitKind::Adapter));
-        assert!(!derives_runtime_imports(UnitKind::Test));
-        assert!(!derives_runtime_imports(UnitKind::Integration));
     }
 }

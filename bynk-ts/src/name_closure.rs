@@ -257,6 +257,17 @@ pub fn text_idents(program: &TsProgram) -> Vec<String> {
     w.text_idents.into_iter().collect()
 }
 
+/// 1B.5e: the text of every opaque statement (`TsStmt::raw`, `raw_using`, a `Verbatim`) in
+/// `stmts`, **at any depth** — inside a function body, a `try`, a switch case or an object
+/// method, not only at the top level. A producer that reads a tree for the names it uses asks
+/// for this to check what the tree cannot see: a shallow `raw_text()` over the top-level
+/// statements alone misses a nested one.
+pub fn raw_statement_texts(stmts: &[TsStmt]) -> Vec<String> {
+    let mut w = Walk::default();
+    w.stmts(stmts);
+    w.raw_texts
+}
+
 /// #2045: each `(specifier, name)` a structured named import brings in as a
 /// value: every entry of an `import { … }` but its `type X` ones, none of an
 /// `import type { … }`. Namespace and opaque-text imports are not reported.
@@ -454,6 +465,9 @@ struct Walk {
     /// other way. A value use of the first and not the second is `TS1361`.
     type_only: BTreeSet<String>,
     value_bound: BTreeSet<String>,
+    /// 1B.5e: the text of every `Raw` or `Verbatim` statement met, at any depth, for
+    /// [`raw_statement_texts`].
+    raw_texts: Vec<String>,
     /// 1A.39b (Decision D): each `TsExpr::Ident` or `TsBindingName::Ident` text that is not an
     /// identifier path (see [`text_idents`]).
     text_idents: BTreeSet<String>,
@@ -938,8 +952,12 @@ impl Walk {
 
     fn stmt(&mut self, stmt: &TsStmt) {
         match &stmt.kind {
-            TsStmtKind::Verbatim { text, .. } => self.opaque(text),
+            TsStmtKind::Verbatim { text, .. } => {
+                self.raw_texts.push(text.clone());
+                self.opaque(text)
+            }
             TsStmtKind::Raw(text, uses) => {
+                self.raw_texts.push(text.clone());
                 self.opaque(text);
                 for n in uses {
                     if !self.in_scope(n) {

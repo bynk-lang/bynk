@@ -16,20 +16,6 @@ use bynk_ts::{
 };
 use std::sync::Arc;
 
-/// The factories [`real_provider_double_factory`] names for `doubles`, each
-/// once, in a fixed order.
-fn real_provider_factories<'a>(
-    doubles: impl Iterator<Item = &'a (String, String, String)>,
-    pglite: bool,
-) -> Vec<String> {
-    doubles
-        .filter_map(|(owner, cap, _)| real_provider_double_factory(owner, cap, pglite))
-        .collect::<BTreeSet<_>>()
-        .into_iter()
-        .map(str::to_string)
-        .collect()
-}
-
 /// The runtime factory of the fake a `bynk.cloudflare` double wraps its real
 /// provider around, for the capabilities whose test double *is* the provider
 /// (P4a #2602: `D1` over in-memory SQLite; #3302: `Email` over an outbox;
@@ -73,7 +59,7 @@ pub(super) fn emit_test_module(
     schema_versions: &HashMap<String, i64>,
     // #2052: the target's own events services' shapes.
     event_shapes: Option<&HashMap<String, bynk_model::EventSubscriberShape>>,
-    // #2050: whether the target's handlers emit ([`target_uses_emit`]).
+    // #2050: whether the target's handlers emit ([`target_emits_events`]).
     uses_emit: bool,
     // P4b (#2608): each `D1` database's migrations.
     d1_migrations: &D1Migrations,
@@ -142,25 +128,7 @@ pub(super) fn emit_test_module(
     // `write_header` already does) and spliced in at this fixed position
     // (index 2, right after the two header comments above) once everything
     // has lowered.
-    let has_agents = unit_tables
-        .get(target_name)
-        .map(|t| !t.agents.is_empty())
-        .unwrap_or(false);
     let runtime_import = emitter::runtime_import_for(&module_path, import_ext);
-    let mut runtime_names: Vec<String> = ["Ok", "Err", "Some", "None"]
-        .iter()
-        .map(|s| s.to_string())
-        .collect();
-    if has_agents {
-        runtime_names.push("__makeTestState".to_string());
-    }
-    runtime_names.push("type Result".to_string());
-    runtime_names.push("type Option".to_string());
-    runtime_names.push("type ValidationError".to_string());
-    // #1883, slice 3: the asset fetch helper answers with an `HttpResult`.
-    if asset_harness.is_some() {
-        runtime_names.push("HttpResult".to_string());
-    }
     let import_idx = stmts.len();
 
     // Compute relative import path from tests/ to the target's output dir.
@@ -176,7 +144,7 @@ pub(super) fn emit_test_module(
 
     // The deps factory, built here for the units its providers name (#1863),
     // which are imported with the consumed contexts below.
-    let uses_send = target_uses_send(target_name, target_kind, unit_tables);
+    let uses_send = target_hands_off_to_exec(target_name, target_kind, unit_tables);
     // #1975: an adapter suite tests its binding, so its factory builds the
     // binding for real; a context's `integration` cases get a second factory
     // that builds each consumed adapter's binding, when that differs.
@@ -269,7 +237,6 @@ pub(super) fn emit_test_module(
             })
             .map(|(owner, _, _)| owner),
     );
-    runtime_names.extend(real_provider_factories(all_doubles(), pglite));
     for unit in &binding_units {
         // P4a (#2602): `bynk.cloudflare`'s binding is first-party, so it is
         // never in `binding_modules` (a test keeps its doubles); the `D1`
@@ -383,13 +350,13 @@ pub(super) fn emit_test_module(
     let uses_advance = indices.iter().any(|&i| {
         parsed[i]
             .test()
-            .is_some_and(|t| t.cases.iter().any(|c| block_uses_advance(&c.body)))
+            .is_some_and(|t| t.cases.iter().any(|c| case_advances_clock(&c.body)))
     });
     // #2138: `run.id`, for a module whose cases read it.
     if indices.iter().any(|&i| {
         parsed[i]
             .test()
-            .is_some_and(|t| t.cases.iter().any(|c| block_uses_run_id(&c.body)))
+            .is_some_and(|t| t.cases.iter().any(|c| case_reads_run_id(&c.body)))
     }) {
         stmts.push(run_id_stmt(false));
     }
@@ -462,7 +429,7 @@ pub(super) fn emit_test_module(
     let uses_observation = indices.iter().any(|&i| {
         parsed[i]
             .test()
-            .is_some_and(|t| t.cases.iter().any(|c| block_uses_observation(&c.body)))
+            .is_some_and(|t| t.cases.iter().any(|c| case_observes(&c.body)))
     });
     if uses_observation {
         let record_types = observation_call_record_types(target_name, unit_tables, unit_uses);
@@ -929,13 +896,10 @@ pub(super) fn emit_test_module(
     }
     stmts.extend(build_run_function(&run_entries));
 
-    // #914: every case/property/stub/attack body above has now lowered, so
-    // `runtime_use` carries whatever it actually reached for — fold that into
-    // the runtime import's own `names` (deduped against the fixed set already
-    // listed) and splice the finished import statement in at its reserved
-    // position, the same ordering `emit_project`'s own deferred `write_header`
-    // relies on.
-    append_runtime_use_imports(&mut runtime_names, runtime_use);
+    // The runtime import is what the finished tree uses (1B.5e, #4054 Decision E): every body
+    // above is a node, or text that names the runtime names it spells (`raw_using`), so the
+    // closure sees each one. It splices in at its reserved position.
+    let runtime_names = emitter::runtime_header::derived_test_runtime_names(&stmts);
     stmts.splice(
         import_idx..import_idx,
         emitter::runtime_files::runtime_import_stmts(false, &runtime_names, &runtime_import),
@@ -1193,8 +1157,10 @@ pub(super) fn event_delivery_helpers(
                                 "eventId".to_string(),
                                 TsExpr::template_lit(
                                     vec!["test-event-".to_string(), String::new()],
-                                    // No pre-increment expression node: the one text hole.
-                                    vec![ident("++__bynkEventSeq")],
+                                    vec![TsExpr::Unary {
+                                        op: bynk_ts::TsUnaryOp::PreIncrement,
+                                        expr: Box::new(ident("__bynkEventSeq")),
+                                    }],
                                 ),
                             ),
                             (
@@ -1240,8 +1206,9 @@ pub(super) fn event_delivery_helpers(
     out
 }
 
-/// #2138: whether a case body reads `run.id` anywhere.
-pub(super) fn block_uses_run_id(block: &Block) -> bool {
+/// #2138: whether a case body reads `run.id` anywhere — the signal to emit the module's
+/// `__bynkRunId` constant. It decides emission, not an import (1B.5e, #4054 Decision G).
+pub(super) fn case_reads_run_id(block: &Block) -> bool {
     let mut found = false;
     let mut check = |e: &Expr| {
         if let ExprKind::FieldAccess { receiver, field } = &e.kind
@@ -1262,8 +1229,10 @@ pub(super) fn block_uses_run_id(block: &Block) -> bool {
     found
 }
 
-/// #2137: whether a case body (or a block nested in it) holds an `advance`.
-pub(super) fn block_uses_advance(b: &Block) -> bool {
+/// #2137: whether a case body (or a block nested in it) holds an `advance` — the signal to
+/// emit the harness clock and the `Clock` double that reads it. It decides emission, not an
+/// import (1B.5e, #4054 Decision G).
+pub(super) fn case_advances_clock(b: &Block) -> bool {
     if b.statements
         .iter()
         .any(|s| matches!(s, bynk_syntax::ast::Statement::Advance(_)))
@@ -1279,14 +1248,14 @@ pub(super) fn block_uses_advance(b: &Block) -> bool {
     for e in exprs {
         bynk_model::walk_exprs(e, &mut |x: &Expr| {
             found |= match &x.kind {
-                ExprKind::Block(inner) => block_uses_advance(inner),
+                ExprKind::Block(inner) => case_advances_clock(inner),
                 ExprKind::If {
                     then_block,
                     else_block,
                     ..
-                } => block_uses_advance(then_block) || block_uses_advance(else_block),
+                } => case_advances_clock(then_block) || case_advances_clock(else_block),
                 ExprKind::Match { arms, .. } => arms.iter().any(|a| {
-                    matches!(&a.body, bynk_syntax::ast::MatchBody::Block(b) if block_uses_advance(b))
+                    matches!(&a.body, bynk_syntax::ast::MatchBody::Block(b) if case_advances_clock(b))
                 }),
                 ExprKind::IntLit { .. } | ExprKind::FloatLit { .. } | ExprKind::DecimalLit { .. } | ExprKind::DurationLit { .. } | ExprKind::StrLit(..) | ExprKind::InterpStr(..) | ExprKind::BoolLit(..) | ExprKind::Ident(..) | ExprKind::Call { .. } | ExprKind::Lambda(..) | ExprKind::BinOp(..) | ExprKind::UnaryOp(..) | ExprKind::Paren(..) | ExprKind::Ok(..) | ExprKind::Err(..) | ExprKind::Question(..) | ExprKind::RecordConstruction { .. } | ExprKind::FieldAccess { .. } | ExprKind::MethodCall { .. } | ExprKind::Is { .. } | ExprKind::Some(..) | ExprKind::None | ExprKind::UnitLit | ExprKind::RecordSpread { .. } | ExprKind::EffectPure(..) | ExprKind::Expect(..) | ExprKind::Val { .. } | ExprKind::Wire(..) | ExprKind::ListLit(..) | ExprKind::Observation(..) | ExprKind::Faults(..) | ExprKind::Trace { .. } => false,
             };
@@ -1299,7 +1268,7 @@ pub(super) fn block_uses_advance(b: &Block) -> bool {
 /// execution context (`detach`, `within` or `race`, directly or through a function it
 /// calls, #2719), so its handlers' `deps` require `__exec` — the same gate the Worker entry and
 /// `compose` thread the request's execution context on.
-pub(super) fn target_uses_send(
+pub(super) fn target_hands_off_to_exec(
     target_name: &str,
     target_kind: UnitKind,
     unit_tables: &HashMap<String, UnitTable>,
@@ -1320,8 +1289,8 @@ pub(super) fn target_uses_send(
 /// `e.within(d)` or `a.race(b)`, directly or through a function it calls
 /// (#2719), so its `deps` carry an execution context whose timers the harness
 /// supplies. A case body that calls such a function directly is read as the
-/// same (see [`target_uses_send`]).
-pub(super) fn target_uses_within(
+/// same (see [`target_hands_off_to_exec`]).
+pub(super) fn target_has_timers(
     target_name: &str,
     target_kind: UnitKind,
     unit_tables: &HashMap<String, UnitTable>,
@@ -1351,7 +1320,7 @@ pub(super) fn module_is_virtual_time(
     stubs: &HashMap<String, ResolvedStub>,
     unit_tables: &HashMap<String, UnitTable>,
 ) -> bool {
-    target_uses_within(target_name, target_kind, unit_tables)
+    target_has_timers(target_name, target_kind, unit_tables)
         || stubs
             .values()
             .any(|rp| rp.clauses.iter().any(stub_takes_time))
@@ -1361,7 +1330,7 @@ pub(super) fn module_is_virtual_time(
 /// — that emits through the first-party `Events`, so the `deps` its handlers
 /// run on require `__eventsDispatch`: the same gate (`unit_table_uses_emit`)
 /// the composition root builds its own dispatch closure on.
-pub(super) fn target_uses_emit(
+pub(super) fn target_emits_events(
     target_name: &str,
     target_kind: UnitKind,
     unit_tables: &HashMap<String, UnitTable>,
@@ -1425,8 +1394,6 @@ fn codec_closure_stmts(
     // The helpers below always name `JsonValue`/`BoundaryError` in their
     // own signatures, regardless of which arm (if any) the case bodies'
     // own `Json.decode`/`Json.encode` calls happened to trip.
-    runtime_use.note_json_codec();
-    runtime_use.note_boundary_codec();
     let qual = runtime_use.json_codec_qual();
     let mut stmts = ser::decls_as_stmts_block(ser::emit_helpers_for_owner_qualified(
         &codec_names,

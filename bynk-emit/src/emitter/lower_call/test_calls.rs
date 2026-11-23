@@ -137,7 +137,6 @@ fn test_deps(cx: &LowerCtx, service: &str, sum_key: Option<&str>) -> DepsArg {
         }
         (_, Some(identity)) => {
             let claims = if sum_key.is_some_and(|k| cx.is_oidc_handler(service, k)) {
-                cx.note_token_claims();
                 Some(
                     cx.call_site_claims
                         .clone()
@@ -384,21 +383,16 @@ impl RawSlots {
         if let Some((at, ty)) = &self.cookies
             && *at == i
         {
-            cx.note_cookie_string();
             return serialised(lowered, ty, Wire::Cookie, cx);
         }
         // #2854: a typed `query` record becomes the query string the raw driver appends to the URL.
         if let Some((at, ty)) = &self.query
             && *at == i
         {
-            cx.note_query_string();
             return serialised(lowered, ty, Wire::Query, cx);
         }
         match &self.body {
-            Some((at, ty)) if *at == i && self.form => {
-                cx.note_query_string();
-                serialised(lowered, ty, Wire::Form, cx)
-            }
+            Some((at, ty)) if *at == i && self.form => serialised(lowered, ty, Wire::Form, cx),
             Some((at, ty)) if *at == i => serialised(lowered, ty, Wire::Json, cx),
             _ => call(id("String"), vec![lowered]),
         }

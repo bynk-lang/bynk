@@ -356,7 +356,7 @@ mod tests {
 
     #[test]
     fn decimal_sign_predicates_print_the_legacy_text() {
-        for recv in ["value", "json", "__v", "json[\"amount\"]"] {
+        for recv in ["value", "json", "__v"] {
             assert_eq!(
                 decimal_cond(&PredKind::NonNegative, recv),
                 format!("({recv}).coefficient >= 0n")
@@ -366,6 +366,23 @@ mod tests {
                 format!("({recv}).coefficient > 0n")
             );
         }
+        // A receiver that is an expression, not a name, goes through
+        // `pred_condition_and_message_over` (an `Ident` holds an identifier path only).
+        let indexed = crate::TsExpr::Index {
+            object: Box::new(crate::TsExpr::Ident("json".to_string())),
+            index: Box::new(crate::TsExpr::Lit(crate::program::TsLit::Str(
+                "amount".to_string(),
+            ))),
+        };
+        let (cond, _) = pred_condition_and_message_over(
+            &PredKind::NonNegative,
+            &indexed,
+            Some(BaseType::Decimal),
+        );
+        assert_eq!(
+            crate::print_expr(&cond),
+            "(json[\"amount\"]).coefficient >= 0n"
+        );
     }
 
     #[test]

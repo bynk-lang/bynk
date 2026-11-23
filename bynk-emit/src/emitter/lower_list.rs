@@ -434,7 +434,6 @@ fn list_for_each(a: &ListArm, f: &Expr, pre: &mut Pre, cx: &mut LowerCtx) -> byn
 // not head-of-line-block the rest. The eager `List` analogue of the
 // `Query.parTraverse` terminal, emitted inline.
 fn list_par_traverse(a: &ListArm, f: &Expr, pre: &mut Pre, cx: &mut LowerCtx) -> bynk_ts::TsExpr {
-    cx.note_settle_all();
     let recv = pre.lower_node(a.receiver, cx);
     let f = pre.lower_node(f, cx);
     {
@@ -497,7 +496,6 @@ fn list_par_traverse_all(
     pre: &mut Pre,
     cx: &mut LowerCtx,
 ) -> bynk_ts::TsExpr {
-    cx.note_settle_all();
     let recv = pre.lower_node(a.receiver, cx);
     let f = pre.lower_node(f, cx);
     {
@@ -659,7 +657,6 @@ fn list_par_traverse_try(
 ) -> bynk_ts::TsExpr {
     let e = a.e;
     let tys = cx.ty_render();
-    cx.note_settle_all();
     let u = list_ok_elem(
         cx.commons().expr_types.get(&e.id).map(|te| te.ty),
         tys,

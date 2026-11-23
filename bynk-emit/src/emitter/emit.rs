@@ -280,9 +280,6 @@ fn emit_refined_type(
         if base == BaseType::Decimal && refinement.is_some() {
             runtime_use.note_decimal("__bynkDecimalToString");
         }
-        for p in refinement.iter().flat_map(|r| &r.predicates) {
-            runtime_use.note_predicate(&p.kind);
-        }
         checks
     };
     let cast_to_name = bynk_ts::TsExpr::As {
@@ -11250,8 +11247,6 @@ pub fn emit_suite_decls(
         // `select[T]` is a `List[T]`, a `firstAs[T]` an `Option[T]`.
         let roots = suite_base_codec_roots(types);
         let (names, insts) = super::serialisation::collect_codec_closure(&roots, &typed.types);
-        runtime_use.note_json_codec();
-        runtime_use.note_boundary_codec();
         stmts.extend(super::serialisation::decls_as_stmts_block(
             super::serialisation::emit_helpers_for_owner_qualified(
                 &names,

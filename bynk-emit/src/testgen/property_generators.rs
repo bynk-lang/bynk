@@ -3,6 +3,7 @@
 //! Crate-hygiene D1 (#2982, PR 2): split out of `tests_emit.rs`.
 
 use super::*;
+use crate::emitter::internal_fault::FaultSite;
 // #1759: every namespace a test module imports, from one definition.
 use bynk_check::checker::Types;
 use bynk_check::test_suites::{self};
@@ -462,6 +463,13 @@ pub(super) fn destructure_vals(
         .collect()
 }
 
+/// A missing checker fact about the named `name`, reported at `site` (1B.5e, Decision G). The
+/// description is built with `concat`, not `format!`: a `format!` line reads as a TypeScript
+/// write to `ts_writes`' text scanner, and this one writes an error message.
+pub(super) fn missing_fact_named(site: FaultSite<'_>, what: &str, name: &str) -> TsExpr {
+    site.missing_fact([what, " `", name, "`"].concat())
+}
+
 /// A TypeScript expression drawing a random inhabitant of a resolved type using
 /// the in-scope `rng` — the property generator (DECISION P: a type is its own
 /// inhabitant space). Sums pick a random variant; records generate every field.
@@ -470,6 +478,7 @@ pub(super) fn gen_ts_for_ty(
     types: &HashMap<String, Arc<TypeDecl>>,
     depth: u32,
     tys: &Arc<Types>,
+    site: FaultSite<'_>,
 ) -> TsExpr {
     if depth == 0 {
         // #1429: a bare `1` here starved `canon_ts_for_ty`'s own recursion
@@ -511,9 +520,9 @@ pub(super) fn gen_ts_for_ty(
         // a small invalid file fast" behaviour this fallback always had
         // for a type the checker never vouched for, not a regression.
         if test_suites::prop_binding_generable(ty, types, test_suites::PROP_GEN_DEPTH, tys) {
-            return canon_ts_for_ty(ty, types, test_suites::PROP_GEN_DEPTH, tys);
+            return canon_ts_for_ty(ty, types, test_suites::PROP_GEN_DEPTH, tys, site);
         }
-        return canon_ts_for_ty(ty, types, 1, tys);
+        return canon_ts_for_ty(ty, types, 1, tys, site);
     }
     match &*tys.get(ty) {
         checker::Ty::Base(BaseType::Int) => {
@@ -536,7 +545,7 @@ pub(super) fn gen_ts_for_ty(
         checker::Ty::Base(b) => base_canon_node(*b),
         checker::Ty::Named { name, .. } => {
             let Some(decl) = types.get(name) else {
-                return ident("undefined");
+                return missing_fact_named(site, "a declaration of the type", name);
             };
             match &decl.body {
                 TypeBody::Refined {
@@ -568,10 +577,14 @@ pub(super) fn gen_ts_for_ty(
                                                     t,
                                                     types,
                                                     tys,
-                                                    gen_ts_for_ty(t, types, depth - 1, tys),
+                                                    gen_ts_for_ty(t, types, depth - 1, tys, site),
                                                 )
                                             })
-                                            .unwrap_or_else(|| ident("undefined"))
+                                            .unwrap_or_else(|| {
+                                                site.missing_fact(
+                                                    "a resolved type for a sum variant's field",
+                                                )
+                                            })
                                     })
                                     .collect();
                                 call(member(ident(name), &v.name.name), args)
@@ -586,7 +599,7 @@ pub(super) fn gen_ts_for_ty(
                         })
                         .collect();
                     if thunks.is_empty() {
-                        ident("undefined")
+                        missing_fact_named(site, "a variant of the sum", name)
                     } else {
                         method_call(ident("rng"), "pick", vec![TsExpr::array(thunks)])
                     }
@@ -605,11 +618,17 @@ pub(super) fn gen_ts_for_ty(
                                         (checker::Ty::Base(b), Some(r)) => {
                                             base_draw_ts(*b, Some(r))
                                         }
-                                        _ => gen_ts_for_ty(t, types, depth - 1, tys),
+                                        _ => gen_ts_for_ty(t, types, depth - 1, tys, site),
                                     };
                                     coerce_int_field(t, types, tys, v)
                                 })
-                                .unwrap_or_else(|| ident("undefined"));
+                                .unwrap_or_else(|| {
+                                    missing_fact_named(
+                                        site,
+                                        "a resolved type for the field",
+                                        &f.name.name,
+                                    )
+                                });
                             (f.name.name.clone(), g)
                         })
                         .collect();
@@ -644,7 +663,10 @@ pub(super) fn gen_ts_for_ty(
         | checker::Ty::Actor(_)
         | checker::Ty::ActorSum(_)
         | checker::Ty::Fn { .. }
-        | checker::Ty::Var(_) => ident("undefined"),
+        | checker::Ty::Var(_) => site.missing_fact(
+            "a generable type for this property binding (the checker refuses one it cannot \
+             generate, `bynk.val.needs_pin`)",
+        ),
     }
 }
 
@@ -656,6 +678,7 @@ pub(super) fn canon_ts_for_ty(
     types: &HashMap<String, Arc<TypeDecl>>,
     depth: u32,
     tys: &Arc<Types>,
+    site: FaultSite<'_>,
 ) -> TsExpr {
     if depth == 0 {
         return ident("undefined");
@@ -668,7 +691,7 @@ pub(super) fn canon_ts_for_ty(
         checker::Ty::Base(b) => base_canon_node(*b),
         checker::Ty::Named { name, .. } => {
             let Some(decl) = types.get(name) else {
-                return ident("undefined");
+                return missing_fact_named(site, "a declaration of the type", name);
             };
             match &decl.body {
                 TypeBody::Refined {
@@ -685,7 +708,7 @@ pub(super) fn canon_ts_for_ty(
                     )
                 }
                 TypeBody::Sum(s) => match s.variants.first() {
-                    None => ident("undefined"),
+                    None => missing_fact_named(site, "a body for the type", name),
                     Some(v) if v.payload.is_empty() => member(ident(name), &v.name.name),
                     Some(v) => {
                         let args: Vec<TsExpr> = v
@@ -698,10 +721,14 @@ pub(super) fn canon_ts_for_ty(
                                             t,
                                             types,
                                             tys,
-                                            canon_ts_for_ty(t, types, depth - 1, tys),
+                                            canon_ts_for_ty(t, types, depth - 1, tys, site),
                                         )
                                     })
-                                    .unwrap_or_else(|| ident("undefined"))
+                                    .unwrap_or_else(|| {
+                                        site.missing_fact(
+                                            "a resolved type for a sum variant's field",
+                                        )
+                                    })
                             })
                             .collect();
                         call(member(ident(name), &v.name.name), args)
@@ -721,11 +748,17 @@ pub(super) fn canon_ts_for_ty(
                                         (checker::Ty::Base(b), Some(r)) => {
                                             base_canon_ts(*b, Some(r))
                                         }
-                                        _ => canon_ts_for_ty(t, types, depth - 1, tys),
+                                        _ => canon_ts_for_ty(t, types, depth - 1, tys, site),
                                     };
                                     coerce_int_field(t, types, tys, v)
                                 })
-                                .unwrap_or_else(|| ident("undefined"));
+                                .unwrap_or_else(|| {
+                                    missing_fact_named(
+                                        site,
+                                        "a resolved type for the field",
+                                        &f.name.name,
+                                    )
+                                });
                             (f.name.name.clone(), g)
                         })
                         .collect();
@@ -760,7 +793,10 @@ pub(super) fn canon_ts_for_ty(
         | checker::Ty::Actor(_)
         | checker::Ty::ActorSum(_)
         | checker::Ty::Fn { .. }
-        | checker::Ty::Var(_) => ident("undefined"),
+        | checker::Ty::Var(_) => site.missing_fact(
+            "a generable type for this property binding (the checker refuses one it cannot \
+             generate, `bynk.val.needs_pin`)",
+        ),
     }
 }
 
@@ -778,8 +814,9 @@ pub(super) fn binding_gen(
     ty: checker::TyId,
     types: &HashMap<String, Arc<TypeDecl>>,
     tys: &Arc<Types>,
+    site: FaultSite<'_>,
 ) -> BindingGen {
-    let gen_ts = gen_ts_for_ty(ty, types, test_suites::PROP_GEN_DEPTH, tys);
+    let gen_ts = gen_ts_for_ty(ty, types, test_suites::PROP_GEN_DEPTH, tys, site);
     let (boundaries, shrink) = match &*tys.get(ty) {
         checker::Ty::Base(BaseType::Int) => {
             let (lo, hi, floor) = int_bounds(None);
@@ -887,17 +924,29 @@ pub(super) fn binding_gen(
                     | BaseType::Instant
                     | BaseType::Bytes
                     | BaseType::Decimal => (
-                        vec![canon_ts_for_ty(ty, types, test_suites::PROP_GEN_DEPTH, tys)],
+                        vec![canon_ts_for_ty(
+                            ty,
+                            types,
+                            test_suites::PROP_GEN_DEPTH,
+                            tys,
+                            site,
+                        )],
                         TsExpr::array(vec![]),
                     ),
                 }
             }
             Some(TypeBody::Sum(_)) => {
-                let canon = canon_ts_for_ty(ty, types, test_suites::PROP_GEN_DEPTH, tys);
+                let canon = canon_ts_for_ty(ty, types, test_suites::PROP_GEN_DEPTH, tys, site);
                 (vec![canon.clone()], TsExpr::array(vec![canon]))
             }
             Some(TypeBody::Record(_)) | None => (
-                vec![canon_ts_for_ty(ty, types, test_suites::PROP_GEN_DEPTH, tys)],
+                vec![canon_ts_for_ty(
+                    ty,
+                    types,
+                    test_suites::PROP_GEN_DEPTH,
+                    tys,
+                    site,
+                )],
                 TsExpr::array(vec![]),
             ),
         },
@@ -1011,6 +1060,15 @@ pub(super) fn gen_descriptor_entry(name: Option<TsExpr>, bg: &BindingGen) -> TsE
 
 #[cfg(test)]
 mod tests {
+    /// A fault site over a throwaway sink: these tests assert what the draw builds, and a
+    /// recorded fault would be the unit's own failure, not theirs.
+    fn fault_site(sink: &crate::emitter::RuntimeUse) -> FaultSite<'_> {
+        FaultSite {
+            sink,
+            span: bynk_syntax::span::Span::default(),
+        }
+    }
+
     use super::super::test_support::{base, named};
     use super::*;
     use bynk_syntax::ast::Trivia;
@@ -1064,7 +1122,11 @@ mod tests {
         let tys = Arc::new(Types::new());
         let int_ty = tys.intern(checker::Ty::Base(BaseType::Int));
         let types: HashMap<String, Arc<TypeDecl>> = HashMap::new();
-        let draw = ident("rng.int(-1000n, 1000n)");
+        let draw = method_call(
+            ident("rng"),
+            "int",
+            vec![TsExpr::bigint("-1000"), TsExpr::bigint("1000")],
+        );
 
         let coerced = coerce_int_field(int_ty, &types, &tys, draw);
         assert_eq!(
@@ -1088,7 +1150,14 @@ mod tests {
             kind: checker::NamedKind::Refined(BaseType::Int),
             args: Vec::new(),
         });
-        let draw = ident("(rng.int(0n, 100n) as any)");
+        let draw = TsExpr::Paren(Box::new(as_expr(
+            method_call(
+                ident("rng"),
+                "int",
+                vec![TsExpr::bigint("0"), TsExpr::bigint("100")],
+            ),
+            any_type(),
+        )));
 
         let coerced = coerce_int_field(pct_ty, &types, &tys, draw);
         assert_eq!(
@@ -1107,7 +1176,14 @@ mod tests {
             kind: checker::NamedKind::Opaque(BaseType::Int),
             args: Vec::new(),
         });
-        let draw = ident("Pct.unsafe(rng.int(0n, 100n))");
+        let draw = call(
+            ident("Pct.unsafe"),
+            vec![method_call(
+                ident("rng"),
+                "int",
+                vec![TsExpr::bigint("0"), TsExpr::bigint("100")],
+            )],
+        );
 
         let coerced = coerce_int_field(pct_ty, &types, &tys, draw);
         assert_eq!(
@@ -1136,7 +1212,7 @@ mod tests {
         let tys = Arc::new(Types::new());
         let string_ty = tys.intern(checker::Ty::Base(BaseType::String));
         let types: HashMap<String, Arc<TypeDecl>> = HashMap::new();
-        let draw = ident("rng.str(0, 8)");
+        let draw = method_call(ident("rng"), "str", vec![num_lit("0"), num_lit("8")]);
 
         let coerced = coerce_int_field(string_ty, &types, &tys, draw);
         assert_eq!(bynk_ts::print_expr(&coerced), "rng.str(0, 8)");
@@ -1216,7 +1292,8 @@ mod tests {
 
         // depth: 0 forces the fallback immediately, the same state
         // `gen_ts_for_ty`'s own recursion reaches once its budget runs out.
-        let generated = gen_ts_for_ty(t_ty, &types, 0, &tys);
+        let sink = crate::emitter::RuntimeUse::default();
+        let generated = gen_ts_for_ty(t_ty, &types, 0, &tys, fault_site(&sink));
         let printed = bynk_ts::print_expr(&generated);
         assert!(
             !printed.contains("undefined"),
@@ -1274,7 +1351,8 @@ mod tests {
         // itself is still checker-validated (via `Plain`), so this isn't
         // testing the depth-0-at-the-top-level case above, only what
         // happens once the *nested*, unvalidated `Bad` field is reached.
-        let generated = gen_ts_for_ty(t_ty, &types, 1, &tys);
+        let sink = crate::emitter::RuntimeUse::default();
+        let generated = gen_ts_for_ty(t_ty, &types, 1, &tys, fault_site(&sink));
         let printed = bynk_ts::print_expr(&generated);
         // A full `PROP_GEN_DEPTH`-deep expansion of `Bad`'s own branching
         // first variant is tens of thousands of characters at minimum

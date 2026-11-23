@@ -311,7 +311,6 @@ pub(super) fn emit_stub_class(
                     );
                     let vname = format!("__pv_{idx}_{i}");
                     body.push(const_(vname.clone(), await_expr(iife(value))));
-                    runtime_use.note_eq();
                     cond_parts.push(call(
                         ident("__bynkEq"),
                         vec![ident(param.name.name.clone()), ident(vname)],
@@ -931,7 +930,7 @@ pub(super) fn stub_overlay(rp: &ResolvedStub, ty: &str, base: Option<TsExpr>) ->
         expr: Box::new(call(
             ident("__bynkOverlay"),
             vec![
-                base.unwrap_or_else(|| ident("undefined")),
+                base.unwrap_or_else(absent),
                 TsExpr::New {
                     callee: Box::new(ident(format!("__Stub_{cap}"))),
                     args,

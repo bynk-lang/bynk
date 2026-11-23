@@ -3,9 +3,9 @@
 
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import { __bynkEq } from "../__bynk_runtime/equality.js";
-import type { ValidationError, DecodeError } from "../__bynk_runtime/errors.js";
-import { __callService, type __JsonValue, type __BoundaryError, type __ServiceBinding } from "../__bynk_runtime/boundary.js";
-import { __responseToHttpResult, __responseToHttpOutcome, __responseToUnauthOutcome, __requestHeaderPairs } from "../__bynk_runtime/http.js";
+import type { DecodeError } from "../__bynk_runtime/errors.js";
+import type { __JsonValue, __BoundaryError, __ServiceBinding } from "../__bynk_runtime/boundary.js";
+import { __responseToHttpResult, __responseToHttpOutcome, __requestHeaderPairs } from "../__bynk_runtime/http.js";
 import * as __ns_api from "../workers/api/handlers.js";
 import worker___ns_api from "../workers/api/index.js";
 import * as __ns_shape_model from "./../shape/model.js";

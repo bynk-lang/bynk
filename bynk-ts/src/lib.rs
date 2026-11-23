@@ -51,8 +51,9 @@ mod source_map;
 pub use await_scan::expr_contains_await;
 pub use lint::{Violation, verbatim_violations};
 pub use name_closure::{
-    ModuleExports, NamespaceMemberUse, module_exports, namespace_member_uses, text_idents,
-    type_only_value_uses, unbound_names, unbound_names_in, unbound_names_providing, value_imports,
+    ModuleExports, NamespaceMemberUse, module_exports, namespace_member_uses, raw_statement_texts,
+    text_idents, type_only_value_uses, unbound_names, unbound_names_in, unbound_names_providing,
+    value_imports,
 };
 pub use predicate::{
     decimal_range_condition, decimal_signed_coef, escape_ts_literal, pred_condition_and_message,

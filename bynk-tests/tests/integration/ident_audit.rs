@@ -7,9 +7,9 @@
 //! the printer, whatever built it; the `ts_text_idents` line probe cannot see an `Ident(` fed from
 //! a variable or a helper, and this test does. It changes no output.
 //!
-//! Every module the emitter or the driver builds is covered bar the test harness's `tests/*.test.ts`
-//! modules, whose text stays predicted until 1B.5 converts it. No text class remains, so a find is
-//! a failure: convert it to the node it spells.
+//! Every module the emitter or the driver builds is covered, the generated test modules
+//! (`tests/*.test.ts`) included since 1B.5e. No text class remains, so a find is a failure:
+//! convert it to the node it spells.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -27,11 +27,6 @@ fn target_name(target: BuildTarget) -> &'static str {
     }
 }
 
-/// A module the driver generates for `test` and `integration test` units: opaque test text.
-fn is_driver_test_module(module: &str) -> bool {
-    module.starts_with("tests/") && module.ends_with(".test.ts")
-}
-
 fn record(
     out: &mut Vec<(String, String)>,
     source: &str,
@@ -46,9 +41,6 @@ fn record(
             .map(|c| c.as_os_str().to_string_lossy())
             .collect::<Vec<_>>()
             .join("/");
-        if is_driver_test_module(&module) {
-            continue;
-        }
         modules += 1;
         for text in bynk_ts::text_idents(program) {
             out.push((format!("{source} [{}] {module}", target_name(target)), text));

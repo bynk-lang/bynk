@@ -14,8 +14,8 @@ use super::super::lower_ctx::LowerCtx;
 use super::super::lower_list::{iife_block, string_of, take};
 use super::super::{BinOp, Expr, ExprKind, Ident, LambdaExpr};
 use super::query::{
-    QueryShape, QuerySource, held_values_source, lower_query_by_name, note_par_fan_out,
-    path_values_source, query_key_cmp, query_keyed, query_other_elem,
+    QueryShape, QuerySource, held_values_source, lower_query_by_name, path_values_source,
+    query_key_cmp, query_keyed, query_other_elem,
 };
 use crate::ts_build::{
     arrow, binary, block, block_arrow, call, const_typed as const_, expr_stmt, ident as id, member,
@@ -111,7 +111,6 @@ fn query_op(
     cx: &mut LowerCtx,
 ) -> bynk_ts::TsExpr {
     let Site { e, method, args } = site;
-    note_par_fan_out(cx, method);
     let tys = cx.ty_render();
     let other_elem = query_other_elem(args, cx);
     lower_query_by_name(

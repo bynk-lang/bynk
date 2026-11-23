@@ -3,6 +3,14 @@
 //! the definer and every reference agree. The names the emitter's case lowering also spells
 //! are in `emitter::harness_names`.
 
+/// The value of a slot the harness genuinely has nothing for: a `stub` with no base provider
+/// to overlay, and a deps factory called outside a named case (1B.5e, #4054 Decision G). It is
+/// a named absent value, not a fallback spelling — a missing checker fact goes through
+/// `FaultSite::missing_fact` instead, and is reported.
+pub(super) fn absent() -> bynk_ts::TsExpr {
+    crate::emitter::internal_fault::undefined_node()
+}
+
 /// A participant's `env_<ns>` binding in the integration harness: the one spelling its
 /// declaration and every reference use (1A.39b, Decision C).
 pub(super) fn env_binding(ns: &str) -> String {

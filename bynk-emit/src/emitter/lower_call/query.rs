@@ -24,18 +24,6 @@ use crate::ts_build::{
     ret, spread, str_lit as str_node,
 };
 
-/// Slice 0b (#2662): the `parTraverse` family joins through `__bynkSettleAll`,
-/// so a module using it needs the import even with no `par` block.
-/// `lower_query_method` has no `cx`, so its callers note it here.
-pub(in crate::emitter) fn note_par_fan_out(cx: &LowerCtx, method: &Ident) {
-    if matches!(
-        method.name.as_str(),
-        "parTraverse" | "parTraverseAll" | "parTraverseTry"
-    ) {
-        cx.note_settle_all();
-    }
-}
-
 /// v0.100 (real-time track slice 0): lower a `Stream[T]` op over a `source`
 /// async-iterable expression. **Builders** (`map`/`take`) wrap the source in a
 /// new async generator — still lazy, still an `AsyncIterable`. The **terminal**

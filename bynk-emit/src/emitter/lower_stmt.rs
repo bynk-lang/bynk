@@ -868,7 +868,6 @@ fn emit_par(body: &mut Body, p: &bynk_syntax::ast::ParStmt, cx: &mut LowerCtx) {
     while pattern.last().is_some_and(String::is_empty) {
         pattern.pop();
     }
-    cx.note_settle_all();
     // T2.2 (R6.4): see the matching note at `EffectLet`.
     cx.emitted_await = true;
     let hoisted = parts.iter().any(|part| !part.pre.is_empty());

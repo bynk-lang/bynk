@@ -222,7 +222,6 @@ pub(in crate::emitter) fn lower_scalar_static_call(
             })
         )
     {
-        cx.note_http_result();
         let args_lowered = lower_http_variant_args(e, args, pre, cx);
         return Some(call_built(
             member_node("HttpResult", &method.name),
@@ -380,7 +379,6 @@ pub(in crate::emitter) fn lower_scalar_static_call(
         && args.len() == 1
     {
         let s = pre.lower_node(&args[0], cx);
-        cx.note_time_ops();
         return Some(runtime_ctor_call(None, "__bynkInstantFromIso", s));
     }
     // v0.90 (ADR 0114): `Instant.fromEpochMillis(n)` — an `Instant` lowers to
@@ -442,12 +440,10 @@ pub(in crate::emitter) fn lower_runtime_value_static_call(
         // #2016: the guarded hex and base64url decodes, `None` on bad input.
         (StaticOp::Bytes(BytesStatic::FromHex), 1) => {
             let s = pre.lower_node(&args[0], cx);
-            cx.note_bytes_ops();
             Some(runtime_ctor_call(None, "__bynkBytesFromHex", s))
         }
         (StaticOp::Bytes(BytesStatic::FromBase64Url), 1) => {
             let s = pre.lower_node(&args[0], cx);
-            cx.note_bytes_ops();
             Some(runtime_ctor_call(None, "__bynkBytesFromBase64Url", s))
         }
         (StaticOp::Bytes(BytesStatic::Empty), 0) => Some(new(global("Uint8Array"), vec![])),
@@ -465,40 +461,33 @@ pub(in crate::emitter) fn lower_runtime_value_static_call(
         // #2380 (L5): `TokenClaims.of(lines)` builds the runtime's claims view.
         (StaticOp::TokenClaims(TokenClaimsStatic::Of), 1) => {
             let xs = pre.lower_node(&args[0], cx);
-            cx.note_token_claims();
             Some(runtime_ctor_call(None, "__tokenClaims", xs))
         }
         // #2341 (L4): `RequestHeaders.of(lines)` / `RequestHeaders.empty()` build
         // the runtime's headers view from `"name: value"` lines.
         (StaticOp::RequestHeaders(RequestHeadersStatic::Of), 1) => {
             let xs = pre.lower_node(&args[0], cx);
-            cx.note_request_headers();
             Some(runtime_ctor_call(None, "__requestHeaders", xs))
         }
         (StaticOp::RequestHeaders(RequestHeadersStatic::Empty), 0) => {
-            cx.note_request_headers();
             Some(call(ident("__requestHeaders"), vec![TsExpr::array(vec![])]))
         }
         // #2854: `RequestQuery.of(pairs)` / `RequestQuery.empty()` build the
         // runtime's query view from `"name=value"` pairs.
         (StaticOp::RequestQuery(RequestQueryStatic::Of), 1) => {
             let xs = pre.lower_node(&args[0], cx);
-            cx.note_request_query();
             Some(runtime_ctor_call(None, "__requestQuery", xs))
         }
         (StaticOp::RequestQuery(RequestQueryStatic::Empty), 0) => {
-            cx.note_request_query();
             Some(call(ident("__requestQuery"), vec![TsExpr::array(vec![])]))
         }
         // #3277: `RequestCookies.of(pairs)` / `RequestCookies.empty()` build the
         // runtime's cookies view from `"name=value"` pairs.
         (StaticOp::RequestCookies(RequestCookiesStatic::Of), 1) => {
             let xs = pre.lower_node(&args[0], cx);
-            cx.note_request_cookies();
             Some(runtime_ctor_call(None, "__requestCookies", xs))
         }
         (StaticOp::RequestCookies(RequestCookiesStatic::Empty), 0) => {
-            cx.note_request_cookies();
             Some(call(ident("__requestCookies"), vec![TsExpr::array(vec![])]))
         }
         // v0.100: `Stream.of(xs)` — the deterministic in-memory source. A `Stream`

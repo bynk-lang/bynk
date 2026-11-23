@@ -21,8 +21,8 @@ use super::kernel_scalar::{
     lower_instant_kernel, lower_int_kernel, lower_string_kernel,
 };
 use super::query::{
-    QueryShape, QuerySource, lower_query_method, lower_stream_method, note_par_fan_out,
-    query_key_cmp, query_keyed, query_other_elem,
+    QueryShape, QuerySource, lower_query_method, lower_stream_method, query_key_cmp, query_keyed,
+    query_other_elem,
 };
 use crate::ts_build::{
     arrow, binary, call, const_typed as const_, ident as id, member, param, paren, ret, spread,
@@ -47,7 +47,6 @@ fn lower_effect_kernel_call(
         // and hands the abandoned effect to the handler's execution
         // context.
         EffectOp::Within if args.len() == 1 => {
-            cx.note_within();
             let recv = pre.lower_node(receiver, cx);
             let after = pre.lower_node(&args[0], cx);
             let exec = cx.exec_node();
@@ -59,7 +58,6 @@ fn lower_effect_kernel_call(
         // #2711: `a.race(b)` takes the first side to succeed and
         // hands the rest to the same execution context, uncancelled.
         EffectOp::Race if args.len() == 1 => {
-            cx.note_race();
             // A chain `a.race(b).race(c)` lowers to one
             // `__bynkRace([a, b, c], …)`: nesting would let `c` beat
             // `a` in a same-instant tie, as the inner race settles a
@@ -194,7 +192,6 @@ pub(in crate::emitter) fn lower_kernel_method_call(
                 let recv = pre.lower_node(receiver, cx);
                 let a: Vec<bynk_ts::TsExpr> = args.iter().map(|x| pre.lower_node(x, cx)).collect();
                 let result_ty = cx.commons().expr_types.get(&e.id).map(|te| te.ty);
-                note_par_fan_out(cx, method);
                 let other_elem = query_other_elem(args, cx);
                 if let Some(built) = lower_query_method(
                     QuerySource::Thunk(recv),

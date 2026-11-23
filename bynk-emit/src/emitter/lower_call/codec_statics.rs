@@ -134,7 +134,6 @@ pub(in super::super) fn lower_json_codec_call(
 
 /// `Form.encode(v)`: the form text a `@form` route reads.
 fn lower_form_encode(arg: &Expr, cx: &mut LowerCtx, pre: &mut Pre) -> TsExpr {
-    cx.runtime_use().note_form_codec();
     // The checker admits only a concrete record of form fields, so the wire
     // value is always available; a miss is a compiler fault, not a user error
     // (1A.34: a missing checker fact, reported at the argument).
@@ -240,7 +239,6 @@ pub(in super::super) fn json_decoder_fn(
     // takes — including the delegating ones, which record nothing. A
     // module that curates its import list (the test-scaffold modules)
     // otherwise emits all three unimported.
-    cx.runtime_use().note_json_codec();
     let des = if rigid {
         call(
             member(cx.codec(t), "decode"),
@@ -264,11 +262,9 @@ pub(in super::super) fn json_decoder_fn(
     // The parse step: `JSON.parse`, or (#3214) the YAML parser, whose failures
     // are already positioned `DecodeError`s.
     let parse = if source == DecodeSource::Form {
-        cx.runtime_use().note_form_codec();
         let specs = form_specs_literal(t, cx)?;
         form_parse_step(specs)
     } else if source == DecodeSource::Yaml {
-        cx.runtime_use().note_yaml();
         yaml_parse_step()
     } else {
         json_parse_step()
@@ -494,8 +490,6 @@ pub(crate) fn eval_value_line(
     };
     // The encoder names `JsonValue` and `BoundaryError`, whether or not the
     // value's type needs a closure of codecs of its own.
-    cx.runtime_use().note_json_codec();
-    cx.runtime_use().note_boundary_codec();
     Some(log(binary(
         TsBinaryOp::Add,
         binary(
@@ -741,7 +735,6 @@ fn pg_row_pass(t: bynk_check::checker::TyId, cx: &LowerCtx) -> Vec<TsStmt> {
     if instants.is_empty() && ints.is_empty() {
         return Vec::new();
     }
-    cx.runtime_use().note_pg_rows();
     let names =
         |names: &[String]| TsExpr::array(names.iter().map(|f| str_node(f.as_str())).collect());
     // `const __fix = (__o: __JsonValue): void => __bynkPgRow(__o, [instants], [ints]);`

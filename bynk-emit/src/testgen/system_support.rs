@@ -319,7 +319,6 @@ pub(super) fn emit_system_http_support(
             // request headers, as an optional trailing driver parameter. They
             // are spread first, so a header the driver sets itself wins.
             let declares_headers = h.params.iter().any(|p| is_headers(&p));
-            runtime_use.note_request_header_pairs();
             let headers_spread = request_headers_spread(declares_headers);
             // A required slot ahead of `sub`: the call lowers `undefined` there
             // when the case sends none.
@@ -369,12 +368,10 @@ pub(super) fn emit_system_http_support(
                     Some(p) => {
                         let var = crate::emitter::ts_ident(&p.name.name);
                         if let bynk_syntax::ast::TypeRef::RequestQuery(_) = &p.type_ref {
-                            runtime_use.note_request_query_search();
                             let s = call(ident("__requestQuerySearch"), vec![ident(var)]);
                             (Some(s.clone()), Some(s))
                         } else {
                             let record = &p.type_ref;
-                            runtime_use.note_query_string();
                             let ser = crate::emitter::serialisation::serialise_expr_via(
                                 record,
                                 &bynk_ts::TsExpr::Ident(var.clone()),
@@ -547,7 +544,7 @@ pub(super) fn emit_system_http_support(
                 h,
                 &table.actors,
                 &secret_read_of,
-                (&mut session_secrets, runtime_use),
+                &mut session_secrets,
                 (&typed_cookie, &raw_cookie),
             );
             // #2864: the secret a `by Forged` / `by Expired` Bearer token is
@@ -622,7 +619,6 @@ pub(super) fn emit_system_http_support(
             };
             let (body_stmts, body_init): (Vec<TsStmt>, Entries) = match body_arg {
                 Some(p) if is_multipart => {
-                    runtime_use.note_multipart_form();
                     let specs: Vec<TsExpr> = crate::emitter::form_body_specs(h, &table.types)
                         .unwrap_or_default()
                         .iter()
@@ -643,23 +639,20 @@ pub(super) fn emit_system_http_support(
                         vec![body_entry(ident("__body"))],
                     )
                 }
-                Some(p) if is_form => {
-                    runtime_use.note_query_string();
-                    (
-                        vec![const_(
-                            "__body",
-                            method_call(
-                                call(
-                                    ident("__queryString"),
-                                    query_string_args(&p.type_ref, serialised(p), &table.types),
-                                ),
-                                "slice",
-                                vec![num_lit("1")],
+                Some(p) if is_form => (
+                    vec![const_(
+                        "__body",
+                        method_call(
+                            call(
+                                ident("__queryString"),
+                                query_string_args(&p.type_ref, serialised(p), &table.types),
                             ),
-                        )],
-                        vec![body_entry(ident("__body"))],
-                    )
-                }
+                            "slice",
+                            vec![num_lit("1")],
+                        ),
+                    )],
+                    vec![body_entry(ident("__body"))],
+                ),
                 Some(p) if raw_type.is_some() && is_stream(&p.type_ref) => {
                     streamed_typed_body(body_ident(p))
                 }
@@ -1556,7 +1549,6 @@ fn cookie_headers(
     // #3277: the raw view sends the header text it was built from (a `Wire`
     // string is the header text itself).
     if matches!(p.type_ref, bynk_syntax::ast::TypeRef::RequestCookies(_)) {
-        runtime_use.note_request_cookies();
         let header = || CookieHeader {
             param: Some(TsExpr::Paren(Box::new(TsExpr::Conditional {
                 test: Box::new(crate::ts_build::strict_eq(
@@ -1572,7 +1564,6 @@ fn cookie_headers(
         };
         return (header(), header());
     }
-    runtime_use.note_cookie_string();
     let ser = crate::emitter::serialisation::serialise_expr_via(
         &p.type_ref,
         &TsExpr::Ident(var.clone()),
@@ -1737,7 +1728,7 @@ fn session_route(
     h: &bynk_syntax::ast::Handler,
     actors: &HashMap<String, bynk_syntax::ast::ActorDecl>,
     secret_read_of: &dyn Fn(&str) -> TsExpr,
-    (session_secrets, runtime_use): (&mut std::collections::BTreeSet<String>, &RuntimeUse),
+    session_secrets: &mut std::collections::BTreeSet<String>,
     (typed_cookie, raw_cookie): (&CookieHeader, &CookieHeader),
 ) -> (Option<SessionDriver>, Entries, Entries, Entries) {
     let Some(seam) = bynk_check::actors::signed_cookie_seam_for(h, actors) else {
@@ -1749,7 +1740,6 @@ fn session_route(
         );
     };
     session_secrets.insert(seam.secret.clone());
-    runtime_use.note_session_signing();
     let session = SessionDriver {
         keys: TsExpr::object(vec![("secret".to_string(), secret_read_of(&seam.secret))]),
         actor: seam.actor,

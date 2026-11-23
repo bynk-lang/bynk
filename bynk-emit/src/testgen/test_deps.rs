@@ -76,7 +76,7 @@ pub(super) fn emit_test_deps(
     // The factory's name: `__makeTestDeps`, or `__makeIntegrationDeps`.
     name: &str,
     // #2050: whether the target's handlers emit, so their `deps` require
-    // `__eventsDispatch` ([`target_uses_emit`]).
+    // `__eventsDispatch` ([`target_emits_events`]).
     uses_emit: bool,
 ) -> TestDeps {
     let mut units: BTreeSet<String> = BTreeSet::new();
@@ -299,7 +299,7 @@ pub(super) fn emit_test_deps(
     // #1994/#2683: the execution context a `detach`-ing handler hands its promise to,
     // plus, on a virtual-time module, the harness's timers (`within` reads them).
     let virtual_time = module_is_virtual_time(target_name, target_kind, stubs, unit_tables);
-    if target_uses_send(target_name, target_kind, unit_tables) {
+    if target_hands_off_to_exec(target_name, target_kind, unit_tables) {
         let exec = call(ident("__bynkExec"), Vec::new());
         entries.push((
             "__exec".to_string(),
@@ -346,22 +346,11 @@ pub(super) fn emit_test_deps(
             .inlined(),
         );
     }
-    // The same `"{  }"` double-space quirk `workers.rs`/`project.rs`/
-    // `emit.rs`/`gen_ts_for_ty` (this file, Arc C slice 31) already carry as
-    // opaque text: the pre-conversion `format!("  return {{ {} }};\n",
-    // entries.join(", "))` template always has a space on each side of its
-    // `{}` slot, so zero entries (a non-`Context` target, or a `Context`
-    // with no capabilities/flattened caps/consumed surface) literally
-    // produced a double space, not the tight `"{}"` `TsExpr::object`'s own
-    // empty-entries shortcut renders — a real, reachable shape (an
-    // integration target's own non-`Context` participants all hit it).
     let case_scoped = stubs.values().any(stub_is_scoped);
     let suite_scoped = stubs.values().any(stub_is_suite_scoped);
-    let return_value = if entries.is_empty() {
-        ident("{  }")
-    } else {
-        TsExpr::object_entries(entries)
-    };
+    // No entries (a non-`Context` target, or a `Context` with no capabilities, flattened caps
+    // or consumed surface) is the empty object, printed `{}` (1B.5e; the ruled 1A.40 class).
+    let return_value = TsExpr::object_entries(entries);
     if virtual_time {
         // #2683: each case builds its `deps` afresh, so this is where the
         // virtual clock, its timers and the in-flight count start over, and

@@ -16,6 +16,14 @@ use bynk_ts::{TsBindingName, TsExpr, TsLit, TsProgram, TsStmt, TsType};
 
 use super::test_runtime_modules::TEST_RUNTIME_MODULES;
 
+/// One row of the generated table: name, sibling modules, runtime names, splice text.
+type TestRuntimeRow = (
+    &'static str,
+    &'static [&'static str],
+    &'static [&'static str],
+    &'static str,
+);
+
 /// One module of the test runtime. Exhaustive: a module added to `runtime/src/testing/` has to be
 /// named here (the `every_module_is_in_the_table_both_ways` test holds the two together).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -113,21 +121,26 @@ impl TestRuntimeModule {
         }
     }
 
-    fn row(self) -> &'static (&'static str, &'static [&'static str], &'static str) {
+    fn row(self) -> &'static TestRuntimeRow {
         TEST_RUNTIME_MODULES
             .iter()
-            .find(|(name, _, _)| *name == self.name())
+            .find(|(name, _, _, _)| *name == self.name())
             .unwrap_or_else(|| panic!("`{}` is not in TEST_RUNTIME_MODULES", self.name()))
     }
 
     /// The module's splice text: exactly what a generated test module embeds.
     pub(super) fn source(self) -> &'static str {
+        self.row().3
+    }
+
+    /// The runtime names the module's text uses (`import`ed from `../*.ts` where it is authored).
+    pub(super) fn runtime_names(self) -> &'static [&'static str] {
         self.row().2
     }
 
     /// The module's text as one statement, ready to splice into a generated test module.
     pub(super) fn splice(self) -> TsStmt {
-        TsStmt::raw(self.source().to_string(), None)
+        TsStmt::raw_using(self.source(), self.runtime_names())
     }
 
     /// The modules this one's text uses names from, which a test module has to splice first.
@@ -222,7 +235,8 @@ mod tests {
     #[test]
     fn every_module_is_in_the_table_both_ways() {
         let enum_names: BTreeSet<&str> = TestRuntimeModule::ALL.iter().map(|m| m.name()).collect();
-        let table_names: BTreeSet<&str> = TEST_RUNTIME_MODULES.iter().map(|(n, _, _)| *n).collect();
+        let table_names: BTreeSet<&str> =
+            TEST_RUNTIME_MODULES.iter().map(|(n, _, _, _)| *n).collect();
         assert_eq!(enum_names, table_names);
         assert_eq!(enum_names.len(), TestRuntimeModule::ALL.len());
         assert_eq!(TestRuntimeModule::ALL.len(), TEST_RUNTIME_MODULES.len());
@@ -232,8 +246,78 @@ mod tests {
     #[test]
     fn all_follows_the_tables_order() {
         let names: Vec<&str> = TestRuntimeModule::ALL.iter().map(|m| m.name()).collect();
-        let table: Vec<&str> = TEST_RUNTIME_MODULES.iter().map(|(n, _, _)| *n).collect();
+        let table: Vec<&str> = TEST_RUNTIME_MODULES.iter().map(|(n, _, _, _)| *n).collect();
         assert_eq!(names, table);
+    }
+
+    /// The identifiers `text` spells as code: string and comment contents are skipped, as is a
+    /// member name after a `.`. A template literal's text is read as code, which can only
+    /// over-report (a spelling inside one would be listed, never missed).
+    fn code_words(text: &str) -> BTreeSet<&str> {
+        let bytes = text.as_bytes();
+        let ident = |b: u8| b.is_ascii_alphanumeric() || b == b'_' || b == b'$';
+        let mut out = BTreeSet::new();
+        let mut i = 0;
+        while i < bytes.len() {
+            match bytes[i] {
+                quote @ (b'"' | b'\'') => {
+                    i += 1;
+                    while i < bytes.len() && bytes[i] != quote {
+                        i += if bytes[i] == b'\\' { 2 } else { 1 };
+                    }
+                    i += 1;
+                }
+                b'/' if bytes.get(i + 1) == Some(&b'/') => {
+                    while i < bytes.len() && bytes[i] != b'\n' {
+                        i += 1;
+                    }
+                }
+                b'/' if bytes.get(i + 1) == Some(&b'*') => {
+                    i += 2;
+                    while i + 1 < bytes.len() && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
+                        i += 1;
+                    }
+                    i += 2;
+                }
+                b if ident(b) => {
+                    let start = i;
+                    while i < bytes.len() && ident(bytes[i]) {
+                        i += 1;
+                    }
+                    if start == 0 || bytes[start - 1] != b'.' {
+                        out.insert(&text[start..i]);
+                    }
+                }
+                _ => i += 1,
+            }
+        }
+        out
+    }
+
+    /// `(module, name)`: a runtime export a fragment spells as a local of its own, which a word
+    /// scan cannot tell from a use (`import_shadow`'s `UNIMPORTED_RUNTIME_OK` has the same entry).
+    const LOCAL_SPELLINGS: &[(&str, &str)] =
+        &[("hmac_signer", "signature"), ("test_filter", "Result")];
+
+    /// Decision C's guard: the runtime names a fragment carries (the column `bundle.mjs` reads
+    /// from its `../*.ts` imports) are the runtime exports its artifact spells, so a fragment
+    /// that starts using `Ok` cannot leave a test module under-importing it.
+    #[test]
+    fn a_fragments_runtime_names_are_the_runtime_exports_it_spells() {
+        for module in TestRuntimeModule::ALL {
+            let listed: BTreeSet<&str> = module.runtime_names().iter().copied().collect();
+            let spelled: BTreeSet<&str> = code_words(module.source())
+                .into_iter()
+                .filter(|w| crate::emitter::runtime_files::is_runtime_export(w))
+                .filter(|w| !LOCAL_SPELLINGS.contains(&(module.name(), *w)))
+                .collect();
+            assert_eq!(
+                listed,
+                spelled,
+                "`{}`: its runtime names differ from the runtime exports its text spells",
+                module.name()
+            );
+        }
     }
 
     /// A fragment is a script: nothing in it imports, and the only line-initial `export` is

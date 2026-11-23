@@ -48,7 +48,7 @@ pub(super) fn emit_test_scope_setup(
     let mut bound: HashSet<String> = ["deps", "__obs"].map(String::from).into();
     let deps_args: Vec<TsExpr> = match suite {
         Some(n) => vec![
-            case_name.map_or_else(|| ident("undefined"), str_lit),
+            case_name.map_or_else(absent, str_lit),
             TsExpr::Lit(TsLit::Num(n.to_string())),
         ],
         None => case_name.map(str_lit).into_iter().collect(),
@@ -541,7 +541,7 @@ pub(super) fn emit_test_case_function(
         unit_uses,
         unit_consumes,
         unit_consumes_aliases,
-        block_uses_observation(&case.body),
+        case_observes(&case.body),
         scoped.then_some(case.name.as_str()),
         suite,
         hidden,
@@ -635,7 +635,7 @@ pub(super) fn emit_test_case_function(
         target_service_handler_kinds(unit_tables.get(target_name)),
         target_sum_handlers(unit_tables.get(target_name)),
         test_agents,
-        target_uses_send(target_name, target_kind, unit_tables),
+        target_hands_off_to_exec(target_name, target_kind, unit_tables),
         harness_bound,
         source,
         rel_path,
@@ -806,18 +806,9 @@ pub(super) fn observation_call_record_types(
                     readonly: false,
                 })
                 .collect();
-            // The same `"{  }"` double-space quirk as elsewhere in this file
-            // (`gen_ts_for_ty`/`canon_ts_for_ty`, Arc C slice 31; `emit_test_deps`
-            // above) — the pre-conversion `format!("type {name} = {{ {} }};\n",
-            // fields.join("; "))` template always has a space on each side of its
-            // `{}` slot, so a zero-param capability op (real and reachable)
-            // literally produced a double space, not the tight `"{}"`
-            // `TsType::Object`'s own empty-members shortcut renders.
-            let ty = if fields.is_empty() {
-                TsType::named("{  }")
-            } else {
-                TsType::Object(fields)
-            };
+            // A zero-param capability op's call record is the empty object type, printed `{}`
+            // (1B.5e; the ruled 1A.40 class `{  }` to `{}`).
+            let ty = TsType::Object(fields);
             stmts.push(TsStmt::decl(
                 TsDecl::TypeAlias {
                     name,

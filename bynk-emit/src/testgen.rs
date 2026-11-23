@@ -66,7 +66,6 @@ use bynk_syntax::ast::{Case, Visibility};
 
 mod case_body;
 mod harness;
-mod imports;
 mod integration_module;
 mod names;
 mod property_generators;
@@ -84,7 +83,6 @@ mod test_runtime_modules;
 pub use self::harness::RunnableTest;
 pub use self::harness::discovery_manifest;
 use self::harness::*;
-use self::imports::*;
 use self::integration_module::*;
 use self::names::*;
 use self::property_generators::*;
@@ -191,7 +189,7 @@ pub fn process_tests(
     // (`emit_project`'s `schema_effective_versions`), for the default envelope
     // of a `svc.event(e)` address.
     schema_versions: &HashMap<String, i64>,
-    // #2050: each unit's resolved callees, for [`target_uses_emit`].
+    // #2050: each unit's resolved callees, for [`target_emits_events`].
     unit_callees: &HashMap<String, HashMap<ExprId, bynk_check::checker::Callee>>,
     // #2052: each events service's shape, for whether `svc.event(e)` forwards the
     // envelope (`EventSubscriberShape::wants_envelope`).
@@ -272,7 +270,7 @@ pub fn process_tests(
             binding_modules,
             schema_versions,
             unit_event_subscriber_shapes.get(target_name),
-            target_uses_emit(
+            target_emits_events(
                 target_name,
                 target_kind,
                 unit_tables,
