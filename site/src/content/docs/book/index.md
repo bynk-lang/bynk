@@ -7,8 +7,8 @@ title: The Bynk Book
 > are marked as planned rather than described as if they exist. See
 > [Versioning & roadmap](/project/versioning-and-roadmap/).
 >
-> v0.640 can be ahead of the latest release, which is what an install gives
-> you. [Releases](/reference/releases/) lists each release, and
+> This version can be ahead of the latest release, which is what an install
+> gives you. [Releases](/reference/releases/) lists each release, and
 > [Unreleased](/reference/releases/unreleased/) what has changed since the
 > latest one.
 
