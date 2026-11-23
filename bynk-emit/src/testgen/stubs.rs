@@ -1644,10 +1644,9 @@ fn double_uses(owner: &str, cap: &str, harness_clock: bool, pglite: bool) -> Vec
     match (owner, cap) {
         ("bynk", "Clock") if harness_clock => vec!["__bynkClockNow", "__bynkClock"],
         ("bynk", "Secrets") | ("bynk.cloudflare", "Version") => vec!["None"],
-        ("bynk", "Idempotency") => clock(vec!["Err", "None", "Some"]),
+        ("bynk", "Idempotency") => clock(Vec::new()),
         ("bynk.cloudflare", "Kv") => clock(vec!["None", "Some"]),
         ("bynk.cloudflare", "R2") => vec!["None", "Some"],
-        ("bynk.cloudflare", "Queue") | ("bynk.cloudflare", "Analytics") => vec!["Some"],
         ("bynk.cloudflare", "RateLimit") => clock(Vec::new()),
         ("bynk.crypto", "Crypto") => vec!["bynk_crypto__binding"],
         ("bynk.testing", "TypedReads") => vec!["bynk_testing__binding"],
@@ -1681,4 +1680,129 @@ pub(super) fn env_secrets_double(owner: &str, cap: &str, ns: &str, name: &str) -
         "  return {\n    async get(key) {\n      const v = __bynkEnv[key];\n      return v === undefined ? None : Some(v);\n    },\n  };\n".to_string(),
         &["None", "Some", "__bynkEnv"],
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::BTreeSet;
+
+    /// The `(owner, capability)` pairs [`platform_double`] has a double for.
+    const DOUBLES: &[(&str, &str)] = &[
+        ("bynk", "Logger"),
+        ("bynk", "Events"),
+        ("bynk", "Clock"),
+        ("bynk", "Random"),
+        ("bynk.crypto", "Crypto"),
+        ("bynk.testing", "TypedReads"),
+        ("bynk", "Secrets"),
+        ("bynk", "Locale"),
+        ("bynk", "Fetch"),
+        ("bynk", "Idempotency"),
+        ("bynk.cloudflare", "Kv"),
+        ("bynk.cloudflare", "R2"),
+        ("bynk.cloudflare", "RateLimit"),
+        ("bynk.cloudflare", "EdgeCache"),
+        ("bynk.cloudflare", "Queue"),
+        ("bynk.cloudflare", "Analytics"),
+        ("bynk.cloudflare", "D1"),
+        ("bynk.cloudflare", "Email"),
+        ("bynk.cloudflare", "Postgres"),
+        ("bynk.cloudflare", "MySql"),
+        ("bynk.cloudflare", "Version"),
+        ("bynk.cloudflare", "Ai"),
+        ("bynk.cloudflare", "Images"),
+        ("bynk.cloudflare", "AnalyticsSql"),
+        ("bynk.cloudflare", "Vectorize"),
+        ("bynk.cloudflare", "AiSearch"),
+        ("bynk.cloudflare", "MtlsCertificate"),
+        ("bynk.cloudflare", "Container"),
+        ("bynk.cloudflare", "StoredSecret"),
+        ("bynk.cloudflare", "Service"),
+    ];
+
+    /// The runtime and sibling names a double's text spells: the result variants, `__bynk…` and
+    /// `__make…` helpers and `…__binding` namespaces, outside strings, templates and comments.
+    fn spelled_names(text: &str) -> BTreeSet<String> {
+        let bytes = text.as_bytes();
+        let mut names = BTreeSet::new();
+        let mut i = 0;
+        while i < bytes.len() {
+            match bytes[i] {
+                b'/' if bytes.get(i + 1) == Some(&b'/') => {
+                    while i < bytes.len() && bytes[i] != b'\n' {
+                        i += 1;
+                    }
+                }
+                q @ (b'"' | b'`') => {
+                    i += 1;
+                    while i < bytes.len() && bytes[i] != q {
+                        i += if bytes[i] == b'\\' { 2 } else { 1 };
+                    }
+                    i += 1;
+                }
+                c if c.is_ascii_alphabetic() || c == b'_' || c == b'$' => {
+                    let start = i;
+                    while i < bytes.len()
+                        && (bytes[i].is_ascii_alphanumeric()
+                            || bytes[i] == b'_'
+                            || bytes[i] == b'$')
+                    {
+                        i += 1;
+                    }
+                    let word = &text[start..i];
+                    if matches!(word, "Some" | "None" | "Ok" | "Err")
+                        || word.starts_with("__bynk")
+                        || word.starts_with("__make")
+                        || word.ends_with("__binding")
+                    {
+                        names.insert(word.to_string());
+                    }
+                }
+                _ => i += 1,
+            }
+        }
+        names
+    }
+
+    /// A double's declared names are the names its body spells. The list is written beside the
+    /// body text, so this is what stops an edit to one from leaving the other behind.
+    #[test]
+    fn a_platform_double_declares_the_names_its_body_spells() {
+        let no_files: &[MigrationFile] = &[];
+        for &(owner, cap) in DOUBLES {
+            for harness_clock in [false, true] {
+                for pglite in [false, true] {
+                    let migrations = pglite.then_some(no_files);
+                    let def = platform_double(owner, cap, "ns", "X", harness_clock, migrations)
+                        .unwrap_or_else(|| panic!("no double for {owner}.{cap}"));
+                    let printed = bynk_ts::print_stmt(&def, 0);
+                    // Drop the declaration's own header line, which names `__bynkTest_X`.
+                    let body = printed.split_once('\n').map_or("", |(_, rest)| rest);
+                    let declared: BTreeSet<String> = double_uses(owner, cap, harness_clock, pglite)
+                        .into_iter()
+                        .map(str::to_string)
+                        .collect();
+                    assert_eq!(
+                        spelled_names(body),
+                        declared,
+                        "{owner}.{cap} (clock {harness_clock}, pglite {pglite})"
+                    );
+                }
+            }
+        }
+    }
+
+    /// The `Secrets` double that answers from a case's `env` declares what it spells.
+    #[test]
+    fn the_env_secrets_double_declares_the_names_it_spells() {
+        let def = env_secrets_double("bynk", "Secrets", "ns", "X").expect("a Secrets double");
+        let printed = bynk_ts::print_stmt(&def, 0);
+        let body = printed.split_once('\n').map_or("", |(_, rest)| rest);
+        let declared: BTreeSet<String> = ["None", "Some", "__bynkEnv"]
+            .into_iter()
+            .map(str::to_string)
+            .collect();
+        assert_eq!(spelled_names(body), declared);
+    }
 }
