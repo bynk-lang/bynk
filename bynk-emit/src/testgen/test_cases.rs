@@ -9,10 +9,7 @@ use crate::emitter::emit::test_scaffold_ns as test_ns;
 use bynk_check::checker::Types;
 use bynk_check::test_suites::{self, ResolvedStub, StubScope};
 use bynk_syntax::ast::{Case, FnName};
-use bynk_ts::{
-    SourceMapBuilder, TsBinaryOp, TsBindingName, TsDecl, TsExpr, TsLit, TsStmt, TsType,
-    TsTypeMember,
-};
+use bynk_ts::{TsBinaryOp, TsBindingName, TsDecl, TsExpr, TsLit, TsStmt, TsType, TsTypeMember};
 use std::sync::Arc;
 
 /// Emit the shared per-runner scope setup — agent reset, the `deps` factory, and
@@ -21,7 +18,7 @@ use std::sync::Arc;
 /// `property` runners so a property body resolves names exactly as a case does.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_test_scope_setup(
-    out: &mut String,
+    out: &mut Vec<TsStmt>,
     // #1975: the deps factory the case calls (`__makeTestDeps`, or the
     // `integration` tier's `__makeIntegrationDeps`).
     deps_factory: &str,
@@ -67,7 +64,7 @@ pub(super) fn emit_test_scope_setup(
             method_call(ident(target_ns.clone()), "__resetAgents", Vec::new()),
             None,
         );
-        out.push_str(&bynk_ts::print_stmt(&stmt, 2));
+        out.push(stmt);
     }
     // v0.117: the per-case recorded-call trace, and — for a context target with
     // capabilities — a `deps` wrapped so each capability operation records its
@@ -141,7 +138,7 @@ pub(super) fn emit_test_scope_setup(
                 ]),
                 None,
             );
-            out.push_str(&bynk_ts::print_stmt(&obs_stmt, 2));
+            out.push(obs_stmt);
             let deps_stmt = TsStmt::const_stmt(
                 TsBindingName::Ident("deps".to_string()),
                 None,
@@ -155,7 +152,7 @@ pub(super) fn emit_test_scope_setup(
                 ),
                 None,
             );
-            out.push_str(&bynk_ts::print_stmt(&deps_stmt, 2));
+            out.push(deps_stmt);
         } else {
             let deps_stmt = TsStmt::const_stmt(
                 TsBindingName::Ident("deps".to_string()),
@@ -163,7 +160,7 @@ pub(super) fn emit_test_scope_setup(
                 call(ident(deps_factory), deps_args.clone()),
                 None,
             );
-            out.push_str(&bynk_ts::print_stmt(&deps_stmt, 2));
+            out.push(deps_stmt);
         }
     } else {
         let deps_stmt = TsStmt::const_stmt(
@@ -172,7 +169,7 @@ pub(super) fn emit_test_scope_setup(
             TsExpr::object(vec![]),
             None,
         );
-        out.push_str(&bynk_ts::print_stmt(&deps_stmt, 2));
+        out.push(deps_stmt);
     }
     // Bring the target's top-level names into local scope so the lowered
     // body can reference them unqualified. The target's types and fns are
@@ -181,11 +178,7 @@ pub(super) fn emit_test_scope_setup(
         let names = target_scope_names(table);
         let type_names = aliased_types(table, |_| true);
         bound.extend(names.iter().cloned());
-        crate::testgen::case_body::extend_printed_at(
-            out,
-            emit_ns_destructure(&target_ns, &names, &type_names),
-            2,
-        );
+        out.extend(emit_ns_destructure(&target_ns, &names, &type_names));
     }
     // Bring in `uses` commons names too — the target's body can use them.
     let (_, target_values) = target_names(target_name, unit_tables);
@@ -194,15 +187,11 @@ pub(super) fn emit_test_scope_setup(
         used_commons_destructures(target_name, unit_tables, unit_uses, &mut seen_assets)
     {
         bound.extend(names.iter().cloned());
-        crate::testgen::case_body::extend_printed_at(
-            out,
-            emit_ns_destructure(&ns, &names, &type_names),
-            2,
-        );
+        out.extend(emit_ns_destructure(&ns, &names, &type_names));
     }
     // #1814: the types the target's view reaches but does not import, from
     // their owning commons (imported by `emit_test_module`).
-    extend_hidden_destructures(out, &hidden_by_owner(hidden), unit_tables);
+    out.extend(hidden_destructures(&hidden_by_owner(hidden), unit_tables));
     bound.extend(hidden.keys().cloned());
     // Bring consumed-context exported names into scope, plus a `Payment`
     // alias for the consumed surface (so `Payment.authorise.call(...)` works).
@@ -245,11 +234,9 @@ pub(super) fn emit_test_scope_setup(
                     .cloned()
                     .collect();
                 bound.extend(declared.iter().cloned());
-                crate::testgen::case_body::extend_printed_at(
-                    out,
-                    emit_ns_destructure_renamed(&ns, &names, &types, &renames, &declared),
-                    2,
-                );
+                out.extend(emit_ns_destructure_renamed(
+                    &ns, &names, &types, &renames, &declared,
+                ));
                 // #1883 (review of #1923): a consumed context's content-hashed
                 // assets, which the target's Worker ships too (its fixed paths
                 // stay with its own Worker, and are not nameable).
@@ -263,11 +250,7 @@ pub(super) fn emit_test_scope_setup(
                 hashed.sort();
                 bound.extend(hashed.iter().cloned());
                 if !hashed.is_empty() {
-                    crate::testgen::case_body::extend_printed_at(
-                        out,
-                        emit_ns_destructure(&ns, &hashed, &[]),
-                        2,
-                    );
+                    out.extend(emit_ns_destructure(&ns, &hashed, &[]));
                 }
             }
             // An `adapter` target has no `__makeSurface`/`deps.surface` entry —
@@ -303,52 +286,24 @@ pub(super) fn emit_test_scope_setup(
                 },
                 None,
             );
-            out.push_str(&bynk_ts::print_stmt(&alias_stmt, 2));
+            out.push(alias_stmt);
             bound.insert(key);
         }
     }
     bound
 }
 
-/// #1484: the `async function {name}() { ... }` wrapper every test-generation
-/// runner shares (`emit_test_case_function`/`emit_test_property_function`/
-/// `emit_test_history_property_function`/`emit_contract_attack_function`, and
-/// `emit_integration_module`'s own inline case wrapper) — no return type
-/// annotation, no generics, no params, never exported. One shared
-/// construction (a real [`TsDecl::Function`]) instead of five separate
-/// `format!("async function {name}() {{\n")` hand-templates.
-///
-/// `body_text` is the function's own already-fully-formed inner content —
-/// everything between the wrapper's own opening and closing braces (a
-/// `try`/`catch`, or a flat sequence of statements ending in a `return`),
-/// carried as one opaque [`TsStmt::raw`] and not decomposed further: it mixes
-/// real node prints (`bynk_ts::print_stmt` calls already scattered through
-/// each caller) with genuinely-opaque lowered bodies (`lower.rs`'s permanent
-/// exclusion, ADR 0391) at depths this track's own established convention
-/// for these files uses, so decomposing the wrapper's *interior* into a
-/// fully real tree per site would risk silently changing that convention's
-/// baked-in indentation — the `TsDecl::Function`/`Raw`-body combination
-/// `emit_free_fn` (#1480) already established for exactly this reason.
-/// `nested_map`, when `Some`, is the one real per-case source map this
-/// track still merges (`emit_test_case_function`'s own `case_smb`/
-/// `emit_integration_module`'s own inline case) — every other caller's own
-/// body map is already a deliberate, pre-existing scope cut (property/
-/// history-property/contract-attack bodies are collaborator-free predicate
-/// scaffolding), unchanged by this conversion.
-pub(super) fn async_test_runner_fn(
-    name: &str,
-    body_text: String,
-    nested_map: Option<SourceMapBuilder>,
-) -> TsStmt {
-    let mut raw_body = TsStmt::raw(body_text, None);
-    raw_body.nested_map = nested_map;
+/// The `async function {name}() { … }` wrapper of a runner built as statements (1B.5b): no return
+/// type, generics or parameters, never exported. The statements' own spans give the case's source
+/// map; the module sets the function's `nested_map_source_id` to the case's source.
+pub(super) fn async_runner_fn(name: &str, body: Vec<TsStmt>) -> TsStmt {
     TsStmt::decl(
         TsDecl::Function {
             name: name.to_string(),
             generics: Vec::new(),
             params: Vec::new(),
             return_type: None,
-            body: vec![raw_body],
+            body,
             is_async: true,
             inline: false,
         },
@@ -412,19 +367,32 @@ pub(super) fn suite_late_codecs(
     runtime_use: &RuntimeUse,
     mark: usize,
 ) -> String {
+    let mut printed = String::new();
+    case_body::extend_printed_at(
+        &mut printed,
+        suite_late_codec_stmts(suite_fns, typed, runtime_use, mark),
+        0,
+    );
+    reindent_by(&printed, "    ")
+}
+
+/// [`suite_late_codecs`] as statements.
+pub(super) fn suite_late_codec_stmts(
+    suite_fns: test_suites::SuiteItems<'_>,
+    typed: &checker::TypedCommons,
+    runtime_use: &RuntimeUse,
+    mark: usize,
+) -> Vec<TsStmt> {
     if suite_fns.types.is_empty() {
-        return String::new();
+        return Vec::new();
     }
-    let late = emitter::emit_suite_late_codecs(
+    emitter::emit_suite_late_codecs(
         suite_fns.types,
         typed,
         &runtime_use.json_codec_qual(),
         runtime_use,
         &runtime_use.json_codec_roots_since(mark),
-    );
-    let mut printed = String::new();
-    case_body::extend_printed_at(&mut printed, late, 0);
-    reindent_by(&printed, "    ")
+    )
 }
 
 /// #2834: the suite's helper `fn`s as local function declarations, for a runner
@@ -442,9 +410,9 @@ pub(super) fn suite_fn_decls(
     runtime_use: &RuntimeUse,
     bound: &mut HashSet<String>,
     tys: &Arc<Types>,
-) -> String {
+) -> Vec<TsStmt> {
     if suite_fns.is_empty() {
-        return String::new();
+        return Vec::new();
     }
     let mut errs: Vec<CompileError> = Vec::new();
     // The fixtures are constants in the view the helpers are checked in.
@@ -495,26 +463,23 @@ pub(super) fn suite_fn_decls(
         typed.consts.insert(c.name.name.clone(), c.clone());
         bound.insert(c.name.name.clone());
     }
-    let mut out = String::new();
+    let mut stmts: Vec<TsStmt> = Vec::new();
     if !suite_fns.types.is_empty() || !suite_fns.consts.is_empty() {
-        let decls = emitter::emit_suite_decls(
+        stmts.extend(emitter::emit_suite_decls(
             suite_fns.types,
             suite_fns.consts,
             typed,
             &runtime_use.json_codec_qual(),
             runtime_use,
-        );
-        let mut printed = String::new();
-        case_body::extend_printed_at(&mut printed, decls, 0);
-        out.push_str(&reindent_by(&printed, "    "));
+        ));
     }
     // #2841: each fixture is a local name for its file's module-level constant.
     for f in suite_fns.fixtures {
         bound.insert(f.name.name.clone());
-        out.push_str(&format!(
-            "    const {}: string = {};\n",
-            f.name.name,
-            fixture_ident(&f.path)
+        stmts.push(crate::ts_build::const_typed(
+            f.name.name.clone(),
+            TsType::named("string"),
+            crate::ts_build::ident(fixture_ident(&f.path)),
         ));
     }
     for f in suite_fns.fns {
@@ -522,11 +487,9 @@ pub(super) fn suite_fn_decls(
             continue;
         };
         bound.insert(name.name.clone());
-        let stmts = emitter::emit_suite_fn(f, typed, runtime_use);
-        let printed: String = stmts.iter().map(|s| bynk_ts::print_stmt(s, 0)).collect();
-        out.push_str(&reindent_by(&printed, "    "));
+        stmts.extend(emitter::emit_suite_fn(f, typed, runtime_use));
     }
-    out
+    stmts
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -564,20 +527,25 @@ pub(super) fn emit_test_case_function(
             .iter()
             .any(|s| matches!(s, StubScope::Case(c) if *c == case.name))
     });
-    let mut out = String::new();
-    out.push_str("  try {\n");
+    let mut out: Vec<TsStmt> = Vec::new();
     if let Some(file) = snapshot_file {
-        out.push_str(&format!(
-            "    __bynkSnapshotCase({}, {});\n",
-            bynk_project::json_string(file),
-            bynk_project::json_string(&case.name)
+        out.push(TsStmt::expr_stmt(
+            call(
+                ident("__bynkSnapshotCase"),
+                vec![
+                    crate::ts_build::raw_lit(bynk_project::json_string(file)),
+                    crate::ts_build::raw_lit(bynk_project::json_string(&case.name)),
+                ],
+            ),
+            None,
         ));
     }
     if let Some(env) = &env {
         let entries = env_entries(env);
-        out.push_str(&bynk_ts::print_stmt(
-            &TsStmt::assign(ident("__bynkEnv"), TsExpr::object(entries), None),
-            2,
+        out.push(TsStmt::assign(
+            ident("__bynkEnv"),
+            TsExpr::object(entries),
+            None,
         ));
     }
     let mut harness_bound = emit_test_scope_setup(
@@ -655,7 +623,7 @@ pub(super) fn emit_test_case_function(
     {
         let mut helper_view = helper_view;
         test_suites::register_call_record_types(&mut helper_view, target_name, unit_tables);
-        out.push_str(&suite_fn_decls(
+        out.extend(suite_fn_decls(
             suite_fns,
             helper_view,
             unit_tables.get(target_name),
@@ -675,7 +643,7 @@ pub(super) fn emit_test_case_function(
         .map(|t| t.agents.keys().cloned().collect())
         .unwrap_or_default();
     // #3585: a `bynk eval` snippet's case reports its tail's value.
-    let (body_src, body_smb) = case_body::lower_test_case_body_reporting(
+    let (body, tail_span) = case_body::lower_test_case_stmts(
         &case.body,
         &mut typed,
         &cross,
@@ -690,33 +658,23 @@ pub(super) fn emit_test_case_function(
         runtime_use,
         case.name == crate::testgen::EVAL_CASE,
     );
-    // v0.70: splice the case body (line-by-line, indented) and merge its source-map
-    // sub-builder into the case builder, line-anchored at the splice. The caller
-    // (emit_test_module) merges this case builder into the module map under the
-    // case's source file.
-    out.push_str(&suite_late_codecs(
+    out.extend(suite_late_codec_stmts(
         suite_fns,
         &typed,
         runtime_use,
         roots_mark,
     ));
-    let body_base = out.len();
-    for line in body_src.lines() {
-        out.push_str("    ");
-        out.push_str(line);
-        out.push('\n');
-    }
-    let mut case_smb = SourceMapBuilder::new();
-    case_smb.merge(&body_smb, &body_src, &out, body_base, 0);
-    let return_pass_true = TsStmt::return_stmt(
+    out.extend(body);
+    let mut return_pass_true = TsStmt::return_stmt(
         Some(TsExpr::object(vec![(
             "pass".to_string(),
             TsExpr::Lit(TsLit::Bool(true)),
         )])),
         None,
     );
-    out.push_str(&bynk_ts::print_stmt(&return_pass_true, 2));
-    out.push_str("  } catch (e) {\n");
+    // The tail's checkpoint falls on the `return` when the tail added no statement of its own.
+    return_pass_true.span = tail_span;
+    out.push(return_pass_true);
     let expectation_error_branch = if_(
         TsExpr::Binary {
             op: TsBinaryOp::InstanceOf,
@@ -737,7 +695,6 @@ pub(super) fn emit_test_case_function(
             None,
         )]),
     );
-    out.push_str(&bynk_ts::print_stmt(&expectation_error_branch, 2));
     let fallback_return = TsStmt::return_stmt(
         Some(TsExpr::object(vec![
             ("pass".to_string(), TsExpr::Lit(TsLit::Bool(false))),
@@ -759,13 +716,25 @@ pub(super) fn emit_test_case_function(
         ])),
         None,
     );
-    out.push_str(&bynk_ts::print_stmt(&fallback_return, 2));
-    if env.is_some() {
-        out.push_str("  } finally {\n    __bynkEnv = {};\n  }\n");
+    let guarded = block(out);
+    let handler = block(vec![expectation_error_branch, fallback_return]);
+    let try_stmt = if env.is_some() {
+        // `finally { __bynkEnv = {}; }` clears the case's `env` on the way out.
+        TsStmt::try_catch_finally(
+            guarded,
+            Some("e"),
+            handler,
+            block(vec![TsStmt::assign(
+                ident("__bynkEnv"),
+                TsExpr::object(Vec::new()),
+                None,
+            )]),
+            None,
+        )
     } else {
-        out.push_str("  }\n");
-    }
-    async_test_runner_fn(runner_name, out, Some(case_smb))
+        TsStmt::try_catch(guarded, Some("e"), handler, None)
+    };
+    async_runner_fn(runner_name, vec![try_stmt])
 }
 
 /// v0.114 (testing track slice 2): the runtime the generative `property` runner
@@ -875,28 +844,4 @@ pub(super) fn observation_call_record_types(
         }
     }
     stmts
-}
-
-/// v0.117: the observation runtime — wraps each observed capability operation on
-/// the test `deps` so every call records its arguments and a monotonic order
-/// index into the per-case trace `__obs`. Emitted once per module that observes.
-/// Finding #17: source lives at `emitter/test_runtime/observation.ts`.
-pub(super) fn observation_runtime_helpers() -> String {
-    include_str!("test_runtime/observation.ts").to_string()
-}
-
-pub(super) fn property_runtime_helpers() -> String {
-    include_str!("test_runtime/property.ts").to_string()
-}
-
-/// v0.119 (testing track slice 7, ADR 0155): the history-property runtime, emitted
-/// alongside [`property_runtime_helpers`] only when a module declares a
-/// `for all run: History[Agent]` property. Generates a bounded, seeded sequence of
-/// handler calls, drives it through the real handlers (`spec.drive`, the agent
-/// module's `__bynkDriveHistory_<Agent>`), evaluates the predicate over the
-/// observed `run`, and on failure delta-debugs the *sequence* (re-driving after
-/// each reduction so the counterexample stays reachable) then shrinks the surviving
-/// arguments — reporting the seed, the shrunk sequence, and a reproduce line.
-pub(super) fn history_runtime_helpers() -> String {
-    include_str!("test_runtime/history.ts").to_string()
 }

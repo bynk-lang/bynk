@@ -68,7 +68,7 @@ use bynk_syntax::ast::{
 use ctx::UnitFacts;
 use ts_types::{TyRender, asset_ts_type, ts_base};
 
-pub(crate) mod bindings;
+pub mod bindings;
 pub mod client;
 pub mod commons_barrel;
 pub(crate) mod compose;
@@ -95,7 +95,7 @@ pub use compose::{
     EventSubscription, ExecNeeds,
 };
 pub use containers::{container_class_names, emit_containers_ts};
-pub use events_fanout::{Publisher, emit_events_fanout_do, emit_group_events_fanout_do};
+pub use events_fanout::{emit_events_fanout_do, emit_group_events_fanout_do};
 pub use secrets::emit_secrets_manifest;
 pub use toml_doc::print_toml_document;
 pub use workers_entry::{
@@ -105,6 +105,7 @@ pub use workers_entry::{
 pub use workers_group::{GroupEntry, GroupMember, emit_group_entry};
 pub use wrangler::{ClassTombstones, emit_wrangler_toml};
 
+mod claim_predicate;
 mod cmp;
 mod codec;
 pub mod ctx;
@@ -136,7 +137,9 @@ pub mod runtime_files;
 /// committed means `cargo build` stays Node-free and the emitter stays lockstep
 /// with the runtime it embeds.
 mod runtime_modules;
-pub use runtime_files::{RUNTIME_DIR, emit_all_runtime_modules, rewrite_runtime_imports};
+pub use runtime_files::{
+    RUNTIME_DIR, closure_files, emit_all_runtime_modules, rewrite_runtime_imports,
+};
 
 /// Events track, slice 2 (spine #936): the TS type of one buffered/fanned-out
 /// event — a handler's `__events` local, the `__eventsDispatch` deps field
@@ -3371,9 +3374,24 @@ mod runtime_tests {
                 }) {
                     continue;
                 }
-                let target = from.strip_prefix("./").and_then(|f| f.strip_suffix(".ts"));
+                // Resolved against the module's own directory: `./result.ts` from `storage`,
+                // `../storage.ts` from `testing/bindings`.
+                let mut parts: Vec<&str> = name.split('/').collect();
+                parts.pop();
+                let target = from.strip_suffix(".ts").map(|f| {
+                    for seg in f.split('/') {
+                        match seg {
+                            "." => {}
+                            ".." => {
+                                parts.pop();
+                            }
+                            seg => parts.push(seg),
+                        }
+                    }
+                    parts.join("/")
+                });
                 assert!(
-                    target.is_some_and(|t| names.contains(&t) && t != *name),
+                    target.is_some_and(|t| names.contains(&t.as_str()) && t != *name),
                     "{name}: import {from:?} does not name another runtime module"
                 );
             }

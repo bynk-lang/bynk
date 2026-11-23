@@ -12,8 +12,8 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use super::internal_fault::undefined_node;
 use super::workers_entry::wire_ident;
 use crate::emitter::RuntimeUse;
+use crate::emitter::bindings::agent_binding;
 use crate::emitter::http_handler_method_name_ir;
-use crate::emitter::wrangler::agent_binding;
 use crate::ts_build::{
     and_expr, as_expr, await_expr, binary, block, call, const_, expr_stmt, ident, if_, let_typed,
     member, method_call, new, not_expr, null_lit, num_lit, or_expr, return_, str_lit, strict_eq,
@@ -701,24 +701,8 @@ pub(super) fn emit_websocket_upgrade(
         // A refinement actor's authorisation invariant: scheme verified (401
         // above), a failed claim predicate is 403, checked against verified claims.
         if let Some(pred) = &seam.authorization {
-            let js = bynk_check::actors::claim_predicate_to_js(pred, "__claims.value.claims");
-            // #1321: `claim_predicate_to_js` is a `bynk_check`-crate helper
-            // that returns already-built JS boolean-expression *text* —
-            // out of this slice's own scope (a different crate; `bynk-ts`'s
-            // own crate-boundary invariant, `bynk-syntax` only, forbids
-            // `bynk-check` depending on it to return a real `TsExpr`
-            // instead). Carried as an opaque `TsExpr::Ident` — the same
-            // "existing textual variant carries pre-rendered text this
-            // crate structurally can't build a shape for" precedent
-            // `ts_type_ref_to_ts_type`'s own `TypeRef::Query` arm already
-            // established for `TsType::Named` (`emitter.rs`), applied here
-            // to `TsExpr::Ident` — not a new pattern. The literal parens
-            // are baked into the text (not left to `Unary::Not`'s own
-            // operand rules) since `js`'s own precedence isn't guaranteed
-            // compatible with a bare `!`, matching the original `writeln!`
-            // text's own explicit `!({js})`.
             stmts.push(if_(
-                ident(format!("!({js})")),
+                super::claim_predicate::claim_predicate_denied(pred),
                 return_(Some(new_response(vec![
                     str_lit("Forbidden"),
                     status_object("403"),
@@ -1068,11 +1052,8 @@ pub(super) fn emit_http_wrapper(
         // 401. Checked against the *verified* claims, before the identity mints
         // or the body runs.
         if let Some(pred) = &seam.authorization {
-            let js = bynk_check::actors::claim_predicate_to_js(pred, "__claims.value.claims");
-            // #1321: see `emit_websocket_upgrade`'s own identical construction
-            // for why this is an opaque `Ident` carrying pre-built text.
             stmts.push(if_(
-                ident(format!("!({js})")),
+                super::claim_predicate::claim_predicate_denied(pred),
                 return_(Some(member(ident("HttpResult"), "Forbidden"))),
             ));
         }
@@ -1787,7 +1768,7 @@ pub(super) fn emit_http_sum_wrapper(
         // result fits the context's optionally-branded parameter type.
         let dser = super::workers_entry::deserialise_call(
             &body_param.type_ref,
-            "__body_json",
+            &ident("__body_json"),
             "$",
             runtime_use,
         );

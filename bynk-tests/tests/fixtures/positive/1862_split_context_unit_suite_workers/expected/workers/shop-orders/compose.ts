@@ -7,7 +7,7 @@ export interface Env {
 }
 
 export function compose(env: Env) {
-  const deps = {  };
+  const deps = {};
   return {
     async length(n: handlers.Note) {
       return handlers.length.call(n, deps);

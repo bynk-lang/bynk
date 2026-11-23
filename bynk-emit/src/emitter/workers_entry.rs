@@ -331,7 +331,7 @@ fn inspect_route(context: &str, member_mode: bool, lists: bool, classes: &[Strin
             .map(|c| {
                 (
                     format!("\"{c}\""),
-                    str_lit(crate::emitter::wrangler::agent_binding(c).name),
+                    str_lit(crate::emitter::bindings::agent_binding(c).name),
                 )
             })
             .collect(),
@@ -426,7 +426,7 @@ fn migrate_route(context: &str, member_mode: bool, migratable: &[(String, i64)])
                     vec![
                         member(
                             ident("env"),
-                            crate::emitter::wrangler::agent_binding(class).name,
+                            crate::emitter::bindings::agent_binding(class).name,
                         ),
                         ident("__body"),
                         num_lit(version.to_string()),
@@ -442,7 +442,7 @@ fn migrate_route(context: &str, member_mode: bool, migratable: &[(String, i64)])
                 TsExpr::Unary {
                     op: bynk_ts::TsUnaryOp::Typeof,
                     expr: Box::new(index_expr(
-                        ident("(env as unknown as globalThis.Record<string, unknown>)"),
+                        super::emit::record_cast(ident("env"), bynk_ts::TsType::named("unknown")),
                         str_lit(wf::MIGRATE_KEY),
                     )),
                 },
@@ -1524,8 +1524,12 @@ pub fn emit_worker_entry(
                     )
                 })
                 .expect("event_services filtered to services with an Event handler");
-            let dser_payload =
-                deserialise_call(&h.params[0].type_ref, "payload", "$.payload", &runtime_use);
+            let dser_payload = deserialise_call(
+                &h.params[0].type_ref,
+                &ident("payload"),
+                "$.payload",
+                &runtime_use,
+            );
             let case_body = vec![
                 // #1825 review: a subscriber that throws is a fault the
                 // publisher's fan-out retries; name it for the log.
@@ -1695,7 +1699,7 @@ pub fn emit_worker_entry(
         let res = match &pm.rejected {
             Some(m) => await_expr(call(
                 ident("__renderRejection"),
-                vec![res, ident(format!("(why) => surface.{m}(why)"))],
+                vec![res, rejection_renderer(m)],
             )),
             None => res,
         };
@@ -2032,7 +2036,7 @@ fn emit_queue_handler(
     for route in queue_routes {
         let method_key = crate::emitter::queue_handler_method_name(&route.service, route.index);
         let dser = match &route.msg_type {
-            Some(t) => deserialise_node(
+            Some(t) => deserialise_call(
                 t,
                 &TsExpr::Paren(Box::new(as_expr(
                     member(ident("msg"), "body"),
@@ -2700,7 +2704,12 @@ fn bind_cf_param(
     {
         return false;
     }
-    let dser = deserialise_call(&p.type_ref, "__cfObject(request)", "cf", ru);
+    let dser = deserialise_call(
+        &p.type_ref,
+        &call(ident("__cfObject"), vec![ident("request")]),
+        "cf",
+        ru,
+    );
     guarded.push(const_("__r_cf", dser));
     // `__cfObject` keeps only fields the record accepts, so this does not reject; the arm
     // is what narrows the `Result` for the compiler.
@@ -2797,7 +2806,7 @@ fn push_cookies_param(
             rejected,
         ))),
     ));
-    let dser = deserialise_call(type_ref, "__c.value", "cookies", ru);
+    let dser = deserialise_call(type_ref, &member(ident("__c"), "value"), "cookies", ru);
     guarded.push(const_("__r_cookies", dser));
     guarded.push(if_(
         strict_eq(member(ident("__r_cookies"), "tag"), str_lit("Err")),
@@ -2964,7 +2973,7 @@ fn stamp_rejection(
     let inner = match rejected {
         Some(m) => await_expr(call(
             ident("__renderRejection"),
-            vec![inner, ident(format!("(why) => surface.{m}(why)"))],
+            vec![inner, rejection_renderer(m)],
         )),
         None => inner,
     };
@@ -3239,7 +3248,7 @@ fn emit_http_route_dispatch(
                     rejected,
                 ))),
             ));
-            let dser = deserialise_call(&p.type_ref, "__q.value", "query", ru);
+            let dser = deserialise_call(&p.type_ref, &member(ident("__q"), "value"), "query", ru);
             guarded.push(const_("__r_query", dser));
             guarded.push(if_(
                 strict_eq(member(ident("__r_query"), "tag"), str_lit("Err")),
@@ -3585,7 +3594,7 @@ fn emit_http_route_dispatch(
                         reject(400),
                     )))]),
                 ));
-                ("__f.value", "body")
+                (member(ident("__f"), "value"), "body")
             } else if let Some(fields) = form {
                 let spec: Vec<TsExpr> = field_specs_exprs(fields);
                 guarded.push(const_(
@@ -3607,11 +3616,11 @@ fn emit_http_route_dispatch(
                         rejected,
                     ))),
                 ));
-                ("__f.value", "body")
+                (member(ident("__f"), "value"), "body")
             } else {
-                ("__body_json", "$")
+                (ident("__body_json"), "$")
             };
-            let dser = deserialise_call(&body_param.type_ref, source, root, ru);
+            let dser = deserialise_call(&body_param.type_ref, &source, root, ru);
             guarded.push(const_("__r_body", dser));
             // The body-deser `400` reflects the offending input into its JSON body, so
             // stamping it (#659) matters most here — `nosniff` on a reflected value.
@@ -3925,7 +3934,7 @@ fn emit_call_handler_dispatch(
         // The binding target must dodge JS reserved words (`class`, `const`, …)
         // that lex as valid Bynk identifiers; the `__r_` temp is already safe.
         let jname = call_wire_ident(pname);
-        let dser_call = deserialise_call(&p.type_ref, "args", "$", ru);
+        let dser_call = deserialise_call(&p.type_ref, &ident("args"), "$", ru);
         stmts.push(const_(format!("__r_{pname}"), dser_call));
         stmts.push(if_(
             strict_eq(member(ident(format!("__r_{pname}")), "tag"), str_lit("Err")),
@@ -3991,7 +4000,7 @@ fn emit_call_handler_dispatch(
             let jname = call_wire_ident(pname);
             let dser = deserialise_call(
                 &p.type_ref,
-                &format!("argsObj[\"{pname}\"]"),
+                &index_expr(ident("argsObj"), str_lit(pname.clone())),
                 &format!("$.{pname}"),
                 ru,
             );
@@ -4024,7 +4033,7 @@ fn emit_call_handler_dispatch(
             await_expr(call(member(ident("surface"), sname.to_string()), call_args)),
         ));
     }
-    let ser_expr = serialise_call(&h.return_type, "result", ru);
+    let ser_expr = serialise_call(&h.return_type, &ident("result"), ru);
     stmts.push(const_("body", ser_expr));
     stmts.push(return_(Some(new_response(vec![
         json_stringify(ident("body")),
@@ -4185,27 +4194,21 @@ fn http_result_inner(t: &TypeRef) -> TypeRef {
 /// made `bynk.types.bytes_at_workers_boundary` necessary. They are now one line
 /// each over the shared dispatch, reaching this context's helpers through the
 /// `handlers` namespace the entry point imports.
-pub(crate) fn deserialise_call(
-    t: &TypeRef,
-    json_expr: &str,
-    path: &str,
-    ru: &RuntimeUse,
-) -> TsExpr {
-    deserialise_node(t, &bynk_ts::TsExpr::Ident(json_expr.to_string()), path, ru)
-}
-
-/// [`deserialise_call`] over a built node, for a subject that names a runtime type (`msg.body as
-/// __JsonValue`): the import is read off the tree, which cannot see a name spelled as text.
-fn deserialise_node(t: &TypeRef, json: &TsExpr, path: &str, ru: &RuntimeUse) -> TsExpr {
+pub(crate) fn deserialise_call(t: &TypeRef, json: &TsExpr, path: &str, ru: &RuntimeUse) -> TsExpr {
     crate::emitter::serialisation::deserialise_expr_via(t, json, path, "handlers.", ru)
 }
 
-fn serialise_call(t: &TypeRef, value: &str, ru: &RuntimeUse) -> TsExpr {
-    crate::emitter::serialisation::serialise_expr_via(
-        t,
-        &bynk_ts::TsExpr::Ident(value.to_string()),
-        "handlers.",
-        ru,
+/// [`deserialise_call`]'s encoding twin: `t`'s value, read from `value`, as JSON.
+fn serialise_call(t: &TypeRef, value: &TsExpr, ru: &RuntimeUse) -> TsExpr {
+    crate::emitter::serialisation::serialise_expr_via(t, value, "handlers.", ru)
+}
+
+/// `(why) => surface.<m>(why)`: the service's `on rejected` handler, which `__renderRejection`
+/// calls with the refusal.
+fn rejection_renderer(m: &str) -> TsExpr {
+    crate::ts_build::arrow(
+        vec![crate::ts_build::param("why", None)],
+        method_call(ident("surface"), m, vec![ident("why")]),
     )
 }
 

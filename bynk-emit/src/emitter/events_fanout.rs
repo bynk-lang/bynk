@@ -22,45 +22,54 @@ use bynk_ts::{
     TsParam, TsProgram, TsStmt, TsType, TsTypeMember, TsUnaryOp,
 };
 
+use crate::emitter::bindings::service_binding;
 use crate::emitter::compose::events::isolated_delivery;
-use crate::emitter::wrangler::{EVENTS_FANOUT_CLASS_NAME, service_binding};
+use crate::emitter::compose::{EventPlan, EventSubscription};
+use crate::emitter::wrangler::EVENTS_FANOUT_CLASS_NAME;
 
 /// The Worker-relative specifier `events_fanout.ts` imports the runtime
 /// from — same depth as `compose.ts` (`workers/<worker>/events_fanout.ts`).
 const EVENTS_FANOUT_RUNTIME_SPECIFIER: &str = "../../runtime.js";
 
 /// `context`: the publishing context's qualified name (the header comment,
-/// and I2's signing identity for every delivery). `routes`: this context's own declared event type names →
-/// their subscribers, as `(subscriber_context, subscriber_service)` pairs —
-/// already sorted (`discover_event_subscribers` sorts each `Vec`), so the
-/// generated table (and so the fan-out order for a multi-subscriber event) is
-/// deterministic build to build.
-pub fn emit_events_fanout_do(
-    context: &str,
-    routes: &BTreeMap<String, Vec<(String, String)>>,
-) -> TsProgram {
-    fanout_program(&format!("context `{context}`"), routes, Some(context), &[])
+/// and I2's signing identity for every delivery). The routes are its own
+/// declared event type names, each with its subscribers, from `events`
+/// ([`EventPlan::published_by`]): already in `discover_event_subscribers`'
+/// order, so the generated table (and so the fan-out order for a
+/// multi-subscriber event) is deterministic build to build.
+pub fn emit_events_fanout_do(context: &str, events: &EventPlan) -> TsProgram {
+    let routes: Routes = events
+        .published_by(context)
+        .map(|(name, subs)| (name.to_string(), subs))
+        .collect();
+    fanout_program(&format!("context `{context}`"), &routes, Some(context), &[])
 }
 
-/// A publishing member's name and the subscribers of each event it publishes.
-pub type Publisher = (String, BTreeMap<String, Vec<(String, String)>>);
+/// The subscribers of each event a fan-out routes, by the name its table keys it
+/// by.
+type Routes<'a> = BTreeMap<String, &'a [EventSubscription]>;
 
 /// #3562 (G3-1): the one events fan-out of a `[deploy.workers.<key>]` group,
-/// serving every publishing member. `publishers` is each publishing member's
-/// name and its own routes, as [`emit_events_fanout_do`] takes them. A member
-/// tags each event it emits with its own name (`publisher`), because two members
-/// may declare an event of one name; the table is keyed `<publisher>/<type>`, and
-/// a delivery is signed as the publisher the event names.
-pub fn emit_group_events_fanout_do(key: &str, publishers: &[Publisher]) -> TsProgram {
-    let merged: BTreeMap<String, Vec<(String, String)>> = publishers
+/// serving every publishing member. `publishers` is the publishing members'
+/// names; each one's routes are its events' in `events`, as
+/// [`emit_events_fanout_do`] takes them. A member tags each event it emits with
+/// its own name (`publisher`), because two members may declare an event of one
+/// name; the table is keyed `<publisher>/<type>`, and a delivery is signed as
+/// the publisher the event names.
+pub fn emit_group_events_fanout_do(
+    key: &str,
+    publishers: &[&str],
+    events: &EventPlan,
+) -> TsProgram {
+    let merged: Routes = publishers
         .iter()
-        .flat_map(|(publisher, routes)| {
-            routes
-                .iter()
-                .map(move |(name, subs)| (format!("{publisher}/{name}"), subs.clone()))
+        .flat_map(|publisher| {
+            events
+                .published_by(publisher)
+                .map(move |(name, subs)| (format!("{publisher}/{name}"), subs))
         })
         .collect();
-    let known: Vec<String> = publishers.iter().map(|(p, _)| p.clone()).collect();
+    let known: Vec<String> = publishers.iter().map(|p| (*p).to_string()).collect();
     fanout_program(&format!("Worker group `{key}`"), &merged, None, &known)
 }
 
@@ -73,7 +82,7 @@ pub fn emit_group_events_fanout_do(key: &str, publishers: &[Publisher]) -> TsPro
 /// `known`, the group's publishing members.
 fn fanout_program(
     subject: &str,
-    routes: &BTreeMap<String, Vec<(String, String)>>,
+    routes: &Routes,
     publisher: Option<&str>,
     known: &[String],
 ) -> TsProgram {
@@ -208,29 +217,35 @@ fn fanout_program(
 /// byte-for-byte) since `TsExpr::Object`'s own key field is a raw string
 /// pushed verbatim, not itself a `TsExpr` — there is no other way to get
 /// quotes around an event-type name that isn't a bare identifier.
-fn event_routes_table(routes: &BTreeMap<String, Vec<(String, String)>>) -> TsExpr {
+fn event_routes_table(routes: &Routes) -> TsExpr {
     TsExpr::multiline_object(
         routes
             .iter()
             .map(|(name, subs)| {
                 let entries = subs
                     .iter()
-                    .map(|(sub_ctx, sub_svc)| {
-                        TsExpr::object(vec![
-                            (
-                                "binding".to_string(),
-                                TsExpr::Lit(TsLit::Str(service_binding(sub_ctx).name)),
-                            ),
-                            (
-                                "context".to_string(),
-                                TsExpr::Lit(TsLit::Str(sub_ctx.clone())),
-                            ),
-                            (
-                                "service".to_string(),
-                                TsExpr::Lit(TsLit::Str(sub_svc.clone())),
-                            ),
-                        ])
-                    })
+                    .map(
+                        |EventSubscription {
+                             context: sub_ctx,
+                             service: sub_svc,
+                             ..
+                         }| {
+                            TsExpr::object(vec![
+                                (
+                                    "binding".to_string(),
+                                    TsExpr::Lit(TsLit::Str(service_binding(sub_ctx).name)),
+                                ),
+                                (
+                                    "context".to_string(),
+                                    TsExpr::Lit(TsLit::Str(sub_ctx.clone())),
+                                ),
+                                (
+                                    "service".to_string(),
+                                    TsExpr::Lit(TsLit::Str(sub_svc.clone())),
+                                ),
+                            ])
+                        },
+                    )
                     .collect();
                 (format!("{name:?}"), TsExpr::array(entries))
             })
@@ -551,22 +566,23 @@ mod tests {
             "../../../bynk-tests/tests/fixtures/positive/966_event_field_default_cross_context/\
              expected/workers/commerce-order/events_fanout.ts"
         );
-        let mut routes = BTreeMap::new();
-        routes.insert(
-            "PaymentConfirmed".to_string(),
-            vec![(
-                "commerce.notifications".to_string(),
-                "OnPayment".to_string(),
-            )],
+        let mut events = EventPlan::default();
+        events.subscriptions.insert(
+            ("commerce.order".to_string(), "PaymentConfirmed".to_string()),
+            vec![EventSubscription {
+                context: "commerce.notifications".to_string(),
+                service: "OnPayment".to_string(),
+                wants_envelope: false,
+            }],
         );
-        let program = emit_events_fanout_do("commerce.order", &routes);
+        let program = emit_events_fanout_do("commerce.order", &events);
         let printed = bynk_ts::print(&program, "", "", "");
         assert_eq!(printed.text, expected);
     }
 
     /// Review of #1317/#1318, finding 1: a context can `ctx_uses_emit`
     /// while publishing only events nobody subscribes to
-    /// (`bynk-emit/src/project.rs`'s own `own_event_routes` filters down to
+    /// (the events plan's `published_by` filters down to
     /// exactly this shape) — `routes` empty is real, reachable input, not
     /// hypothetical. Pins the exact pre-conversion `writeln!` behaviour:
     /// the `for` loop over `routes` just doesn't iterate, but the
@@ -574,8 +590,7 @@ mod tests {
     /// either way.
     #[test]
     fn an_empty_routes_map_still_prints_the_open_and_close_brace_on_separate_lines() {
-        let routes = BTreeMap::new();
-        let program = emit_events_fanout_do("commerce.order", &routes);
+        let program = emit_events_fanout_do("commerce.order", &EventPlan::default());
         let printed = bynk_ts::print(&program, "", "", "");
         assert!(
             printed.text.contains(

@@ -252,6 +252,49 @@ fn multi_file_test_group_has_multiple_sources() {
 }
 
 #[test]
+fn a_property_in_the_second_file_of_a_test_group_maps_to_that_file() {
+    // Review of 1B.5b: a property runner is built as statements whose spans are offsets into its
+    // own test file. They have to be recorded against that file's source id, not the default 0,
+    // which here is `a.bynk`, whose text is shorter and different.
+    let dir = tmp("prop2");
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::create_dir_all(dir.join("tests").join("calc")).unwrap();
+    std::fs::write(dir.join("bynk.toml"), "[project]\nname = \"prop2\"\n").unwrap();
+    std::fs::write(
+        dir.join("src").join("calc.bynk"),
+        "commons calc {\n  fn dbl(n: Int) -> Int {\n    n + n\n  }\n}\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("tests").join("calc").join("a.bynk"),
+        "suite calc {\n  case \"a\" {\n    expect dbl(1) == 2\n  }\n}\n",
+    )
+    .unwrap();
+    // The property sits well past the end of `a.bynk`'s text.
+    std::fs::write(
+        dir.join("tests").join("calc").join("b.bynk"),
+        "suite calc {\n  // padding so the property's offsets are far from a.bynk's\n  // padding\n  // padding\n  property \"doubling is adding\" {\n    for all n: Int {\n      expect dbl(n) == n + n\n    }\n  }\n}\n",
+    )
+    .unwrap();
+
+    let (ts, map) = compile_file(&dir, false, "tests/calc.test.ts");
+    let _ = std::fs::remove_dir_all(&dir);
+    let (sources, mappings) = parse_map(&map);
+    let b = sources.iter().position(|s| s.ends_with("b.bynk")).unwrap() as i64;
+    let lines = decode(&mappings);
+    // The property's body statement, `expect dbl(n) == n + n` (b.bynk line 7, 0-based 6), maps to b.bynk.
+    let at = gen_line_of(&ts, "__bynkExpect");
+    let _ = at;
+    assert!(
+        lines
+            .iter()
+            .flatten()
+            .any(|&(src, line)| src == b && line == 6),
+        "the property's `expect` should map to b.bynk line 7, got {lines:?}"
+    );
+}
+
+#[test]
 fn system_suite_case_maps_to_its_own_bynk_source() {
     // Review of #1497 (#1484's own conversion), finding 1: `emit_integration_
     // module`'s own inline case wrapper now stages each case's body map in a

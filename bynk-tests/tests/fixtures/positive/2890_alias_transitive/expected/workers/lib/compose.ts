@@ -7,7 +7,7 @@ export interface Env {
 }
 
 export function compose(env: Env) {
-  const deps = {  };
+  const deps = {};
   return {
     async flip(c: handlers.Code) {
       return handlers.flip.call(c, deps);

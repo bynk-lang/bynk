@@ -404,7 +404,7 @@ fn loopback(entry: &GroupEntry<'_>) -> Vec<TsStmt> {
     let names: Vec<String> = entry
         .members
         .iter()
-        .map(|m| crate::emitter::wrangler::service_binding(&m.context).name)
+        .map(|m| crate::emitter::bindings::service_binding(&m.context).name)
         .collect();
     let record = || TsType::named_with_args("globalThis.Record", vec![ty("string"), ty("unknown")]);
     let answers_in_process = arrow(
@@ -873,6 +873,7 @@ fn member_table(members: &[(usize, &GroupMember)]) -> Vec<TsStmt> {
         TsTypeMember::readonly_prop(
             "isMiss",
             TsType::Fn {
+                rest: false,
                 params: vec![response_ty()],
                 names: vec!["response".to_string()],
                 ret: Box::new(ty("boolean")),

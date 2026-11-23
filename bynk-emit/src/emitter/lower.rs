@@ -714,7 +714,7 @@ pub(crate) fn lower_expr(e: &Expr, cx: &mut LowerCtx) -> Lowered {
         // ADR 0182: in GENERATED TEST scaffolding a branded type is in scope only
         // as an `any`-typed value binding (`const { T } = ns as any`), never as a
         // type, so a `(raw as T)` cast fails to resolve `T` ("refers to a value,
-        // but is being used as a type"). Brand via `unchecked_construct_test`
+        // but is being used as a type"). Brand via `unchecked_construct_test_node`
         // (refined → `(raw as any)`) there, exactly as the `Val[T](lit)` mock path
         // does. Production emission keeps the real `(raw as T)` brand.
         if cx.in_test_scaffold() {
@@ -1625,6 +1625,7 @@ pub(crate) fn claim_scope_declaration() -> bynk_ts::TsStmt {
     let track_ty = TsType::Object(vec![TsTypeMember::optional_prop(
         "__track",
         TsType::Fn {
+            rest: false,
             params: Vec::new(),
             names: Vec::new(),
             ret: Box::new(scope_ty),
@@ -1969,7 +1970,7 @@ fn lower_val(type_ref: &TypeRef, args: &[Expr], cx: &mut LowerCtx) -> Lowered {
     };
     // Refined literal pin. This `Val[T](lit)` path is test-only scaffolding, where
     // the branded type is an `any` value binding, not a type (ADR 0182) — so brand
-    // via `unchecked_construct_test` (refined → `(lit as any)`), not a `(lit as T)`
+    // via `unchecked_construct_test_node` (refined → `(lit as any)`), not a `(lit as T)`
     // that would fail to resolve `T`. Opaque never reaches here (`NamedKind::Refined`).
     let ty_node = tys.get(ty);
     if let (
@@ -4562,30 +4563,35 @@ pub(super) fn pattern_tests(
 pub(crate) fn event_pattern_guard_ir(
     path: &str,
     pattern: Option<&EventPatternIr>,
-) -> Option<String> {
+) -> Option<bynk_ts::TsExpr> {
+    use crate::ts_build::{and_expr, bool_lit, ident, member, num_lit, str_lit, strict_eq};
     let pattern = pattern?;
-    let tests: Vec<String> = pattern
+    pattern
         .fields
         .iter()
-        .map(|(name, value)| match value {
-            EventPatternValueIr::Const(ConstVal::Int(n)) => format!("{path}.{name} === {n}"),
-            EventPatternValueIr::Const(ConstVal::Str(s)) => {
-                format!("{path}.{name} === \"{}\"", escape_ts_string(s))
+        .map(|(name, value)| {
+            let field = member(ident(path), name.as_str());
+            match value {
+                EventPatternValueIr::Const(ConstVal::Int(n)) => strict_eq(field, num_lit(n)),
+                EventPatternValueIr::Const(ConstVal::Str(s)) => {
+                    strict_eq(field, str_lit(s.as_str()))
+                }
+                EventPatternValueIr::Const(ConstVal::Bool(b)) => strict_eq(field, bool_lit(*b)),
+                EventPatternValueIr::Const(
+                    ConstVal::Float(_) | ConstVal::DurationMillis(_) | ConstVal::Unit,
+                ) => {
+                    unreachable!(
+                        "EventPatternValueIr::Const only ever holds Int/Str/Bool (its own doc \
+                         comment) — the checker's own check_event_pattern already restricted a \
+                         from Events(...) filter to that closed set before this pattern could exist"
+                    )
+                }
+                EventPatternValueIr::Variant { tag } => {
+                    strict_eq(member(field, "tag"), str_lit(tag.as_str()))
+                }
             }
-            EventPatternValueIr::Const(ConstVal::Bool(b)) => format!("{path}.{name} === {b}"),
-            EventPatternValueIr::Const(
-                ConstVal::Float(_) | ConstVal::DurationMillis(_) | ConstVal::Unit,
-            ) => {
-                unreachable!(
-                    "EventPatternValueIr::Const only ever holds Int/Str/Bool (its own doc \
-                     comment) — the checker's own check_event_pattern already restricted a \
-                     from Events(...) filter to that closed set before this pattern could exist"
-                )
-            }
-            EventPatternValueIr::Variant { tag } => format!("{path}.{name}.tag === \"{tag}\""),
         })
-        .collect();
-    Some(tests.join(" && "))
+        .reduce(and_expr)
 }
 
 #[cfg(test)]
@@ -4622,7 +4628,7 @@ mod event_pattern_guard_ir_tests {
             ],
         };
         assert_eq!(
-            event_pattern_guard_ir("e", Some(&pattern)),
+            event_pattern_guard_ir("e", Some(&pattern)).map(|g| bynk_ts::print_expr(&g)),
             Some(
                 "e.n === 3 && e.s === \"a\\\"b\" && e.b === true && e.status.tag === \"Active\""
                     .to_string()

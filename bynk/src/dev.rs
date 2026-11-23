@@ -325,7 +325,7 @@ pub fn foreign_services(config_text: &str, project_workers: &[String]) -> Vec<(S
         return Vec::new();
     };
     let mut out: Vec<(String, String)> = doc
-        .get("services")
+        .get(bynk_project::wrangler_keys::WranglerKey::Services.top_key())
         .and_then(toml::Value::as_array)
         .into_iter()
         .flatten()
@@ -1620,7 +1620,7 @@ fn migrating_databases(config: &str) -> Vec<(String, String)> {
     let Ok(doc) = config.parse::<toml::Table>() else {
         return Vec::new();
     };
-    doc.get("d1_databases")
+    doc.get(bynk_project::wrangler_keys::WranglerKey::D1Databases.top_key())
         .and_then(toml::Value::as_array)
         .into_iter()
         .flatten()

@@ -7,7 +7,7 @@ export interface Env {
 }
 
 export function compose(env: Env) {
-  const deps = {  };
+  const deps = {};
   return {
     async batch(b: handlers.Batch) {
       return handlers.batch.call(b, deps);

@@ -7,7 +7,7 @@ export interface Env {
 }
 
 export function compose(env: Env) {
-  const deps = {  };
+  const deps = {};
   return {
     async queue_highWorker_0(message: handlers.Job) {
       return handlers.highWorker.queue_highWorker_0(message, deps);

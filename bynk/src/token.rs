@@ -5,7 +5,7 @@
 //! The actor declares everything a minter needs: `auth = Bearer(secret =
 //! "<ENV>")`, HS256, and `sub` as the identity. This signs the token exactly as
 //! the emitted verifier (`bynk-emit/src/emitter/runtime/auth.ts`) and the test
-//! runtime's signer (`test_runtime/jwt_signer.ts`) do — the same header, the
+//! runtime's signer (`runtime/src/testing/jwt_signer.ts`) do — the same header, the
 //! same `sub`/`exp` claims, the same unpadded base64url — so the actor's seam
 //! accepts it. It is a different command from `bynk org token mint`, which
 //! mints a registry publish token.

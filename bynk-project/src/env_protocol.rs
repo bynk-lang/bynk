@@ -43,27 +43,25 @@ pub enum Shape {
 }
 
 /// Where the hand-written readers live. [`Reader::path`] joins a reader's file
-/// to its directory, so a directory that moves (1B.3 moves the test runtime
-/// into `bynk-emit`) changes one line here.
+/// to its directory, so a directory that moves changes one line here. The test
+/// runtime's readers are `testing/<name>.ts` under [`ReaderDir::Runtime`] (1B.3a,
+/// #4047): the sources, not the spliced artifacts in `bynk-emit/src/testgen`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ReaderDir {
     /// The emitted runtime's sources, `bynk-emit/runtime/src`.
     Runtime,
-    /// The test-runtime fragments spliced into generated test mains.
-    TestRuntime,
     /// The standard library's binding sources, `bynk-std/lib`.
     Std,
 }
 
 impl ReaderDir {
     /// Every reader directory, for a scan that wants them all.
-    pub const ALL: [ReaderDir; 3] = [ReaderDir::Runtime, ReaderDir::TestRuntime, ReaderDir::Std];
+    pub const ALL: [ReaderDir; 2] = [ReaderDir::Runtime, ReaderDir::Std];
 
     /// The directory, from the repository root.
     pub const fn path(self) -> &'static str {
         match self {
             ReaderDir::Runtime => "bynk-emit/runtime/src",
-            ReaderDir::TestRuntime => "bynk-emit/src/testgen/test_runtime",
             ReaderDir::Std => "bynk-std/lib",
         }
     }
@@ -172,13 +170,6 @@ const fn runtime(file: &'static str) -> Reader {
     }
 }
 
-const fn test_runtime(file: &'static str) -> Reader {
-    Reader {
-        dir: ReaderDir::TestRuntime,
-        file,
-    }
-}
-
 const CLOUDFLARE_BINDING: Reader = Reader {
     dir: ReaderDir::Std,
     file: "cloudflare/cloudflare.binding.ts",
@@ -237,31 +228,31 @@ pub const PROTOCOL: &[Entry] = &[
     process(
         TEST_SEED,
         "bynk-driver::test_runner",
-        &[test_runtime("property.ts")],
+        &[runtime("testing/property.ts")],
         None,
     ),
     process(
         TEST_SETTLE_MS,
         "bynk-driver::test_runner",
-        &[test_runtime("settle.ts")],
+        &[runtime("testing/settle.ts")],
         None,
     ),
     process(
         TEST_TARGETS,
         "bynk-driver::test_runner",
-        &[test_runtime("remote.ts")],
+        &[runtime("testing/remote.ts")],
         None,
     ),
     process(
         TEST_SECRETS,
         "bynk-driver::test_runner",
-        &[test_runtime("remote.ts")],
+        &[runtime("testing/remote.ts")],
         None,
     ),
     process(
         TEST_RUN_ID,
         "bynk-driver::test_runner",
-        &[test_runtime("run_id.ts")],
+        &[runtime("testing/run_id.ts")],
         None,
     ),
     process(
@@ -279,7 +270,7 @@ pub const PROTOCOL: &[Entry] = &[
     process(
         UPDATE_SNAPSHOTS,
         "bynk-driver::test_runner",
-        &[test_runtime("snapshot.ts")],
+        &[runtime("testing/snapshot.ts")],
         None,
     ),
     process(
@@ -505,8 +496,8 @@ mod tests {
             "bynk-std/lib/cloudflare/cloudflare.binding.ts"
         );
         assert_eq!(
-            test_runtime("property.ts").path(),
-            "bynk-emit/src/testgen/test_runtime/property.ts"
+            runtime("testing/property.ts").path(),
+            "bynk-emit/runtime/src/testing/property.ts"
         );
     }
 }

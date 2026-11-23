@@ -7,7 +7,7 @@ export interface Env {
 }
 
 export function compose(env: Env) {
-  const deps = {  };
+  const deps = {};
   return {
     async cron_clock_0(at: number) {
       return handlers.clock.cron_clock_0(at, deps);

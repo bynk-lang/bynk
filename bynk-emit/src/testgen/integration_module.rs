@@ -4,14 +4,117 @@
 
 use super::*;
 use crate::emitter::RuntimeUse;
-use crate::emitter::wrangler::{BindingSource, WorkerBinding, singleton_is};
+use crate::emitter::bindings::{BindingSource, WorkerBinding};
+use crate::emitter::wrangler::singleton_is;
 // #1759: every namespace a test module imports, from one definition.
 use crate::emitter::emit::test_scaffold_ns as test_ns;
 use bynk_check::checker::Types;
 use bynk_check::d1_migrations::{D1Migrations, pglite_on};
 use bynk_check::test_suites::{self};
-use bynk_ts::{SourceMapBuilder, TsDecl, TsExpr, TsProgram, TsStmt};
+use bynk_ts::{SourceMapBuilder, TsBinaryOp, TsDecl, TsExpr, TsProgram, TsStmt, TsType};
 use std::sync::Arc;
+
+/// The `try { <body> return { pass: true }; } catch (e) { … }` of an integration case runner. A
+/// remote case also reports `retries: __bynkRetries`, how often `--settle` retried it.
+fn case_try_stmt(
+    body: Vec<TsStmt>,
+    tail_span: Option<bynk_syntax::span::Span>,
+    remote: bool,
+) -> TsStmt {
+    let mut guarded = body;
+    let outcome = |pass: bool, extra: Vec<(String, TsExpr)>| {
+        let mut entries = vec![("pass".to_string(), crate::ts_build::bool_lit(pass))];
+        entries.extend(extra);
+        if remote {
+            entries.push(("retries".to_string(), ident("__bynkRetries")));
+        }
+        TsStmt::return_stmt(Some(TsExpr::object(entries)), None)
+    };
+    let mut return_pass = outcome(true, Vec::new());
+    // The tail's checkpoint falls on the `return` when the tail added no statement of its own.
+    return_pass.span = tail_span;
+    guarded.push(return_pass);
+    let failure = |message: TsExpr, location: TsExpr, violation: Option<TsExpr>| {
+        let mut error = vec![
+            ("message".to_string(), message),
+            ("location".to_string(), location),
+        ];
+        error.extend(violation.map(|v| ("violation".to_string(), v)));
+        outcome(false, vec![("error".to_string(), TsExpr::object(error))])
+    };
+    let expectation_failure = crate::ts_build::if_(
+        crate::ts_build::binary(
+            TsBinaryOp::InstanceOf,
+            ident("e"),
+            ident("ExpectationError"),
+        ),
+        crate::ts_build::block(vec![failure(
+            crate::ts_build::member(ident("e"), "message"),
+            crate::ts_build::member(ident("e"), "location"),
+            None,
+        )]),
+    );
+    let other_failure = failure(
+        call(ident("String"), vec![ident("e")]),
+        crate::ts_build::str_lit("unknown"),
+        Some(call(ident("__bynkViolationOf"), vec![ident("e")])),
+    );
+    TsStmt::try_catch(
+        crate::ts_build::block(guarded),
+        Some("e"),
+        crate::ts_build::block(vec![expectation_failure, other_failure]),
+        None,
+    )
+}
+
+/// #2073: destructure, from each participant's namespace, the types the lowered case or a helper
+/// names. The names are read off the trees the text was printed from (1B.3c), with every
+/// participant type `provided` so that one spelled like a global (`Request`) is still found.
+fn destructure_named_participant_types(
+    case_out: &mut Vec<TsStmt>,
+    participant_types: &[(String, Vec<String>)],
+    trees: &[&[TsStmt]],
+    unit_tables: &HashMap<String, UnitTable>,
+) {
+    let is_participant_type = |n: &str| {
+        participant_types
+            .iter()
+            .any(|(_, names)| names.iter().any(|m| m == n))
+    };
+    // The walk reports a name only where a node uses it, so a participant type named inside opaque
+    // text (a `Raw` statement) would not be destructured, and the case would fail to compile. The
+    // lowering emits none today; this fails loudly, in tests, if that changes.
+    debug_assert!(
+        trees.iter().flat_map(|s| s.iter()).all(|stmt| {
+            stmt.raw_text().is_none_or(|text| {
+                !participant_types
+                    .iter()
+                    .flat_map(|(_, names)| names)
+                    .any(|n| text.contains(n.as_str()))
+            })
+        }),
+        "a raw statement in a lowered case names a participant type, which the tree walk cannot see"
+    );
+    let used: HashSet<String> = trees
+        .iter()
+        .flat_map(|stmts| bynk_ts::unbound_names_in(stmts, is_participant_type))
+        .collect();
+    for (p, names) in participant_types {
+        let named: Vec<String> = names
+            .iter()
+            .filter(|n| used.contains(*n))
+            .cloned()
+            .collect();
+        if named.is_empty() {
+            continue;
+        }
+        let Some(t) = unit_tables.get(p) else {
+            continue;
+        };
+        let type_names = aliased_types(t, |n| named.contains(n));
+        case_out.extend(emit_ns_destructure(&test_ns(p), &named, &type_names));
+    }
+}
 
 /// Emit a single integration-test module plus its [`RunnableTest`] pointer.
 /// The module imports each participant's workers-mode handler namespace (for
@@ -32,10 +135,10 @@ pub(super) fn emit_integration_module(
     unit_tables: &HashMap<String, UnitTable>,
     cases: &[SystemCaseInput],
     // #1883, slice 3: `asset_harness`'s text, when the target ships assets.
-    asset_harness: Option<String>,
+    asset_harness: Option<Vec<TsStmt>>,
     // #2841: the module-level `string` constant for each fixture file a suite
     // here declares ([`fixture_consts`]).
-    fixture_consts: Option<String>,
+    fixture_consts: Option<Vec<TsStmt>>,
     // #2138: a remote test build — drivers reach the target's URLs, and a case
     // a remote run can't honour is refused (into `errors`) or skipped.
     remote: Option<&crate::emit_model::RemoteTests>,
@@ -228,14 +331,14 @@ pub(super) fn emit_integration_module(
     // ends in a blank line, so the harness statement right after it suppresses
     // the printer's own automatic lead-in blank (`no_blank_before`) rather than
     // stacking a second one on top.
-    stmts.push(TsStmt::raw(expectation_runtime_helpers(), None));
+    stmts.push(TestRuntimeModule::Expectation.splice());
     // #1883, slice 3: the embedded files and `__bynkAssetGet`, for an asset
     // fetch in a case.
-    if let Some(text) = &asset_harness {
-        stmts.push(TsStmt::raw(text.clone(), None));
+    if let Some(assets) = &asset_harness {
+        stmts.extend(assets.iter().cloned());
     }
-    if let Some(text) = &fixture_consts {
-        stmts.push(TsStmt::raw(text.clone(), None));
+    if let Some(consts) = &fixture_consts {
+        stmts.extend(consts.iter().cloned());
     }
 
     // #1994: a participant whose handlers send with `detach` is driven with a
@@ -249,14 +352,14 @@ pub(super) fn emit_integration_module(
                 .is_some_and(|t| t.derived.values().any(|d| d.is_edge_cache()))
     };
     if harness_participants.iter().any(sends) {
-        stmts.push(TsStmt::raw(send_runtime_helpers(), None));
+        stmts.push(TestRuntimeModule::Send.splice());
     }
     // #2138: `run.id`, for a module whose cases read it.
     if cases.iter().any(|c| block_uses_run_id(&c.case.body)) {
-        stmts.push(TsStmt::raw(run_id_helper(remote.is_some()), None));
+        stmts.push(run_id_stmt(remote.is_some()));
     }
     // #2137: the harness clock every participant's `Clock` reads.
-    stmts.push(TsStmt::raw(clock_runtime_helpers(), None));
+    stmts.push(TestRuntimeModule::Clock.splice());
 
     // The env-graph harness: stand each participant up as an in-process Worker
     // and wire its Service Bindings to its siblings; the root env binds to all.
@@ -328,12 +431,9 @@ pub(super) fn emit_integration_module(
     // driver signs with its secret.
     let with_env = cases.iter().any(|c| !c.env_values.is_empty());
     if with_env {
-        let mut env_decl = TsStmt::raw(
-            "// #2134: the running case's `env` entries, set by each case runner.\nlet __bynkEnv: globalThis.Record<string, string> = {};\n",
-            None,
-        );
-        env_decl.no_blank_before = true;
-        stmts.push(env_decl);
+        stmts.extend(env_declaration(
+            "#2134: the running case's `env` entries, set by each case runner.",
+        ));
     }
     // #2138: a remote run's harness binds each participant to its URL in the
     // test target instead of standing it up in process.
@@ -487,31 +587,56 @@ pub(super) fn emit_integration_module(
         // (separate-callee) sibling uses, needed here too since this is a
         // real `TsDecl::Function` (`async_test_runner_fn`) rather than
         // hand-templated text spliced straight into the module.
-        let mut case_out = String::new();
-        case_out.push_str("  try {\n");
+        let mut case_out: Vec<TsStmt> = Vec::new();
         if with_env {
             let entries = env_entries(&input.env_values);
-            crate::testgen::case_body::extend_printed_at(
-                &mut case_out,
-                vec![TsStmt::assign(
-                    ident("__bynkEnv"),
-                    TsExpr::object(entries),
-                    None,
-                )],
-                2,
-            );
+            case_out.push(TsStmt::assign(
+                ident("__bynkEnv"),
+                TsExpr::object(entries),
+                None,
+            ));
         }
         // #2136: the drivers and the case share one harness, so state a
         // call leaves behind is what the next call in the case reads.
-        case_out.push_str("    __bynkHarness = undefined;\n");
+        case_out.push(TsStmt::assign(
+            ident("__bynkHarness"),
+            ident("undefined"),
+            None,
+        ));
         // #2138 (track §3.6): a remote case reports how often `--settle`
         // retried it.
         if remote.is_some() {
-            case_out.push_str("    __bynkRetries = 0;\n");
+            case_out.push(TsStmt::assign(ident("__bynkRetries"), num_lit(0), None));
         }
         // #2137: each case's harness clock starts at the epoch.
-        case_out.push_str("    __bynkClockNow = 0;\n");
-        case_out.push_str("    const deps = __makeHarness();\n");
+        case_out.push(TsStmt::assign(ident("__bynkClockNow"), num_lit(0), None));
+        // #3147: a case that peeks at D1 holds the handles on `deps` (`deps.db`), so `deps` is
+        // declared `any`. Typing the body comes first: the declaration is written once, knowing.
+        // #1855: the lowering reads the case's checked types (a literal at a
+        // refined record field is branded only when its type says so), so
+        // type the body here as the check pass did, into throwaway sinks.
+        let mut throwaway_errors: Vec<CompileError> = Vec::new();
+        let mut throwaway_refs = RefSink::new();
+        (typed.expr_types, typed.callees) = test_suites::typecheck_integration_case_body(
+            participants,
+            view,
+            input.suite_fns,
+            case,
+            cross_context,
+            unit_tables,
+            &mut throwaway_errors,
+            &mut throwaway_refs,
+            tys,
+        );
+        let peeks_d1 = typed
+            .callees
+            .values()
+            .any(|c| matches!(c, bynk_check::checker::Callee::D1Peek { .. }));
+        case_out.push(crate::ts_build::const_typed(
+            "deps",
+            peeks_d1.then(|| TsType::named("any")),
+            call(ident("__makeHarness"), Vec::new()),
+        ));
         // #2024: every name this scaffold binds in the case's scope, so the
         // body's lowering renames a `let` that would redeclare one.
         let mut harness_bound: HashSet<String> = HashSet::from(["deps".to_string()]);
@@ -529,23 +654,15 @@ pub(super) fn emit_integration_module(
                 names.dedup();
                 let type_names = aliased_types(table, |n| is_public_type(table, n));
                 harness_bound.extend(names.iter().cloned());
-                crate::testgen::case_body::extend_printed_at(
-                    &mut case_out,
-                    emit_ns_destructure(&ns, &names, &type_names),
-                    2,
-                );
+                case_out.extend(emit_ns_destructure(&ns, &names, &type_names));
             }
         }
-        extend_hidden_destructures(&mut case_out, &hidden, unit_tables);
+        case_out.extend(hidden_destructures(&hidden, unit_tables));
         harness_bound.extend(hidden.values().flatten().cloned());
         // #1883, slice 3: the assets a case may name, from their owners.
         for (owner, names) in &asset_owners {
             harness_bound.extend(names.iter().cloned());
-            crate::testgen::case_body::extend_printed_at(
-                &mut case_out,
-                emit_ns_destructure(&test_ns(owner), names, &[]),
-                2,
-            );
+            case_out.extend(emit_ns_destructure(&test_ns(owner), names, &[]));
         }
         // #2073: a participant's type the case names (`Region.Domestic`, a
         // consumed context's enum the view brings in), from the namespace of
@@ -593,25 +710,9 @@ pub(super) fn emit_integration_module(
             harness_bound.extend(names.iter().cloned());
             participant_types.push((bynk_check::firstparty::CLOUDFLARE_UNIT.to_string(), names));
         }
-        // #1855: the lowering reads the case's checked types (a literal at a
-        // refined record field is branded only when its type says so), so
-        // type the body here as the check pass did, into throwaway sinks.
-        let mut throwaway_errors: Vec<CompileError> = Vec::new();
-        let mut throwaway_refs = RefSink::new();
-        (typed.expr_types, typed.callees) = test_suites::typecheck_integration_case_body(
-            participants,
-            view,
-            input.suite_fns,
-            case,
-            cross_context,
-            unit_tables,
-            &mut throwaway_errors,
-            &mut throwaway_refs,
-            tys,
-        );
         let roots_mark = runtime_use.json_codec_roots_len();
         // #2834: the suite's helpers, declared ahead of the body.
-        let helper_src = suite_fn_decls(
+        let helper = suite_fn_decls(
             input.suite_fns,
             test_suites::integration_resolved(view, cross_context, test_suites::SuiteItems::NONE),
             participants.first().and_then(|p| unit_tables.get(p)),
@@ -620,7 +721,7 @@ pub(super) fn emit_integration_module(
             &mut harness_bound,
             tys,
         );
-        case_out.push_str(&helper_src);
+        case_out.extend(helper.iter().cloned());
         // #1875 review: the check pass accepted this body from the same
         // inputs, so an error here means the two have drifted, and the
         // lowering would silently fall back to untyped output.
@@ -634,19 +735,7 @@ pub(super) fn emit_integration_module(
                 .map(|e| e.category)
                 .collect::<Vec<_>>()
         );
-        if typed
-            .callees
-            .values()
-            .any(|c| matches!(c, bynk_check::checker::Callee::D1Peek { .. }))
-        {
-            // #3147: the case's handles are held on `deps` (`deps.db`).
-            case_out = case_out.replacen(
-                "    const deps = __makeHarness();\n",
-                "    const deps: any = __makeHarness();\n",
-                1,
-            );
-        }
-        let (body_src, body_smb) = case_body::lower_integration_case_body(
+        let body = case_body::lower_integration_case_body(
             &case.body,
             &mut typed,
             cross_context,
@@ -662,58 +751,22 @@ pub(super) fn emit_integration_module(
             runtime_use,
             remote.is_some(),
         );
-        case_out.push_str(&suite_late_codecs(
+        case_out.extend(suite_late_codec_stmts(
             input.suite_fns,
             &typed,
             runtime_use,
             roots_mark,
         ));
-        for (p, names) in &participant_types {
-            let named: Vec<String> = names
-                .iter()
-                // A helper may name a participant's type though no case does.
-                .filter(|n| names_ident(&body_src, n) || names_ident(&helper_src, n))
-                .cloned()
-                .collect();
-            if named.is_empty() {
-                continue;
-            }
-            let Some(t) = unit_tables.get(p) else {
-                continue;
-            };
-            let type_names = aliased_types(t, |n| named.contains(n));
-            crate::testgen::case_body::extend_printed_at(
-                &mut case_out,
-                emit_ns_destructure(&test_ns(p), &named, &type_names),
-                2,
-            );
-        }
+        destructure_named_participant_types(
+            &mut case_out,
+            &participant_types,
+            &[&body.stmts, &helper],
+            unit_tables,
+        );
         let src_id = map.add_source(input.map_source.clone(), input.source.to_string());
-        let body_base = case_out.len();
-        for line in body_src.lines() {
-            case_out.push_str("    ");
-            case_out.push_str(line);
-            case_out.push('\n');
-        }
-        let mut case_smb = SourceMapBuilder::new();
-        case_smb.merge(&body_smb, &body_src, &case_out, body_base, 0);
-        let retries = if remote.is_some() {
-            ", retries: __bynkRetries"
-        } else {
-            ""
-        };
-        case_out.push_str(&format!("    return {{ pass: true{retries} }};\n"));
-        case_out.push_str("  } catch (e) {\n");
-        case_out.push_str("    if (e instanceof ExpectationError) {\n");
-        case_out.push_str(&format!(
-            "      return {{ pass: false, error: {{ message: e.message, location: e.location }}{retries} }};\n"
-        ));
-        case_out.push_str("    }\n");
-        case_out.push_str(&format!(
-            "    return {{ pass: false, error: {{ message: String(e), location: \"unknown\", violation: __bynkViolationOf(e) }}{retries} }};\n"
-        ));
-        case_out.push_str("  }\n");
-        let mut case_stmt = async_test_runner_fn(&runner_name, case_out, Some(case_smb));
+        case_out.extend(body.stmts);
+        let try_stmt = case_try_stmt(case_out, body.tail_span, remote.is_some());
+        let mut case_stmt = async_runner_fn(&runner_name, vec![try_stmt]);
         case_stmt.nested_map_source_id = src_id;
         stmts.push(case_stmt);
     }
@@ -815,7 +868,7 @@ pub(super) fn emit_integration_module(
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_else(|| "module.ts".to_string());
-    let program = TsProgram { stmts };
+    let program = checked_program(stmts);
     let printed = bynk_ts::print_multi_source(&program, map, &module_file);
     Some((
         module_path.clone(),

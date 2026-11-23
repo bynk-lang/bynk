@@ -5,7 +5,7 @@ import * as boundary_consumer from "./boundary/consumer.js";
 import * as boundary_provider from "./boundary/provider.js";
 
 export function composeApp() {
-  const boundary_providerDeps = {  };
+  const boundary_providerDeps = {};
   const boundary_providerSurface = boundary_provider.__makeSurface(boundary_providerDeps);
   const boundary_consumerDeps = { surface: { Provider: boundary_providerSurface } };
   const boundary_consumerSurface = boundary_consumer.__makeSurface(boundary_consumerDeps);

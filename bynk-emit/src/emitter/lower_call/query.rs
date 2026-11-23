@@ -1270,6 +1270,7 @@ mod tests {
             (
                 "((a0: number) => string)[]",
                 TsType::Fn {
+                    rest: false,
                     params: vec![named("number")],
                     names: vec![],
                     ret: Box::new(named("string")),

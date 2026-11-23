@@ -6,11 +6,11 @@ import * as t_vault from "./t/vault.js";
 import * as t_web from "./t/web.js";
 
 export function composeApp() {
-  const t_vaultDeps = {  };
+  const t_vaultDeps = {};
   const t_vaultSurface = t_vault.__makeSurface(t_vaultDeps);
   const t_deskDeps = { surface: { Vault: t_vaultSurface } };
   const t_deskSurface = t_desk.__makeSurface(t_deskDeps);
-  const t_webDeps = {  };
+  const t_webDeps = {};
   const t_webSurface = t_web.__makeSurface(t_webDeps);
 
   return {

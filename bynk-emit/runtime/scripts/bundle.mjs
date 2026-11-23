@@ -6,7 +6,12 @@
 //    sources and of exported names. A project emits the modules it reaches as
 //    `__bynk_runtime/<module>.{ts,js}`;
 //  - `@bynk/wire-client` (`../wire-client/index.ts`), a concatenation of the
-//    boundary modules for foreign callers.
+//    boundary modules for foreign callers;
+//  - the test runtime (1B.3a, #4047): each `src/testing/<name>.ts` module as its splice form,
+//    `../src/testgen/test_runtime/<name>.ts`, the text a generated test module embeds, plus the
+//    `test_runtime_modules.rs` table the emitter reads them through;
+//  - the client runtime `bynk client` inlines: `src/client/http_client.ts` as
+//    `../src/emitter/http_client_runtime.ts`.
 //
 //   node scripts/bundle.mjs           # (re)write the artifacts
 //   node scripts/bundle.mjs --check   # fail if an artifact is out of date
@@ -51,8 +56,9 @@ const MODULES = [
   "email",
   "postgres",
   "mysql",
-  "pglite",
+  "testing/pglite",
   "agent",
+  "testing/bindings",
   "container",
   "auth",
   "session",
@@ -104,6 +110,115 @@ function stripInternalImports(source) {
     .trim();
 }
 
+// 1B.3a (#4047, Decision A): the test runtime is authored as modules under `src/testing/`, checked
+// by `tsc -p` with the rest of the runtime, and spliced as text into each generated test module.
+// A module's splice form is the module with its relative `import`s dropped (the names they bring
+// are in the one scope the splice creates) and its line-initial `export `s removed (a splice is a
+// script, not a module), so the artifact is exactly the text the emitter always embedded. A name
+// a spliced fragment must keep exporting is listed in SPLICE_EXPORTS.
+const TEST_DIR = join(SRC, "testing");
+const TEST_ARTIFACT_DIR = join(pkgRoot, "..", "src", "testgen", "test_runtime");
+const TEST_TABLE = join(pkgRoot, "..", "src", "testgen", "test_runtime_modules.rs");
+// The names a generated test module supplies, declared for the type-check. Never spliced.
+const TEST_CONTRACT = "harness";
+const TEST_MODULES = [
+  "asset_get",
+  "case_timing",
+  "clock",
+  "expectation",
+  "history",
+  "hmac_signer",
+  "jobs",
+  "jobs_email",
+  "jwt_signer",
+  "observation",
+  "oidc_issuer",
+  "property",
+  "remote",
+  "run_id",
+  "send",
+  "settle",
+  "snapshot",
+  "stub_overlay",
+  "test_filter",
+  "virtual_time",
+];
+// Module -> the names it keeps `export`ed in its splice form (the generated module's runner calls
+// `__bynkSnapshotReport` through the test module's own exports).
+const SPLICE_EXPORTS = { snapshot: ["__bynkSnapshotReport"] };
+const CLIENT_SOURCE = join(SRC, "client", "http_client.ts");
+const CLIENT_RUNTIME_TARGET = join(pkgRoot, "..", "src", "emitter", "http_client_runtime.ts");
+
+const IMPORT_STATEMENT = /^import\s[^;]*?\sfrom\s+["']([^"']+)["'];\n/gms;
+const TOP_LEVEL_EXPORT = /^export (?=(?:declare |abstract |async )*(?:function\*?|class|const|let|interface|type|enum)\s+([A-Za-z_$][\w$]*))/gm;
+
+// The splice form of a module. `stripExports` is false for the client runtime, whose `export`s are
+// the generated client's own.
+function spliceForm(source, { stripExports, keep = [] }) {
+  const startsWithImport = /^import\s/.test(source);
+  // Only a relative import is dropped (its names are in the splice's one scope). A package or
+  // `node:` import would be dropped from the text and fail only when the test ran, so it is an
+  // error here, at the build.
+  let out = source.replace(IMPORT_STATEMENT, (statement, specifier) => {
+    if (!/^\.\.?\//.test(specifier)) {
+      throw new Error(`a spliced module imports "${specifier}", which the splice cannot carry: ${statement.trim()}`);
+    }
+    return "";
+  });
+  // The blank line that separated an import block from the body goes with it.
+  if (startsWithImport) out = out.replace(/^\n+/, "");
+  if (stripExports) {
+    out = out.replace(TOP_LEVEL_EXPORT, (m, name) => (keep.includes(name) ? m : ""));
+  }
+  return out;
+}
+
+// The sibling test modules a module imports (`./name.ts`), contract excluded.
+function testDeps(source) {
+  const deps = [];
+  // The same statements the stripper drops, in either quote style.
+  for (const m of source.matchAll(IMPORT_STATEMENT)) {
+    const sibling = /^\.\/([a-z_0-9]+)\.ts$/.exec(m[1]);
+    if (sibling && sibling[1] !== TEST_CONTRACT) deps.push(sibling[1]);
+  }
+  return [...new Set(deps)].sort();
+}
+
+async function buildTestRuntime() {
+  const files = new Map();
+  const rows = [];
+  for (const name of TEST_MODULES) {
+    const source = await readFile(join(TEST_DIR, `${name}.ts`), "utf8");
+    files.set(join(TEST_ARTIFACT_DIR, `${name}.ts`), spliceForm(source, { stripExports: true, keep: SPLICE_EXPORTS[name] ?? [] }));
+    const deps = testDeps(source).map((d) => `"${d}"`).join(", ");
+    rows.push(`    ("${name}", &[${deps}], include_str!("test_runtime/${name}.ts")),`);
+  }
+  // A module under src/testing/ that is neither listed nor the contract would be type-checked but
+  // never spliced: fail rather than let it go unused.
+  for (const f of await readdir(TEST_DIR)) {
+    const name = f.replace(/\.ts$/, "");
+    // A module under src/testing/ is a spliced fragment (TEST_MODULES), the contract, or a runtime
+    // module a test build imports (`testing/bindings`, `testing/pglite`: in MODULES).
+    const isRuntimeModule = MODULES.includes(`testing/${name}`);
+    if (name !== TEST_CONTRACT && !TEST_MODULES.includes(name) && !isRuntimeModule) {
+      throw new Error(`src/testing/${f} is in neither TEST_MODULES nor MODULES (nor the contract ${TEST_CONTRACT}.ts)`);
+    }
+  }
+  const table = [
+    "// Generated by bynk-emit/runtime/scripts/bundle.mjs — do not edit by hand.",
+    "// 1B.3a (#4047): the test runtime as (module, the sibling modules it imports, splice text),",
+    "// one row per `runtime/src/testing/` module. The emitter reaches the fragments only through it.",
+    "#[rustfmt::skip]",
+    "pub(crate) const TEST_RUNTIME_MODULES: &[(&str, &[&str], &str)] = &[",
+    ...rows,
+    "];",
+    "",
+  ].join("\n");
+  files.set(TEST_TABLE, table);
+  files.set(CLIENT_RUNTIME_TARGET, spliceForm(await readFile(CLIENT_SOURCE, "utf8"), { stripExports: false }));
+  return files;
+}
+
 async function build(header, sources) {
   const bodies = [];
   for (const path of sources) {
@@ -138,7 +253,7 @@ const MODULE_TABLE = join(pkgRoot, "..", "src", "emitter", "runtime_modules.rs")
 function parseAliases(source) {
   const byModule = new Map();
   const origin = new Map(); // imported name -> module
-  for (const m of source.matchAll(/^import\s*\{([^}]*)\}\s*from\s*"\.\/([a-z]+)\.ts";$/gm)) {
+  for (const m of source.matchAll(/^import\s*\{([^}]*)\}\s*from\s*"\.\/([a-z/]+)\.ts";$/gm)) {
     for (const raw of m[1].split(",")) {
       const item = raw.trim();
       if (item) origin.set(item.replace(/^type\s+/, ""), { module: m[2], type: item.startsWith("type ") });
@@ -168,6 +283,17 @@ function aliasBlock(entries) {
   if (values.length) lines.push(`export { ${fmt(values)} };`);
   if (types.length) lines.push(`export type { ${fmt(types)} };`);
   return lines.join("\n");
+}
+
+// Every file under `dir`, recursively (a module may sit in a subdirectory, as `testing/bindings`).
+async function listFiles(dir) {
+  const out = [];
+  for (const entry of await readdir(dir, { withFileTypes: true }).catch(() => [])) {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) out.push(...(await listFiles(path)));
+    else out.push(path);
+  }
+  return out;
 }
 
 async function buildPerModule() {
@@ -217,6 +343,7 @@ async function buildPerModule() {
   const table = [
     "// Generated by bynk-emit/runtime/scripts/bundle.mjs — do not edit by hand.",
     "// ADR 0615: the runtime as (module name, source) pairs, one per @bynk/runtime module.",
+    "#[rustfmt::skip]",
     "pub(crate) const RUNTIME_MODULES: &[(&str, &str)] = &[",
     ...rows,
     "];",
@@ -243,8 +370,8 @@ let stale = false;
   expected.set(MODULE_TABLE, table);
   if (check) {
     let drift = false;
-    for (const f of await readdir(MODULE_DIR).catch(() => [])) {
-      if (!expected.has(join(MODULE_DIR, f))) drift = true; // orphan
+    for (const path of await listFiles(MODULE_DIR)) {
+      if (!expected.has(path)) drift = true; // orphan
     }
     for (const [path, want] of expected) {
       let have = null;
@@ -266,11 +393,48 @@ let stale = false;
     }
   } else {
     await mkdir(MODULE_DIR, { recursive: true });
-    for (const f of await readdir(MODULE_DIR)) {
-      if (!expected.has(join(MODULE_DIR, f))) await rm(join(MODULE_DIR, f));
+    for (const path of await listFiles(MODULE_DIR)) {
+      if (!expected.has(path)) await rm(path);
     }
-    for (const [path, content] of expected) await writeFile(path, content, "utf8");
+    for (const [path, content] of expected) {
+      await mkdir(dirname(path), { recursive: true });
+      await writeFile(path, content, "utf8");
+    }
     console.log(`Wrote ${expected.size - 1} runtime modules and ${MODULE_TABLE}.`);
+  }
+}
+{
+  const files = await buildTestRuntime();
+  if (check) {
+    let drift = false;
+    for (const f of await readdir(TEST_ARTIFACT_DIR).catch(() => [])) {
+      if (!files.has(join(TEST_ARTIFACT_DIR, f))) drift = true; // an artifact with no source module
+    }
+    for (const [path, want] of files) {
+      let have = null;
+      try {
+        have = await readFile(path, "utf8");
+      } catch {
+        /* missing counts as drift */
+      }
+      if (have !== want) drift = true;
+    }
+    if (drift) {
+      console.error(
+        "the test runtime artifacts (src/testgen/test_runtime/, test_runtime_modules.rs, src/emitter/http_client_runtime.ts) are out of date.\n" +
+          "Run `npm run bundle` in bynk-emit/runtime and commit them. Edit runtime/src/testing/ and runtime/src/client/, never the artifacts.",
+      );
+      stale = true;
+    } else {
+      console.log("test runtime artifacts are up to date.");
+    }
+  } else {
+    await mkdir(TEST_ARTIFACT_DIR, { recursive: true });
+    for (const f of await readdir(TEST_ARTIFACT_DIR)) {
+      if (!files.has(join(TEST_ARTIFACT_DIR, f))) await rm(join(TEST_ARTIFACT_DIR, f));
+    }
+    for (const [path, content] of files) await writeFile(path, content, "utf8");
+    console.log(`Wrote ${files.size} test runtime artifacts.`);
   }
 }
 for (const artifact of ARTIFACTS) {

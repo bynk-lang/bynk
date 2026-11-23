@@ -172,7 +172,8 @@ footer.
    6. Reach out with capabilities (new; written in slice 10, at
       `tutorials/capabilities.md`)
    7. Add a stateful agent
-   8. Split into contexts (new)
+   8. Split into contexts (new; written in slice 11, at
+      `tutorials/contexts.md`)
    9. Test it
    10. Deploy it (new)
 3. **Concepts**, at `/book/concepts/`: the explanation pages, moved from the

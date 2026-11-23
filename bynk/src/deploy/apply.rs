@@ -564,11 +564,13 @@ impl ApplyWorker<'_, '_, '_, '_, '_> {
             .iter()
             .map(|f| f.binding.clone())
             .collect();
-        let synthesised = synthesise_environment_block(
+        let synthesised = bynk_emit::emitter::wrangler::environment::render(
             &config_text,
             environment,
-            &self.bound::<Kv>(),
-            &foreign,
+            &bynk_emit::emitter::wrangler::environment::Resolved {
+                kv_ids: &self.bound::<Kv>(),
+                foreign_bindings: &foreign,
+            },
         )
         .map_err(|e| {
             DeployFailure::driver(format!(
