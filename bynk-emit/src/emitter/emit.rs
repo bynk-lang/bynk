@@ -36,7 +36,7 @@ use super::lower_stmt::{Body, Item, block_body_with_return, claim_scoped, functi
 use super::ts_types::{ts_base, ts_ty_to_ts_type, ts_type_ref_to_ts_type};
 use super::*;
 use crate::ts_build::{
-    as_expr as persist_cast, await_expr as hist_await, binary as hist_binary, call as hist_call,
+    as_expr as persist_cast, await_expr as hist_await, binary as hist_binary, call,
     const_ as hist_const, ident, let_decl as hist_let, member, num_lit as hist_num, str_lit,
 };
 
@@ -420,7 +420,7 @@ fn guard_if_stmt(
     let value_entry = if decimal {
         bynk_ts::TsObjectEntry::prop(
             "value".to_string(),
-            hist_call(ident("__bynkDecimalToString"), vec![ident("value")]),
+            call(ident("__bynkDecimalToString"), vec![ident("value")]),
         )
     } else {
         bynk_ts::TsObjectEntry::Shorthand("value".to_string())
@@ -4804,10 +4804,7 @@ fn agent_key_assign(
     bynk_ts::TsStmt::assign(
         member(ident("this"), "__key"),
         bynk_ts::TsExpr::As {
-            expr: Box::new(hist_call(
-                ident("__decodeAgentKey"),
-                vec![ident(codec), json],
-            )),
+            expr: Box::new(call(ident("__decodeAgentKey"), vec![ident(codec), json])),
             ty: key_ty.clone(),
         },
         None,
@@ -4817,7 +4814,7 @@ fn agent_key_assign(
 /// #1818: `globalThis.Object.assign(new <Agent>(state), { __key: key })`, the bundle factory's
 /// instance that learns its key.
 fn object_assign_key(agent: &str) -> bynk_ts::TsExpr {
-    hist_call(
+    call(
         member(member(ident("globalThis"), "Object"), "assign"),
         vec![
             bynk_ts::TsExpr::New {
@@ -6051,13 +6048,13 @@ fn migrate_old_field_entry(
             let key = if type_base_is_string(k, &commons.types) {
                 ident("__k")
             } else {
-                hist_call(persist_global("Number"), vec![ident("__k")])
+                call(persist_global("Number"), vec![ident("__k")])
             };
-            let entries = hist_call(
+            let entries = call(
                 persist_global("Object.entries"),
                 vec![persist_cast(stored_at(str_lit(n)), persist_record_ty())],
             );
-            hist_call(
+            call(
                 member(entries, "map"),
                 vec![bynk_ts::TsExpr::Arrow {
                     params: vec![bynk_ts::TsParam::array_pattern(
@@ -6167,7 +6164,7 @@ fn migrate_decode_old(
                 str_lit("Err"),
             ),
             bynk_ts::TsStmt::throw_stmt(
-                hist_call(
+                call(
                     ident("__rehydrationViolation"),
                     vec![str_lit(names.agent_name), member(od(), "error")],
                 ),
@@ -6211,10 +6208,10 @@ fn migrate_step_try_body(
                         "[__k, __v]",
                         v,
                         bynk_ts::TsStmt::expr_stmt(
-                            hist_call(
+                            call(
                                 member(ident("__h"), "put"),
                                 vec![
-                                    hist_call(persist_global("String"), vec![ident("__k")]),
+                                    call(persist_global("String"), vec![ident("__k")]),
                                     ident("__v"),
                                 ],
                             ),
@@ -6232,9 +6229,9 @@ fn migrate_step_try_body(
                             bynk_ts::TsStmt::return_stmt(Some(ident("__h")), None),
                         ])),
                     };
-                    hist_call(
+                    call(
                         bynk_ts::TsExpr::Paren(Box::new(handle)),
-                        vec![member(hist_call(ident(names.zero_fn), Vec::new()), n)],
+                        vec![member(call(ident(names.zero_fn), Vec::new()), n)],
                     )
                 } else {
                     v
@@ -6267,7 +6264,7 @@ fn migration_step_decl(
 ) -> bynk_ts::TsStmt {
     let state_ty = || bynk_ts::TsType::named(names.state_ty);
     let has_own = |key: bynk_ts::TsExpr| {
-        hist_call(
+        call(
             persist_global("Object.prototype.hasOwnProperty.call"),
             vec![ident("stored"), key],
         )
@@ -6288,7 +6285,7 @@ fn migration_step_decl(
         None,
         persist_cast(
             bynk_ts::TsExpr::object_entries(vec![
-                bynk_ts::TsObjectEntry::Spread(hist_call(ident(names.zero_fn), Vec::new())),
+                bynk_ts::TsObjectEntry::Spread(call(ident(names.zero_fn), Vec::new())),
                 bynk_ts::TsObjectEntry::Spread(ident("__picked")),
             ]),
             state_ty(),
@@ -6297,7 +6294,7 @@ fn migration_step_decl(
     ));
     for f in [names.rehydrate_fn, names.hydrate_fn].into_iter().flatten() {
         body.push(bynk_ts::TsStmt::expr_stmt(
-            hist_call(
+            call(
                 ident(f),
                 vec![ident("__c"), persist_recast(ident("__picked"), state_ty())],
             ),
@@ -6311,7 +6308,7 @@ fn migration_step_decl(
         None::<String>,
         bynk_ts::TsStmt::block(
             vec![bynk_ts::TsStmt::throw_stmt(
-                hist_call(
+                call(
                     ident("__migrationFailed"),
                     vec![str_lit(names.agent_name), hist_num(plan.from)],
                 ),
@@ -6323,7 +6320,7 @@ fn migration_step_decl(
     ));
     // 4. Back to the wire, keeping any key version N did not know.
     let encoded = match names.encode_fn {
-        Some(f) => hist_call(ident(f), vec![ident("__out")]),
+        Some(f) => call(ident(f), vec![ident("__out")]),
         None => bynk_ts::TsExpr::Paren(Box::new(persist_recast(
             ident("__out"),
             persist_record_ty(),
@@ -6341,7 +6338,7 @@ fn migration_step_decl(
     ));
     body.push(empty_record_const("__keep"));
     body.push(copy_stored_keys(
-        hist_call(persist_global("Object.keys"), vec![ident("stored")]),
+        call(persist_global("Object.keys"), vec![ident("stored")]),
         hist_binary(
             bynk_ts::TsBinaryOp::And,
             hist_binary(
@@ -6351,10 +6348,7 @@ fn migration_step_decl(
             ),
             bynk_ts::TsExpr::Unary {
                 op: bynk_ts::TsUnaryOp::Not,
-                expr: Box::new(hist_call(
-                    member(ident("__known"), "has"),
-                    vec![ident("__k")],
-                )),
+                expr: Box::new(call(member(ident("__known"), "has"), vec![ident("__k")])),
             },
         ),
         "__keep",
@@ -6507,7 +6501,7 @@ fn persist_field_as(field: &str, ty: bynk_ts::TsType) -> bynk_ts::TsExpr {
 /// `globalThis.Object.prototype.hasOwnProperty.call(stored, "name")`: whether the stored
 /// record carries the field.
 fn persist_present(name: &str) -> bynk_ts::TsExpr {
-    hist_call(
+    call(
         persist_global("Object.prototype.hasOwnProperty.call"),
         vec![ident("stored"), str_lit(name)],
     )
@@ -6535,7 +6529,7 @@ fn persist_decode(decoded: bynk_ts::TsExpr, agent_name: &str) -> Vec<bynk_ts::Ts
                 str_lit("Err"),
             ),
             bynk_ts::TsStmt::throw_stmt(
-                hist_call(
+                call(
                     ident("__rehydrationViolation"),
                     vec![str_lit(agent_name), member(result(), "error")],
                 ),
@@ -6588,7 +6582,7 @@ fn hydrate_fn_decl(
         )
     };
     let mut body = vec![
-        hist_const("__z", hist_call(ident(zero_fn), Vec::new())),
+        hist_const("__z", call(ident(zero_fn), Vec::new())),
         hist_const(
             "__w",
             persist_cast(
@@ -6605,13 +6599,13 @@ fn hydrate_fn_decl(
             args.push(record_at(&format!("{name}:order")));
         }
         body.push(bynk_ts::TsStmt::if_stmt(
-            hist_call(
+            call(
                 persist_global("Object.hasOwn"),
                 vec![ident("__r"), str_lit(name)],
             ),
             bynk_ts::TsStmt::block(
                 vec![
-                    bynk_ts::TsStmt::expr_stmt(hist_call(ident(with), args), None),
+                    bynk_ts::TsStmt::expr_stmt(call(ident(with), args), None),
                     bynk_ts::TsStmt::assign(
                         member(ident("__w"), name),
                         member(ident("__z"), name),
@@ -6742,7 +6736,7 @@ fn agent_state_checks_and_entries(
             n,
             vec![persist_for_each(
                 "[__k]",
-                hist_call(
+                call(
                     ident("__wireEntries"),
                     vec![persist_field_as(n, bynk_ts::TsType::named("never"))],
                 ),
@@ -6754,7 +6748,7 @@ fn agent_state_checks_and_entries(
     let wire = |kind: &str, n: &str, extra: Option<bynk_ts::TsExpr>| {
         let mut args = vec![member(ident("s"), n)];
         args.extend(extra);
-        bynk_ts::TsObjectEntry::prop(n, hist_call(ident(kind), args))
+        bynk_ts::TsObjectEntry::prop(n, call(ident(kind), args))
     };
     // `(<param>) => <body>`.
     let arrow = |param: &str, body: bynk_ts::TsExpr| bynk_ts::TsExpr::Arrow {
@@ -6788,7 +6782,7 @@ fn agent_state_checks_and_entries(
                 n,
                 vec![persist_for_each(
                     "__k",
-                    hist_call(
+                    call(
                         persist_global("Object.keys"),
                         vec![persist_field_as(n, bynk_ts::TsType::named("object"))],
                     ),
@@ -6805,7 +6799,7 @@ fn agent_state_checks_and_entries(
             encode_entries.push(wire("__wireHeld", n, None));
             encode_entries.push(bynk_ts::TsObjectEntry::prop(
                 format!("\"{n}:order\""),
-                hist_call(ident("__wireHeldOrder"), vec![member(ident("s"), n)]),
+                call(ident("__wireHeldOrder"), vec![member(ident("s"), n)]),
             ));
         } else if is_codecable(v) {
             encode_entries.push(wire(
@@ -6825,7 +6819,7 @@ fn agent_state_checks_and_entries(
         for f in index_fields {
             encode_entries.push(bynk_ts::TsObjectEntry::prop(
                 format!("{n}__idx_{f}"),
-                hist_call(
+                call(
                     ident("__wirePostings"),
                     vec![member(ident("s"), n), str_lit(f)],
                 ),
@@ -6845,7 +6839,7 @@ fn agent_state_checks_and_entries(
         encode_entries.push(wire("__wireHeld", n, None));
         encode_entries.push(bynk_ts::TsObjectEntry::prop(
             format!("\"{n}:order\""),
-            hist_call(ident("__wireHeldOrder"), vec![member(ident("s"), n)]),
+            call(ident("__wireHeldOrder"), vec![member(ident("s"), n)]),
         ));
     }
     // `Set[T]` — the elements are the (textual) Record keys; validate when `T`
@@ -6880,7 +6874,7 @@ fn agent_state_checks_and_entries(
                 n,
                 vec![persist_for_each(
                     "__e",
-                    hist_call(persist_global("Object.values"), vec![cells]),
+                    call(persist_global("Object.values"), vec![cells]),
                     body,
                 )],
             ));
@@ -7716,7 +7710,7 @@ fn emit_agent_dispatch(
         // #1678: the wire arguments are decoded through this agent's table
         // before the handler sees them (`decodeAgentArgs` throws on a decode
         // failure, an internal fault), and the result is encoded on the way out.
-        let decoded_args = bynk_ts::TsExpr::Spread(Box::new(hist_call(
+        let decoded_args = bynk_ts::TsExpr::Spread(Box::new(call(
             ident("__decodeAgentArgs"),
             vec![
                 ident(agent_wire_name(&a.name.name)),
@@ -8088,7 +8082,7 @@ fn emit_agent_history_driver(
             ])],
         );
         let mut body = vec![
-            bynk_ts::TsStmt::expr_stmt(hist_call(member(ident(registry), "reset"), vec![]), None),
+            bynk_ts::TsStmt::expr_stmt(call(member(ident(registry), "reset"), vec![]), None),
             history_inst_stmt(a, commons),
             hist_const("__load", history_load_arrow(a, fns, &state_ty)),
             hist_const("__rej", history_rejected_arrow()),
@@ -8217,10 +8211,7 @@ fn history_inst_stmt(a: &AgentDecl, commons: &TypedCommons) -> bynk_ts::TsStmt {
     hist_const(
         "__inst",
         bynk_ts::TsExpr::As {
-            expr: Box::new(hist_call(
-                ident(agent_factory_name(&a.name.name)),
-                vec![key],
-            )),
+            expr: Box::new(call(ident(agent_factory_name(&a.name.name)), vec![key])),
             ty: history_any_ty(),
         },
     )
@@ -8242,14 +8233,14 @@ fn history_load_arrow(a: &AgentDecl, fns: &AgentLoadFns, state_ty: &str) -> bynk
     } = *fns;
     let stored = || member(member(member(ident("__inst"), "state"), "storage"), "get");
     let assign_s = |value: bynk_ts::TsExpr| bynk_ts::TsStmt::assign(ident("__s"), value, None);
-    let zero = || hist_call(ident(zero_fn), vec![]);
+    let zero = || call(ident(zero_fn), vec![]);
     let mut body = vec![
         // `let`: the stored record is replaced by its joined, wholesale-shaped form below
         // (#3189).
         hist_let(
             "__s",
             None,
-            Some(hist_await(hist_call(stored(), vec![str_lit("state")]))),
+            Some(hist_await(call(stored(), vec![str_lit("state")]))),
         ),
         bynk_ts::TsStmt::if_stmt(
             hist_binary(
@@ -8261,7 +8252,7 @@ fn history_load_arrow(a: &AgentDecl, fns: &AgentLoadFns, state_ty: &str) -> bynk
             None,
         ),
         bynk_ts::TsStmt::expr_stmt(
-            hist_call(
+            call(
                 ident("__checkStoredLayout"),
                 vec![str_lit(&a.name.name), ident("__s")],
             ),
@@ -8280,11 +8271,11 @@ fn history_load_arrow(a: &AgentDecl, fns: &AgentLoadFns, state_ty: &str) -> bynk
             args.push(step_ranges_expr(step_plans));
         }
         body.push(bynk_ts::TsStmt::expr_stmt(
-            hist_call(ident("__checkStoredSchemaVersion"), args),
+            call(ident("__checkStoredSchemaVersion"), args),
             None,
         ));
     }
-    body.push(assign_s(hist_await(hist_call(
+    body.push(assign_s(hist_await(call(
         ident("__readStored"),
         vec![
             ident("__inst"),
@@ -8294,7 +8285,7 @@ fn history_load_arrow(a: &AgentDecl, fns: &AgentLoadFns, state_ty: &str) -> bynk
     ))));
     // State-migrations S2 (#2224): and the same step dispatch.
     if !step_plans.is_empty() {
-        body.push(assign_s(hist_call(ident(migrate_fn), vec![ident("__s")])));
+        body.push(assign_s(call(ident(migrate_fn), vec![ident("__s")])));
     }
     body.push(hist_const(
         "__m",
@@ -8307,7 +8298,7 @@ fn history_load_arrow(a: &AgentDecl, fns: &AgentLoadFns, state_ty: &str) -> bynk
     for (wanted, func) in [(has_rehydrate, rehydrate_fn), (has_collections, hydrate_fn)] {
         if wanted {
             body.push(bynk_ts::TsStmt::expr_stmt(
-                hist_call(ident(func), vec![ident("__m"), ident("__s")]),
+                call(ident(func), vec![ident("__m"), ident("__s")]),
                 None,
             ));
         }
@@ -8372,7 +8363,7 @@ fn history_console_mute_arrow() -> bynk_ts::TsExpr {
             },
             str_lit("string"),
         ),
-        hist_call(
+        call(
             member(first(), "startsWith"),
             vec![str_lit("InvariantViolation")],
         ),
@@ -8391,7 +8382,7 @@ fn history_console_mute_arrow() -> bynk_ts::TsExpr {
         body: Box::new(bynk_ts::TsArrowBody::Block(vec![
             bynk_ts::TsStmt::if_stmt(is_violation, bynk_ts::TsStmt::return_stmt(None, None), None),
             bynk_ts::TsStmt::expr_stmt(
-                hist_call(
+                call(
                     ident("__ce"),
                     vec![bynk_ts::TsExpr::Spread(Box::new(ident("__a")))],
                 ),
@@ -8417,7 +8408,7 @@ fn history_arg_expr(
         index: Box::new(hist_num(i)),
     };
     if type_base_is_int(&p.type_ref, types) {
-        hist_call(member(ident("globalThis"), "Number"), vec![arg])
+        call(member(ident("globalThis"), "Number"), vec![arg])
     } else {
         arg
     }
@@ -8462,7 +8453,7 @@ fn history_drive_loop(
             .collect();
         args.push(ident("deps"));
         vec![bynk_ts::TsStmt::expr_stmt(
-            hist_await(hist_call(member(ident("__inst"), m), args)),
+            hist_await(call(member(ident("__inst"), m), args)),
             None,
         )]
     });
@@ -8473,7 +8464,7 @@ fn history_drive_loop(
         Some("__e"),
         bynk_ts::TsStmt::block(
             vec![bynk_ts::TsStmt::if_else_stmt(
-                hist_call(ident("__rej"), vec![ident("__e")]),
+                call(ident("__rej"), vec![ident("__e")]),
                 bynk_ts::TsStmt::block(
                     vec![
                         bynk_ts::TsStmt::assign(
@@ -8518,7 +8509,7 @@ fn history_drive_loop(
     });
     let new_state = bynk_ts::TsExpr::Conditional {
         test: Box::new(ident("__accepted")),
-        consequent: Box::new(hist_await(hist_call(ident("__load"), vec![]))),
+        consequent: Box::new(hist_await(call(ident("__load"), vec![]))),
         alternate: Box::new(ident("__old")),
     };
     let step = bynk_ts::TsStmt::const_stmt(
@@ -8546,7 +8537,7 @@ fn history_drive_loop(
             ident("undefined"),
         ),
         bynk_ts::TsStmt::expr_stmt(
-            hist_call(
+            call(
                 member(member(ident("globalThis"), "Object"), "defineProperty"),
                 vec![
                     ident("__step"),
@@ -8563,7 +8554,7 @@ fn history_drive_loop(
         ident("seq"),
         bynk_ts::TsStmt::block(
             vec![
-                hist_const("__old", hist_await(hist_call(ident("__load"), vec![]))),
+                hist_const("__old", hist_await(call(ident("__load"), vec![]))),
                 hist_let(
                     "__accepted",
                     None,
@@ -8577,7 +8568,7 @@ fn history_drive_loop(
                 step,
                 define_refusal,
                 bynk_ts::TsStmt::expr_stmt(
-                    hist_call(member(ident("__steps"), "push"), vec![ident("__step")]),
+                    call(member(ident("__steps"), "push"), vec![ident("__step")]),
                     None,
                 ),
             ],
@@ -8733,7 +8724,7 @@ fn map_indexer(field: &str) -> bynk_ts::TsExpr {
                 is_async: false,
                 generics: Vec::new(),
                 return_type: None,
-                body: Box::new(bynk_ts::TsArrowBody::Expr(Box::new(hist_call(
+                body: Box::new(bynk_ts::TsArrowBody::Expr(Box::new(call(
                     ident("String"),
                     vec![member(ident("__v"), field)],
                 )))),

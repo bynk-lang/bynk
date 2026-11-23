@@ -24,7 +24,7 @@ use super::super::{Expr, ExprKind, Ident, TypeRef};
 use super::codec_statics::lower_json_codec_call;
 use super::kernel_scalar::identity;
 use super::query::stream_generator;
-use crate::ts_build::{call, call as call_built, ident, member, new, type_app};
+use crate::ts_build::{call, ident, member, new, type_app};
 
 /// `globalThis.<name>`.
 fn global(name: &str) -> TsExpr {
@@ -82,7 +82,7 @@ pub(in crate::emitter) fn lower_type_static_call(
         if !type_args.is_empty() {
             callee = type_app(callee, explicit_type_args(type_args));
         }
-        let built = call_built(callee, all);
+        let built = call(callee, all);
         return Some(if needs_exec {
             settle_built(built, cx)
         } else {
@@ -221,10 +221,7 @@ pub(in crate::emitter) fn lower_scalar_static_call(
         )
     {
         let args_lowered = lower_http_variant_args(e, args, pre, cx);
-        return Some(call_built(
-            member_node("HttpResult", &method.name),
-            args_lowered,
-        ));
+        return Some(call(member_node("HttpResult", &method.name), args_lowered));
     }
     // v0.20b: built-in collection statics — `List.empty()` /
     // `Map.empty()`. The checker recorded the instantiated type;

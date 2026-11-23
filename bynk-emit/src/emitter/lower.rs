@@ -48,8 +48,8 @@ use super::ts_types::{
 };
 use super::*;
 use crate::ts_build::{
-    arrow_of as lambda_node, bool_lit as bool_node, call as call_built, const_ as binding_stmt,
-    ident, not_expr as negated, num_lit, str_lit,
+    arrow_of as lambda_node, bool_lit as bool_node, call, const_ as binding_stmt, ident,
+    not_expr as negated, num_lit, str_lit,
 };
 
 /// v0.154 (ADR 0178): the `Err`-wrap a `?` on a `Result` operand needs, if the
@@ -1903,7 +1903,7 @@ fn lower_ufcs_method_call(
             type_args: explicit,
         };
     }
-    let built = call_built(callee, all);
+    let built = call(callee, all);
     if needs_exec {
         settle_built(built, cx)
     } else {
@@ -2879,7 +2879,7 @@ fn lower_call(e: &Expr, name: &Ident, args: &[Expr], cx: &mut LowerCtx) -> Lower
             .unwrap_or_else(|| format!("offset {}", e.span.start));
         args_lowered.insert(0, str_lit(*kind));
         args_lowered.push(str_lit(location));
-        return pre.finish(call_built(ident("__fault"), args_lowered));
+        return pre.finish(call(ident("__fault"), args_lowered));
     }
     // #3051: `TestConnection[F]()` — a case's recording handle for a websocket
     // connection.
@@ -2923,7 +2923,7 @@ fn lower_call(e: &Expr, name: &Ident, args: &[Expr], cx: &mut LowerCtx) -> Lower
             object: Box::new(ident("HttpResult")),
             property: name.name.clone(),
         };
-        return pre.finish(call_built(callee, args_lowered));
+        return pre.finish(call(callee, args_lowered));
     }
     // v0.44: a QueueResult variant call (`Retry(reason)`) → `QueueResult.Retry(...)`.
     if matches!(
@@ -2937,7 +2937,7 @@ fn lower_call(e: &Expr, name: &Ident, args: &[Expr], cx: &mut LowerCtx) -> Lower
             object: Box::new(ident("QueueResult")),
             property: name.name.clone(),
         };
-        return pre.finish(call_built(callee, args_lowered));
+        return pre.finish(call(callee, args_lowered));
     }
     // P6.21 (real P6.2 cutover, partial — #1143/#1140's `Callee` classification
     // read back instead of re-derived): agent instantiation `AgentName(key)`
@@ -2970,7 +2970,7 @@ fn lower_call(e: &Expr, name: &Ident, args: &[Expr], cx: &mut LowerCtx) -> Lower
             object: Box::new(ident(&sum.name.name)),
             property: tag.to_string(),
         };
-        return pre.finish(call_built(callee, args_lowered));
+        return pre.finish(call(callee, args_lowered));
     }
     // Constrained generics slice 1: the call's comparator witnesses follow the
     // ordinary arguments (an `Ord`-bounded callee's hidden trailing parameters).
@@ -2988,7 +2988,7 @@ fn lower_call(e: &Expr, name: &Ident, args: &[Expr], cx: &mut LowerCtx) -> Lower
             needs_exec = true;
         }
     }
-    let mut built = call_built(ident(ts_ident(&name.name)), args_lowered);
+    let mut built = call(ident(ts_ident(&name.name)), args_lowered);
     if needs_exec {
         built = settle_built(built, cx);
     }
