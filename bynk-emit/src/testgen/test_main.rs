@@ -298,9 +298,27 @@ struct DetachReports {
 impl DetachReports {
     fn drain(&self) -> Option<TsStmt> {
         self.enabled.then(|| {
-            TsStmt::raw(
-                "const detached = (globalThis as unknown as { __bynkDetachedReports?: { kind: string; site: string; type: string | null; variant: string | null }[] }).__bynkDetachedReports?.splice(0) ?? [];".to_string(),
-                None,
+            // `(globalThis as unknown as { __bynkDetachedReports?: … }).__bynkDetachedReports?.splice(0) ?? []`
+            let reports = crate::ts_build::as_expr(
+                crate::ts_build::as_expr(ident("globalThis"), TsType::named("unknown")),
+                TsType::named(
+                    "{ __bynkDetachedReports?: { kind: string; site: string; type: string | null; variant: string | null }[] }",
+                ),
+            );
+            let splice = crate::ts_build::call(
+                TsExpr::OptionalMember {
+                    object: Box::new(member(crate::ts_build::paren(reports), "__bynkDetachedReports")),
+                    property: "splice".to_string(),
+                },
+                vec![crate::ts_build::num_lit(0)],
+            );
+            crate::ts_build::const_(
+                "detached",
+                crate::ts_build::binary(
+                    bynk_ts::TsBinaryOp::NullishCoalescing,
+                    splice,
+                    TsExpr::array(Vec::new()),
+                ),
             )
         })
     }
@@ -336,9 +354,38 @@ impl DetachReports {
 
     fn print(&self) -> Option<TsStmt> {
         self.enabled.then(|| {
-            TsStmt::raw(
-                "for (const d of detached) console.log(`    ! a detached effect ${d.kind === \"err\" ? `returned Err (${d.type}${d.variant === null ? \"\" : `.${d.variant}`})` : \"faulted\"} at ${d.site}`);".to_string(),
-                None,
+            use crate::ts_build::{cond_expr, null_lit, str_lit, strict_eq};
+            let field = |name: &str| member(ident("d"), name);
+            // `${d.variant === null ? "" : `.${d.variant}`}`
+            let variant = cond_expr(
+                strict_eq(field("variant"), null_lit()),
+                str_lit(""),
+                TsExpr::template_lit(vec![".".to_string(), String::new()], vec![field("variant")]),
+            );
+            // `returned Err (${d.type}${variant})`, or `"faulted"`.
+            let outcome = cond_expr(
+                strict_eq(field("kind"), str_lit("err")),
+                TsExpr::template_lit(
+                    vec!["returned Err (".to_string(), String::new(), ")".to_string()],
+                    vec![field("type"), variant],
+                ),
+                str_lit("faulted"),
+            );
+            crate::ts_build::for_of(
+                "d",
+                ident("detached"),
+                expr_stmt(method_call(
+                    ident("console"),
+                    "log",
+                    vec![TsExpr::template_lit(
+                        vec![
+                            "    ! a detached effect ".to_string(),
+                            " at ".to_string(),
+                            String::new(),
+                        ],
+                        vec![outcome, field("site")],
+                    )],
+                )),
             )
         })
     }
@@ -515,18 +562,7 @@ pub fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt, pg: bool) -
     // #2842: the modules that take a snapshot export `__bynkSnapshotReport`; the
     // run hands the driver every selected one's report — as an event in the stream,
     // and as one marked line in the human output when the driver asks for it.
-    let snapshot_modules: Vec<String> = sorted
-        .iter()
-        .enumerate()
-        .filter(|(_, t)| !t.snapshot_files.is_empty())
-        .map(|(i, _)| format!("[{i}, test_{i}]"))
-        .collect();
-    let snapshot_report = (!snapshot_modules.is_empty()).then(|| {
-        format!(
-            "const __snapshotFiles = ([{}] as const).filter(([i]) => active.includes(modules[i]!)).flatMap(([, t]) => t.__bynkSnapshotReport());",
-            snapshot_modules.join(", ")
-        )
-    });
+    let snapshot_report = snapshot_report_decl(&sorted);
 
     let mut ndjson_stmts = vec![
         const_(
@@ -703,11 +739,11 @@ pub fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt, pg: bool) -
     // #2842: the snapshot report goes ahead of `run-end`.
     let run_end = ndjson_stmts.pop();
     if let Some(decl) = &snapshot_report {
-        ndjson_stmts.push(TsStmt::raw(decl.clone(), None));
-        ndjson_stmts.push(TsStmt::raw(
-            "emit({ type: \"snapshots\", files: __snapshotFiles });".to_string(),
-            None,
-        ));
+        ndjson_stmts.push(decl.clone());
+        ndjson_stmts.push(emit_call(vec![
+            TsObjectEntry::prop("type".to_string(), str_lit("snapshots")),
+            TsObjectEntry::prop("files".to_string(), ident("__snapshotFiles")),
+        ]));
     }
     ndjson_stmts.extend(run_end);
     let ndjson_branch = block(ndjson_stmts);
@@ -846,19 +882,84 @@ fn pglite_teardown() -> TsStmt {
 
 /// #2842: under `BYNK_SNAPSHOT_REPORT=1` the driver reads the report from one
 /// marked line at the end of the human output and strips it.
-fn with_snapshot_report(human_branch: TsStmt, snapshot_report: &Option<String>) -> TsStmt {
+fn with_snapshot_report(human_branch: TsStmt, snapshot_report: &Option<TsStmt>) -> TsStmt {
     match snapshot_report {
-        Some(decl) => block(vec![
-            human_branch,
-            TsStmt::raw(
-                format!(
-                    "{decl}\nif (process.env.BYNK_SNAPSHOT_REPORT === \"1\") {{ globalThis.console.log(\"\\u0001bynk-snapshots \" + globalThis.JSON.stringify(__snapshotFiles)); }}"
+        Some(decl) => {
+            // `if (process.env.BYNK_SNAPSHOT_REPORT === "1") { globalThis.console.log("\u0001bynk-snapshots " + globalThis.JSON.stringify(__snapshotFiles)); }`
+            let marked = crate::ts_build::binary(
+                TsBinaryOp::Add,
+                crate::ts_build::raw_lit("\"\\u0001bynk-snapshots \""),
+                method_call(
+                    ident("globalThis.JSON"),
+                    "stringify",
+                    vec![ident("__snapshotFiles")],
                 ),
-                None,
-            ),
-        ]),
+            );
+            block(vec![
+                human_branch,
+                decl.clone(),
+                crate::ts_build::if_(
+                    strict_eq(
+                        member(member(ident("process"), "env"), "BYNK_SNAPSHOT_REPORT"),
+                        str_lit("1"),
+                    ),
+                    TsStmt::inline_block(vec![console_log(marked)], None),
+                ),
+            ])
+        }
         None => human_branch,
     }
+}
+
+/// `const __snapshotFiles = ([[i, test_i], …] as const).filter(([i]) => active.includes(modules[i]!)).flatMap(([, t]) => t.__bynkSnapshotReport());`:
+/// the report of every selected module that takes a snapshot.
+fn snapshot_files_decl(modules: Vec<TsExpr>) -> TsStmt {
+    use crate::ts_build::{arrow, index, paren};
+    let selected = method_call(
+        paren(TsExpr::AsConst(Box::new(TsExpr::array(modules)))),
+        "filter",
+        vec![arrow(
+            vec![TsParam::array_pattern(vec!["i".to_string()], None)],
+            method_call(
+                ident("active"),
+                "includes",
+                vec![TsExpr::NonNull(Box::new(index(
+                    ident("modules"),
+                    ident("i"),
+                )))],
+            ),
+        )],
+    );
+    const_(
+        "__snapshotFiles",
+        method_call(
+            selected,
+            "flatMap",
+            vec![arrow(
+                vec![TsParam::array_pattern(
+                    vec![String::new(), "t".to_string()],
+                    None,
+                )],
+                method_call(ident("t"), "__bynkSnapshotReport", Vec::new()),
+            )],
+        ),
+    )
+}
+
+/// #2842: the report declaration, when some selected module takes a snapshot.
+fn snapshot_report_decl(sorted: &[&RunnableTest]) -> Option<TsStmt> {
+    let modules: Vec<TsExpr> = sorted
+        .iter()
+        .enumerate()
+        .filter(|(_, t)| !t.snapshot_files.is_empty())
+        .map(|(i, _)| {
+            TsExpr::array(vec![
+                crate::ts_build::num_lit(i),
+                ident(format!("test_{i}")),
+            ])
+        })
+        .collect();
+    (!modules.is_empty()).then(|| snapshot_files_decl(modules))
 }
 
 /// `(detached.length > 0 ? <when_some> : undefined)`: a report field only a run with detached
@@ -1014,5 +1115,27 @@ mod tests {
         let program = emit_test_main(&tests, ImportExt::Js, false);
         let printed = bynk_ts::print(&program, "", "", "");
         assert_eq!(printed.text, expected);
+    }
+
+    /// No stored golden holds a snapshot report, so the statements are pinned: the declaration of
+    /// `__snapshotFiles` over the modules that take a snapshot, and the marked human line.
+    #[test]
+    fn the_snapshot_report_prints_its_declaration_and_marked_line() {
+        let decl = snapshot_files_decl(vec![
+            TsExpr::array(vec![crate::ts_build::num_lit(0), ident("test_0")]),
+            TsExpr::array(vec![crate::ts_build::num_lit(2), ident("test_2")]),
+        ]);
+        assert_eq!(
+            bynk_ts::print_stmt(&decl, 0),
+            "const __snapshotFiles = ([[0, test_0], [2, test_2]] as const).filter(([i]) => active.includes(modules[i]!)).flatMap(([, t]) => t.__bynkSnapshotReport());\n"
+        );
+        let human = with_snapshot_report(block(Vec::new()), &Some(decl));
+        let printed = bynk_ts::print_stmt(&human, 0);
+        assert!(
+            printed.contains(
+                "if (process.env.BYNK_SNAPSHOT_REPORT === \"1\") { globalThis.console.log(\"\\u0001bynk-snapshots \" + globalThis.JSON.stringify(__snapshotFiles)); }"
+            ),
+            "{printed}"
+        );
     }
 }
