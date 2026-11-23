@@ -14,7 +14,7 @@ use bynk_ts::{
 };
 
 use super::*;
-use crate::ts_build::{binary as compare, call, const_typed, ident, member, str_lit};
+use crate::ts_build::{binary, call, const_typed, ident, member, str_lit};
 
 impl Gen {
     // -----------------------------------------------------------------
@@ -685,12 +685,12 @@ impl Gen {
                 (_, true) => {
                     let present = TsExpr::Binary {
                         op: TsBinaryOp::And,
-                        left: Box::new(compare(
+                        left: Box::new(binary(
                             TsBinaryOp::StrictNotEq,
                             field(),
                             TsExpr::Lit(TsLit::Null),
                         )),
-                        right: Box::new(compare(
+                        right: Box::new(binary(
                             TsBinaryOp::StrictNotEq,
                             field(),
                             ident("undefined"),
@@ -698,12 +698,12 @@ impl Gen {
                     };
                     let absent = TsExpr::Binary {
                         op: TsBinaryOp::Or,
-                        left: Box::new(compare(
+                        left: Box::new(binary(
                             TsBinaryOp::StrictEq,
                             field(),
                             TsExpr::Lit(TsLit::Null),
                         )),
-                        right: Box::new(compare(TsBinaryOp::StrictEq, field(), ident("undefined"))),
+                        right: Box::new(binary(TsBinaryOp::StrictEq, field(), ident("undefined"))),
                     };
                     (
                         TsExpr::Conditional {
@@ -784,7 +784,7 @@ impl Gen {
             let write = wire_assign(arg, &fname, ser);
             if optional {
                 stmts.push(TsStmt::if_stmt(
-                    compare(TsBinaryOp::StrictNotEq, given, ident("undefined")),
+                    binary(TsBinaryOp::StrictNotEq, given, ident("undefined")),
                     write,
                     None,
                 ));
@@ -927,7 +927,7 @@ fn checked_stmts(local: &str, value: TsExpr, decoder: TsExpr, at: &str) -> Vec<T
             call(ident("__checked"), vec![value, decoder, str_lit(at)]),
         ),
         TsStmt::if_stmt(
-            compare(
+            binary(
                 TsBinaryOp::StrictEq,
                 member(ident(local), "tag"),
                 str_lit("Err"),

@@ -36,7 +36,7 @@ use super::lower_stmt::{Body, Item, block_body_with_return, claim_scoped, functi
 use super::ts_types::{ts_base, ts_ty_to_ts_type, ts_type_ref_to_ts_type};
 use super::*;
 use crate::ts_build::{
-    as_expr as persist_cast, await_expr as hist_await, binary as hist_binary, call, const_, ident,
+    as_expr as persist_cast, await_expr as hist_await, binary, call, const_, ident,
     let_decl as hist_let, member, num_lit as hist_num, str_lit,
 };
 
@@ -6158,7 +6158,7 @@ fn migrate_decode_old(
         body.push(const_("__od", decoded));
         let od = || ident("__od");
         body.push(bynk_ts::TsStmt::if_stmt(
-            hist_binary(
+            binary(
                 bynk_ts::TsBinaryOp::StrictEq,
                 member(od(), "tag"),
                 str_lit("Err"),
@@ -6339,9 +6339,9 @@ fn migration_step_decl(
     body.push(empty_record_const("__keep"));
     body.push(copy_stored_keys(
         call(persist_global("Object.keys"), vec![ident("stored")]),
-        hist_binary(
+        binary(
             bynk_ts::TsBinaryOp::And,
-            hist_binary(
+            binary(
                 bynk_ts::TsBinaryOp::StrictNotEq,
                 ident("__k"),
                 str_lit("__v"),
@@ -6523,7 +6523,7 @@ fn persist_decode(decoded: bynk_ts::TsExpr, agent_name: &str) -> Vec<bynk_ts::Ts
     vec![
         const_("__r", decoded),
         bynk_ts::TsStmt::if_stmt(
-            hist_binary(
+            binary(
                 bynk_ts::TsBinaryOp::StrictEq,
                 member(result(), "tag"),
                 str_lit("Err"),
@@ -8243,7 +8243,7 @@ fn history_load_arrow(a: &AgentDecl, fns: &AgentLoadFns, state_ty: &str) -> bynk
             Some(hist_await(call(stored(), vec![str_lit("state")]))),
         ),
         bynk_ts::TsStmt::if_stmt(
-            hist_binary(
+            binary(
                 bynk_ts::TsBinaryOp::StrictEq,
                 ident("__s"),
                 ident("undefined"),
@@ -8332,10 +8332,10 @@ fn history_rejected_arrow() -> bynk_ts::TsExpr {
         is_async: false,
         generics: Vec::new(),
         return_type: None,
-        body: Box::new(bynk_ts::TsArrowBody::Expr(Box::new(hist_binary(
+        body: Box::new(bynk_ts::TsArrowBody::Expr(Box::new(binary(
             bynk_ts::TsBinaryOp::And,
             not(not(ident("e"))),
-            hist_binary(
+            binary(
                 bynk_ts::TsBinaryOp::StrictNotEq,
                 history_violation_of("e"),
                 ident("undefined"),
@@ -8353,9 +8353,9 @@ fn history_console_mute_arrow() -> bynk_ts::TsExpr {
         object: Box::new(ident("__a")),
         index: Box::new(hist_num(0)),
     };
-    let is_violation = hist_binary(
+    let is_violation = binary(
         bynk_ts::TsBinaryOp::And,
-        hist_binary(
+        binary(
             bynk_ts::TsBinaryOp::StrictEq,
             bynk_ts::TsExpr::Unary {
                 op: bynk_ts::TsUnaryOp::Typeof,
@@ -8531,7 +8531,7 @@ fn history_drive_loop(
     // The refusal is the runner's, not part of the step's Bynk type, so it is
     // defined non-enumerable: `==` and a rendered step never see it.
     let define_refusal = bynk_ts::TsStmt::if_stmt(
-        hist_binary(
+        binary(
             bynk_ts::TsBinaryOp::StrictNotEq,
             ident("__refusal"),
             ident("undefined"),
