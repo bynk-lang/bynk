@@ -28,6 +28,20 @@ fn destructure_named_participant_types(
             .iter()
             .any(|(_, names)| names.iter().any(|m| m == n))
     };
+    // The walk reports a name only where a node uses it, so a participant type named inside opaque
+    // text (a `Raw` statement) would not be destructured, and the case would fail to compile. The
+    // lowering emits none today; this fails loudly, in tests, if that changes.
+    debug_assert!(
+        trees.iter().flat_map(|s| s.iter()).all(|stmt| {
+            stmt.raw_text().is_none_or(|text| {
+                !participant_types
+                    .iter()
+                    .flat_map(|(_, names)| names)
+                    .any(|n| text.contains(n.as_str()))
+            })
+        }),
+        "a raw statement in a lowered case names a participant type, which the tree walk cannot see"
+    );
     let used: HashSet<String> = trees
         .iter()
         .flat_map(|stmts| bynk_ts::unbound_names_in(stmts, is_participant_type))
