@@ -52,6 +52,17 @@ hand-rolled duplicate of the emitter's own escaping. This generalises the seam
 `materialise_kv_id` already occupies (patching generated config just before
 Wrangler runs) rather than inventing a new one.
 
+> **Amended by the back-half paydown, slice 1C.2 (#4039).** The block is now rendered by
+> `bynk-emit` (`wrangler::environment::render`), which the deploy's `ApplyWorker::environment_block`
+> calls, in place of the driver's own function. It is still a function of the generated
+> `wrangler.toml` as the deploy has materialised it, still appended after a newline, still written
+> through `toml::to_string_pretty`, so every byte of the block is unchanged. What it does with each
+> top-level key is that key's environment rule, `WranglerKey::environment_rule` in
+> `bynk-project`, one exhaustive `match` over every table the emitter writes. The names a deploy
+> gives a resource in an environment are `bynk_project::environment`'s, for the plan and the push
+> alike. The emitter's *build* output is unchanged: the block is still made at deploy time, because
+> the environment and the ids it holds are not known before.
+
 **D3 — queue names and Service Binding targets are environment-qualified
 (`<name>-<env>`); KV needs no qualification.** KV is safe by construction: a
 driver-minted id, already separated by the ledger's per-environment key, with

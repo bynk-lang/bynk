@@ -34,6 +34,9 @@ pub(crate) type Containers = BTreeMap<String, Vec<String>>;
 /// The capability names of the containers `worker` (a directory of
 /// `workers_dir`) declares, or none when it has no manifest or the manifest
 /// cannot be read as the layout this build writes.
+/// The key of the containers sidecar's list (`bynk-containers.json`).
+const SIDECAR_CONTAINERS: &str = "containers";
+
 fn capabilities_of(workers_dir: &Path, worker: &str) -> Vec<String> {
     let path = workers_dir
         .join(worker)
@@ -44,7 +47,8 @@ fn capabilities_of(workers_dir: &Path, worker: &str) -> Vec<String> {
     let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) else {
         return Vec::new();
     };
-    let mut names: Vec<String> = json["containers"]
+    // The sidecar's own key, not a `wrangler.toml` one.
+    let mut names: Vec<String> = json[SIDECAR_CONTAINERS]
         .as_array()
         .into_iter()
         .flatten()
