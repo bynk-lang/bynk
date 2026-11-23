@@ -47,7 +47,7 @@ need `Fetch` for each other: `consumes` reaches them through Service Bindings.
 
 ### The `Idempotency` capability
 
-`Idempotency` makes at-least-once delivery (a retried command, a resent webhook) safe, and is the habit to carry into event subscribers, since event delivery is at most once today:
+`Idempotency` makes at-least-once delivery (a retried command, a resent webhook) safe. It is also the habit to carry into event subscribers: event delivery is at most once today, but claiming `env.eventId` will matter once delivery is durable ([#3898](https://github.com/bynk-lang/bynk/issues/3898)):
 check `dedup` for a cached outcome, and on a miss, cache the value you compute with
 `remember` so a later call with the same key gets it back instead of recomputing:
 
