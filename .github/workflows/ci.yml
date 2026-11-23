@@ -199,8 +199,9 @@ jobs:
       # legs are dropped from `test_os` instead.
       queue_passed: ${{ steps.queue.outputs.passed }}
       # JSON array of OSes for the test legs this run may need. The merge
-      # queue runs Linux only; every other event (PRs, push to main, the
-      # nightly) lists all three, except a stamp commit whose parent already
+      # queue runs Linux only; a PR lists Linux and Windows, plus macOS when
+      # the repository variable MACOS_ON_PRS is 'true'; a push to main and the
+      # nightly list all three, except a stamp commit whose parent already
       # passed macOS (see the step). On a push, an OS whose leg the queue
       # passed on this commit is dropped, so the array can be empty.
       # `test_linux` and `test_other` split it: the `test` job runs the Linux
@@ -550,8 +551,8 @@ jobs:
           fi
           echo "passed=$passed" >> "$GITHUB_OUTPUT"
       # Decide the test legs' OSes from the event: Linux only in the merge
-      # queue, all three OSes on everything else (PRs, push/main, schedule) —
-      # except a stamp commit whose parent already passed macOS (the step checks
+      # queue, Linux and Windows on a PR (plus macOS when MACOS_ON_PRS is
+      # 'true'), all three OSes on push/main and schedule, except a stamp commit whose parent already passed macOS (the step checks
       # the macOS leg only, and off the nightly that leg runs `ci-os`).
       #
       # The stamp commit changes no code: it rewrites version strings, the
