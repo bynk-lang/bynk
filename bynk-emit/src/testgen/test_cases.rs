@@ -793,10 +793,7 @@ pub(super) fn observation_call_record_types(
                             &[const_typed("__t", ty.clone(), ident("__v"))],
                             |_| false,
                         );
-                        let generic = op
-                            .type_params
-                            .iter()
-                            .any(|tp| used.iter().any(|n| *n == tp.name.name));
+                        let generic = op.type_params.iter().any(|tp| used.contains(&tp.name.name));
                         if generic {
                             TsType::named("unknown")
                         } else {
