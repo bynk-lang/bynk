@@ -32,3 +32,7 @@ bynk-model.workspace = true
 # schema-registry read/write) — this crate now depends on it rather than
 # owning it directly.
 bynk-project.workspace = true
+
+[dev-dependencies]
+# 1B.2d: the hand-written manifests of `workers_emit` are held to `serde_json`'s pretty layout.
+serde_json.workspace = true

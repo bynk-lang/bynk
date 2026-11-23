@@ -288,6 +288,7 @@ dependencies = [
  "bynk-project",
  "bynk-syntax",
  "bynk-ts",
+ "serde_json",
  "toml",
  "toml_edit",
 ]
