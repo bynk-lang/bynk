@@ -371,3 +371,285 @@ pub fn runtime_import_stmts(type_only: bool, names: &[String], from: &str) -> Ve
         .map(|d| bynk_ts::TsStmt::decl(d, None))
         .collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::super::runtime_modules;
+    use super::*;
+
+    /// Every relative import in a per-module source names another module in the
+    /// table, so any reachable subset can be closed over its own imports.
+    #[test]
+    fn per_module_runtime_imports_resolve_within_the_table() {
+        let names: Vec<&str> = runtime_modules::RUNTIME_MODULES
+            .iter()
+            .map(|(n, _)| *n)
+            .collect();
+        for (name, src) in runtime_modules::RUNTIME_MODULES {
+            for line in src.lines().filter(|l| {
+                (l.starts_with("import ") || l.starts_with("} from ")) && l.contains('"')
+            }) {
+                let from = line.rsplit('"').nth(1).expect("import specifier");
+                // ADR 0799 C: a module may import the first-party npm package
+                // `bynk-std` declares for it, and nothing else outside the table.
+                if bynk_check::firstparty::FIRST_PARTY_NPM.iter().any(|d| {
+                    // Hyperdrive H5 (#3322): or a subpath of it
+                    // (`mysql2/promise`, mysql2's promise API).
+                    d.runtime_module == *name
+                        && (d.package == from
+                            || from
+                                .strip_prefix(d.package)
+                                .is_some_and(|r| r.starts_with('/')))
+                }) {
+                    continue;
+                }
+                // Resolved against the module's own directory: `./result.ts` from `storage`,
+                // `../storage.ts` from `testing/bindings`.
+                let mut parts: Vec<&str> = name.split('/').collect();
+                parts.pop();
+                let target = from.strip_suffix(".ts").map(|f| {
+                    for seg in f.split('/') {
+                        match seg {
+                            "." => {}
+                            ".." => {
+                                parts.pop();
+                            }
+                            seg => parts.push(seg),
+                        }
+                    }
+                    parts.join("/")
+                });
+                assert!(
+                    target.is_some_and(|t| names.contains(&t.as_str()) && t != *name),
+                    "{name}: import {from:?} does not name another runtime module"
+                );
+            }
+        }
+    }
+
+    /// ADR 0799 C: each first-party npm pin is exact and is the version the
+    /// runtime's own tests and type-check run against (`runtime/package.json`),
+    /// so what a project installs is what was tested, and the module it names
+    /// really imports the package.
+    #[test]
+    fn first_party_pins_match_the_runtime() {
+        let manifest =
+            std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/runtime/package.json"))
+                .expect("runtime/package.json");
+        for d in bynk_check::firstparty::FIRST_PARTY_NPM {
+            assert!(
+                manifest.contains(&format!("\"{}\": \"{}\"", d.package, d.version)),
+                "`{}` is pinned at {} in bynk-std but not in runtime/package.json",
+                d.package,
+                d.version
+            );
+            let (_, src) = runtime_modules::RUNTIME_MODULES
+                .iter()
+                .find(|(n, _)| *n == d.runtime_module)
+                .expect("the runtime module exists");
+            assert!(
+                src.contains(&format!("from \"{}\"", d.package))
+                    || src.contains(&format!("from \"{}/", d.package)),
+                "runtime module `{}` does not import `{}`",
+                d.runtime_module,
+                d.package
+            );
+        }
+    }
+
+    /// The `__` aliases emitted code imports live in the module that defines
+    /// each name, so a per-module import line finds them there.
+    #[test]
+    fn runtime_import_splits_per_defining_module() {
+        let names: Vec<String> = ["Ok", "type Result", "__callService", "type __JsonValue"]
+            .map(String::from)
+            .to_vec();
+        let got: Vec<(bool, Vec<String>, String)> =
+            split_runtime_import(false, &names, "../runtime.js")
+                .into_iter()
+                .map(|d| match d {
+                    bynk_ts::TsDecl::Import {
+                        type_only,
+                        names,
+                        from,
+                    } => (type_only, names, from),
+                    bynk_ts::TsDecl::ImportNamespace { .. }
+                    | bynk_ts::TsDecl::ImportDefault { .. }
+                    | bynk_ts::TsDecl::ReExport { .. }
+                    | bynk_ts::TsDecl::ExportNames { .. }
+                    | bynk_ts::TsDecl::ReExportAll { .. }
+                    | bynk_ts::TsDecl::Export(_)
+                    | bynk_ts::TsDecl::Interface { .. }
+                    | bynk_ts::TsDecl::ConstDecl { .. }
+                    | bynk_ts::TsDecl::Class { .. }
+                    | bynk_ts::TsDecl::Function { .. }
+                    | bynk_ts::TsDecl::TypeAlias { .. }
+                    | bynk_ts::TsDecl::ExportDefault(_)
+                    | bynk_ts::TsDecl::DeclareConst { .. } => unreachable!(),
+                })
+                .collect();
+        let v = |xs: &[&str]| xs.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        assert_eq!(
+            got,
+            vec![
+                (
+                    false,
+                    v(&["Ok", "type Result"]),
+                    "../__bynk_runtime/result.js".to_string()
+                ),
+                (
+                    false,
+                    v(&["__callService", "type __JsonValue"]),
+                    "../__bynk_runtime/boundary.js".to_string()
+                ),
+            ]
+        );
+    }
+
+    /// #2443: `HttpResult` lives apart from the HTTP response helpers, so a
+    /// bundle-target service that only names it does not reach `http` or
+    /// (through its type edges) `boundary`.
+    #[test]
+    fn http_result_is_reached_without_the_http_helpers() {
+        use std::collections::BTreeSet;
+        let names = vec!["HttpResult".to_string()];
+        let decls = split_runtime_import(false, &names, "./runtime.js");
+        assert!(matches!(
+            &decls[..],
+            [bynk_ts::TsDecl::Import { from, .. }] if from == "./__bynk_runtime/httpresult.js"
+        ));
+        let reached: BTreeSet<(String, String)> =
+            [("httpresult".to_string(), "js".to_string())].into();
+        let paths: Vec<String> = closure_files(&reached)
+            .iter()
+            .map(|(p, _)| p.display().to_string())
+            .collect();
+        assert_eq!(paths, ["__bynk_runtime/httpresult.ts"]);
+    }
+
+    #[test]
+    fn runtime_files_close_over_module_imports() {
+        use std::collections::BTreeSet;
+        let reached: BTreeSet<(String, String)> =
+            [("equality".to_string(), "js".to_string())].into();
+        let files = closure_files(&reached);
+        let paths: Vec<String> = files.iter().map(|(p, _)| p.display().to_string()).collect();
+        // equality -> bytes -> result, and equality -> decimal (#2622).
+        assert_eq!(
+            paths,
+            [
+                "__bynk_runtime/bytes.ts",
+                "__bynk_runtime/decimal.ts",
+                "__bynk_runtime/equality.ts",
+                "__bynk_runtime/result.ts"
+            ]
+        );
+        assert!(
+            files.iter().all(|(_, s)| !s.contains(".ts\";")),
+            "siblings are spelled for the target extension"
+        );
+        assert!(closure_files(&BTreeSet::new()).is_empty());
+    }
+
+    #[test]
+    fn handwritten_runtime_imports_are_rewritten() {
+        let src = "import { None, Some, type Option, type KVNamespace } from \"../runtime.js\";\nimport { x } from \"./other.js\";\n";
+        let out = rewrite_runtime_imports(src);
+        assert!(
+            out.contains(
+                "import { None, Some, type Option } from \"../__bynk_runtime/result.js\";"
+            ),
+            "{out}"
+        );
+        assert!(
+            out.contains("import type { KVNamespace } from \"../__bynk_runtime/storage.js\";"),
+            "{out}"
+        );
+        assert!(out.contains("import { x } from \"./other.js\";"), "{out}");
+    }
+
+    #[test]
+    fn handwritten_runtime_import_forms_are_handled_or_left_alone() {
+        let r = rewrite_runtime_imports;
+        // Multi-line, unterminated, indented, trailing comment, CRLF.
+        let multi = "import {\n  Ok,\n  Err,\n} from \"./runtime.js\";\nconst x = 1;\n";
+        assert_eq!(
+            r(multi),
+            "import { Ok, Err } from \"./__bynk_runtime/result.js\";\nconst x = 1;\n"
+        );
+        assert_eq!(
+            r("  import { Ok } from \"./runtime.js\" // keep\n"),
+            "  import { Ok } from \"./__bynk_runtime/result.js\"; // keep\n"
+        );
+        assert_eq!(
+            r("import { Ok } from \"./runtime.js\"\r\nx\r\n"),
+            "import { Ok } from \"./__bynk_runtime/result.js\";\r\nx\r\n"
+        );
+        // An unknown name, a namespace import and a foreign specifier stay as written.
+        for keep in [
+            "import { Ok, Reslt } from \"./runtime.js\";\n",
+            "import * as rt from \"./runtime.js\";\n",
+            "import { a } from \"./lib/other.js\";\n",
+        ] {
+            assert_eq!(r(keep), keep);
+        }
+    }
+
+    #[test]
+    fn an_unknown_runtime_module_emits_nothing_instead_of_panicking() {
+        use std::collections::BTreeSet;
+        let reached: BTreeSet<(String, String)> = [("nope".to_string(), "js".to_string())].into();
+        assert!(closure_files(&reached).is_empty());
+    }
+
+    #[test]
+    fn per_module_runtime_carries_its_aliases() {
+        let all: String = runtime_modules::RUNTIME_MODULES
+            .iter()
+            .map(|(_, s)| *s)
+            .collect();
+        for alias in [
+            "__callService",
+            "__matchPath",
+            "__makeAgent",
+            "__JsonValue",
+            "__formatIcuDate",
+        ] {
+            assert!(
+                all.contains(alias),
+                "{alias} missing from the per-module runtime"
+            );
+        }
+        let (_, http) = runtime_modules::RUNTIME_MODULES
+            .iter()
+            .find(|(n, _)| *n == "http")
+            .unwrap();
+        assert!(http.contains("matchPath as __matchPath"));
+    }
+
+    #[test]
+    fn runtime_emits_all_required_exports() {
+        let s: String = emit_all_runtime_modules()
+            .into_iter()
+            .map(|(_, src)| src)
+            .collect();
+        // Core types and constructors used by every emitted module.
+        assert!(s.contains("export type Result<T, E>"));
+        assert!(s.contains("export const Ok"));
+        assert!(s.contains("export const Err"));
+        assert!(s.contains("export type Option<T>"));
+        assert!(s.contains("export const Some"));
+        assert!(s.contains("export const None"));
+        assert!(s.contains("export interface ValidationError"));
+        // Durable Object surface used by agent classes.
+        assert!(s.contains("export interface DurableObjectStorage"));
+        assert!(s.contains("export interface DurableObjectState"));
+        assert!(s.contains("export class InMemoryStorage"));
+        assert!(s.contains("export function makeTestState"));
+        // Discriminator must be `tag` to match emitted code.
+        assert!(s.contains("tag: \"Ok\""));
+        assert!(s.contains("tag: \"Err\""));
+        assert!(s.contains("tag: \"Some\""));
+        assert!(s.contains("tag: \"None\""));
+    }
+}
