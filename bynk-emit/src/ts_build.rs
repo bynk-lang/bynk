@@ -5,15 +5,15 @@
 //! and no span. Before 1B.4a each file spelled its own, in up to five names for one shape
 //! (`str_lit`, `lit`, `lit_str`, `str_node`, `hist_str`), and one of them differed in behaviour
 //! under the same name (the list kernel's `method_call` brackets its receiver; it is now
-//! `lower_list::bracketed_method_call`). A file whose spelling differs imports a builder under
-//! its old name (`use crate::ts_build::{ident as id}`); 1B.4b renames those call sites in
-//! Phase 2, and the `node_builder_defs` probe reads the renames until then.
+//! `lower_list::bracketed_method_call`). Every file now calls a builder by its name here (1B.4b),
+//! and the `node_builder_defs` probe, which reads 0, guards against a local wrapper or an `as`
+//! rename coming back.
 //!
 //! What does not belong here: a helper that composes constructors and says something about a
 //! construct rather than about TypeScript (`if_err`, `applied`, `tag_const`, `verify_call`), and
 //! the constant helpers (`undefined`, `any_ty`) that `emit_silent_fallbacks` reads by spelling.
 //! They stay in their files, written over these builders. Where `bynk_ts` already has the
-//! constructor (`TsExpr::array`, `TsExpr::object_entries`, `TsParam::with_default`), callers use
+//! constructor (`TsExpr::array`, `TsExpr::object_entries`, `TsParam::new`), callers use
 //! it directly. Statement builders pass `span: None`, as every local one did: a statement that
 //! carries a source span is built with `bynk_ts` directly.
 

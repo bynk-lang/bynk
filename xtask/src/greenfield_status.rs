@@ -2625,8 +2625,8 @@ fn import_prediction_fns_violations(files: &[(PathBuf, String)]) -> usize {
 /// constructor over their parameters, each a local spelling of a shape `ts_build` defines once
 /// (`ident`, `str_lit`, `member`, `call`, `const_`, ...), plus each `as` rename in a
 /// `use crate::ts_build::{..}` clause. Before 1B.4a every file defined its own, in up to five
-/// spellings; 1B.4a leaves only the renames, so the probe reads what is left to spell once, and
-/// 1B.4b (Phase 2) takes it to 0. A growth probe ([`GROWTH_PROBES`]): a new local wrapper in a
+/// spellings; 1B.4a left only the renames, and 1B.4b (Phase 2) took the probe to 0, where it stays as
+/// a guard against a new local wrapper or an `as` rename in a split. A growth probe ([`GROWTH_PROBES`]): a new local wrapper in a
 /// later slice needs a `raises:` line.
 ///
 /// A *definition* counts when it lies outside `ts_build.rs` and outside `#[cfg(test)]` modules, is
@@ -2643,7 +2643,7 @@ fn import_prediction_fns_violations(files: &[(PathBuf, String)]) -> usize {
 /// scanners: a signature split over more than twelve lines is missed, the helpers a body calls are
 /// known by name only, a wrapper with a `where` clause or one returning `TsStmt` through a type
 /// alias is missed, and a rename inside a nested `use` tree (`use crate::{ts_build::{ident as id},
-/// ..}`) is not matched by the alias scan.
+/// ..}`) is not matched by the alias scan; closures (`let ident = |n| ..`) are not scanned.
 fn node_builder_defs(root: &Path) -> Probe {
     Probe {
         name: "node_builder_defs",
