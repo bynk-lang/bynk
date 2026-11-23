@@ -1772,10 +1772,11 @@ fn ast_importers(root: &Path) -> Probe {
 /// `bynk-emit/src` and `/`-separated. [`ast_importers`] counts each *origin* once, so a split
 /// that carries `bynk_syntax::ast` imports into several children leaves the reading where it
 /// was: the probe measures how much of the crate reads the AST, not how many files it is
-/// written across. Rows are added by the splits (`emit.rs` first, in 2.1a). **Each Phase 2 split of a `bynk-emit` file that imports the
-/// AST adds one `(child, origin)` row per new file that does too, in the same PR** (an origin
-/// that is itself a split child maps to its own origin, not to the intermediate file). A row
-/// whose child is not an importer is inert, so a row never needs deleting while the track runs.
+/// written across. Rows are added by the splits (`emit.rs` first, in 2.1a). **Each Phase 2
+/// split of a `bynk-emit` file that imports the AST adds one `(child, origin)` row per new file
+/// that does too, in the same PR** (an origin that is itself a split child maps to its own
+/// origin, not to the intermediate file). A row whose child is not an importer is inert, so a
+/// row never needs deleting while the track runs.
 const AST_IMPORTER_ORIGINS: &[(&str, &str)] = &[
     // emitter/workers_entry.rs (2.4, #4089)
     ("emitter/workers_entry/call.rs", "emitter/workers_entry.rs"),
@@ -1813,6 +1814,8 @@ const AST_IMPORTER_ORIGINS: &[(&str, &str)] = &[
     ("emitter/lower/ident.rs", "emitter/lower.rs"),
     ("emitter/lower/calls.rs", "emitter/lower.rs"),
     // emitter/emit.rs (2.1, #4086), in path order.
+    ("emitter/emit/agent.rs", "emitter/emit.rs"),
+    ("emitter/emit/agent_dispatch.rs", "emitter/emit.rs"),
     ("emitter/emit/agent_history.rs", "emitter/emit.rs"),
     ("emitter/emit/agent_migrate.rs", "emitter/emit.rs"),
     ("emitter/emit/agent_state.rs", "emitter/emit.rs"),
@@ -1822,6 +1825,7 @@ const AST_IMPORTER_ORIGINS: &[(&str, &str)] = &[
     ("emitter/emit/handlers.rs", "emitter/emit.rs"),
     ("emitter/emit/messages.rs", "emitter/emit.rs"),
     ("emitter/emit/service.rs", "emitter/emit.rs"),
+    ("emitter/emit/suite.rs", "emitter/emit.rs"),
     ("emitter/emit/types.rs", "emitter/emit.rs"),
     ("emitter/emit/websocket.rs", "emitter/emit.rs"),
     // emitter/serialisation.rs (an AST_IMPORTER_EXCEPTIONS entry: its children are excluded too)

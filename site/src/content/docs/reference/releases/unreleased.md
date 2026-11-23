@@ -7,6 +7,7 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.640.99** | Internal restructuring: `emit.rs` is now a thin facade over one file per declaration kind (agent handlers and dispatch, the agent class and the suite declarations move out); no output changes |
 | **v0.640.98** | `bynk test --format json`, `--format ndjson` and `--coverage` now exit non-zero when the report ends in an `error`, so a runner that ends before `run-end` can no longer leave an incomplete report (a suite with no `cases`) behind an exit status of 0 |
 | **v0.640.97** | Internal restructuring: `emit.rs` splits further by declaration kind (the agent state persistence and history driver move out); no output changes |
 | **v0.640.96** | Internal restructuring: `emit.rs` splits further by declaration kind (the agent store layout and the agent migration steps move out); no output changes |
