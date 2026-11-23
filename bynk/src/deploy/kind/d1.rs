@@ -377,7 +377,7 @@ pub(crate) fn create_d1(api: &dyn CloudflareApi, name: &str) -> Result<String, S
         return Err(e.to_string());
     }
     let listed = api.d1_list().map_err(|e| {
-        if e.exited() {
+        if e.ran_and_failed() {
             format!("it already exists, and listing the account's databases failed: {e}")
         } else {
             e.to_string()
@@ -670,7 +670,6 @@ mod tests {
                 live: (),
                 tools: Tools {
                     api: &Wrangler::new(&provenance, Path::new("/nonexistent")),
-                    provenance: &provenance,
                     project_root: Path::new("/nonexistent"),
                 },
             },

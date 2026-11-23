@@ -336,9 +336,11 @@ fn sweep_run(root: &Path, opts: &SweepOptions) -> Result<bool, String> {
             manager: Some(bynk_driver::npm_install::system_tool_manager(root)),
         },
     );
+    let scratch = std::env::temp_dir().join(format!("bynk-migrate-{}", std::process::id()));
+    let api = crate::cloudflare::Wrangler::new(&probe.provenance, &scratch);
     let secrets = live::WranglerSecrets {
-        provenance: probe.provenance,
-        scratch: std::env::temp_dir().join(format!("bynk-migrate-{}", std::process::id())),
+        api: &api,
+        scratch: scratch.clone(),
     };
     let results = {
         // A Ctrl-C stops the waking, never the key's deletion.

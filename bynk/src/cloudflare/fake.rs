@@ -7,8 +7,8 @@
 use std::cell::RefCell;
 use std::path::Path;
 
-use super::api::{CloudflareApi, Op, VectorizeOp};
-use super::error::{Exit, WranglerError};
+use super::api::{CloudflareApi, Op, PushCall, PushRun, VectorizeOp};
+use super::error::{Exit, Failure, WranglerError};
 
 /// What the fake answers a call with: what the operation returns on success (an id, or the
 /// printed JSON; ignored by the methods that return `()`), or its error.
@@ -18,6 +18,8 @@ type Answer = Box<dyn FnMut(&Op<'_>) -> Reply>;
 
 pub(crate) struct Recording {
     calls: RefCell<Vec<String>>,
+    /// What each call that takes a value on stdin was sent, in order.
+    stdin: RefCell<Vec<String>>,
     answer: RefCell<Answer>,
 }
 
@@ -26,6 +28,7 @@ impl Recording {
     pub(crate) fn new(answer: impl FnMut(&Op<'_>) -> Reply + 'static) -> Self {
         Recording {
             calls: RefCell::new(Vec::new()),
+            stdin: RefCell::new(Vec::new()),
             answer: RefCell::new(Box::new(answer)),
         }
     }
@@ -33,6 +36,11 @@ impl Recording {
     /// Every call so far, one line each, in order.
     pub(crate) fn calls(&self) -> Vec<String> {
         self.calls.borrow().clone()
+    }
+
+    /// What the calls that take a value on stdin were sent, in order: never in [`calls`].
+    pub(crate) fn stdin(&self) -> Vec<String> {
+        self.stdin.borrow().clone()
     }
 
     fn call(&self, op: Op<'_>) -> Reply {
@@ -98,5 +106,96 @@ impl CloudflareApi for Recording {
 
     fn vectorize(&self, op: VectorizeOp<'_>) -> Result<String, WranglerError> {
         self.call(Op::Vectorize(op))
+    }
+
+    /// A reply of `Ok` is a push that exited 0; a failed exit is a push that ran and failed,
+    /// returned as its exit with its stderr, as the adapter returns it. Any other error (no
+    /// wrangler, a start failure) is the error.
+    fn push(&self, call: PushCall<'_>) -> Result<PushRun, WranglerError> {
+        match self.call(Op::Push {
+            args: call.args,
+            secrets_file: call.secrets_file,
+            environment: call.environment,
+        }) {
+            Ok(_) => Ok(PushRun {
+                exit: Exit::Code(0),
+                said: String::new(),
+                signalled: None,
+            }),
+            Err(e) => match e.failure() {
+                Failure::Exit { exit, stderr, .. } => Ok(PushRun {
+                    exit: *exit,
+                    said: if call.tee {
+                        stderr.clone()
+                    } else {
+                        String::new()
+                    },
+                    signalled: None,
+                }),
+                _ => Err(e),
+            },
+        }
+    }
+
+    fn triggers_deploy(&self, _worker_dir: &Path, environment: &str) -> Result<(), WranglerError> {
+        self.call(Op::TriggersDeploy { environment }).map(drop)
+    }
+
+    fn whoami(&self) -> Result<(), WranglerError> {
+        self.call(Op::Whoami).map(drop)
+    }
+
+    fn worker_deployments(&self, name: &str) -> Result<(), WranglerError> {
+        self.call(Op::WorkerDeployments { name }).map(drop)
+    }
+
+    fn rollback(&self, script: &str, version: &str) -> Result<(), WranglerError> {
+        self.call(Op::Rollback { script, version }).map(drop)
+    }
+
+    fn secret_list(&self, _worker_dir: &Path, environment: &str) -> Result<String, WranglerError> {
+        self.call(Op::SecretList { environment })
+    }
+
+    fn secret_put(
+        &self,
+        _worker_dir: &Path,
+        name: &str,
+        value: &str,
+        environment: &str,
+    ) -> Result<(), WranglerError> {
+        self.stdin.borrow_mut().push(value.to_string());
+        self.call(Op::SecretPut { name, environment }).map(drop)
+    }
+
+    fn named_secret(
+        &self,
+        _dir: &Path,
+        verb: &str,
+        script: &str,
+        name: &str,
+        stdin: &str,
+    ) -> Result<(), WranglerError> {
+        self.stdin.borrow_mut().push(stdin.to_string());
+        self.call(Op::NamedSecret { verb, script, name }).map(drop)
+    }
+
+    fn d1_migrations_apply_local(
+        &self,
+        _worker_dir: &Path,
+        binding: &str,
+        persist: &[String],
+    ) -> Result<(), WranglerError> {
+        self.call(Op::D1MigrationsApplyLocal { binding, persist })
+            .map(drop)
+    }
+
+    fn secrets_store_list_local(
+        &self,
+        _worker_dir: &Path,
+        store: &str,
+        persist: &[String],
+    ) -> Result<String, WranglerError> {
+        self.call(Op::SecretsStoreListLocal { store, persist })
     }
 }

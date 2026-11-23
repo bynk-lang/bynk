@@ -17,26 +17,26 @@ Track slice T0.0 (#999); `ts_writes`/`ts_any` added by P7.0 (#1296); `verbatim_o
 | `ide_emit_edge` | yes | absent |
 | `ast_importers` | yes | 14 |
 | `emit_abi_shapes` | yes | 104 (bynk-browser.ts:Claim, bynk-cloudflare.ts:Claim, bynk-cloudflare.ts:negotiateLocale, bynk-cloudflare.ts:byteStreamBody, bynk-cloudflare.ts:claimStream, bynk-node.ts:Claim, bynk-node.ts:byteStreamBody, bynk-node.ts:claimStream, cloudflare.binding.ts:Ai, cloudflare.binding.ts:AiError, cloudflare.binding.ts:AiSearch, cloudflare.binding.ts:SearchAnswer, cloudflare.binding.ts:Analytics, cloudflare.binding.ts:AnalyticsSql, cloudflare.binding.ts:AnalyticsSqlError, cloudflare.binding.ts:AnalyticsSqlResult, cloudflare.binding.ts:Condition, cloudflare.binding.ts:Container, cloudflare.binding.ts:ContainerError, cloudflare.binding.ts:D1, cloudflare.binding.ts:DataPoint, cloudflare.binding.ts:EdgeCache, cloudflare.binding.ts:Email, cloudflare.binding.ts:EmailError, cloudflare.binding.ts:EmailMessage, cloudflare.binding.ts:FilterOp, cloudflare.binding.ts:ChatMessage, cloudflare.binding.ts:GenerateRequest, cloudflare.binding.ts:Generation, cloudflare.binding.ts:ImageFit, cloudflare.binding.ts:ImageFormat, cloudflare.binding.ts:ImageInfo, cloudflare.binding.ts:ImageResult, cloudflare.binding.ts:ImageStream, cloudflare.binding.ts:ImagesError, cloudflare.binding.ts:Images, cloudflare.binding.ts:IndexInfo, cloudflare.binding.ts:KvEntry, cloudflare.binding.ts:KvExpiration, cloudflare.binding.ts:KvGet, cloudflare.binding.ts:KvKey, cloudflare.binding.ts:KvList, cloudflare.binding.ts:KvListing, cloudflare.binding.ts:KvPut, cloudflare.binding.ts:MetaValue, cloudflare.binding.ts:MtlsCertificate, cloudflare.binding.ts:Mutation, cloudflare.binding.ts:MySql, cloudflare.binding.ts:MySqlError, cloudflare.binding.ts:MySqlRun, cloudflare.binding.ts:MySqlStatement, cloudflare.binding.ts:MySqlValue, cloudflare.binding.ts:OutputOptions, cloudflare.binding.ts:Overlay, cloudflare.binding.ts:PgError, cloudflare.binding.ts:PgRun, cloudflare.binding.ts:PgStatement, cloudflare.binding.ts:PgValue, cloudflare.binding.ts:Postgres, cloudflare.binding.ts:QueryOptions, cloudflare.binding.ts:Queue, cloudflare.binding.ts:QueueSend, cloudflare.binding.ts:R2, cloudflare.binding.ts:R2Body, cloudflare.binding.ts:R2Listing, cloudflare.binding.ts:R2Object, cloudflare.binding.ts:R2Part, cloudflare.binding.ts:R2Put, cloudflare.binding.ts:R2Upload, cloudflare.binding.ts:R2UploadOptions, cloudflare.binding.ts:RateLimit, cloudflare.binding.ts:SearchError, cloudflare.binding.ts:SearchHit, cloudflare.binding.ts:SearchOptions, cloudflare.binding.ts:SqlError, cloudflare.binding.ts:SqlRun, cloudflare.binding.ts:SqlStatement, cloudflare.binding.ts:SqlValue, cloudflare.binding.ts:StoredSecret, cloudflare.binding.ts:TransformOptions, cloudflare.binding.ts:Vector, cloudflare.binding.ts:VectorError, cloudflare.binding.ts:VectorMatch, cloudflare.binding.ts:Vectorize, cloudflare.binding.ts:Version, cloudflare.binding.ts:WorkerVersion, cloudflare.binding.ts:claimStream, cloudflare.binding.ts:AnalyticsDataset, cloudflare.binding.ts:D1Database, cloudflare.binding.ts:D1PreparedStatement, cloudflare.binding.ts:D1Result, cloudflare.binding.ts:QueueProducer, cloudflare.binding.ts:R2Bucket, cloudflare.binding.ts:R2MultipartUpload, cloudflare.binding.ts:R2ObjectMeta, cloudflare.binding.ts:RateLimiter, cloudflare.binding.ts:SecretsStoreSecret, cloudflare.binding.ts:SendEmail, cloudflare.binding.ts:VectorizeIndex, cloudflare.binding.ts:WorkerAiBinding, cloudflare.binding.ts:WorkerImagesBinding, cloudflare.binding.ts:AnalyticsSqlBinding, cloudflare.binding.ts:AiSearchInstance, cloudflare.binding.ts:WorkerVersionMetadata) |
-| `ts_writes` | yes | 506 |
+| `ts_writes` | yes | 458 |
 | `ts_any` | yes | 24 |
 | `verbatim_origins` | yes | 3 |
 | `verbatim_sites` | yes | 9 |
 | `ts_raw_sites_emit` | yes | 4 |
-| `ts_raw_sites_testgen` | yes | 13 |
+| `ts_raw_sites_testgen` | yes | 2 |
 | `ts_text_idents` | yes | 0 |
 | `emit_thread_locals` | yes | 0 |
 | `emit_silent_fallbacks` | yes | 0 |
 | `emit_print_calls` | yes | 0 |
-| `testgen_print_calls` | yes | 11 |
+| `testgen_print_calls` | yes | 0 |
 | `import_prediction_fns` | yes | 0 |
 | `node_builder_defs` | yes | 68 |
 | `deploy_kind_accessors` | yes | 0 |
 | `env_protocol_literals` | yes | 2 |
 | `tool_spawn_sites` | yes | 10 (process control 8, self re-execution 2, other 0) |
 | `deploy_ledger_writes` | yes | 1 |
-| `binding_kind_homes` | yes | 2 |
+| `binding_kind_homes` | yes | 1 |
 | `wrangler_key_literals` | yes | 0 |
-| `cloudflare_client_sites` | yes | 24 |
+| `cloudflare_client_sites` | yes | 10 |
 | `incremental_query_types` | yes | unit_signature present; shared_cache migrated; stability_test present; definition/project levels absent (deleted by #1537) |
 | `unconsumed_ir_items` | yes | 0 |
 | `diagnostic_coverage` | yes | unasserted=28 (asserted 870/898) |

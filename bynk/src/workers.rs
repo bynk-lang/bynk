@@ -8,11 +8,8 @@
 
 use bynk_driver::emsg;
 use std::path::Path;
-use std::process::Command;
 
 use bynk_driver::project::{BuildTarget, SchemaLock};
-
-use crate::probe::Provenance;
 
 /// One compile of the project into `build_dir`, in-process, on the same rooting
 /// rule as `bynk compile <project_root>` (#524, via
@@ -367,14 +364,6 @@ pub fn select_contexts(
     }
     chosen.sort();
     Ok(chosen)
-}
-
-/// `wrangler <subcommand>` for a resolved provenance, or `None` when wrangler
-/// is missing. A delegate to [`bynk_driver::tools::wrangler::command`], the one
-/// place the command is built, kept for the callers 1D.3b moves behind
-/// `cloudflare::CloudflareApi` (#4043, Decision J).
-pub fn wrangler_command(provenance: &Provenance, subcommand: &str) -> Option<Command> {
-    bynk_driver::tools::wrangler::command(provenance, subcommand)
 }
 
 #[cfg(test)]

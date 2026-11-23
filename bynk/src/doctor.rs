@@ -363,9 +363,12 @@ pub fn wrangler_below_min(probe: &Probe) -> bool {
 pub fn wrangler_upgrade_remedy(probe: &Probe, manager: PackageManager) -> String {
     match probe.provenance {
         Provenance::ProjectLocal(_) => {
-            format!("{} (in the project)", manager.dev_install("wrangler@4"))
+            format!(
+                "{} (in the project)",
+                manager.dev_install(bynk_driver::tools::pins::WRANGLER_SPEC)
+            )
         }
-        _ => manager.global_install("wrangler@4"),
+        _ => manager.global_install(bynk_driver::tools::pins::WRANGLER_SPEC),
     }
 }
 
@@ -401,7 +404,7 @@ fn detect_wrangler(tb: &dyn Toolbox, root: Option<&std::path::Path>) -> Row {
     // from: a project's own wrangler is upgraded in the project, and only an npx
     // one can be a stale cache.
     let manager = tool_manager(tb, root);
-    let install = manager.global_install("wrangler@4");
+    let install = manager.global_install(bynk_driver::tools::pins::WRANGLER_SPEC);
     let probe = probe::detect(
         tb,
         "wrangler",

@@ -7,8 +7,7 @@ use crate::emitter::RuntimeUse;
 // #1759: every namespace a test module imports, from one definition.
 use crate::emitter::emit::test_scaffold_ns as test_ns;
 use bynk_ts::{
-    TsArrowBody, TsBinaryOp, TsBindingName, TsDecl, TsExpr, TsLit, TsObjectEntry, TsParam, TsStmt,
-    TsType, TsTypeMember,
+    TsArrowBody, TsBinaryOp, TsExpr, TsLit, TsObjectEntry, TsParam, TsStmt, TsType, TsTypeMember,
 };
 
 /// testing-the-boundary Slice B: for a `system` suite whose target exposes an
@@ -64,7 +63,7 @@ pub(super) struct SystemHttpSupport {
 /// else the fixed test secret in `process.env`).
 pub(super) struct SigDriver {
     pub(super) seam: bynk_check::actors::SignatureSeam,
-    pub(super) secret_read: String,
+    pub(super) secret_read: TsExpr,
 }
 
 /// #2135: which signature a driver sends.
@@ -91,36 +90,44 @@ impl SigDriver {
     }
 
     /// The request headers carrying the signature (and timestamp).
-    pub(super) fn headers(&self) -> String {
-        let mut out = format!("{:?}: __sig.signature, ", self.seam.header);
+    pub(super) fn headers(&self) -> Entries {
+        let mut out = vec![header(
+            &self.seam.header,
+            member(ident("__sig"), "signature"),
+        )];
         if let Some(ts) = &self.seam.timestamp_header {
-            out.push_str(&format!("{ts:?}: __sig.timestamp, "));
+            out.push(header(ts, member(ident("__sig"), "timestamp")));
         }
         out
     }
 
     /// `const __sig = await __bynkSignHmacSha256(<body>, <secret>, …);`.
-    pub(super) fn sign(&self, body: &str, variant: SigVariant) -> TsStmt {
+    pub(super) fn sign(&self, body: &TsExpr, variant: SigVariant) -> TsStmt {
         let (secret, age) = match variant {
             SigVariant::Signed => (self.secret_read.clone(), 0),
             // #2155: a wrong secret derived from the real one, so it differs
             // from whatever the seam holds, `env` entry or test default.
-            SigVariant::Forged => (format!("({} + \"!\")", self.secret_read), 0),
+            SigVariant::Forged => (
+                TsExpr::Paren(Box::new(binary(
+                    TsBinaryOp::Add,
+                    self.secret_read.clone(),
+                    str_lit("!"),
+                ))),
+                0,
+            ),
             SigVariant::Stale(age) => (self.secret_read.clone(), age),
         };
-        TsStmt::const_stmt(
-            TsBindingName::Ident("__sig".to_string()),
-            None,
+        const_(
+            "__sig",
             await_expr(call(
                 ident("__bynkSignHmacSha256"),
                 vec![
-                    ident(body),
-                    ident(secret),
+                    body.clone(),
+                    secret,
                     TsExpr::Lit(TsLit::Bool(self.seam.timestamp_header.is_some())),
                     num_lit(age.to_string()),
                 ],
             )),
-            None,
         )
     }
 }
@@ -130,7 +137,7 @@ impl SigDriver {
 pub(super) fn signing_stmts(
     lone: &Option<SigDriver>,
     sum: &Option<SumAuth>,
-    body: &str,
+    body: &TsExpr,
 ) -> Vec<TsStmt> {
     match (lone, sum) {
         (Some(z), _) => vec![z.sign(body, z.signed())],
@@ -150,7 +157,7 @@ pub(super) struct SumAuth {
 
 pub(super) enum SumCredential {
     /// A Bearer member: how the driver reads its secret.
-    Bearer(String),
+    Bearer(TsExpr),
     /// A `Signature` member.
     Signature(SigDriver),
 }
@@ -158,32 +165,42 @@ pub(super) enum SumCredential {
 impl SumAuth {
     /// The statements building `__auth`, the credential headers for the actor
     /// the call acts as, signing `body` where a member signs.
-    pub(super) fn stmts(&self, body: &str) -> Vec<TsStmt> {
-        let mut out = vec![TsStmt::raw(
-            "const __auth: globalThis.Record<string, string> = {};",
-            None,
+    pub(super) fn stmts(&self, body: &TsExpr) -> Vec<TsStmt> {
+        let auth = |key: &str| index(ident("__auth"), str_lit(key));
+        let mut out = vec![const_typed(
+            "__auth",
+            TsType::named_with_args(
+                "globalThis.Record",
+                vec![TsType::named("string"), TsType::named("string")],
+            ),
+            TsExpr::object(Vec::new()),
         )];
         for (name, cred) in &self.members {
-            let set = match cred {
-                SumCredential::Bearer(secret_read) => format!(
-                    "__auth[\"authorization\"] = `Bearer ${{await __bynkSignHs256({{ sub: __sub, exp: __bynkNow() + 3600 }}, {secret_read})}}`;"
-                ),
+            let set: Vec<TsStmt> = match cred {
+                SumCredential::Bearer(secret_read) => vec![assign(
+                    auth("authorization"),
+                    bearer_token(
+                        object_of(vec![
+                            ("sub", ident("__sub")),
+                            ("exp", binary(TsBinaryOp::Add, now_secs(), num_lit("3600"))),
+                        ]),
+                        secret_read.clone(),
+                    ),
+                )],
                 SumCredential::Signature(z) => {
-                    let mut set = format!(
-                        "const __sig = await __bynkSignHmacSha256({body}, {}, {}, 0); __auth[{:?}] = __sig.signature;",
-                        z.secret_read,
-                        z.seam.timestamp_header.is_some(),
-                        z.seam.header
-                    );
+                    let mut set = vec![
+                        z.sign(body, SigVariant::Signed),
+                        assign(auth(&z.seam.header), member(ident("__sig"), "signature")),
+                    ];
                     if let Some(ts) = &z.seam.timestamp_header {
-                        set.push_str(&format!(" __auth[{ts:?}] = __sig.timestamp;"));
+                        set.push(assign(auth(ts), member(ident("__sig"), "timestamp")));
                     }
                     set
                 }
             };
-            out.push(TsStmt::raw(
-                format!("if (__as === {name:?}) {{ {set} }}"),
-                None,
+            out.push(if_(
+                strict_eq(ident("__as"), str_lit(name.as_str())),
+                block(set),
             ));
         }
         out
@@ -191,9 +208,9 @@ impl SumAuth {
 
     /// #2864: the first Bearer member's secret read: what `by Forged` and
     /// `by Expired` sign a token with on a sum with no `Signature` member.
-    pub(super) fn bearer(&self) -> Option<&str> {
+    pub(super) fn bearer(&self) -> Option<&TsExpr> {
         self.members.iter().find_map(|(_, c)| match c {
-            SumCredential::Bearer(secret_read) => Some(secret_read.as_str()),
+            SumCredential::Bearer(secret_read) => Some(secret_read),
             SumCredential::Signature(_) => None,
         })
     }
@@ -268,23 +285,7 @@ pub(super) fn emit_system_http_support(
 
     // How a driver reads an actor's secret: the case's `env` entry (#2134),
     // else the fixed test secret in `process.env`.
-    let secret_read_of = |secret: &str| {
-        let process_read = format!(
-            "(globalThis as {{ process?: {{ env?: globalThis.Record<string, string> }} }}).process?.env?.[{secret:?}]"
-        );
-        // #2138: a remote run's secret values come from the runner in one
-        // JSON variable (`__bynkSecrets`).
-        let process_read = if remote {
-            format!("(__bynkSecrets[{secret:?}] ?? {process_read})")
-        } else {
-            process_read
-        };
-        if with_env {
-            format!("(__bynkEnv[{secret:?}] ?? {process_read} ?? \"\")")
-        } else {
-            format!("({process_read} ?? \"\")")
-        }
-    };
+    let secret_read_of = |secret: &str| secret_read(secret, with_env, remote);
     let mut svc_names: Vec<&String> = table.services.keys().collect();
     svc_names.sort();
     for sname in svc_names {
@@ -319,11 +320,7 @@ pub(super) fn emit_system_http_support(
             // are spread first, so a header the driver sets itself wins.
             let declares_headers = h.params.iter().any(|p| is_headers(&p));
             runtime_use.note_request_header_pairs();
-            let headers_spread = if declares_headers {
-                "...__requestHeaderPairs(headers), "
-            } else {
-                "...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "
-            };
+            let headers_spread = request_headers_spread(declares_headers);
             // A required slot ahead of `sub`: the call lowers `undefined` there
             // when the case sends none.
             let extra_headers_param = (!declares_headers).then(|| {
@@ -367,34 +364,35 @@ pub(super) fn emit_system_http_support(
                 .partition(|p| path_params.contains(&p.name.name.as_str()));
             // The query string the typed drivers append to the URL, and the one
             // the raw drivers append (a `Wire("?…")` text, or a `RequestQuery`).
-            let (typed_query, raw_query) = match h.params.iter().find(|p| is_query(p)) {
-                Some(p) => {
-                    let var = crate::emitter::ts_ident(&p.name.name);
-                    if let bynk_syntax::ast::TypeRef::RequestQuery(_) = &p.type_ref {
-                        runtime_use.note_request_query_search();
-                        let s = format!("${{__requestQuerySearch({var})}}");
-                        (s.clone(), s)
-                    } else {
-                        let record = &p.type_ref;
-                        runtime_use.note_query_string();
-                        let ser = bynk_ts::print_expr(
-                            &crate::emitter::serialisation::serialise_expr_via(
+            let (typed_query, raw_query): (Option<TsExpr>, Option<TsExpr>) =
+                match h.params.iter().find(|p| is_query(p)) {
+                    Some(p) => {
+                        let var = crate::emitter::ts_ident(&p.name.name);
+                        if let bynk_syntax::ast::TypeRef::RequestQuery(_) = &p.type_ref {
+                            runtime_use.note_request_query_search();
+                            let s = call(ident("__requestQuerySearch"), vec![ident(var)]);
+                            (Some(s.clone()), Some(s))
+                        } else {
+                            let record = &p.type_ref;
+                            runtime_use.note_query_string();
+                            let ser = crate::emitter::serialisation::serialise_expr_via(
                                 record,
                                 &bynk_ts::TsExpr::Ident(var.clone()),
                                 &type_ns,
                                 runtime_use,
-                            ),
-                        );
-                        // #3343: a renamed field is written under its `@name`.
-                        let table_arg = renamed_specs_arg(record, &table.types);
-                        (
-                            format!("${{__queryString({ser}{table_arg})}}"),
-                            format!("${{{var}}}"),
-                        )
+                            );
+                            // #3343: a renamed field is written under its `@name`.
+                            (
+                                Some(call(
+                                    ident("__queryString"),
+                                    query_string_args(record, ser, &table.types),
+                                )),
+                                Some(ident(var)),
+                            )
+                        }
                     }
-                }
-                None => (String::new(), String::new()),
-            };
+                    None => (None, None),
+                };
             // #3277: the `Cookie` header the typed drivers send (a typed record's wire
             // form), and the one the raw drivers send (a `Wire` string).
             let cookies_param = h.params.iter().find(|p| is_cookies(p));
@@ -451,46 +449,31 @@ pub(super) fn emit_system_http_support(
                     );
                 }
             }
-            // The concrete URL: substitute each `:name` with its param.
-            let concrete_path = {
-                let mut s = String::new();
-                for seg in path.split('/').filter(|x| !x.is_empty()) {
-                    s.push('/');
-                    if let Some(name) = seg.strip_prefix(':') {
-                        s.push_str(&format!("${{{}}}", crate::emitter::ts_ident(name)));
-                    } else {
-                        s.push_str(seg);
-                    }
-                }
-                if s.is_empty() {
-                    s.push('/');
-                }
-                s
-            };
             // The signed Authorization header, if the handler's `by` is Bearer.
             // #2019: a refinement-guarded route's signing drivers take the
             // claims the acting actor presents, signed next to `sub`.
             let mut signs_claims = false;
-            let mut lone_bearer_read: Option<String> = None;
+            let mut lone_bearer_read: Option<TsExpr> = None;
             // #3052: the expression for an `Oidc` route's trust roots.
-            let mut oidc_trust: Option<String> = None;
-            let (auth_header, _secret_name) = match bynk_check::actors::bearer_seam_for(
-                h,
-                &table.actors,
-            ) {
+            let mut oidc_trust: Option<TsExpr> = None;
+            let auth_header: Entries = match bynk_check::actors::bearer_seam_for(h, &table.actors) {
                 Some(seam) => {
                     secrets.insert(seam.secret.clone());
                     signs_claims = seam.authorization.is_some();
-                    let claims_spread = if signs_claims {
+                    let mut claim_entries = Vec::new();
+                    if signs_claims {
                         claims.routes.insert((
                             sname.clone(),
                             method.as_str().to_string(),
                             path.clone(),
                         ));
-                        "...__claims, "
-                    } else {
-                        ""
-                    };
+                        claim_entries.push(TsObjectEntry::Spread(ident("__claims")));
+                    }
+                    claim_entries.push(TsObjectEntry::prop("sub", ident("__sub")));
+                    claim_entries.push(TsObjectEntry::prop(
+                        "exp",
+                        binary(TsBinaryOp::Add, now_secs(), num_lit("3600")),
+                    ));
                     // P7.2: `Record<string, string>`, not `emitter/workers.rs`'s own
                     // `Record<string, unknown>` marker — this expression feeds
                     // `__bynkSignHs256` directly with no `typeof` narrowing step in
@@ -502,12 +485,10 @@ pub(super) fn emit_system_http_support(
                     // the participant's `env` first.
                     let secret_read = secret_read_of(&seam.secret);
                     lone_bearer_read = Some(secret_read.clone());
-                    (
-                        format!(
-                            "\"authorization\": `Bearer ${{await __bynkSignHs256({{ {claims_spread}sub: __sub, exp: __bynkNow() + 3600 }}, {secret_read})}}`, "
-                        ),
-                        Some(seam.secret),
-                    )
+                    vec![header(
+                        "authorization",
+                        bearer_token(TsExpr::object_entries(claim_entries), secret_read),
+                    )]
                 }
                 None => match bynk_check::actors::oidc_seam_for(h, &table.actors) {
                     Some(seam) => {
@@ -515,14 +496,16 @@ pub(super) fn emit_system_http_support(
                         // The actor's declared roots, replaced by its
                         // `trustFrom` variable's JSON when the case's `env`
                         // sets it, as the Worker's seam reads them.
-                        let declared = format!(
-                            "{{ issuer: {:?}, audience: {:?}, jwks: {:?} }}",
-                            seam.issuer, seam.audience, seam.jwks
-                        );
+                        let declared = object_of(vec![
+                            ("issuer", str_lit(seam.issuer.clone())),
+                            ("audience", str_lit(seam.audience.clone())),
+                            ("jwks", str_lit(seam.jwks.clone())),
+                        ]);
                         let trust = match &seam.trust_from {
-                            Some(var) => {
-                                format!("__bynkOidcTrustOf({declared}, {})", secret_read_of(var))
-                            }
+                            Some(var) => call(
+                                ident("__bynkOidcTrustOf"),
+                                vec![declared, secret_read_of(var)],
+                            ),
                             None => declared,
                         };
                         oidc_trust = Some(trust.clone());
@@ -532,14 +515,19 @@ pub(super) fn emit_system_http_support(
                             method.as_str().to_string(),
                             path.clone(),
                         ));
-                        (
-                            format!(
-                                "\"authorization\": `Bearer ${{await __bynkOidcToken(__bynkOidcRemote, {trust}, {{ sub: __sub, claims: __claims, kind: \"valid\" }})}}`, "
+                        vec![header(
+                            "authorization",
+                            oidc_token(
+                                trust,
+                                object_of(vec![
+                                    ("sub", ident("__sub")),
+                                    ("claims", ident("__claims")),
+                                    ("kind", str_lit("valid")),
+                                ]),
                             ),
-                            None,
-                        )
+                        )]
                     }
-                    None => (String::new(), None),
+                    None => Vec::new(),
                 },
             };
             // #2155: an actor-sum route's credential depends on the member a
@@ -549,7 +537,7 @@ pub(super) fn emit_system_http_support(
             let sum = sum_auth_for(h, &table.actors, &mut secrets, &secret_read_of);
             let is_sum = h.by_clause.as_ref().is_some_and(|by| by.is_sum());
             let (auth_header, signs_claims) = if is_sum {
-                (String::new(), false)
+                (Vec::new(), false)
             } else {
                 (auth_header, signs_claims)
             };
@@ -565,8 +553,8 @@ pub(super) fn emit_system_http_support(
             // #2864: the secret a `by Forged` / `by Expired` Bearer token is
             // signed against — the lone Bearer actor's, or a sum's first
             // Bearer member's.
-            let bearer_read: Option<String> = if is_sum {
-                sum.as_ref().and_then(SumAuth::bearer).map(str::to_string)
+            let bearer_read: Option<TsExpr> = if is_sum {
+                sum.as_ref().and_then(SumAuth::bearer).cloned()
             } else {
                 lone_bearer_read
             };
@@ -596,10 +584,10 @@ pub(super) fn emit_system_http_support(
                 .or_else(|| sum.as_ref().and_then(SumAuth::signature));
             // The signed drivers' own headers: a lone `Signature` actor's, or
             // a sum's per-call `__auth`.
-            let sig_header = match (&lone_sig, &sum) {
+            let sig_header: Entries = match (&lone_sig, &sum) {
                 (Some(z), _) => z.headers(),
-                (None, Some(_)) => "...__auth, ".to_string(),
-                (None, None) => String::new(),
+                (None, Some(_)) => vec![TsObjectEntry::Spread(ident("__auth"))],
+                (None, None) => Vec::new(),
             };
             let bad_sig_header = sig.map(SigDriver::headers).unwrap_or_default();
             signs_hmac |= sig.is_some();
@@ -621,108 +609,85 @@ pub(super) fn emit_system_http_support(
             // #3276: a `@multipart` route takes its body as a `FormData`, whose
             // boundary the request sets with its own `content-type`.
             let is_multipart = h.annotations.iter().any(|a| a.name.name == "multipart");
-            let (body_stmt, body_init): (Option<TsStmt>, &str) = match body_arg {
+            let body_ident =
+                |p: &bynk_syntax::ast::Param| ident(crate::emitter::ts_ident(&p.name.name));
+            // The serialised wire form of a body param, a node (#1435).
+            let serialised = |p: &bynk_syntax::ast::Param| {
+                crate::emitter::serialisation::serialise_expr_via(
+                    &p.type_ref,
+                    &bynk_ts::TsExpr::Ident(crate::emitter::ts_ident(&p.name.name)),
+                    &type_ns,
+                    runtime_use,
+                )
+            };
+            let (body_stmts, body_init): (Vec<TsStmt>, Entries) = match body_arg {
                 Some(p) if is_multipart => {
                     runtime_use.note_multipart_form();
-                    let ser =
-                        bynk_ts::print_expr(&crate::emitter::serialisation::serialise_expr_via(
-                            &p.type_ref,
-                            &bynk_ts::TsExpr::Ident(crate::emitter::ts_ident(&p.name.name)),
-                            &type_ns,
-                            runtime_use,
-                        ));
-                    let specs = crate::emitter::form_body_specs(h, &table.types)
+                    let specs: Vec<TsExpr> = crate::emitter::form_body_specs(h, &table.types)
                         .unwrap_or_default()
                         .iter()
                         .map(crate::emitter::field_spec_source)
-                        .collect::<Vec<_>>()
-                        .join(", ");
-                    let stmt = TsStmt::const_stmt(
-                        TsBindingName::Ident("__body".to_string()),
-                        None,
-                        call(
-                            ident("__multipartForm"),
-                            vec![ident(ser), ident(format!("[{specs}] as const"))],
-                        ),
-                        None,
-                    );
-                    (Some(stmt), "body: __body, ")
+                        .map(raw_lit)
+                        .collect();
+                    (
+                        vec![const_(
+                            "__body",
+                            call(
+                                ident("__multipartForm"),
+                                vec![
+                                    serialised(p),
+                                    TsExpr::AsConst(Box::new(TsExpr::array(specs))),
+                                ],
+                            ),
+                        )],
+                        vec![body_entry(ident("__body"))],
+                    )
                 }
                 Some(p) if is_form => {
                     runtime_use.note_query_string();
-                    let ser =
-                        bynk_ts::print_expr(&crate::emitter::serialisation::serialise_expr_via(
-                            &p.type_ref,
-                            &bynk_ts::TsExpr::Ident(crate::emitter::ts_ident(&p.name.name)),
-                            &type_ns,
-                            runtime_use,
-                        ));
-                    let stmt = TsStmt::const_stmt(
-                        TsBindingName::Ident("__body".to_string()),
-                        None,
-                        method_call(
-                            call(
-                                ident("__queryString"),
-                                query_string_args(&p.type_ref, &ser, &table.types),
+                    (
+                        vec![const_(
+                            "__body",
+                            method_call(
+                                call(
+                                    ident("__queryString"),
+                                    query_string_args(&p.type_ref, serialised(p), &table.types),
+                                ),
+                                "slice",
+                                vec![num_lit("1")],
                             ),
-                            "slice",
-                            vec![num_lit("1")],
-                        ),
-                        None,
-                    );
-                    (Some(stmt), "body: __body, ")
+                        )],
+                        vec![body_entry(ident("__body"))],
+                    )
                 }
                 Some(p) if raw_type.is_some() && is_stream(&p.type_ref) => {
-                    streamed_typed_body(&crate::emitter::ts_ident(&p.name.name))
+                    streamed_typed_body(body_ident(p))
                 }
-                Some(p) if raw_type.is_some() => {
-                    let stmt = TsStmt::const_stmt(
-                        TsBindingName::Ident("__body".to_string()),
-                        None,
-                        ident(crate::emitter::ts_ident(&p.name.name)),
-                        None,
-                    );
-                    (Some(stmt), "body: __body as BufferSource, ")
-                }
-                Some(p) => {
-                    // #1435 (Arc E slice 1): `serialise_expr_via` now returns
-                    // a real `bynk_ts::TsExpr` — this call site is still
-                    // `String`-based (not yet converted, out of this
-                    // slice's scope), so it prints at the boundary
-                    // (`bynk_ts::print_expr`), the same treatment
-                    // `lower.rs`'s own call sites use.
-                    let ser =
-                        bynk_ts::print_expr(&crate::emitter::serialisation::serialise_expr_via(
-                            &p.type_ref,
-                            &bynk_ts::TsExpr::Ident(crate::emitter::ts_ident(&p.name.name)),
-                            &type_ns,
-                            runtime_use,
-                        ));
-                    let stmt = TsStmt::const_stmt(
-                        TsBindingName::Ident("__body".to_string()),
-                        None,
+                Some(p) if raw_type.is_some() => (
+                    vec![const_("__body", body_ident(p))],
+                    vec![body_entry(TsExpr::As {
+                        expr: Box::new(ident("__body")),
+                        ty: TsType::named("BufferSource"),
+                    })],
+                ),
+                Some(p) => (
+                    vec![const_(
+                        "__body",
                         call(
                             member(ident("globalThis.JSON"), "stringify"),
-                            vec![ident(ser)],
+                            vec![serialised(p)],
                         ),
-                        None,
-                    );
-                    (Some(stmt), "body: __body, ")
-                }
-                None => (None, ""),
+                    )],
+                    vec![body_entry(ident("__body"))],
+                ),
+                None => (Vec::new(), Vec::new()),
             };
             // The response payload deserialiser: the `T` of `Effect[HttpResult[T]]`.
-            let payload_deser = match strip_effect_httpresult(&h.return_type) {
-                // #1435 (Arc E slice 1): boundary-print, same treatment as
-                // `ser` above.
+            let payload_deser: TsExpr = match strip_effect_httpresult(&h.return_type) {
                 Some(inner) => {
-                    bynk_ts::print_expr(&crate::emitter::serialisation::deserialise_ref_via(
-                        inner,
-                        &type_ns,
-                        runtime_use,
-                    ))
+                    crate::emitter::serialisation::deserialise_ref_via(inner, &type_ns, runtime_use)
                 }
-                None => format!("{type_ns}__deserialise_unit"),
+                None => ident(format!("{type_ns}__deserialise_unit")),
             };
             // Driver params mirror the handler's params (path params, then body).
             let driver_params: Vec<TsParam> = h
@@ -731,7 +696,7 @@ pub(super) fn emit_system_http_support(
                 .map(|p| {
                     TsParam::new(
                         crate::emitter::ts_ident(&p.name.name),
-                        Some(TsType::named(driver_param_ty(&p.type_ref, &ns))),
+                        Some(driver_param_type(&p.type_ref)),
                     )
                 })
                 .chain(extra_headers_param.clone())
@@ -742,86 +707,92 @@ pub(super) fn emit_system_http_support(
                 .map(|p| {
                     TsParam::new(
                         crate::emitter::ts_ident(&p.name.name),
-                        Some(TsType::named(
+                        Some(
                             if is_headers(&p)
                                 || matches!(p.type_ref, bynk_syntax::ast::TypeRef::RequestQuery(_))
                             {
-                                driver_param_ty(&p.type_ref, &ns)
+                                driver_param_type(&p.type_ref)
                             } else {
-                                "string".to_string()
+                                TsType::named("string")
                             },
-                        )),
+                        ),
                     )
                 })
                 .chain(extra_headers_param)
                 .collect();
-            let content_type = match (body_arg.is_some(), raw_type) {
-                (true, Some(ct)) => format!("\"content-type\": {ct:?}, "),
-                (true, None) if is_multipart => String::new(),
-                (true, None) if is_form => {
-                    "\"content-type\": \"application/x-www-form-urlencoded\", ".to_string()
-                }
-                (true, None) => "\"content-type\": \"application/json\", ".to_string(),
-                (false, _) => String::new(),
+            let content_type: Entries = match (body_arg.is_some(), raw_type) {
+                (true, Some(ct)) => vec![header("content-type", str_lit(ct))],
+                (true, None) if is_multipart => Vec::new(),
+                (true, None) if is_form => vec![header(
+                    "content-type",
+                    str_lit("application/x-www-form-urlencoded"),
+                )],
+                (true, None) => vec![header("content-type", str_lit("application/json"))],
+                (false, _) => Vec::new(),
             };
-            let url = template(format!("https://test{concrete_path}{typed_query}"));
-            let raw_url = template(format!("https://test{concrete_path}{raw_query}"));
-            // Decision A (#1407): the request-init options object (`{ method,
-            // headers: {...}, body, }`) keeps its own hand-formatted text —
-            // every branch below bakes in an unconditional trailing `, ` before
-            // its closing brace, and prints `{ }` (one space, not
-            // `TsExpr::Object`'s own tight `{}`) when a sub-object has zero
-            // entries — a shape `TsExpr::Object`'s general single-line algebra
-            // (comma-separated, no trailing comma, tight `{}` for zero
-            // entries) cannot reproduce byte-for-byte. The same "odd, one-off
-            // shape stays text" call this track has made before (Decision B,
-            // #1327; Decision C, #1359). Everything AROUND it — the function
-            // declaration, its params, the `new Request(...)` call, the
-            // `await ... .fetch(...)` chain, the final `return
-            // responseTo*(...)` — is real `bynk_ts` structure.
+            let url = request_url(&path, typed_query.clone());
+            let raw_url = request_url(&path, raw_query.clone());
             // #3276: a `@form` route's `content-type` is the driver's default, so a
             // case's own `Content-Type` (a trailing `RequestHeaders`) overrides it,
             // which is how a case probes the route's `415`.
-            let (spread_first, spread_last) = if is_form {
-                ("", headers_spread)
+            let (spread_first, spread_last): (Entries, Entries) = if is_form {
+                (Vec::new(), vec![headers_spread.clone()])
             } else {
-                (headers_spread, "")
+                (vec![headers_spread.clone()], Vec::new())
             };
-            let typed_options = ident(format!(
-                "{{ method: {method:?}, headers: {{ {csrf_default}{spread_first}{content_type}{spread_last}{typed_cookie}{auth_header}{sig_header}}}, {body_init}}}",
-                method = method.as_str(),
-            ));
+            let verb = method.as_str();
+            let cat = |parts: Vec<&Entries>| -> Entries {
+                parts.into_iter().flatten().cloned().collect()
+            };
+            let typed_options = request_init(
+                verb,
+                cat(vec![
+                    &csrf_default,
+                    &spread_first,
+                    &content_type,
+                    &spread_last,
+                    &typed_cookie,
+                    &auth_header,
+                    &sig_header,
+                ]),
+                body_init.clone(),
+            );
             // #2135: the bytes a signing driver signs: what it sends.
-            let typed_body = if body_arg.is_some() { "__body" } else { "\"\"" };
+            let typed_body = if body_arg.is_some() {
+                ident("__body")
+            } else {
+                str_lit("")
+            };
             let raw_body = match body_ps.first() {
-                Some(p) => crate::emitter::ts_ident(&p.name.name),
-                None => "\"\"".to_string(),
+                Some(p) => body_ident(p),
+                None => str_lit(""),
             };
             // #2685: the typed driver names its route to the decoder, which a
             // smoke run checks the answer's status against: the context, the
             // service, the method and the path, as the driver's smoke table
             // keys them. It reads that table only in a smoke run.
-            let typed_payload = if smoke {
-                format!(
-                    "{payload_deser}, {:?}",
-                    format!("{target} {sname} {} {path}", method.as_str())
-                )
+            let typed_payload: Vec<TsExpr> = if smoke {
+                vec![
+                    payload_deser.clone(),
+                    str_lit(format!("{target} {sname} {verb} {path}")),
+                ]
             } else {
-                payload_deser.clone()
+                vec![payload_deser.clone()]
             };
+            let payload = vec![payload_deser.clone()];
             routes.push(sysdrive_driver(
                 SysdriveKind::typed(""),
                 sname,
                 &key,
                 driver_params.clone(),
-                body_stmt.clone(),
+                body_stmts.clone(),
                 url.clone(),
-                typed_options.clone(),
+                typed_options,
                 &binding,
                 "__responseToHttpResult",
-                &typed_payload,
+                typed_payload,
                 signs_claims,
-                signing_stmts(&lone_sig, &sum, typed_body),
+                signing_stmts(&lone_sig, &sum, &typed_body),
                 sum.is_some(),
             ));
             // Slice C: the raw driver for a `Wire(…)`-carrying call. Every slot is
@@ -833,36 +804,47 @@ pub(super) fn emit_system_http_support(
             // with a `Wire`-eligible slot (a body or a path param); a bodyless,
             // path-param-less route (e.g. `GET /cart/size`) can carry no `Wire`
             // argument, so its raw driver would be dead code.
+            let raw_body_init = wire_body_init(body_ps.first().copied(), raw_type.is_some());
             if !h.params.is_empty() {
-                let raw_body_init = wire_body_init(body_ps.first().copied(), raw_type.is_some());
                 // The `Wire` text is text, so a raw route is sent it as `text/plain`:
                 // a route declaring another media type answers `415`, which is how a
                 // case probes it, and a `"*/*"` route still takes the text.
-                let raw_content_type = if raw_type.is_some() {
-                    "\"content-type\": \"text/plain; charset=utf-8\", ".to_string()
+                let raw_content_type: Entries = if raw_type.is_some() {
+                    vec![header("content-type", str_lit("text/plain; charset=utf-8"))]
                 } else if is_multipart && body_arg.is_some() {
                     // A `Wire` body is the multipart text itself, framed with this
                     // boundary (`--bynk-boundary`).
-                    "\"content-type\": \"multipart/form-data; boundary=bynk-boundary\", "
-                        .to_string()
+                    vec![header(
+                        "content-type",
+                        str_lit("multipart/form-data; boundary=bynk-boundary"),
+                    )]
                 } else {
                     content_type.clone()
                 };
-                let raw_options = ident(format!(
-                    "{{ method: {method:?}, headers: {{ {csrf_default}{spread_first}{raw_content_type}{spread_last}{raw_cookie}{auth_header}{sig_header}}}, {raw_body_init}}}",
-                    method = method.as_str(),
-                ));
+                let raw_options = request_init(
+                    verb,
+                    cat(vec![
+                        &csrf_default,
+                        &spread_first,
+                        &raw_content_type,
+                        &spread_last,
+                        &raw_cookie,
+                        &auth_header,
+                        &sig_header,
+                    ]),
+                    raw_body_init.clone(),
+                );
                 routes.push(sysdrive_driver(
                     SysdriveKind::raw(""),
                     sname,
                     &key,
                     raw_params.clone(),
-                    None,
+                    Vec::new(),
                     raw_url.clone(),
                     raw_options,
                     &binding,
                     "__responseToHttpOutcome",
-                    &payload_deser,
+                    payload.clone(),
                     signs_claims,
                     signing_stmts(&lone_sig, &sum, &raw_body),
                     sum.is_some(),
@@ -878,21 +860,26 @@ pub(super) fn emit_system_http_support(
             let secured =
                 !auth_header.is_empty() || sig.is_some() || sum.is_some() || session.is_some();
             if secured {
-                let noauth_options = ident(format!(
-                    "{{ method: {method:?}, headers: {{ {csrf_default}{headers_spread}{content_type}}}, {body_init}}}",
-                    method = method.as_str(),
-                ));
+                let noauth_options = request_init(
+                    verb,
+                    cat(vec![
+                        &csrf_default,
+                        &vec![headers_spread.clone()],
+                        &content_type,
+                    ]),
+                    body_init.clone(),
+                );
                 routes.push(sysdrive_driver(
                     SysdriveKind::typed("noauth"),
                     sname,
                     &key,
                     driver_params.clone(),
-                    body_stmt.clone(),
+                    body_stmts.clone(),
                     url.clone(),
                     noauth_options,
                     &binding,
                     "__responseToUnauthOutcome",
-                    &payload_deser,
+                    payload.clone(),
                     false,
                     Vec::new(),
                     false,
@@ -909,22 +896,26 @@ pub(super) fn emit_system_http_support(
             // correctly here. Emitted under the same conditions as both parent
             // drivers: a `Wire`-eligible slot and a Bearer-secured route.
             if !h.params.is_empty() && secured {
-                let raw_body_init = wire_body_init(body_ps.first().copied(), raw_type.is_some());
-                let rawnoauth_options = ident(format!(
-                    "{{ method: {method:?}, headers: {{ {csrf_default}{headers_spread}{content_type}}}, {raw_body_init}}}",
-                    method = method.as_str(),
-                ));
+                let rawnoauth_options = request_init(
+                    verb,
+                    cat(vec![
+                        &csrf_default,
+                        &vec![headers_spread.clone()],
+                        &content_type,
+                    ]),
+                    raw_body_init.clone(),
+                );
                 routes.push(sysdrive_driver(
                     SysdriveKind::raw("noauth"),
                     sname,
                     &key,
                     raw_params.clone(),
-                    None,
+                    Vec::new(),
                     raw_url.clone(),
                     rawnoauth_options,
                     &binding,
                     "__responseToUnauthOutcome",
-                    &payload_deser,
+                    payload.clone(),
                     false,
                     Vec::new(),
                     false,
@@ -935,10 +926,15 @@ pub(super) fn emit_system_http_support(
             // each decoding a `401` to `Rejected(Unauthorized)`. `Stale` only
             // where the actor declares a timestamp and a tolerance.
             if let Some(z) = sig {
-                let forged_options = ident(format!(
-                    "{{ method: {method:?}, headers: {{ {headers_spread}{content_type}{bad_sig_header}}}, {body_init}}}",
-                    method = method.as_str(),
-                ));
+                let forged_options = request_init(
+                    verb,
+                    cat(vec![
+                        &vec![headers_spread.clone()],
+                        &content_type,
+                        &bad_sig_header,
+                    ]),
+                    body_init.clone(),
+                );
                 let mut variants = vec![("forged", SigVariant::Forged)];
                 if let Some(age) = z.stale_age() {
                     variants.push(("stale", SigVariant::Stale(age)));
@@ -949,34 +945,37 @@ pub(super) fn emit_system_http_support(
                         sname,
                         &key,
                         driver_params.clone(),
-                        body_stmt.clone(),
+                        body_stmts.clone(),
                         url.clone(),
                         forged_options.clone(),
                         &binding,
                         "__responseToUnauthOutcome",
-                        &payload_deser,
+                        payload.clone(),
                         false,
-                        vec![z.sign(typed_body, variant)],
+                        vec![z.sign(&typed_body, variant)],
                         false,
                     ));
                     if !h.params.is_empty() {
-                        let raw_body_init =
-                            wire_body_init(body_ps.first().copied(), raw_type.is_some());
-                        let options = ident(format!(
-                            "{{ method: {method:?}, headers: {{ {headers_spread}{content_type}{bad_sig_header}}}, {raw_body_init}}}",
-                            method = method.as_str(),
-                        ));
+                        let options = request_init(
+                            verb,
+                            cat(vec![
+                                &vec![headers_spread.clone()],
+                                &content_type,
+                                &bad_sig_header,
+                            ]),
+                            raw_body_init.clone(),
+                        );
                         routes.push(sysdrive_driver(
                             SysdriveKind::raw(name),
                             sname,
                             &key,
                             raw_params.clone(),
-                            None,
+                            Vec::new(),
                             raw_url.clone(),
                             options,
                             &binding,
                             "__responseToUnauthOutcome",
-                            &payload_deser,
+                            payload.clone(),
                             false,
                             vec![z.sign(&raw_body, variant)],
                             false,
@@ -990,44 +989,72 @@ pub(super) fn emit_system_http_support(
             // clock), typed and raw, each decoding a `401` to
             // `Rejected(Unauthorized)`. A route with a `Signature` seam keeps
             // the `Signature` drivers above for `Forged`.
-            if let Some(secret_read) = bearer_read.as_deref() {
-                let bearer_options = ident(format!(
-                    "{{ method: {method:?}, headers: {{ {headers_spread}{content_type}\"authorization\": __token, }}, {body_init}}}",
-                    method = method.as_str(),
-                ));
-                let raw_bearer_options = ident(format!(
-                    "{{ method: {method:?}, headers: {{ {headers_spread}{content_type}\"authorization\": __token, }}, {raw_body_init}}}",
-                    method = method.as_str(),
-                    raw_body_init = match body_ps.first() {
-                        Some(p) => body_field(&crate::emitter::ts_ident(&p.name.name)),
-                        None => String::new(),
-                    },
-                ));
-                let mut variants = vec![("expired", format!("({secret_read})"), "-")];
+            // A body entry for the raw drivers of the token routes: the plain body param.
+            let raw_token_body: Entries = body_ps
+                .first()
+                .map(|p| vec![body_entry(body_ident(p))])
+                .unwrap_or_default();
+            let token_header = vec![header("authorization", ident("__token"))];
+            if let Some(secret_read) = bearer_read.as_ref() {
+                let bearer_options = request_init(
+                    verb,
+                    cat(vec![
+                        &vec![headers_spread.clone()],
+                        &content_type,
+                        &token_header,
+                    ]),
+                    body_init.clone(),
+                );
+                let raw_bearer_options = request_init(
+                    verb,
+                    cat(vec![
+                        &vec![headers_spread.clone()],
+                        &content_type,
+                        &token_header,
+                    ]),
+                    raw_token_body.clone(),
+                );
+                let mut variants = vec![(
+                    "expired",
+                    TsExpr::Paren(Box::new(secret_read.clone())),
+                    TsBinaryOp::Sub,
+                )];
                 if sig.is_none() {
-                    variants.push(("forged", format!("({secret_read} + \"!\")"), "+"));
+                    variants.push((
+                        "forged",
+                        TsExpr::Paren(Box::new(binary(
+                            TsBinaryOp::Add,
+                            secret_read.clone(),
+                            str_lit("!"),
+                        ))),
+                        TsBinaryOp::Add,
+                    ));
                 }
                 for (name, secret, sign) in variants {
                     // A valid `sub`, so only the signature (`Forged`) or the
                     // `exp` (`Expired`) is wrong. The `sub` is fixed rather
                     // than the call's identity: `by Forged` names none.
-                    let sign_stmt = TsStmt::raw(
-                        format!(
-                            "const __token = `Bearer ${{await __bynkSignHs256({{ sub: \"bynk-test\", exp: __bynkNow() {sign} 3600 }}, {secret})}}`;"
+                    let sign_stmt = const_(
+                        "__token",
+                        bearer_token(
+                            object_of(vec![
+                                ("sub", str_lit("bynk-test")),
+                                ("exp", binary(sign, now_secs(), num_lit("3600"))),
+                            ]),
+                            secret,
                         ),
-                        None,
                     );
                     routes.push(sysdrive_driver(
                         SysdriveKind::typed(name),
                         sname,
                         &key,
                         driver_params.clone(),
-                        body_stmt.clone(),
+                        body_stmts.clone(),
                         url.clone(),
                         bearer_options.clone(),
                         &binding,
                         "__responseToUnauthOutcome",
-                        &payload_deser,
+                        payload.clone(),
                         false,
                         vec![sign_stmt.clone()],
                         false,
@@ -1038,12 +1065,12 @@ pub(super) fn emit_system_http_support(
                             sname,
                             &key,
                             raw_params.clone(),
-                            None,
+                            Vec::new(),
                             raw_url.clone(),
                             raw_bearer_options.clone(),
                             &binding,
                             "__responseToUnauthOutcome",
-                            &payload_deser,
+                            payload.clone(),
                             false,
                             vec![sign_stmt],
                             false,
@@ -1055,13 +1082,8 @@ pub(super) fn emit_system_http_support(
             // not hold) and `by Expired` (issued before the cookie's `ttl`), each decoding a
             // `401` to `Rejected(Unauthorized)`.
             if let Some(s) = &session {
-                let parts = (
-                    sname.as_str(),
-                    key.as_str(),
-                    binding.as_str(),
-                    payload_deser.as_str(),
-                );
-                let req = SessionRequest::new(method.as_str(), &content_type, headers_spread, h);
+                let parts = (sname.as_str(), key.as_str(), binding.as_str(), &payload);
+                let req = SessionRequest::new(verb, &content_type, &headers_spread, h);
                 let (typed, raw) = (
                     (driver_params.as_slice(), &url),
                     (raw_params.as_slice(), &raw_url),
@@ -1073,8 +1095,8 @@ pub(super) fn emit_system_http_support(
                     (typed, raw),
                     (
                         &req,
-                        body_stmt.as_ref(),
-                        body_init,
+                        &body_stmts,
+                        &body_init,
                         body_ps.first().map(|p| p.name.name.as_str()),
                     ),
                 );
@@ -1084,19 +1106,25 @@ pub(super) fn emit_system_http_support(
             // `by WrongAudience`, typed and raw, each decoding a `401` to
             // `Rejected(Unauthorized)`; and (#3225) `by WrongAlgorithm` and
             // `by NoSubject`.
-            if let Some(trust) = oidc_trust.as_deref() {
-                let oidc_options = ident(format!(
-                    "{{ method: {method:?}, headers: {{ {headers_spread}{content_type}\"authorization\": __token, }}, {body_init}}}",
-                    method = method.as_str(),
-                ));
-                let raw_oidc_options = ident(format!(
-                    "{{ method: {method:?}, headers: {{ {headers_spread}{content_type}\"authorization\": __token, }}, {raw_body_init}}}",
-                    method = method.as_str(),
-                    raw_body_init = match body_ps.first() {
-                        Some(p) => body_field(&crate::emitter::ts_ident(&p.name.name)),
-                        None => String::new(),
-                    },
-                ));
+            if let Some(trust) = oidc_trust.as_ref() {
+                let oidc_options = request_init(
+                    verb,
+                    cat(vec![
+                        &vec![headers_spread.clone()],
+                        &content_type,
+                        &token_header,
+                    ]),
+                    body_init.clone(),
+                );
+                let raw_oidc_options = request_init(
+                    verb,
+                    cat(vec![
+                        &vec![headers_spread.clone()],
+                        &content_type,
+                        &token_header,
+                    ]),
+                    raw_token_body.clone(),
+                );
                 // #3225: `WrongAlgorithm` and `NoSubject` each present two
                 // tokens. Each token has a driver of its own, and the
                 // principal's driver (below) runs them in turn.
@@ -1111,23 +1139,28 @@ pub(super) fn emit_system_http_support(
                     "nosub",
                 ] {
                     // A valid `sub`, so only the one thing under test is wrong.
-                    let sign_stmt = TsStmt::raw(
-                        format!(
-                            "const __token = `Bearer ${{await __bynkOidcToken(__bynkOidcRemote, {trust}, {{ sub: \"bynk-test\", claims: {{}}, kind: \"{name}\" }})}}`;"
+                    let sign_stmt = const_(
+                        "__token",
+                        oidc_token(
+                            trust.clone(),
+                            object_of(vec![
+                                ("sub", str_lit("bynk-test")),
+                                ("claims", TsExpr::object(Vec::new())),
+                                ("kind", str_lit(name)),
+                            ]),
                         ),
-                        None,
                     );
                     routes.push(sysdrive_driver(
                         SysdriveKind::typed(name),
                         sname,
                         &key,
                         driver_params.clone(),
-                        body_stmt.clone(),
+                        body_stmts.clone(),
                         url.clone(),
                         oidc_options.clone(),
                         &binding,
                         "__responseToUnauthOutcome",
-                        &payload_deser,
+                        payload.clone(),
                         false,
                         vec![sign_stmt.clone()],
                         false,
@@ -1138,12 +1171,12 @@ pub(super) fn emit_system_http_support(
                             sname,
                             &key,
                             raw_params.clone(),
-                            None,
+                            Vec::new(),
                             raw_url.clone(),
                             raw_oidc_options.clone(),
                             &binding,
                             "__responseToUnauthOutcome",
-                            &payload_deser,
+                            payload.clone(),
                             false,
                             vec![sign_stmt],
                             false,
@@ -1153,90 +1186,8 @@ pub(super) fn emit_system_http_support(
                 push_two_token_principals(&mut routes, sname, &key, !h.params.is_empty());
             }
         }
-        // #707: one generic wrong-method driver per service — drives an arbitrary
-        // `(method, path)` (an existing path, an undeclared method) and decodes
-        // the router's `405` fall-through to `Rejected(MethodNotAllowed)`. The
-        // handler never runs, so there is no body to serialise and the payload
-        // deserialiser is unused (the `405` takes the `Rejected` arm). Unlike the
-        // per-route drivers' own options object (Decision A above), `{ method }`
-        // is a fixed single shorthand entry — never conditionally empty — so it
-        // matches `TsExpr::Object`'s own real single-line rendering exactly and
-        // is built as a real node, not opaque text.
-        let wrongmethod = TsStmt::decl(
-            TsDecl::Function {
-                name: wrong_method_driver_name(sname),
-                generics: Vec::new(),
-                params: vec![
-                    TsParam::new("method".to_string(), Some(TsType::named("string"))),
-                    TsParam::new("path".to_string(), Some(TsType::named("string"))),
-                ],
-                return_type: None,
-                body: vec![
-                    TsStmt::const_stmt(
-                        TsBindingName::Ident("__h".to_string()),
-                        None,
-                        call(ident("__makeHarness"), vec![]),
-                        None,
-                    ),
-                    TsStmt::const_stmt(
-                        TsBindingName::Ident("__req".to_string()),
-                        None,
-                        TsExpr::New {
-                            callee: Box::new(ident("globalThis.Request")),
-                            args: vec![
-                                TsExpr::template_lit(
-                                    vec!["https://test".to_string(), String::new()],
-                                    vec![ident("path")],
-                                ),
-                                TsExpr::object_entries(vec![TsObjectEntry::Shorthand(
-                                    "method".to_string(),
-                                )]),
-                            ],
-                        },
-                        None,
-                    ),
-                    TsStmt::const_stmt(
-                        TsBindingName::Ident("__res".to_string()),
-                        None,
-                        await_expr(method_call(
-                            member(member(ident("__h"), "env"), &binding),
-                            "fetch",
-                            vec![ident("__req")],
-                        )),
-                        None,
-                    ),
-                    TsStmt::return_stmt(
-                        Some(call(
-                            ident("__responseToHttpOutcome"),
-                            vec![
-                                ident("__res"),
-                                TsExpr::Arrow {
-                                    params: vec![TsParam::new(
-                                        "__j".to_string(),
-                                        Some(TsType::named("__JsonValue")),
-                                    )],
-                                    is_async: false,
-                                    generics: Vec::new(),
-                                    return_type: None,
-                                    body: Box::new(TsArrowBody::Expr(Box::new(call(
-                                        ident("Ok"),
-                                        vec![TsExpr::As {
-                                            expr: Box::new(ident("__j")),
-                                            ty: TsType::named("never"),
-                                        }],
-                                    )))),
-                                },
-                            ],
-                        )),
-                        None,
-                    ),
-                ],
-                is_async: true,
-                inline: false,
-            },
-            None,
-        );
-        routes.push(wrongmethod);
+        // #707: the generic wrong-method driver.
+        routes.push(wrong_method_driver(sname, &binding));
     }
 
     if http_services.is_empty() {
@@ -1352,16 +1303,51 @@ fn is_stream(t: &bynk_syntax::ast::TypeRef) -> bool {
 /// fast-reject) is what a case over the cap exercises. `duplex: "half"` is what a
 /// streamed request body needs on Node; the spread keeps it out of `RequestInit`'s
 /// excess-property check on lib versions that lack it.
-fn streamed_typed_body(param: &str) -> (Option<TsStmt>, &'static str) {
-    let stmt = TsStmt::raw(
-        format!(
-            "const __it = {param}[globalThis.Symbol.asyncIterator](); const __body = new globalThis.ReadableStream<Uint8Array>({{ async pull(c) {{ const r = await __it.next(); if (r.done) c.close(); else c.enqueue(r.value); }} }}, {{ highWaterMark: 0 }});"
-        ),
+fn streamed_typed_body(chunks: TsExpr) -> (Vec<TsStmt>, Entries) {
+    let pull = TsObjectEntry::method(
+        "pull",
+        true,
+        vec![param("c", None)],
         None,
+        vec![
+            const_(
+                "r",
+                await_expr(method_call(ident("__it"), "next", Vec::new())),
+            ),
+            TsStmt::if_else_same_line_stmt(
+                member(ident("r"), "done"),
+                expr_stmt(method_call(ident("c"), "close", Vec::new())),
+                expr_stmt(method_call(
+                    ident("c"),
+                    "enqueue",
+                    vec![member(ident("r"), "value")],
+                )),
+                None,
+            ),
+        ],
+    );
+    let stream = new(
+        type_app(
+            ident("globalThis.ReadableStream"),
+            vec![TsType::named("Uint8Array")],
+        ),
+        vec![
+            TsExpr::object_entries(vec![pull]),
+            object_of(vec![("highWaterMark", num_lit("0"))]),
+        ],
     );
     (
-        Some(stmt),
-        "body: __body, ...({ duplex: \"half\" } as object), ",
+        vec![
+            const_(
+                "__it",
+                call(
+                    index(chunks, member(ident("globalThis.Symbol"), "asyncIterator")),
+                    Vec::new(),
+                ),
+            ),
+            const_("__body", stream),
+        ],
+        vec![body_entry(ident("__body")), duplex_half()],
     )
 }
 
@@ -1369,17 +1355,43 @@ fn streamed_typed_body(param: &str) -> (Option<TsStmt>, &'static str) {
 /// raw `string`). #3380: for a streamed `@raw` route it is one streamed chunk with
 /// no `content-length`, so a case can drive the counted overrun (a `"*/*"` route
 /// takes the `text/plain` it is sent).
-fn wire_body_init(body: Option<&bynk_syntax::ast::Param>, raw: bool) -> String {
+fn wire_body_init(body: Option<&bynk_syntax::ast::Param>, raw: bool) -> Entries {
     let Some(p) = body else {
-        return String::new();
+        return Vec::new();
     };
-    let param = crate::emitter::ts_ident(&p.name.name);
+    let value = ident(crate::emitter::ts_ident(&p.name.name));
     if raw && is_stream(&p.type_ref) {
-        format!(
-            "body: new globalThis.ReadableStream<Uint8Array>({{ start(c) {{ c.enqueue(new globalThis.TextEncoder().encode({param})); c.close(); }} }}), ...({{ duplex: \"half\" }} as object), "
+        let start = TsObjectEntry::method(
+            "start",
+            false,
+            vec![param("c", None)],
+            None,
+            vec![
+                expr_stmt(method_call(
+                    ident("c"),
+                    "enqueue",
+                    vec![method_call(
+                        new(ident("globalThis.TextEncoder"), Vec::new()),
+                        "encode",
+                        vec![value],
+                    )],
+                )),
+                expr_stmt(method_call(ident("c"), "close", Vec::new())),
+            ],
         )
+        .inlined();
+        vec![
+            body_entry(new(
+                type_app(
+                    ident("globalThis.ReadableStream"),
+                    vec![TsType::named("Uint8Array")],
+                ),
+                vec![TsExpr::object_entries(vec![start])],
+            )),
+            duplex_half(),
+        ]
     } else {
-        body_field(&param)
+        vec![body_entry(value)]
     }
 }
 
@@ -1387,7 +1399,7 @@ fn wire_body_init(body: Option<&bynk_syntax::ast::Param>, raw: bool) -> String {
 /// through the target's handler namespace (`todos.AddRequest`); primitives and
 /// compound shapes fall back to `unknown` — the driver only forwards the value
 /// to the namespace's `serialise_*`, and the Bynk checker already typed the call.
-pub(super) fn driver_param_ty(t: &bynk_syntax::ast::TypeRef, _ns: &str) -> String {
+pub(super) fn driver_param_type(t: &bynk_syntax::ast::TypeRef) -> TsType {
     use bynk_syntax::ast::TypeRef;
     if let TypeRef::Named(_) = t {
         // A named type may embed a branded refined field (`AddRequest.title:
@@ -1395,10 +1407,9 @@ pub(super) fn driver_param_ty(t: &bynk_syntax::ast::TypeRef, _ns: &str) -> Strin
         // checker already type-checked the call's args against the handler
         // (Slice A), so the driver forwards the value to the namespace's
         // `serialise_*`. Primitives stay precise.
-        "any".to_string()
+        any_type()
     } else {
-        // The driver prints the node itself: this is test-harness text (1B.5's).
-        bynk_ts::print_type(&crate::emitter::ts_types::ts_type_of(t))
+        crate::emitter::ts_types::ts_type_of(t)
     }
 }
 
@@ -1513,11 +1524,11 @@ struct CookieHeader {
 }
 
 impl CookieHeader {
-    /// The request-init entry `"cookie": <value>, ` (empty when there is no value), the value
+    /// The request-init entry `"cookie": <value>` (none when there is no value), the value
     /// being the parameter's part, the `session` cookie's, or the two joined with `"; "`.
-    fn render(&self, session: Option<&TsExpr>) -> String {
+    fn render(&self, session: Option<&TsExpr>) -> Entries {
         let value = match (&self.param, session) {
-            (None, None) => return String::new(),
+            (None, None) => return Vec::new(),
             (Some(only), None) | (None, Some(only)) => only.clone(),
             (Some(param), Some(session)) => crate::ts_build::method_call(
                 TsExpr::array(vec![param.clone(), session.clone()]),
@@ -1525,13 +1536,8 @@ impl CookieHeader {
                 vec![crate::ts_build::str_lit("; ")],
             ),
         };
-        format!("\"cookie\": {}, ", printed(&value))
+        vec![header("cookie", value)]
     }
-}
-
-/// A driver's expression as the text spliced into its hand-shaped line.
-fn printed(expr: &TsExpr) -> String {
-    bynk_ts::print_expr(expr)
 }
 
 /// #3277: the `Cookie` header the typed system drivers send (a typed record's wire
@@ -1608,12 +1614,12 @@ fn register_param_route(
 /// record's field table too when a field is renamed by `@name`.
 fn query_string_args(
     type_ref: &bynk_syntax::ast::TypeRef,
-    ser: &str,
+    ser: TsExpr,
     types: &std::collections::HashMap<String, std::sync::Arc<bynk_syntax::ast::TypeDecl>>,
 ) -> Vec<TsExpr> {
-    let mut args = vec![ident(ser)];
+    let mut args = vec![ser];
     if let Some(table) = crate::emitter::renamed_specs_source(type_ref, types) {
-        args.push(ident(table));
+        args.push(crate::ts_build::raw_lit(table));
     }
     args
 }
@@ -1623,7 +1629,7 @@ fn sum_auth_for(
     h: &bynk_syntax::ast::Handler,
     actors: &HashMap<String, bynk_syntax::ast::ActorDecl>,
     secrets: &mut std::collections::BTreeSet<String>,
-    secret_read_of: &dyn Fn(&str) -> String,
+    secret_read_of: &dyn Fn(&str) -> TsExpr,
 ) -> Option<SumAuth> {
     let members: Vec<(String, SumCredential)> = bynk_check::actors::sum_members_for(h, actors)?
         .into_iter()
@@ -1658,14 +1664,33 @@ fn push_two_token_principals(routes: &mut Vec<TsStmt>, sname: &str, key: &str, h
     ] {
         for &raw in prefixes {
             let driver = |kind: &str| sysdrive_name(SysdriveKind { raw, kind }, sname, key);
-            routes.push(TsStmt::raw(
-                format!(
-                    "async function {name}(...__a: Parameters<typeof {first}>) {{\n  const __first = await {first}(...__a);\n  if (__first.tag !== \"Rejected\" || __first.value.tag !== \"Unauthorized\") return __first;\n  return await {second}(...__a);\n}}",
-                    name = driver(principal),
-                    first = driver(tokens[0]),
-                    second = driver(tokens[1]),
+            let first = driver(tokens[0]);
+            let args = || vec![TsExpr::Spread(Box::new(ident("__a")))];
+            let refused = binary(
+                TsBinaryOp::Or,
+                strict_neq(member(ident("__first"), "tag"), str_lit("Rejected")),
+                strict_neq(
+                    member(member(ident("__first"), "value"), "tag"),
+                    str_lit("Unauthorized"),
                 ),
-                None,
+            );
+            routes.push(async_driver(
+                driver(principal),
+                vec![TsParam {
+                    rest: true,
+                    ..TsParam::new(
+                        "__a",
+                        Some(TsType::named_with_args(
+                            "Parameters",
+                            vec![TsType::type_of(ident(first.clone()))],
+                        )),
+                    )
+                }],
+                vec![
+                    const_("__first", await_expr(call(ident(first), args()))),
+                    if_(refused, ret(ident("__first"))),
+                    ret(await_expr(call(ident(driver(tokens[1])), args()))),
+                ],
             ));
         }
     }
@@ -1711,20 +1736,22 @@ impl SessionDriver {
 fn session_route(
     h: &bynk_syntax::ast::Handler,
     actors: &HashMap<String, bynk_syntax::ast::ActorDecl>,
-    secret_read_of: &dyn Fn(&str) -> String,
+    secret_read_of: &dyn Fn(&str) -> TsExpr,
     (session_secrets, runtime_use): (&mut std::collections::BTreeSet<String>, &RuntimeUse),
     (typed_cookie, raw_cookie): (&CookieHeader, &CookieHeader),
-) -> (Option<SessionDriver>, String, String, &'static str) {
+) -> (Option<SessionDriver>, Entries, Entries, Entries) {
     let Some(seam) = bynk_check::actors::signed_cookie_seam_for(h, actors) else {
-        return (None, typed_cookie.render(None), raw_cookie.render(None), "");
+        return (
+            None,
+            typed_cookie.render(None),
+            raw_cookie.render(None),
+            Vec::new(),
+        );
     };
     session_secrets.insert(seam.secret.clone());
     runtime_use.note_session_signing();
     let session = SessionDriver {
-        keys: TsExpr::object(vec![(
-            "secret".to_string(),
-            crate::ts_build::raw_lit(secret_read_of(&seam.secret)),
-        )]),
+        keys: TsExpr::object(vec![("secret".to_string(), secret_read_of(&seam.secret))]),
         actor: seam.actor,
         cookie: seam.cookie,
         ttl_secs: seam.ttl_secs,
@@ -1734,7 +1761,7 @@ fn session_route(
         Some(session),
         typed_cookie.render(Some(&pair)),
         raw_cookie.render(Some(&pair)),
-        "\"sec-fetch-site\": \"same-origin\", ",
+        vec![header("sec-fetch-site", str_lit("same-origin"))],
     )
 }
 
@@ -1749,16 +1776,16 @@ type DriverShape<'a> = (&'a [TsParam], &'a TsExpr);
 /// The request a route's session-refusal drivers build, bar the credential.
 struct SessionRequest<'a> {
     method: &'a str,
-    content_type: &'a str,
-    headers_spread: &'a str,
+    content_type: &'a Entries,
+    headers_spread: &'a TsObjectEntry,
     has_params: bool,
 }
 
 impl<'a> SessionRequest<'a> {
     fn new(
         method: &'a str,
-        content_type: &'a str,
-        headers_spread: &'a str,
+        content_type: &'a Entries,
+        headers_spread: &'a TsObjectEntry,
         h: &bynk_syntax::ast::Handler,
     ) -> Self {
         SessionRequest {
@@ -1778,26 +1805,27 @@ impl<'a> SessionRequest<'a> {
 fn push_session_refusal_drivers(
     routes: &mut Vec<TsStmt>,
     session: &SessionDriver,
-    (sname, key, binding, payload): (&str, &str, &str, &str),
+    (sname, key, binding, payload): (&str, &str, &str, &Vec<TsExpr>),
     ((driver_params, url), (raw_params, raw_url)): (DriverShape<'_>, DriverShape<'_>),
-    (req, body_stmt, body_init, body_name): (
+    (req, body_stmts, body_init, body_name): (
         &SessionRequest<'_>,
-        Option<&TsStmt>,
-        &str,
+        &Vec<TsStmt>,
+        &Entries,
         Option<&str>,
     ),
 ) {
-    let make = |body: &str| {
-        ident(format!(
-            "{{ method: {:?}, headers: {{ \"sec-fetch-site\": \"same-origin\", {}{}\"cookie\": __cookie, }}, {body}}}",
-            req.method, req.headers_spread, req.content_type
-        ))
+    let make = |body: Entries| {
+        let mut headers = vec![header("sec-fetch-site", str_lit("same-origin"))];
+        headers.push(req.headers_spread.clone());
+        headers.extend(req.content_type.iter().cloned());
+        headers.push(header("cookie", ident("__cookie")));
+        request_init(req.method, headers, body)
     };
-    let options = make(body_init);
-    let raw_body_init = body_name
-        .map(|n| body_field(&crate::emitter::ts_ident(n)))
+    let options = make(body_init.clone());
+    let raw_body_init: Entries = body_name
+        .map(|n| vec![body_entry(ident(crate::emitter::ts_ident(n)))])
         .unwrap_or_default();
-    let raw_options = make(&raw_body_init);
+    let raw_options = make(raw_body_init);
     let keys_forged = TsExpr::object(vec![(
         "secret".to_string(),
         crate::ts_build::call(ident("__newSessionKey"), Vec::new()),
@@ -1830,20 +1858,18 @@ fn push_session_refusal_drivers(
         ),
     ];
     for (name, pair) in variants {
-        // A raw statement, as before: its text carries no newline, so the next statement
-        // follows on the same line. That layout is pinned by the golden and not changed here.
-        let sign_stmt = TsStmt::raw(format!("const __cookie = {};", printed(&pair)), None);
+        let sign_stmt = const_("__cookie", pair);
         routes.push(sysdrive_driver(
             SysdriveKind::typed(name),
             sname,
             key,
             driver_params.to_vec(),
-            body_stmt.cloned(),
+            body_stmts.clone(),
             url.clone(),
             options.clone(),
             binding,
             "__responseToUnauthOutcome",
-            payload,
+            payload.clone(),
             false,
             vec![sign_stmt.clone()],
             false,
@@ -1854,12 +1880,12 @@ fn push_session_refusal_drivers(
                 sname,
                 key,
                 raw_params.to_vec(),
-                None,
+                Vec::new(),
                 raw_url.clone(),
                 raw_options.clone(),
                 binding,
                 "__responseToUnauthOutcome",
-                payload,
+                payload.clone(),
                 false,
                 vec![sign_stmt],
                 false,
@@ -1885,7 +1911,7 @@ mod tests {
     fn the_session_pair_is_the_template_literal_the_drivers_always_sent() {
         let s = session();
         assert_eq!(
-            printed(&s.pair(&s.keys, ident("__sub"), now_secs())),
+            bynk_ts::print_expr(&s.pair(&s.keys, ident("__sub"), now_secs())),
             "`__Host-session=${await __signSessionCookie({ secret: __key }, \"User\", __sub, 43200, (__bynkNow()) * 1000)}`"
         );
     }
@@ -1898,15 +1924,19 @@ mod tests {
         let some = CookieHeader {
             param: Some(ident("cookies")),
         };
-        assert_eq!(none.render(None), "");
-        assert_eq!(some.render(None), "\"cookie\": cookies, ");
+        let printed = |entries: Entries| bynk_ts::print_expr(&TsExpr::object_entries(entries));
+        assert_eq!(printed(none.render(None)), "{}");
+        assert_eq!(printed(some.render(None)), "{ \"cookie\": cookies }");
         assert_eq!(
-            none.render(Some(&pair)),
-            format!("\"cookie\": {}, ", printed(&pair))
+            printed(none.render(Some(&pair))),
+            format!("{{ \"cookie\": {} }}", bynk_ts::print_expr(&pair))
         );
         assert_eq!(
-            some.render(Some(&pair)),
-            format!("\"cookie\": [cookies, {}].join(\"; \"), ", printed(&pair))
+            printed(some.render(Some(&pair))),
+            format!(
+                "{{ \"cookie\": [cookies, {}].join(\"; \") }}",
+                bynk_ts::print_expr(&pair)
+            )
         );
     }
 }

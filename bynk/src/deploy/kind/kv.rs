@@ -989,7 +989,6 @@ mod tests {
         let provenance = Provenance::Path("/nonexistent/wrangler".into());
         let tools = Tools {
             api: &Wrangler::new(&provenance, Path::new("/nonexistent")),
-            provenance: &provenance,
             project_root: Path::new("/nonexistent"),
         };
         let resources = project(vec![("shop", Resources::default().needs_kv())]);
@@ -1032,7 +1031,6 @@ mod tests {
                 live: None,
                 tools: Tools {
                     api: &Wrangler::new(&provenance, Path::new("/nonexistent")),
-                    provenance: &provenance,
                     project_root: Path::new("/nonexistent"),
                 },
             },

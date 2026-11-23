@@ -1497,11 +1497,11 @@ fn is_left_assoc_arith(op: TsBinaryOp) -> bool {
 /// more real case: the exact *same* operator nested in itself omits parens
 /// too, for `||`/`&&` specifically (both associative, and real content —
 /// `emit_call_handler_dispatch`'s 3-term `||` chain — needs the flat,
-/// unparenthesized reading) — `??` keeps the pre-#1321 conservatism
-/// unchanged (pinned by `parenthesises_a_nested_binary_operand_of_another_
-/// binary`'s own test, still `a ?? (b ?? c)`), since nothing in real
-/// content needs a flattened `??` chain and this slice's own grounding
-/// gives no reason to widen that boundary opportunistically.
+/// unparenthesized reading) — `??` keeps its brackets when it is right-nested
+/// (pinned by `parenthesises_a_nested_binary_operand_of_another_binary`'s own
+/// test, still `a ?? (b ?? c)`), but, being left-associative, prints a
+/// left-nested chain flat (`a ?? b ?? c`, 1B.5d), as `+` does: a driver's
+/// secret read is such a chain.
 fn render_binary_operand(
     out: &mut String,
     outer_op: TsBinaryOp,
@@ -1581,9 +1581,10 @@ fn render_binary_operand(
                 // primitive, not scoped to that one caller's own usage.
                 match outer_op {
                     TsBinaryOp::Or | TsBinaryOp::And => false,
-                    TsBinaryOp::Add | TsBinaryOp::Sub => !is_left,
-                    TsBinaryOp::NullishCoalescing
-                    | TsBinaryOp::StrictEq
+                    // `??` is left-associative, so a left-nested chain prints flat (`a ?? b ?? c`),
+                    // as `+` does, and a right-nested one keeps its brackets (1B.5d).
+                    TsBinaryOp::Add | TsBinaryOp::Sub | TsBinaryOp::NullishCoalescing => !is_left,
+                    TsBinaryOp::StrictEq
                     | TsBinaryOp::StrictNotEq
                     | TsBinaryOp::GreaterThan
                     | TsBinaryOp::InstanceOf
@@ -5801,6 +5802,26 @@ mod tests {
         ));
         let printed = print(&program, "x.bynk", "", "x.ts");
         assert_eq!(printed.text, "a ?? (b ?? c);\n");
+    }
+
+    /// `??` is left-associative, so a left-nested chain prints flat and reparses as the tree it
+    /// was built from, while a right-nested one keeps its brackets (1B.5d: a driver's secret read
+    /// `(__bynkEnv["K"] ?? process.env["K"] ?? "")`).
+    #[test]
+    fn a_left_nested_nullish_chain_prints_flat() {
+        let id = |s: &str| TsExpr::Ident(s.to_string());
+        let nullish = |l: TsExpr, r: TsExpr| TsExpr::Binary {
+            op: TsBinaryOp::NullishCoalescing,
+            left: Box::new(l),
+            right: Box::new(r),
+        };
+        let mut program = TsProgram::new();
+        program.push(TsStmt::expr_stmt(
+            nullish(nullish(id("a"), id("b")), id("c")),
+            None,
+        ));
+        let printed = print(&program, "x.bynk", "", "x.ts");
+        assert_eq!(printed.text, "a ?? b ?? c;\n");
     }
 
     /// #2955: `*`/`**` sit above `+`, so a `**` right operand of `*` prints

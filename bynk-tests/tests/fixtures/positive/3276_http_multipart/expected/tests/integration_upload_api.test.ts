@@ -71,39 +71,39 @@ async function __bynkSignHs256(payload: Record<string, unknown>, secret: string)
 async function __sysdrive_api_http_POST_upload(body: any, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __body = __multipartForm(__ns_upload_api.__serialise_Upload(body), [{ name: "title", kind: "string", list: false, option: false }, { name: "caption", kind: "string", list: false, option: true }, { name: "age", kind: "int", list: false, option: true }, { name: "tags", kind: "string", list: true, option: false }, { name: "photo", kind: "file", list: false, option: false }, { name: "cover", kind: "file", list: false, option: true }, { name: "extras", kind: "file", list: true, option: false }] as const);
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/upload`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), }, body: __body, });
+  const __req = new globalThis.Request(`https://test/upload`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}) }, body: __body });
   const __res = await __h.env.UPLOAD_API.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
 async function __sysdrive_raw_api_http_POST_upload(body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/upload`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "multipart/form-data; boundary=bynk-boundary", }, body: body, });
+  const __req = new globalThis.Request(`https://test/upload`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "multipart/form-data; boundary=bynk-boundary" }, body: body });
   const __res = await __h.env.UPLOAD_API.fetch(__req);
   return __responseToHttpOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
 async function __sysdrive_api_http_POST_tiny(body: any, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __body = __multipartForm(__ns_upload_api.__serialise_Upload(body), [{ name: "title", kind: "string", list: false, option: false }, { name: "caption", kind: "string", list: false, option: true }, { name: "age", kind: "int", list: false, option: true }, { name: "tags", kind: "string", list: true, option: false }, { name: "photo", kind: "file", list: false, option: false }, { name: "cover", kind: "file", list: false, option: true }, { name: "extras", kind: "file", list: true, option: false }] as const);
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/tiny`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), }, body: __body, });
+  const __req = new globalThis.Request(`https://test/tiny`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}) }, body: __body });
   const __res = await __h.env.UPLOAD_API.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
 async function __sysdrive_raw_api_http_POST_tiny(body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/tiny`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "multipart/form-data; boundary=bynk-boundary", }, body: body, });
+  const __req = new globalThis.Request(`https://test/tiny`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "multipart/form-data; boundary=bynk-boundary" }, body: body });
   const __res = await __h.env.UPLOAD_API.fetch(__req);
   return __responseToHttpOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
 async function __sysdrive_api_http_POST_json(body: any, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __body = globalThis.JSON.stringify(__ns_upload_api.__serialise_Title(body));
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/json`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "application/json", }, body: __body, });
+  const __req = new globalThis.Request(`https://test/json`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "application/json" }, body: __body });
   const __res = await __h.env.UPLOAD_API.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
 async function __sysdrive_raw_api_http_POST_json(body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/json`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "application/json", }, body: body, });
+  const __req = new globalThis.Request(`https://test/json`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "application/json" }, body: body });
   const __res = await __h.env.UPLOAD_API.fetch(__req);
   return __responseToHttpOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }

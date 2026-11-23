@@ -72,7 +72,7 @@ async function __bynkSignHs256(payload: Record<string, unknown>, secret: string)
 }
 async function __sysdrive_api_http_GET_status(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/status`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), }, });
+  const __req = new globalThis.Request(`https://test/status`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}) } });
   const __res = await __h.env.SHOP_BILLING.fetch(__req);
   return __responseToHttpResult(__res, __ns_shop_billing.__deserialise_Status);
 }

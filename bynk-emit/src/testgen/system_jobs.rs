@@ -6,7 +6,7 @@
 use super::*;
 use crate::emitter::RuntimeUse;
 use crate::emitter::emit::test_scaffold_ns as test_ns;
-use bynk_ts::TsStmt;
+use bynk_ts::{TsDecl, TsExpr, TsParam, TsStmt, TsType};
 
 /// #2136: the cron and queue drivers of a `system` suite's target, and the
 /// services they cover ([`emitter::ctx::SystemJobServices`]).
@@ -47,7 +47,7 @@ pub(super) fn emit_system_job_support(
     };
     let ns = test_ns(target);
     let worker = worker_binding_name(&ns);
-    let env = format!("__h.{}", env_binding(&ns));
+    let env = member(ident("__h"), env_binding(&ns));
     let type_ns = ns_qualifier(&ns);
     let mut svc_names: Vec<&String> = table.services.keys().collect();
     svc_names.sort();
@@ -67,16 +67,39 @@ pub(super) fn emit_system_job_support(
                     let key = crate::emitter::cron_handler_method_name(sname, idx);
                     let (params, at) = match h.params.first() {
                         Some(p) => (
-                            format!("at: {}", driver_param_ty(&p.type_ref, &ns)),
-                            "at".to_string(),
+                            vec![TsParam::new("at", Some(driver_param_type(&p.type_ref)))],
+                            ident("at"),
                         ),
-                        None => (String::new(), "0".to_string()),
+                        None => (Vec::new(), num_lit("0")),
                     };
-                    drivers.push(TsStmt::raw(
-                        format!(
-                            "async function __sysdrive_schedule_{sname}_{idx}({params}) {{\n  const __h = __makeHarness();\n  return __bynkScheduled<Awaited<ReturnType<typeof {ns}.{sname}.{key}>>>({expr:?}, (exec) => {worker}.scheduled({{ cron: {expr:?}, scheduledTime: {at} }}, {env}, exec));\n}}\n"
+                    let scheduled = call(
+                        type_app(
+                            ident("__bynkScheduled"),
+                            vec![awaited_return(&ns, sname, &key)],
                         ),
-                        None,
+                        vec![
+                            str_lit(expr.clone()),
+                            arrow(
+                                vec![param("exec", None)],
+                                method_call(
+                                    ident(worker.clone()),
+                                    "scheduled",
+                                    vec![
+                                        TsExpr::object(vec![
+                                            ("cron".to_string(), str_lit(expr.clone())),
+                                            ("scheduledTime".to_string(), at),
+                                        ]),
+                                        env.clone(),
+                                        ident("exec"),
+                                    ],
+                                ),
+                            ),
+                        ],
+                    );
+                    drivers.push(async_driver(
+                        format!("__sysdrive_schedule_{sname}_{idx}"),
+                        params,
+                        vec![harness_const(), ret(scheduled)],
                     ));
                     exprs.push(expr);
                 }
@@ -94,20 +117,38 @@ pub(super) fn emit_system_job_support(
                     continue;
                 };
                 let key = crate::emitter::queue_handler_method_name(sname, 0);
-                let param = crate::emitter::ts_ident(&p.name.name);
-                let body = bynk_ts::print_expr(&crate::emitter::serialisation::serialise_expr_via(
+                let param_name = crate::emitter::ts_ident(&p.name.name);
+                let body = crate::emitter::serialisation::serialise_expr_via(
                     &p.type_ref,
-                    &bynk_ts::TsExpr::Ident(param.clone()),
+                    &TsExpr::Ident(param_name.clone()),
                     &type_ns,
                     runtime_use,
-                ));
-                let exec_arg = if target_sends { ", exec" } else { "" };
-                drivers.push(TsStmt::raw(
-                    format!(
-                        "async function __sysdrive_message_{sname}({param}: {ty}) {{\n  const __h = __makeHarness();\n  return __bynkDeliver<Awaited<ReturnType<typeof {ns}.{sname}.{key}>>>({name:?}, {body}, (batch, exec) => {worker}.queue(batch, {env}{exec_arg}));\n}}\n",
-                        ty = driver_param_ty(&p.type_ref, &ns),
+                );
+                let mut forward_args = vec![ident("batch"), env.clone()];
+                if target_sends {
+                    forward_args.push(ident("exec"));
+                }
+                let delivered = call(
+                    type_app(
+                        ident("__bynkDeliver"),
+                        vec![awaited_return(&ns, sname, &key)],
                     ),
-                    None,
+                    vec![
+                        str_lit(name.clone()),
+                        body,
+                        arrow(
+                            vec![param("batch", None), param("exec", None)],
+                            method_call(ident(worker.clone()), "queue", forward_args),
+                        ),
+                    ],
+                );
+                drivers.push(async_driver(
+                    format!("__sysdrive_message_{sname}"),
+                    vec![TsParam::new(
+                        param_name,
+                        Some(driver_param_type(&p.type_ref)),
+                    )],
+                    vec![harness_const(), ret(delivered)],
                 ));
                 services.queue.insert(sname.clone());
             }
@@ -123,14 +164,30 @@ pub(super) fn emit_system_job_support(
                     continue;
                 };
                 let key = crate::emitter::queue_handler_method_name(sname, 0);
-                let param = h.params.first().map_or("mail".to_string(), |p| {
+                let param_name = h.params.first().map_or("mail".to_string(), |p| {
                     crate::emitter::ts_ident(&p.name.name)
                 });
-                drivers.push(TsStmt::raw(
-                    format!(
-                        "async function __sysdrive_message_{sname}({param}: any) {{\n  const __h = __makeHarness();\n  return __bynkDeliverEmail<Awaited<ReturnType<typeof {ns}.{sname}.{key}>>>({param}, (message, exec) => {worker}.email(message, {env}, exec));\n}}\n"
+                let delivered = call(
+                    type_app(
+                        ident("__bynkDeliverEmail"),
+                        vec![awaited_return(&ns, sname, &key)],
                     ),
-                    None,
+                    vec![
+                        ident(param_name.clone()),
+                        arrow(
+                            vec![param("message", None), param("exec", None)],
+                            method_call(
+                                ident(worker.clone()),
+                                "email",
+                                vec![ident("message"), env.clone(), ident("exec")],
+                            ),
+                        ),
+                    ],
+                );
+                drivers.push(async_driver(
+                    format!("__sysdrive_message_{sname}"),
+                    vec![TsParam::new(param_name, Some(any_type()))],
+                    vec![harness_const(), ret(delivered)],
                 ));
                 services.email.insert(sname.clone());
             }
@@ -150,4 +207,37 @@ pub(super) fn emit_system_job_support(
         code.extend(drivers);
     }
     SystemJobSupport { code, services }
+}
+
+/// `async function <name>(<params>) { <body> }`: a driver the harness calls.
+pub(super) fn async_driver(name: String, params: Vec<TsParam>, body: Vec<TsStmt>) -> TsStmt {
+    TsStmt::decl(
+        TsDecl::Function {
+            name,
+            generics: Vec::new(),
+            params,
+            return_type: None,
+            body,
+            is_async: true,
+            inline: false,
+        },
+        None,
+    )
+}
+
+/// `const __h = __makeHarness();`, the first statement of every driver.
+pub(super) fn harness_const() -> TsStmt {
+    const_("__h", call(ident("__makeHarness"), Vec::new()))
+}
+
+/// `Awaited<ReturnType<typeof <ns>.<service>.<method>>>`: what a handler's driver yields.
+fn awaited_return(ns: &str, sname: &str, method: &str) -> TsType {
+    let handler = member(member(ident(ns), sname), method);
+    TsType::named_with_args(
+        "Awaited",
+        vec![TsType::named_with_args(
+            "ReturnType",
+            vec![TsType::type_of(handler)],
+        )],
+    )
 }

@@ -55,11 +55,6 @@ pub(crate) fn raw_lit(text: impl Into<String>) -> TsExpr {
     TsExpr::Lit(TsLit::Raw(text.into()))
 }
 
-/// A template literal with no interpolation: `` `text` ``.
-pub(crate) fn template(text: impl Into<String>) -> TsExpr {
-    TsExpr::template_lit(vec![text.into()], vec![])
-}
-
 // ---- Access and calls ----
 
 /// `object.property`.
@@ -332,10 +327,6 @@ mod tests {
         assert_eq!(bool_lit(true), TsExpr::Lit(TsLit::Bool(true)));
         assert_eq!(null_lit(), TsExpr::Lit(TsLit::Null));
         assert_eq!(raw_lit("a b"), TsExpr::Lit(TsLit::Raw("a b".into())));
-        assert_eq!(
-            template("t"),
-            TsExpr::template_lit(vec!["t".to_string()], vec![])
-        );
     }
 
     #[test]

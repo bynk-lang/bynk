@@ -18,6 +18,11 @@ pub(crate) enum Exit {
 }
 
 impl Exit {
+    /// Whether the process succeeded.
+    pub(crate) fn success(self) -> bool {
+        self == Exit::Code(0)
+    }
+
     /// The process's exit as one byte, as a shell reports it: the code (clamped), 128 plus the
     /// signal, or 0 for SIGINT, which a shared Ctrl-C delivers to bynk too. The same rule as
     /// [`crate::shell::exit_status_byte`].
@@ -63,6 +68,16 @@ pub(crate) enum OpKind {
     VectorizeListMetadataIndex,
     VectorizeCreateMetadataIndex,
     VectorizeDelete,
+    Push,
+    TriggersDeploy,
+    Whoami,
+    WorkerDeployments,
+    SecretList,
+    SecretPut,
+    NamedSecret,
+    Rollback,
+    D1MigrationsApplyLocal,
+    SecretsStoreListLocal,
 }
 
 #[derive(Debug)]
@@ -71,9 +86,17 @@ pub(crate) enum Failure {
     Missing,
     /// Wrangler could not be started.
     Start(std::io::Error),
-    /// Wrangler ran and failed.
+    /// Wrangler started, but bynk could not wait for it to finish.
+    Wait(std::io::Error),
+    /// Something around the call failed: its stdin pipe, a write to it, or its directory.
+    Io(std::io::Error),
+    /// The call's stdin could not be opened; the text says which.
+    Pipe(&'static str),
+    /// Wrangler ran and failed. `status` is how the process's own status prints
+    /// (`exit status: 1`), for the messages that quote it.
     Exit {
         exit: Exit,
+        status: String,
         stdout: String,
         stderr: String,
     },
@@ -100,16 +123,89 @@ impl WranglerError {
         Self::new(op, Failure::Missing)
     }
 
-    /// A failed exit with what wrangler printed.
+    /// A failed exit with what wrangler printed. Its status prints as a Unix shell's would.
     pub(crate) fn exit(op: &Op<'_>, exit: Exit, stdout: &str, stderr: &str) -> Self {
+        let status = match exit {
+            Exit::Code(code) => format!("exit status: {code}"),
+            Exit::Signal(signal) => format!("signal: {signal}"),
+        };
+        Self::exited_with(op, exit, status, stdout, stderr)
+    }
+
+    /// A failed exit of a real process, its status printed as the platform prints it.
+    pub(crate) fn exited(
+        op: &Op<'_>,
+        status: &std::process::ExitStatus,
+        stdout: &str,
+        stderr: &str,
+    ) -> Self {
+        Self::exited_with(op, Exit::of(status), status.to_string(), stdout, stderr)
+    }
+
+    fn exited_with(op: &Op<'_>, exit: Exit, status: String, stdout: &str, stderr: &str) -> Self {
         Self::new(
             op,
             Failure::Exit {
                 exit,
+                status,
                 stdout: stdout.to_string(),
                 stderr: stderr.to_string(),
             },
         )
+    }
+
+    pub(crate) fn failure(&self) -> &Failure {
+        &self.failure
+    }
+
+    /// Whether there was no wrangler to run.
+    pub(crate) fn is_missing(&self) -> bool {
+        matches!(self.failure, Failure::Missing)
+    }
+
+    /// What a failed exit wrote to stderr alone, trimmed (`rollback`'s rendering); any other
+    /// failure's own text.
+    pub(crate) fn stderr_only(&self) -> String {
+        match &self.failure {
+            Failure::Exit { stderr, .. } => stderr.trim().to_string(),
+            _ => self.said(),
+        }
+    }
+
+    /// [`said`](Self::said), except that a failed exit with nothing on either stream says
+    /// `silent` (the migration sweep's `wrangler secret {verb} failed`).
+    pub(crate) fn said_or(&self, silent: &str) -> String {
+        match &self.failure {
+            Failure::Exit { stdout, stderr, .. }
+                if stdout.trim().is_empty() && stderr.trim().is_empty() =>
+            {
+                silent.to_string()
+            }
+            _ => self.said(),
+        }
+    }
+
+    /// What a failed exit wrote to stderr, or to stdout when stderr is blank, trimmed (`bynk
+    /// dev`'s rendering); any other failure's own text.
+    pub(crate) fn stderr_else_stdout(&self) -> String {
+        match &self.failure {
+            Failure::Exit { stdout, stderr, .. } => {
+                if stderr.trim().is_empty() {
+                    stdout.trim().to_string()
+                } else {
+                    stderr.trim().to_string()
+                }
+            }
+            _ => self.said(),
+        }
+    }
+
+    /// Whether a Worker lookup failed because the Worker is not there: Cloudflare's code 10007,
+    /// or 10090 for a legacy environment, as wrangler reads them (`isWorkerNotFoundError`). An
+    /// auth or network failure is never mistaken for one.
+    pub(crate) fn worker_not_found(&self) -> bool {
+        self.exit_said()
+            .is_some_and(|said| said.contains("[code: 10007]") || said.contains("[code: 10090]"))
     }
 
     /// Everything a failed call said, both streams, never empty: a non-zero exit with nothing to
@@ -118,12 +214,14 @@ impl WranglerError {
     pub(crate) fn said(&self) -> String {
         match &self.failure {
             Failure::Missing => "wrangler not found".to_string(),
-            Failure::Start(e) => e.to_string(),
+            Failure::Start(e) | Failure::Wait(e) | Failure::Io(e) => e.to_string(),
+            Failure::Pipe(what) => what.to_string(),
             Failure::Unreadable(what) => what.clone(),
             Failure::Exit {
                 exit,
                 stdout,
                 stderr,
+                ..
             } => {
                 let said: Vec<&str> = [stderr.trim(), stdout.trim()]
                     .into_iter()
@@ -140,14 +238,14 @@ impl WranglerError {
 
     /// Whether wrangler ran and failed, rather than not running at all or answering something
     /// unreadable.
-    pub(crate) fn exited(&self) -> bool {
+    pub(crate) fn ran_and_failed(&self) -> bool {
         matches!(self.failure, Failure::Exit { .. })
     }
 
     /// What a failed exit said, for the prose matches; `None` for any other failure,
     /// which no predicate reads as benign.
     fn exit_said(&self) -> Option<String> {
-        self.exited().then(|| self.said())
+        self.ran_and_failed().then(|| self.said())
     }
 
     /// Whether this create failed only because what it creates is already there.

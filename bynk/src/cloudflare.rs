@@ -23,7 +23,8 @@ pub(crate) mod process;
 
 #[cfg(test)]
 pub(crate) use api::Op;
-pub(crate) use api::{CloudflareApi, VectorizeOp};
+pub(crate) use api::{CloudflareApi, PushCall, VectorizeOp};
 #[cfg(test)]
 pub(crate) use error::WranglerError;
-pub(crate) use process::Wrangler;
+pub(crate) use error::{Exit, Failure};
+pub(crate) use process::{Wrangler, spawn_command};
