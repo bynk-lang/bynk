@@ -134,10 +134,12 @@ fn cfg_test_declared_mods(source: &str) -> Vec<String> {
 /// directories declared away as test-only by a `#[cfg(test)] mod name;` in some
 /// other file. A module file `a/b.rs` owns directory `a/b/`, except `lib.rs`,
 /// `main.rs` and `mod.rs`, which own their own directory.
-fn declaration_gated_stems(files: &[(String, String)]) -> BTreeSet<String> {
+fn declaration_gated_stems<'a>(
+    files: impl IntoIterator<Item = (&'a str, &'a str)>,
+) -> BTreeSet<String> {
     let mut stems = BTreeSet::new();
     for (rel, contents) in files {
-        let (dir, file) = rel.rsplit_once('/').unwrap_or(("", rel.as_str()));
+        let (dir, file) = rel.rsplit_once('/').unwrap_or(("", rel));
         let stem = file.strip_suffix(".rs").unwrap_or(file);
         let owned = match stem {
             "lib" | "main" | "mod" => dir.to_string(),
@@ -164,6 +166,28 @@ fn is_declaration_gated(rel: &str, stems: &BTreeSet<String>) -> bool {
         .any(|s| without_ext == s || rel.starts_with(&format!("{s}/")))
 }
 
+/// The stems of the modules that `files` declare away as test-only (`#[cfg(test)] mod x;`),
+/// for [`is_test_only_file`]. `files` are `(path, contents)` with one common base, in which
+/// the declaring file and the declared one both appear; paths may use either separator.
+pub(crate) fn gated_stems(files: &[(std::path::PathBuf, String)]) -> BTreeSet<String> {
+    let rels: Vec<String> = files
+        .iter()
+        .map(|(p, _)| p.to_string_lossy().replace('\\', "/"))
+        .collect();
+    declaration_gated_stems(
+        rels.iter()
+            .zip(files)
+            .map(|(rel, (_, contents))| (rel.as_str(), contents.as_str())),
+    )
+}
+
+/// Is `rel` test code throughout: a whole test file ([`is_whole_test_file`]), or a module
+/// declared `#[cfg(test)] mod x;` in `gated` ([`gated_stems`])? Every probe that skips
+/// test files uses this, so they agree with `module_lines` on what a test file is.
+pub(crate) fn is_test_only_file(rel: &str, gated: &BTreeSet<String>) -> bool {
+    is_whole_test_file(rel) || is_declaration_gated(rel, gated)
+}
+
 /// `(path from the repo root, production lines)` for one crate's `src/**/*.rs`
 /// files, given as `(src-relative path, contents)`. Whole-test files and files
 /// whose `mod` declaration is `#[cfg(test)]` are skipped; paths read
@@ -172,10 +196,10 @@ pub(crate) fn module_lines_for_crate(
     crate_name: &str,
     files: &[(String, String)],
 ) -> Vec<(String, usize)> {
-    let gated = declaration_gated_stems(files);
+    let gated = declaration_gated_stems(files.iter().map(|(r, c)| (r.as_str(), c.as_str())));
     files
         .iter()
-        .filter(|(rel, _)| !is_whole_test_file(rel) && !is_declaration_gated(rel, &gated))
+        .filter(|(rel, _)| !is_test_only_file(rel, &gated))
         .map(|(rel, contents)| {
             (
                 format!("{crate_name}/src/{rel}"),
