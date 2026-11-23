@@ -4645,6 +4645,19 @@ fn planned_unit<'a>(plan: &'a emitter::ComposePlan, context: &str) -> &'a emitte
         .expect("the compose plan has a unit for every context with a checked table")
 }
 
+/// 1C.3a (#4040): the model a Workers build's files were written from, for the
+/// commands that act on its bindings; none for a Bundle build.
+fn workers_build(
+    target: BuildTarget,
+    bindings: emitter::WorkerBindings,
+    layout: &WorkerLayout,
+) -> Option<WorkersBuild> {
+    matches!(target, BuildTarget::Workers).then(|| WorkersBuild {
+        bindings,
+        layout: layout.clone(),
+    })
+}
+
 /// What `run_checks` derives once for the build (1C.1a, Decision C of #4031):
 /// the composition plan, and every Worker's bindings decided from it. The
 /// duplicate check, the integration harness and the Workers build all read
@@ -4873,10 +4886,7 @@ fn build_output(
     // what", and 1B.1b (#3928) what each unit composes, both decided once in
     // `run_checks` for both targets; 1C.1a (#4031) adds each Worker's bindings,
     // with a container's build path from the project root set once (#3477).
-    let ComposedBuild {
-        plan: compose_plan,
-        mut bindings,
-    } = composed;
+    let (compose_plan, mut bindings) = (composed.plan, composed.bindings);
     bindings.locate_containers(container_root);
     // #2137: the contexts a `system` harness stands up (test build only).
     let harness_clock_contexts =
@@ -4929,11 +4939,7 @@ fn build_output(
             emit.emit_all(&mut compiled, &mut lock_warnings, &mut staged_assets);
         }
     }
-    // 1C.3a (#4040): the model the Workers above were written from.
-    let workers = matches!(target, BuildTarget::Workers).then(|| WorkersBuild {
-        bindings,
-        layout: layout.clone(),
-    });
+    let workers = workers_build(target, bindings, layout);
 
     // v0.17: copy each adapter binding verbatim into the output, beside the
     // adapter's emitted interface module, so compose's import resolves and the
