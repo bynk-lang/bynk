@@ -40,10 +40,12 @@ class __Stub_Locale {
   constructor(c?: string) {
     this.__case = c;
   }
+
   __applies(op: string): boolean {
     if (op === "current") return this.__case === "a stub over a capability whose type the context does not use";
     return true;
   }
+
   async current(): globalThis.Promise<__ns_bynk_locale_types.LocaleTag> {
     const { BytesResponse, Claim, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;

@@ -40,10 +40,12 @@ class __Stub_Stamp {
   constructor(c?: string) {
     this.__case = c;
   }
+
   __applies(op: string): boolean {
     if (op === "next") return this.__case === "a stub replaces a sibling file's provider";
     return true;
   }
+
   async next(): globalThis.Promise<number> {
     if (this.__case === "a stub replaces a sibling file's provider") {
       const __k = this.__seq_0;

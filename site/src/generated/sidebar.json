@@ -33,19 +33,19 @@
     "items": [
       {
         "label": "1. Compile your first program",
-        "link": "/book/tutorials/01-first-program/"
+        "link": "/book/tutorials/first-program/"
       },
       {
         "label": "2. Build a small HTTP service",
-        "link": "/book/tutorials/02-http-service/"
+        "link": "/book/tutorials/http-service/"
       },
       {
         "label": "3. Model your data with types",
-        "link": "/book/tutorials/03-modelling-data/"
+        "link": "/book/tutorials/modelling-data/"
       },
       {
         "label": "4. Make illegal states unrepresentable",
-        "link": "/book/tutorials/04-refined-types/"
+        "link": "/book/tutorials/refined-types/"
       },
       {
         "label": "5. Handle failure with Result",
@@ -57,7 +57,7 @@
       },
       {
         "label": "7. Add a stateful agent",
-        "link": "/book/tutorials/05-stateful-agent/"
+        "link": "/book/tutorials/stateful-agent/"
       },
       {
         "label": "8. Split into contexts",
@@ -65,7 +65,11 @@
       },
       {
         "label": "9. Test it",
-        "link": "/book/tutorials/06-testing/"
+        "link": "/book/tutorials/testing/"
+      },
+      {
+        "label": "10. Deploy it",
+        "link": "/book/tutorials/deploy/"
       }
     ]
   },

@@ -338,15 +338,16 @@ Built-in type names, reserved in type position: `Asset` `BoundaryRejection`
 - [Install](/book/introduction/install/): build from source with a recent Rust toolchain.
 
 ### Tutorials (learn by building)
-- [1. Compile your first program](/book/tutorials/01-first-program/)
-- [2. Build a small HTTP service](/book/tutorials/02-http-service/)
-- [3. Model your data with types](/book/tutorials/03-modelling-data/)
-- [4. Make illegal states unrepresentable](/book/tutorials/04-refined-types/)
+- [1. Compile your first program](/book/tutorials/first-program/)
+- [2. Build a small HTTP service](/book/tutorials/http-service/)
+- [3. Model your data with types](/book/tutorials/modelling-data/)
+- [4. Make illegal states unrepresentable](/book/tutorials/refined-types/)
 - [5. Handle failure with `Result`](/book/tutorials/failure-and-result/)
 - [6. Reach out with capabilities](/book/tutorials/capabilities/)
-- [7. Add a stateful agent](/book/tutorials/05-stateful-agent/)
+- [7. Add a stateful agent](/book/tutorials/stateful-agent/)
 - [8. Split into contexts](/book/tutorials/contexts/)
-- [9. Test it](/book/tutorials/06-testing/)
+- [9. Test it](/book/tutorials/testing/)
+- [10. Deploy it](/book/tutorials/deploy/)
 
 ### Guides (task-focused)
 - [The type system](/book/guides/type-system/): refined/sum/opaque types, `match`, `is`, `Result`/`Option`, JSON decode.

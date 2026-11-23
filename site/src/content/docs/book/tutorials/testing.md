@@ -3,8 +3,8 @@ title: Test it
 ---
 A language built around correctness should make tests easy, and Bynk builds
 testing in: `suite`/`case` blocks, `expect`, value fabrication with `Val[T]`, and
-per-seam test doubles with `stub`. In this final tutorial we test the shortener
-from [Add a stateful agent](/book/tutorials/05-stateful-agent/) and meet each of those tools.
+per-seam test doubles with `stub`. In this chapter we test the shortener
+from [Add a stateful agent](/book/tutorials/stateful-agent/) and meet each of those tools.
 
 ## Lay out a test project
 
@@ -196,22 +196,16 @@ registry:
 > treatment, and [Test tiers](/book/guides/testing/integration/) for promoting a
 > case to run its real collaborators, in one context or across the wire.
 
-## What you have done — and where to go
+## What you have done
 
 You laid out a test project, wrote `case`s with `expect`, ran them with
 `bynk test`, fabricated values with `Val[T]`, and stubbed a collaborator with
-`stub`. More than that: you have built one system the whole way — from a first
-compiled program, through an HTTP service, a data model, refined types, and a
-stateful agent, to a tested URL shortener.
+`stub`. The shortener is now a tested system: a first compiled program grown
+through an HTTP service, a data model, refined types, errors as values,
+capabilities, a stateful agent and two contexts. One step is left: putting it
+live.
 
-From here:
-
-- **Have a specific task?** The [how-to guides](/book/guides/) are recipes
-  for individual jobs.
-- **Need exact behaviour?** The [reference](/reference/) is the
-  consultable source of truth.
-- **Want the reasoning?** The [explanation](/book/guides/) section
-  covers the *why* behind Bynk's design.
+➡️ **Next: [Deploy it](/book/tutorials/deploy/)**
 
 ---
 

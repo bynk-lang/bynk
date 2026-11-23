@@ -901,7 +901,7 @@ exclude = ["src/generated/**", "orders.legacy_refund"]
 ## Legacy mode
 
 Without a `bynk.toml`, a single `.bynk` file compiles as a standalone unit (the
-[first-program](/book/tutorials/01-first-program/) flow). This is the simplest
+[first-program](/book/tutorials/first-program/) flow). This is the simplest
 way to start.
 
 Project features expect the manifest-driven layout above. In particular

@@ -365,6 +365,7 @@ fn clear_stmt_kind(kind: &mut TsStmtKind) {
         } => {
             clear_expr(discriminant);
             for case in cases {
+                case.span = None;
                 for t in &mut case.labels {
                     clear_expr(t);
                 }
@@ -390,12 +391,15 @@ fn clear_decl(decl: &mut TsDecl) {
         TsDecl::Class {
             constructor,
             methods,
+            end_span,
             ..
         } => {
+            *end_span = None;
             if let Some(ctor) = constructor {
                 clear_stmts(&mut ctor.body);
             }
             for m in methods {
+                m.span = None;
                 clear_stmts(&mut m.body);
             }
         }
@@ -3228,7 +3232,12 @@ impl TsParam {
 #[derive(Debug, Clone, PartialEq)]
 pub struct TsClassField {
     pub name: String,
-    pub ty: TsType,
+    /// The field's type. `None` for a field that has only an initialiser, whose type TypeScript
+    /// infers (`__seq_0 = 0;`); build one with [`TsClassField::inferred`].
+    pub ty: Option<TsType>,
+    /// The field's initialiser (`name: T = init;`). `None` for an ordinary field, which the
+    /// constructor or a factory assigns.
+    pub init: Option<TsExpr>,
     /// `private` — the one visibility modifier `events_fanout.rs` uses
     /// (`private env: ...`). Not a decorator or a constructor parameter
     /// property (R7.1 forbids both categorically — there is no variant
@@ -3247,7 +3256,20 @@ impl TsClassField {
     pub fn new(name: impl Into<String>, ty: TsType) -> Self {
         Self {
             name: name.into(),
-            ty,
+            ty: Some(ty),
+            init: None,
+            private: false,
+            definite: false,
+        }
+    }
+
+    /// A public field with an initialiser and no written type (`name = init;`), whose type
+    /// TypeScript infers from it (1B.5c: a stub class's `__seq_0 = 0;`).
+    pub fn inferred(name: impl Into<String>, init: TsExpr) -> Self {
+        Self {
+            name: name.into(),
+            ty: None,
+            init: Some(init),
             private: false,
             definite: false,
         }
