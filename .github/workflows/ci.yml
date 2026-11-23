@@ -1982,7 +1982,8 @@ jobs:
   #   - this is a `pull_request` run and every fast gate passed;
   #   - the head branch lives in THIS repo. A fork's draft state is not ours to
   #     change, and a fork's `pull_request` token is read-only anyway;
-  #   - it is not a Dependabot PR (the review workflow never reviews those);
+  #   - it is not a Dependabot PR (the bynk-lang GitHub App doesn't review a
+  #     bot's PR, and a Dependabot PR has no need of the ready set early);
   #   - checked live when the step runs, not taken from the event payload: the
   #     PR is still open, still a draft, its head is still the SHA this run
   #     tested, and it has no `keep-draft` label. That label is the opt-out for
@@ -1995,17 +1996,17 @@ jobs:
   # write` marks the PR ready (`gh pr ready`, a GraphQL mutation), but the
   # `markPullRequestReadyForReview` mutation also demands `contents: write`
   # from integration tokens (cli/cli#6924). Without it the call fails with
-  # "Resource not accessible by integration". `actions: write` dispatches the
-  # review. A same-repo PR's author can already push to this repo, and a fork
+  # "Resource not accessible by integration". A same-repo PR's author can
+  # already push to this repo, and a fork
   # PR's token stays read-only whatever a job asks for, so a PR that edited
   # this job would gain nothing.
   #
-  # The GITHUB_TOKEN no-retrigger rule: events caused by the default token do
-  # NOT start new workflow runs, so the `ready_for_review` event `gh pr ready`
-  # fires never reaches claude-pr-review.yml. `workflow_dispatch` is the
-  # documented exception to that rule, so the step dispatches the review
-  # explicitly after flipping the PR. Do not "simplify" this to rely on the
-  # event.
+  # The review. Pull requests are reviewed by the bynk-lang GitHub App
+  # (bynk-lang/github-hooks), which `.github/bynk-hooks.yml` turns on: Claude
+  # reviews a member's PR each time it becomes ready, and the App posts the
+  # review. Events caused by the default token start no workflow runs, but
+  # GitHub still delivers them to Apps, so the `ready_for_review` event
+  # `gh pr ready` fires reaches the App, and this job dispatches nothing.
   #
   # Promotion also starts the ready set, in this run: `ready-gate` reads
   # `promoted`. No new run starts (the GITHUB_TOKEN rule below), so without
@@ -2041,7 +2042,6 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
-      actions: write
     outputs:
       # `true` when this job marked the draft ready, so `ready-gate` runs the
       # ready set in this same run (the ready_for_review event this job
@@ -2057,7 +2057,6 @@ jobs:
           REPO: ${{ github.repository }}
           PR: ${{ github.event.pull_request.number }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           # Fetch first, then filter: piped straight into jq, a failed `gh api`
           # (a 5xx, a rate limit) would be masked, since a step with no
@@ -2076,14 +2075,7 @@ jobs:
 
           echo "Fast gates are green at $HEAD_SHA - marking PR #$PR ready for review."
           gh pr ready "$PR" --repo "$REPO"
-          # Set as soon as the PR is ready, before the dispatch below, so a
-          # failed dispatch cannot leave a ready PR without its ready set.
           echo "promoted=true" >> "$GITHUB_OUTPUT"
-          # See the header: the GITHUB_TOKEN-caused ready_for_review event
-          # cannot start the review workflow, so dispatch it explicitly.
-          gh workflow run claude-pr-review.yml \
-            --repo "$REPO" --ref "$DEFAULT_BRANCH" -f pr_number="$PR"
-          echo "Dispatched claude-pr-review.yml for PR #$PR."
 
   # ---------------------------------------------------------------------------
   # Whether this run runs the ready set (see the stage table at the top): the
