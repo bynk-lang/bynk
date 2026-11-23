@@ -200,7 +200,7 @@ pub(crate) fn record_pushed_tombstones(
 
 /// The `--` passthrough argument that conflicts with the driver's own
 /// `--env`, if any (slice 4, DECISION E) — bare or `=`-joined, mirroring
-/// `dev.rs`'s `passthrough_has` matching rule for the same class of clash
+/// `dev/run.rs`'s `passthrough_has` matching rule for the same class of clash
 /// (`--port`/`--inspector-port` there). Returns the matched literal, not just
 /// a bool, so the error can name what it conflicts with. Pure, so the rule is
 /// tested without touching `DeployOptions`.

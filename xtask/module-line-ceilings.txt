@@ -12,4 +12,3 @@ bynk-emit/src/emitter/lower.rs = 4884
 bynk-emit/src/emitter/serialisation.rs = 4232
 bynk-emit/src/emitter/workers_entry.rs = 4215
 bynk-emit/src/emitter.rs = 3215
-bynk/src/dev.rs = 2292
