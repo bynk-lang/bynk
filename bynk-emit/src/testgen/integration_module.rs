@@ -678,35 +678,15 @@ pub(super) fn emit_integration_module(
         let used: HashSet<String> = bynk_ts::unbound_names_in(&body.stmts, is_participant_type)
             .into_iter()
             // A helper may name a participant's type though no case does.
-            .chain(bynk_ts::unbound_names_in(&helper.stmts, is_participant_type))
+            .chain(bynk_ts::unbound_names_in(
+                &helper.stmts,
+                is_participant_type,
+            ))
             .collect();
         for (p, names) in &participant_types {
             let named: Vec<String> = names
                 .iter()
-                .filter(|n| {
-                    // TEMPORARY (1B.3c, Decision E): the one-off corpus comparison.
-                    let old = names_ident(&body.text, n) || names_ident(&helper.text, n);
-                    if old != used.contains(*n) {
-                        if let Ok(path) = std::env::var("BYNK_E_CORPUS") {
-                            use std::io::Write;
-                            if let Ok(mut f) = std::fs::OpenOptions::new()
-                                .create(true)
-                                .append(true)
-                                .open(path)
-                            {
-                                let _ = writeln!(
-                                    f,
-                                    "DIFF name={n} old={old} new={} case={:?}\n---body---\n{}\n---helper---\n{}\n===",
-                                    used.contains(*n),
-                                    case.name,
-                                    body.text,
-                                    helper.text
-                                );
-                            }
-                        }
-                    }
-                    used.contains(*n)
-                })
+                .filter(|n| used.contains(*n))
                 .cloned()
                 .collect();
             if named.is_empty() {

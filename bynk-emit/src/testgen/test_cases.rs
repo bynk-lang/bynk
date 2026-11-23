@@ -663,15 +663,18 @@ pub(super) fn emit_test_case_function(
     {
         let mut helper_view = helper_view;
         test_suites::register_call_record_types(&mut helper_view, target_name, unit_tables);
-        out.push_str(&suite_fn_decls(
-            suite_fns,
-            helper_view,
-            unit_tables.get(target_name),
-            &mut typed,
-            runtime_use,
-            &mut harness_bound,
-            tys,
-        ).text);
+        out.push_str(
+            &suite_fn_decls(
+                suite_fns,
+                helper_view,
+                unit_tables.get(target_name),
+                &mut typed,
+                runtime_use,
+                &mut harness_bound,
+                tys,
+            )
+            .text,
+        );
     }
     let cross = bynk_check::resolver::CrossContextInfo::default();
     let test_services: HashSet<String> = unit_tables
