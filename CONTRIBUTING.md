@@ -74,9 +74,10 @@ CI remains the authority. The toolchain is pinned in `rust-toolchain.toml`.
 6. CI runs in stages (the table at the top of `.github/workflows/ci.yml`):
    - **Draft:** each push runs the fast Linux checks only, and `CI green` stays
      red, because the full check has not run.
-   - **Ready for review:** adds the Windows and macOS legs, the Linux system
-     tests, TypeScript 7 and the Node floor, so platform and system-test
-     failures show up while the PR is in review. A same-repo draft is marked
+   - **Ready for review:** adds the Windows leg (and macOS, when the
+     repository variable `MACOS_ON_PRS` is `true`), the Linux system tests,
+     TypeScript 7 and the Node floor, so platform and system-test failures
+     show up while the PR is in review. A same-repo draft is marked
      ready automatically once its fast checks pass (add the `keep-draft` label
      to stop that).
    - **Merge queue:** re-runs the fast Linux checks on top of the PRs queued
