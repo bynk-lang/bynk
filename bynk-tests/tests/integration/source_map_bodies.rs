@@ -286,7 +286,10 @@ fn a_property_in_the_second_file_of_a_test_group_maps_to_that_file() {
     let at = gen_line_of(&ts, "__bynkExpect");
     let _ = at;
     assert!(
-        lines.iter().flatten().any(|&(src, line)| src == b && line == 6),
+        lines
+            .iter()
+            .flatten()
+            .any(|&(src, line)| src == b && line == 6),
         "the property's `expect` should map to b.bynk line 7, got {lines:?}"
     );
 }
