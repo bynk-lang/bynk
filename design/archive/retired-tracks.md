@@ -2654,3 +2654,47 @@ imposed; entries keep the order they were retired in.
 
   This track's doc, `design/tracks/dev-agent-inspection.md`, is removed. Code comments and ADRs that
   cited it now point here.
+
+- **`web-presence.md`** — spine [#3861](https://github.com/bynk-lang/bynk/issues/3861), settled in
+  [#3859](https://github.com/bynk-lang/bynk/pull/3859) with its open questions closed with the
+  maintainer on 21 November 2026. It realised the brief of the retired documentation track and
+  [ADR 0141](../decisions/0141-documentation-framework.md): one coherent web presence under one
+  domain and design system. bynk-lang.org was arranged by history (the Book held every kind of
+  documentation, the changelog, the specification, troubleshooting and contributing notes;
+  Reference was split with Developer Docs; the blog carried its own copy of the brand), and is now
+  arranged by use. No language surface moved.
+
+  **What shipped.**
+  - **The Book's shape** ([ADR 0880](../decisions/0880-book-organised-by-kind-then-concern.md)). The
+    contents listed every page, with a completeness check in `generate-sidebar.mjs` (slice 1,
+    #3863), and the Book regrouped into Start, Learn Bynk, Concepts and Guides behind a short front
+    page (slice 2, #3866). The Concepts pages moved to `/book/concepts/<concern>/` (slice 5b, #4005).
+  - **Releases** ([ADR 0881](../decisions/0881-release-pages-cut-before-tagging.md)). One page per
+    release tag and an `unreleased` page that `xtask stamp` writes (slice 3, #3871).
+  - **Diagnostics by code** ([ADR 0882](../decisions/0882-compiler-links-name-codes.md)). A
+    generated page for every registry code, and the toolchain links `/d/<code>`, never a page
+    (slice 4, #3893). The troubleshooting pages folded into their codes' `Explain` entries
+    (slice 4b, #3913).
+  - **One Reference.** The language reference, the specification and Developer Docs became one
+    surface at `/reference/`, with its own contents and splat redirects (slice 5, #3944).
+  - **One brand** ([ADR 0883](../decisions/0883-one-site-theme-package.md)). The
+    `@bynk-lang/site-theme` package, in its own repository and published to GitHub Packages,
+    themes the docs site (slice 6, #4012) and the blog (slice 7, bynk-lang/blog#18), with
+    cross-site search (#4023, bynk-lang/blog#24). The site shell (header, footer, the home page)
+    followed the mockups (slice 8, #4032, theme 0.3.0), with the licences of
+    [ADR 0886](../decisions/0886-docs-and-blog-licences.md).
+  - **Learn Bynk in ten chapters.** Four new chapters on the one running project, the URL shortener:
+    Handle failure with `Result` (slice 9, #4052), Reach out with capabilities (slice 10, #4058),
+    Split into contexts (slice 11, #4065, with the examples gate's `bynk,project=` fence) and Deploy
+    it (slice 12, #4078). The chapter files lost their numbers, with a redirect each.
+  - **Project pages.** Contributing and the roadmap left the Book for `/project/`, with their own
+    contents (`site/src/PROJECT.md`), and *Why Bynk exists* folded into *What is Bynk?* (slice 13,
+    #4082).
+
+  **Named follow-ons.** An automated check of `_redirects` against the built site beyond
+  `check-redirects.mjs` (the slice 5b review). The blog's links into moved docs pages ride its next
+  release (L5). A CI gate that runs `bynk deploy --dry-run` on the "Deploy it" chapter's project
+  (slice 12, decision B).
+
+  This track's doc, `design/tracks/web-presence.md`, is removed. Code comments that say "web presence
+  slice N" refer to the slices above.

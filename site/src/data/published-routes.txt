@@ -1266,6 +1266,11 @@
 /docs/tooling/bynk-openapi/
 /docs/tooling/tree-sitter-bynk/
 /docs/tooling/vscode-bynk/
+/project/contributing/
+/project/contributing/architecture/
+/project/contributing/documentation/
+/project/contributing/testing/
+/project/versioning-and-roadmap/
 /reference/
 /reference/actors/
 /reference/adapters/

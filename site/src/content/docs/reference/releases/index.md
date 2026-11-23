@@ -3,7 +3,7 @@ title: Releases
 description: Every Bynk release, newest first, with the increments each one shipped.
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
-[Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
+[Versioning & roadmap](/project/versioning-and-roadmap/)). This book is
 written against **v0.640**.
 
 Each increment gets a version when it merges. A **release** gathers the

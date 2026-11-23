@@ -75,7 +75,7 @@ clean unless emission actually changed, in content or in which files are
 emitted.
 
 `BYNK_BLESS` is the project's shared regenerate switch: the same run also
-refreshes the generated reference pages (see [Working on the docs](/book/contributing/documentation/)).
+refreshes the generated reference pages (see [Working on the docs](/project/contributing/documentation/)).
 Scope it to a specific test when you only mean to bless one thing.
 
 ## The `tsc` verification gate
@@ -162,4 +162,4 @@ A grammar increment is not complete until:
 4. a change to what a program **does** at runtime is proved by a behavioural
    fixture (an `expected_run.txt` suite), not only by a golden;
 5. the **docs** are updated in the same change — see
-   [Working on the docs](/book/contributing/documentation/).
+   [Working on the docs](/project/contributing/documentation/).

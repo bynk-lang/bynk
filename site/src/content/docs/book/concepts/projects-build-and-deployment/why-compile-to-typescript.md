@@ -54,4 +54,4 @@ you are building. See [Target Cloudflare Workers](/book/guides/projects-build-an
 The wager is that for the services Bynk targets, *reach and a proven runtime* are
 worth more than *control over a bespoke runtime* — and that a strong type system
 plus readable output recovers most of what you might otherwise miss. See
-[Why Bynk exists](/book/about/why-bynk-exists/) for the wider motivation.
+[Why Bynk exists](/book/introduction/what-is-bynk/#why-bynk-exists) for the wider motivation.

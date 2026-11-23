@@ -11,10 +11,6 @@
         "link": "/book/introduction/what-is-bynk/"
       },
       {
-        "label": "Why Bynk exists",
-        "link": "/book/about/why-bynk-exists/"
-      },
-      {
         "label": "Anatomy of a Bynk service",
         "link": "/book/introduction/anatomy-of-a-service/"
       },
@@ -680,36 +676,6 @@
             "link": "/book/guides/projects-build-and-deployment/"
           }
         ]
-      }
-    ]
-  },
-  {
-    "label": "About Bynk",
-    "items": [
-      {
-        "label": "Versioning & roadmap",
-        "link": "/book/about/versioning-and-roadmap/"
-      }
-    ]
-  },
-  {
-    "label": "Contributing",
-    "items": [
-      {
-        "label": "Overview",
-        "link": "/book/contributing/"
-      },
-      {
-        "label": "Compiler architecture",
-        "link": "/book/contributing/architecture/"
-      },
-      {
-        "label": "Testing & fixtures",
-        "link": "/book/contributing/testing/"
-      },
-      {
-        "label": "Working on the docs",
-        "link": "/book/contributing/documentation/"
       }
     ]
   }

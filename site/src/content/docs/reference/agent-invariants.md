@@ -122,7 +122,7 @@ disguise — write it as an `invariant`.
 new.status is Paid` uses `is`/`implies`, which need no ordering. An *ordered* step
 like `new.balance >= old.balance` needs `>=`, available on numeric and temporal
 fields but **not on enums** (enums are unordered today) — an ordered-status
-transition is a [named follow-on](/book/about/versioning-and-roadmap/).
+transition is a [named follow-on](/project/versioning-and-roadmap/).
 
 Transitions are checked at the **commit boundary**, alongside the snapshot
 invariants — see below.
@@ -167,7 +167,7 @@ fault** — observationally identical to any other internal fault. The compiler
 *does* `console.error` the agent type and invariant name (never the key value, to
 keep domain identifiers out of logs) at the commit site, so a refusal is
 distinguishable from a crash **in the logs**. Making the refusal
-caller-distinguishable is a [named follow-on](/book/about/versioning-and-roadmap/)
+caller-distinguishable is a [named follow-on](/project/versioning-and-roadmap/)
 (a general typed-agent-fault channel), as is the compile-time
 provable-violation pass.
 

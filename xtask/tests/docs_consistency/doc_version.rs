@@ -32,7 +32,7 @@ fn current_version_banners_agree_with_the_release() {
         ("book/index.md", format!("currently v{mm}")),
         ("reference/tooling/index.mdx", format!("currently v{mm}")),
         (
-            "book/about/versioning-and-roadmap.md",
+            "project/versioning-and-roadmap.md",
             format!("written against v{mm}"),
         ),
         ("reference/spec/scope.md", format!("current version, v{mm}")),
