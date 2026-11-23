@@ -47,9 +47,7 @@ use super::ts_types::{
     unchecked_construct_test_node,
 };
 use super::*;
-use crate::ts_build::{
-    arrow_of, bool_lit, call, const_, ident, not_expr as negated, num_lit, str_lit,
-};
+use crate::ts_build::{arrow_of, bool_lit, call, const_, ident, not_expr, num_lit, str_lit};
 
 /// v0.154 (ADR 0178): the `Err`-wrap a `?` on a `Result` operand needs, if the
 /// operand's error type differs from the enclosing return's and a declared
@@ -3320,7 +3318,11 @@ pub(super) fn build_value_bin_op(
         // operand decides. A primitive operand returns `None` here and falls
         // through to host `===`/`!==` below.
         let call = helper_call(helper, children);
-        if op == BinOp::Eq { call } else { negated(call) }
+        if op == BinOp::Eq {
+            call
+        } else {
+            not_expr(call)
+        }
     } else if let Some(operand) = matches!(op, BinOp::Lt | BinOp::LtEq | BinOp::Gt | BinOp::GtEq)
         .then(|| cx.commons().expr_types.get(&lhs.id).map(|te| te.ty))
         .flatten()
@@ -5766,7 +5768,7 @@ fn minus(x: Int) -> Int { 5 - - -x }
         assert_eq!(args.len(), 2);
         assert_eq!(call.printed(), "__bynkDecimalAdd(a, b)");
         // Structural `!=`: `Unary(Not, Call)`.
-        let ne = super::negated(super::helper_call("__bynkEq", vec![n("a"), n("b")]));
+        let ne = crate::ts_build::not_expr(super::helper_call("__bynkEq", vec![n("a"), n("b")]));
         assert!(matches!(
             &ne,
             bynk_ts::TsExpr::Unary {
