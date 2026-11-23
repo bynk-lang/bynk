@@ -47,7 +47,6 @@ pub const CEILINGS_FILE: &str = "xtask/module-line-ceilings.txt";
 pub const GRANDFATHERED: &[&str] = &[
     "bynk-emit/src/emitter/emit.rs",
     "bynk-emit/src/emitter/serialisation.rs",
-    "bynk-emit/src/emitter.rs",
 ];
 
 /// One measured file.

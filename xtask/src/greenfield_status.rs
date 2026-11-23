@@ -1799,7 +1799,10 @@ const AST_IMPORTER_ORIGINS: &[(&str, &str)] = &[
         "emitter/workers_entry.rs",
     ),
     // emitter.rs (2.5, #4090)
+    ("emitter/boundary.rs", "emitter.rs"),
+    ("emitter/consumed.rs", "emitter.rs"),
     ("emitter/imports.rs", "emitter.rs"),
+    ("emitter/project.rs", "emitter.rs"),
     // 2.2a (#4087): `lower.rs` split.
     ("emitter/lower/pattern.rs", "emitter/lower.rs"),
     ("emitter/lower/is.rs", "emitter/lower.rs"),
