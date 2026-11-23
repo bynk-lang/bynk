@@ -1962,21 +1962,32 @@ fn is_moved_project_file(rel: &Path) -> bool {
 /// the driver does not drop emission code out of their universe. The exclusion rules in
 /// them name `project.rs` / `project/…` relative to the old root, which still resolves.
 fn codegen_family_files(root: &Path) -> Vec<(PathBuf, String)> {
-    let mut files = rust_files_relative(&root.join("bynk-emit/src"));
-    files.extend(
-        rust_files_relative(&root.join("bynk-driver/src"))
-            .into_iter()
-            .filter(|(p, _)| is_moved_project_file(p)),
-    );
-    files.retain(|(p, _)| !is_family_test_file(p));
-    files
+    let driver = rust_files_relative(&root.join("bynk-driver/src"))
+        .into_iter()
+        .filter(|(p, _)| is_moved_project_file(p))
+        .collect();
+    codegen_family_from(rust_files_relative(&root.join("bynk-emit/src")), driver)
+}
+
+/// [`codegen_family_files`]' selection over the two halves' files, without the file walk,
+/// so a test can exercise it: both halves, less every whole test file
+/// ([`is_family_test_file`]).
+fn codegen_family_from(
+    mut emit: Vec<(PathBuf, String)>,
+    driver: Vec<(PathBuf, String)>,
+) -> Vec<(PathBuf, String)> {
+    emit.extend(driver);
+    emit.retain(|(p, _)| !is_family_test_file(p));
+    emit
 }
 
 /// Is `rel` a whole test file (`tests.rs`, `*_tests.rs`, or anything under a `tests/`
 /// directory)? Such a file is test code throughout, so the probes that read the emitter's
 /// production source skip it, as `module_lines` does. Without this, moving a module's
 /// tests out to `foo/tests.rs` would raise `ts_writes` with no production line changed.
-/// Applied to both halves: counting `bynk-emit`'s whole test files as production read
+/// Applied to both halves, by file name alone: a production helper named `tests.rs`,
+/// `*_tests.rs` or under a `tests/` directory would drop out of these probes, so that
+/// naming convention is load-bearing for them. Counting `bynk-emit`'s whole test files as production read
 /// `ts_writes` 464 and `ts_any` 24 where the production lines are 462 and 21.
 fn is_family_test_file(rel: &Path) -> bool {
     crate::module_lines::is_whole_test_file(&rel.to_string_lossy().replace('\\', "/"))
@@ -7819,25 +7830,27 @@ commons app.demo {
     }
 
     /// A whole test file is test code, so the family probes skip it: a module's tests
-    /// moving out to `foo/tests.rs` must not raise `ts_writes`.
+    /// moving out to `foo/tests.rs` must not raise `ts_writes`. Run through
+    /// [`codegen_family_from`], so deleting its filter fails this test.
     #[test]
     fn family_probes_skip_whole_test_files() {
-        for test_file in [
-            "project/tests.rs",
-            "project/entry_scope_tests.rs",
-            "emitter/tests/golden.rs",
-        ] {
-            assert!(is_family_test_file(Path::new(test_file)), "{test_file}");
-        }
-        for production in ["project.rs", "project/entry.rs", "emitter/lower.rs"] {
-            assert!(!is_family_test_file(Path::new(production)), "{production}");
-        }
-        let write = "fn f() { let _ = format!(\"x\"); }\n";
-        let files = |rel: &str| vec![(PathBuf::from(rel), write.to_string())];
-        assert_eq!(ts_writes_over(&[("project/entry.rs", write)]), 1);
-        let mut family = files("project/tests.rs");
-        family.retain(|(p, _)| !is_family_test_file(p));
-        assert_eq!(ts_writes_violations(&family), 0);
+        let write = "fn f() { let _ = format!(\"x\"); }\n".to_string();
+        let file = |rel: &str| (PathBuf::from(rel), write.clone());
+        let family = codegen_family_from(
+            vec![
+                file("emitter/lower.rs"),
+                file("emitter/tests.rs"),
+                file("emitter/tests/golden.rs"),
+            ],
+            vec![
+                file("project/entry.rs"),
+                file("project/tests.rs"),
+                file("project/entry_scope_tests.rs"),
+            ],
+        );
+        let kept: Vec<_> = family.iter().map(|(p, _)| p.to_string_lossy()).collect();
+        assert_eq!(kept, ["emitter/lower.rs", "project/entry.rs"]);
+        assert_eq!(ts_writes_violations(&family), 2);
     }
 
     // --- ts_writes / ts_any (P7.0, #1296; testability + widening, review of #1297) --
