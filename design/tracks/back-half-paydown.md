@@ -329,7 +329,7 @@ production lines without saying why; from 2.0 the gate is mechanical. Settled by
 | Slice | Target | Production lines | Waits for |
 |---|---|---:|---|
 | **2.0** | the ratchet. **Done in #4085.** | — | — |
-| **2.1** | `bynk-emit/src/emitter/emit.rs`, in seven PRs (2.1a to 2.1g, #4086). **2.1a done (#4134):** `emit/types.rs` (1,036 lines with its tests) and `emit/functions.rs` (823); `emit.rs` was 9,295 production lines after it. **2.1b:** `emit/handlers.rs` (284), `emit/messages.rs` (779 with its tests) and `emit/capability.rs` (547); `emit.rs` is 7,792 after it. | 10,717 | 1B.4b (done) |
+| **2.1** | `bynk-emit/src/emitter/emit.rs`, in seven PRs (2.1a to 2.1g, #4086). **2.1a done (#4134):** `emit/types.rs` (1,036 lines with its tests) and `emit/functions.rs` (823); `emit.rs` was 9,295 production lines after it. **2.1b:** `emit/handlers.rs` (284), `emit/messages.rs` (779 with its tests) and `emit/capability.rs` (547); `emit.rs` is 7,795 production lines after it. | 10,717 | 1B.4b (done) |
 | **2.2** | `bynk-emit/src/emitter/lower.rs` | 4,884 | 1B.4b |
 | **2.3** | `bynk-emit/src/emitter/serialisation.rs` | 4,232 | — |
 | **2.4** | `bynk-emit/src/emitter/workers_entry.rs` | 4,215 | — |
