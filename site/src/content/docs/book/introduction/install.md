@@ -181,5 +181,5 @@ project](/book/guides/projects-build-and-deployment/start-a-project/).
 
 - [Start a new project](/book/guides/projects-build-and-deployment/start-a-project/)
   with `bynk new`.
-- [Compile your first program](/book/tutorials/01-first-program/) — what a single
+- [Compile your first program](/book/tutorials/first-program/) — what a single
   Bynk file compiles to, by hand.

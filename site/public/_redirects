@@ -61,6 +61,30 @@
 /book/about/bynk-compared-to-the-alternatives/ /book/concepts/about/bynk-compared-to-the-alternatives/ 301
 /book/about/bynk-compared-to-the-alternatives /book/concepts/about/bynk-compared-to-the-alternatives/ 301
 
+# The Learn Bynk chapter files lost their numbers in slice 12 (#4077), so a
+# chapter's URL no longer changes when chapters are added (track §10).
+/book/tutorials/01-first-program/ /book/tutorials/first-program/ 301
+/book/tutorials/01-first-program /book/tutorials/first-program/ 301
+/book/tutorials/02-http-service/ /book/tutorials/http-service/ 301
+/book/tutorials/02-http-service /book/tutorials/http-service/ 301
+/book/tutorials/03-modelling-data/ /book/tutorials/modelling-data/ 301
+/book/tutorials/03-modelling-data /book/tutorials/modelling-data/ 301
+/book/tutorials/04-refined-types/ /book/tutorials/refined-types/ 301
+/book/tutorials/04-refined-types /book/tutorials/refined-types/ 301
+/book/tutorials/05-stateful-agent/ /book/tutorials/stateful-agent/ 301
+/book/tutorials/05-stateful-agent /book/tutorials/stateful-agent/ 301
+/book/tutorials/06-testing/ /book/tutorials/testing/ 301
+/book/tutorials/06-testing /book/tutorials/testing/ 301
+# The Project pages left the Book in slice 13 (#4082): contributing and the
+# roadmap moved to /project/, and Why Bynk exists folded into What is Bynk?.
+/book/about/versioning-and-roadmap/ /project/versioning-and-roadmap/ 301
+/book/about/versioning-and-roadmap /project/versioning-and-roadmap/ 301
+/book/about/why-bynk-exists/ /book/introduction/what-is-bynk/ 301
+/book/about/why-bynk-exists /book/introduction/what-is-bynk/ 301
+/book/contributing/ /project/contributing/ 301
+/book/contributing /project/contributing/ 301
+/book/contributing/* /project/contributing/:splat 301
+
 # One Reference surface at /reference/ (slice 5, #3935): the Book's reference
 # and specification and the Developer Docs moved there as folders. The per-tool
 # pages came up a level (/docs/tooling/<tool>/ → /reference/tooling/<tool>/), and

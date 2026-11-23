@@ -126,7 +126,7 @@ uses draws a warning.
 
 A capability is also a seam. A test can put a stand-in where `CodeGen` goes, so
 that a case gets a code it can predict. You'll do exactly that in
-[Test it](/book/tutorials/06-testing/).
+[Test it](/book/tutorials/testing/).
 
 ## The file so far
 
@@ -231,7 +231,7 @@ effect it can have, and the compiler holds it to that list.
 The shortener now makes a fresh code for every link, and then forgets it. Next,
 we give it a memory.
 
-➡️ **Next: [Add a stateful agent](/book/tutorials/05-stateful-agent/)**
+➡️ **Next: [Add a stateful agent](/book/tutorials/stateful-agent/)**
 
 ---
 

@@ -832,7 +832,7 @@ fn read_secrets_manifest(worker_dir: &Path) -> Result<SecretsManifest, String> {
 
 /// P4b (#2608): the `.sql` files in a database's copied migrations directory,
 /// in name order, as wrangler applies them.
-fn migration_files(dir: &Path) -> Result<Vec<String>, String> {
+pub(super) fn migration_files(dir: &Path) -> Result<Vec<String>, String> {
     let entries = std::fs::read_dir(dir)
         .map_err(|e| format!("could not list the D1 migrations in {}: {e}", dir.display()))?;
     let mut files: Vec<String> = entries
@@ -1117,9 +1117,14 @@ fn read_resources(config: &Path, project_workers: &[String]) -> Result<Resources
 /// Read the whole project's declared resources, one config read per worker.
 /// `workers` is every Worker the build holds: a Service Binding to anything
 /// else is to a foreign Worker.
+///
+/// `model`, the binding model of the build that wrote `workers_dir` (1C.3a,
+/// #4040), is held to the parse in debug builds: each Worker's bindings, as
+/// the model declares them, must be the ones read back out of the files.
 pub(crate) fn project_resources(
     workers_dir: &Path,
     workers: &[String],
+    model: Option<&bynk_emit::emit_model::WorkersBuild>,
 ) -> Result<BTreeMap<String, Resources>, String> {
     // A Service Binding names its target's *script* name. That is the Worker's
     // directory unless a `[deploy.workers.<key>]` group overrides it with `name`
@@ -1147,6 +1152,12 @@ pub(crate) fn project_resources(
             .collect();
         all.insert(worker.clone(), resources);
     }
+    if cfg!(debug_assertions)
+        && let Some(build) = model
+        && let Err(disagreement) = cross_check(workers_dir, build, &scripts, &all)
+    {
+        panic!("the binding model disagrees with the emitted configuration: {disagreement}");
+    }
     Ok(all)
 }
 
@@ -1156,12 +1167,13 @@ pub(crate) fn project_resources_for(
     workers_dir: &Path,
     workers: &[String],
     project_root: &Path,
+    model: Option<&bynk_emit::emit_model::WorkersBuild>,
 ) -> Result<BTreeMap<String, Resources>, String> {
     let layout = bynk_project::worker_layout::WorkerLayout::for_project(
         project_root,
         &std::collections::HashMap::new(),
     );
-    let mut all = project_resources(workers_dir, workers)?;
+    let mut all = project_resources(workers_dir, workers, model)?;
     for (worker, resources) in &mut all {
         resources.members = layout
             .group_members(worker)
@@ -3220,7 +3232,7 @@ service = "legacy-billing"
             .iter()
             .map(|s| s.to_string())
             .collect();
-        let resources = project_resources(&root, &workers).unwrap();
+        let resources = project_resources(&root, &workers, None).unwrap();
         let _ = std::fs::remove_dir_all(&root);
         assert_eq!(resources["core"].binds_to, ["pay"], "no edge to itself");
         assert_eq!(resources["web"].binds_to, ["core"], "by directory");

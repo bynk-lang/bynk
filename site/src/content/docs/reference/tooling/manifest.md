@@ -16,7 +16,7 @@ A project is an **application** (`[project]`) or a shareable **package**
 (`[package]`), never both. A directory whose `bynk.toml` holds `[workspace]`
 isn't a project at all: it is a [workspace root](#workspace) that groups
 projects. `[package]`, `[dependencies]`, `[dev-dependencies]` and
-`[registries]` are the first part of [packaging](/book/about/versioning-and-roadmap/):
+`[registries]` are the first part of [packaging](/project/versioning-and-roadmap/):
 they are checked today and do more as packaging lands, as each section below
 says.
 
@@ -901,7 +901,7 @@ exclude = ["src/generated/**", "orders.legacy_refund"]
 ## Legacy mode
 
 Without a `bynk.toml`, a single `.bynk` file compiles as a standalone unit (the
-[first-program](/book/tutorials/01-first-program/) flow). This is the simplest
+[first-program](/book/tutorials/first-program/) flow). This is the simplest
 way to start.
 
 Project features expect the manifest-driven layout above. In particular

@@ -100,13 +100,13 @@ Refinement narrows *which values* exist; opacity controls *what a value means an
 who can touch it*; errors-as-values makes *failure explicit*. Together they push
 correctness from runtime checks and discipline into the type system, where the
 compiler enforces it for free. That is the same bet [Bynk makes
-everywhere](/book/about/why-bynk-exists/): the correct way should be the structurally
+everywhere](/book/introduction/what-is-bynk/#why-bynk-exists): the correct way should be the structurally
 enforced way.
 
 The enforcement is not silent, either. Each refusal above arrived with a
 diagnostic naming the exact invariant — the swapped id, the unhandled `Result` —
 so the type system reads less like a wall than a teacher. That the constraints
-are [pedagogical by design](/book/about/why-bynk-exists/#what-this-adds-up-to) is the bet
+are [pedagogical by design](/book/introduction/what-is-bynk/#the-bet-make-illegal-states-unrepresentable) is the bet
 underneath this one.
 
 ```mermaid

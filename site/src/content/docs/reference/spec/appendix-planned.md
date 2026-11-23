@@ -36,4 +36,4 @@ Two named follow-ons extend [agent invariants](/reference/spec/static-semantics/
 These are sketches of intent, not specifications: this appendix deliberately
 states no syntax or behaviour for them. For the design rationale and the current
 thinking on what is deferred, see
-[Versioning & roadmap](/book/about/versioning-and-roadmap/#what-is-deferred-to-v1).
+[Versioning & roadmap](/project/versioning-and-roadmap/#what-is-deferred-to-v1).

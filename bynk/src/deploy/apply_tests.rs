@@ -442,6 +442,7 @@ fn apply(environment: &str, fail_call: Option<usize>, fail_write: Option<usize>)
             let pushed = apply_worker(
                 &mut RunCx {
                     tools: Tools {
+                        api: &Wrangler::new(&provenance, &scratch.root),
                         provenance: &provenance,
                         project_root: &scratch.root,
                     },
@@ -483,8 +484,11 @@ fn apply(environment: &str, fail_call: Option<usize>, fail_write: Option<usize>)
             }
         }
         prune_orphans(
-            &provenance,
-            &scratch.root,
+            Tools {
+                api: &Wrangler::new(&provenance, &scratch.root),
+                provenance: &provenance,
+                project_root: &scratch.root,
+            },
             &mut writer,
             environment,
             &plan.orphans,

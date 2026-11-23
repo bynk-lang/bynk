@@ -13,7 +13,7 @@ The repo had drifted into carrying three identities at once, and they pulled the
 roadmap in different directions:
 
 1. **A production service-tier language** — the pitch in the root `README.md` and
-   in [`about/why-bynk-exists`](../site/src/content/docs/book/about/why-bynk-exists.md):
+   in [*What is Bynk?* › Why Bynk exists](../site/src/content/docs/book/introduction/what-is-bynk.md):
    a statically typed, architecture-first language for building services that
    compiles to typed TypeScript on Cloudflare Workers.
 2. **A pedagogy-first principle** — the design-notes framing of Bynk as a
@@ -80,7 +80,7 @@ phrasing to match:
 
 > Bynk is a service-tier language, not a teaching tool — but a language that
 > explains every refusal is one you come to understand *as you use it*.
-> — [`about/why-bynk-exists`](../site/src/content/docs/book/about/why-bynk-exists.md)
+> — [*What is Bynk?* › Why Bynk exists](../site/src/content/docs/book/introduction/what-is-bynk.md)
 
 ## What this changes
 
@@ -93,7 +93,7 @@ phrasing to match:
   disclosure is good ergonomics for any developer meeting a large surface, not a
   concession to a classroom.
 - **The PhD memo is archived** and dropped from the live design index.
-- **What does not change:** the public `about/why-bynk-exists` page and the root
+- **What does not change:** the public *What is Bynk?* page (whose "Why Bynk exists" section absorbed the old `about/why-bynk-exists` page in web presence slice 13) and the root
   `README.md`, which already pitch the production identity with pedagogy as the
   "quieter principle" underneath it. This record brings the internal notes into
   line with them, not the other way round.

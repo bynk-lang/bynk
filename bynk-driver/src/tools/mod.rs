@@ -13,11 +13,12 @@
 //! [`crate::probe::program_path`] for a test run ([`node_command`]) and through
 //! detection for `bynk test --inspect` ([`resolved_node_command`]), `git` by
 //! its bare name. Detection itself stays in [`crate::probe`], which wrangler
-//! and Docker also use. Wrangler is not spawned here: 1D.3's `Wrangler` client
-//! takes it.
+//! and Docker also use. [`wrangler::command`] builds every wrangler spawn
+//! (1D.3a); what bynk asks wrangler is `bynk`'s `cloudflare` module.
 
 pub mod ladder;
 pub mod pins;
+pub mod wrangler;
 
 pub use ladder::{Ladder, Rung};
 

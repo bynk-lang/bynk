@@ -1221,7 +1221,14 @@
 /book/tutorials/06-testing/
 /book/tutorials/capabilities/
 /book/tutorials/contexts/
+/book/tutorials/deploy/
 /book/tutorials/failure-and-result/
+/book/tutorials/first-program/
+/book/tutorials/http-service/
+/book/tutorials/modelling-data/
+/book/tutorials/refined-types/
+/book/tutorials/stateful-agent/
+/book/tutorials/testing/
 /by-example/
 /by-example/projects/event-log/
 /by-example/projects/feature-flags/
@@ -1259,6 +1266,11 @@
 /docs/tooling/bynk-openapi/
 /docs/tooling/tree-sitter-bynk/
 /docs/tooling/vscode-bynk/
+/project/contributing/
+/project/contributing/architecture/
+/project/contributing/documentation/
+/project/contributing/testing/
+/project/versioning-and-roadmap/
 /reference/
 /reference/actors/
 /reference/adapters/

@@ -1,8 +1,9 @@
 //! The versions of the external tools the toolchain fetches on demand.
 //!
-//! `WRANGLER_SPEC` is written here first for the test harness (1D.3d,
-//! #4043 Decision J). The production spawns still spell `wrangler@4` out until
-//! 1D.3b routes them through this constant.
+//! `WRANGLER_SPEC` is the pin every wrangler spawn provisions: the one
+//! production spawn site, [`super::wrangler::command`] (1D.3a), and the test
+//! harness (1D.3d). `dev.rs`'s warm-up line and `doctor.rs`'s install hints
+//! still spell `wrangler@4` out until 1D.3b points them here (#4043).
 
 /// The TypeScript package a runner fetches when `tsc` is not installed:
 /// `typescript@<major>`, the major the generated output is verified against

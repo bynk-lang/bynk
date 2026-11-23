@@ -1,8 +1,9 @@
 // @ts-check
 //! Generate (or verify) the Starlight sidebars from their contents files
 //! (documentation track). Each tree has an authored table of contents:
-//! `site/src/SUMMARY.md` for the Book (`/book/`) and, since web presence slice 5,
-//! `site/src/REFERENCE.md` for the Reference (`/reference/`). This turns each into
+//! `site/src/SUMMARY.md` for the Book (`/book/`), since web presence slice 5
+//! `site/src/REFERENCE.md` for the Reference (`/reference/`), and since slice 13
+//! `site/src/PROJECT.md` for the Project pages (`/project/`). This turns each into
 //! a committed sidebar under `site/src/generated/` that `astro.config.mjs`
 //! imports, so a sidebar tracks its contents' order and grouping rather than
 //! directory structure.
@@ -15,7 +16,7 @@
 //! fails the build. Mirrors the repo's generate→commit→drift-guard pattern.
 //!
 //! The contents must also be complete (web presence track, slice 1): every page
-//! under a tree's folder (`src/content/docs/book/`, `src/content/docs/reference/`)
+//! under a tree's folder (`src/content/docs/book/`, `…/reference/`, `…/project/`)
 //! is listed in that tree's contents file, and every entry names a page. A
 //! sidebar comes from its contents file, not the folders, so a page nobody
 //! lists exists but no sidebar shows it. `--check` fails naming each one;
@@ -50,6 +51,13 @@ export const TREES = [
     dir: path.join(HERE, "../src/content/docs/reference"),
     base: "/reference/",
     out: path.join(HERE, "../src/generated/reference-sidebar.json"),
+  },
+  {
+    name: "Project",
+    contents: "site/src/PROJECT.md",
+    dir: path.join(HERE, "../src/content/docs/project"),
+    base: "/project/",
+    out: path.join(HERE, "../src/generated/project-sidebar.json"),
   },
 ];
 const BOOK_TREE = TREES[0];
@@ -215,7 +223,7 @@ export function bookPages(dir = BOOK, rel = "") {
   });
 }
 
-/** A page's route, whatever its extension: SUMMARY names `01-first-program.md`
+/** A page's route, whatever its extension: SUMMARY names `first-program.md`
  *  for a page written as `.mdx`, and both are the same route. */
 const routeOf = (pagePath, base = "/book/") => slugFor(pagePath.replace(/\.mdx$/, ".md"), base);
 
