@@ -25,7 +25,7 @@
 
 use crate::ts_build::{
     arrow_of, binary, block, call, const_typed, expr_stmt, ident, if_, index, member, method_call,
-    new as new_, num_lit, param, paren, ret, str_lit,
+    new, num_lit, param, paren, ret, str_lit,
 };
 use bynk_check::wire_format as wf;
 use bynk_ts::{
@@ -122,7 +122,7 @@ fn guard(cond: TsExpr, body: TsStmt) -> TsStmt {
 
 /// `new globalThis.Response(body, init)`.
 fn new_response(body: TsExpr, init: TsExpr) -> TsExpr {
-    new_(global("Response"), vec![body, init])
+    new(global("Response"), vec![body, init])
 }
 
 /// `{ status: <n> }`.
@@ -199,7 +199,7 @@ fn unclaimed(entry: &GroupEntry<'_>) -> TsStmt {
         "path",
         None,
         member(
-            new_(global("URL"), vec![member(ident("request"), "url")]),
+            new(global("URL"), vec![member(ident("request"), "url")]),
             "pathname",
         ),
     )];
@@ -525,7 +525,7 @@ fn with_allowed() -> TsStmt {
     );
     let unique_sorted = method_call(
         method_call(
-            TsExpr::array(vec![TsExpr::Spread(Box::new(new_(
+            TsExpr::array(vec![TsExpr::Spread(Box::new(new(
                 global("Set"),
                 vec![ident("methods")],
             )))]),
