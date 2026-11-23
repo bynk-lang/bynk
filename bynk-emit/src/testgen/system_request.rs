@@ -219,3 +219,55 @@ pub(super) fn wrong_method_driver(sname: &str, binding: &str) -> TsStmt {
         ],
     )
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn printed(e: &TsExpr) -> String {
+        bynk_ts::print_expr(e)
+    }
+
+    const PROCESS: &str = "(globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.[\"K\"]";
+
+    /// The three shapes of a secret read: the fixed test secret, the case's `env` entry before
+    /// it, and (a remote run) the runner's `__bynkSecrets` between the two.
+    #[test]
+    fn a_secret_read_is_the_env_then_the_runner_then_the_process() {
+        assert_eq!(
+            printed(&secret_read("K", false, false)),
+            format!("({PROCESS} ?? \"\")")
+        );
+        assert_eq!(
+            printed(&secret_read("K", true, false)),
+            format!("(__bynkEnv[\"K\"] ?? {PROCESS} ?? \"\")")
+        );
+        assert_eq!(
+            printed(&secret_read("K", false, true)),
+            format!("((__bynkSecrets[\"K\"] ?? {PROCESS}) ?? \"\")")
+        );
+        assert_eq!(
+            printed(&secret_read("K", true, true)),
+            format!("(__bynkEnv[\"K\"] ?? (__bynkSecrets[\"K\"] ?? {PROCESS}) ?? \"\")")
+        );
+    }
+
+    /// A route's URL: each `:name` is that parameter's value, the root path is `/`, and a query
+    /// string follows the path.
+    #[test]
+    fn a_request_url_substitutes_params_and_appends_the_query() {
+        assert_eq!(printed(&request_url("/", None)), "`https://test/`");
+        assert_eq!(
+            printed(&request_url("/orders/:id", None)),
+            "`https://test/orders/${id}`"
+        );
+        assert_eq!(
+            printed(&request_url("/", Some(ident("q")))),
+            "`https://test/${q}`"
+        );
+        assert_eq!(
+            printed(&request_url("/a/:b/c", Some(ident("q")))),
+            "`https://test/a/${b}/c${q}`"
+        );
+    }
+}

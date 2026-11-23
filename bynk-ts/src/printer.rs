@@ -1497,11 +1497,11 @@ fn is_left_assoc_arith(op: TsBinaryOp) -> bool {
 /// more real case: the exact *same* operator nested in itself omits parens
 /// too, for `||`/`&&` specifically (both associative, and real content —
 /// `emit_call_handler_dispatch`'s 3-term `||` chain — needs the flat,
-/// unparenthesized reading) — `??` keeps the pre-#1321 conservatism
-/// unchanged (pinned by `parenthesises_a_nested_binary_operand_of_another_
-/// binary`'s own test, still `a ?? (b ?? c)`), since nothing in real
-/// content needs a flattened `??` chain and this slice's own grounding
-/// gives no reason to widen that boundary opportunistically.
+/// unparenthesized reading) — `??` keeps its brackets when it is right-nested
+/// (pinned by `parenthesises_a_nested_binary_operand_of_another_binary`'s own
+/// test, still `a ?? (b ?? c)`), but, being left-associative, prints a
+/// left-nested chain flat (`a ?? b ?? c`, 1B.5d), as `+` does: a driver's
+/// secret read is such a chain.
 fn render_binary_operand(
     out: &mut String,
     outer_op: TsBinaryOp,
