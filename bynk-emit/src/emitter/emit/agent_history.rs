@@ -49,8 +49,8 @@ pub(super) fn emit_agent_history_driver(
         // variant per handler, built further down from `history_variant_tag` +
         // each handler's own fields) and `deps` varies per handler too (each
         // handler computes its own `deps_ty` from its own `given` set,
-        // `build_deps_object_ty_with_surface`'s own per-handler call elsewhere
-        // in this file) — a single driver-wide type for either needs the
+        // `build_deps_object_ty_with_surface`'s own per-handler call in
+        // `agent_dispatch.rs`) — a single driver-wide type for either needs the
         // intersection/union across every handler this agent's history targets,
         // not a same-line change. `seq`'s own `args` is safe to narrow:
         // it's read back only through `history_arg_expr` call sites below,
