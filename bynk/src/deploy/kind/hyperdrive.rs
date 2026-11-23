@@ -372,7 +372,7 @@ impl ResourceKind for Hyperdrive {
                 let id = api.create(&physical, origin).map_err(|e| {
                     DeployFailure::driver(format!(
                         "could not create the Hyperdrive config `{physical}` for `{worker}`'s `{binding}`: {}",
-                        scrub(&e, &[raw.expose(), origin.password.expose()])
+                        scrub(&e.to_string(), &[raw.expose(), origin.password.expose()])
                     ))
                 })?;
                 let commit = record(
@@ -396,7 +396,7 @@ impl ResourceKind for Hyperdrive {
                 api.update(&old.id, &physical, origin).map_err(|e| {
                     DeployFailure::driver(format!(
                         "could not sync the Hyperdrive config `{physical}` for `{worker}`'s `{binding}`: {}",
-                        scrub(&e, &[raw.expose(), origin.password.expose()])
+                        scrub(&e.to_string(), &[raw.expose(), origin.password.expose()])
                     ))
                 })?;
                 let done = format!("changed the Hyperdrive config `{}`", old.name);

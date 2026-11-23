@@ -654,7 +654,11 @@ mod tests {
         assert_eq!(Vectorize::listing(&lines[2]), None);
         struct Holds;
         impl on_account::Listings for Holds {
-            fn names(&self, _: KindId, _: Option<&str>) -> Result<BTreeSet<String>, String> {
+            fn names(
+                &self,
+                _: KindId,
+                _: Option<&str>,
+            ) -> Result<BTreeSet<String>, crate::cloudflare::CloudflareError> {
                 Ok(BTreeSet::from(["shop-new".to_string()]))
             }
         }

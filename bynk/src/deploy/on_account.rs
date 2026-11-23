@@ -21,7 +21,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::kind::KindId;
-use crate::migrate::live::{self, Credentials, Rest};
+use crate::cloudflare::{CloudflareError, Rest};
 
 /// One listing: a kind, and for R2 the jurisdiction (`None` is the default).
 pub(crate) type Listing = (KindId, Option<String>);
@@ -29,7 +29,11 @@ pub(crate) type Listing = (KindId, Option<String>);
 /// The account's names of one kind.
 pub(crate) trait Listings {
     /// Every name of `kind` on the account; an R2 bucket's within `jurisdiction`.
-    fn names(&self, kind: KindId, jurisdiction: Option<&str>) -> Result<BTreeSet<String>, String>;
+    fn names(
+        &self,
+        kind: KindId,
+        jurisdiction: Option<&str>,
+    ) -> Result<BTreeSet<String>, CloudflareError>;
 }
 
 /// The names the account holds, for the listings a plan asked for.
@@ -82,23 +86,23 @@ pub(crate) struct RestListings(pub(crate) Rest);
 
 impl RestListings {
     /// From `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, or why not.
-    pub(crate) fn from_env() -> Result<Self, String> {
-        let credentials = Credentials::from_env_for(
+    pub(crate) fn from_env() -> Result<Self, CloudflareError> {
+        Ok(RestListings(crate::cloudflare::rest::for_purpose(
             "check the plan against the account",
             "an API token that can read the account's KV, R2, D1, Queues and Vectorize",
-        )?;
-        Ok(RestListings(Rest {
-            agent: live::agent()?,
-            credentials,
-            base: live::API.to_string(),
-        }))
+        )?))
     }
 
     /// Every page of a page-based listing at `path` (which takes `page=`), the
     /// `field` of each entry of `result`.
-    fn paged(&self, path: &str, field: &str) -> Result<BTreeSet<String>, String> {
+    fn paged(&self, path: &str, field: &str) -> Result<BTreeSet<String>, CloudflareError> {
         let mut names = BTreeSet::new();
-        for page in 1.. {
+        let rule = crate::cloudflare::paging::Numbered {
+            cap: None,
+            missing_total: crate::cloudflare::paging::MissingTotal::WhileFull,
+            stop_on_empty: false,
+        };
+        rule.follow(|page| -> Result<_, CloudflareError> {
             let sep = if path.contains('?') { '&' } else { '?' };
             let body = self.0.get(&format!("{path}{sep}page={page}"))?;
             let entries = body["result"]
@@ -109,26 +113,16 @@ impl RestListings {
                     .iter()
                     .filter_map(|e| e[field].as_str().map(str::to_string)),
             );
-            let info = &body["result_info"];
-            let more = match info["total_pages"].as_u64() {
-                Some(total) => page < total,
-                None => info["per_page"]
-                    .as_u64()
-                    .is_some_and(|per| entries.len() as u64 >= per && !entries.is_empty()),
-            };
-            if !more {
-                break;
-            }
-        }
+            Ok(crate::cloudflare::paging::Page::of(&body, entries.len()))
+        })?;
         Ok(names)
     }
 
     /// Every bucket in `jurisdiction`, following the listing's cursor.
-    fn buckets(&self, jurisdiction: Option<&str>) -> Result<BTreeSet<String>, String> {
+    fn buckets(&self, jurisdiction: Option<&str>) -> Result<BTreeSet<String>, CloudflareError> {
         let mut names = BTreeSet::new();
-        let mut cursor: Option<String> = None;
-        loop {
-            let path = match &cursor {
+        crate::cloudflare::paging::cursor(true, |cursor| -> Result<_, CloudflareError> {
+            let path = match cursor {
                 // The cursor is opaque: encoded, so a `+` or `=` in it survives.
                 Some(c) => format!(
                     "/r2/buckets?per_page=1000&cursor={}",
@@ -147,19 +141,18 @@ impl RestListings {
                     .iter()
                     .filter_map(|b| b["name"].as_str().map(str::to_string)),
             );
-            match body["result_info"]["cursor"].as_str() {
-                Some(next) if !next.is_empty() && cursor.as_deref() != Some(next) => {
-                    cursor = Some(next.to_string());
-                }
-                _ => break,
-            }
-        }
+            Ok(body["result_info"]["cursor"].as_str().map(str::to_string))
+        })?;
         Ok(names)
     }
 }
 
 impl Listings for RestListings {
-    fn names(&self, kind: KindId, jurisdiction: Option<&str>) -> Result<BTreeSet<String>, String> {
+    fn names(
+        &self,
+        kind: KindId,
+        jurisdiction: Option<&str>,
+    ) -> Result<BTreeSet<String>, CloudflareError> {
         match kind {
             KindId::Kv => self.paged("/storage/kv/namespaces?per_page=100", "title"),
             KindId::R2 => self.buckets(jurisdiction),
@@ -173,10 +166,9 @@ impl Listings for RestListings {
             | KindId::StoredSecret
             | KindId::AiSearch
             | KindId::MtlsCertificate
-            | KindId::ContainerImage => Err(format!(
-                "the account's {} are not listed",
-                kind.account_noun()
-            )),
+            | KindId::ContainerImage => {
+                Err(format!("the account's {} are not listed", kind.account_noun()).into())
+            }
         }
     }
 }
@@ -258,7 +250,11 @@ mod tests {
     struct Fake;
 
     impl Listings for Fake {
-        fn names(&self, kind: KindId, _: Option<&str>) -> Result<BTreeSet<String>, String> {
+        fn names(
+            &self,
+            kind: KindId,
+            _: Option<&str>,
+        ) -> Result<BTreeSet<String>, CloudflareError> {
             match kind {
                 KindId::D1 => Err("Cloudflare answered 403".into()),
                 _ => Ok(BTreeSet::from(["shop-docs".to_string()])),

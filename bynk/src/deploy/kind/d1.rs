@@ -8,6 +8,7 @@
 //! migrations are applied before the push (P4b, #2608), and `bynk revert` checks the bound id.
 
 use super::*;
+use crate::cloudflare::CloudflareError;
 
 /// The D1 kind.
 pub(crate) struct D1;
@@ -360,31 +361,31 @@ pub(crate) fn apply_d1_migrations(
     worker_dir: &Path,
     binding: &str,
     environment: &str,
-) -> Result<(), String> {
+) -> Result<(), CloudflareError> {
     api.d1_migrations_apply(worker_dir, binding, environment)
-        .map_err(|e| e.to_string())
+        .map_err(CloudflareError::from)
 }
 
 /// Create the D1 database `name` and return its `database_id`, or adopt the
 /// one already there under that name (P4a, #2602). Run from the project root,
 /// as KV and buckets are.
-pub(crate) fn create_d1(api: &dyn CloudflareApi, name: &str) -> Result<String, String> {
+pub(crate) fn create_d1(api: &dyn CloudflareApi, name: &str) -> Result<String, CloudflareError> {
     let e = match api.d1_create(name) {
         Ok(id) => return Ok(id),
         Err(e) => e,
     };
     if !e.already_exists() {
-        return Err(e.to_string());
+        return Err(e.into());
     }
-    let listed = api.d1_list().map_err(|e| {
+    let listed = api.d1_list().map_err(|e| -> CloudflareError {
         if e.ran_and_failed() {
-            format!("it already exists, and listing the account's databases failed: {e}")
+            format!("it already exists, and listing the account's databases failed: {e}").into()
         } else {
-            e.to_string()
+            e.into()
         }
     })?;
     parse_d1_listed_id(&listed, name)
-        .ok_or_else(|| "it already exists, but `wrangler d1 list` does not show it".to_string())
+        .ok_or_else(|| "it already exists, but `wrangler d1 list` does not show it".into())
 }
 
 /// The `uuid` of database `name` in `wrangler d1 list --json`'s array.
@@ -565,7 +566,11 @@ mod tests {
     fn a_database_on_the_account_is_reused_and_one_not_read_is_left_alone() {
         struct Holds;
         impl on_account::Listings for Holds {
-            fn names(&self, _: KindId, _: Option<&str>) -> Result<BTreeSet<String>, String> {
+            fn names(
+                &self,
+                _: KindId,
+                _: Option<&str>,
+            ) -> Result<BTreeSet<String>, crate::cloudflare::CloudflareError> {
                 Ok(BTreeSet::from(["shop-new".to_string()]))
             }
         }

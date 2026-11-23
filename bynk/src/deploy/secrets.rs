@@ -863,7 +863,12 @@ pub(crate) fn apply_secrets(
 ) -> Result<(), DeployFailure> {
     for (binding_name, value) in prepared {
         set_secret(api, worker_dir, binding_name, value, environment).map_err(|e| {
-            DeployFailure::driver(binding_put_failure(environment, worker, binding_name, &e))
+            DeployFailure::driver(binding_put_failure(
+                environment,
+                worker,
+                binding_name,
+                &e.to_string(),
+            ))
         })?;
         eprintln!(
             "{}",

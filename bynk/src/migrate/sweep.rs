@@ -16,6 +16,8 @@
 use std::collections::BTreeMap;
 use std::io::Write;
 
+use crate::cloudflare::CloudflareError;
+
 use bynk_emit::wire_format as wf;
 use bynk_project::schema_registry::SchemaRegistry;
 use bynk_project::worker_layout::WorkerLayout;
@@ -32,22 +34,22 @@ pub(crate) struct Namespace {
 /// Cloudflare's REST API, as far as the sweep uses it.
 pub(crate) trait Cloudflare {
     /// Every Durable Object namespace on the account (all pages).
-    fn namespaces(&self) -> Result<Vec<Namespace>, String>;
+    fn namespaces(&self) -> Result<Vec<Namespace>, CloudflareError>;
     /// The ids of the namespace's objects that hold stored data (all pages).
-    fn stored_objects(&self, namespace: &str) -> Result<Vec<String>, String>;
+    fn stored_objects(&self, namespace: &str) -> Result<Vec<String>, CloudflareError>;
     /// `https://<script>.<subdomain>.workers.dev` when the Worker serves on
     /// `workers.dev`, `None` when that is turned off for it.
-    fn workers_dev_url(&self, script: &str) -> Result<Option<String>, String>;
+    fn workers_dev_url(&self, script: &str) -> Result<Option<String>, CloudflareError>;
     /// When the Worker's code was last deployed: its newest deployment not
     /// triggered by a secret change, or, when every listed one was, the
     /// oldest listed (the code is at least that old). #2276 Decision A.
-    fn last_code_deployment(&self, script: &str) -> Result<std::time::SystemTime, String>;
+    fn last_code_deployment(&self, script: &str) -> Result<std::time::SystemTime, CloudflareError>;
 }
 
 /// Setting and deleting a deployed Worker's secret.
 pub(crate) trait Secrets {
-    fn put(&self, script: &str, name: &str, value: &str) -> Result<(), String>;
-    fn delete(&self, script: &str, name: &str) -> Result<(), String>;
+    fn put(&self, script: &str, name: &str, value: &str) -> Result<(), CloudflareError>;
+    fn delete(&self, script: &str, name: &str) -> Result<(), CloudflareError>;
 }
 
 /// One signed `POST` to a deployed Worker: the status and the body.
@@ -197,7 +199,9 @@ pub(crate) fn prepare(
                 ScriptPlan {
                     url,
                     classes: Vec::new(),
-                    deployed_at: cloudflare.last_code_deployment(&target.script),
+                    deployed_at: cloudflare
+                        .last_code_deployment(&target.script)
+                        .map_err(|e| e.to_string()),
                 },
             );
         }
@@ -913,7 +917,7 @@ mod tests {
     struct FakeCloudflare;
 
     impl Cloudflare for FakeCloudflare {
-        fn namespaces(&self) -> Result<Vec<Namespace>, String> {
+        fn namespaces(&self) -> Result<Vec<Namespace>, crate::cloudflare::CloudflareError> {
             Ok(vec![
                 Namespace {
                     id: "ns-default".into(),
@@ -927,14 +931,23 @@ mod tests {
                 },
             ])
         }
-        fn stored_objects(&self, namespace: &str) -> Result<Vec<String>, String> {
+        fn stored_objects(
+            &self,
+            namespace: &str,
+        ) -> Result<Vec<String>, crate::cloudflare::CloudflareError> {
             assert_eq!(namespace, "ns-default");
             Ok((0..5).map(|i| format!("id{i}")).collect())
         }
-        fn workers_dev_url(&self, script: &str) -> Result<Option<String>, String> {
+        fn workers_dev_url(
+            &self,
+            script: &str,
+        ) -> Result<Option<String>, crate::cloudflare::CloudflareError> {
             Ok((script == "shop").then(|| "https://shop.acct.workers.dev".to_string()))
         }
-        fn last_code_deployment(&self, script: &str) -> Result<std::time::SystemTime, String> {
+        fn last_code_deployment(
+            &self,
+            script: &str,
+        ) -> Result<std::time::SystemTime, crate::cloudflare::CloudflareError> {
             if script == "shop" {
                 Ok(std::time::UNIX_EPOCH)
             } else {
@@ -977,7 +990,12 @@ mod tests {
     }
 
     impl Secrets for FakeSecrets {
-        fn put(&self, script: &str, name: &str, _value: &str) -> Result<(), String> {
+        fn put(
+            &self,
+            script: &str,
+            name: &str,
+            _value: &str,
+        ) -> Result<(), crate::cloudflare::CloudflareError> {
             self.log.borrow_mut().push(format!("put {script} {name}"));
             if self.fail_put {
                 Err("no permission".into())
@@ -985,7 +1003,11 @@ mod tests {
                 Ok(())
             }
         }
-        fn delete(&self, script: &str, name: &str) -> Result<(), String> {
+        fn delete(
+            &self,
+            script: &str,
+            name: &str,
+        ) -> Result<(), crate::cloudflare::CloudflareError> {
             self.log
                 .borrow_mut()
                 .push(format!("delete {script} {name}"));
