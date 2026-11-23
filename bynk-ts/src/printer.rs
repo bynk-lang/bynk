@@ -3457,8 +3457,8 @@ fn render_decl_body(
             out.push_str(" {\n");
             for f in fields {
                 debug_assert!(
-                    !(f.definite && type_admits_undefined(&f.ty)),
-                    "render_decl_body: field `{}` is definite (`!`) yet its type admits `undefined`; \
+                    !(f.definite && f.ty.as_ref().is_none_or(type_admits_undefined)),
+                    "render_decl_body: field `{}` is definite (`!`) yet it has no type or its type admits `undefined`; \
                      an optional-shaped field needs no assertion",
                     f.name
                 );
@@ -3470,8 +3470,14 @@ fn render_decl_body(
                 if f.definite {
                     out.push('!');
                 }
-                out.push_str(": ");
-                render_type(out, &f.ty);
+                if let Some(ty) = &f.ty {
+                    out.push_str(": ");
+                    render_type(out, ty);
+                }
+                if let Some(init) = &f.init {
+                    out.push_str(" = ");
+                    render_expr(out, init, 0, &mut None);
+                }
                 out.push_str(";\n");
             }
             // Readability policy (this module's own doc): no blank line
@@ -9677,6 +9683,23 @@ mod tests {
         assert_eq!(
             print_stmt(&TsStmt::decl(class, None), 0),
             "class C {\n  state: S;\n  __key!: K;\n  private __env: unknown;\n  private id!: N;\n}\n"
+        );
+    }
+
+    /// A field with only an initialiser prints without a type (`__seq_0 = 0;`), as a field with
+    /// both prints `name: T = init;` (1B.5c).
+    #[test]
+    fn a_class_field_may_carry_an_initialiser() {
+        let mut typed = TsClassField::new("n", TsType::named("number"));
+        typed.init = Some(TsExpr::Lit(TsLit::Num("1".to_string())));
+        let fields = vec![
+            TsClassField::inferred("__seq_0", TsExpr::Lit(TsLit::Num("0".to_string()))),
+            typed,
+        ];
+        let class = TsDecl::class("C", fields, None, Vec::new());
+        assert_eq!(
+            print_stmt(&TsStmt::decl(class, None), 0),
+            "class C {\n  __seq_0 = 0;\n  n: number = 1;\n}\n"
         );
     }
 
