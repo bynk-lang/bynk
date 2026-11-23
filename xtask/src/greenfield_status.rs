@@ -1774,6 +1774,10 @@ const AST_IMPORTER_ORIGINS: &[(&str, &str)] = &[
     // 2.2a (#4087): `lower.rs` split.
     ("emitter/lower/pattern.rs", "emitter/lower.rs"),
     ("emitter/lower/is.rs", "emitter/lower.rs"),
+    // 2.2b (#4087).
+    ("emitter/lower/mock.rs", "emitter/lower.rs"),
+    ("emitter/lower/expect.rs", "emitter/lower.rs"),
+    ("emitter/lower/claims.rs", "emitter/lower.rs"),
     // 2.4a (#4089): `workers_entry.rs` split.
     ("emitter/workers_entry/call.rs", "emitter/workers_entry.rs"),
     ("emitter/workers_entry/queue.rs", "emitter/workers_entry.rs"),
