@@ -211,7 +211,15 @@ const canEmbed = embed && runHref;
       frame.className = "bynk-embed-frame";
       frame.loading = "lazy";
       frame.title = "Bynk playground — live editor";
-      frame.addEventListener("load", () => frame.focus(), { once: true });
+      // Once it has loaded, move focus into the editor, unless the reader has
+      // already moved on from the frame while it was loading.
+      frame.addEventListener(
+        "load",
+        () => {
+          if (document.activeElement === frame) frame.focus();
+        },
+        { once: true },
+      );
       mount.append(frame);
       mount.hidden = false;
       preview.hidden = true;
