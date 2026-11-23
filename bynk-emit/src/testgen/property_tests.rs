@@ -815,6 +815,10 @@ pub(super) fn emit_contract_attack_function(
             &cross,
             runtime_use,
         );
+        // The `requires` predicate is the target's source, not this test module's: its spans
+        // would map into the wrong file, so it records none.
+        let mut where_body = where_body;
+        where_body.iter_mut().for_each(TsStmt::clear_spans);
         // P7.2: deferred — `__vals`'s elements are heterogeneous, one per binding,
         // some internally `bigint`-represented; same reason as `__gens`'s own
         // construction elsewhere in this function.

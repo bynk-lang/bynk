@@ -762,6 +762,11 @@ pub(super) fn emit_test_module(
                     tys,
                 )
             };
+            // The property's statements carry spans of its own test file, recorded against
+            // that file's source in the module map (a test group can span several files).
+            let mut prop_stmt = prop_stmt;
+            prop_stmt.nested_map_source_id =
+                map.add_source(parsed[i].map_source_name(), parsed[i].source().to_string());
             stmts.push(prop_stmt);
         }
     }

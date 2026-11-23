@@ -244,7 +244,10 @@ pub fn lower_integration_case_body(
         for stmt in &block.statements {
             let mut sink = StatementSink::new();
             sink.statement(stmt, &mut cx);
-            groups.push(sink.finish().0);
+            let (lowered, pending) = sink.finish();
+            // Every statement pushes content after its mark, so none is left over.
+            debug_assert!(pending.is_none(), "a source statement left a trailing mark");
+            groups.push(lowered);
             binds.push(match stmt {
                 // #2640: a `par` block binds each of its `let` names.
                 bynk_syntax::ast::Statement::Par(p) => p
@@ -598,6 +601,40 @@ mod settle_tests {
             "",
         );
         assert!(text.contains("get(`a\nb`)"), "{text}");
+    }
+
+    /// The path a real body takes: a lowered node whose template literal spans lines, inside the
+    /// attempt's arrow, which the printer indents. The literal's own contents are not touched.
+    #[test]
+    fn a_lowered_template_literal_node_keeps_its_contents_in_an_attempt() {
+        use crate::ts_build::{await_expr, call, const_, ident};
+        use SettleKind::*;
+        let read = const_(
+            "n",
+            await_expr(call(
+                ident("get"),
+                vec![bynk_ts::TsExpr::template_lit(
+                    vec!["a\nb ".to_string(), String::new()],
+                    vec![ident("x")],
+                )],
+            )),
+        );
+        let groups = vec![
+            vec![read],
+            vec![bynk_ts::TsStmt::raw(
+                "if (!(n)) { throw fail(); }\n".to_string(),
+                None,
+            )],
+        ];
+        let binds = vec![vec!["n".to_string()], Vec::new()];
+        let text: String = settle_segments(groups, &[Safe, Expect], &binds)
+            .iter()
+            .map(|s| bynk_ts::print_stmt(s, 0))
+            .collect();
+        assert!(
+            text.contains("const { n } = await __bynkSettle(async () => {\n  const n = await get(`a\nb ${x}`);\n"),
+            "{text}"
+        );
     }
 
     #[test]

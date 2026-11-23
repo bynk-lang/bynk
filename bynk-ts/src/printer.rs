@@ -9787,6 +9787,28 @@ mod tests {
         );
     }
 
+    /// `clear_spans` removes the span of a statement and of every statement nested in it, through
+    /// an `if`, a block, and an arrow's block body, so a printed map records nothing for it.
+    #[test]
+    fn clear_spans_clears_every_nested_statement() {
+        let span = Span::new(0, 4);
+        let inner = TsStmt::expr_stmt(TsExpr::Ident("x".to_string()), Some(span));
+        let arrow = TsExpr::Arrow {
+            params: Vec::new(),
+            is_async: false,
+            generics: Vec::new(),
+            return_type: None,
+            body: Box::new(TsArrowBody::Block(vec![TsStmt::return_stmt(
+                Some(TsExpr::Ident("y".to_string())),
+                Some(span),
+            )])),
+        };
+        let mut stmt = TsStmt::if_stmt(arrow, TsStmt::block(vec![inner], Some(span)), Some(span));
+        assert!(!print_stmt_with_spans(&stmt, 0).1.is_empty());
+        stmt.clear_spans();
+        assert!(print_stmt_with_spans(&stmt, 0).1.is_empty());
+    }
+
     /// With no span set, no member or closing line is recorded, so every existing caller's map is
     /// unchanged (1A.32a).
     #[test]
