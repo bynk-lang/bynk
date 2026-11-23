@@ -9,7 +9,7 @@ export interface Env {
 }
 
 export function compose(env: Env) {
-  const deps = {  };
+  const deps = {};
   return {
     async http_GET_me(request: globalThis.Request, query: handlers.Window) {
       const __authz = request.headers.get("Authorization");

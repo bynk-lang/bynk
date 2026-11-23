@@ -8,7 +8,7 @@ export interface Env {
 }
 
 export function compose(env: Env) {
-  const deps = {  };
+  const deps = {};
   return {
     async queue_support_0(mail: handlers.InboundEmail, __sender: __SenderIdentity) {
       return handlers.support.queue_support_0(mail, { ...deps, identity: __sender });

@@ -10,8 +10,9 @@
 //! imports, the `mod` declarations, and the re-exports external callers see,
 //! while each child opens with `use super::*;` and documents its own items.
 //!
-//! - `config.rs` — the generated `wrangler.toml` / build-output model, and the
-//!   `[env.<name>]` synthesis a non-default `--env` needs.
+//! - `config.rs` — the generated `wrangler.toml` / build-output model. (The
+//!   `[env.<name>]` block a non-default `--env` needs is `bynk-emit`'s
+//!   `wrangler::environment`, which `apply.rs` calls.)
 //! - `graph.rs` — the binding graph, the upload order it forces, and the
 //!   deploy-time contract-skew check.
 //! - `ledger.rs` — the committed `bynk.deploy.lock`: what this project has

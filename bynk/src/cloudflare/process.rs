@@ -155,9 +155,12 @@ impl CloudflareApi for Wrangler<'_> {
 pub(crate) fn parse_kv_id(output: &str) -> Option<String> {
     // A whole-output JSON document first (compact or pretty), then the line scan.
     if let Ok(value) = serde_json::from_str::<serde_json::Value>(output) {
-        let id = value
-            .get("id")
-            .or_else(|| value.get("kv_namespaces")?.get(0)?.get("id"));
+        let id = value.get("id").or_else(|| {
+            value
+                .get(bynk_project::wrangler_keys::WranglerKey::KvNamespaces.top_key())?
+                .get(0)?
+                .get("id")
+        });
         if let Some(id) = id.and_then(|id| id.as_str()) {
             return Some(id.to_owned());
         }

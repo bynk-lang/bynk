@@ -174,18 +174,18 @@ function __makeTestDeps() {
 }
 
 async function __prop_test_sum_with_int_payload_generates() {
-    const deps = {};
-    const { Outcome } = __ns_demo_gen;
-    type Outcome = __ns_demo_gen.Outcome;
-    const __gens = [
-      { name: "o", boundaries: [Outcome.Hit(globalThis.Number(0n))], gen: (rng: any) => rng.pick([() => Outcome.Hit(globalThis.Number(rng.int(-1000n, 1000n))), () => Outcome.Miss]), shrink: (v: any) => [Outcome.Hit(globalThis.Number(0n))], show: (v: any) => __bynkShow(v) },
-    ];
-    const __where = null;
-    const __body = async (__vals: any[]) => {
-      const [o] = __vals;
-      if (!(true)) { throw __bynkExpectFailure("tests/gen.test.bynk:13:14", 740, 744, "expect true"); }
-    };
-    return await __bynkRunProperty({ seed: __bynkMix(__bynkSeed, 0), cases: 100, gens: __gens, where: __where, body: __body, name: "sum with int payload generates", location: "tests/gen.test.bynk", file: "tests/gen.test.bynk" });
+  const deps = {};
+  const { Outcome } = __ns_demo_gen;
+  type Outcome = __ns_demo_gen.Outcome;
+  const __gens = [
+    { name: "o", boundaries: [Outcome.Hit(globalThis.Number(0n))], gen: (rng: any) => rng.pick([() => Outcome.Hit(globalThis.Number(rng.int(-1000n, 1000n))), () => Outcome.Miss]), shrink: (v: any) => [Outcome.Hit(globalThis.Number(0n))], show: (v: any) => __bynkShow(v) },
+  ];
+  const __where = null;
+  const __body = async (__vals: any[]) => {
+    const [o] = __vals;
+    if (!(true)) { throw __bynkExpectFailure("tests/gen.test.bynk:13:14", 740, 744, "expect true"); }
+  };
+  return await __bynkRunProperty({ seed: __bynkMix(__bynkSeed, 0), cases: 100, gens: __gens, where: __where, body: __body, name: "sum with int payload generates", location: "tests/gen.test.bynk", file: "tests/gen.test.bynk" });
 }
 
 type CaseResult = {

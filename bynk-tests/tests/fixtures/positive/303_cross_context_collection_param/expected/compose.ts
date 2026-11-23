@@ -5,7 +5,7 @@ import * as commerce_orders from "./commerce/orders.js";
 import * as commerce_payment from "./commerce/payment.js";
 
 export function composeApp() {
-  const commerce_paymentDeps = {  };
+  const commerce_paymentDeps = {};
   const commerce_paymentSurface = commerce_payment.__makeSurface(commerce_paymentDeps);
   const commerce_ordersDeps = { surface: { payment: commerce_paymentSurface } };
   const commerce_ordersSurface = commerce_orders.__makeSurface(commerce_ordersDeps);

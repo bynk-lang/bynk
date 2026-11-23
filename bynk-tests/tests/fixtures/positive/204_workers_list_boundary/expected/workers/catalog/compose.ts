@@ -7,7 +7,7 @@ export interface Env {
 }
 
 export function compose(env: Env) {
-  const deps = {  };
+  const deps = {};
   return {
     async orders(ids: readonly string[]) {
       return handlers.orders.call(ids, deps);

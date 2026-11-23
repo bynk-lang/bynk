@@ -237,7 +237,7 @@ impl ResourceKind for R2 {
     /// the ledger already holds under the same jurisdiction is not asked of the
     /// account again. Buckets are named as `environment` names them in the config
     /// the push reads: the top level already carries the default environment's, and
-    /// the synthesised `[env.<name>]` block the rest.
+    /// the rendered `[env.<name>]` block the rest.
     fn apply(cx: &StepCx<'_, '_, R2>, step: &R2Step<'_>) -> Result<Applied<R2>, DeployFailure> {
         let (worker, environment, bucket) = (cx.worker, cx.environment, step.bucket);
         if step.decision == R2Decision::Reuse {

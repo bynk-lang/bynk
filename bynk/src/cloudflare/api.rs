@@ -145,7 +145,7 @@ impl Op<'_> {
                 argv
             }
             Op::Vectorize(op) => {
-                let mut argv = words(&["vectorize"]);
+                let mut argv = vec!["vectorize".to_string()];
                 argv.extend(match op {
                     VectorizeOp::List => words(&["list", "--json"]),
                     VectorizeOp::Get { name } => words(&["get", name, "--json"]),

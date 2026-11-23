@@ -7,7 +7,7 @@ export interface Env {
 }
 
 export function compose(env: Env) {
-  const deps = {  };
+  const deps = {};
   return {
     async divide(a: number, b: number) {
       return handlers.divide.call(a, b, deps);

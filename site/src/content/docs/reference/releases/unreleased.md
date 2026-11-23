@@ -7,6 +7,13 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.640.59** | Internal restructuring: the test harness builds the property generators' Decimal values, canonical literals and branded boundaries as typed nodes instead of text, so a zero-field record prints as an empty object; no behaviour changes |
+| **v0.640.58** | Internal restructuring: the test harness builds each case, property, history and contract-attack runner of a generated test module as typed nodes instead of text, so a property runner's statements now print at the function's own indent and a test module's source map points a nested statement at its own source line; no behaviour changes |
+| **v0.640.57** | Internal restructuring: the test harness builds more of a generated test module as typed nodes (the commons barrel's helpers, the harness memo, `__bynkEnv`, fixture and asset tables, the snapshot table, event delivery helpers, `__bynkCases`, the PGlite teardown), and four fixed snippets become type-checked test-runtime modules; a generated `tests/main.ts` now puts the detached-effect report statements on their own lines |
+| **v0.640.56** | Internal restructuring: the test harness decides which participant types a case names from the statements it built, and builds a `SignedCookie` actor's `Cookie` header as a value, instead of lexing and patching emitted TypeScript; no emitted output changes |
+| **v0.640.55** | Internal restructuring: the last predicate, call and cast text in the emitter is built as nodes; no behaviour changes |
+| **v0.640.54** | Internal restructuring: the integration-test doubles (`makeIntegration*`) are no longer in the shipped `storage`, `agent` and `vectorize` runtime modules, so a build's `storage` module is about 670 lines smaller; the doubles are imported from `testing/bindings` and `testing/pglite`, and no production emission changes |
+| **v0.640.53** | Internal restructuring: a record field's wire default is built from its `DefaultValue` tree and the empty `deps` object prints as `{}`; no behaviour changes |
 | **v0.640.52** | Internal restructuring: the test runtime and the client runtime are authored as type-checked runtime modules and generated into the files bynk-emit embeds; no emitted output changes |
 | **v0.640.51** | Internal restructuring: the duplicate-binding check, the Workers build and the events fan-out read one binding model, and the old derivations are deleted; no emitted output changes |
 | **v0.640.50** | Internal restructuring: the codec emitter builds field subscripts and error paths as expression nodes, not text; no emitted output changes |

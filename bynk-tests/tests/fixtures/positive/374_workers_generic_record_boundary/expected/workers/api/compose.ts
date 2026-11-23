@@ -7,7 +7,7 @@ export interface Env {
 }
 
 export function compose(env: Env) {
-  const deps = {  };
+  const deps = {};
   return {
     async users(page: handlers.Paginated<handlers.User>) {
       return handlers.users.call(page, deps);

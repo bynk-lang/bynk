@@ -7,7 +7,7 @@ export interface Env {
 }
 
 export function compose(env: Env) {
-  const deps = {  };
+  const deps = {};
   return {
     async http_PUT_packages_Param_name(name: string, body: string) {
       return handlers.api.http_PUT_packages_Param_name(name, body, deps);

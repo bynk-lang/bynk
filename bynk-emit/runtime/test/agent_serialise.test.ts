@@ -5,12 +5,12 @@ import {
   AGENT_CHAIN_MAX,
   AGENT_QUEUE_WAIT_MS,
   AgentQueue,
-  makeIntegrationDoNamespace,
   serialiseAgentClass,
   serialiseBundleAgent,
   type DurableObjectNamespace,
 } from "../src/agent.ts";
 import { makeTestState, type DurableObjectState } from "../src/storage.ts";
+import { makeIntegrationDoNamespace } from "../src/testing/bindings.ts";
 
 // #3202: an agent instance runs one handler at a time.
 

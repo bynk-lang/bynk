@@ -11,7 +11,7 @@ export interface Env {
 }
 
 export function compose(env: Env) {
-  const deps = {  };
+  const deps = {};
   return {
     async http_POST_hook(body: string) {
       return handlers.api.http_POST_hook(body, deps);

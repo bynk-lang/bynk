@@ -4129,15 +4129,11 @@ queue = "jobs"
                 environment,
             );
             let orders = &plan.contexts[1];
-            let pushed: toml::Table = synthesise_environment_block(
-                ORDERS,
-                environment,
-                &BTreeMap::new(),
-                &BTreeSet::new(),
-            )
-            .unwrap()
-            .parse()
-            .unwrap();
+            let pushed: toml::Table =
+                environment_block(ORDERS, environment, &BTreeMap::new(), &BTreeSet::new())
+                    .unwrap()
+                    .parse()
+                    .unwrap();
             let block = &pushed["env"][environment];
             assert_eq!(block["name"].as_str(), Some(orders.worker.as_str()));
             assert_eq!(
