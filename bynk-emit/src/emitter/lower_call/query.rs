@@ -20,8 +20,7 @@ use super::super::ts_types::{TyRender, ts_ty_to_ts_type};
 use super::super::{BaseType, Expr, Ident, RuntimeUse, TyId};
 use crate::ts_build::{
     arrow, arrow_with, assign, binary, block, call, const_typed, expr_stmt, for_await_of, for_of,
-    ident, let_init as let_, member, method_call as method_call_bare, param, paren, ret, spread,
-    str_lit,
+    ident, let_init as let_, member, method_call, param, paren, ret, spread, str_lit,
 };
 
 /// v0.100 (real-time track slice 0): lower a `Stream[T]` op over a `source`
@@ -333,7 +332,7 @@ pub(in crate::emitter) fn held_values_source(recv: TsExpr, frame: &TsType) -> Ts
         ])),
     };
     let values = call(member(recv, "values"), vec![]);
-    method_call_bare(values, "flatMap", vec![each_id])
+    method_call(values, "flatMap", vec![each_id])
 }
 
 // ---- The thunk wrappers -----------------------------------------------------------------
@@ -389,7 +388,7 @@ fn first_of_a() -> TsExpr {
 
 /// `__q.map((__x) => () => (f)(__x))`: one thunk per element, for `__bynkSettleAll`.
 fn settle_thunks(f: TsExpr) -> TsExpr {
-    method_call_bare(
+    method_call(
         q(),
         "map",
         vec![arrow(
@@ -530,7 +529,7 @@ impl Arm<'_> {
     /// `filter` and `map`: `__q.method((__x) => (f)(__x))`.
     fn builder(self, method: &'static str) -> bynk_ts::TsExpr {
         self.built(|o, [f]| {
-            let body = method_call_bare(q(), method, vec![each(f)]);
+            let body = method_call(q(), method, vec![each(f)]);
             thunk_node(o, false, TsArrowBody::Expr(Box::new(body)))
         })
     }
@@ -540,7 +539,7 @@ impl Arm<'_> {
         self.built(|o, [f]| {
             let parts = TsExpr::Await(Box::new(call(
                 member(member(ident("globalThis"), "Promise"), "all"),
-                vec![method_call_bare(
+                vec![method_call(
                     q(),
                     "map",
                     vec![arrow(
@@ -551,7 +550,7 @@ impl Arm<'_> {
             )));
             let body = vec![
                 const_typed("__parts", None, parts),
-                ret(method_call_bare(ident("__parts"), "flat", vec![])),
+                ret(method_call(ident("__parts"), "flat", vec![])),
             ];
             thunk_node(o, true, TsArrowBody::Multiline(body))
         })
@@ -592,7 +591,7 @@ impl Arm<'_> {
             if from_start {
                 args.insert(0, zero());
             }
-            let body = method_call_bare(q(), "slice", args);
+            let body = method_call(q(), "slice", args);
             thunk_node(o, false, TsArrowBody::Expr(Box::new(body)))
         })
     }
@@ -650,7 +649,7 @@ impl Arm<'_> {
         self.built(|o, [other_q, left, right, into]| {
             let iter = paren(awaited_thunk(other_q));
             let body = join_body(&sides, iter, [left, right, into], |probe| {
-                method_call_bare(q(), "flatMap", vec![probe])
+                method_call(q(), "flatMap", vec![probe])
             });
             thunk_node(o, true, TsArrowBody::Multiline(body))
         })
@@ -661,9 +660,9 @@ impl Arm<'_> {
         self.built(|o, [other, on, into]| {
             let pair = |f: TsExpr| call(paren(f), vec![ident("__t"), ident("__u")]);
             let each_u = |body: TsExpr| arrow(vec![param("__u", None)], body);
-            let matched = method_call_bare(ident("__b"), "filter", vec![each_u(pair(on))]);
-            let joined = method_call_bare(matched, "map", vec![each_u(pair(into))]);
-            let flat = method_call_bare(
+            let matched = method_call(ident("__b"), "filter", vec![each_u(pair(on))]);
+            let joined = method_call(matched, "map", vec![each_u(pair(into))]);
+            let flat = method_call(
                 q(),
                 "flatMap",
                 vec![arrow(vec![param("__t", None)], joined)],
@@ -749,7 +748,7 @@ impl Arm<'_> {
 
     /// `any` and `all`.
     fn predicate(self, method: &'static str) -> bynk_ts::TsExpr {
-        self.built(|o, [p]| terminal_node(o, method_call_bare(q(), method, vec![each(p)])))
+        self.built(|o, [p]| terminal_node(o, method_call(q(), method, vec![each(p)])))
     }
 
     // #3421: a `Decimal` key sums exactly, as `List.sum` does (#2622): from the zero decimal
@@ -781,7 +780,7 @@ impl Arm<'_> {
                 )
             };
             let step = arrow(vec![param("__s", Some(acc_ty)), param("__x", None)], add);
-            terminal_node(o, method_call_bare(q(), "reduce", vec![step, init]))
+            terminal_node(o, method_call(q(), "reduce", vec![step, init]))
         })
     }
 
@@ -897,11 +896,7 @@ impl Arm<'_> {
                 .missing_fact_ty("`Effect[List[_]]` type for a `traverseAll` call"),
         };
         self.built(|o, [f]| {
-            let push = expr_stmt(method_call_bare(
-                ident("__out"),
-                "push",
-                vec![awaited_apply(f)],
-            ));
+            let push = expr_stmt(method_call(ident("__out"), "push", vec![awaited_apply(f)]));
             let body = vec![
                 const_typed(
                     "__out",

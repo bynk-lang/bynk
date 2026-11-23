@@ -18,8 +18,8 @@ use super::query::{
     query_key_cmp, query_keyed, query_other_elem,
 };
 use crate::ts_build::{
-    arrow, binary, block, block_arrow, call, const_typed, expr_stmt, ident, member,
-    method_call as method_call_bare, param, paren, ret, str_lit, strict_neq as ne,
+    arrow, binary, block, block_arrow, call, const_typed, expr_stmt, ident, member, method_call,
+    param, paren, ret, str_lit, strict_neq as ne,
 };
 
 /// A store field's handle, `<var>.<field>`, as a node (the working-state variable and the
@@ -53,7 +53,7 @@ fn awaited(e: TsExpr) -> TsStmt {
 
 /// `recv.method(args)` over a handle.
 fn op(recv: &TsExpr, method: &str, args: Vec<TsExpr>) -> TsExpr {
-    method_call_bare(recv.clone(), method, args)
+    method_call(recv.clone(), method, args)
 }
 
 /// `if (cond) { body }`.
