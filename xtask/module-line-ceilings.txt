@@ -12,7 +12,6 @@ bynk-emit/src/emitter/lower.rs = 4884
 bynk-driver/src/project.rs = 4312
 bynk-emit/src/emitter/serialisation.rs = 4232
 bynk-emit/src/emitter/workers_entry.rs = 4215
-bynk-ts/src/program.rs = 3682
 bynk-ts/src/printer.rs = 3629
 bynk-emit/src/emitter.rs = 3215
 bynk/src/dev.rs = 2292

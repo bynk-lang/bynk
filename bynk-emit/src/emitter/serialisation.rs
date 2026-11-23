@@ -36,7 +36,7 @@ use bynk_ts::{
 /// `Status` fixture: `case "Pending": return ...;` beside `case "Shipped":
 /// { ... }`). `braced` is the caller's own explicit choice rather than an
 /// inferred one, so this stays a thin, honest wrapper over
-/// [`TsSwitchCase::case_braced`] (`bynk-ts/src/program.rs`, #1445) instead
+/// [`TsSwitchCase::case_braced`] (`bynk-ts/src/program/stmt.rs`, #1445) instead
 /// of a heuristic derived from `body`'s own shape.
 fn case_(test: TsExpr, body: Vec<TsStmt>, braced: bool) -> TsSwitchCase {
     TsSwitchCase {
@@ -2415,7 +2415,7 @@ fn serialise_field_expr_via(t: &TypeRef, value: &TsExpr, ns: &str, ru: &RuntimeU
 /// #1435 (Arc E slice 1): the first real [`TsArrowBody::Block`] site in this
 /// tree — a statement body (`if`/`throw`, then `return`), not reducible to one
 /// expression the way every other arm here is. See that type's own doc
-/// (`bynk-ts/src/program.rs`) for why this widens the existing `Arrow.body`
+/// (`bynk-ts/src/program/expr.rs`) for why this widens the existing `Arrow.body`
 /// field rather than adding a new `TsExpr` variant.
 fn guarded_number(value: &TsExpr, check: &str, message: &str) -> TsExpr {
     call(

@@ -2535,7 +2535,7 @@ fn cfg_is_test_only(attr: &str) -> bool {
 }
 
 /// #3681: `TsExpr::Ident(format!(…))` sites — arbitrary expression text wrapped in
-/// a node documented as holding an identifier (`bynk-ts/src/program.rs`). Retired
+/// a node documented as holding an identifier (`bynk-ts/src/program/expr.rs`). Retired
 /// by using the right expression node. A growth probe ([`GROWTH_PROBES`]).
 ///
 /// Counts non-comment lines outside `#[cfg(test)]` modules in
