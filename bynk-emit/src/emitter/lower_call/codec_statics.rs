@@ -16,7 +16,7 @@ use super::super::lower_ctx::LowerCtx;
 use super::super::ts_types::ts_ty_to_ts_type;
 use super::super::{BaseType, Expr, TypeBody, TypeRef, ty_to_type_ref};
 use crate::ts_build::{
-    binary, block, call, const_typed, ident, index, member, or_expr as or, param, raw_lit as raw,
+    binary, block, call, const_typed, ident, index, member, or_expr, param, raw_lit as raw,
     str_lit, strict_eq,
 };
 
@@ -254,7 +254,7 @@ pub(in super::super) fn json_decoder_fn(
     } else {
         Vec::new()
     };
-    // The parse step: `JSON.parse`, or (#3214) the YAML parser, whose failures
+    // The parse step: `JSON.parse`, or_expr (#3214) the YAML parser, whose failures
     // are already positioned `DecodeError`s.
     let parse = if source == DecodeSource::Form {
         let specs = form_specs_literal(t, cx)?;
@@ -350,7 +350,7 @@ fn decode_tail(ts: &TsType) -> Vec<TsStmt> {
     let structural = kind_is("StructuralMismatch");
     let refinement = kind_is("RefinementViolation");
     let path = TsExpr::Conditional {
-        test: Box::new(TsExpr::Paren(Box::new(or(
+        test: Box::new(TsExpr::Paren(Box::new(or_expr(
             structural.clone(),
             refinement.clone(),
         )))),
@@ -632,8 +632,8 @@ fn sql_bool_pass(t: bynk_check::checker::TyId, cx: &LowerCtx) -> Vec<TsStmt> {
     let number = |n: &str| TsExpr::Lit(TsLit::Num(n.to_string()));
     // `const __flags = (__o: __JsonValue): void => { … };`
     let skip = TsStmt::if_stmt(
-        or(
-            or(
+        or_expr(
+            or_expr(
                 strict_eq(o(), TsExpr::Lit(TsLit::Null)),
                 TsExpr::Binary {
                     op: TsBinaryOp::StrictNotEq,
@@ -661,7 +661,7 @@ fn sql_bool_pass(t: bynk_check::checker::TyId, cx: &LowerCtx) -> Vec<TsStmt> {
         "__k",
         TsExpr::array(fields.iter().map(|f| str_lit(f.as_str())).collect()),
         block(vec![TsStmt::if_stmt(
-            or(
+            or_expr(
                 strict_eq(row_k(), number("0")),
                 strict_eq(row_k(), number("1")),
             ),
