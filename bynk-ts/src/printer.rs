@@ -1581,9 +1581,10 @@ fn render_binary_operand(
                 // primitive, not scoped to that one caller's own usage.
                 match outer_op {
                     TsBinaryOp::Or | TsBinaryOp::And => false,
-                    TsBinaryOp::Add | TsBinaryOp::Sub => !is_left,
-                    TsBinaryOp::NullishCoalescing
-                    | TsBinaryOp::StrictEq
+                    // `??` is left-associative, so a left-nested chain prints flat (`a ?? b ?? c`),
+                    // as `+` does, and a right-nested one keeps its brackets (1B.5d).
+                    TsBinaryOp::Add | TsBinaryOp::Sub | TsBinaryOp::NullishCoalescing => !is_left,
+                    TsBinaryOp::StrictEq
                     | TsBinaryOp::StrictNotEq
                     | TsBinaryOp::GreaterThan
                     | TsBinaryOp::InstanceOf
@@ -5801,6 +5802,26 @@ mod tests {
         ));
         let printed = print(&program, "x.bynk", "", "x.ts");
         assert_eq!(printed.text, "a ?? (b ?? c);\n");
+    }
+
+    /// `??` is left-associative, so a left-nested chain prints flat and reparses as the tree it
+    /// was built from, while a right-nested one keeps its brackets (1B.5d: a driver's secret read
+    /// `(__bynkEnv["K"] ?? process.env["K"] ?? "")`).
+    #[test]
+    fn a_left_nested_nullish_chain_prints_flat() {
+        let id = |s: &str| TsExpr::Ident(s.to_string());
+        let nullish = |l: TsExpr, r: TsExpr| TsExpr::Binary {
+            op: TsBinaryOp::NullishCoalescing,
+            left: Box::new(l),
+            right: Box::new(r),
+        };
+        let mut program = TsProgram::new();
+        program.push(TsStmt::expr_stmt(
+            nullish(nullish(id("a"), id("b")), id("c")),
+            None,
+        ));
+        let printed = print(&program, "x.bynk", "", "x.ts");
+        assert_eq!(printed.text, "a ?? b ?? c;\n");
     }
 
     /// #2955: `*`/`**` sit above `+`, so a `**` right operand of `*` prints

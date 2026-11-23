@@ -789,12 +789,14 @@ pub(super) fn observation_call_record_types(
                             &p.type_ref,
                             &type_ns,
                         );
-                        let printed = bynk_ts::print_type(&ty);
-                        let generic = op.type_params.iter().any(|tp| {
-                            printed
-                                .split(|c: char| !c.is_alphanumeric() && c != '_')
-                                .any(|w| w == tp.name.name)
-                        });
+                        let used = bynk_ts::unbound_names_in(
+                            &[const_typed("__t", ty.clone(), ident("__v"))],
+                            |_| false,
+                        );
+                        let generic = op
+                            .type_params
+                            .iter()
+                            .any(|tp| used.iter().any(|n| *n == tp.name.name));
                         if generic {
                             TsType::named("unknown")
                         } else {
