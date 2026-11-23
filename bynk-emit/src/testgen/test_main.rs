@@ -240,15 +240,14 @@ pub(super) fn build_run_function(entries: &[(String, String)]) -> Vec<TsStmt> {
     ];
     body.extend(entries.iter().map(|(name, runner)| dispatch(name, runner)));
     body.push(TsStmt::return_stmt(Some(ident("results")), None));
-    let names = entries
-        .iter()
-        .map(|(name, _)| format!("\"{}\"", crate::emitter::escape_ts_string(name)))
-        .collect::<Vec<_>>()
-        .join(", ");
     vec![
         TsStmt::raw(CASE_TIMING_RUNTIME, None),
-        TsStmt::raw(
-            format!("export const __bynkCases: readonly string[] = [{names}];"),
+        TsStmt::decl(
+            TsDecl::Export(Box::new(TsDecl::ConstDecl {
+                name: "__bynkCases".to_string(),
+                ty: Some(TsType::named("readonly string[]")),
+                init: TsExpr::array(entries.iter().map(|(name, _)| str_lit(name.clone())).collect()),
+            })),
             None,
         ),
         TsStmt::decl(
@@ -930,10 +929,18 @@ function reportUnmatched(): void {
 /// timer behind, which would otherwise hold the process open that long; the
 /// runtime registers the closer on `globalThis`, so no import is needed.
 fn pglite_teardown() -> TsStmt {
-    TsStmt::raw(
-        "await (globalThis as unknown as { __bynkPgliteTeardown?: () => Promise<void> }).__bynkPgliteTeardown?.();".to_string(),
-        None,
-    )
+    // `await (globalThis as unknown as { __bynkPgliteTeardown?: () => Promise<void> }).__bynkPgliteTeardown?.();`
+    let closer = TsExpr::OptionalCall {
+        callee: Box::new(member(
+            crate::ts_build::paren(crate::ts_build::as_expr(
+                crate::ts_build::as_expr(ident("globalThis"), TsType::named("unknown")),
+                TsType::named("{ __bynkPgliteTeardown?: () => Promise<void> }"),
+            )),
+            "__bynkPgliteTeardown",
+        )),
+        args: Vec::new(),
+    };
+    expr_stmt(await_expr(closer))
 }
 
 /// #2842: under `BYNK_SNAPSHOT_REPORT=1` the driver reads the report from one
