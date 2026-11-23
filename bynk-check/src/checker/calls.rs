@@ -377,7 +377,12 @@ pub(crate) fn check_fn_in(
     }
     if !f.given.is_empty() {
         let entries = ctx.caps.given_entries.clone();
-        report_unused_given(&mut ctx, &entries, f.return_type.span());
+        report_unused_given(
+            &mut ctx,
+            &entries,
+            f.return_type.span(),
+            f.return_type.span(),
+        );
     }
 }
 
@@ -7297,7 +7302,7 @@ mod tests {
         };
         format!(
             "context till\n\nconsumes shop\n\n{decls}service total {{\n  \
-             on call() -> Effect[Int]{given} by Caller {{\n{body}\n  }}\n}}\n"
+             on call() -> Effect[Int] by Caller{given} {{\n{body}\n  }}\n}}\n"
         )
     }
 

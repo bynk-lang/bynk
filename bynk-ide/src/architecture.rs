@@ -1167,7 +1167,8 @@ service checkout {
                 .expect("service")
         };
         assert_eq!(svc("internal").protocol, "call");
-        assert!(svc("internal").actors.is_empty());
+        // #3891: an `on call` handler states its actor, so the service names one.
+        assert_eq!(svc("internal").actors, vec!["Caller".to_string()]);
         assert_eq!(svc("web").protocol, "http");
         assert_eq!(
             svc("web").actors,

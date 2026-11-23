@@ -8969,7 +8969,7 @@ mod tests {
     /// `source.fixAll.bynk`), and carries every machine-applicable fix.
     #[tokio::test]
     async fn fix_all_is_offered_only_when_asked_for() {
-        let src = "context app.c\n\ncapability Clock {\n  fn now() -> Effect[Int]\n}\n\nprovides Clock = Sys {\n  fn now() -> Effect[Int] {\n    1\n  }\n}\n\nservice one {\n  on call(x: Int) -> Effect[Int] by Caller given Clock {\n    x\n  }\n}\n\nservice two {\n  on call(x: Int) -> Effect[Int] given Clock {\n    x\n  }\n}\n";
+        let src = "context app.c\n\ncapability Clock {\n  fn now() -> Effect[Int]\n}\n\nprovides Clock = Sys {\n  fn now() -> Effect[Int] {\n    1\n  }\n}\n\nservice one {\n  on call(x: Int) -> Effect[Int] by Caller given Clock {\n    x\n  }\n}\n\nservice two {\n  on call(x: Int) -> Effect[Int] by Caller given Clock {\n    x\n  }\n}\n";
         let s = scratch_project(
             "fix_all_only",
             &[

@@ -32,7 +32,7 @@ event Pinged = { n: Int }
 
 type UserId = opaque String
 
-actor Caller { auth = Bearer(secret = "AUTH_SECRET"), identity = UserId }
+actor Member { auth = Bearer(secret = "AUTH_SECRET"), identity = UserId }
 
 service calc {
   on call(x: Int) -> Effect[Int] by Caller {
@@ -67,16 +67,16 @@ service jobs from queue("jobs") {
 }
 
 service gate from websocket(in: Frame, out: Frame) {
-  on open (room: String) -> Effect[()] by c: Caller {
+  on open (room: String) -> Effect[()] by c: Member {
     let _ <- Room(room).join(c.identity, connection)
     ()
   }
 
-  on message (room: String, frame: Frame) -> Effect[()] by c: Caller {
+  on message (room: String, frame: Frame) -> Effect[()] by c: Member {
     ()
   }
 
-  on close (room: String) -> Effect[()] by c: Caller {
+  on close (room: String) -> Effect[()] by c: Member {
     ()
   }
 }

@@ -1269,7 +1269,7 @@ service api from http {
     const PLATFORM_SRC: &str = r#"context platform
 
 service Pinger {
-  on call(n: Int) -> Effect[Int] by Caller {
+  on call(n: Int) -> Effect[Int] {
     n
   }
 }
@@ -1279,7 +1279,7 @@ service Pinger {
 consumes platform
 
 service api {
-  on call(n: Int) -> Effect[Int] by Caller {
+  on call(n: Int) -> Effect[Int] {
     let v <- platform.Pinger(n)
     v
   }
@@ -1335,20 +1335,20 @@ fn double(x: Int) -> Int {
 }
 
 service fireService {
-  on call(n: Int) -> Effect[()] by Caller given Logger {
+  on call(n: Int) -> Effect[()] given Logger {
     do Logger.info("hi").detach()
     Effect.pure(())
   }
 }
 
 service localService {
-  on call(n: Int) -> Effect[Int] by Caller {
+  on call(n: Int) -> Effect[Int] {
     double(n)
   }
 }
 
 service nestedService {
-  on call(n: Int) -> Effect[Int] by Caller given Clock {
+  on call(n: Int) -> Effect[Int] given Clock {
     let now <- Clock.now()
     if n > 0 {
       if n > 10 {
@@ -1467,7 +1467,7 @@ service nestedService {
             body = format!("if n > {i} {{ {body} }} else {{ 0 }}");
         }
         format!(
-            "context deep\n\nservice api {{\n  on call(n: Int) -> Effect[Int] by Caller {{\n    {body}\n  }}\n}}\n"
+            "context deep\n\nservice api {{\n  on call(n: Int) -> Effect[Int] {{\n    {body}\n  }}\n}}\n"
         )
     }
 
@@ -1588,7 +1588,7 @@ service api from http by Visitor given Clock {
 consumes bynk { Logger }
 
 service guardSvc {
-  on call(flag: Bool) -> Effect[()] by Caller given Logger {
+  on call(flag: Bool) -> Effect[()] given Logger {
     if flag {
       do Logger.info("hi").detach()
     }
@@ -1596,7 +1596,7 @@ service guardSvc {
 }
 
 service routeSvc {
-  on call(x: Int) -> Effect[Int] by Caller {
+  on call(x: Int) -> Effect[Int] {
     match x {
       0 => 100
       _ => x
@@ -1668,7 +1668,7 @@ service routeSvc {
     const SPAN_SRC: &str = r#"context spans
 
 service spanSvc {
-  on call(x: Int) -> Effect[Int] by Caller {
+  on call(x: Int) -> Effect[Int] {
     if x > 0 {
       1
     } else {
@@ -1676,7 +1676,7 @@ service spanSvc {
     }
   }
 
-  on call(y: Int) -> Effect[Int] by Caller {
+  on call(y: Int) -> Effect[Int] {
     match y {
       0 => 100
       n if n > 5 => {
@@ -1686,13 +1686,13 @@ service spanSvc {
     }
   }
 
-  on call(z: Bool) -> Effect[()] by Caller {
+  on call(z: Bool) -> Effect[()] {
     if z {
       ()
     }
   }
 
-  on call(a: Bool, b: Bool) -> Effect[Int] by Caller {
+  on call(a: Bool, b: Bool) -> Effect[Int] {
     if a {
       1
     } else if b {
@@ -2060,7 +2060,7 @@ service web from http by Visitor {
 }
 
 service calls {
-  on call(n: Int) -> Effect[Int] by Caller {
+  on call(n: Int) -> Effect[Int] {
     let v = parse(n)?
     v
   }
@@ -2224,7 +2224,7 @@ agent Book {
 }
 
 service api {
-  on call(a: String, b: String) -> Effect[Int] by Caller {
+  on call(a: String, b: String) -> Effect[Int] {
     let x <- Book(a).add()
     let y <- Book(b).add()
     x
@@ -2297,7 +2297,7 @@ agent Limiter {
 }
 
 service api {
-  on call(c: String, n: Int) -> Effect[Int] by Caller {
+  on call(c: String, n: Int) -> Effect[Int] {
     if n > 0 {
       let v = parse(n)?
       v
@@ -2306,7 +2306,7 @@ service api {
     }
   }
 
-  on call(c: String, n: Int) -> Effect[Int] by Caller {
+  on call(c: String, n: Int) -> Effect[Int] {
     let x <- Limiter(c).hit(n)?
     x
   }
@@ -2378,7 +2378,7 @@ service api {
             body = format!("if n > {i} {{ {body} }} else {{ 0 }}");
         }
         let src = format!(
-            "context deepq\n\nservice api {{\n  on call(n: Int) -> Effect[Int] by Caller {{\n    {body}\n  }}\n}}\n"
+            "context deepq\n\nservice api {{\n  on call(n: Int) -> Effect[Int] {{\n    {body}\n  }}\n}}\n"
         );
         let ctx = parse_context(&src);
         let svc = find_service(&ctx, "api");

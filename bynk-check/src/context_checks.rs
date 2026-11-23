@@ -2745,6 +2745,17 @@ fn check_missing_by(handler: &Handler, protocol: &ServiceProtocol, errors: &mut 
     );
 }
 
+/// Where a handler's `given` clause sits: after its return type, and after its
+/// own `by` clause when it writes one (`-> T by A given C`). A `by` inherited
+/// from a service header lies before the handler and does not move the anchor.
+fn given_anchor_after_by(handler: &Handler) -> Span {
+    let ret = handler.return_type.span();
+    match &handler.by_clause {
+        Some(by) if by.span.start >= ret.end => by.span,
+        _ => ret,
+    }
+}
+
 /// #3891: an `on call` handler states its actor, as an HTTP route does. The
 /// fix-it inserts `by Caller` (the former silent default: any consuming
 /// context) after the return type.
@@ -3545,7 +3556,7 @@ fn check_service_decls(
                 checker::HandlerBodyCheck {
                     capabilities: handler_caps,
                     declared_capabilities: capability_info_map.clone(),
-                    given_anchor: Some(handler.return_type.span()),
+                    given_anchor: Some(given_anchor_after_by(handler)),
                     report_unused: true,
                     actor_binding,
                     borrowed_held,

@@ -443,7 +443,7 @@ foreign caller is checked under its own secret and can never pass for a Bynk
 context, nor a context for it.
 
 A verified caller still has to be one the service's handler admits. A Bynk
-context is admitted by `Caller` (the default, with no `by`), a foreign caller
+context is admitted by `Caller` (the explicit "any consuming context"), a foreign caller
 only by its own actor; `by who: Caller | Legacy` admits both and tells them
 apart. Anyone else gets a bare `403`.
 

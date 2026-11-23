@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. Each code links to its own page: what the code means, how to fix it and an example where an explanation is written, the grammar rules it governs, and the Book pages that explain it. `bynk explain <code>` prints a code's explanation in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **898** codes in total. Every code is an error unless it is marked **Warning** or **Hint**.
+There are **899** codes in total. Every code is an error unless it is marked **Warning** or **Hint**.
 
 <script type="module" src="/diagnostic-filter.js"></script>
 
@@ -26,6 +26,7 @@ There are **898** codes in total. Every code is an error unless it is marked **W
 - [`bynk.actor.foreign_reserved_secret`](/reference/diagnostics/bynk.actor.foreign_reserved_secret/) — A `Foreign` actor's secret uses a `BYNK_CALL_` edge key's name.
 - [`bynk.actor.foreign_secret_not_string`](/reference/diagnostics/bynk.actor.foreign_secret_not_string/) — A `Foreign` actor's secret is not a string.
 - [`bynk.actor.identity_not_sealed`](/reference/diagnostics/bynk.actor.identity_not_sealed/) — An actor identity type is not a context-ownable (sealed) value type.
+- [`bynk.actor.missing_by_on_call`](/reference/diagnostics/bynk.actor.missing_by_on_call/) — An `on call` handler lacks the required `by` actor clause.
 - [`bynk.actor.missing_by_on_http`](/reference/diagnostics/bynk.actor.missing_by_on_http/) — An HTTP handler lacks the required `by` actor clause.
 - [`bynk.actor.oidc_identity_not_string_constructible`](/reference/diagnostics/bynk.actor.oidc_identity_not_string_constructible/) — An `Oidc` actor's identity is not a string-constructible type.
 - [`bynk.actor.oidc_missing_audience`](/reference/diagnostics/bynk.actor.oidc_missing_audience/) — An `Oidc` actor does not name its `audience`.
