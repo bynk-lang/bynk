@@ -798,7 +798,10 @@ fn a_detached_failure_in_a_cron_or_queue_handler_is_counted() {
     }
     let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/positive/3541_detach_cron_queue");
-    let scratch = std::env::temp_dir().join(format!("bynk-detach-jobs-{}", std::process::id()));
+    // The runner compiles into `<output>/../out-js`, so a private parent keeps this run
+    // from sharing (and clobbering) `out-js` with every other test using the temp dir.
+    let root = std::env::temp_dir().join(format!("bynk-detach-jobs-{}", std::process::id()));
+    let scratch = root.join("out");
     let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
         .args(["test"])
         .arg(&fixture)
@@ -827,5 +830,5 @@ fn a_detached_failure_in_a_cron_or_queue_handler_is_counted() {
     assert_eq!(count("Err in a cron handler"), 1);
     assert_eq!(count("fault in a cron handler"), 1);
     assert_eq!(count("queue consumer"), 2);
-    let _ = std::fs::remove_dir_all(&scratch);
+    let _ = std::fs::remove_dir_all(&root);
 }
