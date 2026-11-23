@@ -16,8 +16,8 @@ use super::super::{Expr, ExprKind, Ident, TypeBody, TypeRef, test_scaffold_ns};
 use super::codec_statics::{DecodeSource, json_decoder_fn};
 use super::cross_context::type_ref_named_root;
 use crate::ts_build::{
-    arrow_with, binary, block_arrow, call, const_typed, expr_stmt, ident, member,
-    num_lit as lit_num, param, paren, ret, str_lit,
+    arrow_with, binary, block_arrow, call, const_typed, expr_stmt, ident, member, num_lit, param,
+    paren, ret, str_lit,
 };
 
 /// `"text" as const`: a string-literal tag that keeps its literal type.
@@ -429,7 +429,7 @@ pub(in crate::emitter) fn lower_signed_cookie_call(
                 str_lit(&seam.cookie),
                 str_lit(&seam.same_site),
                 key,
-                lit_num(seam.ttl_secs),
+                num_lit(seam.ttl_secs),
                 now,
             ],
         );
@@ -468,8 +468,8 @@ pub(in crate::emitter) fn lower_cookie_field_call(
         return Some(typed_cookie_node(
             &name,
             str_lit(""),
-            call(ident("Some"), vec![lit_num(0)]),
-            call(ident("Some"), vec![lit_num(0)]),
+            call(ident("Some"), vec![num_lit(0)]),
+            call(ident("Some"), vec![num_lit(0)]),
         ));
     }
     // One shape is peeled: an `Option` layer around the field's type.
@@ -599,7 +599,7 @@ pub(in crate::emitter) fn lower_events_emit_call(
                 ),
                 ("publisherId", str_lit(&owner)),
                 ("emittedAt", call(member(global("Date"), "now"), vec![])),
-                ("schemaVersion", lit_num(schema_version)),
+                ("schemaVersion", num_lit(schema_version)),
             ]);
             let entry = object(vec![
                 ("type", str_lit(&event_name)),

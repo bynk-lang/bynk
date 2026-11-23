@@ -25,7 +25,7 @@
 
 use crate::ts_build::{
     arrow_of as arrow, binary, block, call, const_typed, expr_stmt, ident, if_, index, member,
-    method_call, new as new_, num_lit as num, param, paren, ret, str_lit,
+    method_call, new as new_, num_lit, param, paren, ret, str_lit,
 };
 use bynk_check::wire_format as wf;
 use bynk_ts::{
@@ -127,7 +127,7 @@ fn new_response(body: TsExpr, init: TsExpr) -> TsExpr {
 
 /// `{ status: <n> }`.
 fn status(n: u32) -> TsExpr {
-    TsExpr::object(vec![("status".to_string(), num(n))])
+    TsExpr::object(vec![("status".to_string(), num_lit(n))])
 }
 
 fn function(
@@ -167,7 +167,7 @@ fn verify_call() -> TsExpr {
 /// `if (request.method !== <method>) return new Response(<body>, { status: <n>,
 /// <headers> });`, the method gate every internal prefix starts with.
 fn method_gate(method: &str, body: TsExpr, status_code: u32, headers: Option<TsExpr>) -> TsStmt {
-    let mut init = vec![("status".to_string(), num(status_code))];
+    let mut init = vec![("status".to_string(), num_lit(status_code))];
     if let Some(headers) = headers {
         init.push(("headers".to_string(), headers));
     }
@@ -324,7 +324,7 @@ fn dispatch() -> TsStmt {
     let held_empty = binary(
         TsBinaryOp::StrictEq,
         member(ident("held"), "length"),
-        num(0),
+        num_lit(0),
     );
     let each_member = TsStmt::for_of(
         "member",
@@ -354,7 +354,7 @@ fn dispatch() -> TsStmt {
                 binary(
                     TsBinaryOp::StrictNotEq,
                     member(ident("response"), "status"),
-                    num(404),
+                    num_lit(404),
                 ),
                 expr_stmt(method_call(ident("held"), "push", vec![ident("response")])),
             ),
@@ -541,12 +541,12 @@ fn with_allowed() -> TsStmt {
         vec![param("held", TsType::readonly_array(response_ty()))],
         response_ty(),
         vec![
-            const_typed("first", None, index(ident("held"), num(0))),
+            const_typed("first", None, index(ident("held"), num_lit(0))),
             guard(
                 binary(
                     TsBinaryOp::StrictEq,
                     member(ident("held"), "length"),
-                    num(1),
+                    num_lit(1),
                 ),
                 ret(ident("first")),
             ),
@@ -731,7 +731,7 @@ fn email(members: &[(usize, &GroupMember)]) -> TsObjectEntry {
                     vec![binary(
                         TsBinaryOp::Add,
                         method_call(ident("to"), "lastIndexOf", vec![str_lit("@")]),
-                        num(1),
+                        num_lit(1),
                     )],
                 ),
             ),

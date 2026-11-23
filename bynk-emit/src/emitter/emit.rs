@@ -37,7 +37,7 @@ use super::ts_types::{ts_base, ts_ty_to_ts_type, ts_type_ref_to_ts_type};
 use super::*;
 use crate::ts_build::{
     as_expr, await_expr as hist_await, binary, call, const_, ident, let_decl as hist_let, member,
-    num_lit as hist_num, str_lit,
+    num_lit, str_lit,
 };
 
 /// P6.x (#1188): reads `shape` — `t`'s already-lowered `bynk-emit::ir::TypeShape`
@@ -6310,7 +6310,7 @@ fn migration_step_decl(
             vec![bynk_ts::TsStmt::throw_stmt(
                 call(
                     ident("__migrationFailed"),
-                    vec![str_lit(names.agent_name), hist_num(plan.from)],
+                    vec![str_lit(names.agent_name), num_lit(plan.from)],
                 ),
                 None,
             )],
@@ -8264,8 +8264,8 @@ fn history_load_arrow(a: &AgentDecl, fns: &AgentLoadFns, state_ty: &str) -> bynk
         let mut args = vec![
             str_lit(&a.name.name),
             ident("__s"),
-            hist_num(v.version),
-            hist_num(v.oldest_readable),
+            num_lit(v.version),
+            num_lit(v.oldest_readable),
         ];
         if !step_plans.is_empty() {
             args.push(step_ranges_expr(step_plans));
@@ -8351,7 +8351,7 @@ fn history_rejected_arrow() -> bynk_ts::TsExpr {
 fn history_console_mute_arrow() -> bynk_ts::TsExpr {
     let first = || bynk_ts::TsExpr::Index {
         object: Box::new(ident("__a")),
-        index: Box::new(hist_num(0)),
+        index: Box::new(num_lit(0)),
     };
     let is_violation = binary(
         bynk_ts::TsBinaryOp::And,
@@ -8405,7 +8405,7 @@ fn history_arg_expr(
 ) -> bynk_ts::TsExpr {
     let arg = bynk_ts::TsExpr::Index {
         object: Box::new(member(ident("__st"), "args")),
-        index: Box::new(hist_num(i)),
+        index: Box::new(num_lit(i)),
     };
     if type_base_is_int(&p.type_ref, types) {
         call(member(ident("globalThis"), "Number"), vec![arg])
@@ -8426,7 +8426,7 @@ fn history_switch(
             let mut stmts = body(h);
             stmts.push(bynk_ts::TsStmt::break_stmt(None));
             bynk_ts::TsSwitchCase {
-                labels: vec![hist_num(i)],
+                labels: vec![num_lit(i)],
                 body: stmts,
                 default_braced: false,
                 case_braced: false,
@@ -10591,7 +10591,7 @@ fn ws_arg_cast(holder: &str, i: usize, ty: &TypeRef) -> bynk_ts::TsExpr {
     bynk_ts::TsExpr::As {
         expr: Box::new(bynk_ts::TsExpr::Index {
             object: Box::new(member(ident(holder), "args")),
-            index: Box::new(hist_num(i)),
+            index: Box::new(num_lit(i)),
         }),
         ty: ts_type_ref_to_ts_type(ty, None),
     }
