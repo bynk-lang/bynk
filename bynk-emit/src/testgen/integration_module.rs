@@ -14,6 +14,59 @@ use bynk_check::test_suites::{self};
 use bynk_ts::{SourceMapBuilder, TsBinaryOp, TsDecl, TsExpr, TsProgram, TsStmt, TsType};
 use std::sync::Arc;
 
+/// The `try { <body> return { pass: true }; } catch (e) { … }` of an integration case runner. A
+/// remote case also reports `retries: __bynkRetries`, how often `--settle` retried it.
+fn case_try_stmt(
+    body: Vec<TsStmt>,
+    tail_span: Option<bynk_syntax::span::Span>,
+    remote: bool,
+) -> TsStmt {
+    let mut guarded = body;
+    let outcome = |pass: bool, extra: Vec<(String, TsExpr)>| {
+        let mut entries = vec![("pass".to_string(), crate::ts_build::bool_lit(pass))];
+        entries.extend(extra);
+        if remote {
+            entries.push(("retries".to_string(), ident("__bynkRetries")));
+        }
+        TsStmt::return_stmt(Some(TsExpr::object(entries)), None)
+    };
+    let mut return_pass = outcome(true, Vec::new());
+    // The tail's checkpoint falls on the `return` when the tail added no statement of its own.
+    return_pass.span = tail_span;
+    guarded.push(return_pass);
+    let failure = |message: TsExpr, location: TsExpr, violation: Option<TsExpr>| {
+        let mut error = vec![
+            ("message".to_string(), message),
+            ("location".to_string(), location),
+        ];
+        error.extend(violation.map(|v| ("violation".to_string(), v)));
+        outcome(false, vec![("error".to_string(), TsExpr::object(error))])
+    };
+    let expectation_failure = crate::ts_build::if_(
+        crate::ts_build::binary(
+            TsBinaryOp::InstanceOf,
+            ident("e"),
+            ident("ExpectationError"),
+        ),
+        crate::ts_build::block(vec![failure(
+            crate::ts_build::member(ident("e"), "message"),
+            crate::ts_build::member(ident("e"), "location"),
+            None,
+        )]),
+    );
+    let other_failure = failure(
+        call(ident("String"), vec![ident("e")]),
+        crate::ts_build::str_lit("unknown"),
+        Some(call(ident("__bynkViolationOf"), vec![ident("e")])),
+    );
+    TsStmt::try_catch(
+        crate::ts_build::block(guarded),
+        Some("e"),
+        crate::ts_build::block(vec![expectation_failure, other_failure]),
+        None,
+    )
+}
+
 /// #2073: destructure, from each participant's namespace, the types the lowered case or a helper
 /// names. The names are read off the trees the text was printed from (1B.3c), with every
 /// participant type `provided` so that one spelled like a global (`Request`) is still found.
@@ -712,53 +765,7 @@ pub(super) fn emit_integration_module(
         );
         let src_id = map.add_source(input.map_source.clone(), input.source.to_string());
         case_out.extend(body.stmts);
-        // `retries: __bynkRetries` reports how often `--settle` retried a remote case.
-        let with_retries = |mut entries: Vec<(String, TsExpr)>| {
-            if remote.is_some() {
-                entries.push(("retries".to_string(), ident("__bynkRetries")));
-            }
-            TsExpr::object(entries)
-        };
-        let outcome = |pass: bool, extra: Vec<(String, TsExpr)>| {
-            let mut entries = vec![("pass".to_string(), crate::ts_build::bool_lit(pass))];
-            entries.extend(extra);
-            TsStmt::return_stmt(Some(with_retries(entries)), None)
-        };
-        let mut return_pass = outcome(true, Vec::new());
-        // The tail's checkpoint falls on the `return` when the tail added no statement of its own.
-        return_pass.span = body.tail_span;
-        case_out.push(return_pass);
-        let failure = |message: TsExpr, location: TsExpr, violation: Option<TsExpr>| {
-            let mut error = vec![
-                ("message".to_string(), message),
-                ("location".to_string(), location),
-            ];
-            error.extend(violation.map(|v| ("violation".to_string(), v)));
-            outcome(false, vec![("error".to_string(), TsExpr::object(error))])
-        };
-        let expectation_failure = crate::ts_build::if_(
-            crate::ts_build::binary(
-                TsBinaryOp::InstanceOf,
-                ident("e"),
-                ident("ExpectationError"),
-            ),
-            crate::ts_build::block(vec![failure(
-                crate::ts_build::member(ident("e"), "message"),
-                crate::ts_build::member(ident("e"), "location"),
-                None,
-            )]),
-        );
-        let other_failure = failure(
-            call(ident("String"), vec![ident("e")]),
-            crate::ts_build::str_lit("unknown"),
-            Some(call(ident("__bynkViolationOf"), vec![ident("e")])),
-        );
-        let try_stmt = TsStmt::try_catch(
-            crate::ts_build::block(case_out),
-            Some("e"),
-            crate::ts_build::block(vec![expectation_failure, other_failure]),
-            None,
-        );
+        let try_stmt = case_try_stmt(case_out, body.tail_span, remote.is_some());
         let mut case_stmt = async_runner_fn(&runner_name, vec![try_stmt]);
         case_stmt.nested_map_source_id = src_id;
         stmts.push(case_stmt);
