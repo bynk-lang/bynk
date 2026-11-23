@@ -53,7 +53,7 @@ pub(super) struct EmitUnitCtx {
     exports_for_consumed: HashMap<String, HashMap<String, Visibility>>,
     file_decl_index: FileDeclIndex,
     /// #1820: a context split across files, built for Workers. Each file is
-    /// emitted as its own module ([`worker_file_source_path`]) and
+    /// emitted as its own module ([`worker_file_source_path`](bynk_project::paths::worker_file_source_path)) and
     /// `handlers.ts` re-exports them ([`emit_worker_handlers_barrel`]), rather
     /// than every file being written to `handlers.ts` in turn, each
     /// overwriting the last. `file_decl_index` then names each declaration's

@@ -32,7 +32,7 @@ use std::path::{Path, PathBuf};
 
 /// #1890: one `bynk.project.duplicate_compatibility_flag` warning per
 /// duplicate in the manifest's `[workers] compatibility_flags` (`extra`),
-/// shared by [`finish_build`] and [`check_project`] so `compile` and `check`
+/// shared by [`finish_build`] and [`check_project`](super::check_project) so `compile` and `check`
 /// report the same thing. Attributed to `bynk.toml` by its root-relative
 /// identity path, like every other [`AttributedError`]; the manifest is never
 /// a snapshot, so renderers print that path (or none) rather than a source
@@ -57,7 +57,7 @@ pub(super) fn compatibility_flag_warnings(extra: &[String]) -> Vec<AttributedErr
 /// `compile_in_memory`.
 ///
 /// #1890: `compatibility_flags` is the manifest's `[workers]` list
-/// ([`CompileOptions::compatibility_flags`]). It is merged with the defaults
+/// ([`CompileOptions::compatibility_flags`](super::CompileOptions::compatibility_flags)). It is merged with the defaults
 /// once here, for every Worker, and each duplicate it held becomes one
 /// [`compatibility_flag_warnings`] warning, whatever the build target: the
 /// duplicate is a fact about the manifest.
