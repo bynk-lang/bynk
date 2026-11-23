@@ -1,0 +1,126 @@
+== REST GET · unreachable
+   -> error GET /workers/scripts/s/versions: io: Connection refused (os error N)
+== REST GET · 200, success
+   request: GET /accounts/acct/workers/scripts/s/versions
+   -> ok {"result":{"id":"x"},"success":true}
+== REST GET · 200, success false
+   request: GET /accounts/acct/workers/scripts/s/versions
+   -> error GET /workers/scripts/s/versions: Cloudflare answered 200 [{"code":7003,"message":"No route"}]
+== REST GET · 404 with errors
+   request: GET /accounts/acct/workers/scripts/s/versions
+   -> error GET /workers/scripts/s/versions: Cloudflare answered 404 [{"code":10007,"message":"not found"}]
+== REST GET · 403 with errors
+   request: GET /accounts/acct/workers/scripts/s/versions
+   -> error GET /workers/scripts/s/versions: Cloudflare answered 403 [{"code":10000,"message":"Authentication error"}]
+== REST GET · 500 without errors
+   request: GET /accounts/acct/workers/scripts/s/versions
+   -> error GET /workers/scripts/s/versions: Cloudflare answered 500 
+== REST GET · 200, unreadable
+   request: GET /accounts/acct/workers/scripts/s/versions
+   -> error GET /workers/scripts/s/versions: unreadable answer (expected value at line 1 column 1)
+
+== REST GET with a header · unreachable
+   -> error GET /r2/buckets: io: Connection refused (os error N)
+== REST GET with a header · 200, success
+   request: GET /accounts/acct/r2/buckets [cf-r2-jurisdiction: eu]
+   -> ok {"result":{"id":"x"},"success":true}
+== REST GET with a header · 200, success false
+   request: GET /accounts/acct/r2/buckets [cf-r2-jurisdiction: eu]
+   -> error GET /r2/buckets: Cloudflare answered 200 [{"code":7003,"message":"No route"}]
+== REST GET with a header · 404 with errors
+   request: GET /accounts/acct/r2/buckets [cf-r2-jurisdiction: eu]
+   -> error GET /r2/buckets: Cloudflare answered 404 [{"code":10007,"message":"not found"}]
+== REST GET with a header · 403 with errors
+   request: GET /accounts/acct/r2/buckets [cf-r2-jurisdiction: eu]
+   -> error GET /r2/buckets: Cloudflare answered 403 [{"code":10000,"message":"Authentication error"}]
+== REST GET with a header · 500 without errors
+   request: GET /accounts/acct/r2/buckets [cf-r2-jurisdiction: eu]
+   -> error GET /r2/buckets: Cloudflare answered 500 
+== REST GET with a header · 200, unreadable
+   request: GET /accounts/acct/r2/buckets [cf-r2-jurisdiction: eu]
+   -> error GET /r2/buckets: unreadable answer (expected value at line 1 column 1)
+
+== REST GET outside the account · unreachable
+   -> error GET /zones?name=example.com: io: Connection refused (os error N)
+== REST GET outside the account · 200, success
+   request: GET /zones?name=example.com
+   -> ok {"result":{"id":"x"},"success":true}
+== REST GET outside the account · 200, success false
+   request: GET /zones?name=example.com
+   -> error GET /zones?name=example.com: Cloudflare answered 200 [{"code":7003,"message":"No route"}]
+== REST GET outside the account · 404 with errors
+   request: GET /zones?name=example.com
+   -> error GET /zones?name=example.com: Cloudflare answered 404 [{"code":10007,"message":"not found"}]
+== REST GET outside the account · 403 with errors
+   request: GET /zones?name=example.com
+   -> error GET /zones?name=example.com: Cloudflare answered 403 [{"code":10000,"message":"Authentication error"}]
+== REST GET outside the account · 500 without errors
+   request: GET /zones?name=example.com
+   -> error GET /zones?name=example.com: Cloudflare answered 500 
+== REST GET outside the account · 200, unreadable
+   request: GET /zones?name=example.com
+   -> error GET /zones?name=example.com: unreadable answer (expected value at line 1 column 1)
+
+== REST POST · unreachable
+   -> error POST /d1/database/d/query: io: Connection refused (os error N)
+== REST POST · 200, success
+   request: POST /accounts/acct/d1/database/d/query {"sql":"SELECT 1"}
+   -> ok {"result":{"id":"x"},"success":true}
+== REST POST · 200, success false
+   request: POST /accounts/acct/d1/database/d/query {"sql":"SELECT 1"}
+   -> error POST /d1/database/d/query: Cloudflare answered 200 [{"code":7003,"message":"No route"}]
+== REST POST · 404 with errors
+   request: POST /accounts/acct/d1/database/d/query {"sql":"SELECT 1"}
+   -> error POST /d1/database/d/query: Cloudflare answered 404 [{"code":10007,"message":"not found"}]
+== REST POST · 403 with errors
+   request: POST /accounts/acct/d1/database/d/query {"sql":"SELECT 1"}
+   -> error POST /d1/database/d/query: Cloudflare answered 403 [{"code":10000,"message":"Authentication error"}]
+== REST POST · 500 without errors
+   request: POST /accounts/acct/d1/database/d/query {"sql":"SELECT 1"}
+   -> error POST /d1/database/d/query: Cloudflare answered 500 
+== REST POST · 200, unreadable
+   request: POST /accounts/acct/d1/database/d/query {"sql":"SELECT 1"}
+   -> error POST /d1/database/d/query: unreadable answer (expected value at line 1 column 1)
+
+== REST PUT · unreachable
+   -> error PUT /hyperdrive/configs/h: io: Connection refused (os error N)
+== REST PUT · 200, success
+   request: PUT /accounts/acct/hyperdrive/configs/h {"name":"h"}
+   -> ok {"result":{"id":"x"},"success":true}
+== REST PUT · 200, success false
+   request: PUT /accounts/acct/hyperdrive/configs/h {"name":"h"}
+   -> error PUT /hyperdrive/configs/h: Cloudflare answered 200 [{"code":7003,"message":"No route"}]
+== REST PUT · 404 with errors
+   request: PUT /accounts/acct/hyperdrive/configs/h {"name":"h"}
+   -> error PUT /hyperdrive/configs/h: Cloudflare answered 404 [{"code":10007,"message":"not found"}]
+== REST PUT · 403 with errors
+   request: PUT /accounts/acct/hyperdrive/configs/h {"name":"h"}
+   -> error PUT /hyperdrive/configs/h: Cloudflare answered 403 [{"code":10000,"message":"Authentication error"}]
+== REST PUT · 500 without errors
+   request: PUT /accounts/acct/hyperdrive/configs/h {"name":"h"}
+   -> error PUT /hyperdrive/configs/h: Cloudflare answered 500 
+== REST PUT · 200, unreadable
+   request: PUT /accounts/acct/hyperdrive/configs/h {"name":"h"}
+   -> error PUT /hyperdrive/configs/h: unreadable answer (expected value at line 1 column 1)
+
+== REST DELETE · unreachable
+   -> error DELETE /hyperdrive/configs/h: io: Connection refused (os error N)
+== REST DELETE · 200, success
+   request: DELETE /accounts/acct/hyperdrive/configs/h
+   -> ok {"result":{"id":"x"},"success":true}
+== REST DELETE · 200, success false
+   request: DELETE /accounts/acct/hyperdrive/configs/h
+   -> error DELETE /hyperdrive/configs/h: Cloudflare answered 200 [{"code":7003,"message":"No route"}]
+== REST DELETE · 404 with errors
+   request: DELETE /accounts/acct/hyperdrive/configs/h
+   -> error DELETE /hyperdrive/configs/h: Cloudflare answered 404 [{"code":10007,"message":"not found"}]
+== REST DELETE · 403 with errors
+   request: DELETE /accounts/acct/hyperdrive/configs/h
+   -> error DELETE /hyperdrive/configs/h: Cloudflare answered 403 [{"code":10000,"message":"Authentication error"}]
+== REST DELETE · 500 without errors
+   request: DELETE /accounts/acct/hyperdrive/configs/h
+   -> error DELETE /hyperdrive/configs/h: Cloudflare answered 500 
+== REST DELETE · 200, unreadable
+   request: DELETE /accounts/acct/hyperdrive/configs/h
+   -> error DELETE /hyperdrive/configs/h: unreadable answer (expected value at line 1 column 1)
+

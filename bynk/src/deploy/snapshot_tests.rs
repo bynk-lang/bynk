@@ -113,7 +113,11 @@ fn hyperdrive_wants() -> hyperdrive::Wants {
 struct Account;
 
 impl on_account::Listings for Account {
-    fn names(&self, kind: KindId, jurisdiction: Option<&str>) -> Result<BTreeSet<String>, String> {
+    fn names(
+        &self,
+        kind: KindId,
+        jurisdiction: Option<&str>,
+    ) -> Result<BTreeSet<String>, crate::cloudflare::CloudflareError> {
         let names: &[&str] = match (kind, jurisdiction) {
             (KindId::Kv, None) => &["shop-cart"],
             (KindId::R2, None) => &["shop-new"],
@@ -126,7 +130,7 @@ impl on_account::Listings for Account {
             | (KindId::AiSearch, None)
             | (KindId::MtlsCertificate, None)
             | (KindId::ContainerImage, None) => &[],
-            (_, Some(_)) => return Err("Cloudflare answered 403".to_string()),
+            (_, Some(_)) => return Err("Cloudflare answered 403".into()),
         };
         Ok(names.iter().map(|n| n.to_string()).collect())
     }

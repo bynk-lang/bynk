@@ -7,6 +7,7 @@
 //! superseded record and reported as an orphan. Orphans are never deleted: a bucket holds data.
 
 use super::*;
+use crate::cloudflare::CloudflareError;
 
 /// The R2 kind.
 pub(crate) struct R2;
@@ -404,11 +405,11 @@ pub(crate) fn create_r2_bucket(
     api: &dyn CloudflareApi,
     name: &str,
     jurisdiction: Option<&str>,
-) -> Result<(), String> {
+) -> Result<(), CloudflareError> {
     match api.r2_create(name, jurisdiction) {
         Ok(()) => Ok(()),
         Err(e) if e.already_exists() => Ok(()),
-        Err(e) => Err(e.to_string()),
+        Err(e) => Err(e.into()),
     }
 }
 

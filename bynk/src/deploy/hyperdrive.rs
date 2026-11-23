@@ -19,7 +19,7 @@
 //! is [`scrub`]bed before it is shown.
 
 use super::*;
-use crate::migrate::live::{self, Credentials, Rest};
+use crate::cloudflare::{CloudflareError, Idempotent, Rest};
 use bynk_driver::emsg;
 use bynk_project::hyperdrive::HyperdriveDeployConfig;
 
@@ -395,13 +395,13 @@ pub(crate) fn first_unrecorded<'a>(
 /// run is tested against a fake and the REST client against a stub.
 pub(crate) trait HyperdriveApi {
     /// Make a config, returning its id.
-    fn create(&self, name: &str, origin: &Origin) -> Result<String, String>;
+    fn create(&self, name: &str, origin: &Origin) -> Result<String, CloudflareError>;
     /// Replace config `id`'s name and origin.
-    fn update(&self, id: &str, name: &str, origin: &Origin) -> Result<(), String>;
+    fn update(&self, id: &str, name: &str, origin: &Origin) -> Result<(), CloudflareError>;
     /// The name of config `id`, or `None` when the account has none.
-    fn name_of(&self, id: &str) -> Result<Option<String>, String>;
+    fn name_of(&self, id: &str) -> Result<Option<String>, CloudflareError>;
     /// Delete config `id`; already gone is success.
-    fn delete(&self, id: &str) -> Result<(), String>;
+    fn delete(&self, id: &str) -> Result<(), CloudflareError>;
 }
 
 /// The permission a token needs to make, update and read configs.
@@ -415,19 +415,14 @@ pub(crate) struct RestHyperdrive {
 impl RestHyperdrive {
     /// A client for the account in `CLOUDFLARE_ACCOUNT_ID`, or a message naming
     /// the missing variable and the permission the token needs.
-    pub(crate) fn from_env() -> Result<Self, String> {
-        let credentials = Credentials::from_env_for(
-            "create or update a Hyperdrive config",
-            &format!(
-                "an API token with \"{TOKEN_SCOPE}\" (a `wrangler login` session is not enough: the deploy calls Cloudflare's API directly)"
-            ),
-        )?;
+    pub(crate) fn from_env() -> Result<Self, CloudflareError> {
         Ok(Self {
-            rest: Rest {
-                agent: live::agent()?,
-                credentials,
-                base: live::API.to_string(),
-            },
+            rest: crate::cloudflare::rest::for_purpose(
+                "create or update a Hyperdrive config",
+                &format!(
+                    "an API token with \"{TOKEN_SCOPE}\" (a `wrangler login` session is not enough: the deploy calls Cloudflare's API directly)"
+                ),
+            )?,
         })
     }
 }
@@ -452,40 +447,44 @@ fn origin_json(name: &str, origin: &Origin) -> serde_json::Value {
 }
 
 impl HyperdriveApi for RestHyperdrive {
-    fn create(&self, name: &str, origin: &Origin) -> Result<String, String> {
-        let body = self
-            .rest
-            .post("/hyperdrive/configs", &origin_json(name, origin))?;
+    fn create(&self, name: &str, origin: &Origin) -> Result<String, CloudflareError> {
+        let body = self.rest.post(
+            "/hyperdrive/configs",
+            &origin_json(name, origin),
+            // Not idempotent: a second create makes a second config.
+            Idempotent::No,
+        )?;
         body["result"]["id"]
             .as_str()
             .map(str::to_string)
-            .ok_or_else(|| "Cloudflare made the config but returned no id".to_string())
+            .ok_or_else(|| "Cloudflare made the config but returned no id".into())
     }
 
-    fn update(&self, id: &str, name: &str, origin: &Origin) -> Result<(), String> {
+    fn update(&self, id: &str, name: &str, origin: &Origin) -> Result<(), CloudflareError> {
         self.rest
             .put(
                 &format!("/hyperdrive/configs/{id}"),
                 &origin_json(name, origin),
             )
             .map(drop)
+            .map_err(CloudflareError::from)
     }
 
-    fn name_of(&self, id: &str) -> Result<Option<String>, String> {
+    fn name_of(&self, id: &str) -> Result<Option<String>, CloudflareError> {
         match self.rest.get(&format!("/hyperdrive/configs/{id}")) {
             Ok(body) => Ok(Some(
                 body["result"]["name"].as_str().unwrap_or("").to_string(),
             )),
-            Err(e) if e.contains("answered 404") => Ok(None),
-            Err(e) => Err(e),
+            Err(e) if e.status() == Some(404) => Ok(None),
+            Err(e) => Err(e.into()),
         }
     }
 
-    fn delete(&self, id: &str) -> Result<(), String> {
+    fn delete(&self, id: &str) -> Result<(), CloudflareError> {
         match self.rest.delete(&format!("/hyperdrive/configs/{id}")) {
             Ok(_) => Ok(()),
-            Err(e) if e.contains("answered 404") => Ok(()),
-            Err(e) => Err(e),
+            Err(e) if e.status() == Some(404) => Ok(()),
+            Err(e) => Err(e.into()),
         }
     }
 }

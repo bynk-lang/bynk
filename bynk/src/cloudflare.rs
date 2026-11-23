@@ -10,8 +10,12 @@
 //! - `fake` (tests only): [`fake::Recording`], which logs each call as its wrangler arguments and
 //!   answers from a test's own replies.
 //!
-//! 1D.3a moves the resource kinds' operations here: queues, KV, D1, R2 and Vectorize. The push,
-//! the secrets, `rollback`, `dev` and `tail` follow in 1D.3b, and the REST client in 1D.3c.
+//! - [`rest`]: Cloudflare's REST API, one client for the run ([`rest::for_purpose`]), with typed
+//!   errors ([`RestError`]); [`retry`]: its retry policy, at one attempt during the freeze.
+//!
+//! 1D.3a moved the resource kinds' operations here (queues, KV, D1, R2 and Vectorize), 1D.3b the
+//! rest of wrangler (the push, the secrets, `rollback`, `dev` and `tail`), and 1D.3c the REST
+//! client.
 //! 1D.4 then moves each resource operation to REST behind these same methods, so a kind does not
 //! change when its transport does.
 
@@ -19,12 +23,19 @@ pub(crate) mod api;
 pub(crate) mod error;
 #[cfg(test)]
 pub(crate) mod fake;
+pub(crate) mod paging;
 pub(crate) mod process;
+pub(crate) mod rest;
+pub(crate) mod retry;
 
 #[cfg(test)]
 pub(crate) use api::Op;
 pub(crate) use api::{CloudflareApi, PushCall, VectorizeOp};
 #[cfg(test)]
 pub(crate) use error::WranglerError;
-pub(crate) use error::{Exit, Failure};
+pub(crate) use error::{CloudflareError, Exit, Failure, push_lost_its_upload};
 pub(crate) use process::{Wrangler, spawn_command};
+pub(crate) use rest::Rest;
+#[cfg(test)]
+pub(crate) use rest::RestError;
+pub(crate) use retry::Idempotent;

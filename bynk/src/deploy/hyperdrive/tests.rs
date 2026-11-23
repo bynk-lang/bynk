@@ -1,6 +1,7 @@
 //! #3319: the Hyperdrive deploy, against a fake of Cloudflare's API.
 
 use super::*;
+use crate::cloudflare::CloudflareError;
 use crate::deploy::config::tests::project;
 use crate::deploy::plan::tests::plan_of;
 use bynk_project::hyperdrive::HyperdriveDeploy;
@@ -33,7 +34,7 @@ struct Fake {
 }
 
 impl HyperdriveApi for Fake {
-    fn create(&self, name: &str, origin: &Origin) -> Result<String, String> {
+    fn create(&self, name: &str, origin: &Origin) -> Result<String, CloudflareError> {
         let n = self.calls.borrow().len();
         self.calls.borrow_mut().push(format!(
             "create {name} {}:{}/{} as {}",
@@ -44,7 +45,8 @@ impl HyperdriveApi for Fake {
                 "POST /hyperdrive/configs: Cloudflare answered 400 bad origin {}@{}",
                 origin.password.expose(),
                 origin.host
-            ));
+            )
+            .into());
         }
         let id = format!("cfg-{n}");
         self.existing
@@ -53,19 +55,19 @@ impl HyperdriveApi for Fake {
         Ok(id)
     }
 
-    fn update(&self, id: &str, name: &str, origin: &Origin) -> Result<(), String> {
+    fn update(&self, id: &str, name: &str, origin: &Origin) -> Result<(), CloudflareError> {
         self.calls
             .borrow_mut()
             .push(format!("update {id} {name} {}", origin.host));
         Ok(())
     }
 
-    fn name_of(&self, id: &str) -> Result<Option<String>, String> {
+    fn name_of(&self, id: &str) -> Result<Option<String>, CloudflareError> {
         self.calls.borrow_mut().push(format!("get {id}"));
         Ok(self.existing.borrow().get(id).cloned())
     }
 
-    fn delete(&self, id: &str) -> Result<(), String> {
+    fn delete(&self, id: &str) -> Result<(), CloudflareError> {
         self.calls.borrow_mut().push(format!("delete {id}"));
         Ok(())
     }

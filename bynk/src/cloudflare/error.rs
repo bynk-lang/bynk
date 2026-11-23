@@ -311,6 +311,18 @@ mod tests {
     }
 
     #[test]
+    fn a_push_lost_its_upload_only_on_wranglers_10007() {
+        assert!(push_lost_its_upload(
+            "Uploaded x (0.86 sec)\n✘ [ERROR] This Worker does not exist on your account. [code: 10007]"
+        ));
+        assert!(!push_lost_its_upload(
+            "references Worker 'y' which was not found [code: 10143]"
+        ));
+        assert!(!push_lost_its_upload("[code: 10090]"));
+        assert!(!push_lost_its_upload("10007 without the bracket form"));
+    }
+
+    #[test]
     fn a_failure_says_both_streams_trimmed_or_its_exit() {
         let op = Op::KvList;
         assert_eq!(exit(&op, 1, " out \n", "\n err ").said(), "err\nout");
@@ -376,4 +388,102 @@ mod tests {
     }
 
     use super::super::api::VectorizeOp;
+}
+
+/// Whether a failed push's teed output says the Worker it just uploaded does not exist: wrangler's
+/// lookup after the upload racing the script's creation (#3562, code 10007 only; a legacy
+/// environment's 10090 is not this race). The push's output is the text it streamed, not a
+/// [`WranglerError`], so this reads that text; it lives here so that every match on wrangler's
+/// words is in this module (1D.3c). Before 1D.3c, `first_deploy::NOT_FOUND`.
+pub(crate) fn push_lost_its_upload(said: &str) -> bool {
+    said.contains("[code: 10007]")
+}
+
+/// Any failure of a call to Cloudflare (#4043, Decision E): a wrangler call, a REST call, or a
+/// missing credential. Its `Display` is the text bynk printed before 1D.3. Typed errors stop at
+/// the client boundary: above it, each caller's own `format!` and `DeployFailure` are unchanged.
+#[derive(Debug)]
+pub(crate) enum CloudflareError {
+    Wrangler(WranglerError),
+    Rest(super::rest::RestError),
+    /// A missing credential, in the words of the purpose that needed it.
+    Credentials(String),
+    /// A failure stated in words: an answer that succeeded but could not be used (`the account
+    /// has no workers.dev subdomain`), or the TLS roots that could not be loaded.
+    Other(String),
+}
+
+impl CloudflareError {
+    /// The REST failure, when it is one.
+    pub(crate) fn rest(&self) -> Option<&super::rest::RestError> {
+        match self {
+            CloudflareError::Rest(e) => Some(e),
+            _ => None,
+        }
+    }
+
+    /// The status Cloudflare answered with, when a REST call was answered.
+    pub(crate) fn status(&self) -> Option<u16> {
+        self.rest().and_then(super::rest::RestError::status)
+    }
+
+    /// Whether the token lacks the permission ([`super::rest::RestError::is_denied`]).
+    pub(crate) fn is_denied(&self) -> bool {
+        self.rest().is_some_and(super::rest::RestError::is_denied)
+    }
+}
+
+impl fmt::Display for CloudflareError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            CloudflareError::Wrangler(e) => e.fmt(f),
+            CloudflareError::Rest(e) => e.fmt(f),
+            CloudflareError::Credentials(s) | CloudflareError::Other(s) => f.write_str(s),
+        }
+    }
+}
+
+impl std::error::Error for CloudflareError {}
+
+/// Two failures are the same when they print the same: the text is the contract (Decision F),
+/// and what a state like `ScriptState::Unknown` is compared by. (A `Failure` holds an
+/// `io::Error`, which has no equality of its own.)
+impl PartialEq for CloudflareError {
+    fn eq(&self, other: &Self) -> bool {
+        self.to_string() == other.to_string()
+    }
+}
+
+impl Eq for CloudflareError {}
+
+impl From<WranglerError> for CloudflareError {
+    fn from(e: WranglerError) -> Self {
+        CloudflareError::Wrangler(e)
+    }
+}
+
+impl From<super::rest::RestError> for CloudflareError {
+    fn from(e: super::rest::RestError) -> Self {
+        CloudflareError::Rest(e)
+    }
+}
+
+impl From<String> for CloudflareError {
+    fn from(s: String) -> Self {
+        CloudflareError::Other(s)
+    }
+}
+
+/// Above the client boundary a caller's own error is still its text (`DeployFailure`, a
+/// revert's `String`): `?` carries a typed error up as exactly what it prints.
+impl From<CloudflareError> for String {
+    fn from(e: CloudflareError) -> Self {
+        e.to_string()
+    }
+}
+
+impl From<&str> for CloudflareError {
+    fn from(s: &str) -> Self {
+        CloudflareError::Other(s.to_string())
+    }
 }
