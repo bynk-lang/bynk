@@ -344,6 +344,86 @@ pub(super) fn emit_test_property_function(
     async_runner_fn(runner_name, out)
 }
 
+/// The end of a history property's runner: the `__drive` closure, which runs a generated sequence
+/// through the real handlers via the agent module's exported test driver (threading the test
+/// `deps`), and the `__bynkRunHistory` call that hands it the handlers, the driver and the body.
+fn history_runner_tail(
+    target_name: &str,
+    agent_name: &str,
+    prop: &PropertyDecl,
+    prop_ordinal: usize,
+    rel_path: &str,
+) -> Vec<TsStmt> {
+    let mut out: Vec<TsStmt> = Vec::new();
+    // Drive a generated sequence through the real handlers via the agent module's
+    // exported test driver, threading the test `deps` (real or `stub`-stubbed).
+    let target_ns = test_ns(target_name);
+    // P7.2: `seq` matches `__bynkDriveHistory_*`'s own real param type
+    // (`emit.rs`'s own driver-signature narrowing). `(target_ns as any)` and
+    // `deps` stay deferred — the callee's own `deps: any` param is itself
+    // deferred (per-handler `given` sets can differ; see `emit.rs`), and
+    // `target_ns`'s own generated namespace shape wasn't traced here. The
+    // `Array<{ h: number, args: unknown[] }>` param type stays one opaque
+    // `TsType::named` string — its own inline object type's real member
+    // separator is `, ` (a comma), not `TsType::Object`'s own established
+    // `; ` (semicolon) convention, so building it as a real `TsType::Object`
+    // would silently change the emitted bytes; the same "odd, one-off shape
+    // stays opaque text" posture this track already uses for `Query[T]`/
+    // `this.state.storage.get<T>`/`ReturnType<typeof X>`.
+    let drive_stmt = TsStmt::const_stmt(
+        TsBindingName::Ident("__drive".to_string()),
+        None,
+        TsExpr::Arrow {
+            params: vec![TsParam::new(
+                "seq".to_string(),
+                Some(TsType::named(
+                    "globalThis.Array<{ h: number, args: unknown[] }>",
+                )),
+            )],
+            is_async: false,
+            generics: Vec::new(),
+            return_type: None,
+            body: Box::new(TsArrowBody::Expr(Box::new(method_call(
+                TsExpr::As {
+                    expr: Box::new(ident(target_ns)),
+                    ty: TsType::named("any"),
+                },
+                format!("__bynkDriveHistory_{agent_name}"),
+                vec![ident("seq"), ident("deps")],
+            )))),
+        },
+        None,
+    );
+    out.push(drive_stmt);
+
+    let rel_path_fwd = rel_path.replace('\\', "/");
+    let return_run = TsStmt::return_stmt(
+        Some(await_expr(call(
+            ident("__bynkRunHistory"),
+            vec![TsExpr::object(vec![
+                (
+                    "seed".to_string(),
+                    call(
+                        ident("__bynkMix"),
+                        vec![ident("__bynkSeed"), num_lit(prop_ordinal.to_string())],
+                    ),
+                ),
+                ("cases".to_string(), num_lit("60")),
+                ("maxLen".to_string(), num_lit("16")),
+                ("handlers".to_string(), ident("__handlers")),
+                ("drive".to_string(), ident("__drive")),
+                ("body".to_string(), ident("__body")),
+                ("name".to_string(), str_lit(prop.name.clone())),
+                ("location".to_string(), str_lit(rel_path_fwd.clone())),
+                ("file".to_string(), str_lit(rel_path_fwd)),
+            ])],
+        ))),
+        None,
+    );
+    out.push(return_run);
+    out
+}
+
 /// v0.119 (testing track slice 7, ADR 0155): emit one async runner for a history
 /// property — `for all run: History[Agent]`. Builds a per-handler argument
 /// generator table, a predicate `__body` over the driven `run` (a `List[Step]`),
@@ -591,72 +671,13 @@ pub(super) fn emit_test_history_property_function(
         ),
     ));
 
-    // Drive a generated sequence through the real handlers via the agent module's
-    // exported test driver, threading the test `deps` (real or `stub`-stubbed).
-    let target_ns = test_ns(target_name);
-    // P7.2: `seq` matches `__bynkDriveHistory_*`'s own real param type
-    // (`emit.rs`'s own driver-signature narrowing). `(target_ns as any)` and
-    // `deps` stay deferred — the callee's own `deps: any` param is itself
-    // deferred (per-handler `given` sets can differ; see `emit.rs`), and
-    // `target_ns`'s own generated namespace shape wasn't traced here. The
-    // `Array<{ h: number, args: unknown[] }>` param type stays one opaque
-    // `TsType::named` string — its own inline object type's real member
-    // separator is `, ` (a comma), not `TsType::Object`'s own established
-    // `; ` (semicolon) convention, so building it as a real `TsType::Object`
-    // would silently change the emitted bytes; the same "odd, one-off shape
-    // stays opaque text" posture this track already uses for `Query[T]`/
-    // `this.state.storage.get<T>`/`ReturnType<typeof X>`.
-    let drive_stmt = TsStmt::const_stmt(
-        TsBindingName::Ident("__drive".to_string()),
-        None,
-        TsExpr::Arrow {
-            params: vec![TsParam::new(
-                "seq".to_string(),
-                Some(TsType::named(
-                    "globalThis.Array<{ h: number, args: unknown[] }>",
-                )),
-            )],
-            is_async: false,
-            generics: Vec::new(),
-            return_type: None,
-            body: Box::new(TsArrowBody::Expr(Box::new(method_call(
-                TsExpr::As {
-                    expr: Box::new(ident(target_ns)),
-                    ty: TsType::named("any"),
-                },
-                format!("__bynkDriveHistory_{agent_name}"),
-                vec![ident("seq"), ident("deps")],
-            )))),
-        },
-        None,
-    );
-    out.push(drive_stmt);
-
-    let rel_path_fwd = rel_path.replace('\\', "/");
-    let return_run = TsStmt::return_stmt(
-        Some(await_expr(call(
-            ident("__bynkRunHistory"),
-            vec![TsExpr::object(vec![
-                (
-                    "seed".to_string(),
-                    call(
-                        ident("__bynkMix"),
-                        vec![ident("__bynkSeed"), num_lit(prop_ordinal.to_string())],
-                    ),
-                ),
-                ("cases".to_string(), num_lit("60")),
-                ("maxLen".to_string(), num_lit("16")),
-                ("handlers".to_string(), ident("__handlers")),
-                ("drive".to_string(), ident("__drive")),
-                ("body".to_string(), ident("__body")),
-                ("name".to_string(), str_lit(prop.name.clone())),
-                ("location".to_string(), str_lit(rel_path_fwd.clone())),
-                ("file".to_string(), str_lit(rel_path_fwd)),
-            ])],
-        ))),
-        None,
-    );
-    out.push(return_run);
+    out.extend(history_runner_tail(
+        target_name,
+        agent_name,
+        prop,
+        prop_ordinal,
+        rel_path,
+    ));
     async_runner_fn(runner_name, out)
 }
 
