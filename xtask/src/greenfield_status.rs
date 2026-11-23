@@ -1778,6 +1778,9 @@ const AST_IMPORTER_ORIGINS: &[(&str, &str)] = &[
     ("emitter/lower/mock.rs", "emitter/lower.rs"),
     ("emitter/lower/expect.rs", "emitter/lower.rs"),
     ("emitter/lower/claims.rs", "emitter/lower.rs"),
+    ("emitter/emit/handlers.rs", "emitter/emit.rs"),
+    ("emitter/emit/messages.rs", "emitter/emit.rs"),
+    ("emitter/emit/capability.rs", "emitter/emit.rs"),
 ];
 
 /// How many distinct origins the importing files `rels` come from: a file named as a child in
