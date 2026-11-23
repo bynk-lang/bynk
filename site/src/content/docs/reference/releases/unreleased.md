@@ -7,6 +7,7 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.640.97** | Internal restructuring: `emit.rs` splits further by declaration kind (the agent state persistence and history driver move out); no output changes |
 | **v0.640.96** | Internal restructuring: `emit.rs` splits further by declaration kind (the agent store layout and the agent migration steps move out); no output changes |
 | **v0.640.95** | Internal restructuring: the boundary-codec generator's refined, record, sum, generic and factory codecs move into their own modules |
 | **v0.640.94** | Internal restructuring: the project-mode import and rebrand family moves out of `emitter.rs` into `emitter/imports.rs`, the module header joins `runtime_header.rs`, and the runtime-module tests move beside their code; no output changes |
