@@ -1817,6 +1817,7 @@ const AST_IMPORTER_ORIGINS: &[(&str, &str)] = &[
     ("emitter/emit/messages.rs", "emitter/emit.rs"),
     ("emitter/emit/service.rs", "emitter/emit.rs"),
     ("emitter/emit/types.rs", "emitter/emit.rs"),
+    ("emitter/emit/websocket.rs", "emitter/emit.rs"),
     // emitter/serialisation.rs (an AST_IMPORTER_EXCEPTIONS entry: its children are excluded too)
     ("emitter/serialisation/expr.rs", "emitter/serialisation.rs"),
     ("emitter/serialisation/field.rs", "emitter/serialisation.rs"),
