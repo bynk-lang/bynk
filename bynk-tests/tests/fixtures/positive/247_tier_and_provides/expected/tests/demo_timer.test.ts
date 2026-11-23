@@ -39,10 +39,12 @@ class __Stub_Clock {
   constructor(c?: string) {
     this.__case = c;
   }
+
   __applies(op: string): boolean {
     if (op === "now") return this.__case === "an advancing clock via returns each";
     return true;
   }
+
   async now(): globalThis.Promise<number> {
     if (this.__case === "an advancing clock via returns each") {
       const __k = this.__seq_0;

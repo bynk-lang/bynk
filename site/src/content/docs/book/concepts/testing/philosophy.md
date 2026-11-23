@@ -193,7 +193,7 @@ your code.
 
 ## See also
 
-- Tutorial: [Test it](/book/tutorials/06-testing/).
+- Tutorial: [Test it](/book/tutorials/testing/).
 - How-to: [Write tests and stub collaborators](/book/guides/testing/write-tests/).
 - Guide: [Test tiers](/book/guides/testing/integration/).
 - Reference: [testing](/reference/testing/).

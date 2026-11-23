@@ -115,7 +115,7 @@ wrote unmodified. Prefer a worked example? The bundled
 `bynk check src`, `bynk test .`, and deploy.
 
 See [Start a new project](https://bynk-lang.org/book/guides/projects-build-and-deployment/start-a-project/)
-or [Compile your first program](https://bynk-lang.org/book/tutorials/01-first-program/).
+or [Compile your first program](https://bynk-lang.org/book/tutorials/first-program/).
 
 ## Repository layout
 
@@ -174,7 +174,7 @@ The **[Bynk Book](https://bynk-lang.org/book/)** is the canonical guide and
 reference. It follows [Diátaxis](https://diataxis.fr/), grouped concern-first so
 each topic keeps its explanation, recipes, and reference together:
 
-- **[Tutorials](https://bynk-lang.org/book/tutorials/01-first-program/)** — learn Bynk by building.
+- **[Tutorials](https://bynk-lang.org/book/tutorials/first-program/)** — learn Bynk by building.
 - **[Guides](https://bynk-lang.org/book/guides/)** — task-focused recipes, each section
   opening with the *why* before the *how*.
 - **[Reference](https://bynk-lang.org/reference/)** — exact behaviour, including the

@@ -175,7 +175,7 @@ footer.
    8. Split into contexts (new; written in slice 11, at
       `tutorials/contexts.md`)
    9. Test it
-   10. Deploy it (new)
+   10. Deploy it (new; written in slice 12, at `tutorials/deploy.md`)
 3. **Concepts**, at `/book/concepts/`: the explanation pages, moved from the
    guides and About:
    the type-system philosophy, literal admission, the capability model, sends,
@@ -329,9 +329,10 @@ chapters (9–11) are independent of each other once slice 2 has landed.
 subject (`tutorials/failure-and-result.md`, `tutorials/capabilities.md`,
 `tutorials/contexts.md`, `tutorials/deploy.md`), and its place in the order
 comes from `SUMMARY.md` alone, so slices 9–11 move no URL and collide with no
-existing file. Slice 12 renames the six existing numbered files
-(`01-first-program.md` and so on) to unnumbered names, with one redirect each,
-so a chapter's URL never changes when chapters are added again.
+existing file. Slice 12 renamed the six existing numbered files
+(`01-first-program.md` became `first-program.mdx`, and so on) to unnumbered
+names, with a redirect for each old URL, so a chapter's URL never changes when
+chapters are added again.
 
 The back-half feature freeze ([ADR 0876](../decisions/0876-back-half-feature-freeze.md))
 allows design work, so this doc can settle during it. Most slices change only

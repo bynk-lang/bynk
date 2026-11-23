@@ -215,7 +215,7 @@ export function bookPages(dir = BOOK, rel = "") {
   });
 }
 
-/** A page's route, whatever its extension: SUMMARY names `01-first-program.md`
+/** A page's route, whatever its extension: SUMMARY names `first-program.md`
  *  for a page written as `.mdx`, and both are the same route. */
 const routeOf = (pagePath, base = "/book/") => slugFor(pagePath.replace(/\.mdx$/, ".md"), base);
 

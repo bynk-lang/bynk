@@ -62,10 +62,12 @@ class __Stub_AnalyticsSql {
   constructor(c?: string) {
     this.__case = c;
   }
+
   __applies(op: string): boolean {
     if (op === "query") return this.__case === "a rejected query is matched" || this.__case === "a retryable error is matched" || this.__case === "a stubbed result is read" || this.__case === "the query reads the environment's own dataset";
     return true;
   }
+
   async query(sql: string, params: readonly __ns_bynk_cloudflare.SqlValue[]): globalThis.Promise<Result<__ns_bynk_cloudflare.AnalyticsSqlResult, __ns_bynk_cloudflare.AnalyticsSqlError>> {
     const { BytesResponse, Claim, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
@@ -184,10 +186,12 @@ class __Stub_Signups {
   constructor(c?: string) {
     this.__case = c;
   }
+
   __applies(op: string): boolean {
     if (op === "dataset") return this.__case === "the query reads the environment's own dataset";
     return true;
   }
+
   async dataset(): globalThis.Promise<string> {
     const { BytesResponse, Claim, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;

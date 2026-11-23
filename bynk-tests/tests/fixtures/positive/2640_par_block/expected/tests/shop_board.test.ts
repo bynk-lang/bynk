@@ -74,10 +74,12 @@ class __Stub_Lookup {
   constructor(c?: string) {
     this.__case = c;
   }
+
   __applies(op: string): boolean {
     if (op === "find") return this.__case === "a Result bound in the block is unwrapped after it" || this.__case === "after the block, the first Err in source order propagates" || this.__case === "an Err in a later binding propagates when the earlier is Ok";
     return true;
   }
+
   async find(id: number): globalThis.Promise<Result<number, string>> {
     const { positive } = __ns_shop_board;
     if (this.__case === "a Result bound in the block is unwrapped after it") {
@@ -127,10 +129,12 @@ class __Stub_Orders {
   constructor(c?: string) {
     this.__case = c;
   }
+
   __applies(op: string): boolean {
     if (op === "forUser") return this.__case === "a ? on an argument is hoisted above the block" || this.__case === "a binding that hoists statements still joins" || this.__case === "a block in a branch binds for the rest of that branch" || this.__case === "a block in a case drives addressed services together" || this.__case === "a lambda parameter or match arm named like a sibling is its own binding" || this.__case === "a re-binding reads the value from before the block" || this.__case === "both names are bound after the block" || this.__case === "the effects are issued in source order";
     return true;
   }
+
   async forUser(id: number): globalThis.Promise<number> {
     const { positive } = __ns_shop_board;
     if (this.__case === "both names are bound after the block") {

@@ -15,7 +15,7 @@ Keep editing `shortener.bynk`.
 
 Bynk has no exceptions and no `null`. A step that can fail says so in its type:
 it returns a `Result[T, E]`, which is either `Ok` with a `T` or `Err` with an
-`E`. You met one in [Make illegal states unrepresentable](/book/tutorials/04-refined-types/):
+`E`. You met one in [Make illegal states unrepresentable](/book/tutorials/refined-types/):
 `ShortCode.of(raw)` returns a `Result`, because the string might not fit.
 
 Because failure is a value, nothing can skip it. A caller can't use the `T`
@@ -30,7 +30,7 @@ only lead to another short link, and a chain of them could loop. Whether a
 can say, so it is a check in code, and its failure is a value.
 
 First, name the failure. `LinkError` from
-[Model your data with types](/book/tutorials/03-modelling-data/) gains a
+[Model your data with types](/book/tutorials/modelling-data/) gains a
 variant, and `describe` an arm for it:
 
 ```bynk,fragment
@@ -134,7 +134,7 @@ A body whose `target` is `https://sho.rt/abc123` is now answered with `400` and
 
 ## Three more tools
 
-You'll use these in [Add a stateful agent](/book/tutorials/05-stateful-agent/), when the shortener can look things up:
+You'll use these in [Add a stateful agent](/book/tutorials/stateful-agent/), when the shortener can look things up:
 
 - **`?` on an `Option` answers `404`.** Inside a handler that returns an
   `HttpResult`, `found?` gives the value if there is one, and otherwise ends the

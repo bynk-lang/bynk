@@ -29,6 +29,10 @@
 //!   one project, the way a reader who copies them into a directory would. For
 //!   a page that splits a program over several units, where a context `uses` a
 //!   commons or `consumes` another context the page shows beside it (#4062).
+//!   A project is for **two or more** files: a project of one block is refused
+//!   (fence it as plain ```bynk), and so is a project block that is also
+//!   `ignore`, `fail` or `fragment`, or whose body is only `{{#include …}}`
+//!   lines, since each would leave a file out of the project unchecked (#4077).
 //! - ```bynk,ignore    → skipped. Only for pseudo-syntax that is not Bynk at all
 //!   (`<Name>` placeholders, `…` elisions, lines from different contexts set
 //!   side by side).
@@ -332,6 +336,48 @@ fn project_of(info: &str) -> Option<&str> {
     info.split(',').find_map(|f| f.strip_prefix("project="))
 }
 
+/// A body that is nothing but `{{#include …}}` directives: display-only, its
+/// source inlined at site-build time.
+fn is_include_only(body: &str) -> bool {
+    let mut lines = body
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .peekable();
+    lines.peek().is_some() && lines.all(|l| l.starts_with("{{#include"))
+}
+
+/// Refuse a `bynk,project=<name>` group the gate can't compile as a whole:
+/// fewer than two blocks, or a block that another fence flag (or an
+/// include-only body) would take out of the project. `members` are each
+/// block's fence info and body, in page order.
+fn check_project(name: &str, members: &[(&str, &str)]) -> Result<(), String> {
+    if members.len() < 2 {
+        return Err(format!(
+            "project `{name}` has only one block; a project is for two or more files, \
+             so fence a lone file as plain ```bynk"
+        ));
+    }
+    for (info, body) in members {
+        let flag = info
+            .split(',')
+            .find(|f| ["ignore", "fragment"].contains(f) || f.starts_with("fail"));
+        if let Some(flag) = flag {
+            return Err(format!(
+                "project `{name}` has a block also marked `{flag}`; \
+                 every block of a project is compiled with the rest"
+            ));
+        }
+        if is_include_only(body) {
+            return Err(format!(
+                "project `{name}` has a block that is only `{{{{#include …}}}}`; \
+                 a project's files must be written out on the page"
+            ));
+        }
+    }
+    Ok(())
+}
+
 #[test]
 fn every_doc_example_compiles() {
     let blocks = collect_blocks();
@@ -362,13 +408,7 @@ fn every_doc_example_compiles() {
         // is inlined at site-build time from a fixture that lives outside the Book
         // (site/src/diagnostics/*.bynk). The fixture's own compile is checked by
         // tests/doc_diagnostics.rs, so don't demand it stand alone here.
-        let nonempty: Vec<&str> = b
-            .body
-            .lines()
-            .map(str::trim)
-            .filter(|l| !l.is_empty())
-            .collect();
-        if !nonempty.is_empty() && nonempty.iter().all(|l| l.starts_with("{{#include")) {
+        if is_include_only(&b.body) {
             skip_include += 1;
             continue;
         }
@@ -429,7 +469,11 @@ fn every_doc_example_compiles() {
         let bodies: Vec<&str> = members.iter().map(|b| b.body.as_str()).collect();
         project_files += bodies.len();
         let tag = format!("{}-{name}", file.replace(['/', '.'], "-"));
-        if let Err(e) = compile_files(&bodies, &tag) {
+        let shape: Vec<(&str, &str)> = members
+            .iter()
+            .map(|b| (b.info.as_str(), b.body.as_str()))
+            .collect();
+        if let Err(e) = check_project(name, &shape).and_then(|()| compile_files(&bodies, &tag)) {
             let at = members
                 .iter()
                 .map(|b| b.line.to_string())
@@ -532,4 +576,25 @@ fn project_blocks_compile_together() {
     );
     assert_eq!(project_of("project=shortener"), Some("shortener"));
     assert_eq!(project_of("fragment"), None);
+
+    // The shape of a project group (#4077).
+    let ok = [("bynk,project=p", words), ("bynk,project=p", inner)];
+    assert_eq!(check_project("p", &ok), Ok(()));
+    assert!(
+        check_project("p", &ok[..1]).is_err_and(|e| e.contains("only one block")),
+        "a project of one block is refused"
+    );
+    for flag in ["ignore", "fail", "fail=bynk.x", "fragment"] {
+        let info = format!("bynk,project=p,{flag}");
+        assert!(
+            check_project("p", &[ok[0], (&info, inner)]).is_err_and(|e| e.contains("also marked")),
+            "a project block also marked `{flag}` is refused"
+        );
+    }
+    let include = "{{#include ../x.bynk}}\n";
+    assert!(
+        check_project("p", &[ok[0], ("bynk,project=p", include)])
+            .is_err_and(|e| e.contains("#include")),
+        "an include-only project block is refused"
+    );
 }

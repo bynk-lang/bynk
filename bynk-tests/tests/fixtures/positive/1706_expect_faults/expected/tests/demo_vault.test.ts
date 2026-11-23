@@ -38,10 +38,12 @@ class __Stub_Vault {
   constructor(c?: string) {
     this.__case = c;
   }
+
   __applies(op: string): boolean {
     if (op === "open") return this.__case === "a call that returns does not fault" || this.__case === "a fails stub faults the call" || this.__case === "a sequence serves a fault, then a value" || this.__case === "an unclaimed fault fails the case";
     return true;
   }
+
   async open(): globalThis.Promise<number> {
     if (this.__case === "a fails stub faults the call") {
       throw new globalThis.Error("bynk: injected capability fault (stubs … fails)");
