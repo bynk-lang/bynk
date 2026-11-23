@@ -111,7 +111,8 @@ down, the section shows only its link to the blog and the build carries on.
 The links these components draw aren't in Markdown, so the link validator
 doesn't see them. After the build, CI runs `scripts/check-shell-links.mjs`,
 which checks every site link on the home page and a Book page against the
-built pages.
+built pages. A link that `_redirects` forwards to a built page passes, with a
+note to update it where it is written.
 
 ## Licences
 
