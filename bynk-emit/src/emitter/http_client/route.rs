@@ -30,7 +30,7 @@ impl Gen {
         rp: &RoutePlan,
         types: &HashMap<String, Arc<TypeDecl>>,
     ) -> Result<RouteText, ClientError> {
-        let ident = format!("__route_{}_{}", sanitise(service), rp.function);
+        let route_ident = format!("__route_{}_{}", sanitise(service), rp.function);
         let hash = contract::http_route_contract_hash(&Self::contract_of(r), types);
         let success = r.success.as_ref().map(|t| self.renamed(t));
         let replies = self.replies(r, &success)?;
@@ -227,7 +227,7 @@ impl Gen {
         }
         let constant = TsStmt::decl(
             TsDecl::ConstDecl {
-                name: ident.clone(),
+                name: route_ident.clone(),
                 ty: Some(TsType::named("__Route")),
                 init: TsExpr::multiline_object_entries(constant_entries),
             },
@@ -262,7 +262,7 @@ impl Gen {
             args: vec![
                 id("options"),
                 id(init),
-                id(&ident),
+                id(&route_ident),
                 TsExpr::Arrow {
                     params: Vec::new(),
                     is_async: false,
@@ -453,10 +453,10 @@ impl Gen {
             match p {
                 ParamInput::Path { name, ty } => {
                     let ty = self.renamed(ty);
-                    let ident = super::super::ts_ident(name);
-                    signature.push(TsParam::new(ident.clone(), Some(self.public_type(&ty)?)));
+                    let param_ident = super::super::ts_ident(name);
+                    signature.push(TsParam::new(param_ident.clone(), Some(self.public_type(&ty)?)));
                     let checked = match &ty {
-                        TypeRef::Base(..) => call(id("globalThis.String"), vec![id(&ident)]),
+                        TypeRef::Base(..) => call(id("globalThis.String"), vec![id(&param_ident)]),
                         TypeRef::Named(_)
                         | TypeRef::Result(..)
                         | TypeRef::Option(..)
@@ -482,9 +482,9 @@ impl Gen {
                         | TypeRef::Fn(..)
                         | TypeRef::App { .. } => {
                             let ser =
-                                serialisation::serialise_expr_via(&ty, &id(&ident), "", &self.ru);
+                                serialisation::serialise_expr_via(&ty, &id(&param_ident), "", &self.ru);
                             let de = serialisation::deserialise_ref_via(&ty, "", &self.ru);
-                            let local = format!("__p_{ident}");
+                            let local = format!("__p_{param_ident}");
                             build.extend(checked_stmts(&local, ser, de, &format!("path.{name}")));
                             call(id("globalThis.String"), vec![member(id(&local), "value")])
                         }
