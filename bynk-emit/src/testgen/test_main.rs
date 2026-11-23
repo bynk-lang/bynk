@@ -241,7 +241,7 @@ pub(super) fn build_run_function(entries: &[(String, String)]) -> Vec<TsStmt> {
     body.extend(entries.iter().map(|(name, runner)| dispatch(name, runner)));
     body.push(TsStmt::return_stmt(Some(ident("results")), None));
     vec![
-        TsStmt::raw(CASE_TIMING_RUNTIME, None),
+        TestRuntimeModule::CaseTiming.splice(),
         TsStmt::decl(
             TsDecl::Export(Box::new(TsDecl::ConstDecl {
                 name: "__bynkCases".to_string(),
@@ -281,24 +281,6 @@ pub(super) fn build_run_function(entries: &[(String, String)]) -> Vec<TsStmt> {
     ]
 }
 
-/// What every module's `run` shares (#2267 stage 2): the shape of a finished case
-/// handed to `onCase`, and the clock that measures it. `performance.now()` where the
-/// host has one (sub-millisecond), else `Date.now()`. It is read through
-/// `globalThis`, so no DOM or Node typings are assumed, and is the host's own clock,
-/// not the harness-owned test clock (`advance Clock`).
-pub(super) const CASE_TIMING_RUNTIME: &str = r#"type CaseResult = {
-  name: string;
-  pass: boolean;
-  error?: { message: string; location: string; violation?: { kind: string; agent: string; name: string; location: string }; refusals?: { index: number; call: string; kind: string; agent: string; name: string; location: string }[] };
-  durationMs: number;
-  retries?: number;
-  kind?: string;
-  seed?: string;
-  counterexample?: string;
-};
-const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
-const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
-const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;"#;
 
 pub(super) fn console_log(arg: TsExpr) -> TsStmt {
     expr_stmt(method_call(ident("globalThis.console"), "log", vec![arg]))
@@ -828,7 +810,7 @@ pub fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt, pg: bool) -
         expr_stmt(call(member(ident("process"), "exit"), vec![num_lit("1")])),
     ));
 
-    program.push(TsStmt::raw(TEST_FILTER_RUNTIME, None));
+    program.push(TestRuntimeModule::TestFilter.splice());
     program.push(TsStmt::decl(
         TsDecl::Function {
             name: "main".to_string(),
@@ -845,90 +827,6 @@ pub fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt, pg: bool) -
     program
 }
 
-/// #2273: the entry's `--suite`/`--case` machinery. `BYNK_TEST_FILTER` is one
-/// JSON value (`bynk` builds it): `suites` and `cases` each combine their values
-/// as "or", the two as "and". `selected` keeps a module whose suite is chosen,
-/// `runSelected` runs one module's selected cases through its own `run(name)`
-/// (the module is unchanged) and concatenates them, and `unmatched` names each
-/// value that selected nothing, which is an error unless the run sees only part of
-/// the selection (`--against dev` runs one process per `env` group).
-pub(super) const TEST_FILTER_RUNTIME: &str = r#"type Result = {
-  name: string;
-  pass: boolean;
-  error?: { message: string; location: string; violation?: { kind: string; agent: string; name: string; location: string }; refusals?: { index: number; call: string; kind: string; agent: string; name: string; location: string }[] };
-  durationMs?: number;
-  retries?: number;
-  kind?: string;
-  seed?: string;
-  counterexample?: string;
-};
-type Filter = {
-  program?: string;
-  suites?: string[];
-  cases?: string[];
-  partial?: boolean;
-  skipped?: { suite: string; case: string }[];
-};
-const filter: Filter | undefined =
-  process.env.BYNK_TEST_FILTER === undefined ? undefined : globalThis.JSON.parse(process.env.BYNK_TEST_FILTER);
-const matchedSuites = new Set<string>();
-const matchedCases = new Set<string>();
-
-function selected(suite: string): boolean {
-  if (filter?.suites === undefined) return true;
-  if (!filter.suites.includes(suite)) return false;
-  matchedSuites.add(suite);
-  return true;
-}
-
-// How many cases the filter selects in a module, known before any of them runs: the
-// `tests` of its `suite-begin`. A name is counted once per case that bears it.
-function planned(names: readonly string[]): number {
-  if (filter?.cases === undefined) return names.length;
-  let count = 0;
-  for (const name of filter.cases) count += names.filter((n) => n === name).length;
-  return count;
-}
-
-// Runs a module's selected cases, handing each result to `onCase` as it finishes.
-async function runSelected(
-  run: (only?: string, onCase?: (r: Result) => void) => Promise<Result[]>,
-  onCase: (r: Result) => void,
-): Promise<Result[]> {
-  if (filter?.cases === undefined) return run(undefined, onCase);
-  const results: Result[] = [];
-  for (const name of filter.cases) {
-    const found = await run(name, onCase);
-    if (found.length > 0) matchedCases.add(name);
-    results.push(...found);
-  }
-  return results;
-}
-
-// A case the build skipped is not in it but exists, so a value naming one is matched.
-for (const s of filter?.skipped ?? []) {
-  if (selected(s.suite) && filter?.cases?.includes(s.case)) matchedCases.add(s.case);
-}
-
-function unmatched(): { suites?: string[]; cases?: string[] } | undefined {
-  if (filter === undefined || filter.partial === true) return undefined;
-  const suites = (filter.suites ?? []).filter((s) => !matchedSuites.has(s));
-  const cases = (filter.cases ?? []).filter((c) => !matchedCases.has(c));
-  if (suites.length === 0 && cases.length === 0) return undefined;
-  return { ...(suites.length > 0 ? { suites } : {}), ...(cases.length > 0 ? { cases } : {}) };
-}
-
-function reportUnmatched(): void {
-  const left = unmatched();
-  if (left === undefined) return;
-  const program = filter?.program ?? "bynk";
-  for (const s of left.suites ?? []) {
-    globalThis.console.error(`${program} test: no suite named --suite ${globalThis.JSON.stringify(s)}`);
-  }
-  for (const c of left.cases ?? []) {
-    globalThis.console.error(`${program} test: no case matched --case ${globalThis.JSON.stringify(c)}`);
-  }
-}"#;
 
 /// #3321: closes the PGlite databases a run started. PGlite leaves a ten-second
 /// timer behind, which would otherwise hold the process open that long; the

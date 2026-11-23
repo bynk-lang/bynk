@@ -20,6 +20,8 @@ use super::test_runtime_modules::TEST_RUNTIME_MODULES;
 /// named here (the `every_module_is_in_the_table_both_ways` test holds the two together).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(super) enum TestRuntimeModule {
+    /// #2267: the per-case timer (`CaseResult`, `__bynkCaseSince`).
+    CaseTiming,
     /// #2137: the harness clock (`__bynkClockNow`, `__bynkAdvanceClock`) and the `Clock` that reads it.
     Clock,
     /// `ExpectationError` and the `expect` helpers every test module carries.
@@ -50,13 +52,18 @@ pub(super) enum TestRuntimeModule {
     Settle,
     /// #2842: the snapshot runtime.
     Snapshot,
+    /// #291: `__bynkOverlay`, the layer a `stub` puts over a seam's tier default.
+    StubOverlay,
+    /// #2273: the `--suite` / `--case` filter `tests/main.ts` applies.
+    TestFilter,
     /// #2683: the harness clock on virtual time.
     VirtualTime,
 }
 
 impl TestRuntimeModule {
     /// Every module, in the table's order.
-    pub(super) const ALL: [TestRuntimeModule; 16] = [
+    pub(super) const ALL: [TestRuntimeModule; 19] = [
+        TestRuntimeModule::CaseTiming,
         TestRuntimeModule::Clock,
         TestRuntimeModule::Expectation,
         TestRuntimeModule::History,
@@ -72,12 +79,15 @@ impl TestRuntimeModule {
         TestRuntimeModule::Send,
         TestRuntimeModule::Settle,
         TestRuntimeModule::Snapshot,
+        TestRuntimeModule::StubOverlay,
+        TestRuntimeModule::TestFilter,
         TestRuntimeModule::VirtualTime,
     ];
 
     /// The module's name: its file under `runtime/src/testing/`, without the extension.
     pub(super) fn name(self) -> &'static str {
         match self {
+            TestRuntimeModule::CaseTiming => "case_timing",
             TestRuntimeModule::Clock => "clock",
             TestRuntimeModule::Expectation => "expectation",
             TestRuntimeModule::History => "history",
@@ -93,6 +103,8 @@ impl TestRuntimeModule {
             TestRuntimeModule::Send => "send",
             TestRuntimeModule::Settle => "settle",
             TestRuntimeModule::Snapshot => "snapshot",
+            TestRuntimeModule::StubOverlay => "stub_overlay",
+            TestRuntimeModule::TestFilter => "test_filter",
             TestRuntimeModule::VirtualTime => "virtual_time",
         }
     }

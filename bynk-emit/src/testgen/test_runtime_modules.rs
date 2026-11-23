@@ -3,6 +3,7 @@
 // one row per `runtime/src/testing/` module. The emitter reaches the fragments only through it.
 #[rustfmt::skip]
 pub(crate) const TEST_RUNTIME_MODULES: &[(&str, &[&str], &str)] = &[
+    ("case_timing", &[], include_str!("test_runtime/case_timing.ts")),
     ("clock", &[], include_str!("test_runtime/clock.ts")),
     ("expectation", &[], include_str!("test_runtime/expectation.ts")),
     ("history", &["expectation", "property"], include_str!("test_runtime/history.ts")),
@@ -18,5 +19,7 @@ pub(crate) const TEST_RUNTIME_MODULES: &[(&str, &[&str], &str)] = &[
     ("send", &[], include_str!("test_runtime/send.ts")),
     ("settle", &["expectation"], include_str!("test_runtime/settle.ts")),
     ("snapshot", &[], include_str!("test_runtime/snapshot.ts")),
+    ("stub_overlay", &[], include_str!("test_runtime/stub_overlay.ts")),
+    ("test_filter", &[], include_str!("test_runtime/test_filter.ts")),
     ("virtual_time", &[], include_str!("test_runtime/virtual_time.ts")),
 ];

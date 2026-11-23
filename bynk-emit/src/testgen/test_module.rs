@@ -544,7 +544,7 @@ pub(super) fn emit_test_module(
     // deterministic test double of each platform capability the target
     // consumes.
     if !stubs.is_empty() {
-        stmts.push(TsStmt::raw(STUB_OVERLAY_TS.to_string(), None));
+        stmts.push(TestRuntimeModule::StubOverlay.splice());
     }
     // Both factories may name the same double; define each once. Keyed on the
     // whole `(owner, capability, name)`, so two owners' same-named doubles
