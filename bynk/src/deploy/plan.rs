@@ -873,7 +873,9 @@ fn deploy(
         return Err(ExitCode::FAILURE);
     }
 
+    let api = Wrangler::new(&probe.provenance, project_root);
     let tools = Tools {
+        api: &api,
         provenance: &probe.provenance,
         project_root,
     };

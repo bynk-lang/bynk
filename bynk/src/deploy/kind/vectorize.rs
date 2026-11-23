@@ -305,14 +305,12 @@ impl ResourceKind for Vectorize {
         cx: &StepCx<'_, '_, Vectorize>,
         orphan: &OrphanVectorize,
     ) -> Result<Option<Commit<VectorizeChange>>, DeployFailure> {
-        delete_vectorize_index(cx.tools.provenance, &orphan.index, cx.tools.project_root).map_err(
-            |e| {
-                DeployFailure::driver(format!(
-                    "could not delete the orphaned Vectorize index `{}` of `{}`'s `{}`: {e}",
-                    orphan.index, orphan.worker, orphan.binding
-                ))
-            },
-        )?;
+        delete_vectorize_index(cx.tools.api, &orphan.index).map_err(|e| {
+            DeployFailure::driver(format!(
+                "could not delete the orphaned Vectorize index `{}` of `{}`'s `{}`: {e}",
+                orphan.index, orphan.worker, orphan.binding
+            ))
+        })?;
         Ok(Some(Commit::recorded(
             VectorizeChange::ForgetIndex {
                 worker: orphan.worker.clone(),

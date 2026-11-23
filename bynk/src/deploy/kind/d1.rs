@@ -242,7 +242,7 @@ impl ResourceKind for D1 {
         if let Some(id) = &step.recorded {
             return Ok(Applied::bound(&db.binding, (physical, id.clone())));
         }
-        let id = create_d1(cx.tools.provenance, &physical, cx.tools.project_root).map_err(|e| {
+        let id = create_d1(cx.tools.api, &physical).map_err(|e| {
             DeployFailure::driver(format!(
                 "could not create the D1 database `{physical}` for `{worker}`'s `{}`: {e}",
                 db.binding
@@ -356,80 +356,35 @@ pub(crate) fn d1_database_problem(
 /// fallback instead of asking: the deploy's own confirmation already covered
 /// this.
 pub(crate) fn apply_d1_migrations(
-    provenance: &Provenance,
+    api: &dyn CloudflareApi,
     worker_dir: &Path,
     binding: &str,
     environment: &str,
 ) -> Result<(), String> {
-    let Some(mut command) = workers::wrangler_command(provenance, "d1") else {
-        return Err("wrangler not found".into());
-    };
-    command
-        .args(["migrations", "apply", binding, "--remote"])
-        .current_dir(worker_dir)
-        .stdin(std::process::Stdio::null());
-    if environment != "default" {
-        command.args(["--env", environment]);
-    }
-    let output = command.output().map_err(|e| e.to_string())?;
-    if output.status.success() {
-        Ok(())
-    } else {
-        Err(wrangler_said(&output))
-    }
+    api.d1_migrations_apply(worker_dir, binding, environment)
+        .map_err(|e| e.to_string())
 }
 
 /// Create the D1 database `name` and return its `database_id`, or adopt the
 /// one already there under that name (P4a, #2602). Run from the project root,
 /// as KV and buckets are.
-fn create_d1(provenance: &Provenance, name: &str, project_root: &Path) -> Result<String, String> {
-    let Some(mut command) = workers::wrangler_command(provenance, "d1") else {
-        return Err("wrangler not found".into());
+pub(crate) fn create_d1(api: &dyn CloudflareApi, name: &str) -> Result<String, String> {
+    let e = match api.d1_create(name) {
+        Ok(id) => return Ok(id),
+        Err(e) => e,
     };
-    let output = command
-        .arg("create")
-        .arg(name)
-        .current_dir(project_root)
-        .output()
-        .map_err(|e| e.to_string())?;
-    if output.status.success() {
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        return parse_d1_id(&stdout).ok_or_else(|| {
-            format!("`wrangler d1 create` succeeded but printed no `database_id`:\n{stdout}")
-        });
+    if !e.already_exists() {
+        return Err(e.to_string());
     }
-    let said = wrangler_said(&output);
-    if !d1_database_already_exists(&said) {
-        return Err(said);
-    }
-    let Some(mut list) = workers::wrangler_command(provenance, "d1") else {
-        return Err("wrangler not found".into());
-    };
-    let listed = list
-        .args(["list", "--json"])
-        .current_dir(project_root)
-        .output()
-        .map_err(|e| e.to_string())?;
-    if !listed.status.success() {
-        return Err(format!(
-            "it already exists, and listing the account's databases failed: {}",
-            wrangler_said(&listed)
-        ));
-    }
-    parse_d1_listed_id(&String::from_utf8_lossy(&listed.stdout), name)
+    let listed = api.d1_list().map_err(|e| {
+        if e.exited() {
+            format!("it already exists, and listing the account's databases failed: {e}")
+        } else {
+            e.to_string()
+        }
+    })?;
+    parse_d1_listed_id(&listed, name)
         .ok_or_else(|| "it already exists, but `wrangler d1 list` does not show it".to_string())
-}
-
-/// The `database_id` in `wrangler d1 create`'s output: the config snippet it
-/// prints, as TOML (`database_id = "…"`) or JSON (`"database_id": "…"`).
-fn parse_d1_id(output: &str) -> Option<String> {
-    let at = output.find("database_id")?;
-    let rest = &output[at + "database_id".len()..];
-    let rest = rest.trim_start_matches('"').trim_start();
-    let rest = rest.strip_prefix(['=', ':'])?.trim_start();
-    let id = rest.strip_prefix('"')?.split('"').next()?;
-    (!id.is_empty() && id.chars().all(|c| c.is_ascii_hexdigit() || c == '-'))
-        .then(|| id.to_string())
 }
 
 /// The `uuid` of database `name` in `wrangler d1 list --json`'s array.
@@ -447,14 +402,6 @@ fn parse_d1_listed_id(json: &str, name: &str) -> Option<String> {
         .get("uuid")?
         .as_str()
         .map(str::to_string)
-}
-
-/// Does this `wrangler d1 create` failure just mean a database of that name
-/// is already on the account? Wrangler says "A database with that name
-/// already exists".
-fn d1_database_already_exists(said: &str) -> bool {
-    said.to_ascii_lowercase()
-        .contains("database with that name already exists")
 }
 
 /// One D1 database's step (1D.2b): the declaration, its name in this environment, and the id the
@@ -499,23 +446,16 @@ mod tests {
 
     #[test]
     fn the_d1_id_is_read_from_either_snippet_format() {
-        let toml = "✅ Successfully created DB 'shop-orders' in region WEUR\nCreated your new D1 database.\n\n[[d1_databases]]\nbinding = \"shop_orders\"\ndatabase_name = \"shop-orders\"\ndatabase_id = \"9b3c2a1e-0000-4000-8000-0123456789ab\"\n";
-        assert_eq!(
-            parse_d1_id(toml).as_deref(),
-            Some("9b3c2a1e-0000-4000-8000-0123456789ab")
-        );
-        let json = "{\n  \"d1_databases\": [\n    {\n      \"binding\": \"DB\",\n      \"database_name\": \"shop-orders\",\n      \"database_id\": \"9b3c2a1e-0000-4000-8000-0123456789ab\"\n    }\n  ]\n}";
-        assert_eq!(
-            parse_d1_id(json).as_deref(),
-            Some("9b3c2a1e-0000-4000-8000-0123456789ab")
-        );
-        assert_eq!(parse_d1_id("Created your new D1 database."), None);
-        assert!(d1_database_already_exists(
-            "✘ [ERROR] A database with that name already exists"
-        ));
-        assert!(!d1_database_already_exists(
-            "✘ [ERROR] Authentication error"
-        ));
+        let exists = |stderr: &str| {
+            crate::cloudflare::fake::failed(
+                &crate::cloudflare::Op::D1Create { name: "d" },
+                "",
+                stderr,
+            )
+            .already_exists()
+        };
+        assert!(exists("✘ [ERROR] A database with that name already exists"));
+        assert!(!exists("✘ [ERROR] Authentication error"));
         assert_eq!(
             parse_d1_listed_id(
                 "[{\"uuid\": \"u-1\", \"name\": \"a\"}, {\"uuid\": \"u-2\", \"name\": \"b\"}]",
@@ -729,6 +669,7 @@ mod tests {
                 lock: &lock,
                 live: (),
                 tools: Tools {
+                    api: &Wrangler::new(&provenance, Path::new("/nonexistent")),
                     provenance: &provenance,
                     project_root: Path::new("/nonexistent"),
                 },

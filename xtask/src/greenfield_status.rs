@@ -18,7 +18,7 @@
 //! `options_sources`, `hoist_sinks`, `span_keyed_maps`, `emit_diagnostics`,
 //! `ide_emit_edge`, `ast_importers`, `emit_abi_shapes`, `ts_writes`, `ts_any`,
 //! `verbatim_origins`, `verbatim_sites`, `incremental_query_types`,
-//! `unconsumed_ir_items`, `diagnostic_coverage`, `model_readers_beyond_emit`, `unused_deps`, `explained_codes`, `ts_raw_sites_emit`, `ts_raw_sites_testgen`, `ts_text_idents`, `emit_thread_locals`, `emit_silent_fallbacks`, `emit_print_calls`, `testgen_print_calls`, `import_prediction_fns`, `node_builder_defs`, `deploy_kind_accessors`, `env_protocol_literals`, `tool_spawn_sites`, `deploy_ledger_writes`, `binding_kind_homes`, `wrangler_key_literals`. Ten of these are
+//! `unconsumed_ir_items`, `diagnostic_coverage`, `model_readers_beyond_emit`, `unused_deps`, `explained_codes`, `ts_raw_sites_emit`, `ts_raw_sites_testgen`, `ts_text_idents`, `emit_thread_locals`, `emit_silent_fallbacks`, `emit_print_calls`, `testgen_print_calls`, `import_prediction_fns`, `node_builder_defs`, `deploy_kind_accessors`, `env_protocol_literals`, `tool_spawn_sites`, `deploy_ledger_writes`, `binding_kind_homes`, `wrangler_key_literals`, `cloudflare_client_sites`. Ten of these are
 //! zero/closure-shaped — a boolean, or a count pinned at a small, argued floor
 //! (`ast_importers` = 5, `emit_abi_shapes` = 1). Phase 7's own four are the same shape:
 //! each converged toward an argued floor over dozens of slices, the same trajectory
@@ -42,7 +42,7 @@
 //! **Two kinds of gate** (#3679, amending ADR 0389/0390). Every gated probe is
 //! *exact-match*: a live reading that differs from its committed row fails unless a
 //! pending file names it in `probes:`. The [`GROWTH_PROBES`] (`ts_writes`, `ts_any`,
-//! `emit_abi_shapes`, `verbatim_sites`, `ts_raw_sites_emit`, `ts_raw_sites_testgen`, `ts_text_idents`, `span_keyed_maps`, `emit_thread_locals`, `emit_silent_fallbacks`, `emit_print_calls`, `testgen_print_calls`, `import_prediction_fns`, `node_builder_defs`, `deploy_kind_accessors`, `env_protocol_literals`, `tool_spawn_sites`, `deploy_ledger_writes`, `binding_kind_homes`, `wrangler_key_literals`) are also *directional*:
+//! `emit_abi_shapes`, `verbatim_sites`, `ts_raw_sites_emit`, `ts_raw_sites_testgen`, `ts_text_idents`, `span_keyed_maps`, `emit_thread_locals`, `emit_silent_fallbacks`, `emit_print_calls`, `testgen_print_calls`, `import_prediction_fns`, `node_builder_defs`, `deploy_kind_accessors`, `env_protocol_literals`, `tool_spawn_sites`, `deploy_ledger_writes`, `binding_kind_homes`, `wrangler_key_literals`, `cloudflare_client_sites`) are also *directional*:
 //! `growth_probes_never_rise` (`xtask/tests/greenfield_status.rs`) fails when the
 //! live leading count exceeds the committed one unless a pending file *raises* the
 //! probe with a reason (`raises:`), which the stamp then records in
@@ -117,7 +117,7 @@ pub fn run(root: &Path) -> Report {
 /// The gated probes' names, in [`run_gated`]'s order — what a pending file's
 /// `probes` key may cite. `greenfield_status_table_is_current` asserts this
 /// matches the probes [`run_gated`] actually returns, so the two cannot drift.
-pub const GATED_PROBES: [&str; 34] = [
+pub const GATED_PROBES: [&str; 35] = [
     "workspace_lints",
     "fs_below_driver",
     "options_sources",
@@ -146,6 +146,7 @@ pub const GATED_PROBES: [&str; 34] = [
     "deploy_ledger_writes",
     "binding_kind_homes",
     "wrangler_key_literals",
+    "cloudflare_client_sites",
     "incremental_query_types",
     "unconsumed_ir_items",
     "diagnostic_coverage",
@@ -156,12 +157,12 @@ pub const GATED_PROBES: [&str; 34] = [
 
 /// The gated probes that only a reasoned, recorded `raises:` may increase
 /// (#3679, ADR 0389/0390 amended): `ts_writes`, `ts_any`, `emit_abi_shapes`,
-/// `verbatim_sites`, `ts_raw_sites_emit` and `ts_raw_sites_testgen` (the split of `ts_raw_sites`, #3681), `ts_text_idents` (#3681), `span_keyed_maps`, `emit_thread_locals` (1A.19), `emit_silent_fallbacks` (1A.34), `emit_print_calls` (1A.35b), `testgen_print_calls` (1B.2a), `import_prediction_fns` (1A.36a), `node_builder_defs` (1B.4a), `deploy_kind_accessors` (1D.1a), `env_protocol_literals` (1D.5a), `tool_spawn_sites` (1D.5b), `deploy_ledger_writes` (1D.2a), `binding_kind_homes` (1C.1b), `wrangler_key_literals` (1C.2). Probes already at a zero or closure
+/// `verbatim_sites`, `ts_raw_sites_emit` and `ts_raw_sites_testgen` (the split of `ts_raw_sites`, #3681), `ts_text_idents` (#3681), `span_keyed_maps`, `emit_thread_locals` (1A.19), `emit_silent_fallbacks` (1A.34), `emit_print_calls` (1A.35b), `testgen_print_calls` (1B.2a), `import_prediction_fns` (1A.36a), `node_builder_defs` (1B.4a), `deploy_kind_accessors` (1D.1a), `env_protocol_literals` (1D.5a), `tool_spawn_sites` (1D.5b), `deploy_ledger_writes` (1D.2a), `binding_kind_homes` (1C.1b), `wrangler_key_literals` (1C.2), `cloudflare_client_sites` (1D.3a). Probes already at a zero or closure
 /// floor are excluded (their exact-match row pins them), as are
 /// `verbatim_origins` (an argued floor of 2) and `model_readers_beyond_emit`
 /// (which has the opposite direction). A subset of [`GATED_PROBES`], pinned by
 /// a unit test.
-pub const GROWTH_PROBES: [&str; 20] = [
+pub const GROWTH_PROBES: [&str; 21] = [
     "ts_writes",
     "ts_any",
     "emit_abi_shapes",
@@ -182,6 +183,7 @@ pub const GROWTH_PROBES: [&str; 20] = [
     "deploy_ledger_writes",
     "binding_kind_homes",
     "wrangler_key_literals",
+    "cloudflare_client_sites",
 ];
 
 /// The thirty-four gated (zero/closure/ratchet) probes only — what [`gated_disagreements`] diffs.
@@ -215,6 +217,7 @@ pub fn run_gated(root: &Path) -> Vec<Probe> {
         deploy_ledger_writes(root),
         binding_kind_homes(root),
         wrangler_key_literals(root),
+        cloudflare_client_sites(root),
         incremental_query_types(root),
         unconsumed_ir_items(root),
         diagnostic_coverage(root),
@@ -2977,6 +2980,64 @@ fn deploy_ledger_writes_violations(files: &[(PathBuf, String)]) -> usize {
     })
 }
 
+// --- Gated probe: cloudflare_client_sites (1D.3a) -------------------------------------------
+
+/// 1D.3 (#4043, Decision L): the production sites in `bynk/src` that reach Cloudflare without
+/// going through the `cloudflare` module: a wrangler spawn built at the call site
+/// (`wrangler_command(` or `tools::wrangler::command(`), or a REST client constructed there
+/// (`Rest {`). It read 34 on `main` before 1D.3a (24 wrangler call sites and 10 REST
+/// constructions), falls as 1D.3a and 1D.3b move the wrangler calls behind `CloudflareApi`, and
+/// reaches 0 when 1D.3c builds the one REST client per run. A growth probe ([`GROWTH_PROBES`]): a
+/// new site needs a pending file that `raises:` it with a reason.
+///
+/// Counts non-comment lines outside `#[cfg(test)]` modules, wholly-test files
+/// ([`is_whole_test_file`]) and `bynk/src/cloudflare/`, less the lines that define
+/// `wrangler_command` or declare the `Rest` type (`struct Rest {`, `impl … Rest {`). A REST
+/// construction spans several lines (its credentials, its agent); only its `Rest {` line counts.
+fn cloudflare_client_sites(root: &Path) -> Probe {
+    Probe {
+        name: "cloudflare_client_sites",
+        gated: true,
+        reads: cloudflare_client_sites_violations(&rust_files_relative(&root.join("bynk/src")))
+            .to_string(),
+    }
+}
+
+/// A wrangler spawn built at the call site, or a REST client constructed there.
+const CLOUDFLARE_CLIENT_SITE: &str = r"\bwrangler_command\(|\btools::wrangler::command\(|\bRest \{";
+
+/// [`cloudflare_client_sites`]'s counting logic over an explicit file list, paths relative to
+/// `bynk/src`.
+fn cloudflare_client_sites_violations(files: &[(PathBuf, String)]) -> usize {
+    let site = regex::Regex::new(CLOUDFLARE_CLIENT_SITE).expect("the site pattern compiles");
+    let declaration =
+        regex::Regex::new(r"\bfn wrangler_command\(|\bstruct Rest \{|\bimpl\b.*\bRest \{")
+            .expect("the declaration pattern compiles");
+    // As for [`deploy_kind_accessors_violations`]: the crate's test modules may be `pub(crate)`.
+    let production: Vec<(PathBuf, String)> = files
+        .iter()
+        .filter(|(path, _)| {
+            let path = path.to_string_lossy().replace('\\', "/");
+            !is_whole_test_file(&path)
+                && !path.starts_with("cloudflare/")
+                && path != "test_support.rs"
+        })
+        .map(|(path, contents)| {
+            let contents: Vec<&str> = contents
+                .lines()
+                .map(|line| {
+                    line.strip_prefix("pub(crate) mod ")
+                        .map_or(line, |_| &line[11..])
+                })
+                .collect();
+            (path.clone(), contents.join("\n"))
+        })
+        .collect();
+    production_lines_matching(&production, |line| {
+        site.is_match(line) && !declaration.is_match(line)
+    })
+}
+
 // --- Gated probe: env_protocol_literals (1D.5a) ---------------------------------------------
 
 /// Back-half paydown 1D.5a (#4003, Decision H): production Rust lines that spell a name of the
@@ -3229,11 +3290,10 @@ fn wrangler_key_literals_count(files: &[(PathBuf, String)]) -> usize {
 /// `bynk-driver` that do not go through `bynk-driver/src/tools/` (npm, pnpm, bun, yarn, `tsc`,
 /// `tsx`, `node`, `git`) or the detection layer, `bynk-driver/src/probe.rs`.
 ///
-/// It read 20 on `main` before 1D.5b and reads 12 after it. The residual is listed by reason in
-/// the reading ([`spawn_reason`]): wrangler (`bynk/src/workers.rs::wrangler_command`, which
-/// 1D.3's client replaces, taking the probe to 10), process control (`kill`, `ps`, `lsof`,
-/// `taskkill` and the Windows junction's `cmd`) and self re-execution (`dev_run.rs`). Any other
-/// spawn reads as `other`. A growth probe ([`GROWTH_PROBES`]): it may only fall unless a pending
+/// It read 20 on `main` before 1D.5b, 12 after it, and 10 after 1D.3a moved the wrangler spawn
+/// into `bynk-driver/src/tools/wrangler.rs` (#4043). The residual is listed by reason in the
+/// reading ([`spawn_reason`]): process control (`kill`, `ps`, `lsof`, `taskkill` and the Windows
+/// junction's `cmd`) and self re-execution (`dev_run.rs`). Any other spawn reads as `other`. A growth probe ([`GROWTH_PROBES`]): it may only fall unless a pending
 /// file `raises:` it with a reason, so a new tool spawn goes through `tools`.
 ///
 /// Counts non-comment lines matching `Command::new(` or `ProcCommand::new(` (a word boundary
@@ -3263,8 +3323,6 @@ fn spawn_reason(rel: &str, line: &str) -> &'static str {
         .any(|p| line.contains(&format!("::new({p}")))
     {
         "process control"
-    } else if rel == "bynk/src/workers.rs" {
-        "wrangler"
     } else if rel == "bynk-driver/src/dev_run.rs" {
         "self re-execution"
     } else {
@@ -3278,7 +3336,7 @@ fn tool_spawn_sites_reading(files: &[(PathBuf, String)]) -> String {
     let spawn =
         regex::Regex::new(r"\b(Command|ProcCommand)::new\(").expect("the spawn pattern compiles");
     let mut by_reason: std::collections::BTreeMap<&'static str, usize> =
-        ["wrangler", "process control", "self re-execution", "other"]
+        ["process control", "self re-execution", "other"]
             .into_iter()
             .map(|r| (r, 0))
             .collect();
@@ -3311,11 +3369,8 @@ fn tool_spawn_sites_reading(files: &[(PathBuf, String)]) -> String {
         }
     }
     format!(
-        "{total} (wrangler {}, process control {}, self re-execution {}, other {})",
-        by_reason["wrangler"],
-        by_reason["process control"],
-        by_reason["self re-execution"],
-        by_reason["other"]
+        "{total} (process control {}, self re-execution {}, other {})",
+        by_reason["process control"], by_reason["self re-execution"], by_reason["other"]
     )
 }
 
@@ -4906,7 +4961,7 @@ pub fn render_table(report: &Report) -> String {
          `import_prediction_fns` added by 1A.36a; `deploy_kind_accessors` added by 1D.1a; \
          `env_protocol_literals` added by 1D.5a; `tool_spawn_sites` added by 1D.5b; \
          `deploy_ledger_writes` added by 1D.2a; `testgen_print_calls` added by 1B.2a; `node_builder_defs` added by 1B.4a; \
-         `binding_kind_homes` added by 1C.1b; `wrangler_key_literals` added by 1C.2. Thirty-four \
+         `binding_kind_homes` added by 1C.1b; `wrangler_key_literals` added by 1C.2; `cloudflare_client_sites` added by 1D.3a. Thirty-five \
          probes are gated — a disagreement between this file and a fresh run fails \
          `greenfield_status_table_is_current` (`xtask/tests/greenfield_status.rs`). \
          Five are trend probes, reported only.\n\n",
@@ -5299,7 +5354,8 @@ mod tests {
         | `node_builder_defs` | yes | 195 |\n\
         | `deploy_ledger_writes` | yes | 25 |\n\
         | `binding_kind_homes` | yes | 2 |\n\
-        | `wrangler_key_literals` | yes | 0 |\n";
+        | `wrangler_key_literals` | yes | 0 |\n\
+        | `cloudflare_client_sites` | yes | 34 |\n";
 
     fn growth_live(ts_writes: &str, abi: &str) -> Vec<Probe> {
         vec![
@@ -5323,6 +5379,7 @@ mod tests {
             gated("deploy_ledger_writes", "25"),
             gated("binding_kind_homes", "2"),
             gated("wrangler_key_literals", "0"),
+            gated("cloudflare_client_sites", "34"),
         ]
     }
 
@@ -5594,7 +5651,7 @@ mod tests {
                    let _ = ProcCommand::new(\"taskkill\")\n";
         assert_eq!(
             reading(&[("bynk/src/workers.rs", src)]),
-            "3 (wrangler 2, process control 1, self re-execution 0, other 0)"
+            "3 (process control 1, self re-execution 0, other 2)"
         );
         assert_eq!(
             reading(&[
@@ -5607,11 +5664,11 @@ mod tests {
                     "std::process::Command::new(\"git\")\n"
                 ),
             ]),
-            "3 (wrangler 0, process control 1, self re-execution 1, other 1)"
+            "3 (process control 1, self re-execution 1, other 1)"
         );
         // The tools module, detection, comments, test modules (deploy's are `pub(crate)`),
         // wholly-test files and a longer name do not count.
-        let none = "0 (wrangler 0, process control 0, self re-execution 0, other 0)";
+        let none = "0 (process control 0, self re-execution 0, other 0)";
         assert_eq!(
             reading(&[
                 ("bynk-driver/src/tools/mod.rs", "Command::new(\"git\")\n"),
@@ -5634,6 +5691,39 @@ mod tests {
                 ("bynk/src/d.rs", "MyCommand::new(x)\n"),
             ]),
             none
+        );
+    }
+
+    #[test]
+    fn cloudflare_client_sites_counts_call_sites_outside_tests_comments_and_the_module() {
+        let count =
+            |src: &str| cloudflare_client_sites_violations(&files_of(&[("deploy/kv.rs", src)]));
+        // A wrangler spawn built at the call site, the delegate's, and a REST construction.
+        let src = "let Some(c) = workers::wrangler_command(p, \"kv\") else {\n\
+                   bynk_driver::tools::wrangler::command(provenance, subcommand)\n\
+                   let rest = Rest {\n\
+                   Ok(RestListings(Rest {\n";
+        assert_eq!(count(src), 4);
+        // A definition, the type's own declarations, a longer name and a mention are not sites.
+        assert_eq!(
+            count(
+                "pub fn wrangler_command(p: &Provenance, s: &str) -> Option<Command> {\n\
+                 pub(crate) struct Rest {\nimpl Rest {\nimpl Cloudflare for Rest {\n\
+                 my_wrangler_command(p);\nlet r = RestError {\n"
+            ),
+            0
+        );
+        // A comment, a test module and a wholly-test file do not count, nor does the module.
+        let src = "// wrangler_command(\n#[cfg(test)]\npub(crate) mod tests {\n    fn t() { Rest { a }; }\n}\n";
+        assert_eq!(count(src), 0);
+        assert_eq!(
+            cloudflare_client_sites_violations(&files_of(&[
+                ("deploy/apply_tests.rs", "wrangler_command(p, \"kv\");\n"),
+                ("cloudflare/process.rs", "tools::wrangler::command(p, s)\n"),
+                ("test_support.rs", "wrangler_command(p, \"kv\");\n"),
+                ("tail.rs", "wrangler_command(&probe.provenance, \"tail\")\n"),
+            ])),
+            1
         );
     }
 

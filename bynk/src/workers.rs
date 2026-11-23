@@ -356,32 +356,12 @@ pub fn select_contexts(
     Ok(chosen)
 }
 
-/// Build the `wrangler dev` invocation for a resolved provenance: an installed
-/// binary is run directly; a provisionable one goes through the package
-/// manager's runner (`npx --yes`, `pnpm dlx`, `bunx`).
-/// `None` when wrangler is genuinely missing.
+/// `wrangler <subcommand>` for a resolved provenance, or `None` when wrangler
+/// is missing. A delegate to [`bynk_driver::tools::wrangler::command`], the one
+/// place the command is built, kept for the callers 1D.3b moves behind
+/// `cloudflare::CloudflareApi` (#4043, Decision J).
 pub fn wrangler_command(provenance: &Provenance, subcommand: &str) -> Option<Command> {
-    match provenance {
-        Provenance::Path(p) | Provenance::ProjectLocal(p) => {
-            let mut cmd = Command::new(p);
-            cmd.arg(subcommand);
-            Some(cmd)
-        }
-        Provenance::Runner(manager) => {
-            // Yarn classic has no runner, so a probe never reports it; npx is
-            // the historical default should one arrive.
-            let program = manager.runner_program().unwrap_or("npx");
-            // #1758: the resolved runner, so Windows runs its `.cmd` shim.
-            let mut cmd = Command::new(crate::probe::program_path(program));
-            // #524: pinned provisioning, per the repo's runner convention — an
-            // unpinned `wrangler` here meant the dev server could drift from
-            // the wrangler the tests and deploys run.
-            cmd.args(manager.runner_args("wrangler@4", "wrangler"))
-                .arg(subcommand);
-            Some(cmd)
-        }
-        Provenance::Missing => None,
-    }
+    bynk_driver::tools::wrangler::command(provenance, subcommand)
 }
 
 #[cfg(test)]

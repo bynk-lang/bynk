@@ -29,6 +29,7 @@ pub mod approve;
 pub mod book;
 pub mod check;
 pub mod cli;
+pub(crate) mod cloudflare;
 pub mod compile;
 pub mod deploy;
 pub mod dev;
