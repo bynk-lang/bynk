@@ -246,7 +246,12 @@ pub(super) fn build_run_function(entries: &[(String, String)]) -> Vec<TsStmt> {
             TsDecl::Export(Box::new(TsDecl::ConstDecl {
                 name: "__bynkCases".to_string(),
                 ty: Some(TsType::named("readonly string[]")),
-                init: TsExpr::array(entries.iter().map(|(name, _)| str_lit(name.clone())).collect()),
+                init: TsExpr::array(
+                    entries
+                        .iter()
+                        .map(|(name, _)| str_lit(name.clone()))
+                        .collect(),
+                ),
             })),
             None,
         ),

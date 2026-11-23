@@ -10,7 +10,9 @@ use bynk_check::checker::Types;
 use bynk_check::d1_migrations::{D1Migrations, d1_database_name, double_files, pglite_on};
 use bynk_check::test_suites::{self, ResolvedStub};
 use bynk_syntax::ast::{Block, Expr, ExprKind, FnName, StubClause, StubRhs, TypeRef, Visibility};
-use bynk_ts::{SourceMapBuilder, TsDecl, TsProgram, TsStmt};
+use bynk_ts::{
+    SourceMapBuilder, TsBindingName, TsDecl, TsExpr, TsObjectEntry, TsProgram, TsStmt, TsType,
+};
 use std::sync::Arc;
 
 /// The factories [`real_provider_double_factory`] names for `doubles`, each
@@ -65,7 +67,7 @@ pub(super) fn emit_test_module(
     asset_harness: Option<String>,
     // #2841: the module-level `string` constant for each fixture file a suite
     // here declares ([`fixture_consts`]).
-    fixture_consts: Option<String>,
+    fixture_consts: Option<Vec<TsStmt>>,
     binding_modules: &HashMap<String, String>,
     schema_versions: &HashMap<String, i64>,
     // #2052: the target's own events services' shapes.
@@ -362,16 +364,13 @@ pub(super) fn emit_test_module(
     if let Some(text) = &asset_harness {
         stmts.push(TsStmt::raw(text.clone(), None));
     }
-    if let Some(text) = &fixture_consts {
-        stmts.push(TsStmt::raw(text.clone(), None));
+    if let Some(consts) = &fixture_consts {
+        stmts.extend(consts.iter().cloned());
     }
     // #2842: the stored snapshots and their comparison, for a suite that takes one.
     let snapshot_keys = module_snapshot_keys(indices, parsed);
     if !snapshot_keys.is_empty() {
-        stmts.push(TsStmt::raw(
-            snapshot_harness(&snapshot_keys, snapshot_files),
-            None,
-        ));
+        stmts.extend(snapshot_harness(&snapshot_keys, snapshot_files));
     }
     // #1994: a target whose handlers use `detach` gets the execution-context
     // double its deps carry as `__exec`, and the settle helper that awaits
@@ -535,12 +534,9 @@ pub(super) fn emit_test_module(
         .iter()
         .any(|&i| parsed[i].test().is_some_and(bynk_check::test_env::has_env));
     if with_env {
-        let mut env_decl = TsStmt::raw(
-            "// #2134: the running case's `env` entries, set by its runner.\nlet __bynkEnv: globalThis.Record<string, string> = {};\n",
-            None,
-        );
-        env_decl.no_blank_before = true;
-        stmts.push(env_decl);
+        stmts.extend(env_declaration(
+            "#2134: the running case's `env` entries, set by its runner.",
+        ));
     }
 
     // #291: the overlay `stub` layers over a seam's tier default, and the
@@ -1036,31 +1032,40 @@ pub(super) fn module_snapshot_keys(
 pub(super) fn snapshot_harness(
     keys: &BTreeMap<String, Vec<(String, String)>>,
     stored: Option<&BTreeMap<String, String>>,
-) -> String {
-    let mut out = TestRuntimeModule::Snapshot.source().to_string();
-    out.push_str("const __bynkSnapshotFiles: globalThis.Record<string, __SnapshotFile> = {\n");
-    for (file, pairs) in keys {
-        let text = stored
-            .and_then(|files| files.get(file))
-            .map_or_else(|| "null".to_string(), |t| bynk_project::json_string(t));
-        let live: Vec<String> = pairs
-            .iter()
-            .map(|(c, n)| {
-                format!(
-                    "[{}, {}]",
-                    bynk_project::json_string(c),
-                    bynk_project::json_string(n)
-                )
-            })
-            .collect();
-        out.push_str(&format!(
-            "  {}: {{ stored: {text}, live: [{}] }},\n",
-            bynk_project::json_string(file),
-            live.join(", ")
-        ));
-    }
-    out.push_str("};\n");
-    out
+) -> Vec<TsStmt> {
+    use crate::ts_build::raw_lit;
+    // A file name and a stored text keep the JSON escaping they always had.
+    let json = |text: &str| raw_lit(bynk_project::json_string(text));
+    let entries: Vec<TsObjectEntry> = keys
+        .iter()
+        .map(|(file, pairs)| {
+            let text = stored
+                .and_then(|files| files.get(file))
+                .map_or_else(crate::ts_build::null_lit, |t| json(t));
+            let live = TsExpr::array(
+                pairs
+                    .iter()
+                    .map(|(c, n)| TsExpr::array(vec![json(c), json(n)]))
+                    .collect(),
+            );
+            TsObjectEntry::prop(
+                bynk_project::json_string(file),
+                TsExpr::object(vec![
+                    ("stored".to_string(), text),
+                    ("live".to_string(), live),
+                ]),
+            )
+        })
+        .collect();
+    let mut table = TsStmt::const_stmt(
+        TsBindingName::Ident("__bynkSnapshotFiles".to_string()),
+        Some(TsType::named("globalThis.Record<string, __SnapshotFile>")),
+        TsExpr::multiline_object_entries(entries),
+        None,
+    );
+    // The table follows the runtime's last line directly.
+    table.no_blank_before = true;
+    vec![TestRuntimeModule::Snapshot.splice(), table]
 }
 
 /// #2052: the `__bynkEvent_<svc>` helper behind each `svc.event(payload[,

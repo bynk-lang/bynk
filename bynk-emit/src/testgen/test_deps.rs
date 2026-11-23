@@ -819,7 +819,7 @@ pub(super) fn fixture_consts(
     indices: &[usize],
     parsed: &[ParsedFile],
     files: &TestAssetFiles,
-) -> Option<String> {
+) -> Option<Vec<TsStmt>> {
     let mut paths: BTreeSet<String> = BTreeSet::new();
     for &i in indices {
         if let bynk_syntax::ast::SourceUnit::Suite(s) = parsed[i].unit() {
@@ -828,7 +828,7 @@ pub(super) fn fixture_consts(
             }
         }
     }
-    let stmts: Vec<TsStmt> = paths
+    let mut stmts: Vec<TsStmt> = paths
         .iter()
         .filter_map(|p| {
             let text = files.fixtures.get(p)?;
@@ -843,7 +843,11 @@ pub(super) fn fixture_consts(
     if stmts.is_empty() {
         return None;
     }
-    Some(stmts.iter().map(|s| bynk_ts::print_stmt(s, 0)).collect())
+    // The constants sit on consecutive lines.
+    for stmt in stmts.iter_mut().skip(1) {
+        stmt.no_blank_before = true;
+    }
+    Some(stmts)
 }
 
 /// #1883, slice 3 ([DECISION F]): the TypeScript that lets a case fetch an

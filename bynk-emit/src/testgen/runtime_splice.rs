@@ -279,8 +279,11 @@ mod tests {
     #[test]
     fn the_harness_contract_matches_the_generator() {
         let contract = include_str!("../../runtime/src/testing/harness.ts");
-        let written =
-            crate::testgen::test_module::snapshot_harness(&std::collections::BTreeMap::new(), None);
+        let written: String =
+            crate::testgen::test_module::snapshot_harness(&std::collections::BTreeMap::new(), None)
+                .iter()
+                .map(|s| bynk_ts::print_stmt(s, 0))
+                .collect();
         assert!(
             contract.contains(
                 "declare const __bynkSnapshotFiles: globalThis.Record<string, __SnapshotFile>;"
@@ -293,5 +296,34 @@ mod tests {
             ),
             "the generator no longer writes the declaration harness.ts mirrors"
         );
+    }
+
+    /// No stored golden holds a snapshot table, so its text is pinned: the runtime, then the table
+    /// directly after it, as it was written before the table was a node (1B.5a).
+    #[test]
+    fn the_snapshot_table_prints_as_it_always_did() {
+        let mut keys = std::collections::BTreeMap::new();
+        keys.insert(
+            "a.snap".to_string(),
+            vec![
+                ("one".to_string(), "x".to_string()),
+                ("two".to_string(), "y\"z".to_string()),
+            ],
+        );
+        keys.insert(
+            "b.snap".to_string(),
+            vec![("c".to_string(), "n".to_string())],
+        );
+        let mut stored = std::collections::BTreeMap::new();
+        stored.insert("a.snap".to_string(), "line\n\"q\"".to_string());
+        let printed: String = crate::testgen::test_module::snapshot_harness(&keys, Some(&stored))
+            .iter()
+            .map(|s| bynk_ts::print_stmt(s, 0))
+            .collect();
+        let expected = format!(
+            "{}const __bynkSnapshotFiles: globalThis.Record<string, __SnapshotFile> = {{\n  \"a.snap\": {{ stored: \"line\\n\\\"q\\\"\", live: [[\"one\", \"x\"], [\"two\", \"y\\\"z\"]] }},\n  \"b.snap\": {{ stored: null, live: [[\"c\", \"n\"]] }},\n}};\n",
+            TestRuntimeModule::Snapshot.source()
+        );
+        assert_eq!(printed, expected);
     }
 }

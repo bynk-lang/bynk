@@ -332,6 +332,24 @@ pub(super) fn emit_integration_harness<'a>(
     stmts
 }
 
+/// #2134: the module-level `__bynkEnv`, the running case's `env` entries, under `comment` (which
+/// says who sets it). The comment sits flush above the `let`, and both directly after the
+/// preceding statement.
+pub(super) fn env_declaration(comment: &str) -> Vec<TsStmt> {
+    let mut note = TsStmt::comment(comment, None);
+    let mut slot = crate::ts_build::let_decl(
+        "__bynkEnv",
+        Some(TsType::named_with_args(
+            "globalThis.Record",
+            vec![TsType::named("string"), TsType::named("string")],
+        )),
+        Some(TsExpr::object(Vec::new())),
+    );
+    note.no_blank_before = true;
+    slot.no_blank_before = true;
+    vec![note, slot]
+}
+
 /// The per-case memo of the harness: `let __bynkHarness: … | undefined;` and `__makeHarness`, which
 /// builds it on first use. The two sit on consecutive lines, directly after `__buildHarness`.
 fn harness_memo() -> Vec<TsStmt> {
