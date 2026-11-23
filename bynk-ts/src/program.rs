@@ -365,6 +365,7 @@ fn clear_stmt_kind(kind: &mut TsStmtKind) {
         } => {
             clear_expr(discriminant);
             for case in cases {
+                case.span = None;
                 for t in &mut case.labels {
                     clear_expr(t);
                 }
@@ -390,12 +391,15 @@ fn clear_decl(decl: &mut TsDecl) {
         TsDecl::Class {
             constructor,
             methods,
+            end_span,
             ..
         } => {
+            *end_span = None;
             if let Some(ctor) = constructor {
                 clear_stmts(&mut ctor.body);
             }
             for m in methods {
+                m.span = None;
                 clear_stmts(&mut m.body);
             }
         }

@@ -9832,6 +9832,30 @@ mod tests {
         assert!(print_stmt_with_spans(&stmt, 0).1.is_empty());
     }
 
+    /// A switch case's own span, a class method's span and a class's closing span are cleared too
+    /// (1B.5c: a stub class maps nothing).
+    #[test]
+    fn clear_spans_clears_case_method_and_class_end_spans() {
+        let span = Span::new(0, 4);
+        let case = TsSwitchCase {
+            labels: vec![TsExpr::Lit(TsLit::Num("0".to_string()))],
+            body: vec![TsStmt::return_stmt(None, None)],
+            default_braced: false,
+            case_braced: true,
+            span: Some(span),
+        };
+        let switch = TsStmt::switch_stmt(TsExpr::Ident("k".to_string()), vec![case], None);
+        let method = TsClassMethod {
+            span: Some(span),
+            ..TsClassMethod::new("m", false, Vec::new(), None, vec![switch])
+        };
+        let class = TsDecl::class("C", Vec::new(), None, vec![method]).ending_at(span);
+        let mut stmt = TsStmt::decl(class, None);
+        assert!(!print_stmt_with_spans(&stmt, 0).1.is_empty());
+        stmt.clear_spans();
+        assert!(print_stmt_with_spans(&stmt, 0).1.is_empty());
+    }
+
     /// With no span set, no member or closing line is recorded, so every existing caller's map is
     /// unchanged (1A.32a).
     #[test]
