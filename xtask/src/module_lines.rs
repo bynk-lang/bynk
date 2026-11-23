@@ -26,7 +26,9 @@
 use std::collections::BTreeSet;
 use std::path::{Component, Path};
 
-use crate::greenfield_status::{in_test_range, rust_files, test_mod_ranges, top_level_crate_dirs};
+use crate::greenfield_status::{
+    in_test_range, rust_files, strip_visibility, test_mod_ranges, top_level_crate_dirs,
+};
 
 /// Files of at least this many production lines are tracked.
 pub const THRESHOLD: usize = 2000;
@@ -119,14 +121,7 @@ fn cfg_test_declared_mods(source: &str) -> Vec<String> {
             continue;
         };
         let t = next.trim();
-        // Drop a `pub`, `pub(crate)`, `pub(super)` ... visibility prefix.
-        let t = match t.strip_prefix("pub") {
-            Some(rest) => match rest.trim_start().strip_prefix('(') {
-                Some(r) => r.split_once(')').map_or("", |(_, after)| after),
-                None => rest,
-            },
-            None => t,
-        };
+        let t = strip_visibility(t);
         if let Some(name) = t
             .trim_start()
             .strip_prefix("mod ")
@@ -231,6 +226,25 @@ pub fn measure(root: &Path) -> Vec<ModuleLines> {
 pub fn read_ceilings(root: &Path) -> Vec<(String, usize)> {
     let text = std::fs::read_to_string(root.join(CEILINGS_FILE)).unwrap_or_default();
     parse_ceilings(&text)
+}
+
+/// Lines of the committed ceilings file that are neither blank, a comment nor `file = lines`
+/// (`foo.rs = 10,717`), which [`read_ceilings`] would otherwise drop silently.
+pub fn malformed_ceiling_lines(root: &Path) -> Vec<String> {
+    let text = std::fs::read_to_string(root.join(CEILINGS_FILE)).unwrap_or_default();
+    unparseable_lines(&text)
+}
+
+fn unparseable_lines(text: &str) -> Vec<String> {
+    text.lines()
+        .map(|l| l.split('#').next().unwrap_or("").trim())
+        .filter(|l| !l.is_empty())
+        .filter(|l| {
+            l.split_once('=')
+                .is_none_or(|(_, n)| n.trim().parse::<usize>().is_err())
+        })
+        .map(|l| format!("{CEILINGS_FILE}: unparseable line {l:?}: write `file = lines`"))
+        .collect()
 }
 
 fn parse_ceilings(text: &str) -> Vec<(String, usize)> {
@@ -496,6 +510,13 @@ mod tests {
         let v = stale_grandfathered(&all[1..]);
         assert_eq!(v.len(), 1, "{v:?}");
         assert!(v[0].contains(GRANDFATHERED[0]));
+    }
+
+    #[test]
+    fn a_malformed_ceiling_line_is_reported() {
+        let v = unparseable_lines("# c\n\na/src/x.rs = 2400\na/src/y.rs = 10,717\nnoequals\n");
+        assert_eq!(v.len(), 2, "{v:?}");
+        assert!(v[0].contains("10,717"));
     }
 
     #[test]

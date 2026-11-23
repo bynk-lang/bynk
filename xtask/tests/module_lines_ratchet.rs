@@ -16,6 +16,7 @@ fn no_module_grows_past_its_ceiling() {
     let ceilings = xtask::module_lines::read_ceilings(&root);
     let mut problems = xtask::module_lines::violations(&measured, &ceilings);
     problems.extend(xtask::module_lines::stale_grandfathered(&ceilings));
+    problems.extend(xtask::module_lines::malformed_ceiling_lines(&root));
     assert!(
         problems.is_empty(),
         "module-size ratchet (#4085):\n  {}\n\n`cargo xtask module-lines` lists every back-half file over {} production lines; \

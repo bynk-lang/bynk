@@ -1180,7 +1180,7 @@ fn child_module_file(m: usize, seg: &str, files: &[(PathBuf, String)]) -> Option
 }
 
 /// `t` without a leading `pub`, `pub(crate)`, `pub(super)`, `pub(in path)` visibility.
-fn strip_visibility(t: &str) -> &str {
+pub(crate) fn strip_visibility(t: &str) -> &str {
     match t.strip_prefix("pub") {
         Some(rest) if rest.starts_with(char::is_whitespace) => rest.trim_start(),
         Some(rest) => match rest.strip_prefix('(') {
