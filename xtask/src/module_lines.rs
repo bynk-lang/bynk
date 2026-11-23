@@ -50,7 +50,6 @@ pub const GRANDFATHERED: &[&str] = &[
     "bynk-emit/src/emitter/lower.rs",
     "bynk-emit/src/emitter/serialisation.rs",
     "bynk-emit/src/emitter/workers_entry.rs",
-    "bynk-ts/src/printer.rs",
     "bynk-emit/src/emitter.rs",
 ];
 
