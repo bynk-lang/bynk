@@ -272,7 +272,7 @@ pub(super) fn refined_gen_ts(
 /// Sum/Record arm needs this coercion the top-level arm itself must not
 /// have. A refined/opaque `Int` (`Percent`, etc.) routes through
 /// `refined_gen_ts`'s/its `canon_ts_for_ty` sibling's own
-/// `unchecked_construct_test`-wrapped cast (`(rng.int(...) as any)` /
+/// `unchecked_construct_test_node`-wrapped cast (`(rng.int(...) as any)` /
 /// `Pct.unsafe(rng.int(...))`) — that cast is compile-time only and does
 /// nothing to the runtime value, so it still needs this same coercion
 /// (review of #1428): confirmed the exact `TypeError: Cannot mix BigInt and
