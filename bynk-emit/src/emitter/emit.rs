@@ -36,8 +36,8 @@ use super::lower_stmt::{Body, Item, block_body_with_return, claim_scoped, functi
 use super::ts_types::{ts_base, ts_ty_to_ts_type, ts_type_ref_to_ts_type};
 use super::*;
 use crate::ts_build::{
-    as_expr, await_expr as hist_await, binary, call, const_, ident, let_decl as hist_let, member,
-    num_lit, str_lit,
+    as_expr, await_expr, binary, call, const_, ident, let_decl as hist_let, member, num_lit,
+    str_lit,
 };
 
 /// P6.x (#1188): reads `shape` — `t`'s already-lowered `bynk-emit::ir::TypeShape`
@@ -8240,7 +8240,7 @@ fn history_load_arrow(a: &AgentDecl, fns: &AgentLoadFns, state_ty: &str) -> bynk
         hist_let(
             "__s",
             None,
-            Some(hist_await(call(stored(), vec![str_lit("state")]))),
+            Some(await_expr(call(stored(), vec![str_lit("state")]))),
         ),
         bynk_ts::TsStmt::if_stmt(
             binary(
@@ -8275,7 +8275,7 @@ fn history_load_arrow(a: &AgentDecl, fns: &AgentLoadFns, state_ty: &str) -> bynk
             None,
         ));
     }
-    body.push(assign_s(hist_await(call(
+    body.push(assign_s(await_expr(call(
         ident("__readStored"),
         vec![
             ident("__inst"),
@@ -8453,7 +8453,7 @@ fn history_drive_loop(
             .collect();
         args.push(ident("deps"));
         vec![bynk_ts::TsStmt::expr_stmt(
-            hist_await(call(member(ident("__inst"), m), args)),
+            await_expr(call(member(ident("__inst"), m), args)),
             None,
         )]
     });
@@ -8509,7 +8509,7 @@ fn history_drive_loop(
     });
     let new_state = bynk_ts::TsExpr::Conditional {
         test: Box::new(ident("__accepted")),
-        consequent: Box::new(hist_await(call(ident("__load"), vec![]))),
+        consequent: Box::new(await_expr(call(ident("__load"), vec![]))),
         alternate: Box::new(ident("__old")),
     };
     let step = bynk_ts::TsStmt::const_stmt(
@@ -8554,7 +8554,7 @@ fn history_drive_loop(
         ident("seq"),
         bynk_ts::TsStmt::block(
             vec![
-                const_("__old", hist_await(call(ident("__load"), vec![]))),
+                const_("__old", await_expr(call(ident("__load"), vec![]))),
                 hist_let(
                     "__accepted",
                     None,
