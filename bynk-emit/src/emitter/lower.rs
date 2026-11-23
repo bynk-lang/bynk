@@ -48,8 +48,8 @@ use super::ts_types::{
 };
 use super::*;
 use crate::ts_build::{
-    arrow_of as lambda_node, bool_lit as bool_node, call, const_ as binding_stmt, ident,
-    not_expr as negated, num_lit, str_lit,
+    arrow_of as lambda_node, bool_lit as bool_node, call, const_, ident, not_expr as negated,
+    num_lit, str_lit,
 };
 
 /// v0.154 (ADR 0178): the `Err`-wrap a `?` on a `Result` operand needs, if the
@@ -664,7 +664,7 @@ impl Pre {
         cx: &mut LowerCtx,
     ) -> bynk_ts::TsExpr {
         let tmp = cx.fresh();
-        self.0.push(binding_stmt(&tmp, value));
+        self.0.push(const_(&tmp, value));
         ident(&tmp)
     }
 
@@ -2161,7 +2161,7 @@ fn emit_is_test_bindings(
                     expr: Box::new(recv.node().clone()),
                     ty: bynk_ts::TsType::named(variant.name.clone()),
                 };
-                out.push(binding_stmt(ts_ident(&id.name), cast));
+                out.push(const_(ts_ident(&id.name), cast));
                 cx.declare_binder(&id.name);
                 return;
             }
@@ -2184,7 +2184,7 @@ fn emit_is_test_bindings(
                     object: Box::new(variant_payload_node(recv.node(), &variant.name)),
                     property: field.clone(),
                 };
-                out.push(binding_stmt(&local, read));
+                out.push(const_(&local, read));
             }
         }
         // #2641: a record pattern's depth-1 names — shorthand fields and
@@ -2197,10 +2197,7 @@ fn emit_is_test_bindings(
                     Some(_) => continue,
                 };
                 let local = cx.bind_local_name(&bound.name);
-                out.push(binding_stmt(
-                    &local,
-                    recv.member(&fname.name).node().clone(),
-                ));
+                out.push(const_(&local, recv.member(&fname.name).node().clone()));
             }
         }
         // #2680: a list pattern's depth-1 names — bare-name elements and a
@@ -2209,12 +2206,12 @@ fn emit_is_test_bindings(
             for (i, sub) in elems.iter().enumerate() {
                 if let Pattern::Binding(n) = sub {
                     let local = cx.bind_local_name(&n.name);
-                    out.push(binding_stmt(&local, recv.index(i).node().clone()));
+                    out.push(const_(&local, recv.index(i).node().clone()));
                 }
             }
             if let Some(binder) = rest.as_ref().and_then(|r| r.binder.as_ref()) {
                 let local = cx.bind_local_name(&binder.name);
-                out.push(binding_stmt(&local, list_rest_value(&recv, elems.len())));
+                out.push(const_(&local, list_rest_value(&recv, elems.len())));
             }
         }
         // #474 §2.3.6: an or-pattern's shared names can live at different

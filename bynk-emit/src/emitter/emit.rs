@@ -36,8 +36,8 @@ use super::lower_stmt::{Body, Item, block_body_with_return, claim_scoped, functi
 use super::ts_types::{ts_base, ts_ty_to_ts_type, ts_type_ref_to_ts_type};
 use super::*;
 use crate::ts_build::{
-    as_expr as persist_cast, await_expr as hist_await, binary as hist_binary, call,
-    const_ as hist_const, ident, let_decl as hist_let, member, num_lit as hist_num, str_lit,
+    as_expr as persist_cast, await_expr as hist_await, binary as hist_binary, call, const_, ident,
+    let_decl as hist_let, member, num_lit as hist_num, str_lit,
 };
 
 /// P6.x (#1188): reads `shape` — `t`'s already-lowered `bynk-emit::ir::TypeShape`
@@ -6154,8 +6154,8 @@ fn migrate_decode_old(
             &ctx.runtime_use,
         );
         let old_js = cx.bind_local_name(&old.name.name);
-        body.push(hist_const("__ow", bynk_ts::TsExpr::object_entries(entries)));
-        body.push(hist_const("__od", decoded));
+        body.push(const_("__ow", bynk_ts::TsExpr::object_entries(entries)));
+        body.push(const_("__od", decoded));
         let od = || ident("__od");
         body.push(bynk_ts::TsStmt::if_stmt(
             hist_binary(
@@ -6172,7 +6172,7 @@ fn migrate_decode_old(
             ),
             None,
         ));
-        body.push(hist_const(&old_js, member(od(), "value")));
+        body.push(const_(&old_js, member(od(), "value")));
     }
 }
 
@@ -6193,7 +6193,7 @@ fn migrate_step_try_body(
                 let v = pre.lower_node(&l.value, cx);
                 stmts.extend(pre.ts_stmts());
                 let js = cx.bind_local_name(&l.name.name);
-                stmts.push(hist_const(&js, v));
+                stmts.push(const_(&js, v));
             }
             bynk_syntax::ast::MigrateItem::Assign(asg) => {
                 let mut pre = Pre::new();
@@ -6326,7 +6326,7 @@ fn migration_step_decl(
             persist_record_ty(),
         ))),
     };
-    body.push(hist_const(
+    body.push(const_(
         "__known",
         bynk_ts::TsExpr::New {
             callee: Box::new(bynk_ts::TsExpr::TypeApp {
@@ -6521,7 +6521,7 @@ fn persist_json_input(value: bynk_ts::TsExpr) -> bynk_ts::TsExpr {
 fn persist_decode(decoded: bynk_ts::TsExpr, agent_name: &str) -> Vec<bynk_ts::TsStmt> {
     let result = || ident("__r");
     vec![
-        hist_const("__r", decoded),
+        const_("__r", decoded),
         bynk_ts::TsStmt::if_stmt(
             hist_binary(
                 bynk_ts::TsBinaryOp::StrictEq,
@@ -6582,15 +6582,15 @@ fn hydrate_fn_decl(
         )
     };
     let mut body = vec![
-        hist_const("__z", call(ident(zero_fn), Vec::new())),
-        hist_const(
+        const_("__z", call(ident(zero_fn), Vec::new())),
+        const_(
             "__w",
             persist_cast(
                 ident("s"),
                 persist_writable(bynk_ts::TsType::named(state_ty.clone())),
             ),
         ),
-        hist_const("__r", persist_recast(ident("stored"), persist_record_ty())),
+        const_("__r", persist_recast(ident("stored"), persist_record_ty())),
     ];
     let mut fill = |name: &str, with: &str| {
         let mut args = vec![member(ident("__z"), name), record_at(name)];
@@ -8084,15 +8084,15 @@ fn emit_agent_history_driver(
         let mut body = vec![
             bynk_ts::TsStmt::expr_stmt(call(member(ident(registry), "reset"), vec![]), None),
             history_inst_stmt(a, commons),
-            hist_const("__load", history_load_arrow(a, fns, &state_ty)),
-            hist_const("__rej", history_rejected_arrow()),
+            const_("__load", history_load_arrow(a, fns, &state_ty)),
+            const_("__rej", history_rejected_arrow()),
             bynk_ts::TsStmt::const_stmt(
                 bynk_ts::TsBindingName::Ident("__steps".to_string()),
                 Some(history_steps_ty(&step_ty)),
                 bynk_ts::TsExpr::array(Vec::new()),
                 None,
             ),
-            hist_const("__ce", hist_console_error()),
+            const_("__ce", hist_console_error()),
         ];
         body.push(bynk_ts::TsStmt::assign(
             hist_console_error(),
@@ -8208,7 +8208,7 @@ fn history_inst_stmt(a: &AgentDecl, commons: &TypedCommons) -> bynk_ts::TsStmt {
             expr: Box::new(ident("undefined")),
             ty: bynk_ts::TsType::named("never"),
         });
-    hist_const(
+    const_(
         "__inst",
         bynk_ts::TsExpr::As {
             expr: Box::new(call(ident(agent_factory_name(&a.name.name)), vec![key])),
@@ -8287,7 +8287,7 @@ fn history_load_arrow(a: &AgentDecl, fns: &AgentLoadFns, state_ty: &str) -> bynk
     if !step_plans.is_empty() {
         body.push(assign_s(call(ident(migrate_fn), vec![ident("__s")])));
     }
-    body.push(hist_const(
+    body.push(const_(
         "__m",
         bynk_ts::TsExpr::object_entries(vec![
             bynk_ts::TsObjectEntry::Spread(zero()),
@@ -8554,7 +8554,7 @@ fn history_drive_loop(
         ident("seq"),
         bynk_ts::TsStmt::block(
             vec![
-                hist_const("__old", hist_await(call(ident("__load"), vec![]))),
+                const_("__old", hist_await(call(ident("__load"), vec![]))),
                 hist_let(
                     "__accepted",
                     None,
@@ -8562,7 +8562,7 @@ fn history_drive_loop(
                 ),
                 hist_let("__refusal", Some(bynk_ts::TsType::named("unknown")), None),
                 rejected,
-                hist_const("__new", new_state),
+                const_("__new", new_state),
                 hist_let("__call", Some(history_any_ty()), None),
                 record,
                 step,
