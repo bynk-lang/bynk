@@ -1427,7 +1427,7 @@ fn finish_runner(
             return Ok(ExitCode::FAILURE);
         }
         events.unmatched().report(program);
-        return Ok(exit_from(status.success()));
+        return Ok(exit_from(status.success() && events.ended()));
     }
     if format == TestFormat::Json {
         cmd.env(env_protocol::TEST_FORMAT, "ndjson");
@@ -1472,7 +1472,7 @@ fn finish_runner(
             emsg!("{program} test: error: could not update snapshots: {e}");
             return Ok(ExitCode::FAILURE);
         }
-        Ok(exit_from(out.status.success()))
+        Ok(exit_from_document(out.status.success(), &doc))
     } else if aliases.is_empty() && snapshots.is_none() && !crate::colour::stdout() {
         let status = cmd
             .stdout(Stdio::inherit())
@@ -1674,6 +1674,13 @@ fn exit_from(success: bool) -> ExitCode {
     }
 }
 
+/// #4000: a JSON document that carries an `error` is an incomplete or failed run
+/// (the runner's stream ended with no `run-end`, so a suite's `cases` may be
+/// missing), and it must not exit 0 whatever the runner process's own status was.
+fn exit_from_document(runner_ok: bool, doc: &TestRun) -> ExitCode {
+    exit_from(runner_ok && doc.error.is_none())
+}
+
 /// #854: a `--coverage` request that cannot be honoured (unsupported flag combo,
 /// no `tsc → node`, or a setup error). In JSON mode it is a `runtime` error so
 /// the document stays the only thing on stdout; in rich mode a plain stderr line.
@@ -1753,7 +1760,7 @@ fn run_with_coverage(
             crate::colour::eprintln(&warning.line(program));
         }
         unmatched.report(program);
-        exit_from(out.status.success())
+        exit_from_document(out.status.success(), &doc)
     } else {
         let colour = crate::colour::stdout();
         let status = if colour {
@@ -1867,6 +1874,38 @@ mod inspect_port_tests {
     fn uses_the_default_port_when_free_and_a_free_port_otherwise() {
         assert_eq!(inspect_brk_arg(true), "--inspect-brk");
         assert_eq!(inspect_brk_arg(false), "--inspect-brk=127.0.0.1:0");
+    }
+}
+
+#[cfg(test)]
+mod exit_from_document_tests {
+    use super::*;
+
+    fn exit_for(runner_ok: bool, stdout: &str) -> ExitCode {
+        let doc = crate::test_json::parse_ndjson(stdout).into_document("");
+        exit_from_document(runner_ok, &doc)
+    }
+
+    /// #4000: a runner that exits 0 without ever reaching `run-end` (its output
+    /// clobbered or cut short, so a suite's `cases` are missing) is a failed run.
+    #[test]
+    fn a_stream_that_never_completes_fails_the_run_even_when_the_runner_exits_zero() {
+        let failure = ExitCode::FAILURE;
+        assert_eq!(exit_for(true, ""), failure);
+        assert_eq!(
+            exit_for(true, r#"{"type":"suite-begin","name":"s","kind":"system"}"#),
+            failure
+        );
+        let complete = concat!(
+            r#"{"type":"suite-begin","name":"s","kind":"system"}"#,
+            "\n",
+            r#"{"type":"case","name":"c","outcome":"pass"}"#,
+            "\n",
+            r#"{"type":"run-end","passed":1,"failed":0}"#,
+            "\n",
+        );
+        assert_eq!(exit_for(true, complete), ExitCode::SUCCESS);
+        assert_eq!(exit_for(false, complete), failure);
     }
 }
 
