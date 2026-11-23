@@ -17,8 +17,8 @@ use super::super::ts_types::ts_ty_to_ts_type;
 use super::super::*;
 use super::kernel::receiver_object;
 use crate::ts_build::{
-    arrow, as_expr, binary, call, cond_expr as cond, ident, member, new, param, paren, spread,
-    str_lit, type_app,
+    arrow, as_expr, binary, call, cond_expr, ident, member, new, param, paren, spread, str_lit,
+    type_app,
 };
 
 /// The receiver and then each argument, lowered in order.
@@ -128,7 +128,7 @@ pub(in crate::emitter) fn lower_option_kernel(
                     param("__o", Some(opt.clone())),
                     param("__f", Some(fn_type(&[("x", &t)], b))),
                 ];
-                let body = cond(
+                let body = cond_expr(
                     tag_is("__o", "Some"),
                     call(
                         ident("Some"),
@@ -156,7 +156,7 @@ pub(in crate::emitter) fn lower_option_kernel(
                     param("__o", Some(opt.clone())),
                     param("__f", Some(fn_type(&[("x", &t)], option_of(&b)))),
                 ];
-                let body = cond(
+                let body = cond_expr(
                     tag_is("__o", "Some"),
                     call(ident("__f"), vec![field("__o", "value")]),
                     ident("None"),
@@ -172,7 +172,7 @@ pub(in crate::emitter) fn lower_option_kernel(
                     param("__o", Some(opt.clone())),
                     param("__d", Some(t.clone())),
                 ];
-                let body = cond(tag_is("__o", "Some"), field("__o", "value"), ident("__d"));
+                let body = cond_expr(tag_is("__o", "Some"), field("__o", "value"), ident("__d"));
                 iife(params, body, n)
             })
         }
@@ -195,7 +195,7 @@ pub(in crate::emitter) fn lower_option_kernel(
             Some({
                 let n = kids;
                 let params = vec![param("__o", Some(opt.clone())), param("__e", Some(err))];
-                let body = cond(
+                let body = cond_expr(
                     tag_is("__o", "Some"),
                     call(ident("Ok"), vec![field("__o", "value")]),
                     call(ident("Err"), vec![ident("__e")]),
@@ -215,7 +215,7 @@ pub(in crate::emitter) fn lower_option_kernel(
                     param("__o", Some(opt.clone())),
                     param("__f", Some(fn_type(&[], opt.clone()))),
                 ];
-                let body = cond(
+                let body = cond_expr(
                     tag_is("__o", "Some"),
                     ident("__o"),
                     call(ident("__f"), vec![]),
@@ -231,7 +231,7 @@ pub(in crate::emitter) fn lower_option_kernel(
                     param("__o", Some(opt.clone())),
                     param("__p", Some(fn_type(&[("x", &t)], TsType::named("boolean")))),
                 ];
-                let body = cond(
+                let body = cond_expr(
                     binary(
                         TsBinaryOp::And,
                         tag_is("__o", "Some"),
@@ -279,7 +279,7 @@ pub(in crate::emitter) fn lower_result_kernel(
                     param("__r", Some(res.clone())),
                     param("__f", Some(fn_type(&[("x", &t)], b))),
                 ];
-                let body = cond(
+                let body = cond_expr(
                     tag_is("__r", "Ok"),
                     call(
                         ident("Ok"),
@@ -302,7 +302,7 @@ pub(in crate::emitter) fn lower_result_kernel(
                     param("__r", Some(res.clone())),
                     param("__f", Some(fn_type(&[("x", &t)], result_of(&b, &et)))),
                 ];
-                let body = cond(
+                let body = cond_expr(
                     tag_is("__r", "Ok"),
                     call(ident("__f"), vec![field("__r", "value")]),
                     ident("__r"),
@@ -323,7 +323,7 @@ pub(in crate::emitter) fn lower_result_kernel(
                     param("__r", Some(res.clone())),
                     param("__f", Some(fn_type(&[("e", &et)], fnode))),
                 ];
-                let body = cond(
+                let body = cond_expr(
                     tag_is("__r", "Err"),
                     call(
                         ident("Err"),
@@ -342,7 +342,7 @@ pub(in crate::emitter) fn lower_result_kernel(
                     param("__r", Some(res.clone())),
                     param("__d", Some(t.clone())),
                 ];
-                let body = cond(tag_is("__r", "Ok"), field("__r", "value"), ident("__d"));
+                let body = cond_expr(tag_is("__r", "Ok"), field("__r", "value"), ident("__d"));
                 iife(params, body, n)
             })
         }
@@ -359,7 +359,7 @@ pub(in crate::emitter) fn lower_result_kernel(
             Some({
                 let n = kids;
                 let params = vec![param("__r", Some(res.clone()))];
-                let body = cond(
+                let body = cond_expr(
                     tag_is("__r", "Ok"),
                     call(ident("Some"), vec![field("__r", "value")]),
                     ident("None"),
@@ -540,7 +540,7 @@ pub(in crate::emitter) fn lower_map_kernel(
                     ),
                     param("__k", Some(key_t.clone())),
                 ];
-                let body = cond(
+                let body = cond_expr(
                     call(field("__m", "has"), vec![ident("__k")]),
                     call(
                         ident("Some"),
