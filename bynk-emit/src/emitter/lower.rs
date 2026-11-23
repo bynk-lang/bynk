@@ -714,7 +714,7 @@ pub(crate) fn lower_expr(e: &Expr, cx: &mut LowerCtx) -> Lowered {
         // ADR 0182: in GENERATED TEST scaffolding a branded type is in scope only
         // as an `any`-typed value binding (`const { T } = ns as any`), never as a
         // type, so a `(raw as T)` cast fails to resolve `T` ("refers to a value,
-        // but is being used as a type"). Brand via `unchecked_construct_test`
+        // but is being used as a type"). Brand via `unchecked_construct_test_node`
         // (refined → `(raw as any)`) there, exactly as the `Val[T](lit)` mock path
         // does. Production emission keeps the real `(raw as T)` brand.
         if cx.in_test_scaffold() {
@@ -1970,7 +1970,7 @@ fn lower_val(type_ref: &TypeRef, args: &[Expr], cx: &mut LowerCtx) -> Lowered {
     };
     // Refined literal pin. This `Val[T](lit)` path is test-only scaffolding, where
     // the branded type is an `any` value binding, not a type (ADR 0182) — so brand
-    // via `unchecked_construct_test` (refined → `(lit as any)`), not a `(lit as T)`
+    // via `unchecked_construct_test_node` (refined → `(lit as any)`), not a `(lit as T)`
     // that would fail to resolve `T`. Opaque never reaches here (`NamedKind::Refined`).
     let ty_node = tys.get(ty);
     if let (

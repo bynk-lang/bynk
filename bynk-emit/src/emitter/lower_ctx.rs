@@ -574,7 +574,7 @@ impl<'a> LowerCtx<'a> {
     /// body, or a `stub`/`where`/`requires` predicate value), where branded
     /// types are destructured into `any`-typed value bindings rather than
     /// referenced as types. Callers that emit a branded `as`-cast consult this
-    /// to pick `unchecked_construct_test` (→ `(v as any)`) over the production
+    /// to pick `unchecked_construct_test_node` (→ `(v as any)`) over the production
     /// `(v as T)` form, which cannot resolve `T` in the test module's scope.
     pub(crate) fn in_test_scaffold(&self) -> bool {
         self.test().is_some_and(|t| t.test_scaffold)
