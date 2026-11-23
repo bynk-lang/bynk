@@ -24,8 +24,8 @@
 //! known one answers `401` would let an unsigned caller list a group's services.
 
 use crate::ts_build::{
-    arrow_of as arrow, binary, block, call, const_typed, expr_stmt, ident, if_, index, member,
-    method_call, new as new_, num_lit, param, paren, ret, str_lit,
+    arrow_of, binary, block, call, const_typed, expr_stmt, ident, if_, index, member, method_call,
+    new as new_, num_lit, param, paren, ret, str_lit,
 };
 use bynk_check::wire_format as wf;
 use bynk_ts::{
@@ -87,7 +87,7 @@ fn as_never(expr: TsExpr) -> TsExpr {
 
 /// `(p) => body`, an expression-bodied arrow over untyped parameters.
 fn lambda(params: &[&str], body: TsExpr) -> TsExpr {
-    arrow(
+    arrow_of(
         params.iter().map(|p| TsParam::new(*p, None)).collect(),
         false,
         TsArrowBody::Expr(Box::new(body)),
@@ -415,7 +415,7 @@ fn loopback(entry: &GroupEntry<'_>) -> Vec<TsStmt> {
         .map(|m| crate::emitter::bindings::service_binding(&m.context).name)
         .collect();
     let record = || TsType::named_with_args("globalThis.Record", vec![ty("string"), ty("unknown")]);
-    let answers_in_process = arrow(
+    let answers_in_process = arrow_of(
         vec![param("request", ty("globalThis.Request"))],
         true,
         TsArrowBody::Multiline(vec![TsStmt::try_catch(

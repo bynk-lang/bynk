@@ -48,7 +48,7 @@ use super::ts_types::{
 };
 use super::*;
 use crate::ts_build::{
-    arrow_of as lambda_node, bool_lit, call, const_, ident, not_expr as negated, num_lit, str_lit,
+    arrow_of, bool_lit, call, const_, ident, not_expr as negated, num_lit, str_lit,
 };
 
 /// v0.154 (ADR 0178): the `Err`-wrap a `?` on a `Result` operand needs, if the
@@ -4145,7 +4145,7 @@ fn lower_lambda(e: &Expr, lambda: &LambdaExpr, cx: &mut LowerCtx) -> bynk_ts::Ts
     let result: bynk_ts::TsExpr = if let ExprKind::Block(b) = &lambda.body.kind {
         // The body keeps its marks (1A.15, Decision D).
         let body = block_body(b, cx, is_async);
-        lambda_node(
+        arrow_of(
             params,
             is_async,
             bynk_ts::TsArrowBody::Multiline(body.into_stmts()),
@@ -4162,7 +4162,7 @@ fn lower_lambda(e: &Expr, lambda: &LambdaExpr, cx: &mut LowerCtx) -> bynk_ts::Ts
             stmts.push(bynk_ts::TsStmt::return_stmt(Some(value), None));
             bynk_ts::TsArrowBody::Multiline(stmts)
         };
-        lambda_node(params, is_async, body)
+        arrow_of(params, is_async, body)
     };
     cx.is_temp_hoist = saved_hoist;
     cx.tail_slot = saved_slot;
