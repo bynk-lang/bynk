@@ -177,10 +177,12 @@ class __Stub_Stamp {
     this.__case = c;
     this.__suite = s;
   }
+
   __applies(op: string): boolean {
     if (op === "next") return this.__case === "a case's own stub beats its suite's" || this.__suite === 1 || this.__suite === 2;
     return true;
   }
+
   async next(): globalThis.Promise<number> {
     if (this.__case === "a case's own stub beats its suite's") {
       const __k = this.__seq_0;

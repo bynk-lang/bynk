@@ -115,6 +115,7 @@ pub(crate) struct LowerCtx<'a> {
     /// checkpoints here; `emit_project` owns the `RefCell` and threads a shared
     /// borrow in. `None` for the single-file `emit()` path and any body emitted
     /// outside a project, where no map is produced.
+    #[cfg(test)]
     pub source_map: Option<&'a RefCell<SourceMapBuilder>>,
     /// T2.2 (R6.4): set at the two statement sites that emit a literal `await`
     /// (`EffectLet`, `Do`) and read-and-reset around a value-position `match`/`if`
@@ -190,6 +191,7 @@ impl<'a> LowerCtx<'a> {
             call_site_actor: None,
             call_site_no_credential: false,
             call_site_bad_signature: None,
+            #[cfg(test)]
             source_map: None,
             emitted_await: false,
             claim_scope_used: false,
@@ -1326,6 +1328,7 @@ impl<'a> LowerCtx<'a> {
         self.in_test_scaffold() || self.suite_fn
     }
 
+    #[cfg(test)]
     pub(crate) fn with_source_map(mut self, map: Option<&'a RefCell<SourceMapBuilder>>) -> Self {
         self.source_map = map;
         self
@@ -1457,6 +1460,7 @@ impl<'a> LowerCtx<'a> {
     /// into its own local `String` — `lower_if`'s value-position wrapper,
     /// `build_match_iife`'s — before splicing it elsewhere must not call this
     /// with that buffer's own length (render it with `render_text`).
+    #[cfg(test)]
     pub(crate) fn record_span(&self, out_len: usize, span: bynk_syntax::span::Span) {
         if let Some(map) = self.source_map {
             map.borrow_mut().record(out_len, span);

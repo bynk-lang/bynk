@@ -63,12 +63,14 @@ class __Stub_Backend {
   constructor(c?: string) {
     this.__case = c;
   }
+
   __applies(op: string): boolean {
     if (op === "receiveBytes") return this.__case === "a stubbed byte response is read";
     if (op === "send") return this.__case === "a stubbed network error is matched" || this.__case === "a stubbed response is returned";
     if (op === "sendBytes") return this.__case === "a stubbed sendBytes answers its status";
     return true;
   }
+
   async receiveBytes(req: __ns_bynk.Request): globalThis.Promise<Result<__ns_bynk.BytesResponse, __ns_bynk.FetchError>> {
     const { BytesResponse, Claim, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
@@ -171,6 +173,7 @@ class __Stub_Backend {
     }
     throw new globalThis.Error("bynk: no stub clause matched for Backend.receiveBytes");
   }
+
   async send(req: __ns_bynk.Request): globalThis.Promise<Result<__ns_bynk.Response, __ns_bynk.FetchError>> {
     const { BytesResponse, Claim, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
@@ -276,6 +279,7 @@ class __Stub_Backend {
     }
     throw new globalThis.Error("bynk: no stub clause matched for Backend.send");
   }
+
   async sendBytes(req: __ns_bynk.Request, body: globalThis.Uint8Array): globalThis.Promise<Result<__ns_bynk.BytesResponse, __ns_bynk.FetchError>> {
     const { BytesResponse, Claim, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;

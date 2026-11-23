@@ -38,10 +38,12 @@ class __Stub_Mailer {
   constructor(c?: string) {
     this.__case = c;
   }
+
   __applies(op: string): boolean {
     if (op === "send") return this.__case === "a stubbed bare variant builds the operation's error sum";
     return true;
   }
+
   async send(to: string): globalThis.Promise<Result<string, __ns_mail.MailError>> {
     const { Light, Paint, dbFailure, describe, describeDb, light, lightName, mailFailure, paintName } = __ns_app;
     type Light = __ns_app.Light;
