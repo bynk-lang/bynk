@@ -7,6 +7,7 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.640.93** | Internal restructuring: `emit.rs` splits further by declaration kind (the WebSocket dispatch moves out); no output changes |
 | **v0.640.92** | Internal restructuring: the boundary-codec generator's shared vocabulary, field codecs and value codecs move into their own modules |
 | **v0.640.91** | Internal restructuring: the Worker entry generator's inline blocks (route collection, WebSocket upgrade, events delivery, CORS preflight and the method fall-through) become named functions; no output changes |
 | **v0.640.90** | Internal restructuring: `emit.rs` splits further by declaration kind (services and contexts move out); no output changes |
