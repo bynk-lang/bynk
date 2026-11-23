@@ -262,45 +262,6 @@ export async function dispatchToEventsFanout(
   }
 }
 
-// v0.16: an in-process Durable-Object namespace for multi-Worker integration
-// tests. `cls` is the emitted DO class, built from a fresh in-memory state;
-// one instance is kept per key (so state accumulates within a test case). The
-// returned stub bridges the stub-side `fetch(url, init)` the agent runtime
-// speaks to the DO class's server-side `fetch(request)`.
-//
-// #1959: the class is constructed with `(state, env)` as workerd does, so an
-// agent that rebuilds `given` deps or emits events from `env`, and the events
-// fan-out, see the participant's bindings. A class whose constructor takes
-// only `state` still fits this type: a constructor with fewer parameters is
-// assignable to one with more.
-export function makeIntegrationDoNamespace(
-  cls: new (state: DurableObjectState, env?: unknown) => {
-    fetch(request: Request): Promise<Response>;
-  },
-  env?: unknown,
-  queueWaitMs: number = AGENT_QUEUE_WAIT_MS,
-): DurableObjectNamespace {
-  const instances = new Map<string, { fetch(request: Request): Promise<Response> }>();
-  return {
-    idFromName(name: string): unknown {
-      return name;
-    },
-    get(id: unknown): DurableObjectStub {
-      const k = String(id);
-      let inst = instances.get(k);
-      if (inst === undefined) {
-        inst = new (serialiseAgentClass(cls, { waitMs: queueWaitMs }))(makeTestState(k), env);
-        instances.set(k, inst);
-      }
-      const target = inst;
-      return {
-        fetch: (input: string, init?: unknown): Promise<Response> =>
-          target.fetch(new Request(input, init as RequestInit)),
-      };
-    },
-  };
-}
-
 // State-migrations S4 (#2259 Decision D): `bynk migrate sweep`'s wake.
 //
 // The Worker side. `body` is the verified request body, `{ "ids": [...] }`,
@@ -742,5 +703,5 @@ export function serialiseAgentClass<C extends new (...args: never[]) => object>(
 }
 
 // #1653: the `__` aliases emitted code imports.
-export { AGENT_WIRE_PASS as __AGENT_WIRE_PASS, StateRegistry as __StateRegistry, decodeAgentArgs as __decodeAgentArgs, decodeAgentKey as __decodeAgentKey, dispatchToEventsFanout as __dispatchToEventsFanout, encodeAgentResult as __encodeAgentResult, makeAgent as __makeAgent, makeIntegrationDoNamespace as __makeIntegrationDoNamespace, serialiseAgentKey as __serialiseAgentKey, serialiseAgentClass as __serialiseAgentClass, sweepAgentInstances as __sweepAgentInstances, wakeForMigration as __wakeForMigration };
+export { AGENT_WIRE_PASS as __AGENT_WIRE_PASS, StateRegistry as __StateRegistry, decodeAgentArgs as __decodeAgentArgs, decodeAgentKey as __decodeAgentKey, dispatchToEventsFanout as __dispatchToEventsFanout, encodeAgentResult as __encodeAgentResult, makeAgent as __makeAgent, serialiseAgentKey as __serialiseAgentKey, serialiseAgentClass as __serialiseAgentClass, sweepAgentInstances as __sweepAgentInstances, wakeForMigration as __wakeForMigration };
 export type { AgentWire as __AgentWire, DurableObjectNamespace as __DurableObjectNamespace };

@@ -38,36 +38,26 @@ use bynk_syntax::ast::{
     BaseType, Expr, ExprKind, RecordBody, SumBody, TypeBody, TypeDecl, TypeRef, UnaryOp,
 };
 
-/// Events slice 3a (#972): the **wire-form** JSON literal an event field's
-/// default deserialises from when its key is absent from the incoming JSON.
-/// Type-directed — given the field's expected `TypeRef` and the visible
-/// `types` table, every syntactic ambiguity (a bare `Ident` that is really a
-/// sum variant, a `FieldAccess` that is a qualified nullary variant) resolves
-/// the same way the checker resolves it, just narrower (a bare name must
-/// match a variant of *this* expected sum specifically) — so this needs no
-/// per-expression `Ty` map (`expr_types`), which a subscriber regenerating a
-/// publisher's own event codec (`emit_consumed_context_helpers`) has no way
-/// to obtain anyway (no cross-unit `expr_types` store exists).
+/// Events slice 3a (#972): whether an event field's default is closed-form, so that the JSON
+/// it deserialises from when its key is absent from the incoming JSON can be built. Type-directed
+/// — given the field's expected `TypeRef` and the visible `types` table, every syntactic
+/// ambiguity (a bare `Ident` that is really a sum variant, a `FieldAccess` that is a qualified
+/// nullary variant) resolves the same way the checker resolves it, just narrower (a bare name
+/// must match a variant of *this* expected sum specifically) — so this needs no per-expression
+/// `Ty` map (`expr_types`), which a subscriber regenerating a publisher's own event codec
+/// (`emit_consumed_context_helpers`) has no way to obtain anyway.
 ///
-/// Produces the value in its **wire** shape (`kind` discriminant for a sum,
-/// matching `emit_sum_codec`'s generated `Option`/`Result` instantiations
-/// exactly — never the in-memory `tag` discriminant, and never a qualified
-/// reference like `Region.Domestic` into a value namespace the emitting
-/// module may not import), so it can be spliced in as the field's raw JSON
-/// access and re-enter `emit_field_deserialise` (`bynk-emit`) completely
-/// unchanged.
-///
-/// `Err(reason)` for anything not closed-form. The caller
-/// (`bynk-emit/src/project/validate.rs`'s event-field-default check) turns
-/// that into `bynk.types.bad_field_default` at check time, so a value this
-/// function cannot build should never reach `emit_record` in practice — the
-/// `.ok()` fallback there is a non-panicking safety net, not the intended
-/// rejection path.
+/// It is the checker's validation and nothing else (1A.40b, #3996): `Err(reason)` for anything
+/// not closed-form, which `bynk.types.bad_field_default` reports at check time, and `Ok(())`
+/// otherwise. The **wire form** of a default the emitter splices into a codec is a pure function
+/// of [`field_default_value`]'s tree (`wire_default_node` in `bynk-emit`), so this crate writes
+/// no TypeScript text for it. The two walks share `sum_default_parts`, `record_default_field`,
+/// `inst_record_fields` and `base_value`; a test pins that they agree on every case.
 pub fn lower_field_default_wire(
     init: &Expr,
     expected: &TypeRef,
     types: &std::collections::HashMap<String, Arc<TypeDecl>>,
-) -> Result<String, DefaultReason> {
+) -> Result<(), DefaultReason> {
     lower_field_default_wire_in(init, expected, types, &[])
 }
 
@@ -111,7 +101,7 @@ pub fn lower_field_default_wire_in(
     expected: &TypeRef,
     types: &std::collections::HashMap<String, Arc<TypeDecl>>,
     params: &[String],
-) -> Result<String, DefaultReason> {
+) -> Result<(), DefaultReason> {
     wire_in(
         init,
         expected,
@@ -132,7 +122,7 @@ pub fn lower_event_field_default_wire(
     init: &Expr,
     expected: &TypeRef,
     types: &std::collections::HashMap<String, Arc<TypeDecl>>,
-) -> Result<String, DefaultReason> {
+) -> Result<(), DefaultReason> {
     wire_in(
         init,
         expected,
@@ -150,12 +140,12 @@ fn wire_in(
     expected: &TypeRef,
     types: &std::collections::HashMap<String, Arc<TypeDecl>>,
     cx: Cx<'_>,
-) -> Result<String, DefaultReason> {
+) -> Result<(), DefaultReason> {
     if let ExprKind::Paren(inner) = &init.kind {
         return wire_in(inner, expected, types, cx);
     }
     match expected {
-        TypeRef::Base(b, _) => lower_base_literal(*b, init),
+        TypeRef::Base(b, _) => check_base(*b, init),
         TypeRef::Named(id) => {
             if cx.params.contains(&id.name) {
                 return Err(DefaultReason::UnresolvedType(id.name.clone()));
@@ -164,7 +154,7 @@ fn wire_in(
                 return Err(DefaultReason::UnresolvedType(id.name.clone()));
             };
             match &decl.body {
-                TypeBody::Refined { base, .. } => lower_base_literal(*base, init),
+                TypeBody::Refined { base, .. } => check_base(*base, init),
                 // ADR 0182: `.unsafe`'s value is an identity cast (`return
                 // value as T;`, `emit.rs`'s opaque emission) — the literal
                 // itself, verbatim, is the wire form. (Its refinement is
@@ -174,7 +164,7 @@ fn wire_in(
                 // would, unlike an ordinary `.unsafe` bypass.)
                 TypeBody::Opaque { base, .. } => match qualified_call(init) {
                     Some((type_name, "unsafe", [lit])) if type_name == id.name => {
-                        lower_base_literal(*base, lit)
+                        check_base(*base, lit)
                     }
                     Some((_, "unsafe", _)) => Err(DefaultReason::from(
                         "`.unsafe` takes exactly one argument".to_string(),
@@ -216,35 +206,22 @@ fn wire_in(
             }
         }
         TypeRef::Option(inner, _) => match &init.kind {
-            ExprKind::None => Ok("{ kind: \"None\" }".to_string()),
-            ExprKind::Some(e) => {
-                let v = wire_in(e, inner, types, cx)?;
-                Ok(format!("{{ kind: \"Some\", value: {v} }}"))
-            }
+            ExprKind::None => Ok(()),
+            ExprKind::Some(e) => wire_in(e, inner, types, cx),
             _ => Err(DefaultReason::from(
                 "an `Option` field default must be `Some(...)` or `None`".to_string(),
             )),
         },
         TypeRef::Result(ok, err, _) => match &init.kind {
-            ExprKind::Ok(e) => {
-                let v = wire_in(e, ok, types, cx)?;
-                Ok(format!("{{ kind: \"Ok\", value: {v} }}"))
-            }
-            ExprKind::Err(e) => {
-                let v = wire_in(e, err, types, cx)?;
-                Ok(format!("{{ kind: \"Err\", error: {v} }}"))
-            }
+            ExprKind::Ok(e) => wire_in(e, ok, types, cx),
+            ExprKind::Err(e) => wire_in(e, err, types, cx),
             _ => Err(DefaultReason::from(
                 "a `Result` field default must be `Ok(...)` or `Err(...)`".to_string(),
             )),
         },
         TypeRef::List(elem, _) => match &init.kind {
             ExprKind::ListLit(items, ..) => {
-                let parts = items
-                    .iter()
-                    .map(|e| wire_in(e, elem, types, cx))
-                    .collect::<Result<Vec<_>, _>>()?;
-                Ok(format!("[{}]", parts.join(", ")))
+                items.iter().try_for_each(|e| wire_in(e, elem, types, cx))
             }
             _ => Err(DefaultReason::from(
                 "a `List` field default must be a list literal".to_string(),
@@ -252,9 +229,9 @@ fn wire_in(
         },
         // #2607 (Decision B): `Map.empty()` / `Set.empty()` are the only
         // closed-form map and set values. Both travel as a JSON array (a map
-        // as its entries, a set as its elements), so both are `[]`.
-        TypeRef::Map(..) => empty_collection(init, "Map").map(|()| "[]".to_string()),
-        TypeRef::Set(..) => empty_collection(init, "Set").map(|()| "[]".to_string()),
+        // as its entries, a set as its elements), and both are empty.
+        TypeRef::Map(..) => empty_collection(init, "Map"),
+        TypeRef::Set(..) => empty_collection(init, "Set"),
         TypeRef::Effect(..)
         | TypeRef::HttpResult(..)
         | TypeRef::QueueResult(_)
@@ -304,23 +281,13 @@ fn qualified_call(e: &Expr) -> Option<(&str, &str, &[Expr])> {
     }
 }
 
-/// The wire text of a base literal: [`base_value`] rendered the way a JSON default is spliced.
-fn lower_base_literal(base: BaseType, e: &Expr) -> Result<String, DefaultReason> {
-    Ok(match base_value(base, e)? {
-        DefaultValue::Num(digits) => digits,
-        DefaultValue::Str(text) => format!("\"{}\"", bynk_ts::escape_ts_literal(&text)),
-        DefaultValue::Bool(b) => b.to_string(),
-        // #2622: a `Decimal` is a JSON string on the wire, its canonical text, which the
-        // decoder then parses.
-        DefaultValue::Decimal { coefficient, scale } => {
-            format!("\"{}\"", bynk_syntax::decimal::render(&coefficient, scale))
-        }
-        _ => unreachable!("`base_value` returns only `Num`, `Str`, `Bool` and `Decimal`"),
-    })
+/// Whether `e` is a closed-form literal of `base`: [`base_value`], read for its verdict.
+fn check_base(base: BaseType, e: &Expr) -> Result<(), DefaultReason> {
+    base_value(base, e).map(drop)
 }
 
-/// A base-type literal as plain data. Both forms of a default read it: the wire text through
-/// [`lower_base_literal`], the in-memory value through [`field_default_value`].
+/// A base-type literal as plain data. [`field_default_value`] reads it for the value, and
+/// [`check_base`] for the verdict.
 fn base_value(base: BaseType, e: &Expr) -> Result<DefaultValue, DefaultReason> {
     // Strip one level of negation so `-5`/`-5.0` reach the literal arms below,
     // mirroring `const_literal`'s admission — `i64::checked_neg` guards
@@ -389,14 +356,12 @@ fn lower_sum_default(
     init: &Expr,
     types: &std::collections::HashMap<String, Arc<TypeDecl>>,
     cx: Cx<'_>,
-) -> Result<String, DefaultReason> {
+) -> Result<(), DefaultReason> {
     let (variant, args) = sum_default_parts(sum_name, variants, init)?;
-    let mut parts = vec![format!("kind: \"{}\"", variant.0)];
-    for ((field, ty), arg) in variant.1.iter().zip(args.iter()) {
-        let v = wire_in(arg, ty, types, cx)?;
-        parts.push(format!("{field}: {v}"));
+    for ((_, ty), arg) in variant.1.iter().zip(args.iter()) {
+        wire_in(arg, ty, types, cx)?;
     }
-    Ok(format!("{{ {} }}", parts.join(", ")))
+    Ok(())
 }
 
 /// A sum's variants with their payload field types, as written (a non-generic
@@ -514,17 +479,15 @@ fn lower_record_default(
     init: &Expr,
     types: &std::collections::HashMap<String, Arc<TypeDecl>>,
     cx: Cx<'_>,
-) -> Result<String, DefaultReason> {
+) -> Result<(), DefaultReason> {
     let ExprKind::RecordConstruction { fields, .. } = &init.kind else {
         return Err(DefaultReason::from("expected a record literal".to_string()));
     };
-    let mut parts = Vec::new();
     for (name, ty, declared) in fields_of {
         let value = record_default_field(fields, name, *declared)?;
-        let v = wire_in(value, ty, types, cx)?;
-        parts.push(format!("{name}: {v}"));
+        wire_in(value, ty, types, cx)?;
     }
-    Ok(format!("{{ {} }}", parts.join(", ")))
+    Ok(())
 }
 
 /// #2607: the value a record literal written as a default gives field `name` —
@@ -1050,24 +1013,80 @@ mod tests {
         }
     }
 
-    /// The wire text of a base literal still reads the shared [`base_value`].
+    /// The validator and the tree the emitter renders agree on every default (1A.40b): the
+    /// validator is `Ok` exactly when [`field_default_value`] is, so a default the checker admits
+    /// is never silently dropped by the emitter's `.ok()`, and one it rejects never reaches a
+    /// codec. The wording of a rejection may differ (`.unsafe`'s arity has its own message in the
+    /// validator); the verdict may not.
     #[test]
-    fn the_wire_form_is_unchanged() {
-        for (ty, init, wire) in [
-            ("String", "\"a\\\"b\"", "\"a\\\"b\""),
-            ("Decimal", "-1.50d", "\"-1.50\""),
-            ("Decimal", "0.00d", "\"0.00\""),
-            ("Age", "3", "3"),
-            ("Int", "-5", "-5"),
-            ("Bool", "true", "true"),
-        ] {
+    fn the_validator_and_the_tree_agree_on_every_default() {
+        for (ty, init, _, _) in cases() {
             let (types, e, t) = holder(ty, init);
             assert_eq!(
-                lower_field_default_wire(&e, &t, &types).as_deref(),
-                Ok(wire),
+                lower_field_default_wire(&e, &t, &types),
+                Ok(()),
+                "{ty} = {init}"
+            );
+            assert!(field_default_value(&e, &t, &types).is_ok(), "{ty} = {init}");
+        }
+        // The messages may differ (`.unsafe`'s arity has its own in the validator), and each walk
+        // keeps its own wording; what must agree is the verdict.
+        for (ty, init, _) in REJECTIONS {
+            let (types, e, t) = holder(ty, init);
+            assert!(
+                field_default_value(&e, &t, &types).is_err(),
+                "{ty} = {init}"
+            );
+            assert!(
+                lower_field_default_wire(&e, &t, &types).is_err(),
                 "{ty} = {init}"
             );
         }
+    }
+
+    /// The two walks agree on the other two entry points too (1A.40c, a #4069 nit): the event and
+    /// old-state path, whose defaults may not apply a user generic, and the generic-parameters
+    /// path, where a parameter stands for no value. Same verdict on every accepted and rejected
+    /// default, and the generic cases are where the three entry points differ.
+    #[test]
+    fn the_walks_agree_on_the_event_and_generic_params_paths() {
+        let params = ["T".to_string()];
+        let mut seen_generic_refusal = false;
+        let defaults = cases()
+            .into_iter()
+            .map(|(ty, init, _, _)| (ty, init))
+            .chain(REJECTIONS.iter().map(|(ty, init, _)| (*ty, *init)));
+        for (ty, init) in defaults {
+            let (types, e, t) = holder(ty, init);
+            let event_cx = Cx {
+                params: &[],
+                depth: 0,
+                generics: false,
+            };
+            let event = lower_event_field_default_wire(&e, &t, &types);
+            let event_tree = value_in(&e, &t, &types, event_cx);
+            assert_eq!(event.is_ok(), event_tree.is_ok(), "event: {ty} = {init}");
+            let params_cx = Cx {
+                params: &params,
+                depth: 0,
+                generics: true,
+            };
+            let generic = lower_field_default_wire_in(&e, &t, &types, &params);
+            let generic_tree = value_in(&e, &t, &types, params_cx);
+            assert_eq!(
+                generic.is_ok(),
+                generic_tree.is_ok(),
+                "params: {ty} = {init}"
+            );
+            // The record path accepts what the event path refuses (a default applying a user
+            // generic), so the three entry points are not one walk with the flag ignored.
+            seen_generic_refusal |=
+                lower_field_default_wire(&e, &t, &types).is_ok() && event.is_err();
+        }
+        assert!(
+            seen_generic_refusal,
+            "no case tells the event path from the record path"
+        );
     }
 
     /// `(field type, default, the rejection)` the old renderer gave, kept verbatim.

@@ -56,8 +56,9 @@ const MODULES = [
   "email",
   "postgres",
   "mysql",
-  "pglite",
+  "testing/pglite",
   "agent",
+  "testing/bindings",
   "container",
   "auth",
   "session",
@@ -121,6 +122,8 @@ const TEST_TABLE = join(pkgRoot, "..", "src", "testgen", "test_runtime_modules.r
 // The names a generated test module supplies, declared for the type-check. Never spliced.
 const TEST_CONTRACT = "harness";
 const TEST_MODULES = [
+  "asset_get",
+  "case_timing",
   "clock",
   "expectation",
   "history",
@@ -136,6 +139,8 @@ const TEST_MODULES = [
   "send",
   "settle",
   "snapshot",
+  "stub_overlay",
+  "test_filter",
   "virtual_time",
 ];
 // Module -> the names it keeps `export`ed in its splice form (the generated module's runner calls
@@ -144,14 +149,22 @@ const SPLICE_EXPORTS = { snapshot: ["__bynkSnapshotReport"] };
 const CLIENT_SOURCE = join(SRC, "client", "http_client.ts");
 const CLIENT_RUNTIME_TARGET = join(pkgRoot, "..", "src", "emitter", "http_client_runtime.ts");
 
-const IMPORT_STATEMENT = /^import\s[^;]*?\sfrom\s+["'][^"']+["'];\n/gms;
+const IMPORT_STATEMENT = /^import\s[^;]*?\sfrom\s+["']([^"']+)["'];\n/gms;
 const TOP_LEVEL_EXPORT = /^export (?=(?:declare |abstract |async )*(?:function\*?|class|const|let|interface|type|enum)\s+([A-Za-z_$][\w$]*))/gm;
 
 // The splice form of a module. `stripExports` is false for the client runtime, whose `export`s are
 // the generated client's own.
 function spliceForm(source, { stripExports, keep = [] }) {
   const startsWithImport = /^import\s/.test(source);
-  let out = source.replace(IMPORT_STATEMENT, "");
+  // Only a relative import is dropped (its names are in the splice's one scope). A package or
+  // `node:` import would be dropped from the text and fail only when the test ran, so it is an
+  // error here, at the build.
+  let out = source.replace(IMPORT_STATEMENT, (statement, specifier) => {
+    if (!/^\.\.?\//.test(specifier)) {
+      throw new Error(`a spliced module imports "${specifier}", which the splice cannot carry: ${statement.trim()}`);
+    }
+    return "";
+  });
   // The blank line that separated an import block from the body goes with it.
   if (startsWithImport) out = out.replace(/^\n+/, "");
   if (stripExports) {
@@ -163,8 +176,10 @@ function spliceForm(source, { stripExports, keep = [] }) {
 // The sibling test modules a module imports (`./name.ts`), contract excluded.
 function testDeps(source) {
   const deps = [];
-  for (const m of source.matchAll(/^import\s[^;]*?\sfrom\s+"\.\/([a-z_0-9]+)\.ts";$/gms)) {
-    if (m[1] !== TEST_CONTRACT) deps.push(m[1]);
+  // The same statements the stripper drops, in either quote style.
+  for (const m of source.matchAll(IMPORT_STATEMENT)) {
+    const sibling = /^\.\/([a-z_0-9]+)\.ts$/.exec(m[1]);
+    if (sibling && sibling[1] !== TEST_CONTRACT) deps.push(sibling[1]);
   }
   return [...new Set(deps)].sort();
 }
@@ -182,8 +197,11 @@ async function buildTestRuntime() {
   // never spliced: fail rather than let it go unused.
   for (const f of await readdir(TEST_DIR)) {
     const name = f.replace(/\.ts$/, "");
-    if (name !== TEST_CONTRACT && !TEST_MODULES.includes(name)) {
-      throw new Error(`src/testing/${f} is not in TEST_MODULES (nor the contract ${TEST_CONTRACT}.ts)`);
+    // A module under src/testing/ is a spliced fragment (TEST_MODULES), the contract, or a runtime
+    // module a test build imports (`testing/bindings`, `testing/pglite`: in MODULES).
+    const isRuntimeModule = MODULES.includes(`testing/${name}`);
+    if (name !== TEST_CONTRACT && !TEST_MODULES.includes(name) && !isRuntimeModule) {
+      throw new Error(`src/testing/${f} is in neither TEST_MODULES nor MODULES (nor the contract ${TEST_CONTRACT}.ts)`);
     }
   }
   const table = [
@@ -235,7 +253,7 @@ const MODULE_TABLE = join(pkgRoot, "..", "src", "emitter", "runtime_modules.rs")
 function parseAliases(source) {
   const byModule = new Map();
   const origin = new Map(); // imported name -> module
-  for (const m of source.matchAll(/^import\s*\{([^}]*)\}\s*from\s*"\.\/([a-z]+)\.ts";$/gm)) {
+  for (const m of source.matchAll(/^import\s*\{([^}]*)\}\s*from\s*"\.\/([a-z/]+)\.ts";$/gm)) {
     for (const raw of m[1].split(",")) {
       const item = raw.trim();
       if (item) origin.set(item.replace(/^type\s+/, ""), { module: m[2], type: item.startsWith("type ") });
@@ -265,6 +283,17 @@ function aliasBlock(entries) {
   if (values.length) lines.push(`export { ${fmt(values)} };`);
   if (types.length) lines.push(`export type { ${fmt(types)} };`);
   return lines.join("\n");
+}
+
+// Every file under `dir`, recursively (a module may sit in a subdirectory, as `testing/bindings`).
+async function listFiles(dir) {
+  const out = [];
+  for (const entry of await readdir(dir, { withFileTypes: true }).catch(() => [])) {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) out.push(...(await listFiles(path)));
+    else out.push(path);
+  }
+  return out;
 }
 
 async function buildPerModule() {
@@ -314,6 +343,7 @@ async function buildPerModule() {
   const table = [
     "// Generated by bynk-emit/runtime/scripts/bundle.mjs — do not edit by hand.",
     "// ADR 0615: the runtime as (module name, source) pairs, one per @bynk/runtime module.",
+    "#[rustfmt::skip]",
     "pub(crate) const RUNTIME_MODULES: &[(&str, &str)] = &[",
     ...rows,
     "];",
@@ -340,8 +370,8 @@ let stale = false;
   expected.set(MODULE_TABLE, table);
   if (check) {
     let drift = false;
-    for (const f of await readdir(MODULE_DIR).catch(() => [])) {
-      if (!expected.has(join(MODULE_DIR, f))) drift = true; // orphan
+    for (const path of await listFiles(MODULE_DIR)) {
+      if (!expected.has(path)) drift = true; // orphan
     }
     for (const [path, want] of expected) {
       let have = null;
@@ -363,10 +393,13 @@ let stale = false;
     }
   } else {
     await mkdir(MODULE_DIR, { recursive: true });
-    for (const f of await readdir(MODULE_DIR)) {
-      if (!expected.has(join(MODULE_DIR, f))) await rm(join(MODULE_DIR, f));
+    for (const path of await listFiles(MODULE_DIR)) {
+      if (!expected.has(path)) await rm(path);
     }
-    for (const [path, content] of expected) await writeFile(path, content, "utf8");
+    for (const [path, content] of expected) {
+      await mkdir(dirname(path), { recursive: true });
+      await writeFile(path, content, "utf8");
+    }
     console.log(`Wrote ${expected.size - 1} runtime modules and ${MODULE_TABLE}.`);
   }
 }

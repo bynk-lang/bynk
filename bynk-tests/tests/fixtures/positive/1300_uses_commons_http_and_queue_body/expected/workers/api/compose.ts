@@ -7,7 +7,7 @@ export interface Env {
 }
 
 export function compose(env: Env) {
-  const deps = {  };
+  const deps = {};
   return {
     async queue_credit_0(amount: handlers.Cents) {
       return handlers.credit.queue_credit_0(amount, deps);

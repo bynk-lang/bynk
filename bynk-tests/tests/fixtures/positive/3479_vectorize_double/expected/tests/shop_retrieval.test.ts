@@ -4,7 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import { __bynkEq } from "../__bynk_runtime/equality.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
-import { __makeIntegrationVectorize } from "../__bynk_runtime/vectorize.js";
+import { __makeIntegrationVectorize } from "../__bynk_runtime/testing/bindings.js";
 import * as __ns_shop_retrieval from "./../shop/retrieval.js";
 import * as __ns_bynk from "./../bynk.js";
 import * as __ns_bynk_cloudflare from "./../bynk/cloudflare.js";

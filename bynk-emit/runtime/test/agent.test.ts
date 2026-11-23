@@ -4,7 +4,6 @@ import {
   serialiseAgentKey,
   StateRegistry,
   makeAgent,
-  makeIntegrationDoNamespace,
   makeWorkersAgent,
   sweepAgentInstances,
   wakeForMigration,
@@ -18,7 +17,8 @@ import {
 } from "../src/agent.ts";
 import { checkStoredLayout, type BoundaryError, type JsonValue } from "../src/boundary.ts";
 import { Ok, Err } from "../src/result.ts";
-import { makeIntegrationKv, type DurableObjectState } from "../src/storage.ts";
+import { type DurableObjectState } from "../src/storage.ts";
+import { makeIntegrationDoNamespace, makeIntegrationKv } from "../src/testing/bindings.ts";
 
 test("serialiseAgentKey: strings are identity, primitives are JSON", () => {
   assert.equal(serialiseAgentKey("abc"), "abc");

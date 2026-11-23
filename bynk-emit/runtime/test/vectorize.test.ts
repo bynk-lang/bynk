@@ -5,7 +5,8 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { VECTORIZE_LIMITS, makeIntegrationVectorize } from "../src/vectorize.ts";
+import { VECTORIZE_LIMITS } from "../src/vectorize.ts";
+import { makeIntegrationVectorize } from "../src/testing/bindings.ts";
 
 const ids = (r: unknown): string[] => (r as { matches: { id: string }[] }).matches.map((m) => m.id);
 

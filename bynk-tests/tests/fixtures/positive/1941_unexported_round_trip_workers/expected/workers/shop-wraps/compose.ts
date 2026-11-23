@@ -7,7 +7,7 @@ export interface Env {
 }
 
 export function compose(env: Env) {
-  const deps = {  };
+  const deps = {};
   return {
     async open(p: handlers.Parcel) {
       return handlers.open.call(p, deps);

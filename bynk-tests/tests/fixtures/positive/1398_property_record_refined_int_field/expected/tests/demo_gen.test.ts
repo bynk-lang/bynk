@@ -174,19 +174,19 @@ function __makeTestDeps() {
 }
 
 async function __prop_test_record_refined_int_field_participates_in_arithmetic() {
-    const deps = {};
-    const { Pct, Point } = __ns_demo_gen;
-    type Pct = __ns_demo_gen.Pct;
-    type Point = __ns_demo_gen.Point;
-    const __gens = [
-      { name: "p", boundaries: [{ x: globalThis.Number((0n as any)), y: globalThis.Number((0n as any)) }], gen: (rng: any) => ({ x: globalThis.Number((rng.int(0n, 100n) as any)), y: globalThis.Number((rng.int(0n, 100n) as any)) }), shrink: (v: any) => [], show: (v: any) => __bynkShow(v) },
-    ];
-    const __where = null;
-    const __body = async (__vals: any[]) => {
-      const [p] = __vals;
-      if (!(p.x + 1 === p.x + 1)) { throw __bynkExpectFailure("tests/gen.test.bynk:12:14", 688, 706, "expect p.x + 1 == p.x + 1\n  expected: p.x + 1 == p.x + 1\n  actual:   " + __bynkShow((p.x + 1)) + " == " + __bynkShow((p.x + 1))); }
-    };
-    return await __bynkRunProperty({ seed: __bynkMix(__bynkSeed, 0), cases: 100, gens: __gens, where: __where, body: __body, name: "record refined int field participates in arithmetic", location: "tests/gen.test.bynk", file: "tests/gen.test.bynk" });
+  const deps = {};
+  const { Pct, Point } = __ns_demo_gen;
+  type Pct = __ns_demo_gen.Pct;
+  type Point = __ns_demo_gen.Point;
+  const __gens = [
+    { name: "p", boundaries: [{ x: globalThis.Number((0n as any)), y: globalThis.Number((0n as any)) }], gen: (rng: any) => ({ x: globalThis.Number((rng.int(0n, 100n) as any)), y: globalThis.Number((rng.int(0n, 100n) as any)) }), shrink: (v: any) => [], show: (v: any) => __bynkShow(v) },
+  ];
+  const __where = null;
+  const __body = async (__vals: any[]) => {
+    const [p] = __vals;
+    if (!(p.x + 1 === p.x + 1)) { throw __bynkExpectFailure("tests/gen.test.bynk:12:14", 688, 706, "expect p.x + 1 == p.x + 1\n  expected: p.x + 1 == p.x + 1\n  actual:   " + __bynkShow((p.x + 1)) + " == " + __bynkShow((p.x + 1))); }
+  };
+  return await __bynkRunProperty({ seed: __bynkMix(__bynkSeed, 0), cases: 100, gens: __gens, where: __where, body: __body, name: "record refined int field participates in arithmetic", location: "tests/gen.test.bynk", file: "tests/gen.test.bynk" });
 }
 
 type CaseResult = {

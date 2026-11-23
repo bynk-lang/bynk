@@ -873,6 +873,7 @@ fn member_table(members: &[(usize, &GroupMember)]) -> Vec<TsStmt> {
         TsTypeMember::readonly_prop(
             "isMiss",
             TsType::Fn {
+                rest: false,
                 params: vec![response_ty()],
                 names: vec!["response".to_string()],
                 ret: Box::new(ty("boolean")),

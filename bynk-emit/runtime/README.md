@@ -47,6 +47,13 @@ Two more artifact families are generated from sources under `src/`:
   state and timer queue. `src/testing/harness.ts` declares the one name a generated module
   supplies (`__bynkSnapshotFiles`); it is a contract for the type-check and is never spliced. A
   name a fragment must keep exporting when spliced is listed in `SPLICE_EXPORTS` in `bundle.mjs`.
+- **The test doubles are imported, not spliced** (1B.3b, #4047). `src/testing/bindings.ts` holds
+  every `makeIntegration*` factory a multi-Worker test binds as a participant's `env.*`, and
+  `src/testing/pglite.ts` the opt-in PGlite `Postgres` double, which alone imports
+  `@electric-sql/pglite`. They are ordinary per-module runtime modules (emitted as
+  `__bynk_runtime/testing/<name>.ts`, with the `__` aliases), and no production module defines one:
+  `test/testing_boundary.test.ts` fails if one does. `makeTestState` and `InMemoryStorage` stay in
+  `storage.ts`, because the Bundle target's agent storage is built on them.
 - **`src/client/http_client.ts`** is the runtime `bynk client` inlines. `bundle.mjs` writes it, with
   its `import` dropped, to `../src/emitter/http_client_runtime.ts`.
 

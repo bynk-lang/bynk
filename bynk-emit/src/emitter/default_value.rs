@@ -105,6 +105,65 @@ pub(super) fn default_value_node(value: &DefaultValue, slot: &Slot) -> TsExpr {
     }
 }
 
+/// The node for a default value in its **wire** form: the JSON a real wire value of the field
+/// would be, which the field's codec decodes when the key is absent (events slice 3a, #972;
+/// 1A.40b, #3996). A pure function of the tree:
+/// - a base value is its literal, a `Decimal` its canonical text as a string (#2622), and a refined
+///   value its base value;
+/// - a sum is `{ kind: "V", f: .. }`, an `Option` is `{ kind: "Some", value }` or
+///   `{ kind: "None" }`, and a `Result` is `{ kind: "Ok", value }` or `{ kind: "Err", error }`;
+/// - a list is `[..]`, an empty `Map` or `Set` is `[]` (both travel as an array), and a record is a
+///   plain object.
+///
+/// Unlike the in-memory form ([`default_value_node`]), the wire form carries `kind`, not `tag`,
+/// needs no `as const`, and names no collection class.
+pub(super) fn wire_default_node(value: &DefaultValue) -> TsExpr {
+    let entries = |fields: &[(String, DefaultValue)]| -> Vec<TsObjectEntry> {
+        fields
+            .iter()
+            .map(|(key, v)| TsObjectEntry::prop(key.clone(), wire_default_node(v)))
+            .collect()
+    };
+    match value {
+        DefaultValue::Num(digits) => TsExpr::Lit(TsLit::Num(digits.clone())),
+        DefaultValue::Str(text) => TsExpr::Lit(TsLit::Str(text.clone())),
+        DefaultValue::Bool(b) => TsExpr::Lit(TsLit::Bool(*b)),
+        DefaultValue::Decimal { coefficient, scale } => TsExpr::Lit(TsLit::Str(
+            bynk_syntax::decimal::render(coefficient, *scale),
+        )),
+        DefaultValue::Refined { value, .. } => wire_default_node(value),
+        DefaultValue::Record(fields) => TsExpr::object_entries(entries(fields)),
+        DefaultValue::Sum { variant, fields } => wire_kind(variant, entries(fields)),
+        DefaultValue::Some(v) => wire_kind("Some", vec![wire_prop("value", v)]),
+        DefaultValue::None => wire_kind("None", vec![]),
+        DefaultValue::Ok(v) => wire_kind("Ok", vec![wire_prop("value", v)]),
+        DefaultValue::Err(v) => wire_kind("Err", vec![wire_prop("error", v)]),
+        DefaultValue::List(items) => TsExpr::Array {
+            items: items.iter().map(wire_default_node).collect(),
+            multiline: false,
+        },
+        DefaultValue::EmptyMap | DefaultValue::EmptySet => TsExpr::Array {
+            items: vec![],
+            multiline: false,
+        },
+    }
+}
+
+/// `{ kind: "<variant>", …rest }`.
+fn wire_kind(variant: &str, rest: Vec<TsObjectEntry>) -> TsExpr {
+    let mut entries = vec![TsObjectEntry::prop(
+        "kind".to_string(),
+        TsExpr::Lit(TsLit::Str(variant.to_string())),
+    )];
+    entries.extend(rest);
+    TsExpr::object_entries(entries)
+}
+
+/// `<key>: <wire form of value>`.
+fn wire_prop(key: &str, value: &DefaultValue) -> TsObjectEntry {
+    TsObjectEntry::prop(key.to_string(), wire_default_node(value))
+}
+
 /// `{ tag: "<variant>" as const, …rest }`.
 fn tagged(variant: &str, rest: Vec<TsObjectEntry>) -> TsExpr {
     let tag = TsExpr::AsConst(Box::new(TsExpr::Lit(TsLit::Str(variant.to_string()))));
@@ -331,5 +390,95 @@ mod tests {
         for lexeme in ["1e3", "5", "0.5", "-2.5e-3"] {
             assert_eq!(print(&num(lexeme)), lexeme);
         }
+    }
+
+    fn wire(value: &DefaultValue) -> TsExpr {
+        wire_default_node(value)
+    }
+
+    fn wire_text(value: &DefaultValue) -> String {
+        print_expr(&wire(value))
+    }
+
+    /// 1A.40b: the wire form of every shape, as a tree and as the text it prints (the text the
+    /// deleted `bynk-check` renderer produced; the goldens carry it).
+    #[test]
+    fn the_wire_form_of_every_shape() {
+        let sum = |v: &str, f: Vec<(&str, DefaultValue)>| DefaultValue::Sum {
+            variant: v.to_string(),
+            fields: f.into_iter().map(|(k, v)| (k.to_string(), v)).collect(),
+        };
+        let record = |f: Vec<(&str, DefaultValue)>| {
+            DefaultValue::Record(f.into_iter().map(|(k, v)| (k.to_string(), v)).collect())
+        };
+        let ok = |v| DefaultValue::Ok(Box::new(v));
+        let err = |v| DefaultValue::Err(Box::new(v));
+        for (value, text) in [
+            (num("5"), "5"),
+            (num("-5"), "-5"),
+            (num("1e3"), "1e3"),
+            (DefaultValue::Bool(true), "true"),
+            (DefaultValue::Bool(false), "false"),
+            (text("x"), "\"x\""),
+            (text("a\"b\n"), "\"a\\\"b\\n\""),
+            // A `Decimal` is its canonical text on the wire (#2622), not `{ coefficient, scale }`.
+            (dec("-150", 2), "\"-1.50\""),
+            (dec("000", 2), "\"0.00\""),
+            // A refined value is its base value.
+            (refined("Age", num("3")), "3"),
+            (DefaultValue::None, "{ kind: \"None\" }"),
+            (some(num("1")), "{ kind: \"Some\", value: 1 }"),
+            (
+                some(some(DefaultValue::None)),
+                "{ kind: \"Some\", value: { kind: \"Some\", value: { kind: \"None\" } } }",
+            ),
+            (ok(num("1")), "{ kind: \"Ok\", value: 1 }"),
+            (err(text("e")), "{ kind: \"Err\", error: \"e\" }"),
+            (DefaultValue::List(vec![]), "[]"),
+            (DefaultValue::List(vec![num("1"), num("2")]), "[1, 2]"),
+            // An empty `Map` or `Set` travels as an empty array.
+            (DefaultValue::EmptyMap, "[]"),
+            (DefaultValue::EmptySet, "[]"),
+            (
+                record(vec![("a", num("1")), ("b", text("x"))]),
+                "{ a: 1, b: \"x\" }",
+            ),
+            (sum("Nil", vec![]), "{ kind: \"Nil\" }"),
+            (
+                sum("Has", vec![("value", text("s"))]),
+                "{ kind: \"Has\", value: \"s\" }",
+            ),
+        ] {
+            assert_eq!(wire_text(&value), text, "{value:?}");
+        }
+    }
+
+    /// The wire form is a node, so it compares as one: `kind` (not `tag`), no `as const`.
+    #[test]
+    fn the_wire_form_is_a_node_without_tag_or_as_const() {
+        assert_eq!(
+            wire(&DefaultValue::None),
+            TsExpr::object_entries(vec![TsObjectEntry::prop(
+                "kind".to_string(),
+                TsExpr::Lit(TsLit::Str("None".to_string())),
+            )])
+        );
+        assert_ne!(
+            wire(&DefaultValue::None),
+            default_value_node(&DefaultValue::None, &Slot::Unbranded)
+        );
+        assert_eq!(
+            wire(&DefaultValue::EmptyMap),
+            TsExpr::Array {
+                items: vec![],
+                multiline: false
+            }
+        );
+    }
+
+    /// A zero-field record prints `{}`; the text it replaced printed `{  }`. No fixture has one.
+    #[test]
+    fn an_empty_record_default_prints_as_braces_on_the_wire() {
+        assert_eq!(wire_text(&DefaultValue::Record(vec![])), "{}");
     }
 }

@@ -7,7 +7,7 @@ export interface Env {
 }
 
 export function compose(env: Env) {
-  const deps = {  };
+  const deps = {};
   return {
     async lines(sku: string, unit: handlers.Price, qty: number) {
       return handlers.lines.call(sku, unit, qty, deps);

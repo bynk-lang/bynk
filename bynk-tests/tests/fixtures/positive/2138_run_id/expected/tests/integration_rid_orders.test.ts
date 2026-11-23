@@ -6,7 +6,8 @@ import type { ValidationError, DecodeError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
 import { __callService, type __JsonValue, type __BoundaryError, type __ServiceBinding } from "../__bynk_runtime/boundary.js";
 import { __responseToHttpResult, __responseToHttpOutcome, __responseToUnauthOutcome, __requestHeaderPairs } from "../__bynk_runtime/http.js";
-import { __makeIntegrationDoNamespace, type __DurableObjectNamespace } from "../__bynk_runtime/agent.js";
+import type { __DurableObjectNamespace } from "../__bynk_runtime/agent.js";
+import { __makeIntegrationDoNamespace } from "../__bynk_runtime/testing/bindings.js";
 import * as __ns_rid_orders from "../workers/rid-orders/handlers.js";
 import worker___ns_rid_orders from "../workers/rid-orders/index.js";
 
