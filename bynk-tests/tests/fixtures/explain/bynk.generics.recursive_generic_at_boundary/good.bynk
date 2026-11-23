@@ -5,7 +5,7 @@ type IntTree =
     | Node(left: IntTree, value: Int, right: IntTree)
 
 service s {
-    on call(t: IntTree) -> Effect[Int] {
+    on call(t: IntTree) -> Effect[Int] by Caller {
         Effect.pure(1)
     }
 }

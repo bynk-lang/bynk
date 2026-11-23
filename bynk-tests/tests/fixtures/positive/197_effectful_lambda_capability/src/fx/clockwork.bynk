@@ -16,7 +16,7 @@ fn run(f: Int -> Effect[Int], x: Int) -> Effect[Int] {
 }
 
 service stamper {
-  on call(offset: Int) -> Effect[Int] given Clock {
+  on call(offset: Int) -> Effect[Int] by Caller given Clock {
     let stamped <- run((n) => {
       let t <- Clock.now()
       t + n

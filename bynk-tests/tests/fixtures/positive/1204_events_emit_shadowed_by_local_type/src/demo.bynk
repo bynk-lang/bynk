@@ -21,7 +21,7 @@ fn Events.emit(e: Int) -> Effect[()] {
 }
 
 service pinger {
-  on call() -> Effect[()] {
+  on call() -> Effect[()] by Caller {
     Events.emit(1)
   }
 }

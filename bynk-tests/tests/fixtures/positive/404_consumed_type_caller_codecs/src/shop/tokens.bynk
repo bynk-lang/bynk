@@ -27,7 +27,7 @@ type TokenError = enum {
 Mint a grant for a seed. The single cross-context entry point.
 ---
 service issue {
-  on call(seed: String) -> Effect[Result[Grant, TokenError]] {
+  on call(seed: String) -> Effect[Result[Grant, TokenError]] by Caller {
     match Score.of(50) {
       Ok(s) => Ok(Grant { token: Token.unsafe("tok"), score: s })
       Err(_) => Err(Denied)

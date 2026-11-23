@@ -5,7 +5,7 @@ consumes shop.quotes
 consumes shop.other
 
 service total {
-    on call() -> Effect[Int] {
+    on call() -> Effect[Int] by Caller {
         let w <- shop.quotes.wrap()
         Effect.pure(w.inner.cents)
     }

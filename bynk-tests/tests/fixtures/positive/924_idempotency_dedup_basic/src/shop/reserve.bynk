@@ -5,7 +5,7 @@ consumes bynk { Idempotency }
 type ReserveOutcome = { orderId: String, reserved: Bool }
 
 service ordering {
-  on call(orderId: String) -> Effect[ReserveOutcome] given Idempotency {
+  on call(orderId: String) -> Effect[ReserveOutcome] by Caller given Idempotency {
     let cached <- Idempotency.dedup[ReserveOutcome](orderId)
     match cached {
       Some(outcome) => outcome,

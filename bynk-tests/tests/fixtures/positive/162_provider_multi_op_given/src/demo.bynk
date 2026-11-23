@@ -26,7 +26,7 @@ provides Store = LoggingStore given Logger {
 }
 
 service api {
-  on call(key: String) -> Effect[()] given Store {
+  on call(key: String) -> Effect[()] by Caller given Store {
     let _ <- Store.put(key)
     Effect.pure(())
   }

@@ -10,7 +10,7 @@ type SqlError = { message: String }
 capability Stock = D1
 
 service ping {
-	on call() -> Effect[Int] {
+	on call() -> Effect[Int] by Caller {
 		1
 	}
 }

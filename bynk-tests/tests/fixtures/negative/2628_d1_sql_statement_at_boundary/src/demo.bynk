@@ -31,7 +31,7 @@ agent Keeper {
 
   store last: Cell[Option[SqlStatement]]
 
-  on call() -> Effect[Int] {
+  on call() -> Effect[Int] by Caller {
     Effect.pure(1)
   }
 }

@@ -3,7 +3,7 @@ context shop
 uses mony
 
 service checkout {
-    on call() -> Effect[Int] {
+    on call() -> Effect[Int] by Caller {
         Effect.pure(1)
     }
 }

@@ -10,13 +10,13 @@ type Batch = { lines: List[Line], first: Option[Line], byKey: Map[String, Line],
 type Holder = { batch: Batch, extra: List[Line] }
 
 service put {
-  on call(b: Batch) -> Effect[Int] { b.lines.length() }
+  on call(b: Batch) -> Effect[Int] by Caller { b.lines.length() }
 }
 
 service hold {
-  on call(h: Holder) -> Effect[Int] { h.extra.length() }
+  on call(h: Holder) -> Effect[Int] by Caller { h.extra.length() }
 }
 
 service many {
-  on call(ls: List[Line], first: Option[Line], byKey: Map[String, Line]) -> Effect[Int] { ls.length() }
+  on call(ls: List[Line], first: Option[Line], byKey: Map[String, Line]) -> Effect[Int] by Caller { ls.length() }
 }

@@ -8,7 +8,7 @@ fn size(b: Bag[Int]) -> Int {
 }
 
 service holder {
-  on call(n: Int) -> Effect[Int] {
+  on call(n: Int) -> Effect[Int] by Caller {
     size(Bag { items: [n, n] })
   }
 }

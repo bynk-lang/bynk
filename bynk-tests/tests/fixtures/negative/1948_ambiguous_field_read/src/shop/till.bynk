@@ -9,7 +9,7 @@ consumes shop.two
 // from, so its fields cannot be read.
 
 service total {
-  on call() -> Effect[Int] {
+  on call() -> Effect[Int] by Caller {
     let b <- shop.one.quote()
     Effect.pure(b.x)
   }

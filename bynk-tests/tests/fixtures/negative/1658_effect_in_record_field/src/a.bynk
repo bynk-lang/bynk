@@ -11,7 +11,7 @@ type Box[T] = { item: T }
 
 // #1658: an effect stored in a record field is started, unawaited.
 service s {
-  on call() -> Effect[Int] {
+  on call() -> Effect[Int] by Caller {
     let b = Box { item: Counter("k").get() }
     let v <- Counter("k").get()
     Effect.pure(v)

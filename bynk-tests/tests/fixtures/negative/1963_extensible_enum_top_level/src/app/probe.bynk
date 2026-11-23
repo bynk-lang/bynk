@@ -16,7 +16,7 @@ fn verb(m: Method) -> String {
 }
 
 service probe {
-	on call() -> Effect[String] {
+	on call() -> Effect[String] by Caller {
 		Effect.pure(verb(Get))
 	}
 }

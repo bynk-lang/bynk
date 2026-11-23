@@ -40,7 +40,7 @@ service api from http {
 }
 
 service direct {
-	on call(sku: Int) -> Effect[Int] given Audit {
+	on call(sku: Int) -> Effect[Int] by Caller given Audit {
 		let n <- audited((x) => Audit.note(x), sku)
 		Effect.pure(n)
 	}

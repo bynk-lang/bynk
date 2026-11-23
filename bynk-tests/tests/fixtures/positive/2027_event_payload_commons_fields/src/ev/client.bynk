@@ -7,13 +7,13 @@ consumes ev.store
 // too, so `ev.store`'s `Batch` codec shares this context's instantiation
 // codecs, which must accept either context's `Line`.
 service take {
-  on call(ls: List[Line], first: Option[Line], byKey: Map[String, Line], qtys: List[Qty], page: Page[Line]) -> Effect[Int] {
+  on call(ls: List[Line], first: Option[Line], byKey: Map[String, Line], qtys: List[Qty], page: Page[Line]) -> Effect[Int] by Caller {
     ls.length()
   }
 }
 
 service go {
-  on call() -> Effect[Int] {
+  on call() -> Effect[Int] by Caller {
     let line = Line { qty: 2, tag: someTag() }
     let b <- ev.store.batch(Batch { lines: [line], first: Some(line), qtys: [], page: Page { items: [line] } })
     b.lines.length()

@@ -38,7 +38,7 @@ service placement {
   Internal placement. Returns a domain Result so consumers in other
   contexts can integrate without coupling to HTTP status semantics.
   ---
-  on call(total: Money) -> Effect[Result[(), OrderError]] {
+  on call(total: Money) -> Effect[Result[(), OrderError]] by Caller {
     let auth <- Payment.authorise(total)
     match auth {
       Ok(_) => Ok(())

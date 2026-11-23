@@ -1,7 +1,7 @@
 context platform.pay
 
 service charge {
-  on call(amount: Int) -> Effect[Int] {
+  on call(amount: Int) -> Effect[Int] by Caller {
     Effect.pure(amount)
   }
 }

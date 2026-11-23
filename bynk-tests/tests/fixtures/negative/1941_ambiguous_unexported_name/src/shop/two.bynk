@@ -3,7 +3,7 @@ context shop.two
 type Box = { y: Int }
 
 service quote {
-  on call() -> Effect[Box] {
+  on call() -> Effect[Box] by Caller {
     Effect.pure(Box { y: 1 })
   }
 }

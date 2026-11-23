@@ -1,5 +1,5 @@
 context shop.payment
 
 service authorise {
-  on call(qty: Int) -> Effect[Bool] { qty > 0 }
+  on call(qty: Int) -> Effect[Bool] by Caller { qty > 0 }
 }

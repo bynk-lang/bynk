@@ -3,7 +3,7 @@ context ops.jobs
 consumes platform.time as Time
 
 service tick {
-  on call() -> Effect[Int] given Time.Clock {
+  on call() -> Effect[Int] by Caller given Time.Clock {
     let t <- Time.Clock.now()
     t
   }

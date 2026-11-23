@@ -3,7 +3,7 @@ context net.probe
 consumes bynk { Fetch, Secrets, Method, Request }
 
 service probe {
-  on call(url: String) -> Effect[Int] given Fetch, Secrets {
+  on call(url: String) -> Effect[Int] by Caller given Fetch, Secrets {
     let auth <- Secrets.get("PROBE_TOKEN")
     let req = Request {
       method: Get,

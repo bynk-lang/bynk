@@ -1,7 +1,7 @@
 context shop
 
 service authorise {
-  on call(total: Int) -> Effect[Int] {
+  on call(total: Int) -> Effect[Int] by Caller {
     total
   }
 }
