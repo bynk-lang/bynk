@@ -577,7 +577,7 @@ pub(super) fn emit_test_module(
             platform_double(owner, cap, &test_ns(owner), name, uses_advance, migrations)
         };
         if let Some(def) = def {
-            stmts.push(TsStmt::raw(def, None));
+            stmts.push(def);
         }
     }
 

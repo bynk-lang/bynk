@@ -361,22 +361,6 @@ pub(super) fn suite_replaces_left_out(
 /// always-present ones — a suite type under `Result` or another generic at a
 /// `Json` boundary — as function declarations to splice ahead of the body.
 /// `mark` is `RuntimeUse::json_codec_roots_len` taken before the runner lowered.
-pub(super) fn suite_late_codecs(
-    suite_fns: test_suites::SuiteItems<'_>,
-    typed: &checker::TypedCommons,
-    runtime_use: &RuntimeUse,
-    mark: usize,
-) -> String {
-    let mut printed = String::new();
-    case_body::extend_printed_at(
-        &mut printed,
-        suite_late_codec_stmts(suite_fns, typed, runtime_use, mark),
-        0,
-    );
-    reindent_by(&printed, "    ")
-}
-
-/// [`suite_late_codecs`] as statements.
 pub(super) fn suite_late_codec_stmts(
     suite_fns: test_suites::SuiteItems<'_>,
     typed: &checker::TypedCommons,

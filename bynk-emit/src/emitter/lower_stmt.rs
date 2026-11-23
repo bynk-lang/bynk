@@ -137,10 +137,12 @@ impl StatementSink {
 
 /// Render `body` into `out` at `indent`, recording each [`Item::Mark`] with
 /// `cx.record_span` at the offset where it is reached.
+#[cfg(test)]
 pub(super) fn render(body: &Body, out: &mut String, indent: usize, cx: &LowerCtx) {
     render_with(body, out, indent, Some(cx));
 }
 
+#[cfg(test)]
 fn render_with(body: &Body, out: &mut String, indent: usize, cx: Option<&LowerCtx>) {
     for item in &body.0 {
         match item {
@@ -195,23 +197,6 @@ pub(super) fn block_body_into(body: &mut Body, block: &Block, cx: &mut LowerCtx,
     // (a mock/test that never called `_with_return`) simply inherits the
     // ambient `None`.
     emit_block_inner(body, block, cx, async_tail);
-}
-
-/// As [`emit_block_as_function_body`], but records the enclosing return type on
-/// the `LowerCtx` for the duration of the body so the `?` lowering can apply a
-/// declared error embedding (v0.154, ADR 0178). The return type is set and then
-/// restored, so a *sibling* body (a lambda, a mock) does not inherit the wrong
-/// one; nested control-flow blocks reached via the shim above keep it.
-pub(crate) fn emit_block_as_function_body_with_return(
-    out: &mut String,
-    block: &Block,
-    cx: &mut LowerCtx,
-    indent: usize,
-    async_tail: bool,
-    return_type: Option<&TypeRef>,
-) {
-    let body = block_body_with_return(block, cx, async_tail, return_type);
-    render(&body, out, indent, cx);
 }
 
 /// [`emit_block_as_function_body_with_return`], as the statements of a typed
@@ -1295,6 +1280,7 @@ fn comparison_op_symbol(op: BinOp) -> Option<&'static str> {
     }
 }
 
+#[cfg(test)]
 pub(crate) fn write_line(out: &mut String, indent: usize, line: &str) {
     for _ in 0..indent {
         out.push(' ');

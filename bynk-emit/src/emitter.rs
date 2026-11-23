@@ -32,6 +32,9 @@
 //! - `is` lowers to a tag check; bindings become `const` declarations
 //!   on the truthy side of `if`/`&&`.
 
+#[cfg(test)]
+use bynk_ts::SourceMapBuilder;
+#[cfg(test)]
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -42,8 +45,7 @@ use std::sync::Arc;
 // grounding for why this API stays as-is while `bynk-ts`'s own printer
 // gets a second, simpler way to use the same type.
 use bynk_ts::{
-    SourceMapBuilder, TsType, decimal_signed_coef, pred_condition_and_message,
-    pred_condition_and_message_for,
+    TsType, decimal_signed_coef, pred_condition_and_message, pred_condition_and_message_for,
 };
 
 use crate::emit_model::{EmitProjectCtx, ExtraImport, ImportExt};
