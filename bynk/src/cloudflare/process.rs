@@ -26,6 +26,20 @@ pub(crate) struct Wrangler<'a> {
     script: Option<String>,
 }
 
+/// The test-only `sh -c` behind [`Wrangler::scripted`], in a test module so that
+/// `tool_spawn_sites` reads it as the test code it is.
+#[cfg(test)]
+mod scripting {
+    use std::process::Command;
+
+    /// `sh -c <script> sh <argv…>`, so `"$*"` is the call's arguments.
+    pub(super) fn command(script: &str, argv: &[String]) -> Command {
+        let mut command = Command::new("sh");
+        command.args(["-c", script, "sh"]).args(argv);
+        command
+    }
+}
+
 impl<'a> Wrangler<'a> {
     pub(crate) fn new(provenance: &'a Provenance, project_root: &'a Path) -> Self {
         Wrangler {
@@ -55,9 +69,7 @@ impl<'a> Wrangler<'a> {
             .expect("an operation names its subcommand");
         #[cfg(test)]
         if let Some(script) = &self.script {
-            let mut command = Command::new("sh");
-            command.args(["-c", script, "sh"]).args(argv);
-            return Ok(command);
+            return Ok(scripting::command(script, argv));
         }
         let mut command = bynk_driver::tools::wrangler::command(self.provenance, subcommand)
             .ok_or_else(|| WranglerError::missing(op))?;
