@@ -2346,8 +2346,11 @@ audit/logging belongs *after* resolution.
 ## §5.7b Events (v0.238–v0.244) {#events}
 
 An **event** is a typed fact one context emits and any number of contexts
-receive. Delivery is at-least-once and fire-and-forget: an emitter never learns
-whether, or how, a subscriber ran.
+receive. Delivery is at most once: an emission is lost if the hand-off or the
+delivery to a subscriber fails, and nothing is retried. An emitter never learns
+whether, or how, a subscriber ran. On Workers the emitting handler waits for
+delivery to finish. A durable replacement is planned
+([#3898](https://github.com/bynk-lang/bynk/issues/3898)).
 
 **Declaration.** An `event` ([§4.1.12](/reference/spec/syntactic-grammar/#4112-event_decl))
 MUST be declared in a context (`bynk.event.outside_context`). Its one admitted
