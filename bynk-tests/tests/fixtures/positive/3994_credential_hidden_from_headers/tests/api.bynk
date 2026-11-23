@@ -1,29 +1,29 @@
 suite ci.api as system {
 	// #3994: a verified credential never reaches the handler's `RequestHeaders`.
 	case "a Bearer route's handler cannot read the token" {
-		let r <- api.GET("/bearer") by User("ann")
-		let raw <- api.GET("/bearer-raw") by User("ann")
+		let r <- api.GET("/bearer", RequestHeaders.empty()) by User("ann")
+		let raw <- api.GET("/bearer-raw", RequestHeaders.empty()) by User("ann")
 		expect r is Ok("hidden ann")
 		expect raw is Ok("hidden")
 	}
 
 	case "an Oidc route's handler cannot read the token" {
-		let r <- api.GET("/oidc") by Workload("wid")
+		let r <- api.GET("/oidc", RequestHeaders.empty()) by Workload("wid")
 		expect r is Ok("hidden wid")
 	}
 
 	case "a sum route's handler cannot read the token" {
-		let r <- api.GET("/sum") by User("ann")
+		let r <- api.GET("/sum", RequestHeaders.empty()) by User("ann")
 		expect r is Ok("hidden")
 	}
 
 	case "a Signature route's handler cannot read the signature header" {
-		let r <- api.POST("/hook", "hi") by Processor
+		let r <- api.POST("/hook", RequestHeaders.empty(), "hi") by Processor
 		expect r is Ok("hidden hi")
 	}
 
 	case "a route with no credential keeps the header view" {
-		let r <- api.GET("/open") by Visitor
-		expect r is Ok("none")
+		let r <- api.GET("/open", RequestHeaders.of(["Authorization: Bearer abc"])) by Visitor
+		expect r is Ok("seen")
 	}
 }
