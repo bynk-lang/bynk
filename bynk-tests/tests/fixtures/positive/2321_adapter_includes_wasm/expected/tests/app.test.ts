@@ -39,10 +39,12 @@ class __Stub_Adder {
   constructor(c?: string) {
     this.__case = c;
   }
+
   __applies(op: string): boolean {
     if (op === "add") return this.__case === "the unit tier stubs the adapter";
     return true;
   }
+
   async add(a: number, b: number): globalThis.Promise<number> {
     if (this.__case === "the unit tier stubs the adapter") {
       return 99;

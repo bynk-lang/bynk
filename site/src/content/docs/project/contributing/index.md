@@ -3,7 +3,7 @@ title: Contributing to the compiler
 ---
 This section is for people working on Bynk itself — the `bynk` compiler and its
 sibling tools — rather than people writing Bynk programs. If you are here to
-*use* Bynk, start with the [tutorials](/book/tutorials/01-first-program/).
+*use* Bynk, start with the [tutorials](/book/tutorials/first-program/).
 
 ## The repository
 
@@ -35,7 +35,7 @@ cargo test -p bynk-tests     # the integration corpus (one `it` binary)
 - the **`tsc` verification gate** (`tests/tsc_verify.rs`);
 - the **generated-reference** checks and the **doc-example gate** for the book.
 
-See [Testing & fixtures](/book/contributing/testing/) for how these work and how to update them.
+See [Testing & fixtures](/project/contributing/testing/) for how these work and how to update them.
 
 ## A few conventions
 
@@ -49,12 +49,12 @@ See [Testing & fixtures](/book/contributing/testing/) for how these work and how
   history — some are aspirational or predate the Rust rewrite. Trust the
   fixtures and the code for current behaviour.
 - **Docs ship with the feature.** Each increment updates the book in the same
-  change — see [Working on the docs](/book/contributing/documentation/).
+  change — see [Working on the docs](/project/contributing/documentation/).
 
 ## Where to look
 
-- [Compiler architecture](/book/contributing/architecture/) — the pipeline and the crates.
-- [Testing & fixtures](/book/contributing/testing/) — the fixture formats, the bless workflow, the
+- [Compiler architecture](/project/contributing/architecture/) — the pipeline and the crates.
+- [Testing & fixtures](/project/contributing/testing/) — the fixture formats, the bless workflow, the
   `tsc` gate.
-- [Working on the docs](/book/contributing/documentation/) — the book, its generators, and its
+- [Working on the docs](/project/contributing/documentation/) — the book, its generators, and its
   guardrails.

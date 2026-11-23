@@ -653,7 +653,9 @@ fn read_worker(config: &Path, declared: DeclaredBindings) -> Result<Resources, S
         reads_complete: secrets.read_complete,
         foreign_callers: secrets.foreign,
         session_keys: secrets.session,
-        ..Resources::default()
+        // Filled in by `project_resources`, from the layout and the agents manifest.
+        members: Vec::new(),
+        agent_contexts: BTreeMap::new(),
     })
 }
 

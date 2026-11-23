@@ -16,7 +16,8 @@ use bynk_syntax::ast::{
 };
 use bynk_syntax::span::Span;
 use bynk_ts::{
-    TsBinaryOp, TsBindingName, TsClassMethod, TsExpr, TsParam, TsStmt, TsSwitchCase, TsType,
+    TsBinaryOp, TsBindingName, TsClassCtor, TsClassField, TsClassMethod, TsDecl, TsExpr, TsParam,
+    TsStmt, TsSwitchCase, TsType,
 };
 use std::sync::Arc;
 
@@ -48,7 +49,6 @@ pub(super) fn emit_stub_class(
     hidden: &BTreeMap<String, String>,
     tys: &Arc<Types>,
 ) -> TsStmt {
-    let mut out = String::new();
     let cap = &rp.cap;
     // Value expressions are lowered in the target context's privileged view, so
     // its types, variants and `uses` vocabulary resolve unqualified.
@@ -163,27 +163,16 @@ pub(super) fn emit_stub_class(
             .push(idx);
     }
 
-    // The class wrapper (header/fields) stays hand-written text — Decision C
-    // (#1359's own `emit_provider` precedent): each method's own body is one
-    // opaque `TsStmt::raw` (it mixes real structure with `lower_stub_value_
-    // block`'s own already-lowered opaque text, an `async () => { ... }`
-    // IIFE whose own multi-statement block body no `TsArrowBody::Block`
-    // renderer can flatten onto one line — the same "block-bodied arrow
-    // stays opaque" call `emit_composition_root`'s own `__eventsDispatch`
-    // closure already made), so each method is printed as
-    // its own real `TsClassMethod` fragment via `bynk_ts::print_class_method`
-    // at depth 0 — the only depth `render_class_method`'s own debug_assert
-    // allows a `Raw`-bodied method to print correctly at — and spliced
-    // directly into this still-hand-written wrapper, with no blank line
-    // between fields/methods or between methods (matching this function's
-    // own zero-blank-line output exactly).
-    out.push_str(&format!("class __Stub_{cap} {{\n"));
-    // One per-call sequence cursor field per `returns each` clause.
-    for (idx, clause) in rp.clauses.iter().enumerate() {
-        if matches!(clause.rhs, StubRhs::ReturnsEach(..)) {
-            out.push_str(&format!("  __seq_{idx} = 0;\n"));
-        }
-    }
+    // One per-call sequence cursor field per `returns each` clause (`__seq_0 = 0;`).
+    let mut fields: Vec<TsClassField> = rp
+        .clauses
+        .iter()
+        .enumerate()
+        .filter(|(_, c)| matches!(c.rhs, StubRhs::ReturnsEach(..)))
+        .map(|(idx, _)| TsClassField::inferred(seq_field(idx), num_lit("0")))
+        .collect();
+    let mut constructor: Option<TsClassCtor> = None;
+    let mut methods: Vec<TsClassMethod> = Vec::new();
     // #291: a case-scoped clause applies only while its own case runs, so a
     // class with one carries the running case's name (`__makeTestDeps`'s
     // argument), and `__applies` tells `__bynkOverlay` which operations this
@@ -193,16 +182,22 @@ pub(super) fn emit_stub_class(
     // class also carries the running suite's ordinal.
     let case_scoped = stub_is_scoped(rp);
     if case_scoped {
-        out.push_str("  __case: string | undefined;\n");
+        let maybe = |ty: &str| TsType::union(vec![TsType::named(ty), TsType::named("undefined")]);
+        let this_field = |name: &str| member(ident("this"), name);
+        let optional = |name: &str, ty: &str| TsParam {
+            optional: true,
+            ..TsParam::new(name, Some(TsType::named(ty)))
+        };
+        fields.push(TsClassField::new("__case", maybe("string")));
+        let mut params = vec![optional("c", "string")];
+        let mut body = vec![assign(this_field("__case"), ident("c"))];
         if stub_is_suite_scoped(rp) {
-            out.push_str("  __suite: number | undefined;\n");
-            out.push_str(
-                "  constructor(c?: string, s?: number) {\n    this.__case = c;\n    this.__suite = s;\n  }\n",
-            );
-        } else {
-            out.push_str("  constructor(c?: string) {\n    this.__case = c;\n  }\n");
+            fields.push(TsClassField::new("__suite", maybe("number")));
+            params.push(optional("s", "number"));
+            body.push(assign(this_field("__suite"), ident("s")));
         }
-        out.push_str("  __applies(op: string): boolean {\n");
+        constructor = Some(TsClassCtor { params, body });
+        let mut applies: Vec<TsStmt> = Vec::new();
         for (method, clause_idxs) in &by_method {
             let scopes: Vec<&StubScope> =
                 clause_idxs.iter().map(|&i| &rp.clause_scopes[i]).collect();
@@ -210,13 +205,19 @@ pub(super) fn emit_stub_class(
             if scopes.contains(&&StubScope::Every) {
                 continue;
             }
-            out.push_str(&format!(
-                "    if (op === {}) return {};\n",
-                bynk_ts::print_expr(&str_lit(method.as_str())),
-                scopes_test(&scopes),
+            applies.push(if_(
+                strict_eq(ident("op"), str_lit(method.as_str())),
+                ret(scopes_test(&scopes)),
             ));
         }
-        out.push_str("    return true;\n  }\n");
+        applies.push(ret(bool_lit(true)));
+        methods.push(TsClassMethod::new(
+            "__applies",
+            false,
+            vec![TsParam::new("op", Some(TsType::named("string")))],
+            Some(TsType::named("boolean")),
+            applies,
+        ));
     }
 
     for (method, clause_idxs) in &by_method {
@@ -238,12 +239,7 @@ pub(super) fn emit_stub_class(
             .collect();
         let return_ty = ts_type_ref_qualified_multi_ts_type(&op.return_type, &sig_type_ns);
 
-        let mut body_text = String::new();
-        crate::testgen::case_body::extend_printed_at(
-            &mut body_text,
-            emit_ns_destructure(&scope_ns, &scope_names, &scope_type_names),
-            2,
-        );
+        let mut body = emit_ns_destructure(&scope_ns, &scope_names, &scope_type_names);
         let mut taken: HashSet<String> = scope_names.iter().cloned().collect();
         // #2947: a suite helper inlined ahead of a value (#2907) spells its
         // signature's types unqualified, as in a case runner, so a method with
@@ -254,11 +250,7 @@ pub(super) fn emit_stub_class(
                 used_commons_destructures(&owning_unit, unit_tables, unit_uses, &mut HashSet::new())
             {
                 taken.extend(names.iter().chain(types.iter().map(|(n, _)| n)).cloned());
-                crate::testgen::case_body::extend_printed_at(
-                    &mut body_text,
-                    emit_ns_destructure(&ns, &names, &types),
-                    2,
-                );
+                body.extend(emit_ns_destructure(&ns, &names, &types));
             }
         }
         for u in &adapters {
@@ -286,22 +278,24 @@ pub(super) fn emit_stub_class(
                 .filter(|o| names.contains(*o) && taken.insert((*o).clone()))
                 .cloned()
                 .collect();
-            crate::testgen::case_body::extend_printed_at(
-                &mut body_text,
-                emit_ns_destructure_renamed(&test_ns(u), &names, &types, &renames, &declared),
-                2,
-            );
+            body.extend(emit_ns_destructure_renamed(
+                &test_ns(u),
+                &names,
+                &types,
+                &renames,
+                &declared,
+            ));
         }
         for &idx in clause_idxs {
             let clause = &rp.clauses[idx];
             // Argument-pattern consts: a `Value(e)` pattern lowers to a const the
             // condition compares structurally; an `Any` pattern contributes none.
-            let mut cond_parts: Vec<String> = Vec::new();
+            let mut cond_parts: Vec<TsExpr> = Vec::new();
             for (i, pat) in clause.args.iter().enumerate() {
                 if let ArgPattern::Value(e) = pat
                     && let Some(param) = op.params.get(i)
                 {
-                    let body = lower_stub_value_block(
+                    let value = lower_stub_value_block(
                         e,
                         &param.type_ref,
                         &[],
@@ -316,27 +310,22 @@ pub(super) fn emit_stub_class(
                         tys,
                     );
                     let vname = format!("__pv_{idx}_{i}");
-                    body_text.push_str(&format!("    const {vname} = await (async () => {{\n"));
-                    for line in body.lines() {
-                        body_text.push_str("      ");
-                        body_text.push_str(line);
-                        body_text.push('\n');
-                    }
-                    body_text.push_str("    })();\n");
+                    body.push(const_(vname.clone(), await_expr(iife(value))));
                     runtime_use.note_eq();
-                    cond_parts.push(format!("__bynkEq({}, {vname})", param.name.name));
+                    cond_parts.push(call(
+                        ident("__bynkEq"),
+                        vec![ident(param.name.name.clone()), ident(vname)],
+                    ));
                 }
             }
             let scope = &rp.clause_scopes[idx];
             if *scope != StubScope::Every {
                 cond_parts.insert(0, scopes_test(&[scope]));
             }
-            let cond = if cond_parts.is_empty() {
-                "true".to_string()
-            } else {
-                cond_parts.join(" && ")
-            };
-            body_text.push_str(&format!("    if ({cond}) {{\n"));
+            let cond = cond_parts
+                .into_iter()
+                .reduce(and_expr)
+                .unwrap_or_else(|| bool_lit(true));
             let rhs_body = emit_stub_rhs(
                 clause,
                 idx,
@@ -351,28 +340,39 @@ pub(super) fn emit_stub_class(
                 hidden,
                 tys,
             );
-            for line in rhs_body.lines() {
-                body_text.push_str("      ");
-                body_text.push_str(line);
-                body_text.push('\n');
-            }
-            body_text.push_str("    }\n");
+            body.push(if_(cond, block(rhs_body)));
         }
-        body_text.push_str(&format!(
-            "    throw new globalThis.Error(\"bynk: no stub clause matched for {cap}.{method}\");\n"
+        body.push(TsStmt::throw_stmt(
+            new(
+                ident("globalThis.Error"),
+                vec![str_lit(format!(
+                    "bynk: no stub clause matched for {cap}.{method}"
+                ))],
+            ),
+            None,
         ));
 
-        let method_node = TsClassMethod::new(
+        methods.push(TsClassMethod::new(
             method.clone(),
             true,
             params,
             Some(return_ty),
-            vec![TsStmt::raw(body_text, None)],
-        );
-        out.push_str(&bynk_ts::print_class_method(&method_node, 0));
+            body,
+        ));
     }
-    out.push_str("}\n");
-    TsStmt::raw(out, None)
+    // The stub's values are scaffolding, not user test logic, so the class maps nothing: the
+    // statements the lowering built carry source spans, which are dropped here (v0.70).
+    let mut class = TsStmt::decl(
+        TsDecl::class(format!("__Stub_{cap}"), fields, constructor, methods),
+        None,
+    );
+    class.clear_spans();
+    class
+}
+
+/// `(async () => { body })()`: a block run in place, for a value that needs its own statements.
+fn iife(body: Vec<TsStmt>) -> TsExpr {
+    call(paren(block_arrow(Vec::new(), true, body)), Vec::new())
 }
 
 /// `throw new Error("bynk: injected capability fault (stubs … fails)");` —
@@ -387,20 +387,6 @@ pub(super) fn stub_fault_stmt() -> TsStmt {
         },
         None,
     )
-}
-
-/// Prefix every line of `text` with `prefix` — [`TsStmtKind::Raw`]'s own
-/// "pre-indented at a fixed absolute depth by the caller" contract (its own
-/// doc), used here to carry [`lower_stub_value_block`]'s already-lowered
-/// opaque body text as one switch-case's own statement.
-pub(super) fn reindent_by(text: &str, prefix: &str) -> String {
-    let mut out = String::new();
-    for line in text.lines() {
-        out.push_str(prefix);
-        out.push_str(line);
-        out.push('\n');
-    }
-    out
 }
 
 /// v0.118: render the body of one matched `stub` clause — a `returns` value,
@@ -419,7 +405,7 @@ pub(super) fn emit_stub_rhs(
     runtime_use: &RuntimeUse,
     hidden: &BTreeMap<String, String>,
     tys: &Arc<Types>,
-) -> String {
+) -> Vec<TsStmt> {
     let lower = |e: &Expr| {
         lower_stub_value_block(
             e,
@@ -455,18 +441,22 @@ pub(super) fn emit_stub_rhs(
                     hidden,
                     tys,
                 );
-                let mut out = format!("const __after_{clause_idx} = await (async () => {{\n");
-                out.push_str(&reindent_by(&ms, "  "));
-                out.push_str("})();\n");
-                out.push_str(&format!("await __bynkSleep(__after_{clause_idx});\n"));
-                out.push_str(&lower(e));
+                let after_name = format!("__after_{clause_idx}");
+                let mut out = vec![
+                    const_(after_name.clone(), await_expr(iife(ms))),
+                    expr_stmt(await_expr(call(
+                        ident("__bynkSleep"),
+                        vec![ident(after_name)],
+                    ))),
+                ];
+                out.extend(lower(e));
                 out
             }
             None => lower(e),
         },
         // #2683: `never` — the call stays in flight for ever.
-        StubRhs::Never(_) => "return await __bynkNever();\n".to_string(),
-        StubRhs::Fails(_) => bynk_ts::print_stmt(&stub_fault_stmt(), 0),
+        StubRhs::Never(_) => vec![ret(await_expr(call(ident("__bynkNever"), Vec::new())))],
+        StubRhs::Fails(_) => vec![stub_fault_stmt()],
         StubRhs::ReturnsEach(outcomes, _) => {
             let n = outcomes.len();
             let mut stmts = vec![TsStmt::const_stmt(
@@ -487,7 +477,7 @@ pub(super) fn emit_stub_rhs(
             }
             let outcome_body = |o: &SeqOutcome| match o {
                 SeqOutcome::Value(e) => lower(e),
-                SeqOutcome::Fails(_) => bynk_ts::print_stmt(&stub_fault_stmt(), 0),
+                SeqOutcome::Fails(_) => vec![stub_fault_stmt()],
             };
             let mut cases: Vec<TsSwitchCase> = outcomes
                 .iter()
@@ -495,7 +485,7 @@ pub(super) fn emit_stub_rhs(
                 .take(n.saturating_sub(1))
                 .map(|(j, o)| TsSwitchCase {
                     labels: vec![num_lit(j.to_string())],
-                    body: vec![TsStmt::raw(reindent_by(&outcome_body(o), "    "), None)],
+                    body: outcome_body(o),
                     default_braced: false,
                     // Arc E slice 6 (#1445): unaffected by `case_braced`'s
                     // addition — this site's own non-`default` cases were
@@ -506,16 +496,13 @@ pub(super) fn emit_stub_rhs(
                 .collect();
             cases.push(TsSwitchCase {
                 labels: vec![],
-                body: vec![TsStmt::raw(
-                    reindent_by(&outcome_body(&outcomes[n - 1]), "    "),
-                    None,
-                )],
+                body: outcome_body(&outcomes[n - 1]),
                 default_braced: true,
                 case_braced: true,
                 span: None,
             });
             stmts.push(TsStmt::switch_stmt(ident("__k"), cases, None));
-            stmts.iter().map(|s| bynk_ts::print_stmt(s, 0)).collect()
+            stmts
         }
     }
 }
@@ -538,7 +525,7 @@ pub(super) fn lower_stub_value_block(
     runtime_use: &RuntimeUse,
     hidden: &BTreeMap<String, String>,
     tys: &Arc<Types>,
-) -> String {
+) -> Vec<TsStmt> {
     // #2850: the declaring suite's fixtures are names for module-level
     // constants. An operation parameter of the same name shadows one, as in the
     // checker.
@@ -560,8 +547,8 @@ pub(super) fn lower_stub_value_block(
         items.types,
     );
     let block = test_suites::value_block(e);
-    let mut helpers: Vec<String> = Vec::new();
-    let mut suite_decls = String::new();
+    let mut helpers: Vec<TsStmt> = Vec::new();
+    let mut suite_decls: Vec<TsStmt> = Vec::new();
     if let Some((resolved, _)) = test_suites::build_privileged_resolved(
         &owning_unit,
         unit_tables,
@@ -596,7 +583,7 @@ pub(super) fn lower_stub_value_block(
             test_suites::add_suite_fns_to_typed(&mut typed, items.fns);
             for f in items.fns {
                 let stmts = emitter::emit_suite_fn(f, &typed, runtime_use);
-                helpers.extend(stmts.iter().map(|st| bynk_ts::print_stmt(st, 0)));
+                helpers.extend(stmts);
             }
         }
         // #3111: the suite's own types and constants, declared ahead of the
@@ -619,16 +606,12 @@ pub(super) fn lower_stub_value_block(
             for c in items.consts {
                 typed.consts.insert(c.name.name.clone(), c.clone());
             }
-            case_body::extend_printed_at(
-                &mut suite_decls,
-                emitter::emit_suite_decls(
-                    items.types,
-                    items.consts,
-                    &typed,
-                    &runtime_use.json_codec_qual(),
-                    runtime_use,
-                ),
-                0,
+            suite_decls = emitter::emit_suite_decls(
+                items.types,
+                items.consts,
+                &typed,
+                &runtime_use.json_codec_qual(),
+                runtime_use,
             );
         }
         test_suites::add_suite_fns(
@@ -661,23 +644,26 @@ pub(super) fn lower_stub_value_block(
     // v0.70: `stub` value scaffolding is not user test logic, so its source
     // map is discarded — it stays unmapped (a deliberate scope cut).
     let body =
-        case_body::lower_block_to_async_body(&block, ret_type, &mut typed, &cross, runtime_use).0;
+        case_body::lower_block_to_async_stmts(&block, ret_type, &mut typed, &cross, runtime_use);
     // #3111: the codecs the value reached for beyond the always-present ones.
-    let late_codecs = suite_late_codecs(items, &typed, runtime_use, roots_mark);
-    let aliases: String = fixtures
-        .iter()
-        .map(|f| {
-            format!(
-                "const {}: string = {};\n",
-                f.name.name,
-                fixture_ident(&f.path)
-            )
-        })
+    let late_codecs = suite_late_codec_stmts(items, &typed, runtime_use, roots_mark);
+    let aliases = fixtures.iter().map(|f| {
+        const_typed(
+            f.name.name.clone(),
+            TsType::named("string"),
+            ident(fixture_ident(&f.path)),
+        )
+    });
+    let mut stmts: Vec<TsStmt> = suite_decls
+        .into_iter()
+        .chain(late_codecs)
+        .chain(aliases)
+        .chain(helpers)
+        .chain(body)
         .collect();
-    format!(
-        "{suite_decls}{late_codecs}{aliases}{}{body}",
-        helpers.concat()
-    )
+    // A stub value maps nothing (v0.70): drop the spans the lowering recorded.
+    stmts.iter_mut().for_each(TsStmt::clear_spans);
+    stmts
 }
 
 /// #2850/#2907: what a stub clause's values may name of its suite.
@@ -893,7 +879,7 @@ pub(super) fn stub_is_suite_scoped(rp: &ResolvedStub) -> bool {
 /// #291/#1860: a stub class's test that the running case or suite is one of
 /// `scopes` (none of them [`StubScope::Every`]): `this.__case === "a" ||
 /// this.__suite === 1`, cases in name order and then suites.
-pub(super) fn scopes_test(scopes: &[&StubScope]) -> String {
+pub(super) fn scopes_test(scopes: &[&StubScope]) -> TsExpr {
     let mut cases: BTreeSet<&String> = BTreeSet::new();
     let mut suites: BTreeSet<usize> = BTreeSet::new();
     for scope in scopes {
@@ -907,17 +893,21 @@ pub(super) fn scopes_test(scopes: &[&StubScope]) -> String {
             StubScope::Every => {}
         }
     }
-    cases
+    let this = |field: &str| member(ident("this"), field);
+    let tests: Vec<TsExpr> = cases
         .into_iter()
-        .map(|c| {
-            format!(
-                "this.__case === {}",
-                bynk_ts::print_expr(&str_lit(c.as_str()))
-            )
-        })
-        .chain(suites.into_iter().map(|n| format!("this.__suite === {n}")))
-        .collect::<Vec<_>>()
-        .join(" || ")
+        .map(|c| strict_eq(this("__case"), str_lit(c.as_str())))
+        .chain(
+            suites
+                .into_iter()
+                .map(|n| strict_eq(this("__suite"), num_lit(n.to_string()))),
+        )
+        .collect();
+    debug_assert!(!tests.is_empty(), "scopes_test: every scope was `Every`");
+    tests
+        .into_iter()
+        .reduce(or_expr)
+        .unwrap_or_else(|| bool_lit(false))
 }
 
 /// #291: a stubbed capability's `__makeTestDeps` entry — its `__Stub_<Cap>`
@@ -1333,7 +1323,7 @@ pub(super) fn platform_double(
     // #3321: for a `Postgres` instance, its `schema.sql` when the project opts
     // in to PGlite (`Some`, possibly empty), else `None`.
     d1_migrations: Option<&[MigrationFile]>,
-) -> Option<String> {
+) -> Option<TsStmt> {
     let body = match (owner, cap) {
         // K5a (#2586): every level a no-op, as `info` and `error` are.
         ("bynk", "Logger") => "  return {\n    async info() {},\n    async error() {},\n    async warn() {},\n    async debug() {},\n    async log() {},\n  };\n".to_string(),
@@ -1384,9 +1374,20 @@ pub(super) fn platform_double(
         // usable bare) is built without them, and never refuses.
         ("bynk.cloudflare", "RateLimit") => {
             let now = if harness_clock { "__bynkClockNow" } else { "0" };
-            return Some(format!(
-                "function __bynkTest_{name}(limit: number = globalThis.Number.POSITIVE_INFINITY, period: number = 60): {ns}.{cap} {{\n  const counts = new globalThis.Map<string, {{ window: number; count: number }}>();\n  return {{\n    async allow(key) {{\n      const window = globalThis.Math.floor({now} / (period * 1000));\n      const e = counts.get(key);\n      const c = e !== undefined && e.window === window ? e : {{ window, count: 0 }};\n      c.count += 1;\n      counts.set(key, c);\n      return c.count <= limit;\n    }},\n  }};\n}}\n"
-            ));
+            let params = vec![
+                TsParam {
+                    default: Some(ident("globalThis.Number.POSITIVE_INFINITY")),
+                    ..TsParam::new("limit", Some(TsType::named("number")))
+                },
+                TsParam {
+                    default: Some(num_lit("60")),
+                    ..TsParam::new("period", Some(TsType::named("number")))
+                },
+            ];
+            let body = format!(
+                "  const counts = new globalThis.Map<string, {{ window: number; count: number }}>();\n  return {{\n    async allow(key) {{\n      const window = globalThis.Math.floor({now} / (period * 1000));\n      const e = counts.get(key);\n      const c = e !== undefined && e.window === window ? e : {{ window, count: 0 }};\n      c.count += 1;\n      counts.set(key, c);\n      return c.count <= limit;\n    }},\n  }};\n"
+            );
+            return Some(double_fn(name, ns, cap, params, body, &double_uses(owner, cap, harness_clock, false)));
         }
         // L7 (#2414): there is no edge cache in a test, so each instance
         // accepts every purge, checking its prefixes as the binding does;
@@ -1518,9 +1519,28 @@ pub(super) fn platform_double(
         // which production's approximate, eventually consistent index is not.
         // `stub Docs.query(_, _) returns …` still replaces an operation.
         ("bynk.cloudflare", "Vectorize") => {
-            return Some(format!(
-                "function __bynkTest_{name}(dimensions: number = 1, metric: string = \"cosine\", indexed: readonly string[] = []): {ns}.{cap} {{\n  return new bynk_cloudflare__binding.WorkersVectorize({{ INDEX: __makeIntegrationVectorize(dimensions, metric, indexed) }}, \"INDEX\");\n}}\n"
-            ));
+            let params = vec![
+                TsParam {
+                    default: Some(num_lit("1")),
+                    ..TsParam::new("dimensions", Some(TsType::named("number")))
+                },
+                TsParam {
+                    default: Some(str_lit("cosine")),
+                    ..TsParam::new("metric", Some(TsType::named("string")))
+                },
+                TsParam {
+                    default: Some(TsExpr::array(vec![])),
+                    ..TsParam::new(
+                        "indexed",
+                        Some(TsType::Array {
+                            element: Box::new(TsType::named("string")),
+                            readonly: true,
+                        }),
+                    )
+                },
+            ];
+            let body = "  return new bynk_cloudflare__binding.WorkersVectorize({ INDEX: __makeIntegrationVectorize(dimensions, metric, indexed) }, \"INDEX\");\n".to_string();
+            return Some(double_fn(name, ns, cap, params, body, &double_uses(owner, cap, harness_clock, false)));
         }
         // #3480: a test never reaches AI Search, so each instance faults until
         // its operation is stubbed (no double could keep the service's
@@ -1573,20 +1593,216 @@ pub(super) fn platform_double(
         ("bynk.cloudflare", "Service") => format!("  return {{\n    async send() {{\n      throw new globalThis.Error(\"bynk: `{name}.send` is not stubbed, and a test never reaches the Worker behind it — add `stub {name}.send(_) returns …`\");\n    }},\n  }};\n"),
         _ => return None,
     };
-    Some(format!(
-        "function __bynkTest_{name}(): {ns}.{cap} {{\n{body}}}\n"
+    let pglite = d1_migrations.is_some();
+    Some(double_fn(
+        name,
+        ns,
+        cap,
+        Vec::new(),
+        body,
+        &double_uses(owner, cap, harness_clock, pglite),
     ))
+}
+
+/// A platform double as a function declaration: `function __bynkTest_<name>(params): <ns>.<cap> {
+/// body }`. The body is one authored text statement (a fixed object literal or a call into the
+/// capability's real binding, with named substitutions), carrying the runtime and sibling names it
+/// spells. It stays text because it is test-double code written to be read as TypeScript
+/// (#4054 Decision A).
+fn double_fn(
+    name: &str,
+    ns: &str,
+    cap: &str,
+    params: Vec<TsParam>,
+    body: String,
+    uses: &[&str],
+) -> TsStmt {
+    TsStmt::decl(
+        bynk_ts::TsDecl::Function {
+            name: format!("__bynkTest_{name}"),
+            generics: Vec::new(),
+            params,
+            return_type: Some(TsType::named(format!("{ns}.{cap}"))),
+            body: vec![TsStmt::raw_using(body, uses)],
+            is_async: false,
+            inline: false,
+        },
+        None,
+    )
+}
+
+/// The runtime and sibling names a platform double's body spells, by what the body of that
+/// capability's double names: the result variants it returns, the harness clock it reads, and the
+/// binding or integration factory it calls.
+fn double_uses(owner: &str, cap: &str, harness_clock: bool, pglite: bool) -> Vec<&'static str> {
+    let clock = |mut v: Vec<&'static str>| {
+        if harness_clock {
+            v.push("__bynkClockNow");
+        }
+        v
+    };
+    match (owner, cap) {
+        ("bynk", "Clock") if harness_clock => vec!["__bynkClockNow", "__bynkClock"],
+        ("bynk", "Secrets") | ("bynk.cloudflare", "Version") => vec!["None"],
+        ("bynk", "Idempotency") => clock(Vec::new()),
+        ("bynk.cloudflare", "Kv") => clock(vec!["None", "Some"]),
+        ("bynk.cloudflare", "R2") => vec!["None", "Some"],
+        ("bynk.cloudflare", "RateLimit") => clock(Vec::new()),
+        ("bynk.crypto", "Crypto") => vec!["bynk_crypto__binding"],
+        ("bynk.testing", "TypedReads") => vec!["bynk_testing__binding"],
+        ("bynk.cloudflare", "D1") => vec!["bynk_cloudflare__binding", "__makeIntegrationD1"],
+        ("bynk.cloudflare", "Email") => {
+            vec!["bynk_cloudflare__binding", "__makeIntegrationEmail"]
+        }
+        ("bynk.cloudflare", "Postgres") if pglite => {
+            vec!["bynk_cloudflare__binding", "__makeIntegrationPostgres"]
+        }
+        ("bynk.cloudflare", "Vectorize") => {
+            vec!["bynk_cloudflare__binding", "__makeIntegrationVectorize"]
+        }
+        _ => Vec::new(),
+    }
 }
 
 /// #2134: the `Secrets` test double of a module whose cases run with `env`
 /// entries: it answers `Some(value)` for a name the running case's `env`
 /// gives (`__bynkEnv`), and `None` for any other, as [`platform_double`]'s
 /// does for every name. `None` for any other capability.
-pub(super) fn env_secrets_double(owner: &str, cap: &str, ns: &str, name: &str) -> Option<String> {
+pub(super) fn env_secrets_double(owner: &str, cap: &str, ns: &str, name: &str) -> Option<TsStmt> {
     if (owner, cap) != ("bynk", "Secrets") {
         return None;
     }
-    Some(format!(
-        "function __bynkTest_{name}(): {ns}.{cap} {{\n  return {{\n    async get(key) {{\n      const v = __bynkEnv[key];\n      return v === undefined ? None : Some(v);\n    }},\n  }};\n}}\n"
+    Some(double_fn(
+        name,
+        ns,
+        cap,
+        Vec::new(),
+        "  return {\n    async get(key) {\n      const v = __bynkEnv[key];\n      return v === undefined ? None : Some(v);\n    },\n  };\n".to_string(),
+        &["None", "Some", "__bynkEnv"],
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::BTreeSet;
+
+    /// The `(owner, capability)` pairs [`platform_double`] has a double for.
+    const DOUBLES: &[(&str, &str)] = &[
+        ("bynk", "Logger"),
+        ("bynk", "Events"),
+        ("bynk", "Clock"),
+        ("bynk", "Random"),
+        ("bynk.crypto", "Crypto"),
+        ("bynk.testing", "TypedReads"),
+        ("bynk", "Secrets"),
+        ("bynk", "Locale"),
+        ("bynk", "Fetch"),
+        ("bynk", "Idempotency"),
+        ("bynk.cloudflare", "Kv"),
+        ("bynk.cloudflare", "R2"),
+        ("bynk.cloudflare", "RateLimit"),
+        ("bynk.cloudflare", "EdgeCache"),
+        ("bynk.cloudflare", "Queue"),
+        ("bynk.cloudflare", "Analytics"),
+        ("bynk.cloudflare", "D1"),
+        ("bynk.cloudflare", "Email"),
+        ("bynk.cloudflare", "Postgres"),
+        ("bynk.cloudflare", "MySql"),
+        ("bynk.cloudflare", "Version"),
+        ("bynk.cloudflare", "Ai"),
+        ("bynk.cloudflare", "Images"),
+        ("bynk.cloudflare", "AnalyticsSql"),
+        ("bynk.cloudflare", "Vectorize"),
+        ("bynk.cloudflare", "AiSearch"),
+        ("bynk.cloudflare", "MtlsCertificate"),
+        ("bynk.cloudflare", "Container"),
+        ("bynk.cloudflare", "StoredSecret"),
+        ("bynk.cloudflare", "Service"),
+    ];
+
+    /// The runtime and sibling names a double's text spells: the result variants, `__bynk…` and
+    /// `__make…` helpers and `…__binding` namespaces, outside strings, templates and comments.
+    fn spelled_names(text: &str) -> BTreeSet<String> {
+        let bytes = text.as_bytes();
+        let mut names = BTreeSet::new();
+        let mut i = 0;
+        while i < bytes.len() {
+            match bytes[i] {
+                b'/' if bytes.get(i + 1) == Some(&b'/') => {
+                    while i < bytes.len() && bytes[i] != b'\n' {
+                        i += 1;
+                    }
+                }
+                q @ (b'"' | b'`') => {
+                    i += 1;
+                    while i < bytes.len() && bytes[i] != q {
+                        i += if bytes[i] == b'\\' { 2 } else { 1 };
+                    }
+                    i += 1;
+                }
+                c if c.is_ascii_alphabetic() || c == b'_' || c == b'$' => {
+                    let start = i;
+                    while i < bytes.len()
+                        && (bytes[i].is_ascii_alphanumeric()
+                            || bytes[i] == b'_'
+                            || bytes[i] == b'$')
+                    {
+                        i += 1;
+                    }
+                    let word = &text[start..i];
+                    if matches!(word, "Some" | "None" | "Ok" | "Err")
+                        || word.starts_with("__bynk")
+                        || word.starts_with("__make")
+                        || word.ends_with("__binding")
+                    {
+                        names.insert(word.to_string());
+                    }
+                }
+                _ => i += 1,
+            }
+        }
+        names
+    }
+
+    /// A double's declared names are the names its body spells. The list is written beside the
+    /// body text, so this is what stops an edit to one from leaving the other behind.
+    #[test]
+    fn a_platform_double_declares_the_names_its_body_spells() {
+        let no_files: &[MigrationFile] = &[];
+        for &(owner, cap) in DOUBLES {
+            for harness_clock in [false, true] {
+                for pglite in [false, true] {
+                    let migrations = pglite.then_some(no_files);
+                    let def = platform_double(owner, cap, "ns", "X", harness_clock, migrations)
+                        .unwrap_or_else(|| panic!("no double for {owner}.{cap}"));
+                    let printed = bynk_ts::print_stmt(&def, 0);
+                    // Drop the declaration's own header line, which names `__bynkTest_X`.
+                    let body = printed.split_once('\n').map_or("", |(_, rest)| rest);
+                    let declared: BTreeSet<String> = double_uses(owner, cap, harness_clock, pglite)
+                        .into_iter()
+                        .map(str::to_string)
+                        .collect();
+                    assert_eq!(
+                        spelled_names(body),
+                        declared,
+                        "{owner}.{cap} (clock {harness_clock}, pglite {pglite})"
+                    );
+                }
+            }
+        }
+    }
+
+    /// The `Secrets` double that answers from a case's `env` declares what it spells.
+    #[test]
+    fn the_env_secrets_double_declares_the_names_it_spells() {
+        let def = env_secrets_double("bynk", "Secrets", "ns", "X").expect("a Secrets double");
+        let printed = bynk_ts::print_stmt(&def, 0);
+        let body = printed.split_once('\n').map_or("", |(_, rest)| rest);
+        let declared: BTreeSet<String> = ["None", "Some", "__bynkEnv"]
+            .into_iter()
+            .map(str::to_string)
+            .collect();
+        assert_eq!(spelled_names(body), declared);
+    }
 }

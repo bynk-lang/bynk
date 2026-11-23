@@ -249,7 +249,7 @@ impl ResourceKind for Queue {
         queue: &String,
     ) -> Result<Option<Commit<QueueChange>>, DeployFailure> {
         let physical = env_qualify(cx.environment, queue);
-        delete_queue(cx.tools.provenance, &physical, cx.tools.project_root).map_err(|e| {
+        delete_queue(cx.tools.api, &physical).map_err(|e| {
             DeployFailure::driver(format!(
                 "could not delete the orphaned queue `{physical}`: {e}"
             ))
@@ -331,11 +331,10 @@ fn apply_queues(
 /// made in between did not).
 fn attempt_create(cx: &StepCx<'_, '_, Queue>, queue: &str) -> Result<bool, DeployFailure> {
     let physical = env_qualify(cx.environment, queue);
-    let (provenance, project_root) = (cx.tools.provenance, cx.tools.project_root);
-    if queue_exists(provenance, &physical, project_root) {
+    if queue_exists(cx.tools.api, &physical) {
         return Ok(false);
     }
-    create_queue(provenance, &physical, project_root)
+    create_queue(cx.tools.api, &physical)
         .map_err(|e| DeployFailure::driver(format!("could not create the queue `{physical}`: {e}")))
 }
 
@@ -476,6 +475,7 @@ mod tests {
             std::cell::RefCell::new(BTreeSet::from(["jobs".to_string(), "outbound".to_string()]));
         let site = Site {
             tools: Tools {
+                api: &Wrangler::new(&provenance, Path::new("/nonexistent")),
                 provenance: &provenance,
                 project_root: Path::new("/nonexistent"),
             },

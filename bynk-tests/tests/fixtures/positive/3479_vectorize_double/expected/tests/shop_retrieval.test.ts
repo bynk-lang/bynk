@@ -42,10 +42,12 @@ class __Stub_Docs {
   constructor(c?: string) {
     this.__case = c;
   }
+
   __applies(op: string): boolean {
     if (op === "query") return this.__case === "a stub still replaces an operation";
     return true;
   }
+
   async query(vector: readonly number[], options: __ns_bynk_cloudflare.QueryOptions): globalThis.Promise<Result<readonly __ns_bynk_cloudflare.VectorMatch[], __ns_bynk_cloudflare.VectorError>> {
     const { Meta } = __ns_shop_retrieval;
     type Meta = __ns_shop_retrieval.Meta;

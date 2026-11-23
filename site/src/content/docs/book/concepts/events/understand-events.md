@@ -13,7 +13,7 @@ event field defaults (slice 3a), `@schema(N)` event versioning (slice 3b),
 the cross-build schema registry that verifies it (slice 3c), and
 version-aware dispatch with `via schema(N)` (slice 4) and its ranges (slice 4b).
 For the track's remaining scope (replay), see
-[Versioning & roadmap](/book/about/versioning-and-roadmap/).
+[Versioning & roadmap](/project/versioning-and-roadmap/).
 
 ## The three pieces
 

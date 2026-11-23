@@ -242,6 +242,7 @@ mod tests {
         let project = BTreeMap::new();
         let site = Site {
             tools: Tools {
+                api: &Wrangler::new(&provenance, Path::new("/nonexistent")),
                 provenance: &provenance,
                 project_root: Path::new("/nonexistent"),
             },

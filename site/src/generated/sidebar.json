@@ -11,10 +11,6 @@
         "link": "/book/introduction/what-is-bynk/"
       },
       {
-        "label": "Why Bynk exists",
-        "link": "/book/about/why-bynk-exists/"
-      },
-      {
         "label": "Anatomy of a Bynk service",
         "link": "/book/introduction/anatomy-of-a-service/"
       },
@@ -33,19 +29,19 @@
     "items": [
       {
         "label": "1. Compile your first program",
-        "link": "/book/tutorials/01-first-program/"
+        "link": "/book/tutorials/first-program/"
       },
       {
         "label": "2. Build a small HTTP service",
-        "link": "/book/tutorials/02-http-service/"
+        "link": "/book/tutorials/http-service/"
       },
       {
         "label": "3. Model your data with types",
-        "link": "/book/tutorials/03-modelling-data/"
+        "link": "/book/tutorials/modelling-data/"
       },
       {
         "label": "4. Make illegal states unrepresentable",
-        "link": "/book/tutorials/04-refined-types/"
+        "link": "/book/tutorials/refined-types/"
       },
       {
         "label": "5. Handle failure with Result",
@@ -57,7 +53,7 @@
       },
       {
         "label": "7. Add a stateful agent",
-        "link": "/book/tutorials/05-stateful-agent/"
+        "link": "/book/tutorials/stateful-agent/"
       },
       {
         "label": "8. Split into contexts",
@@ -65,7 +61,11 @@
       },
       {
         "label": "9. Test it",
-        "link": "/book/tutorials/06-testing/"
+        "link": "/book/tutorials/testing/"
+      },
+      {
+        "label": "10. Deploy it",
+        "link": "/book/tutorials/deploy/"
       }
     ]
   },
@@ -676,36 +676,6 @@
             "link": "/book/guides/projects-build-and-deployment/"
           }
         ]
-      }
-    ]
-  },
-  {
-    "label": "About Bynk",
-    "items": [
-      {
-        "label": "Versioning & roadmap",
-        "link": "/book/about/versioning-and-roadmap/"
-      }
-    ]
-  },
-  {
-    "label": "Contributing",
-    "items": [
-      {
-        "label": "Overview",
-        "link": "/book/contributing/"
-      },
-      {
-        "label": "Compiler architecture",
-        "link": "/book/contributing/architecture/"
-      },
-      {
-        "label": "Testing & fixtures",
-        "link": "/book/contributing/testing/"
-      },
-      {
-        "label": "Working on the docs",
-        "link": "/book/contributing/documentation/"
       }
     ]
   }

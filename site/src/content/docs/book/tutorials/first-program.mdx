@@ -70,7 +70,7 @@ Notice that one line of Bynk produced more than a bare type alias. `Id` is a
 *branded* type — `number & { readonly __brand: "Id" }` — so an `Id` is not
 interchangeable with any other number. The compiler also generated a validating
 constructor, `Id.of`, which you will meet properly in
-[Make illegal states unrepresentable](/book/tutorials/04-refined-types/); for now, just note that Bynk types carry an
+[Make illegal states unrepresentable](/book/tutorials/refined-types/); for now, just note that Bynk types carry an
 identity, even when they look like plain aliases.
 
 ## Add a function
@@ -131,7 +131,7 @@ readable TypeScript, and learned the difference between `compile` and `check`.
 Next, we leave single files behind and build something that runs: a small HTTP
 service.
 
-➡️ **Next: [Build a small HTTP service](/book/tutorials/02-http-service/)**
+➡️ **Next: [Build a small HTTP service](/book/tutorials/http-service/)**
 
 ---
 

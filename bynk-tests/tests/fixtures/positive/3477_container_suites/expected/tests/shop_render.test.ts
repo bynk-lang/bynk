@@ -63,10 +63,12 @@ class __Stub_Renderer {
   constructor(c?: string) {
     this.__case = c;
   }
+
   __applies(op: string): boolean {
     if (op === "send") return this.__case === "a failed start carries its message" || this.__case === "a stubbed send returns its response" || this.__case === "an unavailable container is matched";
     return true;
   }
+
   async send(instance: string, req: __ns_bynk.Request): globalThis.Promise<Result<__ns_bynk.Response, __ns_bynk_cloudflare.ContainerError>> {
     const { BytesResponse, Claim, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;

@@ -3,7 +3,7 @@ title: Reference
 description: Exact behaviour of the Bynk language and toolchain — the language, its architecture, adapters, the tools, every diagnostic, the normative specification and every release.
 ---
 Consultable, complete, and dry. These pages describe exact behaviour; for
-learning, start with the [tutorials](/book/tutorials/01-first-program/), and for
+learning, start with the [tutorials](/book/tutorials/first-program/), and for
 tasks see the [how-to guides](/book/guides/). The Reference has seven sections.
 
 ## Language

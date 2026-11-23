@@ -1,7 +1,7 @@
 ---
 title: Model your data with types
 ---
-In [Build a small HTTP service](/book/tutorials/02-http-service/) the shortener echoed strings around. Now we
+In [Build a small HTTP service](/book/tutorials/http-service/) the shortener echoed strings around. Now we
 give it a real data model. Bynk gives you three ways to shape data, and choosing
 the right one is most of the work of modelling a domain well:
 
@@ -37,7 +37,7 @@ type ResolveView = {
 ```
 
 (The `String` fields become precise refined types in
-[Make illegal states unrepresentable](/book/tutorials/04-refined-types/); for now plain strings keep us moving.) You
+[Make illegal states unrepresentable](/book/tutorials/refined-types/); for now plain strings keep us moving.) You
 construct a record by naming it and giving every field a value:
 
 ```bynk,fragment
@@ -46,7 +46,7 @@ Created(CreatedView { code: "abc123", target: body.target })
 
 Records are immutable. To produce a changed copy, use the **spread** form
 `{ ...r, … }`, which copies every field and overrides the ones you name (we will
-use it for agent state in [Add a stateful agent](/book/tutorials/05-stateful-agent/)). A record compiles
+use it for agent state in [Add a stateful agent](/book/tutorials/stateful-agent/)). A record compiles
 to a TypeScript `interface` with `readonly` fields:
 
 ```typescript
@@ -200,7 +200,7 @@ modelling.
 Right now a `code` is any old `String`. Next we sharpen that: how do we stop an
 *invalid* short code — too short, wrong shape — from being constructed at all?
 
-➡️ **Next: [Make illegal states unrepresentable](/book/tutorials/04-refined-types/)**
+➡️ **Next: [Make illegal states unrepresentable](/book/tutorials/refined-types/)**
 
 ---
 

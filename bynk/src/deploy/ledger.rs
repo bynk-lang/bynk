@@ -1450,24 +1450,14 @@ pub(crate) fn confirm_deletion_prompt(yes: bool, count: usize) -> bool {
 /// ledger write, and the next run would re-report the same orphan and
 /// re-issue a delete Cloudflare now rejects as not-found.
 pub(crate) fn prune_orphans(
-    provenance: &Provenance,
-    project_root: &Path,
+    tools: Tools<'_>,
     writer: &mut LedgerWriter<'_>,
     environment: &str,
     orphans: &Orphans,
     lives: Lives<'_>,
 ) -> Result<(), DeployFailure> {
     // 1D.1 (#3929): each converted kind's, in the list's order (ruled for 1D.1c), first.
-    prune_kind_orphans(
-        Tools {
-            provenance,
-            project_root,
-        },
-        writer,
-        environment,
-        orphans,
-        lives,
-    )?;
+    prune_kind_orphans(tools, writer, environment, orphans, lives)?;
     Ok(())
 }
 

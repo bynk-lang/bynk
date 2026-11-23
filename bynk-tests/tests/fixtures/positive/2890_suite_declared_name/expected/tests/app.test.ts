@@ -41,10 +41,12 @@ class __Stub_Crypto {
   constructor(c?: string) {
     this.__case = c;
   }
+
   __applies(op: string): boolean {
     if (op === "digest") return this.__case === "a case names the adapter type by its declared name";
     return true;
   }
+
   async digest(algorithm: __ns_bynk_crypto.Digest, data: globalThis.Uint8Array): globalThis.Promise<globalThis.Uint8Array> {
     const { CryptoError, Digest: CryptoDigest, Digest, Signature, SigningKey, VerifyKey } = __ns_bynk_crypto;
     type CryptoError = __ns_bynk_crypto.CryptoError;

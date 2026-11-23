@@ -358,6 +358,6 @@ let n <- c.increment()
 
 ## Related
 
-- Tutorial: [Add a stateful agent](/book/tutorials/05-stateful-agent/).
+- Tutorial: [Add a stateful agent](/book/tutorials/stateful-agent/).
 - Reference: [agents](/reference/agents/).
 - Diagnostics: [`bynk.agents.non_zeroable_state_field`](/reference/diagnostics/bynk.agents.non_zeroable_state_field/).

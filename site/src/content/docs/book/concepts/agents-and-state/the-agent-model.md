@@ -112,6 +112,6 @@ modelling "absent" precisely, and it is what makes fresh keys safe.
 
 ## See also
 
-- Tutorial: [Add a stateful agent](/book/tutorials/05-stateful-agent/).
+- Tutorial: [Add a stateful agent](/book/tutorials/stateful-agent/).
 - How-to: [Build a stateful agent](/book/guides/agents-and-state/stateful-agent/).
 - Reference: [agents](/reference/agents/).

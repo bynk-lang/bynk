@@ -111,7 +111,8 @@ down, the section shows only its link to the blog and the build carries on.
 The links these components draw aren't in Markdown, so the link validator
 doesn't see them. After the build, CI runs `scripts/check-shell-links.mjs`,
 which checks every site link on the home page and a Book page against the
-built pages.
+built pages. A link that `_redirects` forwards to a built page passes, with a
+note to update it where it is written.
 
 ## Licences
 
@@ -125,13 +126,15 @@ on the same terms; the README's "Licence" section has the details.
 
 The sidebars are **generated**, not hand-maintained. Each tree has an authored
 table of contents: `site/src/SUMMARY.md` for the Book (`book/`, served at
-`/book/`) and `site/src/REFERENCE.md` for the Reference (`reference/`, served at
-`/reference/`). `site/scripts/generate-sidebar.mjs` turns them into the
-committed `site/src/generated/sidebar.json` and `reference-sidebar.json` that
-`astro.config.mjs` imports. After editing either, regenerate and commit:
+`/book/`), `site/src/REFERENCE.md` for the Reference (`reference/`, served at
+`/reference/`), and `site/src/PROJECT.md` for the Project pages (`project/`,
+served at `/project/`). `site/scripts/generate-sidebar.mjs` turns them into the
+committed `site/src/generated/sidebar.json`, `reference-sidebar.json` and
+`project-sidebar.json` that `astro.config.mjs` imports. After editing one,
+regenerate and commit:
 
 ```sh
-node site/scripts/generate-sidebar.mjs            # rewrite both sidebars
+node site/scripts/generate-sidebar.mjs            # rewrite every sidebar
 node site/scripts/generate-sidebar.mjs --check     # CI: fail if one drifted or a page is unlisted
 ```
 
@@ -141,14 +144,16 @@ regenerate fails the build.
 **Every page must be listed in its tree's contents.** A sidebar comes from the
 contents, not from the folders, so a page nobody lists exists but no sidebar
 shows it. When you add a page under `site/src/content/docs/book/`, add its entry
-to `SUMMARY.md`; under `site/src/content/docs/reference/`, to `REFERENCE.md`; in
-the same change. `--check` fails naming any page that isn't listed, and any
+to `SUMMARY.md`; under `site/src/content/docs/reference/`, to `REFERENCE.md`;
+under `site/src/content/docs/project/`, to `PROJECT.md`; in the same change. `--check` fails naming any page that isn't listed, and any
 entry that names no page.
 
 **Which tree a page goes in** follows what the reader is doing. Learning,
 understanding and getting a task done are the Book; looking up exact
 behaviour — a construct's rules, a tool's flags, a code, the specification, a
-release — is the Reference. In the Reference a page's folder decides its URL
+release — is the Reference. Pages for the people who build Bynk or follow
+where it is going (contributing, versioning and the roadmap) are the Project
+pages, linked from the footer. In the Reference a page's folder decides its URL
 and `REFERENCE.md` decides its section, so a page can sit in Architecture
 while its file is under `tooling/`.
 
@@ -479,7 +484,7 @@ never against older design documents. Cite the historical design notes for
 ## Docs ship with the feature
 
 Treat docs as part of an increment's definition of done (see
-[Testing & fixtures](/book/contributing/testing/)): update the affected reference
+[Testing & fixtures](/project/contributing/testing/)): update the affected reference
 (regenerating the generated pages), update the affected
 [specification](/reference/spec/) chapters (per *Keeping the spec current* above), and
 write the changelog line in your `design/pending/` file: the stamp adds it to

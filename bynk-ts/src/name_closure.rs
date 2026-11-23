@@ -1138,7 +1138,10 @@ impl Walk {
                     self.ty(ty);
                 }
                 for f in fields {
-                    self.ty(&f.ty);
+                    self.opt_ty(&f.ty);
+                    if let Some(init) = &f.init {
+                        self.expr(init);
+                    }
                 }
                 if let Some(ctor) = constructor {
                     self.params(&ctor.params);

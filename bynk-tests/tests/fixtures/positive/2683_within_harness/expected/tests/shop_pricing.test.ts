@@ -245,10 +245,12 @@ class __Stub_Ledger {
   constructor(c?: string) {
     this.__case = c;
   }
+
   __applies(op: string): boolean {
     if (op === "book") return this.__case === "a fast effect still gives the Ok branch" || this.__case === "the abandoned effect still ran: the clock reached its completion";
     return true;
   }
+
   async book(id: number): globalThis.Promise<void> {
     const { BytesResponse, Claim, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
@@ -290,10 +292,12 @@ class __Stub_Pricing {
   constructor(c?: string) {
     this.__case = c;
   }
+
   __applies(op: string): boolean {
     if (op === "quote") return this.__case === "a lambda in the handler bounds each call alone" || this.__case === "a latency stub drives the same timeout at integration" || this.__case === "a latency stub that wins at integration is Ok" || this.__case === "a stub faster than the deadline is Ok" || this.__case === "a stub slower than the deadline times out" || this.__case === "a stub that never finishes times out" || this.__case === "a stub with no latency resolves at once" || this.__case === "a tie goes to the effect" || this.__case === "advance Clock fires nothing when no timer is due" || this.__case === "in a par block each within bounds its own effect" || this.__case === "the abandoned call is observed once the case settles";
     return true;
   }
+
   async quote(id: number): globalThis.Promise<number> {
     const { BytesResponse, Claim, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;

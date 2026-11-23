@@ -336,6 +336,6 @@ expect calls.all((c) => c.msg.length() > 0)
 
 ## Related
 
-- Tutorial: [Test it](/book/tutorials/06-testing/).
+- Tutorial: [Test it](/book/tutorials/testing/).
 - Reference: [testing](/reference/testing/).
 - Diagnostics: [`bynk.val.*` errors](/reference/diagnostics/#value-fabrication), [`bynk.observe.*` errors](/reference/diagnostics/#observation).

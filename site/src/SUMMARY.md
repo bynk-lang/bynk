@@ -5,22 +5,22 @@
 # Start
 
 - [What is Bynk?](introduction/what-is-bynk.md)
-- [Why Bynk exists](about/why-bynk-exists.md)
 - [Anatomy of a Bynk service](introduction/anatomy-of-a-service.md)
 - [Coming from TypeScript](introduction/coming-from-typescript.md)
 - [Install](introduction/install.md)
 
 # Learn Bynk
 
-- [1. Compile your first program](tutorials/01-first-program.md)
-- [2. Build a small HTTP service](tutorials/02-http-service.md)
-- [3. Model your data with types](tutorials/03-modelling-data.md)
-- [4. Make illegal states unrepresentable](tutorials/04-refined-types.md)
+- [1. Compile your first program](tutorials/first-program.md)
+- [2. Build a small HTTP service](tutorials/http-service.md)
+- [3. Model your data with types](tutorials/modelling-data.md)
+- [4. Make illegal states unrepresentable](tutorials/refined-types.md)
 - [5. Handle failure with `Result`](tutorials/failure-and-result.md)
 - [6. Reach out with capabilities](tutorials/capabilities.md)
-- [7. Add a stateful agent](tutorials/05-stateful-agent.md)
+- [7. Add a stateful agent](tutorials/stateful-agent.md)
 - [8. Split into contexts](tutorials/contexts.md)
-- [9. Test it](tutorials/06-testing.md)
+- [9. Test it](tutorials/testing.md)
+- [10. Deploy it](tutorials/deploy.md)
 
 # Concepts
 
@@ -166,16 +166,3 @@
     - [Localisation](guides/localisation/index.md)
     - [Testing](guides/testing/index.md)
     - [Projects, build & deployment](guides/projects-build-and-deployment/index.md)
-
-# About Bynk
-
-- [Versioning & roadmap](about/versioning-and-roadmap.md)
-
----
-
-# Contributing
-
-- [Contributing to the compiler](contributing/index.md)
-  - [Compiler architecture](contributing/architecture.md)
-  - [Testing & fixtures](contributing/testing.md)
-  - [Working on the docs](contributing/documentation.md)
