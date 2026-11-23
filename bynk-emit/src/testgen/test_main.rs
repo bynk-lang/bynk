@@ -240,15 +240,19 @@ pub(super) fn build_run_function(entries: &[(String, String)]) -> Vec<TsStmt> {
     ];
     body.extend(entries.iter().map(|(name, runner)| dispatch(name, runner)));
     body.push(TsStmt::return_stmt(Some(ident("results")), None));
-    let names = entries
-        .iter()
-        .map(|(name, _)| format!("\"{}\"", crate::emitter::escape_ts_string(name)))
-        .collect::<Vec<_>>()
-        .join(", ");
     vec![
-        TsStmt::raw(CASE_TIMING_RUNTIME, None),
-        TsStmt::raw(
-            format!("export const __bynkCases: readonly string[] = [{names}];"),
+        TestRuntimeModule::CaseTiming.splice(),
+        TsStmt::decl(
+            TsDecl::Export(Box::new(TsDecl::ConstDecl {
+                name: "__bynkCases".to_string(),
+                ty: Some(TsType::named("readonly string[]")),
+                init: TsExpr::array(
+                    entries
+                        .iter()
+                        .map(|(name, _)| str_lit(name.clone()))
+                        .collect(),
+                ),
+            })),
             None,
         ),
         TsStmt::decl(
@@ -277,25 +281,6 @@ pub(super) fn build_run_function(entries: &[(String, String)]) -> Vec<TsStmt> {
     ]
 }
 
-/// What every module's `run` shares (#2267 stage 2): the shape of a finished case
-/// handed to `onCase`, and the clock that measures it. `performance.now()` where the
-/// host has one (sub-millisecond), else `Date.now()`. It is read through
-/// `globalThis`, so no DOM or Node typings are assumed, and is the host's own clock,
-/// not the harness-owned test clock (`advance Clock`).
-pub(super) const CASE_TIMING_RUNTIME: &str = r#"type CaseResult = {
-  name: string;
-  pass: boolean;
-  error?: { message: string; location: string; violation?: { kind: string; agent: string; name: string; location: string }; refusals?: { index: number; call: string; kind: string; agent: string; name: string; location: string }[] };
-  durationMs: number;
-  retries?: number;
-  kind?: string;
-  seed?: string;
-  counterexample?: string;
-};
-const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
-const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
-const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;"#;
-
 pub(super) fn console_log(arg: TsExpr) -> TsStmt {
     expr_stmt(method_call(ident("globalThis.console"), "log", vec![arg]))
 }
@@ -313,9 +298,27 @@ struct DetachReports {
 impl DetachReports {
     fn drain(&self) -> Option<TsStmt> {
         self.enabled.then(|| {
-            TsStmt::raw(
-                "const detached = (globalThis as unknown as { __bynkDetachedReports?: { kind: string; site: string; type: string | null; variant: string | null }[] }).__bynkDetachedReports?.splice(0) ?? [];".to_string(),
-                None,
+            // `(globalThis as unknown as { __bynkDetachedReports?: … }).__bynkDetachedReports?.splice(0) ?? []`
+            let reports = crate::ts_build::as_expr(
+                crate::ts_build::as_expr(ident("globalThis"), TsType::named("unknown")),
+                TsType::named(
+                    "{ __bynkDetachedReports?: { kind: string; site: string; type: string | null; variant: string | null }[] }",
+                ),
+            );
+            let splice = crate::ts_build::call(
+                TsExpr::OptionalMember {
+                    object: Box::new(member(crate::ts_build::paren(reports), "__bynkDetachedReports")),
+                    property: "splice".to_string(),
+                },
+                vec![crate::ts_build::num_lit(0)],
+            );
+            crate::ts_build::const_(
+                "detached",
+                crate::ts_build::binary(
+                    bynk_ts::TsBinaryOp::NullishCoalescing,
+                    splice,
+                    TsExpr::array(Vec::new()),
+                ),
             )
         })
     }
@@ -351,9 +354,38 @@ impl DetachReports {
 
     fn print(&self) -> Option<TsStmt> {
         self.enabled.then(|| {
-            TsStmt::raw(
-                "for (const d of detached) console.log(`    ! a detached effect ${d.kind === \"err\" ? `returned Err (${d.type}${d.variant === null ? \"\" : `.${d.variant}`})` : \"faulted\"} at ${d.site}`);".to_string(),
-                None,
+            use crate::ts_build::{cond_expr, null_lit, str_lit, strict_eq};
+            let field = |name: &str| member(ident("d"), name);
+            // `${d.variant === null ? "" : `.${d.variant}`}`
+            let variant = cond_expr(
+                strict_eq(field("variant"), null_lit()),
+                str_lit(""),
+                TsExpr::template_lit(vec![".".to_string(), String::new()], vec![field("variant")]),
+            );
+            // `returned Err (${d.type}${variant})`, or `"faulted"`.
+            let outcome = cond_expr(
+                strict_eq(field("kind"), str_lit("err")),
+                TsExpr::template_lit(
+                    vec!["returned Err (".to_string(), String::new(), ")".to_string()],
+                    vec![field("type"), variant],
+                ),
+                str_lit("faulted"),
+            );
+            crate::ts_build::for_of(
+                "d",
+                ident("detached"),
+                expr_stmt(method_call(
+                    ident("console"),
+                    "log",
+                    vec![TsExpr::template_lit(
+                        vec![
+                            "    ! a detached effect ".to_string(),
+                            " at ".to_string(),
+                            String::new(),
+                        ],
+                        vec![outcome, field("site")],
+                    )],
+                )),
             )
         })
     }
@@ -530,18 +562,7 @@ pub fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt, pg: bool) -
     // #2842: the modules that take a snapshot export `__bynkSnapshotReport`; the
     // run hands the driver every selected one's report — as an event in the stream,
     // and as one marked line in the human output when the driver asks for it.
-    let snapshot_modules: Vec<String> = sorted
-        .iter()
-        .enumerate()
-        .filter(|(_, t)| !t.snapshot_files.is_empty())
-        .map(|(i, _)| format!("[{i}, test_{i}]"))
-        .collect();
-    let snapshot_report = (!snapshot_modules.is_empty()).then(|| {
-        format!(
-            "const __snapshotFiles = ([{}] as const).filter(([i]) => active.includes(modules[i]!)).flatMap(([, t]) => t.__bynkSnapshotReport());",
-            snapshot_modules.join(", ")
-        )
-    });
+    let snapshot_report = snapshot_report_decl(&sorted);
 
     let mut ndjson_stmts = vec![
         const_(
@@ -718,11 +739,11 @@ pub fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt, pg: bool) -
     // #2842: the snapshot report goes ahead of `run-end`.
     let run_end = ndjson_stmts.pop();
     if let Some(decl) = &snapshot_report {
-        ndjson_stmts.push(TsStmt::raw(decl.clone(), None));
-        ndjson_stmts.push(TsStmt::raw(
-            "emit({ type: \"snapshots\", files: __snapshotFiles });".to_string(),
-            None,
-        ));
+        ndjson_stmts.push(decl.clone());
+        ndjson_stmts.push(emit_call(vec![
+            TsObjectEntry::prop("type".to_string(), str_lit("snapshots")),
+            TsObjectEntry::prop("files".to_string(), ident("__snapshotFiles")),
+        ]));
     }
     ndjson_stmts.extend(run_end);
     let ndjson_branch = block(ndjson_stmts);
@@ -824,7 +845,7 @@ pub fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt, pg: bool) -
         expr_stmt(call(member(ident("process"), "exit"), vec![num_lit("1")])),
     ));
 
-    program.push(TsStmt::raw(TEST_FILTER_RUNTIME, None));
+    program.push(TestRuntimeModule::TestFilter.splice());
     program.push(TsStmt::decl(
         TsDecl::Function {
             name: "main".to_string(),
@@ -841,116 +862,104 @@ pub fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt, pg: bool) -
     program
 }
 
-/// #2273: the entry's `--suite`/`--case` machinery. `BYNK_TEST_FILTER` is one
-/// JSON value (`bynk` builds it): `suites` and `cases` each combine their values
-/// as "or", the two as "and". `selected` keeps a module whose suite is chosen,
-/// `runSelected` runs one module's selected cases through its own `run(name)`
-/// (the module is unchanged) and concatenates them, and `unmatched` names each
-/// value that selected nothing, which is an error unless the run sees only part of
-/// the selection (`--against dev` runs one process per `env` group).
-pub(super) const TEST_FILTER_RUNTIME: &str = r#"type Result = {
-  name: string;
-  pass: boolean;
-  error?: { message: string; location: string; violation?: { kind: string; agent: string; name: string; location: string }; refusals?: { index: number; call: string; kind: string; agent: string; name: string; location: string }[] };
-  durationMs?: number;
-  retries?: number;
-  kind?: string;
-  seed?: string;
-  counterexample?: string;
-};
-type Filter = {
-  program?: string;
-  suites?: string[];
-  cases?: string[];
-  partial?: boolean;
-  skipped?: { suite: string; case: string }[];
-};
-const filter: Filter | undefined =
-  process.env.BYNK_TEST_FILTER === undefined ? undefined : globalThis.JSON.parse(process.env.BYNK_TEST_FILTER);
-const matchedSuites = new Set<string>();
-const matchedCases = new Set<string>();
-
-function selected(suite: string): boolean {
-  if (filter?.suites === undefined) return true;
-  if (!filter.suites.includes(suite)) return false;
-  matchedSuites.add(suite);
-  return true;
-}
-
-// How many cases the filter selects in a module, known before any of them runs: the
-// `tests` of its `suite-begin`. A name is counted once per case that bears it.
-function planned(names: readonly string[]): number {
-  if (filter?.cases === undefined) return names.length;
-  let count = 0;
-  for (const name of filter.cases) count += names.filter((n) => n === name).length;
-  return count;
-}
-
-// Runs a module's selected cases, handing each result to `onCase` as it finishes.
-async function runSelected(
-  run: (only?: string, onCase?: (r: Result) => void) => Promise<Result[]>,
-  onCase: (r: Result) => void,
-): Promise<Result[]> {
-  if (filter?.cases === undefined) return run(undefined, onCase);
-  const results: Result[] = [];
-  for (const name of filter.cases) {
-    const found = await run(name, onCase);
-    if (found.length > 0) matchedCases.add(name);
-    results.push(...found);
-  }
-  return results;
-}
-
-// A case the build skipped is not in it but exists, so a value naming one is matched.
-for (const s of filter?.skipped ?? []) {
-  if (selected(s.suite) && filter?.cases?.includes(s.case)) matchedCases.add(s.case);
-}
-
-function unmatched(): { suites?: string[]; cases?: string[] } | undefined {
-  if (filter === undefined || filter.partial === true) return undefined;
-  const suites = (filter.suites ?? []).filter((s) => !matchedSuites.has(s));
-  const cases = (filter.cases ?? []).filter((c) => !matchedCases.has(c));
-  if (suites.length === 0 && cases.length === 0) return undefined;
-  return { ...(suites.length > 0 ? { suites } : {}), ...(cases.length > 0 ? { cases } : {}) };
-}
-
-function reportUnmatched(): void {
-  const left = unmatched();
-  if (left === undefined) return;
-  const program = filter?.program ?? "bynk";
-  for (const s of left.suites ?? []) {
-    globalThis.console.error(`${program} test: no suite named --suite ${globalThis.JSON.stringify(s)}`);
-  }
-  for (const c of left.cases ?? []) {
-    globalThis.console.error(`${program} test: no case matched --case ${globalThis.JSON.stringify(c)}`);
-  }
-}"#;
-
 /// #3321: closes the PGlite databases a run started. PGlite leaves a ten-second
 /// timer behind, which would otherwise hold the process open that long; the
 /// runtime registers the closer on `globalThis`, so no import is needed.
 fn pglite_teardown() -> TsStmt {
-    TsStmt::raw(
-        "await (globalThis as unknown as { __bynkPgliteTeardown?: () => Promise<void> }).__bynkPgliteTeardown?.();".to_string(),
-        None,
-    )
+    // `await (globalThis as unknown as { __bynkPgliteTeardown?: () => Promise<void> }).__bynkPgliteTeardown?.();`
+    let closer = TsExpr::OptionalCall {
+        callee: Box::new(member(
+            crate::ts_build::paren(crate::ts_build::as_expr(
+                crate::ts_build::as_expr(ident("globalThis"), TsType::named("unknown")),
+                TsType::named("{ __bynkPgliteTeardown?: () => Promise<void> }"),
+            )),
+            "__bynkPgliteTeardown",
+        )),
+        args: Vec::new(),
+    };
+    expr_stmt(await_expr(closer))
 }
 
 /// #2842: under `BYNK_SNAPSHOT_REPORT=1` the driver reads the report from one
 /// marked line at the end of the human output and strips it.
-fn with_snapshot_report(human_branch: TsStmt, snapshot_report: &Option<String>) -> TsStmt {
+fn with_snapshot_report(human_branch: TsStmt, snapshot_report: &Option<TsStmt>) -> TsStmt {
     match snapshot_report {
-        Some(decl) => block(vec![
-            human_branch,
-            TsStmt::raw(
-                format!(
-                    "{decl}\nif (process.env.BYNK_SNAPSHOT_REPORT === \"1\") {{ globalThis.console.log(\"\\u0001bynk-snapshots \" + globalThis.JSON.stringify(__snapshotFiles)); }}"
+        Some(decl) => {
+            // `if (process.env.BYNK_SNAPSHOT_REPORT === "1") { globalThis.console.log("\u0001bynk-snapshots " + globalThis.JSON.stringify(__snapshotFiles)); }`
+            let marked = crate::ts_build::binary(
+                TsBinaryOp::Add,
+                crate::ts_build::raw_lit("\"\\u0001bynk-snapshots \""),
+                method_call(
+                    ident("globalThis.JSON"),
+                    "stringify",
+                    vec![ident("__snapshotFiles")],
                 ),
-                None,
-            ),
-        ]),
+            );
+            block(vec![
+                human_branch,
+                decl.clone(),
+                crate::ts_build::if_(
+                    strict_eq(
+                        member(member(ident("process"), "env"), "BYNK_SNAPSHOT_REPORT"),
+                        str_lit("1"),
+                    ),
+                    TsStmt::inline_block(vec![console_log(marked)], None),
+                ),
+            ])
+        }
         None => human_branch,
     }
+}
+
+/// `const __snapshotFiles = ([[i, test_i], …] as const).filter(([i]) => active.includes(modules[i]!)).flatMap(([, t]) => t.__bynkSnapshotReport());`:
+/// the report of every selected module that takes a snapshot.
+fn snapshot_files_decl(modules: Vec<TsExpr>) -> TsStmt {
+    use crate::ts_build::{arrow, index, paren};
+    let selected = method_call(
+        paren(TsExpr::AsConst(Box::new(TsExpr::array(modules)))),
+        "filter",
+        vec![arrow(
+            vec![TsParam::array_pattern(vec!["i".to_string()], None)],
+            method_call(
+                ident("active"),
+                "includes",
+                vec![TsExpr::NonNull(Box::new(index(
+                    ident("modules"),
+                    ident("i"),
+                )))],
+            ),
+        )],
+    );
+    const_(
+        "__snapshotFiles",
+        method_call(
+            selected,
+            "flatMap",
+            vec![arrow(
+                vec![TsParam::array_pattern(
+                    vec![String::new(), "t".to_string()],
+                    None,
+                )],
+                method_call(ident("t"), "__bynkSnapshotReport", Vec::new()),
+            )],
+        ),
+    )
+}
+
+/// #2842: the report declaration, when some selected module takes a snapshot.
+fn snapshot_report_decl(sorted: &[&RunnableTest]) -> Option<TsStmt> {
+    let modules: Vec<TsExpr> = sorted
+        .iter()
+        .enumerate()
+        .filter(|(_, t)| !t.snapshot_files.is_empty())
+        .map(|(i, _)| {
+            TsExpr::array(vec![
+                crate::ts_build::num_lit(i),
+                ident(format!("test_{i}")),
+            ])
+        })
+        .collect();
+    (!modules.is_empty()).then(|| snapshot_files_decl(modules))
 }
 
 /// `(detached.length > 0 ? <when_some> : undefined)`: a report field only a run with detached
@@ -1106,5 +1115,27 @@ mod tests {
         let program = emit_test_main(&tests, ImportExt::Js, false);
         let printed = bynk_ts::print(&program, "", "", "");
         assert_eq!(printed.text, expected);
+    }
+
+    /// No stored golden holds a snapshot report, so the statements are pinned: the declaration of
+    /// `__snapshotFiles` over the modules that take a snapshot, and the marked human line.
+    #[test]
+    fn the_snapshot_report_prints_its_declaration_and_marked_line() {
+        let decl = snapshot_files_decl(vec![
+            TsExpr::array(vec![crate::ts_build::num_lit(0), ident("test_0")]),
+            TsExpr::array(vec![crate::ts_build::num_lit(2), ident("test_2")]),
+        ]);
+        assert_eq!(
+            bynk_ts::print_stmt(&decl, 0),
+            "const __snapshotFiles = ([[0, test_0], [2, test_2]] as const).filter(([i]) => active.includes(modules[i]!)).flatMap(([, t]) => t.__bynkSnapshotReport());\n"
+        );
+        let human = with_snapshot_report(block(Vec::new()), &Some(decl));
+        let printed = bynk_ts::print_stmt(&human, 0);
+        assert!(
+            printed.contains(
+                "if (process.env.BYNK_SNAPSHOT_REPORT === \"1\") { globalThis.console.log(\"\\u0001bynk-snapshots \" + globalThis.JSON.stringify(__snapshotFiles)); }"
+            ),
+            "{printed}"
+        );
     }
 }

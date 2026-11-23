@@ -122,6 +122,8 @@ const TEST_TABLE = join(pkgRoot, "..", "src", "testgen", "test_runtime_modules.r
 // The names a generated test module supplies, declared for the type-check. Never spliced.
 const TEST_CONTRACT = "harness";
 const TEST_MODULES = [
+  "asset_get",
+  "case_timing",
   "clock",
   "expectation",
   "history",
@@ -137,6 +139,8 @@ const TEST_MODULES = [
   "send",
   "settle",
   "snapshot",
+  "stub_overlay",
+  "test_filter",
   "virtual_time",
 ];
 // Module -> the names it keeps `export`ed in its splice form (the generated module's runner calls

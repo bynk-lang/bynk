@@ -86,10 +86,10 @@ pub(super) fn emit_integration_module(
     unit_tables: &HashMap<String, UnitTable>,
     cases: &[SystemCaseInput],
     // #1883, slice 3: `asset_harness`'s text, when the target ships assets.
-    asset_harness: Option<String>,
+    asset_harness: Option<Vec<TsStmt>>,
     // #2841: the module-level `string` constant for each fixture file a suite
     // here declares ([`fixture_consts`]).
-    fixture_consts: Option<String>,
+    fixture_consts: Option<Vec<TsStmt>>,
     // #2138: a remote test build — drivers reach the target's URLs, and a case
     // a remote run can't honour is refused (into `errors`) or skipped.
     remote: Option<&crate::emit_model::RemoteTests>,
@@ -285,11 +285,11 @@ pub(super) fn emit_integration_module(
     stmts.push(TestRuntimeModule::Expectation.splice());
     // #1883, slice 3: the embedded files and `__bynkAssetGet`, for an asset
     // fetch in a case.
-    if let Some(text) = &asset_harness {
-        stmts.push(TsStmt::raw(text.clone(), None));
+    if let Some(assets) = &asset_harness {
+        stmts.extend(assets.iter().cloned());
     }
-    if let Some(text) = &fixture_consts {
-        stmts.push(TsStmt::raw(text.clone(), None));
+    if let Some(consts) = &fixture_consts {
+        stmts.extend(consts.iter().cloned());
     }
 
     // #1994: a participant whose handlers send with `detach` is driven with a
@@ -382,12 +382,9 @@ pub(super) fn emit_integration_module(
     // driver signs with its secret.
     let with_env = cases.iter().any(|c| !c.env_values.is_empty());
     if with_env {
-        let mut env_decl = TsStmt::raw(
-            "// #2134: the running case's `env` entries, set by each case runner.\nlet __bynkEnv: globalThis.Record<string, string> = {};\n",
-            None,
-        );
-        env_decl.no_blank_before = true;
-        stmts.push(env_decl);
+        stmts.extend(env_declaration(
+            "#2134: the running case's `env` entries, set by each case runner.",
+        ));
     }
     // #2138: a remote run's harness binds each participant to its URL in the
     // test target instead of standing it up in process.
