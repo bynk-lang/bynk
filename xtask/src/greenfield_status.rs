@@ -1769,6 +1769,10 @@ fn ast_importers(root: &Path) -> Probe {
 /// that is itself a split child maps to its own origin, not to the intermediate file). A row
 /// whose child is not an importer is inert, so a row never needs deleting while the track runs.
 const AST_IMPORTER_ORIGINS: &[(&str, &str)] = &[
+    // emitter/workers_entry.rs (2.4, #4089)
+    ("emitter/workers_entry/call.rs", "emitter/workers_entry.rs"),
+    ("emitter/workers_entry/queue.rs", "emitter/workers_entry.rs"),
+    ("emitter/workers_entry/wire.rs", "emitter/workers_entry.rs"),
     ("emitter/emit/types.rs", "emitter/emit.rs"),
     ("emitter/emit/functions.rs", "emitter/emit.rs"),
     // 2.2a (#4087): `lower.rs` split.

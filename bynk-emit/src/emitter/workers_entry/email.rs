@@ -8,8 +8,7 @@
 //! reply's `EmailMessage` (`cloudflare:email`) is loaded by the runtime when one
 //! is built.
 //!
-//! Kept out of `workers_entry.rs`, whose entry builder is near its length
-//! ceiling.
+//! One of the Worker entry's handler modules, beside `scheduled` and `queue`.
 
 use crate::ts_build::ident;
 use bynk_syntax::ast::ServiceProtocol;
