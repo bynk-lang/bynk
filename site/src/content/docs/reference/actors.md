@@ -32,6 +32,9 @@ A closed, compiler-known set. `auth = <Scheme>` with keyed config where noted.
   capability reads), not the key itself.
 - A `Bearer` or `Oidc` actor's **`identity`** must be a context-owned,
   string-constructible type, so the minted value is sealed to the context.
+- The seam **consumes** a `Bearer`, `Oidc` or `Signature` credential, as it does a `SignedCookie`'s: the
+  handler's `headers: RequestHeaders` omits the `Authorization` header (so `bearer()` is `None`), or the
+  signature header, and the handler sees only the identity ([Request headers](/reference/http/#request-headers)).
 - A `Signature` actor takes **no** `identity` and a handler using it **must** take
   a `body`; it is HTTP-only.
 - An **`Oidc`** actor names **no secret** — its trust root is the provider's

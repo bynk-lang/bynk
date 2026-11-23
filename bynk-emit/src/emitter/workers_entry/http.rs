@@ -10,7 +10,7 @@ use super::respond::{
     try_catch_stmt,
 };
 use super::wire::{deserialise_call, http_result_inner, wire_ident};
-use super::{rejected_surface, signed_cookie_name};
+use super::{consumed_credential_headers, rejected_surface, signed_cookie_name};
 use crate::emitter::{RuntimeUse, http_handler_method_name_ir};
 use crate::ts_build::{
     and_expr, as_expr, await_expr, binary, block, bool_lit, call, cond_expr, const_, ident, if_,
@@ -39,6 +39,9 @@ pub(super) struct HttpRoute {
     /// cookie (this name) the wrapper verifies and the handler's `cookies` view omits.
     /// Its wrapper takes the request first, like Bearer.
     pub(super) signed_cookie: Option<String>,
+    /// #3994: the credential headers the route's seam consumes (`authorization`, a signature
+    /// header); the handler's `RequestHeaders` omits them.
+    pub(super) hidden_headers: Vec<String>,
     /// v0.51: the handler's `by` clause names a Signature actor — the entry
     /// dispatch reads the raw body, verifies the HMAC, and parses the body from
     /// those same bytes.
@@ -103,12 +106,24 @@ pub(super) struct HttpRoute {
 /// cookie is hidden from its `Cookie` header, as it is from the `cookies` views.
 fn request_headers_arg(route: &HttpRoute) -> TsExpr {
     let mut args = vec![ident("request")];
-    args.extend(
-        route
-            .signed_cookie
-            .as_deref()
-            .map(|h| str_lit(crate::emitter::escape_ts_string(h))),
-    );
+    let cookie = route
+        .signed_cookie
+        .as_deref()
+        .map(|h| str_lit(crate::emitter::escape_ts_string(h)));
+    // #3994: a seam's credential header is hidden too (the third argument).
+    if cookie.is_some() || !route.hidden_headers.is_empty() {
+        args.push(cookie.unwrap_or_else(|| ident("undefined")));
+    }
+    if !route.hidden_headers.is_empty() {
+        args.push(TsExpr::Array {
+            items: route
+                .hidden_headers
+                .iter()
+                .map(|n| str_lit(crate::emitter::escape_ts_string(n)))
+                .collect(),
+            multiline: false,
+        });
+    }
     call(ident("__requestHeaders"), args)
 }
 
@@ -1279,6 +1294,7 @@ pub(super) fn collect_http_routes(
                     // v0.151: an `Oidc` wrapper runs its verification seam, taking the request first.
                     oidc: bynk_check::actors::oidc_seam_for(h, &table.actors).is_some(),
                     signed_cookie: signed_cookie_name(h, &table.actors),
+                    hidden_headers: consumed_credential_headers(h, &table.actors),
                     signature: bynk_check::actors::signature_seam_for(h, &table.actors),
                     // v0.52: a multi-actor sum handler's wrapper owns the whole
                     // boundary (raw read, first-wins resolution, body parse), so
