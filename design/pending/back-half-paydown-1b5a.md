@@ -1,7 +1,7 @@
 ---
 level: patch
 changelog: Internal restructuring: the test harness builds more of a generated test module as typed nodes (the commons barrel's helpers, the harness memo, `__bynkEnv`, fixture and asset tables, the snapshot table, event delivery helpers, `__bynkCases`, the PGlite teardown), and four fixed snippets become type-checked test-runtime modules; no emitted output changes
-probes: ts_raw_sites_emit, ts_raw_sites_testgen, testgen_print_calls, ts_writes
+probes: ts_raw_sites_emit, ts_raw_sites_testgen, testgen_print_calls, ts_writes, env_protocol_literals
 ---
 refactor: the harness's small statements and the commons barrel become nodes (1B.5a)
 
