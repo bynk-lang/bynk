@@ -492,7 +492,7 @@ pub(super) fn emit_system_http_support(
             // form), and the one the raw drivers send (a `Wire` string).
             let cookies_param = h.params.iter().find(|p| is_cookies(p));
             let (typed_cookie, raw_cookie) =
-                cookie_header_texts(cookies_param, &type_ns, &table.types, runtime_use);
+                cookie_headers(cookies_param, &type_ns, &table.types, runtime_use);
             if let Some(cp) = cookies_param {
                 let key = (
                     sname.clone(),
@@ -1597,40 +1597,82 @@ pub(super) fn foreign_service_double(binding: &str, worker: &str) -> TsExpr {
 /// participant the local key for the edge from it.
 pub(super) const HARNESS_CALLER: &str = "integration";
 
+/// #3277, #3386 (1B.3c): a route's `Cookie` header value, held as the node its `cookies`
+/// parameter contributes, so a `SignedCookie` actor's session cookie joins it as a second node
+/// and not by editing the rendered entry.
+struct CookieHeader {
+    /// The parameter's part of the header; `None` when the handler takes no `cookies`.
+    param: Option<TsExpr>,
+}
+
+impl CookieHeader {
+    /// The request-init entry `"cookie": <value>, ` (empty when there is no value), the value
+    /// being the parameter's part, the `session` cookie's, or the two joined with `"; "`.
+    fn render(&self, session: Option<&TsExpr>) -> String {
+        let value = match (&self.param, session) {
+            (None, None) => return String::new(),
+            (Some(only), None) | (None, Some(only)) => only.clone(),
+            (Some(param), Some(session)) => crate::ts_build::method_call(
+                TsExpr::array(vec![param.clone(), session.clone()]),
+                "join",
+                vec![crate::ts_build::str_lit("; ")],
+            ),
+        };
+        format!("\"cookie\": {}, ", bynk_ts::print_expr(&value))
+    }
+}
+
 /// #3277: the `Cookie` header the typed system drivers send (a typed record's wire
 /// form) and the one the raw drivers send (a `Wire` string), for a handler's
 /// `cookies` parameter; empty when it has none.
-fn cookie_header_texts(
+fn cookie_headers(
     param: Option<&bynk_syntax::ast::Param>,
     type_ns: &str,
     types: &std::collections::HashMap<String, std::sync::Arc<bynk_syntax::ast::TypeDecl>>,
     runtime_use: &RuntimeUse,
-) -> (String, String) {
+) -> (CookieHeader, CookieHeader) {
     let Some(p) = param else {
-        return (String::new(), String::new());
+        return (CookieHeader { param: None }, CookieHeader { param: None });
     };
     let var = crate::emitter::ts_ident(&p.name.name);
     // #3277: the raw view sends the header text it was built from (a `Wire`
     // string is the header text itself).
     if matches!(p.type_ref, bynk_syntax::ast::TypeRef::RequestCookies(_)) {
         runtime_use.note_request_cookies();
-        let text = format!(
-            "\"cookie\": (typeof {var} === \"string\" ? {var} : __requestCookiesHeader({var})), "
-        );
-        return (text.clone(), text);
+        let header = || CookieHeader {
+            param: Some(TsExpr::Paren(Box::new(TsExpr::Conditional {
+                test: Box::new(crate::ts_build::strict_eq(
+                    crate::ts_build::typeof_expr(ident(var.clone())),
+                    crate::ts_build::str_lit("string"),
+                )),
+                consequent: Box::new(ident(var.clone())),
+                alternate: Box::new(crate::ts_build::call(
+                    ident("__requestCookiesHeader"),
+                    vec![ident(var.clone())],
+                )),
+            }))),
+        };
+        return (header(), header());
     }
     runtime_use.note_cookie_string();
-    let ser = bynk_ts::print_expr(&crate::emitter::serialisation::serialise_expr_via(
+    let ser = crate::emitter::serialisation::serialise_expr_via(
         &p.type_ref,
-        &bynk_ts::TsExpr::Ident(var.clone()),
+        &TsExpr::Ident(var.clone()),
         type_ns,
         runtime_use,
-    ));
+    );
     // #3343: a renamed field is written under its `@name`.
-    let table_arg = renamed_specs_arg(&p.type_ref, types);
+    let mut args = vec![ser];
+    args.extend(
+        crate::emitter::renamed_specs_source(&p.type_ref, types).map(crate::ts_build::raw_lit),
+    );
     (
-        format!("\"cookie\": __cookieString({ser}{table_arg}), "),
-        format!("\"cookie\": {var}, "),
+        CookieHeader {
+            param: Some(crate::ts_build::call(ident("__cookieString"), args)),
+        },
+        CookieHeader {
+            param: Some(ident(var)),
+        },
     )
 }
 
@@ -1720,7 +1762,7 @@ fn push_two_token_principals(routes: &mut Vec<TsStmt>, sname: &str, key: &str, h
 /// #3386: what a `system` driver needs to mint a `SignedCookie` actor's session cookie.
 struct SessionDriver {
     /// The `{ secret: … }` keys expression the cookie is signed with.
-    keys: String,
+    keys: TsExpr,
     /// The declaring actor's name: the cookie's `aud`.
     actor: String,
     /// The cookie's name.
@@ -1730,25 +1772,24 @@ struct SessionDriver {
 }
 
 impl SessionDriver {
-    /// The `name=value` template-literal text for `sub` (a TS expression) signed with `keys`
-    /// and issued `issued_secs` (a TS expression, in seconds) after the epoch.
-    fn pair(&self, keys: &str, sub: &str, issued_secs: &str) -> String {
-        format!(
-            "`{}=${{await __signSessionCookie({keys}, {:?}, {sub}, {}, ({issued_secs}) * 1000)}}`",
-            self.cookie, self.actor, self.ttl_secs
+    /// The `name=value` template literal for `sub` signed with `keys` and issued `issued_secs`
+    /// (an expression, in seconds) after the epoch.
+    fn pair(&self, keys: &TsExpr, sub: TsExpr, issued_secs: TsExpr) -> TsExpr {
+        use crate::ts_build::{await_expr, binary, call, num_lit, paren, str_lit};
+        let signed = await_expr(call(
+            ident("__signSessionCookie"),
+            vec![
+                keys.clone(),
+                str_lit(self.actor.clone()),
+                sub,
+                num_lit(self.ttl_secs),
+                binary(TsBinaryOp::Mul, paren(issued_secs), num_lit(1000)),
+            ],
+        ));
+        TsExpr::template_lit(
+            vec![format!("{}=", self.cookie), String::new()],
+            vec![signed],
         )
-    }
-}
-
-/// The `Cookie` header text carrying `pair` and, when a route also takes a `cookies` param,
-/// the cookies that param is sent as. `existing` is `"cookie": <expr>, ` or empty.
-fn merge_cookie(existing: &str, pair: &str) -> String {
-    match existing
-        .strip_prefix("\"cookie\": ")
-        .and_then(|e| e.strip_suffix(", "))
-    {
-        Some(expr) => format!("\"cookie\": [{expr}, {pair}].join(\"; \"), "),
-        None => format!("\"cookie\": {pair}, "),
     }
 }
 
@@ -1760,26 +1801,34 @@ fn session_route(
     actors: &HashMap<String, bynk_syntax::ast::ActorDecl>,
     secret_read_of: &dyn Fn(&str) -> String,
     (session_secrets, runtime_use): (&mut std::collections::BTreeSet<String>, &RuntimeUse),
-    (typed_cookie, raw_cookie): (&str, &str),
+    (typed_cookie, raw_cookie): (&CookieHeader, &CookieHeader),
 ) -> (Option<SessionDriver>, String, String, &'static str) {
     let Some(seam) = bynk_check::actors::signed_cookie_seam_for(h, actors) else {
-        return (None, typed_cookie.to_string(), raw_cookie.to_string(), "");
+        return (None, typed_cookie.render(None), raw_cookie.render(None), "");
     };
     session_secrets.insert(seam.secret.clone());
     runtime_use.note_session_signing();
     let session = SessionDriver {
-        keys: format!("{{ secret: {} }}", secret_read_of(&seam.secret)),
+        keys: TsExpr::object(vec![(
+            "secret".to_string(),
+            crate::ts_build::raw_lit(secret_read_of(&seam.secret)),
+        )]),
         actor: seam.actor,
         cookie: seam.cookie,
         ttl_secs: seam.ttl_secs,
     };
-    let pair = session.pair(&session.keys, "__sub", "__bynkNow()");
+    let pair = session.pair(&session.keys, ident("__sub"), now_secs());
     (
         Some(session),
-        merge_cookie(typed_cookie, &pair),
-        merge_cookie(raw_cookie, &pair),
+        typed_cookie.render(Some(&pair)),
+        raw_cookie.render(Some(&pair)),
         "\"sec-fetch-site\": \"same-origin\", ",
     )
+}
+
+/// `__bynkNow()`: the harness clock, in seconds.
+fn now_secs() -> TsExpr {
+    crate::ts_build::call(ident("__bynkNow"), Vec::new())
 }
 
 /// A driver's parameters and the URL it requests.
@@ -1837,23 +1886,39 @@ fn push_session_refusal_drivers(
         .map(|n| body_field(&crate::emitter::ts_ident(n)))
         .unwrap_or_default();
     let raw_options = make(&raw_body_init);
-    let issued_before_ttl = format!("__bynkNow() - {} - 3600", session.ttl_secs);
+    let keys_forged = TsExpr::object(vec![(
+        "secret".to_string(),
+        crate::ts_build::call(ident("__newSessionKey"), Vec::new()),
+    )]);
+    let issued_before_ttl = crate::ts_build::binary(
+        TsBinaryOp::Sub,
+        crate::ts_build::binary(
+            TsBinaryOp::Sub,
+            now_secs(),
+            crate::ts_build::num_lit(session.ttl_secs),
+        ),
+        crate::ts_build::num_lit(3600),
+    );
     let variants = [
         (
             "forged",
             session.pair(
-                "{ secret: __newSessionKey() }",
-                "\"bynk-test\"",
-                "__bynkNow()",
+                &keys_forged,
+                crate::ts_build::str_lit("bynk-test"),
+                now_secs(),
             ),
         ),
         (
             "expired",
-            session.pair(&session.keys, "\"bynk-test\"", &issued_before_ttl),
+            session.pair(
+                &session.keys,
+                crate::ts_build::str_lit("bynk-test"),
+                issued_before_ttl,
+            ),
         ),
     ];
     for (name, pair) in variants {
-        let sign_stmt = TsStmt::raw(format!("const __cookie = {pair};"), None);
+        let sign_stmt = crate::ts_build::const_("__cookie", pair);
         routes.push(sysdrive_driver(
             SysdriveKind::typed(name),
             sname,

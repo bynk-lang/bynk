@@ -142,7 +142,7 @@ pub(super) fn emit_test_property_function(
             runtime_use,
             &mut harness_bound,
             tys,
-        ));
+        ).text);
     }
     let cross = bynk_check::resolver::CrossContextInfo::default();
     let binding_names: Vec<String> = prop
@@ -500,7 +500,7 @@ pub(super) fn emit_test_history_property_function(
                     runtime_use,
                     &mut harness_bound,
                     tys,
-                ));
+                ).text);
             }
         }
         // Carry the synthetic call/step/state types into the lowering commons so

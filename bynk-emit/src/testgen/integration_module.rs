@@ -512,7 +512,33 @@ pub(super) fn emit_integration_module(
         }
         // #2137: each case's harness clock starts at the epoch.
         case_out.push_str("    __bynkClockNow = 0;\n");
-        case_out.push_str("    const deps = __makeHarness();\n");
+        // #3147: a case that peeks at D1 holds the handles on `deps` (`deps.db`), so `deps` is
+        // declared `any`. Typing the body comes first: the declaration is written once, knowing.
+        // #1855: the lowering reads the case's checked types (a literal at a
+        // refined record field is branded only when its type says so), so
+        // type the body here as the check pass did, into throwaway sinks.
+        let mut throwaway_errors: Vec<CompileError> = Vec::new();
+        let mut throwaway_refs = RefSink::new();
+        (typed.expr_types, typed.callees) = test_suites::typecheck_integration_case_body(
+            participants,
+            view,
+            input.suite_fns,
+            case,
+            cross_context,
+            unit_tables,
+            &mut throwaway_errors,
+            &mut throwaway_refs,
+            tys,
+        );
+        let peeks_d1 = typed
+            .callees
+            .values()
+            .any(|c| matches!(c, bynk_check::checker::Callee::D1Peek { .. }));
+        case_out.push_str(if peeks_d1 {
+            "    const deps: any = __makeHarness();\n"
+        } else {
+            "    const deps = __makeHarness();\n"
+        });
         // #2024: every name this scaffold binds in the case's scope, so the
         // body's lowering renames a `let` that would redeclare one.
         let mut harness_bound: HashSet<String> = HashSet::from(["deps".to_string()]);
@@ -594,25 +620,9 @@ pub(super) fn emit_integration_module(
             harness_bound.extend(names.iter().cloned());
             participant_types.push((bynk_check::firstparty::CLOUDFLARE_UNIT.to_string(), names));
         }
-        // #1855: the lowering reads the case's checked types (a literal at a
-        // refined record field is branded only when its type says so), so
-        // type the body here as the check pass did, into throwaway sinks.
-        let mut throwaway_errors: Vec<CompileError> = Vec::new();
-        let mut throwaway_refs = RefSink::new();
-        (typed.expr_types, typed.callees) = test_suites::typecheck_integration_case_body(
-            participants,
-            view,
-            input.suite_fns,
-            case,
-            cross_context,
-            unit_tables,
-            &mut throwaway_errors,
-            &mut throwaway_refs,
-            tys,
-        );
         let roots_mark = runtime_use.json_codec_roots_len();
         // #2834: the suite's helpers, declared ahead of the body.
-        let helper_src = suite_fn_decls(
+        let helper = suite_fn_decls(
             input.suite_fns,
             test_suites::integration_resolved(view, cross_context, test_suites::SuiteItems::NONE),
             participants.first().and_then(|p| unit_tables.get(p)),
@@ -621,7 +631,7 @@ pub(super) fn emit_integration_module(
             &mut harness_bound,
             tys,
         );
-        case_out.push_str(&helper_src);
+        case_out.push_str(&helper.text);
         // #1875 review: the check pass accepted this body from the same
         // inputs, so an error here means the two have drifted, and the
         // lowering would silently fall back to untyped output.
@@ -635,19 +645,7 @@ pub(super) fn emit_integration_module(
                 .map(|e| e.category)
                 .collect::<Vec<_>>()
         );
-        if typed
-            .callees
-            .values()
-            .any(|c| matches!(c, bynk_check::checker::Callee::D1Peek { .. }))
-        {
-            // #3147: the case's handles are held on `deps` (`deps.db`).
-            case_out = case_out.replacen(
-                "    const deps = __makeHarness();\n",
-                "    const deps: any = __makeHarness();\n",
-                1,
-            );
-        }
-        let (body_src, body_smb) = case_body::lower_integration_case_body(
+        let body = case_body::lower_integration_case_body(
             &case.body,
             &mut typed,
             cross_context,
@@ -669,11 +667,46 @@ pub(super) fn emit_integration_module(
             runtime_use,
             roots_mark,
         ));
+        // The participant types the lowered case or a helper uses: read off the trees the text
+        // was printed from (1B.3c), with a participant's names `provided` so that a type named
+        // like a global (`Request`) is still found.
+        let is_participant_type = |n: &str| {
+            participant_types
+                .iter()
+                .any(|(_, names)| names.iter().any(|m| m == n))
+        };
+        let used: HashSet<String> = bynk_ts::unbound_names_in(&body.stmts, is_participant_type)
+            .into_iter()
+            // A helper may name a participant's type though no case does.
+            .chain(bynk_ts::unbound_names_in(&helper.stmts, is_participant_type))
+            .collect();
         for (p, names) in &participant_types {
             let named: Vec<String> = names
                 .iter()
-                // A helper may name a participant's type though no case does.
-                .filter(|n| names_ident(&body_src, n) || names_ident(&helper_src, n))
+                .filter(|n| {
+                    // TEMPORARY (1B.3c, Decision E): the one-off corpus comparison.
+                    let old = names_ident(&body.text, n) || names_ident(&helper.text, n);
+                    if old != used.contains(*n) {
+                        if let Ok(path) = std::env::var("BYNK_E_CORPUS") {
+                            use std::io::Write;
+                            if let Ok(mut f) = std::fs::OpenOptions::new()
+                                .create(true)
+                                .append(true)
+                                .open(path)
+                            {
+                                let _ = writeln!(
+                                    f,
+                                    "DIFF name={n} old={old} new={} case={:?}\n---body---\n{}\n---helper---\n{}\n===",
+                                    used.contains(*n),
+                                    case.name,
+                                    body.text,
+                                    helper.text
+                                );
+                            }
+                        }
+                    }
+                    used.contains(*n)
+                })
                 .cloned()
                 .collect();
             if named.is_empty() {
@@ -691,13 +724,13 @@ pub(super) fn emit_integration_module(
         }
         let src_id = map.add_source(input.map_source.clone(), input.source.to_string());
         let body_base = case_out.len();
-        for line in body_src.lines() {
+        for line in body.text.lines() {
             case_out.push_str("    ");
             case_out.push_str(line);
             case_out.push('\n');
         }
         let mut case_smb = SourceMapBuilder::new();
-        case_smb.merge(&body_smb, &body_src, &case_out, body_base, 0);
+        case_smb.merge(&body.smb, &body.text, &case_out, body_base, 0);
         let retries = if remote.is_some() {
             ", retries: __bynkRetries"
         } else {
