@@ -1,15 +1,13 @@
 commons bynk.map {
-	uses bynk.list
-
 	---
 	Returns the values of `m`, one per key (order follows `m.keys()`).
 	---
 	fn values[K: Key, V](m: Map[K, V]) -> List[V] {
 		let init: List[V] = List.empty()
-		reverse(m.keys().fold(init, (acc, k) => match m.get(k) {
+		m.keys().fold(init, (acc, k) => match m.get(k) {
 			Some(v) => acc.prepend(v),
 			None => acc,
-		}))
+		}).reverse()
 	}
 
 	---

@@ -11,9 +11,9 @@ case "an enum orders by variant declaration" {
   expect Medium < High
   expect High >= High
   expect !(High < Low)
-  expect sort(ps) == [Low, Medium, High]
-  expect min(ps) == Some(Low)
-  expect max(ps) == Some(High)
+  expect ps.sort() == [Low, Medium, High]
+  expect ps.min() == Some(Low)
+  expect ps.max() == Some(High)
 }
 
 case "a record orders by its fields in order" {
@@ -23,7 +23,7 @@ case "a record orders by its fields in order" {
   let ts: List[Task] = [c, a, b]
   expect a < b
   expect b < c
-  expect sort(ts) == [a, b, c]
+  expect ts.sort() == [a, b, c]
   expect titles(ts) == ["a", "a", "a"]
 }
 
@@ -40,20 +40,20 @@ case "a generic record is Ord at an instantiation" {
   let b = Pair { first: 1, second: "c" }
   let ps: List[Pair[Int, String]] = [b, a]
   expect a < b
-  expect sort(ps) == [a, b]
+  expect ps.sort() == [a, b]
   expect top(ps) == Some(b)
 }
 
 case "Option orders None first" {
   let os: List[Option[Int]] = [Some(2), None, Some(1)]
-  expect sort(os) == [None, Some(1), Some(2)]
-  expect min(os) == Some(None)
-  expect max(os) == Some(Some(2))
+  expect os.sort() == [None, Some(1), Some(2)]
+  expect os.min() == Some(None)
+  expect os.max() == Some(Some(2))
 }
 
 case "List orders lexicographically" {
   let ls: List[List[Int]] = [[2], [1, 5], [1], []]
-  expect sort(ls) == [[], [1], [1, 5], [2]]
+  expect ls.sort() == [[], [1], [1, 5], [2]]
   let ss: List[String] = ["b", "a", "c"]
   expect top(ss) == Some("c")
 }
@@ -64,8 +64,8 @@ case "Bytes order is unsigned lexicographic" {
   let bs: List[Bytes] = [hi, Bytes.fromUtf8("aa"), lo]
   expect lo < hi
   expect !(hi < lo)
-  expect sort(bs) == [lo, Bytes.fromUtf8("aa"), hi]
-  expect max(bs) == Some(hi)
+  expect bs.sort() == [lo, Bytes.fromUtf8("aa"), hi]
+  expect bs.max() == Some(hi)
 }
 
 case "a bounded generic uses the operators on its parameter" {

@@ -5,7 +5,6 @@ explicit `Box.empty[Int]()`. A bound the type declares supplies a hidden witness
 ---
 commons demo.boxes
 
-uses bynk.list
 
 type Box[T] = { value: T }
 
@@ -19,7 +18,7 @@ type Sorted[T: Ord] = { items: List[T] }
 
 fn Sorted.empty() -> Sorted[T] { Sorted { items: [] } }
 
-fn Sorted.fromList(xs: List[T]) -> Sorted[T] { Sorted { items: sort(xs) } }
+fn Sorted.fromList(xs: List[T]) -> Sorted[T] { Sorted { items: xs.sort() } }
 
 fn Sorted.rebuilt(xs: List[T]) -> Sorted[T] { Sorted.fromList(xs) }
 

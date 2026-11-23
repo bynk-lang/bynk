@@ -8465,7 +8465,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     warn(d(
         "bynk.list.deprecated_function",
-        "A `bynk.list` free function (`map`/`filter`/`find`/`any`/`all`) is deprecated in favour of the `List` method form (warning; auto-fixable).",
+        "A `bynk.list` free function is deprecated in favour of the `List` method form (warning; auto-fixable).",
     )),
     d(
         "bynk.locale.multiple_message_bundles",

@@ -718,21 +718,25 @@ pub(crate) fn refuse_experimental_import(name: &Ident, ctx: &mut Ctx) {
 
 /// The deprecated `bynk.list` free functions and the `List` method form each
 /// rewrites to. One table, read by the warning below and by the wasm
-/// `bynk_reference` catalogue so the two cannot drift. `reverse`/`traverse`
-/// have no method form yet and stay.
+/// `bynk_reference` catalogue so the two cannot drift. Since #3962 every
+/// function has a method form.
 pub const BYNK_LIST_DEPRECATED: &[(&str, &str)] = &[
+    ("reverse", "xs.reverse()"),
     ("map", "xs.map(f)"),
     ("filter", "xs.filter(p)"),
+    ("find", "xs.find(p)"),
     ("any", "xs.any(p)"),
     ("all", "xs.all(p)"),
-    ("find", "xs.filter(p).first()"),
+    ("traverse", "xs.traverse(f)"),
+    ("sort", "xs.sort()"),
+    ("min", "xs.min()"),
+    ("max", "xs.max()"),
 ];
 
-/// v0.91 (ADR 0116 D6): the `bynk.list` free functions whose method forms
-/// shipped with slice 1 are **deprecated** in favour of the method-chain
-/// vocabulary. `reverse`/`traverse` stay (no method form yet). Emits a
-/// non-failing warning (ADR 0117) with a machine-applicable rewrite to the
-/// method form — `map(xs, f)` → `xs.map(f)`, `find(xs, p)` → `xs.filter(p).first()`.
+/// v0.91 (ADR 0116 D6, completed by #3962): every `bynk.list` free function is
+/// **deprecated** in favour of the method-chain vocabulary. Emits a non-failing
+/// warning (ADR 0117) with a machine-applicable rewrite to the method form —
+/// `map(xs, f)` → `xs.map(f)`, `reverse(xs)` → `xs.reverse()`.
 fn warn_bynk_list_deprecation(name: &Ident, args: &[Expr], call_span: Span, ctx: &mut Ctx) {
     if ctx.input.imported_from.get(&name.name).map(String::as_str) != Some("bynk.list") {
         return;
@@ -742,7 +746,7 @@ fn warn_bynk_list_deprecation(name: &Ident, args: &[Expr], call_span: Span, ctx:
         .iter()
         .find(|(f, _)| *f == name.name.as_str())
     else {
-        return; // reverse / traverse keep their free-function form for now
+        return;
     };
     let mut err = CompileError::new(
         "bynk.list.deprecated_function",
@@ -755,35 +759,35 @@ fn warn_bynk_list_deprecation(name: &Ident, args: &[Expr], call_span: Span, ctx:
     .with_note(
         "the `bynk.list.*` free functions are superseded by the method-chain vocabulary (ADR 0116); the method form reads left-to-right and chains",
     );
-    // The auto-fix needs the (list, fn) shape — a wrong-arity call is reported
-    // elsewhere; only offer the rewrite when it is well-formed.
-    if args.len() == 2 {
-        let mut edits = vec![
-            // delete `name(` — the receiver becomes the first argument.
+    // The auto-fix needs the (list) or (list, fn) shape — a wrong-arity call is
+    // reported elsewhere; only offer the rewrite when it is well-formed.
+    let keyless = matches!(name.name.as_str(), "reverse" | "sort" | "min" | "max");
+    let edits = match (keyless, args.len()) {
+        // delete `name(` — the receiver becomes the first argument.
+        (true, 1) => Some(vec![
             (
                 Span::new(name.span.start, args[0].span.start),
                 String::new(),
             ),
-            // the `, ` between the two args becomes `.<method>(`.
+            (
+                Span::new(args[0].span.end, call_span.end),
+                format!(".{}()", name.name),
+            ),
+        ]),
+        // the `, ` between the two args becomes `.<method>(`.
+        (false, 2) => Some(vec![
+            (
+                Span::new(name.span.start, args[0].span.start),
+                String::new(),
+            ),
             (
                 Span::new(args[0].span.end, args[1].span.start),
-                format!(
-                    ".{}(",
-                    if name.name == "find" {
-                        "filter"
-                    } else {
-                        &name.name
-                    }
-                ),
+                format!(".{}(", name.name),
             ),
-        ];
-        if name.name == "find" {
-            // `filter(p)` then `.first()` after the closing `)`.
-            edits.push((
-                Span::new(call_span.end, call_span.end),
-                ".first()".to_string(),
-            ));
-        }
+        ]),
+        _ => None,
+    };
+    if let Some(edits) = edits {
         err = err.with_suggestion(
             format!("rewrite to the `List` method form `{method_form}`"),
             edits,

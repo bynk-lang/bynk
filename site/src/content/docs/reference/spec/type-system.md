@@ -156,7 +156,7 @@ surface.
   new list, none mutates. Kernel operations and the eager method vocabulary
   (`map`/`filter`/`flatMap`/`sortBy`/`sortByDescending`/… builders, `count`/`sum`/`first`/…
   terminals; v0.88, ADR 0116): [§5.10](/reference/spec/static-semantics/#510-collections).
-  The predecessor `bynk.list` free functions whose method forms now exist are
+  The predecessor `bynk.list` free functions (each now has a method form) are
   **deprecated** (`bynk.list.deprecated_function`, v0.91) — they still work.
 - **`Map[K, V]`** (v0.20b) — an **immutable**, insertion-ordered key→value
   map, constructed by `Map.empty()` and grown with `insert`; updating an

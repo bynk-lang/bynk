@@ -546,6 +546,12 @@ combinator vocabulary as kernel methods, so a chain reads
 | `xs.get(index: Int)` | `Option[T]` | the element at `index` (from `0`); `None` when out of range |
 | `xs.first()` | `Option[T]` | the first element; `None` when empty |
 | `xs.firstOrElse(default: T)` | `T` | the first element, or `default` when empty |
+| `xs.last()` | `Option[T]` | the last element; `None` when empty |
+| `xs.lastOrElse(default: T)` | `T` | the last element, or `default` when empty |
+| `xs.isEmpty()` | `Bool` | `true` when there are no elements |
+| `xs.contains(item: T)` | `Bool` | some element `==` `item` (`T` must be `Eq`) |
+| `xs.reverse()` | `List[T]` | the elements in the opposite order |
+| `xs.find(p: T -> Bool)` | `Option[T]` | the first element for which `p` holds; `None` when there is none |
 | `xs.prepend(item: T)` | `List[T]` | `item`, then `xs` |
 | `xs.append(item: T)` | `List[T]` | `xs`, then `item` |
 | `xs.concat(other: List[T])` | `List[T]` | `xs`, then `other` |
@@ -554,6 +560,7 @@ combinator vocabulary as kernel methods, so a chain reads
 | `xs.flatMap(f: T -> List[U])` | `List[U]` | each element's list, joined in order |
 | `xs.sortBy(key: T -> K)` | `List[T]` | smallest key first; stable |
 | `xs.sortByDescending(key: T -> K)` | `List[T]` | largest key first; stable |
+| `xs.sort()` | `List[T]` | the elements themselves, smallest first; stable (`T` must be `Ord`) |
 | `xs.take(n: Int)` | `List[T]` | the first `n` elements (all of them when there are fewer) |
 | `xs.skip(n: Int)` | `List[T]` | all but the first `n` |
 | `xs.distinct()` | `List[T]` | repeats dropped, each element at its first position |
@@ -565,6 +572,8 @@ combinator vocabulary as kernel methods, so a chain reads
 | `xs.sum(key: T -> K)` | `K` | the total of the keys; the zero when empty |
 | `xs.min(key: T -> K)` | `Option[K]` | the smallest key; `None` when empty |
 | `xs.max(key: T -> K)` | `Option[K]` | the largest key; `None` when empty |
+| `xs.min()` | `Option[T]` | the smallest element; `None` when empty (`T` must be `Ord`) |
+| `xs.max()` | `Option[T]` | the largest element; `None` when empty (`T` must be `Ord`) |
 | `xs.average(key: T -> K)` | `Option[Float]` | the mean of the keys (`Option[Duration]` for a `Duration` key); `None` when empty |
 | `xs.joinOn(other, left, right, into)` | `List[V]` | equi-join; see [Joins and grouping](#joins-and-grouping) |
 | `xs.leftJoin(other, left, right, into)` | `List[V]` | left outer join |
@@ -574,6 +583,7 @@ combinator vocabulary as kernel methods, so a chain reads
 | `rs.sequenceTry()` | `Result[List[T], E]` | for a `List[Result[T, E]]`: every value, or the first error |
 | `xs.foldEff(init: U, step: (U, T) -> Effect[U])` | `Effect[U]` | `fold` with an effectful step |
 | `xs.forEach(f: T -> Effect[()])` | `Effect[()]` | run `f` for each element, in order |
+| `xs.traverse(f: T -> Effect[U])` | `Effect[List[U]]` | run `f` for each element, in order, and collect the results |
 | `xs.parTraverse(f: T -> Effect[()])` | `Effect[()]` | run `f` for every element concurrently |
 | `xs.traverseAll(f: T -> Effect[Result[U, E]])` | `Effect[List[Result[U, E]]]` | run `f` for each element in order, keeping every outcome |
 | `xs.parTraverseAll(f: T -> Effect[Result[U, E]])` | `Effect[List[Result[U, E]]]` | the same, concurrently |
@@ -584,7 +594,7 @@ The methods returning an `Effect` can only be called where effects are allowed.
 A method not in this table is `bynk.types.method_not_found`. The rest of this
 section groups them and gives the rules.
 
-**Builders** (return a `List`): `map`, `filter`, `flatMap`, `sortBy`, `sortByDescending`,
+**Builders** (return a `List`): `map`, `filter`, `flatMap`, `sortBy`, `sortByDescending`, `sort`, `reverse`,
 `take`, `skip`, `distinct`, `distinctBy`.
 
 **Collecting `Result`s** (pure; the receiver is a `List[Result[T, E]]`): `sequenceAll()`
@@ -618,8 +628,8 @@ fn withTotal(ns: List[Int]) -> List[Int] {
 `[1, 2, 3]`. `foldEff` builds in order the same way, its step returning
 `Effect.pure(acc.append(x))`.
 
-**Terminals**: `count`, `any`, `all`, `first`, `firstOrElse`, `sum`, `min`, `max`,
-`average`.
+**Terminals**: `count`, `any`, `all`, `first`, `firstOrElse`, `last`, `lastOrElse`, `isEmpty`,
+`contains`, `find`, `sum`, `min`, `max`, `average`.
 
 Ordering keys (`sortBy`/`sortByDescending`/`min`/`max`), on a `List` and on a lazy storage `Query`, are any
 [`Ord` type](#ordering-your-own-types) (`bynk.types.key_not_orderable` otherwise). `sortByDescending` is `sortBy` largest key first: the exact reverse of the ascending order, so a
@@ -628,8 +638,11 @@ their input order, which `reverse(xs.sortBy(k))` does not. It behaves the same f
 `derives Ord` or type-parameter key. Numeric keys (`sum`/`average`) are
 `Int`/`Float`/`Duration` (`bynk.query.sum_needs_numeric`), with `average -> Float`.
 **Empty aggregates are total** — `first`/`min`/`max`/`average` return `Option`,
-`sum` the zero. The first-party `bynk.list` free functions are the deprecated
-predecessors of these methods (see [Operators & built-ins](/reference/operators/) and
+`sum` the zero. The keyless `sort()`, `min()` and `max()` order the elements themselves,
+so the element type must be `Ord` (`bynk.types.not_orderable` otherwise). `contains` compares
+by `==`, so the element type must support equality (`T: Eq` on a type parameter,
+`bynk.generics.missing_eq_bound` otherwise). Every first-party `bynk.list` free function now has a
+method, and each is the deprecated predecessor of it (see [Operators & built-ins](/reference/operators/) and
 [First-party `bynk` capabilities](/reference/bynk-capabilities/)).
 
 ## Map methods {#map-methods}
@@ -1399,7 +1412,7 @@ A `store` `Map`, `Set` or `Cache`, and an `@indexed` field, still take only
 ## Ordering your own types
 
 `Ord` is the set of types with a total order: what `<` `<=` `>` `>=`, the
-`sortBy`/`min`/`max` keys on a `List`, `bynk.list`'s `sort`/`min`/`max` and a
+`sortBy`/`min`/`max` keys on a `List`, its keyless `sort`/`min`/`max` and a
 `T: Ord` [bound](/reference/generics/) accept. It is opt-in for your own types:
 end the declaration with `derives Ord`.
 

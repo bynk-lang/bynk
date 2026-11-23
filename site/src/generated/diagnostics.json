@@ -4405,7 +4405,7 @@
     "constructs": [],
     "example": null,
     "severity": "warning",
-    "summary": "A `bynk.list` free function (`map`/`filter`/`find`/`any`/`all`) is deprecated in favour of the `List` method form (warning; auto-fixable)."
+    "summary": "A `bynk.list` free function is deprecated in favour of the `List` method form (warning; auto-fixable)."
   },
   {
     "blurb": null,

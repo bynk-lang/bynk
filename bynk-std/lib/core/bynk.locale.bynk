@@ -1,6 +1,5 @@
 commons bynk.locale {
 	uses bynk.locale.types
-	uses bynk.list
 	uses bynk.string
 
 	---
@@ -14,13 +13,14 @@ commons bynk.locale {
 			msg.code
 		} else {
 			let init: List[String] = List.empty()
-			let parts = reverse(msg.params
+			let parts = msg.params
 				.keys()
 				.sortBy((k) => k)
 				.fold(init, (acc, k) => match msg.params.get(k) {
 					Some(arg) => acc.prepend(k.concat("=").concat(renderArg(arg))),
 					None => acc,
-				}))
+				})
+				.reverse()
 			msg.code.concat(" {").concat(join(parts, ", ")).concat("}")
 		}
 	}

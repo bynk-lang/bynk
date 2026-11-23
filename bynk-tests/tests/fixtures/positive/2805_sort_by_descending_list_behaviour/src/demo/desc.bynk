@@ -5,7 +5,6 @@
 ---
 commons demo.desc
 
-uses bynk.list
 
 type Rank = { score: Float, tier: Int } derives Ord
 
@@ -23,7 +22,7 @@ fn names(xs: List[Item]) -> List[String] { xs.map((i) => i.name) }
 
 fn byTier(xs: List[Item]) -> List[Item] { xs.sortByDescending((i) => i.tier) }
 
-fn byTierReversed(xs: List[Item]) -> List[Item] { reverse(xs.sortBy((i) => i.tier)) }
+fn byTierReversed(xs: List[Item]) -> List[Item] { xs.sortBy((i) => i.tier).reverse() }
 
 fn byScore(xs: List[Item]) -> List[Item] { xs.sortByDescending((i) => i.score) }
 
