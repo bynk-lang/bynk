@@ -8,7 +8,7 @@ use crate::ts_build::{
     str_lit, strict_eq, switch_stmt,
 };
 use bynk_check::symbols::UnitTable;
-use bynk_syntax::ast::TypeRef;
+use bynk_syntax::ast::{ServiceProtocol, TypeRef};
 use bynk_ts::{TsExpr, TsObjectEntry, TsParam, TsStmt, TsSwitchCase, TsType, TsTypeMember};
 
 /// The queue (v0.10b) and inbound-email (#3328) entry points. `queue` dispatches
@@ -220,4 +220,43 @@ pub(super) struct QueueRoute {
     pub(super) index: usize,
     pub(super) name: String,
     pub(super) msg_type: Option<TypeRef>,
+}
+
+/// Collect the queue consumers across the services, carrying the per-service
+/// declaration index and sorting by queue name.
+pub(super) fn collect_queue_routes(
+    table: &UnitTable,
+    service_names: &[&String],
+) -> Vec<QueueRoute> {
+    let mut queue_routes: Vec<QueueRoute> = Vec::new();
+    for sname in service_names {
+        let service = table.services.get(*sname).unwrap();
+        let mut queue_idx = 0usize;
+        for h in &service.handlers {
+            // P6.31: dispatches on `IrHandlerKind` (no fields to re-derive
+            // here). `service.protocol` stays raw `ServiceProtocol` — this
+            // function has no `TypedCommons` in scope, the same constraint
+            // P6.30 found in `emit_worker_compose`.
+            if matches!(
+                bynk_model::lower_handler_kind_ir(&h.kind),
+                bynk_model::IrHandlerKind::Message
+            ) {
+                // v0.44: the bound queue name lives on the service header
+                // (`from queue("name")`), not on the handler.
+                let ServiceProtocol::Queue { name } = &service.protocol else {
+                    continue;
+                };
+                let msg_type = h.params.first().map(|p| p.type_ref.clone());
+                queue_routes.push(QueueRoute {
+                    service: (*sname).clone(),
+                    index: queue_idx,
+                    name: name.clone(),
+                    msg_type,
+                });
+                queue_idx += 1;
+            }
+        }
+    }
+    queue_routes.sort_by(|a, b| a.name.cmp(&b.name));
+    queue_routes
 }

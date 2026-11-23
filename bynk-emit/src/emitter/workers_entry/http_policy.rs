@@ -2,11 +2,14 @@
 //! method table, each derived from the route table.
 
 use super::http::HttpRoute;
-use super::respond::str_array;
-use crate::ts_build::{bool_lit, null_lit, num_lit};
+use super::respond::{miss, new_response, rejection_renderer, str_array};
+use crate::ts_build::{
+    and_expr, await_expr, block, bool_lit, call, cond_expr, const_, ident, if_, member,
+    method_call, null_lit, num_lit, or_expr, paren, return_, str_lit, strict_eq, strict_neq,
+};
 use bynk_check::symbols::UnitTable;
 use bynk_syntax::ast::ServiceProtocol;
-use bynk_ts::TsExpr;
+use bynk_ts::{TsExpr, TsStmt};
 
 /// Count the number of `:param` segments in a path pattern.
 pub(super) fn param_count(path: &str) -> usize {
@@ -255,6 +258,151 @@ pub(super) fn build_security_services(
         });
     }
     out
+}
+
+/// The CORS preflight branch of one CORS-enabled service (v0.131, ADR 0159): an
+/// `OPTIONS` against any route path of the service is answered here, before the
+/// route dispatch and its auth seam, since a preflight is credential-less by spec
+/// and must not be rejected by a `by` actor / Bearer check.
+///
+/// v0.139 (ADR 0162 D4): a *real* preflight is distinguished from a bare
+/// discovery `OPTIONS` by the `Access-Control-Request-Method` header. A
+/// preflight (has it) is answered here with the `Access-Control-*` grant; a bare
+/// `OPTIONS` (lacks it) falls through to the generic `204 + Allow`, so the two
+/// `OPTIONS` answers compose instead of colliding.
+pub(super) fn cors_preflight(cs: &CorsService, security_services: &[SecurityService]) -> TsStmt {
+    let mut cond_terms = cs.paths.iter().map(|(path, has_params)| {
+        if *has_params {
+            strict_neq(
+                call(
+                    ident("__matchPath"),
+                    vec![str_lit(path.clone()), ident("path")],
+                ),
+                null_lit(),
+            )
+        } else {
+            strict_eq(ident("path"), str_lit(path.clone()))
+        }
+    });
+    let first = cond_terms
+        .next()
+        .expect("a CORS service always has ≥1 route");
+    let cond = cond_terms.fold(first, or_expr);
+    let full_cond = and_expr(
+        and_expr(
+            strict_eq(ident("method"), str_lit("OPTIONS")),
+            strict_neq(
+                method_call(
+                    member(ident("request"), "headers"),
+                    "get",
+                    vec![str_lit("access-control-request-method")],
+                ),
+                null_lit(),
+            ),
+        ),
+        paren(cond),
+    );
+    // v0.141 (ADR 0164 DECISION E): the synthesised preflight also carries the
+    // service's security headers — a CORS-enabled service is a `from http`
+    // service, so it always has a security policy constant.
+    let preflight = call(
+        ident("__corsPreflightResponse"),
+        vec![
+            ident(cs.const_name.clone()),
+            method_call(
+                member(ident("request"), "headers"),
+                "get",
+                vec![str_lit("origin")],
+            ),
+        ],
+    );
+    let stamped = match security_services.iter().find(|s| s.service == cs.service) {
+        Some(ss) => call(
+            ident("__applySecurityHeaders"),
+            vec![preflight, ident(ss.const_name.clone())],
+        ),
+        None => preflight,
+    };
+    if_(full_cond, block(vec![return_(Some(stamped))]))
+}
+
+/// The method-aware router fall-through for one known path (v0.139, ADR 0162): a
+/// request that matched no dispatch block and reaches a live path under an
+/// unhandled method is a bare `OPTIONS` ⇒ `204 + Allow`, any other method ⇒
+/// `405 + Allow` (the `Allow` derived from the route table). For a CORS-enabled
+/// path the synthesised response is stamped with `applyCors` (D5) so a
+/// cross-origin `405`/`OPTIONS` is not invisible to the browser.
+pub(super) fn method_fall_through(pm: &PathMethods, member_mode: bool) -> TsStmt {
+    let allow = pm.methods.join(", ");
+    let match_cond = if pm.has_params {
+        strict_neq(
+            call(
+                ident("__matchPath"),
+                vec![str_lit(pm.path.clone()), ident("path")],
+            ),
+            null_lit(),
+        )
+    } else {
+        strict_eq(ident("path"), str_lit(pm.path.clone()))
+    };
+    let mut fallthrough_body: Vec<TsStmt> = Vec::new();
+    // OPTIONS → 204, everything else → 405; both carry the derived Allow.
+    fallthrough_body.push(const_(
+        "__status",
+        cond_expr(
+            strict_eq(ident("method"), str_lit("OPTIONS")),
+            num_lit("204"),
+            num_lit("405"),
+        ),
+    ));
+    let res = new_response(vec![
+        null_lit(),
+        TsExpr::object(vec![
+            ("status".to_string(), ident("__status")),
+            (
+                "headers".to_string(),
+                TsExpr::object(vec![("allow".to_string(), str_lit(allow))]),
+            ),
+        ]),
+    ]);
+    // #2341 (decision C): a `405` is rendered through the owning service's
+    // `on rejected` (the `204` to `OPTIONS` is not a rejection, and passes
+    // through untouched).
+    let res = match &pm.rejected {
+        Some(m) => await_expr(call(
+            ident("__renderRejection"),
+            vec![res, rejection_renderer(m)],
+        )),
+        None => res,
+    };
+    fallthrough_body.push(const_("__res", res));
+    // Stamp CORS (v0.131) then security headers (v0.141) — disjoint sets, so
+    // the order is immaterial; every `from http` path carries the security
+    // policy (DECISION E), CORS only when the path's service opts in.
+    let cors_res = match &pm.cors_const {
+        Some(c) => call(
+            ident("__applyCors"),
+            vec![
+                ident("__res"),
+                ident(c.clone()),
+                method_call(
+                    member(ident("request"), "headers"),
+                    "get",
+                    vec![str_lit("origin")],
+                ),
+            ],
+        ),
+        None => ident("__res"),
+    };
+    let stamped = match &pm.security_const {
+        Some(s) => call(
+            ident("__applySecurityHeaders"),
+            vec![cors_res, ident(s.clone())],
+        ),
+        None => cors_res,
+    };
+    fallthrough_body.push(return_(Some(miss(member_mode, stamped))));
+    if_(match_cond, block(fallthrough_body))
 }
 
 #[cfg(test)]

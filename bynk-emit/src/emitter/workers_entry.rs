@@ -12,52 +12,49 @@
 //! was the third, #1321).
 
 use bynk_check::symbols::UnitTable;
-use bynk_syntax::ast::{Handler, ServiceProtocol};
 
 use crate::emitter::RuntimeUse;
 use crate::ts_build::{
-    and_expr, as_expr, await_expr, block, call, cond_expr, const_, const_typed, expr_stmt, ident,
-    if_, member, method_call, new, null_lit, num_lit, or_expr, paren, return_, str_lit, strict_eq,
-    strict_neq, switch_stmt,
+    await_expr, call, cond_expr, const_, const_typed, expr_stmt, ident, member, method_call, new,
+    return_, str_lit,
 };
 use bynk_ts::{
-    TsBindingName, TsDecl, TsExpr, TsObjectEntry, TsParam, TsProgram, TsStmt, TsSwitchCase, TsType,
-    TsTypeMember,
+    TsBindingName, TsDecl, TsExpr, TsObjectEntry, TsParam, TsProgram, TsStmt, TsType, TsTypeMember,
 };
 
 mod admin;
 mod call;
 mod email;
+mod events;
 mod field_specs;
 mod http;
 mod http_policy;
 mod queue;
 mod respond;
 mod scheduled;
+mod websocket;
 mod wire;
 
 pub(crate) use admin::INSPECT_PREFIX;
 use admin::{admin_routes, inspect_registry_export};
-use call::{FOREIGN_CALLERS, call_dispatch, verify_gate};
-use field_specs::{
-    cookies_field_specs, effective_max_body, form_field_specs, multipart_spec, query_field_specs,
-};
+use call::{FOREIGN_CALLERS, call_dispatch};
+use events::events_delivery_route;
 pub use field_specs::{
     field_spec_source, form_body_specs, renamed_specs_source, table_has_plain_json,
 };
 pub(crate) use field_specs::{query_leaf_kind, record_field_specs};
-use http::{HttpRoute, emit_http_route_dispatch};
+use http::{collect_http_routes, emit_http_route_dispatch};
 use http_policy::{
     CorsService, PathMethods, SecurityService, build_cors_services, build_path_method_table,
-    build_security_services, param_count,
+    build_security_services, cors_preflight, method_fall_through,
 };
-use queue::{QueueRoute, push_message_entries};
+use queue::{collect_queue_routes, push_message_entries};
 use respond::{
-    MISS_HELPER, REPORT_FAULT_HELPER, case_, default_case, fault_detail, json_response, miss,
-    new_response, null_response, own_path_guard, rejection_renderer, report_fault, set_fault_route,
-    text_response, try_catch_stmt,
+    MISS_HELPER, REPORT_FAULT_HELPER, fault_detail, miss, report_fault, text_response,
+    try_catch_stmt,
 };
-use scheduled::{CronRoute, emit_scheduled_handler};
+use scheduled::{collect_cron_routes, emit_scheduled_handler};
+use websocket::{collect_ws_open_routes, ws_upgrade_dispatch};
 pub(crate) use wire::{deserialise_call, wire_ident};
 
 /// What `fetch`'s catch does with a fault (#1825): log it, report it, and answer
@@ -330,70 +327,15 @@ pub fn emit_worker_entry(
 
     // Collect HTTP routes across all services, sorted so literal-segment
     // routes precede parameter-segment routes that share the same prefix.
-    let mut http_routes: Vec<HttpRoute> = Vec::new();
     let mut service_names: Vec<&String> = table.services.keys().collect();
     service_names.sort();
-    for sname in &service_names {
-        let service = table.services.get(*sname).unwrap();
-        for h in &service.handlers {
-            // Slice 1 of `#1542` (the IR cutover, `design/archive/retired-tracks.md` §5): reads
-            // `IrHandlerKind::Http`'s own `method`/`path` directly — the IR
-            // payload P6.24a already computes here, no longer re-derived from
-            // `h.kind` a second time. `HttpRoute::method` is `IrHttpMethod`
-            // (un-deferred from Q7's original "stays AST until phase 7's
-            // printer" — phase 7 shipped, see the front-loading ADR).
-            if let bynk_model::IrHandlerKind::Http { method, path } =
-                bynk_model::lower_handler_kind_ir(&h.kind)
-            {
-                let query_fields = query_field_specs(h, &path, visible_types);
-                let cookies_fields = cookies_field_specs(h, &path, visible_types);
-                http_routes.push(HttpRoute {
-                    service: (*sname).clone(),
-                    method,
-                    path,
-                    handler: h.clone(),
-                    // v0.47: a Bearer handler's surface wrapper runs the
-                    // verification seam and needs the request passed in.
-                    bearer: bynk_check::actors::bearer_seam_for(h, &table.actors).is_some(),
-                    // v0.151: an `Oidc` wrapper runs its verification seam, taking the request first.
-                    oidc: bynk_check::actors::oidc_seam_for(h, &table.actors).is_some(),
-                    signed_cookie: signed_cookie_name(h, &table.actors),
-                    signature: bynk_check::actors::signature_seam_for(h, &table.actors),
-                    // v0.52: a multi-actor sum handler's wrapper owns the whole
-                    // boundary (raw read, first-wins resolution, body parse), so
-                    // the entry just passes `request` and skips the body parse.
-                    sum: bynk_check::actors::sum_members_for(h, &table.actors).is_some(),
-                    // v0.140 (ADR 0163): the handler's `@cache` freshness policy, if
-                    // any — lowered to a `Cache-Control` on this GET's responses.
-                    cache: bynk_model::lower_route_cache_ir(h),
-                    edge_cache,
-                    vary_locale: edge_cache && needs_locale_request,
-                    // v0.142 (ADR 0165): the route's effective request-body ceiling
-                    // in bytes — the handler's `@limit` if any, else the service's
-                    // `limits { }`, else none. `Some` drives the synthesised `413`
-                    // `Content-Length` guard before the body is read.
-                    max_body: effective_max_body(service.limits.as_ref(), h),
-                    raw: h.raw_content_type().map(str::to_string),
-                    json_plain: bynk_syntax::ast::effective_json_options(service.json.as_ref(), h)
-                        == bynk_syntax::ast::JsonOptions::Plain,
-                    rejected: rejected_surface(service, sname),
-                    query_fields,
-                    form_fields: form_field_specs(h, visible_types),
-                    cookies_fields,
-                    multipart: multipart_spec(service.limits.as_ref(), h, visible_types),
-                });
-            }
-        }
-    }
-    http_routes.sort_by(|a, b| {
-        // Sort by literal-specificity: a path with fewer parameter segments
-        // (more literals) wins. Stable secondary sort by method + path keeps
-        // the diff deterministic.
-        param_count(&a.path)
-            .cmp(&param_count(&b.path))
-            .then_with(|| a.method.as_str().cmp(b.method.as_str()))
-            .then_with(|| a.path.cmp(&b.path))
-    });
+    let http_routes = collect_http_routes(
+        table,
+        &service_names,
+        visible_types,
+        edge_cache,
+        needs_locale_request,
+    );
 
     // v0.131 (ADR 0159): the per-service CORS policies. A `from http` service
     // with a `cors { }` section gets one synthesised `CorsPolicy` constant; its
@@ -418,81 +360,14 @@ pub fn emit_worker_entry(
     let path_methods: Vec<PathMethods> =
         build_path_method_table(&http_routes, &cors_services, &security_services);
 
-    // v0.10a: collect cron handlers across all services, carrying the per-service
-    // declaration index (the method-name key) and sorting by schedule expression
-    // for deterministic switch output.
-    let mut cron_routes: Vec<CronRoute> = Vec::new();
-    for sname in &service_names {
-        let service = table.services.get(*sname).unwrap();
-        let mut cron_idx = 0usize;
-        for h in &service.handlers {
-            // P6.31: dispatches on `IrHandlerKind`; `expr` is a plain `String`
-            // in both, so no AST re-derivation is needed here (unlike the
-            // `Http` arm above).
-            if let bynk_model::IrHandlerKind::Cron { expr } =
-                bynk_model::lower_handler_kind_ir(&h.kind)
-            {
-                cron_routes.push(CronRoute {
-                    service: (*sname).clone(),
-                    index: cron_idx,
-                    expr,
-                    has_param: !h.params.is_empty(),
-                });
-                cron_idx += 1;
-            }
-        }
-    }
-    cron_routes.sort_by(|a, b| a.expr.cmp(&b.expr));
+    // v0.10a: the cron handlers across all services.
+    let cron_routes = collect_cron_routes(table, &service_names);
 
-    // v0.10b: collect queue consumers across all services, carrying the
-    // per-service declaration index and sorting by queue name.
-    let mut queue_routes: Vec<QueueRoute> = Vec::new();
-    for sname in &service_names {
-        let service = table.services.get(*sname).unwrap();
-        let mut queue_idx = 0usize;
-        for h in &service.handlers {
-            // P6.31: dispatches on `IrHandlerKind` (no fields to re-derive
-            // here). `service.protocol` stays raw `ServiceProtocol` — this
-            // function has no `TypedCommons` in scope, the same constraint
-            // P6.30 found in `emit_worker_compose`.
-            if matches!(
-                bynk_model::lower_handler_kind_ir(&h.kind),
-                bynk_model::IrHandlerKind::Message
-            ) {
-                // v0.44: the bound queue name lives on the service header
-                // (`from queue("name")`), not on the handler.
-                let ServiceProtocol::Queue { name } = &service.protocol else {
-                    continue;
-                };
-                let msg_type = h.params.first().map(|p| p.type_ref.clone());
-                queue_routes.push(QueueRoute {
-                    service: (*sname).clone(),
-                    index: queue_idx,
-                    name: name.clone(),
-                    msg_type,
-                });
-                queue_idx += 1;
-            }
-        }
-    }
-    queue_routes.sort_by(|a, b| a.name.cmp(&b.name));
+    // v0.10b: the queue consumers across all services.
+    let queue_routes = collect_queue_routes(table, &service_names);
 
-    // v0.104 (real-time track slice 3b): the `from websocket` upgrade routes. An
-    // `Upgrade: websocket` request dispatches to the service's edge wrapper
-    // (`ws_<service>_open`), which authenticates and forwards to the hosting DO.
-    // Route params come from the upgrade URL's query string (the v1 convention).
-    let mut ws_open_routes: Vec<(&String, &Handler)> = Vec::new();
-    for sname in &service_names {
-        let service = table.services.get(*sname).unwrap();
-        for h in &service.handlers {
-            if matches!(
-                bynk_model::lower_handler_kind_ir(&h.kind),
-                bynk_model::IrHandlerKind::Open
-            ) {
-                ws_open_routes.push((*sname, h));
-            }
-        }
-    }
+    // v0.104 (real-time track slice 3b): the `from websocket` upgrade routes.
+    let ws_open_routes = collect_ws_open_routes(table, &service_names);
 
     // The runtime import is read off the finished tree (below), so the header is held until the
     // body has been built (1A.36b-2).
@@ -636,251 +511,23 @@ pub fn emit_worker_entry(
     // 1.25. The internal admin routes: see `admin_routes`.
     try_body.extend(admin_routes(context, member_mode, migratable, inspect));
 
-    // 1.5. WebSocket upgrade dispatch (v0.104, slice 3b). An `Upgrade: websocket`
-    // request routes to the `from websocket` service's edge wrapper, which runs the
-    // fail-closed auth seam and forwards to the hosting Durable Object. Route params
-    // are read from the upgrade URL's query string by name (the v1 convention; a
-    // missing required param is a `400`).
+    // 1.5. WebSocket upgrade dispatch: see `ws_upgrade_dispatch`.
     if !ws_open_routes.is_empty() {
-        let mut ws_body: Vec<TsStmt> = Vec::new();
-        for (sname, h) in &ws_open_routes {
-            // #1825 review: the auth seam and the DO forward run in the `try`
-            // too, so name the dispatch for the fault log.
-            ws_body.push(set_fault_route(format!("ws {sname}")));
-            let mut args: Vec<TsExpr> = vec![ident("request")];
-            for p in &h.params {
-                let pn = &p.name.name;
-                ws_body.push(const_(
-                    format!("__ws_{pn}"),
-                    method_call(
-                        member(ident("url"), "searchParams"),
-                        "get",
-                        vec![str_lit(pn.clone())],
-                    ),
-                ));
-                ws_body.push(if_(
-                    strict_eq(ident(format!("__ws_{pn}")), null_lit()),
-                    return_(Some(text_response(
-                        &format!("Missing parameter: {pn}"),
-                        400,
-                    ))),
-                ));
-                args.push(ident(format!("__ws_{pn}")));
-            }
-            ws_body.push(return_(Some(call(
-                member(ident("surface"), format!("ws_{sname}_open")),
-                args,
-            ))));
-        }
-        try_body.push(if_(
-            strict_eq(
-                method_call(
-                    member(ident("request"), "headers"),
-                    "get",
-                    vec![str_lit("Upgrade")],
-                ),
-                str_lit("websocket"),
-            ),
-            block(ws_body),
-        ));
+        try_body.push(ws_upgrade_dispatch(&ws_open_routes));
         try_body.push(TsStmt::blank(None));
     }
 
-    // 1.6. Events dispatch (spine #936, ADR 0284). Reached only from a
-    // publishing context's fan-out DO calling in over this subscriber's
-    // Service Binding (`deliverEvent`) — never from external edge traffic, so
-    // it needs no CORS/actor handling, unlike the HTTP routes below.
-    let event_services: Vec<&String> = service_names
-        .iter()
-        .filter(|sname| {
-            table.services.get(**sname).is_some_and(|s| {
-                s.handlers.iter().any(|h| {
-                    matches!(
-                        bynk_model::lower_handler_kind_ir(&h.kind),
-                        bynk_model::IrHandlerKind::Event
-                    )
-                })
-            })
-        })
-        .copied()
-        .collect();
-    if !event_services.is_empty() {
-        let mut event_body: Vec<TsStmt> = verify_gate(context, false).into_iter().collect();
-        event_body.extend([
-            const_(
-                "servicePath",
-                method_call(
-                    ident("path"),
-                    "slice",
-                    vec![member(str_lit("/_bynk/event/"), "length")],
-                ),
-            ),
-            // Slice 2 (spine #936): the fan-out DO's `deliverEvent` always sends
-            // `{ payload, envelope }` — the envelope is minted at emission
-            // (`lower.rs`'s `__events.push`) and forwarded unconditionally over
-            // this hop. Whether a *specific* subscriber's handler actually
-            // wants it is decided by that subscriber's own generated wrapper
-            // (`emit_event_wrapper`), not here — this route passes both through
-            // uniformly regardless of which `case` it dispatches to.
-            //
-            // #973: until this fix, `payload`/`envelope` were cast `as unknown`
-            // and forwarded unchecked — nothing on this whole path ever called a
-            // `deserialise_*` function, so a malformed event silently reached the
-            // subscriber's handler body. Both are now validated here, the same
-            // validate-then-400 shape `/_bynk/call/` above already uses: the
-            // envelope once, unconditionally (it's always on the wire regardless
-            // of whether a given subscriber declared `env`), then the payload
-            // per-`case`, against that subscriber's own generated codec (change A
-            // in #973 — the codec didn't previously exist at all for a pure
-            // subscriber, since it calls no method on the publisher).
-            TsStmt::const_stmt(
-                TsBindingName::ObjectPattern(vec!["payload".to_string(), "envelope".to_string()]),
-                None,
-                as_expr(
-                    // I2 (#1971): the text `__verifyCall` read and verified.
-                    method_call(ident("globalThis.JSON"), "parse", vec![ident("__body")]),
-                    TsType::Object(vec![
-                        TsTypeMember::prop("payload", TsType::named("__JsonValue")),
-                        TsTypeMember::prop("envelope", TsType::named("__JsonValue")),
-                    ]),
-                ),
-                None,
-            ),
-            const_(
-                "__r_envelope",
-                call(
-                    ident("__deserialiseEventEnvelope"),
-                    vec![ident("envelope"), str_lit("$.envelope")],
-                ),
-            ),
-        ]);
-        event_body.push(if_(
-            strict_eq(member(ident("__r_envelope"), "tag"), str_lit("Err")),
-            return_(Some(json_response(
-                member(ident("__r_envelope"), "error"),
-                400,
-            ))),
-        ));
-
-        let mut event_cases: Vec<TsSwitchCase> = Vec::new();
-        for sname in &event_services {
-            let h = table.services[*sname]
-                .handlers
-                .iter()
-                .find(|h| {
-                    matches!(
-                        bynk_model::lower_handler_kind_ir(&h.kind),
-                        bynk_model::IrHandlerKind::Event
-                    )
-                })
-                .expect("event_services filtered to services with an Event handler");
-            let dser_payload = deserialise_call(
-                &h.params[0].type_ref,
-                &ident("payload"),
-                "$.payload",
-                &runtime_use,
-            );
-            let case_body = vec![
-                // #1825 review: a subscriber that throws is a fault the
-                // publisher's fan-out retries; name it for the log.
-                set_fault_route(format!("event {sname}")),
-                const_("__r_payload", dser_payload),
-                if_(
-                    strict_eq(member(ident("__r_payload"), "tag"), str_lit("Err")),
-                    return_(Some(json_response(
-                        member(ident("__r_payload"), "error"),
-                        400,
-                    ))),
-                ),
-                expr_stmt(await_expr(call(
-                    member(ident("surface"), sname.to_string()),
-                    vec![
-                        member(ident("__r_payload"), "value"),
-                        member(ident("__r_envelope"), "value"),
-                    ],
-                ))),
-                return_(Some(null_response(204))),
-            ];
-            event_cases.push(case_(str_lit(sname.to_string()), case_body));
-        }
-        event_cases.push(default_case(vec![return_(Some(miss(
-            member_mode,
-            text_response("Not found", 404),
-        )))]));
-        event_body.push(switch_stmt(ident("servicePath"), event_cases));
-
-        let event_names: Vec<String> = event_services.iter().map(|s| s.to_string()).collect();
-        try_body.push(if_(
-            own_path_guard(member_mode, "/_bynk/event/", &event_names),
-            block(event_body),
-        ));
+    // 1.6. Events dispatch: see `events_delivery_route`.
+    if let Some(events) =
+        events_delivery_route(context, member_mode, table, &service_names, &runtime_use)
+    {
+        try_body.push(events);
         try_body.push(TsStmt::blank(None));
     }
 
-    // v0.131 (ADR 0159): CORS preflight. An `OPTIONS` against any route path of a
-    // CORS-enabled service is answered here — before the route dispatch and its
-    // auth seam, since a preflight is credential-less by spec and must not be
-    // rejected by a `by` actor / Bearer check.
-    //
-    // v0.139 (ADR 0162 D4): a *real* preflight is distinguished from a bare
-    // discovery `OPTIONS` by the `Access-Control-Request-Method` header. A
-    // preflight (has it) is answered here with the `Access-Control-*` grant; a
-    // bare `OPTIONS` (lacks it) falls through to the generic `204 + Allow` below,
-    // so the two `OPTIONS` answers compose instead of colliding.
+    // v0.131 (ADR 0159): CORS preflight, one branch per CORS-enabled service.
     for cs in &cors_services {
-        let mut cond_terms = cs.paths.iter().map(|(path, has_params)| {
-            if *has_params {
-                strict_neq(
-                    call(
-                        ident("__matchPath"),
-                        vec![str_lit(path.clone()), ident("path")],
-                    ),
-                    null_lit(),
-                )
-            } else {
-                strict_eq(ident("path"), str_lit(path.clone()))
-            }
-        });
-        let first = cond_terms
-            .next()
-            .expect("a CORS service always has ≥1 route");
-        let cond = cond_terms.fold(first, or_expr);
-        let full_cond = and_expr(
-            and_expr(
-                strict_eq(ident("method"), str_lit("OPTIONS")),
-                strict_neq(
-                    method_call(
-                        member(ident("request"), "headers"),
-                        "get",
-                        vec![str_lit("access-control-request-method")],
-                    ),
-                    null_lit(),
-                ),
-            ),
-            paren(cond),
-        );
-        // v0.141 (ADR 0164 DECISION E): the synthesised preflight also carries the
-        // service's security headers — a CORS-enabled service is a `from http`
-        // service, so it always has a security policy constant.
-        let preflight = call(
-            ident("__corsPreflightResponse"),
-            vec![
-                ident(cs.const_name.clone()),
-                method_call(
-                    member(ident("request"), "headers"),
-                    "get",
-                    vec![str_lit("origin")],
-                ),
-            ],
-        );
-        let stamped = match security_services.iter().find(|s| s.service == cs.service) {
-            Some(ss) => call(
-                ident("__applySecurityHeaders"),
-                vec![preflight, ident(ss.const_name.clone())],
-            ),
-            None => preflight,
-        };
-        try_body.push(if_(full_cond, block(vec![return_(Some(stamped))])));
+        try_body.push(cors_preflight(cs, &security_services));
     }
 
     // 2. External HTTP routes.
@@ -903,84 +550,9 @@ pub fn emit_worker_entry(
         ));
     }
 
-    // v0.139 (ADR 0162): the method-aware router fall-through. A request that
-    // matched no dispatch block is tested against each known path; a match means
-    // a live path reached under an unhandled method, so a bare `OPTIONS` is a
-    // `204 + Allow` and any other method is a `405 + Allow` (the `Allow` derived
-    // from the route table). For a CORS-enabled path the synthesised response is
-    // stamped with `applyCors` (D5) so a cross-origin `405`/`OPTIONS` is not
-    // invisible to the browser. No path matches ⇒ the `404` as before.
+    // v0.139 (ADR 0162): the method-aware router fall-through, one branch per path.
     for pm in &path_methods {
-        let allow = pm.methods.join(", ");
-        let match_cond = if pm.has_params {
-            strict_neq(
-                call(
-                    ident("__matchPath"),
-                    vec![str_lit(pm.path.clone()), ident("path")],
-                ),
-                null_lit(),
-            )
-        } else {
-            strict_eq(ident("path"), str_lit(pm.path.clone()))
-        };
-        let mut fallthrough_body: Vec<TsStmt> = Vec::new();
-        // OPTIONS → 204, everything else → 405; both carry the derived Allow.
-        fallthrough_body.push(const_(
-            "__status",
-            cond_expr(
-                strict_eq(ident("method"), str_lit("OPTIONS")),
-                num_lit("204"),
-                num_lit("405"),
-            ),
-        ));
-        let res = new_response(vec![
-            null_lit(),
-            TsExpr::object(vec![
-                ("status".to_string(), ident("__status")),
-                (
-                    "headers".to_string(),
-                    TsExpr::object(vec![("allow".to_string(), str_lit(allow))]),
-                ),
-            ]),
-        ]);
-        // #2341 (decision C): a `405` is rendered through the owning service's
-        // `on rejected` (the `204` to `OPTIONS` is not a rejection, and passes
-        // through untouched).
-        let res = match &pm.rejected {
-            Some(m) => await_expr(call(
-                ident("__renderRejection"),
-                vec![res, rejection_renderer(m)],
-            )),
-            None => res,
-        };
-        fallthrough_body.push(const_("__res", res));
-        // Stamp CORS (v0.131) then security headers (v0.141) — disjoint sets, so
-        // the order is immaterial; every `from http` path carries the security
-        // policy (DECISION E), CORS only when the path's service opts in.
-        let cors_res = match &pm.cors_const {
-            Some(c) => call(
-                ident("__applyCors"),
-                vec![
-                    ident("__res"),
-                    ident(c.clone()),
-                    method_call(
-                        member(ident("request"), "headers"),
-                        "get",
-                        vec![str_lit("origin")],
-                    ),
-                ],
-            ),
-            None => ident("__res"),
-        };
-        let stamped = match &pm.security_const {
-            Some(s) => call(
-                ident("__applySecurityHeaders"),
-                vec![cors_res, ident(s.clone())],
-            ),
-            None => cors_res,
-        };
-        fallthrough_body.push(return_(Some(miss(member_mode, stamped))));
-        try_body.push(if_(match_cond, block(fallthrough_body)));
+        try_body.push(method_fall_through(pm, member_mode));
     }
 
     try_body.push(return_(Some(miss(
@@ -1128,6 +700,7 @@ fn rejected_surface(service: &bynk_syntax::ast::ServiceDecl, sname: &str) -> Opt
 
 #[cfg(test)]
 mod tests {
+    use super::respond::own_path_guard;
     use super::*;
 
     fn printed(stmts: &[TsStmt]) -> String {

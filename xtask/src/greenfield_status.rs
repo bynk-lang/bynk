@@ -1771,7 +1771,15 @@ fn ast_importers(root: &Path) -> Probe {
 const AST_IMPORTER_ORIGINS: &[(&str, &str)] = &[
     // emitter/workers_entry.rs (2.4, #4089)
     ("emitter/workers_entry/call.rs", "emitter/workers_entry.rs"),
+    (
+        "emitter/workers_entry/events.rs",
+        "emitter/workers_entry.rs",
+    ),
     ("emitter/workers_entry/queue.rs", "emitter/workers_entry.rs"),
+    (
+        "emitter/workers_entry/websocket.rs",
+        "emitter/workers_entry.rs",
+    ),
     ("emitter/workers_entry/wire.rs", "emitter/workers_entry.rs"),
     (
         "emitter/workers_entry/field_specs.rs",
