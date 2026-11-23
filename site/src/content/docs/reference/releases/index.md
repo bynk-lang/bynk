@@ -4,7 +4,9 @@ description: Every Bynk release, newest first, with the increments each one ship
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/project/versioning-and-roadmap/)). This book is
-written against **v0.640**.
+written against **v0.640**, the development line on `main`, which can be
+ahead of the latest release. An install gives you the latest release: the
+first row of the table below.
 
 Each increment gets a version when it merges. A **release** gathers the
 increments merged since the one before it, and is published as a tagged

@@ -332,7 +332,7 @@ production lines without saying why; from 2.0 the gate is mechanical. Settled by
 | **2.3** | `bynk-emit/src/emitter/serialisation.rs` | 4,232 | — |
 | **2.4** | `bynk-emit/src/emitter/workers_entry.rs` | 4,215 | — |
 | **2.5** | `bynk-emit/src/emitter.rs` | 3,215 | — |
-| **2.6** | `bynk-ts/src/printer.rs`, `bynk-ts/src/program.rs` | 3,629; 3,682 | — |
+| **2.6** | `bynk-ts/src/printer.rs`, `bynk-ts/src/program.rs`. **2.6a (the tree) is done:** `program.rs` is a 441-line parent over `program/{stmt,expr,types,decl,verbatim,spans}.rs` (largest 1,133); the printer (2.6b) and its test split (2.6c) follow. | 3,629; 3,682 → 3,629; 441 | — |
 | **2.7** | `bynk-driver/src/project.rs` | 4,312 | — |
 | **2.8** | `bynk/src/deploy/plan.rs` (optional: under 3,000 already) | 2,271 | — |
 | **2.9** | `bynk/src/dev.rs` (optional) | 2,292 | — |

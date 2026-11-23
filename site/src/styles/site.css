@@ -44,8 +44,46 @@
 .home-section a:hover {
   color: var(--bynk-ink);
 }
-/* Card titles and whole-card links stay in ink; only their hover is teal. */
-.home-section h3 a,
-.home-section a.post {
+/* Card titles stay in ink; only their hover is teal. */
+.home-section h3 a {
   color: var(--bynk-ink);
+}
+
+/* The Diagnostic index (reference/diagnostics.md, generated): a code's
+ * severity badge, when it is not an error, and the filter box that
+ * public/diagnostic-filter.js adds above the first category. */
+.diagnostic-severity {
+  display: inline-block;
+  padding: 0 0.375rem;
+  border: 1px solid var(--bynk-line-strong);
+  border-radius: 0.25rem;
+  font-size: var(--sl-text-xs);
+  font-weight: 600;
+  line-height: 1.5;
+  vertical-align: 0.0625rem;
+}
+.diagnostic-filter {
+  display: grid;
+  gap: 0.375rem;
+  margin-top: 1.5rem;
+}
+.diagnostic-filter label {
+  font-weight: 600;
+}
+.diagnostic-filter input {
+  width: 100%;
+  max-width: 28rem;
+  min-height: 2.75rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--bynk-line-strong);
+  border-radius: 0.375rem;
+  background: var(--bynk-surface-panel);
+  color: var(--bynk-ink);
+  font: inherit;
+}
+.diagnostic-filter p {
+  margin: 0;
+  min-height: 1.5em;
+  font-size: var(--sl-text-sm);
+  color: var(--bynk-ink-muted);
 }
