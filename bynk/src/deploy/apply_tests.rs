@@ -564,7 +564,11 @@ fn apply(environment: &str, fail_call: Option<usize>, fail_write: Option<usize>)
     Applied {
         calls: scratch.calls(),
         writes: writes.take(),
-        failure: failure.map(|f| without_secrets_file(&f.replace(&root, "<root>"))),
+        // A path under the root is written with `/` on every platform (`Path::join` uses `\` on
+        // Windows), so the fixture is one file.
+        failure: failure.map(|f| {
+            without_secrets_file(&f.replace(&root, "<root>").replace("<root>\\", "<root>/"))
+        }),
         on_disk: std::fs::read_to_string(&lock_path).expect("the ledger is on disk"),
         configs: resources
             .keys()
