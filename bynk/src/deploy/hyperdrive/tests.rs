@@ -660,7 +660,7 @@ fn a_named_environment_makes_its_own_config_and_copies_the_stanza() {
     );
 
     // The `[env.staging]` block carries the stanza, with staging's id.
-    let block = crate::deploy::config::synthesise_environment_block(
+    let block = crate::deploy::config::environment_block(
         &std::fs::read_to_string(&config).unwrap(),
         "staging",
         &BTreeMap::new(),

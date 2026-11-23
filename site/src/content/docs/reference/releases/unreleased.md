@@ -7,6 +7,7 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.640.60** | Internal restructuring: the `[env.*]` block of a named-environment deploy is rendered by the emitter from one table of `wrangler.toml` keys; `wrangler.toml` is unchanged |
 | **v0.640.59** | Internal restructuring: the test harness builds the property generators' Decimal values, canonical literals and branded boundaries as typed nodes instead of text, so a zero-field record prints as an empty object; no behaviour changes |
 | **v0.640.58** | Internal restructuring: the test harness builds each case, property, history and contract-attack runner of a generated test module as typed nodes instead of text, so a property runner's statements now print at the function's own indent and a test module's source map points a nested statement at its own source line; no behaviour changes |
 | **v0.640.57** | Internal restructuring: the test harness builds more of a generated test module as typed nodes (the commons barrel's helpers, the harness memo, `__bynkEnv`, fixture and asset tables, the snapshot table, event delivery helpers, `__bynkCases`, the PGlite teardown), and four fixed snippets become type-checked test-runtime modules; a generated `tests/main.ts` now puts the detached-effect report statements on their own lines |
