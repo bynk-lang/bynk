@@ -14,7 +14,10 @@ use bynk_check::firstparty::Platform;
 use bynk_emit::emitter::bindings::WorkerBinding;
 use bynk_emit::emitter::native_platforms_of_context;
 
-use super::{BuildTarget, ErrorSink, ParsedFile, UnitKind, UnitTable};
+use super::diagnostics::ErrorSink;
+use bynk_project::discovery::ParsedFile;
+
+use super::{BuildTarget, UnitKind, UnitTable};
 
 /// v0.19 (decision 0025): each context whose in-process closure reaches a
 /// platform-native unit, with those platforms. Drives the Bundle's env
