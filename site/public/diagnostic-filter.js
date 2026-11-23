@@ -54,4 +54,6 @@ if (content && firstHeading) {
     clearTimeout(timer);
     timer = setTimeout(apply, 150);
   });
+  // A browser can restore the field's text on back or forward navigation.
+  if (input.value) apply();
 }
