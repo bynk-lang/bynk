@@ -482,5 +482,5 @@ HTTP services compile to a Cloudflare Worker with `--target workers`. See
 
 ## Related
 
-- Tutorial: [Build a small HTTP service](/book/tutorials/02-http-service/).
+- Tutorial: [Build a small HTTP service](/book/tutorials/http-service/).
 - Reference: [HTTP](/reference/http/) — the complete variant/status table.
