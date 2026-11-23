@@ -25,9 +25,9 @@ use super::query::{
     query_other_elem,
 };
 use crate::ts_build::{
-    arrow, binary, call, const_typed as const_, ident as id, member, param, paren, ret, spread,
-    str_lit as str_node,
+    arrow, binary, call, const_typed, ident, member, paren, ret, spread, str_lit,
 };
+use bynk_ts::TsParam;
 
 /// `within`, `race` and `detach` on an `Effect[T]` (#2683, #2711, #3437). `None`
 /// when the call's shape is not one the kernel method lowers (the caller falls
@@ -52,7 +52,7 @@ fn lower_effect_kernel_call(
             let exec = cx.exec_node();
             return Some({
                 let n = vec![recv, after, exec];
-                call(id("__bynkWithin"), n)
+                call(ident("__bynkWithin"), n)
             });
         }
         // #2711: `a.race(b)` takes the first side to succeed and
@@ -95,7 +95,7 @@ fn lower_effect_kernel_call(
             return Some({
                 let mut n = children;
                 let exec = n.pop().expect("the execution context is the last child");
-                call(id("__bynkRace"), vec![TsExpr::array(n), exec])
+                call(ident("__bynkRace"), vec![TsExpr::array(n), exec])
             });
         }
         // #3437: `e.detach()` hands the already-running effect to
@@ -110,9 +110,9 @@ fn lower_effect_kernel_call(
             // the offset. `expect_location` has already escaped the assertion location once;
             // the literal node's own escape is the second.
             let site = if cx.assert_loc().is_some() {
-                str_node(expect_location(cx, e.span.start))
+                str_lit(expect_location(cx, e.span.start))
             } else {
-                str_node(
+                str_lit(
                     cx.fault_location(e.span.start)
                         .unwrap_or_else(|| format!("offset {}", e.span.start)),
                 )
@@ -123,11 +123,11 @@ fn lower_effect_kernel_call(
                 .map(|(_, err)| err.display(tys.types()).to_string());
             let mut children = vec![recv, cx.exec_node(), site];
             if let Some(raw) = &err_raw {
-                children.push(str_node(raw.as_str()));
+                children.push(str_lit(raw.as_str()));
             }
             return Some({
                 let n = children;
-                call(id("__bynkDetach"), n)
+                call(ident("__bynkDetach"), n)
             });
         }
         EffectOp::Within | EffectOp::Race | EffectOp::Detach => {}
@@ -447,25 +447,25 @@ fn lower_effect_result_kernel(
     let recv = pre.lower_node(receiver, cx);
     let f = pre.lower_node(f, cx);
     let params = vec![
-        param("__e", Some(effect_of(&t, &et))),
-        param("__f", Some(cb_ty)),
+        TsParam::new("__e", Some(effect_of(&t, &et))),
+        TsParam::new("__f", Some(cb_ty)),
     ];
-    let applied = call(id("__f"), vec![member(id("__r"), field)]);
+    let applied = call(ident("__f"), vec![member(ident("__r"), field)]);
     let hit = match (awaited, wrap) {
         (true, _) => TsExpr::Await(Box::new(applied)),
-        (false, Some(ctor)) => call(id(ctor), vec![applied]),
+        (false, Some(ctor)) => call(ident(ctor), vec![applied]),
         (false, None) => applied,
     };
     let body = vec![
-        const_("__r", None, TsExpr::Await(Box::new(id("__e")))),
+        const_typed("__r", None, TsExpr::Await(Box::new(ident("__e")))),
         ret(TsExpr::Conditional {
             test: Box::new(binary(
                 TsBinaryOp::StrictEq,
-                member(id("__r"), "tag"),
+                member(ident("__r"), "tag"),
                 TsExpr::Lit(TsLit::Str(tag.to_string())),
             )),
             consequent: Box::new(hit),
-            alternate: Box::new(id("__r")),
+            alternate: Box::new(ident("__r")),
         }),
     ];
     let async_arrow = TsExpr::Arrow {
@@ -563,31 +563,40 @@ fn lower_http_result(
         // `[...(__r.cookies ?? []), <added>]`
         let held = spread(paren(binary(
             TsBinaryOp::NullishCoalescing,
-            member(id("__r"), "cookies"),
+            member(ident("__r"), "cookies"),
             TsExpr::array(vec![]),
         )));
         let added = if clear {
             TsExpr::object_entries(vec![
                 TsObjectEntry::Spread(paren(arg)),
-                TsObjectEntry::prop("value".to_string(), str_node("")),
+                TsObjectEntry::prop("value".to_string(), str_lit("")),
                 TsObjectEntry::prop(
                     "maxAge".to_string(),
-                    call(id("Some"), vec![TsExpr::Lit(TsLit::Num("0".to_string()))]),
+                    call(
+                        ident("Some"),
+                        vec![TsExpr::Lit(TsLit::Num("0".to_string()))],
+                    ),
                 ),
                 TsObjectEntry::prop(
                     "expires".to_string(),
-                    call(id("Some"), vec![TsExpr::Lit(TsLit::Num("0".to_string()))]),
+                    call(
+                        ident("Some"),
+                        vec![TsExpr::Lit(TsLit::Num("0".to_string()))],
+                    ),
                 ),
             ])
         } else {
             paren(arg)
         };
         let record = TsExpr::object_entries(vec![
-            TsObjectEntry::Spread(id("__r")),
+            TsObjectEntry::Spread(ident("__r")),
             TsObjectEntry::prop("cookies".to_string(), TsExpr::array(vec![held, added])),
         ]);
         call(
-            paren(arrow(vec![param("__r", Some(any_ty()))], paren(record))),
+            paren(arrow(
+                vec![TsParam::new("__r", Some(any_ty()))],
+                paren(record),
+            )),
             vec![recv],
         )
     }
@@ -598,7 +607,7 @@ mod tests {
     use super::*;
     use crate::emitter::ctx::{BodyMode, ModuleCtx, UnitFacts};
     use crate::emitter::runtime_use::RuntimeUse;
-    use crate::ts_build::ident as ident_node;
+    use crate::ts_build::ident;
     use bynk_check::checker::{ExprId, TypedCommons, TypedExpr};
     use bynk_syntax::span::Span;
 
@@ -607,34 +616,34 @@ mod tests {
     }
 
     fn node(s: &str) -> bynk_ts::TsExpr {
-        ident_node(s)
+        ident(s)
     }
 
     /// A receiver is bracketed only where precedence needs it: a plain identifier or call is not, a
     /// binary, a conditional, an `await`, a unary operator or a number literal is.
     #[test]
     fn a_receiver_is_bracketed_only_where_precedence_needs_it() {
-        let a = || ident_node("a");
-        let b = || ident_node("b");
+        let a = || ident("a");
+        let b = || ident("b");
         let sum = TsExpr::Binary {
             op: TsBinaryOp::Add,
             left: Box::new(a()),
             right: Box::new(b()),
         };
-        let awaited = TsExpr::Await(Box::new(call(id("f"), vec![])));
+        let awaited = TsExpr::Await(Box::new(call(ident("f"), vec![])));
         let cond = TsExpr::Conditional {
-            test: Box::new(id("c")),
-            consequent: Box::new(id("x")),
-            alternate: Box::new(id("y")),
+            test: Box::new(ident("c")),
+            consequent: Box::new(ident("x")),
+            alternate: Box::new(ident("y")),
         };
         let not = TsExpr::Unary {
             op: bynk_ts::TsUnaryOp::Not,
-            expr: Box::new(id("z")),
+            expr: Box::new(ident("z")),
         };
         let on = |recv: TsExpr| printed(call(member(receiver_object(recv), "op"), vec![]));
         assert_eq!(on(a()), "a.op()");
-        assert_eq!(on(call(id("f"), vec![])), "f().op()");
-        assert_eq!(on(member(id("deps"), "claims")), "deps.claims.op()");
+        assert_eq!(on(call(ident("f"), vec![])), "f().op()");
+        assert_eq!(on(member(ident("deps"), "claims")), "deps.claims.op()");
         assert_eq!(on(sum), "(a + b).op()");
         assert_eq!(on(awaited), "(await f()).op()");
         assert_eq!(on(cond), "(c ? x : y).op()");
@@ -655,8 +664,8 @@ mod tests {
         // A receiver that needs brackets keeps them as a node.
         let sum = TsExpr::Binary {
             op: TsBinaryOp::Add,
-            left: Box::new(id("a")),
-            right: Box::new(id("b")),
+            left: Box::new(ident("a")),
+            right: Box::new(ident("b")),
         };
         assert_eq!(
             printed(lower_test_connection(TestConnectionOp::Closed, sum)),
@@ -682,9 +691,9 @@ mod tests {
             "line\u{2028}sep.bynk:1:1",
         ] {
             let once = escape_ts_string(raw);
-            assert_eq!(printed(str_node(raw)), format!("\"{once}\""));
+            assert_eq!(printed(str_lit(raw)), format!("\"{once}\""));
             let twice = escape_ts_string(&once);
-            assert_eq!(printed(str_node(once)), format!("\"{twice}\""), "{raw}");
+            assert_eq!(printed(str_lit(once)), format!("\"{twice}\""), "{raw}");
         }
     }
 

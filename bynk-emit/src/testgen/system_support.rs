@@ -1300,7 +1300,7 @@ fn streamed_typed_body(chunks: TsExpr) -> (Vec<TsStmt>, Entries) {
     let pull = TsObjectEntry::method(
         "pull",
         true,
-        vec![param("c", None)],
+        vec![TsParam::new("c", None)],
         None,
         vec![
             const_(
@@ -1357,7 +1357,7 @@ fn wire_body_init(body: Option<&bynk_syntax::ast::Param>, raw: bool) -> Entries 
         let start = TsObjectEntry::method(
             "start",
             false,
-            vec![param("c", None)],
+            vec![TsParam::new("c", None)],
             None,
             vec![
                 expr_stmt(method_call(

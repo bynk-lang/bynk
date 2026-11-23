@@ -48,8 +48,7 @@ use super::ts_types::{
 };
 use super::*;
 use crate::ts_build::{
-    arrow_of as lambda_node, bool_lit as bool_node, call as call_built, const_ as binding_stmt,
-    ident as ident_node, not_expr as negated, num_lit, str_lit as str_node,
+    arrow_of, binary, bool_lit, call, const_, ident, not_expr, num_lit, str_lit,
 };
 
 /// v0.154 (ADR 0178): the `Err`-wrap a `?` on a `Result` operand needs, if the
@@ -114,7 +113,7 @@ pub(super) fn hoist_if_slot(
     ));
     let branch = |tail: Lowered| {
         let mut stmts: Vec<bynk_ts::TsStmt> = tail.pre.into_iter().collect();
-        stmts.push(bynk_ts::TsStmt::assign(ident_node(&slot), tail.expr, None));
+        stmts.push(bynk_ts::TsStmt::assign(ident(&slot), tail.expr, None));
         bynk_ts::TsStmt::block(stmts, None)
     };
     let then_branch = branch(then_tail);
@@ -170,11 +169,7 @@ fn question_guard_node(tmp: &str, exit: &QuestionExit) -> bynk_ts::TsStmt {
     let cond = bynk_ts::TsExpr::Binary {
         op: bynk_ts::TsBinaryOp::StrictEq,
         left: Box::new(member_node(tmp, "tag")),
-        right: Box::new(str_node(tag)),
-    };
-    let call = |callee: bynk_ts::TsExpr, args: Vec<bynk_ts::TsExpr>| bynk_ts::TsExpr::Call {
-        callee: Box::new(callee),
-        args,
+        right: Box::new(str_lit(tag)),
     };
     let then = match exit {
         QuestionExit::Case {
@@ -185,16 +180,13 @@ fn question_guard_node(tmp: &str, exit: &QuestionExit) -> bynk_ts::TsStmt {
         } => {
             let detail = bynk_ts::TsExpr::Binary {
                 op: bynk_ts::TsBinaryOp::Add,
-                left: Box::new(str_node(format!("{src}\n  the operand was Err: "))),
-                right: Box::new(call(
-                    ident_node("__bynkShow"),
-                    vec![member_node(tmp, "error")],
-                )),
+                left: Box::new(str_lit(format!("{src}\n  the operand was Err: "))),
+                right: Box::new(call(ident("__bynkShow"), vec![member_node(tmp, "error")])),
             };
             let failure = call(
-                ident_node("__bynkExpectFailure"),
+                ident("__bynkExpectFailure"),
                 vec![
-                    str_node(location.clone()),
+                    str_lit(location.clone()),
                     num_lit(start.to_string()),
                     num_lit(end.to_string()),
                     detail,
@@ -207,7 +199,7 @@ fn question_guard_node(tmp: &str, exit: &QuestionExit) -> bynk_ts::TsStmt {
         }
         QuestionExit::Embed { ty_name, variant } => bynk_ts::TsStmt::return_stmt(
             Some(call(
-                ident_node("Err"),
+                ident("Err"),
                 vec![call(
                     member_node(ty_name, variant),
                     vec![member_node(tmp, "error")],
@@ -215,7 +207,7 @@ fn question_guard_node(tmp: &str, exit: &QuestionExit) -> bynk_ts::TsStmt {
             )),
             None,
         ),
-        QuestionExit::Plain => bynk_ts::TsStmt::return_stmt(Some(ident_node(tmp)), None),
+        QuestionExit::Plain => bynk_ts::TsStmt::return_stmt(Some(ident(tmp)), None),
     };
     bynk_ts::TsStmt::if_stmt(cond, then, None)
 }
@@ -347,7 +339,7 @@ fn lower_const_literal_node(e: &Expr) -> Option<bynk_ts::TsExpr> {
             scale,
             negated,
         } => decimal_lit(&format!("{}{coef}", sign(negated)), scale),
-        RefinableLiteral::Str(s) => str_node(s),
+        RefinableLiteral::Str(s) => str_lit(s),
     })
 }
 
@@ -452,7 +444,7 @@ fn lower_interp_str(parts: &[InterpPart], cx: &mut LowerCtx) -> Lowered {
             .into_iter()
             .zip(&decimal_holes)
             .map(|(hole, d)| bynk_ts::TsExpr::Call {
-                callee: Box::new(ident_node(wrapper(*d))),
+                callee: Box::new(ident(wrapper(*d))),
                 args: vec![hole],
             })
             .collect();
@@ -556,7 +548,7 @@ pub(super) fn ternary_built(
 /// `object.property` over a genuine identifier `object`.
 pub(super) fn member_node(object: &str, property: &str) -> bynk_ts::TsExpr {
     bynk_ts::TsExpr::Member {
-        object: Box::new(ident_node(object)),
+        object: Box::new(ident(object)),
         property: property.to_string(),
     }
 }
@@ -667,8 +659,8 @@ impl Pre {
         cx: &mut LowerCtx,
     ) -> bynk_ts::TsExpr {
         let tmp = cx.fresh();
-        self.0.push(binding_stmt(&tmp, value));
-        ident_node(&tmp)
+        self.0.push(const_(&tmp, value));
+        ident(&tmp)
     }
 
     /// The accumulated statements as statement-body items (see
@@ -812,7 +804,7 @@ pub(crate) fn lower_expr(e: &Expr, cx: &mut LowerCtx) -> Lowered {
             ) =>
         {
             // #2138: `run.id` — the module's `__bynkRunId`.
-            pre.finish(ident_node("__bynkRunId"))
+            pre.finish(ident("__bynkRunId"))
         }
         ExprKind::FieldAccess { receiver, field } => {
             pre.finish_with(lower_field_access(e, receiver, field, cx))
@@ -919,13 +911,13 @@ fn expect_built(inner: &Expr, pre: &mut Pre, cx: &mut LowerCtx) -> bynk_ts::TsEx
     {
         let c = vec![value];
         bynk_ts::TsExpr::Call {
-            callee: Box::new(ident_node("__bynkExpect")),
+            callee: Box::new(ident("__bynkExpect")),
             args: vec![
                 bynk_ts::TsExpr::Paren(Box::new(one(c))),
-                str_node(location.clone()),
+                str_lit(location.clone()),
                 num_lit(span_start.to_string()),
                 num_lit(span_end.to_string()),
-                str_node(src.clone()),
+                str_lit(src.clone()),
             ],
         }
     }
@@ -1034,10 +1026,10 @@ fn lower_faults(faults: &FaultsExpr, cx: &mut LowerCtx) -> bynk_ts::TsExpr {
         let rethrow = TsStmt::if_stmt(
             TsExpr::Binary {
                 op: TsBinaryOp::InstanceOf,
-                left: Box::new(ident_node("__e")),
-                right: Box::new(ident_node("ExpectationError")),
+                left: Box::new(ident("__e")),
+                right: Box::new(ident("ExpectationError")),
             },
-            TsStmt::block(vec![TsStmt::throw_stmt(ident_node("__e"), None)], None),
+            TsStmt::block(vec![TsStmt::throw_stmt(ident("__e"), None)], None),
             None,
         );
         let catch_body = vec![
@@ -1068,7 +1060,7 @@ fn recorded_calls(cx: &LowerCtx, cap: &str, op: &str) -> bynk_ts::TsExpr {
         op: TsBinaryOp::NullishCoalescing,
         left: Box::new(TsExpr::Index {
             object: Box::new(member_node(obs, "log")),
-            index: Box::new(str_node(format!("{cap}.{op}"))),
+            index: Box::new(str_lit(format!("{cap}.{op}"))),
         }),
         right: Box::new(TsExpr::array(Vec::new())),
     }))
@@ -1148,12 +1140,6 @@ fn lower_observation(o: &ObservationExpr, cx: &mut LowerCtx) -> bynk_ts::TsExpr 
         object: Box::new(calls.clone()),
         property: "length".to_string(),
     };
-    let binary = |op: TsBinaryOp, left: TsExpr, right: TsExpr| TsExpr::Binary {
-        op,
-        left: Box::new(left),
-        right: Box::new(right),
-    };
-    let paren = |e: TsExpr| TsExpr::Paren(Box::new(e));
     // The text twin of `recorded_calls`, for the fallbacks below.
     match &o.matcher {
         ObservationMatcher::NeverCalled => paren(binary(
@@ -1340,7 +1326,7 @@ fn refinement_default(base: BaseType, refinement: Option<&Refinement>) -> Option
             if len < 1 {
                 len = 1;
             }
-            Some(str_node("x".repeat(len as usize)))
+            Some(str_lit("x".repeat(len as usize)))
         }
         BaseType::Bool => Some(bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Bool(true))),
         BaseType::Float => {
@@ -1457,7 +1443,7 @@ fn empty_bytes_node() -> bynk_ts::TsExpr {
 fn base_default_ts(base: BaseType) -> bynk_ts::TsExpr {
     match base {
         BaseType::Int => num_lit("0".to_string()),
-        BaseType::String => str_node("mock"),
+        BaseType::String => str_lit("mock"),
         BaseType::Bool => bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Bool(true)),
         BaseType::Float => num_lit("0".to_string()),
         BaseType::Duration | BaseType::Instant => num_lit("0".to_string()),
@@ -1504,7 +1490,7 @@ fn mock_value_of(
     };
     Some(match &*tys.get(ty) {
         Ty::Base(BaseType::Int) => num_lit("0".to_string()),
-        Ty::Base(BaseType::String) => str_node(""),
+        Ty::Base(BaseType::String) => str_lit(""),
         Ty::Base(BaseType::Bool) => bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Bool(true)),
         Ty::Base(BaseType::Float) => num_lit("0".to_string()),
         Ty::Base(BaseType::Decimal) => decimal_lit("0", 0),
@@ -1652,7 +1638,6 @@ pub(crate) fn claim_scope_declaration() -> bynk_ts::TsStmt {
             body: Box::new(body),
         }
     };
-    let ident = |n: &str| TsExpr::Ident(n.to_string());
     let noop = TsExpr::object_entries(vec![
         TsObjectEntry::prop(
             "note",
@@ -1897,7 +1882,7 @@ fn lower_ufcs_method_call(
     // Every call is a node, with a `TypeApp` callee when type arguments are explicit (1A.20,
     // #3721, Decision A).
     let mut callee = bynk_ts::TsExpr::Member {
-        object: Box::new(ident_node(&ns)),
+        object: Box::new(ident(&ns)),
         property: method.name.clone(),
     };
     if !explicit.is_empty() {
@@ -1906,7 +1891,7 @@ fn lower_ufcs_method_call(
             type_args: explicit,
         };
     }
-    let built = call_built(callee, all);
+    let built = call(callee, all);
     if needs_exec {
         settle_built(built, cx)
     } else {
@@ -2164,7 +2149,7 @@ fn emit_is_test_bindings(
                     expr: Box::new(recv.node().clone()),
                     ty: bynk_ts::TsType::named(variant.name.clone()),
                 };
-                out.push(binding_stmt(ts_ident(&id.name), cast));
+                out.push(const_(ts_ident(&id.name), cast));
                 cx.declare_binder(&id.name);
                 return;
             }
@@ -2187,7 +2172,7 @@ fn emit_is_test_bindings(
                     object: Box::new(variant_payload_node(recv.node(), &variant.name)),
                     property: field.clone(),
                 };
-                out.push(binding_stmt(&local, read));
+                out.push(const_(&local, read));
             }
         }
         // #2641: a record pattern's depth-1 names — shorthand fields and
@@ -2200,10 +2185,7 @@ fn emit_is_test_bindings(
                     Some(_) => continue,
                 };
                 let local = cx.bind_local_name(&bound.name);
-                out.push(binding_stmt(
-                    &local,
-                    recv.member(&fname.name).node().clone(),
-                ));
+                out.push(const_(&local, recv.member(&fname.name).node().clone()));
             }
         }
         // #2680: a list pattern's depth-1 names — bare-name elements and a
@@ -2212,12 +2194,12 @@ fn emit_is_test_bindings(
             for (i, sub) in elems.iter().enumerate() {
                 if let Pattern::Binding(n) = sub {
                     let local = cx.bind_local_name(&n.name);
-                    out.push(binding_stmt(&local, recv.index(i).node().clone()));
+                    out.push(const_(&local, recv.index(i).node().clone()));
                 }
             }
             if let Some(binder) = rest.as_ref().and_then(|r| r.binder.as_ref()) {
                 let local = cx.bind_local_name(&binder.name);
-                out.push(binding_stmt(&local, list_rest_value(&recv, elems.len())));
+                out.push(const_(&local, list_rest_value(&recv, elems.len())));
             }
         }
         // #474 §2.3.6: an or-pattern's shared names can live at different
@@ -2263,7 +2245,7 @@ fn emit_is_test_bindings(
                         let mut tests = Vec::new();
                         pattern_tests(&recv, disc_ty, alt, cx, &mut tests);
                         let cond = if tests.is_empty() {
-                            bool_node(true)
+                            bool_lit(true)
                         } else {
                             and_join(tests)
                         };
@@ -2300,7 +2282,7 @@ fn emit_is_test_bindings(
                         let tag_test = bynk_ts::TsExpr::Binary {
                             op: bynk_ts::TsBinaryOp::StrictEq,
                             left: Box::new(member_node_of(recv.node(), "tag")),
-                            right: Box::new(str_node(variant.name.clone())),
+                            right: Box::new(str_lit(variant.name.clone())),
                         };
                         (Some(tag_test), pairs)
                     }
@@ -2331,7 +2313,7 @@ fn emit_is_test_bindings(
                 let cond = if i == last {
                     None
                 } else {
-                    Some(tag.unwrap_or_else(|| bool_node(true)))
+                    Some(tag.unwrap_or_else(|| bool_lit(true)))
                 };
                 arms.push(OrArm {
                     cond,
@@ -2427,7 +2409,7 @@ fn lower_if(
         // `hoist_if_slot`.
         let slot_ty = checked_ty_node(e, cx);
         let slot = hoist_if_slot(&mut pre, slot_ty, cond_lowered, then_tail, else_tail, cx);
-        pre.finish(ident_node(&slot))
+        pre.finish(ident(&slot))
     } else {
         // T2.2 (R6.4): isolate the effectfulness flag to just this IIFE's own
         // body. Unlike `lower_match_as_iife`'s `disc_expr` (spliced *outside*
@@ -2567,7 +2549,7 @@ fn lower_ident(e: &Expr, id: &Ident, cx: &mut LowerCtx) -> bynk_ts::TsExpr {
     // checker has already ruled out a local or any other meaning of the name.
     if let Some(name) = cx.const_ref(e) {
         return bynk_ts::TsExpr::Call {
-            callee: Box::new(ident_node(ts_ident(name))),
+            callee: Box::new(ident(ts_ident(name))),
             args: Vec::new(),
         };
     }
@@ -2599,7 +2581,7 @@ fn lower_ident(e: &Expr, id: &Ident, cx: &mut LowerCtx) -> bynk_ts::TsExpr {
                 })
                 .collect(),
         };
-        let mut args: Vec<bynk_ts::TsExpr> = params.iter().map(|p| ident_node(&p.name)).collect();
+        let mut args: Vec<bynk_ts::TsExpr> = params.iter().map(|p| ident(&p.name)).collect();
         args.extend(cx.witness_args(decl, witnesses));
         // #2868: a `given` function closes over the `deps` in scope where it is
         // named.
@@ -2618,7 +2600,7 @@ fn lower_ident(e: &Expr, id: &Ident, cx: &mut LowerCtx) -> bynk_ts::TsExpr {
             return_type: None,
             body: Box::new(bynk_ts::TsArrowBody::Expr(Box::new(
                 bynk_ts::TsExpr::Call {
-                    callee: Box::new(ident_node(ts_ident(&id.name))),
+                    callee: Box::new(ident(ts_ident(&id.name))),
                     args,
                 },
             ))),
@@ -2630,10 +2612,10 @@ fn lower_ident(e: &Expr, id: &Ident, cx: &mut LowerCtx) -> bynk_ts::TsExpr {
     // Checked first so `old`/`new` never collide with the heuristics below.
     if let Some((old_var, new_var)) = cx.transition_states() {
         if id.name == "old" {
-            return ident_node(old_var);
+            return ident(old_var);
         }
         if id.name == "new" {
-            return ident_node(new_var);
+            return ident(new_var);
         }
     }
     // v0.80: inside an invariant predicate, a bare ident naming a state field
@@ -2734,7 +2716,7 @@ fn lower_ident(e: &Expr, id: &Ident, cx: &mut LowerCtx) -> bynk_ts::TsExpr {
     // #908: a re-`let` of this name (in this or an enclosing block) renamed
     // its emitted binding — resolve to it rather than the natural
     // (now-shadowed) `ts_ident` name.
-    ident_node(
+    ident(
         cx.resolved_local_name(&id.name)
             .unwrap_or_else(|| ts_ident(&id.name)),
     )
@@ -2783,7 +2765,7 @@ fn consumed_variant_literal(
         let c = args;
         let mut entries = vec![bynk_ts::TsObjectEntry::prop(
             "tag".to_string(),
-            str_node(tag),
+            str_lit(tag),
         )];
         entries.extend(
             props
@@ -2859,8 +2841,8 @@ pub(super) fn settle_with(helper: Option<&'static str>, call: bynk_ts::TsExpr) -
     match helper {
         None => call,
         Some(helper) => bynk_ts::TsExpr::Call {
-            callee: Box::new(ident_node(helper)),
-            args: vec![ident_node("deps"), call],
+            callee: Box::new(ident(helper)),
+            args: vec![ident("deps"), call],
         },
     }
 }
@@ -2880,9 +2862,9 @@ fn lower_call(e: &Expr, name: &Ident, args: &[Expr], cx: &mut LowerCtx) -> Lower
             .map(|_| expect_location(cx, e.span.start))
             .or_else(|| cx.fault_location(e.span.start))
             .unwrap_or_else(|| format!("offset {}", e.span.start));
-        args_lowered.insert(0, str_node(*kind));
-        args_lowered.push(str_node(location));
-        return pre.finish(call_built(ident_node("__fault"), args_lowered));
+        args_lowered.insert(0, str_lit(*kind));
+        args_lowered.push(str_lit(location));
+        return pre.finish(call(ident("__fault"), args_lowered));
     }
     // #3051: `TestConnection[F]()` — a case's recording handle for a websocket
     // connection.
@@ -2903,7 +2885,7 @@ fn lower_call(e: &Expr, name: &Ident, args: &[Expr], cx: &mut LowerCtx) -> Lower
         // `new TestConnection<F>()`: a `New` over a `TypeApp` (1A.20, #3721).
         return pre.finish(bynk_ts::TsExpr::New {
             callee: Box::new(bynk_ts::TsExpr::TypeApp {
-                callee: Box::new(ident_node("TestConnection")),
+                callee: Box::new(ident("TestConnection")),
                 type_args: vec![frame],
             }),
             args: vec![],
@@ -2923,10 +2905,10 @@ fn lower_call(e: &Expr, name: &Ident, args: &[Expr], cx: &mut LowerCtx) -> Lower
         })
     ) {
         let callee = bynk_ts::TsExpr::Member {
-            object: Box::new(ident_node("HttpResult")),
+            object: Box::new(ident("HttpResult")),
             property: name.name.clone(),
         };
-        return pre.finish(call_built(callee, args_lowered));
+        return pre.finish(call(callee, args_lowered));
     }
     // v0.44: a QueueResult variant call (`Retry(reason)`) → `QueueResult.Retry(...)`.
     if matches!(
@@ -2937,10 +2919,10 @@ fn lower_call(e: &Expr, name: &Ident, args: &[Expr], cx: &mut LowerCtx) -> Lower
         })
     ) {
         let callee = bynk_ts::TsExpr::Member {
-            object: Box::new(ident_node("QueueResult")),
+            object: Box::new(ident("QueueResult")),
             property: name.name.clone(),
         };
-        return pre.finish(call_built(callee, args_lowered));
+        return pre.finish(call(callee, args_lowered));
     }
     // P6.21 (real P6.2 cutover, partial — #1143/#1140's `Callee` classification
     // read back instead of re-derived): agent instantiation `AgentName(key)`
@@ -2970,10 +2952,10 @@ fn lower_call(e: &Expr, name: &Ident, args: &[Expr], cx: &mut LowerCtx) -> Lower
             Err(args) => args,
         };
         let callee = bynk_ts::TsExpr::Member {
-            object: Box::new(ident_node(&sum.name.name)),
+            object: Box::new(ident(&sum.name.name)),
             property: tag.to_string(),
         };
-        return pre.finish(call_built(callee, args_lowered));
+        return pre.finish(call(callee, args_lowered));
     }
     // Constrained generics slice 1: the call's comparator witnesses follow the
     // ordinary arguments (an `Ord`-bounded callee's hidden trailing parameters).
@@ -2991,7 +2973,7 @@ fn lower_call(e: &Expr, name: &Ident, args: &[Expr], cx: &mut LowerCtx) -> Lower
             needs_exec = true;
         }
     }
-    let mut built = call_built(ident_node(ts_ident(&name.name)), args_lowered);
+    let mut built = call(ident(ts_ident(&name.name)), args_lowered);
     if needs_exec {
         built = settle_built(built, cx);
     }
@@ -3155,10 +3137,10 @@ fn lower_bin_op(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut LowerCtx) -> Lowered
                     pre: bindings,
                     expr: rhs_expr,
                 },
-                Lowered::node(bool_node(otherwise == "true")),
+                Lowered::node(bool_lit(otherwise == "true")),
                 cx,
             );
-            return pre.finish(short_circuit(op, lhs_expr, ident_node(&slot)));
+            return pre.finish(short_circuit(op, lhs_expr, ident(&slot)));
         }
         // Emit:  lhs && ((() => { const n = ...; return rhs; })())
         let iife: bynk_ts::TsExpr = compact_iife(bindings, rhs_expr);
@@ -3214,12 +3196,12 @@ fn lower_bin_op(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut LowerCtx) -> Lowered
         }
         if !r.pre.is_empty() && rhs_returns {
             let value = match op {
-                BinOp::And => hoist_bool_if(&mut pre, l, r, Lowered::node(bool_node(false)), cx),
-                BinOp::Or => hoist_bool_if(&mut pre, l, Lowered::node(bool_node(true)), r, cx),
+                BinOp::And => hoist_bool_if(&mut pre, l, r, Lowered::node(bool_lit(false)), cx),
+                BinOp::Or => hoist_bool_if(&mut pre, l, Lowered::node(bool_lit(true)), r, cx),
                 BinOp::Implies => hoist_bool_if(
                     &mut pre,
                     negated_paren(l),
-                    Lowered::node(bool_node(true)),
+                    Lowered::node(bool_lit(true)),
                     r,
                     cx,
                 ),
@@ -3234,7 +3216,7 @@ fn lower_bin_op(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut LowerCtx) -> Lowered
                 | BinOp::Mul
                 | BinOp::Div => unreachable!("guarded by the outer `matches!`"),
             };
-            return pre.finish(ident_node(&value));
+            return pre.finish(ident(&value));
         }
         let Lowered {
             pre: r_pre,
@@ -3327,7 +3309,11 @@ pub(super) fn build_value_bin_op(
         // operand decides. A primitive operand returns `None` here and falls
         // through to host `===`/`!==` below.
         let call = helper_call(helper, children);
-        if op == BinOp::Eq { call } else { negated(call) }
+        if op == BinOp::Eq {
+            call
+        } else {
+            not_expr(call)
+        }
     } else if let Some(operand) = matches!(op, BinOp::Lt | BinOp::LtEq | BinOp::Gt | BinOp::GtEq)
         .then(|| cx.commons().expr_types.get(&lhs.id).map(|te| te.ty))
         .flatten()
@@ -3382,7 +3368,7 @@ fn helper_call(helper: &'static str, children: Vec<bynk_ts::TsExpr>) -> bynk_ts:
     let c = children;
     let (l, r) = two(c);
     bynk_ts::TsExpr::Call {
-        callee: Box::new(ident_node(helper)),
+        callee: Box::new(ident(helper)),
         args: vec![l, r],
     }
 }
@@ -3555,7 +3541,7 @@ fn field_inits(
                 if v == f.name.name {
                     slots.push(FieldSlot::Shorthand(f.name.name.clone()));
                 } else {
-                    children.push(ident_node(&v));
+                    children.push(ident(&v));
                     slots.push(FieldSlot::Prop(f.name.name.clone()));
                 }
             }
@@ -3684,12 +3670,7 @@ fn lower_field_access(e: &Expr, receiver: &Expr, field: &Ident, cx: &mut LowerCt
     {
         let m = member_node(cx.agent_store_var(), &id.name);
         let key = |cx: &LowerCtx| {
-            decode_map_key(
-                map_key_ty(e, cx),
-                ident_node("__k"),
-                tys,
-                cx.fault_site(e.span),
-            )
+            decode_map_key(map_key_ty(e, cx), ident("__k"), tys, cx.fault_site(e.span))
         };
         let is_identity =
             |k: &bynk_ts::TsExpr| matches!(k, bynk_ts::TsExpr::Ident(n) if n == "__k");
@@ -3711,7 +3692,7 @@ fn lower_field_access(e: &Expr, receiver: &Expr, field: &Ident, cx: &mut LowerCt
             body: Box::new(bynk_ts::TsArrowBody::Expr(Box::new(body))),
         };
         let call = |f: &str, args: Vec<bynk_ts::TsExpr>| bynk_ts::TsExpr::Call {
-            callee: Box::new(ident_node(f)),
+            callee: Box::new(ident(f)),
             args,
         };
         let built: bynk_ts::TsExpr = match field.name.as_str() {
@@ -3723,7 +3704,7 @@ fn lower_field_access(e: &Expr, receiver: &Expr, field: &Ident, cx: &mut LowerCt
                 } else {
                     let map = bynk_ts::TsExpr::Call {
                         callee: Box::new(bynk_ts::TsExpr::Member {
-                            object: Box::new(ident_node("__ks")),
+                            object: Box::new(ident("__ks")),
                             property: "map".to_string(),
                         }),
                         args: vec![arrow(vec!["__k"], decoded)],
@@ -3739,7 +3720,7 @@ fn lower_field_access(e: &Expr, receiver: &Expr, field: &Ident, cx: &mut LowerCt
                 let record = bynk_ts::TsExpr::Object {
                     entries: vec![
                         bynk_ts::TsObjectEntry::prop("key", key(cx)),
-                        bynk_ts::TsObjectEntry::prop("value", ident_node("__v")),
+                        bynk_ts::TsObjectEntry::prop("value", ident("__v")),
                     ],
                     multiline: false,
                     end_span: None,
@@ -3756,7 +3737,7 @@ fn lower_field_access(e: &Expr, receiver: &Expr, field: &Ident, cx: &mut LowerCt
                 };
                 let zipped = bynk_ts::TsExpr::Call {
                     callee: Box::new(bynk_ts::TsExpr::Member {
-                        object: Box::new(ident_node("__es")),
+                        object: Box::new(ident("__es")),
                         property: "map".to_string(),
                     }),
                     args: vec![pair],
@@ -3828,7 +3809,7 @@ fn lower_field_access(e: &Expr, receiver: &Expr, field: &Ident, cx: &mut LowerCt
         {
             return pre.finish(member_node("deps", "identity"));
         }
-        return pre.finish(ident_node("undefined"));
+        return pre.finish(ident("undefined"));
     }
     // #2380 (L5): an `Oidc` binder's `.claims` reads `deps.claims`, which its
     // seam filled from the verified token.
@@ -3970,7 +3951,7 @@ mod decode_map_key_tests {
             sink: &ru,
             span: bynk_syntax::span::Span::new(3, 9),
         };
-        let node = decode_map_key(k, ident_node("k"), TyRender::new(&TYS, no_spellings()), at);
+        let node = decode_map_key(k, ident("k"), TyRender::new(&TYS, no_spellings()), at);
         (bynk_ts::print_expr(&node), ru.take_faults())
     }
 
@@ -4157,7 +4138,7 @@ fn lower_lambda(e: &Expr, lambda: &LambdaExpr, cx: &mut LowerCtx) -> bynk_ts::Ts
     let result: bynk_ts::TsExpr = if let ExprKind::Block(b) = &lambda.body.kind {
         // The body keeps its marks (1A.15, Decision D).
         let body = block_body(b, cx, is_async);
-        lambda_node(
+        arrow_of(
             params,
             is_async,
             bynk_ts::TsArrowBody::Multiline(body.into_stmts()),
@@ -4174,7 +4155,7 @@ fn lower_lambda(e: &Expr, lambda: &LambdaExpr, cx: &mut LowerCtx) -> bynk_ts::Ts
             stmts.push(bynk_ts::TsStmt::return_stmt(Some(value), None));
             bynk_ts::TsArrowBody::Multiline(stmts)
         };
-        lambda_node(params, is_async, body)
+        arrow_of(params, is_async, body)
     };
     cx.is_temp_hoist = saved_hoist;
     cx.tail_slot = saved_slot;
@@ -4282,9 +4263,7 @@ pub(super) struct PatPath {
 impl PatPath {
     /// A bare local.
     pub(super) fn ident(name: &str) -> Self {
-        PatPath {
-            node: ident_node(name),
-        }
+        PatPath { node: ident(name) }
     }
 
     /// The path a lowered scrutinee is read at.
@@ -4720,7 +4699,7 @@ pub(super) fn emit_pattern_bindings(
                     let mut t = Vec::new();
                     pattern_tests(path, path_ty, alt, cx, &mut t);
                     Some(if t.is_empty() {
-                        bool_node(true)
+                        bool_lit(true)
                     } else {
                         and_join(t)
                     })
@@ -4898,7 +4877,7 @@ fn lower_is(value: &Expr, pattern: &Pattern, cx: &mut LowerCtx) -> Lowered {
     let scrut_ty = cx.commons().expr_types.get(&value.id).map(|te| te.ty);
     let tested: bynk_ts::TsExpr = match pattern {
         // A bare name binding after `is` matches anything over a sum (ADR 0169).
-        Pattern::Wildcard(_) | Pattern::Binding(_) => bool_node(true),
+        Pattern::Wildcard(_) | Pattern::Binding(_) => bool_lit(true),
         // v0.130 (DECISION F): the checker rejects a literal on the RHS of `is`,
         // so this is unreachable for a well-typed program; lower it to the
         // value-equality it would mean, defensively.
@@ -4944,7 +4923,7 @@ fn lower_is(value: &Expr, pattern: &Pattern, cx: &mut LowerCtx) -> Lowered {
                 "a variant `is` pattern must emit at least its outer tag test"
             );
             if tests.is_empty() {
-                bool_node(true)
+                bool_lit(true)
             } else {
                 and_join(tests)
             }
@@ -4967,7 +4946,7 @@ fn lower_is(value: &Expr, pattern: &Pattern, cx: &mut LowerCtx) -> Lowered {
                 is_async: false,
                 generics: Vec::new(),
                 return_type: None,
-                body: Box::new(bynk_ts::TsArrowBody::Expr(Box::new(ident_node("__c")))),
+                body: Box::new(bynk_ts::TsArrowBody::Expr(Box::new(ident("__c")))),
             }))),
             args: vec![tested],
         });
@@ -5024,7 +5003,7 @@ fn refined_check_as_bool(
     }
     let mut terms = terms.into_iter();
     let Some(first) = terms.next() else {
-        return bool_node(true);
+        return bool_lit(true);
     };
     let joined = terms.fold(first, |left, right| TsExpr::Binary {
         op: TsBinaryOp::And,
@@ -5085,7 +5064,7 @@ mod idempotency_scoping_tests {
             ),
             BodyMode::Method,
         );
-        let mut args = vec![ident_node("orderId")];
+        let mut args = vec![ident("orderId")];
         scope_idempotency_key(true, "dedup", &mut args, &cx);
     }
 
@@ -5113,7 +5092,7 @@ mod idempotency_scoping_tests {
                 actor_sum_binder: None,
             },
         );
-        let mut args = vec![ident_node("orderId")];
+        let mut args = vec![ident("orderId")];
         scope_idempotency_key(true, "dedup", &mut args, &cx);
         assert_eq!(
             args[0].clone().printed(),
@@ -5144,7 +5123,7 @@ mod idempotency_scoping_tests {
                 actor_sum_binder: None,
             },
         );
-        let mut args = vec![ident_node("id"), num_lit("3600000".to_string())];
+        let mut args = vec![ident("id"), num_lit("3600000".to_string())];
         scope_idempotency_key(true, "claim", &mut args, &cx);
         assert_eq!(args[0].clone().printed(), "`shop.hooks.api.POST::${id}`");
         assert_eq!(args[1].clone().printed(), "3600000");
@@ -5187,7 +5166,7 @@ mod idempotency_scoping_tests {
             ),
             BodyMode::Method,
         );
-        let mut args = vec![ident_node("orderId")];
+        let mut args = vec![ident("orderId")];
         scope_idempotency_key(false, "dedup", &mut args, &cx);
         assert_eq!(args[0].clone().printed(), "orderId");
     }
@@ -5390,8 +5369,8 @@ mod bridge_tests {
     fn absorb_built_passes_a_kernel_node_through() {
         let mut pre = Pre::new();
         let stub = Lowered {
-            pre: vec![bynk_ts::TsStmt::expr_stmt(ident_node("t"), None)],
-            expr: ident_node("x"),
+            pre: vec![bynk_ts::TsStmt::expr_stmt(ident("t"), None)],
+            expr: ident("x"),
         };
         match pre.absorb_built(Some(stub)) {
             Some(bynk_ts::TsExpr::Ident(name)) => assert_eq!(name, "x"),
@@ -5530,15 +5509,11 @@ fn minus_neg() -> Int { 5 - -3 }
         }
     }
 
-    fn id(n: &str) -> bynk_ts::TsExpr {
-        bynk_ts::TsExpr::Ident(n.to_string())
-    }
-
     fn bin(op: bynk_ts::TsBinaryOp, l: &str, r: &str) -> bynk_ts::TsExpr {
         bynk_ts::TsExpr::Binary {
             op,
-            left: Box::new(id(l)),
-            right: Box::new(id(r)),
+            left: Box::new(ident(l)),
+            right: Box::new(ident(r)),
         }
     }
 
@@ -5578,11 +5553,11 @@ fn minus_neg() -> Int { 5 - -3 }
         let bare = t_unary_op(UnaryOp::Neg, node(bin(Add, "a", "b")));
         assert_eq!(bare.printed(), "-(a + b)");
         // Nested unaries: `!!x`, `-!x`, and `-(-x)`, never the decrement `--x`.
-        let not_not = t_unary_op(UnaryOp::Not, t_unary_op(UnaryOp::Not, node(id("x"))));
+        let not_not = t_unary_op(UnaryOp::Not, t_unary_op(UnaryOp::Not, node(ident("x"))));
         assert_eq!(not_not.printed(), "!!x");
-        let neg_not = t_unary_op(UnaryOp::Neg, t_unary_op(UnaryOp::Not, node(id("x"))));
+        let neg_not = t_unary_op(UnaryOp::Neg, t_unary_op(UnaryOp::Not, node(ident("x"))));
         assert_eq!(neg_not.printed(), "-!x");
-        let neg_neg = t_unary_op(UnaryOp::Neg, t_unary_op(UnaryOp::Neg, node(id("x"))));
+        let neg_neg = t_unary_op(UnaryOp::Neg, t_unary_op(UnaryOp::Neg, node(ident("x"))));
         assert_eq!(neg_neg.printed(), "-(-x)");
     }
 
@@ -5604,21 +5579,21 @@ fn minus_neg() -> Int { 5 - -3 }
     fn constructor_calls_and_lists_are_nodes_over_node_children() {
         let ok = t_runtime_ctor_call(None, "Ok", node(num_lit("1")));
         assert_eq!(ok.printed(), "Ok(1)");
-        let http = t_runtime_ctor_call(Some("HttpResult"), "Ok", node(id("v")));
+        let http = t_runtime_ctor_call(Some("HttpResult"), "Ok", node(ident("v")));
         let bynk_ts::TsExpr::Call { callee, .. } = &http else {
             panic!("expected a call node");
         };
         assert!(matches!(**callee, bynk_ts::TsExpr::Member { .. }));
         assert_eq!(http.printed(), "HttpResult.Ok(v)");
         assert_eq!(
-            t_runtime_ctor_call(None, "Err", node(id("e"))).printed(),
+            t_runtime_ctor_call(None, "Err", node(ident("e"))).printed(),
             "Err(e)"
         );
         assert_eq!(
-            t_runtime_ctor_call(None, "Some", node(id("s"))).printed(),
+            t_runtime_ctor_call(None, "Some", node(ident("s"))).printed(),
             "Some(s)"
         );
-        let list = array(vec![node(id("a")), node(num_lit("2"))]);
+        let list = array(vec![node(ident("a")), node(num_lit("2"))]);
         assert_eq!(list.printed(), "[a, 2]");
     }
 
@@ -5753,7 +5728,7 @@ fn minus(x: Int) -> Int { 5 - - -x }
 
     #[test]
     fn each_value_operator_shape_is_a_node_over_node_children() {
-        let n = |s: &str| node(id(s));
+        let n = |s: &str| node(ident(s));
         // Plain operator and `Float /`: `Binary`.
         for (op, want) in [
             (BinOp::Add, "a + b"),
@@ -5780,7 +5755,7 @@ fn minus(x: Int) -> Int { 5 - - -x }
         assert_eq!(args.len(), 2);
         assert_eq!(call.printed(), "__bynkDecimalAdd(a, b)");
         // Structural `!=`: `Unary(Not, Call)`.
-        let ne = super::negated(super::helper_call("__bynkEq", vec![n("a"), n("b")]));
+        let ne = crate::ts_build::not_expr(super::helper_call("__bynkEq", vec![n("a"), n("b")]));
         assert!(matches!(
             &ne,
             bynk_ts::TsExpr::Unary {
@@ -5790,7 +5765,7 @@ fn minus(x: Int) -> Int { 5 - - -x }
         ));
         assert_eq!(ne.printed(), "!__bynkEq(a, b)");
         // `Ord`: `cmp(l, r) < 0`.
-        let ord = super::ordered_comparison(BinOp::Lt, id("__cmp_P"), vec![n("a"), n("b")]);
+        let ord = super::ordered_comparison(BinOp::Lt, ident("__cmp_P"), vec![n("a"), n("b")]);
         assert!(matches!(&ord, bynk_ts::TsExpr::Binary { .. }));
         assert_eq!(ord.printed(), "__cmp_P(a, b) < 0");
     }
@@ -5800,10 +5775,11 @@ fn minus(x: Int) -> Int { 5 - - -x }
         // 1A.16: the comparator is itself a node, so a composite one is an
         // ordinary callee (the 1A.5 text path is closed).
         let cmp = bynk_ts::TsExpr::Call {
-            callee: Box::new(id("__bynkCmpList")),
-            args: vec![id("__bynkCmpInt")],
+            callee: Box::new(ident("__bynkCmpList")),
+            args: vec![ident("__bynkCmpInt")],
         };
-        let got = super::ordered_comparison(BinOp::Lt, cmp, vec![node(id("a")), node(id("b"))]);
+        let got =
+            super::ordered_comparison(BinOp::Lt, cmp, vec![node(ident("a")), node(ident("b"))]);
         assert_eq!(got.printed(), "__bynkCmpList(__bynkCmpInt)(a, b) < 0");
     }
 
@@ -5946,10 +5922,7 @@ fn minus(x: Int) -> Int { 5 - - -x }
         assert!(matches!(&m, bynk_ts::TsExpr::Member { object, property }
             if property == "who" && matches!(&**object, bynk_ts::TsExpr::Ident(n) if n == "deps")));
         assert_eq!(bynk_ts::print_expr(&m), "deps.who");
-        assert_eq!(
-            bynk_ts::print_expr(&ident_node("__bynkRunId")),
-            "__bynkRunId"
-        );
+        assert_eq!(bynk_ts::print_expr(&ident("__bynkRunId")), "__bynkRunId");
     }
 
     /// An `if (flag) { done(); }` statement node: multi-line when printed.
@@ -6170,7 +6143,7 @@ fn minus(x: Int) -> Int { 5 - - -x }
             "tests/a.test.bynk:3:7",
             "expect a == \"\u{e9}\\n\" `x` ${y}",
         ] {
-            let node = str_node(raw);
+            let node = str_lit(raw);
             assert_eq!(
                 bynk_ts::print_expr(&node),
                 format!("\"{}\"", crate::emitter::escape_ts_string(raw))
@@ -6264,21 +6237,13 @@ fn minus(x: Int) -> Int { 5 - - -x }
         // depth 0 by `lines()` and re-indented by the caller must equal the
         // flat text lines it replaces; `ts_stmts` keeps it as a node.
         let node = bynk_ts::TsStmt::if_else_same_line_stmt(
-            ident_node("c"),
+            ident("c"),
             bynk_ts::TsStmt::block(
-                vec![bynk_ts::TsStmt::assign(
-                    ident_node("__r1"),
-                    ident_node("a"),
-                    None,
-                )],
+                vec![bynk_ts::TsStmt::assign(ident("__r1"), ident("a"), None)],
                 None,
             ),
             bynk_ts::TsStmt::block(
-                vec![bynk_ts::TsStmt::assign(
-                    ident_node("__r1"),
-                    ident_node("b"),
-                    None,
-                )],
+                vec![bynk_ts::TsStmt::assign(ident("__r1"), ident("b"), None)],
                 None,
             ),
             None,
@@ -6519,11 +6484,8 @@ mod compact_iife_tests {
 
     fn multi_line_stmt() -> bynk_ts::TsStmt {
         bynk_ts::TsStmt::if_stmt(
-            ident_node("flag"),
-            bynk_ts::TsStmt::block(
-                vec![bynk_ts::TsStmt::expr_stmt(ident_node("done"), None)],
-                None,
-            ),
+            ident("flag"),
+            bynk_ts::TsStmt::block(vec![bynk_ts::TsStmt::expr_stmt(ident("done"), None)], None),
             None,
         )
     }
@@ -6532,7 +6494,7 @@ mod compact_iife_tests {
     /// body (the printer refuses it); the arrow takes the multi-line body instead.
     #[test]
     fn a_multi_line_hoist_takes_the_multi_line_body() {
-        let iife = compact_iife(vec![multi_line_stmt()], ident_node("r"));
+        let iife = compact_iife(vec![multi_line_stmt()], ident("r"));
         let printed = bynk_ts::print_expr(&iife);
         assert!(printed.starts_with("(() => {\n"), "{printed}");
         assert!(printed.contains("if (flag) {"), "{printed}");
@@ -6542,8 +6504,8 @@ mod compact_iife_tests {
     /// One-line statements keep the compact one-line form the corpus has always had.
     #[test]
     fn one_line_hoists_stay_compact() {
-        let stmt = bynk_ts::TsStmt::expr_stmt(ident_node("a"), None);
-        let iife = compact_iife(vec![stmt], ident_node("r"));
+        let stmt = bynk_ts::TsStmt::expr_stmt(ident("a"), None);
+        let iife = compact_iife(vec![stmt], ident("r"));
         assert_eq!(bynk_ts::print_expr(&iife), "(() => { a; return r; })()");
     }
 }
@@ -6782,11 +6744,7 @@ mod list_kernel_tests {
 #[cfg(test)]
 mod leaf_node_tests {
     use super::*;
-    use bynk_ts::{TsExpr, print_expr, print_stmt};
-
-    fn ident(n: &str) -> TsExpr {
-        TsExpr::Ident(n.to_string())
-    }
+    use bynk_ts::{print_expr, print_stmt};
 
     /// `(recv as Extract<typeof recv, { tag: "V" }>)`: the variant a test already proved.
     #[test]

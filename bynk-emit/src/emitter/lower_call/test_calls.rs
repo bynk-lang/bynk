@@ -20,7 +20,8 @@ use super::super::lower::{Pre, settle_helper, settle_with};
 use super::super::lower_ctx::LowerCtx;
 use super::super::lower_list::{any_ty, take};
 use super::super::{Expr, ExprKind, Ident, TypeRef};
-use crate::ts_build::{arrow, call, ident as id, member, param, paren, str_lit as str_node};
+use crate::ts_build::{arrow, call, ident, member, num_lit, paren, str_lit};
+use bynk_ts::TsParam;
 
 // ---- Names ----
 
@@ -31,7 +32,7 @@ fn event_helper_name(service: &str) -> String {
 
 /// `{ ...deps, <entries> }`.
 fn deps_with(entries: Vec<TsObjectEntry>) -> TsExpr {
-    let mut all = vec![TsObjectEntry::Spread(id("deps"))];
+    let mut all = vec![TsObjectEntry::Spread(ident("deps"))];
     all.extend(entries);
     TsExpr::object_entries(all)
 }
@@ -54,7 +55,7 @@ struct DepsArg {
 
 /// I3 (#1971), #2020: `{ ...deps, who: { tag, identity? } }`, a sum handler's principal.
 fn who_deps(actor: &str, identity: Option<bynk_ts::TsExpr>) -> bynk_ts::TsExpr {
-    let tag = str_node(actor);
+    let tag = str_lit(actor);
     let who = |tag: TsExpr, identity: Option<TsExpr>| {
         let mut fields = vec![TsObjectEntry::prop("tag".to_string(), tag)];
         fields.extend(identity.map(|i| TsObjectEntry::prop("identity".to_string(), i)));
@@ -125,7 +126,7 @@ fn test_address(cx: &LowerCtx, e: &Expr) -> Option<HandlerAddress> {
 /// The `deps` argument of an addressed call: the call-site principal folded in, or `deps`.
 fn test_deps(cx: &LowerCtx, service: &str, sum_key: Option<&str>) -> DepsArg {
     let plain = |value| DepsArg { value, plain: true };
-    let deps = || id("deps");
+    let deps = || ident("deps");
     let is_sum = sum_key.is_some_and(|k| cx.is_sum_handler(service, k));
     match (cx.call_site_actor.clone(), cx.call_site_identity.clone()) {
         (Some(actor), identity) if is_sum => DepsArg {
@@ -136,15 +137,14 @@ fn test_deps(cx: &LowerCtx, service: &str, sum_key: Option<&str>) -> DepsArg {
             plain(deps())
         }
         (_, Some(identity)) => {
-            let claims = if sum_key.is_some_and(|k| cx.is_oidc_handler(service, k)) {
-                Some(
-                    cx.call_site_claims
-                        .clone()
-                        .unwrap_or_else(|| call(id("__tokenClaims"), vec![TsExpr::array(vec![])])),
-                )
-            } else {
-                None
-            };
+            let claims =
+                if sum_key.is_some_and(|k| cx.is_oidc_handler(service, k)) {
+                    Some(cx.call_site_claims.clone().unwrap_or_else(|| {
+                        call(ident("__tokenClaims"), vec![TsExpr::array(vec![])])
+                    }))
+                } else {
+                    None
+                };
             DepsArg {
                 value: identity_deps(identity, claims),
                 plain: false,
@@ -166,7 +166,7 @@ fn address_call(
     lowered.push(deps);
     {
         let nodes = lowered;
-        call(member(id(service), key), nodes)
+        call(member(ident(service), key), nodes)
     }
 }
 
@@ -211,21 +211,21 @@ fn inbound_email_call(service: &str, key: &str, mail: bynk_ts::TsExpr) -> bynk_t
     let c = vec![mail];
     let [mail] = take(c);
     let sender = TsExpr::object(vec![
-        ("address".to_string(), member(id("__m"), "from")),
+        ("address".to_string(), member(ident("__m"), "from")),
         (
             "dmarc".to_string(),
-            TsExpr::object(vec![("tag".to_string(), str_node("DmarcNone"))]),
+            TsExpr::object(vec![("tag".to_string(), str_lit("DmarcNone"))]),
         ),
     ]);
     let handler = call(
-        member(id(service), key),
+        member(ident(service), key),
         vec![
-            id("__m"),
+            ident("__m"),
             deps_with(vec![TsObjectEntry::prop("identity".to_string(), sender)]),
         ],
     );
     call(
-        paren(arrow(vec![param("__m", Some(any_ty()))], handler)),
+        paren(arrow(vec![TsParam::new("__m", Some(any_ty()))], handler)),
         vec![mail],
     )
 }
@@ -252,7 +252,7 @@ pub(in crate::emitter) fn lower_test_asset_fetch_call(
         return Some({
             let c = vec![asset];
             let [asset] = take(c);
-            call(id("__bynkAssetGet"), vec![member(asset, "url")])
+            call(ident("__bynkAssetGet"), vec![member(asset, "url")])
         });
     }
     None
@@ -296,7 +296,7 @@ pub(in crate::emitter) fn lower_system_schedule_call(
 fn wrong_method_call(service: &str, verb: IrHttpMethod, path: &str) -> bynk_ts::TsExpr {
     let name = wrong_method_driver_name(service);
     {
-        let nodes = vec![str_node(verb.as_str()), str_node(path)];
+        let nodes = vec![str_lit(verb.as_str()), str_lit(path)];
         call(TsExpr::Ident(name.clone()), nodes)
     }
 }
@@ -394,7 +394,7 @@ impl RawSlots {
         match &self.body {
             Some((at, ty)) if *at == i && self.form => serialised(lowered, ty, Wire::Form, cx),
             Some((at, ty)) if *at == i => serialised(lowered, ty, Wire::Json, cx),
-            _ => call(id("String"), vec![lowered]),
+            _ => call(ident("String"), vec![lowered]),
         }
     }
 }
@@ -414,14 +414,14 @@ fn serialised(
     let value = lowered;
     let ser = crate::emitter::serialisation::serialise_expr_via(ty, &paren_as_any(value), ns, ru);
     match wire {
-        Wire::Cookie => call(id("__cookieString"), vec![ser]),
-        Wire::Query => call(id("__queryString"), vec![ser]),
+        Wire::Cookie => call(ident("__cookieString"), vec![ser]),
+        Wire::Query => call(ident("__queryString"), vec![ser]),
         Wire::Form => call(
-            member(call(id("__queryString"), vec![ser]), "slice"),
+            member(call(ident("__queryString"), vec![ser]), "slice"),
             vec![TsExpr::Lit(bynk_ts::TsLit::Num("1".to_string()))],
         ),
         Wire::Json => call(
-            member(member(id("globalThis"), "JSON"), "stringify"),
+            member(member(ident("globalThis"), "JSON"), "stringify"),
             vec![ser],
         ),
     }
@@ -457,10 +457,7 @@ pub(in crate::emitter) fn lower_system_http_call(
     }
     let key = crate::emitter::http_handler_method_name_ir(verb, path);
     // The `sub` slot: the call-site identity, else the empty string.
-    let sub = cx
-        .call_site_identity
-        .clone()
-        .unwrap_or_else(|| str_node(""));
+    let sub = cx.call_site_identity.clone().unwrap_or_else(|| str_lit(""));
     let has_wire = args[1..]
         .iter()
         .any(|a| matches!(&a.kind, ExprKind::Wire(_)));
@@ -540,7 +537,7 @@ fn websocket_lifecycle_call(
     cx: &mut LowerCtx,
     pre: &mut Pre,
 ) -> bynk_ts::TsExpr {
-    use bynk_ts::{TsBinaryOp, TsBindingName, TsLit, TsStmt, TsType};
+    use bynk_ts::{TsBinaryOp, TsBindingName, TsStmt, TsType};
     // An argument the checker's arity check guarantees: absent, a missing fact.
     let tc = match args.first() {
         Some(a) => pre.lower_node(a, cx),
@@ -549,12 +546,8 @@ fn websocket_lifecycle_call(
             "`TestConnection` argument of a websocket lifecycle call",
         ),
     };
-    let sig =
-        |m: &str| TsType::named_with_args("Parameters", vec![TsType::type_of(member(id(svc), m))]);
-    let num = |n: usize| TsExpr::Lit(TsLit::Num(n.to_string()));
-    let array = |items: Vec<TsExpr>| TsExpr::Array {
-        items,
-        multiline: false,
+    let sig = |m: &str| {
+        TsType::named_with_args("Parameters", vec![TsType::type_of(member(ident(svc), m))])
     };
     let const_ = |name: &str, ty: Option<TsType>, init: TsExpr| {
         TsStmt::const_stmt(TsBindingName::Ident(name.to_string()), ty, init, None)
@@ -575,8 +568,8 @@ fn websocket_lifecycle_call(
     let spread_call = |m: &str| {
         TsStmt::return_stmt(
             Some(call(
-                member(id(svc), m),
-                vec![TsExpr::Spread(Box::new(id("__a")))],
+                member(ident(svc), m),
+                vec![TsExpr::Spread(Box::new(ident("__a")))],
             )),
             None,
         )
@@ -584,13 +577,13 @@ fn websocket_lifecycle_call(
     // `__o.<field>[k] as <sig>[idx]`.
     let opened_cast = |field: &str, k: usize, m: &str, idx: usize| TsExpr::As {
         expr: Box::new(TsExpr::Index {
-            object: Box::new(member(id("__o"), field)),
-            index: Box::new(num(k)),
+            object: Box::new(member(ident("__o"), field)),
+            index: Box::new(num_lit(k)),
         }),
         ty: TsType::indexed(sig(m), TsType::number_literal(idx as u32)),
     };
     let deps_cast = |m: &str, idx: usize| TsExpr::As {
-        expr: Box::new(member(id("__o"), "deps")),
+        expr: Box::new(member(ident("__o"), "deps")),
         ty: TsType::indexed(sig(m), TsType::number_literal(idx as u32)),
     };
     match shape {
@@ -604,22 +597,25 @@ fn websocket_lifecycle_call(
                 let mut c = children;
                 let tc = c.remove(0);
                 let deps = c.pop().expect("the deps child is last");
-                let mut parts = vec![id("__c")];
+                let mut parts = vec![ident("__c")];
                 parts.extend(c.iter().cloned());
                 parts.push(deps);
                 let last = TsExpr::Index {
-                    object: Box::new(id("__a")),
+                    object: Box::new(ident("__a")),
                     index: Box::new(TsExpr::Binary {
                         op: TsBinaryOp::Sub,
-                        left: Box::new(member(id("__a"), "length")),
-                        right: Box::new(num(1)),
+                        left: Box::new(member(ident("__a"), "length")),
+                        right: Box::new(num_lit(1)),
                     }),
                 };
                 iife(vec![
                     const_("__c", None, tc),
-                    const_("__a", Some(sig("open")), array(parts)),
+                    const_("__a", Some(sig("open")), TsExpr::array(parts)),
                     TsStmt::expr_stmt(
-                        call(member(id("__c"), "remember"), vec![array(c), last]),
+                        call(
+                            member(ident("__c"), "remember"),
+                            vec![TsExpr::array(c), last],
+                        ),
                         None,
                     ),
                     spread_call("open"),
@@ -635,7 +631,7 @@ fn websocket_lifecycle_call(
             {
                 let c = vec![tc, frame];
                 let [tc, frame] = take(c);
-                let mut parts = vec![id("__c")];
+                let mut parts = vec![ident("__c")];
                 let mut k = 0usize;
                 for i in 0..n {
                     if i == frame_idx {
@@ -648,8 +644,12 @@ fn websocket_lifecycle_call(
                 parts.push(deps_cast("message", n + 1));
                 iife(vec![
                     const_("__c", None, tc),
-                    const_("__o", None, call(member(id("__c"), "opened"), Vec::new())),
-                    const_("__a", Some(sig("message")), array(parts)),
+                    const_(
+                        "__o",
+                        None,
+                        call(member(ident("__c"), "opened"), Vec::new()),
+                    ),
+                    const_("__a", Some(sig("message")), TsExpr::array(parts)),
                     spread_call("message"),
                 ])
             }
@@ -659,15 +659,19 @@ fn websocket_lifecycle_call(
             {
                 let c = vec![tc];
                 let [tc] = take(c);
-                let mut parts = vec![id("__c")];
+                let mut parts = vec![ident("__c")];
                 for i in 0..n {
                     parts.push(opened_cast("route", i, "close", i + 1));
                 }
                 parts.push(deps_cast("close", n + 1));
                 iife(vec![
                     const_("__c", None, tc),
-                    const_("__o", None, call(member(id("__c"), "opened"), Vec::new())),
-                    const_("__a", Some(sig("close")), array(parts)),
+                    const_(
+                        "__o",
+                        None,
+                        call(member(ident("__c"), "opened"), Vec::new()),
+                    ),
+                    const_("__a", Some(sig("close")), TsExpr::array(parts)),
                     spread_call("close"),
                 ])
             }
@@ -781,7 +785,7 @@ mod tests {
     use super::*;
 
     fn node(text: &str) -> bynk_ts::TsExpr {
-        id(text)
+        ident(text)
     }
 
     fn printed(built: bynk_ts::TsExpr) -> String {
@@ -801,7 +805,7 @@ mod tests {
             "/日本語",
             "a'b",
         ] {
-            assert_eq!(printed(str_node(s)), format!("{s:?}"), "{s:?}");
+            assert_eq!(printed(str_lit(s)), format!("{s:?}"), "{s:?}");
         }
     }
 

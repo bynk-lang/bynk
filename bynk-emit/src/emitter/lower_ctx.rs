@@ -3,7 +3,7 @@
 use super::ctx::*;
 use super::ts_types::ts_ty_to_ts_type;
 use super::*;
-use crate::ts_build::{call, ident as id, str_lit as str_node};
+use crate::ts_build::{call, ident, num_lit, str_lit};
 use bynk_check::firstparty::FirstPartyCap;
 
 /// Per-body lowering context: what module we are emitting into ([`ModuleCtx`]),
@@ -601,16 +601,14 @@ impl<'a> LowerCtx<'a> {
         };
         let (line, col) = bynk_syntax::span::line_col(&loc.source, offset);
         let path = loc.rel_path.replace('\\', "/");
-        let lit = |s: &str| bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(s.to_string()));
-        let num = |n: usize| bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Num(n.to_string()));
         let site = bynk_ts::TsExpr::object(vec![
-            ("file".to_string(), lit(&path)),
-            ("line".to_string(), num(line)),
-            ("col".to_string(), num(col)),
+            ("file".to_string(), str_lit(&path)),
+            ("line".to_string(), num_lit(line)),
+            ("col".to_string(), num_lit(col)),
         ]);
         let step = bynk_ts::TsExpr::Call {
             callee: Box::new(bynk_ts::TsExpr::Ident("__traceStep".to_string())),
-            args: vec![lit(kind), lit(target), site],
+            args: vec![str_lit(kind), str_lit(target), site],
         };
         bynk_ts::TsExpr::Call {
             callee: Box::new(step),
@@ -1206,7 +1204,7 @@ impl<'a> LowerCtx<'a> {
                     .unwrap_or_else(|| bynk_ts::TsExpr::array(vec![]));
                 Some({
                     let c = vec![lines];
-                    call(id("__bynkOidcClaims"), c)
+                    call(ident("__bynkOidcClaims"), c)
                 })
             }
             BodyMode::IntegrationCase {
@@ -1261,7 +1259,7 @@ impl<'a> LowerCtx<'a> {
             } => system_http_claims
                 .sum_routes
                 .get(route)
-                .map(|primary| str_node(self.call_site_actor.as_deref().unwrap_or(primary))),
+                .map(|primary| str_lit(self.call_site_actor.as_deref().unwrap_or(primary))),
             BodyMode::Method
             | BodyMode::FreeFn
             | BodyMode::GivenFn { .. }
@@ -1395,7 +1393,7 @@ impl<'a> LowerCtx<'a> {
         });
         let mut args = vec![key];
         args.extend(deps_env);
-        call(id(&factory), args)
+        call(ident(&factory), args)
     }
 
     /// #527: note that the body calls `agent.method`, folding the method's

@@ -25,7 +25,7 @@ use super::lower_call::codec_statics::json_encode;
 use super::lower_ctx::LowerCtx;
 use super::ts_types::{ts_ty_to_ts_type, ts_type_ref_to_ts_type};
 use super::*;
-use crate::ts_build::{num_lit, str_lit as str_node};
+use crate::ts_build::{binary, ident, num_lit, str_lit};
 
 /// The statement emitter builds a [`Body`] — a list of [`Item`]s — instead of
 /// appending text to a caller's buffer; [`render`] is the one adapter that
@@ -249,7 +249,6 @@ pub(super) fn block_body_with_return(
 /// the text wrapper did.
 pub(super) fn claim_scoped(body: Body) -> Body {
     use bynk_ts::{TsBindingName, TsExpr, TsLit, TsStmt};
-    let ident = |name: &str| TsExpr::Ident(name.to_string());
     let settle = |result: TsExpr, threw: bool| {
         TsStmt::expr_stmt(
             TsExpr::Await(Box::new(TsExpr::Call {
@@ -979,7 +978,7 @@ fn statement(body: &mut Body, stmt: &Statement, cx: &mut LowerCtx) {
                 // The snapshot's name is a string-literal node, spelled as the printer
                 // spells every string.
                 Some(json) => body.push(stmt_item(snapshot_check(
-                    str_node(&clause.name),
+                    str_lit(&clause.name),
                     json,
                     &location,
                     (span_start, span_end),
@@ -993,7 +992,7 @@ fn statement(body: &mut Body, stmt: &Statement, cx: &mut LowerCtx) {
                         clause.name
                     );
                     body.push(stmt_item(bynk_ts::TsStmt::throw_stmt(
-                        expect_failure_call(&location, span_start, span_end, str_node(message)),
+                        expect_failure_call(&location, span_start, span_end, str_lit(message)),
                         None,
                     )));
                 }
@@ -1128,7 +1127,7 @@ fn expect_failure_call(
     bynk_ts::TsExpr::Call {
         callee: Box::new(bynk_ts::TsExpr::Ident("__bynkExpectFailure".to_string())),
         args: vec![
-            str_node(location),
+            str_lit(location),
             num_lit(start.to_string()),
             num_lit(end.to_string()),
             detail,
@@ -1171,20 +1170,17 @@ fn expect_item(
                 callee: Box::new(TsExpr::Ident(show.to_string())),
                 args: vec![TsExpr::Paren(Box::new(v))],
             };
-            let add = |l: TsExpr, r: TsExpr| TsExpr::Binary {
-                op: TsBinaryOp::Add,
-                left: Box::new(l),
-                right: Box::new(r),
-            };
-            add(
-                add(
-                    add(str_node(compare_head), shown(lv)),
-                    str_node(format!(" {sym} ")),
+            binary(
+                TsBinaryOp::Add,
+                binary(
+                    TsBinaryOp::Add,
+                    binary(TsBinaryOp::Add, str_lit(compare_head), shown(lv)),
+                    str_lit(format!(" {sym} ")),
                 ),
                 shown(rv),
             )
         }
-        ExpectDetail::Message(m) => str_node(m),
+        ExpectDetail::Message(m) => str_lit(m),
     };
     expect_if(cond, location, start, end, detail)
 }
@@ -1200,10 +1196,9 @@ fn snapshot_check(
     snapshot: &str,
 ) -> bynk_ts::TsStmt {
     use bynk_ts::{TsBinaryOp, TsBindingName, TsExpr, TsStmt};
-    let ident = |n: &str| TsExpr::Ident(n.to_string());
     let message = TsExpr::Binary {
         op: TsBinaryOp::Add,
-        left: Box::new(str_node(format!(
+        left: Box::new(str_lit(format!(
             "expect {src} matches snapshot \"{snapshot}\"\n  "
         ))),
         right: Box::new(ident("__d")),
@@ -1850,6 +1845,7 @@ fn mentions_decimal(ty: TyId, cx: &LowerCtx) -> bool {
 mod body_tests {
     use super::*;
     use crate::emitter::ctx::{BodyMode, ModuleCtx};
+    use crate::ts_build::ident;
     use bynk_check::checker::TypedCommons;
     use bynk_ts::SourceMapBuilder;
     use std::cell::RefCell;
@@ -2047,10 +2043,6 @@ mod body_tests {
                 assert_eq!(map.to_v3(&out, "t.js"), shifted.to_v3(&out, "t.js"));
             }
         }
-    }
-
-    fn ident(name: &str) -> bynk_ts::TsExpr {
-        bynk_ts::TsExpr::Ident(name.to_string())
     }
 
     fn node(stmt: bynk_ts::TsStmt) -> Item {
@@ -2705,6 +2697,7 @@ mod par_node_tests {
 #[cfg(test)]
 mod expect_item_tests {
     use super::*;
+    use crate::ts_build::ident;
 
     /// The item as the one line it prints to.
     fn line(item: Item) -> String {
@@ -2714,12 +2707,8 @@ mod expect_item_tests {
         }
     }
 
-    fn node_expr(name: &str) -> bynk_ts::TsExpr {
-        bynk_ts::TsExpr::Ident(name.to_string())
-    }
-
     fn node(name: &str) -> bynk_ts::TsExpr {
-        node_expr(name)
+        ident(name)
     }
 
     fn compare(lv: bynk_ts::TsExpr, rv: bynk_ts::TsExpr) -> ExpectDetail {
@@ -2812,14 +2801,7 @@ mod expect_item_tests {
     #[test]
     fn a_snapshot_name_is_spelled_as_the_printer_spells_a_string() {
         let name = "bell\u{7} \"q\"";
-        let check = snapshot_check(
-            str_node(name),
-            node_expr("json"),
-            "t:1:1",
-            (0, 2),
-            "v",
-            name,
-        );
+        let check = snapshot_check(str_lit(name), ident("json"), "t:1:1", (0, 2), "v", name);
         let printed = bynk_ts::print_stmt(&check, 0);
         assert!(
             printed.contains("__bynkSnapshotCheck(\"bell\\u{7} \\\"q\\\"\", json)"),
@@ -2827,7 +2809,7 @@ mod expect_item_tests {
         );
         assert_ne!(
             bynk_project::json_string(name),
-            bynk_ts::print_expr(&str_node(name)),
+            bynk_ts::print_expr(&str_lit(name)),
             "the two spellings differ, which is why the name used to take a text arm"
         );
     }
@@ -2848,7 +2830,7 @@ mod expect_item_tests {
     fn the_snapshot_check_node_prints_the_text_it_replaced() {
         let (location, src, shown) = ("tests/a.bynk:3:5", "r.body", "body \"x\"");
         let node = snapshot_check(
-            str_node("snap"),
+            str_lit("snap"),
             bynk_ts::TsExpr::Ident("__json".to_string()),
             location,
             (10, 20),
