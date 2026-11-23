@@ -668,7 +668,7 @@ pub(super) fn emit_integration_module(
             &mut harness_bound,
             tys,
         );
-        case_out.extend(helper.stmts.iter().cloned());
+        case_out.extend(helper.iter().cloned());
         // #1875 review: the check pass accepted this body from the same
         // inputs, so an error here means the two have drifted, and the
         // lowering would silently fall back to untyped output.
@@ -707,7 +707,7 @@ pub(super) fn emit_integration_module(
         destructure_named_participant_types(
             &mut case_out,
             &participant_types,
-            &[&body.stmts, &helper.stmts],
+            &[&body.stmts, &helper],
             unit_tables,
         );
         let src_id = map.add_source(input.map_source.clone(), input.source.to_string());

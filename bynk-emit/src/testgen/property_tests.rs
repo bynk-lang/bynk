@@ -156,18 +156,15 @@ pub(super) fn emit_test_property_function(
         )
     {
         test_suites::register_call_record_types(&mut helper_view, target_name, unit_tables);
-        out.extend(
-            suite_fn_decls(
-                suite_fns,
-                helper_view,
-                unit_tables.get(target_name),
-                &mut typed,
-                runtime_use,
-                &mut harness_bound,
-                tys,
-            )
-            .stmts,
-        );
+        out.extend(suite_fn_decls(
+            suite_fns,
+            helper_view,
+            unit_tables.get(target_name),
+            &mut typed,
+            runtime_use,
+            &mut harness_bound,
+            tys,
+        ));
     }
     let cross = bynk_check::resolver::CrossContextInfo::default();
     let binding_names: Vec<String> = prop
@@ -516,18 +513,15 @@ pub(super) fn emit_test_history_property_function(
                 tys,
             );
             if let Some(helper_view) = helper_view.take() {
-                out.extend(
-                    suite_fn_decls(
-                        suite_fns,
-                        helper_view,
-                        unit_tables.get(target_name),
-                        &mut typed,
-                        runtime_use,
-                        &mut harness_bound,
-                        tys,
-                    )
-                    .stmts,
-                );
+                out.extend(suite_fn_decls(
+                    suite_fns,
+                    helper_view,
+                    unit_tables.get(target_name),
+                    &mut typed,
+                    runtime_use,
+                    &mut harness_bound,
+                    tys,
+                ));
             }
         }
         // Carry the synthetic call/step/state types into the lowering commons so

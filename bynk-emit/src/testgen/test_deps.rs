@@ -749,15 +749,6 @@ pub(super) fn hidden_destructures(
     stmts
 }
 
-/// [`hidden_destructures`], printed at the runner's depth: for a runner still built as text.
-pub(super) fn extend_hidden_destructures(
-    out: &mut String,
-    hidden: &BTreeMap<String, Vec<String>>,
-    unit_tables: &HashMap<String, UnitTable>,
-) {
-    crate::testgen::case_body::extend_printed_at(out, hidden_destructures(hidden, unit_tables), 2);
-}
-
 pub(super) fn sanitise_case_name(name: &str, index: &mut usize) -> String {
     let mut s = String::from("test_");
     for ch in name.chars() {

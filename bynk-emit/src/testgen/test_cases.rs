@@ -9,10 +9,7 @@ use crate::emitter::emit::test_scaffold_ns as test_ns;
 use bynk_check::checker::Types;
 use bynk_check::test_suites::{self, ResolvedStub, StubScope};
 use bynk_syntax::ast::{Case, FnName};
-use bynk_ts::{
-    SourceMapBuilder, TsBinaryOp, TsBindingName, TsDecl, TsExpr, TsLit, TsStmt, TsType,
-    TsTypeMember,
-};
+use bynk_ts::{TsBinaryOp, TsBindingName, TsDecl, TsExpr, TsLit, TsStmt, TsType, TsTypeMember};
 use std::sync::Arc;
 
 /// Emit the shared per-runner scope setup — agent reset, the `deps` factory, and
@@ -398,15 +395,6 @@ pub(super) fn suite_late_codec_stmts(
     )
 }
 
-/// A suite's declarations as `suite_fn_decls` builds them: the statements, and the text they print
-/// to, indented for a runner's body (1B.3c: a caller that asks what the declarations name reads
-/// the statements).
-#[derive(Default)]
-pub(super) struct SuiteDecls {
-    pub(super) text: String,
-    pub(super) stmts: Vec<TsStmt>,
-}
-
 /// #2834: the suite's helper `fn`s as local function declarations, for a runner
 /// to splice in ahead of its body. Each runner declares its own suite's helpers,
 /// after the scope setup, so a helper sees the same unqualified target names a
@@ -422,9 +410,9 @@ pub(super) fn suite_fn_decls(
     runtime_use: &RuntimeUse,
     bound: &mut HashSet<String>,
     tys: &Arc<Types>,
-) -> SuiteDecls {
+) -> Vec<TsStmt> {
     if suite_fns.is_empty() {
-        return SuiteDecls::default();
+        return Vec::new();
     }
     let mut errs: Vec<CompileError> = Vec::new();
     // The fixtures are constants in the view the helpers are checked in.
@@ -501,11 +489,7 @@ pub(super) fn suite_fn_decls(
         bound.insert(name.name.clone());
         stmts.extend(emitter::emit_suite_fn(f, typed, runtime_use));
     }
-    let printed: String = stmts.iter().map(|s| bynk_ts::print_stmt(s, 0)).collect();
-    SuiteDecls {
-        text: reindent_by(&printed, "    "),
-        stmts,
-    }
+    stmts
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -639,18 +623,15 @@ pub(super) fn emit_test_case_function(
     {
         let mut helper_view = helper_view;
         test_suites::register_call_record_types(&mut helper_view, target_name, unit_tables);
-        out.extend(
-            suite_fn_decls(
-                suite_fns,
-                helper_view,
-                unit_tables.get(target_name),
-                &mut typed,
-                runtime_use,
-                &mut harness_bound,
-                tys,
-            )
-            .stmts,
-        );
+        out.extend(suite_fn_decls(
+            suite_fns,
+            helper_view,
+            unit_tables.get(target_name),
+            &mut typed,
+            runtime_use,
+            &mut harness_bound,
+            tys,
+        ));
     }
     let cross = bynk_check::resolver::CrossContextInfo::default();
     let test_services: HashSet<String> = unit_tables
