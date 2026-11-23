@@ -31,6 +31,20 @@ fn double_args(derived: Option<&bynk_check::symbols::DerivedInstance>) -> Vec<Ts
     }
 }
 
+/// `for (const ev of events) await this.Events.emit(ev.payload);`, the body of `__eventsDispatch`.
+fn events_emit_loop() -> TsStmt {
+    use crate::ts_build::{await_expr, expr_stmt, for_of, ident, member, method_call};
+    for_of(
+        "ev",
+        ident("events"),
+        expr_stmt(await_expr(method_call(
+            member(ident("this"), "Events"),
+            "emit",
+            vec![member(ident("ev"), "payload")],
+        ))),
+    )
+}
+
 /// #1479: returns the real [`TsStmt`] itself (was pre-printed `String`) — the
 /// one real declaration this function ever built; its caller now prints it
 /// directly via `bynk_ts::print_stmt`, the same shape it always used, just
@@ -327,20 +341,7 @@ pub(super) fn emit_test_deps(
                     )),
                 )],
                 None,
-                vec![crate::ts_build::for_of(
-                    "ev",
-                    crate::ts_build::ident("events"),
-                    crate::ts_build::expr_stmt(crate::ts_build::await_expr(
-                        crate::ts_build::method_call(
-                            crate::ts_build::member(crate::ts_build::ident("this"), "Events"),
-                            "emit",
-                            vec![crate::ts_build::member(
-                                crate::ts_build::ident("ev"),
-                                "payload",
-                            )],
-                        ),
-                    )),
-                )],
+                vec![events_emit_loop()],
             )
             .inlined(),
         );
