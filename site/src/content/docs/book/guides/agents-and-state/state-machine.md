@@ -109,4 +109,4 @@ can't reference `self`, parameters, or capabilities.
 
 - Reference: [Agents](/reference/agents/) — state initialisation and the
   full state-machine rules.
-- Tutorial: [Add a stateful agent](/book/tutorials/05-stateful-agent/).
+- Tutorial: [Add a stateful agent](/book/tutorials/stateful-agent/).

@@ -424,42 +424,24 @@ pub(crate) fn classify_worker_listing(success: bool, said: &str) -> WorkerPresen
 /// `from queue("n")` already gave it, so a successful create and an
 /// already-existing queue are the same end state and both return `Ok`
 /// (ADR 0194 D2).
-pub(crate) fn create_queue(
-    provenance: &Provenance,
-    name: &str,
-    project_root: &Path,
-) -> Result<bool, String> {
-    let Some(mut command) = workers::wrangler_command(provenance, "queues") else {
-        return Err("wrangler not found".into());
-    };
-    let output = command
-        .arg("create")
-        .arg(name)
-        // As for KV: the generated config may still carry the KV placeholder,
-        // so run from the project root, where wrangler cannot load and reject
-        // an incomplete config that has nothing to do with this call.
-        .current_dir(project_root)
-        .output()
-        .map_err(|e| e.to_string())?;
-    if output.status.success() {
-        return Ok(true);
+pub(crate) fn create_queue(api: &dyn CloudflareApi, name: &str) -> Result<bool, String> {
+    // As for KV, the call runs from the project root: the generated config may still carry
+    // the KV placeholder, and wrangler cannot load and reject a config it never reads.
+    match api.queue_create(name) {
+        Ok(()) => Ok(true),
+        // The race-loser's path, not the common one: `queue_exists` has already
+        // answered for a queue that was simply there. Someone else creating it
+        // between that check and this call lands here, so the "already exists"
+        // complaint is still read as the success it describes.
+        //
+        // This is the driver's one claim about another tool's prose, and it cannot
+        // be pinned by a test (ADR 0194 D2). It is deliberately reached only by a
+        // concurrent deploy, so being wrong about it costs a spurious failure on a
+        // rare race that a re-run fixes — not, as it would on the create-every-time
+        // shape, every re-deploy of every queue project.
+        Err(e) if e.already_exists() => Ok(false),
+        Err(e) => Err(e.to_string()),
     }
-    // The race-loser's path, not the common one: `queue_exists` has already
-    // answered for a queue that was simply there. Someone else creating it
-    // between that check and this call lands here, so the "already exists"
-    // complaint is still read as the success it describes — on both streams,
-    // wrangler being inconsistent about which carries one.
-    //
-    // This is the driver's one claim about another tool's prose, and it cannot
-    // be pinned by a test (ADR 0194 D2). It is deliberately reached only by a
-    // concurrent deploy, so being wrong about it costs a spurious failure on a
-    // rare race that a re-run fixes — not, as it would on the create-every-time
-    // shape, every re-deploy of every queue project.
-    let said = wrangler_said(&output);
-    if queue_already_exists(&said) {
-        return Ok(false);
-    }
-    Err(said)
 }
 
 /// Is `name` already on the account?
@@ -478,20 +460,8 @@ pub(crate) fn create_queue(
 /// an auth or network failure produces, and the honest consequence is the right
 /// one: the create then fails too and surfaces wrangler's real complaint, rather
 /// than this call inventing a diagnosis of its own.
-pub(crate) fn queue_exists(provenance: &Provenance, name: &str, project_root: &Path) -> bool {
-    let Some(mut command) = workers::wrangler_command(provenance, "queues") else {
-        return false;
-    };
-    command
-        .arg("info")
-        .arg(name)
-        // As for the create: run from the project root, where wrangler cannot
-        // load and reject a config still carrying the KV placeholder.
-        .current_dir(project_root)
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .is_ok_and(|status| status.success())
+pub(crate) fn queue_exists(api: &dyn CloudflareApi, name: &str) -> bool {
+    api.queue_info(name).is_ok()
 }
 
 /// Everything a failed wrangler call said, both streams, never empty — a
@@ -548,56 +518,19 @@ pub(crate) fn queues_to_record(declared: &Resources, created: &BTreeSet<String>)
         .collect()
 }
 
-/// Does this `wrangler queues create` failure just mean the queue is already
-/// there?
-///
-/// Matching wrangler's message is the only seam available — it has no
-/// `--if-not-exists`, and the create is the *only* call that would tell us
-/// (checking with `queues list` first would be the same race, one call later).
-/// The failure mode is benign and visible: an unrecognised wording surfaces as
-/// a plain deploy failure carrying wrangler's own text, never as a silent
-/// mis-provision. Pure, so the rule is tested without an account.
-fn queue_already_exists(stderr: &str) -> bool {
-    stderr.to_ascii_lowercase().contains("already exists")
-}
-
 /// Delete a queue by name — `--prune`'s other mutation.
 ///
 /// No confirmation flag to pass: confirmed empirically (#839) that
 /// `wrangler queues delete` has no prompt or force flag at all (`--help`
 /// shows only global flags) — it is already non-interactive by default.
-/// Idempotent against a queue already gone, matched the same way
-/// [`queue_already_exists`] matches the create side's inverse case.
-pub(crate) fn delete_queue(
-    provenance: &Provenance,
-    name: &str,
-    project_root: &Path,
-) -> Result<(), String> {
-    let Some(mut command) = workers::wrangler_command(provenance, "queues") else {
-        return Err("wrangler not found".into());
-    };
-    let output = command
-        .arg("delete")
-        .arg(name)
-        .current_dir(project_root)
-        .output()
-        .map_err(|e| e.to_string())?;
-    if output.status.success() {
-        return Ok(());
+/// Idempotent against a queue already gone ([`crate::cloudflare::WranglerError::already_gone`]:
+/// `Queue "<name>" does not exist. …`, confirmed empirically, #839).
+pub(crate) fn delete_queue(api: &dyn CloudflareApi, name: &str) -> Result<(), String> {
+    match api.queue_delete(name) {
+        Ok(()) => Ok(()),
+        Err(e) if e.already_gone() => Ok(()),
+        Err(e) => Err(e.to_string()),
     }
-    let said = wrangler_said(&output);
-    if queue_already_deleted(&said) {
-        return Ok(());
-    }
-    Err(said)
-}
-
-/// Does this `wrangler queues delete` failure just mean the queue is already
-/// gone? Confirmed empirically (#839): `Queue "<name>" does not exist. To
-/// create it, run: wrangler queues create <name>`. Pure, so the rule is
-/// tested without an account.
-fn queue_already_deleted(stderr: &str) -> bool {
-    stderr.to_ascii_lowercase().contains("does not exist")
 }
 
 /// The names already set on this Worker, from `wrangler secret list`.
@@ -824,17 +757,37 @@ mod tests {
         assert_eq!(DeployFailure::driver("nope".into()).code, 1);
     }
 
+    /// A failed `queues delete` that only says the queue is gone.
+    fn gone_queue(stderr: &str) -> bool {
+        crate::cloudflare::fake::failed(
+            &crate::cloudflare::Op::QueueDelete { name: "jobs" },
+            "",
+            stderr,
+        )
+        .already_gone()
+    }
+
+    /// A failed `queues create` that only says the queue is there.
+    fn existing_queue(stderr: &str) -> bool {
+        crate::cloudflare::fake::failed(
+            &crate::cloudflare::Op::QueueCreate { name: "jobs" },
+            "",
+            stderr,
+        )
+        .already_exists()
+    }
+
     #[test]
     fn queue_already_deleted_matches_the_confirmed_error_shape() {
         // Confirmed empirically (#839): `Queue "<name>" does not exist. To
         // create it, run: wrangler queues create <name>`.
-        assert!(queue_already_deleted(
+        assert!(gone_queue(
             "✘ [ERROR] Queue \"jobs\" does not exist. To create it, run: wrangler queues create jobs"
         ));
-        assert!(!queue_already_deleted(
+        assert!(!gone_queue(
             "✘ [ERROR] A queue with this name already exists"
         ));
-        assert!(!queue_already_deleted(""));
+        assert!(!gone_queue(""));
     }
 
     #[test]
@@ -855,22 +808,20 @@ mod tests {
         // prose: the wording is Cloudflare's API text, which wrangler renders
         // verbatim as `{message} [code: {code}]` and has no queue-specific
         // handling for. `queue_exists` is what keeps it off the common path.
-        assert!(queue_already_exists(
+        assert!(existing_queue(
             "✘ [ERROR] A queue with this name already exists"
         ));
         assert!(
-            queue_already_exists("queue already exists"),
+            existing_queue("queue already exists"),
             "the match is on the phrase, whatever wrangler wraps it in"
         );
         // Anything else is a real failure and must surface with wrangler's own
         // words rather than being swallowed as idempotency.
-        assert!(!queue_already_exists(
-            "✘ [ERROR] Authentication error [10000]"
-        ));
-        assert!(!queue_already_exists(
+        assert!(!existing_queue("✘ [ERROR] Authentication error [10000]"));
+        assert!(!existing_queue(
             "✘ [ERROR] A request to the Cloudflare API failed."
         ));
-        assert!(!queue_already_exists(""));
+        assert!(!existing_queue(""));
     }
 
     #[test]
@@ -958,10 +909,14 @@ mod tests {
         // The consequence that makes this worth doing: a create whose
         // "already exists" lands on stdout must still be read as success, or
         // every re-deploy of a queue project fails.
-        assert!(queue_already_exists(&said(
-            "A queue with this name already exists",
-            ""
-        )));
+        assert!(
+            crate::cloudflare::fake::failed(
+                &crate::cloudflare::Op::QueueCreate { name: "jobs" },
+                "A queue with this name already exists",
+                ""
+            )
+            .already_exists()
+        );
     }
 
     #[test]
@@ -1176,6 +1131,7 @@ mod tests {
         let pushed = apply_worker(
             &mut RunCx {
                 tools: Tools {
+                    api: &Wrangler::new(&provenance, &root),
                     provenance: &provenance,
                     project_root: &root,
                 },
@@ -1891,6 +1847,7 @@ mod tests {
         let pushed = apply_worker(
             &mut RunCx {
                 tools: Tools {
+                    api: &Wrangler::new(&provenance, &root),
                     provenance: &provenance,
                     project_root: &root,
                 },

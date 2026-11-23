@@ -4,10 +4,7 @@
 //! production emitter holds no test-harness entry. They reach `LowerCtx`, `Pre` and
 //! `emit_statement` through `pub(crate)`.
 //!
-//! `extend_printed_at`, the one place the harness prints a node list into a case body's text
-//! buffer, lives here with them (it is what `emit_print_calls` used to read 1 for).
 
-use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 
 use bynk_check::checker::{HandlerAddress, TypedCommons};
@@ -18,71 +15,11 @@ use bynk_syntax::ast::{Block, TypeRef};
 use crate::emitter::ctx::{BodyMode, ModuleCtx, TestShared, UnitFacts};
 use crate::emitter::lower_call::codec_statics::eval_value_line;
 use crate::emitter::lower_ctx::LowerCtx;
-use crate::emitter::lower_stmt::{
-    StatementSink, emit_block_as_function_body_with_return, function_body_stmts,
-};
+use crate::emitter::lower_stmt::{StatementSink, function_body_stmts};
 use crate::emitter::{Pre, RuntimeUse};
-use bynk_ts::SourceMapBuilder;
 
-/// #1478: appends `stmts` to `out`, printing each at `depth` — the shared
-/// "consume a real-node-returning callee's own output" step. #1479 adds the
-/// `depth` parameter (was hardcoded to 0): the harness's own scaffold-body callees (e.g.
-/// `emit_ns_destructure`) print nested inside a generated function body, at that body's own
-/// depth. It was `case_body::extend_printed_at`; 1B.2b (#4028) moved it here with the rest of the
-/// harness's printing, so the production emitter calls `bynk_ts::print_stmt` nowhere and
-/// `emit_print_calls` reads 0.
-pub fn extend_printed_at(out: &mut String, stmts: Vec<bynk_ts::TsStmt>, depth: usize) {
-    for stmt in stmts {
-        out.push_str(&bynk_ts::print_stmt(&stmt, depth));
-    }
-}
-
-/// Lower a block to a sequence of TypeScript statements suitable for use as
-/// an async function body. Used by v0.7 mock-operation emission — today
-/// exclusively test/property/contract scaffolding (`stub` rhs values, `where`
-/// predicates, contract `requires` guards), never real production provider
-/// bodies, so `test_scaffold` is set unconditionally (nothing here emits an
-/// `assert`, so `assert_loc` stays `None`) purely to mark test-scaffold mode
-/// for `in_test_scaffold()` — otherwise a refined-literal admitted here (e.g.
-/// a `stub Cap.op() returns "lit"` rhs) brands via the production `(v as T)`
-/// cast, which cannot resolve `T` in a stub class's `any`-typed destructure
-/// (Locale capability track, slice 1, #844).
-pub fn lower_block_to_async_body(
-    block: &Block,
-    return_type: &TypeRef,
-    typed: &mut TypedCommons,
-    cross_context: &bynk_check::resolver::CrossContextInfo,
-    runtime_use: &RuntimeUse,
-) -> (String, SourceMapBuilder) {
-    let mut out = String::new();
-    // v0.70: a sub-builder records body checkpoints relative to this local buffer;
-    // the caller merges it into the module map at the splice offset.
-    let smb = RefCell::new(SourceMapBuilder::new());
-    {
-        let mut cx = LowerCtx::new(
-            ModuleCtx::new(typed, cross_context, runtime_use, UnitFacts::detached()),
-            BodyMode::PredicateScaffold {
-                test: TestShared {
-                    test_scaffold: true,
-                    assert_loc: None,
-                },
-            },
-        )
-        .with_source_map(Some(&smb));
-        let async_tail = is_effectful_return(return_type);
-        emit_block_as_function_body_with_return(
-            &mut out,
-            block,
-            &mut cx,
-            0,
-            async_tail,
-            Some(return_type),
-        );
-    }
-    (out, smb.into_inner())
-}
-
-/// [`lower_block_to_async_body`] as statements (1B.5b), for a predicate closure built as nodes.
+/// Lower a block as the body of an async scaffold function — a predicate closure or a stub value —
+/// as statements, ending in a `return` of its tail (1B.5b, 1B.5c).
 pub fn lower_block_to_async_stmts(
     block: &Block,
     return_type: &TypeRef,

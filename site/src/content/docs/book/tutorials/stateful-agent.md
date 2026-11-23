@@ -35,7 +35,7 @@ Three parts make up the agent:
 
 - `key code: ShortCode` — the identity. Each distinct `ShortCode` is a separate
   link with its own state. The refined `ShortCode` from
-  [Make illegal states unrepresentable](/book/tutorials/04-refined-types/) means a link can only ever be keyed by a
+  [Make illegal states unrepresentable](/book/tutorials/refined-types/) means a link can only ever be keyed by a
   valid code.
 - `store target: Cell[Option[Url]]` and `store hits: Cell[Int]` — the data this
   agent owns, one `store` field per value: the target URL (once registered) and a

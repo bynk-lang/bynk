@@ -136,6 +136,7 @@ pub(crate) fn allocate_in(
             lock,
             live: (),
             tools: Tools {
+                api: &Wrangler::new(&provenance, Path::new("/nonexistent")),
                 provenance: &provenance,
                 project_root: Path::new("/nonexistent"),
             },
@@ -420,6 +421,7 @@ mod tests {
         let e = provision_kind::<RateLimit>(
             Site {
                 tools: Tools {
+                    api: &Wrangler::new(&provenance, Path::new("/nonexistent")),
                     provenance: &provenance,
                     project_root: Path::new("/nonexistent"),
                 },

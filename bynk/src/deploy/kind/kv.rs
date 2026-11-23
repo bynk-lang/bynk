@@ -22,7 +22,7 @@ impl Kv {
             kv_bindings(&cx.resources[worker])
                 .any(|binding| cx.ledger.recorded::<Kv>(worker, binding).is_some())
         }) {
-            live_kv_namespace_ids(tools.provenance, tools.project_root)
+            live_kv_namespace_ids(tools.api)
         } else {
             None
         }
@@ -318,7 +318,7 @@ impl ResourceKind for Kv {
             None => format!("the orphaned KV namespace for `{worker}`"),
             Some(binding) => format!("the orphaned KV namespace `{binding}` for `{worker}`"),
         };
-        delete_kv_namespace(cx.tools.provenance, &id, cx.tools.project_root)
+        delete_kv_namespace(cx.tools.api, &id)
             .map_err(|e| DeployFailure::driver(format!("could not delete {what}: {e}")))?;
         Ok(Some(Commit::recorded(
             TableChange::remove(worker, binding),
@@ -350,12 +350,8 @@ impl ResourceKind for Kv {
             return Err(DeployFailure::driver(message));
         }
         let what = kv_namespace_noun(worker, binding);
-        let id = create_kv(
-            cx.tools.provenance,
-            &kv_title(worker, binding, environment),
-            cx.tools.project_root,
-        )
-        .map_err(|e| DeployFailure::driver(format!("could not create {what}: {e}")))?;
+        let id = create_kv(cx.tools.api, &kv_title(worker, binding, environment))
+            .map_err(|e| DeployFailure::driver(format!("could not create {what}: {e}")))?;
         // Recorded before the push, so an interrupted run never makes a second namespace.
         let record = cx.recording(binding, KvNamespace::of(&id), &format!("created {what}"));
         Ok(Applied::bound(binding, id).with(record))
@@ -652,58 +648,11 @@ pub(crate) fn kv_namespace_noun(worker: &str, binding: &str) -> String {
     }
 }
 
-fn create_kv(provenance: &Provenance, name: &str, project_root: &Path) -> Result<String, String> {
-    let Some(mut command) = workers::wrangler_command(provenance, "kv") else {
-        return Err("wrangler not found".into());
-    };
-    let output = command
-        .arg("namespace")
-        .arg("create")
-        .arg(name)
-        // No `--json`: `kv namespace create` has no such flag (`Unknown
-        // argument: json`, #2428). The id is read from the binding snippet it
-        // prints instead.
-        // The generated worker config still carries the placeholder until the
-        // namespace exists. Create from the project root so Wrangler cannot
-        // load and validate that incomplete config.
-        .current_dir(project_root)
-        .output()
-        .map_err(|e| e.to_string())?;
-    if !output.status.success() {
-        return Err(wrangler_said(&output));
-    }
-    parse_kv_id(&String::from_utf8_lossy(&output.stdout))
-        .ok_or_else(|| "wrangler did not return a namespace id".into())
-}
-
-/// The namespace id in `wrangler kv namespace create`'s printed binding
-/// snippet: `"id": "…"` in a JSON config, `id = "…"` in a TOML one.
-fn parse_kv_id(output: &str) -> Option<String> {
-    // A whole-output JSON document first (compact or pretty), then the line scan.
-    if let Ok(value) = serde_json::from_str::<serde_json::Value>(output) {
-        let id = value.get("id").or_else(|| {
-            value
-                .get(bynk_project::wrangler_keys::WranglerKey::KvNamespaces.top_key())?
-                .get(0)?
-                .get("id")
-        });
-        if let Some(id) = id.and_then(|id| id.as_str()) {
-            return Some(id.to_owned());
-        }
-    }
-    output.lines().find_map(|line| {
-        let line = line.trim().trim_start_matches(['{', '[']).trim_start();
-        let rest = line
-            .strip_prefix("\"id\"")
-            .or_else(|| line.strip_prefix("id"))?
-            .trim_start();
-        let rest = rest
-            .strip_prefix([':', '='])?
-            .trim_start()
-            .strip_prefix('"')?;
-        let id = &rest[..rest.find('"')?];
-        (!id.is_empty()).then(|| id.to_owned())
-    })
+pub(crate) fn create_kv(api: &dyn CloudflareApi, name: &str) -> Result<String, String> {
+    // The generated worker config still carries the placeholder until the namespace exists, so
+    // the adapter creates from the project root, where wrangler cannot load that incomplete
+    // config.
+    api.kv_create(name).map_err(|e| e.to_string())
 }
 
 /// Every KV namespace id currently on the account — slice 5, DECISION B.
@@ -725,25 +674,12 @@ fn parse_kv_id(output: &str) -> Option<String> {
 /// short page comes back, aggregating every page before this command prints
 /// — confirmed against wrangler's own source, not assumed. A truncated
 /// response is not a live risk on the CLI path this calls.
-pub(crate) fn live_kv_namespace_ids(
-    provenance: &Provenance,
-    project_root: &Path,
-) -> Option<BTreeSet<String>> {
-    let mut command = workers::wrangler_command(provenance, "kv")?;
+pub(crate) fn live_kv_namespace_ids(api: &dyn CloudflareApi) -> Option<BTreeSet<String>> {
     // No `--format json`: unlike `secret list`/`queues`, this command has no
     // such flag at all — confirmed against wrangler 4.103 (`Unknown argument:
     // format`, exit 1). Its *default* output is already a raw JSON array, so
     // this is not a missing-flag gap, just a different default per command.
-    let output = command
-        .arg("namespace")
-        .arg("list")
-        .current_dir(project_root)
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    parse_kv_namespace_ids(&String::from_utf8_lossy(&output.stdout))
+    parse_kv_namespace_ids(&api.kv_list().ok()?)
 }
 
 /// The ids in `wrangler kv namespace list`'s (default, already-JSON) output —
@@ -766,62 +702,20 @@ fn parse_kv_namespace_ids(stdout: &str) -> Option<BTreeSet<String>> {
 /// [`confirm_prune`], which already named every resource about to go and
 /// asked once for the whole batch: a second, per-resource prompt would be
 /// noise, not safety. Idempotent against a namespace already gone (matched
-/// via [`kv_namespace_already_deleted`]) — confirmed empirically (#839):
+/// by [`crate::cloudflare::WranglerError::already_gone`]) — confirmed empirically (#839):
 /// Cloudflare answers a not-found delete with an error, never silent success,
 /// so this driver-side match is what makes re-running `--prune` safe.
-pub(crate) fn delete_kv_namespace(
-    provenance: &Provenance,
-    id: &str,
-    project_root: &Path,
-) -> Result<(), String> {
-    let Some(mut command) = workers::wrangler_command(provenance, "kv") else {
-        return Err("wrangler not found".into());
-    };
-    let output = command
-        .arg("namespace")
-        .arg("delete")
-        .arg("--namespace-id")
-        .arg(id)
-        .arg("--skip-confirmation")
-        .current_dir(project_root)
-        .output()
-        .map_err(|e| e.to_string())?;
-    if output.status.success() {
-        return Ok(());
+pub(crate) fn delete_kv_namespace(api: &dyn CloudflareApi, id: &str) -> Result<(), String> {
+    match api.kv_delete(id) {
+        Ok(()) => Ok(()),
+        Err(e) if e.already_gone() => Ok(()),
+        Err(e) => Err(e.to_string()),
     }
-    let said = wrangler_said(&output);
-    if kv_namespace_already_deleted(&said) {
-        return Ok(());
-    }
-    Err(said)
-}
-
-/// Does this `wrangler kv namespace delete` failure just mean the namespace
-/// is already gone? Confirmed empirically (#839) against a real account:
-/// `namespace not found [code: 10013]`. Matching the stable error code rather
-/// than the prose, unlike [`queue_already_exists`]'s text match — Cloudflare
-/// structures its API errors with a `code`, and `10013` is the more durable
-/// half of the message if the wording is ever revised. Pure, so the rule is
-/// tested without an account.
-fn kv_namespace_already_deleted(stderr: &str) -> bool {
-    stderr.contains("code: 10013") || stderr.to_ascii_lowercase().contains("namespace not found")
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn parses_the_id_from_the_printed_binding_snippet() {
-        let toml = "🌀 Creating namespace with title \"api\"\n✨ Success!\n\
-                    [[kv_namespaces]]\nbinding = \"api\"\nid = \"abc\"\n";
-        assert_eq!(parse_kv_id(toml), Some("abc".into()));
-        let json = "{\n  \"kv_namespaces\": [\n    {\n      \"binding\": \"api\",\n      \"id\": \"abc\"\n    }\n  ]\n}\n";
-        assert_eq!(parse_kv_id(json), Some("abc".into()));
-        let compact = r#"{"kv_namespaces":[{"binding":"api","id":"abc"}]}"#;
-        assert_eq!(parse_kv_id(compact), Some("abc".into()));
-        assert_eq!(parse_kv_id("✘ [ERROR] nope"), None);
-    }
 
     #[test]
     fn should_trust_recorded_kv_only_when_the_id_is_live_or_unchecked() {
@@ -843,6 +737,12 @@ mod tests {
             "nothing recorded at all"
         );
         assert!(!should_trust_recorded_kv(None, None));
+    }
+
+    /// A failed `kv namespace delete` that only says the namespace is gone.
+    fn kv_namespace_already_deleted(stderr: &str) -> bool {
+        crate::cloudflare::fake::failed(&crate::cloudflare::Op::KvDelete { id: "i" }, "", stderr)
+            .already_gone()
     }
 
     #[test]
@@ -1088,6 +988,7 @@ mod tests {
         let lock = lock_of(&[("default", "shop", "KV", "bare")]);
         let provenance = Provenance::Path("/nonexistent/wrangler".into());
         let tools = Tools {
+            api: &Wrangler::new(&provenance, Path::new("/nonexistent")),
             provenance: &provenance,
             project_root: Path::new("/nonexistent"),
         };
@@ -1130,6 +1031,7 @@ mod tests {
                 lock: &lock,
                 live: None,
                 tools: Tools {
+                    api: &Wrangler::new(&provenance, Path::new("/nonexistent")),
                     provenance: &provenance,
                     project_root: Path::new("/nonexistent"),
                 },

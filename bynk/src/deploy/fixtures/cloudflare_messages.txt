@@ -1,0 +1,534 @@
+== queues create · wrangler missing
+   -> error wrangler not found
+== queues create · wrangler does not start
+   -> error No such file or directory (os error 2)
+== queues create · exits 1, stderr only
+   call: queues create jobs
+   -> error it went wrong on stderr
+== queues create · exits 1, stdout only
+   call: queues create jobs
+   -> error it went wrong on stdout
+== queues create · exits 1, both streams
+   call: queues create jobs
+   -> error wrong on stderr
+      and on stdout
+== queues create · exits 3, silent
+   call: queues create jobs
+   -> error wrangler exited 3
+== queues create · killed by SIGTERM, silent
+   call: queues create jobs
+   -> error wrangler exited 143
+== queues create · exits 0, unreadable output
+   call: queues create jobs
+   -> ok true
+== queues create · created
+   call: queues create jobs
+   -> ok true
+== queues create · already exists, on stderr
+   call: queues create jobs
+   -> ok false
+== queues create · already exists, on stdout
+   call: queues create jobs
+   -> ok false
+
+== queues info · wrangler missing
+   -> false
+== queues info · wrangler does not start
+   -> false
+== queues info · exits 1, stderr only
+   call: queues info jobs
+   -> false
+== queues info · exits 1, stdout only
+   call: queues info jobs
+   -> false
+== queues info · exits 1, both streams
+   call: queues info jobs
+   -> false
+== queues info · exits 3, silent
+   call: queues info jobs
+   -> false
+== queues info · killed by SIGTERM, silent
+   call: queues info jobs
+   -> false
+== queues info · exits 0, unreadable output
+   call: queues info jobs
+   -> true
+== queues info · found
+   call: queues info jobs
+   -> true
+
+== queues delete · wrangler missing
+   -> error wrangler not found
+== queues delete · wrangler does not start
+   -> error No such file or directory (os error 2)
+== queues delete · exits 1, stderr only
+   call: queues delete jobs
+   -> error it went wrong on stderr
+== queues delete · exits 1, stdout only
+   call: queues delete jobs
+   -> error it went wrong on stdout
+== queues delete · exits 1, both streams
+   call: queues delete jobs
+   -> error wrong on stderr
+      and on stdout
+== queues delete · exits 3, silent
+   call: queues delete jobs
+   -> error wrangler exited 3
+== queues delete · killed by SIGTERM, silent
+   call: queues delete jobs
+   -> error wrangler exited 143
+== queues delete · exits 0, unreadable output
+   call: queues delete jobs
+   -> ok ()
+== queues delete · deleted
+   call: queues delete jobs
+   -> ok ()
+== queues delete · does not exist
+   call: queues delete jobs
+   -> ok ()
+
+== kv namespace create · wrangler missing
+   -> error wrangler not found
+== kv namespace create · wrangler does not start
+   -> error No such file or directory (os error 2)
+== kv namespace create · exits 1, stderr only
+   call: kv namespace create shop-api
+   -> error it went wrong on stderr
+== kv namespace create · exits 1, stdout only
+   call: kv namespace create shop-api
+   -> error it went wrong on stdout
+== kv namespace create · exits 1, both streams
+   call: kv namespace create shop-api
+   -> error wrong on stderr
+      and on stdout
+== kv namespace create · exits 3, silent
+   call: kv namespace create shop-api
+   -> error wrangler exited 3
+== kv namespace create · killed by SIGTERM, silent
+   call: kv namespace create shop-api
+   -> error wrangler exited 143
+== kv namespace create · exits 0, unreadable output
+   call: kv namespace create shop-api
+   -> error wrangler did not return a namespace id
+== kv namespace create · TOML snippet
+   call: kv namespace create shop-api
+   -> ok "0123abcd"
+== kv namespace create · JSON snippet
+   call: kv namespace create shop-api
+   -> ok "4567ef"
+
+== kv namespace list · wrangler missing
+   -> None
+== kv namespace list · wrangler does not start
+   -> None
+== kv namespace list · exits 1, stderr only
+   call: kv namespace list
+   -> None
+== kv namespace list · exits 1, stdout only
+   call: kv namespace list
+   -> None
+== kv namespace list · exits 1, both streams
+   call: kv namespace list
+   -> None
+== kv namespace list · exits 3, silent
+   call: kv namespace list
+   -> None
+== kv namespace list · killed by SIGTERM, silent
+   call: kv namespace list
+   -> None
+== kv namespace list · exits 0, unreadable output
+   call: kv namespace list
+   -> None
+== kv namespace list · two namespaces
+   call: kv namespace list
+   -> Some({"a1", "b2"})
+
+== kv namespace delete · wrangler missing
+   -> error wrangler not found
+== kv namespace delete · wrangler does not start
+   -> error No such file or directory (os error 2)
+== kv namespace delete · exits 1, stderr only
+   call: kv namespace delete --namespace-id 0123abcd --skip-confirmation
+   -> error it went wrong on stderr
+== kv namespace delete · exits 1, stdout only
+   call: kv namespace delete --namespace-id 0123abcd --skip-confirmation
+   -> error it went wrong on stdout
+== kv namespace delete · exits 1, both streams
+   call: kv namespace delete --namespace-id 0123abcd --skip-confirmation
+   -> error wrong on stderr
+      and on stdout
+== kv namespace delete · exits 3, silent
+   call: kv namespace delete --namespace-id 0123abcd --skip-confirmation
+   -> error wrangler exited 3
+== kv namespace delete · killed by SIGTERM, silent
+   call: kv namespace delete --namespace-id 0123abcd --skip-confirmation
+   -> error wrangler exited 143
+== kv namespace delete · exits 0, unreadable output
+   call: kv namespace delete --namespace-id 0123abcd --skip-confirmation
+   -> ok ()
+== kv namespace delete · deleted
+   call: kv namespace delete --namespace-id 0123abcd --skip-confirmation
+   -> ok ()
+== kv namespace delete · not found, code 10013
+   call: kv namespace delete --namespace-id 0123abcd --skip-confirmation
+   -> ok ()
+== kv namespace delete · not found, prose
+   call: kv namespace delete --namespace-id 0123abcd --skip-confirmation
+   -> ok ()
+
+== d1 migrations apply (default) · wrangler missing
+   -> error wrangler not found
+== d1 migrations apply (default) · wrangler does not start
+   -> error No such file or directory (os error 2)
+== d1 migrations apply (default) · exits 1, stderr only
+   call: d1 migrations apply DB --remote
+   -> error it went wrong on stderr
+== d1 migrations apply (default) · exits 1, stdout only
+   call: d1 migrations apply DB --remote
+   -> error it went wrong on stdout
+== d1 migrations apply (default) · exits 1, both streams
+   call: d1 migrations apply DB --remote
+   -> error wrong on stderr
+      and on stdout
+== d1 migrations apply (default) · exits 3, silent
+   call: d1 migrations apply DB --remote
+   -> error wrangler exited 3
+== d1 migrations apply (default) · killed by SIGTERM, silent
+   call: d1 migrations apply DB --remote
+   -> error wrangler exited 143
+== d1 migrations apply (default) · exits 0, unreadable output
+   call: d1 migrations apply DB --remote
+   -> ok ()
+== d1 migrations apply (default) · applied
+   call: d1 migrations apply DB --remote
+   -> ok ()
+
+== d1 migrations apply (--env staging) · wrangler missing
+   -> error wrangler not found
+== d1 migrations apply (--env staging) · wrangler does not start
+   -> error No such file or directory (os error 2)
+== d1 migrations apply (--env staging) · exits 1, stderr only
+   call: d1 migrations apply DB --remote --env staging
+   -> error it went wrong on stderr
+== d1 migrations apply (--env staging) · exits 1, stdout only
+   call: d1 migrations apply DB --remote --env staging
+   -> error it went wrong on stdout
+== d1 migrations apply (--env staging) · exits 1, both streams
+   call: d1 migrations apply DB --remote --env staging
+   -> error wrong on stderr
+      and on stdout
+== d1 migrations apply (--env staging) · exits 3, silent
+   call: d1 migrations apply DB --remote --env staging
+   -> error wrangler exited 3
+== d1 migrations apply (--env staging) · killed by SIGTERM, silent
+   call: d1 migrations apply DB --remote --env staging
+   -> error wrangler exited 143
+== d1 migrations apply (--env staging) · exits 0, unreadable output
+   call: d1 migrations apply DB --remote --env staging
+   -> ok ()
+
+== d1 create · wrangler missing
+   -> error wrangler not found
+== d1 create · wrangler does not start
+   -> error No such file or directory (os error 2)
+== d1 create · exits 1, stderr only
+   call: d1 create shop-db
+   -> error it went wrong on stderr
+== d1 create · exits 1, stdout only
+   call: d1 create shop-db
+   -> error it went wrong on stdout
+== d1 create · exits 1, both streams
+   call: d1 create shop-db
+   -> error wrong on stderr
+      and on stdout
+== d1 create · exits 3, silent
+   call: d1 create shop-db
+   -> error wrangler exited 3
+== d1 create · killed by SIGTERM, silent
+   call: d1 create shop-db
+   -> error wrangler exited 143
+== d1 create · exits 0, unreadable output
+   call: d1 create shop-db
+   -> error `wrangler d1 create` succeeded but printed no `database_id`:
+      nothing this reads
+== d1 create · created
+   call: d1 create shop-db
+   -> ok "0a1b-2c3d"
+== d1 create · created, JSON snippet
+   call: d1 create shop-db
+   -> ok "ffee-0011"
+== d1 create · already exists, listed
+   call: d1 create shop-db
+   call: d1 list --json
+   -> ok "abcd-ef01"
+== d1 create · already exists, not listed
+   call: d1 create shop-db
+   call: d1 list --json
+   -> error it already exists, but `wrangler d1 list` does not show it
+== d1 create · already exists, listing fails
+   call: d1 create shop-db
+   call: d1 list --json
+   -> error it already exists, and listing the account's databases failed: could not list
+== d1 create · already exists, listing silent
+   call: d1 create shop-db
+   call: d1 list --json
+   -> error it already exists, and listing the account's databases failed: wrangler exited 2
+
+== r2 bucket create · wrangler missing
+   -> error wrangler not found
+== r2 bucket create · wrangler does not start
+   -> error No such file or directory (os error 2)
+== r2 bucket create · exits 1, stderr only
+   call: r2 bucket create shop-files
+   -> error it went wrong on stderr
+== r2 bucket create · exits 1, stdout only
+   call: r2 bucket create shop-files
+   -> error it went wrong on stdout
+== r2 bucket create · exits 1, both streams
+   call: r2 bucket create shop-files
+   -> error wrong on stderr
+      and on stdout
+== r2 bucket create · exits 3, silent
+   call: r2 bucket create shop-files
+   -> error wrangler exited 3
+== r2 bucket create · killed by SIGTERM, silent
+   call: r2 bucket create shop-files
+   -> error wrangler exited 143
+== r2 bucket create · exits 0, unreadable output
+   call: r2 bucket create shop-files
+   -> ok ()
+== r2 bucket create · created
+   call: r2 bucket create shop-files
+   -> ok ()
+== r2 bucket create · already exists, and you own it
+   call: r2 bucket create shop-files
+   -> ok ()
+== r2 bucket create · already exists, not yours
+   call: r2 bucket create shop-files
+   -> error The bucket already exists and is not available.
+
+== r2 bucket create (--jurisdiction eu) · wrangler missing
+   -> error wrangler not found
+== r2 bucket create (--jurisdiction eu) · wrangler does not start
+   -> error No such file or directory (os error 2)
+== r2 bucket create (--jurisdiction eu) · exits 1, stderr only
+   call: r2 bucket create shop-files --jurisdiction eu
+   -> error it went wrong on stderr
+== r2 bucket create (--jurisdiction eu) · exits 1, stdout only
+   call: r2 bucket create shop-files --jurisdiction eu
+   -> error it went wrong on stdout
+== r2 bucket create (--jurisdiction eu) · exits 1, both streams
+   call: r2 bucket create shop-files --jurisdiction eu
+   -> error wrong on stderr
+      and on stdout
+== r2 bucket create (--jurisdiction eu) · exits 3, silent
+   call: r2 bucket create shop-files --jurisdiction eu
+   -> error wrangler exited 3
+== r2 bucket create (--jurisdiction eu) · killed by SIGTERM, silent
+   call: r2 bucket create shop-files --jurisdiction eu
+   -> error wrangler exited 143
+== r2 bucket create (--jurisdiction eu) · exits 0, unreadable output
+   call: r2 bucket create shop-files --jurisdiction eu
+   -> ok ()
+
+== vectorize list · wrangler missing
+   -> error wrangler not found
+== vectorize list · wrangler does not start
+   -> error No such file or directory (os error 2)
+== vectorize list · exits 1, stderr only
+   call: vectorize list --json
+   -> error it went wrong on stderr
+== vectorize list · exits 1, stdout only
+   call: vectorize list --json
+   -> error it went wrong on stdout
+== vectorize list · exits 1, both streams
+   call: vectorize list --json
+   -> error wrong on stderr
+      and on stdout
+== vectorize list · exits 3, silent
+   call: vectorize list --json
+   -> error wrangler exited 3
+== vectorize list · killed by SIGTERM, silent
+   call: vectorize list --json
+   -> error wrangler exited 143
+== vectorize list · exits 0, unreadable output
+   call: vectorize list --json
+   -> error could not read the list of Vectorize indexes from wrangler's output
+== vectorize list · listed
+   call: vectorize list --json
+   -> ok true
+== vectorize list · not listed
+   call: vectorize list --json
+   -> ok false
+== vectorize list · no permission, code 10000
+   call: vectorize list --json
+   -> error Authentication error [code: 10000]
+        hint: the API token needs the Account > Vectorize > Edit permission
+
+== vectorize get · wrangler missing
+   -> error wrangler not found
+== vectorize get · wrangler does not start
+   -> error No such file or directory (os error 2)
+== vectorize get · exits 1, stderr only
+   call: vectorize get docs --json
+   -> error it went wrong on stderr
+== vectorize get · exits 1, stdout only
+   call: vectorize get docs --json
+   -> error it went wrong on stdout
+== vectorize get · exits 1, both streams
+   call: vectorize get docs --json
+   -> error wrong on stderr
+      and on stdout
+== vectorize get · exits 3, silent
+   call: vectorize get docs --json
+   -> error wrangler exited 3
+== vectorize get · killed by SIGTERM, silent
+   call: vectorize get docs --json
+   -> error wrangler exited 143
+== vectorize get · exits 0, unreadable output
+   call: vectorize get docs --json
+   -> error could not read the dimensions and metric of `docs` from wrangler's output, so it was not checked against the source
+== vectorize get · config at the top level
+   call: vectorize get docs --json
+   -> ok IndexConfig { dimensions: 768, metric: "cosine" }
+== vectorize get · config nested
+   call: vectorize get docs --json
+   -> ok IndexConfig { dimensions: 3, metric: "dot-product" }
+
+== vectorize create · wrangler missing
+   -> error wrangler not found
+== vectorize create · wrangler does not start
+   -> error No such file or directory (os error 2)
+== vectorize create · exits 1, stderr only
+   call: vectorize create docs --dimensions 768 --metric cosine
+   -> error it went wrong on stderr
+== vectorize create · exits 1, stdout only
+   call: vectorize create docs --dimensions 768 --metric cosine
+   -> error it went wrong on stdout
+== vectorize create · exits 1, both streams
+   call: vectorize create docs --dimensions 768 --metric cosine
+   -> error wrong on stderr
+      and on stdout
+== vectorize create · exits 3, silent
+   call: vectorize create docs --dimensions 768 --metric cosine
+   -> error wrangler exited 3
+== vectorize create · killed by SIGTERM, silent
+   call: vectorize create docs --dimensions 768 --metric cosine
+   -> error wrangler exited 143
+== vectorize create · exits 0, unreadable output
+   call: vectorize create docs --dimensions 768 --metric cosine
+   -> ok ()
+== vectorize create · created
+   call: vectorize create docs --dimensions 768 --metric cosine
+   -> ok ()
+
+== vectorize list-metadata-index · wrangler missing
+   -> error wrangler not found
+== vectorize list-metadata-index · wrangler does not start
+   -> error No such file or directory (os error 2)
+== vectorize list-metadata-index · exits 1, stderr only
+   call: vectorize list-metadata-index docs --json
+   -> error it went wrong on stderr
+== vectorize list-metadata-index · exits 1, stdout only
+   call: vectorize list-metadata-index docs --json
+   -> error it went wrong on stdout
+== vectorize list-metadata-index · exits 1, both streams
+   call: vectorize list-metadata-index docs --json
+   -> error wrong on stderr
+      and on stdout
+== vectorize list-metadata-index · exits 3, silent
+   call: vectorize list-metadata-index docs --json
+   -> error wrangler exited 3
+== vectorize list-metadata-index · killed by SIGTERM, silent
+   call: vectorize list-metadata-index docs --json
+   -> error wrangler exited 143
+== vectorize list-metadata-index · exits 0, unreadable output
+   call: vectorize list-metadata-index docs --json
+   -> error could not read the metadata indexes from wrangler's output
+== vectorize list-metadata-index · listed
+   call: vectorize list-metadata-index docs --json
+   -> ok ["category:string"]
+
+== vectorize create-metadata-index · wrangler missing
+   -> error wrangler not found
+== vectorize create-metadata-index · wrangler does not start
+   -> error No such file or directory (os error 2)
+== vectorize create-metadata-index · exits 1, stderr only
+   call: vectorize create-metadata-index docs --propertyName category --type string
+   -> error it went wrong on stderr
+== vectorize create-metadata-index · exits 1, stdout only
+   call: vectorize create-metadata-index docs --propertyName category --type string
+   -> error it went wrong on stdout
+== vectorize create-metadata-index · exits 1, both streams
+   call: vectorize create-metadata-index docs --propertyName category --type string
+   -> error wrong on stderr
+      and on stdout
+== vectorize create-metadata-index · exits 3, silent
+   call: vectorize create-metadata-index docs --propertyName category --type string
+   -> error wrangler exited 3
+== vectorize create-metadata-index · killed by SIGTERM, silent
+   call: vectorize create-metadata-index docs --propertyName category --type string
+   -> error wrangler exited 143
+== vectorize create-metadata-index · exits 0, unreadable output
+   call: vectorize create-metadata-index docs --propertyName category --type string
+   -> ok ()
+== vectorize create-metadata-index · created
+   call: vectorize create-metadata-index docs --propertyName category --type string
+   -> ok ()
+== vectorize create-metadata-index · already exists
+   call: vectorize create-metadata-index docs --propertyName category --type string
+   -> ok ()
+
+== vectorize create-metadata-index (not name:type) · wrangler missing
+   -> error `category` is not `name:type`
+== vectorize create-metadata-index (not name:type) · wrangler does not start
+   -> error `category` is not `name:type`
+== vectorize create-metadata-index (not name:type) · exits 1, stderr only
+   -> error `category` is not `name:type`
+== vectorize create-metadata-index (not name:type) · exits 1, stdout only
+   -> error `category` is not `name:type`
+== vectorize create-metadata-index (not name:type) · exits 1, both streams
+   -> error `category` is not `name:type`
+== vectorize create-metadata-index (not name:type) · exits 3, silent
+   -> error `category` is not `name:type`
+== vectorize create-metadata-index (not name:type) · killed by SIGTERM, silent
+   -> error `category` is not `name:type`
+== vectorize create-metadata-index (not name:type) · exits 0, unreadable output
+   -> error `category` is not `name:type`
+
+== vectorize delete · wrangler missing
+   -> error wrangler not found
+== vectorize delete · wrangler does not start
+   -> error No such file or directory (os error 2)
+== vectorize delete · exits 1, stderr only
+   call: vectorize list --json
+   -> error it went wrong on stderr
+== vectorize delete · exits 1, stdout only
+   call: vectorize list --json
+   -> error it went wrong on stdout
+== vectorize delete · exits 1, both streams
+   call: vectorize list --json
+   -> error wrong on stderr
+      and on stdout
+== vectorize delete · exits 3, silent
+   call: vectorize list --json
+   -> error wrangler exited 3
+== vectorize delete · killed by SIGTERM, silent
+   call: vectorize list --json
+   -> error wrangler exited 143
+== vectorize delete · exits 0, unreadable output
+   call: vectorize list --json
+   -> error could not read the list of Vectorize indexes from wrangler's output
+== vectorize delete · deleted
+   call: vectorize list --json
+   call: vectorize delete docs --force
+   -> ok ()
+== vectorize delete · already gone
+   call: vectorize list --json
+   -> ok ()
+== vectorize delete · the delete fails
+   call: vectorize list --json
+   call: vectorize delete docs --force
+   -> error Authentication error [code: 10000]
+        hint: the API token needs the Account > Vectorize > Edit permission
+

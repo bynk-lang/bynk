@@ -229,10 +229,14 @@ pub(crate) struct OrphanCx<'l> {
     pub(crate) resources: &'l BTreeMap<String, Resources>,
 }
 
-/// The tools a kind's account calls go through. In 1D.1 a holder of what today's wrangler and
-/// REST calls take; 1D.3 swaps its contents for the `Wrangler` trait and the shared REST client.
+/// The tools a kind's account calls go through: the account operations ([`CloudflareApi`], 1D.3a)
+/// and, until 1D.3b moves the rest behind them, what today's remaining wrangler calls take.
 #[derive(Clone, Copy)]
 pub(crate) struct Tools<'a> {
+    /// The account operations (1D.3a, #4043): what the resource kinds ask Cloudflare.
+    pub(crate) api: &'a dyn CloudflareApi,
+    /// Wrangler as the run resolved it, for the calls 1D.3b moves behind `api`: the push, the
+    /// secrets, the triggers and the Worker's presence.
     pub(crate) provenance: &'a Provenance,
     pub(crate) project_root: &'a Path,
 }

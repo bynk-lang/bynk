@@ -61,11 +61,13 @@ class __Stub_Kb {
   constructor(c?: string) {
     this.__case = c;
   }
+
   __applies(op: string): boolean {
     if (op === "answer") return this.__case === "a rate limit is matched" || this.__case === "a stubbed answer is returned";
     if (op === "search") return this.__case === "a stubbed search is returned";
     return true;
   }
+
   async answer(messages: readonly __ns_bynk_cloudflare.ChatMessage[], options: __ns_bynk_cloudflare.SearchOptions): globalThis.Promise<Result<__ns_bynk_cloudflare.SearchAnswer, __ns_bynk_cloudflare.SearchError>> {
     const { BytesResponse, Claim, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
@@ -171,6 +173,7 @@ class __Stub_Kb {
     }
     throw new globalThis.Error("bynk: no stub clause matched for Kb.answer");
   }
+
   async search(query: string, options: __ns_bynk_cloudflare.SearchOptions): globalThis.Promise<Result<readonly __ns_bynk_cloudflare.SearchHit[], __ns_bynk_cloudflare.SearchError>> {
     const { BytesResponse, Claim, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;

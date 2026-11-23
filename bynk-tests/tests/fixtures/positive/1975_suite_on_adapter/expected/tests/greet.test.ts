@@ -40,10 +40,12 @@ class __Stub_Greeter {
   constructor(c?: string) {
     this.__case = c;
   }
+
   __applies(op: string): boolean {
     if (op === "hello") return this.__case === "a stub on the adapter's capability answers instead";
     return true;
   }
+
   async hello(name: string): globalThis.Promise<string> {
     const { BytesResponse, Claim, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
@@ -74,10 +76,12 @@ class __Stub_Secrets {
   constructor(c?: string) {
     this.__case = c;
   }
+
   __applies(op: string): boolean {
     if (op === "get") return this.__case === "the binding reads its secret";
     return true;
   }
+
   async get(name: string): globalThis.Promise<Option<string>> {
     const { BytesResponse, Claim, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;

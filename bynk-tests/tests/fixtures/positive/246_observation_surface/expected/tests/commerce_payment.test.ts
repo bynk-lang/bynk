@@ -61,6 +61,7 @@ class __Stub_Logger {
     }
     throw new globalThis.Error("bynk: no stub clause matched for Logger.log");
   }
+
   async warn(msg: string): globalThis.Promise<void> {
     const { AuthId } = __ns_commerce_payment;
     type AuthId = __ns_commerce_payment.AuthId;

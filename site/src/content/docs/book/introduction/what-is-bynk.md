@@ -72,4 +72,4 @@ too — Bynk compiles to a real deployment platform.
 ## Next steps
 
 - [Install Bynk](/book/introduction/install/)
-- [Compile your first program](/book/tutorials/01-first-program/)
+- [Compile your first program](/book/tutorials/first-program/)

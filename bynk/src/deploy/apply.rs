@@ -448,14 +448,7 @@ pub(crate) fn prune_plan(
         if !confirm_prune(opts.yes, &plan.orphans, &opts.environment) {
             return Err(ExitCode::FAILURE);
         }
-        if let Err(e) = prune_orphans(
-            tools.provenance,
-            tools.project_root,
-            writer,
-            &opts.environment,
-            &plan.orphans,
-            lives,
-        ) {
+        if let Err(e) = prune_orphans(tools, writer, &opts.environment, &plan.orphans, lives) {
             emsg!("bynk: error: {}", e.message);
             return Err(ExitCode::from(e.code));
         }
@@ -605,7 +598,7 @@ impl ApplyWorker<'_, '_, '_, '_, '_> {
         {
             let physical = d1_database_name(environment, &db.name);
             apply_d1_migrations(
-                self.run.tools.provenance,
+                self.run.tools.api,
                 &self.worker_dir,
                 &db.binding,
                 environment,

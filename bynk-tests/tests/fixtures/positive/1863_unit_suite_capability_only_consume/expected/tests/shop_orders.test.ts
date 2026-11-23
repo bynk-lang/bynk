@@ -44,10 +44,12 @@ class __Stub_Fees {
   constructor(c?: string) {
     this.__case = c;
   }
+
   __applies(op: string): boolean {
     if (op === "fee") return this.__case === "a stub reaches a provider built over the stubbed capability" || this.__case === "a stub replaces the consumed context's provider";
     return true;
   }
+
   async fee(): globalThis.Promise<number> {
     const { BytesResponse, Claim, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
@@ -92,10 +94,12 @@ class __Stub_Rates {
   constructor(c?: string) {
     this.__case = c;
   }
+
   __applies(op: string): boolean {
     if (op === "rate") return this.__case === "a stub reaches every provider built over it";
     return true;
   }
+
   async rate(): globalThis.Promise<number> {
     const { BytesResponse, Claim, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;

@@ -223,10 +223,12 @@ class __Stub_Clockish {
   constructor(c?: string) {
     this.__case = c;
   }
+
   __applies(op: string): boolean {
     if (op === "stamp") return this.__case === "a stub with latency still completes";
     return true;
   }
+
   async stamp(): globalThis.Promise<number> {
     const { double } = __ns_plain;
     if (this.__case === "a stub with latency still completes") {
