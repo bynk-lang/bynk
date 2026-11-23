@@ -39,16 +39,19 @@ class __Stub_Vault {
   constructor(c?: string) {
     this.__case = c;
   }
+
   __applies(op: string): boolean {
     if (op === "peek") return this.__case === "a single-outcome returns each" || this.__case === "returns each ending in fails";
     return true;
   }
+
   async open(): globalThis.Promise<number> {
     if (true) {
       throw new globalThis.Error("bynk: injected capability fault (stubs … fails)");
     }
     throw new globalThis.Error("bynk: no stub clause matched for Vault.open");
   }
+
   async peek(): globalThis.Promise<number> {
     if (this.__case === "returns each ending in fails") {
       const __k = this.__seq_0;

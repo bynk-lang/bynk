@@ -68,10 +68,12 @@ class __Stub_Crypto {
   constructor(c?: string) {
     this.__case = c;
   }
+
   __applies(op: string): boolean {
     if (op === "digest") return this.__case === "a stub can match on the aliased variant" || this.__case === "a stubbed digest is observed";
     return true;
   }
+
   async digest(algorithm: __ns_bynk_crypto.Digest, data: globalThis.Uint8Array): globalThis.Promise<globalThis.Uint8Array> {
     const { algorithmName, empty } = __ns_app;
     const { CryptoError, Digest: CryptoDigest, Digest, Signature, SigningKey, VerifyKey } = __ns_bynk_crypto;

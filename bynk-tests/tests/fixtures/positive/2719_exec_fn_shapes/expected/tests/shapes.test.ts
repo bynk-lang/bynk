@@ -225,10 +225,12 @@ class __Stub_Quotes {
   constructor(c?: string) {
     this.__case = c;
   }
+
   __applies(op: string): boolean {
     if (op === "quote") return this.__case === "a fast call is within the bound" || this.__case === "a helper that bounds a call runs on virtual time";
     return true;
   }
+
   async quote(id: number): globalThis.Promise<number> {
     const { Box, Dice, bounded, guarded, hedged, middle, outer, rolled, tick, twice, viaLambda } = __ns_shapes;
     type Box = __ns_shapes.Box;

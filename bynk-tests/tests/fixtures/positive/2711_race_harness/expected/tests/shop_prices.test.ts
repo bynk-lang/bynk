@@ -245,10 +245,12 @@ class __Stub_Audit {
   constructor(c?: string) {
     this.__case = c;
   }
+
   __applies(op: string): boolean {
     if (op === "note") return this.__case === "both writes of a raced pair happen";
     return true;
   }
+
   async note(sku: number): globalThis.Promise<void> {
     const { BytesResponse, Claim, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
@@ -283,10 +285,12 @@ class __Stub_Prices {
   constructor(c?: string) {
     this.__case = c;
   }
+
   __applies(op: string): boolean {
     if (op === "get") return this.__case === "a fast fault in the receiver loses to a slower success too" || this.__case === "a fast fault loses to a slower success" || this.__case === "a lambda in the handler races each element alone" || this.__case === "a latency stub decides the race at integration" || this.__case === "a same-instant tie goes to the receiver" || this.__case === "a same-instant tie in a chain goes to the earliest side" || this.__case === "race then within times out when both sides never finish" || this.__case === "race then within: the race wins inside the deadline" || this.__case === "the faster mirror wins" || this.__case === "the loser is still recorded" || this.__case === "the receiver wins when it is faster" || this.__case === "the third of a chain can win" || this.__case === "when every side faults, the call faults";
     return true;
   }
+
   async get(region: string, sku: number): globalThis.Promise<number> {
     const { BytesResponse, Claim, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;

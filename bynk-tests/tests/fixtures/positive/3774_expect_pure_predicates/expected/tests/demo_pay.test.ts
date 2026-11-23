@@ -56,10 +56,12 @@ class __Stub_Logger {
   constructor(c?: string) {
     this.__case = c;
   }
+
   __applies(op: string): boolean {
     if (op === "log") return this.__case === "a fault claim runs its call";
     return true;
   }
+
   async log(msg: string): globalThis.Promise<void> {
     const { AuthId, Day } = __ns_demo_pay;
     type AuthId = __ns_demo_pay.AuthId;

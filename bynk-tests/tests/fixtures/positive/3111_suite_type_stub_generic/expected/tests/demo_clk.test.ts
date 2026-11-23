@@ -198,7 +198,7 @@ class __Stub_Clock {
         const __a = obj["a"];
         return Ok({ a: __a } as Pair);
       }
-      
+
       function __serialise_List_Pair(value: readonly Pair[]): __JsonValue {
         return value.map((v) => __serialise_Pair(v));
       }
@@ -259,29 +259,29 @@ class __Stub_Clock {
       function Name(): string { return (__const_Name ??= { v: "n" }).v; }
       var __const_Prefix: { v: string } | undefined;
       function Prefix(): string { return (__const_Prefix ??= { v: "t-" }).v; }
-          function __serialise_Result_Pair_String(value: Result<Pair, string>): __JsonValue {
-            if (value.tag === "Ok") return { kind: "Ok", value: __serialise_Pair(value.value) };
-            return { kind: "Err", error: value.error as __JsonValue };
+      function __serialise_Result_Pair_String(value: Result<Pair, string>): __JsonValue {
+        if (value.tag === "Ok") return { kind: "Ok", value: __serialise_Pair(value.value) };
+        return { kind: "Err", error: value.error as __JsonValue };
+      }
+      function __deserialise_Result_Pair_String(json: __JsonValue, path: string = "$"): Result<Result<Pair, string>, __BoundaryError> {
+        if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+          return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+        }
+        const obj = json as { [k: string]: __JsonValue };
+        if (obj["kind"] === "Ok") {
+          const __r_v = __deserialise_Pair(obj["value"], `${path}.value`);
+          if (__r_v.tag === "Err") return __r_v;
+          const __v = __r_v.value;
+          return Ok(Ok(__v) as Result<Pair, string>);
+        } else if (obj["kind"] === "Err") {
+          if (typeof obj["error"] !== "string") {
+            return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "string", actual: typeof obj["error"] });
           }
-          function __deserialise_Result_Pair_String(json: __JsonValue, path: string = "$"): Result<Result<Pair, string>, __BoundaryError> {
-            if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
-              return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
-            }
-            const obj = json as { [k: string]: __JsonValue };
-            if (obj["kind"] === "Ok") {
-              const __r_v = __deserialise_Pair(obj["value"], `${path}.value`);
-              if (__r_v.tag === "Err") return __r_v;
-              const __v = __r_v.value;
-              return Ok(Ok(__v) as Result<Pair, string>);
-            } else if (obj["kind"] === "Err") {
-              if (typeof obj["error"] !== "string") {
-                return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "string", actual: typeof obj["error"] });
-              }
-              const __e = obj["error"];
-              return Ok(Err(__e) as Result<Pair, string>);
-            }
-            return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
-          }
+          const __e = obj["error"];
+          return Ok(Err(__e) as Result<Pair, string>);
+        }
+        return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+      }
       function encoded(): string {
         const r: Result<Pair, string> = Ok({ a: 5 });
         return globalThis.JSON.stringify(__serialise_Result_Pair_String(r));
@@ -313,7 +313,7 @@ class __Stub_Clock {
         const __a = obj["a"];
         return Ok({ a: __a } as Pair);
       }
-      
+
       function __serialise_List_Pair(value: readonly Pair[]): __JsonValue {
         return value.map((v) => __serialise_Pair(v));
       }
@@ -374,29 +374,29 @@ class __Stub_Clock {
       function Name(): string { return (__const_Name ??= { v: "n" }).v; }
       var __const_Prefix: { v: string } | undefined;
       function Prefix(): string { return (__const_Prefix ??= { v: "t-" }).v; }
-          function __serialise_Result_Pair_String(value: Result<Pair, string>): __JsonValue {
-            if (value.tag === "Ok") return { kind: "Ok", value: __serialise_Pair(value.value) };
-            return { kind: "Err", error: value.error as __JsonValue };
+      function __serialise_Result_Pair_String(value: Result<Pair, string>): __JsonValue {
+        if (value.tag === "Ok") return { kind: "Ok", value: __serialise_Pair(value.value) };
+        return { kind: "Err", error: value.error as __JsonValue };
+      }
+      function __deserialise_Result_Pair_String(json: __JsonValue, path: string = "$"): Result<Result<Pair, string>, __BoundaryError> {
+        if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+          return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+        }
+        const obj = json as { [k: string]: __JsonValue };
+        if (obj["kind"] === "Ok") {
+          const __r_v = __deserialise_Pair(obj["value"], `${path}.value`);
+          if (__r_v.tag === "Err") return __r_v;
+          const __v = __r_v.value;
+          return Ok(Ok(__v) as Result<Pair, string>);
+        } else if (obj["kind"] === "Err") {
+          if (typeof obj["error"] !== "string") {
+            return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "string", actual: typeof obj["error"] });
           }
-          function __deserialise_Result_Pair_String(json: __JsonValue, path: string = "$"): Result<Result<Pair, string>, __BoundaryError> {
-            if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
-              return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
-            }
-            const obj = json as { [k: string]: __JsonValue };
-            if (obj["kind"] === "Ok") {
-              const __r_v = __deserialise_Pair(obj["value"], `${path}.value`);
-              if (__r_v.tag === "Err") return __r_v;
-              const __v = __r_v.value;
-              return Ok(Ok(__v) as Result<Pair, string>);
-            } else if (obj["kind"] === "Err") {
-              if (typeof obj["error"] !== "string") {
-                return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "string", actual: typeof obj["error"] });
-              }
-              const __e = obj["error"];
-              return Ok(Err(__e) as Result<Pair, string>);
-            }
-            return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
-          }
+          const __e = obj["error"];
+          return Ok(Err(__e) as Result<Pair, string>);
+        }
+        return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+      }
       function encoded(): string {
         const r: Result<Pair, string> = Ok({ a: 5 });
         return globalThis.JSON.stringify(__serialise_Result_Pair_String(r));
@@ -428,7 +428,7 @@ class __Stub_Clock {
         const __a = obj["a"];
         return Ok({ a: __a } as Pair);
       }
-      
+
       function __serialise_List_Pair(value: readonly Pair[]): __JsonValue {
         return value.map((v) => __serialise_Pair(v));
       }
@@ -489,29 +489,29 @@ class __Stub_Clock {
       function Name(): string { return (__const_Name ??= { v: "n" }).v; }
       var __const_Prefix: { v: string } | undefined;
       function Prefix(): string { return (__const_Prefix ??= { v: "t-" }).v; }
-          function __serialise_Result_Pair_String(value: Result<Pair, string>): __JsonValue {
-            if (value.tag === "Ok") return { kind: "Ok", value: __serialise_Pair(value.value) };
-            return { kind: "Err", error: value.error as __JsonValue };
+      function __serialise_Result_Pair_String(value: Result<Pair, string>): __JsonValue {
+        if (value.tag === "Ok") return { kind: "Ok", value: __serialise_Pair(value.value) };
+        return { kind: "Err", error: value.error as __JsonValue };
+      }
+      function __deserialise_Result_Pair_String(json: __JsonValue, path: string = "$"): Result<Result<Pair, string>, __BoundaryError> {
+        if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+          return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+        }
+        const obj = json as { [k: string]: __JsonValue };
+        if (obj["kind"] === "Ok") {
+          const __r_v = __deserialise_Pair(obj["value"], `${path}.value`);
+          if (__r_v.tag === "Err") return __r_v;
+          const __v = __r_v.value;
+          return Ok(Ok(__v) as Result<Pair, string>);
+        } else if (obj["kind"] === "Err") {
+          if (typeof obj["error"] !== "string") {
+            return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "string", actual: typeof obj["error"] });
           }
-          function __deserialise_Result_Pair_String(json: __JsonValue, path: string = "$"): Result<Result<Pair, string>, __BoundaryError> {
-            if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
-              return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
-            }
-            const obj = json as { [k: string]: __JsonValue };
-            if (obj["kind"] === "Ok") {
-              const __r_v = __deserialise_Pair(obj["value"], `${path}.value`);
-              if (__r_v.tag === "Err") return __r_v;
-              const __v = __r_v.value;
-              return Ok(Ok(__v) as Result<Pair, string>);
-            } else if (obj["kind"] === "Err") {
-              if (typeof obj["error"] !== "string") {
-                return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "string", actual: typeof obj["error"] });
-              }
-              const __e = obj["error"];
-              return Ok(Err(__e) as Result<Pair, string>);
-            }
-            return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
-          }
+          const __e = obj["error"];
+          return Ok(Err(__e) as Result<Pair, string>);
+        }
+        return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+      }
       function encoded(): string {
         const r: Result<Pair, string> = Ok({ a: 5 });
         return globalThis.JSON.stringify(__serialise_Result_Pair_String(r));
@@ -543,7 +543,7 @@ class __Stub_Clock {
         const __a = obj["a"];
         return Ok({ a: __a } as Pair);
       }
-      
+
       function __serialise_List_Pair(value: readonly Pair[]): __JsonValue {
         return value.map((v) => __serialise_Pair(v));
       }
@@ -604,29 +604,29 @@ class __Stub_Clock {
       function Name(): string { return (__const_Name ??= { v: "n" }).v; }
       var __const_Prefix: { v: string } | undefined;
       function Prefix(): string { return (__const_Prefix ??= { v: "t-" }).v; }
-          function __serialise_Result_Pair_String(value: Result<Pair, string>): __JsonValue {
-            if (value.tag === "Ok") return { kind: "Ok", value: __serialise_Pair(value.value) };
-            return { kind: "Err", error: value.error as __JsonValue };
+      function __serialise_Result_Pair_String(value: Result<Pair, string>): __JsonValue {
+        if (value.tag === "Ok") return { kind: "Ok", value: __serialise_Pair(value.value) };
+        return { kind: "Err", error: value.error as __JsonValue };
+      }
+      function __deserialise_Result_Pair_String(json: __JsonValue, path: string = "$"): Result<Result<Pair, string>, __BoundaryError> {
+        if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+          return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+        }
+        const obj = json as { [k: string]: __JsonValue };
+        if (obj["kind"] === "Ok") {
+          const __r_v = __deserialise_Pair(obj["value"], `${path}.value`);
+          if (__r_v.tag === "Err") return __r_v;
+          const __v = __r_v.value;
+          return Ok(Ok(__v) as Result<Pair, string>);
+        } else if (obj["kind"] === "Err") {
+          if (typeof obj["error"] !== "string") {
+            return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "string", actual: typeof obj["error"] });
           }
-          function __deserialise_Result_Pair_String(json: __JsonValue, path: string = "$"): Result<Result<Pair, string>, __BoundaryError> {
-            if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
-              return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
-            }
-            const obj = json as { [k: string]: __JsonValue };
-            if (obj["kind"] === "Ok") {
-              const __r_v = __deserialise_Pair(obj["value"], `${path}.value`);
-              if (__r_v.tag === "Err") return __r_v;
-              const __v = __r_v.value;
-              return Ok(Ok(__v) as Result<Pair, string>);
-            } else if (obj["kind"] === "Err") {
-              if (typeof obj["error"] !== "string") {
-                return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "string", actual: typeof obj["error"] });
-              }
-              const __e = obj["error"];
-              return Ok(Err(__e) as Result<Pair, string>);
-            }
-            return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
-          }
+          const __e = obj["error"];
+          return Ok(Err(__e) as Result<Pair, string>);
+        }
+        return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+      }
       function encoded(): string {
         const r: Result<Pair, string> = Ok({ a: 5 });
         return globalThis.JSON.stringify(__serialise_Result_Pair_String(r));
@@ -658,7 +658,7 @@ class __Stub_Clock {
         const __a = obj["a"];
         return Ok({ a: __a } as Pair);
       }
-      
+
       function __serialise_List_Pair(value: readonly Pair[]): __JsonValue {
         return value.map((v) => __serialise_Pair(v));
       }
@@ -719,29 +719,29 @@ class __Stub_Clock {
       function Name(): string { return (__const_Name ??= { v: "n" }).v; }
       var __const_Prefix: { v: string } | undefined;
       function Prefix(): string { return (__const_Prefix ??= { v: "t-" }).v; }
-          function __serialise_Result_Pair_String(value: Result<Pair, string>): __JsonValue {
-            if (value.tag === "Ok") return { kind: "Ok", value: __serialise_Pair(value.value) };
-            return { kind: "Err", error: value.error as __JsonValue };
+      function __serialise_Result_Pair_String(value: Result<Pair, string>): __JsonValue {
+        if (value.tag === "Ok") return { kind: "Ok", value: __serialise_Pair(value.value) };
+        return { kind: "Err", error: value.error as __JsonValue };
+      }
+      function __deserialise_Result_Pair_String(json: __JsonValue, path: string = "$"): Result<Result<Pair, string>, __BoundaryError> {
+        if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+          return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+        }
+        const obj = json as { [k: string]: __JsonValue };
+        if (obj["kind"] === "Ok") {
+          const __r_v = __deserialise_Pair(obj["value"], `${path}.value`);
+          if (__r_v.tag === "Err") return __r_v;
+          const __v = __r_v.value;
+          return Ok(Ok(__v) as Result<Pair, string>);
+        } else if (obj["kind"] === "Err") {
+          if (typeof obj["error"] !== "string") {
+            return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "string", actual: typeof obj["error"] });
           }
-          function __deserialise_Result_Pair_String(json: __JsonValue, path: string = "$"): Result<Result<Pair, string>, __BoundaryError> {
-            if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
-              return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
-            }
-            const obj = json as { [k: string]: __JsonValue };
-            if (obj["kind"] === "Ok") {
-              const __r_v = __deserialise_Pair(obj["value"], `${path}.value`);
-              if (__r_v.tag === "Err") return __r_v;
-              const __v = __r_v.value;
-              return Ok(Ok(__v) as Result<Pair, string>);
-            } else if (obj["kind"] === "Err") {
-              if (typeof obj["error"] !== "string") {
-                return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "string", actual: typeof obj["error"] });
-              }
-              const __e = obj["error"];
-              return Ok(Err(__e) as Result<Pair, string>);
-            }
-            return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
-          }
+          const __e = obj["error"];
+          return Ok(Err(__e) as Result<Pair, string>);
+        }
+        return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+      }
       function encoded(): string {
         const r: Result<Pair, string> = Ok({ a: 5 });
         return globalThis.JSON.stringify(__serialise_Result_Pair_String(r));
@@ -773,7 +773,7 @@ class __Stub_Clock {
         const __a = obj["a"];
         return Ok({ a: __a } as Pair);
       }
-      
+
       function __serialise_List_Pair(value: readonly Pair[]): __JsonValue {
         return value.map((v) => __serialise_Pair(v));
       }
@@ -834,29 +834,29 @@ class __Stub_Clock {
       function Name(): string { return (__const_Name ??= { v: "n" }).v; }
       var __const_Prefix: { v: string } | undefined;
       function Prefix(): string { return (__const_Prefix ??= { v: "t-" }).v; }
-          function __serialise_Result_Pair_String(value: Result<Pair, string>): __JsonValue {
-            if (value.tag === "Ok") return { kind: "Ok", value: __serialise_Pair(value.value) };
-            return { kind: "Err", error: value.error as __JsonValue };
+      function __serialise_Result_Pair_String(value: Result<Pair, string>): __JsonValue {
+        if (value.tag === "Ok") return { kind: "Ok", value: __serialise_Pair(value.value) };
+        return { kind: "Err", error: value.error as __JsonValue };
+      }
+      function __deserialise_Result_Pair_String(json: __JsonValue, path: string = "$"): Result<Result<Pair, string>, __BoundaryError> {
+        if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+          return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+        }
+        const obj = json as { [k: string]: __JsonValue };
+        if (obj["kind"] === "Ok") {
+          const __r_v = __deserialise_Pair(obj["value"], `${path}.value`);
+          if (__r_v.tag === "Err") return __r_v;
+          const __v = __r_v.value;
+          return Ok(Ok(__v) as Result<Pair, string>);
+        } else if (obj["kind"] === "Err") {
+          if (typeof obj["error"] !== "string") {
+            return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "string", actual: typeof obj["error"] });
           }
-          function __deserialise_Result_Pair_String(json: __JsonValue, path: string = "$"): Result<Result<Pair, string>, __BoundaryError> {
-            if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
-              return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
-            }
-            const obj = json as { [k: string]: __JsonValue };
-            if (obj["kind"] === "Ok") {
-              const __r_v = __deserialise_Pair(obj["value"], `${path}.value`);
-              if (__r_v.tag === "Err") return __r_v;
-              const __v = __r_v.value;
-              return Ok(Ok(__v) as Result<Pair, string>);
-            } else if (obj["kind"] === "Err") {
-              if (typeof obj["error"] !== "string") {
-                return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "string", actual: typeof obj["error"] });
-              }
-              const __e = obj["error"];
-              return Ok(Err(__e) as Result<Pair, string>);
-            }
-            return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
-          }
+          const __e = obj["error"];
+          return Ok(Err(__e) as Result<Pair, string>);
+        }
+        return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+      }
       function encoded(): string {
         const r: Result<Pair, string> = Ok({ a: 5 });
         return globalThis.JSON.stringify(__serialise_Result_Pair_String(r));
@@ -885,6 +885,7 @@ class __Stub_Clock {
     }
     throw new globalThis.Error("bynk: no stub clause matched for Clock.label");
   }
+
   async now(): globalThis.Promise<number> {
     if (true) {
       interface Pair {
@@ -911,7 +912,7 @@ class __Stub_Clock {
         const __a = obj["a"];
         return Ok({ a: __a } as Pair);
       }
-      
+
       function __serialise_List_Pair(value: readonly Pair[]): __JsonValue {
         return value.map((v) => __serialise_Pair(v));
       }
@@ -972,29 +973,29 @@ class __Stub_Clock {
       function Name(): string { return (__const_Name ??= { v: "n" }).v; }
       var __const_Prefix: { v: string } | undefined;
       function Prefix(): string { return (__const_Prefix ??= { v: "t-" }).v; }
-          function __serialise_Result_Pair_String(value: Result<Pair, string>): __JsonValue {
-            if (value.tag === "Ok") return { kind: "Ok", value: __serialise_Pair(value.value) };
-            return { kind: "Err", error: value.error as __JsonValue };
+      function __serialise_Result_Pair_String(value: Result<Pair, string>): __JsonValue {
+        if (value.tag === "Ok") return { kind: "Ok", value: __serialise_Pair(value.value) };
+        return { kind: "Err", error: value.error as __JsonValue };
+      }
+      function __deserialise_Result_Pair_String(json: __JsonValue, path: string = "$"): Result<Result<Pair, string>, __BoundaryError> {
+        if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+          return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+        }
+        const obj = json as { [k: string]: __JsonValue };
+        if (obj["kind"] === "Ok") {
+          const __r_v = __deserialise_Pair(obj["value"], `${path}.value`);
+          if (__r_v.tag === "Err") return __r_v;
+          const __v = __r_v.value;
+          return Ok(Ok(__v) as Result<Pair, string>);
+        } else if (obj["kind"] === "Err") {
+          if (typeof obj["error"] !== "string") {
+            return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "string", actual: typeof obj["error"] });
           }
-          function __deserialise_Result_Pair_String(json: __JsonValue, path: string = "$"): Result<Result<Pair, string>, __BoundaryError> {
-            if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
-              return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
-            }
-            const obj = json as { [k: string]: __JsonValue };
-            if (obj["kind"] === "Ok") {
-              const __r_v = __deserialise_Pair(obj["value"], `${path}.value`);
-              if (__r_v.tag === "Err") return __r_v;
-              const __v = __r_v.value;
-              return Ok(Ok(__v) as Result<Pair, string>);
-            } else if (obj["kind"] === "Err") {
-              if (typeof obj["error"] !== "string") {
-                return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "string", actual: typeof obj["error"] });
-              }
-              const __e = obj["error"];
-              return Ok(Err(__e) as Result<Pair, string>);
-            }
-            return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
-          }
+          const __e = obj["error"];
+          return Ok(Err(__e) as Result<Pair, string>);
+        }
+        return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+      }
       function encoded(): string {
         const r: Result<Pair, string> = Ok({ a: 5 });
         return globalThis.JSON.stringify(__serialise_Result_Pair_String(r));
