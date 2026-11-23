@@ -926,38 +926,6 @@ pub fn parse_claim_predicate(e: &Expr) -> Result<ClaimPredicate, Span> {
     }
 }
 
-/// Lower a claim predicate to a JavaScript boolean expression over `claims_var`
-/// (the verified claims object, `Record<string, unknown>`). Used by the emitter
-/// for the refinement seam's 403 check.
-pub fn claim_predicate_to_js(pred: &ClaimPredicate, claims_var: &str) -> String {
-    match pred {
-        ClaimPredicate::HasClaim(name) => {
-            format!(
-                "globalThis.Boolean({claims_var}[\"{}\"])",
-                js_str_escape(name)
-            )
-        }
-        ClaimPredicate::ClaimEquals(name, value) => format!(
-            "({claims_var}[\"{}\"] === \"{}\")",
-            js_str_escape(name),
-            js_str_escape(value)
-        ),
-        ClaimPredicate::And(l, r) => format!(
-            "({} && {})",
-            claim_predicate_to_js(l, claims_var),
-            claim_predicate_to_js(r, claims_var)
-        ),
-        ClaimPredicate::Or(l, r) => format!(
-            "({} || {})",
-            claim_predicate_to_js(l, claims_var),
-            claim_predicate_to_js(r, claims_var)
-        ),
-        ClaimPredicate::Not(inner) => {
-            format!("(!{})", claim_predicate_to_js(inner, claims_var))
-        }
-    }
-}
-
 fn js_str_escape(s: &str) -> String {
     s.replace('\\', "\\\\").replace('"', "\\\"")
 }

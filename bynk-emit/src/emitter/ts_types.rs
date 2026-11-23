@@ -39,22 +39,11 @@ pub(crate) fn unchecked_construct(
 /// which is exactly the type the pre-0182 `T.unsafe(value)` already produced here
 /// (`T` being `any`) and erases to the raw value at runtime — without
 /// reintroducing a callable refined `.unsafe`.
-pub fn unchecked_construct_test(name: &str, value: &str, is_opaque: bool) -> String {
-    if is_opaque {
-        format!("{name}.unsafe({value})")
-    } else {
-        // P7.2: deferred, not narrowed — checked, not skipped. This doc comment's
-        // own explanation still holds: `name` genuinely isn't resolvable as a
-        // type at this call site (only as an `any`-typed value binding), so
-        // there is no real type to cast to here. Fixing this needs restructuring
-        // what the test scaffold imports, not a same-line text change.
-        format!("({value} as any)")
-    }
-}
-
-/// [`unchecked_construct_test`] as a node (1A.17): `Name.unsafe(value)` for an
-/// opaque type, `(value as any)` otherwise (the cast stays: see the note there).
-pub(super) fn unchecked_construct_test_node(
+///
+/// `Name.unsafe(value)` for an opaque type, `(value as any)` otherwise (1A.17; the
+/// cast stays: `name` is not resolvable as a type at this call site, only as an
+/// `any`-typed value binding, so there is no real type to cast to).
+pub(crate) fn unchecked_construct_test_node(
     name: &str,
     value: bynk_ts::TsExpr,
     is_opaque: bool,
@@ -322,6 +311,7 @@ pub(super) fn ts_type_ref_to_ts_type(r: &TypeRef, qualify: Option<QualifyFn<'_>>
         // `bynk-tests/tests/fixtures/positive/302_query_annotated_let/expected/probe.ts:46`).
         TypeRef::Query(t, _) => {
             let fn_ty = TsType::Fn {
+                rest: false,
                 names: vec![],
                 params: vec![],
                 ret: Box::new(query_result_ty(ts_type_ref_to_ts_type(t, qualify))),
@@ -411,6 +401,7 @@ pub(super) fn ts_type_ref_to_ts_type(r: &TypeRef, qualify: Option<QualifyFn<'_>>
                 ret
             };
             TsType::Fn {
+                rest: false,
                 names: vec![],
                 params,
                 ret: Box::new(ret),
@@ -758,6 +749,7 @@ pub(super) fn ts_ty_to_ts_type(t: TyId, tys: TyRender<'_>) -> TsType {
         // the opaque-`Named` wrap this reuses, unchanged reasoning).
         Ty::Query(t) => {
             let fn_ty = TsType::Fn {
+                rest: false,
                 names: vec![],
                 params: vec![],
                 ret: Box::new(query_result_ty(ts_ty_to_ts_type(*t, tys))),
@@ -792,6 +784,7 @@ pub(super) fn ts_ty_to_ts_type(t: TyId, tys: TyRender<'_>) -> TsType {
         Ty::DecodeError => TsType::named("DecodeError"),
         Ty::Unit => TsType::named("void"),
         Ty::Fn { params, ret } => TsType::Fn {
+            rest: false,
             names: vec![],
             params: params.iter().map(|p| ts_ty_to_ts_type(*p, tys)).collect(),
             ret: Box::new(ts_ty_to_ts_type(*ret, tys)),

@@ -7,7 +7,7 @@ export interface Env {
 }
 
 export function compose(env: Env) {
-  const deps = {  };
+  const deps = {};
   return {
     async audit(__caller: string, audit: string) {
       return handlers.audit.call(audit, { ...deps, identity: __caller });

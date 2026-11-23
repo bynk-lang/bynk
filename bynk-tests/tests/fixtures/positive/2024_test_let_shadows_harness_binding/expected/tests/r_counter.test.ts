@@ -431,43 +431,45 @@ async function test_locals_named_like_a_consumed_context_and_its_asset() {
 }
 
 async function __prop_test_a_let_shadowing_the_history_run_binder() {
-    __ns_r_counter.__resetAgents();
-    const deps = __makeTestDeps();
-    const { Counter, __makeCounter, api, level, style } = __ns_r_counter;
-    const { badge } = __ns_r_other;
-    const other = (deps as any).surface?.other;
-    type __History_Counter_Step = any; type __History_Counter_Call = any; type __History_Counter_State = any;
-    const __handlers = [
-      { tag: "Bump", gens: [] },
-    ];
-    const __body = async (__run: globalThis.Array<{ h: number, args: unknown[] }>) => {
-      const run = __run;
-      const steps = (run).length;
-      const __r0 = steps;
-      if (!(__r0 === steps)) { throw __bynkExpectFailure("tests/r/counter.bynk:51:12", 1096, 1108, "expect run == steps\n  expected: run == steps\n  actual:   " + __bynkShow((__r0)) + " == " + __bynkShow((steps))); }
-    };
-    const __drive = (seq: globalThis.Array<{ h: number, args: unknown[] }>) => (__ns_r_counter as any).__bynkDriveHistory_Counter(seq, deps);
-    return await __bynkRunHistory({ seed: __bynkMix(__bynkSeed, 0), cases: 60, maxLen: 16, handlers: __handlers, drive: __drive, body: __body, name: "a let shadowing the history run binder", location: "tests/r/counter.bynk", file: "tests/r/counter.bynk" });
+  __ns_r_counter.__resetAgents();
+  const deps = __makeTestDeps();
+  const { Counter, __makeCounter, api, level, style } = __ns_r_counter;
+  const { badge } = __ns_r_other;
+  const other = (deps as any).surface?.other;
+  type __History_Counter_Step = any;
+  type __History_Counter_Call = any;
+  type __History_Counter_State = any;
+  const __handlers = [
+    { tag: "Bump", gens: [] },
+  ];
+  const __body = async (__run: globalThis.Array<{ h: number, args: unknown[] }>) => {
+    const run = __run;
+    const steps = (run).length;
+    const __r0 = steps;
+    if (!(__r0 === steps)) { throw __bynkExpectFailure("tests/r/counter.bynk:51:12", 1096, 1108, "expect run == steps\n  expected: run == steps\n  actual:   " + __bynkShow((__r0)) + " == " + __bynkShow((steps))); }
+  };
+  const __drive = (seq: globalThis.Array<{ h: number, args: unknown[] }>) => (__ns_r_counter as any).__bynkDriveHistory_Counter(seq, deps);
+  return await __bynkRunHistory({ seed: __bynkMix(__bynkSeed, 0), cases: 60, maxLen: 16, handlers: __handlers, drive: __drive, body: __body, name: "a let shadowing the history run binder", location: "tests/r/counter.bynk", file: "tests/r/counter.bynk" });
 }
 
 async function __prop_test_a_let_rebinding_a_for_all_binder() {
-    __ns_r_counter.__resetAgents();
-    const deps = __makeTestDeps();
-    const { Counter, __makeCounter, api, level, style } = __ns_r_counter;
-    const { badge } = __ns_r_other;
-    const other = (deps as any).surface?.other;
-    const __gens = [
-      { name: "n", boundaries: [0n, 1000n, -1000n], gen: (rng: any) => rng.int(-1000n, 1000n), shrink: (v: any) => __bynkShrinkInt(v, 0n), show: (v: any) => __bynkShow(v) },
-    ];
-    const __where = null;
-    const __body = async (__vals: any[]) => {
-      const n = globalThis.Number(__vals[0]);
-      const m = n;
-      const __r0 = n + 1;
-      const __r1 = __r0;
-      if (!(__r1 === m + 1)) { throw __bynkExpectFailure("tests/r/counter.bynk:60:12", 1242, 1256, "expect level == m + 1\n  expected: level == m + 1\n  actual:   " + __bynkShow((__r1)) + " == " + __bynkShow((m + 1))); }
-    };
-    return await __bynkRunProperty({ seed: __bynkMix(__bynkSeed, 1), cases: 100, gens: __gens, where: __where, body: __body, name: "a let rebinding a for-all binder", location: "tests/r/counter.bynk", file: "tests/r/counter.bynk" });
+  __ns_r_counter.__resetAgents();
+  const deps = __makeTestDeps();
+  const { Counter, __makeCounter, api, level, style } = __ns_r_counter;
+  const { badge } = __ns_r_other;
+  const other = (deps as any).surface?.other;
+  const __gens = [
+    { name: "n", boundaries: [0n, 1000n, -1000n], gen: (rng: any) => rng.int(-1000n, 1000n), shrink: (v: any) => __bynkShrinkInt(v, 0n), show: (v: any) => __bynkShow(v) },
+  ];
+  const __where = null;
+  const __body = async (__vals: any[]) => {
+    const n = globalThis.Number(__vals[0]);
+    const m = n;
+    const __r0 = n + 1;
+    const __r1 = __r0;
+    if (!(__r1 === m + 1)) { throw __bynkExpectFailure("tests/r/counter.bynk:60:12", 1242, 1256, "expect level == m + 1\n  expected: level == m + 1\n  actual:   " + __bynkShow((__r1)) + " == " + __bynkShow((m + 1))); }
+  };
+  return await __bynkRunProperty({ seed: __bynkMix(__bynkSeed, 1), cases: 100, gens: __gens, where: __where, body: __body, name: "a let rebinding a for-all binder", location: "tests/r/counter.bynk", file: "tests/r/counter.bynk" });
 }
 
 type CaseResult = {

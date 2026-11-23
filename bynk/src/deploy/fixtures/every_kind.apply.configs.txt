@@ -1,0 +1,302 @@
+== default: shop ==
+name = "shop"
+main = "index.ts"
+
+[[kv_namespaces]]
+binding = "KV"
+id = "kv-shop-default" # set at deploy time
+
+[[kv_namespaces]]
+binding = "KV_CART"
+id = "kv-shop-cart" # set at deploy time
+
+[[kv_namespaces]]
+binding = "KV_SESSIONS"
+id = "kv-shop-sessions-default" # set at deploy time
+
+[[r2_buckets]]
+binding = "R2_ARCHIVE"
+bucket_name = "shop-archive"
+
+[[r2_buckets]]
+binding = "R2_FILES"
+bucket_name = "shop-files"
+
+[[r2_buckets]]
+binding = "R2_NEW"
+bucket_name = "shop-new"
+
+[[d1_databases]]
+binding = "D1_NEW"
+database_name = "shop-new"
+database_id = "0d1d0000-0000-4000-8000-000000000008" # set at deploy time
+
+[[d1_databases]]
+binding = "D1_ORDERS"
+database_name = "shop-orders"
+database_id = "d1-shop-orders" # set at deploy time
+migrations_dir = "migrations/shop-orders"
+
+[[hyperdrive]]
+binding = "HYPERDRIVE_ADOPTED"
+id = "hd-adopted"
+
+[[hyperdrive]]
+binding = "HYPERDRIVE_MAIN"
+id = "hd-shop-main"
+
+[[hyperdrive]]
+binding = "HYPERDRIVE_NEW"
+id = "hd-shop-new"
+
+[[ratelimits]]
+name = "RATELIMIT_LOGIN"
+namespace_id = "1001" # set at deploy time
+simple = { limit = 20, period = 60 }
+
+[[ratelimits]]
+name = "RATELIMIT_SIGNUP"
+namespace_id = "301720278" # set at deploy time
+simple = { limit = 20, period = 60 }
+
+[[secrets_store_secrets]]
+binding = "SECRET_STRIPE_KEY"
+store_id = "store-1" # the store's name; its id is set at deploy time
+secret_name = "stripe_key"
+
+[[mtls_certificates]]
+binding = "MTLS_BACKEND"
+certificate_id = "cert-2"
+
+[[containers]]
+class_name = "__BynkContainer_Renderer"
+scheduling_policy = "durable_object"
+
+[containers.images.Renderer]
+image = "registry.example/renderer@sha256:bbbb"
+
+[[containers]]
+class_name = "__BynkContainer_Thumbnailer"
+scheduling_policy = "durable_object"
+
+[containers.images.Thumbnailer]
+dockerfile = "../../../containers/thumbnailer/Dockerfile"
+build_context = "../../../containers/thumbnailer"
+
+== default: shop-cart ==
+name = "shop-cart"
+main = "index.ts"
+
+[[kv_namespaces]]
+binding = "KV_SESSIONS"
+id = "kv-shop-cart-sessions" # set at deploy time
+
+[[ratelimits]]
+name = "RATELIMIT_CHECKOUT"
+namespace_id = "958303813" # set at deploy time
+simple = { limit = 20, period = 60 }
+
+== staging: shop ==
+name = "shop"
+main = "index.ts"
+
+[[kv_namespaces]]
+binding = "KV"
+id = "kv-shop-staging" # set at deploy time
+
+[[kv_namespaces]]
+binding = "KV_CART"
+id = "kv-shop-cart-staging" # set at deploy time
+
+[[kv_namespaces]]
+binding = "KV_SESSIONS"
+id = "kv-shop-sessions-staging" # set at deploy time
+
+[[r2_buckets]]
+binding = "R2_ARCHIVE"
+bucket_name = "shop-archive"
+
+[[r2_buckets]]
+binding = "R2_FILES"
+bucket_name = "shop-files"
+
+[[r2_buckets]]
+binding = "R2_NEW"
+bucket_name = "shop-new"
+
+[[d1_databases]]
+binding = "D1_NEW"
+database_name = "shop-new-staging"
+database_id = "0d1d0000-0000-4000-8000-000000000016" # set at deploy time
+
+[[d1_databases]]
+binding = "D1_ORDERS"
+database_name = "shop-orders-staging"
+database_id = "d1-shop-orders-staging" # set at deploy time
+migrations_dir = "migrations/shop-orders"
+
+[[hyperdrive]]
+binding = "HYPERDRIVE_ADOPTED"
+id = "hd-adopted"
+
+[[hyperdrive]]
+binding = "HYPERDRIVE_MAIN"
+id = "hd-shop-main-staging"
+
+[[hyperdrive]]
+binding = "HYPERDRIVE_NEW"
+id = "hd-shop-new-staging"
+
+[[ratelimits]]
+name = "RATELIMIT_LOGIN"
+namespace_id = "2001" # set at deploy time
+simple = { limit = 20, period = 60 }
+
+[[ratelimits]]
+name = "RATELIMIT_SIGNUP"
+namespace_id = "856287038" # set at deploy time
+simple = { limit = 20, period = 60 }
+
+[[secrets_store_secrets]]
+binding = "SECRET_STRIPE_KEY"
+store_id = "store-1" # the store's name; its id is set at deploy time
+secret_name = "stripe_key"
+
+[[mtls_certificates]]
+binding = "MTLS_BACKEND"
+certificate_id = "cert-2"
+
+[[containers]]
+class_name = "__BynkContainer_Renderer"
+scheduling_policy = "durable_object"
+
+[containers.images.Renderer]
+dockerfile = "../../../containers/renderer/Dockerfile"
+build_context = "../../../containers/renderer"
+
+[[containers]]
+class_name = "__BynkContainer_Thumbnailer"
+scheduling_policy = "durable_object"
+
+[containers.images.Thumbnailer]
+dockerfile = "../../../containers/thumbnailer/Dockerfile"
+build_context = "../../../containers/thumbnailer"
+
+[env.staging]
+name = "shop-staging"
+
+[[env.staging.containers]]
+class_name = "__BynkContainer_Renderer"
+scheduling_policy = "durable_object"
+
+[env.staging.containers.images.Renderer]
+image = "registry.example/renderer@sha256:bbbb"
+
+[[env.staging.containers]]
+class_name = "__BynkContainer_Thumbnailer"
+scheduling_policy = "durable_object"
+
+[env.staging.containers.images.Thumbnailer]
+build_context = "../../../containers/thumbnailer"
+dockerfile = "../../../containers/thumbnailer/Dockerfile"
+
+[[env.staging.d1_databases]]
+binding = "D1_NEW"
+database_id = "0d1d0000-0000-4000-8000-000000000016"
+database_name = "shop-new-staging"
+
+[[env.staging.d1_databases]]
+binding = "D1_ORDERS"
+database_id = "d1-shop-orders-staging"
+database_name = "shop-orders-staging"
+migrations_dir = "migrations/shop-orders"
+
+[[env.staging.hyperdrive]]
+binding = "HYPERDRIVE_ADOPTED"
+id = "hd-adopted"
+
+[[env.staging.hyperdrive]]
+binding = "HYPERDRIVE_MAIN"
+id = "hd-shop-main-staging"
+
+[[env.staging.hyperdrive]]
+binding = "HYPERDRIVE_NEW"
+id = "hd-shop-new-staging"
+
+[[env.staging.kv_namespaces]]
+binding = "KV"
+id = "kv-shop-staging"
+
+[[env.staging.kv_namespaces]]
+binding = "KV_CART"
+id = "kv-shop-cart-staging"
+
+[[env.staging.kv_namespaces]]
+binding = "KV_SESSIONS"
+id = "kv-shop-sessions-staging"
+
+[[env.staging.mtls_certificates]]
+binding = "MTLS_BACKEND"
+certificate_id = "cert-2"
+
+[[env.staging.r2_buckets]]
+binding = "R2_ARCHIVE"
+bucket_name = "shop-archive-staging"
+
+[[env.staging.r2_buckets]]
+binding = "R2_FILES"
+bucket_name = "shop-files-staging"
+
+[[env.staging.r2_buckets]]
+binding = "R2_NEW"
+bucket_name = "shop-new-staging"
+
+[[env.staging.ratelimits]]
+name = "RATELIMIT_LOGIN"
+namespace_id = "2001"
+
+[env.staging.ratelimits.simple]
+limit = 20
+period = 60
+
+[[env.staging.ratelimits]]
+name = "RATELIMIT_SIGNUP"
+namespace_id = "856287038"
+
+[env.staging.ratelimits.simple]
+limit = 20
+period = 60
+
+[[env.staging.secrets_store_secrets]]
+binding = "SECRET_STRIPE_KEY"
+secret_name = "stripe_key"
+store_id = "store-1"
+
+== staging: shop-cart ==
+name = "shop-cart"
+main = "index.ts"
+
+[[kv_namespaces]]
+binding = "KV_SESSIONS"
+id = "kv-shop-cart-sessions-staging" # set at deploy time
+
+[[ratelimits]]
+name = "RATELIMIT_CHECKOUT"
+namespace_id = "338888791" # set at deploy time
+simple = { limit = 20, period = 60 }
+
+[env.staging]
+name = "shop-cart-staging"
+
+[[env.staging.kv_namespaces]]
+binding = "KV_SESSIONS"
+id = "kv-shop-cart-sessions-staging"
+
+[[env.staging.ratelimits]]
+name = "RATELIMIT_CHECKOUT"
+namespace_id = "338888791"
+
+[env.staging.ratelimits.simple]
+limit = 20
+period = 60
+

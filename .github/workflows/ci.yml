@@ -368,11 +368,17 @@ jobs:
               # embeds via include_str!. The generated files are `.ts`, so they are
               # invisible to the `rust` filter — name it explicitly so a one-sided
               # edit still runs the package's typecheck/tests and the drift guard.
+              # 1B.3a (#4047): the spliced test-runtime artifacts and the client
+              # runtime artifact are generated from `runtime/src/testing/` and
+              # `runtime/src/client/`, and are guarded the same way.
               - *global
               - 'bynk-emit/runtime/**'
               - 'bynk-emit/wire-client/**'
               - 'bynk-emit/src/emitter/runtime/**'
               - 'bynk-emit/src/emitter/runtime_modules.rs'
+              - 'bynk-emit/src/testgen/test_runtime/**'
+              - 'bynk-emit/src/testgen/test_runtime_modules.rs'
+              - 'bynk-emit/src/emitter/http_client_runtime.ts'
             web_assets:
               # The release's bynk-web tarball (release.yml `web-assets`), which
               # bynk-lang/playground builds from. It gates the GitHub Release, so
@@ -679,7 +685,7 @@ jobs:
         run: cargo audit
       - name: Supply chain (cargo-deny)
         if: ${{ !cancelled() && steps.checkout.outcome == 'success' && (needs.changes.outputs.rust == 'true' || needs.changes.outputs.all == 'true') }}
-        uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2
+        uses: EmbarkStudios/cargo-deny-action@70f81531115945ba6eb6b941ec9d39d063438eb9 # v2
         with:
           command: check
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
@@ -1760,7 +1766,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5
+      - uses: actions/dependency-review-action@bbc44d14a204704ccc493733616cd1e93a0321ec # v5
 
   devcontainer-feature:
     # #2103: build each scenario in features/test/bynk/scenarios.json with the

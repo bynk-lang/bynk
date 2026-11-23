@@ -10,7 +10,10 @@ use bynk_check::checker::Types;
 use bynk_check::d1_migrations::{D1Migrations, d1_database_name, double_files, pglite_on};
 use bynk_check::test_suites::{self, ResolvedStub};
 use bynk_syntax::ast::{Block, Expr, ExprKind, FnName, StubClause, StubRhs, TypeRef, Visibility};
-use bynk_ts::{SourceMapBuilder, TsDecl, TsProgram, TsStmt};
+use bynk_ts::{
+    SourceMapBuilder, TsBinaryOp, TsBindingName, TsDecl, TsExpr, TsObjectEntry, TsParam, TsProgram,
+    TsStmt, TsType,
+};
 use std::sync::Arc;
 
 /// The factories [`real_provider_double_factory`] names for `doubles`, each
@@ -62,10 +65,10 @@ pub(super) fn emit_test_module(
     contracts: bool,
     hidden: &BTreeMap<String, String>,
     // #1883, slice 3: `asset_harness`'s text, when the target ships assets.
-    asset_harness: Option<String>,
+    asset_harness: Option<Vec<TsStmt>>,
     // #2841: the module-level `string` constant for each fixture file a suite
     // here declares ([`fixture_consts`]).
-    fixture_consts: Option<String>,
+    fixture_consts: Option<Vec<TsStmt>>,
     binding_modules: &HashMap<String, String>,
     schema_versions: &HashMap<String, i64>,
     // #2052: the target's own events services' shapes.
@@ -356,28 +359,25 @@ pub(super) fn emit_test_module(
     // fires (property helpers, history helpers, observation helpers, stub
     // helpers, or — if this module has none of those — the deps factory,
     // always last in that chain and so the guaranteed fallback).
-    stmts.push(TsStmt::raw(expectation_runtime_helpers(), None));
+    stmts.push(TestRuntimeModule::Expectation.splice());
     // #1883, slice 3: the embedded files and `__bynkAssetGet`, for an asset
     // fetch in a case.
-    if let Some(text) = &asset_harness {
-        stmts.push(TsStmt::raw(text.clone(), None));
+    if let Some(assets) = &asset_harness {
+        stmts.extend(assets.iter().cloned());
     }
-    if let Some(text) = &fixture_consts {
-        stmts.push(TsStmt::raw(text.clone(), None));
+    if let Some(consts) = &fixture_consts {
+        stmts.extend(consts.iter().cloned());
     }
     // #2842: the stored snapshots and their comparison, for a suite that takes one.
     let snapshot_keys = module_snapshot_keys(indices, parsed);
     if !snapshot_keys.is_empty() {
-        stmts.push(TsStmt::raw(
-            snapshot_harness(&snapshot_keys, snapshot_files),
-            None,
-        ));
+        stmts.extend(snapshot_harness(&snapshot_keys, snapshot_files));
     }
     // #1994: a target whose handlers use `detach` gets the execution-context
     // double its deps carry as `__exec`, and the settle helper that awaits
     // the collected `waitUntil` promises after each addressed call.
     if uses_send {
-        stmts.push(TsStmt::raw(send_runtime_helpers(), None));
+        stmts.push(TestRuntimeModule::Send.splice());
     }
     // #2137: a module whose cases `advance Clock` gets the harness clock, and
     // its `Clock` double reads it (fresh per case, from the epoch).
@@ -392,16 +392,16 @@ pub(super) fn emit_test_module(
             .test()
             .is_some_and(|t| t.cases.iter().any(|c| block_uses_run_id(&c.body)))
     }) {
-        stmts.push(TsStmt::raw(run_id_helper(false), None));
+        stmts.push(run_id_stmt(false));
     }
     // #2683: a module on virtual time takes the timer-queue clock; the plain
     // counter clock is only for one that `advance`s and has no timers.
     let virtual_time = module_is_virtual_time(target_name, target_kind, stubs, unit_tables);
     if virtual_time {
         runtime_use.note_virtual_time();
-        stmts.push(TsStmt::raw(virtual_time_runtime_helpers(), None));
+        stmts.push(TestRuntimeModule::VirtualTime.splice());
     } else if uses_advance {
-        stmts.push(TsStmt::raw(clock_runtime_helpers(), None));
+        stmts.push(TestRuntimeModule::Clock.splice());
     }
     let uses_advance = uses_advance || virtual_time;
     let mut suppress_next_blank = true;
@@ -433,7 +433,7 @@ pub(super) fn emit_test_module(
             .iter()
             .any(|&i| parsed[i].test().is_some_and(|t| !t.properties.is_empty()));
     if has_properties {
-        let mut stmt = TsStmt::raw(property_runtime_helpers(), None);
+        let mut stmt = TestRuntimeModule::Property.splice();
         if suppress_next_blank {
             stmt.no_blank_before = true;
             suppress_next_blank = false;
@@ -449,7 +449,7 @@ pub(super) fn emit_test_module(
             .is_some_and(|t| t.properties.iter().any(prop_is_history))
     });
     if has_history_properties {
-        let mut stmt = TsStmt::raw(history_runtime_helpers(), None);
+        let mut stmt = TestRuntimeModule::History.splice();
         if suppress_next_blank {
             stmt.no_blank_before = true;
             suppress_next_blank = false;
@@ -479,9 +479,9 @@ pub(super) fn emit_test_module(
         // blank before the first record type, matching the old single
         // `push('\n')` between them exactly.
         let helpers_text = if record_types.is_empty() {
-            format!("{}\n", observation_runtime_helpers())
+            format!("{}\n", TestRuntimeModule::Observation.source())
         } else {
-            observation_runtime_helpers()
+            TestRuntimeModule::Observation.source().to_string()
         };
         let mut stmt = TsStmt::raw(helpers_text, None);
         if suppress_next_blank {
@@ -535,19 +535,16 @@ pub(super) fn emit_test_module(
         .iter()
         .any(|&i| parsed[i].test().is_some_and(bynk_check::test_env::has_env));
     if with_env {
-        let mut env_decl = TsStmt::raw(
-            "// #2134: the running case's `env` entries, set by its runner.\nlet __bynkEnv: globalThis.Record<string, string> = {};\n",
-            None,
-        );
-        env_decl.no_blank_before = true;
-        stmts.push(env_decl);
+        stmts.extend(env_declaration(
+            "#2134: the running case's `env` entries, set by its runner.",
+        ));
     }
 
     // #291: the overlay `stub` layers over a seam's tier default, and the
     // deterministic test double of each platform capability the target
     // consumes.
     if !stubs.is_empty() {
-        stmts.push(TsStmt::raw(STUB_OVERLAY_TS.to_string(), None));
+        stmts.push(TestRuntimeModule::StubOverlay.splice());
     }
     // Both factories may name the same double; define each once. Keyed on the
     // whole `(owner, capability, name)`, so two owners' same-named doubles
@@ -681,9 +678,7 @@ pub(super) fn emit_test_module(
             // project-relative `rel_path`, which a debugger would resolve against
             // the emitted `.ts`'s dir) so an editor breakpoint on the real
             // `.bynk` test file binds.
-            let src_id =
-                map.add_source(parsed[i].map_source_name(), parsed[i].source().to_string());
-            case_stmt.nested_map_source_id = src_id;
+            case_stmt.nested_map_source_id = source_id_of(&mut map, &parsed[i]);
             // The "case tier" comment right above is not a real blank-line
             // pair the automatic policy knows about (only two consecutive
             // `Comment`s are exempted) — glue them explicitly, as the pre-
@@ -726,7 +721,7 @@ pub(super) fn emit_test_module(
             prop_runners.push(runner_name.clone());
             // v0.119: a `for all run: History[Agent]` property routes to the driven-
             // sequence runner; a value property keeps the existing path.
-            let prop_stmt = if prop_is_history(prop) {
+            let mut prop_stmt = if prop_is_history(prop) {
                 emit_test_history_property_function(
                     &runner_name,
                     test_suites::SuiteItems::of(test_decl),
@@ -765,6 +760,8 @@ pub(super) fn emit_test_module(
                     tys,
                 )
             };
+            // Its statements' spans are offsets into its own test file.
+            prop_stmt.nested_map_source_id = source_id_of(&mut map, &parsed[i]);
             stmts.push(prop_stmt);
         }
     }
@@ -889,16 +886,13 @@ pub(super) fn emit_test_module(
     // closure above; a plain `function` declaration hoists.
     let event_services = runtime_use.test_event_services();
     if !event_services.is_empty() {
-        stmts.push(TsStmt::raw(
-            event_delivery_helpers(
-                target_name,
-                &event_services,
-                unit_tables,
-                unit_consumes,
-                schema_versions,
-                event_shapes,
-            ),
-            None,
+        stmts.extend(event_delivery_helpers(
+            target_name,
+            &event_services,
+            unit_tables,
+            unit_consumes,
+            schema_versions,
+            event_shapes,
         ));
     }
 
@@ -955,7 +949,7 @@ pub(super) fn emit_test_module(
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_else(|| "module.ts".to_string());
-    let program = TsProgram { stmts };
+    let program = checked_program(stmts);
     let printed = bynk_ts::print_multi_source(&program, map, &module_file);
     Some((
         module_path.clone(),
@@ -997,18 +991,6 @@ pub(super) fn relative_import_for_test(target_dir: &Path) -> String {
     }
 }
 
-/// Finding #17: the source lives at `emitter/test_runtime/expectation.ts` —
-/// a real, syntax-highlighted `.ts` file rather than a Rust string built
-/// line-by-line via `push_str`. `ExpectationError`'s fields are declared and
-/// assigned explicitly rather than via TS parameter properties: parameter
-/// properties are a transform-only construct that Node's strip-only
-/// type-stripping rejects (`ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX`), and
-/// `bynk test --inspect` runs this `.ts` directly under strip-only Node
-/// (slice 2, ADR 0104). The explicit form is equivalent and strip-clean.
-pub(super) fn expectation_runtime_helpers() -> String {
-    include_str!("test_runtime/expectation.ts").to_string()
-}
-
 /// #2842: the snapshots each of the module's suite files takes, keyed by the
 /// file's snapshot path ([`bynk_project::snapshots::snapshot_path`]): every
 /// `(case, name)` pair its `expect … matches snapshot` claims name, in source
@@ -1048,31 +1030,46 @@ pub(super) fn module_snapshot_keys(
 pub(super) fn snapshot_harness(
     keys: &BTreeMap<String, Vec<(String, String)>>,
     stored: Option<&BTreeMap<String, String>>,
-) -> String {
-    let mut out = include_str!("test_runtime/snapshot.ts").to_string();
-    out.push_str("const __bynkSnapshotFiles: globalThis.Record<string, __SnapshotFile> = {\n");
-    for (file, pairs) in keys {
-        let text = stored
-            .and_then(|files| files.get(file))
-            .map_or_else(|| "null".to_string(), |t| bynk_project::json_string(t));
-        let live: Vec<String> = pairs
-            .iter()
-            .map(|(c, n)| {
-                format!(
-                    "[{}, {}]",
-                    bynk_project::json_string(c),
-                    bynk_project::json_string(n)
-                )
-            })
-            .collect();
-        out.push_str(&format!(
-            "  {}: {{ stored: {text}, live: [{}] }},\n",
-            bynk_project::json_string(file),
-            live.join(", ")
-        ));
-    }
-    out.push_str("};\n");
-    out
+) -> Vec<TsStmt> {
+    use crate::ts_build::raw_lit;
+    // A file name and a stored text keep the JSON escaping they always had.
+    let json = |text: &str| raw_lit(bynk_project::json_string(text));
+    let entries: Vec<TsObjectEntry> = keys
+        .iter()
+        .map(|(file, pairs)| {
+            let text = stored
+                .and_then(|files| files.get(file))
+                .map_or_else(crate::ts_build::null_lit, |t| json(t));
+            let live = TsExpr::array(
+                pairs
+                    .iter()
+                    .map(|(c, n)| TsExpr::array(vec![json(c), json(n)]))
+                    .collect(),
+            );
+            TsObjectEntry::prop(
+                bynk_project::json_string(file),
+                TsExpr::object(vec![
+                    ("stored".to_string(), text),
+                    ("live".to_string(), live),
+                ]),
+            )
+        })
+        .collect();
+    let mut table = TsStmt::const_stmt(
+        TsBindingName::Ident("__bynkSnapshotFiles".to_string()),
+        Some(TsType::named("globalThis.Record<string, __SnapshotFile>")),
+        TsExpr::multiline_object_entries(entries),
+        None,
+    );
+    // The table follows the runtime's last line directly.
+    table.no_blank_before = true;
+    vec![TestRuntimeModule::Snapshot.splice(), table]
+}
+
+/// The id under which `file` is a source of the module's map, so the statements lowered from it
+/// record their spans against its text.
+fn source_id_of(map: &mut SourceMapBuilder, file: &ParsedFile) -> usize {
+    map.add_source(file.map_source_name(), file.source().to_string())
 }
 
 /// #2052: the `__bynkEvent_<svc>` helper behind each `svc.event(payload[,
@@ -1114,10 +1111,12 @@ pub(super) fn event_delivery_helpers(
     unit_consumes: &HashMap<String, Vec<String>>,
     schema_versions: &HashMap<String, i64>,
     event_shapes: Option<&HashMap<String, bynk_model::EventSubscriberShape>>,
-) -> String {
+) -> Vec<TsStmt> {
+    use crate::ts_build::{as_expr, const_, ident, member, method_call, ret};
     use bynk_syntax::ast::ServiceProtocol;
     let ns = test_ns(target_name);
-    let mut out = String::new();
+    // The per-service helpers; the counter they share is declared ahead of them once known.
+    let mut helpers: Vec<TsStmt> = Vec::new();
     let mut counts = false;
     for svc in services {
         let Some(decl) = unit_tables
@@ -1160,69 +1159,89 @@ pub(super) fn event_delivery_helpers(
                         .unwrap_or(1);
                     (owner, version)
                 });
+        let helper = |envelope_name: &str, mut body: Vec<TsStmt>, args: Vec<TsExpr>| {
+            body.push(ret(method_call(
+                member(ident(ns.clone()), svc.clone()),
+                "event",
+                args,
+            )));
+            let unknown = || Some(TsType::named("unknown"));
+            TsStmt::decl(
+                TsDecl::Function {
+                    name: format!("__bynkEvent_{svc}"),
+                    generics: Vec::new(),
+                    params: vec![
+                        TsParam::new("payload".to_string(), unknown()),
+                        TsParam::new(envelope_name.to_string(), unknown()),
+                        TsParam::new("deps".to_string(), unknown()),
+                    ],
+                    return_type: None,
+                    body,
+                    is_async: false,
+                    inline: false,
+                },
+                None,
+            )
+        };
+        let never = |name: &str| as_expr(ident(name), TsType::named("never"));
         if takes_envelope {
             let env = match &defaults {
                 Some((owner, version)) => {
                     counts = true;
-                    format!(
-                        "envelope ?? {{ eventId: `test-event-${{++__bynkEventSeq}}`, publisherId: \"{}\", emittedAt: 0, schemaVersion: {version} }}",
-                        crate::emitter::escape_ts_string(owner)
+                    // `envelope ?? { eventId: `test-event-${++__bynkEventSeq}`, … }`
+                    crate::ts_build::binary(
+                        TsBinaryOp::NullishCoalescing,
+                        ident("envelope"),
+                        TsExpr::object(vec![
+                            (
+                                "eventId".to_string(),
+                                TsExpr::template_lit(
+                                    vec!["test-event-".to_string(), String::new()],
+                                    // No pre-increment expression node: the one text hole.
+                                    vec![ident("++__bynkEventSeq")],
+                                ),
+                            ),
+                            (
+                                "publisherId".to_string(),
+                                crate::ts_build::str_lit(owner.clone()),
+                            ),
+                            ("emittedAt".to_string(), crate::ts_build::num_lit(0)),
+                            (
+                                "schemaVersion".to_string(),
+                                crate::ts_build::num_lit(version),
+                            ),
+                        ]),
                     )
                 }
-                None => "envelope".to_string(),
+                None => ident("envelope"),
             };
-            out.push_str(&format!(
-                "function __bynkEvent_{svc}(payload: unknown, envelope: unknown, deps: unknown) {{\n  const env = {env};\n  return {ns}.{svc}.event(payload as never, env as never, deps as never);\n}}\n"
+            helpers.push(helper(
+                "envelope",
+                vec![const_("env", env)],
+                vec![never("payload"), never("env"), never("deps")],
             ));
         } else {
             // The handler cannot observe an envelope, so a case's own is dropped.
-            out.push_str(&format!(
-                "function __bynkEvent_{svc}(payload: unknown, _envelope: unknown, deps: unknown) {{\n  return {ns}.{svc}.event(payload as never, deps as never);\n}}\n"
+            helpers.push(helper(
+                "_envelope",
+                Vec::new(),
+                vec![never("payload"), never("deps")],
             ));
         }
     }
+    // The helpers sit on consecutive lines, the counter they share ahead of them.
+    let mut out: Vec<TsStmt> = Vec::new();
     if counts {
-        out.insert_str(0, "let __bynkEventSeq = 0;\n");
+        out.push(crate::ts_build::let_init(
+            "__bynkEventSeq",
+            crate::ts_build::num_lit(0),
+        ));
+    }
+    out.extend(helpers);
+    for stmt in out.iter_mut().skip(1) {
+        stmt.no_blank_before = true;
     }
     out
-}
-
-/// #1994: the test double for the Worker's `ExecutionContext` — a `waitUntil`
-/// that collects the promises a `detach` send hands it, and (L7, #2414) a `cache`
-/// that records each `EdgeCache` purge and accepts it unless `succeeds` is
-/// cleared — and `__bynkSettle`, which
-/// awaits them after an addressed handler call, so a case's expectations see
-/// the sends' effects. Source lives at `emitter/test_runtime/send.ts`.
-pub(super) fn send_runtime_helpers() -> String {
-    include_str!("test_runtime/send.ts").to_string()
-}
-
-/// #2137: the harness clock — `__bynkClockNow`, which `advance Clock by`
-/// moves (`__bynkAdvanceClock`, refusing a negative at run time), and the
-/// `Clock` that reads it. Source lives at `emitter/test_runtime/clock.ts`.
-pub(super) fn clock_runtime_helpers() -> String {
-    include_str!("test_runtime/clock.ts").to_string()
-}
-
-/// #2683: the harness clock on virtual time — the same `__bynkClockNow` and
-/// `__bynkAdvanceClock` (which now also fires the timers that fall due), plus
-/// the timer queue `within` registers its deadline on, the `after`/`never`
-/// stub waits, the in-flight count, and the auto-advance that drives a case's
-/// addressed calls. Source lives at `emitter/test_runtime/virtual_time.ts`.
-pub(super) fn virtual_time_runtime_helpers() -> String {
-    include_str!("test_runtime/virtual_time.ts").to_string()
-}
-
-/// #2138: `__bynkRunId`, the value `run.id` reads. A remote build's `system`
-/// module reads `BYNK_TEST_RUN_ID` (the runner sets a fresh one); every
-/// in-process module is the fixed `"local"`, even when the variable is set
-/// (an `--against` run's unit suites share its process environment).
-pub(super) fn run_id_helper(remote: bool) -> String {
-    if remote {
-        include_str!("test_runtime/run_id.ts").to_string()
-    } else {
-        "const __bynkRunId: string = \"local\";\n".to_string()
-    }
 }
 
 /// #2138: whether a case body reads `run.id` anywhere.
@@ -1361,19 +1380,6 @@ pub(super) fn target_uses_emit(
         && unit_tables
             .get(target_name)
             .is_some_and(|t| unit_table_uses_emit(t, unit_callees.get(target_name)))
-}
-
-/// #1485: the test-only HS256 JWT signer `emit_system_http_support`'s own
-/// `system` suite driver relies on to sign a `by User("bob")`-style actor's
-/// `Authorization: Bearer …` — `__bynkNow`/`__b64url`/`__bytesB64url`/
-/// `__bynkSignHs256`. Found by #1472's own callee-cascade read as a
-/// genuinely new gap (unlike every other permanent site in this arc, this
-/// one had no in-place argument for staying hand-written text): moved to
-/// `emitter/test_runtime/jwt_signer.ts`, the same committed-`.ts`-file
-/// treatment `expectation_runtime_helpers`/`stub_runtime_helpers` above
-/// already get, rather than a raw Rust string literal with `\`-continuations.
-pub(super) fn jwt_signer_runtime_helpers() -> String {
-    include_str!("test_runtime/jwt_signer.ts").to_string()
 }
 
 /// #3699: the synthetic call-record types (`__Cap_op_Call`) a `trace(Cap.op)`

@@ -102,7 +102,8 @@ async function main() {
       const kind = integration ? "integration" : "unit";
       emit({ type: "suite-begin", name: suite, kind, tests: planned(m.names) });
       function report(r: Result) {
-const detached = (globalThis as unknown as { __bynkDetachedReports?: { kind: string; site: string; type: string | null; variant: string | null }[] }).__bynkDetachedReports?.splice(0) ?? [];        if (r.pass) {
+        const detached = (globalThis as unknown as { __bynkDetachedReports?: { kind: string; site: string; type: string | null; variant: string | null }[] }).__bynkDetachedReports?.splice(0) ?? [];
+        if (r.pass) {
           passed++;
           emit({ type: "case", suite, name: r.name, outcome: "pass", detached_failures: (detached.length > 0 ? detached.length : undefined), detached: (detached.length > 0 ? detached : undefined), durationMs: r.durationMs });
         } else {
@@ -119,8 +120,10 @@ const detached = (globalThis as unknown as { __bynkDetachedReports?: { kind: str
     for (const m of active) {
       globalThis.console.log(`${m.name}:`);
       function report(r: Result) {
-const detached = (globalThis as unknown as { __bynkDetachedReports?: { kind: string; site: string; type: string | null; variant: string | null }[] }).__bynkDetachedReports?.splice(0) ?? [];        if (r.pass) { passed++; globalThis.console.log(`  \u2713 ${r.name}`); } else { failed++; globalThis.console.log(`  \u2717 ${r.name}`); if (r.error) globalThis.console.log(`    ${r.error.message}`); }
-for (const d of detached) console.log(`    ! a detached effect ${d.kind === "err" ? `returned Err (${d.type}${d.variant === null ? "" : `.${d.variant}`})` : "faulted"} at ${d.site}`);      }
+        const detached = (globalThis as unknown as { __bynkDetachedReports?: { kind: string; site: string; type: string | null; variant: string | null }[] }).__bynkDetachedReports?.splice(0) ?? [];
+        if (r.pass) { passed++; globalThis.console.log(`  \u2713 ${r.name}`); } else { failed++; globalThis.console.log(`  \u2717 ${r.name}`); if (r.error) globalThis.console.log(`    ${r.error.message}`); }
+        for (const d of detached) console.log(`    ! a detached effect ${d.kind === "err" ? `returned Err (${d.type}${d.variant === null ? "" : `.${d.variant}`})` : "faulted"} at ${d.site}`);
+      }
       await runSelected(m.run, report);
       globalThis.console.log("");
     }

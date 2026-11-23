@@ -5,7 +5,7 @@ import * as cs_client from "./cs/client.js";
 import * as cs_store from "./cs/store.js";
 
 export function composeApp() {
-  const cs_storeDeps = {  };
+  const cs_storeDeps = {};
   const cs_storeSurface = cs_store.__makeSurface(cs_storeDeps);
   const cs_clientDeps = { surface: { store: cs_storeSurface } };
   const cs_clientSurface = cs_client.__makeSurface(cs_clientDeps);

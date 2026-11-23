@@ -7,7 +7,7 @@ export interface Env {
 }
 
 export function compose(env: Env) {
-  const deps = {  };
+  const deps = {};
   return {
     async count(xs: readonly number[]) {
       return handlers.count.call(xs, deps);

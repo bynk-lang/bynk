@@ -97,6 +97,7 @@ pub(super) fn awaited_apply(f: TsExpr) -> TsExpr {
 /// `(a: A, b: B) => R`: a function type whose parameter names are part of its spelling.
 pub(super) fn fn_type(params: &[(&str, &TsType)], ret: TsType) -> TsType {
     TsType::Fn {
+        rest: false,
         params: params.iter().map(|(_, t)| (*t).clone()).collect(),
         names: params.iter().map(|(n, _)| (*n).to_string()).collect(),
         ret: Box::new(ret),

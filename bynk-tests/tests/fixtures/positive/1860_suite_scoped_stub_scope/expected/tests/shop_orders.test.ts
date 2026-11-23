@@ -289,33 +289,33 @@ async function test_a_case_s_own_stub_beats_its_suite_s() {
 }
 
 async function __prop_test_a_property_without_a_stub_reaches_the_provider() {
-    const deps = __makeTestDeps(undefined, 0);
-    const { place } = __ns_shop_orders;
-    const __gens = [
-      { name: "b", boundaries: [true, false], gen: (rng: any) => rng.bool(), shrink: (v: any) => (v ? [false] : []), show: (v: any) => __bynkShow(v) },
-    ];
-    const __where = null;
-    const __body = async (__vals: any[]) => {
-      const [b] = __vals;
-      const n = await place.call(deps);
-      if (!(n === 100)) { throw __bynkExpectFailure("tests/orders.bynk:16:14", 523, 531, "expect n == 100\n  expected: n == 100\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((100))); }
-    };
-    return await __bynkRunProperty({ seed: __bynkMix(__bynkSeed, 0), cases: 100, gens: __gens, where: __where, body: __body, name: "a property without a stub reaches the provider", location: "tests/orders.bynk", file: "tests/orders.bynk" });
+  const deps = __makeTestDeps(undefined, 0);
+  const { place } = __ns_shop_orders;
+  const __gens = [
+    { name: "b", boundaries: [true, false], gen: (rng: any) => rng.bool(), shrink: (v: any) => (v ? [false] : []), show: (v: any) => __bynkShow(v) },
+  ];
+  const __where = null;
+  const __body = async (__vals: any[]) => {
+    const [b] = __vals;
+    const n = await place.call(deps);
+    if (!(n === 100)) { throw __bynkExpectFailure("tests/orders.bynk:16:14", 523, 531, "expect n == 100\n  expected: n == 100\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((100))); }
+  };
+  return await __bynkRunProperty({ seed: __bynkMix(__bynkSeed, 0), cases: 100, gens: __gens, where: __where, body: __body, name: "a property without a stub reaches the provider", location: "tests/orders.bynk", file: "tests/orders.bynk" });
 }
 
 async function __prop_test_a_suite_s_stub_applies_to_its_property() {
-    const deps = __makeTestDeps(undefined, 1);
-    const { place } = __ns_shop_orders;
-    const __gens = [
-      { name: "b", boundaries: [true, false], gen: (rng: any) => rng.bool(), shrink: (v: any) => (v ? [false] : []), show: (v: any) => __bynkShow(v) },
-    ];
-    const __where = null;
-    const __body = async (__vals: any[]) => {
-      const [b] = __vals;
-      const n = await place.call(deps);
-      if (!(n === 1)) { throw __bynkExpectFailure("tests/orders.bynk:32:14", 823, 829, "expect n == 1\n  expected: n == 1\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((1))); }
-    };
-    return await __bynkRunProperty({ seed: __bynkMix(__bynkSeed, 1), cases: 100, gens: __gens, where: __where, body: __body, name: "a suite's stub applies to its property", location: "tests/orders.bynk", file: "tests/orders.bynk" });
+  const deps = __makeTestDeps(undefined, 1);
+  const { place } = __ns_shop_orders;
+  const __gens = [
+    { name: "b", boundaries: [true, false], gen: (rng: any) => rng.bool(), shrink: (v: any) => (v ? [false] : []), show: (v: any) => __bynkShow(v) },
+  ];
+  const __where = null;
+  const __body = async (__vals: any[]) => {
+    const [b] = __vals;
+    const n = await place.call(deps);
+    if (!(n === 1)) { throw __bynkExpectFailure("tests/orders.bynk:32:14", 823, 829, "expect n == 1\n  expected: n == 1\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((1))); }
+  };
+  return await __bynkRunProperty({ seed: __bynkMix(__bynkSeed, 1), cases: 100, gens: __gens, where: __where, body: __body, name: "a suite's stub applies to its property", location: "tests/orders.bynk", file: "tests/orders.bynk" });
 }
 
 type CaseResult = {

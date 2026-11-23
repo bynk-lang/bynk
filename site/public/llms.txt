@@ -345,7 +345,8 @@ Built-in type names, reserved in type position: `Asset` `BoundaryRejection`
 - [5. Handle failure with `Result`](/book/tutorials/failure-and-result/)
 - [6. Reach out with capabilities](/book/tutorials/capabilities/)
 - [7. Add a stateful agent](/book/tutorials/05-stateful-agent/)
-- [8. Test it](/book/tutorials/06-testing/)
+- [8. Split into contexts](/book/tutorials/contexts/)
+- [9. Test it](/book/tutorials/06-testing/)
 
 ### Guides (task-focused)
 - [The type system](/book/guides/type-system/): refined/sum/opaque types, `match`, `is`, `Result`/`Option`, JSON decode.

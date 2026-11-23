@@ -353,78 +353,6 @@ export interface KVNamespace {
 }
 
 /**
- * #1959: an in-memory KV namespace for multi-Worker integration tests. The
- * harness makes a fresh one per participant per test case and binds it as
- * that participant's `env.KV`, as `bynk deploy` provisions one namespace per
- * Worker. Keys list in order, on one page; `expirationTtl` is accepted and
- * ignored, since a test case does not outlive it.
- */
-export function makeIntegrationKv(): KVNamespace {
-  // P1 (#2590): values are bytes, as on the platform (text is its UTF-8), with
-  // metadata and an expiry beside them. Expiry is kept, not enforced.
-  type Entry = { bytes: Uint8Array; metadata: unknown; expiration?: number };
-  const entries = new Map<string, Entry>();
-  const encode = (value: string | ArrayBuffer | ArrayBufferView): Uint8Array =>
-    typeof value === "string"
-      ? new TextEncoder().encode(value)
-      : value instanceof ArrayBuffer
-        ? new Uint8Array(value.slice(0))
-        : new Uint8Array(value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength));
-  function get(key: string): Promise<string | null>;
-  function get(key: string, type: "arrayBuffer"): Promise<ArrayBuffer | null>;
-  async function get(key: string, type?: "arrayBuffer"): Promise<string | ArrayBuffer | null> {
-    const e = entries.get(key);
-    if (e === undefined) return null;
-    return type === "arrayBuffer" ? e.bytes.slice().buffer : new TextDecoder().decode(e.bytes);
-  }
-  return {
-    get,
-    async getWithMetadata(key: string) {
-      const e = entries.get(key);
-      return e === undefined
-        ? { value: null, metadata: null }
-        : { value: new TextDecoder().decode(e.bytes), metadata: e.metadata ?? null };
-    },
-    async put(
-      key: string,
-      value: string | ArrayBuffer | ArrayBufferView,
-      options?: { expirationTtl?: number; expiration?: number; metadata?: unknown },
-    ): Promise<void> {
-      const expiration =
-        options?.expiration ??
-        (options?.expirationTtl === undefined ? undefined : Math.floor(Date.now() / 1000) + options.expirationTtl);
-      entries.set(key, { bytes: encode(value), metadata: options?.metadata, expiration });
-    },
-    async delete(key: string): Promise<void> {
-      entries.delete(key);
-    },
-    // Pages in key order; the cursor is the last key of the page.
-    async list(options?: { prefix?: string; cursor?: string; limit?: number }) {
-      const prefix = options?.prefix ?? "";
-      const after = options?.cursor;
-      const limit = options?.limit ?? 1000;
-      const names = [...entries.keys()]
-        .filter((k) => k.startsWith(prefix) && (after === undefined || k > after))
-        .sort();
-      const page = names.slice(0, limit);
-      const complete = page.length === names.length;
-      return {
-        keys: page.map((name) => {
-          const e = entries.get(name)!;
-          return {
-            name,
-            ...(e.expiration === undefined ? {} : { expiration: e.expiration }),
-            ...(e.metadata === undefined ? {} : { metadata: e.metadata }),
-          };
-        }),
-        list_complete: complete,
-        ...(complete ? {} : { cursor: page[page.length - 1] }),
-      };
-    },
-  };
-}
-
-/**
  * P5 (#2323): the part of Cloudflare's `R2Bucket` that `WorkersR2` uses,
  * declared here so the binding and the in-memory double share one shape.
  * `put` resolves `null` when its `onlyIf` precondition failed;
@@ -484,194 +412,12 @@ export interface R2Bucket {
 }
 
 /**
- * An in-memory R2 bucket for multi-Worker integration tests, bound as that
- * participant's `env.R2_<NAME>` and fresh per test case, as `makeIntegrationKv`
- * is. It honours the preconditions `WorkersR2` sends and pages `list` in key
- * order at R2's own page size (`limit`, default 1000), the cursor being the
- * last key returned.
- *
- * P5b (#2626): `get`'s `body` streams the object in 64 KiB chunks, `put`
- * takes a stream as well as bytes, and multipart uploads complete as R2's do:
- * every listed part uploaded with that etag, part numbers 1 to 10,000, and
- * every part but the last the same size. R2's 5 MiB minimum part is not
- * enforced, so a test needn't build 5 MiB of bytes.
- */
-export function makeIntegrationR2(): R2Bucket {
-  type Stored = { meta: R2ObjectMeta; body: Uint8Array };
-  type Upload = {
-    options: { httpMetadata?: { contentType?: string }; customMetadata?: Record<string, string> } | undefined;
-    parts: Map<number, { etag: string; body: Uint8Array }>;
-  };
-  const objects = new Map<string, Stored>();
-  const uploads = new Map<string, Upload>();
-  let version = 0;
-  const store = (key: string, body: Uint8Array, options?: R2PutOptions): R2ObjectMeta => {
-    version += 1;
-    const contentType = options?.httpMetadata?.contentType;
-    const meta: R2ObjectMeta = {
-      key,
-      size: body.length,
-      etag: `etag-${version}`,
-      uploaded: new Date(),
-      httpMetadata: contentType === undefined ? {} : { contentType },
-      customMetadata: { ...(options?.customMetadata ?? {}) },
-    };
-    objects.set(key, { meta, body });
-    return meta;
-  };
-  const upload = (key: string, uploadId: string): R2MultipartUpload => {
-    const open = (): Upload => {
-      const u = uploads.get(`${key}\u0000${uploadId}`);
-      if (!u) throw new Error(`R2: no multipart upload ${uploadId} of ${key}`);
-      return u;
-    };
-    return {
-      key,
-      uploadId,
-      async uploadPart(partNumber, value) {
-        const u = open();
-        if (!Number.isInteger(partNumber) || partNumber < 1 || partNumber > 10_000) {
-          throw new Error(`R2: part number ${partNumber} is not between 1 and 10,000`);
-        }
-        version += 1;
-        const etag = `part-${version}`;
-        u.parts.set(partNumber, { etag, body: value.slice() });
-        return { partNumber, etag };
-      },
-      async complete(parts) {
-        const u = open();
-        const listed = [...parts].sort((a, b) => a.partNumber - b.partNumber);
-        const bodies = listed.map((p, i) => {
-          const part = u.parts.get(p.partNumber);
-          if (!part || part.etag !== p.etag) throw new Error(`R2: part ${p.partNumber} was not uploaded with etag ${p.etag}`);
-          if (i > 0 && listed[i - 1].partNumber === p.partNumber) throw new Error(`R2: part ${p.partNumber} is listed twice`);
-          return part.body;
-        });
-        if (bodies.length === 0) throw new Error("R2: a multipart upload needs at least one part");
-        if (bodies.slice(0, -1).some((b) => b.length !== bodies[0].length)) {
-          throw new Error("R2: every part but the last must be the same size");
-        }
-        if (bodies.length > 1 && bodies[bodies.length - 1].length > bodies[0].length) {
-          throw new Error("R2: the last part must be no larger than the others");
-        }
-        const body = new Uint8Array(bodies.reduce((n, b) => n + b.length, 0));
-        let at = 0;
-        for (const b of bodies) {
-          body.set(b, at);
-          at += b.length;
-        }
-        uploads.delete(`${key}\u0000${uploadId}`);
-        return store(key, body, u.options);
-      },
-      async abort() {
-        uploads.delete(`${key}\u0000${uploadId}`);
-      },
-    };
-  };
-  return {
-    async get(key: string): Promise<R2ObjectBody | null> {
-      const s = objects.get(key);
-      if (!s) return null;
-      const bytes = s.body;
-      let at = 0;
-      const body = new ReadableStream<Uint8Array>({
-        pull(controller) {
-          if (at >= bytes.length) {
-            controller.close();
-            return;
-          }
-          controller.enqueue(bytes.slice(at, at + 65_536));
-          at += 65_536;
-        },
-      });
-      return {
-        ...s.meta,
-        body,
-        async arrayBuffer(): Promise<ArrayBuffer> {
-          return bytes.slice().buffer as ArrayBuffer;
-        },
-      };
-    },
-    async head(key: string): Promise<R2ObjectMeta | null> {
-      return objects.get(key)?.meta ?? null;
-    },
-    async put(key: string, value: Uint8Array | ReadableStream<Uint8Array>, options?: R2PutOptions): Promise<R2ObjectMeta | null> {
-      const body = value instanceof Uint8Array ? value.slice() : new Uint8Array(await new Response(value).arrayBuffer());
-      const current = objects.get(key);
-      const cond = options?.onlyIf;
-      if (cond?.etagMatches !== undefined && current?.meta.etag !== cond.etagMatches) return null;
-      if (cond?.etagDoesNotMatch !== undefined) {
-        const clash = cond.etagDoesNotMatch === "*" ? current !== undefined : current?.meta.etag === cond.etagDoesNotMatch;
-        if (clash) return null;
-      }
-      return store(key, body, options);
-    },
-    async delete(key: string): Promise<void> {
-      objects.delete(key);
-    },
-    async list(options) {
-      const prefix = options?.prefix ?? "";
-      const limit = options?.limit ?? 1000;
-      const after = options?.cursor;
-      const keys = [...objects.keys()]
-        .filter((k) => k.startsWith(prefix) && (after === undefined || k > after))
-        .sort();
-      const page = keys.slice(0, limit);
-      const truncated = keys.length > page.length;
-      return {
-        objects: page.map((k) => objects.get(k)!.meta),
-        truncated,
-        cursor: truncated ? page[page.length - 1] : undefined,
-      };
-    },
-    async createMultipartUpload(key, options) {
-      version += 1;
-      const uploadId = `upload-${version}`;
-      uploads.set(`${key}\u0000${uploadId}`, { options, parts: new Map() });
-      return upload(key, uploadId);
-    },
-    resumeMultipartUpload(key, uploadId) {
-      return upload(key, uploadId);
-    },
-  };
-}
-
-/**
  * Standard-library P3 (#2342): the part of Cloudflare's rate limiting binding
  * that `WorkersRateLimit` uses. The limit and the period are the binding's
  * configuration, not arguments.
  */
 export interface RateLimiter {
   limit(options: { key: string }): Promise<{ success: boolean }>;
-}
-
-/**
- * An in-memory rate limiter for multi-Worker integration tests, bound as that
- * participant's `env.RATELIMIT_<NAME>` and fresh per test case, as
- * `makeIntegrationKv` is. It counts calls per key over fixed windows of
- * `periodSecs` (aligned to multiples of the period, as the platform's are)
- * and allows `limit` of them in each, on the harness clock (`now`). Unlike
- * the platform it is exact; the
- * platform's per-location counting only ever allows more.
- */
-export function makeIntegrationRateLimit(
-  limit: number,
-  periodSecs: number,
-  // Milliseconds; the harness passes its clock. Standing still at 0 when
-  // none is given keeps every run's answers the same.
-  now: () => number = () => 0,
-): RateLimiter {
-  const counts = new Map<string, { window: number; count: number }>();
-  return {
-    async limit({ key }: { key: string }): Promise<{ success: boolean }> {
-      const window = Math.floor(now() / (periodSecs * 1000));
-      const entry = counts.get(key);
-      const current = entry !== undefined && entry.window === window ? entry : { window, count: 0 };
-      current.count += 1;
-      counts.set(key, current);
-      return { success: current.count <= limit };
-    },
-  };
 }
 
 /**
@@ -687,49 +433,12 @@ export interface QueueProducer {
 }
 
 /**
- * An in-memory queue producer for multi-Worker integration tests, bound as that
- * participant's `env.QUEUE_<NAME>` and fresh per test case, as
- * `makeIntegrationKv` is. It accepts every send and keeps the bodies it was
- * given in `sent`, in order; nothing is delivered to a consumer.
- */
-export function makeIntegrationQueue(): QueueProducer & { sent: unknown[] } {
-  const sent: unknown[] = [];
-  return {
-    sent,
-    async send(body: unknown): Promise<void> {
-      sent.push(body);
-    },
-    async sendBatch(messages: Iterable<{ body: unknown }>): Promise<void> {
-      for (const m of messages) sent.push(m.body);
-    },
-  };
-}
-
-/**
  * Standard-library P3b (#2582): the part of Cloudflare's Analytics Engine
  * binding that `WorkersAnalytics` uses. The write is synchronous: the platform
  * batches it and sends it after the response.
  */
 export interface AnalyticsDataset {
   writeDataPoint(point: { indexes?: string[]; blobs?: string[]; doubles?: number[] }): void;
-}
-
-/**
- * An in-memory Analytics Engine dataset for multi-Worker integration tests,
- * bound as that participant's `env.ANALYTICS_<NAME>` and fresh per test case,
- * as `makeIntegrationKv` is. It keeps every data point it is given in
- * `written`, in order.
- */
-export function makeIntegrationAnalytics(): AnalyticsDataset & {
-  written: { indexes?: string[]; blobs?: string[]; doubles?: number[] }[];
-} {
-  const written: { indexes?: string[]; blobs?: string[]; doubles?: number[] }[] = [];
-  return {
-    written,
-    writeDataPoint(point): void {
-      written.push(point);
-    },
-  };
 }
 
 /**
@@ -754,208 +463,6 @@ export interface D1Database {
   batch(statements: D1PreparedStatement[]): Promise<D1Result[]>;
 }
 
-// The part of Node's built-in `node:sqlite` the D1 double uses.
-interface SqliteStatement {
-  all(...params: unknown[]): Record<string, unknown>[];
-  get(...params: unknown[]): Record<string, unknown> | undefined;
-  run(...params: unknown[]): { changes: number | bigint; lastInsertRowid: number | bigint };
-}
-interface SqliteDatabase {
-  prepare(sql: string): SqliteStatement;
-  exec(sql: string): void;
-}
-
-/** A character of a SQL identifier, as SQLite's tokenizer sees it: ASCII letters, digits, `_`, `$`, and (#3157) anything non-ASCII. */
-function isWord(ch: string): boolean {
-  return /[A-Za-z0-9_$]/.test(ch) || ch.charCodeAt(0) >= 0x80;
-}
-
-/**
- * What a statement's SQL takes: the count is SQLite's `sqlite3_bind_parameter_count`,
- * which D1 compares to the number bound. A bare `?` is one past the highest
- * index so far, `?N` is index N, and a named parameter (`:a`, `@a`, `$a`) is
- * one past the highest unless the name was seen. Quoted text (`'…'`, `"…"`,
- * `` `…` ``, `[…]`) and comments hold no parameters.
- */
-function sqlParameters(sql: string): { count: number; numbered: string[]; bare: [number, number][] } {
-  let count = 0;
-  const numbered = new Set<string>();
-  const bare: [number, number][] = []; // each bare `?`: its offset and SQLite index
-  const names = new Set<string>();
-  const n = sql.length;
-  let i = 0;
-  const skipTo = (close: string, doubled: boolean): void => {
-    i++;
-    while (i < n) {
-      if (sql[i] === close) {
-        if (doubled && sql[i + 1] === close) i += 2;
-        else break;
-      } else i++;
-    }
-    i++;
-  };
-  while (i < n) {
-    const c = sql[i]!;
-    if (c === "'" || c === '"' || c === "`") skipTo(c, true);
-    else if (c === "[") skipTo("]", false);
-    else if (c === "-" && sql[i + 1] === "-") {
-      while (i < n && sql[i] !== "\n") i++;
-    } else if (c === "/" && sql[i + 1] === "*") {
-      const end = sql.indexOf("*/", i + 2);
-      i = end < 0 ? n : end + 2;
-    } else if (c === "?") {
-      const at = i++;
-      const start = i;
-      while (i < n && sql[i]! >= "0" && sql[i]! <= "9") i++;
-      if (i > start) {
-        numbered.add(`?${sql.slice(start, i)}`); // the raw spelling, `?01` included
-        count = Math.max(count, Number(sql.slice(start, i)));
-      } else {
-        count++;
-        bare.push([at, count]);
-      }
-    } else if (
-      // `$` continues an identifier (`a$b`); `:` and `@` always start a parameter, as in SQLite.
-      (c === ":" || c === "@" || (c === "$" && !(i > 0 && isWord(sql[i - 1]!))))) {
-      const start = i++;
-      while (i < n && isWord(sql[i]!)) i++;
-      if (i - start > 1) {
-        const name = sql.slice(start, i);
-        if (!names.has(name)) {
-          names.add(name);
-          count++;
-        }
-      }
-    } else i++;
-  }
-  return { count, numbered: [...numbered], bare };
-}
-
-/**
- * An in-memory D1 database for tests, bound as `env.D1_<NAME>` and fresh per
- * test case, as `makeIntegrationKv` is. It is real SQLite, through Node's
- * built-in `node:sqlite` (Node 22.13 or later), so statements run as they do
- * on D1: foreign keys enforced, integral numbers bound as `INTEGER`, and a
- * failure reported as D1 words it (`D1_ERROR: …: SQLITE_CONSTRAINT`). A
- * `batch` is one transaction; its results carry `meta`, not rows.
- *
- * P4b (#2608): `migrations` are the database's `[name, sql]` files in order,
- * each run in its own transaction before the database is handed out, as
- * `wrangler d1 migrations apply` runs them. One that fails faults, naming the
- * file, so every test using the database fails the same way.
- */
-export function makeIntegrationD1(
-  migrations: readonly (readonly [string, string])[] = [],
-): D1Database & { readOnly(): D1Database } {
-  const node = (globalThis as { process?: { getBuiltinModule?(id: string): unknown } }).process;
-  const sqlite = node?.getBuiltinModule?.("node:sqlite") as
-    | { DatabaseSync: new (path: string) => SqliteDatabase }
-    | undefined;
-  if (sqlite === undefined) {
-    throw new Error("bynk: the D1 test double needs Node's built-in `node:sqlite` (Node 22.13 or later)");
-  }
-  const db = new sqlite.DatabaseSync(":memory:");
-  db.exec("PRAGMA foreign_keys = ON");
-  for (const [name, sql] of migrations) {
-    db.exec("BEGIN");
-    try {
-      db.exec(sql);
-      db.exec("COMMIT");
-    } catch (e) {
-      db.exec("ROLLBACK");
-      throw new Error(`bynk: D1 migration \`${name}\` failed: ${e instanceof Error ? e.message : String(e)}`);
-    }
-  }
-  const d1Error = (e: unknown): Error => {
-    const message = e instanceof Error ? e.message : String(e);
-    const code = (e as { errcode?: number }).errcode;
-    return new Error(
-      code !== undefined && (code & 0xff) === 19
-        ? `D1_ERROR: ${message}: SQLITE_CONSTRAINT`
-        : `D1_ERROR: ${message}`,
-    );
-  };
-  const attempt = <T>(f: () => T): T => {
-    try {
-      return f();
-    } catch (e) {
-      throw d1Error(e);
-    }
-  };
-  const meta = (r: { changes: number | bigint; lastInsertRowid: number | bigint }) => ({
-    changes: Number(r.changes),
-    last_row_id: Number(r.lastInsertRowid),
-  });
-  // #3147: a `D1.peek` handle reads the database the app wrote, and never
-  // writes it. Its statements run with `query_only` on, for the statement's
-  // own (synchronous) execution only, so the app's own statements in flight
-  // are never refused. SQLite refuses a write then, whatever the statement.
-  const readOnly = <T>(guarded: boolean, f: () => T): T => {
-    if (!guarded) return f();
-    db.exec("PRAGMA query_only = ON");
-    try {
-      return f();
-    } finally {
-      db.exec("PRAGMA query_only = OFF");
-    }
-  };
-  const statement = (sql: string, params: unknown[], guarded = false): D1PreparedStatement & { exec(): D1Result } => {
-    const values = params.map((v) => (typeof v === "number" && Number.isInteger(v) ? BigInt(v) : v));
-    // Node before 22.18 refuses positional values for numbered parameters
-    // (`?1`), so those bind by name: `{ "?1": … }`, one key per number used.
-    // A mix with bare `?` is spelled out first (`?` becomes its index, as
-    // SQLite numbers it), since the oldest Node binds only by name.
-    let text = sql;
-    let scan = sqlParameters(sql);
-    if (scan.bare.length > 0 && scan.numbered.length > 0) {
-      for (const [at, index] of [...scan.bare].reverse()) text = `${text.slice(0, at)}?${index}${text.slice(at + 1)}`;
-      scan = sqlParameters(text);
-    }
-    const { count, numbered } = scan;
-    const bound: unknown[] =
-      numbered.length === 0
-        ? values
-        : [Object.fromEntries(numbered.map((name) => [name, values[Number(name.slice(1)) - 1] ?? null]))];
-    // D1 refuses a count that differs from what the SQL uses, too many or too
-    // few (#3003); SQLite alone would ignore the extras and bind NULL for the rest.
-    // Every caller wraps `prepared()` in `attempt`, which words the failure.
-    const prepared = () => {
-      if (params.length !== count) {
-        throw new Error("Wrong number of parameter bindings for SQL query.");
-      }
-      return db.prepare(text);
-    };
-    return {
-      bind: (...values: unknown[]) => statement(sql, values, guarded),
-      all: async () => ({ results: attempt(() => readOnly(guarded, () => prepared().all(...bound))), meta: {} }),
-      first: async () => attempt(() => readOnly(guarded, () => prepared().get(...bound))) ?? null,
-      run: async () => ({ results: [], meta: meta(attempt(() => readOnly(guarded, () => prepared().run(...bound)))) }),
-      exec: () => ({ results: [], meta: meta(attempt(() => readOnly(guarded, () => prepared().run(...bound)))) }),
-    };
-  };
-  return {
-    prepare: (sql: string) => statement(sql, []),
-    async batch(statements: D1PreparedStatement[]): Promise<D1Result[]> {
-      db.exec("BEGIN");
-      try {
-        const results = statements.map((s) => (s as D1PreparedStatement & { exec(): D1Result }).exec());
-        db.exec("COMMIT");
-        return results;
-      } catch (e) {
-        db.exec("ROLLBACK");
-        throw e;
-      }
-    },
-    // #3147: the same database, read-only, for `D1.peek`.
-    readOnly: (): D1Database => ({
-      prepare: (sql: string) => statement(sql, [], true),
-      async batch(): Promise<D1Result[]> {
-        throw d1Error(new Error("a D1.peek handle is read-only"));
-      },
-    }),
-  };
-}
-
 /**
  * Version metadata (#3300): Cloudflare's Version metadata binding, which
  * `WorkersVersion` reads. `timestamp` is the version's creation time as an
@@ -965,28 +472,6 @@ export interface WorkerVersionMetadata {
   readonly id: string;
   readonly tag: string;
   readonly timestamp: string;
-}
-
-/**
- * The Version metadata binding of a multi-Worker integration test participant,
- * bound as its `env.CF_VERSION_METADATA`: a fixed version (id `"integration"`,
- * no tag, created at the epoch), so a case's assertions do not depend on when
- * it runs.
- */
-export function makeIntegrationVersionMetadata(): WorkerVersionMetadata {
-  return { id: "integration", tag: "", timestamp: "1970-01-01T00:00:00.000Z" };
-}
-
-/**
- * The marker every integration double puts on the fault it throws for an
- * unstubbed call (#3589). A binding in `bynk.cloudflare` that maps a platform
- * failure to an `Err` rethrows an error that carries it (`bynkNotStubbed ===
- * true`), so an unstubbed call faults the case and a handler's `Err(_)`
- * fallback cannot swallow it. Defined once, here; #3578's `Images` double uses
- * the same property.
- */
-export function markNotStubbed(message: string): Error {
-  return Object.assign(new globalThis.Error(message), { bynkNotStubbed: true });
 }
 
 /**
@@ -1005,38 +490,6 @@ export interface WorkerAiBinding {
  */
 export interface AnalyticsSqlBinding {
   query(request: { query: string; params?: unknown[] }): Promise<unknown>;
-}
-
-/**
- * The Analytics SQL binding of a multi-Worker integration test participant, bound as its
- * `env.CF_ANALYTICS_SQL`. A test never reaches Cloudflare, so `query` faults until the case stubs
- * the capability's operation. There are no fake rows: a fabricated reply would make a test pass
- * for the wrong reason.
- */
-export function makeIntegrationAnalyticsSql(): AnalyticsSqlBinding {
-  return {
-    async query(): Promise<unknown> {
-      throw markNotStubbed(
-        "bynk: the `AnalyticsSql` binding is not stubbed, and a test never reaches Analytics SQL — add `stub AnalyticsSql.query(_, _) returns …`",
-      );
-    },
-  };
-}
-
-/**
- * The AI binding of a multi-Worker integration test participant, bound as its
- * `env.AI`. A test never reaches Workers AI, so `run` faults until the case
- * stubs the capability's operation. There is no fake model: a fabricated reply
- * would make a test pass for the wrong reason.
- */
-export function makeIntegrationAi(): WorkerAiBinding {
-  return {
-    async run(): Promise<unknown> {
-      throw markNotStubbed(
-        "bynk: the `Ai` binding is not stubbed, and a test never reaches Workers AI — stub the operation the case calls (`stub Ai.run(_, _) returns …`)",
-      );
-    },
-  };
 }
 
 /**
@@ -1062,32 +515,6 @@ export interface WorkerImagesBinding {
 }
 
 /**
- * The Images binding of a multi-Worker integration test participant, bound as
- * its `env.IMAGES`. A test never reaches Cloudflare Images, so `input` faults
- * until the case stubs the capability's operation. There is no fake transform:
- * an image handed back unchanged would make a test pass for the wrong reason.
- */
-// The double's fault is marked (`markNotStubbed`), which `WorkersImages`
-// rethrows instead of mapping to an `ImagesError`: an unstubbed call must
-// fault, not come back as a value a handler's fallback would swallow.
-function notStubbed(stub: string): Error {
-  return markNotStubbed(
-    `bynk: the \`Images\` binding is not stubbed, and a test never reaches Cloudflare Images — stub the operation the case calls (${stub})`,
-  );
-}
-
-export function makeIntegrationImages(): WorkerImagesBinding {
-  return {
-    async info(): Promise<never> {
-      throw notStubbed("`stub Images.info(_) returns …`");
-    },
-    input(): WorkerImagesTransformer {
-      throw notStubbed("`stub Images.transform(_, _, _) returns …`");
-    },
-  };
-}
-
-/**
  * An AI Search instance binding (#3480): Cloudflare's `ai_search` binding,
  * which `WorkersAiSearch` reads. Requests and replies are the platform's own
  * shapes (`ai_search_options`, `chunks`, `choices`), and the binding is the
@@ -1096,58 +523,6 @@ export function makeIntegrationImages(): WorkerImagesBinding {
 export interface AiSearchInstance {
   search(request: Record<string, unknown>): Promise<unknown>;
   chatCompletions(request: Record<string, unknown>): Promise<unknown>;
-}
-
-/**
- * The AI Search binding of a multi-Worker integration test participant, bound
- * as its `env.<binding>`. A test never reaches AI Search, so every operation
- * faults, naming the binding, until the case stubs the capability's operation.
- */
-export function makeIntegrationAiSearch(binding: string): AiSearchInstance {
-  const unstubbed = async (): Promise<never> => {
-    throw markNotStubbed(
-      `bynk: the \`${binding}\` AI Search binding is not stubbed, and a test never reaches AI Search — stub the operation the case calls (for example \`stub <Name>.search(_, _) returns …\`)`,
-    );
-  };
-  return { search: unstubbed, chatCompletions: unstubbed };
-}
-
-/**
- * The mTLS certificate binding of a multi-Worker integration test participant (#3513 A), bound
- * as its `env.<binding>`. A test never reaches an origin, so `fetch` faults, naming the
- * instance, until the case stubs its `send`.
- */
-export function makeIntegrationMtls(instance: string): { fetch(request: unknown): Promise<never> } {
-  return {
-    fetch: async (): Promise<never> => {
-      throw markNotStubbed(
-        `bynk: \`${instance}.send\` is not stubbed, and a test never reaches the origin — add \`stub ${instance}.send(_) returns …\``,
-      );
-    },
-  };
-}
-
-/**
- * The Durable Object namespace of a `Container` instance (#3477), as the
- * multi-Worker integration harness binds it as `env.<binding>`. There is no
- * in-process container, so every call faults, naming the binding, until the
- * case stubs the instance (`stub Renderer.send(_, _) returns …`). An in-memory
- * echo is deliberately not offered: it would pass cases a real image fails.
- */
-export function makeIntegrationContainer(binding: string): {
-  idFromName(name: string): string;
-  get(id: string): { fetch(request: unknown): Promise<never> };
-} {
-  return {
-    idFromName: (name) => name,
-    get: (id) => ({
-      fetch: async (): Promise<never> => {
-        throw markNotStubbed(
-          `bynk: the \`${binding}\` container \`${id}\` is not stubbed, and a test never starts a container — stub the operation the case calls (for example \`stub <Name>.send(_, _) returns …\`)`,
-        );
-      },
-    }),
-  };
 }
 
 /**
@@ -1160,22 +535,6 @@ export interface SecretsStoreSecret {
 }
 
 /**
- * The Secrets Store binding of a multi-Worker integration test participant,
- * bound as its `env.<binding>`. A test never reaches the account's store, so
- * `get` faults, naming the binding and never a value, until the case stubs the
- * instance's `get`.
- */
-export function makeIntegrationSecretsStoreSecret(binding: string): SecretsStoreSecret {
-  return {
-    async get(): Promise<string> {
-      throw markNotStubbed(
-        `bynk: Secrets Store binding \`${binding}\` has no value in a test, which never reads the account's store — add \`stub <Capability>.get() returns …\``,
-      );
-    },
-  };
-}
-
-/**
  * Cloudflare's `send_email` binding (#3302), which `WorkersEmail` calls with a
  * message builder. It resolves to the platform's message id, or rejects with an
  * `Error` carrying a `code` (`E_SENDER_NOT_VERIFIED`, …). A builder holds
@@ -1183,23 +542,6 @@ export function makeIntegrationSecretsStoreSecret(binding: string): SecretsStore
  */
 export interface SendEmail {
   send(builder: Record<string, unknown>): Promise<{ messageId: string }>;
-}
-
-/**
- * The `send_email` binding of a multi-Worker integration test participant,
- * bound as its `env.<binding>`: an in-memory outbox. Every builder is kept (in
- * `sent`, in order) and answered with a deterministic id, so a test reads what
- * was sent and no mail leaves the process.
- */
-export function makeIntegrationEmail(): SendEmail & { sent: Record<string, unknown>[] } {
-  const sent: Record<string, unknown>[] = [];
-  return {
-    sent,
-    async send(builder: Record<string, unknown>): Promise<{ messageId: string }> {
-      sent.push(builder);
-      return { messageId: `test-message-${sent.length}` };
-    },
-  };
 }
 
 /**
@@ -1215,20 +557,4 @@ export interface Hyperdrive {
   readonly user?: string;
   readonly password?: string;
   readonly database?: string;
-}
-
-/**
- * The Hyperdrive binding of a multi-Worker integration test participant, bound
- * as its `env.<binding>`. A test never reaches a database, so reading its
- * `connectionString` faults, naming the binding, until the case stubs the
- * instance's operations (a stub answers before the binding is read).
- */
-export function makeIntegrationHyperdrive(binding: string): Hyperdrive {
-  return {
-    get connectionString(): string {
-      throw markNotStubbed(
-        `bynk: Hyperdrive binding \`${binding}\` has no database in a test, which never reaches a database — add \`stub <Capability>.all(_, _) returns …\` (or \`first\` or \`run\`)`,
-      );
-    },
-  };
 }

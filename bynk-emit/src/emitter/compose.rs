@@ -9,7 +9,6 @@
 //! #3928), so the seven target divergences stay renderer choices, each named
 //! where it is made.
 
-use crate::ts_build::ident;
 use bynk_ts::TsExpr;
 
 pub(crate) mod bundle;
@@ -23,11 +22,10 @@ pub use plan::{
     ComposeFacts, ComposePlan, ComposeUnit, ComposeUnitFacts, ConsumedSurface, ExecNeeds,
 };
 
-/// The `deps` object of a unit that has no entries. Both renderers spell it
-/// `{  }` (a double space, not the tight `{}` an empty `TsExpr::Object`
-/// prints): the pre-conversion `format!("{{ {} }}", entries.join(", "))`
-/// template always put a space on each side of its slot, and the goldens carry
-/// the result. One helper, so the two copies cannot drift.
+/// The `deps` object of a unit that has no entries: an empty object, which prints `{}`. (It was
+/// `{  }`, the residue of a deleted `format!("{{ {} }}", entries.join(", "))` template, until
+/// 1A.40b; the goldens changed by that whitespace alone.) One helper, so the two copies cannot
+/// drift.
 pub(crate) fn empty_deps() -> TsExpr {
-    ident("{  }")
+    TsExpr::object_entries(vec![])
 }

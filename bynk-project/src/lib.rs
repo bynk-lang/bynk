@@ -35,6 +35,7 @@ pub mod contracts_lock;
 pub mod dev_ack;
 pub mod discovery;
 pub mod env_protocol;
+pub mod environment;
 pub mod graph;
 pub mod hyperdrive;
 pub mod json;
@@ -52,6 +53,7 @@ pub mod vectorize;
 pub mod worker_groups;
 pub mod worker_layout;
 pub mod workspace;
+pub mod wrangler_keys;
 
 mod diagnostics;
 

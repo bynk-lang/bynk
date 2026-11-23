@@ -4,7 +4,7 @@
 // rollback.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { makeIntegrationPostgres } from "../src/pglite.ts";
+import { makeIntegrationPostgres } from "../src/testing/pglite.ts";
 import type { PgParam } from "../src/postgres.ts";
 
 const int = (value: number): PgParam => ({ tag: "PgInteger", value });

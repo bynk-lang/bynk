@@ -11,99 +11,6 @@ use bynk_ts::{
     TsType, TsTypeMember,
 };
 
-/// #2073: whether the lowered TypeScript `src` names the identifier `name`,
-/// as a whole word outside a member access (`x.Region` names a property) and
-/// outside a string literal (an `expect`'s failure message quotes the source)
-/// or a `//` or `/* */` comment. A template literal's text is skipped too, but
-/// its `${…}` holes are code.
-pub(super) fn names_ident(src: &str, name: &str) -> bool {
-    let is_ident = |c: char| c.is_ascii_alphanumeric() || c == '_' || c == '$';
-    // `code` is `src` with every literal character blanked, so offsets and
-    // word boundaries are kept.
-    let mut code = String::with_capacity(src.len());
-    // `None`: code. `Some(q)`: inside a string quoted by `q`. A template's
-    // hole pushes the template, and its braces, on `stack`.
-    let mut quote: Option<char> = None;
-    let mut stack: Vec<usize> = Vec::new(); // brace depth in each open hole
-    let mut chars = src.chars().peekable();
-    while let Some(c) = chars.next() {
-        match quote {
-            Some(q) => {
-                if c == '\\' {
-                    code.push(' ');
-                    if chars.next().is_some() {
-                        code.push(' ');
-                    }
-                    continue;
-                }
-                if q == '`' && c == '$' && chars.peek() == Some(&'{') {
-                    chars.next();
-                    code.push_str("  ");
-                    stack.push(0);
-                    quote = None;
-                    continue;
-                }
-                if c == q {
-                    quote = None;
-                }
-                code.push(' ');
-            }
-            None => match c {
-                '"' | '\'' | '`' => {
-                    quote = Some(c);
-                    code.push(' ');
-                }
-                '/' if chars.peek() == Some(&'/') => {
-                    // A line comment runs to the end of the line.
-                    code.push(' ');
-                    for d in chars.by_ref() {
-                        if d == '\n' {
-                            code.push('\n');
-                            break;
-                        }
-                        code.push(' ');
-                    }
-                }
-                '/' if chars.peek() == Some(&'*') => {
-                    // A block comment runs to the next `*/`.
-                    chars.next();
-                    code.push_str("  ");
-                    let mut star = false;
-                    for d in chars.by_ref() {
-                        code.push(' ');
-                        if star && d == '/' {
-                            break;
-                        }
-                        star = d == '*';
-                    }
-                }
-                '{' if !stack.is_empty() => {
-                    *stack.last_mut().expect("non-empty") += 1;
-                    code.push(c);
-                }
-                '}' if !stack.is_empty() => {
-                    let depth = stack.last_mut().expect("non-empty");
-                    if *depth == 0 {
-                        // The hole closes; the template resumes.
-                        stack.pop();
-                        quote = Some('`');
-                        code.push(' ');
-                    } else {
-                        *depth -= 1;
-                        code.push(c);
-                    }
-                }
-                _ => code.push(c),
-            },
-        }
-    }
-    code.match_indices(name).any(|(i, _)| {
-        let before = code[..i].chars().next_back();
-        let after = code[i + name.len()..].chars().next();
-        !before.is_some_and(|c| is_ident(c) || c == '.') && !after.is_some_and(is_ident)
-    })
-}
-
 /// testing-the-boundary Slice B: for a `system` suite whose target exposes an
 /// `http` service, emit a **test-only** HS256 signer and one **driver** per
 /// route. A driver builds a real `Request` (concrete path, JSON body, a signed
@@ -132,8 +39,8 @@ pub(super) type RouteBodyMap =
 ///
 /// #1479: `code` is now real [`TsStmt`]s (was pre-printed `String`) — the
 /// HS256 signer block (`__bynkNow`/`__b64url`/`__bytesB64url`/
-/// `__bynkSignHs256`) is committed `.ts` source (`emitter/test_runtime/
-/// jwt_signer.ts`, #1485), spliced in via [`jwt_signer_runtime_helpers`] and
+/// `__bynkSignHs256`) is committed `.ts` source (`runtime/src/testing/
+/// jwt_signer.ts`, #1485), spliced in via [`TestRuntimeModule::splice`] and
 /// carried as one [`bynk_ts::TsStmtKind::Raw`] statement, the same carrier
 /// this track's earlier still-`String`-typed-sibling conversions already
 /// used.
@@ -329,7 +236,7 @@ pub(super) fn emit_system_http_support(
         };
     };
     let ns = test_ns(target);
-    let binding = crate::emitter::wrangler::service_binding(target).name;
+    let binding = crate::emitter::bindings::service_binding(target).name;
     let type_ns = ns_qualifier(&ns);
 
     let mut routes: Vec<TsStmt> = Vec::new();
@@ -492,7 +399,7 @@ pub(super) fn emit_system_http_support(
             // form), and the one the raw drivers send (a `Wire` string).
             let cookies_param = h.params.iter().find(|p| is_cookies(p));
             let (typed_cookie, raw_cookie) =
-                cookie_header_texts(cookies_param, &type_ns, &table.types, runtime_use);
+                cookie_headers(cookies_param, &type_ns, &table.types, runtime_use);
             if let Some(cp) = cookies_param {
                 let key = (
                     sname.clone(),
@@ -1346,33 +1253,28 @@ pub(super) fn emit_system_http_support(
     // #1485: the HS256 signer block — a monotonic clock the signer's `exp`
     // uses (kept out of `bundle`d runtime), plus the test-only HS256 signer
     // itself (never in the deployable app; e2e owns real auth) — now lives
-    // at `emitter/test_runtime/jwt_signer.ts`, the same committed-`.ts`-file
+    // at `runtime/src/testing/jwt_signer.ts`, the same committed-`.ts`-file
     // treatment `expectation_runtime_helpers`/`stub_runtime_helpers` already
     // get, rather than an unexplained raw string literal with `\`-continuations.
-    let mut code = vec![TsStmt::raw(jwt_signer_runtime_helpers(), None)];
+    let mut code = vec![TestRuntimeModule::JwtSigner.splice()];
     // #3052: the test issuer an `Oidc` route's drivers mint tokens with.
     if has_oidc {
-        let mut issuer = TsStmt::raw(
-            format!(
-                "const __bynkOidcRemote: boolean = {remote};\n{}",
-                include_str!("test_runtime/oidc_issuer.ts")
-            ),
-            None,
-        );
+        // The remote flag is the first line of the issuer's text, so the two print as one block.
+        let mut remote_flag = oidc_remote_flag(remote);
+        remote_flag.no_blank_before = true;
+        code.push(remote_flag);
+        let mut issuer = TestRuntimeModule::OidcIssuer.splice();
         issuer.no_blank_before = true;
         code.push(issuer);
     }
     if signs_hmac {
-        let mut signer = TsStmt::raw(
-            include_str!("test_runtime/hmac_signer.ts").to_string(),
-            None,
-        );
+        let mut signer = TestRuntimeModule::HmacSigner.splice();
         signer.no_blank_before = true;
         code.push(signer);
     }
     // Set each secret the target's actors read, so the real Bearer seam verifies.
     // P7.2: `Record<string, string>` — same reasoning as `__bynkSignHs256`'s own
-    // `secret: string` parameter in `emitter/test_runtime/jwt_signer.ts`.
+    // `secret: string` parameter in `runtime/src/testing/jwt_signer.ts`.
     let record_string_string = TsType::named_with_args(
         "globalThis.Record",
         vec![TsType::named("string"), TsType::named("string")],
@@ -1602,40 +1504,87 @@ pub(super) fn foreign_service_double(binding: &str, worker: &str) -> TsExpr {
 /// participant the local key for the edge from it.
 pub(super) const HARNESS_CALLER: &str = "integration";
 
+/// #3277, #3386 (1B.3c): a route's `Cookie` header value, held as the node its `cookies`
+/// parameter contributes, so a `SignedCookie` actor's session cookie joins it as a second node
+/// and not by editing the rendered entry.
+struct CookieHeader {
+    /// The parameter's part of the header; `None` when the handler takes no `cookies`.
+    param: Option<TsExpr>,
+}
+
+impl CookieHeader {
+    /// The request-init entry `"cookie": <value>, ` (empty when there is no value), the value
+    /// being the parameter's part, the `session` cookie's, or the two joined with `"; "`.
+    fn render(&self, session: Option<&TsExpr>) -> String {
+        let value = match (&self.param, session) {
+            (None, None) => return String::new(),
+            (Some(only), None) | (None, Some(only)) => only.clone(),
+            (Some(param), Some(session)) => crate::ts_build::method_call(
+                TsExpr::array(vec![param.clone(), session.clone()]),
+                "join",
+                vec![crate::ts_build::str_lit("; ")],
+            ),
+        };
+        format!("\"cookie\": {}, ", printed(&value))
+    }
+}
+
+/// A driver's expression as the text spliced into its hand-shaped line.
+fn printed(expr: &TsExpr) -> String {
+    bynk_ts::print_expr(expr)
+}
+
 /// #3277: the `Cookie` header the typed system drivers send (a typed record's wire
 /// form) and the one the raw drivers send (a `Wire` string), for a handler's
 /// `cookies` parameter; empty when it has none.
-fn cookie_header_texts(
+fn cookie_headers(
     param: Option<&bynk_syntax::ast::Param>,
     type_ns: &str,
     types: &std::collections::HashMap<String, std::sync::Arc<bynk_syntax::ast::TypeDecl>>,
     runtime_use: &RuntimeUse,
-) -> (String, String) {
+) -> (CookieHeader, CookieHeader) {
     let Some(p) = param else {
-        return (String::new(), String::new());
+        return (CookieHeader { param: None }, CookieHeader { param: None });
     };
     let var = crate::emitter::ts_ident(&p.name.name);
     // #3277: the raw view sends the header text it was built from (a `Wire`
     // string is the header text itself).
     if matches!(p.type_ref, bynk_syntax::ast::TypeRef::RequestCookies(_)) {
         runtime_use.note_request_cookies();
-        let text = format!(
-            "\"cookie\": (typeof {var} === \"string\" ? {var} : __requestCookiesHeader({var})), "
-        );
-        return (text.clone(), text);
+        let header = || CookieHeader {
+            param: Some(TsExpr::Paren(Box::new(TsExpr::Conditional {
+                test: Box::new(crate::ts_build::strict_eq(
+                    crate::ts_build::typeof_expr(ident(var.clone())),
+                    crate::ts_build::str_lit("string"),
+                )),
+                consequent: Box::new(ident(var.clone())),
+                alternate: Box::new(crate::ts_build::call(
+                    ident("__requestCookiesHeader"),
+                    vec![ident(var.clone())],
+                )),
+            }))),
+        };
+        return (header(), header());
     }
     runtime_use.note_cookie_string();
-    let ser = bynk_ts::print_expr(&crate::emitter::serialisation::serialise_expr_via(
+    let ser = crate::emitter::serialisation::serialise_expr_via(
         &p.type_ref,
-        &bynk_ts::TsExpr::Ident(var.clone()),
+        &TsExpr::Ident(var.clone()),
         type_ns,
         runtime_use,
-    ));
+    );
     // #3343: a renamed field is written under its `@name`.
-    let table_arg = renamed_specs_arg(&p.type_ref, types);
+    let mut args = vec![ser];
+    args.extend(
+        crate::emitter::renamed_specs_source(&p.type_ref, types).map(crate::ts_build::raw_lit),
+    );
     (
-        format!("\"cookie\": __cookieString({ser}{table_arg}), "),
-        format!("\"cookie\": {var}, "),
+        CookieHeader {
+            param: Some(crate::ts_build::call(ident("__cookieString"), args)),
+        },
+        CookieHeader {
+            param: Some(ident(var)),
+        },
     )
 }
 
@@ -1725,7 +1674,7 @@ fn push_two_token_principals(routes: &mut Vec<TsStmt>, sname: &str, key: &str, h
 /// #3386: what a `system` driver needs to mint a `SignedCookie` actor's session cookie.
 struct SessionDriver {
     /// The `{ secret: … }` keys expression the cookie is signed with.
-    keys: String,
+    keys: TsExpr,
     /// The declaring actor's name: the cookie's `aud`.
     actor: String,
     /// The cookie's name.
@@ -1735,25 +1684,24 @@ struct SessionDriver {
 }
 
 impl SessionDriver {
-    /// The `name=value` template-literal text for `sub` (a TS expression) signed with `keys`
-    /// and issued `issued_secs` (a TS expression, in seconds) after the epoch.
-    fn pair(&self, keys: &str, sub: &str, issued_secs: &str) -> String {
-        format!(
-            "`{}=${{await __signSessionCookie({keys}, {:?}, {sub}, {}, ({issued_secs}) * 1000)}}`",
-            self.cookie, self.actor, self.ttl_secs
+    /// The `name=value` template literal for `sub` signed with `keys` and issued `issued_secs`
+    /// (an expression, in seconds) after the epoch.
+    fn pair(&self, keys: &TsExpr, sub: TsExpr, issued_secs: TsExpr) -> TsExpr {
+        use crate::ts_build::{await_expr, binary, call, num_lit, paren, str_lit};
+        let signed = await_expr(call(
+            ident("__signSessionCookie"),
+            vec![
+                keys.clone(),
+                str_lit(self.actor.clone()),
+                sub,
+                num_lit(self.ttl_secs),
+                binary(TsBinaryOp::Mul, paren(issued_secs), num_lit(1000)),
+            ],
+        ));
+        TsExpr::template_lit(
+            vec![format!("{}=", self.cookie), String::new()],
+            vec![signed],
         )
-    }
-}
-
-/// The `Cookie` header text carrying `pair` and, when a route also takes a `cookies` param,
-/// the cookies that param is sent as. `existing` is `"cookie": <expr>, ` or empty.
-fn merge_cookie(existing: &str, pair: &str) -> String {
-    match existing
-        .strip_prefix("\"cookie\": ")
-        .and_then(|e| e.strip_suffix(", "))
-    {
-        Some(expr) => format!("\"cookie\": [{expr}, {pair}].join(\"; \"), "),
-        None => format!("\"cookie\": {pair}, "),
     }
 }
 
@@ -1765,26 +1713,34 @@ fn session_route(
     actors: &HashMap<String, bynk_syntax::ast::ActorDecl>,
     secret_read_of: &dyn Fn(&str) -> String,
     (session_secrets, runtime_use): (&mut std::collections::BTreeSet<String>, &RuntimeUse),
-    (typed_cookie, raw_cookie): (&str, &str),
+    (typed_cookie, raw_cookie): (&CookieHeader, &CookieHeader),
 ) -> (Option<SessionDriver>, String, String, &'static str) {
     let Some(seam) = bynk_check::actors::signed_cookie_seam_for(h, actors) else {
-        return (None, typed_cookie.to_string(), raw_cookie.to_string(), "");
+        return (None, typed_cookie.render(None), raw_cookie.render(None), "");
     };
     session_secrets.insert(seam.secret.clone());
     runtime_use.note_session_signing();
     let session = SessionDriver {
-        keys: format!("{{ secret: {} }}", secret_read_of(&seam.secret)),
+        keys: TsExpr::object(vec![(
+            "secret".to_string(),
+            crate::ts_build::raw_lit(secret_read_of(&seam.secret)),
+        )]),
         actor: seam.actor,
         cookie: seam.cookie,
         ttl_secs: seam.ttl_secs,
     };
-    let pair = session.pair(&session.keys, "__sub", "__bynkNow()");
+    let pair = session.pair(&session.keys, ident("__sub"), now_secs());
     (
         Some(session),
-        merge_cookie(typed_cookie, &pair),
-        merge_cookie(raw_cookie, &pair),
+        typed_cookie.render(Some(&pair)),
+        raw_cookie.render(Some(&pair)),
         "\"sec-fetch-site\": \"same-origin\", ",
     )
+}
+
+/// `__bynkNow()`: the harness clock, in seconds.
+fn now_secs() -> TsExpr {
+    crate::ts_build::call(ident("__bynkNow"), Vec::new())
 }
 
 /// A driver's parameters and the URL it requests.
@@ -1842,23 +1798,41 @@ fn push_session_refusal_drivers(
         .map(|n| body_field(&crate::emitter::ts_ident(n)))
         .unwrap_or_default();
     let raw_options = make(&raw_body_init);
-    let issued_before_ttl = format!("__bynkNow() - {} - 3600", session.ttl_secs);
+    let keys_forged = TsExpr::object(vec![(
+        "secret".to_string(),
+        crate::ts_build::call(ident("__newSessionKey"), Vec::new()),
+    )]);
+    let issued_before_ttl = crate::ts_build::binary(
+        TsBinaryOp::Sub,
+        crate::ts_build::binary(
+            TsBinaryOp::Sub,
+            now_secs(),
+            crate::ts_build::num_lit(session.ttl_secs),
+        ),
+        crate::ts_build::num_lit(3600),
+    );
     let variants = [
         (
             "forged",
             session.pair(
-                "{ secret: __newSessionKey() }",
-                "\"bynk-test\"",
-                "__bynkNow()",
+                &keys_forged,
+                crate::ts_build::str_lit("bynk-test"),
+                now_secs(),
             ),
         ),
         (
             "expired",
-            session.pair(&session.keys, "\"bynk-test\"", &issued_before_ttl),
+            session.pair(
+                &session.keys,
+                crate::ts_build::str_lit("bynk-test"),
+                issued_before_ttl,
+            ),
         ),
     ];
     for (name, pair) in variants {
-        let sign_stmt = TsStmt::raw(format!("const __cookie = {pair};"), None);
+        // A raw statement, as before: its text carries no newline, so the next statement
+        // follows on the same line. That layout is pinned by the golden and not changed here.
+        let sign_stmt = TsStmt::raw(format!("const __cookie = {};", printed(&pair)), None);
         routes.push(sysdrive_driver(
             SysdriveKind::typed(name),
             sname,
@@ -1898,26 +1872,41 @@ fn push_session_refusal_drivers(
 mod tests {
     use super::*;
 
+    fn session() -> SessionDriver {
+        SessionDriver {
+            keys: TsExpr::object(vec![("secret".to_string(), ident("__key"))]),
+            actor: "User".to_string(),
+            cookie: "__Host-session".to_string(),
+            ttl_secs: 43200,
+        }
+    }
+
     #[test]
-    fn names_ident_ignores_literals_and_members_but_reads_template_holes() {
-        // #2073 review: a name in a string, a template's text or after a `.`
-        // is not a reference; one in a template's `${…}` hole is.
-        assert!(names_ident("const r = Region.Here;", "Region"));
-        assert!(!names_ident("x.Region", "Region"));
-        assert!(!names_ident("__serialise_Region(v)", "Region"));
-        assert!(!names_ident("fail(\"expect r == Region.Here\")", "Region"));
-        assert!(!names_ident("fail('Region')", "Region"));
-        assert!(!names_ident("fail(`expected Region`)", "Region"));
-        assert!(names_ident("fail(`got ${show(Region.Here)}`)", "Region"));
-        assert!(names_ident(
-            "fail(`a ${ { k: 1 }.k } b`) + Region.Here",
-            "Region"
-        ));
-        assert!(!names_ident("fail(`a ${ { k: 1 }.k } Region`)", "Region"));
-        assert!(!names_ident("fail(\"a \\\" Region\")", "Region"));
-        assert!(!names_ident("x(); // Region\n", "Region"));
-        assert!(names_ident("x(); // c\nRegion.Here", "Region"));
-        assert!(!names_ident("/* Region */ x()", "Region"));
-        assert!(names_ident("/* a */ Region.Here", "Region"));
+    fn the_session_pair_is_the_template_literal_the_drivers_always_sent() {
+        let s = session();
+        assert_eq!(
+            printed(&s.pair(&s.keys, ident("__sub"), now_secs())),
+            "`__Host-session=${await __signSessionCookie({ secret: __key }, \"User\", __sub, 43200, (__bynkNow()) * 1000)}`"
+        );
+    }
+
+    #[test]
+    fn a_cookie_header_is_the_param_the_session_or_the_two_joined() {
+        let s = session();
+        let pair = s.pair(&s.keys, ident("__sub"), now_secs());
+        let none = CookieHeader { param: None };
+        let some = CookieHeader {
+            param: Some(ident("cookies")),
+        };
+        assert_eq!(none.render(None), "");
+        assert_eq!(some.render(None), "\"cookie\": cookies, ");
+        assert_eq!(
+            none.render(Some(&pair)),
+            format!("\"cookie\": {}, ", printed(&pair))
+        );
+        assert_eq!(
+            some.render(Some(&pair)),
+            format!("\"cookie\": [cookies, {}].join(\"; \"), ", printed(&pair))
+        );
     }
 }

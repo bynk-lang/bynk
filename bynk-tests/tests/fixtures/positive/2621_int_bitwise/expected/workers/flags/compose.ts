@@ -7,7 +7,7 @@ export interface Env {
 }
 
 export function compose(env: Env) {
-  const deps = {  };
+  const deps = {};
   return {
     async bits(a: number, b: number) {
       return handlers.bits.call(a, b, deps);

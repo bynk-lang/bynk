@@ -27,6 +27,7 @@ use std::path::PathBuf;
 const CALLS: &str = include_str!("fixtures/every_kind.apply.calls.txt");
 const WRITES: &str = include_str!("fixtures/every_kind.apply.writes.txt");
 const FAILURES: &str = include_str!("fixtures/every_kind.apply.failures.txt");
+const CONFIGS: &str = include_str!("fixtures/every_kind.apply.configs.txt");
 
 const ENVIRONMENTS: [&str; 2] = ["default", "staging"];
 
@@ -417,6 +418,8 @@ struct Applied {
     failure: Option<String>,
     /// The ledger on disk when it ended.
     on_disk: String,
+    /// Each Worker's `wrangler.toml` when it ended, by Worker (1C.2's pin, Decision C of #4039).
+    configs: BTreeMap<String, String>,
 }
 
 /// Apply the every-kind project in `environment`, as `run` does after its confirmation: each
@@ -563,6 +566,14 @@ fn apply(environment: &str, fail_call: Option<usize>, fail_write: Option<usize>)
         writes: writes.take(),
         failure: failure.map(|f| without_secrets_file(&f.replace(&root, "<root>"))),
         on_disk: std::fs::read_to_string(&lock_path).expect("the ledger is on disk"),
+        configs: resources
+            .keys()
+            .map(|worker| {
+                let text = std::fs::read_to_string(workers_dir.join(worker).join("wrangler.toml"))
+                    .expect("the Worker's configuration is on disk");
+                (worker.clone(), text.replace(&root, "<root>"))
+            })
+            .collect(),
     }
 }
 
@@ -622,9 +633,10 @@ fn changes_the_account(call: &str) -> bool {
     .any(|prefix| call.starts_with(prefix))
 }
 
-/// The three fixtures' texts.
-fn fixtures() -> (String, String, String) {
+/// The four fixtures' texts.
+fn fixtures() -> (String, String, String, String) {
     let (mut calls, mut writes, mut failures) = (String::new(), String::new(), String::new());
+    let mut configs = String::new();
     for environment in ENVIRONMENTS {
         let run = apply(environment, None, None);
         assert_eq!(run.failure, None, "the every-kind apply succeeds");
@@ -644,6 +656,9 @@ fn fixtures() -> (String, String, String) {
             before.clone_from(&write.text);
         }
         assert_eq!(run.on_disk, before, "the last write is what is on disk");
+        for (worker, text) in &run.configs {
+            configs.push_str(&format!("== {environment}: {worker} ==\n{text}\n"));
+        }
         failures.push_str(&format!("== {environment} ==\n"));
         for (n, call) in run.calls.iter().enumerate() {
             if !changes_the_account(call) {
@@ -673,7 +688,7 @@ fn fixtures() -> (String, String, String) {
             failures.push_str(&changed_lines(LEDGER, &failed.on_disk));
         }
     }
-    (calls, writes, failures)
+    (calls, writes, failures, configs)
 }
 
 #[test]
@@ -682,12 +697,13 @@ fn the_every_kind_apply_makes_the_same_calls_writes_and_failures() {
     let _lock = crate::stop::TEST_LOCK
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let (calls, writes, failures) = fixtures();
+    let (calls, writes, failures, configs) = fixtures();
     if std::env::var_os("BYNK_WRITE_APPLY_FIXTURES").is_some() {
         let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/deploy/fixtures");
         std::fs::write(dir.join("every_kind.apply.calls.txt"), &calls).unwrap();
         std::fs::write(dir.join("every_kind.apply.writes.txt"), &writes).unwrap();
         std::fs::write(dir.join("every_kind.apply.failures.txt"), &failures).unwrap();
+        std::fs::write(dir.join("every_kind.apply.configs.txt"), &configs).unwrap();
         return;
     }
     assert_eq!(
@@ -697,6 +713,10 @@ fn the_every_kind_apply_makes_the_same_calls_writes_and_failures() {
     assert_eq!(
         writes, WRITES,
         "the apply's ledger writes changed: 1D.2 must not change what `bynk deploy` records, or when (ADR 0180)"
+    );
+    assert_eq!(
+        configs, CONFIGS,
+        "the Workers' final configurations changed: 1C.2 must not change what `bynk deploy` hands Wrangler"
     );
     assert_eq!(
         failures, FAILURES,
