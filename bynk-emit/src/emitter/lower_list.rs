@@ -1504,3 +1504,234 @@ pub(super) fn with_comparator_node(cmp: &TsExpr, body: impl FnOnce(TsExpr) -> Ts
         ),
     }
 }
+
+/// 1A.18a (#3719): the `List` kernel's expression-bodied arms build nodes.
+#[cfg(test)]
+mod list_kernel_tests {
+    use crate::testkit::emit_source;
+
+    /// The emitted TypeScript for a one-function commons.
+    fn emitted(body: &str) -> String {
+        emit_source(&format!("commons lk\n{body}\n"))
+    }
+
+    /// The returned expression of `export function f`.
+    fn returned(ts: &str) -> String {
+        let at = ts.find("export function f(").expect("f");
+        let rest = &ts[at..];
+        let ret = rest.find("  return ").expect("a return") + "  return ".len();
+        let end = rest[ret..].find(";\n}\n").expect("end");
+        rest[ret..ret + end].to_string()
+    }
+
+    /// Each arm over node operands prints exactly today's text.
+    #[test]
+    fn expression_arms_over_nodes_print_as_before() {
+        for (body, want) in [
+            ("fn f(xs: List[Int]) -> Int { xs.length() }", "(xs).length"),
+            ("fn f(xs: List[Int]) -> Int { xs.count() }", "(xs).length"),
+            (
+                "fn f(xs: List[Int], i: Int) -> Option[Int] { xs.get(i) }",
+                "((__xs: readonly number[], __i: number) => __i >= 0 && __i < __xs.length ? Some(__xs[__i] as number) : None)(xs, i)",
+            ),
+            (
+                "fn f(xs: List[Int], y: List[Int]) -> List[Int] { xs.concat(y).append(1).prepend(0) }",
+                "[0, ...[...[...xs, ...y], 1]]",
+            ),
+            (
+                "fn f(xs: List[Int]) -> List[Int] { xs.map((x) => x + 1).filter((x) => x > 1).take(2).skip(1) }",
+                "((((xs).map((__x: number) => ((x: number) => x + 1)(__x))).filter((__x: number) => ((x: number) => x > 1)(__x))).slice(0, globalThis.Math.max(0, 2))).slice(globalThis.Math.max(0, 1))",
+            ),
+            (
+                "fn f(xs: List[Int]) -> Bool { xs.any((x) => x > 1) && xs.all((x) => x > 0) }",
+                "(xs).some((__x: number) => ((x: number) => x > 1)(__x)) && (xs).every((__x: number) => ((x: number) => x > 0)(__x))",
+            ),
+            (
+                "fn f(xs: List[Int]) -> List[Int] { xs.flatMap((x) => [x, x]) }",
+                "(xs).flatMap((__x: number) => ((x: number) => [x, x])(__x))",
+            ),
+            (
+                "fn f(xs: List[Int]) -> Option[Int] { xs.first() }",
+                "((__xs: readonly number[]) => __xs.length > 0 ? Some(__xs[0]) : None)(xs)",
+            ),
+            (
+                "fn f(xs: List[Int]) -> Int { xs.firstOrElse(0) }",
+                "((__xs: readonly number[], __d: number) => __xs.length > 0 ? __xs[0] : __d)(xs, 0)",
+            ),
+            (
+                "fn f(xs: List[Int]) -> Int { xs.sum((x) => x) }",
+                "(xs).reduce((__s: number, __x: number) => __s + ((x: number) => x)(__x), 0)",
+            ),
+            (
+                "fn f(xs: List[Int]) -> List[Int] { xs.distinct() }",
+                "[...new globalThis.Set(xs)]",
+            ),
+            (
+                "fn f(xs: List[Bytes]) -> List[Bytes] { xs.distinct() }",
+                "__bynkDistinct(xs)",
+            ),
+            (
+                "fn f(xs: List[Float]) -> List[Float] { xs.sortBy((x) => x) }",
+                "[...xs].sort((__a: number, __b: number) => __bynkCmpFloat(((x: number) => x)(__a), ((x: number) => x)(__b)))",
+            ),
+            (
+                "fn f(xs: List[Float]) -> List[Float] { xs.sortByDescending((x) => x) }",
+                "[...xs].sort((__a: number, __b: number) => __bynkCmpFloat(((x: number) => x)(__b), ((x: number) => x)(__a)))",
+            ),
+        ] {
+            let ts = emitted(body);
+            assert_eq!(returned(&ts), want, "{body}");
+        }
+    }
+
+    /// The `Decimal` sum starts from the zero decimal and notes its helper.
+    #[test]
+    fn a_decimal_sum_is_a_node_and_imports_its_helper() {
+        let ts = emitted("fn f(xs: List[Decimal]) -> Decimal { xs.sum((x) => x) }");
+        assert!(ts.contains("__bynkDecimalAdd(__s, ((x: { readonly coefficient: bigint; readonly scale: number }) => x)(__x)), { coefficient: 0n, scale: 0 })"), "{ts}");
+        assert!(ts.contains("import { __bynkDecimalAdd }"), "{ts}");
+    }
+
+    /// The one returned expression of `f`, async or not.
+    fn returned_any(ts: &str) -> String {
+        let at = ts.find("function f(").expect("f");
+        let rest = &ts[at..];
+        let ret = rest.find("  return ").expect("a return") + "  return ".len();
+        let end = rest[ret..].find(";\n}\n").expect("end");
+        rest[ret..ret + end].to_string()
+    }
+
+    fn arm_source(elem: &str, ret: &str, extra: &str, expr: &str) -> String {
+        let param = format!("xs: List[{elem}]");
+        let body = expr.replace("{R}", "xs");
+        format!("fn f({param}{extra}) -> {ret} {{ {body} }}")
+    }
+
+    /// The layout of the statement arms: a block-bodied arrow, one statement per
+    /// line, an unbraced loop body inline, `} else {` on one line, and the
+    /// accumulator's function type keeps its parameter names.
+    #[test]
+    fn statement_arms_print_as_multi_line_arrows() {
+        for (elem, ret, extra, expr, want) in [
+            (
+                "Int",
+                "Effect[Int]",
+                ", g: (Int, Int) -> Effect[Int]",
+                "{R}.foldEff(0, g)",
+                "(async (__xs: readonly number[], __acc: number, __f: (acc: number, x: number) => globalThis.Promise<number>) => {
+    for (const __x of __xs) __acc = await __f(__acc, __x);
+    return __acc;
+  })(xs, 0, g)",
+            ),
+            (
+                "Result[Int, String]",
+                "Result[List[Int], List[String]]",
+                "",
+                "{R}.sequenceAll()",
+                "((__xs: readonly Result<number, string>[]) => {
+    const __ok: number[] = [];
+    const __errs: string[] = [];
+    for (const __r of __xs) {
+      if (__r.tag === \"Err\") {
+        __errs.push(__r.error);
+      } else {
+        __ok.push(__r.value);
+      }
+    }
+    return __errs.length > 0 ? Err(__errs) : Ok(__ok);
+  })(xs)",
+            ),
+            (
+                "Int",
+                "List[Int]",
+                "",
+                "{R}.sortByDescending((x) => x)",
+                "[...xs].sort((__a: number, __b: number) => {
+    const __ka = ((x: number) => x)(__a);
+    const __kb = ((x: number) => x)(__b);
+    return __ka < __kb ? 1 : __ka > __kb ? -1 : 0;
+  })",
+            ),
+            (
+                "Int",
+                "List[Int]",
+                ", ys: List[Int]",
+                "{R}.joinOn(ys, (x) => x, (y) => y, (x, y) => x + y)",
+                "(() => {
+    const __h: globalThis.Record<string, number[]> = globalThis.Object.create(null);
+    for (const __u of ys) {
+      const __k = String(((y: number) => y)(__u));
+      (__h[__k] = __h[__k] ?? []).push(__u);
+    }
+    return (xs).flatMap((__t: number) => {
+      const __m = __h[String(((x: number) => x)(__t))] ?? [];
+      return __m.map((__u: number) => ((x: number, y: number) => x + y)(__t, __u));
+    });
+  })()",
+            ),
+        ] {
+            let ts = emitted(&arm_source(elem, ret, extra, expr));
+            assert_eq!(returned_any(&ts), want, "{expr}");
+        }
+    }
+
+    /// The async arms stay async by construction and still import the settle
+    /// helper that `par*` calls: `note_settle_all` fires as it did.
+    #[test]
+    fn par_arms_import_their_settle_helper() {
+        let ts = emitted(&arm_source(
+            "Int",
+            "Effect[()]",
+            ", g: (Int) -> Effect[()]",
+            "{R}.parTraverse(g)",
+        ));
+        assert!(ts.contains("__bynkSettleAll"), "{ts}");
+        assert!(
+            ts.contains("(async (__xs: readonly number[]) => {\n"),
+            "{ts}"
+        );
+    }
+
+    /// Hoisted effects keep source order: the receiver's `?` lowers before the
+    /// argument's for `append`/`concat`, after it for `prepend`.
+    #[test]
+    fn hoisted_operands_keep_source_order() {
+        let src = "commons lk\n\
+            fn p(x: Int) -> Result[Int, String] { Ok(x) }\n\
+            fn f(xs: List[Int]) -> Result[List[Int], String] { Ok(xs.append(p(1)?).concat([p(2)?])) }\n\
+            fn g(xs: List[Int]) -> Result[List[Int], String] { Ok(xs.prepend(p(3)?)) }\n";
+        let ts = emit_source(src);
+        let at = |n: &str| ts.find(n).unwrap_or_else(|| panic!("{n}\n{ts}"));
+        let f = at("export function f(");
+        let one = ts[f..].find("p(1)").unwrap();
+        let two = ts[f..].find("p(2)").unwrap();
+        assert!(one < two, "{ts}");
+        assert!(
+            ts.contains("return Ok([...[...xs, __r0.value], ...[__r1.value]]);"),
+            "{ts}"
+        );
+        assert!(ts.contains("return Ok([__r0.value, ...xs]);"), "{ts}");
+    }
+
+    /// Decision G: the imports derive from the printed output, so a module using
+    /// `get`, `first`, `sequenceAll` and `traverseTry` imports what it uses: the
+    /// `Result` and `Option` names, and nothing from `errors` (1A.36b-1).
+    #[test]
+    fn imports_follow_the_printed_kernel_output() {
+        let src = "commons lk\n\
+            fn a(xs: List[Int]) -> Option[Int] { xs.get(0) }\n\
+            fn a2(xs: List[Int]) -> Option[Int] { xs.first() }\n\
+            fn b(xs: List[Result[Int, String]]) -> Result[List[Int], List[String]] { xs.sequenceAll() }\n\
+            fn c(xs: List[Int]) -> Effect[Result[List[Int], String]] {\n\
+              xs.traverseTry((x) => { let r: Result[Int, String] = Ok(x)\n  Effect.pure(r) })\n\
+            }\n";
+        let ts = emit_source(src);
+        assert!(
+            ts.contains(
+                "import { Ok, Err, Some, None, type Result, type Option } from \"./__bynk_runtime/result.js\";"
+            ),
+            "{ts}"
+        );
+        assert_eq!(ts.matches("import ").count(), 1, "{ts}");
+    }
+}
