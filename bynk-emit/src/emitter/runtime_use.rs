@@ -1,26 +1,22 @@
 //! Which runtime helpers an emitted module's *callers other than its own header* need.
 //!
-//! A module the emitter builds takes its runtime import from its built tree: a unit module
-//! since 1A.36b-1 (`runtime_header`), the Worker `index.ts` and `compose.ts` since 1A.36b-2.
-//! So nothing here decides an import the emitter writes. What these notes still serve:
-//!
-//! - the test harness's modules (`testgen`, `system_support.rs` above all), whose imports stay
-//!   predicted until 1B.5: every flag below with a reader is read there;
-//! - emission itself: `plain_json`, `virtual_time` and the codec roots decide what is
-//!   *emitted*, not what is imported.
+//! Every module the emitter or the harness builds takes its runtime import from its built
+//! tree: a unit module since 1A.36b-1 (`runtime_header`), the Worker `index.ts` and
+//! `compose.ts` since 1A.36b-2, and the generated test modules since 1B.5e. **So nothing here
+//! decides an import at all.** What remains is emission itself: `plain_json`, `virtual_time`,
+//! `http_result_cookie` (the `bynk` `Cookie` type a case reads, not a runtime name) and the
+//! codec roots decide what is *emitted*. 1B.5e deleted the 28 flags whose only reader was the
+//! test harness's predicted import list, with their notes and fields.
 //!
 //! A Worker module's own `RuntimeUse` (`workers.rs`, `workers_entry.rs`) is a sink: the codec
 //! producers shared with the unit modules take one to note into, and nothing reads it back.
 //!
-//! The groups the notes carry are the `Bytes` helpers (`__bynkBytesEqual` and friends,
-//! v0.110 / ADR 0142), the structural-equality walker (`__bynkEq`, #1652), the `Instant`,
-//! percent-encoding, request and cookie helpers, the boundary-codec group (`Ok`, `Err`,
-//! `Result`, `BoundaryError`, #914) an *inlined* deserialiser builds, and the JSON-codec
-//! group (`Ok`, `Err`, `Result`, `JsonValue`, `DecodeError`, #914) the `Json.decode[T]`
-//! wrapper names. The notes whose only reader was an emitter-built module's header (the ICU
-//! formatters, the session-cookie helpers and the two trace helpers, 1A.36b-1) are gone, the
-//! tree carrying the fact. 1A.36b-2 found no further note whose only reader was a Worker
-//! header: the driver reads each one that remains.
+//! The notes that remain are the ones emission itself reads: the `Bytes` helpers
+//! (`__bynkBytesEqual` and friends, v0.110 / ADR 0142), the `detach` reporter, the comparator,
+//! key and `Decimal` helper sets a module's witnesses name, and the codec state below. The
+//! notes whose only reader was an emitter-built module's header (the ICU formatters, the
+//! session-cookie helpers and the two trace helpers) went in 1A.36b-1; those whose only
+//! reader was the test harness's import list went in 1B.5e.
 //!
 //! #917 adds a differently-shaped piece of state, riding this same shared reference for
 //! the same reason: a test-scaffold module's `Json.decode`/`Json.encode` on a named type has
@@ -31,8 +27,8 @@
 //!
 //! The condition is "did emission actually reference it", which is a fact only
 //! emission knows. This type is how that fact travels: the producers call
-//! [`RuntimeUse::note_bytes`] and the like as they emit, and a module that still curates its
-//! import list reads the flags afterwards.
+//! [`RuntimeUse::note_bytes`] and the like as they emit, and the emission that depends on the
+//! fact reads it afterwards.
 //!
 //! # Why not scan the generated text
 //!
@@ -47,8 +43,8 @@
 //! that would obviously catch it, because the marker and the scan live in
 //! different files.
 //!
-//! A unit module's header went further: it reads the tree, which carries each name as a
-//! node, so no note is needed there at all.
+//! Every header goes further: it reads the tree, which carries each name as a node, so no
+//! note is needed for an import at all.
 //!
 //! # What keeps the producers honest
 //!
@@ -89,66 +85,13 @@ use super::internal_fault::InternalFault;
 #[derive(Default)]
 pub struct RuntimeUse {
     bytes: Cell<bool>,
-    /// #2016: the module references the `Bytes` operation helpers (`concat`,
-    /// `compare`, hex, base64url), a group apart from `bytes` so a module that
-    /// only builds or compares `Bytes` keeps its import list.
-    bytes_ops: Cell<bool>,
-    /// K3 (#2592): the module references the `Instant` ISO-8601 helpers.
-    time_ops: Cell<bool>,
-    /// Hyperdrive H3 (#3320): the module references `__bynkPgRow`, the typed
-    /// `Postgres` reads' pass over a row's `Instant` and `Int` columns.
-    pg_rows: Cell<bool>,
-    /// #2867: an `IsoDate` refinement check was emitted.
-    iso_date: Cell<bool>,
-    /// #3214: the module lowers `Yaml.decode[T]` and imports the YAML parser.
-    yaml: Cell<bool>,
-    /// #2640: the module references the `par` block's join, `__bynkSettleAll`.
-    settle_all: Cell<bool>,
-    /// #2683: the module references `e.within(d)`'s race, `__bynkWithin`.
-    within: Cell<bool>,
-    /// #2711: the module references `a.race(b)`'s helper, `__bynkRace`.
-    race: Cell<bool>,
     /// #3437: the module references `e.detach()`'s reporter, `__bynkDetach`.
     detach: Cell<bool>,
-    /// #2620: the module references `unreachable`/`todo`'s helper, `__fault`.
-    fault: Cell<bool>,
     /// #2683: the test module runs on virtual time, so an addressed call is
     /// driven by `__bynkSettleVirtual`.
     virtual_time: Cell<bool>,
-    /// K2 (#2594): the module references the percent-encoding helpers.
-    url_ops: Cell<bool>,
-    /// #2341 (L4): the module builds a `RequestHeaders` (`__requestHeaders`).
-    request_headers: Cell<bool>,
-    /// #2341 (L4): a system-tier driver sends a test's headers
-    /// (`__requestHeaderPairs`).
-    request_header_pairs: Cell<bool>,
-    /// #2854: the module builds a `RequestQuery` (`__requestQuery`).
-    request_query: Cell<bool>,
-    /// #3277: the module builds a `RequestCookies` (`__requestCookies`).
-    request_cookies: Cell<bool>,
-    /// #3386: a `system` driver mints session cookies (`__signSessionCookie`, `__newSessionKey`).
-    session_signing: Cell<bool>,
-    /// #2854: a typed query becomes a query string (`__queryString`).
-    query_string: Cell<bool>,
-    /// #3276: a typed `@multipart` body becomes a `FormData` (`__multipartForm`).
-    multipart_form: Cell<bool>,
-    /// #3276: `Form.decode`/`Form.encode` lower to the form codec (`__formDecode`, `__formString`).
-    form_codec: Cell<bool>,
-    /// #3277: a typed `cookies` record becomes a `Cookie` header (`__cookieString`).
-    cookie_string: Cell<bool>,
     /// #3277: a case reads the cookies of an `HttpResult`, so names the `bynk` `Cookie` type.
     http_result_cookie: Cell<bool>,
-    /// #2854: a system-tier driver sends a test's query (`__requestQuerySearch`).
-    request_query_search: Cell<bool>,
-    /// #2380 (L5): the module builds a `TokenClaims` (`__tokenClaims`).
-    token_claims: Cell<bool>,
-    /// #3051: the module builds a `TestConnection` (`TestConnection[F]()`).
-    test_connection: Cell<bool>,
-    /// #1652: the module references `__bynkEq` (structural `==`).
-    eq: Cell<bool>,
-    /// #1657: the module references the `Int` domain traps (`__bynkIntDiv`,
-    /// `__bynkToInt`).
-    int: Cell<bool>,
     /// Constrained generics slice 1: the comparator helpers (`__bynkCmpInt`,
     /// `__bynkCmpRecord`, …) the module's witnesses, ordering operators and
     /// ordering kernels reference.
@@ -157,15 +100,6 @@ pub struct RuntimeUse {
     /// encoders carry the plain branch `withPlainJson` switches on. Absent, they
     /// are emitted byte-for-byte as before.
     plain_json: Cell<bool>,
-    boundary_codec: Cell<bool>,
-    json_codec: Cell<bool>,
-    /// #1934: the module constructs an `HttpResult` variant. A source module
-    /// imports `HttpResult` by its own structural scan; a test module, whose
-    /// case compares a typed outcome with `Ok(…)`, reads this.
-    http_result: Cell<bool>,
-    /// #2839: the module constructs a `QueueResult` variant (a test case
-    /// comparing a verdict with a bare `Ack`/`Retry(…)`).
-    queue_result: Cell<bool>,
     /// #917: for a test-scaffold module, the type-only namespace each
     /// codec-eligible named type reaches through (`"Order" -> "orders."`) — the
     /// module has no local declaration of its own, only a namespace import of
@@ -211,45 +145,6 @@ impl RuntimeUse {
         self.bytes.set(true);
     }
 
-    /// Record that the module references the `Bytes` operation helpers (#2016).
-    pub fn note_bytes_ops(&self) {
-        self.bytes_ops.set(true);
-    }
-
-    /// #2867: a refinement check whose condition calls a runtime helper
-    /// (`IsoDate` -> `__bynkIsIsoDate`).
-    pub fn note_predicate(&self, pred: &bynk_syntax::ast::PredKind) {
-        if matches!(pred, bynk_syntax::ast::PredKind::IsoDate) {
-            self.iso_date.set(true);
-        }
-    }
-
-    /// #3214: record that the module lowers `Yaml.decode[T]`, so the YAML parser
-    /// module is imported (and emitted); no other module pays for it.
-    pub fn note_yaml(&self) {
-        self.yaml.set(true);
-    }
-
-    /// Record that the module references the `Instant` ISO-8601 helpers (#2592).
-    pub fn note_time_ops(&self) {
-        self.time_ops.set(true);
-    }
-
-    /// Record that the module references the typed `Postgres` read helper (#3320).
-    pub fn note_pg_rows(&self) {
-        self.pg_rows.set(true);
-    }
-
-    /// Record that the module references the percent-encoding helpers (#2594).
-    pub fn note_url_ops(&self) {
-        self.url_ops.set(true);
-    }
-
-    /// Record that the module references the `par` join (#2640).
-    pub fn note_settle_all(&self) {
-        self.settle_all.set(true);
-    }
-
     /// Record that the test module runs on virtual time (#2683).
     pub fn note_virtual_time(&self) {
         self.virtual_time.set(true);
@@ -260,74 +155,9 @@ impl RuntimeUse {
         self.virtual_time.get()
     }
 
-    /// Record that the module references the `within` race (#2683).
-    pub fn note_within(&self) {
-        self.within.set(true);
-    }
-
     /// Record that the module references the `detach` reporter (#3437).
     pub fn note_detach(&self) {
         self.detach.set(true);
-    }
-
-    /// Record that the module references the `race` helper (#2711).
-    pub fn note_race(&self) {
-        self.race.set(true);
-    }
-
-    /// Record that the module references the `__fault` helper (#2620).
-    pub fn note_fault(&self) {
-        self.fault.set(true);
-    }
-
-    /// Record that the module builds a `RequestHeaders` value (#2341).
-    pub fn note_request_headers(&self) {
-        self.request_headers.set(true);
-    }
-
-    /// Record that a system-tier driver sends a test's headers (#2341).
-    pub fn note_request_header_pairs(&self) {
-        self.request_header_pairs.set(true);
-    }
-
-    /// Whether `__requestHeaderPairs` must be imported (#2341).
-    pub fn request_header_pairs(&self) -> bool {
-        self.request_header_pairs.get()
-    }
-
-    /// Record that a `system` driver mints session cookies (#3386).
-    pub fn note_session_signing(&self) {
-        self.session_signing.set(true);
-    }
-
-    /// Whether the session-signing helpers must be imported (#3386).
-    pub fn session_signing(&self) -> bool {
-        self.session_signing.get()
-    }
-
-    /// Record that the module builds a `RequestCookies` value (#3277).
-    pub fn note_request_cookies(&self) {
-        self.request_cookies.set(true);
-    }
-
-    /// Whether the `RequestCookies` helpers must be imported (#3277).
-    pub fn request_cookies(&self) -> bool {
-        self.request_cookies.get()
-    }
-
-    /// Record that the module builds a `RequestQuery` value (#2854).
-    pub fn note_request_query(&self) {
-        self.request_query.set(true);
-    }
-
-    /// Whether `__requestQuery` must be imported (#2854).
-    pub fn request_query(&self) -> bool {
-        self.request_query.get()
-    }
-
-    /// Record that a typed query becomes a query string (#2854).
-    pub fn note_cookie_string(&self) {
-        self.cookie_string.set(true);
     }
 
     /// Record that a result method names the `bynk` `Cookie` type (#3277).
@@ -338,107 +168,6 @@ impl RuntimeUse {
     /// Whether the module must import the `Cookie` type (#3277).
     pub fn http_result_cookie(&self) -> bool {
         self.http_result_cookie.get()
-    }
-
-    /// Whether `__cookieString` must be imported (#3277).
-    pub fn cookie_string(&self) -> bool {
-        self.cookie_string.get()
-    }
-
-    /// Record that `Form.decode`/`Form.encode` use the form codec (#3276).
-    pub fn note_form_codec(&self) {
-        self.form_codec.set(true);
-    }
-
-    /// Whether the form codec helpers must be imported (#3276).
-    pub fn form_codec(&self) -> bool {
-        self.form_codec.get()
-    }
-
-    /// Record that a typed `@multipart` body becomes a `FormData` (#3276).
-    pub fn note_multipart_form(&self) {
-        self.multipart_form.set(true);
-    }
-
-    /// Whether `__multipartForm` must be imported (#3276).
-    pub fn multipart_form(&self) -> bool {
-        self.multipart_form.get()
-    }
-
-    pub fn note_query_string(&self) {
-        self.query_string.set(true);
-    }
-
-    /// Whether `__queryString` must be imported (#2854).
-    pub fn query_string(&self) -> bool {
-        self.query_string.get()
-    }
-
-    /// Record that a system-tier driver sends a test's query (#2854).
-    pub fn note_request_query_search(&self) {
-        self.request_query_search.set(true);
-    }
-
-    /// Whether `__requestQuerySearch` must be imported (#2854).
-    pub fn request_query_search(&self) -> bool {
-        self.request_query_search.get()
-    }
-
-    /// Record that the module builds a `TestConnection` (#3051).
-    pub fn note_test_connection(&self) {
-        self.test_connection.set(true);
-    }
-
-    /// Whether the module builds a `TestConnection` (#3051).
-    pub fn test_connection(&self) -> bool {
-        self.test_connection.get()
-    }
-
-    /// Record that the module builds a `TokenClaims` value (#2380).
-    pub fn note_token_claims(&self) {
-        self.token_claims.set(true);
-    }
-
-    /// Whether `__tokenClaims` must be imported (#2380).
-    pub fn token_claims(&self) -> bool {
-        self.token_claims.get()
-    }
-
-    /// Whether `__requestHeaders` must be imported (#2341).
-    pub fn request_headers(&self) -> bool {
-        self.request_headers.get()
-    }
-
-    /// Record that the module references `__bynkEq`, the structural-equality
-    /// walker behind `==`/`!=` on a non-primitive operand (#1652).
-    pub fn note_eq(&self) {
-        self.eq.set(true);
-    }
-
-    /// Record that the module constructs an `HttpResult` variant (#1934).
-    pub fn note_http_result(&self) {
-        self.http_result.set(true);
-    }
-
-    /// Record that the module constructs a `QueueResult` variant (#2839).
-    pub fn note_queue_result(&self) {
-        self.queue_result.set(true);
-    }
-
-    /// Whether a test module must import `QueueResult` (#2839).
-    pub fn queue_result(&self) -> bool {
-        self.queue_result.get()
-    }
-
-    /// Whether a test module must import `HttpResult` (#1934).
-    pub fn http_result(&self) -> bool {
-        self.http_result.get()
-    }
-
-    /// Record that the module references the `Int` domain traps: `Int` division
-    /// (`__bynkIntDiv`) or a Float→`Int` conversion (`__bynkToInt`), #1657.
-    pub fn note_int(&self) {
-        self.int.set(true);
     }
 
     /// Record that the module references the comparator helper `name`
@@ -469,20 +198,6 @@ impl RuntimeUse {
             .iter()
             .map(|n| format!(", {n}"))
             .collect::<String>()
-    }
-
-    /// Record that the module inlines a boundary deserialiser, which builds
-    /// `Ok(…)` / `Err(… as BoundaryError)` directly rather than delegating to a
-    /// `deserialise_<T>` in its own namespace.
-    pub fn note_boundary_codec(&self) {
-        self.boundary_codec.set(true);
-    }
-
-    /// Record that the module emits the `Json.decode[T]` wrapper, whose
-    /// signature and body name `Result`, `JsonValue` and `DecodeError` regardless
-    /// of which arm the inner deserialiser takes.
-    pub fn note_json_codec(&self) {
-        self.json_codec.set(true);
     }
 
     /// #917: set once, up front, before any body lowers — the type-only
@@ -555,81 +270,9 @@ impl RuntimeUse {
         self.bytes.get()
     }
 
-    /// Whether the `Bytes` operation helpers must be imported (#2016).
-    pub fn bytes_ops(&self) -> bool {
-        self.bytes_ops.get()
-    }
-
-    /// Whether `__bynkIsIsoDate` must be imported (#2867).
-    pub fn iso_date(&self) -> bool {
-        self.iso_date.get()
-    }
-
-    /// Whether the YAML parser must be imported (#3214).
-    pub fn yaml(&self) -> bool {
-        self.yaml.get()
-    }
-
-    /// Whether the `Instant` ISO-8601 helpers must be imported (#2592).
-    pub fn time_ops(&self) -> bool {
-        self.time_ops.get()
-    }
-
-    /// Whether the typed `Postgres` read helper must be imported (#3320).
-    pub fn pg_rows(&self) -> bool {
-        self.pg_rows.get()
-    }
-
-    /// Whether the percent-encoding helpers must be imported (#2594).
-    pub fn url_ops(&self) -> bool {
-        self.url_ops.get()
-    }
-
-    /// Whether `__bynkWithin` must be imported (#2683).
-    pub fn within(&self) -> bool {
-        self.within.get()
-    }
-
-    /// Whether `__fault` must be imported (#2620).
-    pub fn fault(&self) -> bool {
-        self.fault.get()
-    }
-
     /// Whether `__bynkDetach` must be imported (#3437).
     pub fn detach(&self) -> bool {
         self.detach.get()
-    }
-
-    /// Whether `__bynkRace` must be imported (#2711).
-    pub fn race(&self) -> bool {
-        self.race.get()
-    }
-
-    /// Whether `__bynkSettleAll` must be imported (#2640).
-    pub fn settle_all(&self) -> bool {
-        self.settle_all.get()
-    }
-
-    /// Whether `__bynkEq` must be imported (#1652).
-    pub fn eq(&self) -> bool {
-        self.eq.get()
-    }
-
-    /// Whether the `Int` domain traps must be imported (#1657).
-    pub fn int(&self) -> bool {
-        self.int.get()
-    }
-
-    /// Whether the `Ok` / `Err` / `Result` / `BoundaryError` group must be
-    /// imported.
-    pub fn boundary_codec(&self) -> bool {
-        self.boundary_codec.get()
-    }
-
-    /// Whether the `Ok` / `Err` / `Result` / `JsonValue` / `DecodeError` group
-    /// must be imported.
-    pub fn json_codec(&self) -> bool {
-        self.json_codec.get()
     }
 }
 
@@ -646,7 +289,7 @@ mod tests {
         let u = RuntimeUse::default();
         u.note_bytes();
         assert!(u.bytes());
-        assert!(!u.eq(), "noting one helper does not set the other");
+        assert!(!u.detach(), "noting one helper does not set the other");
         u.note_bytes();
         assert!(u.bytes(), "a second note is not a toggle");
     }

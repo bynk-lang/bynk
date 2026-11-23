@@ -213,7 +213,6 @@ impl<'a> LowerCtx<'a> {
         let list = witness_list(f, &self.commons().types);
         if list.iter().any(|w| w.kind == WitnessKind::Codec) {
             // The witness type names these, whether or not the body encodes.
-            self.runtime_use().note_json_codec();
         }
         list.into_iter()
             .map(|w| {
@@ -1340,71 +1339,9 @@ impl<'a> LowerCtx<'a> {
         self.runtime_use().note_bytes();
     }
 
-    /// Record that this lowering emitted a `Bytes` operation helper (#2016), so
-    /// the module imports that group.
-    pub(super) fn note_bytes_ops(&self) {
-        self.runtime_use().note_bytes_ops();
-    }
-
-    /// #2867: record a refinement check that calls a runtime helper.
-    pub(super) fn note_predicate(&self, pred: &PredKind) {
-        self.runtime_use().note_predicate(pred);
-    }
-
-    /// Record that this lowering emitted an `Instant` ISO-8601 helper (#2592).
-    pub(super) fn note_time_ops(&self) {
-        self.runtime_use().note_time_ops();
-    }
-
-    /// Record that this lowering emitted a percent-encoding helper (#2594).
-    pub(super) fn note_url_ops(&self) {
-        self.runtime_use().note_url_ops();
-    }
-
-    /// Record that this lowering emitted a `within` race (#2683).
-    pub(super) fn note_within(&self) {
-        self.runtime_use().note_within();
-    }
-
-    /// Record that this lowering emitted a `__fault` call (#2620).
-    pub(super) fn note_fault(&self) {
-        self.runtime_use().note_fault();
-    }
-
     /// Record that this lowering emitted a `detach` (#3437).
     pub(super) fn note_detach(&self) {
         self.runtime_use().note_detach();
-    }
-
-    /// Record that this lowering emitted a `race` (#2711).
-    pub(super) fn note_race(&self) {
-        self.runtime_use().note_race();
-    }
-
-    /// Record that this lowering emitted a `par` join (#2640).
-    pub(super) fn note_settle_all(&self) {
-        self.runtime_use().note_settle_all();
-    }
-
-    /// Record that this lowering built a `RequestHeaders` value (#2341), so
-    /// the module imports `__requestHeaders`.
-    pub(super) fn note_request_headers(&self) {
-        self.runtime_use().note_request_headers();
-    }
-
-    /// Record that this lowering built a `RequestCookies` value (#3277).
-    pub(super) fn note_request_cookies(&self) {
-        self.runtime_use().note_request_cookies();
-    }
-
-    /// Record that this lowering built a `RequestQuery` value (#2854).
-    pub(super) fn note_request_query(&self) {
-        self.runtime_use().note_request_query();
-    }
-
-    /// Record that this lowering turned a typed query into a query string (#2854).
-    pub(super) fn note_query_string(&self) {
-        self.runtime_use().note_query_string();
     }
 
     /// Record that this lowering used an `HttpResult` cookie method (#3277).
@@ -1412,42 +1349,9 @@ impl<'a> LowerCtx<'a> {
         self.runtime_use().note_http_result_cookie();
     }
 
-    /// Record that this lowering turned a typed `cookies` record into a `Cookie` header (#3277).
-    pub(super) fn note_cookie_string(&self) {
-        self.runtime_use().note_cookie_string();
-    }
-
-    /// Record that this lowering built a `TokenClaims` value (#2380).
-    pub(super) fn note_token_claims(&self) {
-        self.runtime_use().note_token_claims();
-    }
-
-    /// Record that this lowering constructed an `HttpResult` variant (#1934),
-    /// so a test module imports it.
-    pub(super) fn note_http_result(&self) {
-        self.runtime_use().note_http_result();
-    }
-
-    /// Record that this lowering constructed a `QueueResult` variant (#2839).
-    pub(super) fn note_queue_result(&self) {
-        self.runtime_use().note_queue_result();
-    }
-
-    /// Record that this lowering emitted a reference to `__bynkEq` (#1652), so
-    /// the module imports it.
-    pub(super) fn note_eq(&self) {
-        self.runtime_use().note_eq();
-    }
-
     /// Record that this lowering referenced a `Decimal` runtime helper (#2622).
     pub(crate) fn note_decimal(&self, name: &'static str) {
         self.runtime_use().note_decimal(name);
-    }
-
-    /// Record that this lowering emitted an `Int` domain trap (#1657), so the
-    /// module imports the helpers.
-    pub(super) fn note_int(&self) {
-        self.runtime_use().note_int();
     }
 
     /// Record a checkpoint: generated text from `out_len` onward originates at

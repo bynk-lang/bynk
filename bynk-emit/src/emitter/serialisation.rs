@@ -1077,7 +1077,6 @@ fn emit_refined(
             // #1846: a renamed unexported type reports its declared name,
             // the one its owner's `.of` reports (`Code`, not `t_vault__Code`).
             let field = ty.rsplit('.').next().unwrap_or(name);
-            scalar.predicates.iter().for_each(|p| ru.note_predicate(p));
             body.extend(emit_inline_refinement_checks(
                 field,
                 &scalar.base_guards,
@@ -1240,7 +1239,6 @@ fn emit_field_refinement_checks(
     ru: &RuntimeUse,
 ) -> Vec<TsStmt> {
     let value = format!("__{fname}");
-    predicates.iter().for_each(|p| ru.note_predicate(p));
     // #2622: a `Decimal` violation reports its canonical text; the decoded
     // value holds a `bigint`, which cannot be JSON-stringified.
     let shown = if base == Some(BaseType::Decimal) {
@@ -2906,25 +2904,6 @@ pub(crate) fn deserialise_expr_via(
     ns: &str,
     ru: &RuntimeUse,
 ) -> TsExpr {
-    // Every arm except the delegating ones — which call a `deserialise_<T>` in the
-    // module's own namespace — builds `Ok(…)` / `Err(… as BoundaryError)` inline.
-    // Recorded once here rather than per-arm: the delegating set is short and
-    // closed, the inlining set is long, and erring the other way emits a module
-    // that references an unimported name (#914). `Effect` recurses, so it lets the
-    // inner type decide.
-    if !matches!(
-        t,
-        TypeRef::Named(_)
-            | TypeRef::Result(..)
-            | TypeRef::Option(..)
-            | TypeRef::List(..)
-            | TypeRef::Set(..)
-            | TypeRef::Map(..)
-            | TypeRef::App { .. }
-            | TypeRef::Effect(..)
-    ) {
-        ru.note_boundary_codec();
-    }
     // The runtime-owned-error-type arms below (`ValidationError`/`DecodeError`/
     // `QueueResult`/`HttpResult`) all share this one shape: `Ok(json as
     // unknown as {ty}) as Result<{ty}, BoundaryError>` — the deserialise-side

@@ -311,7 +311,6 @@ pub(super) fn emit_stub_class(
                     );
                     let vname = format!("__pv_{idx}_{i}");
                     body.push(const_(vname.clone(), await_expr(iife(value))));
-                    runtime_use.note_eq();
                     cond_parts.push(call(
                         ident("__bynkEq"),
                         vec![ident(param.name.name.clone()), ident(vname)],

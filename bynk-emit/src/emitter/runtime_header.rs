@@ -1,6 +1,10 @@
 //! The runtime import of a generated module, derived from the module's tree
 //! (1A.36b-1, #3737 Decision A).
 //!
+//! Every module the emitter or the test harness builds derives its header this way: a unit
+//! module since 1A.36b-1, the Worker `index.ts` and `compose.ts` since 1A.36b-2, and the
+//! generated test modules (`tests/*.test.ts`, in [`TEST_ORDER`]) since 1B.5e.
+//!
 //! A module's header used to be guessed before its body existed, by predicates
 //! over the source and flags the producers noted as a side effect, and each
 //! guess had to agree exactly with what the body later spelled. The body is
@@ -20,32 +24,11 @@
 //! runtime export the printed code spells (outside strings and comments) is
 //! imported, so a name only text spells fails there rather than in `tsc`.
 //!
-//! # The gate
-//!
-//! [`derives_runtime_imports`] is the one place that says which modules this
-//! applies to. The driver's `tests/*.test.ts` modules are opaque test text whose
-//! header the driver curates from the same [`RuntimeUse`](super::runtime_use)
-//! notes the emitter once read, so they keep their predicted imports until 1B.5.
-//!
 //! [`split_runtime_import`]: super::runtime_files::split_runtime_import
 
-use bynk_project::UnitKind;
 use bynk_ts::TsStmt;
 
 use super::runtime_files::{is_runtime_export, is_type_only_export};
-
-/// Whether a unit of `kind` takes its runtime import from its tree.
-///
-/// Every kind is listed, so a new one has to be decided. A `Test` or
-/// `Integration` unit is built by `bynk-emit::testgen`, not through the
-/// emitter's header at all; it keeps its predicted imports until 1B.5 and must
-/// not be derived here.
-pub(crate) fn derives_runtime_imports(kind: UnitKind) -> bool {
-    match kind {
-        UnitKind::Commons | UnitKind::Context | UnitKind::Adapter => true,
-        UnitKind::Test | UnitKind::Integration => false,
-    }
-}
 
 /// The order runtime names have always had in a generated import list. A
 /// derived name takes its place here, so the names a module keeps stay in the
@@ -548,16 +531,5 @@ mod tests {
             call("None"),
         ]);
         assert_eq!(derived_runtime_names(&stmts), ["None"]);
-    }
-
-    /// 1A.36b-1: the gate. Only the units the emitter's header serves derive
-    /// their imports; the driver's test units keep the imports it predicts.
-    #[test]
-    fn the_driver_test_units_are_gated_off() {
-        assert!(derives_runtime_imports(UnitKind::Commons));
-        assert!(derives_runtime_imports(UnitKind::Context));
-        assert!(derives_runtime_imports(UnitKind::Adapter));
-        assert!(!derives_runtime_imports(UnitKind::Test));
-        assert!(!derives_runtime_imports(UnitKind::Integration));
     }
 }

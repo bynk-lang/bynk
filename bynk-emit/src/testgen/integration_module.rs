@@ -760,8 +760,6 @@ pub(super) fn emit_integration_module(
         let (codec_names, codec_insts) =
             crate::emitter::serialisation::collect_codec_closure(&json_codec_roots, &view.types);
         if !codec_names.is_empty() || !codec_insts.is_empty() {
-            runtime_use.note_json_codec();
-            runtime_use.note_boundary_codec();
             // First claim wins: `uses` commons, then reached-type owners, then
             // participants (the view keeps the first declaration of a name).
             let mut qual: HashMap<String, String> = HashMap::new();

@@ -788,9 +788,6 @@ pub(crate) fn lower_expr(e: &Expr, cx: &mut LowerCtx) -> Lowered {
                 cx.commons().expr_ty(e.id).as_deref(),
                 Some(Ty::HttpResult(_))
             );
-            if http {
-                cx.note_http_result();
-            }
             pre.finish(runtime_ctor_call(http.then_some("HttpResult"), "Ok", child))
         }
         ExprKind::Err(inner) => {
@@ -2696,7 +2693,6 @@ fn lower_ident(e: &Expr, id: &Ident, cx: &mut LowerCtx) -> bynk_ts::TsExpr {
             ..
         })
     ) {
-        cx.note_http_result();
         return member_node("HttpResult", &id.name);
     }
     // v0.44: a nullary QueueResult variant (`Ack`) constructs `QueueResult.Ack`.
@@ -2707,7 +2703,6 @@ fn lower_ident(e: &Expr, id: &Ident, cx: &mut LowerCtx) -> bynk_ts::TsExpr {
             ..
         })
     ) {
-        cx.note_queue_result();
         return member_node("QueueResult", &id.name);
     }
     // A bare ident whose name matches a declared variant of a sum
@@ -2885,7 +2880,6 @@ fn lower_call(e: &Expr, name: &Ident, args: &[Expr], cx: &mut LowerCtx) -> Lower
             .map(|_| expect_location(cx, e.span.start))
             .or_else(|| cx.fault_location(e.span.start))
             .unwrap_or_else(|| format!("offset {}", e.span.start));
-        cx.note_fault();
         args_lowered.insert(0, str_node(*kind));
         args_lowered.push(str_node(location));
         return pre.finish(call_built(ident_node("__fault"), args_lowered));
@@ -2897,7 +2891,6 @@ fn lower_call(e: &Expr, name: &Ident, args: &[Expr], cx: &mut LowerCtx) -> Lower
         ..
     }) = cx.commons().callee(e.id)
     {
-        cx.runtime_use().note_test_connection();
         let frame = match cx.commons().expr_ty(e.id).as_deref() {
             Some(Ty::TestConnection(f)) => {
                 crate::emitter::ts_types::ts_ty_to_ts_type(*f, cx.ty_render())
@@ -2929,7 +2922,6 @@ fn lower_call(e: &Expr, name: &Ident, args: &[Expr], cx: &mut LowerCtx) -> Lower
             ..
         })
     ) {
-        cx.note_http_result();
         let callee = bynk_ts::TsExpr::Member {
             object: Box::new(ident_node("HttpResult")),
             property: name.name.clone(),
@@ -2944,7 +2936,6 @@ fn lower_call(e: &Expr, name: &Ident, args: &[Expr], cx: &mut LowerCtx) -> Lower
             ..
         })
     ) {
-        cx.note_queue_result();
         let callee = bynk_ts::TsExpr::Member {
             object: Box::new(ident_node("QueueResult")),
             property: name.name.clone(),
@@ -3324,7 +3315,6 @@ pub(super) fn build_value_bin_op(
             // #1657: `Int` division by zero traps, a runtime fault, rather than
             // producing `Infinity`/`NaN` as an `Int`. A runtime helper rather than
             // an inline guard, so coverage never reports its fault branch.
-            cx.note_int();
             helper_call("__bynkIntDiv", children)
         }
     } else if let Some(helper) = matches!(op, BinOp::Eq | BinOp::NotEq)
@@ -3477,10 +3467,7 @@ fn equality_helper(operand: Option<TyId>, tys: &Types, cx: &LowerCtx) -> Option<
             cx.note_decimal("__bynkDecimalEqual");
             Some("__bynkDecimalEqual")
         }
-        Some(EqualityLowering::Structural) | None => {
-            cx.note_eq();
-            Some("__bynkEq")
-        }
+        Some(EqualityLowering::Structural) | None => Some("__bynkEq"),
     }
 }
 
@@ -3797,7 +3784,6 @@ fn lower_field_access(e: &Expr, receiver: &Expr, field: &Ident, cx: &mut LowerCt
             })
         )
     {
-        cx.note_http_result();
         return pre.finish(member_node("HttpResult", &field.name));
     }
     // #2073 (with #2045): a qualified nullary variant of a consumed context's
@@ -4449,9 +4435,6 @@ pub(super) fn pattern_tests(
                         path_ty
                     )
                 });
-            for p in &predicate.predicates {
-                cx.note_predicate(&p.kind);
-            }
             tests.push(refined_check_as_bool(
                 path.node().clone(),
                 base,
@@ -4909,9 +4892,6 @@ fn lower_is(value: &Expr, pattern: &Pattern, cx: &mut LowerCtx) -> Lowered {
             .map(|d| d.body.clone())
     {
         let recv = pre.absorb_node(cx.is_receiver_ref_forced(value));
-        for p in refinement.iter().flat_map(|r| &r.predicates) {
-            cx.note_predicate(&p.kind);
-        }
         return pre.finish(refined_check_as_bool(recv, base, refinement.as_ref()));
     }
     let path = PatPath::from_lowered(pre.absorb_node(cx.is_receiver_ref(value)));

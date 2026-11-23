@@ -145,7 +145,6 @@ pub(in crate::emitter) fn lower_int_kernel(
                 | IntOp::Max
                 | IntOp::Clamp => "__bynkIntPow",
             };
-            cx.note_int();
             Some(plain_call(helper, kids))
         }
         _ => None,
@@ -180,7 +179,6 @@ pub(in crate::emitter) fn lower_float_kernel(
             } else {
                 op.name()
             };
-            cx.note_int();
             Some({
                 let n = kids;
                 call(
@@ -285,7 +283,6 @@ pub(in crate::emitter) fn lower_instant_kernel(
         // K3 (#2592): RFC 3339 in UTC.
         (InstantOp::ToIso, []) => {
             let kids = operands(&mut pre, cx, &[receiver]);
-            cx.note_time_ops();
             Some(plain_call("__bynkInstantToIso", kids))
         }
         _ => None,
@@ -328,22 +325,18 @@ pub(in crate::emitter) fn lower_bytes_kernel(
         }
         (BytesOp::Concat, [other]) => {
             let kids = operands(&mut pre, cx, &[receiver, other]);
-            cx.note_bytes_ops();
             Some(plain_call("__bynkBytesConcat", kids))
         }
         (BytesOp::Compare, [other]) => {
             let kids = operands(&mut pre, cx, &[receiver, other]);
-            cx.note_bytes_ops();
             Some(plain_call("__bynkBytesCompare", kids))
         }
         (BytesOp::ToHex, []) => {
             let kids = operands(&mut pre, cx, &[receiver]);
-            cx.note_bytes_ops();
             Some(plain_call("__bynkBytesToHex", kids))
         }
         (BytesOp::ToBase64Url, []) => {
             let kids = operands(&mut pre, cx, &[receiver]);
-            cx.note_bytes_ops();
             Some(plain_call("__bynkBytesToBase64Url", kids))
         }
         _ => None,
@@ -759,12 +752,10 @@ pub(in crate::emitter) fn lower_string_kernel(
         // K2 (#2594): percent-encoding over the UTF-8 bytes.
         (StringOp::PercentEncode, []) => {
             let kids = operands(&mut pre, cx, &[receiver]);
-            cx.note_url_ops();
             Some(plain_call("__bynkPercentEncode", kids))
         }
         (StringOp::PercentDecode, []) => {
             let kids = operands(&mut pre, cx, &[receiver]);
-            cx.note_url_ops();
             Some(plain_call("__bynkPercentDecode", kids))
         }
         _ => None,

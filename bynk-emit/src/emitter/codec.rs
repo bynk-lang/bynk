@@ -249,8 +249,6 @@ impl<'a> CodecGen<'a> {
         // `JsonValue` and `BoundaryError`, whether or not the type yields a
         // codec root; a module that curates its imports (a test module) needs
         // them brought in.
-        self.runtime_use.note_json_codec();
-        self.runtime_use.note_boundary_codec();
         serialisation::witness_codec_expr(&tref, self.runtime_use)
     }
 }

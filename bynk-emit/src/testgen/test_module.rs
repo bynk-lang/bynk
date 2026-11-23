@@ -1391,8 +1391,6 @@ fn codec_closure_stmts(
     // The helpers below always name `JsonValue`/`BoundaryError` in their
     // own signatures, regardless of which arm (if any) the case bodies'
     // own `Json.decode`/`Json.encode` calls happened to trip.
-    runtime_use.note_json_codec();
-    runtime_use.note_boundary_codec();
     let qual = runtime_use.json_codec_qual();
     let mut stmts = ser::decls_as_stmts_block(ser::emit_helpers_for_owner_qualified(
         &codec_names,
