@@ -139,7 +139,7 @@ as a plain value keeps its pure-collection methods).
 
 | Kind | Operations | Notes |
 |---|---|---|
-| `Map[K, V]` | `put`/`get`/`update`/`upsert`/`remove`/`contains`/`size` | `update` on an absent key faults — use `upsert` for default-if-absent |
+| `Map[K, V]` | `put`/`get`/`update`/`upsert`/`remove`/`contains`/`size` | `update` is for a key the handler knows exists, so it faults on an absent key: a missing key is a logic error, and the fault is its signal. `upsert` takes a default and creates the entry when the key is absent; `contains` tests first when the handler isn't sure |
 | `Set[T]` | `add`/`remove`/`contains`/`size` | `add` is idempotent; `remove` of an absent member is a no-op |
 | `Cache[K, V]` | the `Map` op set, with per-entry TTL expiry | requires `@ttl`; an expired entry reads as absent (check-on-read, needs `given Clock`) and is deleted when a handler that uses a `Cache` commits (at most 64 per commit, shared by all the agent's `Cache` fields) |
 | `Log[T]` | `append`; lazy `Query` reads via `since`/`before`/`between`/`recent`/`reversed` | `append` stamps the time (`given Clock`); the window roots take explicit `Instant`s, so reads need no clock |
