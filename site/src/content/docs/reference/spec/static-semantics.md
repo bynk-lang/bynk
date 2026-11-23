@@ -320,7 +320,7 @@ numeric types widen to their base in operator positions, as before.
 of the **same `Ord` type**; a type that is not `Ord` is
 `bynk.types.not_orderable`. A type is `Ord` when it is one of:
 
-- `Int`, `Float`, `String`, `Duration`, `Instant` or `Bytes`, or a refined type
+- `Int`, `Float`, `Decimal`, `String`, `Duration`, `Instant` or `Bytes`, or a refined type
   over one of them;
 - `Option[T]` or `List[T]` where `T` is `Ord`;
 - a record, sum, enum or opaque type that declares `derives Ord` (§4.2.1),
@@ -339,6 +339,7 @@ follows:
 
 - `Int`, `Duration` and `Instant` order numerically; a refined type orders as
   its base.
+- `Decimal` orders numerically, ignoring scale: `1.2d` and `1.20d` are equal.
 - `String` orders by **UTF-16 code unit**, element by element, a proper prefix
   first. This is not Unicode code-point or locale order.
 - `Bytes` orders **lexicographically over unsigned octets**, a proper prefix

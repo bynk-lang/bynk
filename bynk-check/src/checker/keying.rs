@@ -6,7 +6,7 @@
 //! `groupBy` or join key). It is automatic, never derived: a type is `Key` when it
 //! is one of:
 //!
-//! - `String`, `Int`, `Bool`, `Instant`, `Duration` or `Bytes`, or a refined or
+//! - `String`, `Int`, `Bool`, `Instant`, `Duration`, `Bytes` or `Decimal`, or a refined or
 //!   opaque type over one of them;
 //! - `Option[T]` or `List[T]` with `T` `Key`;
 //! - a record, sum or enum whose every field and payload is `Key`, and, when it is
