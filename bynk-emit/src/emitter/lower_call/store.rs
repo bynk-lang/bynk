@@ -19,7 +19,7 @@ use super::query::{
 };
 use crate::ts_build::{
     arrow, binary, block, block_arrow, call, const_typed, expr_stmt, ident, member, method_call,
-    param, paren, ret, str_lit, strict_neq as ne,
+    param, paren, ret, str_lit, strict_neq,
 };
 
 /// A store field's handle, `<var>.<field>`, as a node (the working-state variable and the
@@ -237,8 +237,8 @@ fn lower_store_held_map_call(
                     if_then(
                         binary(
                             TsBinaryOp::And,
-                            ne(ident("__old"), undefined()),
-                            ne(ident("__old"), ident("__new")),
+                            strict_neq(ident("__old"), undefined()),
+                            strict_neq(ident("__old"), ident("__new")),
                         ),
                         vec![
                             const_typed("__c", None, resolve_connection(&f_node, ident("__old"))),
@@ -260,7 +260,7 @@ fn lower_store_held_map_call(
                         TsExpr::Await(Box::new(op(&m.node, "get", vec![ident("__k")]))),
                     ),
                     if_then(
-                        ne(ident("__cid"), undefined()),
+                        strict_neq(ident("__cid"), undefined()),
                         vec![
                             const_typed("__c", None, resolve_connection(&f_node, ident("__cid"))),
                             close_if_some(),
@@ -285,7 +285,7 @@ fn lower_store_held_map_call(
                 sync_iife(vec![
                     const_typed("__cid", None, op(&m.node, "get", vec![string_of(k)])),
                     ret(TsExpr::Conditional {
-                        test: Box::new(ne(ident("__cid"), undefined())),
+                        test: Box::new(strict_neq(ident("__cid"), undefined())),
                         consequent: Box::new(resolve_connection(&f_node, ident("__cid"))),
                         alternate: Box::new(ident("None")),
                     }),
@@ -381,8 +381,8 @@ fn lower_store_map_call(
                     if_then(
                         binary(
                             TsBinaryOp::And,
-                            ne(ident("__old"), undefined()),
-                            ne(ident("__old"), ident("__new")),
+                            strict_neq(ident("__old"), undefined()),
+                            strict_neq(ident("__old"), ident("__new")),
                         ),
                         vec![awaited(call(member(ident("__old"), "close"), vec![]))],
                     ),
@@ -417,7 +417,7 @@ fn lower_store_map_call(
                         TsExpr::Await(Box::new(op(&m.node, "get", vec![ident("__k")]))),
                     ),
                     if_then(
-                        ne(ident("__o"), undefined()),
+                        strict_neq(ident("__o"), undefined()),
                         vec![
                             awaited(call(member(ident("__o"), "close"), vec![])),
                             awaited(op(&m.node, "remove", vec![ident("__k")])),
@@ -599,7 +599,7 @@ fn awaited_now(deps: TsExpr) -> TsExpr {
 fn is_live() -> TsExpr {
     binary(
         TsBinaryOp::And,
-        ne(ident("__e"), undefined()),
+        strict_neq(ident("__e"), undefined()),
         binary(
             TsBinaryOp::GreaterThan,
             member(ident("__e"), "exp"),
