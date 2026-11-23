@@ -25,8 +25,9 @@ use super::query::{
     query_other_elem,
 };
 use crate::ts_build::{
-    arrow, binary, call, const_typed, ident, member, param, paren, ret, spread, str_lit,
+    arrow, binary, call, const_typed, ident, member, paren, ret, spread, str_lit,
 };
+use bynk_ts::TsParam;
 
 /// `within`, `race` and `detach` on an `Effect[T]` (#2683, #2711, #3437). `None`
 /// when the call's shape is not one the kernel method lowers (the caller falls
@@ -446,8 +447,8 @@ fn lower_effect_result_kernel(
     let recv = pre.lower_node(receiver, cx);
     let f = pre.lower_node(f, cx);
     let params = vec![
-        param("__e", Some(effect_of(&t, &et))),
-        param("__f", Some(cb_ty)),
+        TsParam::new("__e", Some(effect_of(&t, &et))),
+        TsParam::new("__f", Some(cb_ty)),
     ];
     let applied = call(ident("__f"), vec![member(ident("__r"), field)]);
     let hit = match (awaited, wrap) {
@@ -592,7 +593,10 @@ fn lower_http_result(
             TsObjectEntry::prop("cookies".to_string(), TsExpr::array(vec![held, added])),
         ]);
         call(
-            paren(arrow(vec![param("__r", Some(any_ty()))], paren(record))),
+            paren(arrow(
+                vec![TsParam::new("__r", Some(any_ty()))],
+                paren(record),
+            )),
             vec![recv],
         )
     }

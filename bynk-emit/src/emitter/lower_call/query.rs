@@ -20,8 +20,9 @@ use super::super::ts_types::{TyRender, ts_ty_to_ts_type};
 use super::super::{BaseType, Expr, Ident, RuntimeUse, TyId};
 use crate::ts_build::{
     arrow, arrow_with, assign, binary, block, call, const_typed, expr_stmt, for_await_of, for_of,
-    ident, let_init, member, method_call, param, paren, ret, spread, str_lit,
+    ident, let_init, member, method_call, paren, ret, spread, str_lit,
 };
+use bynk_ts::TsParam;
 
 /// v0.100 (real-time track slice 0): lower a `Stream[T]` op over a `source`
 /// async-iterable expression. **Builders** (`map`/`take`) wrap the source in a
@@ -106,7 +107,7 @@ pub(in crate::emitter) fn lower_stream_method(
             body.push(ret(ident("__r")));
             call(
                 TsExpr::Arrow {
-                    params: vec![param("__s", None)],
+                    params: vec![TsParam::new("__s", None)],
                     is_async: true,
                     generics: Vec::new(),
                     return_type: None,
@@ -126,7 +127,7 @@ pub(super) fn stream_generator(source: Option<TsExpr>, body: Vec<TsStmt>) -> TsE
         TsExpr::Function {
             is_async: true,
             is_generator: true,
-            params: source.iter().map(|_| param("__s", None)).collect(),
+            params: source.iter().map(|_| TsParam::new("__s", None)).collect(),
             return_type: None,
             body,
         },
@@ -322,7 +323,7 @@ pub(in crate::emitter) fn held_values_source(recv: TsExpr, frame: &TsType) -> Ts
         alternate: Box::new(TsExpr::array(vec![])),
     };
     let each_id = TsExpr::Arrow {
-        params: vec![param("__cid", None)],
+        params: vec![TsParam::new("__cid", None)],
         is_async: false,
         generics: vec![],
         return_type: None,
@@ -350,7 +351,7 @@ fn q() -> TsExpr {
 /// `(() => __bynkThen(orig, (__q) => body))`, `async (__q)` when the body awaits.
 fn thunk_node(orig: TsExpr, is_async: bool, body: TsArrowBody) -> TsExpr {
     let each = TsExpr::Arrow {
-        params: vec![param("__q", None)],
+        params: vec![TsParam::new("__q", None)],
         is_async,
         generics: vec![],
         return_type: None,
@@ -363,14 +364,14 @@ fn thunk_node(orig: TsExpr, is_async: bool, body: TsArrowBody) -> TsExpr {
 fn terminal_node(orig: TsExpr, expr: TsExpr) -> TsExpr {
     call(
         ident("__bynkThen"),
-        vec![orig, arrow(vec![param("__q", None)], expr)],
+        vec![orig, arrow(vec![TsParam::new("__q", None)], expr)],
     )
 }
 
 /// `(__x) => (f)(__x)`: the callback is wrapped in a one-parameter arrow so the array index
 /// never reaches a one-parameter Bynk function.
 fn each(f: TsExpr) -> TsExpr {
-    arrow(vec![param("__x", None)], applied(f, ident("__x")))
+    arrow(vec![TsParam::new("__x", None)], applied(f, ident("__x")))
 }
 
 /// `await (f)()`: a `Query` argument is itself a thunk, invoked to materialise it.
@@ -392,7 +393,7 @@ fn settle_thunks(f: TsExpr) -> TsExpr {
         q(),
         "map",
         vec![arrow(
-            vec![param("__x", None)],
+            vec![TsParam::new("__x", None)],
             arrow(vec![], applied(f, ident("__x"))),
         )],
     )
@@ -543,7 +544,7 @@ impl Arm<'_> {
                     q(),
                     "map",
                     vec![arrow(
-                        vec![param("__x", None)],
+                        vec![TsParam::new("__x", None)],
                         call(applied(f, ident("__x")), vec![]),
                     )],
                 )],
@@ -572,7 +573,10 @@ impl Arm<'_> {
                     );
                     method_sort(
                         TsExpr::array(vec![spread(q())]),
-                        arrow(vec![param("__a", None), param("__b", None)], compare),
+                        arrow(
+                            vec![TsParam::new("__a", None), TsParam::new("__b", None)],
+                            compare,
+                        ),
                     )
                 });
                 thunk_node(o, false, TsArrowBody::Expr(Box::new(sorted)))
@@ -659,13 +663,13 @@ impl Arm<'_> {
     fn join(self) -> bynk_ts::TsExpr {
         self.built(|o, [other, on, into]| {
             let pair = |f: TsExpr| call(paren(f), vec![ident("__t"), ident("__u")]);
-            let each_u = |body: TsExpr| arrow(vec![param("__u", None)], body);
+            let each_u = |body: TsExpr| arrow(vec![TsParam::new("__u", None)], body);
             let matched = method_call(ident("__b"), "filter", vec![each_u(pair(on))]);
             let joined = method_call(matched, "map", vec![each_u(pair(into))]);
             let flat = method_call(
                 q(),
                 "flatMap",
-                vec![arrow(vec![param("__t", None)], joined)],
+                vec![arrow(vec![TsParam::new("__t", None)], joined)],
             );
             let body = vec![const_typed("__b", None, awaited_thunk(other)), ret(flat)];
             thunk_node(o, true, TsArrowBody::Multiline(body))
@@ -779,7 +783,10 @@ impl Arm<'_> {
                     zero(),
                 )
             };
-            let step = arrow(vec![param("__s", Some(acc_ty)), param("__x", None)], add);
+            let step = arrow(
+                vec![TsParam::new("__s", Some(acc_ty)), TsParam::new("__x", None)],
+                add,
+            );
             terminal_node(o, method_call(q(), "reduce", vec![step, init]))
         })
     }

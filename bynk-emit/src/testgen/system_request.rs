@@ -5,7 +5,7 @@
 //! driver. Each is now a node built here once, so the drivers differ by which entries they carry.
 
 use super::*;
-use bynk_ts::{TsBinaryOp, TsExpr, TsObjectEntry, TsStmt, TsType, TsTypeMember};
+use bynk_ts::{TsBinaryOp, TsExpr, TsObjectEntry, TsParam, TsStmt, TsType, TsTypeMember};
 
 /// A list of request-init (or header) object entries.
 pub(super) type Entries = Vec<TsObjectEntry>;
@@ -178,7 +178,7 @@ pub(super) fn any_type() -> TsType {
 pub(super) fn wrong_method_driver(sname: &str, binding: &str) -> TsStmt {
     let string = || Some(TsType::named("string"));
     let decode = arrow(
-        vec![param("__j", Some(TsType::named("__JsonValue")))],
+        vec![TsParam::new("__j", Some(TsType::named("__JsonValue")))],
         call(
             ident("Ok"),
             vec![as_expr(ident("__j"), TsType::named("never"))],
@@ -186,7 +186,10 @@ pub(super) fn wrong_method_driver(sname: &str, binding: &str) -> TsStmt {
     );
     async_driver(
         wrong_method_driver_name(sname),
-        vec![param("method", string()), param("path", string())],
+        vec![
+            TsParam::new("method", string()),
+            TsParam::new("path", string()),
+        ],
         vec![
             harness_const(),
             const_(

@@ -20,7 +20,8 @@ use super::super::lower::{Pre, settle_helper, settle_with};
 use super::super::lower_ctx::LowerCtx;
 use super::super::lower_list::{any_ty, take};
 use super::super::{Expr, ExprKind, Ident, TypeRef};
-use crate::ts_build::{arrow, call, ident, member, param, paren, str_lit};
+use crate::ts_build::{arrow, call, ident, member, paren, str_lit};
+use bynk_ts::TsParam;
 
 // ---- Names ----
 
@@ -224,7 +225,7 @@ fn inbound_email_call(service: &str, key: &str, mail: bynk_ts::TsExpr) -> bynk_t
         ],
     );
     call(
-        paren(arrow(vec![param("__m", Some(any_ty()))], handler)),
+        paren(arrow(vec![TsParam::new("__m", Some(any_ty()))], handler)),
         vec![mail],
     )
 }

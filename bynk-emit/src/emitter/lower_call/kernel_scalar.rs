@@ -13,7 +13,8 @@ use super::super::lower_ctx::LowerCtx;
 use super::super::lower_list::{take, zero};
 use super::super::{Expr, ExprKind, rounding_mode};
 use super::kernel::receiver_object;
-use crate::ts_build::{arrow, call, ident, member, param, spread, str_lit};
+use crate::ts_build::{arrow, call, ident, member, spread, str_lit};
+use bynk_ts::TsParam;
 
 /// The receiver and then each argument, lowered in order.
 fn operands(pre: &mut Pre, cx: &mut LowerCtx, parts: &[&Expr]) -> Vec<bynk_ts::TsExpr> {
@@ -473,8 +474,8 @@ fn split_regex_arrow() -> TsExpr {
     );
     TsExpr::Arrow {
         params: vec![
-            param("__s", Some(ts_named("string"))),
-            param("__r", Some(ts_named("globalThis.RegExp"))),
+            TsParam::new("__s", Some(ts_named("string"))),
+            TsParam::new("__r", Some(ts_named("globalThis.RegExp"))),
         ],
         is_async: false,
         generics: Vec::new(),
@@ -510,7 +511,7 @@ fn option_string() -> TsType {
 /// `(name: ty): ret => body`, a one-parameter arrow with a declared return type.
 fn typed_arrow(name: &str, ty: TsType, ret: TsType, body: TsExpr) -> TsExpr {
     TsExpr::Arrow {
-        params: vec![param(name, Some(ty))],
+        params: vec![TsParam::new(name, Some(ty))],
         is_async: false,
         generics: Vec::new(),
         return_type: Some(ret),
@@ -748,7 +749,7 @@ pub(in crate::emitter) fn lower_string_kernel(
                 let n = kids;
                 let [recv, sub] = take::<2, _>(n);
                 let to_option = arrow(
-                    vec![param("__i", Some(ts_named("number")))],
+                    vec![TsParam::new("__i", Some(ts_named("number")))],
                     TsExpr::Conditional {
                         test: Box::new(TsExpr::Binary {
                             op: TsBinaryOp::LessThan,

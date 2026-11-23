@@ -25,7 +25,7 @@
 
 use crate::ts_build::{
     arrow_of, binary, block, call, const_typed, expr_stmt, ident, if_, index, member, method_call,
-    new, num_lit, param, paren, ret, str_lit,
+    new, num_lit, paren, ret, str_lit,
 };
 use bynk_check::wire_format as wf;
 use bynk_ts::{
@@ -285,8 +285,8 @@ fn unclaimed(entry: &GroupEntry<'_>) -> TsStmt {
         "__unclaimed",
         true,
         vec![
-            param("request", ty("globalThis.Request")),
-            param("env", ty("unknown")),
+            TsParam::new("request", Some(ty("globalThis.Request"))),
+            TsParam::new("env", Some(ty("unknown"))),
         ],
         promise(response_ty()),
         body,
@@ -301,9 +301,9 @@ fn fetch_method() -> TsObjectEntry {
         "fetch",
         true,
         vec![
-            param("request", ty("globalThis.Request")),
-            param("env", ty("unknown")),
-            param("ctx", ty("__Ctx")),
+            TsParam::new("request", Some(ty("globalThis.Request"))),
+            TsParam::new("env", Some(ty("unknown"))),
+            TsParam::new("ctx", Some(ty("__Ctx"))),
         ],
         Some(promise(response_ty())),
         vec![ret(call(
@@ -365,9 +365,9 @@ fn dispatch() -> TsStmt {
         "__fetch",
         true,
         vec![
-            param("request", ty("globalThis.Request")),
-            param("env", ty("unknown")),
-            param("ctx", ty("__Ctx")),
+            TsParam::new("request", Some(ty("globalThis.Request"))),
+            TsParam::new("env", Some(ty("unknown"))),
+            TsParam::new("ctx", Some(ty("__Ctx"))),
         ],
         promise(response_ty()),
         vec![
@@ -404,7 +404,10 @@ fn loopback(entry: &GroupEntry<'_>) -> Vec<TsStmt> {
         return vec![function(
             "__loopback",
             false,
-            vec![param("env", ty("unknown")), param("_ctx", ty("__Ctx"))],
+            vec![
+                TsParam::new("env", Some(ty("unknown"))),
+                TsParam::new("_ctx", Some(ty("__Ctx"))),
+            ],
             ty("unknown"),
             vec![ret(ident("env"))],
         )];
@@ -416,7 +419,7 @@ fn loopback(entry: &GroupEntry<'_>) -> Vec<TsStmt> {
         .collect();
     let record = || TsType::named_with_args("globalThis.Record", vec![ty("string"), ty("unknown")]);
     let answers_in_process = arrow_of(
-        vec![param("request", ty("globalThis.Request"))],
+        vec![TsParam::new("request", Some(ty("globalThis.Request")))],
         true,
         TsArrowBody::Multiline(vec![TsStmt::try_catch(
             block(vec![ret(TsExpr::Await(Box::new(call(
@@ -440,7 +443,10 @@ fn loopback(entry: &GroupEntry<'_>) -> Vec<TsStmt> {
         function(
             "__loopback",
             false,
-            vec![param("env", ty("unknown")), param("ctx", ty("__Ctx"))],
+            vec![
+                TsParam::new("env", Some(ty("unknown"))),
+                TsParam::new("ctx", Some(ty("__Ctx"))),
+            ],
             ty("unknown"),
             vec![
                 const_typed(
@@ -472,9 +478,9 @@ fn refused() -> TsStmt {
     function(
         "__refused",
         false,
-        vec![param(
+        vec![TsParam::new(
             "verified",
-            TsType::union(vec![ty("string"), response_ty()]),
+            Some(TsType::union(vec![ty("string"), response_ty()])),
         )],
         response_ty(),
         vec![ret(TsExpr::Conditional {
@@ -538,7 +544,10 @@ fn with_allowed() -> TsStmt {
     function(
         "__withAllowed",
         false,
-        vec![param("held", TsType::readonly_array(response_ty()))],
+        vec![TsParam::new(
+            "held",
+            Some(TsType::readonly_array(response_ty())),
+        )],
         response_ty(),
         vec![
             const_typed("first", None, index(ident("held"), num_lit(0))),
@@ -606,9 +615,9 @@ fn scheduled(members: &[(usize, &GroupMember)]) -> TsObjectEntry {
         "scheduled",
         true,
         vec![
-            param("event", readonly_string("cron")),
-            param("env", ty("unknown")),
-            param("ctx", ty("__Ctx")),
+            TsParam::new("event", Some(readonly_string("cron"))),
+            TsParam::new("env", Some(ty("unknown"))),
+            TsParam::new("ctx", Some(ty("__Ctx"))),
         ],
         Some(promise(ty("void"))),
         vec![expr_stmt(TsExpr::Await(Box::new(method_call(
@@ -643,9 +652,9 @@ fn queue(members: &[(usize, &GroupMember)]) -> TsObjectEntry {
         "queue",
         true,
         vec![
-            param("batch", readonly_string("queue")),
-            param("env", ty("unknown")),
-            param("ctx", ty("__Ctx")),
+            TsParam::new("batch", Some(readonly_string("queue"))),
+            TsParam::new("env", Some(ty("unknown"))),
+            TsParam::new("ctx", Some(ty("__Ctx"))),
         ],
         Some(promise(ty("void"))),
         vec![TsStmt::switch_stmt(
@@ -711,9 +720,9 @@ fn email(members: &[(usize, &GroupMember)]) -> TsObjectEntry {
         "email",
         true,
         vec![
-            param("message", readonly_string("to")),
-            param("env", ty("unknown")),
-            param("ctx", ty("__Ctx")),
+            TsParam::new("message", Some(readonly_string("to"))),
+            TsParam::new("env", Some(ty("unknown"))),
+            TsParam::new("ctx", Some(ty("__Ctx"))),
         ],
         Some(promise(ty("void"))),
         vec![
@@ -760,9 +769,9 @@ fn handler_type(name: &str, method: &str, arg: &str, ret_ty: TsType) -> TsStmt {
             ty: TsType::Object(vec![TsTypeMember::method(
                 method,
                 vec![
-                    param(arg, ty("never")),
-                    param("env", ty("never")),
-                    param("ctx", ty("__Ctx")),
+                    TsParam::new(arg, Some(ty("never"))),
+                    TsParam::new("env", Some(ty("never"))),
+                    TsParam::new("ctx", Some(ty("__Ctx"))),
                 ],
                 promise(ret_ty),
             )]),
@@ -823,9 +832,12 @@ fn member_table(members: &[(usize, &GroupMember)]) -> Vec<TsStmt> {
                 type_params: Vec::new(),
                 ty: TsType::Object(vec![TsTypeMember::method(
                     "waitUntil",
-                    vec![param(
+                    vec![TsParam::new(
                         "promise",
-                        TsType::named_with_args("globalThis.Promise", vec![ty("unknown")]),
+                        Some(TsType::named_with_args(
+                            "globalThis.Promise",
+                            vec![ty("unknown")],
+                        )),
                     )],
                     ty("void"),
                 )]),
@@ -839,9 +851,9 @@ fn member_table(members: &[(usize, &GroupMember)]) -> Vec<TsStmt> {
                 ty: TsType::Object(vec![TsTypeMember::method(
                     "fetch",
                     vec![
-                        param("request", ty("globalThis.Request")),
-                        param("env", ty("never")),
-                        param("ctx", ty("__Ctx")),
+                        TsParam::new("request", Some(ty("globalThis.Request"))),
+                        TsParam::new("env", Some(ty("never"))),
+                        TsParam::new("ctx", Some(ty("__Ctx"))),
                     ],
                     promise(response_ty()),
                 )]),

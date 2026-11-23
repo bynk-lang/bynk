@@ -16,9 +16,9 @@ use super::super::lower_ctx::LowerCtx;
 use super::super::ts_types::ts_ty_to_ts_type;
 use super::super::{BaseType, Expr, TypeBody, TypeRef, ty_to_type_ref};
 use crate::ts_build::{
-    binary, block, call, const_typed, ident, index, member, or_expr, param, raw_lit, str_lit,
-    strict_eq,
+    binary, block, call, const_typed, ident, index, member, or_expr, raw_lit, str_lit, strict_eq,
 };
+use bynk_ts::TsParam;
 
 /// v0.22b: the typed JSON codec (ADR 0045). `encode` dispatches to the
 /// module-local `serialise_*` helpers + `JSON.stringify`; `decode[T]` to
@@ -269,7 +269,7 @@ pub(in super::super) fn json_decoder_fn(
     body.push(const_typed("__r", None, des));
     body.extend(decode_tail(&ts));
     Some(TsExpr::Arrow {
-        params: vec![param("__s", TsType::named("string"))],
+        params: vec![TsParam::new("__s", Some(TsType::named("string")))],
         is_async: false,
         generics: Vec::new(),
         return_type: Some(decoder_result_ty(&ts)),
@@ -671,7 +671,7 @@ fn sql_bool_pass(t: bynk_check::checker::TyId, cx: &LowerCtx) -> Vec<TsStmt> {
         None,
     );
     let flags = TsExpr::Arrow {
-        params: vec![param("__o", json_value_ty())],
+        params: vec![TsParam::new("__o", Some(json_value_ty()))],
         is_async: false,
         generics: Vec::new(),
         return_type: Some(TsType::named("void")),
@@ -723,7 +723,7 @@ fn pg_row_pass(t: bynk_check::checker::TyId, cx: &LowerCtx) -> Vec<TsStmt> {
         |names: &[String]| TsExpr::array(names.iter().map(|f| str_lit(f.as_str())).collect());
     // `const __fix = (__o: __JsonValue): void => __bynkPgRow(__o, [instants], [ints]);`
     let fix = TsExpr::Arrow {
-        params: vec![param("__o", json_value_ty())],
+        params: vec![TsParam::new("__o", Some(json_value_ty()))],
         is_async: false,
         generics: Vec::new(),
         return_type: Some(TsType::named("void")),

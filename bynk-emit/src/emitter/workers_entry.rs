@@ -4207,7 +4207,7 @@ fn serialise_call(t: &TypeRef, value: &TsExpr, ru: &RuntimeUse) -> TsExpr {
 /// calls with the refusal.
 fn rejection_renderer(m: &str) -> TsExpr {
     crate::ts_build::arrow(
-        vec![crate::ts_build::param("why", None)],
+        vec![bynk_ts::TsParam::new("why", None)],
         method_call(ident("surface"), m, vec![ident("why")]),
     )
 }

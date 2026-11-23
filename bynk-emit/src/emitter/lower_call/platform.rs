@@ -16,9 +16,10 @@ use super::super::{Expr, ExprKind, Ident, TypeBody, TypeRef, test_scaffold_ns};
 use super::codec_statics::{DecodeSource, json_decoder_fn};
 use super::cross_context::type_ref_named_root;
 use crate::ts_build::{
-    arrow_with, binary, block_arrow, call, const_typed, expr_stmt, ident, member, num_lit, param,
-    paren, ret, str_lit,
+    arrow_with, binary, block_arrow, call, const_typed, expr_stmt, ident, member, num_lit, paren,
+    ret, str_lit,
 };
+use bynk_ts::TsParam;
 
 /// `"text" as const`: a string-literal tag that keeps its literal type.
 fn tag_const(text: &str) -> TsExpr {
@@ -219,8 +220,8 @@ pub(in crate::emitter) fn tracked_claim_call(
         let note = call(member(ident("__claims"), "note"), vec![k(), claim, t()]);
         let note_arrow = TsExpr::Arrow {
             params: vec![
-                param("__k", Some(TsType::named("string"))),
-                param("__t", Some(TsType::named("number"))),
+                TsParam::new("__k", Some(TsType::named("string"))),
+                TsParam::new("__t", Some(TsType::named("number"))),
             ],
             is_async: true,
             generics: vec![],

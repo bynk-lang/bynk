@@ -210,13 +210,6 @@ pub(crate) fn block_arrow(params: Vec<TsParam>, is_async: bool, body: Vec<TsStmt
     arrow_of(params, is_async, TsArrowBody::Multiline(body))
 }
 
-/// A parameter `name: ty` (or bare `name` when `ty` is `None`; a bare [`TsType`] is accepted
-/// too). Callers that need a default,
-/// an optional or a rest parameter build it with `TsParam::new` and its modifiers.
-pub(crate) fn param(name: impl Into<String>, ty: impl Into<Option<TsType>>) -> TsParam {
-    TsParam::new(name, ty.into())
-}
-
 // ---- Statements ----
 
 /// `expr;`.
@@ -462,21 +455,6 @@ mod tests {
         assert_eq!(
             arrow_of(p(), true, TsArrowBody::Expr(boxed(y()))),
             arrow_node(true, TsArrowBody::Expr(boxed(y())))
-        );
-        assert_eq!(
-            param("a", Some(TsType::named("A"))),
-            param("a", TsType::named("A"))
-        );
-        assert_eq!(
-            param("a", Some(TsType::named("A"))),
-            TsParam {
-                name: "a".into(),
-                ty: Some(TsType::named("A")),
-                optional: false,
-                rest: false,
-                array_pattern: None,
-                default: None,
-            }
         );
     }
 

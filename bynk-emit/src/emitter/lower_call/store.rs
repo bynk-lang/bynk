@@ -19,8 +19,9 @@ use super::query::{
 };
 use crate::ts_build::{
     arrow, binary, block, block_arrow, call, const_typed, expr_stmt, ident, member, method_call,
-    param, paren, ret, str_lit, strict_neq,
+    paren, ret, str_lit, strict_neq,
 };
+use bynk_ts::TsParam;
 
 /// A store field's handle, `<var>.<field>`, as a node (the working-state variable and the
 /// field's name are each an identifier).
@@ -448,7 +449,7 @@ fn lower_store_map_call(
                 let [k] = take(c);
                 let present = op(&m.node, "get", vec![ident("__k")]);
                 let some = arrow(
-                    vec![param("__v", None)],
+                    vec![TsParam::new("__v", None)],
                     call(ident("Some"), vec![TsExpr::NonNull(Box::new(ident("__v")))]),
                 );
                 let then_get = call(ident("__bynkThen"), vec![present, some]);
@@ -463,7 +464,7 @@ fn lower_store_map_call(
                         ident("__bynkThen"),
                         vec![
                             op(&m.node, "has", vec![ident("__k")]),
-                            arrow(vec![param("__h", None)], branch),
+                            arrow(vec![TsParam::new("__h", None)], branch),
                         ],
                     )),
                 ])
@@ -472,7 +473,7 @@ fn lower_store_map_call(
                 let c = a;
                 let [k, f] = take(c);
                 let modify = block_arrow(
-                    vec![param("__c", None), param("__p", None)],
+                    vec![TsParam::new("__c", None), TsParam::new("__p", None)],
                     false,
                     vec![
                         if_then(
@@ -498,7 +499,10 @@ fn lower_store_map_call(
                     consequent: Box::new(TsExpr::NonNull(Box::new(ident("__c")))),
                     alternate: Box::new(paren(default)),
                 };
-                let modify = arrow(vec![param("__c", None), param("__p", None)], apply(f, cur));
+                let modify = arrow(
+                    vec![TsParam::new("__c", None), TsParam::new("__p", None)],
+                    apply(f, cur),
+                );
                 async_iife(vec![
                     awaited(op(&m.node, "modify", vec![string_of(k), modify])),
                     done(),
@@ -726,7 +730,7 @@ fn lower_store_cache_call(
                 let c_ = a;
                 let [k, f] = take(c_);
                 let modify = block_arrow(
-                    vec![param("__e", None)],
+                    vec![TsParam::new("__e", None)],
                     false,
                     vec![
                         if_then(
@@ -755,7 +759,7 @@ fn lower_store_cache_call(
                     alternate: Box::new(paren(default)),
                 };
                 let modify = block_arrow(
-                    vec![param("__e", None)],
+                    vec![TsParam::new("__e", None)],
                     false,
                     vec![
                         const_typed("__cur", None, cur),
