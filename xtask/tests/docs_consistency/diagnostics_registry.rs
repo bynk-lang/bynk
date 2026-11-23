@@ -159,7 +159,7 @@ fn registry_matches_codes_used_in_source() {
 fn grammar_symbols_are_embeddable_rules() {
     let grammar = grammar_json();
     // An *embeddable* rule has a `{{#grammar}}` entry (and `#rule-<raw>` anchor)
-    // in grammar.md, so the diagnostics `Construct` deep-link resolves. This is
+    // in grammar.md, so a code page's "grammar rules it governs" link resolves. This is
     // stricter than "a real rule": a collapsed trivial wrapper has no entry.
     let embeddable: BTreeSet<String> = xtask::grammar::embeddable_rules(&grammar)
         .into_iter()

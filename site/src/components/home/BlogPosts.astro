@@ -2,6 +2,10 @@
 // "From the blog" (web presence slice 8): the newest three posts, read at
 // build time from the blog's /blog/posts.json (see src/lib/blog-posts.mjs).
 // When the list can't be read, the section shows only its link to the blog.
+//
+// Each card is an <article> whose title is a heading and the only link, so a
+// screen reader hears the title alone as the link's name; the link's ::after
+// covers the card, so the whole card is still clickable.
 import { latestPosts } from "../../lib/blog-posts.mjs";
 
 const posts = await latestPosts(3);
@@ -20,16 +24,19 @@ const date = (iso: string) =>
     posts.length > 0 && (
       <div class="posts">
         {posts.map((p) => (
-          <a class="post" href={p.url}>
+          <article class="post">
             {(p.series || p.level) && (
-              <span class="eyebrow">{[p.series, p.level].filter(Boolean).join(" · ")}</span>
+              <p class="eyebrow">{[p.series, p.level].filter(Boolean).join(" · ")}</p>
             )}
-            <span class="title">{p.title}</span>
-            {p.summary && <span class="summary">{p.summary}</span>}
-            <span class="meta">
-              {[date(p.date), p.bynkVersion && `Bynk ${p.bynkVersion.replace(/^v/, "")}`].filter(Boolean).join(" · ")}
-            </span>
-          </a>
+            <h3 class="title">
+              <a href={p.url}>{p.title}</a>
+            </h3>
+            {p.summary && <p class="summary">{p.summary}</p>}
+            <p class="meta">
+              <time datetime={p.date}>{date(p.date)}</time>
+              {p.bynkVersion && <> · Bynk {p.bynkVersion.replace(/^v/, "")}</>}
+            </p>
+          </article>
         ))}
       </div>
     )
@@ -50,6 +57,7 @@ const date = (iso: string) =>
     gap: 1rem;
   }
   .post {
+    position: relative;
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
@@ -57,25 +65,45 @@ const date = (iso: string) =>
     background: var(--bynk-surface-panel);
     border: 1px solid var(--bynk-line);
     border-radius: 0.5rem;
-    text-decoration: none;
     color: var(--bynk-ink);
+  }
+  .post p {
+    margin: 0;
   }
   .post:hover {
     border-color: var(--bynk-line-strong);
   }
-  .post:hover .title {
-    color: var(--bynk-accent);
+  .post:has(a:focus-visible) {
+    outline: 2px solid var(--sl-color-text-accent);
+    outline-offset: 2px;
   }
   .title {
+    margin: 0;
     font-size: var(--sl-text-lg);
     font-weight: 650;
     line-height: 1.3;
+  }
+  .title a {
+    text-decoration: none;
+  }
+  .title a:focus-visible {
+    outline: none;
+  }
+  /* The title's link covers the card. */
+  .title a::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+  }
+  .post:hover .title a {
+    color: var(--bynk-accent);
   }
   .summary {
     color: var(--bynk-ink-muted);
     font-size: var(--sl-text-sm);
   }
-  .meta {
+  .post .meta {
     margin-top: auto;
     color: var(--bynk-ink-muted);
     font-size: var(--sl-text-xs);
