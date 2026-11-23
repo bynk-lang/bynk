@@ -20,7 +20,7 @@ use super::super::ts_types::{TyRender, ts_ty_to_ts_type};
 use super::super::{BaseType, Expr, Ident, RuntimeUse, TyId};
 use crate::ts_build::{
     arrow, arrow_with, assign, binary, block, call, const_typed, expr_stmt, for_await_of, for_of,
-    ident, let_init as let_, member, method_call, param, paren, ret, spread, str_lit,
+    ident, let_init, member, method_call, param, paren, ret, spread, str_lit,
 };
 
 /// v0.100 (real-time track slice 0): lower a `Stream[T]` op over a `source`
@@ -70,7 +70,7 @@ pub(in crate::emitter) fn lower_stream_method(
                 block(vec![TsStmt::return_stmt(None, None)]),
                 None,
             ));
-            body.push(let_("__i", zero()));
+            body.push(let_init("__i", zero()));
             let step = TsExpr::Unary {
                 op: bynk_ts::TsUnaryOp::PreIncrement,
                 expr: Box::new(ident("__i")),
@@ -738,7 +738,7 @@ impl Arm<'_> {
                 call(paren(f), vec![ident("__acc"), ident("__x")]),
             );
             let body = vec![
-                let_("__acc", init),
+                let_init("__acc", init),
                 for_of("__x", q(), step),
                 ret(ident("__acc")),
             ];
@@ -809,7 +809,7 @@ impl Arm<'_> {
                             ret(ident("None")),
                             None,
                         ),
-                        let_("__m", applied(key.clone(), first_of_a())),
+                        let_init("__m", applied(key.clone(), first_of_a())),
                         for_of("__x", ident("__a"), scan),
                         ret(call(ident("Some"), vec![ident("__m")])),
                     ],
@@ -859,7 +859,7 @@ impl Arm<'_> {
                     ret(ident("None")),
                     None,
                 ),
-                let_("__s", zero()),
+                let_init("__s", zero()),
                 for_of("__x", ident("__a"), add),
                 ret(call(ident("Some"), vec![mean])),
             ];
