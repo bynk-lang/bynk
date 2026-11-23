@@ -36,7 +36,7 @@ Track slice T0.0 (#999); `ts_writes`/`ts_any` added by P7.0 (#1296); `verbatim_o
 | `deploy_ledger_writes` | yes | 1 |
 | `binding_kind_homes` | yes | 1 |
 | `wrangler_key_literals` | yes | 0 |
-| `cloudflare_client_sites` | yes | 10 |
+| `cloudflare_client_sites` | yes | 0 |
 | `incremental_query_types` | yes | unit_signature present; shared_cache migrated; stability_test present; definition/project levels absent (deleted by #1537) |
 | `unconsumed_ir_items` | yes | 0 |
 | `diagnostic_coverage` | yes | unasserted=28 (asserted 870/898) |

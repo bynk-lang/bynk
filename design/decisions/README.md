@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0888](0888-wrangler-rest-boundary.md) | **The wrangler/REST boundary and the Cloudflare client layer** (v0.640.69) — Wrangler for deploy, dev, tail, migrations and rollback; REST for account resources; one module, one operation trait, one REST client, typed errors whose text is the contract | Accepted (v0.640.69) |
 | [0887](0887-the-test-runtime-is-first-party-runtime-code.md) | **The test runtime is first-party runtime code** (v0.640.52) — Test-runtime code is authored as type-checked modules under the runtime's `src/testing/`, spliced into generated test modules as generated text, and guarded so every module is checked | Accepted (v0.640.52) |
 | [0886](0886-docs-and-blog-licences.md) | **The documentation's prose is CC BY 4.0 and its snippets MIT, as the blog's; Bynk stays MIT or Apache-2.0** (v0.640.40) — Writing on both sites is CC BY 4.0, code snippets on both are MIT, and the toolchain and everything else in bynk-lang/bynk stays dual-licensed MIT or Apache-2.0 | Accepted (v0.640.40) |
 | [0885](0885-where-test-generation-lives.md) | **Test-harness generation is `bynk-emit::testgen`, and the driver only orchestrates it** (v0.640.38) — The test modules, entry and discovery manifest are generated in `bynk-emit`; the driver keeps orchestration, I/O and spawning; `bynk-emit` has no dependency on `bynk-driver`, including for its tests | Accepted (v0.640.38) |

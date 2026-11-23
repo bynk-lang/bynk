@@ -1,12 +1,6 @@
----
-level: patch
-changelog: Internal restructuring of how `bynk deploy`, `bynk revert` and `bynk migrate` call Cloudflare's API; one REST client per run with typed errors and shared pagination, with no change to messages, requests or `bynk.deploy.lock`
-probes: cloudflare_client_sites
----
+# 0888 — The wrangler/REST boundary and the Cloudflare client layer
 
-## ADR: wrangler-rest-boundary
-title: The wrangler/REST boundary and the Cloudflare client layer
-summary: Wrangler for deploy, dev, tail, migrations and rollback; REST for account resources; one module, one operation trait, one REST client, typed errors whose text is the contract
+- **Status:** Accepted (v0.640.69)
 
 **Context.** Before back-half paydown 1D.3 (#4043), `bynk` reached Cloudflare in two
 ways that shared nothing. It spawned wrangler from 24 places, each of which built its own
