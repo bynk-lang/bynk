@@ -44,9 +44,17 @@ Two more artifact families are generated from sources under `src/`:
   is a script, not a module), to `../src/testgen/test_runtime/<name>.ts`, and the table
   `../src/testgen/test_runtime_modules.rs` the emitter reads them through. A generated test module
   still *splices* that text rather than importing it, so each module keeps its own clock, snapshot
-  state and timer queue. `src/testing/harness.ts` declares the one name a generated module
-  supplies (`__bynkSnapshotFiles`); it is a contract for the type-check and is never spliced. A
-  name a fragment must keep exporting when spliced is listed in `SPLICE_EXPORTS` in `bundle.mjs`.
+  state and timer queue. `src/testing/harness.ts` declares the names a generated module
+  supplies (`__bynkSnapshotFiles`, `__bynkAssetFiles`); it is a contract for the type-check and is
+  never spliced. A name a fragment must keep exporting when spliced is listed in `SPLICE_EXPORTS`
+  in `bundle.mjs`.
+- **A fragment's runtime names are a table column** (1B.5e, #4054 Decision C). Each row records
+  the names the module imports from the runtime's own modules (`../*.ts`), beside its name, the
+  sibling modules it imports and its splice text. `TestRuntimeModule::splice` carries them as the
+  `raw_using` names of the spliced statement, so a generated test module — whose imports come
+  from its tree since 1B.5e — imports what the spliced text spells. A `testgen` unit test holds
+  each row's column against the runtime exports its artifact spells, so a fragment that starts
+  using `Ok` cannot leave a module under-importing it.
 - **The test doubles are imported, not spliced** (1B.3b, #4047). `src/testing/bindings.ts` holds
   every `makeIntegration*` factory a multi-Worker test binds as a participant's `env.*`, and
   `src/testing/pglite.ts` the opt-in PGlite `Postgres` double, which alone imports

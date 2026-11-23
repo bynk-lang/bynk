@@ -1,7 +1,7 @@
 ---
 level: patch
 changelog: Internal restructuring: the test harness builds the system suites' http, cron, queue and email drivers, their request-init objects, credentials and tokens as typed nodes instead of text, so a request's options object prints without a trailing comma and a driver's credential statements each print on their own line; no behaviour changes
-probes: ts_raw_sites_testgen, testgen_print_calls, ts_writes
+probes: ts_raw_sites_testgen, ts_writes
 ---
 refactor: the system drivers are nodes (1B.5d)
 

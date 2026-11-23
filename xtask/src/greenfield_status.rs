@@ -117,7 +117,7 @@ pub fn run(root: &Path) -> Report {
 /// The gated probes' names, in [`run_gated`]'s order — what a pending file's
 /// `probes` key may cite. `greenfield_status_table_is_current` asserts this
 /// matches the probes [`run_gated`] actually returns, so the two cannot drift.
-pub const GATED_PROBES: [&str; 35] = [
+pub const GATED_PROBES: [&str; 34] = [
     "workspace_lints",
     "fs_below_driver",
     "options_sources",
@@ -137,7 +137,6 @@ pub const GATED_PROBES: [&str; 35] = [
     "emit_thread_locals",
     "emit_silent_fallbacks",
     "emit_print_calls",
-    "testgen_print_calls",
     "import_prediction_fns",
     "node_builder_defs",
     "deploy_kind_accessors",
@@ -162,7 +161,7 @@ pub const GATED_PROBES: [&str; 35] = [
 /// `verbatim_origins` (an argued floor of 2) and `model_readers_beyond_emit`
 /// (which has the opposite direction). A subset of [`GATED_PROBES`], pinned by
 /// a unit test.
-pub const GROWTH_PROBES: [&str; 21] = [
+pub const GROWTH_PROBES: [&str; 20] = [
     "ts_writes",
     "ts_any",
     "emit_abi_shapes",
@@ -174,7 +173,6 @@ pub const GROWTH_PROBES: [&str; 21] = [
     "emit_thread_locals",
     "emit_silent_fallbacks",
     "emit_print_calls",
-    "testgen_print_calls",
     "import_prediction_fns",
     "node_builder_defs",
     "deploy_kind_accessors",
@@ -208,7 +206,6 @@ pub fn run_gated(root: &Path) -> Vec<Probe> {
         emit_thread_locals(root),
         emit_silent_fallbacks(root),
         emit_print_calls(root),
-        testgen_print_calls(root),
         import_prediction_fns(root),
         node_builder_defs(root),
         deploy_kind_accessors(root),
@@ -2316,26 +2313,16 @@ fn ts_raw_sites_testgen(root: &Path) -> Probe {
 /// [`codegen_family_files`] gives it) generates the *test harness* rather than
 /// production emission: `bynk-emit::testgen` (`testgen.rs`, `testgen/**`), which 1B.2a moved
 /// there from the driver's `project/tests_emit/**`.
+///
+/// Two probes read it since 1B.5e (Decision H of #4054): `ts_raw_sites_emit` and
+/// `ts_raw_sites_testgen`, because §8 has a row for each, and [`ast_importers`], because the
+/// harness reads the AST by design. Every other probe over `bynk-emit/src` reads the whole
+/// crate, the harness included.
 fn is_testgen_path(rel: &Path) -> bool {
     rel.components().any(|c| {
         let c = c.as_os_str().to_string_lossy();
         c == "testgen" || c == "testgen.rs"
     })
-}
-
-/// `bynk-emit/src`'s files, split by [`is_testgen_path`] (1B.2a, Decision D of #4028): the
-/// production emission the Phase 1 exit rows are about when `testgen` is false, the test
-/// harness's own files (`testgen.rs`, `testgen/**`) when it is true. The probes that read
-/// `bynk-emit/src` alone ([`emit_print_calls`], [`import_prediction_fns`],
-/// [`emit_silent_fallbacks`], [`ast_importers`]) take the first, as [`ts_raw_sites_emit`] does;
-/// [`testgen_print_calls`] takes the second. The zero-reading rules ([`fs_below_driver`],
-/// [`emit_thread_locals`], [`hoist_sinks`]) keep scanning every file, so the harness can never
-/// do I/O or hold a thread-local.
-fn emit_files_by_origin(root: &Path, testgen: bool) -> Vec<(PathBuf, String)> {
-    rust_files_relative(&root.join("bynk-emit/src"))
-        .into_iter()
-        .filter(|(p, _)| is_testgen_path(p) == testgen)
-        .collect()
 }
 
 /// [`ts_raw_sites_emit`]'s and [`ts_raw_sites_testgen`]'s counting logic over an
@@ -2427,7 +2414,8 @@ fn emit_silent_fallbacks(root: &Path) -> Probe {
     Probe {
         name: "emit_silent_fallbacks",
         gated: true,
-        reads: emit_silent_fallbacks_violations(&emit_files_by_origin(root, false)).to_string(),
+        reads: emit_silent_fallbacks_violations(&rust_files_relative(&root.join("bynk-emit/src")))
+            .to_string(),
     }
 }
 
@@ -2545,23 +2533,8 @@ fn emit_print_calls(root: &Path) -> Probe {
     Probe {
         name: "emit_print_calls",
         gated: true,
-        reads: emit_print_calls_violations(&emit_files_by_origin(root, false)).to_string(),
-    }
-}
-
-/// 1B.2a (#4028, Decision D): [`emit_print_calls`]'s count over `bynk-emit::testgen`, the
-/// test-harness generation (`testgen.rs`, `testgen/**`). It starts at the 43 the harness
-/// carried in the driver (`print_stmt`, `print_expr` and `print_type`), and is the half of the
-/// old reading the move reclassifies, as `ts_raw_sites_testgen` is of `ts_raw_sites`: the two
-/// readings sum to what one probe over `bynk-emit/src` would read. A growth probe
-/// ([`GROWTH_PROBES`]): it may only fall unless a pending file `raises:` it with a reason.
-/// 1B.2b moved `extend_printed_at` in (`testgen/case_body.rs`), so it reads 44.
-/// 1B.5 converts the harness to nodes and takes it to its argued floor.
-fn testgen_print_calls(root: &Path) -> Probe {
-    Probe {
-        name: "testgen_print_calls",
-        gated: true,
-        reads: emit_print_calls_violations(&emit_files_by_origin(root, true)).to_string(),
+        reads: emit_print_calls_violations(&rust_files_relative(&root.join("bynk-emit/src")))
+            .to_string(),
     }
 }
 
@@ -2599,7 +2572,8 @@ fn import_prediction_fns(root: &Path) -> Probe {
     Probe {
         name: "import_prediction_fns",
         gated: true,
-        reads: import_prediction_fns_violations(&emit_files_by_origin(root, false)).to_string(),
+        reads: import_prediction_fns_violations(&rust_files_relative(&root.join("bynk-emit/src")))
+            .to_string(),
     }
 }
 
@@ -2608,13 +2582,19 @@ fn import_prediction_fns(root: &Path) -> Probe {
 /// (`unit_table_uses_emit`, `unit_table_uses_idempotency`, `call_handler_needs_exec`), whether a
 /// context's `deps` interface carries `__eventsDispatch` (`commons_uses_emit`), or are structural
 /// type walks (`mentions_decimal`, `mentions_factory_param`). None of them decides an import.
-const IMPORT_PREDICTION_ALLOWLIST: [&str; 6] = [
+///
+/// 1B.5e (Decision H of #4054) adds `double_uses`, which the widened scan reaches. It is the
+/// opposite of a prediction: it lists the runtime and sibling names an authored test double's
+/// fixed body *spells*, which `TsStmt::raw_using` declares so the derived header imports them
+/// (Decision A). A guard test in `testgen/stubs.rs` holds the list against the body's words.
+const IMPORT_PREDICTION_ALLOWLIST: [&str; 7] = [
     "unit_table_uses_emit",
     "unit_table_uses_idempotency",
     "call_handler_needs_exec",
     "commons_uses_emit",
     "mentions_decimal",
     "mentions_factory_param",
+    "double_uses",
 ];
 
 /// The name of the function a line declares (`fn name(`, after any `pub`, `pub(crate)`, `const`,
@@ -6045,10 +6025,9 @@ mod tests {
     }
 
     /// 1B.2a (Decision D of #4028): the four production probes that read `bynk-emit/src` skip
-    /// the harness, and `testgen_print_calls` reads it alone, so their sum is what one probe
-    /// over the crate would read.
+    /// 1B.5e (Decision H): `emit_print_calls` reads the whole crate, the harness included.
     #[test]
-    fn the_harness_is_read_apart_from_production_emission() {
+    fn the_print_probe_reads_the_harness_too() {
         let tree = TempTree::new("bynk-testgen-split");
         let dir = tree.0.clone();
         let src = dir.join("bynk-emit/src");
@@ -6064,17 +6043,14 @@ mod tests {
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
             std::fs::write(path, text).unwrap();
         }
-        assert_eq!(emit_print_calls(&dir).reads, "1");
-        assert_eq!(testgen_print_calls(&dir).reads, "3");
-        assert_eq!(emit_files_by_origin(&dir, false).len(), 1);
-        assert_eq!(emit_files_by_origin(&dir, true).len(), 2);
+        assert_eq!(emit_print_calls(&dir).reads, "4");
     }
 
-    /// The harness's prediction functions, silent fallbacks and AST imports are not production
-    /// emission (1B.2a), so `import_prediction_fns`, `emit_silent_fallbacks` and `ast_importers`
-    /// skip it.
+    /// 1B.5e (Decision H): the harness's prediction functions and silent fallbacks are read
+    /// with production emission's, because the harness predicts no import and draws no silent
+    /// `undefined` any more. Only `ast_importers` still skips it: it reads the AST by design.
     #[test]
-    fn production_probes_skip_testgen_files() {
+    fn the_prediction_and_fallback_probes_read_the_harness_too() {
         let tree = TempTree::new("bynk-testgen-skip");
         let dir = tree.0.clone();
         let src = dir.join("bynk-emit/src");
@@ -6085,8 +6061,8 @@ mod tests {
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
             std::fs::write(path, body).unwrap();
         }
-        assert_eq!(import_prediction_fns(&dir).reads, "1");
-        assert_eq!(emit_silent_fallbacks(&dir).reads, "1");
+        assert_eq!(import_prediction_fns(&dir).reads, "3");
+        assert_eq!(emit_silent_fallbacks(&dir).reads, "3");
         assert_eq!(ast_importer_files(&dir).len(), 1);
     }
 
