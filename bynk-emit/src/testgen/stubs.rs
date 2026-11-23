@@ -953,7 +953,6 @@ pub(super) fn stub_overlay(rp: &ResolvedStub, ty: &str, base: Option<TsExpr>) ->
     }
 }
 
-
 /// `Idempotency`'s double: an in-memory store whose entries and claims expire
 /// on the clock `Clock.now()` reads (`__NOW__`, substituted as for `Kv`; `__CLAIM__` is the module's `Claim`), so a
 /// test that `advance`s the harness clock sees a window lapse.

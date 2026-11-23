@@ -65,7 +65,7 @@ pub(super) fn emit_test_module(
     contracts: bool,
     hidden: &BTreeMap<String, String>,
     // #1883, slice 3: `asset_harness`'s text, when the target ships assets.
-    asset_harness: Option<String>,
+    asset_harness: Option<Vec<TsStmt>>,
     // #2841: the module-level `string` constant for each fixture file a suite
     // here declares ([`fixture_consts`]).
     fixture_consts: Option<Vec<TsStmt>>,
@@ -362,8 +362,8 @@ pub(super) fn emit_test_module(
     stmts.push(TestRuntimeModule::Expectation.splice());
     // #1883, slice 3: the embedded files and `__bynkAssetGet`, for an asset
     // fetch in a case.
-    if let Some(text) = &asset_harness {
-        stmts.push(TsStmt::raw(text.clone(), None));
+    if let Some(assets) = &asset_harness {
+        stmts.extend(assets.iter().cloned());
     }
     if let Some(consts) = &fixture_consts {
         stmts.extend(consts.iter().cloned());

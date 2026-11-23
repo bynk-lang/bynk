@@ -281,7 +281,6 @@ pub(super) fn build_run_function(entries: &[(String, String)]) -> Vec<TsStmt> {
     ]
 }
 
-
 pub(super) fn console_log(arg: TsExpr) -> TsStmt {
     expr_stmt(method_call(ident("globalThis.console"), "log", vec![arg]))
 }
@@ -826,7 +825,6 @@ pub fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt, pg: bool) -
     program.push(expr_stmt(call(ident("main"), vec![])));
     program
 }
-
 
 /// #3321: closes the PGlite databases a run started. PGlite leaves a ten-second
 /// timer behind, which would otherwise hold the process open that long; the

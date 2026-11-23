@@ -122,6 +122,7 @@ const TEST_TABLE = join(pkgRoot, "..", "src", "testgen", "test_runtime_modules.r
 // The names a generated test module supplies, declared for the type-check. Never spliced.
 const TEST_CONTRACT = "harness";
 const TEST_MODULES = [
+  "asset_get",
   "case_timing",
   "clock",
   "expectation",
