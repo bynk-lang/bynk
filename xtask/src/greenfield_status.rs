@@ -1790,8 +1790,6 @@ const AST_IMPORTER_ORIGINS: &[(&str, &str)] = &[
         "emitter/workers_entry/http_policy.rs",
         "emitter/workers_entry.rs",
     ),
-    ("emitter/emit/types.rs", "emitter/emit.rs"),
-    ("emitter/emit/functions.rs", "emitter/emit.rs"),
     // 2.2a (#4087): `lower.rs` split.
     ("emitter/lower/pattern.rs", "emitter/lower.rs"),
     ("emitter/lower/is.rs", "emitter/lower.rs"),
@@ -1804,9 +1802,13 @@ const AST_IMPORTER_ORIGINS: &[(&str, &str)] = &[
     ("emitter/lower/literal.rs", "emitter/lower.rs"),
     ("emitter/lower/ident.rs", "emitter/lower.rs"),
     ("emitter/lower/calls.rs", "emitter/lower.rs"),
+    // emitter/emit.rs (2.1, #4086), in path order.
+    ("emitter/emit/capability.rs", "emitter/emit.rs"),
+    ("emitter/emit/functions.rs", "emitter/emit.rs"),
     ("emitter/emit/handlers.rs", "emitter/emit.rs"),
     ("emitter/emit/messages.rs", "emitter/emit.rs"),
-    ("emitter/emit/capability.rs", "emitter/emit.rs"),
+    ("emitter/emit/service.rs", "emitter/emit.rs"),
+    ("emitter/emit/types.rs", "emitter/emit.rs"),
     // emitter/serialisation.rs (an AST_IMPORTER_EXCEPTIONS entry: its children are excluded too)
     ("emitter/serialisation/expr.rs", "emitter/serialisation.rs"),
     ("emitter/serialisation/field.rs", "emitter/serialisation.rs"),
