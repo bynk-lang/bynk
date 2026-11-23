@@ -11,6 +11,7 @@
 //! Kept out of `workers_entry.rs`, whose entry builder is near its length
 //! ceiling.
 
+use crate::ts_build::ident;
 use bynk_syntax::ast::ServiceProtocol;
 use bynk_ts::{TsArrowBody, TsBindingName, TsExpr, TsLit, TsParam, TsStmt, TsType};
 
@@ -67,7 +68,6 @@ pub(super) fn emit_email_handler(
     params.extend(exec_params.iter().cloned());
     // The routes are built inside a thunk, so composing the surface is guarded
     // with everything else: nothing escapes `email()` as a throw.
-    let ident = |n: &str| TsExpr::Ident(n.to_string());
     let route = |r: &EmailRoute| {
         let method = crate::emitter::queue_handler_method_name(&r.service, 0);
         let handle = TsExpr::Arrow {

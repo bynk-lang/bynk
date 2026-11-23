@@ -14,7 +14,7 @@ use super::super::emit::{flatten_emit_ident_chain, test_scaffold_ns};
 use super::super::lower::Pre;
 use super::super::lower_ctx::LowerCtx;
 use super::super::{TypeBody, TypeDecl, *};
-use crate::ts_build::{call, ident as id, member, paren};
+use crate::ts_build::{call, ident, member, paren};
 
 /// v0.6 cross-context service call: receiver is an alias or the dotted name
 /// of a consumed context. In bundle mode, lower to
@@ -56,7 +56,7 @@ pub(in crate::emitter) fn lower_cross_context_service_call(
                     )
                 })
                 .collect();
-            let surface = member(member(id("deps"), "surface"), &key);
+            let surface = member(member(ident("deps"), "surface"), &key);
             let service = call(member(surface, &method.name), args_lowered);
             // #2825: the result takes the caller's declaration of a
             // same-named refined or opaque type, whose brand differs.
@@ -876,7 +876,10 @@ mod tests {
     /// The cast builds `Paren(As(As(..)))`, which prints as one bracketed double cast.
     #[test]
     fn the_cast_is_one_bracketed_double_cast() {
-        let cast = cast_through_unknown(id("total"), TsType::named("shop_pay.Money"));
+        let cast = cast_through_unknown(
+            crate::ts_build::ident("total"),
+            TsType::named("shop_pay.Money"),
+        );
         assert_eq!(
             bynk_ts::print_expr(&cast),
             "(total as unknown as shop_pay.Money)"

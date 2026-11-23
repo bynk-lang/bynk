@@ -80,7 +80,7 @@ pub(super) fn emit_system_job_support(
                         vec![
                             str_lit(expr.clone()),
                             arrow(
-                                vec![param("exec", None)],
+                                vec![TsParam::new("exec", None)],
                                 method_call(
                                     ident(worker.clone()),
                                     "scheduled",
@@ -137,7 +137,7 @@ pub(super) fn emit_system_job_support(
                         str_lit(name.clone()),
                         body,
                         arrow(
-                            vec![param("batch", None), param("exec", None)],
+                            vec![TsParam::new("batch", None), TsParam::new("exec", None)],
                             method_call(ident(worker.clone()), "queue", forward_args),
                         ),
                     ],
@@ -175,7 +175,7 @@ pub(super) fn emit_system_job_support(
                     vec![
                         ident(param_name.clone()),
                         arrow(
-                            vec![param("message", None), param("exec", None)],
+                            vec![TsParam::new("message", None), TsParam::new("exec", None)],
                             method_call(
                                 ident(worker.clone()),
                                 "email",

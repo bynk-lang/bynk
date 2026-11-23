@@ -19,10 +19,10 @@ use super::super::lower_list::{
 use super::super::ts_types::{TyRender, ts_ty_to_ts_type};
 use super::super::{BaseType, Expr, Ident, RuntimeUse, TyId};
 use crate::ts_build::{
-    arrow, arrow_with, assign, binary, block, call, const_typed as const_, expr_stmt, for_await_of,
-    for_of, ident as id, let_init as let_, member, method_call as method_call_bare, param, paren,
-    ret, spread, str_lit as str_node,
+    arrow, arrow_with, assign, binary, block, call, const_typed, expr_stmt, for_await_of, for_of,
+    ident, let_init, member, method_call, paren, ret, spread, str_lit,
 };
+use bynk_ts::TsParam;
 
 /// v0.100 (real-time track slice 0): lower a `Stream[T]` op over a `source`
 /// async-iterable expression. **Builders** (`map`/`take`) wrap the source in a
@@ -53,10 +53,10 @@ pub(in crate::emitter) fn lower_stream_method(
             let mut body = stream_claim();
             body.push(for_await_of(
                 "__e",
-                id("__s"),
+                ident("__s"),
                 block(vec![expr_stmt(TsExpr::Yield(Box::new(applied(
                     f,
-                    id("__e"),
+                    ident("__e"),
                 ))))]),
             ));
             stream_generator(Some(source), body)
@@ -65,24 +65,24 @@ pub(in crate::emitter) fn lower_stream_method(
             let n = kids;
             let [source, count] = take::<2, _>(n);
             let mut body = stream_claim();
-            body.push(const_("__n", None, count));
+            body.push(const_typed("__n", None, count));
             body.push(TsStmt::if_stmt(
-                binary(TsBinaryOp::LessThanEq, id("__n"), zero()),
+                binary(TsBinaryOp::LessThanEq, ident("__n"), zero()),
                 block(vec![TsStmt::return_stmt(None, None)]),
                 None,
             ));
-            body.push(let_("__i", zero()));
+            body.push(let_init("__i", zero()));
             let step = TsExpr::Unary {
                 op: bynk_ts::TsUnaryOp::PreIncrement,
-                expr: Box::new(id("__i")),
+                expr: Box::new(ident("__i")),
             };
             body.push(for_await_of(
                 "__e",
-                id("__s"),
+                ident("__s"),
                 block(vec![
-                    expr_stmt(TsExpr::Yield(Box::new(id("__e")))),
+                    expr_stmt(TsExpr::Yield(Box::new(ident("__e")))),
                     TsStmt::if_stmt(
-                        binary(TsBinaryOp::GreaterThanEq, step, id("__n")),
+                        binary(TsBinaryOp::GreaterThanEq, step, ident("__n")),
                         block(vec![TsStmt::return_stmt(None, None)]),
                         None,
                     ),
@@ -95,19 +95,19 @@ pub(in crate::emitter) fn lower_stream_method(
             let n = kids;
             let [source] = take::<1, _>(n);
             let mut body = stream_claim();
-            body.push(const_("__r", None, TsExpr::array(vec![])));
+            body.push(const_typed("__r", None, TsExpr::array(vec![])));
             body.push(for_await_of(
                 "__e",
-                id("__s"),
+                ident("__s"),
                 block(vec![expr_stmt(call(
-                    member(id("__r"), "push"),
-                    vec![id("__e")],
+                    member(ident("__r"), "push"),
+                    vec![ident("__e")],
                 ))]),
             ));
-            body.push(ret(id("__r")));
+            body.push(ret(ident("__r")));
             call(
                 TsExpr::Arrow {
-                    params: vec![param("__s", None)],
+                    params: vec![TsParam::new("__s", None)],
                     is_async: true,
                     generics: Vec::new(),
                     return_type: None,
@@ -127,7 +127,7 @@ pub(super) fn stream_generator(source: Option<TsExpr>, body: Vec<TsStmt>) -> TsE
         TsExpr::Function {
             is_async: true,
             is_generator: true,
-            params: source.iter().map(|_| param("__s", None)).collect(),
+            params: source.iter().map(|_| TsParam::new("__s", None)).collect(),
             return_type: None,
             body,
         },
@@ -143,35 +143,35 @@ fn stream_claim() -> Vec<TsStmt> {
         TsType::named("boolean"),
     )]);
     let mark = || TsExpr::Index {
-        object: Box::new(id("__m")),
-        index: Box::new(id("__k")),
+        object: Box::new(ident("__m")),
+        index: Box::new(ident("__k")),
     };
     vec![
-        const_(
+        const_typed(
             "__m",
             None,
             TsExpr::As {
                 expr: Box::new(TsExpr::As {
-                    expr: Box::new(id("__s")),
+                    expr: Box::new(ident("__s")),
                     ty: TsType::named("unknown"),
                 }),
                 ty: symbol_flags,
             },
         ),
-        const_(
+        const_typed(
             "__k",
             None,
             call(
-                member(member(id("globalThis"), "Symbol"), "for"),
-                vec![str_node(STREAM_READ_SYMBOL)],
+                member(member(ident("globalThis"), "Symbol"), "for"),
+                vec![str_lit(STREAM_READ_SYMBOL)],
             ),
         ),
         TsStmt::if_stmt(
             mark(),
             block(vec![TsStmt::throw_stmt(
                 TsExpr::New {
-                    callee: Box::new(member(id("globalThis"), "Error")),
-                    args: vec![str_node("bynk: a stream can be read only once")],
+                    callee: Box::new(member(ident("globalThis"), "Error")),
+                    args: vec![str_lit("bynk: a stream can be read only once")],
                 },
                 None,
             )]),
@@ -305,35 +305,35 @@ pub(in crate::emitter) fn path_values_source(recv: TsExpr) -> TsExpr {
 pub(in crate::emitter) fn held_values_source(recv: TsExpr, frame: &TsType) -> TsExpr {
     let resolve = call(
         TsExpr::TypeApp {
-            callee: Box::new(id("__resolveConnection")),
+            callee: Box::new(ident("__resolveConnection")),
             type_args: vec![frame.clone()],
         },
         vec![
             super::super::lower::member_node("this", "state"),
-            id("__cid"),
+            ident("__cid"),
         ],
     );
     let present = TsExpr::Conditional {
         test: Box::new(binary(
             TsBinaryOp::StrictEq,
-            member(id("__c"), "tag"),
+            member(ident("__c"), "tag"),
             TsExpr::Lit(bynk_ts::TsLit::Str("Some".to_string())),
         )),
-        consequent: Box::new(TsExpr::array(vec![member(id("__c"), "value")])),
+        consequent: Box::new(TsExpr::array(vec![member(ident("__c"), "value")])),
         alternate: Box::new(TsExpr::array(vec![])),
     };
     let each_id = TsExpr::Arrow {
-        params: vec![param("__cid", None)],
+        params: vec![TsParam::new("__cid", None)],
         is_async: false,
         generics: vec![],
         return_type: None,
         body: Box::new(TsArrowBody::Block(vec![
-            const_("__c", None, resolve),
+            const_typed("__c", None, resolve),
             ret(present),
         ])),
     };
     let values = call(member(recv, "values"), vec![]);
-    method_call_bare(values, "flatMap", vec![each_id])
+    method_call(values, "flatMap", vec![each_id])
 }
 
 // ---- The thunk wrappers -----------------------------------------------------------------
@@ -345,33 +345,33 @@ pub(in crate::emitter) fn held_values_source(recv: TsExpr, frame: &TsType) -> Ts
 // terminal is the unwrapped `__bynkThen`.
 
 fn q() -> TsExpr {
-    id("__q")
+    ident("__q")
 }
 
 /// `(() => __bynkThen(orig, (__q) => body))`, `async (__q)` when the body awaits.
 fn thunk_node(orig: TsExpr, is_async: bool, body: TsArrowBody) -> TsExpr {
     let each = TsExpr::Arrow {
-        params: vec![param("__q", None)],
+        params: vec![TsParam::new("__q", None)],
         is_async,
         generics: vec![],
         return_type: None,
         body: Box::new(body),
     };
-    paren(arrow(vec![], call(id("__bynkThen"), vec![orig, each])))
+    paren(arrow(vec![], call(ident("__bynkThen"), vec![orig, each])))
 }
 
 /// `__bynkThen(orig, (__q) => expr)`.
 fn terminal_node(orig: TsExpr, expr: TsExpr) -> TsExpr {
     call(
-        id("__bynkThen"),
-        vec![orig, arrow(vec![param("__q", None)], expr)],
+        ident("__bynkThen"),
+        vec![orig, arrow(vec![TsParam::new("__q", None)], expr)],
     )
 }
 
 /// `(__x) => (f)(__x)`: the callback is wrapped in a one-parameter arrow so the array index
 /// never reaches a one-parameter Bynk function.
 fn each(f: TsExpr) -> TsExpr {
-    arrow(vec![param("__x", None)], applied(f, id("__x")))
+    arrow(vec![TsParam::new("__x", None)], applied(f, ident("__x")))
 }
 
 /// `await (f)()`: a `Query` argument is itself a thunk, invoked to materialise it.
@@ -382,19 +382,19 @@ fn awaited_thunk(f: TsExpr) -> TsExpr {
 /// `__a[0]`.
 fn first_of_a() -> TsExpr {
     TsExpr::Index {
-        object: Box::new(id("__a")),
+        object: Box::new(ident("__a")),
         index: Box::new(zero()),
     }
 }
 
 /// `__q.map((__x) => () => (f)(__x))`: one thunk per element, for `__bynkSettleAll`.
 fn settle_thunks(f: TsExpr) -> TsExpr {
-    method_call_bare(
+    method_call(
         q(),
         "map",
         vec![arrow(
-            vec![param("__x", None)],
-            arrow(vec![], applied(f, id("__x"))),
+            vec![TsParam::new("__x", None)],
+            arrow(vec![], applied(f, ident("__x"))),
         )],
     )
 }
@@ -402,7 +402,7 @@ fn settle_thunks(f: TsExpr) -> TsExpr {
 /// `await __bynkSettleAll(__q.map(…))`.
 fn settled(f: TsExpr) -> TsExpr {
     TsExpr::Await(Box::new(call(
-        id("__bynkSettleAll"),
+        ident("__bynkSettleAll"),
         vec![settle_thunks(f)],
     )))
 }
@@ -530,7 +530,7 @@ impl Arm<'_> {
     /// `filter` and `map`: `__q.method((__x) => (f)(__x))`.
     fn builder(self, method: &'static str) -> bynk_ts::TsExpr {
         self.built(|o, [f]| {
-            let body = method_call_bare(q(), method, vec![each(f)]);
+            let body = method_call(q(), method, vec![each(f)]);
             thunk_node(o, false, TsArrowBody::Expr(Box::new(body)))
         })
     }
@@ -539,19 +539,19 @@ impl Arm<'_> {
     fn flat_map(self) -> bynk_ts::TsExpr {
         self.built(|o, [f]| {
             let parts = TsExpr::Await(Box::new(call(
-                member(member(id("globalThis"), "Promise"), "all"),
-                vec![method_call_bare(
+                member(member(ident("globalThis"), "Promise"), "all"),
+                vec![method_call(
                     q(),
                     "map",
                     vec![arrow(
-                        vec![param("__x", None)],
-                        call(applied(f, id("__x")), vec![]),
+                        vec![TsParam::new("__x", None)],
+                        call(applied(f, ident("__x")), vec![]),
                     )],
                 )],
             )));
             let body = vec![
-                const_("__parts", None, parts),
-                ret(method_call_bare(id("__parts"), "flat", vec![])),
+                const_typed("__parts", None, parts),
+                ret(method_call(ident("__parts"), "flat", vec![])),
             ];
             thunk_node(o, true, TsArrowBody::Multiline(body))
         })
@@ -566,11 +566,17 @@ impl Arm<'_> {
                 let sorted = with_comparator_node(&cmp, |c| {
                     let compare = call(
                         c,
-                        vec![applied(key.clone(), id(first)), applied(key, id(second))],
+                        vec![
+                            applied(key.clone(), ident(first)),
+                            applied(key, ident(second)),
+                        ],
                     );
                     method_sort(
                         TsExpr::array(vec![spread(q())]),
-                        arrow(vec![param("__a", None), param("__b", None)], compare),
+                        arrow(
+                            vec![TsParam::new("__a", None), TsParam::new("__b", None)],
+                            compare,
+                        ),
                     )
                 });
                 thunk_node(o, false, TsArrowBody::Expr(Box::new(sorted)))
@@ -589,7 +595,7 @@ impl Arm<'_> {
             if from_start {
                 args.insert(0, zero());
             }
-            let body = method_call_bare(q(), "slice", args);
+            let body = method_call(q(), "slice", args);
             thunk_node(o, false, TsArrowBody::Expr(Box::new(body)))
         })
     }
@@ -604,7 +610,7 @@ impl Arm<'_> {
                 args.insert(0, awaited_thunk(other));
             }
             args.insert(0, q());
-            let body = call(id(helper), args);
+            let body = call(ident(helper), args);
             thunk_node(o, joins, TsArrowBody::Expr(Box::new(body)))
         })
     }
@@ -612,7 +618,7 @@ impl Arm<'_> {
     fn distinct(self) -> bynk_ts::TsExpr {
         self.built(|o, []| {
             let set = TsExpr::New {
-                callee: Box::new(member(id("globalThis"), "Set")),
+                callee: Box::new(member(ident("globalThis"), "Set")),
                 args: vec![q()],
             };
             let body = TsExpr::array(vec![spread(set)]);
@@ -647,7 +653,7 @@ impl Arm<'_> {
         self.built(|o, [other_q, left, right, into]| {
             let iter = paren(awaited_thunk(other_q));
             let body = join_body(&sides, iter, [left, right, into], |probe| {
-                method_call_bare(q(), "flatMap", vec![probe])
+                method_call(q(), "flatMap", vec![probe])
             });
             thunk_node(o, true, TsArrowBody::Multiline(body))
         })
@@ -656,16 +662,16 @@ impl Arm<'_> {
     /// `join`: a nested loop over a predicate.
     fn join(self) -> bynk_ts::TsExpr {
         self.built(|o, [other, on, into]| {
-            let pair = |f: TsExpr| call(paren(f), vec![id("__t"), id("__u")]);
-            let each_u = |body: TsExpr| arrow(vec![param("__u", None)], body);
-            let matched = method_call_bare(id("__b"), "filter", vec![each_u(pair(on))]);
-            let joined = method_call_bare(matched, "map", vec![each_u(pair(into))]);
-            let flat = method_call_bare(
+            let pair = |f: TsExpr| call(paren(f), vec![ident("__t"), ident("__u")]);
+            let each_u = |body: TsExpr| arrow(vec![TsParam::new("__u", None)], body);
+            let matched = method_call(ident("__b"), "filter", vec![each_u(pair(on))]);
+            let joined = method_call(matched, "map", vec![each_u(pair(into))]);
+            let flat = method_call(
                 q(),
                 "flatMap",
-                vec![arrow(vec![param("__t", None)], joined)],
+                vec![arrow(vec![TsParam::new("__t", None)], joined)],
             );
-            let body = vec![const_("__b", None, awaited_thunk(other)), ret(flat)];
+            let body = vec![const_typed("__b", None, awaited_thunk(other)), ret(flat)];
             thunk_node(o, true, TsArrowBody::Multiline(body))
         })
     }
@@ -698,13 +704,13 @@ impl Arm<'_> {
             let found = TsExpr::Conditional {
                 test: Box::new(binary(
                     TsBinaryOp::GreaterThan,
-                    member(id("__a"), "length"),
+                    member(ident("__a"), "length"),
                     zero(),
                 )),
-                consequent: Box::new(call(id("Some"), vec![first_of_a()])),
-                alternate: Box::new(id("None")),
+                consequent: Box::new(call(ident("Some"), vec![first_of_a()])),
+                alternate: Box::new(ident("None")),
             };
-            let body = vec![const_("__a", None, q()), ret(found)];
+            let body = vec![const_typed("__a", None, q()), ret(found)];
             terminal_node(o, iife_over_q(false, body))
         })
     }
@@ -714,13 +720,13 @@ impl Arm<'_> {
             let found = TsExpr::Conditional {
                 test: Box::new(binary(
                     TsBinaryOp::GreaterThan,
-                    member(id("__a"), "length"),
+                    member(ident("__a"), "length"),
                     zero(),
                 )),
                 consequent: Box::new(first_of_a()),
                 alternate: Box::new(paren(default)),
             };
-            let body = vec![const_("__a", None, q()), ret(found)];
+            let body = vec![const_typed("__a", None, q()), ret(found)];
             terminal_node(o, iife_over_q(false, body))
         })
     }
@@ -731,11 +737,14 @@ impl Arm<'_> {
 
     fn fold(self) -> bynk_ts::TsExpr {
         self.built(|o, [init, f]| {
-            let step = assign(id("__acc"), call(paren(f), vec![id("__acc"), id("__x")]));
+            let step = assign(
+                ident("__acc"),
+                call(paren(f), vec![ident("__acc"), ident("__x")]),
+            );
             let body = vec![
-                let_("__acc", init),
+                let_init("__acc", init),
                 for_of("__x", q(), step),
-                ret(id("__acc")),
+                ret(ident("__acc")),
             ];
             terminal_node(o, iife_over_q(false, body))
         })
@@ -743,7 +752,7 @@ impl Arm<'_> {
 
     /// `any` and `all`.
     fn predicate(self, method: &'static str) -> bynk_ts::TsExpr {
-        self.built(|o, [p]| terminal_node(o, method_call_bare(q(), method, vec![each(p)])))
+        self.built(|o, [p]| terminal_node(o, method_call(q(), method, vec![each(p)])))
     }
 
     // #3421: a `Decimal` key sums exactly, as `List.sum` does (#2622): from the zero decimal
@@ -762,20 +771,23 @@ impl Arm<'_> {
                 (
                     TsType::named(crate::emitter::ts_types::DECIMAL_TS_TYPE),
                     call(
-                        id("__bynkDecimalAdd"),
-                        vec![id("__s"), applied(key, id("__x"))],
+                        ident("__bynkDecimalAdd"),
+                        vec![ident("__s"), applied(key, ident("__x"))],
                     ),
                     decimal_lit("0", 0),
                 )
             } else {
                 (
                     TsType::named("number"),
-                    binary(TsBinaryOp::Add, id("__s"), applied(key, id("__x"))),
+                    binary(TsBinaryOp::Add, ident("__s"), applied(key, ident("__x"))),
                     zero(),
                 )
             };
-            let step = arrow(vec![param("__s", Some(acc_ty)), param("__x", None)], add);
-            terminal_node(o, method_call_bare(q(), "reduce", vec![step, init]))
+            let step = arrow(
+                vec![TsParam::new("__s", Some(acc_ty)), TsParam::new("__x", None)],
+                add,
+            );
+            terminal_node(o, method_call(q(), "reduce", vec![step, init]))
         })
     }
 
@@ -790,30 +802,30 @@ impl Arm<'_> {
         let key_cmp = self.shape.key_cmp.clone();
         self.built(|o, [key]| {
             let kernel = |better: TsExpr| {
-                let take_key = TsStmt::if_stmt(better, assign(id("__m"), id("__k")), None);
+                let take_key = TsStmt::if_stmt(better, assign(ident("__m"), ident("__k")), None);
                 let scan = block(vec![
-                    const_("__k", None, applied(key.clone(), id("__x"))),
+                    const_typed("__k", None, applied(key.clone(), ident("__x"))),
                     take_key,
                 ]);
                 iife_over_q(
                     false,
                     vec![
-                        const_("__a", None, q()),
+                        const_typed("__a", None, q()),
                         TsStmt::if_stmt(
-                            binary(TsBinaryOp::StrictEq, member(id("__a"), "length"), zero()),
-                            ret(id("None")),
+                            binary(TsBinaryOp::StrictEq, member(ident("__a"), "length"), zero()),
+                            ret(ident("None")),
                             None,
                         ),
-                        let_("__m", applied(key.clone(), first_of_a())),
-                        for_of("__x", id("__a"), scan),
-                        ret(call(id("Some"), vec![id("__m")])),
+                        let_init("__m", applied(key.clone(), first_of_a())),
+                        for_of("__x", ident("__a"), scan),
+                        ret(call(ident("Some"), vec![ident("__m")])),
                     ],
                 )
             };
             match &key_cmp {
-                None => terminal_node(o, kernel(binary(cmp_op, id("__k"), id("__m")))),
+                None => terminal_node(o, kernel(binary(cmp_op, ident("__k"), ident("__m")))),
                 Some(key_cmp) => with_comparator_node(key_cmp, |c| {
-                    let better = binary(cmp_op, call(c, vec![id("__k"), id("__m")]), zero());
+                    let better = binary(cmp_op, call(c, vec![ident("__k"), ident("__m")]), zero());
                     terminal_node(o, kernel(better))
                 }),
             }
@@ -830,29 +842,33 @@ impl Arm<'_> {
                     if matches!(&*tys.get(*o), Ty::Base(BaseType::Duration)))
         );
         self.built(|o, [key]| {
-            let ratio = binary(TsBinaryOp::Div, id("__s"), member(id("__a"), "length"));
+            let ratio = binary(
+                TsBinaryOp::Div,
+                ident("__s"),
+                member(ident("__a"), "length"),
+            );
             let mean = if round {
                 call(
-                    member(member(id("globalThis"), "Math"), "round"),
+                    member(member(ident("globalThis"), "Math"), "round"),
                     vec![ratio],
                 )
             } else {
                 ratio
             };
             let add = expr_stmt(TsExpr::AddAssign {
-                target: Box::new(id("__s")),
-                value: Box::new(applied(key, id("__x"))),
+                target: Box::new(ident("__s")),
+                value: Box::new(applied(key, ident("__x"))),
             });
             let body = vec![
-                const_("__a", None, q()),
+                const_typed("__a", None, q()),
                 TsStmt::if_stmt(
-                    binary(TsBinaryOp::StrictEq, member(id("__a"), "length"), zero()),
-                    ret(id("None")),
+                    binary(TsBinaryOp::StrictEq, member(ident("__a"), "length"), zero()),
+                    ret(ident("None")),
                     None,
                 ),
-                let_("__s", zero()),
-                for_of("__x", id("__a"), add),
-                ret(call(id("Some"), vec![mean])),
+                let_init("__s", zero()),
+                for_of("__x", ident("__a"), add),
+                ret(call(ident("Some"), vec![mean])),
             ];
             terminal_node(o, iife_over_q(false, body))
         })
@@ -887,19 +903,15 @@ impl Arm<'_> {
                 .missing_fact_ty("`Effect[List[_]]` type for a `traverseAll` call"),
         };
         self.built(|o, [f]| {
-            let push = expr_stmt(method_call_bare(
-                id("__out"),
-                "push",
-                vec![awaited_apply(f)],
-            ));
+            let push = expr_stmt(method_call(ident("__out"), "push", vec![awaited_apply(f)]));
             let body = vec![
-                const_(
+                const_typed(
                     "__out",
                     Some(TsType::array(res.clone())),
                     TsExpr::array(vec![]),
                 ),
                 for_of("__x", q(), block(vec![push])),
-                ret(id("__out")),
+                ret(ident("__out")),
             ];
             terminal_node(o, iife_over_q(true, body))
         })
@@ -918,18 +930,18 @@ impl Arm<'_> {
         let u = list_ok_elem(self.result_ty, self.tys, self.fault_site());
         self.built(|o, [f]| {
             let step = vec![
-                const_("__r", None, awaited_apply(f)),
+                const_typed("__r", None, awaited_apply(f)),
                 bail_on_err(),
                 push_value(),
             ];
             let body = vec![
-                const_(
+                const_typed(
                     "__out",
                     Some(TsType::array(u.clone())),
                     TsExpr::array(vec![]),
                 ),
                 for_of("__x", q(), block(step)),
-                ret(call(id("Ok"), vec![id("__out")])),
+                ret(call(ident("Ok"), vec![ident("__out")])),
             ];
             terminal_node(o, iife_over_q(true, body))
         })
@@ -940,14 +952,14 @@ impl Arm<'_> {
         self.built(|o, [f]| {
             let scan = vec![bail_on_err(), push_value()];
             let body = vec![
-                const_("__rs", None, settled(f)),
-                const_(
+                const_typed("__rs", None, settled(f)),
+                const_typed(
                     "__out",
                     Some(TsType::array(u.clone())),
                     TsExpr::array(vec![]),
                 ),
-                for_of("__r", id("__rs"), block(scan)),
-                ret(call(id("Ok"), vec![id("__out")])),
+                for_of("__r", ident("__rs"), block(scan)),
+                ret(call(ident("Ok"), vec![ident("__out")])),
             ];
             terminal_node(o, iife_over_q(true, body))
         })
@@ -1020,7 +1032,7 @@ mod tests {
     }
 
     fn arg_nodes(args: &[&str]) -> Vec<bynk_ts::TsExpr> {
-        args.iter().map(|a| id(*a)).collect()
+        args.iter().map(|a| ident(*a)).collect()
     }
 
     /// A comparator that is a bare identifier (substituted), and one that is built (bound
@@ -1028,10 +1040,10 @@ mod tests {
     fn comparator(label: &str) -> Option<TsExpr> {
         match label {
             "plain" => None,
-            "bare" => Some(id("__bynkCmpFloat")),
+            "bare" => Some(ident("__bynkCmpFloat")),
             "built" => Some(call(
-                id("__bynkCmpSum"),
-                vec![TsExpr::array(vec![]), id("w")],
+                ident("__bynkCmpSum"),
+                vec![TsExpr::array(vec![]), ident("w")],
             )),
             other => panic!("unknown comparator `{other}`"),
         }
@@ -1182,7 +1194,7 @@ mod tests {
             let built = lower(
                 &env,
                 op,
-                values(id("src")),
+                values(ident("src")),
                 arg_nodes(args),
                 (&elem, &other),
                 keyed,
@@ -1207,7 +1219,7 @@ mod tests {
             let built = lower(
                 &env,
                 op,
-                values(id("src")),
+                values(ident("src")),
                 arg_nodes(&["f"]),
                 (&elem, &other),
                 false,
@@ -1231,7 +1243,7 @@ mod tests {
             lower(
                 &env,
                 QueryOp::Filter,
-                values(id("src")),
+                values(ident("src")),
                 vec![],
                 (&e, &e),
                 false,
@@ -1286,7 +1298,7 @@ mod tests {
                     None,
                 )
             };
-            let node = node_print(built(values(id("src")), id("key")));
+            let node = node_print(built(values(ident("src")), ident("key")));
             assert!(node.contains(&want), "{want}\n{node}");
         }
     }
@@ -1302,7 +1314,7 @@ mod tests {
         let node = node_print(lower(
             &env,
             QueryOp::Sum,
-            values(id("src")),
+            values(ident("src")),
             arg_nodes(&["key"]),
             (&e, &e),
             false,
@@ -1318,7 +1330,7 @@ mod tests {
         lower(
             &plain,
             QueryOp::Sum,
-            values(id("src")),
+            values(ident("src")),
             arg_nodes(&["key"]),
             (&e, &e),
             false,
@@ -1346,7 +1358,7 @@ mod tests {
             let node = node_print(lower(
                 &env,
                 QueryOp::Average,
-                values(id("src")),
+                values(ident("src")),
                 arg_nodes(&["key"]),
                 (&e, &e),
                 false,
@@ -1372,7 +1384,7 @@ mod tests {
                 .collect::<Vec<_>>()
                 .join(" ")
         };
-        let node = |name: &str| id(name);
+        let node = |name: &str| ident(name);
         assert_eq!(
             squash(lower_stream_method(
                 node("src"),
@@ -1420,7 +1432,7 @@ mod tests {
             )
         };
         assert_eq!(
-            node_print(over(id("recv"))),
+            node_print(over(ident("recv"))),
             "__bynkThen((recv)(), (__q) => __q.length)"
         );
     }
@@ -1432,7 +1444,7 @@ mod tests {
     fn the_callers_sources_are_nodes_over_plain_paths() {
         let print = |e: TsExpr| bynk_ts::print_expr(&e);
         assert_eq!(
-            print(path_values_source(member(id("__state"), "items"))),
+            print(path_values_source(member(ident("__state"), "items"))),
             "__state.items.values()"
         );
         assert_eq!(
@@ -1445,7 +1457,10 @@ mod tests {
         let frame = named("Frame");
         let held = "__state.conns.values().flatMap((__cid) => { const __c = __resolveConnection<Frame>(this.state, __cid); return __c.tag === \"Some\" ? [__c.value] : []; })";
         assert_eq!(
-            print(held_values_source(member(id("__state"), "conns"), &frame)),
+            print(held_values_source(
+                member(ident("__state"), "conns"),
+                &frame
+            )),
             held
         );
     }

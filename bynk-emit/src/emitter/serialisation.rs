@@ -18,7 +18,7 @@ use crate::emitter::default_value::wire_default_node;
 use crate::emitter::{RuntimeUse, payload_prop};
 use crate::ts_build::{
     and_expr, arrow, as_expr, binary, block, call, const_, ident, if_, index, member, not_expr,
-    or_expr, param, ret, str_lit, strict_eq, strict_neq, switch_stmt, typeof_expr,
+    or_expr, ret, str_lit, strict_eq, strict_neq, switch_stmt, typeof_expr,
 };
 use bynk_check::wire_default::field_default_value;
 use bynk_ts::{
@@ -74,7 +74,7 @@ fn obj_prop(key: &str) -> TsExpr {
 /// `(v) => <serialise v>`: the element serialiser a `List` or `Set` codec maps over.
 fn element_serialiser(elem: &TypeRef, depth: Option<Depth<'_>>, ru: &RuntimeUse) -> TsExpr {
     arrow(
-        vec![param("v", None)],
+        vec![TsParam::new("v", None)],
         serialise_field_expr(elem, &ident("v"), depth, ru),
     )
 }
