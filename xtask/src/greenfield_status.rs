@@ -1813,6 +1813,8 @@ const AST_IMPORTER_ORIGINS: &[(&str, &str)] = &[
     ("emitter/lower/ident.rs", "emitter/lower.rs"),
     ("emitter/lower/calls.rs", "emitter/lower.rs"),
     // emitter/emit.rs (2.1, #4086), in path order.
+    ("emitter/emit/agent_migrate.rs", "emitter/emit.rs"),
+    ("emitter/emit/agent_store.rs", "emitter/emit.rs"),
     ("emitter/emit/capability.rs", "emitter/emit.rs"),
     ("emitter/emit/functions.rs", "emitter/emit.rs"),
     ("emitter/emit/handlers.rs", "emitter/emit.rs"),
@@ -1822,7 +1824,23 @@ const AST_IMPORTER_ORIGINS: &[(&str, &str)] = &[
     ("emitter/emit/websocket.rs", "emitter/emit.rs"),
     // emitter/serialisation.rs (an AST_IMPORTER_EXCEPTIONS entry: its children are excluded too)
     ("emitter/serialisation/expr.rs", "emitter/serialisation.rs"),
+    (
+        "emitter/serialisation/factory.rs",
+        "emitter/serialisation.rs",
+    ),
     ("emitter/serialisation/field.rs", "emitter/serialisation.rs"),
+    (
+        "emitter/serialisation/generics.rs",
+        "emitter/serialisation.rs",
+    ),
+    (
+        "emitter/serialisation/record_sum.rs",
+        "emitter/serialisation.rs",
+    ),
+    (
+        "emitter/serialisation/refined.rs",
+        "emitter/serialisation.rs",
+    ),
     (
         "emitter/serialisation/support.rs",
         "emitter/serialisation.rs",

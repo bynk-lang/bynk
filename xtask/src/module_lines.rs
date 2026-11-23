@@ -44,11 +44,7 @@ pub const CEILINGS_FILE: &str = "xtask/module-line-ceilings.txt";
 /// November 2026), exempt from the cap until track exit. An entry leaves the list when its
 /// ceiling falls under [`EXIT_CAP`] (the test fails while a listed file is under it); the
 /// slice that takes the last one under deletes this constant and the rule that reads it.
-pub const GRANDFATHERED: &[&str] = &[
-    "bynk-emit/src/emitter/emit.rs",
-    "bynk-emit/src/emitter/serialisation.rs",
-    "bynk-emit/src/emitter.rs",
-];
+pub const GRANDFATHERED: &[&str] = &["bynk-emit/src/emitter/emit.rs", "bynk-emit/src/emitter.rs"];
 
 /// One measured file.
 #[derive(Debug, Clone, PartialEq, Eq)]
