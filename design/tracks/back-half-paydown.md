@@ -328,7 +328,7 @@ production lines without saying why; from 2.0 the gate is mechanical. Settled by
 |---|---|---:|---|
 | **2.0** | the ratchet. **Done in #4085.** | — | — |
 | **2.1** | `bynk-emit/src/emitter/emit.rs` | 10,717 | 1B.4b |
-| **2.2** | `bynk-emit/src/emitter/lower.rs` | 4,884 | 1B.4b |
+| **2.2** | `bynk-emit/src/emitter/lower.rs`, in five PRs (#4087). **2.2a done:** `lower/pattern.rs` and `lower/is.rs` (4,863 to 3,752); 2.2b to 2.2e remain | 3,752 | 1B.4b; 2.2c to 2.2e also 1B.5e (merged) |
 | **2.3** | `bynk-emit/src/emitter/serialisation.rs` | 4,232 | — |
 | **2.4** | `bynk-emit/src/emitter/workers_entry.rs` | 4,215 | — |
 | **2.5** | `bynk-emit/src/emitter.rs` | 3,215 | — |

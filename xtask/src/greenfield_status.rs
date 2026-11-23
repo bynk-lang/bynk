@@ -1763,11 +1763,15 @@ fn ast_importers(root: &Path) -> Probe {
 /// `bynk-emit/src` and `/`-separated. [`ast_importers`] counts each *origin* once, so a split
 /// that carries `bynk_syntax::ast` imports into several children leaves the reading where it
 /// was: the probe measures how much of the crate reads the AST, not how many files it is
-/// written across. Empty today. **Each Phase 2 split of a `bynk-emit` file that imports the
+/// written across. **Each Phase 2 split of a `bynk-emit` file that imports the
 /// AST adds one `(child, origin)` row per new file that does too, in the same PR** (an origin
 /// that is itself a split child maps to its own origin, not to the intermediate file). A row
 /// whose child is not an importer is inert, so a row never needs deleting while the track runs.
-const AST_IMPORTER_ORIGINS: &[(&str, &str)] = &[];
+const AST_IMPORTER_ORIGINS: &[(&str, &str)] = &[
+    // 2.2a (#4087): `lower.rs` split.
+    ("emitter/lower/pattern.rs", "emitter/lower.rs"),
+    ("emitter/lower/is.rs", "emitter/lower.rs"),
+];
 
 /// How many distinct origins the importing files `rels` come from: a file named as a child in
 /// `origins` counts as its origin, any other file as itself.
