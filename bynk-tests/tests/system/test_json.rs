@@ -873,6 +873,19 @@ fn concurrent_runs_sharing_an_output_parent_do_not_interfere() {
         );
         let cases = doc["suites"][0]["cases"].as_array().map_or(0, Vec::len);
         assert!(cases > 0, "run {i} reported a suite with no cases:\n{doc}");
+        // The layout itself, whatever the timing: each run compiled inside its own output.
+        if have("tsc") && have("node") {
+            let js = parent.join(format!("out{i}")).join("out-js/tests/main.js");
+            assert!(
+                js.is_file(),
+                "run {i} compiled outside its output: {} is missing",
+                js.display()
+            );
+        }
     }
+    assert!(
+        !parent.join("out-js").exists(),
+        "a run wrote `out-js` beside its output (#4159)"
+    );
     let _ = std::fs::remove_dir_all(&parent);
 }

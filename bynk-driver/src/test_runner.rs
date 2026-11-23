@@ -916,9 +916,9 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
 
     // #2146: tsc emits ES modules (the compile writes `out/package.json`
     // declaring `"type": "module"`, which the emitted tsconfig's `module:
-    // NodeNext` follows, #2148), but `out-js` sits in no such `package.json`
-    // scope, so mark it ESM for Node to run the result as such. The `out/`
-    // tree is left as the compiler wrote it.
+    // NodeNext` follows, #2148). Since #4159 `out-js` is under `out/`, so that
+    // scope already covers it; the marker is kept so the tree still runs as ES
+    // modules if it is moved. The `out/` tree is left as the compiler wrote it.
     let prepared = write_esm_marker(&out_js_root).map_err(|e| {
         let marker = out_js_root.join("package.json");
         format!("could not write {}: {e}", marker.display())

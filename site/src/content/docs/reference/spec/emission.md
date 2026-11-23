@@ -162,7 +162,8 @@ that no Bynk name can collide with it. The emitted code MUST compile under
   (`require`, `module.exports`, `__dirname`) are not available. `bynk test`
   also marks its `tsc` output directory ES modules for Node (#2146). A user who
   runs the `tsc`-built JavaScript (`out-js`, inside the output root) with
-  plain `node` needs `"type": "module"` in a `package.json` above it.
+  plain `node` gets the output root's `"type": "module"` `package.json`; a copy
+  moved elsewhere needs one above it.
 
 ### §7.3.1a Named constants {#731a-named-constants}
 
