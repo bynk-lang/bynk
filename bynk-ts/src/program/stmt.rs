@@ -314,7 +314,7 @@ pub(crate) enum TsStmtKind {
     ///
     /// Carries no semantic content the printer or checker ever reads back —
     /// pure, inert text. Printed one `// `-prefixed line per `\n` in `text`
-    /// (`bynk-ts/src/printer.rs`'s own `render_stmt`), so a multi-line
+    /// (`bynk-ts/src/printer/stmt.rs`'s own `render_stmt`), so a multi-line
     /// comment is representable as one statement, though
     /// `events_fanout.rs`'s own two-line header is built as two separate
     /// `Comment` statements instead — matching how its two adjacent

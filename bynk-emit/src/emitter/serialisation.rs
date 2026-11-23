@@ -1517,7 +1517,7 @@ fn emit_record_codec(
             // `"<field>" in obj ? obj["<field>"] : <default>`: `d` is the default's tree
             // (`field_default_value`), rendered in its wire form (`wire_default_node`). As a
             // `Conditional`'s own `alternate` it sits in an `AssignmentExpression` grammar
-            // position, which (per `bynk-ts/src/printer.rs`'s own `Conditional` render arm)
+            // position, which (per `bynk-ts/src/printer/expr.rs`'s own `Conditional` render arm)
             // never adds parens around either branch, whatever the branch's shape.
             let d_name = format!("__d_{fname}");
             body.push(TsStmt::const_stmt(

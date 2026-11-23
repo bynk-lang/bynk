@@ -12,6 +12,7 @@
 use std::path::{Path, PathBuf};
 
 use crate::greenfield_status::{in_test_range, test_mod_ranges};
+use crate::module_lines::is_whole_test_file;
 
 /// The message the isolation statement logs. Spelled in two halves so this file
 /// is not itself an occurrence.
@@ -21,7 +22,7 @@ pub fn marker() -> String {
 
 /// Every line of production Rust source under each crate's `src` (this crate
 /// aside, which only names the marker) that holds `needle`, outside
-/// `#[cfg(test)]` modules, as `path:line`.
+/// `#[cfg(test)]` modules and whole-test files, as `path:line`.
 pub fn occurrences(root: &Path, needle: &str) -> Vec<String> {
     let mut found = Vec::new();
     let Ok(entries) = std::fs::read_dir(root) else {
@@ -60,6 +61,15 @@ fn scan(dir: &Path, root: &Path, needle: &str, found: &mut Vec<String>) {
                 .map(|c| c.as_os_str().to_string_lossy())
                 .collect::<Vec<_>>()
                 .join("/");
+            // A whole-test file (`tests.rs`, `*_tests.rs`, anything under `tests/`) is not
+            // production: a split that moves a test module out to `foo/tests.rs` keeps
+            // its test-only copies out of the count, as it does for `module_lines`.
+            if rel
+                .split_once("/src/")
+                .is_some_and(|(_, in_src)| is_whole_test_file(in_src))
+            {
+                continue;
+            }
             found.extend(
                 occurrences_in(&source, needle)
                     .into_iter()
