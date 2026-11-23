@@ -330,13 +330,13 @@ production lines without saying why; from 2.0 the gate is mechanical. Settled by
 |---|---|---:|---|
 | **2.0** | the ratchet. **Done in #4085.** | — | — |
 | **2.1** | `bynk-emit/src/emitter/emit.rs`, in seven PRs (2.1a to 2.1g, #4086). **2.1a done:** `emit/types.rs` (1,036 lines with its tests) and `emit/functions.rs` (823); `emit.rs` is 9,295 production lines after it. | 10,717 | 1B.4b (done) |
-| **2.2** | `bynk-emit/src/emitter/lower.rs` | 4,884 | 1B.4b |
+| **2.2** | `bynk-emit/src/emitter/lower.rs`, in five PRs (#4087). **2.2a done:** `lower/pattern.rs` and `lower/is.rs` (now 3,752); 2.2b to 2.2e remain | 3,752 | 1B.4b; 2.2c to 2.2e also 1B.5e (merged) |
 | **2.3** | `bynk-emit/src/emitter/serialisation.rs` | 4,232 | — |
 | **2.4** | `bynk-emit/src/emitter/workers_entry.rs` | 4,215 | — |
 | **2.5** | `bynk-emit/src/emitter.rs` | 3,215 | — |
 | **2.6** | `bynk-ts/src/printer.rs`, `bynk-ts/src/program.rs`. **2.6a (the tree) is done:** `program.rs` is a 441-line parent over `program/{stmt,expr,types,decl,verbatim,spans}.rs` (largest 1,133); the printer (2.6b) and its test split (2.6c) follow. | 3,629; 3,682 → 3,629; 441 | — |
 | **2.7** | `bynk-driver/src/project.rs`, in two PRs. **Done: 2.7a (#4136) moved `options`, `entry`, `in_memory`, `agent_deps` and the tests out (`module_lines` 4,312 to 2,875); 2.7b (closes #4108) moved `pipeline`, `unit` and `output` out, leaving a 92-line facade; no `project/` file is over 1,350 production lines, and `run_checks` and `build_output` keep their `fn-length-ceilings.txt` values under their new keys.** | 4,312 | — |
-| **2.8** | `bynk/src/deploy/plan.rs` (optional: under 3,000 already). **Done (closes #4109):** `plan/{run,model,keys,skew,messages}.rs` and `plan/tests.rs`; `module_lines` 2,271 to a 51-line facade, and the largest child is `model.rs` at 975. The plan's rendering stayed with the plan, because `plan_report` reads its private fields (Decision B). | 2,271 | — |
+| **2.8** | `bynk/src/deploy/plan.rs` (optional: under 3,000 already) | 2,271 | — |
 | **2.9** | `bynk/src/dev.rs` (optional) | 2,292 | — |
 
 Each split lowers or deletes its target's ceiling with `cargo xtask module-lines --apply`.
