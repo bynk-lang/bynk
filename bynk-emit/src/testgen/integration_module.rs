@@ -14,6 +14,45 @@ use bynk_check::test_suites::{self};
 use bynk_ts::{SourceMapBuilder, TsDecl, TsExpr, TsProgram, TsStmt};
 use std::sync::Arc;
 
+/// #2073: destructure, from each participant's namespace, the types the lowered case or a helper
+/// names. The names are read off the trees the text was printed from (1B.3c), with every
+/// participant type `provided` so that one spelled like a global (`Request`) is still found.
+fn destructure_named_participant_types(
+    case_out: &mut String,
+    participant_types: &[(String, Vec<String>)],
+    trees: &[&[TsStmt]],
+    unit_tables: &HashMap<String, UnitTable>,
+) {
+    let is_participant_type = |n: &str| {
+        participant_types
+            .iter()
+            .any(|(_, names)| names.iter().any(|m| m == n))
+    };
+    let used: HashSet<String> = trees
+        .iter()
+        .flat_map(|stmts| bynk_ts::unbound_names_in(stmts, is_participant_type))
+        .collect();
+    for (p, names) in participant_types {
+        let named: Vec<String> = names
+            .iter()
+            .filter(|n| used.contains(*n))
+            .cloned()
+            .collect();
+        if named.is_empty() {
+            continue;
+        }
+        let Some(t) = unit_tables.get(p) else {
+            continue;
+        };
+        let type_names = aliased_types(t, |n| named.contains(n));
+        crate::testgen::case_body::extend_printed_at(
+            case_out,
+            emit_ns_destructure(&test_ns(p), &named, &type_names),
+            2,
+        );
+    }
+}
+
 /// Emit a single integration-test module plus its [`RunnableTest`] pointer.
 /// The module imports each participant's workers-mode handler namespace (for
 /// serialise/deserialise) and Worker entry (for dispatch), builds an in-process
@@ -667,41 +706,12 @@ pub(super) fn emit_integration_module(
             runtime_use,
             roots_mark,
         ));
-        // The participant types the lowered case or a helper uses: read off the trees the text
-        // was printed from (1B.3c), with a participant's names `provided` so that a type named
-        // like a global (`Request`) is still found.
-        let is_participant_type = |n: &str| {
-            participant_types
-                .iter()
-                .any(|(_, names)| names.iter().any(|m| m == n))
-        };
-        let used: HashSet<String> = bynk_ts::unbound_names_in(&body.stmts, is_participant_type)
-            .into_iter()
-            // A helper may name a participant's type though no case does.
-            .chain(bynk_ts::unbound_names_in(
-                &helper.stmts,
-                is_participant_type,
-            ))
-            .collect();
-        for (p, names) in &participant_types {
-            let named: Vec<String> = names
-                .iter()
-                .filter(|n| used.contains(*n))
-                .cloned()
-                .collect();
-            if named.is_empty() {
-                continue;
-            }
-            let Some(t) = unit_tables.get(p) else {
-                continue;
-            };
-            let type_names = aliased_types(t, |n| named.contains(n));
-            crate::testgen::case_body::extend_printed_at(
-                &mut case_out,
-                emit_ns_destructure(&test_ns(p), &named, &type_names),
-                2,
-            );
-        }
+        destructure_named_participant_types(
+            &mut case_out,
+            &participant_types,
+            &[&body.stmts, &helper.stmts],
+            unit_tables,
+        );
         let src_id = map.add_source(input.map_source.clone(), input.source.to_string());
         let body_base = case_out.len();
         for line in body.text.lines() {
