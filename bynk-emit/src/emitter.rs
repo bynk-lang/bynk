@@ -84,6 +84,7 @@ pub mod serialisation;
 pub mod toml_doc;
 pub(crate) mod workers;
 pub(crate) mod workers_email;
+pub mod workers_emit;
 pub(crate) mod workers_entry;
 pub mod workers_group;
 pub mod wrangler;
