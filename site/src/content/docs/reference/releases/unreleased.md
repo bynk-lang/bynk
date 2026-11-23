@@ -7,6 +7,7 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.640.86** | Internal restructuring: the Worker entry generator's call, admin, scheduled, queue and email families move into modules of their own; no output changes |
 | **v0.640.85** | Internal restructuring: `bynk dev`'s `dev.rs` splits into its run, events, stand-ins, bindings, serving, supervision and watch helpers; no output changes |
 | **v0.640.84** | Internal restructuring: the `?`/control-flow and operator lowering move out of `lower.rs` into their own modules |
 | **v0.640.83** | Internal restructuring: `emit.rs` splits further by declaration kind (handler names, messages and capabilities move out); no output changes |
