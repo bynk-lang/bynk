@@ -1316,9 +1316,9 @@ and the right choice for CI that wants one result.
   not compile is a single `error` with `kind: "compile"`; a runner that dies before
   `run-end` ends the stream with an `error` with `kind: "runtime"` and its stderr;
   a failing case is not an error, and the exit code is non-zero for it as before.
-  The `--format json` document follows the same rule: a document with an `error` exits
-  non-zero, even if the runner process itself exited 0, so an incomplete report (a suite
-  missing its `cases`) never passes as a clean run.
+  A stream that ends with an `error` also exits non-zero, even if the runner process itself
+  exited 0, and so does a `--format json` document that carries an `error`: an incomplete report
+  (a suite missing its `cases`) never passes as a clean run.
 - `suite-begin.tests` is the number of cases the suite will report, and it is sent
   before the first of them runs: the runner counts what the filter selects. A case a remote
   run skipped (`--against … --skip-unsupported`) is a `case` with outcome `skipped`

@@ -1427,7 +1427,7 @@ fn finish_runner(
             return Ok(ExitCode::FAILURE);
         }
         events.unmatched().report(program);
-        return Ok(exit_from(status.success()));
+        return Ok(exit_from(status.success() && events.ended()));
     }
     if format == TestFormat::Json {
         cmd.env(env_protocol::TEST_FORMAT, "ndjson");
