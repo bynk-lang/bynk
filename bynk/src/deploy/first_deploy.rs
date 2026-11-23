@@ -56,10 +56,16 @@ impl ScriptVersions for RestVersions {
             ),
             // Cloudflare's own answer, by status or by code, never a bare number that
             // an id or a message could happen to contain.
-            Err(said) if said.status() == Some(404) || said.has_code(10007) => ScriptState::Absent,
+            Err(said) if is_absent(&said) => ScriptState::Absent,
             Err(said) => ScriptState::Unknown(said.into()),
         }
     }
+}
+
+/// Whether a versions lookup's failure says the script does not exist: a 404, or Cloudflare's
+/// code 10007 ("This Worker does not exist"). Anything else (auth, network) is not assumed.
+fn is_absent(said: &crate::cloudflare::rest::RestError) -> bool {
+    said.status() == Some(404) || said.has_code(10007)
 }
 
 /// Whether a failed first push was in fact the upload that created the Worker:
@@ -270,7 +276,7 @@ mod tests {
     #[test]
     fn only_cloudflares_own_not_found_reads_as_absent() {
         use crate::cloudflare::RestError;
-        let absent = |e: RestError| e.status() == Some(404) || e.has_code(10007);
+        let absent = |e: RestError| is_absent(&e);
         assert!(absent(RestError::answered(
             "GET",
             "/workers/scripts/x/versions",

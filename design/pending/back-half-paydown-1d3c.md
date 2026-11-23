@@ -50,7 +50,8 @@ which to REST (Q4), and how the client layer should be shaped (Q7).
   and `cloudflare_credentials.txt`, and a diff in any of them is a stop, never a bless.
   `RestError` answers `status()`, `has_code()` (an exact code, where the old substring
   search also matched `100070` for `10007`), `is_denied()` and `message_mentions()`, so no
-  caller searches a REST error's text. Typed errors stop at the client boundary: above it,
+  caller searches a REST error's text. Codes and messages are read at any depth of `errors`, an
+  entry's `error_chain` included, as the old search of the printed text found them. Typed errors stop at the client boundary: above it,
   `DeployFailure` and each caller's own `format!` are unchanged.
 - **Retries (Decision H).** `retry::Policy` retries only an idempotent call (a `GET`, `PUT`
   or `DELETE`, or a `POST` the caller marks idempotent, such as D1's `SELECT`; never

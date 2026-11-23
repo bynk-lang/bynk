@@ -111,6 +111,30 @@ fn shared() -> &'static Shared {
     })
 }
 
+/// Every object in `errors`, at any depth, for `visit`: an entry's `error_chain` (which
+/// Cloudflare sends for some failures) included. Before 1D.3c the predicates searched the whole
+/// printed `errors` text, so a nested code or message counted; walking the tree keeps that,
+/// while reading each code whole.
+fn walk(
+    errors: &serde_json::Value,
+    visit: &mut impl FnMut(&serde_json::Map<String, serde_json::Value>),
+) {
+    match errors {
+        serde_json::Value::Object(entry) => {
+            visit(entry);
+            for value in entry.values() {
+                walk(value, visit);
+            }
+        }
+        serde_json::Value::Array(items) => {
+            for item in items {
+                walk(item, visit);
+            }
+        }
+        _ => {}
+    }
+}
+
 /// The run's REST client, for a purpose that says what it is `doing` and what token it `needs`
 /// (both in the message when a credential is missing). The credentials are read and the agent
 /// built the first time any purpose asks; a purpose asking later reuses them.
@@ -178,10 +202,11 @@ impl RestError {
 
     /// The codes in Cloudflare's `errors` array.
     pub(crate) fn codes(&self) -> Vec<u64> {
-        self.errors()
-            .iter()
-            .filter_map(|e| e.get("code")?.as_u64())
-            .collect()
+        let mut codes = Vec::new();
+        walk(&self.errors(), &mut |entry| {
+            codes.extend(entry.get("code").and_then(serde_json::Value::as_u64));
+        });
+        codes
     }
 
     /// Whether Cloudflare's errors carry `code` (exactly: `10007` is not `100070`).
@@ -191,10 +216,14 @@ impl RestError {
 
     /// Whether one of Cloudflare's error messages mentions `text` (a D1 query's `no such table`).
     pub(crate) fn message_mentions(&self, text: &str) -> bool {
-        self.errors()
-            .iter()
-            .filter_map(|e| e.get("message")?.as_str())
-            .any(|m| m.contains(text))
+        let mut mentioned = false;
+        walk(&self.errors(), &mut |entry| {
+            mentioned |= entry
+                .get("message")
+                .and_then(serde_json::Value::as_str)
+                .is_some_and(|m| m.contains(text));
+        });
+        mentioned
     }
 
     /// Whether the token lacks the permission: a 401 or 403, or one of Cloudflare's
@@ -205,15 +234,13 @@ impl RestError {
             || [10000, 9109, 9106].iter().any(|c| self.has_code(*c))
     }
 
-    fn errors(&self) -> Vec<serde_json::Value> {
+    /// Cloudflare's `errors`, as it sent them.
+    fn errors(&self) -> serde_json::Value {
         match &self.failure {
             RestFailure::Answered { errors, .. } => {
-                serde_json::from_str::<serde_json::Value>(errors)
-                    .ok()
-                    .and_then(|v| v.as_array().cloned())
-                    .unwrap_or_default()
+                serde_json::from_str(errors).unwrap_or(serde_json::Value::Null)
             }
-            _ => Vec::new(),
+            _ => serde_json::Value::Null,
         }
     }
 
@@ -515,6 +542,16 @@ pub(crate) mod tests {
             e.to_string(),
             r#"GET /x: Cloudflare answered 404 [{"code":10007,"message":"no such table: d1_migrations"}]"#
         );
+        // A code or message nested in an entry's `error_chain` counts, as it did when the
+        // printed text was searched.
+        let nested = RestError::answered(
+            "POST",
+            "/x",
+            400,
+            r#"[{"code":7500,"message":"failed","error_chain":[{"code":10000,"message":"no such table: t"}]}]"#,
+        );
+        assert!(nested.has_code(10000) && nested.is_denied(), "{nested}");
+        assert!(nested.message_mentions("no such table"));
         let near = RestError::answered("GET", "/x", 400, r#"[{"code":100070}]"#);
         assert!(!near.has_code(10007), "100070 is not 10007");
         for denied in [
