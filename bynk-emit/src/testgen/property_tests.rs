@@ -11,7 +11,7 @@ use bynk_check::test_suites::{self};
 use bynk_syntax::ast::{
     BaseType, BinOp, Block, Expr, ExprKind, FnDecl, FnName, Ident, PropertyDecl, TypeRef,
 };
-use bynk_ts::{TsArrowBody, TsBindingName, TsExpr, TsLit, TsParam, TsStmt, TsType};
+use bynk_ts::{TsArrowBody, TsBindingName, TsDecl, TsExpr, TsLit, TsParam, TsStmt, TsType};
 use std::sync::Arc;
 
 /// One generator descriptor per binding of a `property`, over the target's
@@ -36,6 +36,28 @@ fn binding_gen_entries(
             gen_descriptor_entry(Some(str_lit(b.name.name.clone())), &bg)
         })
         .collect()
+}
+
+/// `const <name> = [async] (__vals: any[]) => { <destructure> <body> };`, the closure a property or
+/// attack runner hands `__bynkRunProperty` for its `where` filter and its body.
+fn vals_closure(
+    name: &str,
+    is_async: bool,
+    mut destructure: Vec<TsStmt>,
+    body: Vec<TsStmt>,
+) -> TsStmt {
+    destructure.extend(body);
+    crate::ts_build::const_(
+        name,
+        crate::ts_build::block_arrow(
+            vec![TsParam::new(
+                "__vals".to_string(),
+                Some(TsType::array(TsType::named("any"))),
+            )],
+            is_async,
+            destructure,
+        ),
+    )
 }
 
 /// v0.114: emit one async runner for a generative `property` — the binding
@@ -63,7 +85,7 @@ pub(super) fn emit_test_property_function(
     hidden: &BTreeMap<String, String>,
     tys: &Arc<Types>,
 ) -> TsStmt {
-    let mut out = String::new();
+    let mut out: Vec<TsStmt> = Vec::new();
     let mut harness_bound = emit_test_scope_setup(
         &mut out,
         "__makeTestDeps",
@@ -110,7 +132,7 @@ pub(super) fn emit_test_property_function(
         TsExpr::multiline_array(gens),
         None,
     );
-    out.push_str(&bynk_ts::print_stmt(&gens_stmt, 2));
+    out.push(gens_stmt);
 
     // The `where` filter and the predicate body, as closures over the tuple.
     let mut typed = synthetic_typed_commons_for_target(
@@ -134,8 +156,8 @@ pub(super) fn emit_test_property_function(
         )
     {
         test_suites::register_call_record_types(&mut helper_view, target_name, unit_tables);
-        out.push_str(
-            &suite_fn_decls(
+        out.extend(
+            suite_fn_decls(
                 suite_fns,
                 helper_view,
                 unit_tables.get(target_name),
@@ -144,7 +166,7 @@ pub(super) fn emit_test_property_function(
                 &mut harness_bound,
                 tys,
             )
-            .text,
+            .stmts,
         );
     }
     let cross = bynk_check::resolver::CrossContextInfo::default();
@@ -213,7 +235,7 @@ pub(super) fn emit_test_property_function(
             typed.expr_types.extend(where_types);
             typed.callees.extend(where_callees);
         }
-        let (src, _) = case_body::lower_block_to_async_body(
+        let where_body = case_body::lower_block_to_async_stmts(
             &synth,
             &TypeRef::Base(BaseType::Bool, w.span),
             &mut typed,
@@ -223,14 +245,12 @@ pub(super) fn emit_test_property_function(
         // P7.2: deferred — `__vals`'s elements are heterogeneous, one per binding,
         // some internally `bigint`-represented; same reason as `__gens`'s own
         // construction elsewhere in this function.
-        out.push_str("    const __where = (__vals: any[]) => {\n");
-        out.push_str(&format!("      {destructure}\n"));
-        for line in src.lines() {
-            out.push_str("      ");
-            out.push_str(line);
-            out.push('\n');
-        }
-        out.push_str("    };\n");
+        out.push(vals_closure(
+            "__where",
+            false,
+            destructure.clone(),
+            where_body,
+        ));
     } else {
         let where_null = TsStmt::const_stmt(
             TsBindingName::Ident("__where".to_string()),
@@ -238,7 +258,7 @@ pub(super) fn emit_test_property_function(
             TsExpr::Lit(TsLit::Null),
             None,
         );
-        out.push_str(&bynk_ts::print_stmt(&where_null, 2));
+        out.push(where_null);
     }
 
     let test_services: HashSet<String> = unit_tables
@@ -273,7 +293,7 @@ pub(super) fn emit_test_property_function(
     // still binds through `assert_loc`).
     // #2024: the `for all` binders share the body closure's scope.
     harness_bound.extend(binding_names.iter().cloned());
-    let (body_src, _body_smb) = case_body::lower_test_case_body(
+    let (body_stmts, _) = case_body::lower_test_case_stmts(
         &prop.forall.body,
         &mut typed,
         &cross,
@@ -286,22 +306,16 @@ pub(super) fn emit_test_property_function(
         source,
         rel_path,
         runtime_use,
+        false,
     );
-    out.push_str(&suite_late_codecs(
+    out.extend(suite_late_codec_stmts(
         suite_fns,
         &typed,
         runtime_use,
         roots_mark,
     ));
     // P7.2: deferred, same reason as `__where`'s own `__vals` above.
-    out.push_str("    const __body = async (__vals: any[]) => {\n");
-    out.push_str(&format!("      {destructure}\n"));
-    for line in body_src.lines() {
-        out.push_str("      ");
-        out.push_str(line);
-        out.push('\n');
-    }
-    out.push_str("    };\n");
+    out.push(vals_closure("__body", true, destructure, body_stmts));
 
     // Forward slashes so the emitted location/reproduce path is portable — on
     // Windows a `PathBuf` join yields `\`, which must not leak into the golden
@@ -329,8 +343,8 @@ pub(super) fn emit_test_property_function(
         ))),
         None,
     );
-    out.push_str(&bynk_ts::print_stmt(&return_run, 2));
-    async_test_runner_fn(runner_name, out, None)
+    out.push(return_run);
+    async_runner_fn(runner_name, out)
 }
 
 /// v0.119 (testing track slice 7, ADR 0155): emit one async runner for a history
@@ -361,7 +375,7 @@ pub(super) fn emit_test_history_property_function(
     tys: &Arc<Types>,
 ) -> TsStmt {
     let roots_mark = runtime_use.json_codec_roots_len();
-    let mut out = String::new();
+    let mut out: Vec<TsStmt> = Vec::new();
     let mut harness_bound = emit_test_scope_setup(
         &mut out,
         "__makeTestDeps",
@@ -388,16 +402,23 @@ pub(super) fn emit_test_history_property_function(
             )])),
             None,
         );
-        out.push_str(&bynk_ts::print_stmt(&return_pass_true, 2));
-        return async_test_runner_fn(runner_name, out, None);
+        out.push(return_pass_true);
+        return async_runner_fn(runner_name, out);
     };
 
     // The synthesised call/step/state types are checker-only (never emitted as
     // real TS), but the lowered predicate annotates the driven history with them.
     // Alias each to `any` so the driven plain objects type-check structurally.
-    out.push_str(&format!(
-        "    type __History_{agent_name}_Step = any; type __History_{agent_name}_Call = any; type __History_{agent_name}_State = any;\n"
-    ));
+    for part in ["Step", "Call", "State"] {
+        out.push(TsStmt::decl(
+            TsDecl::TypeAlias {
+                name: format!("__History_{agent_name}_{part}"),
+                type_params: Vec::new(),
+                ty: TsType::named("any"),
+            },
+            None,
+        ));
+    }
 
     // The privileged view, plus the synthetic call/step/state types and the body's
     // expr types (with `run: List[Step]` in scope), so the lowering resolves the
@@ -495,8 +516,8 @@ pub(super) fn emit_test_history_property_function(
                 tys,
             );
             if let Some(helper_view) = helper_view.take() {
-                out.push_str(
-                    &suite_fn_decls(
+                out.extend(
+                    suite_fn_decls(
                         suite_fns,
                         helper_view,
                         unit_tables.get(target_name),
@@ -505,7 +526,7 @@ pub(super) fn emit_test_history_property_function(
                         &mut harness_bound,
                         tys,
                     )
-                    .text,
+                    .stmts,
                 );
             }
         }
@@ -522,7 +543,7 @@ pub(super) fn emit_test_history_property_function(
         TsExpr::multiline_array(handler_descs),
         None,
     );
-    out.push_str(&bynk_ts::print_stmt(&handlers_stmt, 2));
+    out.push(handlers_stmt);
 
     // The predicate body, as a closure over the driven history `run`.
     let cross = bynk_check::resolver::CrossContextInfo::default();
@@ -536,7 +557,7 @@ pub(super) fn emit_test_history_property_function(
         .unwrap_or_default();
     // #2024: the driven history's binder shares the body closure's scope.
     harness_bound.insert(run_var.to_string());
-    let (body_src, _body_smb) = case_body::lower_test_case_body(
+    let (body_stmts, _) = case_body::lower_test_case_stmts(
         &prop.forall.body,
         &mut typed,
         &cross,
@@ -549,8 +570,9 @@ pub(super) fn emit_test_history_property_function(
         source,
         rel_path,
         runtime_use,
+        false,
     );
-    out.push_str(&suite_late_codecs(
+    out.extend(suite_late_codec_stmts(
         suite_fns,
         &typed,
         runtime_use,
@@ -559,16 +581,21 @@ pub(super) fn emit_test_history_property_function(
     // P7.2: matches `__bynkDriveHistory_*`'s own real signature — see
     // `emit.rs`'s own driver-signature narrowing and the matching `__drive`
     // call site below (`{target_ns}.__bynkDriveHistory_{agent_name}`).
-    out.push_str(
-        "    const __body = async (__run: globalThis.Array<{ h: number, args: unknown[] }>) => {\n",
-    );
-    out.push_str(&format!("      const {run_var} = __run;\n"));
-    for line in body_src.lines() {
-        out.push_str("      ");
-        out.push_str(line);
-        out.push('\n');
-    }
-    out.push_str("    };\n");
+    let mut history_body = vec![crate::ts_build::const_(run_var.to_string(), ident("__run"))];
+    history_body.extend(body_stmts);
+    out.push(crate::ts_build::const_(
+        "__body",
+        crate::ts_build::block_arrow(
+            vec![TsParam::new(
+                "__run".to_string(),
+                Some(TsType::named(
+                    "globalThis.Array<{ h: number, args: unknown[] }>",
+                )),
+            )],
+            true,
+            history_body,
+        ),
+    ));
 
     // Drive a generated sequence through the real handlers via the agent module's
     // exported test driver, threading the test `deps` (real or `stub`-stubbed).
@@ -609,7 +636,7 @@ pub(super) fn emit_test_history_property_function(
         },
         None,
     );
-    out.push_str(&bynk_ts::print_stmt(&drive_stmt, 2));
+    out.push(drive_stmt);
 
     let rel_path_fwd = rel_path.replace('\\', "/");
     let return_run = TsStmt::return_stmt(
@@ -635,8 +662,8 @@ pub(super) fn emit_test_history_property_function(
         ))),
         None,
     );
-    out.push_str(&bynk_ts::print_stmt(&return_run, 2));
-    async_test_runner_fn(runner_name, out, None)
+    out.push(return_run);
+    async_runner_fn(runner_name, out)
 }
 
 /// v0.115 (testing track slice 3): emit one async runner that *attacks* a
@@ -667,7 +694,7 @@ pub(super) fn emit_contract_attack_function(
     let FnName::Free(fname) = &f.name else {
         return None;
     };
-    let mut out = String::new();
+    let mut out: Vec<TsStmt> = Vec::new();
     // The attack lowers no case body, so it has no `let` to rename.
     let _ = emit_test_scope_setup(
         &mut out,
@@ -718,7 +745,7 @@ pub(super) fn emit_contract_attack_function(
         TsExpr::multiline_array(gens),
         None,
     );
-    out.push_str(&bynk_ts::print_stmt(&gens_stmt, 2));
+    out.push(gens_stmt);
 
     let param_names: Vec<String> = f.params.iter().map(|p| p.name.name.clone()).collect();
     let param_types: Vec<Option<checker::TyId>> = f
@@ -766,7 +793,7 @@ pub(super) fn emit_contract_attack_function(
             tail_leading_comments: Vec::new(),
             implicit_tail: false,
         };
-        let (src, _) = case_body::lower_block_to_async_body(
+        let where_body = case_body::lower_block_to_async_stmts(
             &synth,
             &TypeRef::Base(BaseType::Bool, w.span),
             &mut typed,
@@ -776,14 +803,12 @@ pub(super) fn emit_contract_attack_function(
         // P7.2: deferred — `__vals`'s elements are heterogeneous, one per binding,
         // some internally `bigint`-represented; same reason as `__gens`'s own
         // construction elsewhere in this function.
-        out.push_str("    const __where = (__vals: any[]) => {\n");
-        out.push_str(&format!("      {destructure}\n"));
-        for line in src.lines() {
-            out.push_str("      ");
-            out.push_str(line);
-            out.push('\n');
-        }
-        out.push_str("    };\n");
+        out.push(vals_closure(
+            "__where",
+            false,
+            destructure.clone(),
+            where_body,
+        ));
     } else {
         let where_null = TsStmt::const_stmt(
             TsBindingName::Ident("__where".to_string()),
@@ -791,7 +816,7 @@ pub(super) fn emit_contract_attack_function(
             TsExpr::Lit(TsLit::Null),
             None,
         );
-        out.push_str(&bynk_ts::print_stmt(&where_null, 2));
+        out.push(where_null);
     }
 
     // `__body` — call the (guarded) function. #1426: every param is already
@@ -803,14 +828,15 @@ pub(super) fn emit_contract_attack_function(
     // asserts the `ensures`.
     let call_args: Vec<String> = f.params.iter().map(|p| p.name.name.clone()).collect();
     // P7.2: deferred, same reason as `__where`'s own `__vals` above.
-    out.push_str("    const __body = async (__vals: any[]) => {\n");
-    out.push_str(&format!("      {destructure}\n"));
-    out.push_str(&format!(
-        "      {}({});\n",
-        fname.name,
-        call_args.join(", ")
+    let mut attack_body = destructure;
+    attack_body.push(TsStmt::expr_stmt(
+        call(
+            ident(fname.name.clone()),
+            call_args.into_iter().map(ident).collect(),
+        ),
+        None,
     ));
-    out.push_str("    };\n");
+    out.push(vals_closure("__body", true, Vec::new(), attack_body));
 
     let rel_path_fwd = rel_path.replace('\\', "/");
     let name = contract_case_name(&fname.name);
@@ -836,8 +862,8 @@ pub(super) fn emit_contract_attack_function(
         ))),
         None,
     );
-    out.push_str(&bynk_ts::print_stmt(&return_run, 2));
-    Some(async_test_runner_fn(runner_name, out, None))
+    out.push(return_run);
+    Some(async_runner_fn(runner_name, out))
 }
 
 // -- Small tree-construction helpers (#1325) ------------------------------

@@ -73,6 +73,19 @@ impl Body {
     /// replaces the earlier, as `SourceMapBuilder::record` does; the printer records the span
     /// where that statement starts.
     pub(super) fn into_stmts(self) -> Vec<bynk_ts::TsStmt> {
+        let (stmts, pending) = self.into_stmts_pending();
+        // A mark with no statement after it would be dropped silently. Every
+        // producer pushes its content after its mark; this makes that explicit.
+        debug_assert!(
+            pending.is_none(),
+            "into_stmts: a trailing Item::Mark has no statement to carry its span"
+        );
+        stmts
+    }
+
+    /// [`Body::into_stmts`], handing back a trailing [`Item::Mark`] that no statement follows, for
+    /// a caller that attaches it to the statement it adds next (a runner's `return`).
+    fn into_stmts_pending(self) -> (Vec<bynk_ts::TsStmt>, Option<Span>) {
         let mut stmts = Vec::with_capacity(self.0.len());
         let mut pending: Option<Span> = None;
         for item in self.0 {
@@ -85,13 +98,40 @@ impl Body {
                 }
             }
         }
-        // A mark with no statement after it would be dropped silently. Every
-        // producer pushes its content after its mark; this makes that explicit.
-        debug_assert!(
-            pending.is_none(),
-            "into_stmts: a trailing Item::Mark has no statement to carry its span"
-        );
-        stmts
+        (stmts, pending)
+    }
+}
+
+/// A case body built as statements, for the harness (1B.5b): the statements the lowering emits,
+/// with the source-map marks they carry, and the tail's hoisted statements after them. The
+/// statements print the text the case runner used to splice, with the same checkpoints.
+pub(crate) struct StatementSink(Body);
+
+impl StatementSink {
+    pub(crate) fn new() -> Self {
+        StatementSink(Body::new())
+    }
+
+    /// Lower `stmt` into the sink.
+    pub(crate) fn statement(&mut self, stmt: &Statement, cx: &mut LowerCtx) {
+        statement(&mut self.0, stmt, cx);
+    }
+
+    /// A source-map checkpoint for the statement added next.
+    pub(crate) fn mark(&mut self, span: Span) {
+        self.0.push(Item::Mark(span));
+    }
+
+    /// Statements already built, added as they are.
+    pub(crate) fn nodes(&mut self, stmts: Vec<bynk_ts::TsStmt>) {
+        for stmt in stmts {
+            self.0.push(Item::Node(Box::new(stmt)));
+        }
+    }
+
+    /// The statements, and a trailing mark no statement follows (to go on the next one).
+    pub(crate) fn finish(self) -> (Vec<bynk_ts::TsStmt>, Option<Span>) {
+        self.0.into_stmts_pending()
     }
 }
 
@@ -906,28 +946,6 @@ fn par_node(parts: Vec<ParPart>, pattern: &[String], hoisted: bool) -> bynk_ts::
             None,
         )
     }
-}
-
-pub(crate) fn emit_statement(out: &mut String, stmt: &Statement, cx: &mut LowerCtx, indent: usize) {
-    let mut body = Body::new();
-    statement(&mut body, stmt, cx);
-    render(&body, out, indent, cx);
-}
-
-/// [`emit_statement`] that also hands back the statements it printed, for a caller that decides
-/// from the tree it built and not from the text (the harness: which participant types a case
-/// names, 1B.3c).
-pub(crate) fn emit_statement_nodes(
-    out: &mut String,
-    nodes: &mut Vec<bynk_ts::TsStmt>,
-    stmt: &Statement,
-    cx: &mut LowerCtx,
-    indent: usize,
-) {
-    let mut body = Body::new();
-    statement(&mut body, stmt, cx);
-    render(&body, out, indent, cx);
-    nodes.extend(body.into_stmts());
 }
 
 fn statement(body: &mut Body, stmt: &Statement, cx: &mut LowerCtx) {

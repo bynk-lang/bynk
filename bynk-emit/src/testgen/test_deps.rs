@@ -734,22 +734,28 @@ pub(super) fn hidden_by_owner(hidden: &BTreeMap<String, String>) -> BTreeMap<Str
 /// lowered case spells a reached type (a kernel's `(__x: Repo) => …`), names
 /// a reached sum's variants (`Status.Done`) and calls its methods
 /// (`Repo.shout(…)`).
-pub(super) fn extend_hidden_destructures(
-    out: &mut String,
+pub(super) fn hidden_destructures(
     hidden: &BTreeMap<String, Vec<String>>,
     unit_tables: &HashMap<String, UnitTable>,
-) {
+) -> Vec<TsStmt> {
+    let mut stmts = Vec::new();
     for (owner, names) in hidden {
         let Some(table) = unit_tables.get(owner) else {
             continue;
         };
         let type_names = aliased_types(table, |n| names.contains(n));
-        crate::testgen::case_body::extend_printed_at(
-            out,
-            emit_ns_destructure(&test_ns(owner), names, &type_names),
-            2,
-        );
+        stmts.extend(emit_ns_destructure(&test_ns(owner), names, &type_names));
     }
+    stmts
+}
+
+/// [`hidden_destructures`], printed at the runner's depth: for a runner still built as text.
+pub(super) fn extend_hidden_destructures(
+    out: &mut String,
+    hidden: &BTreeMap<String, Vec<String>>,
+    unit_tables: &HashMap<String, UnitTable>,
+) {
+    crate::testgen::case_body::extend_printed_at(out, hidden_destructures(hidden, unit_tables), 2);
 }
 
 pub(super) fn sanitise_case_name(name: &str, index: &mut usize) -> String {
