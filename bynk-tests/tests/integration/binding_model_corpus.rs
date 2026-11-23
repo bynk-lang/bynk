@@ -6,6 +6,13 @@
 //! per-kind struct, so the check restates no kind's shape: the `binding` (or
 //! `name`) of every array-of-tables entry is the set of the model's binding
 //! names, less the singletons, which are plain tables.
+//!
+//! It runs in both directions over Workers: every directory the renderer wrote
+//! is checked, and every Worker the model gives a binding to must have a
+//! config that was. What it can see is a binding table keyed `binding` or
+//! `name`; a future kind rendered under some other key would be missing from the
+//! config side, so a dropped binding is caught but one added under such a key is
+//! not, and the key must be added to [`entry_names`] with the kind.
 
 use std::collections::BTreeSet;
 use std::fs;
@@ -77,12 +84,18 @@ fn every_rendered_binding_is_the_models_and_every_model_binding_is_rendered() {
         let out = scratch(&name);
         bynk_driver::write_output(&output, &out).expect("the build writes");
         let workers_dir = out.join("workers");
+        let mut seen = BTreeSet::new();
         for entry in fs::read_dir(&workers_dir).into_iter().flatten().flatten() {
-            let config = entry.path().join("wrangler.toml");
-            let Ok(text) = fs::read_to_string(&config) else {
-                continue;
-            };
             let dir = entry.file_name().to_string_lossy().into_owned();
+            let config = entry.path().join("wrangler.toml");
+            let text = match fs::read_to_string(&config) {
+                Ok(text) => text,
+                Err(e) => {
+                    failures.push(format!("{name}/{dir}: its config cannot be read: {e}"));
+                    continue;
+                }
+            };
+            seen.insert(dir.clone());
             let table: toml::Table = text.parse().expect("the rendered config parses");
             let mut rendered = BTreeSet::new();
             entry_names(&table, &mut rendered);
@@ -99,6 +112,21 @@ fn every_rendered_binding_is_the_models_and_every_model_binding_is_rendered() {
                 ));
             }
             checked += 1;
+        }
+        // The other direction: a Worker the model gives a binding to must have a
+        // config the renderer wrote, under the directory the layout names.
+        for context in build.bindings.by_context().keys() {
+            let dir = build.layout.dir(context);
+            let binds = build
+                .bindings
+                .of_worker(&dir)
+                .iter()
+                .any(|b| !matches!(b.source, BindingSource::Singleton { .. }));
+            if binds && !seen.contains(&dir) {
+                failures.push(format!(
+                    "{name}/{dir}: the model has bindings for this Worker, but no config was rendered"
+                ));
+            }
         }
         let _ = fs::remove_dir_all(&out);
     }
