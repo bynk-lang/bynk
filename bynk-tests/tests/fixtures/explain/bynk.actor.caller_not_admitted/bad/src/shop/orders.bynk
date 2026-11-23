@@ -1,0 +1,9 @@
+context shop.orders
+
+consumes shop.billing
+
+service place {
+  on call(id: String) -> Effect[Int] by Caller {
+    shop.billing.refunds(id)
+  }
+}

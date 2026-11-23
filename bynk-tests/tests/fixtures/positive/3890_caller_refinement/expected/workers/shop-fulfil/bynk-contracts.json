@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "provides": {
+    "pack": "45af6daeadaae4c5"
+  },
+  "expects": {
+    "shop.billing": {
+      "book": "d2ffe9d089a8381d"
+    }
+  },
+  "provides_shapes": {
+    "pack": "Svc(\"pack\",P(\"id\",B(\"String\")),Ret(R(B(\"String\"),B(\"String\"))))"
+  },
+  "expects_shapes": {
+    "shop.billing": {
+      "book": "Svc(\"book\",P(\"id\",B(\"String\")),Ret(R(B(\"String\"),B(\"String\"))))"
+    }
+  }
+}

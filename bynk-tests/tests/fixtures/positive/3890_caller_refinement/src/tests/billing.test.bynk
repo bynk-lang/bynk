@@ -1,0 +1,22 @@
+suite shop.billing {
+  case "the admin context may refund" {
+    let r <- refunds.call("o1") by Admin("shop.admin")
+    expect r is Ok("o1 refunded for shop.admin")
+  }
+  case "a named context acts as the refinement" {
+    let r <- ship.call("o2") by Fulfilment("shop.fulfil")
+    expect r is Ok("o2 shipped for shop.fulfil")
+  }
+  case "a deny-list admits everyone else" {
+    let r <- status.call("o3") by Caller("shop.orders")
+    expect r is Ok("o3")
+  }
+  case "the sum admits a context through its refinement" {
+    let r <- book.call("o4") by Fulfilment("shop.orders")
+    expect r is Ok("o4 for shop.orders")
+  }
+  case "the sum admits the foreign caller" {
+    let r <- book.call("o5") by Ledger
+    expect r is Ok("o5 for the ledger")
+  }
+}

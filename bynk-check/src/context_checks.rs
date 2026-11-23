@@ -2135,7 +2135,9 @@ fn check_by_clause_contracts(
         let local = table.actors.get(&actor_ref.name);
         // A refinement actor (`actor A = B where …`) is never a peer: every `A`
         // is a `B`, so the arm is dead (Q3/Q4).
-        if by.is_sum() && local.is_some_and(|a| a.refinement.is_some()) {
+        if by.is_sum()
+            && local.is_some_and(|a| a.refinement.is_some() && !is_caller_refinement(a, table))
+        {
             errors.push(
                 CompileError::new(
                     "bynk.actor.refinement_in_sum",
@@ -2162,14 +2164,19 @@ fn check_by_clause_contracts(
                 Some(r) => table.actors.get(&r.base.name),
                 None => Some(a),
             };
-            scheme_actor
-                .and_then(|sa| sa.auth.as_ref())
-                .and_then(|au| Scheme::from_name(&au.name))
-                .filter(|s| s.admitted())
-                .map(|scheme| actors::Contract {
-                    scheme,
-                    identity: actors::Identity::Unit,
-                })
+            if is_caller_refinement(a, table) {
+                // #3890: a refinement over `Caller` inherits its scheme and identity.
+                actors::prelude_actor("Caller")
+            } else {
+                scheme_actor
+                    .and_then(|sa| sa.auth.as_ref())
+                    .and_then(|au| Scheme::from_name(&au.name))
+                    .filter(|s| s.admitted())
+                    .map(|scheme| actors::Contract {
+                        scheme,
+                        identity: actors::Identity::Unit,
+                    })
+            }
         } else {
             actors::prelude_actor(&actor_ref.name)
         };
@@ -2217,9 +2224,10 @@ fn check_by_clause_contracts(
         // context's name), a cross-context `on call` concept — it is admissible
         // only on the `Call` protocol, even though its `Internal` scheme is
         // otherwise valid on cron/queue (those take `Scheduler`/`Producer`).
-        let is_caller = !table.actors.contains_key(&actor_ref.name)
+        let is_caller = (!table.actors.contains_key(&actor_ref.name)
             && actors::prelude_actor(&actor_ref.name).map(|c| c.identity)
-                == Some(actors::Identity::CallerId);
+                == Some(actors::Identity::CallerId))
+            || local.is_some_and(|a| is_caller_refinement(a, table));
         if is_caller && !matches!(protocol, ServiceProtocol::Call) {
             errors.push(
                 CompileError::new(
@@ -2718,6 +2726,15 @@ fn check_signed_cookie_route(
     }
 }
 
+/// #3890: whether an actor declaration refines the prelude `Caller` (no local
+/// actor named `Caller` shadows it).
+pub(crate) fn is_caller_refinement(actor: &bynk_syntax::ast::ActorDecl, table: &UnitTable) -> bool {
+    actor
+        .refinement
+        .as_ref()
+        .is_some_and(|r| r.base.name == "Caller" && !table.actors.contains_key("Caller"))
+}
+
 /// A handler with no `by` clause: edge protocols (HTTP, WebSocket) have no safe
 /// default actor; the internal protocols inherit one.
 fn check_missing_by(handler: &Handler, protocol: &ServiceProtocol, errors: &mut Vec<CompileError>) {
@@ -2805,6 +2822,26 @@ fn check_actor_contracts(
         // an authorisation invariant. Its base MUST be a declared `Bearer` actor
         // (only Bearer carries claims to authorise against), and its `where`
         // predicate MUST be in the closed claim-predicate set.
+        if let Some(r) = &actor.refinement
+            && is_caller_refinement(actor, table)
+        {
+            // #3890: a refinement over the prelude `Caller` narrows which
+            // contexts may call, by the closed `IsContext(…)` vocabulary.
+            if let Err(span) = actors::parse_caller_predicate(&r.predicate) {
+                errors.push(
+                    CompileError::new(
+                        "bynk.actor.refinement_predicate_unsupported",
+                        span,
+                        "a refinement over `Caller` must be `IsContext(<context>, …)`, composed with `&&`, `||`, `!`",
+                    )
+                    .with_note(
+                        "the calling context is the only thing a `Caller` carries; claims such as \
+                         `hasClaim` belong to a `Bearer` actor",
+                    ),
+                );
+            }
+            continue;
+        }
         if let Some(r) = &actor.refinement {
             let base = table.actors.get(&r.base.name);
             let base_is_bearer = base.is_some_and(|b| {
@@ -2839,7 +2876,8 @@ fn check_actor_contracts(
                     )
                     .with_note(
                         "claims are untyped JSON, so the predicate vocabulary is a closed set this \
-                         slice; a general typed-claims surface is a later slice",
+                         slice; a general typed-claims surface is a later slice (`IsContext(…)` \
+                         belongs to a refinement over `Caller`)",
                     ),
                 );
             }
@@ -3675,6 +3713,10 @@ fn actor_identity_ty_guarded<'a>(
             // the same name on a self-reference.
             if let Some((key, _)) = table.actors.get_key_value(&r.base.name) {
                 return actor_identity_ty_guarded(key.as_str(), table, resolved, seen, tys);
+            }
+            // #3890: a refinement over the prelude `Caller` yields a `CallerId`.
+            if is_caller_refinement(local, table) {
+                return tys.intern(checker::Ty::Base(bynk_syntax::ast::BaseType::String));
             }
             return tys.intern(checker::Ty::Unit);
         }

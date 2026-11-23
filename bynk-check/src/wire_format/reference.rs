@@ -811,6 +811,13 @@ context is admitted by `Caller` (the default, with no `by`), a foreign caller
 only by its own actor; `by who: Caller | Legacy` admits both and tells them
 apart. Anyone else gets a bare `403`.
 
+A refinement over `Caller` (`actor Admin = Caller where IsContext(shop.admin)`)
+narrows which contexts that is: the handler admits the proven caller only if the
+refinement's predicate holds for it, and a context it does not name gets the same
+bare `403` even though its signature verifies. The compiler also refuses such a
+call where it is written, but this check stays, because the keys are per pair of
+contexts and a caller from before the restriction may still be deployed.
+
 A TypeScript Worker need not speak any of this by hand. For each context with
 a foreign caller the build emits a typed client, `bynk-client.ts`, which
 signs, stamps the contract hash and encodes exactly as this page describes;

@@ -1,0 +1,35 @@
+context shop.billing
+
+// #3890: refinements over `Caller` name the contexts that may call.
+actor Admin = Caller where IsContext(shop.admin)
+actor Fulfilment = Caller where IsContext(shop.orders, shop.fulfil)
+actor NotLegacy = Caller where !IsContext(shop.legacy)
+actor Ledger { auth = Foreign(secret = "LEDGER_CALL_KEY") }
+
+service refunds {
+  on call(id: String) -> Effect[Result[String, String]] by c: Admin {
+    Ok("\(id) refunded for \(c.identity)")
+  }
+}
+
+service ship {
+  on call(order: String) -> Effect[Result[String, String]] by c: Fulfilment {
+    Ok("\(order) shipped for \(c.identity)")
+  }
+}
+
+service status {
+  on call(id: String) -> Effect[Result[String, String]] by NotLegacy {
+    Ok(id)
+  }
+}
+
+// A refinement over `Caller` is a sum's one `Internal` member.
+service book {
+  on call(id: String) -> Effect[Result[String, String]] by who: Fulfilment | Ledger {
+    match who {
+      Fulfilment(name) => Ok("\(id) for \(name)")
+      Ledger => Ok("\(id) for the ledger")
+    }
+  }
+}
