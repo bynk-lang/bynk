@@ -1,8 +1,8 @@
 // The names a generated test module supplies to the test runtime it splices (back-half paydown
 // 1B.3a, #4047, Decision B). This is a contract, never spliced or emitted: `bundle.mjs` lists it
-// as contract-only. A `testgen` unit test checks the declaration against the text the generator
-// writes (`test_module.rs`, `snapshot_harness`; `test_deps.rs`, `asset_harness`), so a renamed generated name fails a test, not a
-// fixture.
+// as contract-only. A `testgen` unit test checks each declaration against what the generator
+// writes (`test_module.rs`, `snapshot_harness`; `test_deps.rs`, `ASSET_FILES_NAME` and
+// `ASSET_FILES_TYPE`), so a renamed or retyped generated name fails a test, not a fixture.
 
 import type { __SnapshotFile } from "./snapshot.ts";
 

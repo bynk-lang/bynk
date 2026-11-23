@@ -851,6 +851,12 @@ pub(super) fn fixture_consts(
     Some(stmts)
 }
 
+/// The name and type of the embedded asset table, which `runtime/src/testing/harness.ts` declares
+/// for `asset_get.ts` (the `the_harness_contract_matches_the_generator` test holds the two together).
+pub(super) const ASSET_FILES_NAME: &str = "__bynkAssetFiles";
+pub(super) const ASSET_FILES_TYPE: &str =
+    "Record<string, { readonly body: string; readonly contentType: string }>";
+
 /// #1883, slice 3 ([DECISION F]): the TypeScript that lets a case fetch an
 /// asset — the files `target`'s Worker ships
 /// ([`bynk_check::assets::deployed_assets`]), embedded base64 by served path
@@ -903,10 +909,8 @@ pub(super) fn asset_harness(
         })
         .collect();
     let table = TsStmt::const_stmt(
-        TsBindingName::Ident("__bynkAssetFiles".to_string()),
-        Some(TsType::named(
-            "Record<string, { readonly body: string; readonly contentType: string }>",
-        )),
+        TsBindingName::Ident(ASSET_FILES_NAME.to_string()),
+        Some(TsType::named(ASSET_FILES_TYPE)),
         TsExpr::multiline_object_entries(entries),
         None,
     );

@@ -312,6 +312,16 @@ mod tests {
             ),
             "the generator no longer writes the declaration harness.ts mirrors"
         );
+        // The asset table: the generator's name and type are the ones `harness.ts` declares.
+        let assets = format!(
+            "declare const {}: {};",
+            crate::testgen::test_deps::ASSET_FILES_NAME,
+            crate::testgen::test_deps::ASSET_FILES_TYPE
+        );
+        assert!(
+            contract.contains(&assets),
+            "harness.ts does not declare the asset table as the generator writes it: {assets}"
+        );
     }
 
     /// No stored golden holds a snapshot table, so its text is pinned: the runtime, then the table
