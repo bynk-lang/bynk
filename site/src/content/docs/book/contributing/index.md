@@ -3,7 +3,7 @@ title: Contributing to the compiler
 ---
 This section is for people working on Bynk itself — the `bynk` compiler and its
 sibling tools — rather than people writing Bynk programs. If you are here to
-*use* Bynk, start with the [tutorials](/book/tutorials/01-first-program/).
+*use* Bynk, start with the [tutorials](/book/tutorials/first-program/).
 
 ## The repository
 

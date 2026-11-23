@@ -314,7 +314,7 @@ comes with sharing a sum type, and you built and ran two Workers.
 
 Next, we prove the registry works, with tests.
 
-➡️ **Next: [Test it](/book/tutorials/06-testing/)**
+➡️ **Next: [Test it](/book/tutorials/testing/)**
 
 ---
 
