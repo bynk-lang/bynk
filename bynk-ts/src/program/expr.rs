@@ -177,7 +177,7 @@ pub enum TsExpr {
     /// TypeScript's ordinary multi-line object-literal convention, which
     /// nothing in this crate could represent before this addition. Only
     /// statement/declaration-level renderers (which already carry `depth`)
-    /// can render this correctly — `printer.rs`'s own `render_stmt_level_
+    /// can render this correctly — `printer/multiline.rs`'s own `render_stmt_level_
     /// expr`, and (#1355) `render_multiline_object_entry`'s own `Prop` arm,
     /// for a `multiline: true` object nested one level inside ANOTHER
     /// multiline object as one of its own entries' values —
@@ -771,7 +771,7 @@ pub enum TsUnaryOp {
 /// site anywhere in `bynk-emit` that needs a relational, not equality,
 /// comparison). Not the
 /// full JS/TS operator table (Decision B's own "extend narrowly" posture) —
-/// see the printer's own `binary_precedence` (`bynk-ts/src/printer.rs`,
+/// see the printer's own `binary_precedence` (`bynk-ts/src/printer/precedence.rs`,
 /// private) for why a nested `Binary` operand's parenthesisation needed to
 /// become precedence-aware once more than one operator existed. Arc C, step
 /// (11) (#1388) grounds one more: `+` (string concatenation) — the
