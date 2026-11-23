@@ -2132,6 +2132,12 @@ impl DevConfigs<'_> {
     /// and the served [`DEV_CONFIG`] is replaced whole only after the last of
     /// them, so `wrangler dev` never reloads with the deploy's names bound.
     fn write(&self, model: Option<&bynk_emit::emit_model::WorkersBuild>, announce: bool) -> bool {
+        // The bridge's cross-check (1C.3a) reads the build's own files, so it runs
+        // before the patches below edit them in place (an mTLS certificate's name
+        // becomes the id the ledger recorded, or the entry is dropped).
+        if let Some(model) = model {
+            let _ = crate::deploy::project_resources(self.workers_dir, self.available, Some(model));
+        }
         dev_config_patches(
             self.project_root,
             self.workers_dir,
@@ -2147,7 +2153,7 @@ impl DevConfigs<'_> {
             self.serving,
             self.remote,
             announce,
-            model,
+            None,
         );
         if !bound.may_publish(announce) {
             if bound == DevVectorize::Unsafe && !announce {
@@ -3563,6 +3569,63 @@ mod tests {
         );
         assert!(served.contains("index_name = \"docs-dev\""), "{served}");
         assert!(!served.contains("shop-docs"), "{served}");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// 1C.3a review: the bridge's cross-check reads the build's own files, so it
+    /// must run before `bynk dev` edits them. An mTLS certificate's name is
+    /// replaced by the ledger's id (or the entry dropped), which the model, still
+    /// naming the certificate, would otherwise disagree with.
+    #[test]
+    fn the_model_is_checked_against_the_build_before_the_dev_patches_edit_it() {
+        use bynk_check::worker_bindings::{BindingSource, WorkerBinding};
+        let (root, workers) = vectorize_project(
+            "mtls",
+            "\n[[mtls_certificates]]\nbinding = \"MTLS_BACKEND\"\ncertificate_id = \"acme-client\"\n",
+        );
+        let binding = |name: &str, source| WorkerBinding {
+            name: name.to_string(),
+            source,
+        };
+        let model = bynk_emit::emit_model::WorkersBuild {
+            bindings: bynk_emit::emitter::WorkerBindings::of_workers(BTreeMap::from([(
+                "shop".to_string(),
+                vec![
+                    binding(
+                        "VECTORIZE_DOCS",
+                        BindingSource::VectorizeIndex {
+                            capability: "Docs".to_string(),
+                            dimensions: 768,
+                            metric: "cosine".to_string(),
+                            indexed: Vec::new(),
+                        },
+                    ),
+                    binding(
+                        "MTLS_BACKEND",
+                        BindingSource::MtlsCertificate {
+                            capability: "Backend".to_string(),
+                            certificate: "acme-client".to_string(),
+                        },
+                    ),
+                ],
+            )])),
+            layout: bynk_project::worker_layout::WorkerLayout::identity(),
+        };
+        let available = names(&["shop"]);
+        let serving = serving_shop();
+        let configs = DevConfigs {
+            project_root: &root,
+            workers_dir: &workers,
+            available: &available,
+            serving: &serving,
+            stand_ins: &[],
+            remote: false,
+            environment: "default",
+        };
+        assert!(configs.write(Some(&model), true));
+        // The patch ran: the unlinked certificate is not in the served copy.
+        let served = std::fs::read_to_string(workers.join("shop").join(DEV_CONFIG)).unwrap();
+        assert!(!served.contains("acme-client"), "{served}");
         let _ = std::fs::remove_dir_all(&root);
     }
 
