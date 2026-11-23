@@ -128,7 +128,11 @@ impl Scratch {
 
     /// The wrangler a case runs: none, one that cannot start, or a script held in memory and
     /// run with `sh -c` (no stand-in is written to disk).
-    fn wrangler(&self, wrangler: Script) -> Reached {
+    ///
+    /// `drains`: the call pipes a value to wrangler's stdin, so the script reads it first, as
+    /// wrangler does. A script that exited without reading would race `bynk`'s write, and the
+    /// write could fail with a broken pipe instead of the shape the case scripts.
+    fn wrangler(&self, wrangler: Script, drains: bool) -> Reached {
         match wrangler {
             Script::Missing => Reached::Provenance(Provenance::Missing),
             Script::NotStartable => {
@@ -149,6 +153,8 @@ impl Scratch {
                             "printf 'stdin: %s\\n' \"$(cat)\" >> '{}'; ",
                             self.log().display()
                         )
+                    } else if drains {
+                        "cat > /dev/null; ".to_string()
                     } else {
                         String::new()
                     };
@@ -729,6 +735,15 @@ fn case(operation: &str, run: Run, shape: &str, wrangler: Script) -> String {
 }
 
 /// One case of the rest of wrangler.
+/// The operations that pipe a value to wrangler's stdin (`Wrangler::feed`); their stand-ins
+/// read it, as wrangler does. Every other call's stdin is inherited or closed, so a stand-in
+/// that read it could block.
+const FEEDS_STDIN: &[&str] = &[
+    "secret put",
+    "secret put (by name, for the sweep)",
+    "secret delete (by name, for the sweep)",
+];
+
 fn case_b(operation: &str, run: RunB, shape: &str, wrangler: Script) -> String {
     case_with(operation, shape, wrangler, run)
 }
@@ -740,7 +755,7 @@ fn case_with(
     run: impl FnOnce(&Cx<'_>) -> String,
 ) -> String {
     let scratch = Scratch::new();
-    let reached = scratch.wrangler(wrangler);
+    let reached = scratch.wrangler(wrangler, FEEDS_STDIN.contains(&operation));
     let api = match &reached {
         Reached::Provenance(provenance) => Wrangler::new(provenance, &scratch.dir),
         Reached::Script(script) => Wrangler::scripted(script, &scratch.dir),
