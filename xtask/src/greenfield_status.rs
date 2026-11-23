@@ -1813,7 +1813,9 @@ const AST_IMPORTER_ORIGINS: &[(&str, &str)] = &[
     ("emitter/lower/ident.rs", "emitter/lower.rs"),
     ("emitter/lower/calls.rs", "emitter/lower.rs"),
     // emitter/emit.rs (2.1, #4086), in path order.
+    ("emitter/emit/agent_history.rs", "emitter/emit.rs"),
     ("emitter/emit/agent_migrate.rs", "emitter/emit.rs"),
+    ("emitter/emit/agent_state.rs", "emitter/emit.rs"),
     ("emitter/emit/agent_store.rs", "emitter/emit.rs"),
     ("emitter/emit/capability.rs", "emitter/emit.rs"),
     ("emitter/emit/functions.rs", "emitter/emit.rs"),
