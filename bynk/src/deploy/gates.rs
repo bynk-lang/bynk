@@ -349,7 +349,7 @@ pub(crate) fn check_foreign_pins(
 pub(crate) struct KeysCx<'a> {
     pub(crate) order: &'a [String],
     pub(crate) resources: &'a BTreeMap<String, Resources>,
-    pub(crate) provenance: &'a Provenance,
+    pub(crate) api: &'a dyn CloudflareApi,
     pub(crate) workers_dir: &'a Path,
     pub(crate) lock: &'a DeployLock,
     pub(crate) opts: &'a DeployOptions,
@@ -377,7 +377,7 @@ pub(crate) fn decide_keys(cx: &KeysCx<'_>, secret_source: &SecretSource) -> Resu
     let KeysCx {
         order,
         resources,
-        provenance,
+        api,
         workers_dir,
         lock,
         opts,
@@ -395,7 +395,7 @@ pub(crate) fn decide_keys(cx: &KeysCx<'_>, secret_source: &SecretSource) -> Resu
     let listed: BTreeMap<String, Option<BTreeSet<String>>> = asked
         .iter()
         .map(|worker| {
-            let answer = list_secrets(provenance, &workers_dir.join(worker), &opts.environment);
+            let answer = list_secrets(api, &workers_dir.join(worker), &opts.environment);
             (worker.to_string(), answer)
         })
         .collect();
@@ -501,7 +501,8 @@ pub(crate) fn account_checks(
         colour::eprintln(&refusal);
         return Err(ExitCode::FAILURE);
     }
-    if !whoami(&probe.provenance) {
+    let api = Wrangler::new(&probe.provenance, project_root);
+    if !whoami(&api) {
         emsg!(
             "bynk: error: Cloudflare authentication is unavailable; run `wrangler login` or set CLOUDFLARE_API_TOKEN"
         );
@@ -511,9 +512,7 @@ pub(crate) fn account_checks(
     // names is not Bynk's to create, so a missing one is a warning, never a
     // refusal from the driver. Asked once per Worker, before the
     // confirmation, so the user decides with it in view.
-    for warning in foreign_worker_warnings(order, resources, |name| {
-        worker_presence(&probe.provenance, name, project_root)
-    }) {
+    for warning in foreign_worker_warnings(order, resources, |name| worker_presence(&api, name)) {
         colour::eprintln(&warning);
     }
     // #3301: a stored secret is linked, never created, so a missing store or

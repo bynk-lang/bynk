@@ -23,11 +23,9 @@
 
 use bynk_driver::emsg;
 use std::cell::Cell;
-use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
-use std::process::{Child, ExitStatus};
-use std::thread::JoinHandle;
 
+use crate::cloudflare::{CloudflareApi, Exit, Failure};
 use crate::migrate::live::{self, Credentials, Rest};
 
 /// What the account says about one script's versions.
@@ -139,7 +137,7 @@ impl Watch {
     }
 
     /// The status to act on: a success if `status` failed but the upload landed.
-    pub(crate) fn settle(&self, status: ExitStatus, said: &str) -> ExitStatus {
+    pub(crate) fn settle(&self, status: Exit, said: &str) -> Exit {
         if status.success() || !self.forgives(said) {
             return status;
         }
@@ -148,7 +146,7 @@ impl Watch {
             self.script
         );
         self.forgave.set(true);
-        success_status()
+        Exit::Code(0)
     }
 
     /// Whether a failure was forgiven. wrangler's lookup that answers `10007` comes
@@ -159,55 +157,23 @@ impl Watch {
     }
 }
 
-#[cfg(unix)]
-fn success_status() -> ExitStatus {
-    std::os::unix::process::ExitStatusExt::from_raw(0)
-}
-
-#[cfg(windows)]
-fn success_status() -> ExitStatus {
-    std::os::windows::process::ExitStatusExt::from_raw(0)
-}
-
-/// Copy a child's stderr to ours as it arrives, and keep it, so a watched push
-/// shows what wrangler shows and can still be read afterwards. The child must
-/// have been spawned with a piped stderr.
-pub(crate) fn tee_stderr(child: &mut Child) -> Option<JoinHandle<String>> {
-    let stderr = child.stderr.take()?;
-    Some(std::thread::spawn(move || {
-        let mut kept = String::new();
-        let mut out = std::io::stderr();
-        let mut reader = BufReader::new(stderr);
-        let mut line = Vec::new();
-        // Bytes, not `lines()`: a line that is not UTF-8 must not end the copy, which
-        // would drop the pipe under wrangler and lose everything after it.
-        while reader.read_until(b'\n', &mut line).is_ok_and(|n| n > 0) {
-            let _ = out.write_all(&line);
-            kept.push_str(&String::from_utf8_lossy(&line));
-            line.clear();
-        }
-        kept
-    }))
-}
-
 /// Run `wrangler triggers deploy` for a Worker whose `deploy` was forgiven: the
 /// step wrangler never reached (workers.dev, routes, custom domains, crons). A
 /// failure here is the deploy's failure, since the Worker would be live without
-/// them.
+/// them. `Err(None)` when there is no wrangler to run.
 pub(crate) fn deploy_triggers(
-    mut command: std::process::Command,
+    api: &dyn CloudflareApi,
     worker_dir: &Path,
     environment: &str,
-) -> Result<(), String> {
-    command.arg("deploy").current_dir(worker_dir);
-    if environment != "default" {
-        command.arg("--env").arg(environment);
-    }
-    match command.status() {
-        Ok(status) if status.success() => Ok(()),
-        Ok(status) => Err(format!("`wrangler triggers deploy` exited {status}")),
-        Err(e) => Err(format!("could not run `wrangler triggers deploy`: {e}")),
-    }
+) -> Result<(), Option<String>> {
+    api.triggers_deploy(worker_dir, environment)
+        .map_err(|e| match e.failure() {
+            Failure::Missing => None,
+            Failure::Exit { status, .. } => {
+                Some(format!("`wrangler triggers deploy` exited {status}"))
+            }
+            _ => Some(format!("could not run `wrangler triggers deploy`: {e}")),
+        })
 }
 
 #[cfg(test)]
@@ -293,10 +259,8 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    #[cfg(unix)]
     #[test]
     fn a_forgiven_failure_settles_as_success_and_others_keep_their_status() {
-        use std::os::unix::process::ExitStatusExt;
         let dir = dir("settle");
         let watch = Watch::with(
             &dir,
@@ -308,7 +272,7 @@ mod tests {
             ]))),
         )
         .unwrap();
-        let failed = ExitStatus::from_raw(1 << 8);
+        let failed = Exit::Code(1);
         assert!(watch.settle(failed, SAID).success());
         assert!(!watch.settle(failed, "some other failure").success());
         let _ = std::fs::remove_dir_all(&dir);
@@ -332,38 +296,10 @@ mod tests {
         assert!(!is_not_found("GET /y: connection reset"));
     }
 
-    /// The tee copies stderr through and keeps it, through a line that is not
-    /// UTF-8, with the kept text readable afterwards.
-    #[cfg(unix)]
-    #[test]
-    fn the_tee_keeps_everything_wrangler_says_even_past_invalid_utf8() {
-        let mut child = std::process::Command::new("sh")
-            .args([
-                "-c",
-                "printf 'first\\n\\377\\n' >&2; echo '[code: 10007]' >&2; exit 1",
-            ])
-            .stderr(std::process::Stdio::piped())
-            .spawn()
-            .unwrap();
-        let said = tee_stderr(&mut child).unwrap();
-        let status = child.wait().unwrap();
-        let said = said.join().unwrap();
-        assert!(!status.success());
-        assert!(said.starts_with("first\n"), "{said:?}");
-        assert!(said.contains("[code: 10007]"), "{said:?}");
-        assert!(upload_survived(
-            &said,
-            &ScriptState::Absent,
-            &ScriptState::Present(1)
-        ));
-    }
-
     /// `settle` of a failed push that said `10007`, on an account that shows the
     /// upload landed, records that triggers were skipped.
-    #[cfg(unix)]
     #[test]
     fn a_forgiven_failure_records_that_triggers_were_skipped() {
-        use std::os::unix::process::ExitStatusExt;
         let dir = dir("forgave");
         let watch = Watch::with(
             &dir,
@@ -375,18 +311,26 @@ mod tests {
         )
         .unwrap();
         assert!(!watch.forgave());
-        assert!(watch.settle(ExitStatus::from_raw(1 << 8), SAID).success());
+        assert!(watch.settle(Exit::Code(1), SAID).success());
         assert!(watch.forgave());
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    #[cfg(unix)]
     #[test]
     fn triggers_deploy_reports_its_own_failure() {
+        use crate::cloudflare::fake::{Recording, failed};
         let dir = std::env::temp_dir();
-        let ok = std::process::Command::new("true");
-        assert!(deploy_triggers(ok, &dir, "default").is_ok());
-        let bad = std::process::Command::new("false");
-        assert!(deploy_triggers(bad, &dir, "default").is_err());
+        let ok = Recording::new(|_| Ok(String::new()));
+        assert_eq!(deploy_triggers(&ok, &dir, "staging"), Ok(()));
+        assert_eq!(ok.calls(), ["triggers deploy --env staging"]);
+        let bad = Recording::new(|op| Err(failed(op, "", "")));
+        assert_eq!(
+            deploy_triggers(&bad, &dir, "default"),
+            Err(Some(
+                "`wrangler triggers deploy` exited exit status: 1".into()
+            ))
+        );
+        let missing = Recording::new(|op| Err(crate::cloudflare::WranglerError::missing(op)));
+        assert_eq!(deploy_triggers(&missing, &dir, "default"), Err(None));
     }
 }

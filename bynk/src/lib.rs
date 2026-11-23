@@ -67,8 +67,6 @@ pub mod stop;
 pub mod sweep;
 pub mod tail;
 pub mod test;
-#[cfg(test)]
-mod test_support;
 pub mod trace;
 pub mod workers;
 

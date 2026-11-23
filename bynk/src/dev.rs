@@ -43,8 +43,9 @@ use crate::shell::exit_status_byte;
 // — the paths this crate's integration tests already use — keep resolving.
 pub use crate::workers::{
     SelectError, compile_once, discover_workers, prepare_build_dir, select_contexts,
-    wrangler_command,
 };
+
+use crate::cloudflare::CloudflareApi;
 
 /// Parsed `bynk dev` flags (the project `PATH` is resolved into `project_root`
 /// before we get here).
@@ -778,7 +779,7 @@ pub fn run(
     let mut children: Vec<(String, Served)> = Vec::new();
     let mut pumps: Vec<std::thread::JoinHandle<()>> = Vec::new();
     for s in &serving {
-        let Some(mut cmd) = wrangler_command(&probe.provenance, "dev") else {
+        let Some(mut cmd) = crate::cloudflare::spawn_command(&probe.provenance, "dev") else {
             emsg!("bynk: error: wrangler not found (run `bynk doctor --only deploy`)");
             terminate(&mut children, &workers_dir);
             return ExitCode::FAILURE;
@@ -1675,37 +1676,30 @@ fn apply_local_migrations(
             continue;
         };
         for (binding, dir) in migrating_databases(&config) {
-            let Some(mut cmd) = wrangler_command(provenance, "d1") else {
-                emsg!("bynk: warning: wrangler not found (run `bynk doctor --only deploy`)");
-                return;
-            };
-            cmd.args(["migrations", "apply", &binding, "--local"])
-                .args(persist_to_args(wrangler_args))
-                .current_dir(&worker_dir)
-                .stdin(std::process::Stdio::null());
-            match cmd.output() {
+            let api = crate::cloudflare::Wrangler::new(provenance, &worker_dir);
+            match api.d1_migrations_apply_local(
+                &worker_dir,
+                &binding,
+                &persist_to_args(wrangler_args),
+            ) {
                 // Only an applied file is remembered: one fixed after a
                 // failed apply was never applied, so it gets no note.
-                Ok(out) if out.status.success() => {
+                Ok(()) => {
                     for file in edited_migrations(&worker_dir.join(&dir), seen) {
                         emsg!(
                             "bynk dev: note: `{file}` changed after it was applied; wrangler applies a migration once, by name, so add a new one to change the schema"
                         );
                     }
                 }
-                Ok(out) => {
-                    let said = String::from_utf8_lossy(&out.stderr);
-                    let said = if said.trim().is_empty() {
-                        String::from_utf8_lossy(&out.stdout)
-                    } else {
-                        said
-                    };
-                    emsg!(
-                        "bynk dev: warning: could not apply `{}`'s D1 migrations for `{binding}`: {}",
-                        s.worker,
-                        said.trim()
-                    );
+                Err(e) if e.is_missing() => {
+                    emsg!("bynk: warning: wrangler not found (run `bynk doctor --only deploy`)");
+                    return;
                 }
+                Err(e) if e.ran_and_failed() => emsg!(
+                    "bynk dev: warning: could not apply `{}`'s D1 migrations for `{binding}`: {}",
+                    s.worker,
+                    e.stderr_else_stdout()
+                ),
                 Err(e) => emsg!(
                     "bynk dev: warning: could not run wrangler to apply `{}`'s D1 migrations: {e}",
                     s.worker
@@ -1727,7 +1721,7 @@ fn warm_up_wrangler(provenance: &Provenance, serving: usize) -> bool {
     }
     let runner = provenance.runner_label().unwrap_or("npx");
     emsg!("bynk dev: installing wrangler via {runner} once before starting the contexts…");
-    let warmed = wrangler_command(provenance, "--version").map(|mut cmd| {
+    let warmed = crate::cloudflare::spawn_command(provenance, "--version").map(|mut cmd| {
         cmd.stdout(std::process::Stdio::null())
             .status()
             .is_ok_and(|s| s.success())
@@ -1748,7 +1742,7 @@ fn wrangler_warm_up_command_line(provenance: &Provenance) -> String {
         return "wrangler --version".to_string();
     };
     let program = manager.runner_program().unwrap_or("npx");
-    let args = manager.runner_args("wrangler@4", "wrangler");
+    let args = manager.runner_args(bynk_driver::tools::pins::WRANGLER_SPEC, "wrangler");
     format!("{program} {} --version", args.join(" "))
 }
 
@@ -1794,17 +1788,12 @@ fn warn_missing_local_secrets(
             continue;
         };
         for (binding, store, secret) in entries {
-            let Some(mut cmd) = wrangler_command(provenance, "secrets-store") else {
+            let listed = crate::cloudflare::Wrangler::new(provenance, &worker_dir)
+                .secrets_store_list_local(&worker_dir, &store, &persist_to_args(wrangler_args));
+            if listed.as_ref().is_err_and(|e| e.is_missing()) {
                 return;
-            };
-            cmd.args(["secret", "list", &store])
-                .args(persist_to_args(wrangler_args))
-                .current_dir(&worker_dir)
-                .stdin(std::process::Stdio::null());
-            let present = cmd.output().is_ok_and(|out| {
-                out.status.success()
-                    && secret_listed(&String::from_utf8_lossy(&out.stdout), &secret)
-            });
+            }
+            let present = listed.is_ok_and(|stdout| secret_listed(&stdout, &secret));
             if !present {
                 eprintln!(
                     "{}",

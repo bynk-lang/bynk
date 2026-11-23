@@ -707,11 +707,7 @@ fn push_worker(
     worker_dir: &Path,
     declared: &Resources,
 ) -> Result<Pushed, DeployFailure> {
-    let (provenance, project_root, environment) = (
-        run.tools.provenance,
-        run.tools.project_root,
-        run.environment,
-    );
+    let (api, project_root, environment) = (run.tools.api, run.tools.project_root, run.environment);
     // Secrets straddle the push, and which side depends on whether the Worker
     // already exists (ADR 0195 D6).
     //
@@ -742,7 +738,7 @@ fn push_worker(
     // anything is uploaded.
     let first_deploy = !run.writer.lock().is_deployed(environment, worker);
     let prepared = prepare_bindings(
-        provenance,
+        api,
         worker_dir,
         worker,
         declared,
@@ -767,9 +763,9 @@ fn push_worker(
         .collect();
     let wrangler_args = wrangler_args.as_slice();
     if !first_deploy {
-        apply_secrets(provenance, worker_dir, worker, &prepared, environment)?;
+        apply_secrets(api, worker_dir, worker, &prepared, environment)?;
         return push(
-            provenance,
+            api,
             worker_dir,
             worker,
             wrangler_args,
@@ -779,7 +775,7 @@ fn push_worker(
     }
     if prepared.is_empty() {
         return push(
-            provenance,
+            api,
             worker_dir,
             worker,
             wrangler_args,
@@ -794,7 +790,7 @@ fn push_worker(
             "bynk: warning: this wrangler is older than {SECRETS_FILE_MIN}, which cannot upload secrets with a new Worker, so `{deployed}` will be live for a moment before its secrets are set. Upgrade wrangler to close that window."
         );
         let pushed = push(
-            provenance,
+            api,
             worker_dir,
             worker,
             wrangler_args,
@@ -802,7 +798,7 @@ fn push_worker(
             (None, true),
         )?;
         if pushed == Pushed::Ok {
-            apply_secrets(provenance, worker_dir, worker, &prepared, environment)?;
+            apply_secrets(api, worker_dir, worker, &prepared, environment)?;
         }
         return Ok(pushed);
     }
@@ -812,7 +808,7 @@ fn push_worker(
         ))
     })?;
     let pushed = push(
-        provenance,
+        api,
         worker_dir,
         worker,
         wrangler_args,

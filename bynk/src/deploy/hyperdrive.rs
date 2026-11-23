@@ -642,7 +642,6 @@ pub(crate) fn provision(
     let site = Site {
         tools: Tools {
             api: &Wrangler::new(&provenance, Path::new("/nonexistent")),
-            provenance: &provenance,
             project_root: Path::new("/nonexistent"),
         },
         environment,
@@ -684,7 +683,6 @@ pub(crate) fn prune(
     };
     let tools = Tools {
         api: &Wrangler::new(&provenance, Path::new("/nonexistent")),
-        provenance: &provenance,
         project_root: Path::new("/nonexistent"),
     };
     for orphan in orphans.iter().filter(|o| Hyperdrive::prunable(o)) {

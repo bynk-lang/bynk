@@ -22,6 +22,8 @@ struct Answer {
     exit: Exit,
     stdout: &'static str,
     stderr: &'static str,
+    /// Log what arrived on stdin (`stdin: …`), for the calls that take a value there.
+    stdin: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -35,6 +37,15 @@ const fn answer(code: i32, stdout: &'static str, stderr: &'static str) -> Answer
         exit: Exit::Code(code),
         stdout,
         stderr,
+        stdin: false,
+    }
+}
+
+/// [`answer`], logging what the call sent on stdin.
+const fn reading(code: i32, stdout: &'static str, stderr: &'static str) -> Answer {
+    Answer {
+        stdin: true,
+        ..answer(code, stdout, stderr)
     }
 }
 
@@ -81,6 +92,7 @@ const SHAPES: &[(&str, Script)] = &[
                 exit: Exit::Signal("TERM"),
                 stdout: "",
                 stderr: "",
+                stdin: false,
             },
         )]),
     ),
@@ -90,7 +102,13 @@ const SHAPES: &[(&str, Script)] = &[
     ),
 ];
 
-/// A scratch directory per case, with the stand-in and its call log in it.
+/// How a case reaches wrangler.
+enum Reached {
+    Provenance(Provenance),
+    Script(String),
+}
+
+/// A scratch directory per case, with the call log in it.
 struct Scratch {
     dir: PathBuf,
 }
@@ -108,14 +126,21 @@ impl Scratch {
         Scratch { dir }
     }
 
-    /// The wrangler a case runs, written to disk where it is a script.
-    fn provenance(&self, wrangler: Script) -> Provenance {
+    /// The wrangler a case runs: none, one that cannot start, or a script held in memory and
+    /// run with `sh -c` (no stand-in is written to disk).
+    ///
+    /// `drains`: the call pipes a value to wrangler's stdin, so the script reads it first, as
+    /// wrangler does. A script that exited without reading would race `bynk`'s write, and the
+    /// write could fail with a broken pipe instead of the shape the case scripts.
+    fn wrangler(&self, wrangler: Script, drains: bool) -> Reached {
         match wrangler {
-            Script::Missing => Provenance::Missing,
-            Script::NotStartable => Provenance::Path(self.dir.join("no-such-wrangler")),
+            Script::Missing => Reached::Provenance(Provenance::Missing),
+            Script::NotStartable => {
+                Reached::Provenance(Provenance::Path(self.dir.join("no-such-wrangler")))
+            }
             Script::Answers(answers) => {
                 let mut script = format!(
-                    "#!/bin/sh\nprintf '%s\\n' \"$*\" >> '{}'\ncase \"$*\" in\n",
+                    "printf '%s\\n' \"$*\" >> '{}'\ncase \"$*\" in\n",
                     self.log().display()
                 );
                 for (pattern, answer) in answers {
@@ -123,15 +148,23 @@ impl Scratch {
                         Exit::Code(code) => format!("exit {code}"),
                         Exit::Signal(signal) => format!("kill -{signal} $$"),
                     };
+                    let stdin = if answer.stdin {
+                        format!(
+                            "printf 'stdin: %s\\n' \"$(cat)\" >> '{}'; ",
+                            self.log().display()
+                        )
+                    } else if drains {
+                        "cat > /dev/null; ".to_string()
+                    } else {
+                        String::new()
+                    };
                     script.push_str(&format!(
-                        "  {pattern}) printf '%s' '{}'; printf '%s' '{}' >&2; {exit} ;;\n",
+                        "  {pattern}) {stdin}printf '%s' '{}'; printf '%s' '{}' >&2; {exit} ;;\n",
                         answer.stdout, answer.stderr
                     ));
                 }
                 script.push_str("esac\necho \"unscripted: $*\" >&2\nexit 99\n");
-                let path = self.dir.join("wrangler");
-                crate::test_support::write_executable(&path, &script);
-                Provenance::Path(path)
+                Reached::Script(script)
             }
         }
     }
@@ -524,13 +557,217 @@ const SPECIAL: &[(&str, &str, Script)] = &[
     ),
 ];
 
+/// What an operation runs with: the account operations and the scratch project root.
+struct Cx<'a> {
+    api: &'a dyn CloudflareApi,
+    root: &'a Path,
+}
+
+/// One operation of the rest of wrangler: its name and how to run it.
+type RunB = fn(&Cx<'_>) -> String;
+
+/// A push's or a deploy step's result: `ok` and the value, or the failure's exit code and text.
+fn failed<T: Debug>(result: Result<T, DeployFailure>) -> String {
+    match result {
+        Ok(value) => format!("ok {value:?}"),
+        Err(f) => format!("exit {} {}", f.code, f.message),
+    }
+}
+
+/// The rest of wrangler (1D.3b, #4043): the push, the triggers, the account reads, the secrets,
+/// `rollback` and the migration sweep's secrets, pinned before they move.
+const OPERATIONS_B: &[(&str, RunB)] = &[
+    ("deploy", |c| {
+        failed(push(c.api, c.root, "api", &[], "default", (None, false)))
+    }),
+    ("deploy (--env staging, with arguments)", |c| {
+        failed(push(
+            c.api,
+            c.root,
+            "api",
+            &["--var".into(), "A:1".into()],
+            "staging",
+            (None, false),
+        ))
+    }),
+    ("deploy (with a secrets file)", |c| {
+        let file = c.root.join("secrets.json");
+        std::fs::write(&file, "{}").unwrap();
+        failed(push(
+            c.api,
+            c.root,
+            "api",
+            &[],
+            "default",
+            (Some(&file), false),
+        ))
+    }),
+    ("triggers deploy", |c| {
+        failed(deploy_forgiven_triggers(c.api, c.root, "api", "staging"))
+    }),
+    ("whoami", |c| format!("{:?}", whoami(c.api))),
+    ("deployments list", |c| {
+        format!("{:?}", worker_presence(c.api, "billing"))
+    }),
+    ("secret list (default)", |c| {
+        format!("{:?}", list_secrets(c.api, c.root, "default"))
+    }),
+    ("secret list (--env staging)", |c| {
+        format!("{:?}", list_secrets(c.api, c.root, "staging"))
+    }),
+    ("secret put", |c| {
+        shown(set_secret(c.api, c.root, "TOKEN", "s3cret", "staging"))
+    }),
+    ("rollback", |c| {
+        let account = crate::deploy::revert::LiveAccount {
+            rest: crate::migrate::live::tests::rest("http://127.0.0.1:9".into()),
+            api: c.api,
+        };
+        shown(crate::deploy::revert::Account::rollback(
+            &account, "shop-api", "v-123",
+        ))
+    }),
+    ("secret put (by name, for the sweep)", |c| {
+        let secrets = crate::migrate::live::WranglerSecrets {
+            api: c.api,
+            scratch: c.root.join("sweep"),
+        };
+        shown(crate::migrate::sweep::Secrets::put(
+            &secrets,
+            "shop-api",
+            "MIGRATE_KEY",
+            "k3y",
+        ))
+    }),
+    ("secret delete (by name, for the sweep)", |c| {
+        let secrets = crate::migrate::live::WranglerSecrets {
+            api: c.api,
+            scratch: c.root.join("sweep"),
+        };
+        shown(crate::migrate::sweep::Secrets::delete(
+            &secrets,
+            "shop-api",
+            "MIGRATE_KEY",
+        ))
+    }),
+];
+
+/// The rest of wrangler's own answers.
+const SPECIAL_B: &[(&str, &str, Script)] = &[
+    (
+        "deploy",
+        "interrupted by SIGINT",
+        Script::Answers(&[(
+            "*",
+            Answer {
+                exit: Exit::Signal("INT"),
+                stdout: "",
+                stderr: "",
+                stdin: false,
+            },
+        )]),
+    ),
+    (
+        "deployments list",
+        "listed",
+        Script::Answers(&[("*", answer(0, "[]\n", ""))]),
+    ),
+    (
+        "deployments list",
+        "not found, code 10007",
+        Script::Answers(&[(
+            "*",
+            answer(1, "", "This Worker does not exist [code: 10007]\n"),
+        )]),
+    ),
+    (
+        "deployments list",
+        "not found, code 10090",
+        Script::Answers(&[("*", answer(1, "", "legacy env [code: 10090]\n"))]),
+    ),
+    (
+        "secret list (default)",
+        "two secrets",
+        Script::Answers(&[(
+            "*",
+            answer(
+                0,
+                "[{\"name\":\"TOKEN\",\"type\":\"secret_text\"},{\"name\":\"KEY\"}]\n",
+                "",
+            ),
+        )]),
+    ),
+    (
+        "secret put",
+        "set, value on stdin",
+        Script::Answers(&[("*", reading(0, "Success!\n", ""))]),
+    ),
+    (
+        "secret put",
+        "fails, value on stdin",
+        Script::Answers(&[("*", reading(1, "", "Authentication error [code: 10000]\n"))]),
+    ),
+    (
+        "rollback",
+        "rolled back",
+        Script::Answers(&[("*", answer(0, "Rolled back.\n", ""))]),
+    ),
+    (
+        "rollback",
+        "fails, stderr and stdout",
+        Script::Answers(&[("*", answer(1, "  on stdout\n", "  on stderr\n"))]),
+    ),
+    (
+        "secret put (by name, for the sweep)",
+        "set, value on stdin",
+        Script::Answers(&[("*", reading(0, "Success!\n", ""))]),
+    ),
+    (
+        "secret delete (by name, for the sweep)",
+        "deleted, nothing on stdin",
+        Script::Answers(&[("*", reading(0, "Deleted.\n", ""))]),
+    ),
+];
+
 /// One case as the fixture shows it.
 fn case(operation: &str, run: Run, shape: &str, wrangler: Script) -> String {
+    case_with(operation, shape, wrangler, |cx| run(cx.api, cx.root))
+}
+
+/// One case of the rest of wrangler.
+/// The operations that pipe a value to wrangler's stdin (`Wrangler::feed`); their stand-ins
+/// read it, as wrangler does. Every other call's stdin is inherited or closed, so a stand-in
+/// that read it could block.
+const FEEDS_STDIN: &[&str] = &[
+    "secret put",
+    "secret put (by name, for the sweep)",
+    "secret delete (by name, for the sweep)",
+];
+
+fn case_b(operation: &str, run: RunB, shape: &str, wrangler: Script) -> String {
+    case_with(operation, shape, wrangler, run)
+}
+
+fn case_with(
+    operation: &str,
+    shape: &str,
+    wrangler: Script,
+    run: impl FnOnce(&Cx<'_>) -> String,
+) -> String {
     let scratch = Scratch::new();
-    let provenance = scratch.provenance(wrangler);
-    let result = run(&Wrangler::new(&provenance, &scratch.dir), &scratch.dir);
+    let reached = scratch.wrangler(wrangler, FEEDS_STDIN.contains(&operation));
+    let api = match &reached {
+        Reached::Provenance(provenance) => Wrangler::new(provenance, &scratch.dir),
+        Reached::Script(script) => Wrangler::scripted(script, &scratch.dir),
+    };
+    let result = run(&Cx {
+        api: &api,
+        root: &scratch.dir,
+    });
+    let at = scratch.dir.display().to_string();
+    let result = result.replace(&at, "<root>");
     let mut out = format!("== {operation} · {shape}\n");
-    for call in scratch.calls().lines() {
+    for call in scratch.calls().replace(&at, "<root>").lines() {
         out.push_str(&format!("   call: {call}\n"));
     }
     for (i, line) in result.lines().enumerate() {
@@ -552,6 +789,15 @@ fn messages() -> String {
         }
         out.push('\n');
     }
+    for (operation, run) in OPERATIONS_B {
+        for (shape, wrangler) in SHAPES {
+            out.push_str(&case_b(operation, *run, shape, *wrangler));
+        }
+        for (_, shape, wrangler) in SPECIAL_B.iter().filter(|(op, _, _)| op == operation) {
+            out.push_str(&case_b(operation, *run, shape, *wrangler));
+        }
+        out.push('\n');
+    }
     out
 }
 
@@ -561,6 +807,12 @@ fn every_wrangler_operation_of_the_resource_kinds_keeps_its_messages() {
     let _lock = crate::stop::TEST_LOCK
         .lock()
         .unwrap_or_else(|e| e.into_inner());
+    for (operation, _, _) in SPECIAL_B {
+        assert!(
+            OPERATIONS_B.iter().any(|(op, _)| op == operation),
+            "a special case names an operation the fixture does not run: {operation}"
+        );
+    }
     for (operation, _, _) in SPECIAL {
         assert!(
             OPERATIONS.iter().any(|(op, _)| op == operation),
