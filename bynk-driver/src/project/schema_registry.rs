@@ -12,7 +12,7 @@
 //! all.
 //!
 //! Read/write is opt-in (`CompileOptions::schema_registry`) — see
-//! `project.rs`'s `compile_project`/`run_checks` for why: fixtures and
+//! `project/entry.rs`'s `compile_project` and `project/pipeline.rs`'s `run_checks` for why: fixtures and
 //! in-memory builds must never touch a project tree as a side effect of
 //! compiling.
 //!
@@ -20,7 +20,7 @@
 //! `EventEntry`, `FieldShape`, and their `parse`/`serialize` — moved to
 //! `bynk_project::schema_registry`. `SchemaRegistry`/`serialize` are
 //! re-exported below so every existing `schema_registry::X` call site in
-//! `project.rs` keeps working unchanged; `EventEntry`/`FieldShape` had no
+//! `project/pipeline.rs` and `project/output.rs` keeps working unchanged; `EventEntry`/`FieldShape` had no
 //! remaining call site here once `reconcile` moved (see next) and are not.
 //!
 //! P5.3 (`design/tracks/semantics-in-the-checker.md` §6): `reconcile` and its
@@ -28,7 +28,7 @@
 //! `bynk_check`-coupled half (`UnitTable`) that stayed here pending P4.1's
 //! `bynk-check` entry point — moved to `bynk_check::schema_registry`,
 //! category 1 of `bynk-check/src/analysis.rs`'s own residual-gap accounting.
-//! This module is now just the re-export below; `project.rs`'s `run_checks`
+//! This module is now just the re-export below; `project/pipeline.rs`'s `run_checks`
 //! calls `bynk_check::schema_registry::reconcile` directly.
 //!
 //! P5.5 (§6, §3.2's "eighth site"): `project.rs`'s own
