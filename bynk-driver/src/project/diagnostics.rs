@@ -7,7 +7,7 @@ use bynk_syntax::error::CompileError;
 // relocated verbatim (Decision C) to `bynk-check/src/analysis.rs`, alongside
 // the new `bynk-check`-native analysis entry point that also needs to build
 // one. Re-exported here so `crate::project::{ProjectAnalysis, ...}` (this
-// module's own `pub use` chain, `project.rs:80`) — and every downstream
+// module's own `pub use` chain in `project.rs`) — and every downstream
 // caller, including `bynk-ide`'s `crate::project::ProjectAnalysis`
 // import — keeps resolving unchanged. `Mode`/`ErrorSink`/`ProjectFailure`
 // below are unaffected: `Mode` and `ProjectFailure` are pipeline-driving

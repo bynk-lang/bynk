@@ -1,0 +1,35 @@
+# This repository's settings for the bynk-lang GitHub App
+# (bynk-lang/github-hooks: docs/settings.md). Every feature is off unless it's
+# turned on here, and the App reads this file from the default branch.
+
+# Issue triage: Claude suggests labels for each new issue, and a maintainer
+# approves or declines them in Mine. Only the labels that say what an issue is
+# about are offered. The maintainers' decisions (proposal, accepted, the
+# priorities, keep-draft, track, design-review, strategy and the like),
+# Dependabot's and the canaries' are left to people.
+triage:
+  enabled: true
+  labels: [bug, enhancement, documentation, question, language, platform, tooling]
+
+# Stale pull request nudges: each weekday, a ready pull request that has
+# waited on its requested reviewers for 3 whole days or more gets a proposed
+# comment to them, which a maintainer approves or declines in Mine.
+nudges:
+  enabled: true
+  after_days: 3
+
+# Release notes stay off: release.yml writes each release's notes from the
+# changelog, so a release is never published empty. The weekly summary is the
+# organisation's, and only bynk-lang/github-hooks turns it on.
+
+# Pull request reviews: when a member's pull request becomes ready for review,
+# by hand or when ci.yml's `promote` job marks a green draft ready, Claude
+# reviews it with read-only tools, and the App posts the review at once as
+# inline threads, with no approval in Mine. A later review resolves the App's
+# own threads the change has addressed, but never a blocking one. The
+# guidelines are the maintainers' notes for this repository. This replaces
+# the claude-pr-review.yml workflow.
+review:
+  enabled: true
+  guidelines: .github/review-guidelines.md
+  authors: members
