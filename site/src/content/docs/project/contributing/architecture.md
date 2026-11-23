@@ -69,7 +69,7 @@ The library (`lib.rs`) exposes the flows the CLI and LSP build on:
 
 - **`compile(source, filename)`** — single-file mode for a self-contained
   `commons`. Runs the five stages in order and returns the emitted TypeScript (or
-  `Vec<CompileError>`). This is also what the [doc-example gate](/book/contributing/documentation/)
+  `Vec<CompileError>`). This is also what the [doc-example gate](/project/contributing/documentation/)
   uses for `commons` blocks.
 - **`compile_project(root)`** / `compile_project_with_target` /
   `compile_project_with_split_paths` — multi-file projects. A two-pass design:
@@ -86,7 +86,7 @@ These codes are the user-facing contract, so they are catalogued in a central
 registry, `diagnostics.rs`, which also generates the
 [diagnostic index](/reference/diagnostics/). A test asserts the registry
 matches the codes actually emitted in the source — so adding a new code without
-registering it fails the build. See [Testing & fixtures](/book/contributing/testing/).
+registering it fails the build. See [Testing & fixtures](/project/contributing/testing/).
 
 ## Targets
 

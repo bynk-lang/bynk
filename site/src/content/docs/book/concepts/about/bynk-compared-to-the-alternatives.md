@@ -321,8 +321,8 @@ you would rather a mistake fail to compile than be caught in review.
 
 ## See also
 
-- [Why Bynk exists](/book/about/why-bynk-exists/) — the motivation behind the design.
+- [Why Bynk exists](/book/introduction/what-is-bynk/#why-bynk-exists) — the motivation behind the design.
 - [Bynk compared to TypeScript](/book/concepts/about/bynk-compared-to-typescript/) — the
   language-level comparison.
-- [Versioning & roadmap](/book/about/versioning-and-roadmap/) — where Bynk is on
+- [Versioning & roadmap](/project/versioning-and-roadmap/) — where Bynk is on
   the road to 1.0.

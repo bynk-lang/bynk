@@ -1079,7 +1079,7 @@ mod tests {
         // links and anchors resolve independently of the page too.
         for cl in [
             "Close [#548](https://github.com/accuser/bynk/issues/548)",
-            "See [the roadmap](/book/about/versioning-and-roadmap/)",
+            "See [the roadmap](/project/versioning-and-roadmap/)",
             "See [below](#notes)",
         ] {
             let content = format!("---\nlevel: minor\nchangelog: {cl}\n---\n");

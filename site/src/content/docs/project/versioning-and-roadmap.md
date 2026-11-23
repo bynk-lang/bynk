@@ -174,6 +174,6 @@ a single current version.
 
 ## See also
 
-- [Why Bynk exists](/book/about/why-bynk-exists/) — the motivation behind the design these
+- [Why Bynk exists](/book/introduction/what-is-bynk/#why-bynk-exists) — the motivation behind the design these
   increments are building toward.
 - Reference: [releases](/reference/releases/).

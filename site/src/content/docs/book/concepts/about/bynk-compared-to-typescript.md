@@ -52,4 +52,4 @@ the gains.
 
 ## See also
 
-- [Why Bynk exists](/book/about/why-bynk-exists/) · [Why compile to TypeScript](/book/concepts/projects-build-and-deployment/why-compile-to-typescript/)
+- [Why Bynk exists](/book/introduction/what-is-bynk/#why-bynk-exists) · [Why compile to TypeScript](/book/concepts/projects-build-and-deployment/why-compile-to-typescript/)

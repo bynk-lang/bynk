@@ -28,6 +28,9 @@ import bookSidebar from "./src/generated/sidebar.json" with { type: "json" };
 // presence slice 5): the language reference, architecture, adapters, tooling,
 // diagnostics, the specification and the releases.
 import referenceSidebar from "./src/generated/reference-sidebar.json" with { type: "json" };
+// The Project pages' sidebar (slice 13), from src/PROJECT.md: versioning and
+// roadmap, and contributing.
+import projectSidebar from "./src/generated/project-sidebar.json" with { type: "json" };
 
 // `{{#include}}` diagnostics fixtures live in `site/src/diagnostics/` (the
 // remark plugin resolves the `diagnostics/…` suffix against this base).
@@ -142,8 +145,8 @@ export default defineConfig({
         },
       },
       social: [{ icon: "github", label: "GitHub", href: "https://github.com/bynk-lang/bynk" }],
-      // The Book sidebar is generated from src/SUMMARY.md and the Reference
-      // sidebar from src/REFERENCE.md; By Example appends its own group:
+      // The Book sidebar is generated from src/SUMMARY.md, the Reference
+      // sidebar from src/REFERENCE.md and the Project one from src/PROJECT.md; By Example appends its own group:
       // snippets first (the gentle tier), then the project gallery.
       sidebar: [
         ...bookSidebar,
@@ -156,6 +159,7 @@ export default defineConfig({
           ],
         },
         ...referenceSidebar,
+        ...projectSidebar,
       ],
     }),
   ],
