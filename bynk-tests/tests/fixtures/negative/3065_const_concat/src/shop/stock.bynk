@@ -12,7 +12,7 @@ const GoodSql: String = "SELECT 1"
 const Joined: String = GoodSql + " WHERE 1"
 
 service s {
-  on call() -> Effect[Result[Option[String], SqlError]] given Stock {
+  on call() -> Effect[Result[Option[String], SqlError]] by Caller given Stock {
     Stock.first(Joined, [])
   }
 }

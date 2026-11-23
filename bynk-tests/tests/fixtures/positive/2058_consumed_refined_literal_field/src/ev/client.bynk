@@ -6,7 +6,7 @@ consumes ev.kinds
 // #2058: the caller never names `Code`, so a literal admitted to it is cast
 // to `ev_store.Code`, under the namespace the module already imports.
 service bound {
-  on call() -> Effect[Int] {
+  on call() -> Effect[Int] by Caller {
     let i = Item { code: 1, name: "a" }
     ev.store.put(i)
   }
@@ -14,14 +14,14 @@ service bound {
 
 // `ev.kinds` has no service, so only the type cast names its namespace.
 service tagged {
-  on call() -> Effect[Int] {
+  on call() -> Effect[Int] by Caller {
     let t = Tag { kind: 3, label: "x" }
     t.kind
   }
 }
 
 service direct {
-  on call() -> Effect[Int] {
+  on call() -> Effect[Int] by Caller {
     ev.store.put(Item { code: 2, name: "b" })
   }
 }

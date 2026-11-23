@@ -4,7 +4,7 @@ context shop.ledger
 type Ticket = { s: String }
 
 service take {
-  on call(t: Ticket) -> Effect[String] {
+  on call(t: Ticket) -> Effect[String] by Caller {
     t.s
   }
 }

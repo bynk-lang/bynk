@@ -50,7 +50,7 @@ provides Gamma = GammaImpl {{
 }}
 
 service handlers {{
-  on call(x: Int) -> Effect[Int]{given} {{
+  on call(x: Int) -> Effect[Int]{given} by Caller {{
 {body}
   }}
 }}
@@ -222,7 +222,7 @@ context app.crossuse
 consumes platform.time as Time
 
 service crossuse {{
-  on call() -> Effect[Int]{given} {{
+  on call() -> Effect[Int]{given} by Caller {{
     let t <- Time.Clock.now()
     t
   }}

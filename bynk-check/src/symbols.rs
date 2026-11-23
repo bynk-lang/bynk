@@ -3353,7 +3353,7 @@ mod value_namespace_tests {
             Kind::Const => format!("const {n}: Int = 1\n"),
             Kind::Service => {
                 format!(
-                    "service {n} {{\n  on call() -> Effect[Int] {{\n    Effect.pure(1)\n  }}\n}}\n"
+                    "service {n} {{\n  on call() -> Effect[Int] by Caller {{\n    Effect.pure(1)\n  }}\n}}\n"
                 )
             }
             Kind::Agent => format!(
@@ -3469,7 +3469,7 @@ mod contract_types_tests {
 
     const ORDER: &str = "context shop.order\n\nexports transparent { Order }\n\ntype Region = enum { Domestic, International }\n\ntype Order = { id: String, region: Region }\n";
     const POST: &str = "context shop.post\n\nexports transparent { Parcel }\n\ntype Region = enum { North, South }\n\ntype Parcel = { ref: String, region: Region }\n";
-    const LEDGER: &str = "context shop.ledger\n\nconsumes shop.order\nconsumes shop.post\n\ntype Region = enum { Here, There }\n\nservice orderId {\n  on call(o: Order) -> Effect[String] {\n    o.id\n  }\n}\n\nservice parcelRef {\n  on call(p: Parcel) -> Effect[String] {\n    p.ref\n  }\n}\n";
+    const LEDGER: &str = "context shop.ledger\n\nconsumes shop.order\nconsumes shop.post\n\ntype Region = enum { Here, There }\n\nservice orderId {\n  on call(o: Order) -> Effect[String] by Caller {\n    o.id\n  }\n}\n\nservice parcelRef {\n  on call(p: Parcel) -> Effect[String] {\n    p.ref\n  }\n}\n";
 
     fn normal_form(service: &str) -> String {
         let a = analyse(&[

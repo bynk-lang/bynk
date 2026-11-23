@@ -24,7 +24,7 @@ event PaymentConfirmed = {
 }
 
 service markPaid {
-  on call(orderId: String) -> Effect[()] given Events {
+  on call(orderId: String) -> Effect[()] by Caller given Events {
     Events.emit[PaymentConfirmed](PaymentConfirmed { orderId: orderId })
   }
 }
@@ -40,7 +40,7 @@ event PaymentConfirmed = {
 }
 
 service markPaid {
-  on call(orderId: String) -> Effect[()] given Events {
+  on call(orderId: String) -> Effect[()] by Caller given Events {
     Events.emit[PaymentConfirmed](PaymentConfirmed { orderId: orderId, region: "US" })
   }
 }
@@ -56,7 +56,7 @@ event PaymentConfirmed = {
 }
 
 service markPaid {
-  on call(orderId: String) -> Effect[()] given Events {
+  on call(orderId: String) -> Effect[()] by Caller given Events {
     Events.emit[PaymentConfirmed](PaymentConfirmed { orderId: orderId, region: "US" })
   }
 }

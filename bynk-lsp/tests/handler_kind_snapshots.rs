@@ -35,7 +35,7 @@ type UserId = opaque String
 actor Caller { auth = Bearer(secret = "AUTH_SECRET"), identity = UserId }
 
 service calc {
-  on call(x: Int) -> Effect[Int] {
+  on call(x: Int) -> Effect[Int] by Caller {
     x
   }
 }
@@ -88,7 +88,7 @@ service onPing from Events(Pinged) {
 }
 
 service ping {
-  on call(n: Int) -> Effect[()] given Events {
+  on call(n: Int) -> Effect[()] by Caller given Events {
     Events.emit[Pinged](Pinged { n: n })
   }
 }

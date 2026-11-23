@@ -30,21 +30,21 @@ consumes bynk { Random }
 consumes bynk.crypto { Crypto }
 
 service issue {
-	on call() -> Effect[String] given Random {
+	on call() -> Effect[String] by Caller given Random {
 		let raw <- Random.bytes(32)
 		Effect.pure(raw.toBase64Url())
 	}
 }
 
 service digestOf {
-	on call(token: String) -> Effect[String] given Crypto {
+	on call(token: String) -> Effect[String] by Caller given Crypto {
 		let digest <- Crypto.digest(Sha256, Bytes.fromUtf8(token))
 		Effect.pure(digest.toHex())
 	}
 }
 
 service check {
-	on call(presented: String, storedHex: String) -> Effect[Bool] given Crypto {
+	on call(presented: String, storedHex: String) -> Effect[Bool] by Caller given Crypto {
 		match Bytes.fromHex(storedHex) {
 			None => Effect.pure(false),
 			Some(stored) => {
@@ -71,7 +71,7 @@ consumes bynk { Secrets }
 consumes bynk.crypto { Crypto }
 
 service verify {
-	on call(body: String, signatureHex: String) -> Effect[Bool] given Crypto, Secrets {
+	on call(body: String, signatureHex: String) -> Effect[Bool] by Caller given Crypto, Secrets {
 		let secret <- Secrets.get("WEBHOOK_SECRET")
 		match secret {
 			None => Effect.pure(false),
@@ -104,7 +104,7 @@ consumes bynk { Secrets }
 consumes bynk.crypto { Crypto }
 
 service signLine {
-	on call(payload: String) -> Effect[Result[String, CryptoError]] given Crypto, Secrets {
+	on call(payload: String) -> Effect[Result[String, CryptoError]] by Caller given Crypto, Secrets {
 		let stored <- Secrets.get("REGISTRY_SIGNING_KEY")
 		match stored {
 			None => Effect.pure(Err(InvalidKey("REGISTRY_SIGNING_KEY isn't set"))),

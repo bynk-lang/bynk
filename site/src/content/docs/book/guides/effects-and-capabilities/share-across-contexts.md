@@ -40,7 +40,7 @@ context ops.jobs
 consumes platform.time
 
 service tick {
-	on call() -> Effect[Int] given platform.time.Clock {
+	on call() -> Effect[Int] by Caller given platform.time.Clock {
 		let t <- platform.time.Clock.now()
 		t
 	}
@@ -52,7 +52,7 @@ Prefer an alias for brevity when the context path is long:
 ```bynk,ignore
 consumes platform.time as Time
 // ...
-on call() -> Effect[Int] given Time.Clock {
+on call() -> Effect[Int] by Caller given Time.Clock {
   let t <- Time.Clock.now()
   t
 }

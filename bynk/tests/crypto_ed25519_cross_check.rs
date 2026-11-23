@@ -45,7 +45,7 @@ fn scratch(name: &str) -> PathBuf {
     dir
 }
 
-const PROBE: &str = "context x.probe\n\nconsumes bynk.crypto { Crypto }\n\nservice probe {\n\ton call() -> Effect[Int] given Crypto {\n\t\tEffect.pure(0)\n\t}\n}\n";
+const PROBE: &str = "context x.probe\n\nconsumes bynk.crypto { Crypto }\n\nservice probe {\n\ton call() -> Effect[Int] by Caller given Crypto {\n\t\tEffect.pure(0)\n\t}\n}\n";
 
 /// Run in the compiled output: sign `payload` under `pkcs8` with the binding,
 /// then verify `registry_sig` (made by the registry's key) under `public`, and

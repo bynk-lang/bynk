@@ -80,7 +80,7 @@ impl Run {
     }
 }
 
-const SERVICE: &str = "context app.m\n\ncapability Clock {\n  fn now() -> Effect[Int]\n}\n\nprovides Clock = Sys {\n  fn now() -> Effect[Int] {\n    1\n  }\n}\n\nservice s {\n  on call(x: Int) -> Effect[Int] given Clock {\n    let n <- Clock.now()\n    let y = x * 2 + 1\n    n + y\n  }\n}\n";
+const SERVICE: &str = "context app.m\n\ncapability Clock {\n  fn now() -> Effect[Int]\n}\n\nprovides Clock = Sys {\n  fn now() -> Effect[Int] {\n    1\n  }\n}\n\nservice s {\n  on call(x: Int) -> Effect[Int] by Caller given Clock {\n    let n <- Clock.now()\n    let y = x * 2 + 1\n    n + y\n  }\n}\n";
 
 const RESULTS: &str = "commons app.m\n\nfn half(n: Int) -> Result[Int, String] {\n  if n < 0 {\n    Err(\"negative\")\n  } else {\n    Ok(n / 2)\n  }\n}\n\nfn quarter(n: Int) -> Result[Int, String] {\n  let h = half(n)?\n  Ok(h / 2)\n}\n";
 

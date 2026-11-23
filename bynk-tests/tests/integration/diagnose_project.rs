@@ -70,7 +70,7 @@ provides Clock = FixedClock {
 }
 
 service charge {
-  on call(cents: Int) -> Effect[Result[Int, ()]] given Clock {
+  on call(cents: Int) -> Effect[Result[Int, ()]] by Caller given Clock {
     let t <- Clock.now()
     Ok(cents + t)
   }

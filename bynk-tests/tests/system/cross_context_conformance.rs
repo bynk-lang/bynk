@@ -129,13 +129,13 @@ const CALLEE: &str = r#"context app.b
 actor Legacy { auth = Foreign(secret = "LEGACY_CALL_KEY") }
 
 service ok {
-  on call(n: Int) -> Effect[Int] {
+  on call(n: Int) -> Effect[Int] by Caller {
     Effect.pure(n + 1)
   }
 }
 
 service boom {
-  on call(n: Int) -> Effect[Int] {
+  on call(n: Int) -> Effect[Int] by Caller {
     Effect.pure(n / 0)
   }
 }
@@ -157,7 +157,7 @@ event Placed = {
 }
 
 service place {
-  on call(n: Int) -> Effect[()] given Events {
+  on call(n: Int) -> Effect[()] by Caller given Events {
     Events.emit[Placed](Placed { n: n })
   }
 }

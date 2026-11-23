@@ -4,13 +4,13 @@ uses codes
 consumes lib { Code as LibCode }
 
 service echo {
-	on call(c: LibCode) -> Effect[LibCode] {
+	on call(c: LibCode) -> Effect[LibCode] by Caller {
 		Effect.pure(c)
 	}
 }
 
 service take {
-	on call(c: Code) -> Effect[Int] {
+	on call(c: Code) -> Effect[Int] by Caller {
 		Effect.pure(c.n)
 	}
 }

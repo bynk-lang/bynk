@@ -7213,7 +7213,7 @@ mod tests {
     #[test]
     fn a_capability_op_call_has_the_op_s_return_type() {
         let a = context(&format!(
-            "{CLOCK}\nservice probe {{\n  on call() -> Effect[Int] given Clock {{\n    Clock.now()\n  }}\n}}\n"
+            "{CLOCK}\nservice probe {{\n  on call() -> Effect[Int] by Caller given Clock {{\n    Clock.now()\n  }}\n}}\n"
         ));
         a.assert_clean();
         assert_eq!(a.type_at("demo.bynk", "Clock.now()"), "Effect[Int]");
@@ -7222,7 +7222,7 @@ mod tests {
     #[test]
     fn a_capability_op_called_with_an_extra_argument_is_an_arity_error() {
         let a = context(&format!(
-            "{CLOCK}\nservice probe {{\n  on call() -> Effect[Int] given Clock {{\n    Clock.now(1)\n  }}\n}}\n"
+            "{CLOCK}\nservice probe {{\n  on call() -> Effect[Int] by Caller given Clock {{\n    Clock.now(1)\n  }}\n}}\n"
         ));
         a.assert_reports("bynk.capability.op_arity");
     }
@@ -7230,7 +7230,7 @@ mod tests {
     #[test]
     fn a_capability_called_inside_a_pure_lambda_is_rejected() {
         let a = context(&format!(
-            "{CLOCK}\nservice probe {{\n  on call() -> Effect[Int] given Clock {{\n    \
+            "{CLOCK}\nservice probe {{\n  on call() -> Effect[Int] by Caller given Clock {{\n    \
              let f: (Int) -> Int = (n) => Clock.now()\n    Effect.pure(1)\n  }}\n}}\n"
         ));
         a.assert_reports("bynk.effect.capability_in_pure_context");
@@ -7284,8 +7284,8 @@ mod tests {
                         capability Store {\n  fn get() -> Effect[Box]\n  fn put(b: Box) -> Effect[Int]\n}\n\n\
                         provides Store = Shelf {\n  fn get() -> Effect[Box] {\n    Effect.pure(Box { a: Amount { cents: 1 } })\n  }\n\n  \
                         fn put(b: Box) -> Effect[Int] {\n    Effect.pure(b.a.cents)\n  }\n}\n\n\
-                        service quote {\n  on call() -> Effect[Box] {\n    Effect.pure(Box { a: Amount { cents: 1 } })\n  }\n}\n\n\
-                        service take {\n  on call(b: Box) -> Effect[Int] {\n    Effect.pure(b.a.cents)\n  }\n}\n";
+                        service quote {\n  on call() -> Effect[Box] by Caller {\n    Effect.pure(Box { a: Amount { cents: 1 } })\n  }\n}\n\n\
+                        service take {\n  on call(b: Box) -> Effect[Int] by Caller {\n    Effect.pure(b.a.cents)\n  }\n}\n";
 
     /// A `till` context consuming `shop`, declaring `decls`, with `body` as
     /// a service handler's body (given `shop.Store` when it calls it).
@@ -7297,7 +7297,7 @@ mod tests {
         };
         format!(
             "context till\n\nconsumes shop\n\n{decls}service total {{\n  \
-             on call() -> Effect[Int]{given} {{\n{body}\n  }}\n}}\n"
+             on call() -> Effect[Int]{given} by Caller {{\n{body}\n  }}\n}}\n"
         )
     }
 
@@ -7307,7 +7307,7 @@ mod tests {
     fn label_provider(max: u32) -> String {
         format!(
             "context shop\n\ntype Label = String where MaxLength({max})\n\n\
-             service label {{\n  on call() -> Effect[Result[Label, Int]] {{\n    Effect.pure(Ok(\"a\"))\n  }}\n}}\n"
+             service label {{\n  on call() -> Effect[Result[Label, Int]] by Caller {{\n    Effect.pure(Ok(\"a\"))\n  }}\n}}\n"
         )
     }
 
@@ -7349,14 +7349,14 @@ mod tests {
     fn opaque_provider(max: u32) -> String {
         format!(
             "context shop\n\ntype Tag = opaque String where MaxLength({max})\n\n\
-             service check {{\n  on call(t: Tag) -> Effect[Int] {{\n    Effect.pure(0)\n  }}\n}}\n"
+             service check {{\n  on call(t: Tag) -> Effect[Int] by Caller {{\n    Effect.pure(0)\n  }}\n}}\n"
         )
     }
 
     fn opaque_till(max: u32) -> String {
         format!(
             "context till\n\nconsumes shop\n\ntype Tag = opaque String where MaxLength({max})\n\n\
-             service total {{\n  on call(t: Tag) -> Effect[Int] {{\n    shop.check(t)\n  }}\n}}\n"
+             service total {{\n  on call(t: Tag) -> Effect[Int] by Caller {{\n    shop.check(t)\n  }}\n}}\n"
         )
     }
 
@@ -7381,12 +7381,12 @@ mod tests {
     #[test]
     fn equivalent_refinements_of_one_name_do_not_make_it_ambiguous() {
         let owner = "context shop\n\ntype Label = Int where Positive\n\n\
-                     service make {\n  on call() -> Effect[Result[Label, Int]] {\n    Effect.pure(Ok(1))\n  }\n}\n\n\
-                     service take {\n  on call(l: Label) -> Effect[Int] {\n    Effect.pure(0)\n  }\n}\n";
+                     service make {\n  on call() -> Effect[Result[Label, Int]] by Caller {\n    Effect.pure(Ok(1))\n  }\n}\n\n\
+                     service take {\n  on call(l: Label) -> Effect[Int] by Caller {\n    Effect.pure(0)\n  }\n}\n";
         let other = "context other\n\ntype Label = Int where Positive && NonNegative\n\n\
-                     service peek {\n  on call() -> Effect[Int] {\n    Effect.pure(0)\n  }\n}\n";
+                     service peek {\n  on call() -> Effect[Int] by Caller {\n    Effect.pure(0)\n  }\n}\n";
         let till = "context till\n\nconsumes shop\n\nconsumes other\n\n\
-                    service total {\n  on call() -> Effect[Int] {\n    \
+                    service total {\n  on call() -> Effect[Int] by Caller {\n    \
                     let r <- shop.make()\n    match r {\n      Ok(l) => shop.take(l)\n      Err(_) => Effect.pure(0)\n    }\n  }\n}\n";
         analyse(&[
             ("shop.bynk", owner),
@@ -7469,14 +7469,14 @@ mod tests {
     #[test]
     fn an_ambiguous_unexported_name_explains_its_rejection() {
         let other = "context depot\n\ntype Box = { label: String }\n\n\
-                     service quote {\n  on call() -> Effect[Box] {\n    Effect.pure(Box { label: \"x\" })\n  }\n}\n";
+                     service quote {\n  on call() -> Effect[Box] by Caller {\n    Effect.pure(Box { label: \"x\" })\n  }\n}\n";
         let a = analyse(&[
             ("shop.bynk", SHOP),
             ("depot.bynk", other),
             (
                 "till.bynk",
                 "context till\n\nconsumes shop\n\nconsumes depot\n\n\
-                 service total {\n  on call() -> Effect[Int] {\n    \
+                 service total {\n  on call() -> Effect[Int] by Caller {\n    \
                  let b <- shop.quote()\n    shop.take(b)\n  }\n}\n",
             ),
         ]);
@@ -7510,11 +7510,11 @@ mod tests {
         };
         let shop = pair(
             "shop",
-            "service quote {\n  on call() -> Effect[Box] {\n    Effect.pure(Box { a: Amount { cents: 1 } })\n  }\n}\n",
+            "service quote {\n  on call() -> Effect[Box] by Caller {\n    Effect.pure(Box { a: Amount { cents: 1 } })\n  }\n}\n",
         );
         let depot = pair(
             "depot",
-            "service store {\n  on call(b: Box) -> Effect[Int] {\n    Effect.pure(b.a.cents)\n  }\n}\n",
+            "service store {\n  on call(b: Box) -> Effect[Int] by Caller {\n    Effect.pure(b.a.cents)\n  }\n}\n",
         );
         let a = analyse(&[
             ("shop.bynk", &shop),
@@ -7524,7 +7524,7 @@ mod tests {
                 "context till\n\nconsumes shop\n\nconsumes depot\n\n\
                  type Amount = { dollars: Int }\n\n\
                  fn mine() -> Amount {\n  Amount { dollars: 1 }\n}\n\n\
-                 service total {\n  on call() -> Effect[Int] {\n    \
+                 service total {\n  on call() -> Effect[Int] by Caller {\n    \
                  let b <- shop.quote()\n    Effect.pure(1)\n  }\n}\n",
             ),
         ]);
@@ -7537,14 +7537,14 @@ mod tests {
     fn caller_box_differs_inside(ret: &str, value: &str) {
         let shop = format!(
             "context shop\n\ntype Box = {{ a: Int }}\n\n\
-             service quote {{\n  on call() -> Effect[{ret}] {{\n    Effect.pure({value})\n  }}\n}}\n"
+             service quote {{\n  on call() -> Effect[{ret}] by Caller {{\n    Effect.pure({value})\n  }}\n}}\n"
         );
         let a = analyse(&[
             ("shop.bynk", &shop),
             (
                 "till.bynk",
                 "context till\n\nconsumes shop\n\ntype Box = { label: String }\n\n\
-                 service total {\n  on call() -> Effect[Int] {\n    \
+                 service total {\n  on call() -> Effect[Int] by Caller {\n    \
                  let b <- shop.quote()\n    Effect.pure(1)\n  }\n}\n",
             ),
         ]);
@@ -7587,20 +7587,20 @@ mod tests {
             (
                 "shop.bynk",
                 "context shop\n\ntype Amount = { cents: Int }\n\ntype Box = { a: Amount }\n\n\
-                 service quote {\n  on call() -> Effect[Box] {\n    \
+                 service quote {\n  on call() -> Effect[Box] by Caller {\n    \
                  Effect.pure(Box { a: Amount { cents: 1 } })\n  }\n}\n",
             ),
             (
                 "depot.bynk",
                 "context depot\n\ntype Coins = { cents: Int }\n\ntype Box = { a: Coins }\n\n\
-                 service store {\n  on call(b: Box) -> Effect[Int] {\n    Effect.pure(b.a.cents)\n  }\n}\n",
+                 service store {\n  on call(b: Box) -> Effect[Int] by Caller {\n    Effect.pure(b.a.cents)\n  }\n}\n",
             ),
             (
                 "till.bynk",
                 "context till\n\nconsumes shop\n\nconsumes depot\n\n\
                  type Amount = { dollars: Int }\n\n\
                  fn mine() -> Amount {\n  Amount { dollars: 1 }\n}\n\n\
-                 service total {\n  on call() -> Effect[Int] {\n    \
+                 service total {\n  on call() -> Effect[Int] by Caller {\n    \
                  let b <- shop.quote()\n    depot.store(b)\n  }\n}\n",
             ),
         ]);

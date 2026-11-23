@@ -4314,7 +4314,7 @@ mod tests {
     // v0.123 (slice 2): a service renders its protocol header and route lines.
     #[test]
     fn describe_service_renders_routes() {
-        let src = "context demo.app\n\nservice greeter {\n  on call(name: String) -> Effect[String] {\n    Effect.pure(name)\n  }\n}\n";
+        let src = "context demo.app\n\nservice greeter {\n  on call(name: String) -> Effect[String] by Caller {\n    Effect.pure(name)\n  }\n}\n";
         let out = describe_symbol(src, "greeter").unwrap();
         assert!(out.contains("service greeter {"), "{out}");
         assert!(out.contains("on call"), "{out}");

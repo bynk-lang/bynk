@@ -4,7 +4,7 @@ uses rt.shapes
 consumes rt.provider
 
 service relay {
-  on call(t: Tree) -> Effect[Tree] {
+  on call(t: Tree) -> Effect[Tree] by Caller {
     let r <- rt.provider.trees(t)
     Effect.pure(r)
   }

@@ -11,19 +11,19 @@ consumes bynk.cloudflare { MySql, MySqlError, MySqlValue, MySqlRun }
 capability Legacy = MySql
 
 service add {
-	on call(name: String) -> Effect[Result[MySqlRun, MySqlError]] given Legacy {
+	on call(name: String) -> Effect[Result[MySqlRun, MySqlError]] by Caller given Legacy {
 		Legacy.run("insert into orders (name) values (?)", [MySqlText(name)])
 	}
 }
 
 service list {
-	on call() -> Effect[Result[String, MySqlError]] given Legacy {
+	on call() -> Effect[Result[String, MySqlError]] by Caller given Legacy {
 		Legacy.all("select id, name from orders where id > ?", [MySqlInteger(0)])
 	}
 }
 
 service find {
-	on call(id: Int) -> Effect[Result[Option[String], MySqlError]] given Legacy {
+	on call(id: Int) -> Effect[Result[Option[String], MySqlError]] by Caller given Legacy {
 		Legacy.first("select name from orders where id = ?", [MySqlInteger(id)])
 	}
 }

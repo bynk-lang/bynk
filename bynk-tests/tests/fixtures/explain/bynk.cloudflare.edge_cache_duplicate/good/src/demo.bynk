@@ -5,7 +5,7 @@ consumes bynk.cloudflare { EdgeCache }
 capability Edge = EdgeCache
 
 service probe {
-    on call() -> Effect[Bool] given Edge {
+    on call() -> Effect[Bool] by Caller given Edge {
         Edge.purge(["/a"])
     }
 }

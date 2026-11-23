@@ -49,7 +49,7 @@ service chat from websocket(in: Frame, out: Frame) {
 
 // Handlers declaring no `given` inherit the service's, which satisfies `warn`.
 service api given Logger, Audit {
-	on call(what: String) -> Effect[Int] {
+	on call(what: String) -> Effect[Int] by Caller {
 		let _ <- warn(what)
 		let n <- Audit.note(what)
 		Effect.pure(n)

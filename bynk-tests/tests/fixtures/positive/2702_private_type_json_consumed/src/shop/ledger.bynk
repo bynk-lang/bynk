@@ -4,7 +4,7 @@ uses labels
 consumes shop.order
 
 service name {
-  on call(t: Tag) -> Effect[String] {
+  on call(t: Tag) -> Effect[String] by Caller {
     t.name
   }
 }

@@ -211,7 +211,7 @@ event PaymentConfirmed = {
 }
 
 service markPaid {
-	on call(orderId: String) -> Effect[()] given Events {
+	on call(orderId: String) -> Effect[()] by Caller given Events {
 		Events.emit[PaymentConfirmed](PaymentConfirmed { orderId: orderId })
 	}
 }
@@ -1420,7 +1420,7 @@ embedded quote doubled.
 type Order = { id: Int, name: String, placed: Instant, note: Option[String] }
 
 service feed {
-	on call(min: Int) -> Effect[Result[List[Order], PgReadError]] given Main {
+	on call(min: Int) -> Effect[Result[List[Order], PgReadError]] by Caller given Main {
 		Main.select[Order]("FROM orders WHERE id > $1 ORDER BY id", [PgInteger(min)])
 	}
 }
@@ -2118,7 +2118,7 @@ time, so the SQL is still a constant:
 type Activity = { id: String, event: String, receivedAt: Int }
 
 service feed {
-	on call(repo: String) -> Effect[Result[List[Activity], SqlReadError]] given Orders {
+	on call(repo: String) -> Effect[Result[List[Activity], SqlReadError]] by Caller given Orders {
 		Orders.select[Activity]("FROM deliveries WHERE repo = ?1 LIMIT 50", [Text(repo)])
 	}
 }
@@ -2448,7 +2448,7 @@ context app.probe
 consumes bynk { Fetch, Request }
 
 service probe {
-	on call(url: String) -> Effect[String] given Fetch {
+	on call(url: String) -> Effect[String] by Caller given Fetch {
 		let res <- Fetch.send(Request {
 			method: Get,
 			url: url,
@@ -2476,7 +2476,7 @@ context app.probe
 consumes bynk { Fetch, Request, Method, FetchError }
 
 service probe {
-	on call(url: String) -> Effect[String] given Fetch {
+	on call(url: String) -> Effect[String] by Caller given Fetch {
 		let res <- Fetch.send(Request {
 			method: Get,
 			url: url,

@@ -14,7 +14,7 @@ fn Box.same(self) -> Effect[Int] {
 }
 
 service run {
-	on call(n: Int) -> Effect[Int] {
+	on call(n: Int) -> Effect[Int] by Caller {
 		let b = Box { n: n }
 		let r <- b.bump(1)
 		Effect.pure(r)

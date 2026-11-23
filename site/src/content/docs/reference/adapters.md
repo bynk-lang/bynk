@@ -172,7 +172,7 @@ store `Json.encode(entry)`, read back through `Json.decode[Entry]`:
 
 ```bynk,fragment
 service cache {
-  on call(key: String, e: Entry) -> Effect[Option[Entry]] given Kv {
+  on call(key: String, e: Entry) -> Effect[Option[Entry]] by Caller given Kv {
     let _ <- Kv.putTtl(key, Json.encode(e), 60)
     let stored <- Kv.get(key)
     match stored {
@@ -191,7 +191,7 @@ context cache.store {
 	consumes bynk.cloudflare { Kv }  // locks this deployment unit to cloudflare
 
 	service cache {
-		on call(key: String, value: String) -> Effect[Option[String]] given Kv {
+		on call(key: String, value: String) -> Effect[Option[String]] by Caller given Kv {
 			let previous <- Kv.get(key)
 			let _ <- Kv.put(key, value)
 			previous
@@ -227,7 +227,7 @@ context auth.sessions {
 	consumes tokens { Jwt }  // library adapter; bare `Jwt` in scope
 
 	service login {
-		on call() -> Effect[String] given Jwt, Logger {
+		on call() -> Effect[String] by Caller given Jwt, Logger {
 			let _ <- Logger.info("issuing token")
 			let token <- Jwt.sign(Claims { sub: "u1", exp: 0 })
 			token

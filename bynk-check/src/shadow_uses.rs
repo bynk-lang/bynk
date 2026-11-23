@@ -661,7 +661,7 @@ mod tests {
             (
                 "src/t/web.bynk",
                 "context t.web\n\nuses t.core\nuses t.model\n\ntype Repo = Int\n\n\
-                 service read {\n  on call(r: Run) -> Effect[Int] {\n    r.repo + 1\n  }\n}\n",
+                 service read {\n  on call(r: Run) -> Effect[Int] by Caller {\n    r.repo + 1\n  }\n}\n",
             ),
         ]);
         a.assert_reports("bynk.uses.name_conflict");

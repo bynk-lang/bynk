@@ -15,7 +15,7 @@ fn isAlpha(c: LibCode) -> Bool {
 }
 
 service check {
-	on call() -> Effect[Bool] {
+	on call() -> Effect[Bool] by Caller {
 		let t = Tagged { code: LibCode.Alpha, label: "a" }
 		Effect.pure(isAlpha(codeOf(t)))
 	}

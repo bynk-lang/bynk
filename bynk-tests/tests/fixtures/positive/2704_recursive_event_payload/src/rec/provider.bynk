@@ -8,13 +8,13 @@ event Planted = { tree: Tree }
 
 // A call argument and result of a recursive type: the `/_bynk/call/` decoders.
 service trees {
-  on call(t: Tree) -> Effect[Tree] {
+  on call(t: Tree) -> Effect[Tree] by Caller {
     Effect.pure(t)
   }
 }
 
 service gardener {
-  on call(t: Tree) -> Effect[()] given Events {
+  on call(t: Tree) -> Effect[()] by Caller given Events {
     let _ <- Events.emit[Planted](Planted { tree: t })
   }
 }

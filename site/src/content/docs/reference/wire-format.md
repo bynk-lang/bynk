@@ -197,13 +197,13 @@ type Line = {
 type Price = Decimal where Positive
 
 service cost {
-  on call(unit: Price) -> Effect[Result[Price, String]] {
+  on call(unit: Price) -> Effect[Result[Price, String]] by Caller {
     Ok(unit)
   }
 }
 
 service quote {
-  on call(line: Line, size: Qty) -> Effect[Result[Shape, String]] {
+  on call(line: Line, size: Qty) -> Effect[Result[Shape, String]] by Caller {
     Ok(Dot)
   }
 }
@@ -220,7 +220,7 @@ service who {
 }
 
 service ping {
-  on call() -> Effect[Result[(), String]] {
+  on call() -> Effect[Result[(), String]] by Caller {
     Ok(())
   }
 }

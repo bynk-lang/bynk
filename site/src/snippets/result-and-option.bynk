@@ -28,7 +28,7 @@ fn label(o: Option[Int]) -> String {
 Run calls `service playground`, which labels one present value and one absent one.
 ---
 service playground {
-  on call() -> Effect[List[String]] {
+  on call() -> Effect[List[String]] by Caller {
     [label(ok(3).ok()), label(empty())]
   }
 }

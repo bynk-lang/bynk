@@ -172,7 +172,7 @@ fn messages_bundle_diagnostic_present() {
 fn locale_bundle_ambiguity_diagnostic_present() {
     const MSGS_A: &str = "commons msgs_a\n\nuses bynk.locale\n\nmessages \"en\" @reference {\n  \"greeting\" => \"Hello\"\n}\n";
     const MSGS_B: &str = "commons msgs_b\n\nuses bynk.locale\n\nmessages \"en\" @reference {\n  \"farewell\" => \"Bye\"\n}\n";
-    const WEB: &str = "context web\n\nconsumes bynk { Locale }\nuses msgs_a\nuses msgs_b\n\nservice api {\n  on call() -> Effect[String] given Locale {\n    let tag <- Locale.current()\n    Effect.pure(tag)\n  }\n}\n";
+    const WEB: &str = "context web\n\nconsumes bynk { Locale }\nuses msgs_a\nuses msgs_b\n\nservice api {\n  on call() -> Effect[String] by Caller given Locale {\n    let tag <- Locale.current()\n    Effect.pure(tag)\n  }\n}\n";
 
     let (scratch, overlay) = setup_project(
         "locale_ambiguity",
@@ -208,7 +208,7 @@ fn locale_bundle_ambiguity_diagnostic_present() {
 /// and already ran this check unconditionally pre-repoint).
 #[test]
 fn event_subscription_diagnostic_present() {
-    const ORDER: &str = "context commerce.order\n\nexports transparent { PaymentConfirmed }\nconsumes bynk { Events }\n\nevent PaymentConfirmed = {\n  orderId: String,\n}\n\nservice markPaid {\n  on call(orderId: String) -> Effect[()] given Events {\n    Events.emit[PaymentConfirmed](PaymentConfirmed { orderId: orderId })\n  }\n}\n";
+    const ORDER: &str = "context commerce.order\n\nexports transparent { PaymentConfirmed }\nconsumes bynk { Events }\n\nevent PaymentConfirmed = {\n  orderId: String,\n}\n\nservice markPaid {\n  on call(orderId: String) -> Effect[()] by Caller given Events {\n    Events.emit[PaymentConfirmed](PaymentConfirmed { orderId: orderId })\n  }\n}\n";
     const NOTIFICATIONS: &str = "context commerce.notifications\n\nconsumes commerce.order\n\nservice OnPayment from Events(PaymentConfrimed) {\n  on event(e: PaymentConfrimed) -> Effect[()] {\n    ()\n  }\n}\n";
 
     let (scratch, overlay) = setup_project(
@@ -245,7 +245,7 @@ fn event_subscription_diagnostic_present() {
 /// slice took it away.
 #[test]
 fn platform_lock_diagnostic_stays_absent() {
-    const STORE: &str = "context cache.store\n\nconsumes bynk.cloudflare { Kv }\n\nservice cache {\n  on call(key: String, value: String) -> Effect[Option[String]] given Kv {\n    let previous <- Kv.get(key)\n    let _ <- Kv.put(key, value)\n    let _ <- Kv.delete(\"stale\")\n    previous\n  }\n}\n";
+    const STORE: &str = "context cache.store\n\nconsumes bynk.cloudflare { Kv }\n\nservice cache {\n  on call(key: String, value: String) -> Effect[Option[String]] by Caller given Kv {\n    let previous <- Kv.get(key)\n    let _ <- Kv.put(key, value)\n    let _ <- Kv.delete(\"stale\")\n    previous\n  }\n}\n";
 
     let (scratch, overlay) = setup_project("platform_lock", &[("src/cache/store.bynk", STORE)]);
 
@@ -273,7 +273,7 @@ fn platform_lock_diagnostic_stays_absent() {
 /// from `bynk-tests/tests/fixtures/negative/152_fn_type_in_service_sig`.
 #[test]
 fn function_type_boundary_diagnostic_present() {
-    const API: &str = "context hof.api\n\nservice runner {\n  on call(f: Int -> Int) -> Effect[Int] {\n    Effect.pure(0)\n  }\n}\n";
+    const API: &str = "context hof.api\n\nservice runner {\n  on call(f: Int -> Int) -> Effect[Int] by Caller {\n    Effect.pure(0)\n  }\n}\n";
 
     let (scratch, overlay) = setup_project("fn_boundary", &[("src/hof/api.bynk", API)]);
 
@@ -366,7 +366,7 @@ fn test_body_diagnostics_and_index_bindings_go_missing() {
 /// this path either before or after the relocation.
 #[test]
 fn secrets_computed_name_diagnostic_stays_absent() {
-    const PROBE: &str = "context net.probe\n\nconsumes bynk { Secrets }\n\nservice probe {\n  on call(key: String) -> Effect[Option[String]] given Secrets {\n    Secrets.get(key)\n  }\n}\n";
+    const PROBE: &str = "context net.probe\n\nconsumes bynk { Secrets }\n\nservice probe {\n  on call(key: String) -> Effect[Option[String]] by Caller given Secrets {\n    Secrets.get(key)\n  }\n}\n";
 
     let (scratch, overlay) =
         setup_project("secrets_computed_name", &[("src/net/probe.bynk", PROBE)]);

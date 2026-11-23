@@ -6,7 +6,7 @@ type Tree[A] =
 	| Node(left: Tree[A], value: A, right: Tree[A])
 
 service s {
-	on call(t: Tree[Int]) -> Effect[Int] {
+	on call(t: Tree[Int]) -> Effect[Int] by Caller {
 		Effect.pure(0)
 	}
 }

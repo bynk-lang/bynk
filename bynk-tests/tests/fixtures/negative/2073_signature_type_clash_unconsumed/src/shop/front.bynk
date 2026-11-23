@@ -7,7 +7,7 @@ consumes shop.order
 consumes shop.ledger
 
 service check {
-  on call(o: Order) -> Effect[String] {
+  on call(o: Order) -> Effect[String] by Caller {
     shop.ledger.take(o)
   }
 }

@@ -71,7 +71,7 @@ service support from email("support@shop.example") {
 }
 
 service order_count {
-  on call(n: Int) -> Effect[Int] {
+  on call(n: Int) -> Effect[Int] by Caller {
     Effect.pure(n)
   }
 }
@@ -115,7 +115,7 @@ service catch_all from email("*@shop.example") {
 }
 
 service price {
-  on call(n: Int) -> Effect[Int] {
+  on call(n: Int) -> Effect[Int] by Caller {
     Effect.pure(n)
   }
 }

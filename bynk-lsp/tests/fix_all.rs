@@ -54,7 +54,7 @@ fn handlers(given_a: &str, body_a: &str, given_b: &str, body_b: &str) -> String 
         ));
     }
     src.push_str(&format!(
-        "service one {{\n  on call(x: Int) -> Effect[Int]{given_a} {{\n{body_a}\n  }}\n}}\n\nservice two {{\n  on call(x: Int) -> Effect[Int]{given_b} {{\n{body_b}\n  }}\n}}\n"
+        "service one {{\n  on call(x: Int) -> Effect[Int]{given_a} by Caller {{\n{body_a}\n  }}\n}}\n\nservice two {{\n  on call(x: Int) -> Effect[Int]{given_b} {{\n{body_b}\n  }}\n}}\n"
     ));
     src
 }

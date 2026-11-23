@@ -674,7 +674,7 @@ fn spin(n: Int) -> Int {
 }
 
 service relay {
-  on call(url: String) -> Effect[Int] given Fetch {
+  on call(url: String) -> Effect[Int] by Caller given Fetch {
     let res <- Fetch.send(Request {
       method: Get,
       url: url,

@@ -196,7 +196,7 @@ fn round_trip_preserves_cross_context_capability_syntax() {
         \x20 }\n\
         }\n\n\
         service report {\n\
-        \x20 on call() -> Effect[Int] given Stamp {\n\
+        \x20 on call() -> Effect[Int] by Caller given Stamp {\n\
         \x20   let s <- Stamp.make()\n\
         \x20   s\n\
         \x20 }\n\

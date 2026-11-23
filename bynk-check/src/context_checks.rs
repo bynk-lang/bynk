@@ -2724,6 +2724,10 @@ fn check_missing_by(handler: &Handler, protocol: &ServiceProtocol, errors: &mut 
     if crate::actors::default_actor(protocol).is_some() {
         return;
     }
+    if matches!(protocol, ServiceProtocol::Call) {
+        errors.push(missing_by_on_call(handler));
+        return;
+    }
     // v0.103 (D-A): a WebSocket upgrade authenticates at the edge before the
     // connection is accepted — `on open` must name its actor, no anonymous upgrade.
     let (msg, note) = match protocol {
@@ -2739,6 +2743,27 @@ fn check_missing_by(handler: &Handler, protocol: &ServiceProtocol, errors: &mut 
     errors.push(
         CompileError::new("bynk.actor.missing_by_on_http", handler.span, msg).with_note(note),
     );
+}
+
+/// #3891: an `on call` handler states its actor, as an HTTP route does. The
+/// fix-it inserts `by Caller` (the former silent default: any consuming
+/// context) after the return type.
+fn missing_by_on_call(handler: &Handler) -> CompileError {
+    let at = handler.return_type.span().end;
+    CompileError::new(
+        "bynk.actor.missing_by_on_call",
+        handler.span,
+        "an `on call` handler must declare its actor with a `by` clause",
+    )
+    .with_note(
+        "`by Caller` admits any context that consumes this one; a refinement or a `Foreign` actor narrows it. \
+         Migrate a project with `bynk check --fix=bynk.actor.missing_by_on_call`",
+    )
+    .with_suggestion(
+        "add `by Caller`",
+        vec![(Span::new_in(handler.span.file, at, at), " by Caller".to_string())],
+        Applicability::MachineApplicable,
+    )
 }
 
 /// Once per context, after every actor declaration is read: the checks on foreign callers' secrets.
@@ -7632,7 +7657,7 @@ service Api {
 context demo
 
 service Api {
-  on call(ping: String) -> Effect[String] {
+  on call(ping: String) -> Effect[String] by Caller {
     Effect.pure(ping)
   }
 }

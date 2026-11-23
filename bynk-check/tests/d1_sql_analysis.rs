@@ -16,7 +16,7 @@ fn source(statements: &str) -> String {
         "context demo\n\nconsumes bynk.cloudflare {{ D1, SqlStatement, SqlValue, SqlError, SqlRun, SqlReadError }}\n\ncapability Orders = D1\n\n\
          type Order = {{ id: String, total: Int, note: Option[String] }}\n\n\
          const HIDDEN: String = \"SELECT id, total AS amount FROM orders\"\n\n\
-         service probe {{\n  on call(id: String) -> Effect[Bool] given Orders {{\n{statements}    true\n  }}\n}}\n"
+         service probe {{\n  on call(id: String) -> Effect[Bool] by Caller given Orders {{\n{statements}    true\n  }}\n}}\n"
     )
 }
 
@@ -305,7 +305,7 @@ fn given_fn_categories(test: &str, body: &str, called: bool) -> Vec<&'static str
         "context demo\n\nconsumes bynk.cloudflare {{ D1, SqlStatement, SqlValue, SqlError, SqlRun, SqlReadError }}\n\ncapability Orders = D1\n\n\
          const MISSPELT: String = \"SELECT id FROM orders WHERE stauts = ?1\"\n\n\
          fn lookup(id: String) -> Effect[Bool] given Orders {{\n{body}  true\n}}\n\n\
-         service probe {{\n  on call(id: String) -> Effect[Bool]{given} {{\n    {call}\n  }}\n}}\n"
+         service probe {{\n  on call(id: String) -> Effect[Bool]{given} by Caller {{\n    {call}\n  }}\n}}\n"
     );
     write("demo.bynk", &unit);
     write("migrations/demo-orders/0001_create.sql", MIGRATION);

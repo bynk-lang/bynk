@@ -57,7 +57,7 @@ pub fn source(platform: Platform) -> String {
         }
     }
     format!(
-        "context stdlib.scaffold\n\n{uses}{consumes}\nservice probe {{\n\ton call() -> Effect[Int] {{\n\t\tEffect.pure(0)\n\t}}\n}}\n"
+        "context stdlib.scaffold\n\n{uses}{consumes}\nservice probe {{\n\ton call() -> Effect[Int] by Caller {{\n\t\tEffect.pure(0)\n\t}}\n}}\n"
     )
 }
 

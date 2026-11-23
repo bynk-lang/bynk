@@ -324,7 +324,7 @@ fn new_entry_point_reports_errors_on_a_broken_project() {
 /// pin one layer up, at the `bynk-ide`/`bynk-lsp` call path.
 #[test]
 fn new_entry_point_reports_a_function_type_boundary_violation() {
-    const API: &str = "context hof.api\n\nservice runner {\n  on call(f: Int -> Int) -> Effect[Int] {\n    Effect.pure(0)\n  }\n}\n";
+    const API: &str = "context hof.api\n\nservice runner {\n  on call(f: Int -> Int) -> Effect[Int] by Caller {\n    Effect.pure(0)\n  }\n}\n";
     let (root, overlay) = setup_project("fn_boundary", &[("src/hof/api.bynk", API)]);
     let roots = Roots::Single(root);
 
@@ -396,7 +396,7 @@ event PaymentConfirmed = {
 }
 
 service markPaid {
-  on call(orderId: String) -> Effect[()] given Events {
+  on call(orderId: String) -> Effect[()] by Caller given Events {
     Events.emit[PaymentConfirmed](PaymentConfirmed { orderId: orderId, region: "US" })
   }
 }

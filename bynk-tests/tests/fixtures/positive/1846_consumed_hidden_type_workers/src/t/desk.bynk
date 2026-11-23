@@ -8,7 +8,7 @@ consumes t.vault as Vault
 type Code = String where NonEmpty
 
 service probe {
-  on call(c: Code) -> Effect[Option[Code]] {
+  on call(c: Code) -> Effect[Option[Code]] by Caller {
     let t <- Vault.fetch()
     Effect.pure(if t.label == "vault" { Some(c) } else { None })
   }

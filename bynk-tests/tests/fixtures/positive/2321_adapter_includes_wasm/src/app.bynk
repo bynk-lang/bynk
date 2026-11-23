@@ -3,7 +3,7 @@ context app
 consumes math { Adder }
 
 service sum {
-	on call(a: Int, b: Int) -> Effect[Int] given Adder {
+	on call(a: Int, b: Int) -> Effect[Int] by Caller given Adder {
 		let s <- Adder.add(a, b)
 		s
 	}

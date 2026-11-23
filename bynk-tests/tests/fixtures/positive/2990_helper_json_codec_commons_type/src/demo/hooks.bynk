@@ -3,7 +3,7 @@ context demo.hooks
 uses demo.types
 
 service echo {
-	on call(u: UserRef) -> Effect[String] {
+	on call(u: UserRef) -> Effect[String] by Caller {
 		u.login
 	}
 }

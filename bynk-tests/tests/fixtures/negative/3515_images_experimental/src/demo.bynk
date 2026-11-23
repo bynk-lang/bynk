@@ -5,7 +5,7 @@ context demo
 consumes bynk.cloudflare { Images, TransformOptions, OutputOptions, ImageFormat }
 
 service s {
-	on call(image: Bytes) -> Effect[Int] given Images {
+	on call(image: Bytes) -> Effect[Int] by Caller given Images {
 		let r <- Images.transform(image, TransformOptions {}, OutputOptions { format: ImageFormat.Png })
 		match r {
 			Ok(img) => Effect.pure(img.body.length()),

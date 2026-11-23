@@ -561,8 +561,8 @@ fn book_examples_are_canonically_formatted() {
 #[test]
 fn project_blocks_compile_together() {
     let words = "commons words\n\nfn greet(name: String) -> String {\n\t\"hello, \\(name)\"\n}\n";
-    let inner = "context inner\n\nuses words\n\nservice hello {\n\ton call(name: String) -> Effect[String] {\n\t\tgreet(name)\n\t}\n}\n";
-    let outer = "context outer\n\nconsumes inner\n\nservice relay {\n\ton call(name: String) -> Effect[String] {\n\t\tlet said <- inner.hello(name)\n\t\tsaid\n\t}\n}\n";
+    let inner = "context inner\n\nuses words\n\nservice hello {\n\ton call(name: String) -> Effect[String] by Caller {\n\t\tgreet(name)\n\t}\n}\n";
+    let outer = "context outer\n\nconsumes inner\n\nservice relay {\n\ton call(name: String) -> Effect[String] by Caller {\n\t\tlet said <- inner.hello(name)\n\t\tsaid\n\t}\n}\n";
 
     assert_eq!(compile_files(&[words, inner, outer], "selftest-ok"), Ok(()));
     assert!(
