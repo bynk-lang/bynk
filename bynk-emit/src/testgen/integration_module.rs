@@ -14,6 +14,59 @@ use bynk_check::test_suites::{self};
 use bynk_ts::{SourceMapBuilder, TsDecl, TsExpr, TsProgram, TsStmt};
 use std::sync::Arc;
 
+/// #2073: destructure, from each participant's namespace, the types the lowered case or a helper
+/// names. The names are read off the trees the text was printed from (1B.3c), with every
+/// participant type `provided` so that one spelled like a global (`Request`) is still found.
+fn destructure_named_participant_types(
+    case_out: &mut String,
+    participant_types: &[(String, Vec<String>)],
+    trees: &[&[TsStmt]],
+    unit_tables: &HashMap<String, UnitTable>,
+) {
+    let is_participant_type = |n: &str| {
+        participant_types
+            .iter()
+            .any(|(_, names)| names.iter().any(|m| m == n))
+    };
+    // The walk reports a name only where a node uses it, so a participant type named inside opaque
+    // text (a `Raw` statement) would not be destructured, and the case would fail to compile. The
+    // lowering emits none today; this fails loudly, in tests, if that changes.
+    debug_assert!(
+        trees.iter().flat_map(|s| s.iter()).all(|stmt| {
+            stmt.raw_text().is_none_or(|text| {
+                !participant_types
+                    .iter()
+                    .flat_map(|(_, names)| names)
+                    .any(|n| text.contains(n.as_str()))
+            })
+        }),
+        "a raw statement in a lowered case names a participant type, which the tree walk cannot see"
+    );
+    let used: HashSet<String> = trees
+        .iter()
+        .flat_map(|stmts| bynk_ts::unbound_names_in(stmts, is_participant_type))
+        .collect();
+    for (p, names) in participant_types {
+        let named: Vec<String> = names
+            .iter()
+            .filter(|n| used.contains(*n))
+            .cloned()
+            .collect();
+        if named.is_empty() {
+            continue;
+        }
+        let Some(t) = unit_tables.get(p) else {
+            continue;
+        };
+        let type_names = aliased_types(t, |n| named.contains(n));
+        crate::testgen::case_body::extend_printed_at(
+            case_out,
+            emit_ns_destructure(&test_ns(p), &named, &type_names),
+            2,
+        );
+    }
+}
+
 /// Emit a single integration-test module plus its [`RunnableTest`] pointer.
 /// The module imports each participant's workers-mode handler namespace (for
 /// serialise/deserialise) and Worker entry (for dispatch), builds an in-process
@@ -512,7 +565,33 @@ pub(super) fn emit_integration_module(
         }
         // #2137: each case's harness clock starts at the epoch.
         case_out.push_str("    __bynkClockNow = 0;\n");
-        case_out.push_str("    const deps = __makeHarness();\n");
+        // #3147: a case that peeks at D1 holds the handles on `deps` (`deps.db`), so `deps` is
+        // declared `any`. Typing the body comes first: the declaration is written once, knowing.
+        // #1855: the lowering reads the case's checked types (a literal at a
+        // refined record field is branded only when its type says so), so
+        // type the body here as the check pass did, into throwaway sinks.
+        let mut throwaway_errors: Vec<CompileError> = Vec::new();
+        let mut throwaway_refs = RefSink::new();
+        (typed.expr_types, typed.callees) = test_suites::typecheck_integration_case_body(
+            participants,
+            view,
+            input.suite_fns,
+            case,
+            cross_context,
+            unit_tables,
+            &mut throwaway_errors,
+            &mut throwaway_refs,
+            tys,
+        );
+        let peeks_d1 = typed
+            .callees
+            .values()
+            .any(|c| matches!(c, bynk_check::checker::Callee::D1Peek { .. }));
+        case_out.push_str(if peeks_d1 {
+            "    const deps: any = __makeHarness();\n"
+        } else {
+            "    const deps = __makeHarness();\n"
+        });
         // #2024: every name this scaffold binds in the case's scope, so the
         // body's lowering renames a `let` that would redeclare one.
         let mut harness_bound: HashSet<String> = HashSet::from(["deps".to_string()]);
@@ -594,25 +673,9 @@ pub(super) fn emit_integration_module(
             harness_bound.extend(names.iter().cloned());
             participant_types.push((bynk_check::firstparty::CLOUDFLARE_UNIT.to_string(), names));
         }
-        // #1855: the lowering reads the case's checked types (a literal at a
-        // refined record field is branded only when its type says so), so
-        // type the body here as the check pass did, into throwaway sinks.
-        let mut throwaway_errors: Vec<CompileError> = Vec::new();
-        let mut throwaway_refs = RefSink::new();
-        (typed.expr_types, typed.callees) = test_suites::typecheck_integration_case_body(
-            participants,
-            view,
-            input.suite_fns,
-            case,
-            cross_context,
-            unit_tables,
-            &mut throwaway_errors,
-            &mut throwaway_refs,
-            tys,
-        );
         let roots_mark = runtime_use.json_codec_roots_len();
         // #2834: the suite's helpers, declared ahead of the body.
-        let helper_src = suite_fn_decls(
+        let helper = suite_fn_decls(
             input.suite_fns,
             test_suites::integration_resolved(view, cross_context, test_suites::SuiteItems::NONE),
             participants.first().and_then(|p| unit_tables.get(p)),
@@ -621,7 +684,7 @@ pub(super) fn emit_integration_module(
             &mut harness_bound,
             tys,
         );
-        case_out.push_str(&helper_src);
+        case_out.push_str(&helper.text);
         // #1875 review: the check pass accepted this body from the same
         // inputs, so an error here means the two have drifted, and the
         // lowering would silently fall back to untyped output.
@@ -635,19 +698,7 @@ pub(super) fn emit_integration_module(
                 .map(|e| e.category)
                 .collect::<Vec<_>>()
         );
-        if typed
-            .callees
-            .values()
-            .any(|c| matches!(c, bynk_check::checker::Callee::D1Peek { .. }))
-        {
-            // #3147: the case's handles are held on `deps` (`deps.db`).
-            case_out = case_out.replacen(
-                "    const deps = __makeHarness();\n",
-                "    const deps: any = __makeHarness();\n",
-                1,
-            );
-        }
-        let (body_src, body_smb) = case_body::lower_integration_case_body(
+        let body = case_body::lower_integration_case_body(
             &case.body,
             &mut typed,
             cross_context,
@@ -669,35 +720,21 @@ pub(super) fn emit_integration_module(
             runtime_use,
             roots_mark,
         ));
-        for (p, names) in &participant_types {
-            let named: Vec<String> = names
-                .iter()
-                // A helper may name a participant's type though no case does.
-                .filter(|n| names_ident(&body_src, n) || names_ident(&helper_src, n))
-                .cloned()
-                .collect();
-            if named.is_empty() {
-                continue;
-            }
-            let Some(t) = unit_tables.get(p) else {
-                continue;
-            };
-            let type_names = aliased_types(t, |n| named.contains(n));
-            crate::testgen::case_body::extend_printed_at(
-                &mut case_out,
-                emit_ns_destructure(&test_ns(p), &named, &type_names),
-                2,
-            );
-        }
+        destructure_named_participant_types(
+            &mut case_out,
+            &participant_types,
+            &[&body.stmts, &helper.stmts],
+            unit_tables,
+        );
         let src_id = map.add_source(input.map_source.clone(), input.source.to_string());
         let body_base = case_out.len();
-        for line in body_src.lines() {
+        for line in body.text.lines() {
             case_out.push_str("    ");
             case_out.push_str(line);
             case_out.push('\n');
         }
         let mut case_smb = SourceMapBuilder::new();
-        case_smb.merge(&body_smb, &body_src, &case_out, body_base, 0);
+        case_smb.merge(&body.smb, &body.text, &case_out, body_base, 0);
         let retries = if remote.is_some() {
             ", retries: __bynkRetries"
         } else {

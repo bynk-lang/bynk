@@ -18,7 +18,9 @@ use bynk_syntax::ast::{Block, TypeRef};
 use crate::emitter::ctx::{BodyMode, ModuleCtx, TestShared, UnitFacts};
 use crate::emitter::lower_call::codec_statics::eval_value_line;
 use crate::emitter::lower_ctx::LowerCtx;
-use crate::emitter::lower_stmt::{emit_block_as_function_body_with_return, emit_statement};
+use crate::emitter::lower_stmt::{
+    emit_block_as_function_body_with_return, emit_statement, emit_statement_nodes,
+};
 use crate::emitter::{Pre, RuntimeUse};
 use bynk_ts::SourceMapBuilder;
 
@@ -181,6 +183,15 @@ pub fn lower_test_case_body_reporting(
     (out, smb.into_inner())
 }
 
+/// A lowered integration case body: its text, the source map recorded against that text, and the
+/// statements the text was printed from (1B.3c: the harness decides what the body names from the
+/// tree, not by lexing the text).
+pub struct LoweredCaseBody {
+    pub text: String,
+    pub smb: SourceMapBuilder,
+    pub stmts: Vec<bynk_ts::TsStmt>,
+}
+
 /// v0.16: lower an integration test case body. Like [`lower_test_case_body`],
 /// but in **workers** mode and from a synthetic harness root: entry calls
 /// (`ctx.service(args)`) are cross-context calls that lower to `callService(
@@ -207,8 +218,10 @@ pub fn lower_integration_case_body(
     // #2138 (track §3.6): a remote build wraps each replayable segment in a
     // `__bynkSettle` retry ([`settle_segments`]).
     settle: bool,
-) -> (String, SourceMapBuilder) {
+) -> LoweredCaseBody {
     let mut out = String::new();
+    // The statements `out` was printed from, for the caller's name walk.
+    let mut stmts: Vec<bynk_ts::TsStmt> = Vec::new();
     let smb = RefCell::new(SourceMapBuilder::new());
     let kinds: Vec<SettleKind> = block
         .statements
@@ -244,7 +257,7 @@ pub fn lower_integration_case_body(
         cx.harness_bound = harness_bound;
         for stmt in &block.statements {
             let start = out.len();
-            emit_statement(&mut out, stmt, &mut cx, 0);
+            emit_statement_nodes(&mut out, &mut stmts, stmt, &mut cx, 0);
             bounds.push((start, out.len()));
             binds.push(match stmt {
                 // #2640: a `par` block binds each of its `let` names.
@@ -284,17 +297,24 @@ pub fn lower_integration_case_body(
         cx.record_span(out.len(), block.tail.span);
         let mut pre = Pre::new();
         let tail = pre.lower_node(&block.tail, &mut cx);
-        extend_printed_at(&mut out, discarded_tail(&pre, tail), 0);
+        let tail_stmts = discarded_tail(&pre, tail);
+        stmts.extend(tail_stmts.iter().cloned());
+        extend_printed_at(&mut out, tail_stmts, 0);
     }
     if settle {
         // The rewrite moves the text, so the source map no longer fits it; a
         // remote build is not one an editor steps through.
-        return (
-            settle_segments(&out, &bounds, &kinds, &binds),
-            SourceMapBuilder::new(),
-        );
+        return LoweredCaseBody {
+            text: settle_segments(&out, &bounds, &kinds, &binds),
+            smb: SourceMapBuilder::new(),
+            stmts,
+        };
     }
-    (out, smb.into_inner())
+    LoweredCaseBody {
+        text: out,
+        smb: smb.into_inner(),
+        stmts,
+    }
 }
 
 /// A test case's tail, evaluated and discarded: the statements it hoisted, then `void (<tail>);`.

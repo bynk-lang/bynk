@@ -300,8 +300,8 @@ pub fn closure_files(reached: &BTreeSet<(String, String)>) -> Vec<(PathBuf, Stri
 }
 
 /// The runtime module an `import … from "<relative>.ts";` line of `module`'s source names, resolved
-/// against the module's own directory: `./result.ts` from `storage`, `../storage.ts` and
-/// `./pglite.ts` from `testing/bindings`.
+/// against the module's own directory: `./result.ts` from `storage`, and `../storage.ts` from
+/// `testing/bindings`.
 fn imported_module(module: &str, line: &str) -> Option<&'static str> {
     let spec = line
         .rsplit_once('"')

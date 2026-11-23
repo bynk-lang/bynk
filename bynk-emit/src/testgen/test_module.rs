@@ -1105,7 +1105,8 @@ pub(super) fn event_delivery_helpers(
 ) -> String {
     use bynk_syntax::ast::ServiceProtocol;
     let ns = test_ns(target_name);
-    let mut out = String::new();
+    // The per-service helpers; the counter they share is declared ahead of them once known.
+    let mut helpers = String::new();
     let mut counts = false;
     for svc in services {
         let Some(decl) = unit_tables
@@ -1159,19 +1160,21 @@ pub(super) fn event_delivery_helpers(
                 }
                 None => "envelope".to_string(),
             };
-            out.push_str(&format!(
+            helpers.push_str(&format!(
                 "function __bynkEvent_{svc}(payload: unknown, envelope: unknown, deps: unknown) {{\n  const env = {env};\n  return {ns}.{svc}.event(payload as never, env as never, deps as never);\n}}\n"
             ));
         } else {
             // The handler cannot observe an envelope, so a case's own is dropped.
-            out.push_str(&format!(
+            helpers.push_str(&format!(
                 "function __bynkEvent_{svc}(payload: unknown, _envelope: unknown, deps: unknown) {{\n  return {ns}.{svc}.event(payload as never, deps as never);\n}}\n"
             ));
         }
     }
+    let mut out = String::new();
     if counts {
-        out.insert_str(0, "let __bynkEventSeq = 0;\n");
+        out.push_str("let __bynkEventSeq = 0;\n");
     }
+    out.push_str(&helpers);
     out
 }
 

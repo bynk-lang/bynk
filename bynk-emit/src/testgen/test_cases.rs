@@ -427,6 +427,15 @@ pub(super) fn suite_late_codecs(
     reindent_by(&printed, "    ")
 }
 
+/// A suite's declarations as `suite_fn_decls` builds them: the statements, and the text they print
+/// to, indented for a runner's body (1B.3c: a caller that asks what the declarations name reads
+/// the statements).
+#[derive(Default)]
+pub(super) struct SuiteDecls {
+    pub(super) text: String,
+    pub(super) stmts: Vec<TsStmt>,
+}
+
 /// #2834: the suite's helper `fn`s as local function declarations, for a runner
 /// to splice in ahead of its body. Each runner declares its own suite's helpers,
 /// after the scope setup, so a helper sees the same unqualified target names a
@@ -442,9 +451,9 @@ pub(super) fn suite_fn_decls(
     runtime_use: &RuntimeUse,
     bound: &mut HashSet<String>,
     tys: &Arc<Types>,
-) -> String {
+) -> SuiteDecls {
     if suite_fns.is_empty() {
-        return String::new();
+        return SuiteDecls::default();
     }
     let mut errs: Vec<CompileError> = Vec::new();
     // The fixtures are constants in the view the helpers are checked in.
@@ -495,26 +504,23 @@ pub(super) fn suite_fn_decls(
         typed.consts.insert(c.name.name.clone(), c.clone());
         bound.insert(c.name.name.clone());
     }
-    let mut out = String::new();
+    let mut stmts: Vec<TsStmt> = Vec::new();
     if !suite_fns.types.is_empty() || !suite_fns.consts.is_empty() {
-        let decls = emitter::emit_suite_decls(
+        stmts.extend(emitter::emit_suite_decls(
             suite_fns.types,
             suite_fns.consts,
             typed,
             &runtime_use.json_codec_qual(),
             runtime_use,
-        );
-        let mut printed = String::new();
-        case_body::extend_printed_at(&mut printed, decls, 0);
-        out.push_str(&reindent_by(&printed, "    "));
+        ));
     }
     // #2841: each fixture is a local name for its file's module-level constant.
     for f in suite_fns.fixtures {
         bound.insert(f.name.name.clone());
-        out.push_str(&format!(
-            "    const {}: string = {};\n",
-            f.name.name,
-            fixture_ident(&f.path)
+        stmts.push(crate::ts_build::const_typed(
+            f.name.name.clone(),
+            TsType::named("string"),
+            crate::ts_build::ident(fixture_ident(&f.path)),
         ));
     }
     for f in suite_fns.fns {
@@ -522,11 +528,13 @@ pub(super) fn suite_fn_decls(
             continue;
         };
         bound.insert(name.name.clone());
-        let stmts = emitter::emit_suite_fn(f, typed, runtime_use);
-        let printed: String = stmts.iter().map(|s| bynk_ts::print_stmt(s, 0)).collect();
-        out.push_str(&reindent_by(&printed, "    "));
+        stmts.extend(emitter::emit_suite_fn(f, typed, runtime_use));
     }
-    out
+    let printed: String = stmts.iter().map(|s| bynk_ts::print_stmt(s, 0)).collect();
+    SuiteDecls {
+        text: reindent_by(&printed, "    "),
+        stmts,
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -655,15 +663,18 @@ pub(super) fn emit_test_case_function(
     {
         let mut helper_view = helper_view;
         test_suites::register_call_record_types(&mut helper_view, target_name, unit_tables);
-        out.push_str(&suite_fn_decls(
-            suite_fns,
-            helper_view,
-            unit_tables.get(target_name),
-            &mut typed,
-            runtime_use,
-            &mut harness_bound,
-            tys,
-        ));
+        out.push_str(
+            &suite_fn_decls(
+                suite_fns,
+                helper_view,
+                unit_tables.get(target_name),
+                &mut typed,
+                runtime_use,
+                &mut harness_bound,
+                tys,
+            )
+            .text,
+        );
     }
     let cross = bynk_check::resolver::CrossContextInfo::default();
     let test_services: HashSet<String> = unit_tables

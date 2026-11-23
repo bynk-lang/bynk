@@ -914,6 +914,22 @@ pub(crate) fn emit_statement(out: &mut String, stmt: &Statement, cx: &mut LowerC
     render(&body, out, indent, cx);
 }
 
+/// [`emit_statement`] that also hands back the statements it printed, for a caller that decides
+/// from the tree it built and not from the text (the harness: which participant types a case
+/// names, 1B.3c).
+pub(crate) fn emit_statement_nodes(
+    out: &mut String,
+    nodes: &mut Vec<bynk_ts::TsStmt>,
+    stmt: &Statement,
+    cx: &mut LowerCtx,
+    indent: usize,
+) {
+    let mut body = Body::new();
+    statement(&mut body, stmt, cx);
+    render(&body, out, indent, cx);
+    nodes.extend(body.into_stmts());
+}
+
 fn statement(body: &mut Body, stmt: &Statement, cx: &mut LowerCtx) {
     // Slice 1 (ADR 0103 D2): every generated line this statement emits — including
     // the multi-line `?` expansion (temp / Err-guard / unwrap) — anchors to the

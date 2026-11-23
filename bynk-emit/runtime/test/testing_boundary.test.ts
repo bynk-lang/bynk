@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // 1B.3b (#4047, Decision D): a test double is a `makeIntegration*` factory, and it lives under
@@ -19,12 +19,13 @@ function typescriptFiles(dir: string): string[] {
   });
 }
 
-const DOUBLE = /^export (?:async )?function (makeIntegration\w+)/gm;
+// A double is exported as a function or as a `const` (an arrow or a bound function).
+const DOUBLE = /^export (?:(?:async )?function|const) (makeIntegration\w+)/gm;
 
 test("no production runtime module defines a makeIntegration* test double", () => {
   const offenders: string[] = [];
   for (const file of typescriptFiles(src)) {
-    if (file.includes(`${join(src, "testing")}`)) continue;
+    if (file.startsWith(join(src, "testing") + sep)) continue;
     for (const m of readFileSync(file, "utf8").matchAll(DOUBLE)) {
       offenders.push(`${file.slice(src.length + 1)}: ${m[1]}`);
     }
