@@ -7,6 +7,7 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.640.56** | Internal restructuring: the test harness decides which participant types a case names from the statements it built, and builds a `SignedCookie` actor's `Cookie` header as a value, instead of lexing and patching emitted TypeScript; no emitted output changes |
 | **v0.640.55** | Internal restructuring: the last predicate, call and cast text in the emitter is built as nodes; no behaviour changes |
 | **v0.640.54** | Internal restructuring: the integration-test doubles (`makeIntegration*`) are no longer in the shipped `storage`, `agent` and `vectorize` runtime modules, so a build's `storage` module is about 670 lines smaller; the doubles are imported from `testing/bindings` and `testing/pglite`, and no production emission changes |
 | **v0.640.53** | Internal restructuring: a record field's wire default is built from its `DefaultValue` tree and the empty `deps` object prints as `{}`; no behaviour changes |
