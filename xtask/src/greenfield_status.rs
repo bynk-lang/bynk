@@ -1966,8 +1966,9 @@ fn codegen_family_files(root: &Path) -> Vec<(PathBuf, String)> {
     files.extend(
         rust_files_relative(&root.join("bynk-driver/src"))
             .into_iter()
-            .filter(|(p, _)| is_moved_project_file(p) && !is_family_test_file(p)),
+            .filter(|(p, _)| is_moved_project_file(p)),
     );
+    files.retain(|(p, _)| !is_family_test_file(p));
     files
 }
 
@@ -1975,8 +1976,8 @@ fn codegen_family_files(root: &Path) -> Vec<(PathBuf, String)> {
 /// directory)? Such a file is test code throughout, so the probes that read the emitter's
 /// production source skip it, as `module_lines` does. Without this, moving a module's
 /// tests out to `foo/tests.rs` would raise `ts_writes` with no production line changed.
-/// Applied to the driver half only: skipping `bynk-emit`'s whole test files would also
-/// move the emitter's own readings (`ts_writes` 464 to 462, `ts_any` 24 to 21).
+/// Applied to both halves: counting `bynk-emit`'s whole test files as production read
+/// `ts_writes` 464 and `ts_any` 24 where the production lines are 462 and 21.
 fn is_family_test_file(rel: &Path) -> bool {
     crate::module_lines::is_whole_test_file(&rel.to_string_lossy().replace('\\', "/"))
 }
