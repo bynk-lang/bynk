@@ -30,13 +30,16 @@ function fileFor(pathname) {
   return null;
 }
 
-/** `_redirects`' exact rules (no splats), source path → destination. */
+/** `_redirects`' exact 3xx rules (no splats), source path → destination. A
+ * rule with no status is a 301; a 404 or 410 rule forwards nothing. */
 const redirects = new Map();
 const redirectsFile = path.join(dist, "_redirects");
 if (fs.existsSync(redirectsFile)) {
   for (const line of fs.readFileSync(redirectsFile, "utf8").split("\n")) {
-    const [from, to] = line.trim().split(/\s+/);
-    if (from?.startsWith("/") && !from.includes("*") && to) redirects.set(from, to);
+    const [from, to, status = "301"] = line.trim().split(/\s+/);
+    if (from?.startsWith("/") && !from.includes("*") && to && /^3\d\d$/.test(status)) {
+      redirects.set(from, to);
+    }
   }
 }
 
