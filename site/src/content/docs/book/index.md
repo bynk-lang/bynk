@@ -4,7 +4,7 @@ title: The Bynk Book
 > ⚠️ **Bynk is pre-1.0 (currently v0.640) and under active development.**
 > The language changes in small, spec-first increments. This book documents
 > **what compiles today**; planned features are marked as planned rather than
-> described as if they exist. See [Versioning & roadmap](/book/about/versioning-and-roadmap/).
+> described as if they exist. See [Versioning & roadmap](/project/versioning-and-roadmap/).
 
 Welcome to the official guide and reference for **Bynk** — a statically typed,
 architecture-first language that compiles to typed TypeScript for Cloudflare
@@ -35,7 +35,7 @@ If you are not sure where to start:
   work through [Learn Bynk](/book/tutorials/first-program/) in order.
 - **Coming from TypeScript?** Read
   [Coming from TypeScript](/book/introduction/coming-from-typescript/).
-- **Evaluating Bynk?** Read [Why Bynk exists](/book/about/why-bynk-exists/),
+- **Evaluating Bynk?** Read [Why Bynk exists](/book/introduction/what-is-bynk/#why-bynk-exists),
   then [Bynk compared to TypeScript](/book/concepts/about/bynk-compared-to-typescript/).
 - **Have a specific task?** Go to the [Guides](/book/guides/).
 

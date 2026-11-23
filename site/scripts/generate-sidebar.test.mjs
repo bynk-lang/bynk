@@ -167,3 +167,34 @@ test("the second tree's contents are checked against its own pages", () => {
   assert.deepEqual(report.unlisted, ["spec/index.md"]);
   assert.deepEqual(report.missing, []);
 });
+
+// Slice 13: the Project pages are a third tree, routed under /project/, with no
+// front page of their own (no prefix chapter).
+const PROJECT = TREES.find((t) => t.name === "Project");
+const PROJECT_PAGES = ["versioning-and-roadmap.md", "contributing/index.md", "contributing/testing.md"];
+const PROJECT_CONTENTS = `# Summary
+
+# Project
+
+- [Versioning & roadmap](versioning-and-roadmap.md)
+
+# Contributing
+
+- [Contributing](contributing/index.md)
+  - [Testing](contributing/testing.md)
+`;
+
+test("the Project tree routes its pages under /project/, without a front page", () => {
+  const sidebar = buildSidebar(PROJECT_CONTENTS, PROJECT_PAGES, PROJECT);
+  assert.deepEqual(sidebar[0], {
+    label: "Project",
+    items: [{ label: "Versioning & roadmap", link: "/project/versioning-and-roadmap/" }],
+  });
+  assert.deepEqual(sidebar[1].items, [
+    { label: "Overview", link: "/project/contributing/" },
+    { label: "Testing", link: "/project/contributing/testing/" },
+  ]);
+  const report = completeness(PROJECT_CONTENTS, [...PROJECT_PAGES, "contributing/new.md"], PROJECT.base);
+  assert.deepEqual(report.unlisted, ["contributing/new.md"]);
+  assert.deepEqual(report.listedTwice, []);
+});

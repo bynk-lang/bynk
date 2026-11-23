@@ -41,7 +41,9 @@ intent only, and a merge-time stamp assigns the numbers in merge order. See
 
 ## Developing
 
-Build and layout are described in the [README](README.md#developing). Before you
+Build and layout are described in the [README](README.md#developing), and the
+compiler's architecture, its test fixtures and how the docs are built in the
+[contributor pages](https://bynk-lang.org/project/contributing/). Before you
 push, run the CI gates locally:
 
 ```sh

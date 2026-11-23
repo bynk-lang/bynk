@@ -82,6 +82,15 @@ Workers). A binding naming a Worker outside this project's build is left in the
 config and *not* ordered against — an externally-managed Worker is Cloudflare's
 to accept or reject, not ours to invent a node for.
 
+> **Read, 23 November 2026, by the back-half paydown, slice 1C.3 (#4040).** The deploy no longer
+> parses `[[services]]` (or any other binding table) back out of the file. `bynk deploy` and
+> `bynk dev` compile in-process into a private build directory, so the `wrangler.toml` they would
+> read is the same process's rendering of the `WorkerBindings` it holds; they read that model
+> (`deploy/declared.rs`) and the guarantee above, that the graph is the relation the file
+> declares, now rests on there being one source for both. A test over the Workers corpus keeps the
+> rendered file and the model naming the same bindings. The rule for a Service Binding to a Worker
+> outside the build is unchanged: its script is not one of the build's.
+
 **(D4) A run is resumable, never transactional, and never skips.** Each context's
 state is written to the ledger as it lands ([[0180]]'s incremental posture): a
 failure stops the run, keeps what landed, and names what did not. There is **no

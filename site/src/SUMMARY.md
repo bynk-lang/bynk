@@ -5,7 +5,6 @@
 # Start
 
 - [What is Bynk?](introduction/what-is-bynk.md)
-- [Why Bynk exists](about/why-bynk-exists.md)
 - [Anatomy of a Bynk service](introduction/anatomy-of-a-service.md)
 - [Coming from TypeScript](introduction/coming-from-typescript.md)
 - [Install](introduction/install.md)
@@ -167,16 +166,3 @@
     - [Localisation](guides/localisation/index.md)
     - [Testing](guides/testing/index.md)
     - [Projects, build & deployment](guides/projects-build-and-deployment/index.md)
-
-# About Bynk
-
-- [Versioning & roadmap](about/versioning-and-roadmap.md)
-
----
-
-# Contributing
-
-- [Contributing to the compiler](contributing/index.md)
-  - [Compiler architecture](contributing/architecture.md)
-  - [Testing & fixtures](contributing/testing.md)
-  - [Working on the docs](contributing/documentation.md)

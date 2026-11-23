@@ -58,15 +58,17 @@ book="site/src/content/docs/book"
 # The Reference (language, tooling, specification, releases) is its own tree
 # since web presence slice 5; the Tooling index carries a "currently v…" banner.
 ref="site/src/content/docs/reference"
+# The Project pages (contributing, versioning and roadmap) since slice 13.
+proj="site/src/content/docs/project"
 sed -i.bak -E "s/currently v[0-9]+\.[0-9]+/currently v$mm/" \
 	"$book/index.md" "$ref/tooling/index.mdx"
 sed -i.bak -E "s/written against v[0-9]+\.[0-9]+/written against v$mm/" \
-	"$book/about/versioning-and-roadmap.md"
+	"$proj/versioning-and-roadmap.md"
 sed -i.bak -E "s/written against \*\*v[0-9]+\.[0-9]+\*\*/written against **v$mm**/" \
 	"$ref/releases/index.md"
 sed -i.bak -E "s/current version, v[0-9]+\.[0-9]+/current version, v$mm/" \
 	"$ref/spec/scope.md" "$ref/spec/appendix-version-history.md" "$ref/spec/index.md"
-find "$book" "$ref" -name '*.bak' -delete
+find "$book" "$ref" "$proj" -name '*.bak' -delete
 
 # The LLM primer states the current version too (#2464), so an agent reading it
 # knows which toolchain its syntax matches. `doc_version.rs` pins it as well.

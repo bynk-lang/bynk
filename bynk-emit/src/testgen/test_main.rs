@@ -70,12 +70,12 @@ pub(super) fn sysdrive_driver(
     sname: &str,
     key: &str,
     mut params: Vec<TsParam>,
-    body_stmt: Option<TsStmt>,
+    body_stmts: Vec<TsStmt>,
     url: TsExpr,
     options: TsExpr,
     binding: &str,
     decode_fn: &str,
-    payload: &str,
+    payload: Vec<TsExpr>,
     signs_claims: bool,
     // #2135: a `Signature` route's signing statements (`const __sig = …`,
     // or #2155 a sum's per-call `__auth`), after the body they sign is
@@ -106,10 +106,7 @@ pub(super) fn sysdrive_driver(
             Some(TsType::named("string")),
         ));
     }
-    let mut body = Vec::new();
-    if let Some(stmt) = body_stmt {
-        body.push(stmt);
-    }
+    let mut body = body_stmts;
     body.extend(sign_stmts);
     body.push(TsStmt::const_stmt(
         TsBindingName::Ident("__h".to_string()),
@@ -137,7 +134,10 @@ pub(super) fn sysdrive_driver(
         None,
     ));
     body.push(TsStmt::return_stmt(
-        Some(call(ident(decode_fn), vec![ident("__res"), ident(payload)])),
+        Some(call(
+            ident(decode_fn),
+            std::iter::once(ident("__res")).chain(payload).collect(),
+        )),
         None,
     ));
     TsStmt::decl(

@@ -789,12 +789,13 @@ pub(super) fn observation_call_record_types(
                             &p.type_ref,
                             &type_ns,
                         );
-                        let printed = bynk_ts::print_type(&ty);
-                        let generic = op.type_params.iter().any(|tp| {
-                            printed
-                                .split(|c: char| !c.is_alphanumeric() && c != '_')
-                                .any(|w| w == tp.name.name)
-                        });
+                        // The operation's own type parameters are reported even when one is spelled
+                        // like a global type (`Error`, `Map`): it is the parameter here, not the global.
+                        let used = bynk_ts::unbound_names_in(
+                            &[const_typed("__t", ty.clone(), ident("__v"))],
+                            |n| op.type_params.iter().any(|tp| tp.name.name == n),
+                        );
+                        let generic = op.type_params.iter().any(|tp| used.contains(&tp.name.name));
                         if generic {
                             TsType::named("unknown")
                         } else {

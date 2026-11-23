@@ -36,6 +36,8 @@ bynk-std = { workspace = true, features = ["test-support"] }
 
 [dev-dependencies]
 serde_json.workspace = true
+# 1C.3b (#4040): `binding_model_corpus` reads the rendered configs generically.
+toml.workspace = true
 # `xtask::site_page` (the generated-page transform `wire_reference` uses).
 xtask = { path = "../xtask" }
 bynk-syntax.workspace = true

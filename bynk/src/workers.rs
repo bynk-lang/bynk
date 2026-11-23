@@ -120,6 +120,19 @@ pub fn compile_once_reporting(
     build: Build,
     progress: Option<bynk_driver::project::ProgressSink>,
 ) -> bool {
+    compile_built(project_root, build_dir, build, progress).is_some()
+}
+
+/// [`compile_once_reporting`], handing back the binding model the build wrote
+/// its Workers from (1C.3a, #4040), or `None` when the build failed (already
+/// reported). The commands that act on a Worker's bindings read this rather
+/// than reading them back out of the files.
+pub fn compile_built(
+    project_root: &Path,
+    build_dir: &Path,
+    build: Build,
+    progress: Option<bynk_driver::project::ProgressSink>,
+) -> Option<bynk_emit::emit_model::WorkersBuild> {
     // #1078: `bynk-emit` touches no disk for `bynk.schema.lock` — read its
     // current content here (verified-absent `None` for a fresh project) and
     // hand it in; write the reconciled content back after a clean compile.
@@ -131,7 +144,7 @@ pub fn compile_once_reporting(
                     "bynk: error: could not read {}: {e}",
                     bynk_driver::schema_lock::lock_path(project_root).display()
                 );
-                return false;
+                return None;
             }
         }
     } else {
@@ -146,7 +159,7 @@ pub fn compile_once_reporting(
             .tests(false),
         Err(e) => {
             emsg!("bynk: error: {e}");
-            return false;
+            return None;
         }
     };
     let options = with_trace(options, build.trace_requests).inspect_agents(build.inspect_agents);
@@ -157,7 +170,7 @@ pub fn compile_once_reporting(
             // compile` did — the front-end's flatten-then-delegate (ADR 0100),
             // shared with `bynk check` (see `crate::diagnostics`).
             crate::diagnostics::render_project_failure(&failure);
-            return false;
+            return None;
         }
     };
     // A write failure here is reported but does not fail the build — the
@@ -179,7 +192,7 @@ pub fn compile_once_reporting(
             "bynk: error: could not write build output under `{}`: {e}",
             build_dir.display()
         );
-        return false;
+        return None;
     }
     // ADR 0117: surface non-failing warnings.
     crate::diagnostics::print_project_warnings(
@@ -207,9 +220,9 @@ pub fn compile_once_reporting(
         mode,
     ) {
         emsg!("bynk: error: {e}");
-        return false;
+        return None;
     }
-    true
+    output.workers
 }
 
 /// #3796: where a `bynk deploy --dry-run` builds: a fresh directory under the

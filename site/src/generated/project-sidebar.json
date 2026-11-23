@@ -1,0 +1,32 @@
+[
+  {
+    "label": "Project",
+    "items": [
+      {
+        "label": "Versioning & roadmap",
+        "link": "/project/versioning-and-roadmap/"
+      }
+    ]
+  },
+  {
+    "label": "Contributing",
+    "items": [
+      {
+        "label": "Overview",
+        "link": "/project/contributing/"
+      },
+      {
+        "label": "Compiler architecture",
+        "link": "/project/contributing/architecture/"
+      },
+      {
+        "label": "Testing & fixtures",
+        "link": "/project/contributing/testing/"
+      },
+      {
+        "label": "Working on the docs",
+        "link": "/project/contributing/documentation/"
+      }
+    ]
+  }
+]

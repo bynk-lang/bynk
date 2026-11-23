@@ -1,8 +1,9 @@
 ---
 // Bynk sidebar override: scope the sidebar to the surface being viewed. The site
 // has three documentation surfaces — the Book (/book), By Example (/by-example)
-// and the Reference (/reference, web presence slice 5) — reachable from the persistent header nav. Listing
-// all three trees on every page is noisy, so here we keep only the top-level
+// and the Reference (/reference, web presence slice 5) — reachable from the persistent header nav,
+// and the Project pages (/project, slice 13) the footer links. Listing
+// every tree on every page is noisy, so here we keep only the top-level
 // entries that lead into the current surface and hand the narrowed list back to
 // Starlight's own Sidebar, so persistence, the mobile menu and current-page
 // marking all keep working unchanged.
@@ -12,6 +13,7 @@ import Default from "@astrojs/starlight/components/Sidebar.astro";
 function surfaceOf(pathname) {
   if (pathname.startsWith("/by-example")) return "/by-example";
   if (pathname.startsWith("/reference")) return "/reference";
+  if (pathname.startsWith("/project")) return "/project";
   return "/book";
 }
 

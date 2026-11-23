@@ -52,6 +52,7 @@ mod agent_move;
 mod apply;
 mod config;
 pub(crate) mod containers;
+mod declared;
 mod destinations;
 mod facts;
 mod first_deploy;
@@ -74,6 +75,7 @@ use agent_move::*;
 use apply::*;
 use config::*;
 use containers::*;
+use declared::*;
 use destinations::*;
 use gates::*;
 use graph::*;
@@ -128,9 +130,9 @@ pub(crate) fn deployed_environments(
 pub(crate) fn local_edge_keys(
     workers_dir: &Path,
     workers: &[String],
-    project_root: &Path,
+    model: &bynk_emit::emit_model::WorkersBuild,
 ) -> Result<BTreeMap<String, Vec<String>>, String> {
-    let resources = project_resources_for(workers_dir, workers, project_root)?;
+    let resources = project_resources(workers_dir, workers, model)?;
     let edges = project_edges(&resources);
     for edge in &edges {
         edge.ends()?;
@@ -159,8 +161,9 @@ pub(crate) fn local_edge_keys(
 pub(crate) fn local_session_keys(
     workers_dir: &Path,
     workers: &[String],
+    model: &bynk_emit::emit_model::WorkersBuild,
 ) -> Result<BTreeMap<String, Vec<String>>, String> {
-    let resources = project_resources(workers_dir, workers)?;
+    let resources = project_resources(workers_dir, workers, model)?;
     Ok(workers
         .iter()
         .map(|w| {

@@ -713,14 +713,14 @@ fn deploy(
     let Some((build_dir, _scratch)) = build_dir_for(project_root, opts.dry_run) else {
         return Err(ExitCode::FAILURE);
     };
-    if !workers::compile_once_reporting(
+    let Some(model) = workers::compile_built(
         project_root,
         &build_dir,
         workers::Build::new(true, opts.dry_run).no_install(opts.no_install),
         bynk_driver::progress::terminal_sink(),
-    ) {
+    ) else {
         return Err(ExitCode::FAILURE);
-    }
+    };
     // Slice 2: every context, ordered — not the one context slice 0 demanded.
     let workers_dir = build_dir.join("workers");
     let available = workers::discover_workers(&workers_dir);
@@ -734,7 +734,7 @@ fn deploy(
     // Read spans the *whole* project even under `--context`: D4 needs the
     // selected context's binding targets to check they are live, and they are
     // by definition outside the selection.
-    let mut resources = match project_resources_for(&workers_dir, &available, project_root) {
+    let mut resources = match project_resources(&workers_dir, &available, &model) {
         Ok(resources) => resources,
         Err(e) => {
             emsg!("bynk: error: {e}");
