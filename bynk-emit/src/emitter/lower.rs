@@ -48,8 +48,7 @@ use super::ts_types::{
 };
 use super::*;
 use crate::ts_build::{
-    arrow_of as lambda_node, bool_lit as bool_node, call, const_, ident, not_expr as negated,
-    num_lit, str_lit,
+    arrow_of as lambda_node, bool_lit, call, const_, ident, not_expr as negated, num_lit, str_lit,
 };
 
 /// v0.154 (ADR 0178): the `Err`-wrap a `?` on a `Result` operand needs, if the
@@ -2257,7 +2256,7 @@ fn emit_is_test_bindings(
                         let mut tests = Vec::new();
                         pattern_tests(&recv, disc_ty, alt, cx, &mut tests);
                         let cond = if tests.is_empty() {
-                            bool_node(true)
+                            bool_lit(true)
                         } else {
                             and_join(tests)
                         };
@@ -2325,7 +2324,7 @@ fn emit_is_test_bindings(
                 let cond = if i == last {
                     None
                 } else {
-                    Some(tag.unwrap_or_else(|| bool_node(true)))
+                    Some(tag.unwrap_or_else(|| bool_lit(true)))
                 };
                 arms.push(OrArm {
                     cond,
@@ -3149,7 +3148,7 @@ fn lower_bin_op(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut LowerCtx) -> Lowered
                     pre: bindings,
                     expr: rhs_expr,
                 },
-                Lowered::node(bool_node(otherwise == "true")),
+                Lowered::node(bool_lit(otherwise == "true")),
                 cx,
             );
             return pre.finish(short_circuit(op, lhs_expr, ident(&slot)));
@@ -3208,12 +3207,12 @@ fn lower_bin_op(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut LowerCtx) -> Lowered
         }
         if !r.pre.is_empty() && rhs_returns {
             let value = match op {
-                BinOp::And => hoist_bool_if(&mut pre, l, r, Lowered::node(bool_node(false)), cx),
-                BinOp::Or => hoist_bool_if(&mut pre, l, Lowered::node(bool_node(true)), r, cx),
+                BinOp::And => hoist_bool_if(&mut pre, l, r, Lowered::node(bool_lit(false)), cx),
+                BinOp::Or => hoist_bool_if(&mut pre, l, Lowered::node(bool_lit(true)), r, cx),
                 BinOp::Implies => hoist_bool_if(
                     &mut pre,
                     negated_paren(l),
-                    Lowered::node(bool_node(true)),
+                    Lowered::node(bool_lit(true)),
                     r,
                     cx,
                 ),
@@ -4707,7 +4706,7 @@ pub(super) fn emit_pattern_bindings(
                     let mut t = Vec::new();
                     pattern_tests(path, path_ty, alt, cx, &mut t);
                     Some(if t.is_empty() {
-                        bool_node(true)
+                        bool_lit(true)
                     } else {
                         and_join(t)
                     })
@@ -4885,7 +4884,7 @@ fn lower_is(value: &Expr, pattern: &Pattern, cx: &mut LowerCtx) -> Lowered {
     let scrut_ty = cx.commons().expr_types.get(&value.id).map(|te| te.ty);
     let tested: bynk_ts::TsExpr = match pattern {
         // A bare name binding after `is` matches anything over a sum (ADR 0169).
-        Pattern::Wildcard(_) | Pattern::Binding(_) => bool_node(true),
+        Pattern::Wildcard(_) | Pattern::Binding(_) => bool_lit(true),
         // v0.130 (DECISION F): the checker rejects a literal on the RHS of `is`,
         // so this is unreachable for a well-typed program; lower it to the
         // value-equality it would mean, defensively.
@@ -4931,7 +4930,7 @@ fn lower_is(value: &Expr, pattern: &Pattern, cx: &mut LowerCtx) -> Lowered {
                 "a variant `is` pattern must emit at least its outer tag test"
             );
             if tests.is_empty() {
-                bool_node(true)
+                bool_lit(true)
             } else {
                 and_join(tests)
             }
@@ -5011,7 +5010,7 @@ fn refined_check_as_bool(
     }
     let mut terms = terms.into_iter();
     let Some(first) = terms.next() else {
-        return bool_node(true);
+        return bool_lit(true);
     };
     let joined = terms.fold(first, |left, right| TsExpr::Binary {
         op: TsBinaryOp::And,
