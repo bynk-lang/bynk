@@ -20,8 +20,8 @@ use bynk_syntax::ast::{BaseType, Handler, LimitsPolicy, ServiceProtocol, TypeRef
 use crate::emitter::RuntimeUse;
 use crate::ts_build::{
     and_expr, as_expr, await_expr, binary, block, bool_lit, call, cond_expr, const_, const_typed,
-    expr_stmt, ident, if_, index as index_expr, let_typed, member, method_call, new, null_lit,
-    num_lit, or_expr, paren, return_, str_lit, strict_eq, strict_neq, switch_stmt,
+    expr_stmt, ident, if_, index, let_typed, member, method_call, new, null_lit, num_lit, or_expr,
+    paren, return_, str_lit, strict_eq, strict_neq, switch_stmt,
 };
 use bynk_check::wire_format::{self as wf, CallCheck};
 use bynk_ts::{
@@ -441,7 +441,7 @@ fn migrate_route(context: &str, member_mode: bool, migratable: &[(String, i64)])
             strict_neq(
                 TsExpr::Unary {
                     op: bynk_ts::TsUnaryOp::Typeof,
-                    expr: Box::new(index_expr(
+                    expr: Box::new(index(
                         super::emit::record_cast(ident("env"), bynk_ts::TsType::named("unknown")),
                         str_lit(wf::MIGRATE_KEY),
                     )),
@@ -3279,7 +3279,7 @@ fn emit_http_route_dispatch(
         let jname = wire_ident(pname);
         guarded.push(const_(
             format!("__raw_{pname}"),
-            index_expr(member(ident("__m"), "params"), str_lit(pname.clone())),
+            index(member(ident("__m"), "params"), str_lit(pname.clone())),
         ));
         guarded.extend(emit_path_param_construction(
             pname,
@@ -3386,7 +3386,7 @@ fn emit_http_route_dispatch(
                 ident("__raw")
             };
             guarded.push(const_("__secret", {
-                let explicit = index_expr(
+                let explicit = index(
                     as_expr(
                         as_expr(ident("env"), TsType::named("unknown")),
                         TsType::named_with_args(
@@ -4000,7 +4000,7 @@ fn emit_call_handler_dispatch(
             let jname = call_wire_ident(pname);
             let dser = deserialise_call(
                 &p.type_ref,
-                &index_expr(ident("argsObj"), str_lit(pname.clone())),
+                &index(ident("argsObj"), str_lit(pname.clone())),
                 &format!("$.{pname}"),
                 ru,
             );
