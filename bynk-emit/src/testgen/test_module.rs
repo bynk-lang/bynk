@@ -11,7 +11,8 @@ use bynk_check::d1_migrations::{D1Migrations, d1_database_name, double_files, pg
 use bynk_check::test_suites::{self, ResolvedStub};
 use bynk_syntax::ast::{Block, Expr, ExprKind, FnName, StubClause, StubRhs, TypeRef, Visibility};
 use bynk_ts::{
-    SourceMapBuilder, TsBindingName, TsDecl, TsExpr, TsObjectEntry, TsProgram, TsStmt, TsType,
+    SourceMapBuilder, TsBinaryOp, TsBindingName, TsDecl, TsExpr, TsObjectEntry, TsParam, TsProgram,
+    TsStmt, TsType,
 };
 use std::sync::Arc;
 
@@ -885,16 +886,13 @@ pub(super) fn emit_test_module(
     // closure above; a plain `function` declaration hoists.
     let event_services = runtime_use.test_event_services();
     if !event_services.is_empty() {
-        stmts.push(TsStmt::raw(
-            event_delivery_helpers(
-                target_name,
-                &event_services,
-                unit_tables,
-                unit_consumes,
-                schema_versions,
-                event_shapes,
-            ),
-            None,
+        stmts.extend(event_delivery_helpers(
+            target_name,
+            &event_services,
+            unit_tables,
+            unit_consumes,
+            schema_versions,
+            event_shapes,
         ));
     }
 
@@ -1107,11 +1105,12 @@ pub(super) fn event_delivery_helpers(
     unit_consumes: &HashMap<String, Vec<String>>,
     schema_versions: &HashMap<String, i64>,
     event_shapes: Option<&HashMap<String, bynk_model::EventSubscriberShape>>,
-) -> String {
+) -> Vec<TsStmt> {
+    use crate::ts_build::{as_expr, const_, ident, member, method_call, ret};
     use bynk_syntax::ast::ServiceProtocol;
     let ns = test_ns(target_name);
     // The per-service helpers; the counter they share is declared ahead of them once known.
-    let mut helpers = String::new();
+    let mut helpers: Vec<TsStmt> = Vec::new();
     let mut counts = false;
     for svc in services {
         let Some(decl) = unit_tables
@@ -1154,32 +1153,88 @@ pub(super) fn event_delivery_helpers(
                         .unwrap_or(1);
                     (owner, version)
                 });
+        let helper = |envelope_name: &str, mut body: Vec<TsStmt>, args: Vec<TsExpr>| {
+            body.push(ret(method_call(
+                member(ident(ns.clone()), svc.clone()),
+                "event",
+                args,
+            )));
+            let unknown = || Some(TsType::named("unknown"));
+            TsStmt::decl(
+                TsDecl::Function {
+                    name: format!("__bynkEvent_{svc}"),
+                    generics: Vec::new(),
+                    params: vec![
+                        TsParam::new("payload".to_string(), unknown()),
+                        TsParam::new(envelope_name.to_string(), unknown()),
+                        TsParam::new("deps".to_string(), unknown()),
+                    ],
+                    return_type: None,
+                    body,
+                    is_async: false,
+                    inline: false,
+                },
+                None,
+            )
+        };
+        let never = |name: &str| as_expr(ident(name), TsType::named("never"));
         if takes_envelope {
             let env = match &defaults {
                 Some((owner, version)) => {
                     counts = true;
-                    format!(
-                        "envelope ?? {{ eventId: `test-event-${{++__bynkEventSeq}}`, publisherId: \"{}\", emittedAt: 0, schemaVersion: {version} }}",
-                        crate::emitter::escape_ts_string(owner)
+                    // `envelope ?? { eventId: `test-event-${++__bynkEventSeq}`, … }`
+                    crate::ts_build::binary(
+                        TsBinaryOp::NullishCoalescing,
+                        ident("envelope"),
+                        TsExpr::object(vec![
+                            (
+                                "eventId".to_string(),
+                                TsExpr::template_lit(
+                                    vec!["test-event-".to_string(), String::new()],
+                                    // No pre-increment expression node: the one text hole.
+                                    vec![ident("++__bynkEventSeq")],
+                                ),
+                            ),
+                            (
+                                "publisherId".to_string(),
+                                crate::ts_build::str_lit(owner.clone()),
+                            ),
+                            ("emittedAt".to_string(), crate::ts_build::num_lit(0)),
+                            (
+                                "schemaVersion".to_string(),
+                                crate::ts_build::num_lit(version),
+                            ),
+                        ]),
                     )
                 }
-                None => "envelope".to_string(),
+                None => ident("envelope"),
             };
-            helpers.push_str(&format!(
-                "function __bynkEvent_{svc}(payload: unknown, envelope: unknown, deps: unknown) {{\n  const env = {env};\n  return {ns}.{svc}.event(payload as never, env as never, deps as never);\n}}\n"
+            helpers.push(helper(
+                "envelope",
+                vec![const_("env", env)],
+                vec![never("payload"), never("env"), never("deps")],
             ));
         } else {
             // The handler cannot observe an envelope, so a case's own is dropped.
-            helpers.push_str(&format!(
-                "function __bynkEvent_{svc}(payload: unknown, _envelope: unknown, deps: unknown) {{\n  return {ns}.{svc}.event(payload as never, deps as never);\n}}\n"
+            helpers.push(helper(
+                "_envelope",
+                Vec::new(),
+                vec![never("payload"), never("deps")],
             ));
         }
     }
-    let mut out = String::new();
+    // The helpers sit on consecutive lines, the counter they share ahead of them.
+    let mut out: Vec<TsStmt> = Vec::new();
     if counts {
-        out.push_str("let __bynkEventSeq = 0;\n");
+        out.push(crate::ts_build::let_init(
+            "__bynkEventSeq",
+            crate::ts_build::num_lit(0),
+        ));
     }
-    out.push_str(&helpers);
+    out.extend(helpers);
+    for stmt in out.iter_mut().skip(1) {
+        stmt.no_blank_before = true;
+    }
     out
 }
 
