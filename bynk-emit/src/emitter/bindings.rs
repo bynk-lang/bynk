@@ -55,6 +55,17 @@ impl WorkerBindings {
         Self { contexts, workers }
     }
 
+    /// A model holding exactly `workers`' bindings, each keyed as both a
+    /// context and a Worker directory: what a reader of the model is tested
+    /// against, without compiling a project.
+    #[doc(hidden)]
+    pub fn of_workers(workers: BTreeMap<String, Vec<WorkerBinding>>) -> Self {
+        Self {
+            contexts: workers.clone(),
+            workers,
+        }
+    }
+
     /// The bindings of context `context`'s Worker; none for a name that is not
     /// a context.
     pub fn of(&self, context: &str) -> &[WorkerBinding] {

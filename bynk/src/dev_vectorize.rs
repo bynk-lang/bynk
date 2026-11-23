@@ -59,8 +59,9 @@ pub(crate) fn bind_for_dev(
     workers_dir: &Path,
     all: &[String],
     serving: &[String],
+    model: Option<&bynk_emit::emit_model::WorkersBuild>,
 ) -> Result<Bound, String> {
-    let resources = crate::deploy::project_resources(workers_dir, all)?;
+    let resources = crate::deploy::project_resources(workers_dir, all, model)?;
     let settings =
         bynk_project::vectorize::try_read_vectorize_dev(project_root).map_err(|e| e.to_string())?;
     // An entry for a capability the project no longer has is still an error: a
@@ -243,7 +244,7 @@ mod tests {
             "[project]\nname = \"shop\"\nversion = \"0.1.0\"\n\n[dev.vectorize-index]\nDocs = \"docs-dev\"\n",
         );
         let all = vec!["shop".to_string()];
-        let bound = bind_for_dev(&root, &workers, &all, &all).unwrap();
+        let bound = bind_for_dev(&root, &workers, &all, &all, None).unwrap();
         assert_eq!(bound.bound, [("Docs".to_string(), "docs-dev".to_string())]);
         assert_eq!(bound.unbound, ["Notes".to_string()]);
         let config = std::fs::read_to_string(workers.join("shop").join("wrangler.toml")).unwrap();
@@ -278,7 +279,7 @@ mod tests {
         )
         .unwrap();
         let all = vec!["shop".to_string()];
-        let err = bind_for_dev(&root, &workers, &all, &all).unwrap_err();
+        let err = bind_for_dev(&root, &workers, &all, &all, None).unwrap_err();
         assert!(err.contains("names no `Vectorize` capability"), "{err}");
         let _ = std::fs::remove_dir_all(&root);
     }
@@ -301,7 +302,7 @@ mod tests {
             "[project]\nname = \"shop\"\nversion = \"0.1.0\"\n\n[dev.vectorize-index]\nDoc = \"docs-dev\"\n",
         );
         let all = vec!["shop".to_string()];
-        let err = bind_for_dev(&root, &workers, &all, &all).unwrap_err();
+        let err = bind_for_dev(&root, &workers, &all, &all, None).unwrap_err();
         assert!(
             err.contains("`[dev.vectorize-index] Doc` names no `Vectorize` capability")
                 && err.contains("did you mean `Docs`?"),

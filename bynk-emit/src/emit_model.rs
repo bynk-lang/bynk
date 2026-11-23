@@ -328,6 +328,25 @@ pub struct ProjectOutput {
     /// `service`s, described from the checker's resolved types, in unit then
     /// service order. Empty for a project with none.
     pub entry_handlers: Vec<bynk_model::entry::EntryHandler>,
+    /// 1C.3a (#4040): what a Workers build decided about its Workers'
+    /// bindings, for the commands that act on them to read instead of reading
+    /// them back out of the files the build wrote. `None` for a Bundle build,
+    /// which has no Workers.
+    pub workers: Option<WorkersBuild>,
+}
+
+/// 1C.3a (#4040): the binding model of a Workers build, with what the model
+/// is read against. `bindings` is the one [`WorkerBindings`] the build's
+/// `wrangler.toml` files were rendered from, so a reader of it sees exactly the
+/// bindings written.
+///
+/// [`WorkerBindings`]: crate::emitter::WorkerBindings
+#[derive(Debug, Clone)]
+pub struct WorkersBuild {
+    /// Every Worker's bindings.
+    pub bindings: crate::emitter::WorkerBindings,
+    /// Where each context's Worker is, and what it is called.
+    pub layout: bynk_project::worker_layout::WorkerLayout,
 }
 
 /// v0.67: a discovered test suite — one `test <target>` group (unit) or

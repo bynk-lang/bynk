@@ -45,6 +45,8 @@ mod integration {
     mod agent_state_corpus;
     #[path = "agents_nodes.rs"]
     mod agents_nodes;
+    #[path = "binding_model_corpus.rs"]
+    mod binding_model_corpus;
     #[path = "by_on_agent.rs"]
     mod by_on_agent;
     #[path = "call_hierarchy_index.rs"]
