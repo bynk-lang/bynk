@@ -151,7 +151,7 @@ fn emit_queue_handler(
         // one compact line (`console.error(...); msg.retry();`) inside the
         // usual braces-on-their-own-lines shape — `TsStmt::try_catch`
         // directly, not the `try_catch_stmt` convenience helper, since this
-        // is the one real site in this file needing `InlineBlock` here
+        // is the one real site in this module needing `InlineBlock` here
         // rather than the ordinary one-statement-per-line `Block`.
         let for_of_body = TsStmt::try_catch(
             block(try_stmts),
