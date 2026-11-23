@@ -1379,10 +1379,11 @@ pub(crate) fn brace_delta(line: &str, mut state: BraceScanState) -> (i32, BraceS
 
 // --- Gated probe 3: options_sources --------------------------------------
 
-/// R2.3. `CompileOptions` (in `bynk-driver/src/project.rs`; it was `bynk-emit/src/project.rs`
+/// R2.3. `CompileOptions` (in `bynk-driver/src/project/options.rs`; it was `bynk-emit/src/project.rs`
 /// until crate-hygiene D1, #2982) has a `sources` field.
 fn options_sources(root: &Path) -> Probe {
-    let src = std::fs::read_to_string(root.join("bynk-driver/src/project.rs")).unwrap_or_default();
+    let src = std::fs::read_to_string(root.join("bynk-driver/src/project/options.rs"))
+        .unwrap_or_default();
     let present = struct_body(&src, "CompileOptions").is_some_and(|body| body.contains("sources"));
     Probe {
         name: "options_sources",
@@ -1965,7 +1966,12 @@ fn codegen_family_files(root: &Path) -> Vec<(PathBuf, String)> {
     files.extend(
         rust_files_relative(&root.join("bynk-driver/src"))
             .into_iter()
-            .filter(|(p, _)| is_moved_project_file(p)),
+            .filter(|(p, _)| {
+                is_moved_project_file(p)
+                    && !crate::module_lines::is_whole_test_file(
+                        &p.to_string_lossy().replace('\\', "/"),
+                    )
+            }),
     );
     files
 }

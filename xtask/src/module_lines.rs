@@ -46,7 +46,6 @@ pub const CEILINGS_FILE: &str = "xtask/module-line-ceilings.txt";
 /// slice that takes the last one under deletes this constant and the rule that reads it.
 pub const GRANDFATHERED: &[&str] = &[
     "bynk-emit/src/emitter/emit.rs",
-    "bynk-driver/src/project.rs",
     "bynk-emit/src/emitter/lower.rs",
     "bynk-emit/src/emitter/serialisation.rs",
     "bynk-emit/src/emitter/workers_entry.rs",
