@@ -178,7 +178,7 @@ async function __prop_test_zero_field_record_binding_generates() {
   const { Empty } = __ns_demo_gen;
   type Empty = __ns_demo_gen.Empty;
   const __gens = [
-    { name: "e", boundaries: [{  }], gen: (rng: any) => ({  }), shrink: (v: any) => [], show: (v: any) => __bynkShow(v) },
+    { name: "e", boundaries: [{}], gen: (rng: any) => ({}), shrink: (v: any) => [], show: (v: any) => __bynkShow(v) },
   ];
   const __where = null;
   const __body = async (__vals: any[]) => {
