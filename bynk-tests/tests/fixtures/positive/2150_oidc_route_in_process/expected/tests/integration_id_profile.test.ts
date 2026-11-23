@@ -189,61 +189,69 @@ async function __bynkOidcToken(remote: boolean, trust: __BynkOidcTrust, o: __Byn
 }
 async function __sysdrive_api_http_GET_me(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string, __claims: globalThis.Record<string, unknown>) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/me`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "authorization": `Bearer ${await __bynkOidcToken(__bynkOidcRemote, { issuer: "https://issuer.example.com", audience: "my-api", jwks: "https://issuer.example.com/.well-known/jwks.json" }, { sub: __sub, claims: __claims, kind: "valid" })}`, }, });
+  const __req = new globalThis.Request(`https://test/me`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "authorization": `Bearer ${await __bynkOidcToken(__bynkOidcRemote, { issuer: "https://issuer.example.com", audience: "my-api", jwks: "https://issuer.example.com/.well-known/jwks.json" }, { sub: __sub, claims: __claims, kind: "valid" })}` } });
   const __res = await __h.env.ID_PROFILE.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
 async function __sysdrive_noauth_api_http_GET_me(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/me`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), }, });
+  const __req = new globalThis.Request(`https://test/me`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}) } });
   const __res = await __h.env.ID_PROFILE.fetch(__req);
   return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
 async function __sysdrive_forged_api_http_GET_me(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
-const __token = `Bearer ${await __bynkOidcToken(__bynkOidcRemote, { issuer: "https://issuer.example.com", audience: "my-api", jwks: "https://issuer.example.com/.well-known/jwks.json" }, { sub: "bynk-test", claims: {}, kind: "forged" })}`;  const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/me`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "authorization": __token, }, });
+  const __token = `Bearer ${await __bynkOidcToken(__bynkOidcRemote, { issuer: "https://issuer.example.com", audience: "my-api", jwks: "https://issuer.example.com/.well-known/jwks.json" }, { sub: "bynk-test", claims: {}, kind: "forged" })}`;
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/me`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "authorization": __token } });
   const __res = await __h.env.ID_PROFILE.fetch(__req);
   return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
 async function __sysdrive_expired_api_http_GET_me(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
-const __token = `Bearer ${await __bynkOidcToken(__bynkOidcRemote, { issuer: "https://issuer.example.com", audience: "my-api", jwks: "https://issuer.example.com/.well-known/jwks.json" }, { sub: "bynk-test", claims: {}, kind: "expired" })}`;  const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/me`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "authorization": __token, }, });
+  const __token = `Bearer ${await __bynkOidcToken(__bynkOidcRemote, { issuer: "https://issuer.example.com", audience: "my-api", jwks: "https://issuer.example.com/.well-known/jwks.json" }, { sub: "bynk-test", claims: {}, kind: "expired" })}`;
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/me`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "authorization": __token } });
   const __res = await __h.env.ID_PROFILE.fetch(__req);
   return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
 async function __sysdrive_wrongissuer_api_http_GET_me(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
-const __token = `Bearer ${await __bynkOidcToken(__bynkOidcRemote, { issuer: "https://issuer.example.com", audience: "my-api", jwks: "https://issuer.example.com/.well-known/jwks.json" }, { sub: "bynk-test", claims: {}, kind: "wrongissuer" })}`;  const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/me`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "authorization": __token, }, });
+  const __token = `Bearer ${await __bynkOidcToken(__bynkOidcRemote, { issuer: "https://issuer.example.com", audience: "my-api", jwks: "https://issuer.example.com/.well-known/jwks.json" }, { sub: "bynk-test", claims: {}, kind: "wrongissuer" })}`;
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/me`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "authorization": __token } });
   const __res = await __h.env.ID_PROFILE.fetch(__req);
   return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
 async function __sysdrive_wrongaudience_api_http_GET_me(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
-const __token = `Bearer ${await __bynkOidcToken(__bynkOidcRemote, { issuer: "https://issuer.example.com", audience: "my-api", jwks: "https://issuer.example.com/.well-known/jwks.json" }, { sub: "bynk-test", claims: {}, kind: "wrongaudience" })}`;  const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/me`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "authorization": __token, }, });
+  const __token = `Bearer ${await __bynkOidcToken(__bynkOidcRemote, { issuer: "https://issuer.example.com", audience: "my-api", jwks: "https://issuer.example.com/.well-known/jwks.json" }, { sub: "bynk-test", claims: {}, kind: "wrongaudience" })}`;
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/me`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "authorization": __token } });
   const __res = await __h.env.ID_PROFILE.fetch(__req);
   return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
 async function __sysdrive_algnone_api_http_GET_me(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
-const __token = `Bearer ${await __bynkOidcToken(__bynkOidcRemote, { issuer: "https://issuer.example.com", audience: "my-api", jwks: "https://issuer.example.com/.well-known/jwks.json" }, { sub: "bynk-test", claims: {}, kind: "algnone" })}`;  const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/me`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "authorization": __token, }, });
+  const __token = `Bearer ${await __bynkOidcToken(__bynkOidcRemote, { issuer: "https://issuer.example.com", audience: "my-api", jwks: "https://issuer.example.com/.well-known/jwks.json" }, { sub: "bynk-test", claims: {}, kind: "algnone" })}`;
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/me`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "authorization": __token } });
   const __res = await __h.env.ID_PROFILE.fetch(__req);
   return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
 async function __sysdrive_alghs256_api_http_GET_me(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
-const __token = `Bearer ${await __bynkOidcToken(__bynkOidcRemote, { issuer: "https://issuer.example.com", audience: "my-api", jwks: "https://issuer.example.com/.well-known/jwks.json" }, { sub: "bynk-test", claims: {}, kind: "alghs256" })}`;  const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/me`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "authorization": __token, }, });
+  const __token = `Bearer ${await __bynkOidcToken(__bynkOidcRemote, { issuer: "https://issuer.example.com", audience: "my-api", jwks: "https://issuer.example.com/.well-known/jwks.json" }, { sub: "bynk-test", claims: {}, kind: "alghs256" })}`;
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/me`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "authorization": __token } });
   const __res = await __h.env.ID_PROFILE.fetch(__req);
   return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
 async function __sysdrive_emptysub_api_http_GET_me(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
-const __token = `Bearer ${await __bynkOidcToken(__bynkOidcRemote, { issuer: "https://issuer.example.com", audience: "my-api", jwks: "https://issuer.example.com/.well-known/jwks.json" }, { sub: "bynk-test", claims: {}, kind: "emptysub" })}`;  const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/me`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "authorization": __token, }, });
+  const __token = `Bearer ${await __bynkOidcToken(__bynkOidcRemote, { issuer: "https://issuer.example.com", audience: "my-api", jwks: "https://issuer.example.com/.well-known/jwks.json" }, { sub: "bynk-test", claims: {}, kind: "emptysub" })}`;
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/me`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "authorization": __token } });
   const __res = await __h.env.ID_PROFILE.fetch(__req);
   return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
 async function __sysdrive_nosub_api_http_GET_me(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
-const __token = `Bearer ${await __bynkOidcToken(__bynkOidcRemote, { issuer: "https://issuer.example.com", audience: "my-api", jwks: "https://issuer.example.com/.well-known/jwks.json" }, { sub: "bynk-test", claims: {}, kind: "nosub" })}`;  const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/me`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "authorization": __token, }, });
+  const __token = `Bearer ${await __bynkOidcToken(__bynkOidcRemote, { issuer: "https://issuer.example.com", audience: "my-api", jwks: "https://issuer.example.com/.well-known/jwks.json" }, { sub: "bynk-test", claims: {}, kind: "nosub" })}`;
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/me`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "authorization": __token } });
   const __res = await __h.env.ID_PROFILE.fetch(__req);
   return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
@@ -259,7 +267,7 @@ async function __sysdrive_nosubject_api_http_GET_me(...__a: Parameters<typeof __
 }
 async function __sysdrive_api_http_GET_health(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/health`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), }, });
+  const __req = new globalThis.Request(`https://test/health`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}) } });
   const __res = await __h.env.ID_PROFILE.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }

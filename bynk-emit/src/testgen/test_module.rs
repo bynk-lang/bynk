@@ -215,9 +215,8 @@ pub(super) fn emit_test_module(
     };
     let integration_deps = (target_kind == UnitKind::Context
         && has_integration_case
-        && bynk_ts::print_stmt(&integration_factory("__makeTestDeps").stmt, 0)
-            != bynk_ts::print_stmt(&deps.stmt, 0))
-    .then(|| integration_factory("__makeIntegrationDeps"));
+        && integration_factory("__makeTestDeps").stmt != deps.stmt)
+        .then(|| integration_factory("__makeIntegrationDeps"));
     let deps_units: BTreeSet<&String> = deps
         .units
         .iter()
@@ -473,22 +472,19 @@ pub(super) fn emit_test_module(
         // *second* `push('\n')` ran unconditionally, so an empty
         // `record_types` (a `unit_tables` miss, or a target with no
         // capabilities/ops) still got two blank lines after the helpers, not
-        // one. Baking the second blank directly into the helpers' own Raw
-        // text when there is nothing to glue after it reproduces that;
-        // otherwise the printer's automatic policy alone supplies the one
-        // blank before the first record type, matching the old single
-        // `push('\n')` between them exactly.
-        let helpers_text = if record_types.is_empty() {
-            format!("{}\n", TestRuntimeModule::Observation.source())
-        } else {
-            TestRuntimeModule::Observation.source().to_string()
-        };
-        let mut stmt = TsStmt::raw(helpers_text, None);
+        // one. A blank statement after the helpers when there is nothing to
+        // glue after them reproduces that; otherwise the printer's automatic
+        // policy alone supplies the one blank before the first record type,
+        // matching the old single `push('\n')` between them exactly.
+        let mut stmt = TestRuntimeModule::Observation.splice();
         if suppress_next_blank {
             stmt.no_blank_before = true;
             suppress_next_blank = false;
         }
         stmts.push(stmt);
+        if record_types.is_empty() {
+            stmts.push(TsStmt::blank(None));
+        }
         // The synthetic per-op call-record types a `trace(Cap.op)` result's
         // elements carry — so `trace(…).filter((c) => c.field …)` type-checks
         // against the operation's parameter names. Glued together (no blank
