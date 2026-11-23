@@ -1,18 +1,23 @@
 //! The external HTTP routes of the Worker entry: the route table and the per-route dispatch.
 
-use super::field_specs::{FieldSpec, MultipartSpec, field_specs_exprs};
+use super::field_specs::{
+    FieldSpec, MultipartSpec, cookies_field_specs, effective_max_body, field_specs_exprs,
+    form_field_specs, multipart_spec, query_field_specs,
+};
 use super::http_policy::param_count;
 use super::respond::{
     json_error_kind, json_response, null_response, rejection_renderer, set_fault_route,
     try_catch_stmt,
 };
 use super::wire::{deserialise_call, http_result_inner, wire_ident};
+use super::{rejected_surface, signed_cookie_name};
 use crate::emitter::{RuntimeUse, http_handler_method_name_ir};
 use crate::ts_build::{
     and_expr, as_expr, await_expr, binary, block, bool_lit, call, cond_expr, const_, ident, if_,
     index, let_typed, member, method_call, new, null_lit, num_lit, or_expr, paren, return_,
     str_lit, strict_eq, strict_neq,
 };
+use bynk_check::symbols::UnitTable;
 use bynk_syntax::ast::{BaseType, Handler, TypeRef};
 use bynk_ts::{TsExpr, TsStmt, TsType, TsTypeMember};
 
@@ -94,12 +99,6 @@ pub(super) struct HttpRoute {
     pub(super) multipart: Option<MultipartSpec>,
 }
 
-/// #3277: bind a handler's `cookies` parameter. `cookies: RequestCookies` (decision A) is the
-/// raw view of the request's cookies; a `cookies` record is decoded off the `Cookie` header and
-/// validated before the handler runs, answering `400` as a `body` does, with the record's own
-/// codec checking refinements and filling defaults. #3386: a route guarded by a `SignedCookie`
-/// actor consumes that cookie at the seam, so it is hidden from either form. Returns whether the
-/// parameter was a `cookies` one (a `:cookies` path segment is a path parameter instead).
 /// #2341: the `RequestHeaders` a handler is passed. #3386: on a `SignedCookie` route the session
 /// cookie is hidden from its `Cookie` header, as it is from the `cookies` views.
 fn request_headers_arg(route: &HttpRoute) -> TsExpr {
@@ -166,6 +165,12 @@ fn bind_request_record_param(
     bind_cookies_param(route, p, guarded, call_args, wrappers, ru)
 }
 
+/// #3277: bind a handler's `cookies` parameter. `cookies: RequestCookies` (decision A) is the
+/// raw view of the request's cookies; a `cookies` record is decoded off the `Cookie` header and
+/// validated before the handler runs, answering `400` as a `body` does, with the record's own
+/// codec checking refinements and filling defaults. #3386: a route guarded by a `SignedCookie`
+/// actor consumes that cookie at the seam, so it is hidden from either form. Returns whether the
+/// parameter was a `cookies` one (a `:cookies` path segment is a path parameter instead).
 fn bind_cookies_param(
     route: &HttpRoute,
     p: &bynk_syntax::ast::Param,
@@ -1237,4 +1242,78 @@ fn emit_path_param_construction(
             );
         }
     }
+}
+
+/// Collect every `from http` route across the services, sorted so
+/// literal-segment routes precede parameter-segment routes that share a prefix.
+pub(super) fn collect_http_routes(
+    table: &UnitTable,
+    service_names: &[&String],
+    visible_types: &std::collections::HashMap<String, std::sync::Arc<bynk_syntax::ast::TypeDecl>>,
+    edge_cache: bool,
+    needs_locale_request: bool,
+) -> Vec<HttpRoute> {
+    let mut http_routes: Vec<HttpRoute> = Vec::new();
+    for sname in service_names {
+        let service = table.services.get(*sname).unwrap();
+        for h in &service.handlers {
+            // Slice 1 of `#1542` (the IR cutover, `design/archive/retired-tracks.md` §5): reads
+            // `IrHandlerKind::Http`'s own `method`/`path` directly — the IR
+            // payload P6.24a already computes here, no longer re-derived from
+            // `h.kind` a second time. `HttpRoute::method` is `IrHttpMethod`
+            // (un-deferred from Q7's original "stays AST until phase 7's
+            // printer" — phase 7 shipped, see the front-loading ADR).
+            if let bynk_model::IrHandlerKind::Http { method, path } =
+                bynk_model::lower_handler_kind_ir(&h.kind)
+            {
+                let query_fields = query_field_specs(h, &path, visible_types);
+                let cookies_fields = cookies_field_specs(h, &path, visible_types);
+                http_routes.push(HttpRoute {
+                    service: (*sname).clone(),
+                    method,
+                    path,
+                    handler: h.clone(),
+                    // v0.47: a Bearer handler's surface wrapper runs the
+                    // verification seam and needs the request passed in.
+                    bearer: bynk_check::actors::bearer_seam_for(h, &table.actors).is_some(),
+                    // v0.151: an `Oidc` wrapper runs its verification seam, taking the request first.
+                    oidc: bynk_check::actors::oidc_seam_for(h, &table.actors).is_some(),
+                    signed_cookie: signed_cookie_name(h, &table.actors),
+                    signature: bynk_check::actors::signature_seam_for(h, &table.actors),
+                    // v0.52: a multi-actor sum handler's wrapper owns the whole
+                    // boundary (raw read, first-wins resolution, body parse), so
+                    // the entry just passes `request` and skips the body parse.
+                    sum: bynk_check::actors::sum_members_for(h, &table.actors).is_some(),
+                    // v0.140 (ADR 0163): the handler's `@cache` freshness policy, if
+                    // any — lowered to a `Cache-Control` on this GET's responses.
+                    cache: bynk_model::lower_route_cache_ir(h),
+                    edge_cache,
+                    vary_locale: edge_cache && needs_locale_request,
+                    // v0.142 (ADR 0165): the route's effective request-body ceiling
+                    // in bytes — the handler's `@limit` if any, else the service's
+                    // `limits { }`, else none. `Some` drives the synthesised `413`
+                    // `Content-Length` guard before the body is read.
+                    max_body: effective_max_body(service.limits.as_ref(), h),
+                    raw: h.raw_content_type().map(str::to_string),
+                    json_plain: bynk_syntax::ast::effective_json_options(service.json.as_ref(), h)
+                        == bynk_syntax::ast::JsonOptions::Plain,
+                    rejected: rejected_surface(service, sname),
+                    query_fields,
+                    form_fields: form_field_specs(h, visible_types),
+                    cookies_fields,
+                    multipart: multipart_spec(service.limits.as_ref(), h, visible_types),
+                });
+            }
+        }
+    }
+    http_routes.sort_by(|a, b| {
+        // Sort by literal-specificity: a path with fewer parameter segments
+        // (more literals) wins. Stable secondary sort by method + path keeps
+        // the diff deterministic.
+        param_count(&a.path)
+            .cmp(&param_count(&b.path))
+            .then_with(|| a.method.as_str().cmp(b.method.as_str()))
+            .then_with(|| a.path.cmp(&b.path))
+    });
+    http_routes
 }

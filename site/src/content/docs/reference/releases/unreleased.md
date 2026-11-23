@@ -7,6 +7,8 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.640.91** | Internal restructuring: the Worker entry generator's inline blocks (route collection, WebSocket upgrade, events delivery, CORS preflight and the method fall-through) become named functions; no output changes |
+| **v0.640.90** | Internal restructuring: `emit.rs` splits further by declaration kind (services and contexts move out); no output changes |
 | **v0.640.89** | Internal restructuring: the call dispatchers move out of `lower.rs` into their own module, which completes the `lower.rs` split |
 | **v0.640.88** | Internal restructuring: the Worker entry generator's HTTP family (route dispatch, request field specs and CORS and security policy) moves into modules of its own; no output changes |
 | **v0.640.87** | Internal restructuring: the literal, record and identifier lowering move out of `lower.rs` into their own modules |
