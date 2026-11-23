@@ -188,7 +188,11 @@ fn emit_refined_type(
     let mut stmts = vec![type_alias];
 
     let checks = {
-        let checks = emit_refined_checks(t, base, refinement);
+        let checks = if bynk_syntax::ast::of_is_total(base, refinement, is_opaque) {
+            Vec::new()
+        } else {
+            emit_refined_checks(t, base, refinement)
+        };
         // #2622: a `Decimal` violation reports its canonical text, since the
         // `bigint` coefficient cannot be JSON-stringified.
         if base == BaseType::Decimal && refinement.is_some() {
@@ -200,11 +204,18 @@ fn emit_refined_type(
         expr: Box::new(bynk_ts::TsExpr::Ident("value".to_string())),
         ty: bynk_ts::TsType::named(name.clone()),
     };
+    // #3946: a named type with no predicate has nothing to check; `of` is a
+    // brand cast returning the type itself, like literal admission.
+    let total = bynk_syntax::ast::of_is_total(base, refinement, is_opaque);
     let mut of_body = checks;
     of_body.push(bynk_ts::TsStmt::return_stmt(
-        Some(bynk_ts::TsExpr::Call {
-            callee: Box::new(bynk_ts::TsExpr::Ident("Ok".to_string())),
-            args: vec![cast_to_name.clone()],
+        Some(if total {
+            cast_to_name.clone()
+        } else {
+            bynk_ts::TsExpr::Call {
+                callee: Box::new(bynk_ts::TsExpr::Ident("Ok".to_string())),
+                args: vec![cast_to_name.clone()],
+            }
         }),
         None,
     ));
@@ -216,13 +227,17 @@ fn emit_refined_type(
             "value".to_string(),
             Some(base_ty.clone()),
         )],
-        return_type: Some(bynk_ts::TsType::named_with_args(
-            "Result",
-            vec![
-                bynk_ts::TsType::named(name.clone()),
-                bynk_ts::TsType::named("ValidationError"),
-            ],
-        )),
+        return_type: Some(if total {
+            bynk_ts::TsType::named(name.clone())
+        } else {
+            bynk_ts::TsType::named_with_args(
+                "Result",
+                vec![
+                    bynk_ts::TsType::named(name.clone()),
+                    bynk_ts::TsType::named("ValidationError"),
+                ],
+            )
+        }),
         doc: None,
         inline: false,
         body: of_body,

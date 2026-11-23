@@ -1727,6 +1727,24 @@ fn record_capability_ref(span: Span, name: &str, ctx: &mut Ctx) {
     }
 }
 
+/// The type of `T.of(value)`: `Result[T, ValidationError]`, except on a named
+/// type with no predicate (#3946), where nothing can fail and it is `T`.
+/// Compile-time literal admission (v0.9.4) happens instead wherever an expected
+/// refined type is known — see `admit_refined_literal`, used by `type_of` — so
+/// `.of`'s type depends on the declaration, never on the form of its argument.
+fn of_result_ty(decl: &Arc<TypeDecl>, base: BaseType, tys: &Types) -> TyId {
+    if bynk_syntax::ast::of_is_total(
+        base,
+        type_decl_refinement(decl),
+        matches!(decl.body, TypeBody::Opaque { .. }),
+    ) {
+        return named_ty(decl, tys);
+    }
+    let named = named_ty(decl, tys);
+    let err = tys.intern(Ty::ValidationError);
+    tys.intern(Ty::Result(named, err))
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn check_static_call(
     type_name: &Ident,
@@ -2201,15 +2219,7 @@ pub(crate) fn check_static_call(
             ));
             return None;
         }
-        // `.of` is always the runtime constructor: it returns
-        // `Result[T, ValidationError]`. Compile-time literal admission (v0.9.4)
-        // happens instead wherever an expected refined type is known — see
-        // `admit_refined_literal`, used by `type_of` — so `.of`'s type never
-        // depends on the form of its argument.
-        return Some(tys.intern(Ty::Result(
-            named_ty(decl, tys),
-            tys.intern(Ty::ValidationError),
-        )));
+        return Some(of_result_ty(decl, base, tys));
     }
 
     // 2b) Built-in `unsafe` constructor on opaque types — only available

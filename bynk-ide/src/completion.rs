@@ -2522,11 +2522,22 @@ fn member_candidates_from(
                     }
                     bynk_syntax::ast::TypeBody::Refined { .. }
                     | bynk_syntax::ast::TypeBody::Opaque { .. } => {
+                        let of_sig = match &t.body {
+                            // #3946: a named type with no predicate cannot fail.
+                            bynk_syntax::ast::TypeBody::Refined {
+                                base, refinement, ..
+                            } if bynk_syntax::ast::of_is_total(
+                                *base,
+                                refinement.as_ref(),
+                                false,
+                            ) =>
+                            {
+                                format!("of(value) -> {receiver}")
+                            }
+                            _ => format!("of(value) -> Result[{receiver}, ValidationError]"),
+                        };
                         for (label, sig) in [
-                            (
-                                "of",
-                                format!("of(value) -> Result[{receiver}, ValidationError]"),
-                            ),
+                            ("of", of_sig),
                             ("unsafe", format!("unsafe(value) -> {receiver}")),
                         ] {
                             if seen.insert(label.to_string()) {

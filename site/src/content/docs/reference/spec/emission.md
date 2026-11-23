@@ -75,14 +75,14 @@ every call from outside a cycle, are emitted without the parameter.
 
 | Construct | Emits |
 |---|---|
-| alias (`type Id = Int`) | a branded base type with a `.of` constructor |
+| named type (`type Id = Int`) | a branded base type with a `.of` brand cast returning the type (no predicate, so it cannot fail) |
 | refined type | a branded base with `.of` (a runtime predicate check returning `Result`) |
 | opaque type | a branded base with `.of` and `.unsafe` constructors; no structural access to the representation |
 | record | an `interface` with `readonly` fields, constructed from an object literal |
 | sum / enum | a discriminated union over a `tag` field, plus a constructor namespace |
 
 Only an **opaque** type emits a public `.unsafe` constructor (ADR 0182) — its
-representation is hidden, so its defining `commons` needs one; a refined or alias
+representation is hidden, so its defining `commons` needs one; a refined or named
 type emits **none**, so no host or adapter code can brand a value past the
 refinement predicate. A refined type is constructed through `.of` and compile-time
 literal admission ([type-system §6.4](/reference/spec/type-system/#64-admission--construction));
