@@ -7,6 +7,7 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.640.84** | Internal restructuring: the `?`/control-flow and operator lowering move out of `lower.rs` into their own modules |
 | **v0.640.83** | Internal restructuring: `emit.rs` splits further by declaration kind (handler names, messages and capabilities move out); no output changes |
 | **v0.640.82** | Internal restructuring: the deploy `plan.rs` splits into its run, plan model, keys, contract-skew policy and messages; no output changes |
 | **v0.640.81** | Internal restructuring: `bynk-ts`'s printer (`printer.rs`) is split into modules by concern, with its tests in their own file; no output changes |
