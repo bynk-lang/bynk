@@ -10,6 +10,9 @@
 //! - `greenfield-status` (compiler-architecture track, T0.0, #999) runs all nineteen
 //!   probes against the tree and prints the report (the fourteen gated ones are what
 //!   the committed table is diffed on); `--apply` writes the committed table.
+//! - `module-lines` (#4085) lists the back-half source files at or over 2,000 production
+//!   lines against their committed ceilings (the ratchet `xtask/tests/module_lines_ratchet.rs`
+//!   enforces); `--apply` rewrites `xtask/module-line-ceilings.txt`;
 //! - `fn-lengths` (#3167) lists the non-test functions over 300 lines against their
 //!   committed ceilings (the ratchet `xtask/tests/fn_length_ratchet.rs` enforces);
 //!   `--apply` rewrites `xtask/fn-length-ceilings.txt` from the tree.
@@ -96,6 +99,34 @@ fn main() -> ExitCode {
                 match ceiling {
                     Some(c) => println!("{:>6}  (ceiling {c})  {}", f.lines, f.key()),
                     None => println!("{:>6}  (no ceiling)  {}", f.lines, f.key()),
+                }
+            }
+            ExitCode::SUCCESS
+        }
+        Some("module-lines") => {
+            if let Some(bad) = args[1..].iter().find(|a| *a != "--apply") {
+                eprintln!("xtask module-lines: unknown argument {bad:?}");
+                usage();
+                return ExitCode::from(2);
+            }
+            let root = repo_root();
+            let measured = xtask::module_lines::measure(&root);
+            if args.iter().any(|a| a == "--apply") {
+                let path = root.join(xtask::module_lines::CEILINGS_FILE);
+                if let Err(e) =
+                    std::fs::write(&path, xtask::module_lines::render_ceilings(&measured))
+                {
+                    eprintln!("xtask module-lines: cannot write {}: {e}", path.display());
+                    return ExitCode::FAILURE;
+                }
+                println!("wrote {} ({} files)", path.display(), measured.len());
+                return ExitCode::SUCCESS;
+            }
+            let ceilings = xtask::module_lines::read_ceilings(&root);
+            for m in &measured {
+                match ceilings.iter().find(|(k, _)| *k == m.file) {
+                    Some((_, c)) => println!("{:>6}  (ceiling {c})  {}", m.lines, m.file),
+                    None => println!("{:>6}  (no ceiling)  {}", m.lines, m.file),
                 }
             }
             ExitCode::SUCCESS
@@ -1055,7 +1086,7 @@ fn release_page(apply: bool) -> ExitCode {
 
 fn usage() {
     eprintln!(
-        "usage: cargo xtask <check-pending | ci [--fast] | fn-lengths [--apply] | greenfield-status [--apply | --list-unasserted | --check-growth [--base REV] | --trend-only [--apply]] | manifest-schema [--check] | editor-contract [--check | --tag T --out F] | stamp [--apply] | release-notes <vX.Y.Z> | release-page [--apply] | bench [--sizes N,N,…] [--shape independent|linked|both] [--runs N] [--edits N] [--record] | bench-runtime [--sizes-only] [--record] [--runs N] [--requests N] [--startups N] | tier-probe>"
+        "usage: cargo xtask <check-pending | ci [--fast] | fn-lengths [--apply] | module-lines [--apply] | greenfield-status [--apply | --list-unasserted | --check-growth [--base REV] | --trend-only [--apply]] | manifest-schema [--check] | editor-contract [--check | --tag T --out F] | stamp [--apply] | release-notes <vX.Y.Z> | release-page [--apply] | bench [--sizes N,N,…] [--shape independent|linked|both] [--runs N] [--edits N] [--record] | bench-runtime [--sizes-only] [--record] [--runs N] [--requests N] [--startups N] | tier-probe>"
     );
 }
 

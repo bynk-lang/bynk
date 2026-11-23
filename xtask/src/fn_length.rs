@@ -201,11 +201,7 @@ pub fn measure(root: &Path) -> Vec<FnLen> {
     let mut all: Vec<FnLen> = Vec::new();
     for krate in top_level_crate_dirs(root) {
         for (path, contents) in rust_files(&krate.join("src")) {
-            let file = path
-                .strip_prefix(root)
-                .unwrap_or(&path)
-                .to_string_lossy()
-                .replace('\\', "/");
+            let file = crate::module_lines::repo_rel_slash(&path, root);
             all.extend(disambiguate(&file, measure_source(&contents)));
         }
     }

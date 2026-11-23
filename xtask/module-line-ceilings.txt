@@ -1,0 +1,19 @@
+# Ratcheted maximum module size (#4085). `file = lines`, for every back-half source
+# file (bynk-model, bynk-emit, bynk-ts, bynk-driver, bynk-strip, bynk) of at least
+# 2000 production lines: comments and blank lines count; `#[cfg(test)]` modules,
+# whole-test files and `#[cfg(test)] mod x;` files do not. A file may not grow past its
+# ceiling, none may newly reach 2000, and an entry whose file has dropped below
+# 2000 (or gone, or been renamed) must be removed. A new entry may not be
+# 3000 or more: split along a seam first. Prefer splitting a file to raising its
+# ceiling; a raise needs its justification in review. `cargo xtask module-lines --apply`
+# rewrites this file from the tree (lowering ceilings after a file shrinks).
+bynk-emit/src/emitter/emit.rs = 10717
+bynk-emit/src/emitter/lower.rs = 4884
+bynk-driver/src/project.rs = 4312
+bynk-emit/src/emitter/serialisation.rs = 4232
+bynk-emit/src/emitter/workers_entry.rs = 4215
+bynk-ts/src/program.rs = 3682
+bynk-ts/src/printer.rs = 3629
+bynk-emit/src/emitter.rs = 3215
+bynk/src/dev.rs = 2292
+bynk/src/deploy/plan.rs = 2271

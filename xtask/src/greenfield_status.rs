@@ -82,6 +82,8 @@ use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use crate::module_lines::{BACK_HALF_CRATES, is_whole_test_file};
+
 /// One probe's result. `gated` probes are diffed against the committed table by
 /// [`crate::greenfield_status::gated_disagreements`]; the rest are reported only.
 pub struct Probe {
@@ -1177,6 +1179,18 @@ fn child_module_file(m: usize, seg: &str, files: &[(PathBuf, String)]) -> Option
         .find_map(|c| files.iter().position(|(p, _)| p == c))
 }
 
+/// `t` without a leading `pub`, `pub(crate)`, `pub(super)`, `pub(in path)` visibility.
+pub(crate) fn strip_visibility(t: &str) -> &str {
+    match t.strip_prefix("pub") {
+        Some(rest) if rest.starts_with(char::is_whitespace) => rest.trim_start(),
+        Some(rest) => match rest.strip_prefix('(') {
+            Some(r) => r.split_once(')').map_or(t, |(_, after)| after.trim_start()),
+            None => t,
+        },
+        None => t,
+    }
+}
+
 /// Every `#[cfg(test)] mod <ident> { ... }` block in `lines`, as inclusive
 /// `(start_line, end_line)` line-index ranges — every occurrence, not just a single
 /// trailing block. A file in this codebase can carry several test modules scattered
@@ -1196,8 +1210,10 @@ fn child_module_file(m: usize, seg: &str, files: &[(PathBuf, String)]) -> Option
 /// hundreds of lines. `brace_delta` skips characters inside Rust string/char literals
 /// and comments, so embedded fixture text can't be mistaken for real Rust braces.
 ///
-/// Only matches a brace-opening `mod` line — `#[cfg(test)] mod foo;` (an external-file
-/// declaration, not an inline scope) does not open a range.
+/// Only matches a brace-opening `mod` line, with an optional `pub`/`pub(…)` visibility
+/// (`#[cfg(test)] pub(crate) mod tests {`) — `#[cfg(test)] mod foo;` (an external-file
+/// declaration, not an inline scope) does not open a range. `#[cfg(all(test, …))]` is not
+/// recognised (one 840-line front-half module, `bynk-check/src/d1_sql.rs`).
 pub(crate) fn test_mod_ranges(lines: &[&str]) -> Vec<(usize, usize)> {
     let mut ranges = Vec::new();
     let mut i = 0;
@@ -1206,7 +1222,7 @@ pub(crate) fn test_mod_ranges(lines: &[&str]) -> Vec<(usize, usize)> {
             && let Some(off) = lines[i + 1..].iter().position(|l| !l.trim().is_empty())
         {
             let mod_line = i + 1 + off;
-            let t = lines[mod_line].trim();
+            let t = strip_visibility(lines[mod_line].trim());
             if t.starts_with("mod ") && t.ends_with('{') {
                 let mut depth = 0i32;
                 let mut state = BraceScanState::Normal;
@@ -1725,11 +1741,46 @@ fn ast_importer_files(root: &Path) -> Vec<PathBuf> {
 /// not clear. Gated at phase 6's retired floor of 5 when it was set; the live reading is
 /// the committed one in `design/greenfield-status.md`.
 fn ast_importers(root: &Path) -> Probe {
+    let dir = root.join("bynk-emit/src");
+    let rels: Vec<String> = ast_importer_files(root)
+        .iter()
+        .map(|p| {
+            p.strip_prefix(&dir)
+                .unwrap_or(p)
+                .to_string_lossy()
+                .replace('\\', "/")
+        })
+        .collect();
     Probe {
         name: "ast_importers",
         gated: true,
-        reads: ast_importer_files(root).len().to_string(),
+        reads: distinct_ast_importer_origins(&rels, AST_IMPORTER_ORIGINS).to_string(),
     }
+}
+
+/// Phase 2 of the back-half paydown track (#4085): the split-out files of a pure move, each
+/// mapped to the file it came from, as `(file, origin)` with both paths relative to
+/// `bynk-emit/src` and `/`-separated. [`ast_importers`] counts each *origin* once, so a split
+/// that carries `bynk_syntax::ast` imports into several children leaves the reading where it
+/// was: the probe measures how much of the crate reads the AST, not how many files it is
+/// written across. Empty today. **Each Phase 2 split of a `bynk-emit` file that imports the
+/// AST adds one `(child, origin)` row per new file that does too, in the same PR** (an origin
+/// that is itself a split child maps to its own origin, not to the intermediate file). A row
+/// whose child is not an importer is inert, so a row never needs deleting while the track runs.
+const AST_IMPORTER_ORIGINS: &[(&str, &str)] = &[];
+
+/// How many distinct origins the importing files `rels` come from: a file named as a child in
+/// `origins` counts as its origin, any other file as itself.
+fn distinct_ast_importer_origins(rels: &[String], origins: &[(&str, &str)]) -> usize {
+    rels.iter()
+        .map(|rel| {
+            origins
+                .iter()
+                .find(|(child, _)| child == rel)
+                .map_or(rel.as_str(), |(_, origin)| origin)
+        })
+        .collect::<BTreeSet<&str>>()
+        .len()
 }
 
 // --- Gated probe 9: emit_abi_shapes ---------------------------------------
@@ -4205,57 +4256,37 @@ fn test_density(root: &Path) -> Probe {
 /// A source file at least this many production lines long counts as large.
 const MODULE_LINES_THRESHOLDS: [usize; 3] = [2000, 3000, 5000];
 
-/// The crates of the "back half" whose largest files the probe names (track §8).
-const BACK_HALF_CRATES: [&str; 6] = [
-    "bynk-model",
-    "bynk-emit",
-    "bynk-ts",
-    "bynk-driver",
-    "bynk-strip",
-    "bynk",
-];
-
-/// True for a file under a crate's `src/` that is wholly tests: `tests.rs`,
-/// `*_tests.rs`, or anything beneath a `tests/` directory. `rel` is the path
-/// relative to `src/`, with `/` separators.
-fn is_whole_test_file(rel: &str) -> bool {
-    let mut parts: Vec<&str> = rel.split('/').collect();
-    let file = parts.pop().unwrap_or("");
-    file == "tests.rs" || file.ends_with("_tests.rs") || parts.contains(&"tests")
-}
-
-/// Lines of `source` outside its `#[cfg(test)]` module ranges. Comments and blank
-/// lines count; only each test module's own range is removed, wherever it sits.
-fn production_lines(source: &str) -> usize {
-    let lines: Vec<&str> = source.lines().collect();
-    let ranges = test_mod_ranges(&lines);
-    (0..lines.len())
-        .filter(|&i| !in_test_range(i, &ranges))
-        .count()
-}
-
 /// The probe's one-line reading from `(path from the repo root, production lines)`
-/// pairs: how many files reach each threshold, the largest file anywhere, and the
-/// three largest back-half files. Ties break on path so the reading is stable.
-fn module_lines_reading(files: &[(String, usize)]) -> String {
+/// pairs: how many files reach each threshold, the largest file anywhere, the three
+/// largest back-half files, the back-half files at or over the track's exit cap
+/// ([`crate::module_lines::EXIT_CAP`], §8's "Back-half files ≥ 3,000 lines (production)"),
+/// and how many ceilings `xtask/module-line-ceilings.txt` holds. Ties break on path so the
+/// reading is stable.
+fn module_lines_reading(files: &[(String, usize)], ceilings: usize) -> String {
     let at_least = |n: usize| files.iter().filter(|(_, l)| *l >= n).count();
     let mut sorted: Vec<&(String, usize)> = files.iter().collect();
     sorted.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
     let named = |f: &&(String, usize)| format!("{} {}", f.0, f.1);
     let largest = sorted.first().map(named).unwrap_or_else(|| "none".into());
+    let is_back_half = |p: &str| {
+        p.split('/')
+            .next()
+            .is_some_and(|c| BACK_HALF_CRATES.contains(&c))
+    };
     let back_half: Vec<String> = sorted
         .iter()
-        .filter(|(p, _)| {
-            p.split('/')
-                .next()
-                .is_some_and(|c| BACK_HALF_CRATES.contains(&c))
-        })
+        .filter(|(p, _)| is_back_half(p))
         .take(3)
         .map(named)
         .collect();
+    let exit_cap = crate::module_lines::EXIT_CAP;
+    let back_half_over_cap = files
+        .iter()
+        .filter(|(p, l)| is_back_half(p) && *l >= exit_cap)
+        .count();
     let [a, b, c] = MODULE_LINES_THRESHOLDS;
     format!(
-        "≥{a}: {} (≥{b}: {}, ≥{c}: {}); largest: {largest}; back half: {}",
+        "≥{a}: {} (≥{b}: {}, ≥{c}: {}); largest: {largest}; back half: {}; back half ≥{b}: {back_half_over_cap}; ceilings: {ceilings}",
         at_least(a),
         at_least(b),
         at_least(c),
@@ -4263,118 +4294,21 @@ fn module_lines_reading(files: &[(String, usize)]) -> String {
     )
 }
 
-/// Names declared by `#[cfg(test)] [vis] mod name;` — an external-file module
-/// *declaration* gated by its attribute, whose file is therefore wholly test code
-/// (`bynk-check/src/testkit.rs`). The attribute must be the line directly above
-/// (blank lines allowed), as [`test_mod_ranges`] reads it.
-fn cfg_test_declared_mods(source: &str) -> Vec<String> {
-    let lines: Vec<&str> = source.lines().collect();
-    let mut out = Vec::new();
-    for (i, line) in lines.iter().enumerate() {
-        if line.trim() != "#[cfg(test)]" {
-            continue;
-        }
-        let Some(next) = lines[i + 1..].iter().find(|l| !l.trim().is_empty()) else {
-            continue;
-        };
-        let t = next.trim();
-        // Drop a `pub`, `pub(crate)`, `pub(super)` ... visibility prefix.
-        let t = match t.strip_prefix("pub") {
-            Some(rest) => match rest.trim_start().strip_prefix('(') {
-                Some(r) => r.split_once(')').map_or("", |(_, after)| after),
-                None => rest,
-            },
-            None => t,
-        };
-        if let Some(name) = t
-            .trim_start()
-            .strip_prefix("mod ")
-            .and_then(|r| r.strip_suffix(';'))
-        {
-            out.push(name.trim().to_string());
-        }
-    }
-    out
-}
-
-/// The `src/`-relative stems (`testkit`, `emitter/testkit`) of files and
-/// directories declared away as test-only by a `#[cfg(test)] mod name;` in some
-/// other file. A module file `a/b.rs` owns directory `a/b/`, except `lib.rs`,
-/// `main.rs` and `mod.rs`, which own their own directory.
-fn declaration_gated_stems(files: &[(String, String)]) -> BTreeSet<String> {
-    let mut stems = BTreeSet::new();
-    for (rel, contents) in files {
-        let (dir, file) = rel.rsplit_once('/').unwrap_or(("", rel.as_str()));
-        let stem = file.strip_suffix(".rs").unwrap_or(file);
-        let owned = match stem {
-            "lib" | "main" | "mod" => dir.to_string(),
-            _ if dir.is_empty() => stem.to_string(),
-            _ => format!("{dir}/{stem}"),
-        };
-        for name in cfg_test_declared_mods(contents) {
-            stems.insert(if owned.is_empty() {
-                name
-            } else {
-                format!("{owned}/{name}")
-            });
-        }
-    }
-    stems
-}
-
-/// True when `rel` is one of the declaration-gated stems' files (`stem.rs`,
-/// `stem/mod.rs`) or lies beneath such a module's directory.
-fn is_declaration_gated(rel: &str, stems: &BTreeSet<String>) -> bool {
-    let without_ext = rel.strip_suffix(".rs").unwrap_or(rel);
-    stems
-        .iter()
-        .any(|s| without_ext == s || rel.starts_with(&format!("{s}/")))
-}
-
-/// `(path from the repo root, production lines)` for one crate's `src/**/*.rs`
-/// files, given as `(src-relative path, contents)`. Whole-test files and files
-/// whose `mod` declaration is `#[cfg(test)]` are skipped; paths read
-/// `{crate}/src/{rel}`.
-fn module_lines_for_crate(crate_name: &str, files: &[(String, String)]) -> Vec<(String, usize)> {
-    let gated = declaration_gated_stems(files);
-    files
-        .iter()
-        .filter(|(rel, _)| !is_whole_test_file(rel) && !is_declaration_gated(rel, &gated))
-        .map(|(rel, contents)| {
-            (
-                format!("{crate_name}/src/{rel}"),
-                production_lines(contents),
-            )
-        })
-        .collect()
-}
-
-/// Phase 2 of the back-half paydown track (#3683). Production lines per
-/// `src/**/*.rs` file across every top-level crate, excluding `#[cfg(test)]`
-/// modules, whole-test files and files declared by `#[cfg(test)] mod name;`.
-/// A trend, not a gate: the threshold is still open.
+/// Phase 2 of the back-half paydown track (#3683, ratcheted by #4085). Production lines per
+/// `src/**/*.rs` file across every top-level crate, excluding `#[cfg(test)]` modules (with
+/// an optional `pub`/`pub(…)` visibility; `#[cfg(all(test, …))]` is a known gap, one 840-line
+/// front-half module), whole-test files and files declared by `#[cfg(test)] mod name;`. The
+/// reading is a trend, because naming the largest files would change the row on almost every
+/// Rust PR; the gate is `xtask/module-line-ceilings.txt`, checked by
+/// `xtask/tests/module_lines_ratchet.rs` over the back-half crates. Both read
+/// [`crate::module_lines`], so there is one definition.
 fn module_lines(root: &Path) -> Probe {
-    let mut files = Vec::new();
-    for krate in top_level_crate_dirs(root) {
-        let crate_name = krate.file_name().unwrap().to_string_lossy().to_string();
-        let src = krate.join("src");
-        let rels: Vec<(String, String)> = rust_files(&src)
-            .into_iter()
-            .map(|(path, contents)| {
-                let rel = path
-                    .strip_prefix(&src)
-                    .unwrap_or(&path)
-                    .to_string_lossy()
-                    .replace('\\', "/");
-                (rel, contents)
-            })
-            .collect();
-        files.extend(module_lines_for_crate(&crate_name, &rels));
-    }
+    let files = crate::module_lines::measure_workspace(root);
+    let ceilings = crate::module_lines::read_ceilings(root).len();
     Probe {
         name: "module_lines",
         gated: false,
-        reads: module_lines_reading(&files),
+        reads: module_lines_reading(&files, ceilings),
     }
 }
 
@@ -6990,99 +6924,73 @@ mod idempotency_scoping_tests {
         );
     }
 
+    #[test]
+    fn ast_importer_origins_count_each_origin_once() {
+        let rels: Vec<String> = [
+            "emitter/a.rs",
+            "emitter/a/x.rs",
+            "emitter/a/y.rs",
+            "emitter/b.rs",
+        ]
+        .map(String::from)
+        .to_vec();
+        // No table: every file counts.
+        assert_eq!(distinct_ast_importer_origins(&rels, &[]), 4);
+        // Two children of `emitter/a.rs` fold into it.
+        let table = [
+            ("emitter/a/x.rs", "emitter/a.rs"),
+            ("emitter/a/y.rs", "emitter/a.rs"),
+        ];
+        assert_eq!(distinct_ast_importer_origins(&rels, &table), 2);
+        // A row for a file that is not an importer is inert.
+        assert_eq!(
+            distinct_ast_importer_origins(&rels[..1], &[("emitter/z.rs", "emitter/a.rs")]),
+            1
+        );
+    }
+
+    /// The origin table is empty until a split adds to it; every row names `bynk-emit/src`
+    /// files that exist, so a row cannot rot silently.
+    #[test]
+    fn ast_importer_origin_rows_name_existing_files() {
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..");
+        for (child, origin) in AST_IMPORTER_ORIGINS {
+            assert!(root.join("bynk-emit/src").join(child).is_file(), "{child}");
+            assert!(
+                root.join("bynk-emit/src").join(origin).is_file(),
+                "{origin}"
+            );
+        }
+    }
+
     // --- module_lines -----------------------------------------------------
 
-    fn lines_of(n: usize) -> String {
-        "x\n".repeat(n)
-    }
-
-    #[test]
-    fn module_lines_excludes_a_trailing_test_module() {
-        let src = format!(
-            "{}#[cfg(test)]\nmod tests {{\n{}}}\n",
-            lines_of(5),
-            lines_of(100)
-        );
-        // 5 production lines plus the attribute line, which sits outside the range.
-        assert_eq!(production_lines(&src), 6);
-    }
-
-    #[test]
-    fn module_lines_excludes_a_mid_file_test_module_but_keeps_what_follows() {
-        let src = format!(
-            "{}#[cfg(test)]\nmod tests {{\n{}}}\n{}",
-            lines_of(3),
-            lines_of(50),
-            lines_of(4)
-        );
-        assert_eq!(production_lines(&src), 3 + 1 + 4);
-    }
-
-    #[test]
-    fn module_lines_counts_comments_and_blank_lines() {
-        assert_eq!(production_lines("// c\n\nfn a() {}\n"), 3);
-    }
-
-    #[test]
-    fn module_lines_skips_whole_test_files() {
-        assert!(is_whole_test_file("tests.rs"));
-        assert!(is_whole_test_file("emitter/tests.rs"));
-        assert!(is_whole_test_file("parser_tests.rs"));
-        assert!(is_whole_test_file("tests/fixtures/a.rs"));
-        assert!(!is_whole_test_file("emitter/emit.rs"));
-        assert!(!is_whole_test_file("attests.rs"));
-    }
-
-    #[test]
-    fn module_lines_paths_read_crate_src_rel() {
-        let files = vec![("emitter/a.rs".to_string(), lines_of(7))];
-        assert_eq!(
-            module_lines_for_crate("bynk-emit", &files),
-            vec![("bynk-emit/src/emitter/a.rs".to_string(), 7)]
-        );
-    }
-
-    #[test]
-    fn module_lines_skips_files_declared_by_cfg_test_mod() {
-        let lib =
-            "#[cfg(test)]\npub(crate) mod testkit;\n\n#[cfg(test)]\nmod fixtures;\npub mod real;\n";
-        let files = vec![
-            ("lib.rs".to_string(), lib.to_string()),
-            ("testkit.rs".to_string(), lines_of(500)),
-            ("fixtures/mod.rs".to_string(), lines_of(50)),
-            ("fixtures/inner.rs".to_string(), lines_of(50)),
-            ("real.rs".to_string(), lines_of(9)),
-        ];
-        let got = module_lines_for_crate("c", &files);
-        let names: Vec<&str> = got.iter().map(|(p, _)| p.as_str()).collect();
-        assert_eq!(names, vec!["c/src/lib.rs", "c/src/real.rs"]);
-    }
-
-    #[test]
-    fn module_lines_declaration_gate_is_scoped_to_the_declaring_directory() {
-        // `emitter.rs` declares `emitter/testkit.rs`; a top-level `testkit.rs`
-        // that no `#[cfg(test)]` declaration gates stays production code.
-        let files = vec![
-            (
-                "emitter.rs".to_string(),
-                "#[cfg(test)]\nmod testkit;\n".to_string(),
-            ),
-            ("emitter/testkit.rs".to_string(), lines_of(30)),
-            ("testkit.rs".to_string(), lines_of(40)),
-            ("lib.rs".to_string(), "mod testkit;\n".to_string()),
-        ];
-        let got = module_lines_for_crate("c", &files);
-        assert!(got.iter().any(|(p, n)| p == "c/src/testkit.rs" && *n == 40));
-        assert!(!got.iter().any(|(p, _)| p.contains("emitter/testkit")));
+    fn module_lines_reading_t(files: &[(String, usize)]) -> String {
+        module_lines_reading(files, 0)
     }
 
     #[test]
     fn module_lines_threshold_counts_exactly_2000() {
         let at = |n| vec![("bynk-emit/src/a.rs".to_string(), n)];
-        assert!(module_lines_reading(&at(2000)).starts_with("≥2000: 1 (≥3000: 0, ≥5000: 0)"));
-        assert!(module_lines_reading(&at(1999)).starts_with("≥2000: 0 "));
-        assert!(module_lines_reading(&at(3000)).contains("≥3000: 1"));
-        assert!(module_lines_reading(&at(5000)).contains("≥5000: 1"));
+        assert!(module_lines_reading_t(&at(2000)).starts_with("≥2000: 1 (≥3000: 0, ≥5000: 0)"));
+        assert!(module_lines_reading_t(&at(1999)).starts_with("≥2000: 0 "));
+        assert!(module_lines_reading_t(&at(3000)).contains("≥3000: 1"));
+        assert!(module_lines_reading_t(&at(5000)).contains("≥5000: 1"));
+    }
+
+    #[test]
+    fn module_lines_reading_counts_back_half_files_at_the_exit_cap_and_the_ceilings() {
+        let f = |p: &str, l| (p.to_string(), l);
+        let files = vec![
+            f("bynk-emit/src/a.rs", 3000),
+            f("bynk-emit/src/b.rs", 2999),
+            f("bynk-check/src/front.rs", 9000),
+        ];
+        let reading = module_lines_reading(&files, 7);
+        assert!(
+            reading.ends_with("back half ≥3000: 1; ceilings: 7"),
+            "{reading}"
+        );
     }
 
     #[test]
@@ -7095,10 +7003,10 @@ mod idempotency_scoping_tests {
             f("bynk-driver/src/c.rs", 200),
             f("bynk-model/src/d.rs", 400),
         ];
-        let reading = module_lines_reading(&files);
+        let reading = module_lines_reading(&files, 0);
         assert!(
-            reading.ends_with(
-                "back half: bynk-emit/src/a.rs 500, bynk-model/src/d.rs 400, bynk-ts/src/b.rs 300"
+            reading.contains(
+                "back half: bynk-emit/src/a.rs 500, bynk-model/src/d.rs 400, bynk-ts/src/b.rs 300;"
             ),
             "{reading}"
         );
@@ -7111,15 +7019,40 @@ mod idempotency_scoping_tests {
             f("bynk-check/src/big.rs", 900),
             f("bynk-emit/src/a.rs", 100),
         ];
-        let reading = module_lines_reading(&files);
+        let reading = module_lines_reading(&files, 0);
         assert!(
             reading.contains("largest: bynk-check/src/big.rs 900;"),
             "{reading}"
         );
         assert!(
-            reading.ends_with("back half: bynk-emit/src/a.rs 100"),
+            reading.contains("back half: bynk-emit/src/a.rs 100;"),
             "{reading}"
         );
+    }
+
+    /// A visibility prefix on the test module does not hide it (`pub(crate) mod tests {`),
+    /// but a `#[cfg(test)]` item that is not a module still opens no range.
+    #[test]
+    fn test_mod_ranges_accepts_a_visibility_prefix() {
+        let src = "\
+#[cfg(test)]
+pub(crate) mod tests {
+    fn x() {}
+}
+#[cfg(test)]
+pub mod y {
+}
+#[cfg(test)]
+pub(crate) fn helper() {
+}
+#[cfg(test)]
+pub(in crate::a) mod z {
+}
+#[cfg(test)]
+pub mod w;
+";
+        let lines: Vec<&str> = src.lines().collect();
+        assert_eq!(test_mod_ranges(&lines), vec![(1, 3), (5, 6), (11, 12)]);
     }
 
     /// The same fixture's `test_mod_ranges` shape, checked directly: two disjoint
