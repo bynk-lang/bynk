@@ -8,4 +8,3 @@
 # ceiling; a raise needs its justification in review. `cargo xtask module-lines --apply`
 # rewrites this file from the tree (lowering ceilings after a file shrinks).
 bynk-emit/src/emitter/emit.rs = 9295
-bynk-emit/src/emitter/serialisation.rs = 4232
