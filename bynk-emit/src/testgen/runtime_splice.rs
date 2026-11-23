@@ -20,6 +20,10 @@ use super::test_runtime_modules::TEST_RUNTIME_MODULES;
 /// named here (the `every_module_is_in_the_table_both_ways` test holds the two together).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(super) enum TestRuntimeModule {
+    /// #1883: `__bynkAssetGet`, which answers a case's asset fetch from the embedded files.
+    AssetGet,
+    /// #2267: the per-case timer (`CaseResult`, `__bynkCaseSince`).
+    CaseTiming,
     /// #2137: the harness clock (`__bynkClockNow`, `__bynkAdvanceClock`) and the `Clock` that reads it.
     Clock,
     /// `ExpectationError` and the `expect` helpers every test module carries.
@@ -50,13 +54,19 @@ pub(super) enum TestRuntimeModule {
     Settle,
     /// #2842: the snapshot runtime.
     Snapshot,
+    /// #291: `__bynkOverlay`, the layer a `stub` puts over a seam's tier default.
+    StubOverlay,
+    /// #2273: the `--suite` / `--case` filter `tests/main.ts` applies.
+    TestFilter,
     /// #2683: the harness clock on virtual time.
     VirtualTime,
 }
 
 impl TestRuntimeModule {
     /// Every module, in the table's order.
-    pub(super) const ALL: [TestRuntimeModule; 16] = [
+    pub(super) const ALL: [TestRuntimeModule; 20] = [
+        TestRuntimeModule::AssetGet,
+        TestRuntimeModule::CaseTiming,
         TestRuntimeModule::Clock,
         TestRuntimeModule::Expectation,
         TestRuntimeModule::History,
@@ -72,12 +82,16 @@ impl TestRuntimeModule {
         TestRuntimeModule::Send,
         TestRuntimeModule::Settle,
         TestRuntimeModule::Snapshot,
+        TestRuntimeModule::StubOverlay,
+        TestRuntimeModule::TestFilter,
         TestRuntimeModule::VirtualTime,
     ];
 
     /// The module's name: its file under `runtime/src/testing/`, without the extension.
     pub(super) fn name(self) -> &'static str {
         match self {
+            TestRuntimeModule::AssetGet => "asset_get",
+            TestRuntimeModule::CaseTiming => "case_timing",
             TestRuntimeModule::Clock => "clock",
             TestRuntimeModule::Expectation => "expectation",
             TestRuntimeModule::History => "history",
@@ -93,6 +107,8 @@ impl TestRuntimeModule {
             TestRuntimeModule::Send => "send",
             TestRuntimeModule::Settle => "settle",
             TestRuntimeModule::Snapshot => "snapshot",
+            TestRuntimeModule::StubOverlay => "stub_overlay",
+            TestRuntimeModule::TestFilter => "test_filter",
             TestRuntimeModule::VirtualTime => "virtual_time",
         }
     }
@@ -185,7 +201,8 @@ pub(super) fn run_id_stmt(remote: bool) -> TsStmt {
     }
 }
 
-/// #3052: `const __bynkOidcRemote: boolean = <remote>;`, the flag the issuer's text reads.
+/// #3052: `const __bynkOidcRemote: boolean = <remote>;`, the flag the `system` drivers pass to
+/// `__bynkOidcToken` (the issuer's text takes it as a parameter and does not read it itself).
 pub(super) fn oidc_remote_flag(remote: bool) -> TsStmt {
     TsStmt::const_stmt(
         TsBindingName::Ident("__bynkOidcRemote".to_string()),
@@ -242,33 +259,47 @@ mod tests {
         }
     }
 
-    /// Every dependency of a module is a module, and none depends on itself.
+    /// The dependency graph has no cycle of any length: a depth-first walk that meets a module
+    /// it is still inside has found one.
     #[test]
-    fn dependencies_are_modules_and_acyclic() {
-        for module in TestRuntimeModule::ALL {
-            let deps = module.deps();
-            assert!(
-                !deps.contains(&module),
-                "{} depends on itself",
-                module.name()
-            );
-            for dep in deps {
-                assert!(
-                    !dep.deps().contains(&module),
-                    "{} and {} depend on each other",
-                    module.name(),
-                    dep.name()
-                );
+    fn the_dependency_graph_has_no_cycle() {
+        fn visit(
+            module: TestRuntimeModule,
+            path: &mut Vec<TestRuntimeModule>,
+            done: &mut Vec<TestRuntimeModule>,
+        ) {
+            if done.contains(&module) {
+                return;
             }
+            assert!(
+                !path.contains(&module),
+                "a dependency cycle through `{}`: {:?}",
+                module.name(),
+                path.iter().map(|m| m.name()).collect::<Vec<_>>()
+            );
+            path.push(module);
+            for dep in module.deps() {
+                visit(dep, path, done);
+            }
+            path.pop();
+            done.push(module);
         }
+        let mut done = Vec::new();
+        for module in TestRuntimeModule::ALL {
+            visit(module, &mut Vec::new(), &mut done);
+        }
+        assert_eq!(done.len(), TestRuntimeModule::ALL.len());
     }
 
     /// The generated declaration in `harness.ts` is the name `snapshot_harness` writes.
     #[test]
     fn the_harness_contract_matches_the_generator() {
         let contract = include_str!("../../runtime/src/testing/harness.ts");
-        let written =
-            crate::testgen::test_module::snapshot_harness(&std::collections::BTreeMap::new(), None);
+        let written: String =
+            crate::testgen::test_module::snapshot_harness(&std::collections::BTreeMap::new(), None)
+                .iter()
+                .map(|s| bynk_ts::print_stmt(s, 0))
+                .collect();
         assert!(
             contract.contains(
                 "declare const __bynkSnapshotFiles: globalThis.Record<string, __SnapshotFile>;"
@@ -281,5 +312,44 @@ mod tests {
             ),
             "the generator no longer writes the declaration harness.ts mirrors"
         );
+        // The asset table: the generator's name and type are the ones `harness.ts` declares.
+        let assets = format!(
+            "declare const {}: {};",
+            crate::testgen::test_deps::ASSET_FILES_NAME,
+            crate::testgen::test_deps::ASSET_FILES_TYPE
+        );
+        assert!(
+            contract.contains(&assets),
+            "harness.ts does not declare the asset table as the generator writes it: {assets}"
+        );
+    }
+
+    /// No stored golden holds a snapshot table, so its text is pinned: the runtime, then the table
+    /// directly after it, as it was written before the table was a node (1B.5a).
+    #[test]
+    fn the_snapshot_table_prints_as_it_always_did() {
+        let mut keys = std::collections::BTreeMap::new();
+        keys.insert(
+            "a.snap".to_string(),
+            vec![
+                ("one".to_string(), "x".to_string()),
+                ("two".to_string(), "y\"z".to_string()),
+            ],
+        );
+        keys.insert(
+            "b.snap".to_string(),
+            vec![("c".to_string(), "n".to_string())],
+        );
+        let mut stored = std::collections::BTreeMap::new();
+        stored.insert("a.snap".to_string(), "line\n\"q\"".to_string());
+        let printed: String = crate::testgen::test_module::snapshot_harness(&keys, Some(&stored))
+            .iter()
+            .map(|s| bynk_ts::print_stmt(s, 0))
+            .collect();
+        let expected = format!(
+            "{}const __bynkSnapshotFiles: globalThis.Record<string, __SnapshotFile> = {{\n  \"a.snap\": {{ stored: \"line\\n\\\"q\\\"\", live: [[\"one\", \"x\"], [\"two\", \"y\\\"z\"]] }},\n  \"b.snap\": {{ stored: null, live: [[\"c\", \"n\"]] }},\n}};\n",
+            TestRuntimeModule::Snapshot.source()
+        );
+        assert_eq!(printed, expected);
     }
 }

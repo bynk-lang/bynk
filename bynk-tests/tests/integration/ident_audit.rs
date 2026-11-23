@@ -1,4 +1,4 @@
-//! The identifier audit (1A.39b, #3930 Decision D).
+//! The identifier audit (1A.39b, #3930 Decision D; closed by 1A.40c, #3996).
 //!
 //! For every module the positive corpus emits, on both targets, every `TsExpr::Ident` is an
 //! identifier or a dotted identifier chain (`this.state`, `globalThis.Number`) and every
@@ -8,8 +8,8 @@
 //! a variable or a helper, and this test does. It changes no output.
 //!
 //! Every module the emitter or the driver builds is covered bar the test harness's `tests/*.test.ts`
-//! modules, whose text stays predicted until 1B.5 converts it. What is still text is accounted by
-//! class in [`TEXT_CLASSES`], each with a reason and an owner; the list can only shrink.
+//! modules, whose text stays predicted until 1B.5 converts it. No text class remains, so a find is
+//! a failure: convert it to the node it spells.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -19,105 +19,6 @@ use bynk_driver::project::{BuildTarget, Document};
 
 #[path = "../par/mod.rs"]
 mod par;
-
-/// One class of expression text that an `Ident` still holds. Every find must match a class, and
-/// every class must still occur: the list can only shrink (a class that no longer occurs is
-/// deleted, and a find outside every class fails). A class is structural, a named shape and not
-/// "anything".
-struct TextClass {
-    name: &'static str,
-    matches: fn(&str) -> bool,
-    reason: &'static str,
-    owner: &'static str,
-}
-
-const OWNER: &str = "1A.40";
-
-const TEXT_CLASSES: &[TextClass] = &[
-    TextClass {
-        name: "rendered literal",
-        matches: is_rendered_literal,
-        reason: "a pre-rendered default, zero or wire literal (`\"\"`, `0`, `[]`, `{ kind: \"None\" }`)",
-        owner: OWNER,
-    },
-    TextClass {
-        name: "predicate, call or cast text",
-        matches: is_rendered_expression,
-        reason: "a rendered predicate, call, comparison or cast (`!(..)`, `f(x)`, `a === b`, `(x as T)`)",
-        owner: OWNER,
-    },
-];
-
-/// Whether `text` has `await` as a whole word.
-fn has_await_word(text: &str) -> bool {
-    let word = |c: char| c.is_ascii_alphanumeric() || c == '_' || c == '$';
-    text.match_indices("await").any(|(i, m)| {
-        !text[..i].chars().next_back().is_some_and(word)
-            && !text[i + m.len()..].chars().next().is_some_and(word)
-    })
-}
-
-/// A literal: strings, numbers, arrays and objects of literals. No operator, call or cast.
-fn is_rendered_literal(t: &str) -> bool {
-    let mut out = String::new();
-    let mut chars = t.chars();
-    while let Some(c) = chars.next() {
-        if c == '"' {
-            out.push_str("\"\"");
-            loop {
-                match chars.next() {
-                    Some('\\') => {
-                        chars.next();
-                    }
-                    Some('"') | None => break,
-                    Some(_) => {}
-                }
-            }
-        } else {
-            out.push(c);
-        }
-    }
-    let out = out.trim();
-    if out.is_empty() || out.contains("for ") {
-        return false;
-    }
-    let bytes = out.as_bytes();
-    let mut i = 0;
-    while i < bytes.len() {
-        let b = bytes[i];
-        if b.is_ascii_alphabetic() || b == b'_' || b == b'$' {
-            let start = i;
-            while i < bytes.len()
-                && (bytes[i].is_ascii_alphanumeric() || matches!(bytes[i], b'_' | b'$'))
-            {
-                i += 1;
-            }
-            let word = &out[start..i];
-            // A bare word is an object key (`kind:`), or a `null`/`true`/`false` literal.
-            let follows_colon = out[i..].trim_start().starts_with(':');
-            if !follows_colon && !matches!(word, "null" | "true" | "false" | "undefined") {
-                return false;
-            }
-        } else if matches!(
-            b,
-            b'"' | b'[' | b']' | b'{' | b'}' | b':' | b',' | b' ' | b'-' | b'.'
-        ) || b.is_ascii_digit()
-        {
-            i += 1;
-        } else {
-            return false;
-        }
-    }
-    true
-}
-
-/// Expression text that is not a literal: it carries an operator, a call, a cast or a ternary.
-fn is_rendered_expression(t: &str) -> bool {
-    !is_rendered_literal(t)
-        && ["(", " === ", " >= ", " + ", " as ", " ? ", " => "]
-            .iter()
-            .any(|n| t.contains(n))
-}
 
 fn target_name(target: BuildTarget) -> &'static str {
     match target {
@@ -212,104 +113,23 @@ fn every_ident_in_the_built_trees_is_an_identifier_path() {
     }
     assert!(modules > 1000, "only {modules} modules checked");
 
-    // Classify each find by the first class that matches; count occurrences (one per module and
-    // text) and distinct texts per class.
-    let mut counts = vec![0usize; TEXT_CLASSES.len()];
-    let mut distinct: Vec<BTreeMap<&str, usize>> = vec![BTreeMap::new(); TEXT_CLASSES.len()];
-    let mut unmatched: BTreeMap<&str, (usize, &str)> = BTreeMap::new();
+    // One line per distinct text, with the number of modules it occurs in and the first place.
+    let mut distinct: BTreeMap<&str, (usize, &str)> = BTreeMap::new();
     for (location, text) in &found {
-        match TEXT_CLASSES.iter().position(|c| (c.matches)(text)) {
-            Some(i) => {
-                counts[i] += 1;
-                *distinct[i].entry(text.as_str()).or_default() += 1;
-            }
-            None => {
-                unmatched
-                    .entry(text.as_str())
-                    .or_insert((0, location.as_str()))
-                    .0 += 1;
-            }
-        }
+        distinct
+            .entry(text.as_str())
+            .or_insert((0, location.as_str()))
+            .0 += 1;
     }
-    let mut report = format!(
-        "ident audit: {modules} modules, {} text idents\n",
-        found.len()
-    );
-    for (i, c) in TEXT_CLASSES.iter().enumerate() {
-        report.push_str(&format!(
-            "  {:<32} {:>6} occurrences, {:>4} distinct texts (owner {}): {}\n",
-            c.name,
-            counts[i],
-            distinct[i].len(),
-            c.owner,
-            c.reason
-        ));
-    }
-    eprintln!("{report}");
-
     assert!(
-        unmatched.is_empty(),
-        "{modules} modules checked. An `Ident` holds expression text that matches no class in \
-         TEXT_CLASSES (convert it to the node it spells, or add a structural class with a reason \
-         and an owner):\n{}",
-        unmatched
+        distinct.is_empty(),
+        "{modules} modules checked. An `Ident` holds expression text (convert it to the node it \
+         spells):\n{}",
+        distinct
             .iter()
             .take(60)
             .map(|(t, (n, loc))| format!("  {n:>5}  {t}   (first: {loc})"))
             .collect::<Vec<_>>()
             .join("\n"),
     );
-    // `bynk_ts::expr_contains_await` treats an identifier path as never awaiting and searches any
-    // other `Ident` as text. The audit enforces what keeps the node view sound: no text `Ident`
-    // in the corpus holds the word `await`. (The events fan-out block, the one class that awaited
-    // by design, is built from nodes since 1B.1c.)
-    let awaiting: Vec<&str> = found
-        .iter()
-        .map(|(_, t)| t.as_str())
-        .filter(|t| has_await_word(t))
-        .collect();
-    assert!(
-        awaiting.is_empty(),
-        "a text `Ident` holds the word `await` (an await hidden outside a node): {awaiting:?}"
-    );
-    // The list can only shrink: a class that no longer occurs is deleted.
-    let stale: Vec<&str> = TEXT_CLASSES
-        .iter()
-        .zip(&counts)
-        .filter(|(_, n)| **n == 0)
-        .map(|(c, _)| c.name)
-        .collect();
-    assert!(
-        stale.is_empty(),
-        "these TEXT_CLASSES no longer occur anywhere; delete their entries: {stale:?}"
-    );
-}
-
-#[test]
-fn the_class_matchers_match_their_shapes_and_nothing_wider() {
-    // rendered literal
-    assert!(is_rendered_literal("\"\""));
-    assert!(is_rendered_literal("-0.25"));
-    assert!(is_rendered_literal("[]"));
-    assert!(is_rendered_literal(
-        "{ kind: \"Some\", value: { kind: \"None\" } }"
-    ));
-    assert!(!is_rendered_literal("f(x)"));
-    assert!(!is_rendered_literal("a === 1"));
-    assert!(!is_rendered_literal("{ for (const ev of events) { } }"));
-    assert!(!is_rendered_literal("depth + 1"));
-    // predicate, call or cast text
-    assert!(is_rendered_expression(
-        "__bynkSchemaEnv.schemaVersion === 1"
-    ));
-    assert!(is_rendered_expression("(this as unknown as T)"));
-    assert!(is_rendered_expression("f(x)"));
-    assert!(!is_rendered_expression("plain"));
-    assert!(!is_rendered_expression("{  }"));
-    assert!(!is_rendered_expression("obj[\"f\"]"));
-    // the word check
-    assert!(has_await_word("(await x)"));
-    assert!(has_await_word("await"));
-    assert!(!has_await_word("awaiter"));
-    assert!(!has_await_word("this.awaited"));
 }

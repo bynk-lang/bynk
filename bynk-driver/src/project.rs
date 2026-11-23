@@ -3635,10 +3635,16 @@ fn runtime_with_npm(
     std::collections::BTreeMap<String, String>,
 ) {
     let runtime_files = emitter::runtime_files::closure_files(reached);
-    let modules = runtime_files
+    // A module's name is its path under the runtime directory without the extension, so a module
+    // in a subdirectory (`testing/pglite`) keeps it (1B.3b, #4047).
+    let modules: Vec<String> = runtime_files
         .iter()
-        .filter_map(|(path, _)| path.file_stem().and_then(|m| m.to_str()));
-    for dep in firstparty::first_party_npm_for(modules) {
+        .filter_map(|(path, _)| {
+            let rel = path.strip_prefix(emitter::RUNTIME_DIR).ok()?;
+            Some(rel.with_extension("").to_string_lossy().replace('\\', "/"))
+        })
+        .collect();
+    for dep in firstparty::first_party_npm_for(modules.iter().map(String::as_str)) {
         npm_deps.insert(dep.package.to_string(), dep.version.to_string());
     }
     (runtime_files, npm_deps)

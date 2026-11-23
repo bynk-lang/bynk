@@ -14,9 +14,9 @@
 //! `TypeRef`, `Expr`, `TypeDecl` (all `bynk-syntax`) — the vocabulary a
 //! boundary type is built from. It is **not** legal for any TS-token string,
 //! `pred_condition_and_message` (`bynk-emit/src/emitter.rs`, stays put),
-//! `lower_field_default_wire` (`bynk-emit/src/emitter/serialisation.rs`,
-//! stays put — a default's *wire literal* is a rendering, not a boundary
-//! fact), or the `Qual` type-name→TS-namespace-prefix map (`bynk-emit`'s
+//! `wire_default_node` (`bynk-emit/src/emitter/default_value.rs`, stays
+//! put — a default's *wire literal* is a rendering, not a boundary fact),
+//! or the `Qual` type-name→TS-namespace-prefix map (`bynk-emit`'s
 //! `serialisation.rs`; see the [`Provenance`] doc for why it cannot move
 //! here). `bynk-emit` renders this IR into TypeScript; it does not re-derive
 //! it.
@@ -223,9 +223,10 @@ pub struct WireField {
     /// key without moving the path segment a hover/error should still name.
     pub path_segment: String,
     /// The field's default initialiser, if any, carried as raw AST — its
-    /// *wire-JSON literal* rendering is `lower_field_default_wire`
-    /// (`bynk-emit`), which stays in `bynk-emit` per the module doc: a
-    /// default's lowered literal is a rendering, not a boundary fact.
+    /// *wire-JSON literal* rendering is `wire_default_node` (`bynk-emit`,
+    /// over `field_default_value`'s tree), which stays in `bynk-emit` per the
+    /// module doc: a default's lowered literal is a rendering, not a boundary
+    /// fact.
     pub default: Option<(Expr, TypeRef)>,
     /// #1969: the field's inline refinement (`qty: Int where Positive`), in
     /// declaration order, checked on decode after the field's own codec. Empty

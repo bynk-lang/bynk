@@ -7,7 +7,7 @@ export interface Env {
 }
 
 export function compose(env: Env) {
-  const deps = {  };
+  const deps = {};
   return {
     async objects(payload: globalThis.Uint8Array) {
       return handlers.objects.call(payload, deps);

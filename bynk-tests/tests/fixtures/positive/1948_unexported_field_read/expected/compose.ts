@@ -5,7 +5,7 @@ import * as shop_quotes from "./shop/quotes.js";
 import * as shop_till from "./shop/till.js";
 
 export function composeApp() {
-  const shop_quotesDeps = {  };
+  const shop_quotesDeps = {};
   const shop_quotesSurface = shop_quotes.__makeSurface(shop_quotesDeps);
   const shop_tillDeps = { surface: { quotes: shop_quotesSurface } };
   const shop_tillSurface = shop_till.__makeSurface(shop_tillDeps);

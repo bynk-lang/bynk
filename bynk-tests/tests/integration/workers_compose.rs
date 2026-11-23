@@ -52,7 +52,7 @@ fn each_call_service_gets_a_wrapper_delegating_to_its_handler() {
 fn a_context_consuming_nothing_has_an_empty_env_and_no_env_in_deps() {
     let ts = compose(&[("demo/payment.bynk", PAYMENT)], "demo-payment");
     assert!(ts.contains("export interface Env {\n}"), "{ts}");
-    assert!(ts.contains("const deps = {  };"), "{ts}");
+    assert!(ts.contains("const deps = {};"), "{ts}");
 }
 
 #[test]

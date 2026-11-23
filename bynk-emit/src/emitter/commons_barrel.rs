@@ -5,11 +5,12 @@
 //! unchanged (1B.2a, #4028).
 
 use crate::emit_model::{Document, ImportExt, StagedFile};
+use crate::ts_build::{ident, method_call};
 use bynk_project::UnitKind;
 use bynk_project::discovery::*;
 use bynk_project::paths::*;
 use bynk_project::worker_layout::WorkerLayout;
-use bynk_ts::{TsDecl, TsProgram, TsStmt};
+use bynk_ts::{TsDecl, TsExpr, TsObjectEntry, TsParam, TsProgram, TsStmt, TsType};
 use std::collections::{BTreeMap, HashSet};
 use std::path::{Path, PathBuf};
 
@@ -179,18 +180,19 @@ pub fn merged_unit_helpers(
             .iter()
             .map(|f| alias_of(f, &mut stmts))
             .collect();
-        let calls: Vec<String> = files
-            .iter()
-            .map(|alias| format!("  {alias}.__resetAgents();"))
-            .collect();
-        // The text spells each file's namespace; they are declared with it.
-        let names: Vec<&str> = files.iter().map(String::as_str).collect();
-        stmts.push(TsStmt::raw_using(
-            format!(
-                "export function __resetAgents(): void {{\n{}\n}}\n",
-                calls.join("\n")
-            ),
-            &names,
+        stmts.push(exported_function(
+            "__resetAgents",
+            Vec::new(),
+            Some(TsType::named("void")),
+            files
+                .iter()
+                .map(|alias| {
+                    TsStmt::expr_stmt(
+                        method_call(ident(alias.clone()), "__resetAgents", Vec::new()),
+                        None,
+                    )
+                })
+                .collect(),
         ));
         defined.push("__resetAgents".to_string());
     }
@@ -200,28 +202,69 @@ pub fn merged_unit_helpers(
             .iter()
             .map(|f| alias_of(f, &mut stmts))
             .collect();
-        let intersection = files
-            .iter()
-            .map(|a| format!("{a}.{deps}"))
-            .collect::<Vec<_>>()
-            .join(" & ");
         let spreads = files
             .iter()
-            .map(|a| format!("...{a}.__makeSurface(deps)"))
-            .collect::<Vec<_>>()
-            .join(", ");
-        let names: Vec<&str> = files.iter().map(String::as_str).collect();
-        stmts.push(TsStmt::raw_using(
-            format!(
-                "export type {deps} = {intersection};\n\
-                 export function __makeSurface(deps: {deps}) {{\n  return {{ {spreads} }};\n}}\n"
-            ),
-            &names,
+            .map(|a| {
+                TsObjectEntry::Spread(method_call(
+                    ident(a.clone()),
+                    "__makeSurface",
+                    vec![ident("deps")],
+                ))
+            })
+            .collect();
+        stmts.push(TsStmt::decl(
+            TsDecl::Export(Box::new(TsDecl::TypeAlias {
+                name: deps.clone(),
+                type_params: Vec::new(),
+                ty: TsType::intersection(
+                    files
+                        .iter()
+                        .map(|a| TsType::named(format!("{a}.{deps}")))
+                        .collect(),
+                ),
+            })),
+            None,
         ));
+        let mut make_surface = exported_function(
+            "__makeSurface",
+            vec![TsParam::new(
+                "deps".to_string(),
+                Some(TsType::named(deps.clone())),
+            )],
+            None,
+            vec![TsStmt::return_stmt(
+                Some(TsExpr::object_entries(spreads)),
+                None,
+            )],
+        );
+        // The alias and the function sit on consecutive lines.
+        make_surface.no_blank_before = true;
+        stmts.push(make_surface);
         defined.push("__makeSurface".to_string());
         defined.push(deps);
     }
     (stmts, defined)
+}
+
+/// `export function name(params): ret { body }`, a barrel helper.
+fn exported_function(
+    name: &str,
+    params: Vec<TsParam>,
+    return_type: Option<TsType>,
+    body: Vec<TsStmt>,
+) -> TsStmt {
+    TsStmt::decl(
+        TsDecl::Export(Box::new(TsDecl::Function {
+            name: name.to_string(),
+            generics: Vec::new(),
+            params,
+            return_type,
+            body,
+            is_async: false,
+            inline: false,
+        })),
+        None,
+    )
 }
 
 /// #1820: the explicit re-exports a multi-file context's barrel needs where

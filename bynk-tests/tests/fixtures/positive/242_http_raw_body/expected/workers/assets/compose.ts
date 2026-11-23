@@ -7,7 +7,7 @@ export interface Env {
 }
 
 export function compose(env: Env) {
-  const deps = {  };
+  const deps = {};
   return {
     async http_GET_sitemap_xml() {
       return handlers.Assets.http_GET_sitemap_xml(deps);

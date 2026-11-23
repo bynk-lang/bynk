@@ -7,7 +7,7 @@ export interface Env {
 }
 
 export function compose(env: Env) {
-  const deps = {  };
+  const deps = {};
   return {
     async whoami(__caller: string, ping: string) {
       return handlers.whoami.call(ping, { ...deps, identity: __caller });

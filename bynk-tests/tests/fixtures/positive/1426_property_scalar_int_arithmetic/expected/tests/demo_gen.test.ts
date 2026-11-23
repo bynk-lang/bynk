@@ -174,16 +174,16 @@ function __makeTestDeps() {
 }
 
 async function __prop_test_scalar_int_participates_in_arithmetic() {
-    const deps = {};
-    const __gens = [
-      { name: "n", boundaries: [0n, 1000n, -1000n], gen: (rng: any) => rng.int(-1000n, 1000n), shrink: (v: any) => __bynkShrinkInt(v, 0n), show: (v: any) => __bynkShow(v) },
-    ];
-    const __where = null;
-    const __body = async (__vals: any[]) => {
-      const n = globalThis.Number(__vals[0]);
-      if (!(n + 1 === n + 1)) { throw __bynkExpectFailure("tests/gen.test.bynk:12:14", 692, 706, "expect n + 1 == n + 1\n  expected: n + 1 == n + 1\n  actual:   " + __bynkShow((n + 1)) + " == " + __bynkShow((n + 1))); }
-    };
-    return await __bynkRunProperty({ seed: __bynkMix(__bynkSeed, 0), cases: 100, gens: __gens, where: __where, body: __body, name: "scalar int participates in arithmetic", location: "tests/gen.test.bynk", file: "tests/gen.test.bynk" });
+  const deps = {};
+  const __gens = [
+    { name: "n", boundaries: [0n, 1000n, -1000n], gen: (rng: any) => rng.int(-1000n, 1000n), shrink: (v: any) => __bynkShrinkInt(v, 0n), show: (v: any) => __bynkShow(v) },
+  ];
+  const __where = null;
+  const __body = async (__vals: any[]) => {
+    const n = globalThis.Number(__vals[0]);
+    if (!(n + 1 === n + 1)) { throw __bynkExpectFailure("tests/gen.test.bynk:12:14", 692, 706, "expect n + 1 == n + 1\n  expected: n + 1 == n + 1\n  actual:   " + __bynkShow((n + 1)) + " == " + __bynkShow((n + 1))); }
+  };
+  return await __bynkRunProperty({ seed: __bynkMix(__bynkSeed, 0), cases: 100, gens: __gens, where: __where, body: __body, name: "scalar int participates in arithmetic", location: "tests/gen.test.bynk", file: "tests/gen.test.bynk" });
 }
 
 type CaseResult = {

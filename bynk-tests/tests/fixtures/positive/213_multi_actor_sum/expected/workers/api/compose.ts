@@ -9,7 +9,7 @@ export interface Env {
 }
 
 export function compose(env: Env) {
-  const deps = {  };
+  const deps = {};
   return {
     async http_GET_notes_Param_id(request: globalThis.Request, id: string) {
       let __who: any = undefined;
