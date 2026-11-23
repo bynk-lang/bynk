@@ -31,6 +31,20 @@ fn double_args(derived: Option<&bynk_check::symbols::DerivedInstance>) -> Vec<Ts
     }
 }
 
+/// `for (const ev of events) await this.Events.emit(ev.payload);`, the body of `__eventsDispatch`.
+fn events_emit_loop() -> TsStmt {
+    use crate::ts_build::{await_expr, expr_stmt, for_of, ident, member, method_call};
+    for_of(
+        "ev",
+        ident("events"),
+        expr_stmt(await_expr(method_call(
+            member(ident("this"), "Events"),
+            "emit",
+            vec![member(ident("ev"), "payload")],
+        ))),
+    )
+}
+
 /// #1479: returns the real [`TsStmt`] itself (was pre-printed `String`) — the
 /// one real declaration this function ever built; its caller now prints it
 /// directly via `bynk_ts::print_stmt`, the same shape it always used, just
@@ -327,10 +341,7 @@ pub(super) fn emit_test_deps(
                     )),
                 )],
                 None,
-                vec![TsStmt::raw(
-                    "for (const ev of events) await this.Events.emit(ev.payload);",
-                    None,
-                )],
+                vec![events_emit_loop()],
             )
             .inlined(),
         );
@@ -723,22 +734,19 @@ pub(super) fn hidden_by_owner(hidden: &BTreeMap<String, String>) -> BTreeMap<Str
 /// lowered case spells a reached type (a kernel's `(__x: Repo) => …`), names
 /// a reached sum's variants (`Status.Done`) and calls its methods
 /// (`Repo.shout(…)`).
-pub(super) fn extend_hidden_destructures(
-    out: &mut String,
+pub(super) fn hidden_destructures(
     hidden: &BTreeMap<String, Vec<String>>,
     unit_tables: &HashMap<String, UnitTable>,
-) {
+) -> Vec<TsStmt> {
+    let mut stmts = Vec::new();
     for (owner, names) in hidden {
         let Some(table) = unit_tables.get(owner) else {
             continue;
         };
         let type_names = aliased_types(table, |n| names.contains(n));
-        crate::testgen::case_body::extend_printed_at(
-            out,
-            emit_ns_destructure(&test_ns(owner), names, &type_names),
-            2,
-        );
+        stmts.extend(emit_ns_destructure(&test_ns(owner), names, &type_names));
     }
+    stmts
 }
 
 pub(super) fn sanitise_case_name(name: &str, index: &mut usize) -> String {
@@ -809,7 +817,7 @@ pub(super) fn fixture_consts(
     indices: &[usize],
     parsed: &[ParsedFile],
     files: &TestAssetFiles,
-) -> Option<String> {
+) -> Option<Vec<TsStmt>> {
     let mut paths: BTreeSet<String> = BTreeSet::new();
     for &i in indices {
         if let bynk_syntax::ast::SourceUnit::Suite(s) = parsed[i].unit() {
@@ -818,7 +826,7 @@ pub(super) fn fixture_consts(
             }
         }
     }
-    let stmts: Vec<TsStmt> = paths
+    let mut stmts: Vec<TsStmt> = paths
         .iter()
         .filter_map(|p| {
             let text = files.fixtures.get(p)?;
@@ -833,8 +841,18 @@ pub(super) fn fixture_consts(
     if stmts.is_empty() {
         return None;
     }
-    Some(stmts.iter().map(|s| bynk_ts::print_stmt(s, 0)).collect())
+    // The constants sit on consecutive lines.
+    for stmt in stmts.iter_mut().skip(1) {
+        stmt.no_blank_before = true;
+    }
+    Some(stmts)
 }
+
+/// The name and type of the embedded asset table, which `runtime/src/testing/harness.ts` declares
+/// for `asset_get.ts` (the `the_harness_contract_matches_the_generator` test holds the two together).
+pub(super) const ASSET_FILES_NAME: &str = "__bynkAssetFiles";
+pub(super) const ASSET_FILES_TYPE: &str =
+    "Record<string, { readonly body: string; readonly contentType: string }>";
 
 /// #1883, slice 3 ([DECISION F]): the TypeScript that lets a case fetch an
 /// asset — the files `target`'s Worker ships
@@ -851,7 +869,7 @@ pub(super) fn asset_harness(
     unit_consumes: &HashMap<String, Vec<String>>,
     unit_tables: &HashMap<String, UnitTable>,
     files: &TestAssetFiles,
-) -> Option<String> {
+) -> Option<Vec<TsStmt>> {
     let deployed = bynk_check::assets::deployed_assets(
         target,
         unit_uses,
@@ -862,37 +880,41 @@ pub(super) fn asset_harness(
     if deployed.is_empty() {
         return None;
     }
-    let mut out = String::from(
-        "const __bynkAssetFiles: Record<string, { readonly body: string; readonly contentType: string }> = {\n",
-    );
-    for (served, source) in &deployed {
-        // Review of #1922: every deployed file was read (`asset_served`
-        // comes from the same bytes), so a miss is a broken invariant, not
-        // something to degrade quietly into an undefined `__bynkAssetGet`.
-        let bytes = files.bytes.get(source).unwrap_or_else(|| {
-            panic!(
-                "bynk internal error: deployed asset `{source}` has no bytes for the test harness"
+    let entries: Vec<TsObjectEntry> = deployed
+        .iter()
+        .map(|(served, source)| {
+            // Review of #1922: every deployed file was read (`asset_served`
+            // comes from the same bytes), so a miss is a broken invariant, not
+            // something to degrade quietly into an undefined `__bynkAssetGet`.
+            let bytes = files.bytes.get(source).unwrap_or_else(|| {
+                panic!(
+                    "bynk internal error: deployed asset `{source}` has no bytes for the test harness"
+                )
+            });
+            TsObjectEntry::prop(
+                bynk_project::json_string(served),
+                TsExpr::object(vec![
+                    ("body".to_string(), crate::ts_build::str_lit(base64(bytes))),
+                    (
+                        "contentType".to_string(),
+                        crate::ts_build::raw_lit(bynk_project::json_string(
+                            bynk_check::assets::content_type_for(served),
+                        )),
+                    ),
+                ]),
             )
-        });
-        out.push_str(&format!(
-            "  {}: {{ body: \"{}\", contentType: {} }},\n",
-            bynk_project::json_string(served),
-            base64(bytes),
-            bynk_project::json_string(bynk_check::assets::content_type_for(served)),
-        ));
-    }
-    out.push_str(
-        "};\n\
-         function __bynkAssetGet(url: string): HttpResult<never> {\n\
-         \x20 const f = globalThis.Object.hasOwn(__bynkAssetFiles, url) ? __bynkAssetFiles[url] : undefined;\n\
-         \x20 if (f === undefined) return HttpResult.NotFound;\n\
-         \x20 const bin = atob(f.body);\n\
-         \x20 const bytes = new Uint8Array(bin.length);\n\
-         \x20 for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);\n\
-         \x20 return HttpResult.Raw(bytes, f.contentType);\n\
-         }\n",
+        })
+        .collect();
+    let table = TsStmt::const_stmt(
+        TsBindingName::Ident(ASSET_FILES_NAME.to_string()),
+        Some(TsType::named(ASSET_FILES_TYPE)),
+        TsExpr::multiline_object_entries(entries),
+        None,
     );
-    Some(out)
+    // The getter follows the table's last line directly.
+    let mut getter = TestRuntimeModule::AssetGet.splice();
+    getter.no_blank_before = true;
+    Some(vec![table, getter])
 }
 
 /// #1883, slice 3: each asset a `system` case may name ([`SuiteView::assets`]),

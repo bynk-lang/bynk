@@ -7,7 +7,7 @@ export interface Env {
 }
 
 export function compose(env: Env) {
-  const deps = {  };
+  const deps = {};
   return {
     async charge(c: handlers.Charge, tip: { readonly coefficient: bigint; readonly scale: number }) {
       return handlers.charge.call(c, tip, deps);

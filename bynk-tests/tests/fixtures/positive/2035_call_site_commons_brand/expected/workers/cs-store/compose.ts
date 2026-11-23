@@ -8,7 +8,7 @@ export interface Env {
 }
 
 export function compose(env: Env) {
-  const deps = {  };
+  const deps = {};
   return {
     async hold(h: handlers.Holder) {
       return handlers.hold.call(h, deps);

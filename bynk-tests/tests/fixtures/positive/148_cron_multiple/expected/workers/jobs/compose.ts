@@ -7,7 +7,7 @@ export interface Env {
 }
 
 export function compose(env: Env) {
-  const deps = {  };
+  const deps = {};
   return {
     async cron_sweeper_0() {
       return handlers.sweeper.cron_sweeper_0(deps);

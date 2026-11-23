@@ -6,7 +6,7 @@ import * as shop_front from "./shop/front.js";
 import * as shop_orders from "./shop/orders.js";
 
 export function composeApp() {
-  const shop_clockDeps = {  };
+  const shop_clockDeps = {};
   const shop_clockSurface = shop_clock.__makeSurface(shop_clockDeps);
   const shop_ordersDeps = { surface: { Clock: shop_clockSurface } };
   const shop_ordersSurface = shop_orders.__makeSurface(shop_ordersDeps, "shop.orders");

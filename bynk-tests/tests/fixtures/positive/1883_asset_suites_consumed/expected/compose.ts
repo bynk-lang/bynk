@@ -5,7 +5,7 @@ import * as t_other from "./t/other.js";
 import * as t_web from "./t/web.js";
 
 export function composeApp() {
-  const t_otherDeps = {  };
+  const t_otherDeps = {};
   const t_otherSurface = t_other.__makeSurface(t_otherDeps);
   const t_webDeps = { surface: { other: t_otherSurface } };
   const t_webSurface = t_web.__makeSurface(t_webDeps);

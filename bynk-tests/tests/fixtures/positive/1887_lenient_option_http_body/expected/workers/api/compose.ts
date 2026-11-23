@@ -7,7 +7,7 @@ export interface Env {
 }
 
 export function compose(env: Env) {
-  const deps = {  };
+  const deps = {};
   return {
     async http_POST_repos(body: handlers.Repo) {
       return handlers.repos.http_POST_repos(body, deps);

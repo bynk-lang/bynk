@@ -31,7 +31,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { WorkersAi, WorkersAiSearch, WorkersImages, WorkersAnalytics, WorkersAnalyticsSql, WorkersContainer, WorkersD1, WorkersEdgeCache, WorkersEmail, WorkersKv, WorkersMtls, WorkersMySql, WorkersPostgres, WorkersQueue, WorkersR2, WorkersRateLimit, WorkersService, WorkersStoredSecret, WorkersVectorize, WorkersVersion } from "./bynk/cloudflare.binding.js";
 import { Method, FetchError } from "./bynk.js";
-import { __makeIntegrationAi, __makeIntegrationAiSearch, __makeIntegrationAnalyticsSql, __makeIntegrationContainer, __makeIntegrationHyperdrive, __makeIntegrationImages, __makeIntegrationMtls, __makeIntegrationSecretsStoreSecret } from "./__bynk_runtime/storage.js";
+import { __makeIntegrationAi, __makeIntegrationAiSearch, __makeIntegrationAnalyticsSql, __makeIntegrationContainer, __makeIntegrationHyperdrive, __makeIntegrationImages, __makeIntegrationMtls, __makeIntegrationSecretsStoreSecret } from "./__bynk_runtime/testing/bindings.js";
 import { Some, None } from "./__bynk_runtime/result.js";
 
 function fakeKv(pageSize = 2) {

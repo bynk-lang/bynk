@@ -174,21 +174,21 @@ function __makeTestDeps() {
 }
 
 async function __prop_test_generated_bindings_satisfy_their_own_trivial_shape() {
-    const deps = {};
-    const { Label, Outcome } = __ns_demo_gen;
-    type Label = __ns_demo_gen.Label;
-    type Outcome = __ns_demo_gen.Outcome;
-    const __gens = [
-      { name: "o", boundaries: [Outcome.Hit(true)], gen: (rng: any) => rng.pick([() => Outcome.Hit(rng.bool()), () => Outcome.Miss]), shrink: (v: any) => [Outcome.Hit(true)], show: (v: any) => __bynkShow(v) },
-      { name: "flag", boundaries: [true, false], gen: (rng: any) => rng.bool(), shrink: (v: any) => (v ? [false] : []), show: (v: any) => __bynkShow(v) },
-      { name: "label", boundaries: [("x" as any)], gen: (rng: any) => (rng.str(1, 9) as any), shrink: (v: any) => __bynkShrinkString(v, 1).map((__s: string) => (__s as any)), show: (v: any) => __bynkShow(v) },
-    ];
-    const __where = null;
-    const __body = async (__vals: any[]) => {
-      const [o, flag, label] = __vals;
-      if (!(true)) { throw __bynkExpectFailure("tests/gen.test.bynk:7:14", 360, 364, "expect true"); }
-    };
-    return await __bynkRunProperty({ seed: __bynkMix(__bynkSeed, 0), cases: 100, gens: __gens, where: __where, body: __body, name: "generated bindings satisfy their own trivial shape", location: "tests/gen.test.bynk", file: "tests/gen.test.bynk" });
+  const deps = {};
+  const { Label, Outcome } = __ns_demo_gen;
+  type Label = __ns_demo_gen.Label;
+  type Outcome = __ns_demo_gen.Outcome;
+  const __gens = [
+    { name: "o", boundaries: [Outcome.Hit(true)], gen: (rng: any) => rng.pick([() => Outcome.Hit(rng.bool()), () => Outcome.Miss]), shrink: (v: any) => [Outcome.Hit(true)], show: (v: any) => __bynkShow(v) },
+    { name: "flag", boundaries: [true, false], gen: (rng: any) => rng.bool(), shrink: (v: any) => (v ? [false] : []), show: (v: any) => __bynkShow(v) },
+    { name: "label", boundaries: [("x" as any)], gen: (rng: any) => (rng.str(1, 9) as any), shrink: (v: any) => __bynkShrinkString(v, 1).map((__s: string) => (__s as any)), show: (v: any) => __bynkShow(v) },
+  ];
+  const __where = null;
+  const __body = async (__vals: any[]) => {
+    const [o, flag, label] = __vals;
+    if (!(true)) { throw __bynkExpectFailure("tests/gen.test.bynk:7:14", 360, 364, "expect true"); }
+  };
+  return await __bynkRunProperty({ seed: __bynkMix(__bynkSeed, 0), cases: 100, gens: __gens, where: __where, body: __body, name: "generated bindings satisfy their own trivial shape", location: "tests/gen.test.bynk", file: "tests/gen.test.bynk" });
 }
 
 type CaseResult = {

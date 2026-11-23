@@ -6,7 +6,7 @@ import * as demo_ledger from "./demo/ledger.js";
 import * as demo_vault from "./demo/vault.js";
 
 export function composeApp() {
-  const demo_vaultDeps = {  };
+  const demo_vaultDeps = {};
   const demo_vaultSurface = demo_vault.__makeSurface(demo_vaultDeps);
   const demo_deskDeps = { surface: { Vault: demo_vaultSurface } };
   const demo_deskSurface = demo_desk.__makeSurface(demo_deskDeps);

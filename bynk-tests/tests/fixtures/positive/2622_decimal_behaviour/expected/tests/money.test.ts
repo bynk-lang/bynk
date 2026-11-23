@@ -684,51 +684,51 @@ async function test_a_malformed_decimal_on_the_wire_is_rejected_at_the_field_pat
 }
 
 async function __prop_test_addition_is_exact_and_commutative() {
-    const deps = {};
-    const { Charge, Debt, Line, Order, Price, REFUND, Rate, Receipt, VAT, Wide, amountText, cheapest, decodeCharge, decodeLine, decodeReceipt, distinctCount, encodeReceipt, feeOf, gross, label, lineError, lineTotal, parsed, refund, roundTo, seen, sorted, split, total, withTax } = __ns_money;
-    type Charge = __ns_money.Charge;
-    type Debt = __ns_money.Debt;
-    type Line = __ns_money.Line;
-    type Order = __ns_money.Order;
-    type Price = __ns_money.Price;
-    type Rate = __ns_money.Rate;
-    type Receipt = __ns_money.Receipt;
-    type Wide = __ns_money.Wide;
-    const __gens = [
-      { name: "a", boundaries: [], gen: (rng: any) => ({ coefficient: 0n, scale: 0 }), shrink: (v: any) => [], show: (v: any) => __bynkShow(v) },
-      { name: "b", boundaries: [], gen: (rng: any) => ({ coefficient: 0n, scale: 0 }), shrink: (v: any) => [], show: (v: any) => __bynkShow(v) },
-    ];
-    const __where = null;
-    const __body = async (__vals: any[]) => {
-      const [a, b] = __vals;
-      if (!(__bynkDecimalEqual(__bynkDecimalAdd(a, b), __bynkDecimalAdd(b, a)))) { throw __bynkExpectFailure("tests/money.test.bynk:161:14", 6184, 6198, "expect a + b == b + a\n  expected: a + b == b + a\n  actual:   " + __bynkDecimalShow((__bynkDecimalAdd(a, b))) + " == " + __bynkDecimalShow((__bynkDecimalAdd(b, a)))); }
-      if (!(__bynkDecimalEqual(__bynkDecimalSub((__bynkDecimalAdd(a, b)), b), a))) { throw __bynkExpectFailure("tests/money.test.bynk:162:14", 6212, 6228, "expect (a + b) - b == a\n  expected: (a + b) - b == a\n  actual:   " + __bynkDecimalShow((__bynkDecimalSub((__bynkDecimalAdd(a, b)), b))) + " == " + __bynkDecimalShow((a))); }
-    };
-    return await __bynkRunProperty({ seed: __bynkMix(__bynkSeed, 0), cases: 100, gens: __gens, where: __where, body: __body, name: "addition is exact and commutative", location: "tests/money.test.bynk", file: "tests/money.test.bynk" });
+  const deps = {};
+  const { Charge, Debt, Line, Order, Price, REFUND, Rate, Receipt, VAT, Wide, amountText, cheapest, decodeCharge, decodeLine, decodeReceipt, distinctCount, encodeReceipt, feeOf, gross, label, lineError, lineTotal, parsed, refund, roundTo, seen, sorted, split, total, withTax } = __ns_money;
+  type Charge = __ns_money.Charge;
+  type Debt = __ns_money.Debt;
+  type Line = __ns_money.Line;
+  type Order = __ns_money.Order;
+  type Price = __ns_money.Price;
+  type Rate = __ns_money.Rate;
+  type Receipt = __ns_money.Receipt;
+  type Wide = __ns_money.Wide;
+  const __gens = [
+    { name: "a", boundaries: [], gen: (rng: any) => ({ coefficient: 0n, scale: 0 }), shrink: (v: any) => [], show: (v: any) => __bynkShow(v) },
+    { name: "b", boundaries: [], gen: (rng: any) => ({ coefficient: 0n, scale: 0 }), shrink: (v: any) => [], show: (v: any) => __bynkShow(v) },
+  ];
+  const __where = null;
+  const __body = async (__vals: any[]) => {
+    const [a, b] = __vals;
+    if (!(__bynkDecimalEqual(__bynkDecimalAdd(a, b), __bynkDecimalAdd(b, a)))) { throw __bynkExpectFailure("tests/money.test.bynk:161:14", 6184, 6198, "expect a + b == b + a\n  expected: a + b == b + a\n  actual:   " + __bynkDecimalShow((__bynkDecimalAdd(a, b))) + " == " + __bynkDecimalShow((__bynkDecimalAdd(b, a)))); }
+    if (!(__bynkDecimalEqual(__bynkDecimalSub((__bynkDecimalAdd(a, b)), b), a))) { throw __bynkExpectFailure("tests/money.test.bynk:162:14", 6212, 6228, "expect (a + b) - b == a\n  expected: (a + b) - b == a\n  actual:   " + __bynkDecimalShow((__bynkDecimalSub((__bynkDecimalAdd(a, b)), b))) + " == " + __bynkDecimalShow((a))); }
+  };
+  return await __bynkRunProperty({ seed: __bynkMix(__bynkSeed, 0), cases: 100, gens: __gens, where: __where, body: __body, name: "addition is exact and commutative", location: "tests/money.test.bynk", file: "tests/money.test.bynk" });
 }
 
 async function __prop_test_a_positive_price_survives_the_wire() {
-    const deps = {};
-    const { Charge, Debt, Line, Order, Price, REFUND, Rate, Receipt, VAT, Wide, amountText, cheapest, decodeCharge, decodeLine, decodeReceipt, distinctCount, encodeReceipt, feeOf, gross, label, lineError, lineTotal, parsed, refund, roundTo, seen, sorted, split, total, withTax } = __ns_money;
-    type Charge = __ns_money.Charge;
-    type Debt = __ns_money.Debt;
-    type Line = __ns_money.Line;
-    type Order = __ns_money.Order;
-    type Price = __ns_money.Price;
-    type Rate = __ns_money.Rate;
-    type Receipt = __ns_money.Receipt;
-    type Wide = __ns_money.Wide;
-    const __gens = [
-      { name: "p", boundaries: [({ coefficient: 1n, scale: 2 } as any)], gen: (rng: any) => ({ coefficient: rng.int(1n, 100000n), scale: 2 } as any), shrink: (v: any) => [], show: (v: any) => __bynkShow(v) },
-    ];
-    const __where = null;
-    const __body = async (__vals: any[]) => {
-      const [p] = __vals;
-      const line = { sku: "x", unit: p, qty: 1 };
-      if (!(__bynkEq(decodeLine(globalThis.JSON.stringify(__serialise_Line(line))), Some(line)))) { throw __bynkExpectFailure("tests/money.test.bynk:169:14", 6378, 6421, "expect decodeLine(Json.encode(line)) == Some(line)\n  expected: decodeLine(Json.encode(line)) == Some(line)\n  actual:   " + __bynkDecimalShow((decodeLine(globalThis.JSON.stringify(__serialise_Line(line))))) + " == " + __bynkDecimalShow((Some(line)))); }
-      if (!(__bynkCmpDecimal(p, { coefficient: 0n, scale: 0 }) > 0)) { throw __bynkExpectFailure("tests/money.test.bynk:170:14", 6435, 6441, "expect p > 0d\n  expected: p > 0d\n  actual:   " + __bynkDecimalShow((p)) + " > " + __bynkDecimalShow(({ coefficient: 0n, scale: 0 }))); }
-    };
-    return await __bynkRunProperty({ seed: __bynkMix(__bynkSeed, 1), cases: 100, gens: __gens, where: __where, body: __body, name: "a positive price survives the wire", location: "tests/money.test.bynk", file: "tests/money.test.bynk" });
+  const deps = {};
+  const { Charge, Debt, Line, Order, Price, REFUND, Rate, Receipt, VAT, Wide, amountText, cheapest, decodeCharge, decodeLine, decodeReceipt, distinctCount, encodeReceipt, feeOf, gross, label, lineError, lineTotal, parsed, refund, roundTo, seen, sorted, split, total, withTax } = __ns_money;
+  type Charge = __ns_money.Charge;
+  type Debt = __ns_money.Debt;
+  type Line = __ns_money.Line;
+  type Order = __ns_money.Order;
+  type Price = __ns_money.Price;
+  type Rate = __ns_money.Rate;
+  type Receipt = __ns_money.Receipt;
+  type Wide = __ns_money.Wide;
+  const __gens = [
+    { name: "p", boundaries: [({ coefficient: 1n, scale: 2 } as any)], gen: (rng: any) => ({ coefficient: rng.int(1n, 100000n), scale: 2 } as any), shrink: (v: any) => [], show: (v: any) => __bynkShow(v) },
+  ];
+  const __where = null;
+  const __body = async (__vals: any[]) => {
+    const [p] = __vals;
+    const line = { sku: "x", unit: p, qty: 1 };
+    if (!(__bynkEq(decodeLine(globalThis.JSON.stringify(__serialise_Line(line))), Some(line)))) { throw __bynkExpectFailure("tests/money.test.bynk:169:14", 6378, 6421, "expect decodeLine(Json.encode(line)) == Some(line)\n  expected: decodeLine(Json.encode(line)) == Some(line)\n  actual:   " + __bynkDecimalShow((decodeLine(globalThis.JSON.stringify(__serialise_Line(line))))) + " == " + __bynkDecimalShow((Some(line)))); }
+    if (!(__bynkCmpDecimal(p, { coefficient: 0n, scale: 0 }) > 0)) { throw __bynkExpectFailure("tests/money.test.bynk:170:14", 6435, 6441, "expect p > 0d\n  expected: p > 0d\n  actual:   " + __bynkDecimalShow((p)) + " > " + __bynkDecimalShow(({ coefficient: 0n, scale: 0 }))); }
+  };
+  return await __bynkRunProperty({ seed: __bynkMix(__bynkSeed, 1), cases: 100, gens: __gens, where: __where, body: __body, name: "a positive price survives the wire", location: "tests/money.test.bynk", file: "tests/money.test.bynk" });
 }
 
 export function __serialise_Line(value: __ns_money.Line): __JsonValue {

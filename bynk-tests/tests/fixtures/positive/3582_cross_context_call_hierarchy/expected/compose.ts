@@ -6,7 +6,7 @@ import * as shop_orders from "./shop/orders.js";
 import * as shop_pay from "./shop/pay.js";
 
 export function composeApp() {
-  const shop_payDeps = {  };
+  const shop_payDeps = {};
   const shop_paySurface = shop_pay.__makeSurface(shop_payDeps);
   const shop_billingDeps = { surface: { Pay: shop_paySurface } };
   const shop_billingSurface = shop_billing.__makeSurface(shop_billingDeps);
