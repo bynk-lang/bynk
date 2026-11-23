@@ -66,7 +66,6 @@ use bynk_syntax::ast::{Case, Visibility};
 
 mod case_body;
 mod harness;
-mod imports;
 mod integration_module;
 mod names;
 mod property_generators;
@@ -84,7 +83,6 @@ mod test_runtime_modules;
 pub use self::harness::RunnableTest;
 pub use self::harness::discovery_manifest;
 use self::harness::*;
-use self::imports::*;
 use self::integration_module::*;
 use self::names::*;
 use self::property_generators::*;

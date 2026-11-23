@@ -5,11 +5,10 @@
 use super::*;
 use crate::emitter::RuntimeUse;
 use crate::emitter::bindings::{BindingSource, WorkerBinding};
-use crate::emitter::wrangler::singleton_is;
 // #1759: every namespace a test module imports, from one definition.
 use crate::emitter::emit::test_scaffold_ns as test_ns;
 use bynk_check::checker::Types;
-use bynk_check::d1_migrations::{D1Migrations, pglite_on};
+use bynk_check::d1_migrations::D1Migrations;
 use bynk_check::test_suites::{self};
 use bynk_ts::{SourceMapBuilder, TsBinaryOp, TsDecl, TsExpr, TsProgram, TsStmt, TsType};
 use std::sync::Arc;
@@ -207,48 +206,7 @@ pub(super) fn emit_integration_module(
             .and_then(|all| all.get(p))
             .unwrap_or(&empty)
     };
-    let binds = |kind: fn(&BindingSource) -> bool| {
-        harness_participants
-            .iter()
-            .any(|p| bindings_of(p).iter().any(|b| kind(&b.source)))
-    };
-    let has_objects = binds(|s| {
-        matches!(
-            s,
-            BindingSource::Agent { .. } | BindingSource::EventsFanout { .. }
-        )
-    });
     let runtime_import = emitter::runtime_import_for(&module_path, ImportExt::Js);
-    let mut runtime_names: Vec<String> = [
-        "Ok",
-        "Err",
-        "Some",
-        "None",
-        "__callService",
-        "type Result",
-        "type Option",
-        "type ValidationError",
-        "type DecodeError",
-        "type __JsonValue",
-        "type __BoundaryError",
-        "type __ServiceBinding",
-        "__responseToHttpResult",
-        "__responseToHttpOutcome",
-        "__responseToUnauthOutcome",
-    ]
-    .iter()
-    .map(|s| s.to_string())
-    .collect();
-    // #1883, slice 3: the asset fetch helper answers with an `HttpResult`.
-    if asset_harness.is_some() {
-        runtime_names.push("HttpResult".to_string());
-    }
-    runtime_names.extend(platform_binding_factories(&binds, pglite_on(d1_migrations)));
-    if has_objects {
-        runtime_names.push("__makeIntegrationDoNamespace".to_string());
-        runtime_names.push("type __DurableObjectState".to_string());
-        runtime_names.push("type __DurableObjectNamespace".to_string());
-    }
     let import_idx = stmts.len();
 
     // Per-participant: workers handler namespace + Worker entry default export,
@@ -843,12 +801,8 @@ pub(super) fn emit_integration_module(
         }
     }
 
-    // #914: every case body above has now lowered, so `runtime_use` carries
-    // whatever it actually reached for — fold that into the runtime import's
-    // own `names` (deduped against the fixed set already listed) and splice
-    // the finished import statement in at its reserved position, the same
-    // ordering `emit_project`'s own deferred `write_header` relies on.
-    append_runtime_use_imports(&mut runtime_names, runtime_use);
+    // The runtime import is what the finished tree uses (1B.5e, #4054 Decision E).
+    let runtime_names = emitter::runtime_header::derived_test_runtime_names(&stmts);
     let mut head =
         emitter::runtime_files::runtime_import_stmts(false, &runtime_names, &runtime_import);
     // #3277: a case that reads a result's cookies names the `Cookie` type.
@@ -890,92 +844,4 @@ pub(super) fn emit_integration_module(
             detach_reports: harness_participants.iter().any(sends),
         },
     ))
-}
-
-/// The runtime factories the harness binds the participants' platform
-/// resources with (KV, R2, rate limiters, queue producers, Analytics datasets,
-/// D1, Version metadata), each once, in a fixed order. `binds` answers whether
-/// any participant has a binding of a kind.
-fn platform_binding_factories(
-    binds: &dyn Fn(fn(&BindingSource) -> bool) -> bool,
-    pglite: bool,
-) -> Vec<String> {
-    let kinds: [(crate::emitter::wrangler::BindingKind, &str); 17] = [
-        (
-            |s| matches!(s, BindingSource::Kv | BindingSource::KvInstance { .. }),
-            "__makeIntegrationKv",
-        ),
-        (
-            |s| matches!(s, BindingSource::R2Instance { .. }),
-            "__makeIntegrationR2",
-        ),
-        (
-            |s| matches!(s, BindingSource::RateLimitInstance { .. }),
-            "__makeIntegrationRateLimit",
-        ),
-        (
-            |s| matches!(s, BindingSource::QueueProducer { .. }),
-            "__makeIntegrationQueue",
-        ),
-        (
-            |s| matches!(s, BindingSource::AnalyticsDataset { .. }),
-            "__makeIntegrationAnalytics",
-        ),
-        (
-            |s| matches!(s, BindingSource::D1Database { .. }),
-            "__makeIntegrationD1",
-        ),
-        (
-            |s| matches!(s, BindingSource::StoredSecret { .. }),
-            "__makeIntegrationSecretsStoreSecret",
-        ),
-        (
-            |s| matches!(s, BindingSource::Email { .. }),
-            "__makeIntegrationEmail",
-        ),
-        (
-            |s| {
-                matches!(
-                    s,
-                    BindingSource::Postgres { .. } | BindingSource::MySql { .. }
-                )
-            },
-            "__makeIntegrationHyperdrive",
-        ),
-        (
-            |s| matches!(s, BindingSource::VectorizeIndex { .. }),
-            "__makeIntegrationVectorize",
-        ),
-        (
-            |s| matches!(s, BindingSource::ContainerInstance { .. }),
-            "__makeIntegrationContainer",
-        ),
-        (
-            |s| matches!(s, BindingSource::AiSearchInstance { .. }),
-            "__makeIntegrationAiSearch",
-        ),
-        (
-            |s| matches!(s, BindingSource::MtlsCertificate { .. }),
-            "__makeIntegrationMtls",
-        ),
-        (
-            |s| singleton_is(s, "Version"),
-            "__makeIntegrationVersionMetadata",
-        ),
-        (|s| singleton_is(s, "Ai"), "__makeIntegrationAi"),
-        (|s| singleton_is(s, "Images"), "__makeIntegrationImages"),
-        (
-            |s| singleton_is(s, "AnalyticsSql"),
-            "__makeIntegrationAnalyticsSql",
-        ),
-    ];
-    kinds
-        .into_iter()
-        .filter(|(kind, _)| binds(*kind))
-        // #3321: with PGlite the `Postgres` binding is the double's.
-        .map(|(_, name)| match (pglite, name) {
-            (true, "__makeIntegrationHyperdrive") => "__makeIntegrationPgliteBinding".to_string(),
-            _ => name.to_string(),
-        })
-        .collect()
 }

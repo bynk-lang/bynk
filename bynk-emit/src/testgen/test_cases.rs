@@ -806,18 +806,9 @@ pub(super) fn observation_call_record_types(
                     readonly: false,
                 })
                 .collect();
-            // The same `"{  }"` double-space quirk as elsewhere in this file
-            // (`gen_ts_for_ty`/`canon_ts_for_ty`, Arc C slice 31; `emit_test_deps`
-            // above) — the pre-conversion `format!("type {name} = {{ {} }};\n",
-            // fields.join("; "))` template always has a space on each side of its
-            // `{}` slot, so a zero-param capability op (real and reachable)
-            // literally produced a double space, not the tight `"{}"`
-            // `TsType::Object`'s own empty-members shortcut renders.
-            let ty = if fields.is_empty() {
-                TsType::named("{  }")
-            } else {
-                TsType::Object(fields)
-            };
+            // A zero-param capability op's call record is the empty object type, printed `{}`
+            // (1B.5e; the ruled 1A.40 class `{  }` to `{}`).
+            let ty = TsType::Object(fields);
             stmts.push(TsStmt::decl(
                 TsDecl::TypeAlias {
                     name,

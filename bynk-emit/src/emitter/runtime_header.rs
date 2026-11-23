@@ -269,6 +269,107 @@ const WORKER_ORDER: &[&str] = &[
     "__requestQuery",
 ];
 
+/// The order runtime names have in a generated test module's import lines (1B.5e, #4054
+/// Decision E). It was read off the import lines the 371 `tests/*.test.ts` goldens had before
+/// their headers were derived, merged into one order that holds every pair those lines showed
+/// but one: `__JsonValue` came before `__BoundaryError` on an integration module's value line
+/// and after it on a unit module's `import type` line, and the integration order is kept (the
+/// ruled reordering of the unit modules). A name it does not list follows, alphabetically.
+const TEST_ORDER: &[&str] = &[
+    "HttpResult",
+    "Ok",
+    "Err",
+    "Some",
+    "None",
+    "Result",
+    "Option",
+    "TestConnection",
+    "ValidationError",
+    "DecodeError",
+    "__BynkKeyMap",
+    "__BynkKeySet",
+    "__DurableObjectNamespace",
+    "__DurableObjectState",
+    "__bynkBytesEqual",
+    "__bynkBytesToBase64",
+    "__bynkBytesFromBase64",
+    "__bynkBytesDecodeUtf8",
+    "__bynkBytesConcat",
+    "__bynkBytesCompare",
+    "__bynkBytesToHex",
+    "__bynkBytesFromHex",
+    "__bynkBytesToBase64Url",
+    "__bynkBytesFromBase64Url",
+    "__bynkCmpBytes",
+    "__bynkCmpDecimal",
+    "__bynkCmpFloat",
+    "__bynkCmpInt",
+    "__bynkCmpList",
+    "__bynkCmpOption",
+    "__bynkCmpRecord",
+    "__bynkCmpString",
+    "__bynkCmpSum",
+    "__bynkDecimalAbs",
+    "__bynkDecimalAdd",
+    "__bynkDecimalDiv",
+    "__bynkDecimalEqual",
+    "__bynkDecimalFromInt",
+    "__bynkDecimalMin",
+    "__bynkDecimalMul",
+    "__bynkDecimalNeg",
+    "__bynkDecimalParse",
+    "__bynkDecimalParseWire",
+    "__bynkDecimalRound",
+    "__bynkDecimalShow",
+    "__bynkDecimalSub",
+    "__bynkDecimalToFloat",
+    "__bynkDecimalToInt",
+    "__bynkDecimalToString",
+    "__bynkDistinctBy",
+    "__bynkEq",
+    "__bynkGroupBy",
+    "__bynkInstantToIso",
+    "__bynkInstantFromIso",
+    "__bynkJoinOn",
+    "__bynkMapInsert",
+    "__bynkSetInsert",
+    "__bynkSetOf",
+    "__bynkSetRemove",
+    "__bynkSettleAll",
+    "__callService",
+    "__JsonValue",
+    "__BoundaryError",
+    "__ServiceBinding",
+    "__makeIntegrationAi",
+    "__makeIntegrationAnalytics",
+    "__makeIntegrationD1",
+    "__makeIntegrationEmail",
+    "__makeIntegrationImages",
+    "__makeIntegrationKv",
+    "__makeIntegrationDoNamespace",
+    "__makeIntegrationQueue",
+    "__makeIntegrationR2",
+    "__makeIntegrationRateLimit",
+    "__makeIntegrationSecretsStoreSecret",
+    "__makeIntegrationVectorize",
+    "__makeIntegrationVersionMetadata",
+    "__makeTestState",
+    "__responseToHttpResult",
+    "__responseToHttpOutcome",
+    "__responseToUnauthOutcome",
+    "__requestHeaders",
+    "__requestCookies",
+    "__requestCookiesHeader",
+    "__requestQuery",
+    "__queryString",
+    "__multipartForm",
+    "__cookieString",
+    "__requestHeaderPairs",
+    "__requestQuerySearch",
+    "__signSessionCookie",
+    "__newSessionKey",
+];
+
 /// The runtime names `stmts` (a module's imports, if it has any besides the
 /// runtime's, and its body) use and do not bind, spelled as an import names
 /// them (`type X` for a type-only export) and in their historical order.
@@ -277,6 +378,11 @@ const WORKER_ORDER: &[&str] = &[
 /// runtime's even where it shares a global's name, so no global hides it.
 pub(crate) fn derived_runtime_names(stmts: &[TsStmt]) -> Vec<String> {
     names_in_order(stmts, |n| ORDER.iter().position(|o| *o == n))
+}
+
+/// [`derived_runtime_names`] for a generated test module (`tests/*.test.ts`), in [`TEST_ORDER`].
+pub(crate) fn derived_test_runtime_names(stmts: &[TsStmt]) -> Vec<String> {
+    names_in_order(stmts, |n| TEST_ORDER.iter().position(|o| *o == n))
 }
 
 /// [`derived_runtime_names`] for a Worker's `index.ts` or `compose.ts`, in [`WORKER_ORDER`].

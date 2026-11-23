@@ -16,20 +16,6 @@ use bynk_ts::{
 };
 use std::sync::Arc;
 
-/// The factories [`real_provider_double_factory`] names for `doubles`, each
-/// once, in a fixed order.
-fn real_provider_factories<'a>(
-    doubles: impl Iterator<Item = &'a (String, String, String)>,
-    pglite: bool,
-) -> Vec<String> {
-    doubles
-        .filter_map(|(owner, cap, _)| real_provider_double_factory(owner, cap, pglite))
-        .collect::<BTreeSet<_>>()
-        .into_iter()
-        .map(str::to_string)
-        .collect()
-}
-
 /// The runtime factory of the fake a `bynk.cloudflare` double wraps its real
 /// provider around, for the capabilities whose test double *is* the provider
 /// (P4a #2602: `D1` over in-memory SQLite; #3302: `Email` over an outbox;
@@ -142,25 +128,7 @@ pub(super) fn emit_test_module(
     // `write_header` already does) and spliced in at this fixed position
     // (index 2, right after the two header comments above) once everything
     // has lowered.
-    let has_agents = unit_tables
-        .get(target_name)
-        .map(|t| !t.agents.is_empty())
-        .unwrap_or(false);
     let runtime_import = emitter::runtime_import_for(&module_path, import_ext);
-    let mut runtime_names: Vec<String> = ["Ok", "Err", "Some", "None"]
-        .iter()
-        .map(|s| s.to_string())
-        .collect();
-    if has_agents {
-        runtime_names.push("__makeTestState".to_string());
-    }
-    runtime_names.push("type Result".to_string());
-    runtime_names.push("type Option".to_string());
-    runtime_names.push("type ValidationError".to_string());
-    // #1883, slice 3: the asset fetch helper answers with an `HttpResult`.
-    if asset_harness.is_some() {
-        runtime_names.push("HttpResult".to_string());
-    }
     let import_idx = stmts.len();
 
     // Compute relative import path from tests/ to the target's output dir.
@@ -269,7 +237,6 @@ pub(super) fn emit_test_module(
             })
             .map(|(owner, _, _)| owner),
     );
-    runtime_names.extend(real_provider_factories(all_doubles(), pglite));
     for unit in &binding_units {
         // P4a (#2602): `bynk.cloudflare`'s binding is first-party, so it is
         // never in `binding_modules` (a test keeps its doubles); the `D1`
@@ -929,13 +896,10 @@ pub(super) fn emit_test_module(
     }
     stmts.extend(build_run_function(&run_entries));
 
-    // #914: every case/property/stub/attack body above has now lowered, so
-    // `runtime_use` carries whatever it actually reached for — fold that into
-    // the runtime import's own `names` (deduped against the fixed set already
-    // listed) and splice the finished import statement in at its reserved
-    // position, the same ordering `emit_project`'s own deferred `write_header`
-    // relies on.
-    append_runtime_use_imports(&mut runtime_names, runtime_use);
+    // The runtime import is what the finished tree uses (1B.5e, #4054 Decision E): every body
+    // above is a node, or text that names the runtime names it spells (`raw_using`), so the
+    // closure sees each one. It splices in at its reserved position.
+    let runtime_names = emitter::runtime_header::derived_test_runtime_names(&stmts);
     stmts.splice(
         import_idx..import_idx,
         emitter::runtime_files::runtime_import_stmts(false, &runtime_names, &runtime_import),
@@ -1193,8 +1157,10 @@ pub(super) fn event_delivery_helpers(
                                 "eventId".to_string(),
                                 TsExpr::template_lit(
                                     vec!["test-event-".to_string(), String::new()],
-                                    // No pre-increment expression node: the one text hole.
-                                    vec![ident("++__bynkEventSeq")],
+                                    vec![TsExpr::Unary {
+                                        op: bynk_ts::TsUnaryOp::PreIncrement,
+                                        expr: Box::new(ident("__bynkEventSeq")),
+                                    }],
                                 ),
                             ),
                             (
