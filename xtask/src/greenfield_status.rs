@@ -1673,10 +1673,18 @@ fn ide_emit_edge(root: &Path) -> Probe {
 /// files were never counted.
 const AST_IMPORTER_EXCEPTIONS: &[&str] = &["emitter/serialisation.rs"];
 
-/// Is `rel_path` (relative to `bynk-emit/src`) one of [`AST_IMPORTER_EXCEPTIONS`]?
+/// Is `rel_path` (relative to `bynk-emit/src`) one of [`AST_IMPORTER_EXCEPTIONS`], or a file
+/// split out of one (an [`AST_IMPORTER_ORIGINS`] child whose origin is an exception)? P6.33's
+/// grounds cover the codec renderer however it is filed, so `serialisation/expr.rs` is excluded
+/// because `serialisation.rs` is, and a new file in the directory that is not in the origin table
+/// is still counted (named, not prefixed).
 fn is_named_ast_importer(rel_path: &Path) -> bool {
     let rel = rel_path.to_string_lossy().replace('\\', "/");
-    AST_IMPORTER_EXCEPTIONS.contains(&rel.as_str())
+    let origin = AST_IMPORTER_ORIGINS
+        .iter()
+        .find(|(child, _)| *child == rel)
+        .map_or(rel.as_str(), |(_, origin)| *origin);
+    AST_IMPORTER_EXCEPTIONS.contains(&origin)
 }
 
 /// Is `contents` a module (not a nested block) that glob-imports its parent —
@@ -1798,6 +1806,13 @@ const AST_IMPORTER_ORIGINS: &[(&str, &str)] = &[
     ("emitter/emit/handlers.rs", "emitter/emit.rs"),
     ("emitter/emit/messages.rs", "emitter/emit.rs"),
     ("emitter/emit/capability.rs", "emitter/emit.rs"),
+    // emitter/serialisation.rs (an AST_IMPORTER_EXCEPTIONS entry: its children are excluded too)
+    ("emitter/serialisation/expr.rs", "emitter/serialisation.rs"),
+    ("emitter/serialisation/field.rs", "emitter/serialisation.rs"),
+    (
+        "emitter/serialisation/support.rs",
+        "emitter/serialisation.rs",
+    ),
 ];
 
 /// How many distinct origins the importing files `rels` come from: a file named as a child in
@@ -6365,6 +6380,17 @@ mod tests {
         // `project/tests_emit.rs` left `bynk-emit/src` with `project` (D1, #2982).
         assert!(!is_named_ast_importer(Path::new("project/tests_emit.rs")));
         assert!(is_named_ast_importer(Path::new("emitter/serialisation.rs")));
+        // A file split out of it is excluded through the origin table; a file that is not in
+        // the table is not, whatever directory it sits in.
+        assert!(is_named_ast_importer(Path::new(
+            "emitter/serialisation/expr.rs"
+        )));
+        assert!(is_named_ast_importer(Path::new(
+            "emitter/serialisation/field.rs"
+        )));
+        assert!(!is_named_ast_importer(Path::new(
+            "emitter/serialisation/other.rs"
+        )));
         assert!(!is_named_ast_importer(Path::new("project.rs")));
         assert!(!is_named_ast_importer(Path::new("emitter.rs")));
         assert!(!is_named_ast_importer(Path::new("emitter/lower.rs")));
@@ -6439,6 +6465,8 @@ mod tests {
         );
         assert!(!counted.contains("project/tests_emit.rs"));
         assert!(!counted.contains("emitter/serialisation.rs"));
+        assert!(!counted.contains("emitter/serialisation/expr.rs"));
+        assert!(!counted.contains("emitter/serialisation/field.rs"));
         assert!(!counted.contains("project.rs"));
         assert!(!counted.contains("project/diagnostics.rs"));
         assert!(counted.contains("emitter.rs"));
