@@ -174,18 +174,18 @@ function __makeTestDeps() {
 }
 
 async function __prop_test_record_int_field_participates_in_arithmetic() {
-    const deps = {};
-    const { Point } = __ns_demo_gen;
-    type Point = __ns_demo_gen.Point;
-    const __gens = [
-      { name: "p", boundaries: [{ x: globalThis.Number(0n), y: globalThis.Number(0n) }], gen: (rng: any) => ({ x: globalThis.Number(rng.int(-1000n, 1000n)), y: globalThis.Number(rng.int(-1000n, 1000n)) }), shrink: (v: any) => [], show: (v: any) => __bynkShow(v) },
-    ];
-    const __where = null;
-    const __body = async (__vals: any[]) => {
-      const [p] = __vals;
-      if (!(p.x + 1 === p.x + 1)) { throw __bynkExpectFailure("tests/gen.test.bynk:13:14", 783, 801, "expect p.x + 1 == p.x + 1\n  expected: p.x + 1 == p.x + 1\n  actual:   " + __bynkShow((p.x + 1)) + " == " + __bynkShow((p.x + 1))); }
-    };
-    return await __bynkRunProperty({ seed: __bynkMix(__bynkSeed, 0), cases: 100, gens: __gens, where: __where, body: __body, name: "record int field participates in arithmetic", location: "tests/gen.test.bynk", file: "tests/gen.test.bynk" });
+  const deps = {};
+  const { Point } = __ns_demo_gen;
+  type Point = __ns_demo_gen.Point;
+  const __gens = [
+    { name: "p", boundaries: [{ x: globalThis.Number(0n), y: globalThis.Number(0n) }], gen: (rng: any) => ({ x: globalThis.Number(rng.int(-1000n, 1000n)), y: globalThis.Number(rng.int(-1000n, 1000n)) }), shrink: (v: any) => [], show: (v: any) => __bynkShow(v) },
+  ];
+  const __where = null;
+  const __body = async (__vals: any[]) => {
+    const [p] = __vals;
+    if (!(p.x + 1 === p.x + 1)) { throw __bynkExpectFailure("tests/gen.test.bynk:13:14", 783, 801, "expect p.x + 1 == p.x + 1\n  expected: p.x + 1 == p.x + 1\n  actual:   " + __bynkShow((p.x + 1)) + " == " + __bynkShow((p.x + 1))); }
+  };
+  return await __bynkRunProperty({ seed: __bynkMix(__bynkSeed, 0), cases: 100, gens: __gens, where: __where, body: __body, name: "record int field participates in arithmetic", location: "tests/gen.test.bynk", file: "tests/gen.test.bynk" });
 }
 
 type CaseResult = {

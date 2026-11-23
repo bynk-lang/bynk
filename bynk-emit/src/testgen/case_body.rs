@@ -19,7 +19,7 @@ use crate::emitter::ctx::{BodyMode, ModuleCtx, TestShared, UnitFacts};
 use crate::emitter::lower_call::codec_statics::eval_value_line;
 use crate::emitter::lower_ctx::LowerCtx;
 use crate::emitter::lower_stmt::{
-    emit_block_as_function_body_with_return, emit_statement, emit_statement_nodes,
+    StatementSink, emit_block_as_function_body_with_return, function_body_stmts,
 };
 use crate::emitter::{Pre, RuntimeUse};
 use bynk_ts::SourceMapBuilder;
@@ -82,48 +82,40 @@ pub fn lower_block_to_async_body(
     (out, smb.into_inner())
 }
 
-/// Lower a test-case body: statements followed by a discarded tail expression
-/// (the runner records success via the assertion mechanism, not via a return
-/// value). Used by v0.7 test emission.
-#[allow(clippy::too_many_arguments)]
-pub fn lower_test_case_body(
+/// [`lower_block_to_async_body`] as statements (1B.5b), for a predicate closure built as nodes.
+pub fn lower_block_to_async_stmts(
     block: &Block,
+    return_type: &TypeRef,
     typed: &mut TypedCommons,
     cross_context: &bynk_check::resolver::CrossContextInfo,
-    test_services: HashSet<String>,
-    test_service_handlers: HashMap<String, Vec<bynk_model::IrHandlerKind>>,
-    sum_handlers: HashSet<(String, String)>,
-    test_agents: HashSet<String>,
-    settle_sends: bool,
-    harness_bound: HashSet<String>,
-    source: &str,
-    rel_path: &str,
     runtime_use: &RuntimeUse,
-) -> (String, SourceMapBuilder) {
-    lower_test_case_body_reporting(
-        block,
-        typed,
-        cross_context,
-        test_services,
-        test_service_handlers,
-        sum_handlers,
-        test_agents,
-        settle_sends,
-        harness_bound,
-        source,
-        rel_path,
-        runtime_use,
-        false,
-    )
+) -> Vec<bynk_ts::TsStmt> {
+    let mut cx = LowerCtx::new(
+        ModuleCtx::new(typed, cross_context, runtime_use, UnitFacts::detached()),
+        BodyMode::PredicateScaffold {
+            test: TestShared {
+                test_scaffold: true,
+                assert_loc: None,
+            },
+        },
+    );
+    let async_tail = is_effectful_return(return_type);
+    function_body_stmts(block, &mut cx, async_tail, Some(return_type))
 }
 
-/// [`lower_test_case_body`], optionally reporting the tail's value (#3585,
-/// `bynk eval`). With `report_value`, the tail expression is not discarded: its
-/// value is encoded as the wire shape `Json.encode` gives it and written to
-/// stdout as one `{"type":"eval-value","valueType":"…","value":…}` line, which
-/// the test runner's NDJSON reader picks up. Nothing else about the body changes.
+/// Lower a test-case body as statements (1B.5b): the body's statements followed by a discarded
+/// tail expression (the runner records success via the assertion mechanism, not via a return
+/// value), and, when the tail is a discarded `()` and adds no statement, the tail's source-map
+/// mark for the statement the caller adds next. The source map is the statements' own spans: a
+/// statement carries the span of its source statement, and the printer records it where the
+/// statement starts.
+///
+/// With `report_value` (#3585, `bynk eval`) the tail's value is not discarded: it is encoded as
+/// the wire shape `Json.encode` gives it and written to stdout as one
+/// `{"type":"eval-value","valueType":"…","value":…}` line, which the test runner's NDJSON reader
+/// picks up. Nothing else about the body changes.
 #[allow(clippy::too_many_arguments)]
-pub fn lower_test_case_body_reporting(
+pub fn lower_test_case_stmts(
     block: &Block,
     typed: &mut TypedCommons,
     cross_context: &bynk_check::resolver::CrossContextInfo,
@@ -138,9 +130,8 @@ pub fn lower_test_case_body_reporting(
     rel_path: &str,
     runtime_use: &RuntimeUse,
     report_value: bool,
-) -> (String, SourceMapBuilder) {
-    let mut out = String::new();
-    let smb = RefCell::new(SourceMapBuilder::new());
+) -> (Vec<bynk_ts::TsStmt>, Option<bynk_syntax::span::Span>) {
+    let mut sink = StatementSink::new();
     {
         let mut cx = LowerCtx::new(
             ModuleCtx::new(typed, cross_context, runtime_use, UnitFacts::detached()),
@@ -160,36 +151,35 @@ pub fn lower_test_case_body_reporting(
                 sum_handlers,
                 settle_sends,
             },
-        )
-        .with_source_map(Some(&smb));
+        );
         cx.local_agents = test_agents;
         cx.harness_bound = harness_bound;
         for stmt in &block.statements {
-            emit_statement(&mut out, stmt, &mut cx, 0);
+            sink.statement(stmt, &mut cx);
         }
         // Evaluate the tail expression but discard its value; assertions inside
         // it still take effect via thrown AssertionErrors.
-        cx.record_span(out.len(), block.tail.span);
+        sink.mark(block.tail.span);
         let mut pre = Pre::new();
         if report_value && let Some(line) = eval_value_line(&mut pre, &block.tail, &mut cx) {
             let mut stmts = pre.ts_stmts();
             stmts.push(line);
-            extend_printed_at(&mut out, stmts, 0);
-            return (out, smb.into_inner());
+            sink.nodes(stmts);
+        } else {
+            let tail = pre.lower_node(&block.tail, &mut cx);
+            sink.nodes(discarded_tail(&pre, tail));
         }
-        let tail = pre.lower_node(&block.tail, &mut cx);
-        extend_printed_at(&mut out, discarded_tail(&pre, tail), 0);
     }
-    (out, smb.into_inner())
+    sink.finish()
 }
 
-/// A lowered integration case body: its text, the source map recorded against that text, and the
-/// statements the text was printed from (1B.3c: the harness decides what the body names from the
-/// tree, not by lexing the text).
+/// A lowered integration case body (1B.5b): its statements, and the tail's source-map mark when
+/// the tail added no statement of its own, for the statement the caller adds next. The harness
+/// decides what the body names from these statements (1B.3c), and the case's source map is their
+/// own spans.
 pub struct LoweredCaseBody {
-    pub text: String,
-    pub smb: SourceMapBuilder,
     pub stmts: Vec<bynk_ts::TsStmt>,
+    pub tail_span: Option<bynk_syntax::span::Span>,
 }
 
 /// v0.16: lower an integration test case body. Like [`lower_test_case_body`],
@@ -219,20 +209,17 @@ pub fn lower_integration_case_body(
     // `__bynkSettle` retry ([`settle_segments`]).
     settle: bool,
 ) -> LoweredCaseBody {
-    let mut out = String::new();
-    // The statements `out` was printed from, for the caller's name walk.
-    let mut stmts: Vec<bynk_ts::TsStmt> = Vec::new();
-    let smb = RefCell::new(SourceMapBuilder::new());
     let kinds: Vec<SettleKind> = block
         .statements
         .iter()
         .map(|s| settle_kind(s, &typed.callees))
         .collect();
-    let mut bounds: Vec<(usize, usize)> = Vec::new();
+    // Each source statement's lowered statements, in order.
+    let mut groups: Vec<Vec<bynk_ts::TsStmt>> = Vec::new();
     // Each statement's top-level bindings, as emitted (a re-`let` or a name
     // the harness binds is renamed), for a settle attempt to return.
     let mut binds: Vec<Vec<String>> = Vec::new();
-    {
+    let (tail_stmts, tail_span) = {
         let mut module = ModuleCtx::new(typed, cross_context, runtime_use, UnitFacts::detached());
         module.target = BuildTarget::Workers;
         let mut cx = LowerCtx::new(
@@ -252,13 +239,15 @@ pub fn lower_integration_case_body(
                 system_http_claims: Box::new(system_http_claims),
                 system_jobs,
             },
-        )
-        .with_source_map(Some(&smb));
+        );
         cx.harness_bound = harness_bound;
         for stmt in &block.statements {
-            let start = out.len();
-            emit_statement_nodes(&mut out, &mut stmts, stmt, &mut cx, 0);
-            bounds.push((start, out.len()));
+            let mut sink = StatementSink::new();
+            sink.statement(stmt, &mut cx);
+            let (lowered, pending) = sink.finish();
+            // Every statement pushes content after its mark, so none is left over.
+            debug_assert!(pending.is_none(), "a source statement left a trailing mark");
+            groups.push(lowered);
             binds.push(match stmt {
                 // #2640: a `par` block binds each of its `let` names.
                 bynk_syntax::ast::Statement::Par(p) => p
@@ -294,27 +283,20 @@ pub fn lower_integration_case_body(
                 | bynk_syntax::ast::Statement::Advance(..) => Vec::new(),
             });
         }
-        cx.record_span(out.len(), block.tail.span);
+        let mut sink = StatementSink::new();
+        sink.mark(block.tail.span);
         let mut pre = Pre::new();
         let tail = pre.lower_node(&block.tail, &mut cx);
-        let tail_stmts = discarded_tail(&pre, tail);
-        stmts.extend(tail_stmts.iter().cloned());
-        extend_printed_at(&mut out, tail_stmts, 0);
-    }
-    if settle {
-        // The rewrite moves the text, so the source map no longer fits it; a
-        // remote build is not one an editor steps through.
-        return LoweredCaseBody {
-            text: settle_segments(&out, &bounds, &kinds, &binds),
-            smb: SourceMapBuilder::new(),
-            stmts,
-        };
-    }
-    LoweredCaseBody {
-        text: out,
-        smb: smb.into_inner(),
-        stmts,
-    }
+        sink.nodes(discarded_tail(&pre, tail));
+        sink.finish()
+    };
+    let mut stmts = if settle {
+        settle_segments(groups, &kinds, &binds)
+    } else {
+        groups.into_iter().flatten().collect()
+    };
+    stmts.extend(tail_stmts);
+    LoweredCaseBody { stmts, tail_span }
 }
 
 /// A test case's tail, evaluated and discarded: the statements it hoisted, then `void (<tail>);`.
@@ -422,20 +404,20 @@ fn settle_kind(
 /// re-run until every `expect` in it holds or the deadline passes, so the
 /// addresses since the last unsafe one are replayed before each retry. The
 /// bindings it declares are returned out of the attempt, so the statements
-/// after it see them unchanged. `bounds` are each statement's byte range in
-/// `out`; text after the last one (the tail) is kept as is.
+/// after it see them unchanged. `groups` are each source statement's lowered
+/// statements; the tail follows them, outside any attempt.
 fn settle_segments(
-    out: &str,
-    bounds: &[(usize, usize)],
+    groups: Vec<Vec<bynk_ts::TsStmt>>,
     kinds: &[SettleKind],
     binds: &[Vec<String>],
-) -> String {
-    let piece = |i: usize| &out[bounds[i].0..bounds[i].1];
-    let mut text = String::new();
+) -> Vec<bynk_ts::TsStmt> {
+    let mut groups: Vec<Option<Vec<bynk_ts::TsStmt>>> = groups.into_iter().map(Some).collect();
+    let mut out: Vec<bynk_ts::TsStmt> = Vec::new();
+    let mut take = |k: usize| groups[k].take().unwrap_or_default();
     let mut i = 0;
     while i < kinds.len() {
         if kinds[i] == SettleKind::Unsafe {
-            text.push_str(piece(i));
+            out.extend(take(i));
             i += 1;
             continue;
         }
@@ -445,40 +427,52 @@ fn settle_segments(
         let last_expect = (i..end).rev().find(|&k| kinds[k] == SettleKind::Expect);
         match last_expect {
             Some(e) if (i..e).any(|k| kinds[k] == SettleKind::Safe) => {
-                let segment: String = (i..=e).map(piece).collect();
+                let segment: Vec<bynk_ts::TsStmt> = (i..=e).flat_map(&mut take).collect();
                 let names: Vec<&str> = binds[i..=e].iter().flatten().map(String::as_str).collect();
-                text.push_str(&settle_attempt(&segment, &names));
+                out.push(settle_attempt(segment, &names));
                 for k in e + 1..end {
-                    text.push_str(piece(k));
+                    out.extend(take(k));
                 }
             }
             _ => {
                 for k in i..end {
-                    text.push_str(piece(k));
+                    out.extend(take(k));
                 }
             }
         }
         i = end;
     }
-    if let Some(&(_, last)) = bounds.last() {
-        text.push_str(&out[last..]);
-    } else {
-        text.push_str(out);
-    }
-    text
+    out
 }
 
 /// One `__bynkSettle` attempt around `segment`, returning `names` (the
 /// segment's top-level bindings, from the AST, as emitted) so the code after
-/// it sees them. The segment's text is moved in unchanged — not re-indented,
-/// which would alter a multi-line template literal.
-fn settle_attempt(segment: &str, names: &[&str]) -> String {
+/// it sees them.
+fn settle_attempt(mut segment: Vec<bynk_ts::TsStmt>, names: &[&str]) -> bynk_ts::TsStmt {
+    use crate::ts_build::{await_expr, block_arrow, call, ident};
+    if !names.is_empty() {
+        segment.push(bynk_ts::TsStmt::return_stmt(
+            Some(bynk_ts::TsExpr::object_entries(
+                names
+                    .iter()
+                    .map(|n| bynk_ts::TsObjectEntry::Shorthand((*n).to_string()))
+                    .collect(),
+            )),
+            None,
+        ));
+    }
+    let attempt = await_expr(call(
+        ident("__bynkSettle"),
+        vec![block_arrow(Vec::new(), true, segment)],
+    ));
     if names.is_empty() {
-        format!("await __bynkSettle(async () => {{\n{segment}}});\n")
+        bynk_ts::TsStmt::expr_stmt(attempt, None)
     } else {
-        let list = names.join(", ");
-        format!(
-            "const {{ {list} }} = await __bynkSettle(async () => {{\n{segment}return {{ {list} }};\n}});\n"
+        bynk_ts::TsStmt::const_stmt(
+            bynk_ts::TsBindingName::ObjectPattern(names.iter().map(|n| n.to_string()).collect()),
+            None,
+            attempt,
+            None,
         )
     }
 }
@@ -488,24 +482,27 @@ mod settle_tests {
     use super::*;
 
     /// Each piece's binding is the identifier after a leading `const `, as
-    /// the AST would give it.
+    /// the AST would give it. The rewrite prints at depth 0, the tail after it.
     fn rewrite(pieces: &[&str], kinds: &[SettleKind], tail: &str) -> String {
-        let mut out = String::new();
-        let mut bounds = Vec::new();
-        let mut binds = Vec::new();
-        for p in pieces {
-            let start = out.len();
-            out.push_str(p);
-            bounds.push((start, out.len()));
-            binds.push(
+        let groups: Vec<Vec<bynk_ts::TsStmt>> = pieces
+            .iter()
+            .map(|p| vec![bynk_ts::TsStmt::raw(p.to_string(), None)])
+            .collect();
+        let binds: Vec<Vec<String>> = pieces
+            .iter()
+            .map(|p| {
                 p.strip_prefix("const ")
                     .and_then(|r| r.split(' ').next())
                     .map(|n| vec![n.to_string()])
-                    .unwrap_or_default(),
-            );
-        }
-        out.push_str(tail);
-        settle_segments(&out, &bounds, kinds, &binds)
+                    .unwrap_or_default()
+            })
+            .collect();
+        let mut text: String = settle_segments(groups, kinds, &binds)
+            .iter()
+            .map(|s| bynk_ts::print_stmt(s, 0))
+            .collect();
+        text.push_str(tail);
+        text
     }
 
     #[test]
@@ -523,7 +520,7 @@ mod settle_tests {
         );
         assert_eq!(
             text,
-            "const a = await post();\nconst { n } = await __bynkSettle(async () => {\nconst n = await get();\nif (!(n === 1)) { throw fail(); }\nreturn { n };\n});\nconst after = n;\nvoid (after);\n"
+            "const a = await post();\nconst { n } = await __bynkSettle(async () => {\nconst n = await get();\nif (!(n === 1)) { throw fail(); }\n  return { n };\n});\nconst after = n;\nvoid (after);\n"
         );
     }
 
@@ -552,14 +549,14 @@ mod settle_tests {
              const { n } = await __bynkSettle(async () => {\n\
              const n = await get();\n\
              if (!(n)) { throw fail(); }\n\
-             return { n };\n\
+             \x20 return { n };\n\
              });\n\
              const t = n;\n\
              const b = await post();\n\
              const { m } = await __bynkSettle(async () => {\n\
              const m = await get();\n\
              if (!(m)) { throw fail(); }\n\
-             return { m };\n\
+             \x20 return { m };\n\
              });\n\
              const u = await get();\n\
              void (u);\n"
@@ -586,13 +583,12 @@ mod settle_tests {
              const q = 1;\n\
              const n = await get();\n\
              if (!(n === q)) { throw fail(); }\n\
-             return { q, n };\n\
+             \x20 return { q, n };\n\
              });\n"
         );
     }
 
-    /// The segment's text moves in unchanged: a multi-line template literal
-    /// keeps its contents.
+    /// A multi-line template literal in a segment keeps its contents.
     #[test]
     fn a_template_literal_in_a_segment_is_not_reindented() {
         use SettleKind::*;
@@ -605,6 +601,40 @@ mod settle_tests {
             "",
         );
         assert!(text.contains("get(`a\nb`)"), "{text}");
+    }
+
+    /// The path a real body takes: a lowered node whose template literal spans lines, inside the
+    /// attempt's arrow, which the printer indents. The literal's own contents are not touched.
+    #[test]
+    fn a_lowered_template_literal_node_keeps_its_contents_in_an_attempt() {
+        use crate::ts_build::{await_expr, call, const_, ident};
+        use SettleKind::*;
+        let read = const_(
+            "n",
+            await_expr(call(
+                ident("get"),
+                vec![bynk_ts::TsExpr::template_lit(
+                    vec!["a\nb ".to_string(), String::new()],
+                    vec![ident("x")],
+                )],
+            )),
+        );
+        let groups = vec![
+            vec![read],
+            vec![bynk_ts::TsStmt::raw(
+                "if (!(n)) { throw fail(); }\n".to_string(),
+                None,
+            )],
+        ];
+        let binds = vec![vec!["n".to_string()], Vec::new()];
+        let text: String = settle_segments(groups, &[Safe, Expect], &binds)
+            .iter()
+            .map(|s| bynk_ts::print_stmt(s, 0))
+            .collect();
+        assert!(
+            text.contains("const { n } = await __bynkSettle(async () => {\n  const n = await get(`a\nb ${x}`);\n"),
+            "{text}"
+        );
     }
 
     #[test]

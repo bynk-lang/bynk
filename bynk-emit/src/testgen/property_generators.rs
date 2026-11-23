@@ -7,7 +7,7 @@ use super::*;
 use bynk_check::checker::Types;
 use bynk_check::test_suites::{self};
 use bynk_syntax::ast::{BaseType, PredKind, Refinement, TypeBody, TypeDecl};
-use bynk_ts::{TsArrowBody, TsExpr, TsLit, TsParam, TsType};
+use bynk_ts::{TsArrowBody, TsExpr, TsLit, TsParam, TsStmt, TsType};
 use std::sync::Arc;
 
 /// Integer generation bounds `(lo, hi, floor)` derived from a refinement: `lo`
@@ -437,12 +437,17 @@ pub(super) fn destructure_vals(
     binding_types: &[Option<checker::TyId>],
     types: Option<&HashMap<String, Arc<TypeDecl>>>,
     tys: &Arc<Types>,
-) -> String {
+) -> Vec<TsStmt> {
     let needs_coercion = binding_types
         .iter()
         .any(|ty| matches!((ty, types), (Some(t), Some(types)) if ty_draws_bigint(*t, types, tys)));
     if !needs_coercion {
-        return format!("const [{}] = __vals;", names.join(", "));
+        return vec![TsStmt::const_stmt(
+            bynk_ts::TsBindingName::ArrayPattern(names.to_vec()),
+            None,
+            ident("__vals"),
+            None,
+        )];
     }
     names
         .iter()
@@ -457,10 +462,9 @@ pub(super) fn destructure_vals(
                 (Some(t), Some(types)) => coerce_top_level_int_binding(*t, types, tys, raw),
                 _ => raw,
             };
-            format!("const {name} = {};", bynk_ts::print_expr(&value))
+            crate::ts_build::const_(name.clone(), value)
         })
-        .collect::<Vec<_>>()
-        .join(" ")
+        .collect()
 }
 
 /// A TypeScript expression drawing a random inhabitant of a resolved type using

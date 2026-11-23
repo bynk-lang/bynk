@@ -678,9 +678,7 @@ pub(super) fn emit_test_module(
             // project-relative `rel_path`, which a debugger would resolve against
             // the emitted `.ts`'s dir) so an editor breakpoint on the real
             // `.bynk` test file binds.
-            let src_id =
-                map.add_source(parsed[i].map_source_name(), parsed[i].source().to_string());
-            case_stmt.nested_map_source_id = src_id;
+            case_stmt.nested_map_source_id = source_id_of(&mut map, &parsed[i]);
             // The "case tier" comment right above is not a real blank-line
             // pair the automatic policy knows about (only two consecutive
             // `Comment`s are exempted) — glue them explicitly, as the pre-
@@ -723,7 +721,7 @@ pub(super) fn emit_test_module(
             prop_runners.push(runner_name.clone());
             // v0.119: a `for all run: History[Agent]` property routes to the driven-
             // sequence runner; a value property keeps the existing path.
-            let prop_stmt = if prop_is_history(prop) {
+            let mut prop_stmt = if prop_is_history(prop) {
                 emit_test_history_property_function(
                     &runner_name,
                     test_suites::SuiteItems::of(test_decl),
@@ -762,6 +760,8 @@ pub(super) fn emit_test_module(
                     tys,
                 )
             };
+            // Its statements' spans are offsets into its own test file.
+            prop_stmt.nested_map_source_id = source_id_of(&mut map, &parsed[i]);
             stmts.push(prop_stmt);
         }
     }
@@ -1064,6 +1064,12 @@ pub(super) fn snapshot_harness(
     // The table follows the runtime's last line directly.
     table.no_blank_before = true;
     vec![TestRuntimeModule::Snapshot.splice(), table]
+}
+
+/// The id under which `file` is a source of the module's map, so the statements lowered from it
+/// record their spans against its text.
+fn source_id_of(map: &mut SourceMapBuilder, file: &ParsedFile) -> usize {
+    map.add_source(file.map_source_name(), file.source().to_string())
 }
 
 /// #2052: the `__bynkEvent_<svc>` helper behind each `svc.event(payload[,
