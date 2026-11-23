@@ -1771,6 +1771,10 @@ fn ast_importers(root: &Path) -> Probe {
 const AST_IMPORTER_ORIGINS: &[(&str, &str)] = &[
     ("emitter/emit/types.rs", "emitter/emit.rs"),
     ("emitter/emit/functions.rs", "emitter/emit.rs"),
+    // 2.2a (#4087): `lower.rs` split.
+    ("emitter/lower/pattern.rs", "emitter/lower.rs"),
+    ("emitter/lower/is.rs", "emitter/lower.rs"),
+    // 2.4a (#4089): `workers_entry.rs` split.
     ("emitter/workers_entry/call.rs", "emitter/workers_entry.rs"),
     ("emitter/workers_entry/queue.rs", "emitter/workers_entry.rs"),
     ("emitter/workers_entry/wire.rs", "emitter/workers_entry.rs"),

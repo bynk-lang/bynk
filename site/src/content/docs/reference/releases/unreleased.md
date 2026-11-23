@@ -7,6 +7,7 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.640.78** | Internal restructuring: the driver's `project.rs` loses its pipeline, per-unit work and output assembly to child modules; no output changes |
 | **v0.640.77** | Internal restructuring: the driver's `project.rs` loses its options, entry points, deps plan and tests to child modules; no output changes |
 | **v0.640.76** | Internal restructuring: `emit.rs` starts to split by declaration kind (types and functions move out); no output changes |
 | **v0.640.75** | Internal restructuring: `bynk-ts`'s tree (`program.rs`) is split into modules by node family; no output changes |

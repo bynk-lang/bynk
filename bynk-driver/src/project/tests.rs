@@ -1,6 +1,28 @@
+use super::diagnostics::ErrorSink;
+use super::diagnostics::Mode;
+use super::diagnostics::ProjectFailure;
 use super::entry::sources_to_discovered;
+use super::pipeline::{RunChecks, run_checks};
+use super::unit::report_internal_faults;
 use super::*;
+use bynk_check::checker::Types;
+use bynk_check::firstparty::Platform;
+use bynk_check::project_model::{self, Visibility};
+use bynk_check::symbols::FileDeclIndex;
+use bynk_check::symbols::UnitTable;
+use bynk_emit::emit_model::ImportExt;
+use bynk_emit::emit_model::is_worker_asset_path;
+use bynk_emit::emit_model::is_worker_migration_path;
+use bynk_emit::emit_model::worker_assets_dir;
+use bynk_emit::emitter;
+use bynk_project::discovery::discover_project_files;
+use bynk_project::discovery::parse_sources;
+use bynk_project::paths::ProjectPaths;
+use bynk_project::paths::try_read_project_paths;
+use std::collections::{BTreeMap, HashMap};
 use std::fs;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 /// 1A.34: a checker fact the emitter did not find reaches the user as a coded diagnostic
 /// at the `.bynk` span of the construct, attributed to its file, naming where to report it,

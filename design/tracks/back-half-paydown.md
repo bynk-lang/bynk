@@ -299,7 +299,7 @@ feature work is frozen, such moves cost no merge conflicts.
   emitter moved into `emitter/lower_stmt.rs` (a mechanical move ahead of the work, under the
   exception above), so that 1A.10–1A.13 edit one small module instead of `lower.rs`.
 - `emitter.rs`, split into headers, imports, boundary helpers and the project driver.
-- `workers_entry.rs`, split by dispatch family, with one module per non-`fetch` handler kind (#4089): `fetch` is most of the file and WebSocket is not a function of its own, so the split is by route family (`call`, `admin`, `http`), the shared `respond`, `wire` and `field_specs`, and `scheduled`, `queue` and `email`; after 2.4c a WebSocket module.
+- `workers_entry.rs`, split per handler kind: fetch, scheduled, queue, email, WebSocket.
 - `bynk-driver/src/project.rs`, which becomes what remains after 1B.2d: the check-and-emit
   orchestration (it does no process spawning and almost no file I/O; the driver's other modules
   do that). 2.7a moves the options, the entry points and the deps plan out, and 2.7b the pipeline.
@@ -330,12 +330,12 @@ production lines without saying why; from 2.0 the gate is mechanical. Settled by
 |---|---|---:|---|
 | **2.0** | the ratchet. **Done in #4085.** | — | — |
 | **2.1** | `bynk-emit/src/emitter/emit.rs`, in seven PRs (2.1a to 2.1g, #4086). **2.1a done:** `emit/types.rs` (1,036 lines with its tests) and `emit/functions.rs` (823); `emit.rs` is 9,295 production lines after it. | 10,717 | 1B.4b (done) |
-| **2.2** | `bynk-emit/src/emitter/lower.rs` | 4,884 | 1B.4b |
+| **2.2** | `bynk-emit/src/emitter/lower.rs`, in five PRs (#4087). **2.2a done:** `lower/pattern.rs` and `lower/is.rs` (now 3,752); 2.2b to 2.2e remain | 3,752 | 1B.4b; 2.2c to 2.2e also 1B.5e (merged) |
 | **2.3** | `bynk-emit/src/emitter/serialisation.rs` | 4,232 | — |
-| **2.4** | `bynk-emit/src/emitter/workers_entry.rs`, in three PRs. **2.4a done:** `respond`, `wire`, `call`, `admin`, `scheduled`, `queue` and `email` (moved in from `workers_email.rs`) move out. 2.4b: the HTTP family. 2.4c (optional): the inline blocks of `emit_worker_entry` become functions | 4,215 | — |
+| **2.4** | `bynk-emit/src/emitter/workers_entry.rs` | 4,215 | — |
 | **2.5** | `bynk-emit/src/emitter.rs` | 3,215 | — |
 | **2.6** | `bynk-ts/src/printer.rs`, `bynk-ts/src/program.rs`. **2.6a (the tree) is done:** `program.rs` is a 441-line parent over `program/{stmt,expr,types,decl,verbatim,spans}.rs` (largest 1,133); the printer (2.6b) and its test split (2.6c) follow. | 3,629; 3,682 → 3,629; 441 | — |
-| **2.7** | `bynk-driver/src/project.rs`, in two PRs. **2.7a done (#4136, part of #4108): `options`, `entry`, `in_memory`, `agent_deps` and the tests move out; `module_lines` 4,312 to 2,875.** 2.7b: `pipeline`, `unit`, `output` | 4,312 | — |
+| **2.7** | `bynk-driver/src/project.rs`, in two PRs. **Done: 2.7a (#4136) moved `options`, `entry`, `in_memory`, `agent_deps` and the tests out (`module_lines` 4,312 to 2,875); 2.7b (closes #4108) moved `pipeline`, `unit` and `output` out, leaving a 92-line facade; no `project/` file is over 1,350 production lines, and `run_checks` and `build_output` keep their `fn-length-ceilings.txt` values under their new keys.** | 4,312 | — |
 | **2.8** | `bynk/src/deploy/plan.rs` (optional: under 3,000 already) | 2,271 | — |
 | **2.9** | `bynk/src/dev.rs` (optional) | 2,292 | — |
 

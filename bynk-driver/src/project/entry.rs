@@ -1,10 +1,10 @@
-use super::RunChecks;
-use super::compatibility_flag_warnings;
 use super::diagnostics::Mode;
 use super::diagnostics::ProjectFailure;
-use super::finish_build;
 use super::options::CompileOptions;
-use super::run_checks;
+use super::output::compatibility_flag_warnings;
+use super::output::finish_build;
+use super::pipeline::RunChecks;
+use super::pipeline::run_checks;
 use bynk_emit::emit_model::ProjectOutput;
 use bynk_project::AttributedError;
 use bynk_project::Roots;
