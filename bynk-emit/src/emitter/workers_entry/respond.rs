@@ -139,7 +139,7 @@ pub(super) fn case_(test: TsExpr, body: Vec<TsStmt>) -> TsSwitchCase {
         labels: vec![test],
         body,
         default_braced: false,
-        // Arc E slice 6 (#1445): every real non-`default` case in this file
+        // Arc E slice 6 (#1445): every real non-`default` case in this module
         // is `{ }`-blocked, same as before `case_braced` existed.
         case_braced: true,
         span: None,
@@ -191,7 +191,7 @@ pub(super) fn status_json_headers_obj(status: i64) -> TsExpr {
 
 /// `new Response(JSON.stringify(<body>), { status: <status>, headers: {
 /// "content-type": "application/json" } })` — the dominant JSON-error-
-/// response shape across this file's own real content.
+/// response shape across this module's own real content.
 pub(super) fn json_response(body: TsExpr, status: i64) -> TsExpr {
     new_response(vec![json_stringify(body), status_json_headers_obj(status)])
 }
@@ -218,7 +218,7 @@ pub(super) fn null_response(status: i64) -> TsExpr {
 }
 
 /// `{ kind: "<kind>", ...fields }` — the shared shape of every synthesised
-/// boundary-error body this file builds.
+/// boundary-error body this module builds.
 pub(super) fn json_error_kind(kind: &str, fields: Vec<(String, TsExpr)>) -> TsExpr {
     let mut entries = vec![("kind".to_string(), str_lit(kind))];
     entries.extend(fields);

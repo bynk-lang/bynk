@@ -1773,6 +1773,15 @@ const AST_IMPORTER_ORIGINS: &[(&str, &str)] = &[
     ("emitter/workers_entry/call.rs", "emitter/workers_entry.rs"),
     ("emitter/workers_entry/queue.rs", "emitter/workers_entry.rs"),
     ("emitter/workers_entry/wire.rs", "emitter/workers_entry.rs"),
+    (
+        "emitter/workers_entry/field_specs.rs",
+        "emitter/workers_entry.rs",
+    ),
+    ("emitter/workers_entry/http.rs", "emitter/workers_entry.rs"),
+    (
+        "emitter/workers_entry/http_policy.rs",
+        "emitter/workers_entry.rs",
+    ),
     // 2.2a (#4087): `lower.rs` split.
     ("emitter/lower/pattern.rs", "emitter/lower.rs"),
     ("emitter/lower/is.rs", "emitter/lower.rs"),
