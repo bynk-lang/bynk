@@ -1,3 +1,4 @@
+import { __bynkCmpString } from "./compare.ts";
 // The Durable Object storage surface the runtime speaks. The single-key forms
 // are what every emitted agent uses today; the batched, ranged and transactional
 // forms are the per-entry storage track's (#3195, `design/tracks/per-entry-storage.md`).
@@ -284,20 +285,10 @@ function readMany<T>(data: ReadonlyMap<string, unknown>, keys: readonly string[]
   return out;
 }
 
-// Keys sort by their UTF-8 bytes, as Cloudflare documents: not by UTF-16 code
-// unit, which orders a character above U+FFFF before one in U+E000..U+FFFF.
-const encoder = new TextEncoder();
-export function utf8Compare(a: string, b: string): number {
-  if (a === b) return 0;
-  const x = encoder.encode(a);
-  const y = encoder.encode(b);
-  const n = Math.min(x.length, y.length);
-  for (let i = 0; i < n; i += 1) {
-    const d = (x[i] as number) - (y[i] as number);
-    if (d !== 0) return d;
-  }
-  return x.length - y.length;
-}
+// Keys sort by their UTF-8 bytes, as Cloudflare documents: that is code-point
+// order, the same order as `String` comparison in Bynk (#3954), so there is one
+// comparator.
+export const utf8Compare = __bynkCmpString;
 
 function listFrom<T>(data: ReadonlyMap<string, unknown>, options?: DurableObjectListOptions): Map<string, T> {
   // As Durable Object storage does (#3747), so a caller that passes both fails here too.

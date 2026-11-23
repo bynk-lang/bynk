@@ -2,6 +2,7 @@
 // context boundary.consumer
 
 import { Ok, Err, type Result } from "../__bynk_runtime/result.js";
+import { __bynkCodePointLength } from "../__bynk_runtime/text.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 
 import { Token } from "./provider.js";
@@ -18,7 +19,7 @@ export type Reply = string & { readonly __brand: "boundary.consumer.Reply" };
 
 export const Reply = {
   of(value: string): Result<Reply, ValidationError> {
-    if (!(value.length <= 8)) {
+    if (!(__bynkCodePointLength(value) <= 8)) {
       return Err({ field: "Reply", message: "length must be at most 8", value });
     }
     return Ok(value as Reply);

@@ -138,9 +138,10 @@ sorts predictably, with `NaN` last. The operators are different: `NaN < x` and
 prefix first. It was equatable but not orderable before; code that was rejected
 for sorting on a `Bytes` key now compiles.
 
-**`String`.** Strings compare by UTF-16 code unit, which matches the order
-JavaScript's `<` gives. It is neither Unicode code-point nor locale order, so
-`"Z"` sorts before `"a"`.
+**`String`.** Strings compare by code point, which is also UTF-8 byte order and
+so agrees with how storage and SQL order the same text. It is not locale order,
+so `"Z"` sorts before `"a"`. This differs from JavaScript's `<` (UTF-16 code
+unit) only for a character above U+FFFF compared with one in U+E000..U+FFFF.
 
 Reference: [Ordering your own types](/reference/types/#ordering-your-own-types)
 and [Generics and bounds](/reference/generics/).

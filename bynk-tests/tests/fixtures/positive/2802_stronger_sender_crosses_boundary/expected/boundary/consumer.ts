@@ -3,6 +3,7 @@
 
 import { Ok, Err, type Result } from "../__bynk_runtime/result.js";
 import { __bynkDecimalToString } from "../__bynk_runtime/decimal.js";
+import { __bynkCodePointLength } from "../__bynk_runtime/text.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 
 import * as boundary_provider from "./provider.js";
@@ -11,7 +12,7 @@ export type ShortLabel = string & { readonly __brand: "boundary.consumer.ShortLa
 
 export const ShortLabel = {
   of(value: string): Result<ShortLabel, ValidationError> {
-    if (!(value.length <= 4)) {
+    if (!(__bynkCodePointLength(value) <= 4)) {
       return Err({ field: "ShortLabel", message: "length must be at most 4", value });
     }
     return Ok(value as ShortLabel);
@@ -61,7 +62,7 @@ export type Slug = string & { readonly __brand: "boundary.consumer.Slug" };
 
 export const Slug = {
   of(value: string): Result<Slug, ValidationError> {
-    if (!(value.length <= 4)) {
+    if (!(__bynkCodePointLength(value) <= 4)) {
       return Err({ field: "Slug", message: "length must be at most 4", value });
     }
     if (!(new globalThis.RegExp("^(?:" + "[a-z]+" + ")$").test(value))) {
@@ -75,7 +76,7 @@ export type Reply = string & { readonly __brand: "boundary.consumer.Reply" };
 
 export const Reply = {
   of(value: string): Result<Reply, ValidationError> {
-    if (!(value.length <= 8)) {
+    if (!(__bynkCodePointLength(value) <= 8)) {
       return Err({ field: "Reply", message: "length must be at most 8", value });
     }
     return Ok(value as Reply);

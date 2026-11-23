@@ -208,7 +208,7 @@ pub(in crate::emitter) struct QueryShape<'a> {
     pub(in crate::emitter) other_elem: &'a TsType,
     pub(in crate::emitter) keyed: bool,
     /// The comparator expression for `sortBy`/`min`/`max` (#2787); `None` keeps
-    /// the bare `<`/`>` operators, for `Int`/`String`/`Duration`/`Instant` keys.
+    /// the bare `<`/`>` operators, for `Int`/`Duration`/`Instant` keys.
     pub(in crate::emitter) key_cmp: Option<bynk_ts::TsExpr>,
     /// The module's runtime-helper record, so a lowering that needs a helper
     /// imports it (`Query.sum` over a `Decimal` key needs `__bynkDecimalAdd`, #3421).

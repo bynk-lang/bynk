@@ -2,6 +2,7 @@
 // context wire.gateway
 
 import { Ok, Err, type Result } from "../../__bynk_runtime/result.js";
+import { __bynkCodePointLength } from "../../__bynk_runtime/text.js";
 import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService } from "../../__bynk_runtime/boundary.js";
 
 import type * as wire_auth from "../wire-auth/handlers.js";
@@ -106,10 +107,10 @@ export function __deserialise_ClientId(json: __JsonValue, path: string = "$"): R
   if (typeof json !== "string") {
     return Err({ kind: "StructuralMismatch", path, expected: "string", actual: typeof json });
   }
-  if (!(json.length > 0)) {
+  if (!(__bynkCodePointLength(json) > 0)) {
     return Err({ kind: "RefinementViolation", path, violation: { field: "ClientId", message: "must be non-empty", value: json } });
   }
-  if (!(json.length <= 20)) {
+  if (!(__bynkCodePointLength(json) <= 20)) {
     return Err({ kind: "RefinementViolation", path, violation: { field: "ClientId", message: "length must be at most 20", value: json } });
   }
   return Ok(json as unknown as wire_auth.ClientId);

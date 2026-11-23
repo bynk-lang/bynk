@@ -2,6 +2,7 @@
 // commons demo.shapes
 
 import { Ok, Err, type Result } from "../__bynk_runtime/result.js";
+import { __bynkCodePointLength } from "../__bynk_runtime/text.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 
 /**
@@ -13,7 +14,7 @@ export type Code = string & { readonly __brand: "Code" };
 
 export const Code = {
   of(value: string): Result<Code, ValidationError> {
-    if (!(value.length >= 3)) {
+    if (!(__bynkCodePointLength(value) >= 3)) {
       return Err({ field: "Code", message: "length must be at least 3", value });
     }
     return Ok(value as Code);

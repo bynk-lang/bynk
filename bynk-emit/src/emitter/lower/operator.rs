@@ -434,18 +434,13 @@ fn two<T>(children: Vec<T>) -> (T, T) {
 }
 
 /// Whether a key or operand of this type orders with the bare JS `<`/`>`: a base
-/// type other than `Bytes` (a `Uint8Array`), or a refined type over one. Every
+/// type other than `Bytes` (a `Uint8Array`) and `String` (code-point order, #3954),
+/// or a refined type over one. Every
 /// other `Ord` type goes through a comparator.
 fn is_bare_ordered(ty: TyId, tys: &Types) -> bool {
     matches!(
         ty.base(tys),
-        Some(
-            BaseType::Int
-                | BaseType::Float
-                | BaseType::String
-                | BaseType::Duration
-                | BaseType::Instant
-        )
+        Some(BaseType::Int | BaseType::Float | BaseType::Duration | BaseType::Instant)
     )
 }
 
