@@ -7,6 +7,7 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.640.66** | Internal restructuring: `bynk deploy` and `bynk dev` read each Worker's bindings from the build's binding model instead of parsing them back out of `wrangler.toml` and its sidecars; no output changes |
 | **v0.640.65** | The pages for contributors and for following the project leave the Book for a small Project section, linked from the footer — [Versioning & roadmap](/project/versioning-and-roadmap/) and [Contributing](/project/contributing/), with their own sidebar — and *Why Bynk exists* becomes a section of [What is Bynk?](/book/introduction/what-is-bynk/#why-bynk-exists); every old URL redirects. With this the web presence track (#3861) is retired (slice 13, #4082). |
 | **v0.640.64** | Internal restructuring: `bynk deploy` and `bynk dev` take each Worker's binding model from the compile they run, and check it against the configuration it wrote; no output changes |
 | **v0.640.63** | Internal restructuring of `bynk deploy`; the resource kinds reach Cloudflare through one operation trait, with no change to plans, provisioning, messages or `bynk.deploy.lock` |
