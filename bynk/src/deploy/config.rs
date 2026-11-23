@@ -5,103 +5,27 @@ use super::*;
 // order against (slices 1 and 2)
 // ---------------------------------------------------------------------------
 
-/// The stanzas of a generated `wrangler.toml` that `deploy` acts on.
+/// The settings of a generated `wrangler.toml` that `deploy` acts on and the
+/// build's binding model does not carry: the queues a Worker consumes, its
+/// Durable Object `exports`, and the Email Routing `addresses`.
 ///
-/// Everything here is read from the **emitted config** rather than from the
-/// checker's project model because this is precisely the file wrangler is about
-/// to send and Cloudflare is about to validate — so the plan and the upload can
-/// never describe different projects (ADR 0193 D3, extended to slice 1's kinds).
+/// A Worker's *bindings* are not read from the file (1C.3b, #4040): the file is
+/// the same process's rendering of the `WorkerBindings` the build holds, and
+/// [`declared_bindings`] reads the model directly. What is left here is what
+/// the model never held. ADR 0193 D3's guarantee, that the plan and the upload
+/// never describe different projects, rests on there being one source for both.
 #[derive(Debug, Default, Deserialize)]
-struct WranglerConfig {
-    #[serde(default)]
-    services: Vec<ServiceBinding>,
+struct WorkerSettings {
     #[serde(default)]
     queues: QueueBindings,
     /// #1796: Cloudflare's declarative `exports` map, keyed by class name —
     /// what replaced the `[[migrations]]` this struct used to read.
     #[serde(default)]
     exports: BTreeMap<String, Export>,
-    // P7.4 (#1305): read structurally alongside everything else this struct
-    // already deserialises, replacing `needs_kv`'s own former
-    // `text.contains(KV_NAMESPACE_ID_PLACEHOLDER)` whole-file substring
-    // search (R8.20 — deploy-time placeholders are typed, not textual).
-    #[serde(default)]
-    kv_namespaces: Vec<KvNamespaceBinding>,
-    /// P5 (#2323): the `[[r2_buckets]]` of the `R2` instances.
-    #[serde(default)]
-    r2_buckets: Vec<R2BucketBinding>,
-    /// P4a (#2602): the `[[d1_databases]]` of the `D1` instances.
-    #[serde(default)]
-    d1_databases: Vec<D1DatabaseBinding>,
-    /// #3479: the `[[vectorize]]` of the `Vectorize` instances.
-    #[serde(default)]
-    vectorize: Vec<VectorizeStanza>,
-    /// #3477: the `[[containers]]` of the `Container` instances.
-    #[serde(default)]
-    containers: Vec<ContainerStanza>,
-    /// #3319: the `[[hyperdrive]]` of the `Postgres` instances.
-    #[serde(default)]
-    hyperdrive: Vec<HyperdriveStanza>,
-    /// P3 (#2342): the `[[ratelimits]]` of the `RateLimit` instances.
-    #[serde(default)]
-    ratelimits: Vec<RateLimitBinding>,
-    /// P3b (#2582): the `[[analytics_engine_datasets]]` of the `Analytics`
-    /// instances.
-    #[serde(default)]
-    analytics_engine_datasets: Vec<AnalyticsDatasetBinding>,
-    /// #3301: the `[[secrets_store_secrets]]` of the `StoredSecret` instances.
-    #[serde(default)]
-    secrets_store_secrets: Vec<StoredSecretBinding>,
-    /// #3480: the `[[ai_search]]` of the `AiSearch` instances.
-    #[serde(default)]
-    ai_search: Vec<AiSearchBinding>,
-    /// #3513 A: the `[[mtls_certificates]]` of the `MtlsCertificate` instances.
-    #[serde(default)]
-    mtls_certificates: Vec<MtlsCertificateBinding>,
-    /// #3302: the `[[send_email]]` of the `Email` instances.
-    #[serde(default)]
-    send_email: Vec<SendEmailBinding>,
     /// #3328: the top-level `addresses` of the `from email` services, the
     /// Email Routing rules wrangler reconciles on every deploy.
     #[serde(default)]
     addresses: Vec<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct SendEmailBinding {
-    /// `EMAIL_<SNAKE>`: the instance's binding.
-    name: String,
-    /// The addresses the instance may send as (`@allowedSenders`); absent when
-    /// the instance is unrestricted.
-    #[serde(default)]
-    allowed_sender_addresses: Vec<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct MtlsCertificateBinding {
-    /// `MTLS_<SNAKE>`: the instance's binding.
-    binding: String,
-    /// The certificate's name, as `@certificate` wrote it, until the deploy replaces it
-    /// with the id it resolves.
-    certificate_id: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct AiSearchBinding {
-    /// `AI_SEARCH_<SNAKE>`: the instance's binding.
-    binding: String,
-    /// The account's instance, as `@instance` wrote it.
-    instance_name: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct StoredSecretBinding {
-    /// `SECRET_<SNAKE>`: the instance's binding.
-    binding: String,
-    /// In a freshly generated config, the store's *name*, which `bynk deploy`
-    /// replaces with the id it resolves.
-    store_id: String,
-    secret_name: String,
 }
 
 /// #3302: one `Email` instance's sender restriction, as the emitted config
@@ -116,33 +40,6 @@ pub(crate) struct EmailSendersDecl {
     pub(crate) senders: Vec<String>,
 }
 
-#[derive(Debug, Deserialize)]
-struct AnalyticsDatasetBinding {
-    /// `ANALYTICS_<SNAKE>`: the instance's binding.
-    binding: String,
-    /// The unqualified derived name (`<worker>_<capability, snake>`), which
-    /// [`analytics_dataset_name`] environment-qualifies.
-    dataset: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct RateLimitBinding {
-    /// `RATELIMIT_<SNAKE>`: the instance's binding, keyed `name`, not
-    /// `binding`. The `namespace_id` itself is only read and written
-    /// structurally, by `materialise_ratelimit_namespace_ids`.
-    name: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct ServiceBinding {
-    /// The binding's `env` name: `SHOP_CART` for a project context,
-    /// `SERVICE_BILLING` for a foreign Worker (interop I5, #1972).
-    binding: String,
-    /// The *target* worker's name (`worker_dir_name`, dots dasherised), or a
-    /// foreign Worker's as its declaration names it.
-    service: String,
-}
-
 /// Interop I5 (#1972): a Service Binding to a Worker that is not one of the
 /// project's (`capability Billing = Service @worker("legacy-billing")`).
 /// Deploy reads only generated output (ADR 0193 D3), so a `[[services]]`
@@ -154,27 +51,10 @@ pub(crate) struct ForeignService {
     pub(crate) worker: String,
 }
 
-#[derive(Debug, Deserialize)]
-struct KvNamespaceBinding {
-    /// `KV` for the bare `Kv`, `KV_<SNAKE>` for a derived instance (S4b,
-    /// #1967). The `id` itself is only ever read and written structurally, by
-    /// `bynk_emit::emitter::wrangler::materialise_kv_namespace_ids`.
-    binding: String,
-}
-
 #[derive(Debug, Default, Deserialize)]
 struct QueueBindings {
     #[serde(default)]
     consumers: Vec<QueueConsumer>,
-    /// P2 (#2578): the `[[queues.producers]]` of the `Queue` instances.
-    #[serde(default)]
-    producers: Vec<QueueProducer>,
-}
-
-#[derive(Debug, Deserialize)]
-struct QueueProducer {
-    /// The queue's user-given name, straight from `@name("n")`.
-    queue: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -204,101 +84,6 @@ struct Export {
 pub(crate) struct DurableObject {
     pub(crate) class: String,
     pub(crate) storage: String,
-}
-
-/// #3477: one `[[containers]]` entry: the class whose container it runs.
-#[derive(Debug, Deserialize)]
-struct ContainerStanza {
-    class_name: String,
-}
-
-/// #3477: `bynk-containers.json` beside a Worker's config: each container's
-/// capability, `@build` directory and `@instanceType`, which the stanza does
-/// not carry.
-#[derive(Debug, Deserialize)]
-struct ContainersManifest {
-    version: u32,
-    #[serde(default)]
-    containers: Vec<ContainersManifestEntry>,
-}
-
-#[derive(Debug, Deserialize)]
-struct ContainersManifestEntry {
-    capability: String,
-    class: String,
-    build: String,
-    #[serde(default)]
-    instance_type: Option<String>,
-}
-
-/// Read the containers manifest beside `worker_dir`'s config, if there is one.
-fn read_containers_manifest(worker_dir: &Path) -> Result<Vec<ContainersManifestEntry>, String> {
-    let name = bynk_emit::emitter::wrangler::CONTAINERS_MANIFEST;
-    let path = worker_dir.join(name);
-    if !path.exists() {
-        return Ok(Vec::new());
-    }
-    let text = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
-    let manifest: ContainersManifest = serde_json::from_str(&text).map_err(|e| e.to_string())?;
-    if manifest.version != bynk_emit::emitter::wrangler::CONTAINERS_MANIFEST_VERSION {
-        return Err(format!("unsupported {name} version {}", manifest.version));
-    }
-    Ok(manifest.containers)
-}
-
-#[derive(Debug, Deserialize)]
-struct VectorizeStanza {
-    /// `VECTORIZE_<SNAKE>`: the instance's binding.
-    binding: String,
-    /// The unqualified derived index name, which [`vectorize_index_name`]
-    /// environment-qualifies.
-    index_name: String,
-}
-
-/// #3479: `bynk-vectorize.json` beside a Worker's config: each index's
-/// dimensions, metric and metadata indexes, which the stanza does not carry.
-#[derive(Debug, Deserialize)]
-struct VectorizeManifest {
-    version: u32,
-    #[serde(default)]
-    vectorize: Vec<VectorizeManifestEntry>,
-}
-
-#[derive(Debug, Deserialize)]
-struct VectorizeManifestEntry {
-    binding: String,
-    dimensions: i64,
-    metric: String,
-    #[serde(default)]
-    indexed: Vec<String>,
-}
-
-/// Read the Vectorize manifest beside `worker_dir`'s config, if there is one.
-/// A version this deploy does not know is refused rather than guessed: an index
-/// made with the wrong dimensions cannot be corrected.
-fn read_vectorize_manifest(worker_dir: &Path) -> Result<Vec<VectorizeManifestEntry>, String> {
-    let name = bynk_emit::emitter::wrangler::VECTORIZE_MANIFEST;
-    let path = worker_dir.join(name);
-    if !path.exists() {
-        return Ok(Vec::new());
-    }
-    let text = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
-    let manifest: VectorizeManifest = serde_json::from_str(&text).map_err(|e| e.to_string())?;
-    if manifest.version != bynk_emit::emitter::wrangler::VECTORIZE_MANIFEST_VERSION {
-        return Err(format!("unsupported {name} version {}", manifest.version));
-    }
-    Ok(manifest.vectorize)
-}
-
-#[derive(Debug, Deserialize)]
-struct R2BucketBinding {
-    /// `R2_<SNAKE>`: the instance's binding.
-    binding: String,
-    /// The unqualified derived name (`<worker>-<capability, kebab>`), which
-    /// [`r2_bucket_name`] environment-qualifies.
-    bucket_name: String,
-    #[serde(default)]
-    jurisdiction: Option<String>,
 }
 
 /// P3b (#2582): one `Analytics` instance's dataset, as the emitted config
@@ -348,12 +133,6 @@ pub(crate) struct StoredSecretDecl {
     pub(crate) secret: String,
 }
 
-#[derive(Debug, Deserialize)]
-struct HyperdriveStanza {
-    /// `HYPERDRIVE_<SNAKE>`: the instance's binding.
-    binding: String,
-}
-
 /// #3319: one `Postgres` instance's Hyperdrive config, as the emitted config
 /// declares it. Its id is made (or adopted) by the deploy and kept in the
 /// ledger; nothing about the connection string is in the config.
@@ -388,51 +167,6 @@ impl HyperdriveKind {
     }
 }
 
-/// The emitted `bynk-hyperdrive.json` (#3322): the bindings that are not
-/// `Postgres`, each with its kind and `@tls` mode. Names and modes only.
-#[derive(Debug, Deserialize)]
-struct HyperdriveManifest {
-    version: u32,
-    #[serde(default)]
-    hyperdrive: Vec<HyperdriveManifestEntry>,
-}
-
-#[derive(Debug, Deserialize)]
-struct HyperdriveManifestEntry {
-    binding: String,
-    kind: String,
-    #[serde(default)]
-    tls: Option<String>,
-}
-
-/// Read the Hyperdrive manifest beside `worker_dir`'s config, if there is one.
-/// A version or kind this deploy does not know is refused rather than guessed:
-/// making a Postgres config for a MySQL binding would be the wrong database.
-fn read_hyperdrive_manifest(worker_dir: &Path) -> Result<Vec<HyperdriveManifestEntry>, String> {
-    let path = worker_dir.join(bynk_emit::emitter::wrangler::HYPERDRIVE_MANIFEST);
-    if !path.exists() {
-        return Ok(Vec::new());
-    }
-    let text = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
-    let manifest: HyperdriveManifest = serde_json::from_str(&text).map_err(|e| e.to_string())?;
-    if manifest.version != bynk_emit::emitter::wrangler::HYPERDRIVE_MANIFEST_VERSION {
-        return Err(format!(
-            "unsupported {} version {}",
-            bynk_emit::emitter::wrangler::HYPERDRIVE_MANIFEST,
-            manifest.version
-        ));
-    }
-    if let Some(other) = manifest.hyperdrive.iter().find(|e| e.kind != "mysql") {
-        return Err(format!(
-            "{} names kind `{}` for `{}`, which this bynk does not know",
-            bynk_emit::emitter::wrangler::HYPERDRIVE_MANIFEST,
-            other.kind,
-            other.binding
-        ));
-    }
-    Ok(manifest.hyperdrive)
-}
-
 impl HyperdriveDecl {
     /// The capability's name as the source wrote it, recovered from the
     /// binding (`HYPERDRIVE_MAIN` is `Main`): the key of `[deploy.hyperdrive]`
@@ -456,19 +190,6 @@ impl HyperdriveDecl {
             .to_ascii_lowercase()
             .replace('_', "-")
     }
-}
-
-#[derive(Debug, Deserialize)]
-struct D1DatabaseBinding {
-    /// `D1_<SNAKE>`: the instance's binding.
-    binding: String,
-    /// The unqualified derived name (`<worker>-<capability, kebab>`), which
-    /// [`d1_database_name`] environment-qualifies.
-    database_name: String,
-    /// P4b (#2608): the copy of its migrations beside the config, when it has
-    /// any (`migrations/<database>`).
-    #[serde(default)]
-    migrations_dir: Option<String>,
 }
 
 /// P4a (#2602): one `D1` instance's database, as the emitted config declares
@@ -844,10 +565,12 @@ pub(super) fn migration_files(dir: &Path) -> Result<Vec<String>, String> {
     Ok(files)
 }
 
-/// Read everything `deploy` acts on out of one worker's generated build output.
-fn read_resources(config: &Path, project_workers: &[String]) -> Result<Resources, String> {
+/// Read everything `deploy` acts on for one Worker: its settings out of the
+/// generated `config`, its secrets from the manifest beside it, and its
+/// bindings from `declared`, which the build's model gave.
+fn read_worker(config: &Path, declared: DeclaredBindings) -> Result<Resources, String> {
     let text = std::fs::read_to_string(config).map_err(|e| e.to_string())?;
-    let parsed: WranglerConfig = toml::from_str(&text).map_err(|e| e.to_string())?;
+    let parsed: WorkerSettings = toml::from_str(&text).map_err(|e| e.to_string())?;
     // Beside the config, not in it: secrets are a runtime store rather than
     // configuration, so `wrangler.toml` has no stanza to carry them.
     let secrets = read_secrets_manifest(
@@ -866,14 +589,6 @@ fn read_resources(config: &Path, project_workers: &[String]) -> Result<Resources
     // rather than an emitter detail deploy happens to inherit.
     queues.sort();
     queues.dedup();
-    let mut producer_queues: Vec<String> = parsed
-        .queues
-        .producers
-        .into_iter()
-        .map(|p| p.queue)
-        .collect();
-    producer_queues.sort();
-    producer_queues.dedup();
     // A `BTreeMap`, so already in class-name order. A live class always has
     // a backend: Wrangler's schema requires `storage` unless `state` is a
     // tombstone. One without is refused, not skipped (review of #1803):
@@ -909,276 +624,79 @@ fn read_resources(config: &Path, project_workers: &[String]) -> Result<Resources
         })?;
         durable_objects.push(DurableObject { class, storage });
     }
-    let (binds_to, mut foreign): (Vec<ServiceBinding>, Vec<ServiceBinding>) = parsed
-        .services
-        .into_iter()
-        .partition(|s| project_workers.contains(&s.service));
-    foreign.sort_by(|a, b| a.binding.cmp(&b.binding));
-    let mut r2_buckets: Vec<R2Decl> = parsed
-        .r2_buckets
-        .into_iter()
-        .map(|b| R2Decl {
-            binding: b.binding,
-            name: b.bucket_name,
-            jurisdiction: b.jurisdiction,
-        })
-        .collect();
-    r2_buckets.sort_by(|a, b| a.binding.cmp(&b.binding));
-    let configured = read_vectorize_manifest(config.parent().unwrap_or(Path::new(".")))?;
-    let mut vectorize_indexes: Vec<VectorizeDecl> = parsed
-        .vectorize
-        .into_iter()
-        .map(|v| {
-            let entry = configured
-                .iter()
-                .find(|c| c.binding == v.binding)
-                .ok_or_else(|| {
-                    format!(
-                        "{} does not state the configuration of `{}`, so the index cannot be created or checked",
-                        bynk_emit::emitter::wrangler::VECTORIZE_MANIFEST,
-                        v.binding
-                    )
-                })?;
-            Ok(VectorizeDecl {
-                binding: v.binding,
-                name: v.index_name,
-                dimensions: entry.dimensions,
-                metric: entry.metric.clone(),
-                indexed: entry.indexed.clone(),
-                adopt: None,
-            })
-        })
-        .collect::<Result<_, String>>()?;
-    vectorize_indexes.sort_by(|a, b| a.binding.cmp(&b.binding));
-    let manifest = read_containers_manifest(config.parent().unwrap_or(Path::new(".")))?;
-    let mut containers: Vec<ContainerDecl> = parsed
-        .containers
-        .into_iter()
-        .map(|stanza| {
-            let entry = manifest
-                .iter()
-                .find(|c| c.class == stanza.class_name)
-                .ok_or_else(|| {
-                    format!(
-                        "{} does not describe the container of `{}`, so it cannot be planned or adopted",
-                        bynk_emit::emitter::wrangler::CONTAINERS_MANIFEST,
-                        stanza.class_name
-                    )
-                })?;
-            Ok(ContainerDecl {
-                capability: entry.capability.clone(),
-                class: entry.class.clone(),
-                build: entry.build.clone(),
-                instance_type: entry.instance_type.clone(),
-                adopt: None,
-            })
-        })
-        .collect::<Result<_, String>>()?;
-    containers.sort_by(|a, b| a.class.cmp(&b.class));
-    let mut ratelimits: Vec<String> = parsed.ratelimits.into_iter().map(|r| r.name).collect();
-    ratelimits.sort();
-    let mut analytics_datasets: Vec<AnalyticsDecl> = parsed
-        .analytics_engine_datasets
-        .into_iter()
-        .map(|d| AnalyticsDecl {
-            binding: d.binding,
-            name: d.dataset,
-        })
-        .collect();
-    analytics_datasets.sort_by(|a, b| a.binding.cmp(&b.binding));
-    let mut stored_secrets: Vec<StoredSecretDecl> = parsed
-        .secrets_store_secrets
-        .into_iter()
-        .map(|s| StoredSecretDecl {
-            binding: s.binding,
-            store: s.store_id,
-            secret: s.secret_name,
-        })
-        .collect();
-    stored_secrets.sort_by(|a, b| a.binding.cmp(&b.binding));
-    let mut ai_search: Vec<AiSearchDecl> = parsed
-        .ai_search
-        .into_iter()
-        .map(|s| AiSearchDecl {
-            binding: s.binding,
-            instance: s.instance_name,
-        })
-        .collect();
-    ai_search.sort_by(|a, b| a.binding.cmp(&b.binding));
-    let mut mtls_certificates: Vec<MtlsCertificateDecl> = parsed
-        .mtls_certificates
-        .into_iter()
-        .map(|c| MtlsCertificateDecl {
-            binding: c.binding,
-            certificate: c.certificate_id,
-        })
-        .collect();
-    mtls_certificates.sort_by(|a, b| a.binding.cmp(&b.binding));
-    let mut email_senders: Vec<EmailSendersDecl> = parsed
-        .send_email
-        .into_iter()
-        .filter(|e| !e.allowed_sender_addresses.is_empty())
-        .map(|e| EmailSendersDecl {
-            binding: e.name,
-            senders: e.allowed_sender_addresses,
-        })
-        .collect();
-    email_senders.sort_by(|a, b| a.binding.cmp(&b.binding));
-    let worker_dir = config
-        .parent()
-        .ok_or_else(|| "configuration has no directory".to_string())?;
-    let mut d1_databases: Vec<D1Decl> = parsed
-        .d1_databases
-        .into_iter()
-        .map(|d| {
-            Ok(D1Decl {
-                migrations: match &d.migrations_dir {
-                    Some(dir) => migration_files(&worker_dir.join(dir))?,
-                    None => Vec::new(),
-                },
-                binding: d.binding,
-                name: d.database_name,
-            })
-        })
-        .collect::<Result<_, String>>()?;
-    d1_databases.sort_by(|a, b| a.binding.cmp(&b.binding));
-    let kinds = read_hyperdrive_manifest(worker_dir)?;
-    let mut hyperdrive: Vec<HyperdriveDecl> = parsed
-        .hyperdrive
-        .into_iter()
-        .map(|h| {
-            let mysql = kinds.iter().find(|k| k.binding == h.binding);
-            HyperdriveDecl {
-                kind: if mysql.is_some() {
-                    HyperdriveKind::MySql
-                } else {
-                    HyperdriveKind::Postgres
-                },
-                tls: mysql.and_then(|k| k.tls.clone()),
-                binding: h.binding,
-            }
-        })
-        .collect();
-    hyperdrive.sort_by(|a, b| a.binding.cmp(&b.binding));
+    let mut addresses = parsed.addresses;
+    addresses.sort();
     Ok(Resources {
-        members: Vec::new(),
-        agent_contexts: BTreeMap::new(),
-        binds_to: binds_to.into_iter().map(|s| s.service).collect(),
-        foreign_services: foreign
-            .into_iter()
-            .map(|s| ForeignService {
-                binding: s.binding,
-                worker: s.service,
-            })
-            .collect(),
+        binds_to: declared.binds_to,
+        foreign_services: declared.foreign_services,
         queues,
-        producer_queues,
+        producer_queues: declared.producer_queues,
         durable_objects,
         renamed_durable_objects,
         deleted_durable_objects,
-        needs_kv: parsed
-            .kv_namespaces
-            .iter()
-            .any(|ns| ns.binding == bynk_emit::emitter::wrangler::KV_BINDING_NAME),
-        kv_instances: {
-            let mut instances: Vec<String> = parsed
-                .kv_namespaces
-                .into_iter()
-                .map(|ns| ns.binding)
-                .filter(|b| b != bynk_emit::emitter::wrangler::KV_BINDING_NAME)
-                .collect();
-            instances.sort();
-            instances
-        },
-        r2_buckets,
-        vectorize_indexes,
-        containers,
-        d1_databases,
-        hyperdrive,
-        ratelimits,
-        analytics_datasets,
-        stored_secrets,
-        ai_search,
-        mtls_certificates,
-        email_senders,
-        email_addresses: {
-            let mut addresses = parsed.addresses;
-            addresses.sort();
-            addresses
-        },
+        needs_kv: declared.needs_kv,
+        kv_instances: declared.kv_instances,
+        r2_buckets: declared.r2_buckets,
+        vectorize_indexes: declared.vectorize_indexes,
+        containers: declared.containers,
+        d1_databases: declared.d1_databases,
+        hyperdrive: declared.hyperdrive,
+        ratelimits: declared.ratelimits,
+        analytics_datasets: declared.analytics_datasets,
+        stored_secrets: declared.stored_secrets,
+        ai_search: declared.ai_search,
+        mtls_certificates: declared.mtls_certificates,
+        email_senders: declared.email_senders,
+        email_addresses: addresses,
         declared_secrets: secrets.declared,
         read_secrets: secrets.read,
         reads_complete: secrets.read_complete,
         foreign_callers: secrets.foreign,
         session_keys: secrets.session,
+        // Filled in by `project_resources`, from the layout and the agents manifest.
+        members: Vec::new(),
+        agent_contexts: BTreeMap::new(),
     })
 }
 
 /// Read the whole project's declared resources, one config read per worker.
-/// `workers` is every Worker the build holds: a Service Binding to anything
-/// else is to a foreign Worker.
-///
-/// `model`, the binding model of the build that wrote `workers_dir` (1C.3a,
-/// #4040), is held to the parse in debug builds: each Worker's bindings, as
-/// the model declares them, must be the ones read back out of the files.
+/// `workers` is every Worker the build holds, and `model` the binding model of
+/// the build that wrote `workers_dir` (1C.3b, #4040): each Worker's bindings
+/// are what it declares, and a group Worker's members and its Service Bindings'
+/// targets are from the layout the build used.
 pub(crate) fn project_resources(
     workers_dir: &Path,
     workers: &[String],
-    model: Option<&bynk_emit::emit_model::WorkersBuild>,
+    model: &bynk_emit::emit_model::WorkersBuild,
 ) -> Result<BTreeMap<String, Resources>, String> {
     // A Service Binding names its target's *script* name. That is the Worker's
     // directory unless a `[deploy.workers.<key>]` group overrides it with `name`
-    // (#3562), so each binding is read against the script names and turned back
-    // into the directory the rest of deploy keys a Worker by.
+    // (#3562), so a foreign Service Binding is told from a project's by the
+    // build's script names.
     let scripts = script_names(workers_dir, workers);
-    // Only a script name is a Worker a binding can name: a directory that is not
-    // also its Worker's script name is no target (`core` for a group renamed
-    // `core-script`), and a binding to it is a foreign Worker like any other.
-    let known: Vec<String> = scripts.keys().cloned().collect();
     let mut all = BTreeMap::new();
     for worker in workers {
-        let mut resources = read_resources(&workers_dir.join(worker).join("wrangler.toml"), &known)
+        let declared = declared_bindings(
+            workers_dir,
+            worker,
+            model.bindings.of_worker(worker),
+            &model.layout,
+            &scripts,
+        )
+        .map_err(|e| format!("could not read the bindings of `{worker}`: {e}"))?;
+        let mut resources = read_worker(&workers_dir.join(worker).join("wrangler.toml"), declared)
             .map_err(|e| format!("could not read the configuration for `{worker}`: {e}"))?;
         resources.agent_contexts =
             read_agent_contexts(&workers_dir.join(worker), worker, &resources)
                 .map_err(|e| format!("could not read the agent classes of `{worker}`: {e}"))?;
-        resources.binds_to = resources
-            .binds_to
-            .into_iter()
-            .map(|service| scripts.get(&service).cloned().unwrap_or(service))
-            // A group's member calling another member is the Worker binding to
-            // itself, which exists as soon as it is uploaded: no edge (ADR 0874 D7).
-            .filter(|dir| dir != worker)
-            .collect();
-        all.insert(worker.clone(), resources);
-    }
-    if cfg!(debug_assertions)
-        && let Some(build) = model
-        && let Err(disagreement) = cross_check(workers_dir, build, &scripts, &all)
-    {
-        panic!("the binding model disagrees with the emitted configuration: {disagreement}");
-    }
-    Ok(all)
-}
-
-/// [`project_resources`] with each group Worker's members from the project's
-/// layout (#3562), which a push records in the version's deploy facts.
-pub(crate) fn project_resources_for(
-    workers_dir: &Path,
-    workers: &[String],
-    project_root: &Path,
-    model: Option<&bynk_emit::emit_model::WorkersBuild>,
-) -> Result<BTreeMap<String, Resources>, String> {
-    let layout = bynk_project::worker_layout::WorkerLayout::for_project(
-        project_root,
-        &std::collections::HashMap::new(),
-    );
-    let mut all = project_resources(workers_dir, workers, model)?;
-    for (worker, resources) in &mut all {
-        resources.members = layout
+        // Each group Worker's members, which a push records in the version's
+        // deploy facts (#3562).
+        resources.members = model
+            .layout
             .group_members(worker)
             .map(<[String]>::to_vec)
             .unwrap_or_default();
+        all.insert(worker.clone(), resources);
     }
     Ok(all)
 }
@@ -1501,6 +1019,7 @@ pub(crate) fn environment_block(
 pub(crate) mod tests {
     use super::*;
     use bynk_check::worker_bindings::{BindingSource, WorkerBinding};
+    use bynk_project::worker_layout::WorkerLayout;
 
     fn names(v: &[&str]) -> Vec<String> {
         v.iter().map(|s| s.to_string()).collect()
@@ -1736,21 +1255,73 @@ pub(crate) mod tests {
     /// (a queue) and 372 (KV + agent + queue in one context). Deploy reads what
     /// the emitter writes, so the two must depict the same file.
     fn parse_config(label: &str, text: &str) -> Resources {
+        parse_with(label, text, "shop", &[])
+    }
+
+    /// A binding of `source`, named `name`.
+    fn bnd(name: &str, source: BindingSource) -> WorkerBinding {
+        WorkerBinding {
+            name: name.to_string(),
+            source,
+        }
+    }
+
+    /// What the Worker in directory `dir` declares from `bindings`, over the
+    /// tests' project Workers, with no staged migrations.
+    fn declare(dir: &str, bindings: &[WorkerBinding]) -> DeclaredBindings {
+        let scripts = PROJECT_WORKERS
+            .iter()
+            .map(|w| (w.to_string(), w.to_string()))
+            .collect();
+        declared_bindings(
+            Path::new("/nowhere"),
+            dir,
+            bindings,
+            &WorkerLayout::identity(),
+            &scripts,
+        )
+        .unwrap()
+    }
+
+    /// [`parse_config`] with the bindings `bindings` gives the Worker in
+    /// directory `dir`: the settings are read from `text` and the bindings
+    /// from the model, as `deploy` reads a Worker.
+    fn parse_with(label: &str, text: &str, dir: &str, bindings: &[WorkerBinding]) -> Resources {
         let path = temp_config(label);
         std::fs::write(&path, text).unwrap();
-        let resources =
-            read_resources(&path, &names(PROJECT_WORKERS)).expect("the emitted config parses");
+        let resources = read_worker(&path, declare(dir, bindings)).expect("the config parses");
         let _ = std::fs::remove_file(&path);
         resources
     }
 
-    /// #3302: only an `Email` instance with `@allowedSenders` is read, with
+    /// #3302: only an `Email` instance with `@allowedSenders` is declared, with
     /// its addresses, in binding order; an unrestricted one asks nothing.
     #[test]
-    fn email_senders_are_read_from_the_send_email_stanzas() {
-        let resources = parse_config(
+    fn email_senders_are_the_restricted_email_instances() {
+        let email = |name: &str, to: Option<&str>, senders: &[&str]| {
+            bnd(
+                name,
+                BindingSource::Email {
+                    capability: "Cap".into(),
+                    to: to.map(str::to_string),
+                    allowed_recipients: Vec::new(),
+                    allowed_senders: names(senders),
+                },
+            )
+        };
+        let resources = parse_with(
             "email-senders",
-            "name = \"shop\"\n\n[[send_email]]\nname = \"EMAIL_OPS\"\ndestination_address = \"ops@shop.example\"\n\n[[send_email]]\nname = \"EMAIL_MAIL\"\nallowed_sender_addresses = [\"orders@shop.example\", \"billing@shop.example\"]\n\n[[send_email]]\nname = \"EMAIL_ALERTS\"\n",
+            "name = \"shop\"\n",
+            "shop",
+            &[
+                email("EMAIL_OPS", Some("ops@shop.example"), &[]),
+                email(
+                    "EMAIL_MAIL",
+                    None,
+                    &["orders@shop.example", "billing@shop.example"],
+                ),
+                email("EMAIL_ALERTS", None, &[]),
+            ],
         );
         assert_eq!(
             resources.email_senders,
@@ -2373,22 +1944,20 @@ max_batch_size = 10
     }
 
     #[test]
-    fn service_targets_are_read_from_the_generated_config() {
-        // The graph is read from the emitted `[[services]]` — the same file
-        // wrangler uploads — so parse the real shape the emitter writes.
+    fn service_targets_are_the_models_service_bindings() {
+        // The graph is the model's `Service` bindings, the list the config's
+        // `[[services]]` is rendered from.
         assert_eq!(
-            parse_config(
+            parse_with(
                 "services",
-                r#"
-name = "commerce-orders"
-main = "index.ts"
-compatibility_date = "2026-08-11"
-compatibility_flags = ["global_fetch_strictly_public"]
-
-[[services]]
-binding = "COMMERCE_PAYMENT"
-service = "commerce-payment"
-"#,
+                "name = \"commerce-orders\"\nmain = \"index.ts\"\n",
+                "commerce-orders",
+                &[bnd(
+                    "COMMERCE_PAYMENT",
+                    BindingSource::Service {
+                        context: "commerce.payment".into()
+                    }
+                )],
             ),
             Resources::default().binds(&["commerce-payment"]),
         );
@@ -2431,24 +2000,30 @@ max_batch_size = 10
     fn a_producer_declares_the_queues_it_sends_to_apart_from_those_it_consumes() {
         // P2 (#2578): `capability OrderEvents = Queue @name("order-events")`
         // beside a consumer of another queue, and a second producer to it.
-        let declared = parse_config(
+        let producer = |name: &str, queue: &str| {
+            bnd(
+                name,
+                BindingSource::QueueProducer {
+                    capability: "Cap".into(),
+                    queue: queue.into(),
+                },
+            )
+        };
+        let declared = parse_with(
             "producers",
             r#"
 name = "shop"
 main = "index.ts"
 
-[[queues.producers]]
-binding = "QUEUE_ORDER_EVENTS"
-queue = "order-events"
-
-[[queues.producers]]
-binding = "QUEUE_AUDIT"
-queue = "audit"
-
 [[queues.consumers]]
 queue = "order-events"
 max_batch_size = 10
 "#,
+            "shop",
+            &[
+                producer("QUEUE_ORDER_EVENTS", "order-events"),
+                producer("QUEUE_AUDIT", "audit"),
+            ],
         );
         assert_eq!(
             declared,
@@ -2504,17 +2079,13 @@ storage = "sqlite"
         // a queue, in one context. Each kind is read independently, so one
         // present must not mask another.
         assert_eq!(
-            parse_config(
+            parse_with(
                 "everything",
                 r#"
 name = "ops-hub"
 main = "index.ts"
 compatibility_date = "2026-08-11"
 compatibility_flags = ["global_fetch_strictly_public"]
-
-[[kv_namespaces]]
-binding = "KV"
-id = "<KV_NAMESPACE_ID>" # set at deploy time
 
 [[durable_objects.bindings]]
 name = "JOB_LEDGER"
@@ -2528,6 +2099,8 @@ storage = "sqlite"
 queue = "job-intake"
 max_batch_size = 10
 "#,
+                "ops-hub",
+                &[bnd("KV", BindingSource::Kv)],
             ),
             Resources::default()
                 .needs_kv()
@@ -2623,11 +2196,26 @@ state = "deleted"
     }
 
     #[test]
-    fn rate_limiters_are_read_by_name() {
-        // P3 (#2342): `[[ratelimits]]` are keyed `name`, not `binding`.
-        let resources = parse_config(
+    fn rate_limiters_are_declared_by_binding_name() {
+        // P3 (#2342): a limiter is declared under its binding name.
+        let limiter = |name: &str, limit, period| {
+            bnd(
+                name,
+                BindingSource::RateLimitInstance {
+                    capability: "Cap".into(),
+                    limit,
+                    period,
+                },
+            )
+        };
+        let resources = parse_with(
             "ratelimits",
-            "name = \"registry-publish\"\n\n[[ratelimits]]\nname = \"RATELIMIT_READ_LIMIT\"\nnamespace_id = \"<RATELIMIT_READ_LIMIT_NAMESPACE>\"\nsimple = { limit = 1000, period = 10 }\n\n[[ratelimits]]\nname = \"RATELIMIT_PUBLISH_LIMIT\"\nnamespace_id = \"<RATELIMIT_PUBLISH_LIMIT_NAMESPACE>\"\nsimple = { limit = 20, period = 60 }\n",
+            "name = \"registry-publish\"\n",
+            "registry-publish",
+            &[
+                limiter("RATELIMIT_READ_LIMIT", 1000, 10),
+                limiter("RATELIMIT_PUBLISH_LIMIT", 20, 60),
+            ],
         );
         assert_eq!(
             resources.ratelimits,
@@ -2637,11 +2225,22 @@ state = "deleted"
     }
 
     #[test]
-    fn analytics_datasets_are_read_and_qualified_per_environment() {
+    fn analytics_datasets_are_declared_and_qualified_per_environment() {
         // P3b (#2582): read in binding order, and qualified with `_`.
         let config = "name = \"shop-cart\"\n\n[[analytics_engine_datasets]]\nbinding = \"ANALYTICS_SIGNUPS\"\ndataset = \"shop_cart_signups\"\n";
         assert_eq!(
-            parse_config("analytics", config).analytics_datasets,
+            parse_with(
+                "analytics",
+                config,
+                "shop-cart",
+                &[bnd(
+                    "ANALYTICS_SIGNUPS",
+                    BindingSource::AnalyticsDataset {
+                        capability: "Cap".into()
+                    }
+                )]
+            )
+            .analytics_datasets,
             [AnalyticsDecl {
                 binding: "ANALYTICS_SIGNUPS".into(),
                 name: "shop_cart_signups".into(),
@@ -2685,11 +2284,25 @@ state = "deleted"
     }
 
     #[test]
-    fn r2_buckets_are_read_with_their_names_and_jurisdictions() {
+    fn r2_buckets_are_declared_with_their_names_and_jurisdictions() {
         // P5 (#2323): fixture `2323_r2_workers`'s buckets, in binding order.
-        let resources = parse_config(
+        let bucket = |name: &str, jurisdiction: Option<&str>| {
+            bnd(
+                name,
+                BindingSource::R2Instance {
+                    capability: "Cap".into(),
+                    jurisdiction: jurisdiction.map(str::to_string),
+                },
+            )
+        };
+        let resources = parse_with(
             "r2-buckets",
-            "name = \"registry-store\"\n\n[[r2_buckets]]\nbinding = \"R2_INDEXES\"\nbucket_name = \"registry-store-indexes\"\njurisdiction = \"eu\"\n\n[[r2_buckets]]\nbinding = \"R2_ARCHIVES\"\nbucket_name = \"registry-store-archives\"\n",
+            "name = \"registry-store\"\n",
+            "registry-store",
+            &[
+                bucket("R2_INDEXES", Some("eu")),
+                bucket("R2_ARCHIVES", None),
+            ],
         );
         assert_eq!(
             resources.r2_buckets,
@@ -2720,30 +2333,48 @@ state = "deleted"
                 .unwrap()
                 .as_nanos()
         ));
-        let migrations = dir.join("migrations/shop-orders");
+        let migrations = dir.join("shop/migrations/shop-orders");
         std::fs::create_dir_all(&migrations).unwrap();
         for file in ["0002_more.sql", "0001_create.sql"] {
             std::fs::write(migrations.join(file), "SELECT 1;").unwrap();
         }
-        let config = dir.join("wrangler.toml");
-        std::fs::write(
-            &config,
-            "name = \"shop\"\n\n[[d1_databases]]\nbinding = \"D1_ORDERS\"\ndatabase_name = \"shop-orders\"\ndatabase_id = \"<D1_ORDERS_ID>\"\nmigrations_dir = \"migrations/shop-orders\"\n",
-        )
-        .unwrap();
-        let resources = read_resources(&config, &names(PROJECT_WORKERS));
+        let declared = declared_bindings(
+            &dir,
+            "shop",
+            &[bnd(
+                "D1_ORDERS",
+                BindingSource::D1Database {
+                    capability: "Cap".into(),
+                },
+            )],
+            &WorkerLayout::identity(),
+            &BTreeMap::new(),
+        );
         let _ = std::fs::remove_dir_all(&dir);
         assert_eq!(
-            resources.unwrap().d1_databases[0].migrations,
+            declared.unwrap().d1_databases[0].migrations,
             ["0001_create.sql", "0002_more.sql"]
         );
     }
 
     #[test]
-    fn d1_databases_are_read_in_binding_order_and_copied_into_a_named_environment() {
+    fn d1_databases_are_declared_in_binding_order_and_copied_into_a_named_environment() {
         // P4a (#2602).
         let config = "name = \"shop-cart\"\n\n[[d1_databases]]\nbinding = \"D1_ORDERS\"\ndatabase_name = \"shop-cart-orders\"\ndatabase_id = \"<D1_ORDERS_ID>\"\n\n[[d1_databases]]\nbinding = \"D1_AUDIT\"\ndatabase_name = \"shop-cart-audit\"\ndatabase_id = \"<D1_AUDIT_ID>\"\n";
-        let resources = parse_config("d1-databases", config);
+        let database = |name: &str| {
+            bnd(
+                name,
+                BindingSource::D1Database {
+                    capability: "Cap".into(),
+                },
+            )
+        };
+        let resources = parse_with(
+            "d1-databases",
+            config,
+            "shop-cart",
+            &[database("D1_ORDERS"), database("D1_AUDIT")],
+        );
         assert_eq!(
             resources.d1_databases,
             [
@@ -2845,22 +2476,38 @@ state = "deleted"
     }
 
     #[test]
-    fn the_bare_namespace_and_each_instance_are_read_apart() {
+    fn the_bare_namespace_and_each_instance_are_declared_apart() {
         // S4b (#1967): fixture `1966_derived_kv_workers`'s namespaces beside
         // the bare `KV`. The config lists them in emission order; the
         // instances come back in binding order.
-        let resources = parse_config(
+        let instance = |name: &str| {
+            bnd(
+                name,
+                BindingSource::KvInstance {
+                    capability: "Cap".into(),
+                },
+            )
+        };
+        let resources = parse_with(
             "kv-instances",
-            "name = \"shop-cart\"\n\n[[kv_namespaces]]\nbinding = \"KV\"\nid = \"<KV_NAMESPACE_ID>\"\n\n[[kv_namespaces]]\nbinding = \"KV_SESSIONS\"\nid = \"<KV_SESSIONS_ID>\"\n\n[[kv_namespaces]]\nbinding = \"KV_PRICE_CACHE\"\nid = \"<KV_PRICE_CACHE_ID>\"\n",
+            "name = \"shop-cart\"\n",
+            "shop-cart",
+            &[
+                bnd("KV", BindingSource::Kv),
+                instance("KV_SESSIONS"),
+                instance("KV_PRICE_CACHE"),
+            ],
         );
         assert!(resources.needs_kv);
         assert_eq!(
             resources.kv_instances,
             names(&["KV_PRICE_CACHE", "KV_SESSIONS"])
         );
-        let instances_only = parse_config(
+        let instances_only = parse_with(
             "kv-instances-only",
-            "name = \"shop-cart\"\n\n[[kv_namespaces]]\nbinding = \"KV_SESSIONS\"\nid = \"<KV_SESSIONS_ID>\"\n",
+            "name = \"shop-cart\"\n",
+            "shop-cart",
+            &[instance("KV_SESSIONS")],
         );
         assert!(
             !instances_only.needs_kv,
@@ -2880,7 +2527,8 @@ state = "deleted"
             "name = \"cart\"\n\n[exports.Cart]\ntype = \"durable-object\"\n",
         )
         .unwrap();
-        let err = read_resources(&path, &[]).expect_err("a live class with no backend is refused");
+        let err = read_worker(&path, DeclaredBindings::default())
+            .expect_err("a live class with no backend is refused");
         let _ = std::fs::remove_file(&path);
         assert!(
             err.contains("`exports.Cart`") && err.contains("`storage`"),
@@ -2888,43 +2536,30 @@ state = "deleted"
         );
     }
 
-    /// #3479: an index's name comes from the config's `[[vectorize]]` and its
-    /// configuration from the manifest beside it; a stanza the manifest does not
-    /// state is an error (an index made with a guessed shape cannot be corrected),
-    /// and a named environment's block carries the qualified name.
-    /// #3477: a container is read from the config's `[[containers]]` and its
-    /// manifest, which states what the stanza does not; the `[env.<name>]` block
-    /// copies the application, and the config alone does not describe a container.
+    /// #3477: a container is declared from the model's `ContainerInstance`,
+    /// which states what the config's `[[containers]]` stanza does not; the
+    /// `[env.<name>]` block copies the application, and the config alone does
+    /// not describe a container.
     #[test]
-    fn a_container_is_read_from_the_config_and_its_manifest() {
-        let dir = std::env::temp_dir().join(format!(
-            "bynk-containers-manifest-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        std::fs::create_dir_all(&dir).unwrap();
-        let config = dir.join("wrangler.toml");
-        let text = "name = \"shop\"\n\n[[containers]]\nclass_name = \"__Container_Renderer\"\nscheduling_policy = \"durable_object\"\n\n[containers.images.Renderer]\ndockerfile = \"../../../containers/render/Dockerfile\"\nbuild_context = \"../../../containers/render\"\n";
-        std::fs::write(&config, text).unwrap();
-
-        let error = read_resources(&config, &[]).unwrap_err();
-        assert!(
-            error.contains("does not describe the container of `__Container_Renderer`"),
-            "{error}"
+    fn a_container_is_declared_from_the_model() {
+        let declared = declare(
+            "shop",
+            &[bnd(
+                "CONTAINER_RENDERER",
+                BindingSource::ContainerInstance {
+                    capability: "Renderer".into(),
+                    class_name: "__Container_Renderer".into(),
+                    build: "containers/render".into(),
+                    root_from_worker: "../../..".into(),
+                    port: 8080,
+                    sleep_after: None,
+                    instance_type: Some("standard-1".into()),
+                    forward: Vec::new(),
+                },
+            )],
         );
-
-        let manifest = dir.join(bynk_emit::emitter::wrangler::CONTAINERS_MANIFEST);
-        std::fs::write(
-            &manifest,
-            "{ \"version\": 1, \"containers\": [{ \"capability\": \"Renderer\", \"class\": \"__Container_Renderer\", \"build\": \"containers/render\", \"instance_type\": \"standard-1\" }] }",
-        )
-        .unwrap();
-        let read = read_resources(&config, &[]).unwrap();
         assert_eq!(
-            read.containers,
+            declared.containers,
             [ContainerDecl {
                 capability: "Renderer".into(),
                 class: "__Container_Renderer".into(),
@@ -2933,53 +2568,34 @@ state = "deleted"
                 adopt: None,
             }]
         );
-
-        std::fs::write(&manifest, "{ \"version\": 2 }").unwrap();
-        let error = read_resources(&config, &[]).unwrap_err();
-        assert!(
-            error.contains("unsupported bynk-containers.json version 2"),
-            "{error}"
-        );
-
+        let text = "name = \"shop\"\n\n[[containers]]\nclass_name = \"__Container_Renderer\"\nscheduling_policy = \"durable_object\"\n\n[containers.images.Renderer]\ndockerfile = \"../../../containers/render/Dockerfile\"\nbuild_context = \"../../../containers/render\"\n";
         let synthesised =
             environment_block(text, "staging", &BTreeMap::new(), &BTreeSet::new()).unwrap();
         let doc: toml::Table = synthesised.parse().unwrap();
         let copied = &doc["env"]["staging"]["containers"][0];
         assert_eq!(copied["scheduling_policy"].as_str(), Some("durable_object"));
         assert!(copied["images"]["Renderer"].get("dockerfile").is_some());
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// #3479: an index's name and configuration are declared from the model's
+    /// `VectorizeIndex` (an index made with a guessed shape cannot be
+    /// corrected), and a named environment's block carries the qualified name.
     #[test]
-    fn a_vectorize_index_is_read_from_the_config_and_its_manifest() {
-        let dir = std::env::temp_dir().join(format!(
-            "bynk-vectorize-manifest-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        std::fs::create_dir_all(&dir).unwrap();
-        let config = dir.join("wrangler.toml");
-        let text = "name = \"shop\"\n\n[[vectorize]]\nbinding = \"VECTORIZE_DOCS\"\nindex_name = \"shop-docs\"\n";
-        std::fs::write(&config, text).unwrap();
-
-        let error = read_resources(&config, &[]).unwrap_err();
-        assert!(
-            error.contains("does not state the configuration of `VECTORIZE_DOCS`"),
-            "{error}"
+    fn a_vectorize_index_is_declared_from_the_model() {
+        let declared = declare(
+            "shop",
+            &[bnd(
+                "VECTORIZE_DOCS",
+                BindingSource::VectorizeIndex {
+                    capability: "Cap".into(),
+                    dimensions: 768,
+                    metric: "cosine".into(),
+                    indexed: vec!["category:string".into()],
+                },
+            )],
         );
-
-        let manifest = dir.join(bynk_emit::emitter::wrangler::VECTORIZE_MANIFEST);
-        std::fs::write(
-            &manifest,
-            "{ \"version\": 1, \"vectorize\": [{ \"binding\": \"VECTORIZE_DOCS\", \"dimensions\": 768, \"metric\": \"cosine\", \"indexed\": [\"category:string\"] }] }",
-        )
-        .unwrap();
-        let read = read_resources(&config, &[]).unwrap();
         assert_eq!(
-            read.vectorize_indexes,
+            declared.vectorize_indexes,
             [VectorizeDecl {
                 binding: "VECTORIZE_DOCS".into(),
                 name: "shop-docs".into(),
@@ -2989,60 +2605,38 @@ state = "deleted"
                 adopt: None,
             }]
         );
-
-        std::fs::write(&manifest, "{ \"version\": 2 }").unwrap();
-        let error = read_resources(&config, &[]).unwrap_err();
-        assert!(
-            error.contains("unsupported bynk-vectorize.json version 2"),
-            "{error}"
-        );
-
+        let text = "name = \"shop\"\n\n[[vectorize]]\nbinding = \"VECTORIZE_DOCS\"\nindex_name = \"shop-docs\"\n";
         let synthesised =
             environment_block(text, "staging", &BTreeMap::new(), &BTreeSet::new()).unwrap();
         assert!(
             synthesised.contains("index_name = \"shop-docs-staging\""),
             "{synthesised}"
         );
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// Hyperdrive H5 (#3322): a binding the Hyperdrive manifest lists is MySQL's,
-    /// with its `@tls` mode; one it does not is Postgres'; a version or kind this
-    /// deploy does not know is refused, not guessed.
+    /// Hyperdrive H5 (#3322): a `MySql` binding is MySQL's, with its `@tls`
+    /// mode; a `Postgres` one is Postgres'.
     #[test]
-    fn the_hyperdrive_manifest_names_the_mysql_bindings_and_refuses_what_it_does_not_know() {
-        let dir = std::env::temp_dir().join(format!(
-            "bynk-hyperdrive-manifest-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        std::fs::create_dir_all(&dir).unwrap();
-        let config = dir.join("wrangler.toml");
-        std::fs::write(
-            &config,
-            "name = \"shop\"\n\n[[hyperdrive]]\nbinding = \"HYPERDRIVE_MAIN\"\nid = \"<A>\"\n\n[[hyperdrive]]\nbinding = \"HYPERDRIVE_LEGACY\"\nid = \"<B>\"\n",
-        )
-        .unwrap();
-        let manifest = dir.join(bynk_emit::emitter::wrangler::HYPERDRIVE_MANIFEST);
-
-        // No manifest: both are Postgres', as a Postgres-only project's are.
-        let none = read_resources(&config, &[]).unwrap();
-        assert!(
-            none.hyperdrive
-                .iter()
-                .all(|h| h.kind == HyperdriveKind::Postgres)
+    fn a_hyperdrive_binding_is_mysql_or_postgres_by_its_source() {
+        let declared = declare(
+            "shop",
+            &[
+                bnd(
+                    "HYPERDRIVE_MAIN",
+                    BindingSource::Postgres {
+                        capability: "Main".into(),
+                    },
+                ),
+                bnd(
+                    "HYPERDRIVE_LEGACY",
+                    BindingSource::MySql {
+                        capability: "Legacy".into(),
+                        tls: Some("verify-ca".into()),
+                    },
+                ),
+            ],
         );
-
-        std::fs::write(
-            &manifest,
-            "{ \"version\": 1, \"hyperdrive\": [{ \"binding\": \"HYPERDRIVE_LEGACY\", \"kind\": \"mysql\", \"tls\": \"verify-ca\" }] }",
-        )
-        .unwrap();
-        let read = read_resources(&config, &[]).unwrap();
-        let kinds: Vec<_> = read
+        let kinds: Vec<_> = declared
             .hyperdrive
             .iter()
             .map(|h| (h.binding.as_str(), h.kind, h.tls.as_deref()))
@@ -3058,15 +2652,6 @@ state = "deleted"
                 ("HYPERDRIVE_MAIN", HyperdriveKind::Postgres, None),
             ]
         );
-
-        for bad in [
-            "{ \"version\": 9, \"hyperdrive\": [] }",
-            "{ \"version\": 1, \"hyperdrive\": [{ \"binding\": \"HYPERDRIVE_LEGACY\", \"kind\": \"oracle\" }] }",
-        ] {
-            std::fs::write(&manifest, bad).unwrap();
-            assert!(read_resources(&config, &[]).is_err(), "{bad}");
-        }
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
@@ -3123,6 +2708,26 @@ state = "deleted"
 #[cfg(test)]
 mod foreign_service_tests {
     use super::*;
+    use bynk_check::worker_bindings::{BindingSource, WorkerBinding};
+    use bynk_project::worker_groups::{WorkerGroup, WorkerGroups};
+    use bynk_project::worker_layout::WorkerLayout;
+
+    fn bnd(name: &str, source: BindingSource) -> WorkerBinding {
+        WorkerBinding {
+            name: name.to_string(),
+            source,
+        }
+    }
+
+    fn foreign(name: &str, worker: &str) -> WorkerBinding {
+        bnd(
+            name,
+            BindingSource::ForeignService {
+                capability: "Cap".into(),
+                worker: worker.into(),
+            },
+        )
+    }
 
     const WITH_FOREIGN: &str = r#"
 name = "shop-billing"
@@ -3147,14 +2752,23 @@ service = "legacy-billing"
     /// build's Workers is a foreign Worker, kept out of the deploy graph.
     #[test]
     fn a_service_to_a_worker_outside_the_build_is_foreign() {
-        let path = std::env::temp_dir().join(format!(
-            "bynk-foreign-{}-{:?}.toml",
-            std::process::id(),
-            std::thread::current().id()
-        ));
-        std::fs::write(&path, WITH_FOREIGN).unwrap();
-        let resources = read_resources(&path, &["payment".to_string()]).unwrap();
-        let _ = std::fs::remove_file(&path);
+        let resources = declared_bindings(
+            Path::new("/nowhere"),
+            "shop-billing",
+            &[
+                bnd(
+                    "PAYMENT",
+                    BindingSource::Service {
+                        context: "payment".into(),
+                    },
+                ),
+                foreign("SERVICE_LEDGER", "ledger"),
+                foreign("SERVICE_BILLING", "legacy-billing"),
+            ],
+            &WorkerLayout::identity(),
+            &BTreeMap::from([("payment".to_string(), "payment".to_string())]),
+        )
+        .unwrap();
         assert_eq!(resources.binds_to, ["payment"]);
         assert_eq!(
             resources.foreign_services,
@@ -3211,28 +2825,46 @@ service = "legacy-billing"
     fn a_group_is_one_node_in_the_deploy_graph() {
         let root = std::env::temp_dir().join(format!("bynk-group-graph-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
-        let write = |dir: &str, name: &str, services: &[&str]| {
+        for (dir, name) in [
+            ("core", "core-script"),
+            ("web", "web"),
+            ("pay", "pay"),
+            ("odd", "odd"),
+        ] {
             std::fs::create_dir_all(root.join(dir)).unwrap();
-            let mut text = format!("name = \"{name}\"\n");
-            for (i, service) in services.iter().enumerate() {
-                text.push_str(&format!(
-                    "\n[[services]]\nbinding = \"B{i}\"\nservice = \"{service}\"\n"
-                ));
-            }
-            std::fs::write(root.join(dir).join("wrangler.toml"), text).unwrap();
-        };
+            std::fs::write(
+                root.join(dir).join("wrangler.toml"),
+                format!("name = \"{name}\"\n"),
+            )
+            .unwrap();
+        }
         // `core` is a group renamed `core-script`; it binds to itself and to `pay`.
-        write("core", "core-script", &["core-script", "pay"]);
-        // `web` binds to the group by its script name.
-        write("web", "web", &["core-script"]);
-        write("pay", "pay", &[]);
-        // `odd` names the group's *directory*, which is not a script on Cloudflare.
-        write("odd", "odd", &["core"]);
+        // `web` binds to the group by its script name. `odd` names the group's
+        // *directory*, which is not a script on Cloudflare.
+        let model = bynk_emit::emit_model::WorkersBuild {
+            bindings: bynk_emit::emitter::WorkerBindings::of_workers(BTreeMap::from([
+                (
+                    "core".to_string(),
+                    vec![foreign("B0", "core-script"), foreign("B1", "pay")],
+                ),
+                ("web".to_string(), vec![foreign("B0", "core-script")]),
+                ("pay".to_string(), Vec::new()),
+                ("odd".to_string(), vec![foreign("B0", "core")]),
+            ])),
+            layout: WorkerLayout::from_groups(&WorkerGroups::from([(
+                "core".to_string(),
+                WorkerGroup {
+                    contexts: vec!["shop.orders".to_string(), "shop.pricing".to_string()],
+                    name: Some("core-script".to_string()),
+                    ..WorkerGroup::default()
+                },
+            )])),
+        };
         let workers: Vec<String> = ["core", "odd", "pay", "web"]
             .iter()
             .map(|s| s.to_string())
             .collect();
-        let resources = project_resources(&root, &workers, None).unwrap();
+        let resources = project_resources(&root, &workers, &model).unwrap();
         let _ = std::fs::remove_dir_all(&root);
         assert_eq!(resources["core"].binds_to, ["pay"], "no edge to itself");
         assert_eq!(resources["web"].binds_to, ["core"], "by directory");

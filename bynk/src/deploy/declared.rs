@@ -1,17 +1,12 @@
-//! 1C.3a (#4040): a Worker's binding declarations, filled from the build's
+//! 1C.3 (#4040): a Worker's binding declarations, filled from the build's
 //! `WorkerBindings`, the model its `wrangler.toml` was rendered from.
 //!
 //! [`declared_bindings`] is the one place that decides what each kind of
 //! binding declares to the deploy: an exhaustive `match` on [`BindingSource`]
-//! with no catch-all arm, so a new kind does not compile until it says. Until
-//! 1C.3b deletes the parse of the emitted files, [`cross_check`] holds the two
-//! to each other: the projection must give, per Worker, exactly the sixteen
-//! binding fields `read_resources` reads back out of the config and its
-//! sidecars.
+//! with no catch-all arm, so a new kind does not compile until it says.
 
 use super::*;
 use bynk_check::worker_bindings::{BindingSource, WorkerBinding};
-use bynk_emit::emit_model::WorkersBuild;
 use bynk_project::worker_layout::WorkerLayout;
 
 /// The sixteen binding fields of [`Resources`], as one Worker's bindings
@@ -34,68 +29,6 @@ pub(crate) struct DeclaredBindings {
     pub(crate) ai_search: Vec<AiSearchDecl>,
     pub(crate) mtls_certificates: Vec<MtlsCertificateDecl>,
     pub(crate) email_senders: Vec<EmailSendersDecl>,
-}
-
-impl DeclaredBindings {
-    /// The binding fields of `resources`, as the parse of the build's files
-    /// read them.
-    pub(crate) fn of(resources: &Resources) -> Self {
-        Self {
-            binds_to: resources.binds_to.clone(),
-            foreign_services: resources.foreign_services.clone(),
-            producer_queues: resources.producer_queues.clone(),
-            needs_kv: resources.needs_kv,
-            kv_instances: resources.kv_instances.clone(),
-            r2_buckets: resources.r2_buckets.clone(),
-            vectorize_indexes: resources.vectorize_indexes.clone(),
-            containers: resources.containers.clone(),
-            d1_databases: resources.d1_databases.clone(),
-            hyperdrive: resources.hyperdrive.clone(),
-            ratelimits: resources.ratelimits.clone(),
-            analytics_datasets: resources.analytics_datasets.clone(),
-            stored_secrets: resources.stored_secrets.clone(),
-            ai_search: resources.ai_search.clone(),
-            mtls_certificates: resources.mtls_certificates.clone(),
-            email_senders: resources.email_senders.clone(),
-        }
-    }
-
-    /// The first field in which `self` and `file` differ, with both values.
-    fn first_difference(&self, file: &Self) -> Option<String> {
-        macro_rules! fields {
-            ($($field:ident),* $(,)?) => {
-                $(
-                    if self.$field != file.$field {
-                        return Some(format!(
-                            "`{}`: the binding model says {:?}, the emitted files say {:?}",
-                            stringify!($field),
-                            self.$field,
-                            file.$field
-                        ));
-                    }
-                )*
-            };
-        }
-        fields!(
-            binds_to,
-            foreign_services,
-            producer_queues,
-            needs_kv,
-            kv_instances,
-            r2_buckets,
-            vectorize_indexes,
-            containers,
-            d1_databases,
-            hyperdrive,
-            ratelimits,
-            analytics_datasets,
-            stored_secrets,
-            ai_search,
-            mtls_certificates,
-            email_senders,
-        );
-        None
-    }
 }
 
 /// What the Worker in directory `dir` declares, from its `bindings`
@@ -251,41 +184,6 @@ pub(crate) fn declared_bindings(
         .sort_by(|a, b| a.binding.cmp(&b.binding));
     out.email_senders.sort_by(|a, b| a.binding.cmp(&b.binding));
     Ok(out)
-}
-
-/// The bridge: for each Worker of `files` (the parse of the build's files),
-/// the projection of the build's model must agree with it. `Err` names the
-/// first Worker and field that differ.
-pub(crate) fn cross_check(
-    workers_dir: &Path,
-    build: &WorkersBuild,
-    scripts: &BTreeMap<String, String>,
-    files: &BTreeMap<String, Resources>,
-) -> Result<(), String> {
-    for (worker, resources) in files {
-        let model = declared_bindings(
-            workers_dir,
-            worker,
-            build.bindings.of_worker(worker),
-            &build.layout,
-            scripts,
-        )?;
-        if let Some(difference) = model.first_difference(&DeclaredBindings::of(resources)) {
-            return Err(format!("Worker `{worker}`, {difference}"));
-        }
-    }
-    Ok(())
-}
-
-/// `bynk-tests`' hook for the corpus check: `workers_dir` is a build's
-/// `workers/` directory and `build` the model that build was written from.
-/// `Err` is a disagreement between the model and the files, or a build that
-/// would not read.
-pub(crate) fn check_build(workers_dir: &Path, build: &WorkersBuild) -> Result<(), String> {
-    let available = workers::discover_workers(workers_dir);
-    let scripts = script_names(workers_dir, &available);
-    let files = project_resources(workers_dir, &available, None)?;
-    cross_check(workers_dir, build, &scripts, &files)
 }
 
 #[cfg(test)]
@@ -714,19 +612,5 @@ mod tests {
             ],
         );
         assert_eq!(got, DeclaredBindings::default());
-    }
-
-    /// A projection that differs from the parse names the Worker and the field.
-    #[test]
-    fn a_disagreement_names_the_field() {
-        let model = DeclaredBindings {
-            needs_kv: true,
-            ..DeclaredBindings::default()
-        };
-        let difference = model
-            .first_difference(&DeclaredBindings::default())
-            .expect("they differ");
-        assert!(difference.starts_with("`needs_kv`"), "{difference}");
-        assert_eq!(model.first_difference(&model.clone()), None);
     }
 }

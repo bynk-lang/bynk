@@ -734,14 +734,13 @@ fn deploy(
     // Read spans the *whole* project even under `--context`: D4 needs the
     // selected context's binding targets to check they are live, and they are
     // by definition outside the selection.
-    let mut resources =
-        match project_resources_for(&workers_dir, &available, project_root, Some(&model)) {
-            Ok(resources) => resources,
-            Err(e) => {
-                emsg!("bynk: error: {e}");
-                return Err(ExitCode::FAILURE);
-            }
-        };
+    let mut resources = match project_resources(&workers_dir, &available, &model) {
+        Ok(resources) => resources,
+        Err(e) => {
+            emsg!("bynk: error: {e}");
+            return Err(ExitCode::FAILURE);
+        }
+    };
     let (graph, groups) = (service_graph(&resources), GroupNames::of(project_root));
     // Read before the plan: a malformed `--secrets-file` is the user's typo, and
     // it should surface as one now rather than as a missing-secret failure
