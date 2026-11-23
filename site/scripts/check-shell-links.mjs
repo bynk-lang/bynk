@@ -7,7 +7,10 @@
 // Reads the built site (`dist/`, so run it after `astro build`): every
 // site-relative href in the home page and in one Book page must name a built
 // page, and a `#fragment` must name an id on that page. Links under /blog/
-// are the blog's (another build), so they are skipped.
+// are the blog's (another build), so they are skipped. A link that a
+// `_redirects` rule sends on to a built page still works, so it passes with a
+// note to update it at its source (the theme's site map can trail a rename
+// until the theme's next release, as it did in slice 12).
 //
 //   node scripts/check-shell-links.mjs [dist]
 
@@ -27,9 +30,20 @@ function fileFor(pathname) {
   return null;
 }
 
+/** `_redirects`' exact rules (no splats), source path → destination. */
+const redirects = new Map();
+const redirectsFile = path.join(dist, "_redirects");
+if (fs.existsSync(redirectsFile)) {
+  for (const line of fs.readFileSync(redirectsFile, "utf8").split("\n")) {
+    const [from, to] = line.trim().split(/\s+/);
+    if (from?.startsWith("/") && !from.includes("*") && to) redirects.set(from, to);
+  }
+}
+
 const hrefs = (html) => [...html.matchAll(/<a\b[^>]*\bhref="([^"]+)"/g)].map((m) => m[1].replaceAll("&amp;", "&"));
 
 const problems = [];
+const notes = [];
 let checked = 0;
 for (const page of PAGES) {
   const html = fs.readFileSync(path.join(dist, page), "utf8");
@@ -38,7 +52,11 @@ for (const page of PAGES) {
     const [withQuery, fragment] = href.split("#");
     const pathname = withQuery.split("?")[0];
     checked++;
-    const file = fileFor(pathname);
+    let file = fileFor(pathname);
+    const to = redirects.get(pathname);
+    if (!file && to?.startsWith("/") && (file = fileFor(to.split("#")[0]))) {
+      notes.push(`${page}: ${href} redirects to ${to}; link to that at the source`);
+    }
     if (!file) {
       problems.push(`${page}: ${href} — no such page`);
       continue;
@@ -49,6 +67,7 @@ for (const page of PAGES) {
   }
 }
 
+if (notes.length) console.log(`Note:\n  ${notes.join("\n  ")}`);
 if (problems.length) {
   console.error(`The shell's links: ${problems.length} broken\n  ${problems.join("\n  ")}`);
   process.exit(1);
