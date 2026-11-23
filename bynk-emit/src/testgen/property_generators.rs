@@ -828,9 +828,7 @@ pub(super) fn binding_gen(
                     BaseType::Int => {
                         let (lo, hi, floor) = int_bounds(refinement.as_ref());
                         let brand = |value: TsExpr| {
-                            emitter::ts_types::unchecked_construct_test_node(
-                                name, value, is_opaque,
-                            )
+                            emitter::ts_types::unchecked_construct_test_node(name, value, is_opaque)
                         };
                         (
                             vec![brand(TsExpr::bigint(lo)), brand(TsExpr::bigint(hi))],
@@ -848,7 +846,9 @@ pub(super) fn binding_gen(
                                     is_async: false,
                                     generics: Vec::new(),
                                     return_type: None,
-                                    body: Box::new(TsArrowBody::Expr(Box::new(brand(ident("__n"))))),
+                                    body: Box::new(TsArrowBody::Expr(Box::new(brand(ident(
+                                        "__n",
+                                    ))))),
                                 }],
                             ),
                         )
@@ -856,9 +856,7 @@ pub(super) fn binding_gen(
                     BaseType::String => {
                         let min = str_min(refinement.as_ref());
                         let brand = |value: TsExpr| {
-                            emitter::ts_types::unchecked_construct_test_node(
-                                name, value, is_opaque,
-                            )
+                            emitter::ts_types::unchecked_construct_test_node(name, value, is_opaque)
                         };
                         (
                             vec![brand(str_lit("x".repeat(min.max(0) as usize)))],
@@ -876,7 +874,9 @@ pub(super) fn binding_gen(
                                     is_async: false,
                                     generics: Vec::new(),
                                     return_type: None,
-                                    body: Box::new(TsArrowBody::Expr(Box::new(brand(ident("__s"))))),
+                                    body: Box::new(TsArrowBody::Expr(Box::new(brand(ident(
+                                        "__s",
+                                    ))))),
                                 }],
                             ),
                         )
