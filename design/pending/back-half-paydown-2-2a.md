@@ -13,5 +13,5 @@ unchanged.
 
 No gated probe moves: `ast_importers` reads 13 because the two new files are
 entered in `AST_IMPORTER_ORIGINS` (origin `emitter/lower.rs`), so no `probes:`
-line. `lower.rs`' ceiling in `xtask/module-line-ceilings.txt` falls from 4,863
-to 3,752.
+line. `lower.rs` now reads 3,752 production lines; its ceiling in
+`xtask/module-line-ceilings.txt` stays loose until the final tidy.
