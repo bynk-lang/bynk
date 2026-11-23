@@ -80,12 +80,17 @@ fn destructure_named_participant_types(
             .iter()
             .any(|(_, names)| names.iter().any(|m| m == n))
     };
-    // The walk reports a name only where a node uses it, so a participant type named inside opaque
-    // text (a `Raw` statement) would not be destructured, and the case would fail to compile. The
-    // lowering emits none today; this fails loudly, in tests, if that changes.
+    // The walk reports a name only where a node uses it, so a participant type named inside
+    // opaque text (a `Raw` statement) would not be destructured, and the case would fail to
+    // compile. The lowering emits none today; this fails loudly, in tests, if that changes.
+    //
+    // 1B.5e: over every opaque statement at any depth (`raw_statement_texts`), not only the
+    // top-level ones. The shallow form this replaces could not see a raw statement nested in a
+    // function body, a `try` or an object method, which is where the harness's remaining two
+    // sites sit.
     debug_assert!(
-        trees.iter().flat_map(|s| s.iter()).all(|stmt| {
-            stmt.raw_text().is_none_or(|text| {
+        trees.iter().all(|stmts| {
+            bynk_ts::raw_statement_texts(stmts).iter().all(|text| {
                 !participant_types
                     .iter()
                     .flat_map(|(_, names)| names)

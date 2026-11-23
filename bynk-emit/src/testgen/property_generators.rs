@@ -1113,7 +1113,11 @@ mod tests {
         let tys = Arc::new(Types::new());
         let int_ty = tys.intern(checker::Ty::Base(BaseType::Int));
         let types: HashMap<String, Arc<TypeDecl>> = HashMap::new();
-        let draw = ident("rng.int(-1000n, 1000n)");
+        let draw = method_call(
+            ident("rng"),
+            "int",
+            vec![TsExpr::bigint("-1000"), TsExpr::bigint("1000")],
+        );
 
         let coerced = coerce_int_field(int_ty, &types, &tys, draw);
         assert_eq!(
@@ -1137,7 +1141,14 @@ mod tests {
             kind: checker::NamedKind::Refined(BaseType::Int),
             args: Vec::new(),
         });
-        let draw = ident("(rng.int(0n, 100n) as any)");
+        let draw = TsExpr::Paren(Box::new(as_expr(
+            method_call(
+                ident("rng"),
+                "int",
+                vec![TsExpr::bigint("0"), TsExpr::bigint("100")],
+            ),
+            any_type(),
+        )));
 
         let coerced = coerce_int_field(pct_ty, &types, &tys, draw);
         assert_eq!(
@@ -1156,7 +1167,14 @@ mod tests {
             kind: checker::NamedKind::Opaque(BaseType::Int),
             args: Vec::new(),
         });
-        let draw = ident("Pct.unsafe(rng.int(0n, 100n))");
+        let draw = call(
+            ident("Pct.unsafe"),
+            vec![method_call(
+                ident("rng"),
+                "int",
+                vec![TsExpr::bigint("0"), TsExpr::bigint("100")],
+            )],
+        );
 
         let coerced = coerce_int_field(pct_ty, &types, &tys, draw);
         assert_eq!(
@@ -1185,7 +1203,7 @@ mod tests {
         let tys = Arc::new(Types::new());
         let string_ty = tys.intern(checker::Ty::Base(BaseType::String));
         let types: HashMap<String, Arc<TypeDecl>> = HashMap::new();
-        let draw = ident("rng.str(0, 8)");
+        let draw = method_call(ident("rng"), "str", vec![num_lit("0"), num_lit("8")]);
 
         let coerced = coerce_int_field(string_ty, &types, &tys, draw);
         assert_eq!(bynk_ts::print_expr(&coerced), "rng.str(0, 8)");

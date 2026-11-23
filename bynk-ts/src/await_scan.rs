@@ -3,24 +3,24 @@
 //! looks inside nested arrows and object methods too, as the text search did, so an argument that
 //! awaits anywhere is hoisted ahead of the flag it must not run under.
 //!
-//! An [`TsExpr::Ident`] that is an identifier path (`awaiter`, `this.state`) never awaits, even if
-//! it spells "await": only [`TsExpr::Await`] nodes count. An `Ident` that is not an identifier
-//! path is expression text (1A.40 retires those classes; the identifier audit's `TEXT_CLASSES`
-//! lists them) and is searched as text, as foreign text is, so a text `(await x)` is still
-//! hoisted. The audit also asserts that no text `Ident` contains the word `await`.
+//! An [`TsExpr::Ident`] never awaits, even if it spells "await" (`awaiter`, `this.awaited`):
+//! only [`TsExpr::Await`] nodes count. An `Ident` holds an identifier path and nothing else —
+//! 1A.40c retired the text classes, the printer debug-asserts it, and the identifier audit
+//! covers every module the emitter and the test harness build (1B.5e) — so there is no text in
+//! an `Ident` left to search (1A.40 Decision F, landing in whichever of 1A.40c and 1B.5e came
+//! last).
 
-use crate::name_closure::is_identifier_path;
 use crate::program::{TsArrowBody, TsExpr, TsObjectEntry, TsStmt, TsStmtKind};
 
 /// Whether `expr` contains an `await`, at any depth. A [`TsExpr::VerbatimExpr`] or
-/// [`TsExpr::RawUsing`] is foreign text, so it is searched as text; an `Ident` is not.
+/// [`TsExpr::RawUsing`] is foreign text, so it is searched as text; an `Ident` is an
+/// identifier path, so it never awaits.
 pub fn expr_contains_await(expr: &TsExpr) -> bool {
     match expr {
         TsExpr::Await(_) => true,
         TsExpr::Lit(_) => false,
-        // An identifier path never awaits, even if it spells "await" (`awaiter`, `awaitedValue`);
-        // any other `Ident` is expression text until 1A.40, so it is searched as text.
-        TsExpr::Ident(text) => !is_identifier_path(text) && text.contains("await"),
+        // An identifier never awaits, even if it spells "await" (`awaiter`, `awaitedValue`).
+        TsExpr::Ident(_) => false,
         // Foreign text is the other place an `await` can hide outside a node: search it as text (a
         // false positive only hoists).
         TsExpr::VerbatimExpr(text, _) | TsExpr::RawUsing(text, _) => text.contains("await"),
@@ -185,15 +185,12 @@ mod tests {
         assert!(!expr_contains_await(&e));
     }
 
-    /// An identifier path that contains "await" is not an `await`. Expression text in an `Ident`
-    /// and foreign text (`VerbatimExpr`) are still searched as text.
+    /// An identifier never awaits, whatever it spells. Foreign text (`VerbatimExpr`,
+    /// `RawUsing`) is still searched as text.
     #[test]
     fn only_await_nodes_and_foreign_text_count() {
         assert!(!expr_contains_await(&id("awaiter")));
         assert!(!expr_contains_await(&id("this.awaited")));
-        // Expression text held in an `Ident` (until 1A.40) is still searched as text.
-        assert!(expr_contains_await(&id("(await x)")));
-        assert!(expr_contains_await(&id("f(await y)")));
         assert!(!expr_contains_await(&id("plain")));
         assert!(expr_contains_await(&TsExpr::VerbatimExpr(
             "(await f())".to_string(),

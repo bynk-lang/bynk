@@ -2112,7 +2112,17 @@ fn render_multiline_conditional(
 
 fn render_expr(out: &mut String, expr: &TsExpr, depth: usize, m: &mut Option<MergeTarget<'_>>) {
     match expr {
-        TsExpr::Ident(name) => out.push_str(name),
+        TsExpr::Ident(name) => {
+            // 1A.40 Decision F, restored in 1B.5e: an `Ident` holds an identifier path and
+            // nothing else. The text classes are gone and the identifier audit covers every
+            // module, so expression text here is a defect in whatever built it — it would hide
+            // the names it uses from `name_closure` and its structure from this printer.
+            debug_assert!(
+                crate::name_closure::is_identifier_path(name),
+                "an `Ident` holds expression text: {name}"
+            );
+            out.push_str(name);
+        }
         // #1539: printed exactly as `Ident` always was — raw text, no
         // escaping of its own. The origin exists for `verbatim_origins`/
         // `verbatim_sites` (xtask's gated probes) to line-scan, not for the
@@ -6223,9 +6233,13 @@ mod tests {
                 is_async: true,
                 generics: Vec::new(),
                 return_type: None,
-                body: Box::new(TsArrowBody::Expr(Box::new(TsExpr::Ident(
-                    "{ dispatch(events); }".to_string(),
-                )))),
+                body: Box::new(TsArrowBody::Flat(vec![TsStmt::expr_stmt(
+                    TsExpr::Call {
+                        callee: Box::new(TsExpr::Ident("dispatch".to_string())),
+                        args: vec![TsExpr::Ident("events".to_string())],
+                    },
+                    None,
+                )])),
             },
             None,
         ));
@@ -6991,7 +7005,11 @@ mod tests {
     fn prints_a_contract_guard_if_stmt() {
         let cond = TsExpr::Unary {
             op: TsUnaryOp::Not,
-            expr: Box::new(TsExpr::Paren(Box::new(TsExpr::Ident("n > 0".to_string())))),
+            expr: Box::new(TsExpr::Paren(Box::new(TsExpr::Binary {
+                op: TsBinaryOp::GreaterThan,
+                left: Box::new(TsExpr::Ident("n".to_string())),
+                right: Box::new(TsExpr::Lit(TsLit::Num("0".to_string()))),
+            }))),
         };
         let new_error = TsExpr::New {
             callee: Box::new(TsExpr::Ident("Error".to_string())),
@@ -8117,7 +8135,13 @@ mod tests {
                 doc: None,
                 inline: false,
                 body: vec![TsStmt::return_stmt(
-                    Some(TsExpr::Ident("{ value: f(self.value) }".to_string())),
+                    Some(TsExpr::object(vec![(
+                        "value".to_string(),
+                        TsExpr::Call {
+                            callee: Box::new(TsExpr::Ident("f".to_string())),
+                            args: vec![TsExpr::Ident("self.value".to_string())],
+                        },
+                    )])),
                     None,
                 )],
                 span: None,
@@ -8888,8 +8912,20 @@ mod tests {
     fn spans_of_nested_blocks_are_reported_in_printed_order() {
         let inner = TsStmt::if_else_same_line_stmt(
             id("b"),
-            TsStmt::block(vec![TsStmt::return_stmt(Some(id("1")), sp(40))], None),
-            TsStmt::block(vec![TsStmt::return_stmt(Some(id("2")), sp(50))], None),
+            TsStmt::block(
+                vec![TsStmt::return_stmt(
+                    Some(TsExpr::Lit(TsLit::Num("1".to_string()))),
+                    sp(40),
+                )],
+                None,
+            ),
+            TsStmt::block(
+                vec![TsStmt::return_stmt(
+                    Some(TsExpr::Lit(TsLit::Num("2".to_string()))),
+                    sp(50),
+                )],
+                None,
+            ),
             sp(30),
         );
         let outer = TsStmt::if_else_same_line_stmt(
@@ -8901,7 +8937,13 @@ mod tests {
                 ],
                 None,
             ),
-            TsStmt::block(vec![TsStmt::return_stmt(Some(id("3")), sp(60))], None),
+            TsStmt::block(
+                vec![TsStmt::return_stmt(
+                    Some(TsExpr::Lit(TsLit::Num("3".to_string()))),
+                    sp(60),
+                )],
+                None,
+            ),
             None,
         );
         let (text, spans) = print_stmt_with_spans(&outer, 0);
@@ -8928,8 +8970,8 @@ mod tests {
     fn an_inline_branch_starts_after_its_separating_space() {
         let stmt = TsStmt::if_else_stmt(
             id("c"),
-            TsStmt::return_stmt(Some(id("1")), sp(5)),
-            TsStmt::return_stmt(Some(id("2")), sp(6)),
+            TsStmt::return_stmt(Some(TsExpr::Lit(TsLit::Num("1".to_string()))), sp(5)),
+            TsStmt::return_stmt(Some(TsExpr::Lit(TsLit::Num("2".to_string()))), sp(6)),
             sp(4),
         );
         let (text, spans) = print_stmt_with_spans(&stmt, 0);
@@ -9181,10 +9223,20 @@ mod tests {
             vec![
                 case(
                     vec![lit("A"), lit("B"), lit("C")],
-                    vec![TsStmt::return_stmt(Some(id("1")), None)],
+                    vec![TsStmt::return_stmt(
+                        Some(TsExpr::Lit(TsLit::Num("1".to_string()))),
+                        None,
+                    )],
                     None,
                 ),
-                case(vec![], vec![TsStmt::return_stmt(Some(id("2")), None)], None),
+                case(
+                    vec![],
+                    vec![TsStmt::return_stmt(
+                        Some(TsExpr::Lit(TsLit::Num("2".to_string()))),
+                        None,
+                    )],
+                    None,
+                ),
             ],
             None,
         );
@@ -9199,7 +9251,10 @@ mod tests {
     fn shared_labels_over_an_unbraced_body() {
         let mut shared = case(
             vec![lit("A"), lit("B")],
-            vec![TsStmt::return_stmt(Some(id("1")), None)],
+            vec![TsStmt::return_stmt(
+                Some(TsExpr::Lit(TsLit::Num("1".to_string()))),
+                None,
+            )],
             None,
         );
         shared.case_braced = false;
@@ -9219,12 +9274,18 @@ mod tests {
             vec![
                 case(
                     vec![lit("A"), lit("B")],
-                    vec![TsStmt::return_stmt(Some(id("1")), sp(11))],
+                    vec![TsStmt::return_stmt(
+                        Some(TsExpr::Lit(TsLit::Num("1".to_string()))),
+                        sp(11),
+                    )],
                     sp(10),
                 ),
                 case(
                     vec![],
-                    vec![TsStmt::return_stmt(Some(id("2")), None)],
+                    vec![TsStmt::return_stmt(
+                        Some(TsExpr::Lit(TsLit::Num("2".to_string()))),
+                        None,
+                    )],
                     sp(20),
                 ),
             ],
