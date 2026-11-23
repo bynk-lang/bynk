@@ -565,7 +565,7 @@ combinator vocabulary as kernel methods, so a chain reads
 | `xs.sum(key: T -> K)` | `K` | the total of the keys; the zero when empty |
 | `xs.min(key: T -> K)` | `Option[K]` | the smallest key; `None` when empty |
 | `xs.max(key: T -> K)` | `Option[K]` | the largest key; `None` when empty |
-| `xs.average(key: T -> K)` | `Option[Float]` | the mean of the keys (`Option[Duration]` for a `Duration` key); `None` when empty |
+| `xs.average(key: T -> K)` | `Option[Float]` | the mean of the keys (`Option[Duration]` for a `Duration` key); a `Decimal` key is refused (`bynk.query.sum_needs_numeric`); `None` when empty |
 | `xs.joinOn(other, left, right, into)` | `List[V]` | equi-join; see [Joins and grouping](#joins-and-grouping) |
 | `xs.leftJoin(other, left, right, into)` | `List[V]` | left outer join |
 | `xs.join(other, on, into)` | `List[V]` | predicate join |
@@ -625,8 +625,9 @@ Ordering keys (`sortBy`/`sortByDescending`/`min`/`max`), on a `List` and on a la
 [`Ord` type](#ordering-your-own-types) (`bynk.types.key_not_orderable` otherwise). `sortByDescending` is `sortBy` largest key first: the exact reverse of the ascending order, so a
 `Float` `NaN` comes **first** (`None` last, a longer list first). It is **stable**: equal keys keep
 their input order, which `reverse(xs.sortBy(k))` does not. It behaves the same for a concrete,
-`derives Ord` or type-parameter key. Numeric keys (`sum`/`average`) are
-`Int`/`Float`/`Duration` (`bynk.query.sum_needs_numeric`), with `average -> Float`.
+`derives Ord` or type-parameter key. Numeric keys: `sum` takes `Int`, `Float`, `Duration` or `Decimal` keys; `average`
+takes `Int`, `Float` or `Duration`, and refuses `Decimal` (`bynk.query.sum_needs_numeric`: sum, then divide with a
+scale and rounding mode). `average -> Float` (`Duration` for a `Duration` key). The same keys apply on a lazy storage `Query`.
 **Empty aggregates are total** — `first`/`min`/`max`/`average` return `Option`,
 `sum` the zero. The first-party `bynk.list` free functions are the deprecated
 predecessors of these methods (see [Operators & built-ins](/reference/operators/) and
