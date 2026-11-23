@@ -416,8 +416,18 @@ fn a_par_join_in_an_agent_handler_adds_no_interleaving() {
     ] {
         let (outcome, order) = run(port, &held, mode, overlap, room);
         record(&mut report, mode, overlap, &outcome, &order);
+        let allowed = if overlap {
+            outcome.is_sequentially_consistent()
+        } else {
+            // Sent only after the first finished: the second must see its write.
+            (
+                outcome.first.as_str(),
+                outcome.second.as_str(),
+                outcome.last.as_str(),
+            ) == ("\"0\"", "\"1\"", "\"2\"")
+        };
         assert!(
-            outcome.is_sequentially_consistent(),
+            allowed,
             "a `{mode}` {} run produced an outcome no sequential schedule does: {outcome:?}\n{report}\n--- worker log ---\n{}",
             if overlap { "overlap" } else { "serial" },
             log()
