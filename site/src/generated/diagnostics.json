@@ -1634,14 +1634,14 @@
     "summary": "A precondition (`requires`) references `result`; the return value is only in scope inside an `ensures`."
   },
   {
-    "blurb": "A scheduled trigger carries one thing, the time it fired, so an `on schedule` handler takes at most one parameter, and it must be an `Int`: that time in milliseconds since the epoch. Drop the parameter, or type it `Int`. To act on a richer value, build it from the time inside the body.",
+    "blurb": "A scheduled trigger carries one thing, the time it fired, so an `on schedule` handler takes at most one parameter, and it must be an `Instant`: the time the schedule fired. Drop the parameter, or type it `Instant`. A parameter typed `Int` (the old spelling) is this error too: write `at: Instant`, and use `at.toEpochMillis()` where the body needs the number.",
     "category": "Cron",
     "categoryAnchor": "cron",
     "code": "bynk.cron.bad_params",
     "constructs": [
       "cron_handler"
     ],
-    "example": "on schedule(\"*/5 * * * *\") (label: String) -> Effect[Result[(), String]] { … }   // ✗ the parameter is the time\n\non schedule(\"*/5 * * * *\") (at: Int) -> Effect[Result[(), String]] { … }          // ✓",
+    "example": "on schedule(\"*/5 * * * *\") (at: Int) -> Effect[Result[(), String]] { … }   // ✗ the time is an `Instant`\n\non schedule(\"*/5 * * * *\") (at: Instant) -> Effect[Result[(), String]] { … }          // ✓",
     "severity": "error",
     "summary": "A cron handler declares more than one parameter, or a non-`Int` one."
   },
