@@ -1763,11 +1763,13 @@ fn ast_importers(root: &Path) -> Probe {
 /// `bynk-emit/src` and `/`-separated. [`ast_importers`] counts each *origin* once, so a split
 /// that carries `bynk_syntax::ast` imports into several children leaves the reading where it
 /// was: the probe measures how much of the crate reads the AST, not how many files it is
-/// written across. **Each Phase 2 split of a `bynk-emit` file that imports the
+/// written across. Rows are added by the splits (`emit.rs` first, in 2.1a). **Each Phase 2 split of a `bynk-emit` file that imports the
 /// AST adds one `(child, origin)` row per new file that does too, in the same PR** (an origin
 /// that is itself a split child maps to its own origin, not to the intermediate file). A row
 /// whose child is not an importer is inert, so a row never needs deleting while the track runs.
 const AST_IMPORTER_ORIGINS: &[(&str, &str)] = &[
+    ("emitter/emit/types.rs", "emitter/emit.rs"),
+    ("emitter/emit/functions.rs", "emitter/emit.rs"),
     // 2.2a (#4087): `lower.rs` split.
     ("emitter/lower/pattern.rs", "emitter/lower.rs"),
     ("emitter/lower/is.rs", "emitter/lower.rs"),
@@ -6953,7 +6955,7 @@ mod idempotency_scoping_tests {
         );
     }
 
-    /// The origin table is empty until a split adds to it; every row names `bynk-emit/src`
+    /// Every row of the origin table names `bynk-emit/src`
     /// files that exist, so a row cannot rot silently.
     #[test]
     fn ast_importer_origin_rows_name_existing_files() {

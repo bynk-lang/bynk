@@ -7,7 +7,7 @@
 # 3000 or more: split along a seam first. Prefer splitting a file to raising its
 # ceiling; a raise needs its justification in review. `cargo xtask module-lines --apply`
 # rewrites this file from the tree (lowering ceilings after a file shrinks).
-bynk-emit/src/emitter/emit.rs = 10656
+bynk-emit/src/emitter/emit.rs = 9295
 bynk-driver/src/project.rs = 4312
 bynk-emit/src/emitter/serialisation.rs = 4232
 bynk-emit/src/emitter/workers_entry.rs = 4215
