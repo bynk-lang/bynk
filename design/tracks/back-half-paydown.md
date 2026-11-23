@@ -1,8 +1,9 @@
 # Back-half paydown — a feature freeze to pay down the code generator, driver and deploy debt
 
 - **Status:** Settled. The §9 questions were closed with the maintainer on 17 November 2026.
-  Phase 0 is complete (P0.1–P0.5; P0.6 was retired into 1B.3). In Phase 1, 1A is done
-  (1A.39b, #3930, closed it for the freeze; the audited text classes that remain are 1A.40, proposed); 1B, 1C and 1D are next/in progress.
+  Phase 0 is complete (P0.1–P0.5; P0.6 was retired into 1B.3). **Phase 1 is complete (23 November 2026):**
+  1A, 1B, 1C and 1D have all merged, every §8 Phase 1 row reads met, and **the freeze is lifted** (§2).
+  Phase 2 (§6) is proposed and accepted as slices 1B.4b and 2.0–2.9 (#4085–#4091, #4108–#4110).
   Spine bynk-lang/bynk#3676.
 - **The freeze:** the maintainer paused new feature development on `bynk` from v0.639.1. §2 sets
   out its terms, as settled by Q1, and the freeze ADR added with this settling records them and
@@ -81,6 +82,8 @@ This applies to `vscode-bynk` too, wherever a change would need a new compiler s
 Extension work that needs no compiler change, such as polish and fixes, is allowed (Q1). A
 `bynk-std` addition is not allowed, even one that needs no emitter change: one rule is easier to
 hold than a judgement call per PR (Q1).
+
+**Lifted, 23 November 2026.** Every §8 Phase 1 row reads met on `main` (spine bynk-lang/bynk#3676), so the freeze ended that day. Feature proposals may be accepted for build again, and Phases 2 and 3 run alongside them under the ratchets.
 
 **Lifting the freeze.** The freeze lifts when Phase 1's exit criteria are met. Phases 2 and 3
 then run alongside resumed feature work. From then on the Phase 0 ratchets hold the line: a
