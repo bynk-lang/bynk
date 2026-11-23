@@ -108,16 +108,23 @@ pub(super) fn str_min(refinement: Option<&Refinement>) -> i64 {
 
 /// A canonical (deterministic) TypeScript literal inhabiting a base type — used
 /// for opaque `.unsafe` wrapping of the exotic bases (`Duration`, `Bytes`, …).
-pub(super) fn base_canon(base: BaseType) -> String {
+pub(super) fn base_canon_node(base: BaseType) -> TsExpr {
     match base {
-        BaseType::Int => "0n".to_string(),
-        BaseType::String => "\"\"".to_string(),
-        BaseType::Bool => "true".to_string(),
-        BaseType::Float => "0".to_string(),
-        BaseType::Duration | BaseType::Instant => "0".to_string(),
-        BaseType::Bytes => "new globalThis.Uint8Array()".to_string(),
-        BaseType::Decimal => "{ coefficient: 0n, scale: 0 }".to_string(),
+        BaseType::Int => TsExpr::bigint(0),
+        BaseType::String => str_lit(""),
+        BaseType::Bool => TsExpr::Lit(TsLit::Bool(true)),
+        BaseType::Float | BaseType::Duration | BaseType::Instant => num_lit("0"),
+        BaseType::Bytes => new(member(ident("globalThis"), "Uint8Array"), Vec::new()),
+        BaseType::Decimal => decimal_node(TsExpr::bigint(0), 0),
     }
+}
+
+/// A `Decimal` value: the frozen `{ coefficient, scale }` over `bigint`.
+fn decimal_node(coefficient: TsExpr, scale: u32) -> TsExpr {
+    TsExpr::object(vec![
+        ("coefficient".to_string(), coefficient),
+        ("scale".to_string(), num_lit(scale.to_string())),
+    ])
 }
 
 /// `Decimal` generation bounds `(lo, hi, scale)` as coefficients at `scale`,
@@ -198,16 +205,16 @@ pub(super) fn base_draw_ts(base: BaseType, refinement: Option<&Refinement>) -> T
         // #2622: a random coefficient at a fixed scale.
         BaseType::Decimal => {
             let (lo, hi, scale) = decimal_bounds(refinement);
-            ident(format!(
-                "{{ coefficient: {}, scale: {scale} }}",
-                bynk_ts::print_expr(&method_call(
+            decimal_node(
+                method_call(
                     ident("rng"),
                     "int",
                     vec![TsExpr::bigint(lo), TsExpr::bigint(hi)],
-                ))
-            ))
+                ),
+                scale,
+            )
         }
-        BaseType::Duration | BaseType::Instant | BaseType::Bytes => ident(base_canon(base)),
+        BaseType::Duration | BaseType::Instant | BaseType::Bytes => base_canon_node(base),
     }
 }
 
@@ -232,9 +239,9 @@ pub(super) fn base_canon_ts(base: BaseType, refinement: Option<&Refinement>) -> 
             let (lo, hi, scale) = decimal_bounds(refinement);
             // The value closest to zero the refinement admits.
             let c = 0i128.clamp(lo, hi);
-            ident(format!("{{ coefficient: {c}n, scale: {scale} }}"))
+            decimal_node(TsExpr::bigint(c), scale)
         }
-        BaseType::Duration | BaseType::Instant | BaseType::Bytes => ident(base_canon(base)),
+        BaseType::Duration | BaseType::Instant | BaseType::Bytes => base_canon_node(base),
     }
 }
 
@@ -248,19 +255,7 @@ pub(super) fn refined_gen_ts(
     is_opaque: bool,
 ) -> TsExpr {
     let draw = base_draw_ts(base, refinement);
-    // `unchecked_construct_test` is also called from `lower.rs`'s own
-    // permanently-excluded general expression lowering (Third correction) and
-    // must keep its exact `-> String` signature — its own branching (a real
-    // `.unsafe(...)` call vs a real `(... as any)` cast) is not duplicated here
-    // as a second node-building path; its already-formed text is carried as an
-    // opaque `Ident` instead, the same "an unconverted shared sibling's own
-    // text stays opaque" posture this track already uses (P7.9's `ts_base`,
-    // #1369's `Cell` zero value).
-    ident(emitter::ts_types::unchecked_construct_test(
-        name,
-        &bynk_ts::print_expr(&draw),
-        is_opaque,
-    ))
+    emitter::ts_types::unchecked_construct_test_node(name, draw, is_opaque)
 }
 
 /// Coerce a Sum-variant-payload/Record-field value to `number` when its own
@@ -277,7 +272,7 @@ pub(super) fn refined_gen_ts(
 /// Sum/Record arm needs this coercion the top-level arm itself must not
 /// have. A refined/opaque `Int` (`Percent`, etc.) routes through
 /// `refined_gen_ts`'s/its `canon_ts_for_ty` sibling's own
-/// `unchecked_construct_test`-wrapped cast (`(rng.int(...) as any)` /
+/// `unchecked_construct_test_node`-wrapped cast (`(rng.int(...) as any)` /
 /// `Pct.unsafe(rng.int(...))`) — that cast is compile-time only and does
 /// nothing to the runtime value, so it still needs this same coercion
 /// (review of #1428): confirmed the exact `TypeError: Cannot mix BigInt and
@@ -538,7 +533,7 @@ pub(super) fn gen_ts_for_ty(
             "float",
             vec![num_lit("-1000"), num_lit("1000")],
         ),
-        checker::Ty::Base(b) => ident(base_canon(*b)),
+        checker::Ty::Base(b) => base_canon_node(*b),
         checker::Ty::Named { name, .. } => {
             let Some(decl) = types.get(name) else {
                 return ident("undefined");
@@ -618,20 +613,7 @@ pub(super) fn gen_ts_for_ty(
                             (f.name.name.clone(), g)
                         })
                         .collect();
-                    // The same `"{  }"` double-space quirk `workers.rs`/
-                    // `project.rs`/`emit.rs` already carry as opaque text
-                    // (#1321/#1327/#1390): the pre-conversion `format!("{{
-                    // {} }}", fields.join(", "))` template always has a space
-                    // on each side of its `{}` slot, so zero fields literally
-                    // produced a double space, not the tight `"{}"`
-                    // `TsExpr::object`'s own empty-entries shortcut renders.
-                    // A zero-field record is exotic but not provably
-                    // unreachable — guarded rather than assumed.
-                    if fields.is_empty() {
-                        ident("{  }")
-                    } else {
-                        TsExpr::object(fields)
-                    }
+                    TsExpr::object(fields)
                 }
             }
         }
@@ -683,7 +665,7 @@ pub(super) fn canon_ts_for_ty(
         checker::Ty::Base(BaseType::String) => str_lit(""),
         checker::Ty::Base(BaseType::Bool) => TsExpr::Lit(TsLit::Bool(true)),
         checker::Ty::Base(BaseType::Float) => num_lit("0"),
-        checker::Ty::Base(b) => ident(base_canon(*b)),
+        checker::Ty::Base(b) => base_canon_node(*b),
         checker::Ty::Named { name, .. } => {
             let Some(decl) = types.get(name) else {
                 return ident("undefined");
@@ -696,11 +678,11 @@ pub(super) fn canon_ts_for_ty(
                     base, refinement, ..
                 } => {
                     let lit = base_canon_ts(*base, refinement.as_ref());
-                    ident(emitter::ts_types::unchecked_construct_test(
+                    emitter::ts_types::unchecked_construct_test_node(
                         name,
-                        &bynk_ts::print_expr(&lit),
+                        lit,
                         matches!(decl.body, TypeBody::Opaque { .. }),
-                    ))
+                    )
                 }
                 TypeBody::Sum(s) => match s.variants.first() {
                     None => ident("undefined"),
@@ -747,13 +729,7 @@ pub(super) fn canon_ts_for_ty(
                             (f.name.name.clone(), g)
                         })
                         .collect();
-                    // Same `"{  }"` double-space quirk as `gen_ts_for_ty`'s
-                    // own Record branch above — see its comment for why.
-                    if fields.is_empty() {
-                        ident("{  }")
-                    } else {
-                        TsExpr::object(fields)
-                    }
+                    TsExpr::object(fields)
                 }
             }
         }
@@ -851,21 +827,11 @@ pub(super) fn binding_gen(
                 match base {
                     BaseType::Int => {
                         let (lo, hi, floor) = int_bounds(refinement.as_ref());
-                        let shrunk =
-                            emitter::ts_types::unchecked_construct_test(name, "__n", is_opaque);
+                        let brand = |value: TsExpr| {
+                            emitter::ts_types::unchecked_construct_test_node(name, value, is_opaque)
+                        };
                         (
-                            vec![
-                                ident(emitter::ts_types::unchecked_construct_test(
-                                    name,
-                                    &format!("{lo}n"),
-                                    is_opaque,
-                                )),
-                                ident(emitter::ts_types::unchecked_construct_test(
-                                    name,
-                                    &format!("{hi}n"),
-                                    is_opaque,
-                                )),
-                            ],
+                            vec![brand(TsExpr::bigint(lo)), brand(TsExpr::bigint(hi))],
                             method_call(
                                 call(
                                     ident("__bynkShrinkInt"),
@@ -880,20 +846,20 @@ pub(super) fn binding_gen(
                                     is_async: false,
                                     generics: Vec::new(),
                                     return_type: None,
-                                    body: Box::new(TsArrowBody::Expr(Box::new(ident(shrunk)))),
+                                    body: Box::new(TsArrowBody::Expr(Box::new(brand(ident(
+                                        "__n",
+                                    ))))),
                                 }],
                             ),
                         )
                     }
                     BaseType::String => {
                         let min = str_min(refinement.as_ref());
-                        let lit = format!("\"{}\"", "x".repeat(min.max(0) as usize));
-                        let shrunk =
-                            emitter::ts_types::unchecked_construct_test(name, "__s", is_opaque);
+                        let brand = |value: TsExpr| {
+                            emitter::ts_types::unchecked_construct_test_node(name, value, is_opaque)
+                        };
                         (
-                            vec![ident(emitter::ts_types::unchecked_construct_test(
-                                name, &lit, is_opaque,
-                            ))],
+                            vec![brand(str_lit("x".repeat(min.max(0) as usize)))],
                             method_call(
                                 call(
                                     ident("__bynkShrinkString"),
@@ -908,7 +874,9 @@ pub(super) fn binding_gen(
                                     is_async: false,
                                     generics: Vec::new(),
                                     return_type: None,
-                                    body: Box::new(TsArrowBody::Expr(Box::new(ident(shrunk)))),
+                                    body: Box::new(TsArrowBody::Expr(Box::new(brand(ident(
+                                        "__s",
+                                    ))))),
                                 }],
                             ),
                         )
@@ -1003,22 +971,11 @@ pub(super) fn gen_descriptor_entry(name: Option<TsExpr>, bg: &BindingGen) -> TsE
             return_type: None,
             // #1397: an unparenthesised object-literal arrow body parses as
             // a block (`{ a: … }` reads `a:` as a statement label, and a
-            // bare `{  }` reads as an empty block) — for a record-typed
-            // binding, `bg.gen_ts` is `TsExpr::Object` for a non-empty
-            // record, or `gen_ts_for_ty`'s own `"{  }"` sentinel `TsExpr::
-            // Ident` (its Record arm's double-space-quirk comment) for a
-            // zero-field one. Wrap either in `TsExpr::Paren` here, the one
-            // choke point all three call sites share. The `Ident` arm
-            // matches by leading `{` rather than the sentinel's exact
-            // double-space spelling (review of #1425): a valid identifier
-            // can never start with `{`, so this is still a no-op for every
-            // other `gen_ts` shape, but it keeps matching if that
-            // formatting quirk is ever normalised away (the same cleanup
-            // #1321/#1327/#1390 already invite for its other two copies).
+            // bare `{}` reads as an empty block), so a record-typed binding's
+            // `TsExpr::Object` is wrapped in `TsExpr::Paren` here, the one
+            // choke point all three call sites share.
             body: Box::new(TsArrowBody::Expr(Box::new(
-                if matches!(&bg.gen_ts, TsExpr::Object { .. })
-                    || matches!(&bg.gen_ts, TsExpr::Ident(s) if s.trim_start().starts_with('{'))
-                {
+                if matches!(&bg.gen_ts, TsExpr::Object { .. }) {
                     TsExpr::Paren(Box::new(bg.gen_ts.clone()))
                 } else {
                     bg.gen_ts.clone()

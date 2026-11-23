@@ -39,22 +39,11 @@ pub(crate) fn unchecked_construct(
 /// which is exactly the type the pre-0182 `T.unsafe(value)` already produced here
 /// (`T` being `any`) and erases to the raw value at runtime — without
 /// reintroducing a callable refined `.unsafe`.
-pub fn unchecked_construct_test(name: &str, value: &str, is_opaque: bool) -> String {
-    if is_opaque {
-        format!("{name}.unsafe({value})")
-    } else {
-        // P7.2: deferred, not narrowed — checked, not skipped. This doc comment's
-        // own explanation still holds: `name` genuinely isn't resolvable as a
-        // type at this call site (only as an `any`-typed value binding), so
-        // there is no real type to cast to here. Fixing this needs restructuring
-        // what the test scaffold imports, not a same-line text change.
-        format!("({value} as any)")
-    }
-}
-
-/// [`unchecked_construct_test`] as a node (1A.17): `Name.unsafe(value)` for an
-/// opaque type, `(value as any)` otherwise (the cast stays: see the note there).
-pub(super) fn unchecked_construct_test_node(
+///
+/// `Name.unsafe(value)` for an opaque type, `(value as any)` otherwise (1A.17; the
+/// cast stays: `name` is not resolvable as a type at this call site, only as an
+/// `any`-typed value binding, so there is no real type to cast to).
+pub(crate) fn unchecked_construct_test_node(
     name: &str,
     value: bynk_ts::TsExpr,
     is_opaque: bool,
