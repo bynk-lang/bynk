@@ -13,7 +13,7 @@ use super::super::lower_ctx::LowerCtx;
 use super::super::lower_list::{take, zero};
 use super::super::{Expr, ExprKind, rounding_mode};
 use super::kernel::receiver_object;
-use crate::ts_build::{arrow, call, ident, member, spread, str_lit};
+use crate::ts_build::{arrow, assign, binary, call, ident, member, num_lit, spread, str_lit};
 use bynk_ts::TsParam;
 
 /// The receiver and then each argument, lowered in order.
@@ -382,12 +382,6 @@ fn regex_node(literal: &str, extra: &str, anchored: bool) -> TsExpr {
 /// the sticky regex, so its body is built once for every literal.
 fn split_regex_arrow() -> TsExpr {
     use bynk_ts::{TsBindingName, TsLit, TsStmt};
-    let num = |n: &str| TsExpr::Lit(TsLit::Num(n.to_string()));
-    let bin = |op, l: TsExpr, r: TsExpr| TsExpr::Binary {
-        op,
-        left: Box::new(l),
-        right: Box::new(r),
-    };
     let let_num = |name: &str, init: TsExpr| {
         TsStmt::let_stmt(
             TsBindingName::Ident(name.to_string()),
@@ -399,7 +393,6 @@ fn split_regex_arrow() -> TsExpr {
     let const_of = |name: &str, ty: Option<TsType>, init: TsExpr| {
         TsStmt::const_stmt(TsBindingName::Ident(name.to_string()), ty, init, None)
     };
-    let assign = |target: TsExpr, value: TsExpr| TsStmt::assign(target, value, None);
     let exec = || call(member(ident("__r"), "exec"), vec![ident("__s")]);
     let last_index = || member(ident("__r"), "lastIndex");
     let slice_to = |from: &str, to: Option<&str>| {
@@ -409,15 +402,19 @@ fn split_regex_arrow() -> TsExpr {
     };
     // An empty input has no characters to scan: no match gives `[""]`, a match gives `[]`.
     let empty = TsStmt::if_stmt(
-        bin(
+        binary(
             TsBinaryOp::StrictEq,
             member(ident("__s"), "length"),
-            num("0"),
+            num_lit("0"),
         ),
         TsStmt::block(
             vec![TsStmt::return_stmt(
                 Some(TsExpr::Conditional {
-                    test: Box::new(bin(TsBinaryOp::StrictEq, exec(), TsExpr::Lit(TsLit::Null))),
+                    test: Box::new(binary(
+                        TsBinaryOp::StrictEq,
+                        exec(),
+                        TsExpr::Lit(TsLit::Null),
+                    )),
                     consequent: Box::new(TsExpr::array(vec![str_lit("")])),
                     alternate: Box::new(TsExpr::array(vec![])),
                 }),
@@ -429,14 +426,14 @@ fn split_regex_arrow() -> TsExpr {
     );
     // A miss, or an empty match at the last split point, advances one code unit; a hit cuts.
     let advance = TsStmt::if_else_stmt(
-        bin(
+        binary(
             TsBinaryOp::Or,
-            bin(
+            binary(
                 TsBinaryOp::StrictEq,
                 ident("__hit"),
                 TsExpr::Lit(TsLit::Null),
             ),
-            bin(TsBinaryOp::StrictEq, ident("__e"), ident("__p")),
+            binary(TsBinaryOp::StrictEq, ident("__e"), ident("__p")),
         ),
         TsStmt::block(vec![TsStmt::increment(ident("__q"), None)], None),
         TsStmt::block(
@@ -456,7 +453,7 @@ fn split_regex_arrow() -> TsExpr {
         None,
     );
     let scan = TsStmt::while_stmt(
-        bin(
+        binary(
             TsBinaryOp::LessThan,
             ident("__q"),
             member(ident("__s"), "length"),
@@ -487,8 +484,8 @@ fn split_regex_arrow() -> TsExpr {
                 Some(TsType::array(ts_named("string"))),
                 TsExpr::array(vec![]),
             ),
-            let_num("__p", num("0")),
-            let_num("__q", num("0")),
+            let_num("__p", num_lit("0")),
+            let_num("__q", num_lit("0")),
             scan,
             TsStmt::expr_stmt(
                 call(member(ident("__out"), "push"), vec![slice_to("__p", None)]),

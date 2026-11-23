@@ -36,7 +36,8 @@ use super::lower_stmt::{Body, Item, block_body_with_return, claim_scoped, functi
 use super::ts_types::{ts_base, ts_ty_to_ts_type, ts_type_ref_to_ts_type};
 use super::*;
 use crate::ts_build::{
-    as_expr, await_expr, binary, call, const_, ident, let_decl, member, num_lit, str_lit,
+    as_expr, await_expr, binary, call, const_, ident, index, let_decl, member, not_expr, num_lit,
+    str_lit,
 };
 
 /// P6.x (#1188): reads `shape` — `t`'s already-lowered `bynk-emit::ir::TypeShape`
@@ -171,7 +172,7 @@ fn zero_value_ts(
 /// `===` for a literal, `>=` and/or `<=` for a range, and none for `_`, which
 /// only forwards the envelope. Bounds are inclusive.
 fn schema_version_test(env_binder: &str, version: SchemaVersionIr) -> Option<bynk_ts::TsExpr> {
-    use crate::ts_build::{and_expr, binary, ident, member, num_lit, strict_eq};
+    use crate::ts_build::{and_expr, strict_eq};
     use bynk_ts::TsBinaryOp::{GreaterThanEq, LessThanEq};
     let v = || member(ident(env_binder), "schemaVersion");
     match version {
@@ -2339,15 +2340,6 @@ pub(crate) fn emit_messages_bundle(
     locales_decl.no_blank_before = true;
     stmts.push(locales_decl);
 
-    let ident = |s: &str| bynk_ts::TsExpr::Ident(s.to_string());
-    let member = |object: bynk_ts::TsExpr, property: &str| bynk_ts::TsExpr::Member {
-        object: Box::new(object),
-        property: property.to_string(),
-    };
-    let index = |object: bynk_ts::TsExpr, index: bynk_ts::TsExpr| bynk_ts::TsExpr::Index {
-        object: Box::new(object),
-        index: Box::new(index),
-    };
     let not_undefined = |e: bynk_ts::TsExpr| bynk_ts::TsExpr::Binary {
         op: bynk_ts::TsBinaryOp::StrictNotEq,
         left: Box::new(e),
@@ -5906,7 +5898,6 @@ fn wire_record_ty() -> bynk_ts::TsType {
 /// `if (__v >= <lo> && __v <= <from>) return <step_fn>(stored);`: one arm of an agent's
 /// migration dispatcher.
 fn migrate_step_dispatch(lo: i64, from: i64, step_fn: &str) -> bynk_ts::TsStmt {
-    let ident = |name: &str| bynk_ts::TsExpr::Ident(name.to_string());
     let bound = |op: bynk_ts::TsBinaryOp, n: i64| bynk_ts::TsExpr::Binary {
         op,
         left: Box::new(ident("__v")),
@@ -6393,7 +6384,6 @@ fn hydrate_or_attach_stmt(
     let Some(spec) = lazy_fields else {
         return bynk_ts::TsStmt::expr_stmt(hydrate, None);
     };
-    let ident = |name: &str| bynk_ts::TsExpr::Ident(name.to_string());
     let attach = bynk_ts::TsExpr::Call {
         callee: Box::new(ident("__attachLazy")),
         args: vec![ident("this.state.storage"), ident("__merged"), ident(spec)],
@@ -7430,7 +7420,6 @@ fn return_undefined_unless(test: bynk_ts::TsExpr) -> Item {
 /// `if (__events.length > 0) { await deps.__eventsDispatch(__events); }`, with
 /// the call on its own lines in a braced block, or `inline` on one.
 fn events_flush_item(inline: bool) -> Item {
-    let ident = |name: &str| bynk_ts::TsExpr::Ident(name.to_string());
     let dispatch = bynk_ts::TsStmt::expr_stmt(
         bynk_ts::TsExpr::Await(Box::new(bynk_ts::TsExpr::Call {
             callee: Box::new(bynk_ts::TsExpr::Member {
@@ -8319,10 +8308,6 @@ fn history_load_arrow(a: &AgentDecl, fns: &AgentLoadFns, state_ty: &str) -> bynk
 /// P7.2: `e` is a caught throw of unknown shape by construction — a marker type stating
 /// exactly the one field this checks, not a blanket escape.
 fn history_rejected_arrow() -> bynk_ts::TsExpr {
-    let not = |e| bynk_ts::TsExpr::Unary {
-        op: bynk_ts::TsUnaryOp::Not,
-        expr: Box::new(e),
-    };
     bynk_ts::TsExpr::Arrow {
         params: vec![bynk_ts::TsParam::new(
             "e",
@@ -8333,7 +8318,7 @@ fn history_rejected_arrow() -> bynk_ts::TsExpr {
         return_type: None,
         body: Box::new(bynk_ts::TsArrowBody::Expr(Box::new(binary(
             bynk_ts::TsBinaryOp::And,
-            not(not(ident("e"))),
+            not_expr(not_expr(ident("e"))),
             binary(
                 bynk_ts::TsBinaryOp::StrictNotEq,
                 history_violation_of("e"),

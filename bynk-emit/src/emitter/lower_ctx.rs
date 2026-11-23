@@ -3,7 +3,7 @@
 use super::ctx::*;
 use super::ts_types::ts_ty_to_ts_type;
 use super::*;
-use crate::ts_build::{call, ident, str_lit};
+use crate::ts_build::{call, ident, num_lit, str_lit};
 use bynk_check::firstparty::FirstPartyCap;
 
 /// Per-body lowering context: what module we are emitting into ([`ModuleCtx`]),
@@ -601,16 +601,14 @@ impl<'a> LowerCtx<'a> {
         };
         let (line, col) = bynk_syntax::span::line_col(&loc.source, offset);
         let path = loc.rel_path.replace('\\', "/");
-        let lit = |s: &str| bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(s.to_string()));
-        let num = |n: usize| bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Num(n.to_string()));
         let site = bynk_ts::TsExpr::object(vec![
-            ("file".to_string(), lit(&path)),
-            ("line".to_string(), num(line)),
-            ("col".to_string(), num(col)),
+            ("file".to_string(), str_lit(&path)),
+            ("line".to_string(), num_lit(line)),
+            ("col".to_string(), num_lit(col)),
         ]);
         let step = bynk_ts::TsExpr::Call {
             callee: Box::new(bynk_ts::TsExpr::Ident("__traceStep".to_string())),
-            args: vec![lit(kind), lit(target), site],
+            args: vec![str_lit(kind), str_lit(target), site],
         };
         bynk_ts::TsExpr::Call {
             callee: Box::new(step),

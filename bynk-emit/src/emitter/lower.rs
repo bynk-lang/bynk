@@ -47,7 +47,9 @@ use super::ts_types::{
     unchecked_construct_test_node,
 };
 use super::*;
-use crate::ts_build::{arrow_of, bool_lit, call, const_, ident, not_expr, num_lit, str_lit};
+use crate::ts_build::{
+    arrow_of, binary, bool_lit, call, const_, ident, not_expr, num_lit, str_lit,
+};
 
 /// v0.154 (ADR 0178): the `Err`-wrap a `?` on a `Result` operand needs, if the
 /// operand's error type differs from the enclosing return's and a declared
@@ -168,10 +170,6 @@ fn question_guard_node(tmp: &str, exit: &QuestionExit) -> bynk_ts::TsStmt {
         op: bynk_ts::TsBinaryOp::StrictEq,
         left: Box::new(member_node(tmp, "tag")),
         right: Box::new(str_lit(tag)),
-    };
-    let call = |callee: bynk_ts::TsExpr, args: Vec<bynk_ts::TsExpr>| bynk_ts::TsExpr::Call {
-        callee: Box::new(callee),
-        args,
     };
     let then = match exit {
         QuestionExit::Case {
@@ -1142,12 +1140,6 @@ fn lower_observation(o: &ObservationExpr, cx: &mut LowerCtx) -> bynk_ts::TsExpr 
         object: Box::new(calls.clone()),
         property: "length".to_string(),
     };
-    let binary = |op: TsBinaryOp, left: TsExpr, right: TsExpr| TsExpr::Binary {
-        op,
-        left: Box::new(left),
-        right: Box::new(right),
-    };
-    let paren = |e: TsExpr| TsExpr::Paren(Box::new(e));
     // The text twin of `recorded_calls`, for the fallbacks below.
     match &o.matcher {
         ObservationMatcher::NeverCalled => paren(binary(
@@ -1646,7 +1638,6 @@ pub(crate) fn claim_scope_declaration() -> bynk_ts::TsStmt {
             body: Box::new(body),
         }
     };
-    let ident = |n: &str| TsExpr::Ident(n.to_string());
     let noop = TsExpr::object_entries(vec![
         TsObjectEntry::prop(
             "note",

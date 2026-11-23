@@ -25,7 +25,7 @@ use super::lower_call::codec_statics::json_encode;
 use super::lower_ctx::LowerCtx;
 use super::ts_types::{ts_ty_to_ts_type, ts_type_ref_to_ts_type};
 use super::*;
-use crate::ts_build::{num_lit, str_lit};
+use crate::ts_build::{binary, ident, num_lit, str_lit};
 
 /// The statement emitter builds a [`Body`] — a list of [`Item`]s — instead of
 /// appending text to a caller's buffer; [`render`] is the one adapter that
@@ -249,7 +249,6 @@ pub(super) fn block_body_with_return(
 /// the text wrapper did.
 pub(super) fn claim_scoped(body: Body) -> Body {
     use bynk_ts::{TsBindingName, TsExpr, TsLit, TsStmt};
-    let ident = |name: &str| TsExpr::Ident(name.to_string());
     let settle = |result: TsExpr, threw: bool| {
         TsStmt::expr_stmt(
             TsExpr::Await(Box::new(TsExpr::Call {
@@ -1171,14 +1170,11 @@ fn expect_item(
                 callee: Box::new(TsExpr::Ident(show.to_string())),
                 args: vec![TsExpr::Paren(Box::new(v))],
             };
-            let add = |l: TsExpr, r: TsExpr| TsExpr::Binary {
-                op: TsBinaryOp::Add,
-                left: Box::new(l),
-                right: Box::new(r),
-            };
-            add(
-                add(
-                    add(str_lit(compare_head), shown(lv)),
+            binary(
+                TsBinaryOp::Add,
+                binary(
+                    TsBinaryOp::Add,
+                    binary(TsBinaryOp::Add, str_lit(compare_head), shown(lv)),
                     str_lit(format!(" {sym} ")),
                 ),
                 shown(rv),
@@ -1200,7 +1196,6 @@ fn snapshot_check(
     snapshot: &str,
 ) -> bynk_ts::TsStmt {
     use bynk_ts::{TsBinaryOp, TsBindingName, TsExpr, TsStmt};
-    let ident = |n: &str| TsExpr::Ident(n.to_string());
     let message = TsExpr::Binary {
         op: TsBinaryOp::Add,
         left: Box::new(str_lit(format!(

@@ -20,7 +20,7 @@ use super::super::lower::{Pre, settle_helper, settle_with};
 use super::super::lower_ctx::LowerCtx;
 use super::super::lower_list::{any_ty, take};
 use super::super::{Expr, ExprKind, Ident, TypeRef};
-use crate::ts_build::{arrow, call, ident, member, paren, str_lit};
+use crate::ts_build::{arrow, call, ident, member, num_lit, paren, str_lit};
 use bynk_ts::TsParam;
 
 // ---- Names ----
@@ -537,7 +537,7 @@ fn websocket_lifecycle_call(
     cx: &mut LowerCtx,
     pre: &mut Pre,
 ) -> bynk_ts::TsExpr {
-    use bynk_ts::{TsBinaryOp, TsBindingName, TsLit, TsStmt, TsType};
+    use bynk_ts::{TsBinaryOp, TsBindingName, TsStmt, TsType};
     // An argument the checker's arity check guarantees: absent, a missing fact.
     let tc = match args.first() {
         Some(a) => pre.lower_node(a, cx),
@@ -548,11 +548,6 @@ fn websocket_lifecycle_call(
     };
     let sig = |m: &str| {
         TsType::named_with_args("Parameters", vec![TsType::type_of(member(ident(svc), m))])
-    };
-    let num = |n: usize| TsExpr::Lit(TsLit::Num(n.to_string()));
-    let array = |items: Vec<TsExpr>| TsExpr::Array {
-        items,
-        multiline: false,
     };
     let const_ = |name: &str, ty: Option<TsType>, init: TsExpr| {
         TsStmt::const_stmt(TsBindingName::Ident(name.to_string()), ty, init, None)
@@ -583,7 +578,7 @@ fn websocket_lifecycle_call(
     let opened_cast = |field: &str, k: usize, m: &str, idx: usize| TsExpr::As {
         expr: Box::new(TsExpr::Index {
             object: Box::new(member(ident("__o"), field)),
-            index: Box::new(num(k)),
+            index: Box::new(num_lit(k)),
         }),
         ty: TsType::indexed(sig(m), TsType::number_literal(idx as u32)),
     };
@@ -610,14 +605,17 @@ fn websocket_lifecycle_call(
                     index: Box::new(TsExpr::Binary {
                         op: TsBinaryOp::Sub,
                         left: Box::new(member(ident("__a"), "length")),
-                        right: Box::new(num(1)),
+                        right: Box::new(num_lit(1)),
                     }),
                 };
                 iife(vec![
                     const_("__c", None, tc),
-                    const_("__a", Some(sig("open")), array(parts)),
+                    const_("__a", Some(sig("open")), TsExpr::array(parts)),
                     TsStmt::expr_stmt(
-                        call(member(ident("__c"), "remember"), vec![array(c), last]),
+                        call(
+                            member(ident("__c"), "remember"),
+                            vec![TsExpr::array(c), last],
+                        ),
                         None,
                     ),
                     spread_call("open"),
@@ -651,7 +649,7 @@ fn websocket_lifecycle_call(
                         None,
                         call(member(ident("__c"), "opened"), Vec::new()),
                     ),
-                    const_("__a", Some(sig("message")), array(parts)),
+                    const_("__a", Some(sig("message")), TsExpr::array(parts)),
                     spread_call("message"),
                 ])
             }
@@ -673,7 +671,7 @@ fn websocket_lifecycle_call(
                         None,
                         call(member(ident("__c"), "opened"), Vec::new()),
                     ),
-                    const_("__a", Some(sig("close")), array(parts)),
+                    const_("__a", Some(sig("close")), TsExpr::array(parts)),
                     spread_call("close"),
                 ])
             }

@@ -16,7 +16,8 @@ use super::super::lower_ctx::LowerCtx;
 use super::super::ts_types::ts_ty_to_ts_type;
 use super::super::{BaseType, Expr, TypeBody, TypeRef, ty_to_type_ref};
 use crate::ts_build::{
-    binary, block, call, const_typed, ident, index, member, or_expr, raw_lit, str_lit, strict_eq,
+    binary, block, call, const_typed, ident, index, member, num_lit, or_expr, raw_lit, str_lit,
+    strict_eq,
 };
 use bynk_ts::TsParam;
 
@@ -629,7 +630,6 @@ fn sql_bool_pass(t: bynk_check::checker::TyId, cx: &LowerCtx) -> Vec<TsStmt> {
     let o = || ident("__o");
     let k = || ident("__k");
     let row_k = || index(ident("__row"), k());
-    let number = |n: &str| TsExpr::Lit(TsLit::Num(n.to_string()));
     // `const __flags = (__o: __JsonValue): void => { … };`
     let skip = TsStmt::if_stmt(
         or_expr(
@@ -662,10 +662,10 @@ fn sql_bool_pass(t: bynk_check::checker::TyId, cx: &LowerCtx) -> Vec<TsStmt> {
         TsExpr::array(fields.iter().map(|f| str_lit(f.as_str())).collect()),
         block(vec![TsStmt::if_stmt(
             or_expr(
-                strict_eq(row_k(), number("0")),
-                strict_eq(row_k(), number("1")),
+                strict_eq(row_k(), num_lit("0")),
+                strict_eq(row_k(), num_lit("1")),
             ),
-            TsStmt::assign(row_k(), strict_eq(row_k(), number("1")), None),
+            TsStmt::assign(row_k(), strict_eq(row_k(), num_lit("1")), None),
             None,
         )]),
         None,
