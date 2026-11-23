@@ -9,7 +9,7 @@ use bynk_check::checker::Callee;
 use super::super::lower::Pre;
 use super::super::lower_ctx::LowerCtx;
 use super::super::*;
-use crate::ts_build::{call, ident as id, member, str_lit as str_node};
+use crate::ts_build::{call, ident, member, str_lit as str_node};
 
 /// Lower an inline agent invocation, `Agent(<key>).method(args)`, or `None` when the call is not one. A node
 /// (`Call(Member(<construction>, method), args)`, wrapped in the trace step on a traced build).
@@ -58,10 +58,10 @@ pub(in crate::emitter) fn lower_inline_agent_call(
             cx.record_agent_call(&name.name, &method.name);
             let mut children: Vec<bynk_ts::TsExpr> =
                 args.iter().map(|a| pre.lower_node(a, cx)).collect();
-            children.push(id("deps"));
+            children.push(ident("deps"));
             return Some({
                 let nodes = children;
-                call(member(id("this"), &method.name), nodes)
+                call(member(ident("this"), &method.name), nodes)
             });
         }
         cx.record_agent_call(&name.name, &method.name);
@@ -123,7 +123,7 @@ pub(in crate::emitter) fn lower_let_bound_agent_call(
             .unwrap_or_else(|| id_.name.clone());
         let built = {
             let nodes = children;
-            call(member(id(&recv), &method.name), nodes)
+            call(member(ident(&recv), &method.name), nodes)
         };
         let target = format!("{agent}.{}", method.name);
         return Some(trace_built(cx, &target, e.span.start, built));
@@ -166,12 +166,12 @@ mod tests {
     use super::*;
     use crate::emitter::ctx::{BodyMode, HandlerShared, ModuleCtx, UnitFacts};
     use crate::emitter::runtime_use::RuntimeUse;
-    use crate::ts_build::ident as ident_node;
+    use crate::ts_build::ident;
     use bynk_check::checker::TypedCommons;
     use bynk_check::project_model::BuildTarget;
 
     fn node(text: &str) -> bynk_ts::TsExpr {
-        ident_node(text)
+        ident(text)
     }
 
     fn printed(built: bynk_ts::TsExpr) -> String {

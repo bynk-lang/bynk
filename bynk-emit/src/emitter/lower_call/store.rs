@@ -18,7 +18,7 @@ use super::query::{
     query_key_cmp, query_keyed, query_other_elem,
 };
 use crate::ts_build::{
-    arrow, binary, block, block_arrow, call, const_typed as const_, expr_stmt, ident as id, member,
+    arrow, binary, block, block_arrow, call, const_typed as const_, expr_stmt, ident, member,
     method_call as method_call_bare, param, paren, ret, str_lit as lit_str, strict_neq as ne,
 };
 
@@ -31,14 +31,14 @@ struct Receiver {
 impl Receiver {
     fn new(var: &str, field: &str) -> Self {
         Receiver {
-            node: member(id(var), field),
+            node: member(ident(var), field),
         }
     }
 }
 
 /// `undefined`.
 fn undefined() -> TsExpr {
-    id("undefined")
+    ident("undefined")
 }
 
 /// `return undefined;`, the end of every effectful operation.
@@ -161,7 +161,7 @@ pub(in crate::emitter) fn lower_store_method_call(
 fn resolve_connection(frame: &TsType, id_: TsExpr) -> TsExpr {
     call(
         TsExpr::TypeApp {
-            callee: Box::new(id("__resolveConnection")),
+            callee: Box::new(ident("__resolveConnection")),
             type_args: vec![frame.clone()],
         },
         vec![member_node("this", "state"), id_],
@@ -173,11 +173,11 @@ fn close_if_some() -> TsStmt {
     if_then(
         binary(
             TsBinaryOp::StrictEq,
-            member(id("__c"), "tag"),
+            member(ident("__c"), "tag"),
             lit_str("Some"),
         ),
         vec![awaited(call(
-            member(member(id("__c"), "value"), "close"),
+            member(member(ident("__c"), "value"), "close"),
             vec![],
         ))],
     )
@@ -228,24 +228,24 @@ fn lower_store_held_map_call(
                 let [k, v] = take(c);
                 async_iife(vec![
                     const_("__k", None, string_of(k)),
-                    const_("__new", None, call(id("__connIdOf"), vec![v])),
+                    const_("__new", None, call(ident("__connIdOf"), vec![v])),
                     const_(
                         "__old",
                         None,
-                        TsExpr::Await(Box::new(op(&m.node, "get", vec![id("__k")]))),
+                        TsExpr::Await(Box::new(op(&m.node, "get", vec![ident("__k")]))),
                     ),
                     if_then(
                         binary(
                             TsBinaryOp::And,
-                            ne(id("__old"), undefined()),
-                            ne(id("__old"), id("__new")),
+                            ne(ident("__old"), undefined()),
+                            ne(ident("__old"), ident("__new")),
                         ),
                         vec![
-                            const_("__c", None, resolve_connection(&f_node, id("__old"))),
+                            const_("__c", None, resolve_connection(&f_node, ident("__old"))),
                             close_if_some(),
                         ],
                     ),
-                    awaited(op(&m.node, "put", vec![id("__k"), id("__new")])),
+                    awaited(op(&m.node, "put", vec![ident("__k"), ident("__new")])),
                     done(),
                 ])
             }
@@ -257,14 +257,14 @@ fn lower_store_held_map_call(
                     const_(
                         "__cid",
                         None,
-                        TsExpr::Await(Box::new(op(&m.node, "get", vec![id("__k")]))),
+                        TsExpr::Await(Box::new(op(&m.node, "get", vec![ident("__k")]))),
                     ),
                     if_then(
-                        ne(id("__cid"), undefined()),
+                        ne(ident("__cid"), undefined()),
                         vec![
-                            const_("__c", None, resolve_connection(&f_node, id("__cid"))),
+                            const_("__c", None, resolve_connection(&f_node, ident("__cid"))),
                             close_if_some(),
-                            awaited(op(&m.node, "remove", vec![id("__k")])),
+                            awaited(op(&m.node, "remove", vec![ident("__k")])),
                         ],
                     ),
                     done(),
@@ -285,9 +285,9 @@ fn lower_store_held_map_call(
                 sync_iife(vec![
                     const_("__cid", None, op(&m.node, "get", vec![string_of(k)])),
                     ret(TsExpr::Conditional {
-                        test: Box::new(ne(id("__cid"), undefined())),
-                        consequent: Box::new(resolve_connection(&f_node, id("__cid"))),
-                        alternate: Box::new(id("None")),
+                        test: Box::new(ne(ident("__cid"), undefined())),
+                        consequent: Box::new(resolve_connection(&f_node, ident("__cid"))),
+                        alternate: Box::new(ident("None")),
                     }),
                 ])
             }
@@ -376,17 +376,17 @@ fn lower_store_map_call(
                     const_(
                         "__old",
                         None,
-                        TsExpr::Await(Box::new(op(&m.node, "get", vec![id("__k")]))),
+                        TsExpr::Await(Box::new(op(&m.node, "get", vec![ident("__k")]))),
                     ),
                     if_then(
                         binary(
                             TsBinaryOp::And,
-                            ne(id("__old"), undefined()),
-                            ne(id("__old"), id("__new")),
+                            ne(ident("__old"), undefined()),
+                            ne(ident("__old"), ident("__new")),
                         ),
-                        vec![awaited(call(member(id("__old"), "close"), vec![]))],
+                        vec![awaited(call(member(ident("__old"), "close"), vec![]))],
                     ),
-                    awaited(op(&m.node, "put", vec![id("__k"), id("__new")])),
+                    awaited(op(&m.node, "put", vec![ident("__k"), ident("__new")])),
                     done(),
                 ])
             }
@@ -414,13 +414,13 @@ fn lower_store_map_call(
                     const_(
                         "__o",
                         None,
-                        TsExpr::Await(Box::new(op(&m.node, "get", vec![id("__k")]))),
+                        TsExpr::Await(Box::new(op(&m.node, "get", vec![ident("__k")]))),
                     ),
                     if_then(
-                        ne(id("__o"), undefined()),
+                        ne(ident("__o"), undefined()),
                         vec![
-                            awaited(call(member(id("__o"), "close"), vec![])),
-                            awaited(op(&m.node, "remove", vec![id("__k")])),
+                            awaited(call(member(ident("__o"), "close"), vec![])),
+                            awaited(op(&m.node, "remove", vec![ident("__k")])),
                         ],
                     ),
                     done(),
@@ -446,23 +446,23 @@ fn lower_store_map_call(
             "get" => {
                 let c = a;
                 let [k] = take(c);
-                let present = op(&m.node, "get", vec![id("__k")]);
+                let present = op(&m.node, "get", vec![ident("__k")]);
                 let some = arrow(
                     vec![param("__v", None)],
-                    call(id("Some"), vec![TsExpr::NonNull(Box::new(id("__v")))]),
+                    call(ident("Some"), vec![TsExpr::NonNull(Box::new(ident("__v")))]),
                 );
-                let then_get = call(id("__bynkThen"), vec![present, some]);
+                let then_get = call(ident("__bynkThen"), vec![present, some]);
                 let branch = TsExpr::Conditional {
-                    test: Box::new(id("__h")),
+                    test: Box::new(ident("__h")),
                     consequent: Box::new(then_get),
-                    alternate: Box::new(id("None")),
+                    alternate: Box::new(ident("None")),
                 };
                 async_iife(vec![
                     const_("__k", None, string_of(k)),
                     ret(call(
-                        id("__bynkThen"),
+                        ident("__bynkThen"),
                         vec![
-                            op(&m.node, "has", vec![id("__k")]),
+                            op(&m.node, "has", vec![ident("__k")]),
                             arrow(vec![param("__h", None)], branch),
                         ],
                     )),
@@ -478,11 +478,11 @@ fn lower_store_map_call(
                         if_then(
                             TsExpr::Unary {
                                 op: TsUnaryOp::Not,
-                                expr: Box::new(id("__p")),
+                                expr: Box::new(ident("__p")),
                             },
                             vec![throw_error("Map.update: key absent")],
                         ),
-                        ret(apply(f, TsExpr::NonNull(Box::new(id("__c"))))),
+                        ret(apply(f, TsExpr::NonNull(Box::new(ident("__c"))))),
                     ],
                 );
                 async_iife(vec![
@@ -494,8 +494,8 @@ fn lower_store_map_call(
                 let c = a;
                 let [k, default, f] = take(c);
                 let cur = TsExpr::Conditional {
-                    test: Box::new(id("__p")),
-                    consequent: Box::new(TsExpr::NonNull(Box::new(id("__c")))),
+                    test: Box::new(ident("__p")),
+                    consequent: Box::new(TsExpr::NonNull(Box::new(ident("__c")))),
                     alternate: Box::new(paren(default)),
                 };
                 let modify = arrow(vec![param("__c", None), param("__p", None)], apply(f, cur));
@@ -599,11 +599,11 @@ fn awaited_now(deps: TsExpr) -> TsExpr {
 fn is_live() -> TsExpr {
     binary(
         TsBinaryOp::And,
-        ne(id("__e"), undefined()),
+        ne(ident("__e"), undefined()),
         binary(
             TsBinaryOp::GreaterThan,
-            member(id("__e"), "exp"),
-            id("__now"),
+            member(ident("__e"), "exp"),
+            ident("__now"),
         ),
     )
 }
@@ -616,7 +616,7 @@ fn stamped(value: TsExpr, ttl: i64) -> TsExpr {
             "exp".to_string(),
             binary(
                 TsBinaryOp::Add,
-                id("__now"),
+                ident("__now"),
                 TsExpr::Lit(TsLit::Num(ttl.to_string())),
             ),
         ),
@@ -656,7 +656,10 @@ fn lower_store_cache_call(
             const_(
                 "__now",
                 None,
-                call(id("__noteClock"), vec![id(&var), awaited_now(deps.clone())]),
+                call(
+                    ident("__noteClock"),
+                    vec![ident(&var), awaited_now(deps.clone())],
+                ),
             )
         };
         let a = lower_args(args, cx, pre);
@@ -690,8 +693,8 @@ fn lower_store_cache_call(
                     ),
                     ret(TsExpr::Conditional {
                         test: Box::new(paren(is_live())),
-                        consequent: Box::new(call(id("Some"), vec![member(id("__e"), "v")])),
-                        alternate: Box::new(id("None")),
+                        consequent: Box::new(call(ident("Some"), vec![member(ident("__e"), "v")])),
+                        alternate: Box::new(ident("None")),
                     }),
                 ])
             }
@@ -715,7 +718,7 @@ fn lower_store_cache_call(
                     ret(TsExpr::Await(Box::new(op(
                         &c.node,
                         "liveSize",
-                        vec![id("__now")],
+                        vec![ident("__now")],
                     )))),
                 ])
             }
@@ -733,13 +736,13 @@ fn lower_store_cache_call(
                             },
                             vec![throw_error("Cache.update: key absent")],
                         ),
-                        ret(stamped(apply(f, member(id("__e"), "v")), ttl)),
+                        ret(stamped(apply(f, member(ident("__e"), "v")), ttl)),
                     ],
                 );
                 async_iife(vec![
                     now(),
                     const_("__k", None, string_of(k)),
-                    awaited(op(&c.node, "modify", vec![id("__k"), modify])),
+                    awaited(op(&c.node, "modify", vec![ident("__k"), modify])),
                     done(),
                 ])
             }
@@ -748,7 +751,7 @@ fn lower_store_cache_call(
                 let [k, default, f] = take(c_);
                 let cur = TsExpr::Conditional {
                     test: Box::new(paren(is_live())),
-                    consequent: Box::new(member(id("__e"), "v")),
+                    consequent: Box::new(member(ident("__e"), "v")),
                     alternate: Box::new(paren(default)),
                 };
                 let modify = block_arrow(
@@ -756,13 +759,13 @@ fn lower_store_cache_call(
                     false,
                     vec![
                         const_("__cur", None, cur),
-                        ret(stamped(apply(f, id("__cur")), ttl)),
+                        ret(stamped(apply(f, ident("__cur")), ttl)),
                     ],
                 );
                 async_iife(vec![
                     now(),
                     const_("__k", None, string_of(k)),
-                    awaited(op(&c.node, "modify", vec![id("__k"), modify])),
+                    awaited(op(&c.node, "modify", vec![ident("__k"), modify])),
                     done(),
                 ])
             }
@@ -812,7 +815,7 @@ fn lower_store_log_call(
                 let [v] = take(c);
                 let mut body = vec![
                     const_("__now", None, now),
-                    awaited(op(&g.node, "append", vec![v, id("__now")])),
+                    awaited(op(&g.node, "append", vec![v, ident("__now")])),
                 ];
                 if let Some(ms) = retain {
                     body.push(awaited(op(
@@ -820,7 +823,7 @@ fn lower_store_log_call(
                         "prune",
                         vec![binary(
                             TsBinaryOp::Sub,
-                            id("__now"),
+                            ident("__now"),
                             TsExpr::Lit(TsLit::Num(ms.to_string())),
                         )],
                     )));

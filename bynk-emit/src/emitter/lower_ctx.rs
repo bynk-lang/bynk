@@ -3,7 +3,7 @@
 use super::ctx::*;
 use super::ts_types::ts_ty_to_ts_type;
 use super::*;
-use crate::ts_build::{call, ident as id, str_lit as str_node};
+use crate::ts_build::{call, ident, str_lit as str_node};
 use bynk_check::firstparty::FirstPartyCap;
 
 /// Per-body lowering context: what module we are emitting into ([`ModuleCtx`]),
@@ -1206,7 +1206,7 @@ impl<'a> LowerCtx<'a> {
                     .unwrap_or_else(|| bynk_ts::TsExpr::array(vec![]));
                 Some({
                     let c = vec![lines];
-                    call(id("__bynkOidcClaims"), c)
+                    call(ident("__bynkOidcClaims"), c)
                 })
             }
             BodyMode::IntegrationCase {
@@ -1395,7 +1395,7 @@ impl<'a> LowerCtx<'a> {
         });
         let mut args = vec![key];
         args.extend(deps_env);
-        call(id(&factory), args)
+        call(ident(&factory), args)
     }
 
     /// #527: note that the body calls `agent.method`, folding the method's

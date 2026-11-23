@@ -16,7 +16,7 @@ use super::super::{Expr, ExprKind, Ident, TypeBody, TypeRef, test_scaffold_ns};
 use super::codec_statics::{DecodeSource, json_decoder_fn};
 use super::cross_context::type_ref_named_root;
 use crate::ts_build::{
-    arrow_with, binary, block_arrow, call, const_typed as const_, expr_stmt, ident as id, member,
+    arrow_with, binary, block_arrow, call, const_typed as const_, expr_stmt, ident, member,
     num_lit as lit_num, param, paren, ret, str_lit as lit_str,
 };
 
@@ -49,7 +49,7 @@ fn lower_args(args: &[Expr], cx: &mut LowerCtx, pre: &mut Pre) -> Vec<bynk_ts::T
 /// and as the text the fallbacks print.
 fn deps_receiver(in_test: bool, cx: &LowerCtx) -> TsExpr {
     if in_test {
-        id("deps")
+        ident("deps")
     } else {
         cx.cap_deps_node()
     }
@@ -138,7 +138,7 @@ pub(in crate::emitter) fn decode_capability_reply(
     let payload = reply.payload.display(cx.commons().tys());
     let codec = cx.codec(reply.payload);
     crate::ts_build::call(
-        id("__bynkCapabilityReply"),
+        ident("__bynkCapabilityReply"),
         vec![
             call,
             codec,
@@ -210,13 +210,13 @@ pub(in crate::emitter) fn tracked_claim_call(
     cx.emitted_await = true;
     {
         let nodes = args;
-        let k = || id("__k");
-        let t = || id("__t");
+        let k = || ident("__k");
+        let t = || ident("__t");
         let claim = TsExpr::Await(Box::new(call(
             member(cap_node, "claim"),
-            vec![k(), call(member(id("__claims"), "lease"), vec![t()])],
+            vec![k(), call(member(ident("__claims"), "lease"), vec![t()])],
         )));
-        let note = call(member(id("__claims"), "note"), vec![k(), claim, t()]);
+        let note = call(member(ident("__claims"), "note"), vec![k(), claim, t()]);
         let note_arrow = TsExpr::Arrow {
             params: vec![
                 param("__k", Some(TsType::named("string"))),
@@ -251,15 +251,15 @@ pub(in crate::emitter) fn lower_d1_peek_call(
     };
     let ns = test_scaffold_ns(&participant);
     let read_only = call(
-        chain(id("deps"), &[&format!("env_{ns}"), &binding, "readOnly"]),
+        chain(ident("deps"), &[&format!("env_{ns}"), &binding, "readOnly"]),
         vec![],
     );
     let workers_d1 = TsExpr::New {
-        callee: Box::new(chain(id("bynk_cloudflare__binding"), &["WorkersD1"])),
+        callee: Box::new(chain(ident("bynk_cloudflare__binding"), &["WorkersD1"])),
         args: vec![object(vec![(&binding, read_only)]), lit_str(&binding)],
     };
     Some(paren(TsExpr::Assign {
-        target: Box::new(member(id("deps"), &local)),
+        target: Box::new(member(ident("deps"), &local)),
         value: Box::new(workers_d1),
     }))
 }
@@ -327,8 +327,8 @@ pub(in crate::emitter) fn lower_d1_select_call(
     Some({
         let nodes = vec![decoder, params];
         let [decoder, params] = super::super::lower_list::take(nodes);
-        let r = || id("__r");
-        let d = || id("__d");
+        let r = || ident("__r");
+        let d = || ident("__d");
         let tag_is = |obj: TsExpr, tag: &str| {
             binary(
                 bynk_ts::TsBinaryOp::StrictEq,
@@ -338,7 +338,7 @@ pub(in crate::emitter) fn lower_d1_select_call(
         };
         let err = |tag: &str, error: TsExpr| {
             call(
-                id("Err"),
+                ident("Err"),
                 vec![object(vec![("tag", tag_const(tag)), ("error", error)])],
             )
         };
@@ -361,22 +361,26 @@ pub(in crate::emitter) fn lower_d1_select_call(
         let decode_arg = if first {
             body.push(TsStmt::if_stmt(
                 tag_is(member(r(), "value"), "None"),
-                ret(call(id("Ok"), vec![id("None")])),
+                ret(call(ident("Ok"), vec![ident("None")])),
                 None,
             ));
             chain(r(), &["value", "value"])
         } else {
             member(r(), "value")
         };
-        body.push(const_("__d", None, call(id("__decode"), vec![decode_arg])));
+        body.push(const_(
+            "__d",
+            None,
+            call(ident("__decode"), vec![decode_arg]),
+        ));
         let ok_value = if first {
-            call(id("Some"), vec![member(d(), "value")])
+            call(ident("Some"), vec![member(d(), "value")])
         } else {
             member(d(), "value")
         };
         body.push(ret(TsExpr::Conditional {
             test: Box::new(tag_is(d(), "Ok")),
-            consequent: Box::new(call(id("Ok"), vec![ok_value])),
+            consequent: Box::new(call(ident("Ok"), vec![ok_value])),
             alternate: Box::new(err(decode_tag, member(d(), "error"))),
         }));
         call(paren(block_arrow(vec![], true, body)), vec![])
@@ -404,7 +408,7 @@ pub(in crate::emitter) fn lower_signed_cookie_call(
     })?;
     if !issue {
         return Some(call(
-            id("__expireSessionCookie"),
+            ident("__expireSessionCookie"),
             vec![lit_str(&seam.cookie), lit_str(&seam.same_site)],
         ));
     }
@@ -418,9 +422,9 @@ pub(in crate::emitter) fn lower_signed_cookie_call(
             vec![],
         )));
         let issue = call(
-            id("__issueSessionCookie"),
+            ident("__issueSessionCookie"),
             vec![
-                call(id("__sessionKeysOf"), vec![deps_node, lit_str(&actor)]),
+                call(ident("__sessionKeysOf"), vec![deps_node, lit_str(&actor)]),
                 lit_str(&actor),
                 lit_str(&seam.cookie),
                 lit_str(&seam.same_site),
@@ -464,8 +468,8 @@ pub(in crate::emitter) fn lower_cookie_field_call(
         return Some(typed_cookie_node(
             &name,
             lit_str(""),
-            call(id("Some"), vec![lit_num(0)]),
-            call(id("Some"), vec![lit_num(0)]),
+            call(ident("Some"), vec![lit_num(0)]),
+            call(ident("Some"), vec![lit_num(0)]),
         ));
     }
     // One shape is peeled: an `Option` layer around the field's type.
@@ -486,13 +490,13 @@ pub(in crate::emitter) fn lower_cookie_field_call(
         let nodes = vec![value];
         let [value] = super::super::lower_list::take(nodes);
         let value = if decimal {
-            call(id("__bynkDecimalToString"), vec![value])
+            call(ident("__bynkDecimalToString"), vec![value])
         } else {
             value
         };
         typed_cookie_node(
             &name,
-            call(id("__cookieValue"), vec![lit_str(kind), value]),
+            call(ident("__cookieValue"), vec![lit_str(kind), value]),
             none(),
             none(),
         )
@@ -587,7 +591,7 @@ pub(in crate::emitter) fn lower_events_emit_call(
         return Some({
             let nodes = vec![payload];
             let [payload] = super::super::lower_list::take(nodes);
-            let global = |name: &str| member(id("globalThis"), name);
+            let global = |name: &str| member(ident("globalThis"), name);
             let envelope = object(vec![
                 (
                     "eventId",
@@ -602,7 +606,7 @@ pub(in crate::emitter) fn lower_events_emit_call(
                 ("payload", payload),
                 ("envelope", envelope),
             ]);
-            let push = expr_stmt(call(member(id("__events"), "push"), vec![entry]));
+            let push = expr_stmt(call(member(ident("__events"), "push"), vec![entry]));
             call(paren(block_arrow(vec![], true, vec![push])), vec![])
         });
     }
@@ -636,7 +640,7 @@ pub(in crate::emitter) fn lower_capability_call(
         let wire = capability_wire(e, cx);
         let args_lowered = encode_capability_args(wire.as_deref(), args_lowered, cx);
         let call = capability_op_call(
-            id("deps"),
+            ident("deps"),
             &recv.name,
             &method.name,
             Vec::new(),
@@ -659,7 +663,7 @@ pub(in crate::emitter) fn lower_capability_call(
         let args_lowered = lower_args(args, cx, pre);
         let wire = capability_wire(e, cx);
         let args_lowered = encode_capability_args(wire.as_deref(), args_lowered, cx);
-        let call = capability_op_call(id("deps"), &cap, &method.name, Vec::new(), args_lowered);
+        let call = capability_op_call(ident("deps"), &cap, &method.name, Vec::new(), args_lowered);
         return Some(decode_capability_reply(
             call,
             wire.as_deref(),
@@ -888,7 +892,7 @@ mod tests {
                 "capability",
                 "Greeter.hello",
                 offset,
-                call(chain(id("deps"), &["Greeter", "hello"]), vec![]),
+                call(chain(ident("deps"), &["Greeter", "hello"]), vec![]),
             );
             let text = if traced {
                 let (line, col) = bynk_syntax::span::line_col(&source, offset);

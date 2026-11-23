@@ -14,9 +14,7 @@ use bynk_ts::{
 };
 
 use super::*;
-use crate::ts_build::{
-    binary as compare, call, const_typed as const_of, ident as id, member, str_lit,
-};
+use crate::ts_build::{binary as compare, call, const_typed as const_of, ident, member, str_lit};
 
 impl Gen {
     // -----------------------------------------------------------------
@@ -153,17 +151,17 @@ impl Gen {
                     let t = success.clone().expect("a value reply has a success type");
                     let decode = serialisation::deserialise_ref_via(&t, "", &self.ru);
                     let converts = self.holds_option(&t);
-                    let conv = self.convert(&t, Dir::ToPublic, id("v"), 0)?;
+                    let conv = self.convert(&t, Dir::ToPublic, ident("v"), 0)?;
                     let decode = if converts {
                         // `(json) => __then(decode(json, "$"), (v) => conv)`
                         arrow(
                             vec!["json"],
                             call(
-                                id("__then"),
+                                ident("__then"),
                                 vec![
                                     TsExpr::Call {
                                         callee: Box::new(decode),
-                                        args: vec![id("json"), str_lit("$")],
+                                        args: vec![ident("json"), str_lit("$")],
                                     },
                                     arrow(vec!["v"], conv),
                                 ],
@@ -223,7 +221,7 @@ impl Gen {
             .iter()
             .any(|(_, _, p)| p.is_raw() || *p == ReplyPayload::Events)
         {
-            constant_entries.push(TsObjectEntry::prop("streamed", id("__streamed")));
+            constant_entries.push(TsObjectEntry::prop("streamed", ident("__streamed")));
         }
         let constant = TsStmt::decl(
             TsDecl::ConstDecl {
@@ -258,11 +256,11 @@ impl Gen {
         };
         let promise = TsType::named_with_args("globalThis.Promise", vec![ret]);
         let call = TsExpr::Call {
-            callee: Box::new(id("__call")),
+            callee: Box::new(ident("__call")),
             args: vec![
-                id("options"),
-                id(init),
-                id(&route_ident),
+                ident("options"),
+                ident(init),
+                ident(&route_ident),
                 TsExpr::Arrow {
                     params: Vec::new(),
                     is_async: false,
@@ -454,9 +452,14 @@ impl Gen {
                 ParamInput::Path { name, ty } => {
                     let ty = self.renamed(ty);
                     let param_ident = super::super::ts_ident(name);
-                    signature.push(TsParam::new(param_ident.clone(), Some(self.public_type(&ty)?)));
+                    signature.push(TsParam::new(
+                        param_ident.clone(),
+                        Some(self.public_type(&ty)?),
+                    ));
                     let checked = match &ty {
-                        TypeRef::Base(..) => call(id("globalThis.String"), vec![id(&param_ident)]),
+                        TypeRef::Base(..) => {
+                            call(ident("globalThis.String"), vec![ident(&param_ident)])
+                        }
                         TypeRef::Named(_)
                         | TypeRef::Result(..)
                         | TypeRef::Option(..)
@@ -481,12 +484,19 @@ impl Gen {
                         | TypeRef::Unit(_)
                         | TypeRef::Fn(..)
                         | TypeRef::App { .. } => {
-                            let ser =
-                                serialisation::serialise_expr_via(&ty, &id(&param_ident), "", &self.ru);
+                            let ser = serialisation::serialise_expr_via(
+                                &ty,
+                                &ident(&param_ident),
+                                "",
+                                &self.ru,
+                            );
                             let de = serialisation::deserialise_ref_via(&ty, "", &self.ru);
                             let local = format!("__p_{param_ident}");
                             build.extend(checked_stmts(&local, ser, de, &format!("path.{name}")));
-                            call(id("globalThis.String"), vec![member(id(&local), "value")])
+                            call(
+                                ident("globalThis.String"),
+                                vec![member(ident(&local), "value")],
+                            )
                         }
                     };
                     params.push(TsObjectEntry::prop(format!("\"{name}\""), checked));
@@ -497,11 +507,11 @@ impl Gen {
                 } => {
                     let ty = self.renamed(ty);
                     signature.push(TsParam::new("body", Some(self.public_type(&ty)?)));
-                    let wired = self.convert(&ty, Dir::ToWire, id("body"), 0)?;
+                    let wired = self.convert(&ty, Dir::ToWire, ident("body"), 0)?;
                     let ser = serialisation::serialise_expr_via(&ty, &wired, "", &self.ru);
                     let de = serialisation::deserialise_ref_via(&ty, "", &self.ru);
                     build.extend(checked_stmts("__b", ser, de, "$"));
-                    entries.push(TsObjectEntry::prop("body", member(id("__b"), "value")));
+                    entries.push(TsObjectEntry::prop("body", member(ident("__b"), "value")));
                 }
                 ParamInput::Body {
                     ty,
@@ -514,8 +524,8 @@ impl Gen {
                     entries.push(TsObjectEntry::prop(
                         "form",
                         call(
-                            id("__formString"),
-                            vec![id("__w_body"), TsExpr::array(arg.specs)],
+                            ident("__formString"),
+                            vec![ident("__w_body"), TsExpr::array(arg.specs)],
                         ),
                     ));
                 }
@@ -526,7 +536,7 @@ impl Gen {
                     let ty = self.renamed(ty);
                     signature.push(TsParam::new("body", Some(self.multipart_type(&ty)?)));
                     build.extend(self.multipart_arg(&ty)?);
-                    entries.push(TsObjectEntry::prop("multipart", id("__form")));
+                    entries.push(TsObjectEntry::prop("multipart", ident("__form")));
                 }
                 ParamInput::Body {
                     kind: BodyKind::Raw { content_type },
@@ -541,7 +551,7 @@ impl Gen {
                             TsType::named("globalThis.ReadableStream<globalThis.Uint8Array>"),
                         ])),
                     ));
-                    entries.push(TsObjectEntry::prop("raw", id("body")));
+                    entries.push(TsObjectEntry::prop("raw", ident("body")));
                     if let Some(ct) = content_type {
                         entries.push(TsObjectEntry::prop("rawType", str_lit(ct)));
                     }
@@ -554,8 +564,8 @@ impl Gen {
                     entries.push(TsObjectEntry::prop(
                         "query",
                         call(
-                            id("__queryString"),
-                            vec![id("__w_query"), TsExpr::array(arg.specs.clone())],
+                            ident("__queryString"),
+                            vec![ident("__w_query"), TsExpr::array(arg.specs.clone())],
                         ),
                     ));
                     signature.push(arg.parameter("query", &name));
@@ -572,8 +582,8 @@ impl Gen {
                     entries.push(TsObjectEntry::prop(
                         "cookies",
                         call(
-                            id("__cookieString"),
-                            vec![id("__w_cookies"), TsExpr::array(arg.specs.clone())],
+                            ident("__cookieString"),
+                            vec![ident("__w_cookies"), TsExpr::array(arg.specs.clone())],
                         ),
                     ));
                     signature.push(arg.parameter("cookies", &name));
@@ -586,7 +596,7 @@ impl Gen {
             TsObjectEntry::prop("params", TsExpr::object_entries(params)),
         );
         build.push(TsStmt::return_stmt(
-            Some(call(id("Ok"), vec![TsExpr::object_entries(entries)])),
+            Some(call(ident("Ok"), vec![TsExpr::object_entries(entries)])),
             None,
         ));
         Ok((signature, build, arg_types))
@@ -617,7 +627,7 @@ impl Gen {
                 "__form",
                 None,
                 TsExpr::New {
-                    callee: Box::new(member(id("globalThis"), "FormData")),
+                    callee: Box::new(member(ident("globalThis"), "FormData")),
                     args: Vec::new(),
                 },
             ),
@@ -629,7 +639,7 @@ impl Gen {
             let wire = f.wire_name().unwrap_or_else(|| fname.clone());
             let (inner, list, option) = serialisation::peel_list_option(&f.type_ref);
             let is_file = matches!(inner, TypeRef::Named(i) if self.is_file(&i.name));
-            let field = || member(id("body"), &fname);
+            let field = || member(ident("body"), &fname);
             if !is_file {
                 let wired = self.convert(&f.type_ref, Dir::ToWire, field(), 0)?;
                 let ser = serialisation::serialise_expr_via(&f.type_ref, &wired, "", &self.ru);
@@ -648,11 +658,11 @@ impl Gen {
             let append = |part: TsExpr| {
                 TsStmt::expr_stmt(
                     TsExpr::Call {
-                        callee: Box::new(member(id("__form"), "append")),
+                        callee: Box::new(member(ident("__form"), "append")),
                         args: vec![
                             str_lit(&wire),
                             part.clone(),
-                            call(id("__fileName"), vec![part]),
+                            call(ident("__fileName"), vec![part]),
                         ],
                     },
                     None,
@@ -670,7 +680,7 @@ impl Gen {
                             body: Box::new(TsArrowBody::Expr(Box::new(stub()))),
                         }],
                     },
-                    TsStmt::for_of("part", field(), append(id("part")), None),
+                    TsStmt::for_of("part", field(), append(ident("part")), None),
                 ),
                 (_, true) => {
                     let present = TsExpr::Binary {
@@ -680,7 +690,11 @@ impl Gen {
                             field(),
                             TsExpr::Lit(TsLit::Null),
                         )),
-                        right: Box::new(compare(TsBinaryOp::StrictNotEq, field(), id("undefined"))),
+                        right: Box::new(compare(
+                            TsBinaryOp::StrictNotEq,
+                            field(),
+                            ident("undefined"),
+                        )),
                     };
                     let absent = TsExpr::Binary {
                         op: TsBinaryOp::Or,
@@ -689,7 +703,7 @@ impl Gen {
                             field(),
                             TsExpr::Lit(TsLit::Null),
                         )),
-                        right: Box::new(compare(TsBinaryOp::StrictEq, field(), id("undefined"))),
+                        right: Box::new(compare(TsBinaryOp::StrictEq, field(), ident("undefined"))),
                     };
                     (
                         TsExpr::Conditional {
@@ -709,15 +723,15 @@ impl Gen {
             parts.push(appended);
         }
         let de = serialisation::deserialise_ref_via(record, "", &self.ru);
-        stmts.extend(checked_stmts("__c_body", id("__w_body"), de, "body"));
+        stmts.extend(checked_stmts("__c_body", ident("__w_body"), de, "body"));
         stmts.push(TsStmt::expr_stmt(
             call(
-                id("__appendText"),
+                ident("__appendText"),
                 vec![
-                    id("__form"),
+                    ident("__form"),
                     call(
-                        id("__formString"),
-                        vec![id("__w_body"), TsExpr::array(specs)],
+                        ident("__formString"),
+                        vec![ident("__w_body"), TsExpr::array(specs)],
                     ),
                 ],
             ),
@@ -764,13 +778,13 @@ impl Gen {
                 optional,
                 readonly: true,
             });
-            let given = member(id(arg), &fname);
+            let given = member(ident(arg), &fname);
             let wired = self.convert(&f.type_ref, Dir::ToWire, given.clone(), 0)?;
             let ser = serialisation::serialise_expr_via(&f.type_ref, &wired, "", &self.ru);
             let write = wire_assign(arg, &fname, ser);
             if optional {
                 stmts.push(TsStmt::if_stmt(
-                    compare(TsBinaryOp::StrictNotEq, given, id("undefined")),
+                    compare(TsBinaryOp::StrictNotEq, given, ident("undefined")),
                     write,
                     None,
                 ));
@@ -782,7 +796,7 @@ impl Gen {
         let de = serialisation::deserialise_ref_via(record, "", &self.ru);
         stmts.extend(checked_stmts(
             &format!("__c_{arg}"),
-            id(format!("__w_{arg}")),
+            ident(format!("__w_{arg}")),
             de,
             at,
         ));
@@ -887,7 +901,7 @@ fn wire_object_stmt(arg: &str) -> TsStmt {
 fn wire_assign(arg: &str, field: &str, value: TsExpr) -> TsStmt {
     TsStmt::assign(
         TsExpr::Index {
-            object: Box::new(id(format!("__w_{arg}"))),
+            object: Box::new(ident(format!("__w_{arg}"))),
             index: Box::new(str_lit(field)),
         },
         value,
@@ -910,15 +924,15 @@ fn checked_stmts(local: &str, value: TsExpr, decoder: TsExpr, at: &str) -> Vec<T
         const_of(
             local,
             None,
-            call(id("__checked"), vec![value, decoder, str_lit(at)]),
+            call(ident("__checked"), vec![value, decoder, str_lit(at)]),
         ),
         TsStmt::if_stmt(
             compare(
                 TsBinaryOp::StrictEq,
-                member(id(local), "tag"),
+                member(ident(local), "tag"),
                 str_lit("Err"),
             ),
-            TsStmt::return_stmt(Some(id(local)), None),
+            TsStmt::return_stmt(Some(ident(local)), None),
             None,
         ),
     ]

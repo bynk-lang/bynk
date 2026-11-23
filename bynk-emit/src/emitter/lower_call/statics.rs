@@ -24,9 +24,7 @@ use super::super::{Expr, ExprKind, Ident, TypeRef};
 use super::codec_statics::lower_json_codec_call;
 use super::kernel_scalar::identity;
 use super::query::stream_generator;
-use crate::ts_build::{
-    call, call as call_built, ident as id, ident, ident as ident_node, member, new, type_app,
-};
+use crate::ts_build::{call, call as call_built, ident, member, new, type_app};
 
 /// `globalThis.<name>`.
 fn global(name: &str) -> TsExpr {
@@ -117,7 +115,7 @@ fn parse_iife(is_int: bool, s: bynk_ts::TsExpr) -> bynk_ts::TsExpr {
                 op: TsBinaryOp::Add,
                 left: Box::new(TsExpr::Call {
                     callee: Box::new(global("Number")),
-                    args: vec![ident_node("__s")],
+                    args: vec![ident("__s")],
                 }),
                 right: Box::new(TsExpr::Lit(TsLit::Num("0".to_string()))),
             },
@@ -128,7 +126,7 @@ fn parse_iife(is_int: bool, s: bynk_ts::TsExpr) -> bynk_ts::TsExpr {
             FLOAT_GRAMMAR,
             TsExpr::Call {
                 callee: Box::new(global("Number")),
-                args: vec![ident_node("__s")],
+                args: vec![ident("__s")],
             },
             "isFinite",
         )
@@ -138,11 +136,11 @@ fn parse_iife(is_int: bool, s: bynk_ts::TsExpr) -> bynk_ts::TsExpr {
         let s = c.into_iter().next().expect("one child");
         let matches = TsExpr::Call {
             callee: Box::new(member(TsExpr::Lit(TsLit::Raw(grammar.to_string())), "test")),
-            args: vec![ident_node("__s")],
+            args: vec![ident("__s")],
         };
         let guard = TsExpr::Call {
             callee: Box::new(member(member_node("globalThis", "Number"), guard_fn)),
-            args: vec![ident_node("__n")],
+            args: vec![ident("__n")],
         };
         let body = vec![
             TsStmt::if_stmt(
@@ -150,15 +148,15 @@ fn parse_iife(is_int: bool, s: bynk_ts::TsExpr) -> bynk_ts::TsExpr {
                     op: TsUnaryOp::Not,
                     expr: Box::new(matches),
                 },
-                TsStmt::return_stmt(Some(ident_node("None")), None),
+                TsStmt::return_stmt(Some(ident("None")), None),
                 None,
             ),
             TsStmt::const_stmt(TsBindingName::Ident("__n".to_string()), None, value, None),
             TsStmt::return_stmt(
                 Some(TsExpr::Conditional {
                     test: Box::new(guard),
-                    consequent: Box::new(call(ident("Some"), vec![ident_node("__n")])),
-                    alternate: Box::new(ident_node("None")),
+                    consequent: Box::new(call(ident("Some"), vec![ident("__n")])),
+                    alternate: Box::new(ident("None")),
                 }),
                 None,
             ),
@@ -187,7 +185,7 @@ fn set_of(plain: bool, elem: TsType, xs: bynk_ts::TsExpr) -> bynk_ts::TsExpr {
         new(type_app(global("Set"), vec![elem]), vec![xs])
     } else {
         TsExpr::Call {
-            callee: Box::new(type_app(ident_node("__bynkSetOf"), vec![elem])),
+            callee: Box::new(type_app(ident("__bynkSetOf"), vec![elem])),
             args: vec![xs],
         }
     }
@@ -503,7 +501,10 @@ pub(in crate::emitter) fn lower_runtime_value_static_call(
                     "__e",
                     xs,
                     TsStmt::block(
-                        vec![TsStmt::expr_stmt(TsExpr::Yield(Box::new(id("__e"))), None)],
+                        vec![TsStmt::expr_stmt(
+                            TsExpr::Yield(Box::new(ident("__e"))),
+                            None,
+                        )],
                         None,
                     ),
                     None,

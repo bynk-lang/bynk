@@ -13,7 +13,7 @@ use super::super::lower_ctx::LowerCtx;
 use super::super::lower_list::{take, zero};
 use super::super::{Expr, ExprKind, rounding_mode};
 use super::kernel::receiver_object;
-use crate::ts_build::{arrow, call, ident as id, member, param, spread, str_lit as str_node};
+use crate::ts_build::{arrow, call, ident, member, param, spread, str_lit as str_node};
 
 /// The receiver and then each argument, lowered in order.
 fn operands(pre: &mut Pre, cx: &mut LowerCtx, parts: &[&Expr]) -> Vec<bynk_ts::TsExpr> {
@@ -32,7 +32,7 @@ pub(super) fn identity(pre: &mut Pre, operand: &Expr, cx: &mut LowerCtx) -> bynk
 }
 
 fn global_math(name: &str) -> TsExpr {
-    member(member(id("globalThis"), "Math"), name)
+    member(member(ident("globalThis"), "Math"), name)
 }
 
 /// `globalThis.Math.<name>(…)` over the lowered operands.
@@ -54,7 +54,7 @@ fn clamp(kids: Vec<bynk_ts::TsExpr>) -> bynk_ts::TsExpr {
 /// `name(…)` for a runtime helper or a global function (`String`).
 fn plain_call(name: &str, kids: Vec<bynk_ts::TsExpr>) -> bynk_ts::TsExpr {
     let n = kids;
-    call(id(name), n)
+    call(ident(name), n)
 }
 
 /// `recv.prop`, bracketed only where precedence needs it.
@@ -182,7 +182,7 @@ pub(in crate::emitter) fn lower_float_kernel(
             Some({
                 let n = kids;
                 call(
-                    id("__bynkToInt"),
+                    ident("__bynkToInt"),
                     vec![call(global_math(f), n), str_node(op.name())],
                 )
             })
@@ -200,7 +200,7 @@ pub(in crate::emitter) fn lower_float_kernel(
             let name = op.name();
             Some({
                 let n = kids;
-                call(member(member(id("globalThis"), "Number"), name), n)
+                call(member(member(ident("globalThis"), "Number"), name), n)
             })
         }
         (FloatOp::ToString, []) => {
@@ -371,7 +371,7 @@ fn regex_parts(literal: &str, extra: &str, anchored: bool) -> (String, String) {
 fn regex_node(literal: &str, extra: &str, anchored: bool) -> TsExpr {
     let (source, flags) = regex_parts(literal, extra, anchored);
     TsExpr::New {
-        callee: Box::new(member(id("globalThis"), "RegExp")),
+        callee: Box::new(member(ident("globalThis"), "RegExp")),
         args: vec![str_node(source), str_node(flags)],
     }
 }
@@ -399,16 +399,20 @@ fn split_regex_arrow() -> TsExpr {
         TsStmt::const_stmt(TsBindingName::Ident(name.to_string()), ty, init, None)
     };
     let assign = |target: TsExpr, value: TsExpr| TsStmt::assign(target, value, None);
-    let exec = || call(member(id("__r"), "exec"), vec![id("__s")]);
-    let last_index = || member(id("__r"), "lastIndex");
+    let exec = || call(member(ident("__r"), "exec"), vec![ident("__s")]);
+    let last_index = || member(ident("__r"), "lastIndex");
     let slice_to = |from: &str, to: Option<&str>| {
-        let mut args = vec![id(from)];
-        args.extend(to.map(id));
-        call(member(id("__s"), "slice"), args)
+        let mut args = vec![ident(from)];
+        args.extend(to.map(ident));
+        call(member(ident("__s"), "slice"), args)
     };
     // An empty input has no characters to scan: no match gives `[""]`, a match gives `[]`.
     let empty = TsStmt::if_stmt(
-        bin(TsBinaryOp::StrictEq, member(id("__s"), "length"), num("0")),
+        bin(
+            TsBinaryOp::StrictEq,
+            member(ident("__s"), "length"),
+            num("0"),
+        ),
         TsStmt::block(
             vec![TsStmt::return_stmt(
                 Some(TsExpr::Conditional {
@@ -426,31 +430,39 @@ fn split_regex_arrow() -> TsExpr {
     let advance = TsStmt::if_else_stmt(
         bin(
             TsBinaryOp::Or,
-            bin(TsBinaryOp::StrictEq, id("__hit"), TsExpr::Lit(TsLit::Null)),
-            bin(TsBinaryOp::StrictEq, id("__e"), id("__p")),
+            bin(
+                TsBinaryOp::StrictEq,
+                ident("__hit"),
+                TsExpr::Lit(TsLit::Null),
+            ),
+            bin(TsBinaryOp::StrictEq, ident("__e"), ident("__p")),
         ),
-        TsStmt::block(vec![TsStmt::increment(id("__q"), None)], None),
+        TsStmt::block(vec![TsStmt::increment(ident("__q"), None)], None),
         TsStmt::block(
             vec![
                 TsStmt::expr_stmt(
                     call(
-                        member(id("__out"), "push"),
+                        member(ident("__out"), "push"),
                         vec![slice_to("__p", Some("__q"))],
                     ),
                     None,
                 ),
-                assign(id("__p"), id("__e")),
-                assign(id("__q"), id("__p")),
+                assign(ident("__p"), ident("__e")),
+                assign(ident("__q"), ident("__p")),
             ],
             None,
         ),
         None,
     );
     let scan = TsStmt::while_stmt(
-        bin(TsBinaryOp::LessThan, id("__q"), member(id("__s"), "length")),
+        bin(
+            TsBinaryOp::LessThan,
+            ident("__q"),
+            member(ident("__s"), "length"),
+        ),
         TsStmt::block(
             vec![
-                assign(last_index(), id("__q")),
+                assign(last_index(), ident("__q")),
                 const_of("__hit", None, exec()),
                 const_of("__e", None, last_index()),
                 advance,
@@ -478,10 +490,10 @@ fn split_regex_arrow() -> TsExpr {
             let_num("__q", num("0")),
             scan,
             TsStmt::expr_stmt(
-                call(member(id("__out"), "push"), vec![slice_to("__p", None)]),
+                call(member(ident("__out"), "push"), vec![slice_to("__p", None)]),
                 None,
             ),
-            TsStmt::return_stmt(Some(id("__out")), None),
+            TsStmt::return_stmt(Some(ident("__out")), None),
         ])),
     }
 }
@@ -511,10 +523,10 @@ fn none_or_some(name: &str, rhs: TsExpr, some: TsExpr) -> TsExpr {
     TsExpr::Conditional {
         test: Box::new(TsExpr::Binary {
             op: TsBinaryOp::StrictEq,
-            left: Box::new(id(name)),
+            left: Box::new(ident(name)),
             right: Box::new(rhs),
         }),
-        consequent: Box::new(id("None")),
+        consequent: Box::new(ident("None")),
         alternate: Box::new(some),
     }
 }
@@ -525,14 +537,18 @@ fn groups_node() -> TsExpr {
         "__g",
         TsType::union(vec![ts_named("string"), ts_named("undefined")]),
         option_string(),
-        none_or_some("__g", id("undefined"), call(id("Some"), vec![id("__g")])),
+        none_or_some(
+            "__g",
+            ident("undefined"),
+            call(ident("Some"), vec![ident("__g")]),
+        ),
     );
     typed_arrow(
         "__m",
         ts_named("globalThis.RegExpMatchArray"),
         TsType::array(option_string()),
         call(
-            member(TsExpr::array(vec![spread(id("__m"))]), "map"),
+            member(TsExpr::array(vec![spread(ident("__m"))]), "map"),
             vec![map_group],
         ),
     )
@@ -551,7 +567,7 @@ fn find_regex_node(regex: TsExpr, recv: TsExpr) -> TsExpr {
         none_or_some(
             "__m",
             TsExpr::Lit(bynk_ts::TsLit::Null),
-            call(id("Some"), vec![call(groups_node(), vec![id("__m")])]),
+            call(ident("Some"), vec![call(groups_node(), vec![ident("__m")])]),
         ),
     );
     call(mapper, vec![call(member(regex, "exec"), vec![recv])])
@@ -736,11 +752,11 @@ pub(in crate::emitter) fn lower_string_kernel(
                     TsExpr::Conditional {
                         test: Box::new(TsExpr::Binary {
                             op: TsBinaryOp::LessThan,
-                            left: Box::new(id("__i")),
+                            left: Box::new(ident("__i")),
                             right: Box::new(zero()),
                         }),
-                        consequent: Box::new(id("None")),
-                        alternate: Box::new(call(id("Some"), vec![id("__i")])),
+                        consequent: Box::new(ident("None")),
+                        alternate: Box::new(call(ident("Some"), vec![ident("__i")])),
                     },
                 );
                 call(
@@ -779,7 +795,7 @@ pub(in crate::emitter) fn lower_decimal_kernel(
         kids.push(str_node(mode));
         {
             let n = kids;
-            call(id(helper), n)
+            call(ident(helper), n)
         }
     };
     let built: Option<bynk_ts::TsExpr> = match (op, args) {
