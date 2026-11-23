@@ -174,18 +174,18 @@ function __makeTestDeps() {
 }
 
 async function __prop_test_record_binding_s_own_fields_resolve_and_compare() {
-    const deps = {};
-    const { Point } = __ns_demo_gen;
-    type Point = __ns_demo_gen.Point;
-    const __gens = [
-      { name: "p", boundaries: [{ x: globalThis.Number(0n), y: globalThis.Number(0n) }], gen: (rng: any) => ({ x: globalThis.Number(rng.int(-1000n, 1000n)), y: globalThis.Number(rng.int(-1000n, 1000n)) }), shrink: (v: any) => [], show: (v: any) => __bynkShow(v) },
-    ];
-    const __where = null;
-    const __body = async (__vals: any[]) => {
-      const [p] = __vals;
-      if (!(p.x <= p.y || p.y <= p.x)) { throw __bynkExpectFailure("tests/gen.test.bynk:18:14", 1066, 1090, "expect p.x <= p.y || p.y <= p.x"); }
-    };
-    return await __bynkRunProperty({ seed: __bynkMix(__bynkSeed, 0), cases: 100, gens: __gens, where: __where, body: __body, name: "record binding's own fields resolve and compare", location: "tests/gen.test.bynk", file: "tests/gen.test.bynk" });
+  const deps = {};
+  const { Point } = __ns_demo_gen;
+  type Point = __ns_demo_gen.Point;
+  const __gens = [
+    { name: "p", boundaries: [{ x: globalThis.Number(0n), y: globalThis.Number(0n) }], gen: (rng: any) => ({ x: globalThis.Number(rng.int(-1000n, 1000n)), y: globalThis.Number(rng.int(-1000n, 1000n)) }), shrink: (v: any) => [], show: (v: any) => __bynkShow(v) },
+  ];
+  const __where = null;
+  const __body = async (__vals: any[]) => {
+    const [p] = __vals;
+    if (!(p.x <= p.y || p.y <= p.x)) { throw __bynkExpectFailure("tests/gen.test.bynk:18:14", 1066, 1090, "expect p.x <= p.y || p.y <= p.x"); }
+  };
+  return await __bynkRunProperty({ seed: __bynkMix(__bynkSeed, 0), cases: 100, gens: __gens, where: __where, body: __body, name: "record binding's own fields resolve and compare", location: "tests/gen.test.bynk", file: "tests/gen.test.bynk" });
 }
 
 type CaseResult = {

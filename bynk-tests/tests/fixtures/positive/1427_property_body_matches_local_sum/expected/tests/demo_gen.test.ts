@@ -174,30 +174,30 @@ function __makeTestDeps() {
 }
 
 async function __prop_test_for_all_body_matches_a_locally_constructed_sum() {
-    const deps = {};
-    const { Outcome } = __ns_demo_gen;
-    type Outcome = __ns_demo_gen.Outcome;
-    const __gens = [
-      { name: "n", boundaries: [0n, 1000n, -1000n], gen: (rng: any) => rng.int(-1000n, 1000n), shrink: (v: any) => __bynkShrinkInt(v, 0n), show: (v: any) => __bynkShow(v) },
-    ];
-    const __where = null;
-    const __body = async (__vals: any[]) => {
-      const n = globalThis.Number(__vals[0]);
-      const o = Outcome.Hit(5);
-      void (((__d) => {
-        switch (__d.tag) {
-          case "Hit": {
-            const score = __d.score;
-            return __bynkExpect((score === 5), "tests/gen.test.bynk:15:30", 780, 790, "expect score == 5");
-          }
-          case "Miss": {
-            return __bynkExpect((false), "tests/gen.test.bynk:16:24", 814, 819, "expect false");
-          }
+  const deps = {};
+  const { Outcome } = __ns_demo_gen;
+  type Outcome = __ns_demo_gen.Outcome;
+  const __gens = [
+    { name: "n", boundaries: [0n, 1000n, -1000n], gen: (rng: any) => rng.int(-1000n, 1000n), shrink: (v: any) => __bynkShrinkInt(v, 0n), show: (v: any) => __bynkShow(v) },
+  ];
+  const __where = null;
+  const __body = async (__vals: any[]) => {
+    const n = globalThis.Number(__vals[0]);
+    const o = Outcome.Hit(5);
+    void (((__d) => {
+      switch (__d.tag) {
+        case "Hit": {
+          const score = __d.score;
+          return __bynkExpect((score === 5), "tests/gen.test.bynk:15:30", 780, 790, "expect score == 5");
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(o));
-    };
-    return await __bynkRunProperty({ seed: __bynkMix(__bynkSeed, 0), cases: 100, gens: __gens, where: __where, body: __body, name: "for-all body matches a locally constructed sum", location: "tests/gen.test.bynk", file: "tests/gen.test.bynk" });
+        case "Miss": {
+          return __bynkExpect((false), "tests/gen.test.bynk:16:24", 814, 819, "expect false");
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(o));
+  };
+  return await __bynkRunProperty({ seed: __bynkMix(__bynkSeed, 0), cases: 100, gens: __gens, where: __where, body: __body, name: "for-all body matches a locally constructed sum", location: "tests/gen.test.bynk", file: "tests/gen.test.bynk" });
 }
 
 type CaseResult = {

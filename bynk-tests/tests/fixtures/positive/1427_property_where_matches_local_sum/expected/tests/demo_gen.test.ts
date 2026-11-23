@@ -174,32 +174,32 @@ function __makeTestDeps() {
 }
 
 async function __prop_test_where_clause_matches_a_locally_constructed_sum() {
-    const deps = {};
-    const { Outcome } = __ns_demo_gen;
-    type Outcome = __ns_demo_gen.Outcome;
-    const __gens = [
-      { name: "n", boundaries: [0n, 1000n, -1000n], gen: (rng: any) => rng.int(-1000n, 1000n), shrink: (v: any) => __bynkShrinkInt(v, 0n), show: (v: any) => __bynkShow(v) },
-    ];
-    const __where = (__vals: any[]) => {
-      const n = globalThis.Number(__vals[0]);
-      return (((__d) => {
-        switch (__d.tag) {
-          case "Hit": {
-            const score = __d.score;
-            return score === 5;
-          }
-          case "Miss": {
-            return false;
-          }
+  const deps = {};
+  const { Outcome } = __ns_demo_gen;
+  type Outcome = __ns_demo_gen.Outcome;
+  const __gens = [
+    { name: "n", boundaries: [0n, 1000n, -1000n], gen: (rng: any) => rng.int(-1000n, 1000n), shrink: (v: any) => __bynkShrinkInt(v, 0n), show: (v: any) => __bynkShow(v) },
+  ];
+  const __where = (__vals: any[]) => {
+    const n = globalThis.Number(__vals[0]);
+    return (((__d) => {
+      switch (__d.tag) {
+        case "Hit": {
+          const score = __d.score;
+          return score === 5;
         }
-        throw new globalThis.Error("non-exhaustive match");
-      })(Outcome.Hit(5)));
-    };
-    const __body = async (__vals: any[]) => {
-      const n = globalThis.Number(__vals[0]);
-      if (!(true)) { throw __bynkExpectFailure("tests/gen.test.bynk:8:14", 439, 443, "expect true"); }
-    };
-    return await __bynkRunProperty({ seed: __bynkMix(__bynkSeed, 0), cases: 100, gens: __gens, where: __where, body: __body, name: "where-clause matches a locally constructed sum", location: "tests/gen.test.bynk", file: "tests/gen.test.bynk" });
+        case "Miss": {
+          return false;
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(Outcome.Hit(5)));
+  };
+  const __body = async (__vals: any[]) => {
+    const n = globalThis.Number(__vals[0]);
+    if (!(true)) { throw __bynkExpectFailure("tests/gen.test.bynk:8:14", 439, 443, "expect true"); }
+  };
+  return await __bynkRunProperty({ seed: __bynkMix(__bynkSeed, 0), cases: 100, gens: __gens, where: __where, body: __body, name: "where-clause matches a locally constructed sum", location: "tests/gen.test.bynk", file: "tests/gen.test.bynk" });
 }
 
 type CaseResult = {

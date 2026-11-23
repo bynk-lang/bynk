@@ -174,18 +174,18 @@ function __makeTestDeps() {
 }
 
 async function __prop_test_recursive_sum_with_int_base_generates() {
-    const deps = {};
-    const { T } = __ns_demo_gen;
-    type T = __ns_demo_gen.T;
-    const __gens = [
-      { name: "t", boundaries: [T.Base(globalThis.Number(0n))], gen: (rng: any) => rng.pick([() => T.Base(globalThis.Number(rng.int(-1000n, 1000n))), () => T.Cons(rng.pick([() => T.Base(globalThis.Number(rng.int(-1000n, 1000n))), () => T.Cons(rng.pick([() => T.Base(globalThis.Number(rng.int(-1000n, 1000n))), () => T.Cons(rng.pick([() => T.Base(globalThis.Number(rng.int(-1000n, 1000n))), () => T.Cons(rng.pick([() => T.Base(globalThis.Number(rng.int(-1000n, 1000n))), () => T.Cons(rng.pick([() => T.Base(globalThis.Number(rng.int(-1000n, 1000n))), () => T.Cons(rng.pick([() => T.Base(globalThis.Number(rng.int(-1000n, 1000n))), () => T.Cons(rng.pick([() => T.Base(globalThis.Number(rng.int(-1000n, 1000n))), () => T.Cons(rng.pick([() => T.Base(globalThis.Number(rng.int(-1000n, 1000n))), () => T.Cons(rng.pick([() => T.Base(globalThis.Number(rng.int(-1000n, 1000n))), () => T.Cons(rng.pick([() => T.Base(globalThis.Number(rng.int(-1000n, 1000n))), () => T.Cons(rng.pick([() => T.Base(globalThis.Number(0n)), () => T.Cons(T.Base(globalThis.Number(0n)))]))]))]))]))]))]))]))]))]))]))]))]), shrink: (v: any) => [T.Base(globalThis.Number(0n))], show: (v: any) => __bynkShow(v) },
-    ];
-    const __where = null;
-    const __body = async (__vals: any[]) => {
-      const [t] = __vals;
-      if (!(true)) { throw __bynkExpectFailure("tests/gen.test.bynk:16:14", 922, 926, "expect true"); }
-    };
-    return await __bynkRunProperty({ seed: __bynkMix(__bynkSeed, 0), cases: 100, gens: __gens, where: __where, body: __body, name: "recursive sum with int base generates", location: "tests/gen.test.bynk", file: "tests/gen.test.bynk" });
+  const deps = {};
+  const { T } = __ns_demo_gen;
+  type T = __ns_demo_gen.T;
+  const __gens = [
+    { name: "t", boundaries: [T.Base(globalThis.Number(0n))], gen: (rng: any) => rng.pick([() => T.Base(globalThis.Number(rng.int(-1000n, 1000n))), () => T.Cons(rng.pick([() => T.Base(globalThis.Number(rng.int(-1000n, 1000n))), () => T.Cons(rng.pick([() => T.Base(globalThis.Number(rng.int(-1000n, 1000n))), () => T.Cons(rng.pick([() => T.Base(globalThis.Number(rng.int(-1000n, 1000n))), () => T.Cons(rng.pick([() => T.Base(globalThis.Number(rng.int(-1000n, 1000n))), () => T.Cons(rng.pick([() => T.Base(globalThis.Number(rng.int(-1000n, 1000n))), () => T.Cons(rng.pick([() => T.Base(globalThis.Number(rng.int(-1000n, 1000n))), () => T.Cons(rng.pick([() => T.Base(globalThis.Number(rng.int(-1000n, 1000n))), () => T.Cons(rng.pick([() => T.Base(globalThis.Number(rng.int(-1000n, 1000n))), () => T.Cons(rng.pick([() => T.Base(globalThis.Number(rng.int(-1000n, 1000n))), () => T.Cons(rng.pick([() => T.Base(globalThis.Number(rng.int(-1000n, 1000n))), () => T.Cons(rng.pick([() => T.Base(globalThis.Number(0n)), () => T.Cons(T.Base(globalThis.Number(0n)))]))]))]))]))]))]))]))]))]))]))]))]), shrink: (v: any) => [T.Base(globalThis.Number(0n))], show: (v: any) => __bynkShow(v) },
+  ];
+  const __where = null;
+  const __body = async (__vals: any[]) => {
+    const [t] = __vals;
+    if (!(true)) { throw __bynkExpectFailure("tests/gen.test.bynk:16:14", 922, 926, "expect true"); }
+  };
+  return await __bynkRunProperty({ seed: __bynkMix(__bynkSeed, 0), cases: 100, gens: __gens, where: __where, body: __body, name: "recursive sum with int base generates", location: "tests/gen.test.bynk", file: "tests/gen.test.bynk" });
 }
 
 type CaseResult = {

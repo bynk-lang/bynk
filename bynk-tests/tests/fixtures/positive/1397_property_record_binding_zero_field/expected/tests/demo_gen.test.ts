@@ -174,18 +174,18 @@ function __makeTestDeps() {
 }
 
 async function __prop_test_zero_field_record_binding_generates() {
-    const deps = {};
-    const { Empty } = __ns_demo_gen;
-    type Empty = __ns_demo_gen.Empty;
-    const __gens = [
-      { name: "e", boundaries: [{  }], gen: (rng: any) => ({  }), shrink: (v: any) => [], show: (v: any) => __bynkShow(v) },
-    ];
-    const __where = null;
-    const __body = async (__vals: any[]) => {
-      const [e] = __vals;
-      if (!(true)) { throw __bynkExpectFailure("tests/gen.test.bynk:10:14", 545, 549, "expect true"); }
-    };
-    return await __bynkRunProperty({ seed: __bynkMix(__bynkSeed, 0), cases: 100, gens: __gens, where: __where, body: __body, name: "zero-field record binding generates", location: "tests/gen.test.bynk", file: "tests/gen.test.bynk" });
+  const deps = {};
+  const { Empty } = __ns_demo_gen;
+  type Empty = __ns_demo_gen.Empty;
+  const __gens = [
+    { name: "e", boundaries: [{  }], gen: (rng: any) => ({  }), shrink: (v: any) => [], show: (v: any) => __bynkShow(v) },
+  ];
+  const __where = null;
+  const __body = async (__vals: any[]) => {
+    const [e] = __vals;
+    if (!(true)) { throw __bynkExpectFailure("tests/gen.test.bynk:10:14", 545, 549, "expect true"); }
+  };
+  return await __bynkRunProperty({ seed: __bynkMix(__bynkSeed, 0), cases: 100, gens: __gens, where: __where, body: __body, name: "zero-field record binding generates", location: "tests/gen.test.bynk", file: "tests/gen.test.bynk" });
 }
 
 type CaseResult = {
