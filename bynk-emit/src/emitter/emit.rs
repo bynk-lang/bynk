@@ -36,8 +36,7 @@ use super::lower_stmt::{Body, Item, block_body_with_return, claim_scoped, functi
 use super::ts_types::{ts_base, ts_ty_to_ts_type, ts_type_ref_to_ts_type};
 use super::*;
 use crate::ts_build::{
-    as_expr, await_expr, binary, call, const_, ident, let_decl as hist_let, member, num_lit,
-    str_lit,
+    as_expr, await_expr, binary, call, const_, ident, let_decl, member, num_lit, str_lit,
 };
 
 /// P6.x (#1188): reads `shape` — `t`'s already-lowered `bynk-emit::ir::TypeShape`
@@ -6302,7 +6301,7 @@ fn migration_step_decl(
         ));
     }
     // 3. The body. A throw is `MigrationFailed`, never a bare 500 (Decision D).
-    body.push(hist_let("__out", Some(state_ty()), None));
+    body.push(let_decl("__out", Some(state_ty()), None));
     body.push(bynk_ts::TsStmt::try_catch(
         bynk_ts::TsStmt::block(migrate_step_try_body(names, step, cx), None),
         None::<String>,
@@ -8237,7 +8236,7 @@ fn history_load_arrow(a: &AgentDecl, fns: &AgentLoadFns, state_ty: &str) -> bynk
     let mut body = vec![
         // `let`: the stored record is replaced by its joined, wholesale-shaped form below
         // (#3189).
-        hist_let(
+        let_decl(
             "__s",
             None,
             Some(await_expr(call(stored(), vec![str_lit("state")]))),
@@ -8555,15 +8554,15 @@ fn history_drive_loop(
         bynk_ts::TsStmt::block(
             vec![
                 const_("__old", await_expr(call(ident("__load"), vec![]))),
-                hist_let(
+                let_decl(
                     "__accepted",
                     None,
                     Some(bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Bool(true))),
                 ),
-                hist_let("__refusal", Some(bynk_ts::TsType::named("unknown")), None),
+                let_decl("__refusal", Some(bynk_ts::TsType::named("unknown")), None),
                 rejected,
                 const_("__new", new_state),
-                hist_let("__call", Some(history_any_ty()), None),
+                let_decl("__call", Some(history_any_ty()), None),
                 record,
                 step,
                 define_refusal,
