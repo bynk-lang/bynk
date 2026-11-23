@@ -4471,7 +4471,7 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     Explain {
         code: "bynk.service.mixed_protocols",
         blurb: "A service is one protocol adapter: with `from http`, `from cron`, `from queue(…)`, `from websocket(…)` or `from Events(E)` it admits only handlers of that form, and one that does not match is refused. Declare a service per protocol. A handler in a service with no `from` at all is `bynk.service.missing_from`.",
-        example: "service worker from queue(\"jobs\") {\n    on call(m: String) -> Effect[Int] by Caller { … }   // ✗ `on call` is not a queue handler\n}\n\nservice count {                             // ✓ a service of its own\n    on call(m: String) -> Effect[Int] by Caller { … }\n}",
+        example: "service worker from queue(\"jobs\") {\n    on call(m: String) -> Effect[Int] { … }   // ✗ `on call` is not a queue handler\n}\n\nservice count {                             // ✓ a service of its own\n    on call(m: String) -> Effect[Int] by Caller { … }\n}",
     },
     Explain {
         code: "bynk.service.outside_context",

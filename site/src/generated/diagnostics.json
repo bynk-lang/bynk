@@ -1367,7 +1367,7 @@
     "constructs": [
       "consumes_decl"
     ],
-    "example": "// pay.bynk\ncontext pay\n\nservice charge {\n    on call(amount: Int) -> Effect[Int] by Caller {\n        Effect.pure(amount)\n    }\n}\n\n// shop.bynk\ncontext shop\n\nconsumes pay\n\nservice checkout {\n    on call() -> Effect[Int] {\n        pay.charge(1, 2)         // ✗ `charge` takes one argument\n    }\n}\n\nservice checkout {\n    on call() -> Effect[Int] {\n        pay.charge(1)            // ✓ one argument for `amount`\n    }\n}",
+    "example": "// pay.bynk\ncontext pay\n\nservice charge {\n    on call(amount: Int) -> Effect[Int] by Caller {\n        Effect.pure(amount)\n    }\n}\n\n// shop.bynk\ncontext shop\n\nconsumes pay\n\nservice checkout {\n    on call() -> Effect[Int] by Caller {\n        pay.charge(1, 2)         // ✗ `charge` takes one argument\n    }\n}\n\nservice checkout {\n    on call() -> Effect[Int] by Caller {\n        pay.charge(1)            // ✓ one argument for `amount`\n    }\n}",
     "severity": "error",
     "summary": "A consumed service was called with the wrong number of arguments."
   },
@@ -1463,7 +1463,7 @@
     "constructs": [
       "consumes_decl"
     ],
-    "example": "// shop/checkout.bynk\nconsumes pay\n\nservice checkout {\n    on call() -> Effect[Int] by Caller {\n        pay.charge(1)\n    }\n}\n\n// shop/refund.bynk, another file of the same context\nservice refund {\n    on call() -> Effect[Int] {\n        pay.charge(2)   // ✗ this file does not consume `pay`\n    }\n}\n\nconsumes pay            // ✓ each file consumes what it names",
+    "example": "// shop/checkout.bynk\nconsumes pay\n\nservice checkout {\n    on call() -> Effect[Int] by Caller {\n        pay.charge(1)\n    }\n}\n\n// shop/refund.bynk, another file of the same context\nservice refund {\n    on call() -> Effect[Int] by Caller {\n        pay.charge(2)   // ✗ this file does not consume `pay`\n    }\n}\n\nconsumes pay            // ✓ each file consumes what it names",
     "severity": "error",
     "summary": "A call to another unit's service is written in a file whose own `consumes` does not name that unit."
   },
@@ -1487,7 +1487,7 @@
     "constructs": [
       "consumes_decl"
     ],
-    "example": "// pay.bynk\ncontext pay\n\nservice charge {\n    on call(amount: Int) -> Effect[Int] by Caller {\n        Effect.pure(amount)\n    }\n}\n\n// shop.bynk\ncontext shop\n\nconsumes pay\n\nservice checkout {\n    on call() -> Effect[Int] {\n        pay.charg(1)             // ✗ `pay` has no service `charg`\n    }\n}\n\nservice checkout {\n    on call() -> Effect[Int] {\n        pay.charge(1)            // ✓ the declared name\n    }\n}",
+    "example": "// pay.bynk\ncontext pay\n\nservice charge {\n    on call(amount: Int) -> Effect[Int] by Caller {\n        Effect.pure(amount)\n    }\n}\n\n// shop.bynk\ncontext shop\n\nconsumes pay\n\nservice checkout {\n    on call() -> Effect[Int] by Caller {\n        pay.charg(1)             // ✗ `pay` has no service `charg`\n    }\n}\n\nservice checkout {\n    on call() -> Effect[Int] by Caller {\n        pay.charge(1)            // ✓ the declared name\n    }\n}",
     "severity": "error",
     "summary": "Called a service the consumed context does not declare."
   },
@@ -2027,7 +2027,7 @@
     "categoryAnchor": "effects",
     "code": "bynk.effect.cross_context_in_pure_context",
     "constructs": [],
-    "example": "on call() -> Effect[Int] by Caller {\n    let f = (n: Int) => pay.charge(n)   // ✗ a service call in a pure lambda\n    Effect.pure(1)\n}\n\non call() -> Effect[Int] {\n    let paid <- pay.charge(5)           // ✓ the handler makes the call\n    let f = (n: Int) => n + paid\n    Effect.pure(f(1))\n}",
+    "example": "on call() -> Effect[Int] by Caller {\n    let f = (n: Int) => pay.charge(n)   // ✗ a service call in a pure lambda\n    Effect.pure(1)\n}\n\non call() -> Effect[Int] by Caller {\n    let paid <- pay.charge(5)           // ✓ the handler makes the call\n    let f = (n: Int) => n + paid\n    Effect.pure(f(1))\n}",
     "severity": "error",
     "summary": "A cross-context call was made in a pure context."
   },
@@ -6834,7 +6834,7 @@
     "constructs": [
       "service_decl"
     ],
-    "example": "service greet {\n    on call(name: String) -> Effect[String] by Caller { … }\n    on call(name: String) -> Effect[String] { … }   // ✗ a second `on call`\n}\n\nservice greet {\n    on call(name: String) -> Effect[String] { … }   // ✓ one handler\n}\n\nservice farewell {                                  // ✓ a second operation is a second service\n    on call(name: String) -> Effect[String] { … }\n}",
+    "example": "service greet {\n    on call(name: String) -> Effect[String] by Caller { … }\n    on call(name: String) -> Effect[String] by Caller { … }   // ✗ a second `on call`\n}\n\nservice greet {\n    on call(name: String) -> Effect[String] by Caller { … }   // ✓ one handler\n}\n\nservice farewell {                                  // ✓ a second operation is a second service\n    on call(name: String) -> Effect[String] by Caller { … }\n}",
     "severity": "error",
     "summary": "A service declares more than one `on call` handler; it has exactly one."
   },
@@ -6858,7 +6858,7 @@
     "constructs": [
       "service_decl"
     ],
-    "example": "service worker from queue(\"jobs\") {\n    on call(m: String) -> Effect[Int] by Caller { … }   // ✗ `on call` is not a queue handler\n}\n\nservice count {                             // ✓ a service of its own\n    on call(m: String) -> Effect[Int] { … }\n}",
+    "example": "service worker from queue(\"jobs\") {\n    on call(m: String) -> Effect[Int] { … }   // ✗ `on call` is not a queue handler\n}\n\nservice count {                             // ✓ a service of its own\n    on call(m: String) -> Effect[Int] by Caller { … }\n}",
     "severity": "error",
     "summary": "A service mixes handler forms that do not match its `from <protocol>`."
   },
@@ -6882,7 +6882,7 @@
     "constructs": [
       "service_decl"
     ],
-    "example": "service probe {\n    on call() -> Int by Caller { … }            // ✗ not an `Effect`\n    on call() -> Effect[Int] { … }    // ✓\n}",
+    "example": "service probe {\n    on call() -> Int by Caller { … }            // ✗ not an `Effect`\n    on call() -> Effect[Int] by Caller { … }    // ✓\n}",
     "severity": "error",
     "summary": "A service handler's return type is not an `Effect`."
   },

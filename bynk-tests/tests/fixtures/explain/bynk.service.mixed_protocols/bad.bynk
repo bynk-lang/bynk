@@ -1,7 +1,7 @@
 context jobs
 
 service worker from queue("jobs") {
-  on call(m: String) -> Effect[Int] by Caller {
+  on call(m: String) -> Effect[Int] {
     Effect.pure(1)
   }
 }

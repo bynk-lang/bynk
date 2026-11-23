@@ -104,7 +104,9 @@ consumes bynk { Secrets }
 consumes bynk.crypto { Crypto }
 
 service signLine {
-	on call(payload: String) -> Effect[Result[String, CryptoError]] by Caller given Crypto, Secrets {
+	on call(
+		payload: String
+	) -> Effect[Result[String, CryptoError]] by Caller given Crypto, Secrets {
 		let stored <- Secrets.get("REGISTRY_SIGNING_KEY")
 		match stored {
 			None => Effect.pure(Err(InvalidKey("REGISTRY_SIGNING_KEY isn't set"))),

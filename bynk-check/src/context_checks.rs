@@ -2725,7 +2725,10 @@ fn check_missing_by(handler: &Handler, protocol: &ServiceProtocol, errors: &mut 
         return;
     }
     if matches!(protocol, ServiceProtocol::Call) {
-        errors.push(missing_by_on_call(handler));
+        // Only a real `on call` handler: a stray kind in a call service has its own error.
+        if handler.kind == HandlerKind::Call {
+            errors.push(missing_by_on_call(handler));
+        }
         return;
     }
     // v0.103 (D-A): a WebSocket upgrade authenticates at the edge before the
