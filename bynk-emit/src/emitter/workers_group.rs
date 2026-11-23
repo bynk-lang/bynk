@@ -25,7 +25,7 @@
 
 use crate::ts_build::{
     arrow_of as arrow, binary, block, call, const_typed as const_, expr_stmt, ident, if_, index,
-    member, method_call, new as new_, num_lit as num, param, paren, ret, str_lit as lit,
+    member, method_call, new as new_, num_lit as num, param, paren, ret, str_lit,
 };
 use bynk_check::wire_format as wf;
 use bynk_ts::{
@@ -153,14 +153,14 @@ fn function(
 
 /// `["a", "b"]`, as a TypeScript array literal of strings.
 fn array(items: &[String]) -> TsExpr {
-    TsExpr::array(items.iter().map(lit).collect())
+    TsExpr::array(items.iter().map(str_lit).collect())
 }
 
 /// `await __verifyCall(request, env, "")`.
 fn verify_call() -> TsExpr {
     TsExpr::Await(Box::new(call(
         ident("__verifyCall"),
-        vec![ident("request"), ident("env"), lit("")],
+        vec![ident("request"), ident("env"), str_lit("")],
     )))
 }
 
@@ -175,7 +175,7 @@ fn method_gate(method: &str, body: TsExpr, status_code: u32, headers: Option<TsE
         binary(
             TsBinaryOp::StrictNotEq,
             member(ident("request"), "method"),
-            lit(method),
+            str_lit(method),
         ),
         ret(new_response(body, TsExpr::object(init))),
     )
@@ -185,7 +185,7 @@ fn method_gate(method: &str, body: TsExpr, status_code: u32, headers: Option<TsE
 fn prefix_branch(prefix: &str, mut body: Vec<TsStmt>) -> TsStmt {
     body.push(ret(call(ident("__refused"), vec![verify_call()])));
     TsStmt::if_stmt(
-        method_call(ident("path"), "startsWith", vec![lit(prefix)]),
+        method_call(ident("path"), "startsWith", vec![str_lit(prefix)]),
         block(body),
         None,
     )
@@ -194,7 +194,7 @@ fn prefix_branch(prefix: &str, mut body: Vec<TsStmt>) -> TsStmt {
 /// The unclaimed-request fallback: what a standalone Worker answers to an
 /// unauthenticated request for an internal prefix (see the module doc).
 fn unclaimed(entry: &GroupEntry<'_>) -> TsStmt {
-    let allow = |method: &str| TsExpr::object(vec![("allow".to_string(), lit(method))]);
+    let allow = |method: &str| TsExpr::object(vec![("allow".to_string(), str_lit(method))]);
     let mut body = vec![const_(
         "path",
         None,
@@ -215,7 +215,7 @@ fn unclaimed(entry: &GroupEntry<'_>) -> TsStmt {
     ));
     if entry.has_events {
         body.push(guard(
-            method_call(ident("path"), "startsWith", vec![lit("/_bynk/event/")]),
+            method_call(ident("path"), "startsWith", vec![str_lit("/_bynk/event/")]),
             ret(call(ident("__refused"), vec![verify_call()])),
         ));
     }
@@ -226,11 +226,11 @@ fn unclaimed(entry: &GroupEntry<'_>) -> TsStmt {
                 method_call(
                     member(ident("request"), "headers"),
                     "get",
-                    vec![lit(wf::CALLER_HEADER)],
+                    vec![str_lit(wf::CALLER_HEADER)],
                 ),
-                lit(caller),
+                str_lit(caller),
             ),
-            ret(new_response(lit(body), status(401))),
+            ret(new_response(str_lit(body), status(401))),
         )
     };
     if entry.has_migrate {
@@ -249,17 +249,17 @@ fn unclaimed(entry: &GroupEntry<'_>) -> TsStmt {
                             vec![ty("string"), ty("unknown")],
                         ),
                     }),
-                    lit(wf::MIGRATE_KEY),
+                    str_lit(wf::MIGRATE_KEY),
                 )),
             },
-            lit("string"),
+            str_lit("string"),
         );
         body.push(prefix_branch(
             wf::MIGRATE_PATH_PREFIX,
             vec![
                 guard(
                     key_missing,
-                    ret(new_response(lit("Not found"), status(404))),
+                    ret(new_response(str_lit("Not found"), status(404))),
                 ),
                 method_gate(
                     wf::CALL_METHOD,
@@ -275,12 +275,12 @@ fn unclaimed(entry: &GroupEntry<'_>) -> TsStmt {
         body.push(prefix_branch(
             super::workers_entry::INSPECT_PREFIX,
             vec![
-                method_gate("POST", lit("Method Not Allowed"), 405, None),
+                method_gate("POST", str_lit("Method Not Allowed"), 405, None),
                 caller_gate("bynk.dev", "Unauthorized"),
             ],
         ));
     }
-    body.push(ret(new_response(lit("Not Found"), status(404))));
+    body.push(ret(new_response(str_lit("Not Found"), status(404))));
     function(
         "__unclaimed",
         true,
@@ -425,7 +425,7 @@ fn loopback(entry: &GroupEntry<'_>) -> Vec<TsStmt> {
             ))))]),
             None::<String>,
             block(vec![ret(new_response(
-                lit("Internal Server Error"),
+                str_lit("Internal Server Error"),
                 status(500),
             ))]),
             None,
@@ -484,9 +484,9 @@ fn refused() -> TsStmt {
                     op: TsUnaryOp::Typeof,
                     expr: Box::new(ident("verified")),
                 },
-                lit("string"),
+                str_lit("string"),
             )),
-            consequent: Box::new(new_response(lit("Unauthorized"), status(401))),
+            consequent: Box::new(new_response(str_lit("Unauthorized"), status(401))),
             alternate: Box::new(ident("verified")),
         })],
     )
@@ -499,11 +499,11 @@ fn with_allowed() -> TsStmt {
         method_call(
             paren(binary(
                 TsBinaryOp::NullishCoalescing,
-                method_call(member(ident("r"), "headers"), "get", vec![lit("allow")]),
-                lit(""),
+                method_call(member(ident("r"), "headers"), "get", vec![str_lit("allow")]),
+                str_lit(""),
             )),
             "split",
-            vec![lit(",")],
+            vec![str_lit(",")],
         ),
         "map",
         vec![lambda(&["m"], method_call(ident("m"), "trim", vec![]))],
@@ -518,7 +518,7 @@ fn with_allowed() -> TsStmt {
                 "filter",
                 vec![lambda(
                     &["m"],
-                    binary(TsBinaryOp::StrictNotEq, ident("m"), lit("")),
+                    binary(TsBinaryOp::StrictNotEq, ident("m"), str_lit("")),
                 )],
             ),
         )],
@@ -533,7 +533,7 @@ fn with_allowed() -> TsStmt {
             vec![],
         ),
         "join",
-        vec![lit(", ")],
+        vec![str_lit(", ")],
     );
     function(
         "__withAllowed",
@@ -559,7 +559,7 @@ fn with_allowed() -> TsStmt {
             expr_stmt(method_call(
                 member(ident("merged"), "headers"),
                 "set",
-                vec![lit("allow"), unique_sorted],
+                vec![str_lit("allow"), unique_sorted],
             )),
             ret(ident("merged")),
         ],
@@ -625,7 +625,7 @@ fn queue(members: &[(usize, &GroupMember)]) -> TsObjectEntry {
         .iter()
         .filter(|(_, m)| !m.queues.is_empty())
         .map(|(i, m)| TsSwitchCase {
-            labels: m.queues.iter().map(lit).collect(),
+            labels: m.queues.iter().map(str_lit).collect(),
             body: vec![ret(run_member(*i, "queue", "batch"))],
             default_braced: false,
             case_braced: false,
@@ -667,7 +667,7 @@ fn email(members: &[(usize, &GroupMember)]) -> TsObjectEntry {
         .flat_map(|(i, m)| {
             m.addresses.iter().map(move |a| {
                 TsExpr::object(vec![
-                    ("address".to_string(), lit(a.to_lowercase())),
+                    ("address".to_string(), str_lit(a.to_lowercase())),
                     ("member".to_string(), ident(format!("__m{i}"))),
                 ])
             })
@@ -730,7 +730,7 @@ fn email(members: &[(usize, &GroupMember)]) -> TsObjectEntry {
                     "slice",
                     vec![binary(
                         TsBinaryOp::Add,
-                        method_call(ident("to"), "lastIndexOf", vec![lit("@")]),
+                        method_call(ident("to"), "lastIndexOf", vec![str_lit("@")]),
                         num(1),
                     )],
                 ),

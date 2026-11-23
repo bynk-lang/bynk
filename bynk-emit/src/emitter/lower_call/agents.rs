@@ -9,7 +9,7 @@ use bynk_check::checker::Callee;
 use super::super::lower::Pre;
 use super::super::lower_ctx::LowerCtx;
 use super::super::*;
-use crate::ts_build::{call, ident, member, str_lit as str_node};
+use crate::ts_build::{call, ident, member, str_lit};
 
 /// Lower an inline agent invocation, `Agent(<key>).method(args)`, or `None` when the call is not one. A node
 /// (`Call(Member(<construction>, method), args)`, wrapped in the trace step on a traced build).
@@ -69,7 +69,7 @@ pub(in crate::emitter) fn lower_inline_agent_call(
         let key = ctor_args
             .first()
             .map(|a| pre.lower_node(a, cx))
-            .unwrap_or_else(|| str_node("default"));
+            .unwrap_or_else(|| str_lit("default"));
         let instance = cx.agent_construct_node(&name.name, key);
         let mut children: Vec<bynk_ts::TsExpr> = vec![instance];
         children.extend(args.iter().map(|a| pre.lower_node(a, cx)));

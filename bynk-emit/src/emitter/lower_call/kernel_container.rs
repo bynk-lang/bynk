@@ -18,7 +18,7 @@ use super::super::*;
 use super::kernel::receiver_object;
 use crate::ts_build::{
     arrow, as_expr as cast, binary, call, cond_expr as cond, ident, member, new, param, paren,
-    spread, str_lit as str_node, type_app,
+    spread, str_lit, type_app,
 };
 
 /// The receiver and then each argument, lowered in order.
@@ -53,7 +53,7 @@ fn field(name: &str, prop: &str) -> TsExpr {
 
 /// `name.tag === "<tag>"`.
 fn tag_is(name: &str, tag: &str) -> TsExpr {
-    binary(TsBinaryOp::StrictEq, field(name, "tag"), str_node(tag))
+    binary(TsBinaryOp::StrictEq, field(name, "tag"), str_lit(tag))
 }
 
 /// An immediately-invoked typed arrow over the lowered operands: the printer brackets the arrow.
@@ -69,7 +69,7 @@ fn is_tag(recv: bynk_ts::TsExpr, tag: &'static str) -> bynk_ts::TsExpr {
     paren(binary(
         TsBinaryOp::StrictEq,
         member(receiver_object(recv), "tag"),
-        str_node(tag),
+        str_lit(tag),
     ))
 }
 

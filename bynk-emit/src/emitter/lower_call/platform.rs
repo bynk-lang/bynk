@@ -17,12 +17,12 @@ use super::codec_statics::{DecodeSource, json_decoder_fn};
 use super::cross_context::type_ref_named_root;
 use crate::ts_build::{
     arrow_with, binary, block_arrow, call, const_typed as const_, expr_stmt, ident, member,
-    num_lit as lit_num, param, paren, ret, str_lit as lit_str,
+    num_lit as lit_num, param, paren, ret, str_lit,
 };
 
 /// `"text" as const`: a string-literal tag that keeps its literal type.
 fn tag_const(text: &str) -> TsExpr {
-    TsExpr::AsConst(Box::new(lit_str(text)))
+    TsExpr::AsConst(Box::new(str_lit(text)))
 }
 
 /// An inline object literal of `key: value` entries.
@@ -143,11 +143,11 @@ pub(in crate::emitter) fn decode_capability_reply(
             call,
             codec,
             object(vec![
-                ("capability", lit_str(cap)),
-                ("operation", lit_str(op)),
-                ("type", lit_str(&payload)),
+                ("capability", str_lit(cap)),
+                ("operation", str_lit(op)),
+                ("type", str_lit(&payload)),
             ]),
-            lit_str(policy),
+            str_lit(policy),
         ],
     )
 }
@@ -256,7 +256,7 @@ pub(in crate::emitter) fn lower_d1_peek_call(
     );
     let workers_d1 = TsExpr::New {
         callee: Box::new(chain(ident("bynk_cloudflare__binding"), &["WorkersD1"])),
-        args: vec![object(vec![(&binding, read_only)]), lit_str(&binding)],
+        args: vec![object(vec![(&binding, read_only)]), str_lit(&binding)],
     };
     Some(paren(TsExpr::Assign {
         target: Box::new(member(ident("deps"), &local)),
@@ -333,7 +333,7 @@ pub(in crate::emitter) fn lower_d1_select_call(
             binary(
                 bynk_ts::TsBinaryOp::StrictEq,
                 member(obj, "tag"),
-                lit_str(tag),
+                str_lit(tag),
             )
         };
         let err = |tag: &str, error: TsExpr| {
@@ -349,7 +349,7 @@ pub(in crate::emitter) fn lower_d1_select_call(
                 None,
                 TsExpr::Await(Box::new(call(
                     chain(deps_node, &[&cap, op]),
-                    vec![lit_str(&sql), params],
+                    vec![str_lit(&sql), params],
                 ))),
             ),
             TsStmt::if_stmt(
@@ -409,7 +409,7 @@ pub(in crate::emitter) fn lower_signed_cookie_call(
     if !issue {
         return Some(call(
             ident("__expireSessionCookie"),
-            vec![lit_str(&seam.cookie), lit_str(&seam.same_site)],
+            vec![str_lit(&seam.cookie), str_lit(&seam.same_site)],
         ));
     }
     let key = pre.lower_node(args.first()?, cx);
@@ -424,10 +424,10 @@ pub(in crate::emitter) fn lower_signed_cookie_call(
         let issue = call(
             ident("__issueSessionCookie"),
             vec![
-                call(ident("__sessionKeysOf"), vec![deps_node, lit_str(&actor)]),
-                lit_str(&actor),
-                lit_str(&seam.cookie),
-                lit_str(&seam.same_site),
+                call(ident("__sessionKeysOf"), vec![deps_node, str_lit(&actor)]),
+                str_lit(&actor),
+                str_lit(&seam.cookie),
+                str_lit(&seam.same_site),
                 key,
                 lit_num(seam.ttl_secs),
                 now,
@@ -467,7 +467,7 @@ pub(in crate::emitter) fn lower_cookie_field_call(
     if expire {
         return Some(typed_cookie_node(
             &name,
-            lit_str(""),
+            str_lit(""),
             call(ident("Some"), vec![lit_num(0)]),
             call(ident("Some"), vec![lit_num(0)]),
         ));
@@ -496,7 +496,7 @@ pub(in crate::emitter) fn lower_cookie_field_call(
         };
         typed_cookie_node(
             &name,
-            call(ident("__cookieValue"), vec![lit_str(kind), value]),
+            call(ident("__cookieValue"), vec![str_lit(kind), value]),
             none(),
             none(),
         )
@@ -506,12 +506,12 @@ pub(in crate::emitter) fn lower_cookie_field_call(
 /// [`typed_cookie_literal`] as a node: the field's wire `name` is raw text (the printer escapes it).
 fn typed_cookie_node(name: &str, value: TsExpr, max_age: TsExpr, expires: TsExpr) -> TsExpr {
     paren(object(vec![
-        ("name", lit_str(name)),
+        ("name", str_lit(name)),
         ("value", value),
         ("maxAge", max_age),
         ("expires", expires),
         ("domain", object(vec![("tag", tag_const("None"))])),
-        ("path", lit_str("/")),
+        ("path", str_lit("/")),
         ("secure", TsExpr::Lit(TsLit::Bool(true))),
         ("httpOnly", TsExpr::Lit(TsLit::Bool(true))),
         ("sameSite", object(vec![("tag", tag_const("Lax"))])),
@@ -597,12 +597,12 @@ pub(in crate::emitter) fn lower_events_emit_call(
                     "eventId",
                     call(member(global("crypto"), "randomUUID"), vec![]),
                 ),
-                ("publisherId", lit_str(&owner)),
+                ("publisherId", str_lit(&owner)),
                 ("emittedAt", call(member(global("Date"), "now"), vec![])),
                 ("schemaVersion", lit_num(schema_version)),
             ]);
             let entry = object(vec![
-                ("type", lit_str(&event_name)),
+                ("type", str_lit(&event_name)),
                 ("payload", payload),
                 ("envelope", envelope),
             ]);
@@ -805,7 +805,7 @@ mod tests {
             "SELECT \"a\" FROM t WHERE x = 'y'",
         ] {
             assert_eq!(
-                bynk_ts::print_expr(&lit_str(s)),
+                bynk_ts::print_expr(&str_lit(s)),
                 format!("\"{}\"", crate::emitter::escape_ts_string(s)),
                 "{s:?}"
             );
@@ -858,7 +858,7 @@ mod tests {
     #[test]
     fn the_typed_cookie_node_prints_as_the_text_does() {
         let none = || object(vec![("tag", tag_const("None"))]);
-        let node = typed_cookie_node("a\"b", lit_str("v"), none(), none());
+        let node = typed_cookie_node("a\"b", str_lit("v"), none(), none());
         // The text literal the node replaced.
         let (name, value) = (crate::emitter::escape_ts_string("a\"b"), "\"v\"");
         let none = "{ tag: \"None\" as const }";

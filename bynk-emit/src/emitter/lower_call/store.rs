@@ -19,7 +19,7 @@ use super::query::{
 };
 use crate::ts_build::{
     arrow, binary, block, block_arrow, call, const_typed as const_, expr_stmt, ident, member,
-    method_call as method_call_bare, param, paren, ret, str_lit as lit_str, strict_neq as ne,
+    method_call as method_call_bare, param, paren, ret, str_lit, strict_neq as ne,
 };
 
 /// A store field's handle, `<var>.<field>`, as a node (the working-state variable and the
@@ -76,7 +76,7 @@ fn throw_error(message: &str) -> TsStmt {
     TsStmt::throw_stmt(
         TsExpr::New {
             callee: Box::new(member_node("globalThis", "Error")),
-            args: vec![lit_str(message)],
+            args: vec![str_lit(message)],
         },
         None,
     )
@@ -174,7 +174,7 @@ fn close_if_some() -> TsStmt {
         binary(
             TsBinaryOp::StrictEq,
             member(ident("__c"), "tag"),
-            lit_str("Some"),
+            str_lit("Some"),
         ),
         vec![awaited(call(
             member(member(ident("__c"), "value"), "close"),
@@ -962,7 +962,7 @@ fn route_indexed_filter(
             vec![],
             call(
                 member(m.node.clone(), "byIndex"),
-                vec![lit_str(field), string_of(v)],
+                vec![str_lit(field), string_of(v)],
             ),
         ))
     };

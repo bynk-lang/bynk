@@ -20,7 +20,7 @@ use super::super::lower::{Pre, settle_helper, settle_with};
 use super::super::lower_ctx::LowerCtx;
 use super::super::lower_list::{any_ty, take};
 use super::super::{Expr, ExprKind, Ident, TypeRef};
-use crate::ts_build::{arrow, call, ident, member, param, paren, str_lit as str_node};
+use crate::ts_build::{arrow, call, ident, member, param, paren, str_lit};
 
 // ---- Names ----
 
@@ -54,7 +54,7 @@ struct DepsArg {
 
 /// I3 (#1971), #2020: `{ ...deps, who: { tag, identity? } }`, a sum handler's principal.
 fn who_deps(actor: &str, identity: Option<bynk_ts::TsExpr>) -> bynk_ts::TsExpr {
-    let tag = str_node(actor);
+    let tag = str_lit(actor);
     let who = |tag: TsExpr, identity: Option<TsExpr>| {
         let mut fields = vec![TsObjectEntry::prop("tag".to_string(), tag)];
         fields.extend(identity.map(|i| TsObjectEntry::prop("identity".to_string(), i)));
@@ -213,7 +213,7 @@ fn inbound_email_call(service: &str, key: &str, mail: bynk_ts::TsExpr) -> bynk_t
         ("address".to_string(), member(ident("__m"), "from")),
         (
             "dmarc".to_string(),
-            TsExpr::object(vec![("tag".to_string(), str_node("DmarcNone"))]),
+            TsExpr::object(vec![("tag".to_string(), str_lit("DmarcNone"))]),
         ),
     ]);
     let handler = call(
@@ -295,7 +295,7 @@ pub(in crate::emitter) fn lower_system_schedule_call(
 fn wrong_method_call(service: &str, verb: IrHttpMethod, path: &str) -> bynk_ts::TsExpr {
     let name = wrong_method_driver_name(service);
     {
-        let nodes = vec![str_node(verb.as_str()), str_node(path)];
+        let nodes = vec![str_lit(verb.as_str()), str_lit(path)];
         call(TsExpr::Ident(name.clone()), nodes)
     }
 }
@@ -456,10 +456,7 @@ pub(in crate::emitter) fn lower_system_http_call(
     }
     let key = crate::emitter::http_handler_method_name_ir(verb, path);
     // The `sub` slot: the call-site identity, else the empty string.
-    let sub = cx
-        .call_site_identity
-        .clone()
-        .unwrap_or_else(|| str_node(""));
+    let sub = cx.call_site_identity.clone().unwrap_or_else(|| str_lit(""));
     let has_wire = args[1..]
         .iter()
         .any(|a| matches!(&a.kind, ExprKind::Wire(_)));
@@ -809,7 +806,7 @@ mod tests {
             "/日本語",
             "a'b",
         ] {
-            assert_eq!(printed(str_node(s)), format!("{s:?}"), "{s:?}");
+            assert_eq!(printed(str_lit(s)), format!("{s:?}"), "{s:?}");
         }
     }
 

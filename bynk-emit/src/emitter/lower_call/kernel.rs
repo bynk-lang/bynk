@@ -25,8 +25,7 @@ use super::query::{
     query_other_elem,
 };
 use crate::ts_build::{
-    arrow, binary, call, const_typed as const_, ident, member, param, paren, ret, spread,
-    str_lit as str_node,
+    arrow, binary, call, const_typed as const_, ident, member, param, paren, ret, spread, str_lit,
 };
 
 /// `within`, `race` and `detach` on an `Effect[T]` (#2683, #2711, #3437). `None`
@@ -110,9 +109,9 @@ fn lower_effect_kernel_call(
             // the offset. `expect_location` has already escaped the assertion location once;
             // the literal node's own escape is the second.
             let site = if cx.assert_loc().is_some() {
-                str_node(expect_location(cx, e.span.start))
+                str_lit(expect_location(cx, e.span.start))
             } else {
-                str_node(
+                str_lit(
                     cx.fault_location(e.span.start)
                         .unwrap_or_else(|| format!("offset {}", e.span.start)),
                 )
@@ -123,7 +122,7 @@ fn lower_effect_kernel_call(
                 .map(|(_, err)| err.display(tys.types()).to_string());
             let mut children = vec![recv, cx.exec_node(), site];
             if let Some(raw) = &err_raw {
-                children.push(str_node(raw.as_str()));
+                children.push(str_lit(raw.as_str()));
             }
             return Some({
                 let n = children;
@@ -569,7 +568,7 @@ fn lower_http_result(
         let added = if clear {
             TsExpr::object_entries(vec![
                 TsObjectEntry::Spread(paren(arg)),
-                TsObjectEntry::prop("value".to_string(), str_node("")),
+                TsObjectEntry::prop("value".to_string(), str_lit("")),
                 TsObjectEntry::prop(
                     "maxAge".to_string(),
                     call(
@@ -688,9 +687,9 @@ mod tests {
             "line\u{2028}sep.bynk:1:1",
         ] {
             let once = escape_ts_string(raw);
-            assert_eq!(printed(str_node(raw)), format!("\"{once}\""));
+            assert_eq!(printed(str_lit(raw)), format!("\"{once}\""));
             let twice = escape_ts_string(&once);
-            assert_eq!(printed(str_node(once)), format!("\"{twice}\""), "{raw}");
+            assert_eq!(printed(str_lit(once)), format!("\"{twice}\""), "{raw}");
         }
     }
 

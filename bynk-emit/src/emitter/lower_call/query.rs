@@ -21,7 +21,7 @@ use super::super::{BaseType, Expr, Ident, RuntimeUse, TyId};
 use crate::ts_build::{
     arrow, arrow_with, assign, binary, block, call, const_typed as const_, expr_stmt, for_await_of,
     for_of, ident, let_init as let_, member, method_call as method_call_bare, param, paren, ret,
-    spread, str_lit as str_node,
+    spread, str_lit,
 };
 
 /// v0.100 (real-time track slice 0): lower a `Stream[T]` op over a `source`
@@ -163,7 +163,7 @@ fn stream_claim() -> Vec<TsStmt> {
             None,
             call(
                 member(member(ident("globalThis"), "Symbol"), "for"),
-                vec![str_node(STREAM_READ_SYMBOL)],
+                vec![str_lit(STREAM_READ_SYMBOL)],
             ),
         ),
         TsStmt::if_stmt(
@@ -171,7 +171,7 @@ fn stream_claim() -> Vec<TsStmt> {
             block(vec![TsStmt::throw_stmt(
                 TsExpr::New {
                     callee: Box::new(member(ident("globalThis"), "Error")),
-                    args: vec![str_node("bynk: a stream can be read only once")],
+                    args: vec![str_lit("bynk: a stream can be read only once")],
                 },
                 None,
             )]),

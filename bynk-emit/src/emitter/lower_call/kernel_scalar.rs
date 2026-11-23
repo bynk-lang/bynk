@@ -13,7 +13,7 @@ use super::super::lower_ctx::LowerCtx;
 use super::super::lower_list::{take, zero};
 use super::super::{Expr, ExprKind, rounding_mode};
 use super::kernel::receiver_object;
-use crate::ts_build::{arrow, call, ident, member, param, spread, str_lit as str_node};
+use crate::ts_build::{arrow, call, ident, member, param, spread, str_lit};
 
 /// The receiver and then each argument, lowered in order.
 fn operands(pre: &mut Pre, cx: &mut LowerCtx, parts: &[&Expr]) -> Vec<bynk_ts::TsExpr> {
@@ -183,7 +183,7 @@ pub(in crate::emitter) fn lower_float_kernel(
                 let n = kids;
                 call(
                     ident("__bynkToInt"),
-                    vec![call(global_math(f), n), str_node(op.name())],
+                    vec![call(global_math(f), n), str_lit(op.name())],
                 )
             })
         }
@@ -372,7 +372,7 @@ fn regex_node(literal: &str, extra: &str, anchored: bool) -> TsExpr {
     let (source, flags) = regex_parts(literal, extra, anchored);
     TsExpr::New {
         callee: Box::new(member(ident("globalThis"), "RegExp")),
-        args: vec![str_node(source), str_node(flags)],
+        args: vec![str_lit(source), str_lit(flags)],
     }
 }
 
@@ -417,7 +417,7 @@ fn split_regex_arrow() -> TsExpr {
             vec![TsStmt::return_stmt(
                 Some(TsExpr::Conditional {
                     test: Box::new(bin(TsBinaryOp::StrictEq, exec(), TsExpr::Lit(TsLit::Null))),
-                    consequent: Box::new(TsExpr::array(vec![str_node("")])),
+                    consequent: Box::new(TsExpr::array(vec![str_lit("")])),
                     alternate: Box::new(TsExpr::array(vec![])),
                 }),
                 None,
@@ -792,7 +792,7 @@ pub(in crate::emitter) fn lower_decimal_kernel(
     let mode = |a: &Expr| rounding_mode(a).map(|m| m.name());
     // A helper call whose last operand is the rounding mode, a string literal.
     let with_mode = |helper: &str, mut kids: Vec<bynk_ts::TsExpr>, mode: &str| {
-        kids.push(str_node(mode));
+        kids.push(str_lit(mode));
         {
             let n = kids;
             call(ident(helper), n)

@@ -3,7 +3,7 @@
 use super::ctx::*;
 use super::ts_types::ts_ty_to_ts_type;
 use super::*;
-use crate::ts_build::{call, ident, str_lit as str_node};
+use crate::ts_build::{call, ident, str_lit};
 use bynk_check::firstparty::FirstPartyCap;
 
 /// Per-body lowering context: what module we are emitting into ([`ModuleCtx`]),
@@ -1261,7 +1261,7 @@ impl<'a> LowerCtx<'a> {
             } => system_http_claims
                 .sum_routes
                 .get(route)
-                .map(|primary| str_node(self.call_site_actor.as_deref().unwrap_or(primary))),
+                .map(|primary| str_lit(self.call_site_actor.as_deref().unwrap_or(primary))),
             BodyMode::Method
             | BodyMode::FreeFn
             | BodyMode::GivenFn { .. }

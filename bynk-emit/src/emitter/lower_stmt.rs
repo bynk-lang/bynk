@@ -25,7 +25,7 @@ use super::lower_call::codec_statics::json_encode;
 use super::lower_ctx::LowerCtx;
 use super::ts_types::{ts_ty_to_ts_type, ts_type_ref_to_ts_type};
 use super::*;
-use crate::ts_build::{num_lit, str_lit as str_node};
+use crate::ts_build::{num_lit, str_lit};
 
 /// The statement emitter builds a [`Body`] — a list of [`Item`]s — instead of
 /// appending text to a caller's buffer; [`render`] is the one adapter that
@@ -979,7 +979,7 @@ fn statement(body: &mut Body, stmt: &Statement, cx: &mut LowerCtx) {
                 // The snapshot's name is a string-literal node, spelled as the printer
                 // spells every string.
                 Some(json) => body.push(stmt_item(snapshot_check(
-                    str_node(&clause.name),
+                    str_lit(&clause.name),
                     json,
                     &location,
                     (span_start, span_end),
@@ -993,7 +993,7 @@ fn statement(body: &mut Body, stmt: &Statement, cx: &mut LowerCtx) {
                         clause.name
                     );
                     body.push(stmt_item(bynk_ts::TsStmt::throw_stmt(
-                        expect_failure_call(&location, span_start, span_end, str_node(message)),
+                        expect_failure_call(&location, span_start, span_end, str_lit(message)),
                         None,
                     )));
                 }
@@ -1128,7 +1128,7 @@ fn expect_failure_call(
     bynk_ts::TsExpr::Call {
         callee: Box::new(bynk_ts::TsExpr::Ident("__bynkExpectFailure".to_string())),
         args: vec![
-            str_node(location),
+            str_lit(location),
             num_lit(start.to_string()),
             num_lit(end.to_string()),
             detail,
@@ -1178,13 +1178,13 @@ fn expect_item(
             };
             add(
                 add(
-                    add(str_node(compare_head), shown(lv)),
-                    str_node(format!(" {sym} ")),
+                    add(str_lit(compare_head), shown(lv)),
+                    str_lit(format!(" {sym} ")),
                 ),
                 shown(rv),
             )
         }
-        ExpectDetail::Message(m) => str_node(m),
+        ExpectDetail::Message(m) => str_lit(m),
     };
     expect_if(cond, location, start, end, detail)
 }
@@ -1203,7 +1203,7 @@ fn snapshot_check(
     let ident = |n: &str| TsExpr::Ident(n.to_string());
     let message = TsExpr::Binary {
         op: TsBinaryOp::Add,
-        left: Box::new(str_node(format!(
+        left: Box::new(str_lit(format!(
             "expect {src} matches snapshot \"{snapshot}\"\n  "
         ))),
         right: Box::new(ident("__d")),
@@ -2812,14 +2812,7 @@ mod expect_item_tests {
     #[test]
     fn a_snapshot_name_is_spelled_as_the_printer_spells_a_string() {
         let name = "bell\u{7} \"q\"";
-        let check = snapshot_check(
-            str_node(name),
-            node_expr("json"),
-            "t:1:1",
-            (0, 2),
-            "v",
-            name,
-        );
+        let check = snapshot_check(str_lit(name), node_expr("json"), "t:1:1", (0, 2), "v", name);
         let printed = bynk_ts::print_stmt(&check, 0);
         assert!(
             printed.contains("__bynkSnapshotCheck(\"bell\\u{7} \\\"q\\\"\", json)"),
@@ -2827,7 +2820,7 @@ mod expect_item_tests {
         );
         assert_ne!(
             bynk_project::json_string(name),
-            bynk_ts::print_expr(&str_node(name)),
+            bynk_ts::print_expr(&str_lit(name)),
             "the two spellings differ, which is why the name used to take a text arm"
         );
     }
@@ -2848,7 +2841,7 @@ mod expect_item_tests {
     fn the_snapshot_check_node_prints_the_text_it_replaced() {
         let (location, src, shown) = ("tests/a.bynk:3:5", "r.body", "body \"x\"");
         let node = snapshot_check(
-            str_node("snap"),
+            str_lit("snap"),
             bynk_ts::TsExpr::Ident("__json".to_string()),
             location,
             (10, 20),

@@ -17,7 +17,7 @@ use super::super::ts_types::ts_ty_to_ts_type;
 use super::super::{BaseType, Expr, TypeBody, TypeRef, ty_to_type_ref};
 use crate::ts_build::{
     binary, block, call, const_typed as const_, ident, index, member, or_expr as or, param,
-    raw_lit as raw, str_lit as str_node, strict_eq,
+    raw_lit as raw, str_lit, strict_eq,
 };
 
 /// v0.22b: the typed JSON codec (ADR 0045). `encode` dispatches to the
@@ -242,7 +242,7 @@ pub(in super::super) fn json_decoder_fn(
     let des = if rigid {
         call(
             member(cx.codec(t), "decode"),
-            vec![ident("__j"), str_node("$")],
+            vec![ident("__j"), str_lit("$")],
         )
     } else {
         super::super::serialisation::deserialise_expr(&tref, &ident("__j"), "$", cx.runtime_use())
@@ -286,8 +286,8 @@ fn decoder_result_ty(ts: &TsType) -> TsType {
 /// Err({ kind: "Malformed", path: "$", message: String(__e) }); }`.
 fn json_parse_step() -> Vec<TsStmt> {
     let malformed = TsExpr::object(vec![
-        ("kind".to_string(), str_node("Malformed")),
-        ("path".to_string(), str_node("$")),
+        ("kind".to_string(), str_lit("Malformed")),
+        ("path".to_string(), str_lit("$")),
         (
             "message".to_string(),
             call(ident("String"), vec![ident("__e")]),
@@ -324,7 +324,7 @@ fn parsed_result_step(parse: TsExpr) -> Vec<TsStmt> {
     vec![
         const_("__p", None, parse),
         if_err(
-            strict_eq(member(ident("__p"), "tag"), str_node("Err")),
+            strict_eq(member(ident("__p"), "tag"), str_lit("Err")),
             member(ident("__p"), "error"),
         ),
         const_("__j", Some(json_value_ty()), member(ident("__p"), "value")),
@@ -346,7 +346,7 @@ fn form_parse_step(specs: TsExpr) -> Vec<TsStmt> {
 fn decode_tail(ts: &TsType) -> Vec<TsStmt> {
     let be = |property: &str| member(ident("__be"), property);
     let r = |property: &str| member(ident("__r"), property);
-    let kind_is = |kind: &str| strict_eq(be("kind"), str_node(kind));
+    let kind_is = |kind: &str| strict_eq(be("kind"), str_lit(kind));
     let structural = kind_is("StructuralMismatch");
     let refinement = kind_is("RefinementViolation");
     let path = TsExpr::Conditional {
@@ -355,7 +355,7 @@ fn decode_tail(ts: &TsType) -> Vec<TsStmt> {
             refinement.clone(),
         )))),
         consequent: Box::new(be("path")),
-        alternate: Box::new(str_node("$")),
+        alternate: Box::new(str_lit("$")),
     };
     // The one message chain: a structural mismatch reads what it expected and what it found, a
     // refinement violation its own message, anything else its details.
@@ -378,7 +378,7 @@ fn decode_tail(ts: &TsType) -> Vec<TsStmt> {
     ]);
     vec![
         TsStmt::if_stmt(
-            strict_eq(r("tag"), str_node("Ok")),
+            strict_eq(r("tag"), str_lit("Ok")),
             TsStmt::return_stmt(
                 Some(call(
                     ident("Ok"),
@@ -462,7 +462,7 @@ pub(crate) fn eval_value_line(
     let head = binary(
         TsBinaryOp::Add,
         raw("'{\"type\":\"eval-value\",\"valueType\":'"),
-        call(member(global("JSON"), "stringify"), vec![str_node(shown)]),
+        call(member(global("JSON"), "stringify"), vec![str_lit(shown)]),
     );
     let log = |arg: TsExpr| {
         bynk_ts::TsStmt::expr_stmt(call(member(global("console"), "log"), vec![arg]), None)
@@ -641,7 +641,7 @@ fn sql_bool_pass(t: bynk_check::checker::TyId, cx: &LowerCtx) -> Vec<TsStmt> {
                         op: TsUnaryOp::Typeof,
                         expr: Box::new(o()),
                     }),
-                    right: Box::new(str_node("object")),
+                    right: Box::new(str_lit("object")),
                 },
             ),
             is_array(o()),
@@ -659,7 +659,7 @@ fn sql_bool_pass(t: bynk_check::checker::TyId, cx: &LowerCtx) -> Vec<TsStmt> {
     };
     let read_flags = TsStmt::for_of(
         "__k",
-        TsExpr::array(fields.iter().map(|f| str_node(f.as_str())).collect()),
+        TsExpr::array(fields.iter().map(|f| str_lit(f.as_str())).collect()),
         block(vec![TsStmt::if_stmt(
             or(
                 strict_eq(row_k(), number("0")),
@@ -720,7 +720,7 @@ fn pg_row_pass(t: bynk_check::checker::TyId, cx: &LowerCtx) -> Vec<TsStmt> {
         return Vec::new();
     }
     let names =
-        |names: &[String]| TsExpr::array(names.iter().map(|f| str_node(f.as_str())).collect());
+        |names: &[String]| TsExpr::array(names.iter().map(|f| str_lit(f.as_str())).collect());
     // `const __fix = (__o: __JsonValue): void => __bynkPgRow(__o, [instants], [ints]);`
     let fix = TsExpr::Arrow {
         params: vec![param("__o", json_value_ty())],

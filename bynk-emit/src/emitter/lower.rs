@@ -49,7 +49,7 @@ use super::ts_types::{
 use super::*;
 use crate::ts_build::{
     arrow_of as lambda_node, bool_lit as bool_node, call as call_built, const_ as binding_stmt,
-    ident, not_expr as negated, num_lit, str_lit as str_node,
+    ident, not_expr as negated, num_lit, str_lit,
 };
 
 /// v0.154 (ADR 0178): the `Err`-wrap a `?` on a `Result` operand needs, if the
@@ -170,7 +170,7 @@ fn question_guard_node(tmp: &str, exit: &QuestionExit) -> bynk_ts::TsStmt {
     let cond = bynk_ts::TsExpr::Binary {
         op: bynk_ts::TsBinaryOp::StrictEq,
         left: Box::new(member_node(tmp, "tag")),
-        right: Box::new(str_node(tag)),
+        right: Box::new(str_lit(tag)),
     };
     let call = |callee: bynk_ts::TsExpr, args: Vec<bynk_ts::TsExpr>| bynk_ts::TsExpr::Call {
         callee: Box::new(callee),
@@ -185,13 +185,13 @@ fn question_guard_node(tmp: &str, exit: &QuestionExit) -> bynk_ts::TsStmt {
         } => {
             let detail = bynk_ts::TsExpr::Binary {
                 op: bynk_ts::TsBinaryOp::Add,
-                left: Box::new(str_node(format!("{src}\n  the operand was Err: "))),
+                left: Box::new(str_lit(format!("{src}\n  the operand was Err: "))),
                 right: Box::new(call(ident("__bynkShow"), vec![member_node(tmp, "error")])),
             };
             let failure = call(
                 ident("__bynkExpectFailure"),
                 vec![
-                    str_node(location.clone()),
+                    str_lit(location.clone()),
                     num_lit(start.to_string()),
                     num_lit(end.to_string()),
                     detail,
@@ -344,7 +344,7 @@ fn lower_const_literal_node(e: &Expr) -> Option<bynk_ts::TsExpr> {
             scale,
             negated,
         } => decimal_lit(&format!("{}{coef}", sign(negated)), scale),
-        RefinableLiteral::Str(s) => str_node(s),
+        RefinableLiteral::Str(s) => str_lit(s),
     })
 }
 
@@ -919,10 +919,10 @@ fn expect_built(inner: &Expr, pre: &mut Pre, cx: &mut LowerCtx) -> bynk_ts::TsEx
             callee: Box::new(ident("__bynkExpect")),
             args: vec![
                 bynk_ts::TsExpr::Paren(Box::new(one(c))),
-                str_node(location.clone()),
+                str_lit(location.clone()),
                 num_lit(span_start.to_string()),
                 num_lit(span_end.to_string()),
-                str_node(src.clone()),
+                str_lit(src.clone()),
             ],
         }
     }
@@ -1065,7 +1065,7 @@ fn recorded_calls(cx: &LowerCtx, cap: &str, op: &str) -> bynk_ts::TsExpr {
         op: TsBinaryOp::NullishCoalescing,
         left: Box::new(TsExpr::Index {
             object: Box::new(member_node(obs, "log")),
-            index: Box::new(str_node(format!("{cap}.{op}"))),
+            index: Box::new(str_lit(format!("{cap}.{op}"))),
         }),
         right: Box::new(TsExpr::array(Vec::new())),
     }))
@@ -1337,7 +1337,7 @@ fn refinement_default(base: BaseType, refinement: Option<&Refinement>) -> Option
             if len < 1 {
                 len = 1;
             }
-            Some(str_node("x".repeat(len as usize)))
+            Some(str_lit("x".repeat(len as usize)))
         }
         BaseType::Bool => Some(bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Bool(true))),
         BaseType::Float => {
@@ -1454,7 +1454,7 @@ fn empty_bytes_node() -> bynk_ts::TsExpr {
 fn base_default_ts(base: BaseType) -> bynk_ts::TsExpr {
     match base {
         BaseType::Int => num_lit("0".to_string()),
-        BaseType::String => str_node("mock"),
+        BaseType::String => str_lit("mock"),
         BaseType::Bool => bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Bool(true)),
         BaseType::Float => num_lit("0".to_string()),
         BaseType::Duration | BaseType::Instant => num_lit("0".to_string()),
@@ -1501,7 +1501,7 @@ fn mock_value_of(
     };
     Some(match &*tys.get(ty) {
         Ty::Base(BaseType::Int) => num_lit("0".to_string()),
-        Ty::Base(BaseType::String) => str_node(""),
+        Ty::Base(BaseType::String) => str_lit(""),
         Ty::Base(BaseType::Bool) => bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Bool(true)),
         Ty::Base(BaseType::Float) => num_lit("0".to_string()),
         Ty::Base(BaseType::Decimal) => decimal_lit("0", 0),
@@ -2297,7 +2297,7 @@ fn emit_is_test_bindings(
                         let tag_test = bynk_ts::TsExpr::Binary {
                             op: bynk_ts::TsBinaryOp::StrictEq,
                             left: Box::new(member_node_of(recv.node(), "tag")),
-                            right: Box::new(str_node(variant.name.clone())),
+                            right: Box::new(str_lit(variant.name.clone())),
                         };
                         (Some(tag_test), pairs)
                     }
@@ -2780,7 +2780,7 @@ fn consumed_variant_literal(
         let c = args;
         let mut entries = vec![bynk_ts::TsObjectEntry::prop(
             "tag".to_string(),
-            str_node(tag),
+            str_lit(tag),
         )];
         entries.extend(
             props
@@ -2877,8 +2877,8 @@ fn lower_call(e: &Expr, name: &Ident, args: &[Expr], cx: &mut LowerCtx) -> Lower
             .map(|_| expect_location(cx, e.span.start))
             .or_else(|| cx.fault_location(e.span.start))
             .unwrap_or_else(|| format!("offset {}", e.span.start));
-        args_lowered.insert(0, str_node(*kind));
-        args_lowered.push(str_node(location));
+        args_lowered.insert(0, str_lit(*kind));
+        args_lowered.push(str_lit(location));
         return pre.finish(call_built(ident("__fault"), args_lowered));
     }
     // #3051: `TestConnection[F]()` — a case's recording handle for a websocket
@@ -6157,7 +6157,7 @@ fn minus(x: Int) -> Int { 5 - - -x }
             "tests/a.test.bynk:3:7",
             "expect a == \"\u{e9}\\n\" `x` ${y}",
         ] {
-            let node = str_node(raw);
+            let node = str_lit(raw);
             assert_eq!(
                 bynk_ts::print_expr(&node),
                 format!("\"{}\"", crate::emitter::escape_ts_string(raw))
