@@ -1177,6 +1177,18 @@ fn child_module_file(m: usize, seg: &str, files: &[(PathBuf, String)]) -> Option
         .find_map(|c| files.iter().position(|(p, _)| p == c))
 }
 
+/// `t` without a leading `pub`, `pub(crate)`, `pub(super)`, `pub(in path)` visibility.
+fn strip_visibility(t: &str) -> &str {
+    match t.strip_prefix("pub") {
+        Some(rest) if rest.starts_with(char::is_whitespace) => rest.trim_start(),
+        Some(rest) => match rest.strip_prefix('(') {
+            Some(r) => r.split_once(')').map_or(t, |(_, after)| after.trim_start()),
+            None => t,
+        },
+        None => t,
+    }
+}
+
 /// Every `#[cfg(test)] mod <ident> { ... }` block in `lines`, as inclusive
 /// `(start_line, end_line)` line-index ranges — every occurrence, not just a single
 /// trailing block. A file in this codebase can carry several test modules scattered
@@ -1196,8 +1208,10 @@ fn child_module_file(m: usize, seg: &str, files: &[(PathBuf, String)]) -> Option
 /// hundreds of lines. `brace_delta` skips characters inside Rust string/char literals
 /// and comments, so embedded fixture text can't be mistaken for real Rust braces.
 ///
-/// Only matches a brace-opening `mod` line — `#[cfg(test)] mod foo;` (an external-file
-/// declaration, not an inline scope) does not open a range.
+/// Only matches a brace-opening `mod` line, with an optional `pub`/`pub(…)` visibility
+/// (`#[cfg(test)] pub(crate) mod tests {`) — `#[cfg(test)] mod foo;` (an external-file
+/// declaration, not an inline scope) does not open a range. `#[cfg(all(test, …))]` is not
+/// recognised (one 840-line front-half module, `bynk-check/src/d1_sql.rs`).
 pub(crate) fn test_mod_ranges(lines: &[&str]) -> Vec<(usize, usize)> {
     let mut ranges = Vec::new();
     let mut i = 0;
@@ -1206,7 +1220,7 @@ pub(crate) fn test_mod_ranges(lines: &[&str]) -> Vec<(usize, usize)> {
             && let Some(off) = lines[i + 1..].iter().position(|l| !l.trim().is_empty())
         {
             let mod_line = i + 1 + off;
-            let t = lines[mod_line].trim();
+            let t = strip_visibility(lines[mod_line].trim());
             if t.starts_with("mod ") && t.ends_with('{') {
                 let mut depth = 0i32;
                 let mut state = BraceScanState::Normal;
@@ -7120,6 +7134,31 @@ mod idempotency_scoping_tests {
             reading.ends_with("back half: bynk-emit/src/a.rs 100"),
             "{reading}"
         );
+    }
+
+    /// A visibility prefix on the test module does not hide it (`pub(crate) mod tests {`),
+    /// but a `#[cfg(test)]` item that is not a module still opens no range.
+    #[test]
+    fn test_mod_ranges_accepts_a_visibility_prefix() {
+        let src = "\
+#[cfg(test)]
+pub(crate) mod tests {
+    fn x() {}
+}
+#[cfg(test)]
+pub mod y {
+}
+#[cfg(test)]
+pub(crate) fn helper() {
+}
+#[cfg(test)]
+pub(in crate::a) mod z {
+}
+#[cfg(test)]
+pub mod w;
+";
+        let lines: Vec<&str> = src.lines().collect();
+        assert_eq!(test_mod_ranges(&lines), vec![(1, 3), (5, 6), (11, 12)]);
     }
 
     /// The same fixture's `test_mod_ranges` shape, checked directly: two disjoint
