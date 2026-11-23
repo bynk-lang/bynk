@@ -28,7 +28,7 @@ Track slice T0.0 (#999); `ts_writes`/`ts_any` added by P7.0 (#1296); `verbatim_o
 | `emit_silent_fallbacks` | yes | 0 |
 | `emit_print_calls` | yes | 0 |
 | `import_prediction_fns` | yes | 0 |
-| `node_builder_defs` | yes | 68 |
+| `node_builder_defs` | yes | 0 |
 | `deploy_kind_accessors` | yes | 0 |
 | `env_protocol_literals` | yes | 2 |
 | `tool_spawn_sites` | yes | 10 (process control 8, self re-execution 2, other 0) |

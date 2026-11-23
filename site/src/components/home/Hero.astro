@@ -39,7 +39,10 @@ const actions = hero?.actions ?? [];
   <figure class="panel">
     <figcaption class="panel-head">
       <span class="file">greeter.bynk</span>
-      <a href={runHref} rel="noopener">Open in playground ↗</a>
+      <a href={runHref} rel="noopener">
+        Open in playground<span aria-hidden="true"> ↗</span>
+        <span class="sr-only">(opens the playground site)</span>
+      </a>
     </figcaption>
     <Code code={code} lang="bynk" />
     <p class="panel-foot">

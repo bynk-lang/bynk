@@ -116,6 +116,8 @@ export default defineConfig({
       // in the site's content names a registry code, so none can dangle.
       plugins: [
         bynkSiteTheme({
+          // The home page's footer carries the site map, outside <main>.
+          siteMap: ["index"],
           // The writing is CC BY 4.0, its code snippets MIT, and Bynk itself
           // MIT or Apache-2.0 (README, "Licence").
           licence: [
