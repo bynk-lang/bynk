@@ -76,7 +76,7 @@ pub(super) fn emit_test_deps(
     // The factory's name: `__makeTestDeps`, or `__makeIntegrationDeps`.
     name: &str,
     // #2050: whether the target's handlers emit, so their `deps` require
-    // `__eventsDispatch` ([`target_uses_emit`]).
+    // `__eventsDispatch` ([`target_emits_events`]).
     uses_emit: bool,
 ) -> TestDeps {
     let mut units: BTreeSet<String> = BTreeSet::new();
@@ -299,7 +299,7 @@ pub(super) fn emit_test_deps(
     // #1994/#2683: the execution context a `detach`-ing handler hands its promise to,
     // plus, on a virtual-time module, the harness's timers (`within` reads them).
     let virtual_time = module_is_virtual_time(target_name, target_kind, stubs, unit_tables);
-    if target_uses_send(target_name, target_kind, unit_tables) {
+    if target_hands_off_to_exec(target_name, target_kind, unit_tables) {
         let exec = call(ident("__bynkExec"), Vec::new());
         entries.push((
             "__exec".to_string(),

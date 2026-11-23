@@ -112,7 +112,7 @@ mod cmp;
 mod codec;
 pub mod ctx;
 mod default_value;
-mod internal_fault;
+pub(crate) mod internal_fault;
 mod lower;
 pub(crate) mod lower_call;
 pub(crate) mod lower_ctx;

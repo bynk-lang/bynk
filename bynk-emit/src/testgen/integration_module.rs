@@ -304,7 +304,7 @@ pub(super) fn emit_integration_module(
     // L7 (#2414): so is one with an `EdgeCache` instance, which purges
     // through that context's `cache` double.
     let sends = |p: &String| {
-        target_uses_send(p, UnitKind::Context, unit_tables)
+        target_hands_off_to_exec(p, UnitKind::Context, unit_tables)
             || unit_tables
                 .get(p)
                 .is_some_and(|t| t.derived.values().any(|d| d.is_edge_cache()))
@@ -313,7 +313,7 @@ pub(super) fn emit_integration_module(
         stmts.push(TestRuntimeModule::Send.splice());
     }
     // #2138: `run.id`, for a module whose cases read it.
-    if cases.iter().any(|c| block_uses_run_id(&c.case.body)) {
+    if cases.iter().any(|c| case_reads_run_id(&c.case.body)) {
         stmts.push(run_id_stmt(remote.is_some()));
     }
     // #2137: the harness clock every participant's `Clock` reads.

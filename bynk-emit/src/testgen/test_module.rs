@@ -59,7 +59,7 @@ pub(super) fn emit_test_module(
     schema_versions: &HashMap<String, i64>,
     // #2052: the target's own events services' shapes.
     event_shapes: Option<&HashMap<String, bynk_model::EventSubscriberShape>>,
-    // #2050: whether the target's handlers emit ([`target_uses_emit`]).
+    // #2050: whether the target's handlers emit ([`target_emits_events`]).
     uses_emit: bool,
     // P4b (#2608): each `D1` database's migrations.
     d1_migrations: &D1Migrations,
@@ -144,7 +144,7 @@ pub(super) fn emit_test_module(
 
     // The deps factory, built here for the units its providers name (#1863),
     // which are imported with the consumed contexts below.
-    let uses_send = target_uses_send(target_name, target_kind, unit_tables);
+    let uses_send = target_hands_off_to_exec(target_name, target_kind, unit_tables);
     // #1975: an adapter suite tests its binding, so its factory builds the
     // binding for real; a context's `integration` cases get a second factory
     // that builds each consumed adapter's binding, when that differs.
@@ -350,13 +350,13 @@ pub(super) fn emit_test_module(
     let uses_advance = indices.iter().any(|&i| {
         parsed[i]
             .test()
-            .is_some_and(|t| t.cases.iter().any(|c| block_uses_advance(&c.body)))
+            .is_some_and(|t| t.cases.iter().any(|c| case_advances_clock(&c.body)))
     });
     // #2138: `run.id`, for a module whose cases read it.
     if indices.iter().any(|&i| {
         parsed[i]
             .test()
-            .is_some_and(|t| t.cases.iter().any(|c| block_uses_run_id(&c.body)))
+            .is_some_and(|t| t.cases.iter().any(|c| case_reads_run_id(&c.body)))
     }) {
         stmts.push(run_id_stmt(false));
     }
@@ -429,7 +429,7 @@ pub(super) fn emit_test_module(
     let uses_observation = indices.iter().any(|&i| {
         parsed[i]
             .test()
-            .is_some_and(|t| t.cases.iter().any(|c| block_uses_observation(&c.body)))
+            .is_some_and(|t| t.cases.iter().any(|c| case_observes(&c.body)))
     });
     if uses_observation {
         let record_types = observation_call_record_types(target_name, unit_tables, unit_uses);
@@ -1206,8 +1206,9 @@ pub(super) fn event_delivery_helpers(
     out
 }
 
-/// #2138: whether a case body reads `run.id` anywhere.
-pub(super) fn block_uses_run_id(block: &Block) -> bool {
+/// #2138: whether a case body reads `run.id` anywhere — the signal to emit the module's
+/// `__bynkRunId` constant. It decides emission, not an import (1B.5e, #4054 Decision G).
+pub(super) fn case_reads_run_id(block: &Block) -> bool {
     let mut found = false;
     let mut check = |e: &Expr| {
         if let ExprKind::FieldAccess { receiver, field } = &e.kind
@@ -1228,8 +1229,10 @@ pub(super) fn block_uses_run_id(block: &Block) -> bool {
     found
 }
 
-/// #2137: whether a case body (or a block nested in it) holds an `advance`.
-pub(super) fn block_uses_advance(b: &Block) -> bool {
+/// #2137: whether a case body (or a block nested in it) holds an `advance` — the signal to
+/// emit the harness clock and the `Clock` double that reads it. It decides emission, not an
+/// import (1B.5e, #4054 Decision G).
+pub(super) fn case_advances_clock(b: &Block) -> bool {
     if b.statements
         .iter()
         .any(|s| matches!(s, bynk_syntax::ast::Statement::Advance(_)))
@@ -1245,14 +1248,14 @@ pub(super) fn block_uses_advance(b: &Block) -> bool {
     for e in exprs {
         bynk_model::walk_exprs(e, &mut |x: &Expr| {
             found |= match &x.kind {
-                ExprKind::Block(inner) => block_uses_advance(inner),
+                ExprKind::Block(inner) => case_advances_clock(inner),
                 ExprKind::If {
                     then_block,
                     else_block,
                     ..
-                } => block_uses_advance(then_block) || block_uses_advance(else_block),
+                } => case_advances_clock(then_block) || case_advances_clock(else_block),
                 ExprKind::Match { arms, .. } => arms.iter().any(|a| {
-                    matches!(&a.body, bynk_syntax::ast::MatchBody::Block(b) if block_uses_advance(b))
+                    matches!(&a.body, bynk_syntax::ast::MatchBody::Block(b) if case_advances_clock(b))
                 }),
                 ExprKind::IntLit { .. } | ExprKind::FloatLit { .. } | ExprKind::DecimalLit { .. } | ExprKind::DurationLit { .. } | ExprKind::StrLit(..) | ExprKind::InterpStr(..) | ExprKind::BoolLit(..) | ExprKind::Ident(..) | ExprKind::Call { .. } | ExprKind::Lambda(..) | ExprKind::BinOp(..) | ExprKind::UnaryOp(..) | ExprKind::Paren(..) | ExprKind::Ok(..) | ExprKind::Err(..) | ExprKind::Question(..) | ExprKind::RecordConstruction { .. } | ExprKind::FieldAccess { .. } | ExprKind::MethodCall { .. } | ExprKind::Is { .. } | ExprKind::Some(..) | ExprKind::None | ExprKind::UnitLit | ExprKind::RecordSpread { .. } | ExprKind::EffectPure(..) | ExprKind::Expect(..) | ExprKind::Val { .. } | ExprKind::Wire(..) | ExprKind::ListLit(..) | ExprKind::Observation(..) | ExprKind::Faults(..) | ExprKind::Trace { .. } => false,
             };
@@ -1265,7 +1268,7 @@ pub(super) fn block_uses_advance(b: &Block) -> bool {
 /// execution context (`detach`, `within` or `race`, directly or through a function it
 /// calls, #2719), so its handlers' `deps` require `__exec` — the same gate the Worker entry and
 /// `compose` thread the request's execution context on.
-pub(super) fn target_uses_send(
+pub(super) fn target_hands_off_to_exec(
     target_name: &str,
     target_kind: UnitKind,
     unit_tables: &HashMap<String, UnitTable>,
@@ -1286,8 +1289,8 @@ pub(super) fn target_uses_send(
 /// `e.within(d)` or `a.race(b)`, directly or through a function it calls
 /// (#2719), so its `deps` carry an execution context whose timers the harness
 /// supplies. A case body that calls such a function directly is read as the
-/// same (see [`target_uses_send`]).
-pub(super) fn target_uses_within(
+/// same (see [`target_hands_off_to_exec`]).
+pub(super) fn target_has_timers(
     target_name: &str,
     target_kind: UnitKind,
     unit_tables: &HashMap<String, UnitTable>,
@@ -1317,7 +1320,7 @@ pub(super) fn module_is_virtual_time(
     stubs: &HashMap<String, ResolvedStub>,
     unit_tables: &HashMap<String, UnitTable>,
 ) -> bool {
-    target_uses_within(target_name, target_kind, unit_tables)
+    target_has_timers(target_name, target_kind, unit_tables)
         || stubs
             .values()
             .any(|rp| rp.clauses.iter().any(stub_takes_time))
@@ -1327,7 +1330,7 @@ pub(super) fn module_is_virtual_time(
 /// — that emits through the first-party `Events`, so the `deps` its handlers
 /// run on require `__eventsDispatch`: the same gate (`unit_table_uses_emit`)
 /// the composition root builds its own dispatch closure on.
-pub(super) fn target_uses_emit(
+pub(super) fn target_emits_events(
     target_name: &str,
     target_kind: UnitKind,
     unit_tables: &HashMap<String, UnitTable>,

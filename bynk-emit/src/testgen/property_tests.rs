@@ -14,12 +14,15 @@ use bynk_syntax::ast::{
 use bynk_ts::{TsArrowBody, TsBindingName, TsDecl, TsExpr, TsLit, TsParam, TsStmt, TsType};
 use std::sync::Arc;
 
+use crate::emitter::internal_fault::FaultSite;
+
 /// One generator descriptor per binding of a `property`, over the target's
 /// privileged type view `resolved` (so refined and opaque constructors resolve).
 fn binding_gen_entries(
     prop: &PropertyDecl,
     resolved: Option<&ResolvedCommons>,
     tys: &Arc<Types>,
+    site: FaultSite<'_>,
 ) -> Vec<TsExpr> {
     prop.forall
         .bindings
@@ -27,10 +30,13 @@ fn binding_gen_entries(
         .map(|b| {
             let bg = resolved
                 .and_then(|r| checker::resolve_type_ref(&b.type_ref, &r.types, tys).map(|t| (t, r)))
-                .map(|(t, r)| binding_gen(t, &r.types, tys))
-                .unwrap_or(BindingGen {
+                .map(|(t, r)| binding_gen(t, &r.types, tys, site))
+                .unwrap_or_else(|| BindingGen {
                     boundaries: Vec::new(),
-                    gen_ts: ident("undefined"),
+                    gen_ts: site.missing_fact(format!(
+                        "a resolved type for the property binding `{}`",
+                        b.name.name
+                    )),
                     shrink: TsExpr::array(vec![]),
                 });
             gen_descriptor_entry(Some(str_lit(b.name.name.clone())), &bg)
@@ -125,7 +131,15 @@ pub(super) fn emit_test_property_function(
     // itself, not a same-line text change, and a wrong guess here risks a
     // real `tsc --strict` failure specifically on the shrink helpers' own
     // typed parameters.
-    let gens = binding_gen_entries(prop, resolved.as_ref(), tys);
+    let gens = binding_gen_entries(
+        prop,
+        resolved.as_ref(),
+        tys,
+        FaultSite {
+            sink: runtime_use,
+            span: prop.span,
+        },
+    );
     let gens_stmt = TsStmt::const_stmt(
         TsBindingName::Ident("__gens".to_string()),
         None,
@@ -298,7 +312,7 @@ pub(super) fn emit_test_property_function(
         target_service_handler_kinds(unit_tables.get(target_name)),
         target_sum_handlers(unit_tables.get(target_name)),
         test_agents,
-        target_uses_send(target_name, target_kind, unit_tables),
+        target_hands_off_to_exec(target_name, target_kind, unit_tables),
         harness_bound,
         source,
         rel_path,
@@ -553,15 +567,22 @@ pub(super) fn emit_test_history_property_function(
                 let tag = test_suites::history_variant_name(&h.method_name.as_ref().unwrap().name);
                 // P7.2: deferred — same reason as `__gens`'s own construction
                 // above (`Int`'s internal `bigint` representation).
+                let site = FaultSite {
+                    sink: runtime_use,
+                    span: prop.span,
+                };
                 let gens: Vec<TsExpr> = h
                     .params
                     .iter()
                     .map(|p| {
                         let bg = checker::resolve_type_ref(&p.type_ref, &resolved.types, tys)
-                            .map(|t| binding_gen(t, &resolved.types, tys))
-                            .unwrap_or(BindingGen {
+                            .map(|t| binding_gen(t, &resolved.types, tys, site))
+                            .unwrap_or_else(|| BindingGen {
                                 boundaries: Vec::new(),
-                                gen_ts: ident("undefined"),
+                                gen_ts: site.missing_fact(format!(
+                                    "a resolved type for the history parameter `{}`",
+                                    p.name.name
+                                )),
                                 shrink: TsExpr::array(vec![]),
                             });
                         gen_descriptor_entry(None, &bg)
@@ -639,7 +660,7 @@ pub(super) fn emit_test_history_property_function(
         target_service_handler_kinds(unit_tables.get(target_name)),
         target_sum_handlers(unit_tables.get(target_name)),
         test_agents,
-        target_uses_send(target_name, target_kind, unit_tables),
+        target_hands_off_to_exec(target_name, target_kind, unit_tables),
         harness_bound,
         source,
         rel_path,
@@ -740,15 +761,22 @@ pub(super) fn emit_contract_attack_function(
     // itself, not a same-line text change, and a wrong guess here risks a
     // real `tsc --strict` failure specifically on the shrink helpers' own
     // typed parameters.
+    let site = FaultSite {
+        sink: runtime_use,
+        span: f.span,
+    };
     let gens: Vec<TsExpr> = f
         .params
         .iter()
         .map(|p| {
             let bg = checker::resolve_type_ref(&p.type_ref, &resolved.types, tys)
-                .map(|t| binding_gen(t, &resolved.types, tys))
-                .unwrap_or(BindingGen {
+                .map(|t| binding_gen(t, &resolved.types, tys, site))
+                .unwrap_or_else(|| BindingGen {
                     boundaries: Vec::new(),
-                    gen_ts: ident("undefined"),
+                    gen_ts: site.missing_fact(format!(
+                        "a resolved type for the contract parameter `{}`",
+                        p.name.name
+                    )),
                     shrink: TsExpr::array(vec![]),
                 });
             gen_descriptor_entry(Some(str_lit(p.name.name.clone())), &bg)

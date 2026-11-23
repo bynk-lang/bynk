@@ -575,7 +575,7 @@ pub fn discovery_manifest(tests: &[RunnableTest]) -> Vec<DiscoveredSuite> {
 /// Whether a `case` body uses an observation (`Cap.op called …`) or
 /// `trace(Cap.op)` anywhere (v0.117) — the signal to wrap `deps` with the
 /// recording proxy. Bodies that don't observe emit unchanged.
-pub(super) fn block_uses_observation(block: &Block) -> bool {
+pub(super) fn case_observes(block: &Block) -> bool {
     let mut found = false;
     let mut check = |e: &Expr| {
         if matches!(e.kind, ExprKind::Observation(_) | ExprKind::Trace { .. }) {

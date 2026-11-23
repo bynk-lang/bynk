@@ -930,7 +930,7 @@ pub(super) fn stub_overlay(rp: &ResolvedStub, ty: &str, base: Option<TsExpr>) ->
         expr: Box::new(call(
             ident("__bynkOverlay"),
             vec![
-                base.unwrap_or_else(|| ident("undefined")),
+                base.unwrap_or_else(absent),
                 TsExpr::New {
                     callee: Box::new(ident(format!("__Stub_{cap}"))),
                     args,

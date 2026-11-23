@@ -1,0 +1,11 @@
+suite demo.d {
+  // 1B.5e (#4054, Decision G): a compound type has no generator — the property
+  // draw has an arm per generable type and nothing to draw a `List` from. The
+  // checker refuses the binding, so the draw's remaining arms are internal
+  // errors rather than a silent `undefined`. This fixture pins that refusal.
+  property "a list cannot be generated" {
+    for all xs: List[Count] {
+      expect xs.length() >= 0
+    }
+  }
+}
