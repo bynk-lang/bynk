@@ -3212,6 +3212,14 @@ impl LanguageServer for Backend {
                 files: files.as_deref(),
             })
         });
+        // #3879: a `Queue` instance's hover names the context that consumes its queue.
+        let content = content.map(|value| {
+            bynk_ide::queue_delivery::with_consumer_note(
+                value,
+                doc.map_or("", |(text, _)| text),
+                files.as_deref(),
+            )
+        });
         // #2470: a refined type's hover gains its predicates in words and,
         // for a client that runs the command, a "Try values…" link.
         let content = match content {

@@ -106,17 +106,6 @@ pub struct HoverInput<'a> {
 /// The rung order is the contract; see the module doc. Each rung is tried in
 /// turn and the first `Some` wins.
 pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
-    let content = hover_content_inner(input)?;
-    // #3879: a `Queue` instance says which context consumes its queue.
-    let doc_text = input.doc.map_or("", |(text, _)| text);
-    Some(crate::queue_delivery::with_consumer_note(
-        content,
-        doc_text,
-        input.files,
-    ))
-}
-
-fn hover_content_inner(input: &HoverInput<'_>) -> Option<String> {
     if let Some(a) = &input.analysis {
         let tys = a.tys;
         // 1. v0.25: binding-index path — a resolved symbol reference, described
