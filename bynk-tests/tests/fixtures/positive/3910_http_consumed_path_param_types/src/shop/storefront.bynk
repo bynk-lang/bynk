@@ -1,0 +1,22 @@
+context shop.storefront
+
+consumes shop.catalogue
+
+// #3910: path parameters typed by what a consumed context owns (an `Int`, an enum and a
+// `Decimal`), imported type-only: the entry decodes them with this context's own codecs.
+service api from http {
+  on GET("/orders/:id") (id: OrderNo) -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("order \(id)")
+  }
+
+  on GET("/modes/:m") (m: Mode) -> Effect[HttpResult[String]] by v: Visitor {
+    match m {
+      Fast => Ok("fast")
+      Slow => Ok("slow")
+    }
+  }
+
+  on GET("/prices/:p") (p: Price) -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("price \(p)")
+  }
+}

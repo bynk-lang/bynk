@@ -73,6 +73,49 @@ function __bynkShow(v: unknown): string {
   } catch { return String(v); }
 }
 
+// #4229: a `Duration` as the largest unit literal that holds it exactly (`3.seconds`,
+// `1.hour`, `1500.milliseconds`), an integral count only; anything else prints as the number.
+function __bynkShowDuration(ms: number): string {
+  if (!Number.isInteger(ms)) return String(ms);
+  const units: Array<[number, string, string]> = [
+    [86400000, "day", "days"],
+    [3600000, "hour", "hours"],
+    [60000, "minute", "minutes"],
+    [1000, "second", "seconds"],
+  ];
+  if (ms === 0) return "0.seconds";
+  const abs = Math.abs(ms);
+  for (const [size, one, many] of units) {
+    if (abs % size === 0) {
+      const n = ms / size;
+      return `${n}.${Math.abs(n) === 1 ? one : many}`;
+    }
+  }
+  return `${ms}.${abs === 1 ? "millisecond" : "milliseconds"}`;
+}
+function __bynkShowFields(v: any, shapes: Record<string, any>): string {
+  return "{" + Object.keys(v).map((k) => JSON.stringify(k) + ":" + (shapes[k] != null ? __bynkShowTyped(v[k], shapes[k]) : __bynkShow(v[k]))).join(",") + "}";
+}
+// A value printed beside the shape of the `Duration`s and `Instant`s in its type
+// (`bynk-emit/src/testgen/show_shape.rs`): `"D"`, `"I"`, `["l", s]`, `["o", s]`,
+// `["res", ok, err]`, `["r", { f: s }]`, `["s", { Variant: { f: s } }]`.
+function __bynkShowTyped(v: unknown, shape: any): string {
+  try {
+    if (shape === "D" && typeof v === "number") return __bynkShowDuration(v);
+    if (shape === "I" && typeof v === "number") return `Instant.fromEpochMillis(${v})`;
+    if (Array.isArray(shape)) {
+      const obj = v as any;
+      switch (shape[0]) {
+        case "l": if (Array.isArray(v)) return "[" + v.map((e) => __bynkShowTyped(e, shape[1])).join(",") + "]"; break;
+        case "o": if (obj !== null && typeof obj === "object") return __bynkShowFields(obj, { value: shape[1] }); break;
+        case "res": if (obj !== null && typeof obj === "object") return __bynkShowFields(obj, { value: shape[1], error: shape[2] }); break;
+        case "r": if (obj !== null && typeof obj === "object") return __bynkShowFields(obj, shape[1]); break;
+        case "s": if (obj !== null && typeof obj === "object") return __bynkShowFields(obj, shape[1][obj.tag] ?? {}); break;
+      }
+    }
+  } catch { /* fall through to the type-blind printer */ }
+  return __bynkShow(v);
+}
 
 let __bynkClockNow = 0;
 function __bynkAdvanceClock(by: number): void {
@@ -135,12 +178,12 @@ async function __bynkScheduled<T>(cron: string, run: (exec: __BynkJobExec) => Pr
 }
 type __BynkQueueMessage = { readonly id: string; readonly timestamp: Date; readonly attempts: number; readonly body: unknown; ack(): void; retry(): void };
 type __BynkQueueBatch = { readonly queue: string; readonly messages: ReadonlyArray<__BynkQueueMessage>; ackAll(): void; retryAll(): void };
-async function __bynkDeliver<T>(queue: string, body: unknown, run: (batch: __BynkQueueBatch, exec: __BynkJobExec) => Promise<void>): Promise<T> {
+async function __bynkDeliver<T>(queue: string, body: unknown, delivery: { attempts: number; sentAt: number } | undefined, run: (batch: __BynkQueueBatch, exec: __BynkJobExec) => Promise<void>): Promise<T> {
   const wire: unknown = globalThis.JSON.parse(globalThis.JSON.stringify(body ?? null));
   let verdict: { tag: "Ack" } | { tag: "Retry"; reason: string } | undefined;
   let reason = "";
   const message: __BynkQueueMessage = {
-    id: "bynk-test-message-1", timestamp: new globalThis.Date(0), attempts: 1, body: wire,
+    id: "bynk-test-message-1", timestamp: new globalThis.Date(delivery?.sentAt ?? 0), attempts: delivery?.attempts ?? 1, body: wire,
     ack(): void { verdict ??= { tag: "Ack" }; },
     retry(): void { verdict ??= { tag: "Retry", reason }; },
   };
@@ -167,7 +210,7 @@ async function __bynkDeliver<T>(queue: string, body: unknown, run: (batch: __Byn
 }
 async function __sysdrive_message_inbox(job: any) {
   const __h = __makeHarness();
-  return __bynkDeliver<Awaited<ReturnType<typeof __ns_ops_inbox.inbox.queue_inbox_0>>>("jobs", __ns_ops_inbox.__serialise_Job(job), (batch, exec) => worker___ns_ops_inbox.queue(batch, __h.env___ns_ops_inbox));
+  return __bynkDeliver<Awaited<ReturnType<typeof __ns_ops_inbox.inbox.queue_inbox_0>>>("jobs", __ns_ops_inbox.__serialise_Job(job), undefined, (batch, exec) => worker___ns_ops_inbox.queue(batch, __h.env___ns_ops_inbox));
 }
 
 async function test_a_job_is_acked_through_the_Worker_s_queue_entry() {

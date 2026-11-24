@@ -31,6 +31,24 @@ A `:name` segment in the route becomes a parameter of the same name:
   }
 ```
 
+A parameter is not limited to text. It takes the types a typed query field
+takes (`Int`, `Bool`, `Decimal`, an enum, or a refinement over one of those), so
+an order number can be a positive `Int`, read and checked before the handler runs:
+
+```bynk,fragment
+type OrderNo = Int where Positive
+```
+
+```bynk,fragment
+  on GET("/orders/:id") (id: OrderNo) -> Effect[HttpResult[String]] by Visitor {
+    Ok("order \(id)")
+  }
+```
+
+`/orders/42` reaches the handler with `id` bound to `42`. `/orders/abc` is a `400`
+`StructuralMismatch` and `/orders/0` a `400` `RefinementViolation`, both at
+`path.id`, so the handler never re-checks. The route matched, so neither is a `404`.
+
 ## Accept a date in a URL
 
 A path parameter of a refined type is checked before the handler runs.

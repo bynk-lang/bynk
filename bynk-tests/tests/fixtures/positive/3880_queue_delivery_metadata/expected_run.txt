@@ -1,0 +1,2 @@
+# #3880: the handler takes its delivery metadata, at unit and system.
+passed=8 failed=0

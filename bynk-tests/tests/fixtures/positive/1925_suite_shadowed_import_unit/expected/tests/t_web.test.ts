@@ -72,6 +72,49 @@ function __bynkShow(v: unknown): string {
   } catch { return String(v); }
 }
 
+// #4229: a `Duration` as the largest unit literal that holds it exactly (`3.seconds`,
+// `1.hour`, `1500.milliseconds`), an integral count only; anything else prints as the number.
+function __bynkShowDuration(ms: number): string {
+  if (!Number.isInteger(ms)) return String(ms);
+  const units: Array<[number, string, string]> = [
+    [86400000, "day", "days"],
+    [3600000, "hour", "hours"],
+    [60000, "minute", "minutes"],
+    [1000, "second", "seconds"],
+  ];
+  if (ms === 0) return "0.seconds";
+  const abs = Math.abs(ms);
+  for (const [size, one, many] of units) {
+    if (abs % size === 0) {
+      const n = ms / size;
+      return `${n}.${Math.abs(n) === 1 ? one : many}`;
+    }
+  }
+  return `${ms}.${abs === 1 ? "millisecond" : "milliseconds"}`;
+}
+function __bynkShowFields(v: any, shapes: Record<string, any>): string {
+  return "{" + Object.keys(v).map((k) => JSON.stringify(k) + ":" + (shapes[k] != null ? __bynkShowTyped(v[k], shapes[k]) : __bynkShow(v[k]))).join(",") + "}";
+}
+// A value printed beside the shape of the `Duration`s and `Instant`s in its type
+// (`bynk-emit/src/testgen/show_shape.rs`): `"D"`, `"I"`, `["l", s]`, `["o", s]`,
+// `["res", ok, err]`, `["r", { f: s }]`, `["s", { Variant: { f: s } }]`.
+function __bynkShowTyped(v: unknown, shape: any): string {
+  try {
+    if (shape === "D" && typeof v === "number") return __bynkShowDuration(v);
+    if (shape === "I" && typeof v === "number") return `Instant.fromEpochMillis(${v})`;
+    if (Array.isArray(shape)) {
+      const obj = v as any;
+      switch (shape[0]) {
+        case "l": if (Array.isArray(v)) return "[" + v.map((e) => __bynkShowTyped(e, shape[1])).join(",") + "]"; break;
+        case "o": if (obj !== null && typeof obj === "object") return __bynkShowFields(obj, { value: shape[1] }); break;
+        case "res": if (obj !== null && typeof obj === "object") return __bynkShowFields(obj, { value: shape[1], error: shape[2] }); break;
+        case "r": if (obj !== null && typeof obj === "object") return __bynkShowFields(obj, shape[1]); break;
+        case "s": if (obj !== null && typeof obj === "object") return __bynkShowFields(obj, shape[1][obj.tag] ?? {}); break;
+      }
+    }
+  } catch { /* fall through to the type-blind printer */ }
+  return __bynkShow(v);
+}
 
 const __bynkAssetFiles: Record<string, { readonly body: string; readonly contentType: string }> = {
   "/_assets/logo.fbd986be9cdd659c.svg": { body: "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciLz4K", contentType: "image/svg+xml" },

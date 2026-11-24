@@ -510,7 +510,8 @@ suite shop.inventory as system {
   A cron handler that faults fails the case, as it does at `unit`. A handler that
   returns `Err` is reported to the platform by the entry; the double records that
   report without counting it, since the case already reads the `Err` as its result.
-- **`q.message(m)`** serialises `m` as the producer does, sends it through a JSON
+- **`q.message(m)`** (or `q.message(m, QueueDelivery { attempts: 4, sentAt: t })` when the
+  handler declares a `QueueDelivery`) serialises `m` as the producer does, sends it through a JSON
   round trip, and calls `queue` with a one-message batch. A message whose type
   doesn't survive the round trip fails as it would on the platform. The batch
   records whether the consumer called `ack()` or `retry()`, and the address yields
@@ -848,7 +849,11 @@ The value is shown in the runtime's own tagged form (`{"tag":"Err","error":"…"
 the same printer a comparison failure uses, and only when the claim fails. A subject
 that is not plain data (a function, a stream, a held connection)
 shows its type instead (`r was an Option[Stream[Int]]`). A value of a redacted type
-(`SigningKey`, `VerifyKey`, `TokenClaims`) shows `<redacted>`. The message cuts a long
+(`SigningKey`, `VerifyKey`, `TokenClaims`) shows `<redacted>`. A `Duration` or `Instant` inside the
+value prints as a Bynk value (`3.seconds`, `Instant.fromEpochMillis(0)`), as does a
+counterexample of a failing `for all` over one, whether it sits directly in the type or in a
+list, `Option`, `Result`, record or sum; inside a `Map` or `Set`, or deeper than six named
+levels, it prints as its millisecond count. The message cuts a long
 value at 2,000 characters and says so; `--format json` carries the whole value as
 `actual` ([Machine-readable output](#machine-readable-output---format-json)). A subject that is a
 call, or any other expression, reports no value: bind it first (`let r = f(x)`), then

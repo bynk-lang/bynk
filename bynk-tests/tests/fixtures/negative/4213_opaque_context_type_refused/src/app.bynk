@@ -1,0 +1,7 @@
+context app
+
+consumes shapes { Port }
+
+fn port(n: Int) -> Result[Port, ValidationError] {
+  Port.of(n)
+}

@@ -1854,7 +1854,9 @@ unique, MUST NOT use the reserved `/_bynk/` prefix
 (`bynk.http.invalid_path`, `bynk.http.duplicate_route`, `bynk.http.reserved_prefix`),
 MUST NOT contain `*`, `{` or `}` in any segment, which are reserved for a future
 route form (`bynk.http.reserved_route_syntax`),
-and each `:name` segment MUST bind to a string-constructible parameter
+and each `:name` segment MUST bind to a parameter of a type a typed `query` field takes, less
+`Option` and `List` (#3910): a `String`, `Int`, `Bool` or `Decimal`, an enum, or a refined or
+opaque type over one of those
 (`bynk.http.unbound_path_param`, `bynk.http.path_param_not_stringy`,
 `bynk.http.extra_param`); `GET` and `DELETE` MUST NOT take a `body`
 (`bynk.http.body_on_get_or_delete`). A parameter named `query` that no `:query`
@@ -1884,7 +1886,8 @@ schedule is (`bynk.cron.invalid_schedule` otherwise), and duplicate detection an
 trigger table read it. A cron handler MUST take at most two parameters, at most one `Instant` (the
 scheduled time) and at most one `CronSchedule` (the schedule that fired the run), in either order, a valid schedule (`Cron`: Cloudflare's five-field syntax, single-spaced), and return `Effect[Result[(), E]]`
 (the `bynk.cron.*` codes); an `on message` handler MUST take exactly one `message`
-parameter, a Cloudflare-valid queue name, and the same return shape (the `bynk.queue.*`
+parameter (plus, #3880, at most one `QueueDelivery` of `bynk.cloudflare`, in either order, which receives
+the platform's attempt count and send time), a Cloudflare-valid queue name, and the same return shape (the `bynk.queue.*`
 codes). A `from queue` service MAY carry one `delivery { }` section (#3877), whose keys are the
 closed set `retries` (0 to 100), `retryDelay` (a `Duration` of whole seconds, at most 24 hours),
 `deadLetter` (a queue name, or `None`), `batchSize` (1 to 100), `batchWait` (a `Duration` of whole
@@ -2531,18 +2534,18 @@ never a context (`bynk.adapter.consumes_context`).
 or with conflicting visibility, and an exported capability MUST have a provider
 (the `bynk.exports.*` codes). A value crossing a boundary MUST be structurally
 compatible with the receiving side ([§6.5](/reference/spec/type-system/#65-type-compatibility--boundaries),
-`bynk.boundary.structural_mismatch`); outside its owning context, a
-context-owned type MUST NOT be built through its constructors (`.of`,
-`.unsafe`, a variant) and an opaque export MUST NOT be built with record syntax
-or inspected (`bynk.context.external_construction`,
-`bynk.context.opaque_inspection`), nor decoded from JSON
-(`bynk.context.external_decode`); a field read on a value of an opaque export is
-an inspection, however the value was bound. A transparent record's fields are
-shared, so a consumer MAY build one with record syntax. A type an **adapter**
+`bynk.boundary.structural_mismatch`); outside its owning context, an
+`exports opaque` type, and a type declared `opaque` however it is exported,
+MUST NOT be built through its constructors (`.of`, a
+variant) or with record syntax, inspected
+(`bynk.context.external_construction`, `bynk.context.opaque_inspection`) or
+decoded from JSON (`bynk.context.external_decode`), and `.unsafe` MUST NOT be
+called on any type from outside; a field read on a value of an opaque export is
+an inspection, however the value was bound. A type a context or an **adapter**
 exports `transparent` is constructible by a consumer in every ordinary form —
-`.of` on a refined type, a variant of a sum, record syntax — because an adapter's
-values are linked into each consumer (`.unsafe` and an opaque export stay the
-owner's). A consumer MAY read the fields of a value whose type the
+`.of` on a refined type, a variant of a sum, record syntax — and under the
+Workers target the consumer builds a context's own with its own copy of the
+guards. A consumer MAY read the fields of a value whose type the
 providing context declares but does not export; the read is checked against
 that declaration ([§6.5](/reference/spec/type-system/#65-type-compatibility--boundaries)). These rules hold in every body — functions, service and agent handlers,
 and provider operations.

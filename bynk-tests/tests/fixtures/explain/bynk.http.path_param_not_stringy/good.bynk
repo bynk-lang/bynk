@@ -1,9 +1,9 @@
 context api
 
-type ItemId = String where Matches("^[0-9]+$")
+type ItemNo = Int where Positive
 
 service api from http {
-    on GET("/items/:id") (id: ItemId) -> Effect[HttpResult[String]] by v: Visitor {
+    on GET("/items/:id") (id: ItemNo) -> Effect[HttpResult[String]] by v: Visitor {
         Ok("x")
     }
 }

@@ -1,0 +1,3 @@
+commons shared.order
+
+type Ordering = enum { Less, Equal, Greater }

@@ -955,6 +955,9 @@ pub(super) struct BindingGen {
     pub(super) boundaries: Vec<TsExpr>,
     pub(super) gen_ts: TsExpr,
     pub(super) shrink: TsExpr,
+    /// #4229: where a `Duration` or `Instant` sits in the type, for the printer. `None` when the
+    /// type holds neither (the type-blind printer is then enough).
+    pub(super) show_shape: Option<TsExpr>,
 }
 
 /// Build the generator descriptor for a binding whose resolved type is `ty`.
@@ -1170,6 +1173,7 @@ pub(super) fn binding_gen(
         boundaries,
         gen_ts,
         shrink,
+        show_shape: super::show_shape::show_shape(ty, types, tys),
     }
 }
 
@@ -1229,10 +1233,11 @@ pub(super) fn gen_descriptor_entry(name: Option<TsExpr>, bg: &BindingGen) -> TsE
             is_async: false,
             generics: Vec::new(),
             return_type: None,
-            body: Box::new(TsArrowBody::Expr(Box::new(call(
-                ident("__bynkShow"),
-                vec![ident("v")],
-            )))),
+            // #4229: a type holding a `Duration` or `Instant` prints through its shape.
+            body: Box::new(TsArrowBody::Expr(Box::new(match &bg.show_shape {
+                Some(shape) => call(ident("__bynkShowTyped"), vec![ident("v"), shape.clone()]),
+                None => call(ident("__bynkShow"), vec![ident("v")]),
+            }))),
         },
     ));
     TsExpr::object(entries)

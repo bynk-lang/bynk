@@ -1584,12 +1584,12 @@
     "summary": "A Worker would declare two bindings with the same name, such as an agent `Kv` and the `bynk.cloudflare` KV namespace (both `KV`)."
   },
   {
-    "blurb": "A context that `consumes` another may hold and pass on the other's types, but may not build one. (An adapter's `transparent` types, such as `bynk.cloudflare`'s `KvTtl`, are the exception: `.of`, a variant and a record literal are open to a consumer.) A refined or opaque type can promise an invariant, a `Matches` pattern or a smart constructor, and that holds only if every value is made by the owner; `.of`, `.unsafe` and a variant constructor are refused from outside, as is the record syntax of an opaque type. Ask the owner for the value instead: a service that returns it, or takes the plain input and does the check. `bynk.context.opaque_inspection` is the other side, looking inside such a value.",
+    "blurb": "A context that `consumes` another may hold and pass on the other's types, but may not build an opaque one. (A `transparent` export, whether a context's or an adapter's, such as `bynk.cloudflare`'s `KvTtl`, is open to a consumer: `.of`, a variant and a record literal build it.) An opaque type can promise an invariant, a `Matches` pattern or a smart constructor, and that holds only if every value is made by the owner; `.of`, a variant constructor and record syntax are refused from outside, and so is `.unsafe` on any type. Ask the owner for the value instead: a service that returns it, or takes the plain input and does the check. `bynk.context.opaque_inspection` is the other side, looking inside such a value.",
     "category": "Contexts",
     "categoryAnchor": "contexts",
     "code": "bynk.context.external_construction",
     "constructs": [],
-    "example": "// payment.bynk\ncontext payment\n\nexports transparent { AuthId }\n\ntype AuthId = String where Matches(\"AUTH-[0-9]+\")\n\nservice issue {\n    on call() -> Effect[AuthId] by Caller { … }\n}\n\n// orders.bynk\ncontext orders\n\nconsumes payment\n\nAuthId.of(s)             // ✗ only `payment` makes an `AuthId`\n\npayment.issue()          // ✓ ask `payment` for one",
+    "example": "// payment.bynk\ncontext payment\n\nexports opaque { AuthId }\n\ntype AuthId = String where Matches(\"AUTH-[0-9]+\")\n\nservice issue {\n    on call() -> Effect[AuthId] by Caller { … }\n}\n\n// orders.bynk\ncontext orders\n\nconsumes payment\n\nAuthId.of(s)             // ✗ only `payment` makes an `AuthId`\n\npayment.issue()          // ✓ ask `payment` for one",
     "severity": "error",
     "summary": "A context-owned type was constructed from outside that context."
   },
@@ -3920,16 +3920,16 @@
     "summary": "A `@multipart` route's body cap is over 32 MiB; the body is buffered with a parsed copy beside it, in a Worker's 128 MB (warning)."
   },
   {
-    "blurb": "A path parameter is read from a segment of the URL, which is text, so its type must be one the router can build from a string: `String`, a refined `String`, or an opaque type over `String`. An `Int`, an enum or a record is refused here, though a `query` field may be one. Take the segment as a refined `String` that states its shape.",
+    "blurb": "A path parameter is read from one segment of the URL, which is text, so its type must be one the router can read from a single value: a `String`, `Int`, `Bool` or `Decimal`, an enum (by variant name), or a refined or opaque type over one of those, the set a typed `query` field takes. A segment is always present and holds one value, so `Option` and `List` make no sense here, and a record or any other type is refused. The router decodes the segment after matching the route and answers `400` when it does not read as the type or breaks a refinement. Take the segment as a type that states its shape.",
     "category": "HTTP",
     "categoryAnchor": "http",
     "code": "bynk.http.path_param_not_stringy",
     "constructs": [
       "http_handler"
     ],
-    "example": "on GET(\"/items/:id\") (id: Int) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✗ a path segment is a string\n\ntype ItemId = String where Matches(\"^[0-9]+$\")\non GET(\"/items/:id\") (id: ItemId) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
+    "example": "on GET(\"/items/:id\") (id: Option[Int]) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✗ a segment is always present\n\ntype ItemNo = Int where Positive\non GET(\"/items/:id\") (id: ItemNo) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
     "severity": "error",
-    "summary": "A path parameter's type is not constructible from a string."
+    "summary": "A path parameter's type is not one a single path segment can carry."
   },
   {
     "blurb": "A typed `query` record is filled from a query string, a set of keys with text values, so each field must be one a single value can fill: a `String`, `Int`, `Bool` or `Decimal`, an enum, or a refined or opaque type over one, optionally in an `Option` or a `List` (a repeated key). A nested record or any other type is refused. Flatten the record, or take `query: RequestQuery` and read the keys yourself. A `@form` body has the same rule: `bynk.http.form_field_not_stringy`.",
@@ -6086,7 +6086,7 @@
     "summary": "A `sum`/`average` key function does not return a numeric type (`Int`, `Float`, or `Duration`; `sum` also takes a `Decimal`, `average` does not)."
   },
   {
-    "blurb": "A queue consumer is invoked once per message, so `on message` takes exactly one parameter: the message, of any type that can be decoded from the queue body. Two parameters leave the second with nothing to supply it, and none leaves the handler without the message. Put what you need into the message type itself: a record with those fields is one parameter. Name the parameter `message` by convention.",
+    "blurb": "A queue consumer is invoked once per message, so `on message` takes the message, of any type that can be decoded from the queue body, and optionally one more parameter of type `QueueDelivery` (from `bynk.cloudflare`), the message's attempt count and send time, in either order. Any other second parameter has nothing to supply it, a second `QueueDelivery` is one too many, and a handler whose only parameter is the `QueueDelivery` has no message. Put what you need into the message type itself: a record with those fields is one parameter. Name the parameter `message` by convention.",
     "category": "Queue",
     "categoryAnchor": "queue",
     "code": "bynk.queue.bad_params",
