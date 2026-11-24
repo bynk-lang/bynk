@@ -63,9 +63,16 @@ pub fn parse_own_units(options: &CompileOptions) -> Result<Vec<ParsedFile>, Stri
             .into_all()
             .into_iter()
             .next()
-            .map(|e| format!(": {}", e.error.message))
-            .unwrap_or_default();
-        format!("the project does not parse{first}; fix it first (`bynk check`)")
+            .map(|e| e.error.message);
+        match first {
+            Some(why) => [
+                "the project does not parse: ",
+                why.as_str(),
+                "; fix it first (`bynk check`)",
+            ]
+            .concat(),
+            None => "the project does not parse; fix it first (`bynk check`)".to_string(),
+        }
     };
     let file_lists = match discovered {
         Some(files) => files,

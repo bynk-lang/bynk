@@ -73,7 +73,7 @@ pub const COMMAND_GROUPS: &[(&str, &[&str])] = &[
     ),
     (
         "Run and deploy",
-        &["dev", "deploy", "revert", "tail", "migrate"],
+        &["dev", "deploy", "revert", "tail", "migrate", "lock"],
     ),
     (
         "Dependencies",
