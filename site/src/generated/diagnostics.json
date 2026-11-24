@@ -4489,7 +4489,7 @@
     "constructs": [],
     "example": null,
     "severity": "warning",
-    "summary": "A `limit` of 1 makes the `…With` call sequential: use `forEach`, `traverse`, `traverseAll` or `traverseTry` (warning)."
+    "summary": "A `limit` of 1 runs the `…With` call one step at a time; the sequential `forEach`, `traverse`, `traverseAll` or `traverseTry` says so directly (warning)."
   },
   {
     "blurb": "The `limit` of a `ParOptions` bounds how many steps of `parForEachWith`, `parTraverseWith`, `parTraverseAllWith` or `parTraverseTryWith` are in flight at once. It must be a whole number from 1 to 1000: zero or a negative bound would never start a step, and a bound above 1000 is past what a single invocation can usefully hold open (connection and subrequest limits). The check applies when the limit is a literal or a constant; a limit computed at run time faults the call instead. Pick a value in range, or use the plain form (`parForEach`, `parTraverse`, …) for an unbounded fan-out.",

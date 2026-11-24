@@ -8543,7 +8543,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     )),
     warn(d(
         "bynk.list.par_limit_one",
-        "A `limit` of 1 makes the `…With` call sequential: use `forEach`, `traverse`, `traverseAll` or `traverseTry` (warning).",
+        "A `limit` of 1 runs the `…With` call one step at a time; the sequential `forEach`, `traverse`, `traverseAll` or `traverseTry` says so directly (warning).",
     )),
     d(
         "bynk.list.par_limit_range",

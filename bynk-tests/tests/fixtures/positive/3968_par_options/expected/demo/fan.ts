@@ -32,3 +32,17 @@ export function check(id: number): Result<number, string> {
 export async function collect(ids: readonly number[], width: number): globalThis.Promise<readonly Result<number, string>[]> {
   return (async (__xs: readonly number[]) => await __bynkSettlePool(__xs.map((__x: number) => () => (async (id: number) => globalThis.Promise.resolve(check(id)))(__x)), ({ limit: width }).limit))(ids);
 }
+
+export async function tryAll(ids: readonly number[], width: number): globalThis.Promise<Result<readonly number[], string>> {
+  return (async (__xs: readonly number[]) => {
+    const __rs = await __bynkSettlePool(__xs.map((__x: number) => () => (async (id: number) => globalThis.Promise.resolve(check(id)))(__x)), ({ limit: width }).limit, true);
+    const __out: number[] = [];
+    for (const __r of __rs) {
+      if (__r.tag === "Err") {
+        return Err(__r.error);
+      }
+      __out.push(__r.value);
+    }
+    return Ok(__out);
+  })(ids);
+}

@@ -12,3 +12,7 @@ export async function warm(ids: readonly number[]): globalThis.Promise<void> {
     await __bynkSettlePool(__xs.map((__x: number) => () => (async (id: number) => notify(id))(__x)), ({ limit: 1 }).limit);
   })(ids);
 }
+
+export async function collect(ids: readonly number[]): globalThis.Promise<readonly void[]> {
+  return (async (__xs: readonly number[]) => await __bynkSettlePool(__xs.map((__x: number) => () => (async (id: number) => notify(id))(__x)), ({ limit: 4 }).limit))(ids);
+}

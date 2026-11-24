@@ -28,4 +28,8 @@ commons demo.fan {
 			ParOptions { limit: width }
 		)
 	}
+
+	fn tryAll(ids: List[Int], width: Int) -> Effect[Result[List[Int], String]] {
+		ids.parTraverseTryWith((id: Int) => Effect.pure(check(id)), ParOptions { limit: width })
+	}
 }

@@ -1,0 +1,10 @@
+commons demo.look {
+  // A record of the same name is not the `bynk.par` one: nothing guarantees its `limit`.
+  type ParOptions = {
+    max: Int,
+  }
+
+  fn bad(xs: List[Int]) -> Effect[()] {
+    xs.parForEachWith((x: Int) => Effect.pure(()), ParOptions { max: 4 })
+  }
+}

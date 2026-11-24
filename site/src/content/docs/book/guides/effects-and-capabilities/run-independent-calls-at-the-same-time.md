@@ -127,7 +127,7 @@ commons demo.fan {
 }
 ```
 
-`limit` must be a whole number from 1 to 1000 (a literal outside that is an error, and `1` is a warning because that is just `forEach`). Results still come back in input order, and a failure still waits for the started calls to settle before raising the first one in input order. `parTraverseTryWith` also stops starting new calls once one returns `Err`.
+`limit` must be a whole number from 1 to 1000 (a literal outside that is an error, and `1` is a warning because nothing then overlaps; `forEach` is the sequential form, though it also stops at the first failed step where the pool still starts the rest). Results still come back in input order, and a failure still waits for the started calls to settle before raising the first one in input order. `parTraverseTryWith` also stops starting new calls once one returns `Err`.
 
 ## Test it
 

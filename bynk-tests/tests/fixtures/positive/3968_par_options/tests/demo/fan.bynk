@@ -16,3 +16,15 @@ case "parTraverseAllWith collects every result" {
 	let rs <- collect([1, 2, 3], 2)
 	expect rs.length() == 3
 }
+
+case "parTraverseTryWith returns every value in input order when all succeed" {
+	let r <- tryAll([1, 2], 2)
+	expect r == Ok([1, 2])
+}
+
+case "parTraverseTryWith returns the first Err in input order, and an early Err stops the rest" {
+	let wide <- tryAll([1, 3, 4], 3)
+	expect wide == Err("big")
+	let narrow <- tryAll([3, 1, 2], 1)
+	expect narrow == Err("big")
+}

@@ -8,4 +8,8 @@ commons shop {
   fn warm(ids: List[Int]) -> Effect[()] {
     ids.parForEachWith((id: Int) => notify(id), ParOptions { limit: 1 })
   }
+
+  fn collect(ids: List[Int]) -> Effect[List[()]] {
+    ids.parTraverseWith((id: Int) => notify(id), ParOptions { limit: 4 })
+  }
 }

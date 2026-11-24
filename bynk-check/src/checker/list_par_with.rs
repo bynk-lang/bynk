@@ -99,9 +99,15 @@ pub(super) fn check_par_with(
     let result =
         super::kernels::check_list_kernel_method(method, Some(plain), &args[..1], elem, span, ctx);
     let options = type_of(&args[1], None, ctx)?;
+    // The record the `bynk.par` commons declares, not a look-alike of the same
+    // name: only that one is guaranteed an `Int` `limit`, which the emitted call
+    // reads without a check.
     let is_options = matches!(
         &*tys.get(options),
-        Ty::Named { name, kind: NamedKind::Record, .. } if name == "ParOptions"
+        Ty::Named { name, kind: NamedKind::Record, .. }
+            if name == "ParOptions"
+                && ctx.input.imported_from.get(name.as_str()).map(String::as_str)
+                    == Some("bynk.par")
     );
     if !is_options {
         ctx.errors.push(
@@ -113,7 +119,9 @@ pub(super) fn check_par_with(
                     options.display(tys)
                 ),
             )
-            .with_note("`ParOptions { limit: 10 }` comes from `uses bynk.par`"),
+            .with_note(
+                "pass a `ParOptions { limit: 10 }`, the record from `uses bynk.par` (a record of the same name declared elsewhere does not count)",
+            ),
         );
         return result;
     }
@@ -129,7 +137,7 @@ pub(super) fn check_par_with(
                     ),
                 )
                 .with_note(
-                    "a `limit` computed at run time outside that range faults the call instead",
+                    "pick a `limit` from 1 to 1000, or use the plain form for an unbounded fan-out; a `limit` computed at run time outside that range faults the call instead",
                 ),
             );
         } else if limit == 1 {
@@ -137,12 +145,10 @@ pub(super) fn check_par_with(
                 CompileError::new(
                     "bynk.list.par_limit_one",
                     method.span,
-                    format!(
-                        "`limit: 1` runs one step at a time, which is `{sequential}` without the options"
-                    ),
+                    "`limit: 1` runs one step at a time, so nothing overlaps",
                 )
                 .with_note(format!(
-                    "`{sequential}` is the sequential form of `{name}`; use it when the steps need not overlap"
+                    "`{sequential}` is the sequential form of `{name}`; it also stops at the first failed step, where `{name}` still starts the rest"
                 )),
             );
         }
