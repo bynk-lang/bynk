@@ -1695,6 +1695,7 @@
 /reference/diagnostics/bynk.list.deprecated_function/
 /reference/diagnostics/bynk.list.par_traverse_unit/
 /reference/diagnostics/bynk.locale.multiple_message_bundles/
+/reference/diagnostics/bynk.map.deprecated_function/
 /reference/diagnostics/bynk.messages.format_mismatch/
 /reference/diagnostics/bynk.messages.incomplete/
 /reference/diagnostics/bynk.messages.invalid_locale_tag/
@@ -1924,6 +1925,7 @@
 /reference/diagnostics/bynk.service.websocket_multiple/
 /reference/diagnostics/bynk.service.websocket_open_arity/
 /reference/diagnostics/bynk.service.websocket_param_not_stringy/
+/reference/diagnostics/bynk.set.deprecated_function/
 /reference/diagnostics/bynk.stability.experimental/
 /reference/diagnostics/bynk.store.annotation_kind_mismatch/
 /reference/diagnostics/bynk.store.annotation_unsupported/
