@@ -6,7 +6,7 @@ consumes bynk { Events }
 type Receipt = { orderId: String }
 
 service pay {
-  on call() -> Effect[()] given Events {
+  on call() -> Effect[()] by Caller given Events {
     Events.emit(Receipt { orderId: "x" })
   }
 }
