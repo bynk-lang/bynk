@@ -223,6 +223,7 @@ fn exports_of(
 const HOST_SUPPLIED: &[&str] = &[
     "217_field_op_index",
     "219_given_unused_capability_warns",
+    "4189_virtual_stub_unit",
     "86_service_with_given",
     "87_service_chained_effects",
     "88_service_with_result_propagation",
