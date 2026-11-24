@@ -100,6 +100,31 @@ is a transport failure. A Bynk caller reports a `409` `ContractMismatch` and a
 marked `500` `CalleeFaulted` by name, and every other non-`2xx` as
 `Transport`, with the status.
 
+### What a caller makes of a failure
+
+A Bynk caller that writes `<context>.<service>.outcome(args)` gets the call's
+failure as a value, a `CallOutcome[R]` (`bynk`), instead of a fault. The
+variants are grouped by whether the callee's handler ran:
+
+| The callee answered | The caller's outcome | The handler ran? |
+|---|---|---|
+| `200` | `Handled(result)` | yes, and answered |
+| `413` (check 2) | `Rejected(TooLarge)` | no |
+| `401` (check 3) | `Rejected(NotAuthenticated)` | no |
+| `400` `UnsupportedWireVersion` (check 4) | `Rejected(UnsupportedWire)` | no |
+| `404` (check 5) | `Rejected(NoSuchService)` | no |
+| `403` (check 6) | `Rejected(NotAdmitted)` | no |
+| `409` `ContractMismatch` (check 7) | `Rejected(StaleContract)` | no |
+| any other `400` (checks 8 and 9) | `Rejected(Undecodable)` | no |
+| a marked `500` | `Faulted` | yes, and committed nothing |
+| any other status | `Unreachable(Some(status))` | unknown |
+| no response (the `fetch` threw) | `Unreachable(None)` | unknown |
+
+A `200` the caller cannot decode stays a fault: the contract hash makes it a
+toolchain bug rather than an outcome. A failure turned into a value is still
+logged once, as it would have been as a fault. On the `bundle` target
+there is no wire: only `Handled` and `Faulted` occur.
+
 ### Error bodies
 
 Every JSON error body is an object with a `kind`:

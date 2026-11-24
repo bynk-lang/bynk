@@ -174,6 +174,92 @@ If `reserve` fails, nothing has happened yet, so the handler answers at once. If
 `authorise` fails, it releases the stock it reserved first. Either `else`
 produces the handler's result, in place of the rest of its body.
 
+This undoes the stock when the callee *answers* `Err`. If the call itself fails, with no
+answer at all, the call faults and the `else` never runs: the handler faults, and the stock
+stays reserved. To undo on every way a call can fail, see
+[`.outcome`](#handle-a-call-that-fails-with-outcome) below.
+
+## Handle a call that fails with `.outcome`
+
+A plain call has the handler's own type, and when the call itself fails (the callee
+refuses it, faults, or cannot be reached) the calling handler faults too. That is
+right for most calls. When the handler must do something about the failure, such as
+undo an earlier step, write `.outcome` after the service:
+
+```bynk,fragment
+context orders
+
+consumes bynk { CallOutcome }
+consumes inventory as Stock
+consumes payment as Pay
+
+service placeOrder {
+	on call(sku: String, total: Int) -> Effect[Result[Int, String]] by Caller {
+		let Ok(_) <- Stock.reserve(sku) else { Err("out of stock") }
+		let o <- Pay.authorise.outcome(total)
+		match o {
+			Handled(Ok(receipt)) => Effect.pure(Ok(receipt)),
+			Handled(Err(_)) => {
+				let _ <- Stock.release(sku)
+				Effect.pure(Err("payment declined"))
+			},
+			Rejected(_) => {
+				let _ <- Stock.release(sku)
+				Effect.pure(Err("payment unavailable"))
+			},
+			Faulted => {
+				let _ <- Stock.release(sku)
+				Effect.pure(Err("payment unavailable"))
+			},
+			Unreachable(_) => Effect.pure(Err("payment pending")),
+		}
+	}
+}
+```
+
+`Pay.authorise.outcome(total)` is the same call, typed `Effect[CallOutcome[R]]` for the
+handler's `R`. The variants say whether the callee's handler ran, which is what decides
+whether to undo, reconcile or retry:
+
+- `Handled(result)`: it ran and answered. A `Result`'s `Err` is an answer, so the
+  `Handled(Err(_))` arm is where a declined payment lands.
+- `Rejected(reason)`: it was refused before it ran, so nothing happened there: `TooLarge`,
+  `NotAuthenticated`, `UnsupportedWire`, `NoSuchService`, `NotAdmitted` (the callee's
+  `by` did not admit this context), `StaleContract` or `Undecodable`.
+- `Faulted`: it ran and faulted. A faulting handler commits nothing itself.
+- `Unreachable(status)`: it is not known whether it ran. Retrying repeats work the callee
+  may have done, so pass an idempotency key in the arguments and have the callee check it
+  with `Idempotency.claim`.
+
+Each variant is logged once as the fault would have been, so handling `Rejected(StaleContract)`
+does not hide a bad deployment from whoever runs it. On the `bundle` target there is no wire:
+only `Handled` and `Faulted` occur.
+
+To pass a failure up rather than handle it, `o.handled()` is a `Result[R, CallFailure]`, and
+`CallFailure` can be wrapped into your own error type with `embeds`:
+
+```bynk,fragment
+context orders
+
+consumes bynk { CallOutcome, CallFailure }
+consumes payment { Receipt, PaymentError }
+
+type OrderError =
+	| Payment(reason: PaymentError)
+	| Upstream(failure: CallFailure)
+	embeds PaymentError as Payment, CallFailure as Upstream
+
+fn settle(o: CallOutcome[Result[Receipt, PaymentError]]) -> Result[Receipt, OrderError] {
+	let paid = o.handled()?
+	let receipt = paid?
+	Ok(receipt)
+}
+```
+
+A deadline composes: `Pay.authorise.outcome(total).within(2.seconds)` is
+`Effect[Result[CallOutcome[…], TimedOut]]`. A `CallOutcome` cannot be written by hand:
+only `.outcome(…)` and a test `stub` make one.
+
 ## How it compiles
 
 The call is the same Bynk code on both targets, but the emitted wiring differs:

@@ -39,6 +39,9 @@ export default {
         const __m = __matchPath("/items/:id", path);
         if (method === "PUT" && __m) {
           __route = "PUT /items/:id";
+          if (__m.malformed) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          }
           if (!__jsonMediaTypeMatches(request)) {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/json" }), { status: 415, headers: { "content-type": "application/json" } }), __security_api);
           }

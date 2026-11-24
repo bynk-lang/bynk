@@ -36,7 +36,7 @@ export default {
       }
 
       {
-        if (method === "POST" && path === "/book") {
+        if (method === "POST" && __matchPath("/book", path) !== null) {
           __route = "POST /book";
           if (!__jsonMediaTypeMatches(request)) {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/json" }), { status: 415, headers: { "content-type": "application/json" } }), __security_api);
@@ -58,6 +58,9 @@ export default {
         const __m = __matchPath("/x/:day", path);
         if ((method === "GET" || method === "HEAD") && __m) {
           __route = "GET /x/:day";
+          if (__m.malformed) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          }
           const __raw_day = __m.params["day"];
           const __r_day = handlers.Day.of(__raw_day);
           if (__r_day.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "RefinementViolation", path: "path.day", violation: __r_day.error }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
@@ -67,7 +70,7 @@ export default {
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
-      if (path === "/book") {
+      if (__matchPath("/book", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
         return __applySecurityHeaders(__res, __security_api);

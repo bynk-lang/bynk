@@ -35,7 +35,7 @@ export default {
       }
 
       {
-        if ((method === "GET" || method === "HEAD") && path === "/pixel.png") {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/pixel.png", path) !== null) {
           __route = "GET /pixel.png";
           const result = await surface.http_GET_pixel_png();
           const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: void) => null, { weakEtag: true }), request), __security_Assets);
@@ -43,7 +43,7 @@ export default {
         }
       }
       {
-        if ((method === "GET" || method === "HEAD") && path === "/sitemap.xml") {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/sitemap.xml", path) !== null) {
           __route = "GET /sitemap.xml";
           const result = await surface.http_GET_sitemap_xml();
           const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: void) => null, { weakEtag: true }), request), __security_Assets);
@@ -54,6 +54,9 @@ export default {
         const __m = __matchPath("/robots/:mode", path);
         if ((method === "GET" || method === "HEAD") && __m) {
           __route = "GET /robots/:mode";
+          if (__m.malformed) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_Assets);
+          }
           const __raw_mode = __m.params["mode"];
           const mode = __raw_mode;
           const result = await surface.http_GET_robots_Param_mode(mode);
@@ -61,7 +64,7 @@ export default {
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
-      if (path === "/pixel.png") {
+      if (__matchPath("/pixel.png", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_Assets);
@@ -71,7 +74,7 @@ export default {
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_Assets);
       }
-      if (path === "/sitemap.xml") {
+      if (__matchPath("/sitemap.xml", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_Assets);

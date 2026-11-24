@@ -122,7 +122,7 @@ async function __bynkDriveUntil(done: () => boolean, stuckThrows: boolean): Prom
     }
   }
 }
-async function __bynkSettleVirtual<T>(deps: { __exec?: { pending: Promise<unknown>[] } }, call: Promise<T>): Promise<T> {
+async function __bynkSettleVirtual<T>(deps: object & { __exec?: { pending: Promise<unknown>[] } }, call: Promise<T>): Promise<T> {
   const outcome = { finished: false, ok: false, value: undefined as T | undefined, error: undefined as unknown };
   call.then(
     (value) => {

@@ -46,7 +46,7 @@ admits `30.days` and refuses `30.seconds` when the program compiles, and `Ttl.of
 | `MinLength(n)` | length ≥ n, counted in code points |
 | `MaxLength(n)` | length ≤ n, counted in code points |
 | `Length(n)` | length = n, counted in code points |
-| `Matches(regex)` | the whole string matches `regex` (anchored) |
+| `Matches(regex)` | the whole string matches `regex` (anchored), in Unicode mode; may open with `(?i)` or `(?s)` |
 | `IsoDate` | a calendar date, exactly `YYYY-MM-DD` (years 0000-9999), and a date that exists |
 | `Cron` | a valid Cloudflare cron schedule: five fields separated by exactly one space ([cron](/reference/cron/)) |
 
@@ -73,7 +73,19 @@ A predicate must apply to the base type (`bynk.types.predicate_base_mismatch`).
 An `InRange` with `lo > hi` is rejected (`bynk.types.inverted_range`), as is a set
 of predicates that admit no value (`bynk.types.empty_refinement`) or a negative
 length (`bynk.types.negative_length`). An invalid regex is
-`bynk.types.invalid_regex`. A `Matches`, `IsoDate` or `Cron` refinement may be followed
+`bynk.types.invalid_regex`.
+
+A `Matches` pattern is the same dialect as the [`String` regex methods](/reference/types/#regular-expressions):
+it runs as a JavaScript `RegExp` in **Unicode mode** (`u`), so `Matches(r"[\p{L}\p{M}' -]+")` admits an
+internationalised name and `Matches(".")` admits one astral character, not half of one. `\w`, `\d` and `\b`
+stay ASCII (use `\p{L}` and `\p{Nd}`). The pattern may open with one flag group, `(?i)` or `(?s)`, each at most
+once, which becomes the `RegExp` flags (`Matches(r"(?i)[a-z]{3}-\d{4}")`); `(?m)` means nothing when the whole string
+is tested and is `bynk.types.invalid_regex`, as is a pattern invalid under `u`. The `RegExp` is built once, not on every check.
+In the published OpenAPI a `(?i)` pattern is written out letter by letter (`[aA]`); one that cannot be
+(a property escape under `i`) is left out and the schema's `description` says so, so a published pattern never disagrees
+with the check.
+
+A `Matches`, `IsoDate` or `Cron` refinement may be followed
 by `@example("…")`, a test witness for `Val` that the compiler checks against
 the refinement ([`@example`](/reference/testing/#val-example)). The emitted boundary check runs a `Matches` regex
 under the platform's backtracking `RegExp`, on untrusted input, so the compiler

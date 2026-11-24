@@ -355,6 +355,8 @@ mod system {
     mod contract_behaviour;
     #[path = "coverage_behaviour.rs"]
     mod coverage_behaviour;
+    #[path = "cron_failed_workerd.rs"]
+    mod cron_failed_workerd;
     #[path = "cross_context_caller.rs"]
     mod cross_context_caller;
     #[path = "cross_context_conformance.rs"]

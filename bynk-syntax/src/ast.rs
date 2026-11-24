@@ -564,6 +564,13 @@ pub enum StubRhs {
     /// #2683: `never` — the call never completes. It exists to test a
     /// `within` against an effect that does not finish.
     Never(Span),
+    /// #3894: `rejected <Refusal>` — a consumed service's call is refused before its handler
+    /// runs, for the named `bynk` `Refusal` case. Only on a consumed-service stub.
+    Rejected(Ident, Span),
+    /// #3894: `faulted` — a consumed service's handler ran and faulted.
+    Faulted(Span),
+    /// #3894: `unreachable` — it is not known whether a consumed service's handler ran.
+    Unreachable(Span),
 }
 
 impl StubRhs {
@@ -573,6 +580,7 @@ impl StubRhs {
             StubRhs::Fails(s) => *s,
             StubRhs::ReturnsEach(_, s) => *s,
             StubRhs::Never(s) => *s,
+            StubRhs::Rejected(_, s) | StubRhs::Faulted(s) | StubRhs::Unreachable(s) => *s,
         }
     }
 }
@@ -3217,6 +3225,29 @@ pub enum PredKind {
     /// #3873: a `String` that is a valid Cloudflare cron schedule
     /// ([`crate::cron::is_cron_expression`]).
     Cron,
+}
+
+/// #3950: a regex literal's leading `(?flags)` group of letters, split off: the
+/// rest of the pattern and the letters. `None` when the literal opens with no
+/// such group (a lookaround `(?=`, `(?!`, `(?<` or a non-capturing `(?:` is not
+/// one). The one reading `Matches` and the `String` kernel's regex literals
+/// share; whether the letters are valid is the checker's to say.
+pub fn leading_regex_flag_group(literal: &str) -> Option<(&str, &str)> {
+    let rest = literal.strip_prefix("(?")?;
+    let end = rest.find(')')?;
+    let flags = &rest[..end];
+    (!flags.is_empty() && flags.chars().all(|c| c.is_ascii_alphabetic()))
+        .then(|| (&rest[end + 1..], flags))
+}
+
+/// #3950: the pattern and `RegExp` flags a `Matches` argument runs as: the
+/// leading flag group moved into the flags, and the `u` (Unicode) flag every
+/// Bynk regex carries added. The checker has already refused an invalid group.
+pub fn matches_pattern_and_flags(literal: &str) -> (String, String) {
+    match leading_regex_flag_group(literal) {
+        Some((pat, flags)) => (pat.to_string(), format!("{flags}u")),
+        None => (literal.to_string(), "u".to_string()),
+    }
 }
 
 /// #2867: is `s` exactly `YYYY-MM-DD` and a date that exists? The one

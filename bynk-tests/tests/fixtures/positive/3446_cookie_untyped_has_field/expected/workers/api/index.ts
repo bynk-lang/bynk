@@ -2,7 +2,7 @@
 // Worker entry point for context `api`.
 
 import { type __JsonValue, __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
-import { __httpResultToResponse, __headResponse, __notModifiedIfMatch, type __SecurityPolicy, __applySecurityHeaders, __cookieObject } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, type __SecurityPolicy, __applySecurityHeaders, __cookieObject } from "../../__bynk_runtime/http.js";
 import { compose, type Env } from "./compose.js";
 import * as handlers from "./handlers.js";
 
@@ -36,7 +36,7 @@ export default {
       }
 
       {
-        if ((method === "GET" || method === "HEAD") && path === "/a") {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/a", path) !== null) {
           __route = "GET /a";
           const __c = __cookieObject(request, [{ name: "theme", kind: "enum", list: false, option: false }]);
           if (!__c.ok) return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__c.error), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
@@ -49,18 +49,18 @@ export default {
         }
       }
       {
-        if (method === "POST" && path === "/reset") {
+        if (method === "POST" && __matchPath("/reset", path) !== null) {
           __route = "POST /reset";
           const result = await surface.http_POST_reset();
           return __applySecurityHeaders(__httpResultToResponse(result, (__v: void) => null), __security_api);
         }
       }
-      if (path === "/a") {
+      if (__matchPath("/a", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_api);
       }
-      if (path === "/reset") {
+      if (__matchPath("/reset", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
         return __applySecurityHeaders(__res, __security_api);

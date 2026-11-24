@@ -36,7 +36,7 @@ export default {
       }
 
       {
-        if ((method === "GET" || method === "HEAD") && path === "/whoami") {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/whoami", path) !== null) {
           __route = "GET /whoami";
           const result = await surface.http_GET_whoami(__requestHeaders(request));
           const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), __security_api);
@@ -47,6 +47,9 @@ export default {
         const __m = __matchPath("/packages/:name", path);
         if (method === "DELETE" && __m) {
           __route = "DELETE /packages/:name";
+          if (__m.malformed) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          }
           const __raw_name = __m.params["name"];
           const name = __raw_name;
           const result = await surface.http_DELETE_packages_Param_name(name);
@@ -57,6 +60,9 @@ export default {
         const __m = __matchPath("/notes/:id", path);
         if (method === "POST" && __m) {
           __route = "POST /notes/:id";
+          if (__m.malformed) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          }
           if (!__jsonMediaTypeMatches(request)) {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/json" }), { status: 415, headers: { "content-type": "application/json" } }), __security_api);
           }
@@ -70,6 +76,9 @@ export default {
         const __m = __matchPath("/packages/:name", path);
         if (method === "PUT" && __m) {
           __route = "PUT /packages/:name";
+          if (__m.malformed) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          }
           if (!__jsonMediaTypeMatches(request)) {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/json" }), { status: 415, headers: { "content-type": "application/json" } }), __security_api);
           }
@@ -98,7 +107,7 @@ export default {
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "DELETE, OPTIONS, PUT" } });
         return __applySecurityHeaders(__res, __security_api);
       }
-      if (path === "/whoami") {
+      if (__matchPath("/whoami", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_api);

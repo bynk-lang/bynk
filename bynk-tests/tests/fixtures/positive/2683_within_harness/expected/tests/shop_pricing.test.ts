@@ -28,8 +28,34 @@ function __bynkViolationOf(e: any): { kind: string, agent: string, name: string,
   const v = e && e.invariantViolation;
   return v === undefined ? undefined : { kind: v.declaration, agent: v.agent, name: v.invariant, location: v.location };
 }
+// #4198: a `Decimal` (`{ coefficient: bigint, scale }`) and a `Bytes` (`Uint8Array`) print in
+// Bynk's own form, wherever they sit, instead of throwing in `JSON.stringify` or printing
+// as a bare object. `Duration` and `Instant` are plain numbers at runtime.
+function __bynkShowLeaf(x: any): unknown {
+  if (x !== null && typeof x === "object" && typeof x.coefficient === "bigint" && typeof x.scale === "number") {
+    const neg = x.coefficient < 0n;
+    let digits = (neg ? -x.coefficient : x.coefficient).toString();
+    let text = digits;
+    if (x.scale > 0) {
+      if (digits.length <= x.scale) digits = "0".repeat(x.scale + 1 - digits.length) + digits;
+      text = digits.slice(0, digits.length - x.scale) + "." + digits.slice(digits.length - x.scale);
+    }
+    return (neg ? "-" : "") + text + "d";
+  }
+  if (x instanceof Uint8Array) return `Bytes.fromHex("${Array.from(x, (b) => b.toString(16).padStart(2, "0")).join("")}")`;
+  return x;
+}
 function __bynkShow(v: unknown): string {
-  try { return typeof v === "bigint" ? String(v) : (JSON.stringify(v) ?? String(v)); } catch { return String(v); }
+  try {
+    if (typeof v === "bigint") return String(v);
+    const leaf = __bynkShowLeaf(v);
+    if (typeof leaf === "string" && leaf !== v) return leaf;
+    if (Array.isArray(v)) return "[" + v.map((e) => __bynkShow(e)).join(",") + "]";
+    if (v !== null && typeof v === "object" && Object.getPrototypeOf(v) === Object.prototype) {
+      return "{" + Object.keys(v).map((k) => JSON.stringify(k) + ":" + __bynkShow((v as any)[k])).join(",") + "}";
+    }
+    return JSON.stringify(v) ?? String(v);
+  } catch { return String(v); }
 }
 
 
@@ -192,7 +218,7 @@ async function __bynkDriveUntil(done: () => boolean, stuckThrows: boolean): Prom
     }
   }
 }
-async function __bynkSettleVirtual<T>(deps: { __exec?: { pending: Promise<unknown>[] } }, call: Promise<T>): Promise<T> {
+async function __bynkSettleVirtual<T>(deps: object & { __exec?: { pending: Promise<unknown>[] } }, call: Promise<T>): Promise<T> {
   const outcome = { finished: false, ok: false, value: undefined as T | undefined, error: undefined as unknown };
   call.then(
     (value) => {
@@ -250,8 +276,10 @@ class __Stub_Ledger {
   }
 
   async book(id: number): globalThis.Promise<void> {
-    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Refusal, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type CallFailure = __ns_bynk.CallFailure;
+    type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
     type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
     type CronSchedule = __ns_bynk.CronSchedule;
@@ -262,6 +290,7 @@ class __Stub_Ledger {
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type Redirect = __ns_bynk.Redirect;
+    type Refusal = __ns_bynk.Refusal;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type SameSite = __ns_bynk.SameSite;
@@ -298,8 +327,10 @@ class __Stub_Pricing {
   }
 
   async quote(id: number): globalThis.Promise<number> {
-    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Refusal, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type CallFailure = __ns_bynk.CallFailure;
+    type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
     type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
     type CronSchedule = __ns_bynk.CronSchedule;
@@ -310,6 +341,7 @@ class __Stub_Pricing {
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type Redirect = __ns_bynk.Redirect;
+    type Refusal = __ns_bynk.Refusal;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type SameSite = __ns_bynk.SameSite;
@@ -446,8 +478,10 @@ async function test_a_stub_slower_than_the_deadline_times_out() {
   try {
     const deps = __makeTestDeps("a stub slower than the deadline times out");
     const { booking, many, quotes, together } = __ns_shop_pricing;
-    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Refusal, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type CallFailure = __ns_bynk.CallFailure;
+    type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
     type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
     type CronSchedule = __ns_bynk.CronSchedule;
@@ -458,6 +492,7 @@ async function test_a_stub_slower_than_the_deadline_times_out() {
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type Redirect = __ns_bynk.Redirect;
+    type Refusal = __ns_bynk.Refusal;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type SameSite = __ns_bynk.SameSite;
@@ -480,8 +515,10 @@ async function test_a_stub_faster_than_the_deadline_is_Ok() {
   try {
     const deps = __makeTestDeps("a stub faster than the deadline is Ok");
     const { booking, many, quotes, together } = __ns_shop_pricing;
-    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Refusal, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type CallFailure = __ns_bynk.CallFailure;
+    type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
     type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
     type CronSchedule = __ns_bynk.CronSchedule;
@@ -492,6 +529,7 @@ async function test_a_stub_faster_than_the_deadline_is_Ok() {
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type Redirect = __ns_bynk.Redirect;
+    type Refusal = __ns_bynk.Refusal;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type SameSite = __ns_bynk.SameSite;
@@ -514,8 +552,10 @@ async function test_a_tie_goes_to_the_effect() {
   try {
     const deps = __makeTestDeps("a tie goes to the effect");
     const { booking, many, quotes, together } = __ns_shop_pricing;
-    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Refusal, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type CallFailure = __ns_bynk.CallFailure;
+    type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
     type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
     type CronSchedule = __ns_bynk.CronSchedule;
@@ -526,6 +566,7 @@ async function test_a_tie_goes_to_the_effect() {
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type Redirect = __ns_bynk.Redirect;
+    type Refusal = __ns_bynk.Refusal;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type SameSite = __ns_bynk.SameSite;
@@ -548,8 +589,10 @@ async function test_a_stub_that_never_finishes_times_out() {
   try {
     const deps = __makeTestDeps("a stub that never finishes times out");
     const { booking, many, quotes, together } = __ns_shop_pricing;
-    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Refusal, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type CallFailure = __ns_bynk.CallFailure;
+    type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
     type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
     type CronSchedule = __ns_bynk.CronSchedule;
@@ -560,6 +603,7 @@ async function test_a_stub_that_never_finishes_times_out() {
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type Redirect = __ns_bynk.Redirect;
+    type Refusal = __ns_bynk.Refusal;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type SameSite = __ns_bynk.SameSite;
@@ -582,8 +626,10 @@ async function test_a_stub_with_no_latency_resolves_at_once() {
   try {
     const deps = __makeTestDeps("a stub with no latency resolves at once");
     const { booking, many, quotes, together } = __ns_shop_pricing;
-    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Refusal, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type CallFailure = __ns_bynk.CallFailure;
+    type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
     type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
     type CronSchedule = __ns_bynk.CronSchedule;
@@ -594,6 +640,7 @@ async function test_a_stub_with_no_latency_resolves_at_once() {
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type Redirect = __ns_bynk.Redirect;
+    type Refusal = __ns_bynk.Refusal;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type SameSite = __ns_bynk.SameSite;
@@ -617,8 +664,10 @@ async function test_the_abandoned_call_is_observed_once_the_case_settles() {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
     const deps = __bynkRecordDeps(__makeTestDeps("the abandoned call is observed once the case settles"), { Ledger: ["book"], Pricing: ["quote"] }, __obs);
     const { booking, many, quotes, together } = __ns_shop_pricing;
-    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Refusal, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type CallFailure = __ns_bynk.CallFailure;
+    type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
     type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
     type CronSchedule = __ns_bynk.CronSchedule;
@@ -629,6 +678,7 @@ async function test_the_abandoned_call_is_observed_once_the_case_settles() {
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type Redirect = __ns_bynk.Redirect;
+    type Refusal = __ns_bynk.Refusal;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type SameSite = __ns_bynk.SameSite;
@@ -657,8 +707,10 @@ async function test_the_abandoned_effect_still_ran__the_clock_reached_its_comple
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
     const deps = __bynkRecordDeps(__makeTestDeps("the abandoned effect still ran: the clock reached its completion"), { Ledger: ["book"], Pricing: ["quote"] }, __obs);
     const { booking, many, quotes, together } = __ns_shop_pricing;
-    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Refusal, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type CallFailure = __ns_bynk.CallFailure;
+    type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
     type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
     type CronSchedule = __ns_bynk.CronSchedule;
@@ -669,6 +721,7 @@ async function test_the_abandoned_effect_still_ran__the_clock_reached_its_comple
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type Redirect = __ns_bynk.Redirect;
+    type Refusal = __ns_bynk.Refusal;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type SameSite = __ns_bynk.SameSite;
@@ -692,8 +745,10 @@ async function test_a_fast_effect_still_gives_the_Ok_branch() {
   try {
     const deps = __makeTestDeps("a fast effect still gives the Ok branch");
     const { booking, many, quotes, together } = __ns_shop_pricing;
-    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Refusal, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type CallFailure = __ns_bynk.CallFailure;
+    type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
     type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
     type CronSchedule = __ns_bynk.CronSchedule;
@@ -704,6 +759,7 @@ async function test_a_fast_effect_still_gives_the_Ok_branch() {
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type Redirect = __ns_bynk.Redirect;
+    type Refusal = __ns_bynk.Refusal;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type SameSite = __ns_bynk.SameSite;
@@ -727,8 +783,10 @@ async function test_a_lambda_in_the_handler_bounds_each_call_alone() {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
     const deps = __bynkRecordDeps(__makeTestDeps("a lambda in the handler bounds each call alone"), { Ledger: ["book"], Pricing: ["quote"] }, __obs);
     const { booking, many, quotes, together } = __ns_shop_pricing;
-    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Refusal, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type CallFailure = __ns_bynk.CallFailure;
+    type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
     type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
     type CronSchedule = __ns_bynk.CronSchedule;
@@ -739,6 +797,7 @@ async function test_a_lambda_in_the_handler_bounds_each_call_alone() {
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type Redirect = __ns_bynk.Redirect;
+    type Refusal = __ns_bynk.Refusal;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type SameSite = __ns_bynk.SameSite;
@@ -762,8 +821,10 @@ async function test_advance_Clock_fires_nothing_when_no_timer_is_due() {
   try {
     const deps = __makeTestDeps("advance Clock fires nothing when no timer is due");
     const { booking, many, quotes, together } = __ns_shop_pricing;
-    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Refusal, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type CallFailure = __ns_bynk.CallFailure;
+    type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
     type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
     type CronSchedule = __ns_bynk.CronSchedule;
@@ -774,6 +835,7 @@ async function test_advance_Clock_fires_nothing_when_no_timer_is_due() {
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type Redirect = __ns_bynk.Redirect;
+    type Refusal = __ns_bynk.Refusal;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type SameSite = __ns_bynk.SameSite;
@@ -798,8 +860,10 @@ async function test_in_a_par_block_each_within_bounds_its_own_effect() {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
     const deps = __bynkRecordDeps(__makeTestDeps("in a par block each within bounds its own effect"), { Ledger: ["book"], Pricing: ["quote"] }, __obs);
     const { booking, many, quotes, together } = __ns_shop_pricing;
-    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Refusal, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type CallFailure = __ns_bynk.CallFailure;
+    type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
     type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
     type CronSchedule = __ns_bynk.CronSchedule;
@@ -810,6 +874,7 @@ async function test_in_a_par_block_each_within_bounds_its_own_effect() {
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type Redirect = __ns_bynk.Redirect;
+    type Refusal = __ns_bynk.Refusal;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type SameSite = __ns_bynk.SameSite;
@@ -833,8 +898,10 @@ async function test_a_real_provider_call_under_within_is_not_timed_out() {
   try {
     const deps = __makeTestDeps();
     const { booking, many, quotes, together } = __ns_shop_pricing;
-    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Refusal, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type CallFailure = __ns_bynk.CallFailure;
+    type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
     type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
     type CronSchedule = __ns_bynk.CronSchedule;
@@ -845,6 +912,7 @@ async function test_a_real_provider_call_under_within_is_not_timed_out() {
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type Redirect = __ns_bynk.Redirect;
+    type Refusal = __ns_bynk.Refusal;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type SameSite = __ns_bynk.SameSite;
@@ -867,8 +935,10 @@ async function test_a_latency_stub_drives_the_same_timeout_at_integration() {
   try {
     const deps = __makeTestDeps("a latency stub drives the same timeout at integration");
     const { booking, many, quotes, together } = __ns_shop_pricing;
-    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Refusal, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type CallFailure = __ns_bynk.CallFailure;
+    type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
     type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
     type CronSchedule = __ns_bynk.CronSchedule;
@@ -879,6 +949,7 @@ async function test_a_latency_stub_drives_the_same_timeout_at_integration() {
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type Redirect = __ns_bynk.Redirect;
+    type Refusal = __ns_bynk.Refusal;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type SameSite = __ns_bynk.SameSite;
@@ -901,8 +972,10 @@ async function test_a_latency_stub_that_wins_at_integration_is_Ok() {
   try {
     const deps = __makeTestDeps("a latency stub that wins at integration is Ok");
     const { booking, many, quotes, together } = __ns_shop_pricing;
-    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Refusal, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type CallFailure = __ns_bynk.CallFailure;
+    type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
     type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
     type CronSchedule = __ns_bynk.CronSchedule;
@@ -913,6 +986,7 @@ async function test_a_latency_stub_that_wins_at_integration_is_Ok() {
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type Redirect = __ns_bynk.Redirect;
+    type Refusal = __ns_bynk.Refusal;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type SameSite = __ns_bynk.SameSite;

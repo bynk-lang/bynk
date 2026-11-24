@@ -39,7 +39,7 @@ export default {
       }
 
       {
-        if (method === "POST" && path === "/cart") {
+        if (method === "POST" && __matchPath("/cart", path) !== null) {
           __route = "POST /cart";
           if (!__jsonMediaTypeMatches(request)) {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/json" }), { status: 415, headers: { "content-type": "application/json" } }), __security_api);
@@ -58,7 +58,7 @@ export default {
         }
       }
       {
-        if (method === "POST" && path === "/reject") {
+        if (method === "POST" && __matchPath("/reject", path) !== null) {
           __route = "POST /reject";
           if (!__jsonMediaTypeMatches(request)) {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/json" }), { status: 415, headers: { "content-type": "application/json" } }), __security_api);
@@ -80,6 +80,9 @@ export default {
         const __m = __matchPath("/cart/:sku", path);
         if (method === "PUT" && __m) {
           __route = "PUT /cart/:sku";
+          if (__m.malformed) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          }
           if (!__jsonMediaTypeMatches(request)) {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/json" }), { status: 415, headers: { "content-type": "application/json" } }), __security_api);
           }
@@ -100,7 +103,7 @@ export default {
           return __applySecurityHeaders(__httpResultToResponse(result, handlers.__serialise_Item), __security_api);
         }
       }
-      if (path === "/cart") {
+      if (__matchPath("/cart", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
         return __applySecurityHeaders(__res, __security_api);
@@ -110,7 +113,7 @@ export default {
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, PUT" } });
         return __applySecurityHeaders(__res, __security_api);
       }
-      if (path === "/reject") {
+      if (__matchPath("/reject", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
         return __applySecurityHeaders(__res, __security_api);

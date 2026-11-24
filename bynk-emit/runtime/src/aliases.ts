@@ -8,7 +8,7 @@ import { containerClass } from "./container.ts";
 import { AGENT_WIRE_PASS, StateRegistry, decodeAgentArgs, decodeAgentKey, dispatchToEventsFanout, encodeAgentResult, makeAgent, serialiseAgentClass, serialiseAgentKey, sweepAgentInstances, wakeForMigration, type AgentWire, type DurableObjectNamespace } from "./agent.ts";
 import { oidcTrust, tokenClaims, verifyBearerJwtHs256, verifyOidcJwt, verifySignatureHmacSha256 } from "./auth.ts";
 import { expireSessionCookie, issueSessionCookie, newSessionKey, sessionKeysOf, signSessionCookie, verifySignedCookie } from "./session.ts";
-import { boundaryError, callService, checkStoredLayout, checkStoredSchemaVersion, deliverEvent, deserialiseEventEnvelope, faultResponse, migrationFailed, readCapped, rehydrationViolation, reportUnknownStoredKeys, verifyCall, type BoundaryError, type JsonValue, type ServiceBinding } from "./boundary.ts";
+import { boundaryError, callOutcome, callService, callServiceOutcome, checkStoredLayout, checkStoredSchemaVersion, deliverEvent, deserialiseEventEnvelope, faultResponse, migrationFailed, readCapped, rehydrationViolation, reportUnknownStoredKeys, verifyCall, type BoundaryError, type JsonValue, type ServiceBinding } from "./boundary.ts";
 import { WorkersConnection, acceptHibernatableConnection, connIdOf, newWebSocketPair, resolveConnection, webSocketUpgradeResponse } from "./connection.ts";
 import { pgExecute, type PgExecute, type PgOutcome, type PgParam, type PgStatementParam, type PgTxOutcome } from "./postgres.ts";
 import { mysqlExecute, type MySqlEndpoint, type MySqlOutcome, type MySqlParam, type MySqlStatementParam, type MySqlTxOutcome, type MySqlExecute } from "./mysql.ts";
@@ -17,7 +17,7 @@ import { handleEmail, type InboundMessage, type SenderIdentity } from "./email.t
 import { commitStored, noteClock, readStored, readsLazily, then } from "./entries.ts";
 import { attachLazy } from "./lazy.ts";
 import { fault, invariantViolation } from "./errors.ts";
-import { applyCache, applyCors, applyEdgeCache, applySecurityHeaders, cfObject, cookieObject, cookieString, cookieValue, corsPreflightResponse, csrfAllowed, edgeCacheGuard, formDecode, formMediaTypeMatches, formObject, formString, headResponse, httpResultToResponse, jsonMediaTypeMatches, matchPath, mediaTypeMatches, multipartForm, multipartMediaTypeMatches, multipartObject, noStore, notModifiedIfMatch, queryObject, queryString, renderRejection, requestHeaderPairs, requestCookies, requestCookiesHeader, requestBodyStream, requestHeaders, requestQuery, requestQuerySearch, responseToHttpOutcome, responseToHttpResult, responseToUnauthOutcome, sessionCookieOf, untilBodyTooLarge, varyAcceptLanguage, withPlainJson, type CorsPolicy, type SecurityPolicy } from "./http.ts";
+import { allowUnion, applyCache, applyCors, applyEdgeCache, applySecurityHeaders, cfObject, cookieObject, cookieString, cookieValue, corsPreflightResponse, csrfAllowed, edgeCacheGuard, formDecode, formMediaTypeMatches, formObject, formString, headResponse, httpResultToResponse, jsonMediaTypeMatches, matchPath, mediaTypeMatches, multipartForm, multipartMediaTypeMatches, multipartObject, noStore, notModifiedIfMatch, queryObject, queryString, renderRejection, requestHeaderPairs, requestCookies, requestCookiesHeader, requestBodyStream, requestHeaders, requestQuery, requestQuerySearch, responseToHttpOutcome, responseToHttpResult, responseToUnauthOutcome, sessionCookieOf, untilBodyTooLarge, varyAcceptLanguage, withPlainJson, type CorsPolicy, type SecurityPolicy } from "./http.ts";
 import { traceBinding, traceFault, traceFetch, traceStep, type TraceSpan } from "./trace.ts";
 import { historyBefore, historyRecord, inspectAgent, inspectRoute, noteAgentInstance } from "./inspect.ts";
 import { formatIcuDate, formatIcuNumber, selectPluralArm } from "./messages.ts";
@@ -51,12 +51,15 @@ export {
   makeIntegrationPostgres as __makeIntegrationPostgres,
   pgExecute as __pgExecute,
   acceptHibernatableConnection as __acceptHibernatableConnection,
+  allowUnion as __allowUnion,
   applyCache as __applyCache,
   applyCors as __applyCors,
   applyEdgeCache as __applyEdgeCache,
   applySecurityHeaders as __applySecurityHeaders,
   boundaryError as __boundaryError,
+  callOutcome as __callOutcome,
   callService as __callService,
+  callServiceOutcome as __callServiceOutcome,
   attachLazy as __attachLazy,
   commitStored as __commitStored,
   checkStoredLayout as __checkStoredLayout,

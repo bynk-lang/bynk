@@ -35,11 +35,11 @@ export default {
         }
       }
 
-      if (method === "OPTIONS" && request.headers.get("access-control-request-method") !== null && (path === "/ping" || __matchPath("/items/:id", path) !== null)) {
+      if (method === "OPTIONS" && request.headers.get("access-control-request-method") !== null && (__matchPath("/ping", path) !== null || __matchPath("/items/:id", path) !== null)) {
         return __applySecurityHeaders(__corsPreflightResponse(__cors_api, request.headers.get("origin")), __security_api);
       }
       {
-        if ((method === "GET" || method === "HEAD") && path === "/ping") {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/ping", path) !== null) {
           __route = "GET /ping";
           const result = await surface.http_GET_ping();
           const __response = __applySecurityHeaders(__applyCors(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), __cors_api, request.headers.get("origin")), __security_api);
@@ -50,6 +50,9 @@ export default {
         const __m = __matchPath("/items/:id", path);
         if ((method === "GET" || method === "HEAD") && __m) {
           __route = "GET /items/:id";
+          if (__m.malformed) {
+            return __applySecurityHeaders(__applyCors(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __cors_api, request.headers.get("origin")), __security_api);
+          }
           const __raw_id = __m.params["id"];
           const id = __raw_id;
           const result = await surface.http_GET_items_Param_id(id);
@@ -62,7 +65,7 @@ export default {
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__applyCors(__res, __cors_api, request.headers.get("origin")), __security_api);
       }
-      if (path === "/ping") {
+      if (__matchPath("/ping", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__applyCors(__res, __cors_api, request.headers.get("origin")), __security_api);

@@ -289,7 +289,11 @@ pub fn check_suite_fixtures(
                     }
                 }
             }
-            StubRhs::Fails(_) | StubRhs::Never(_) => {}
+            StubRhs::Fails(_)
+            | StubRhs::Never(_)
+            | StubRhs::Rejected(..)
+            | StubRhs::Faulted(_)
+            | StubRhs::Unreachable(_) => {}
         }
         if let Some(a) = &st.after {
             collect_expr_idents(a, &mut mentioned);

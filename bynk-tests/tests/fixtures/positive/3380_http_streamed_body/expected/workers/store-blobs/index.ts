@@ -35,7 +35,7 @@ export default {
       }
 
       {
-        if (method === "POST" && path === "/small") {
+        if (method === "POST" && __matchPath("/small", path) !== null) {
           __route = "POST /small";
           const __contentLength = request.headers.get("content-length");
           if (__contentLength !== null && globalThis.Number(__contentLength) > 8) {
@@ -59,6 +59,9 @@ export default {
         const __m = __matchPath("/blobs/:name", path);
         if (method === "PUT" && __m) {
           __route = "PUT /blobs/:name";
+          if (__m.malformed) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_blobs);
+          }
           if (!__mediaTypeMatches(request, ["application/octet-stream"])) {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/octet-stream" }), { status: 415, headers: { "content-type": "application/json" } }), __security_blobs);
           }
@@ -82,7 +85,7 @@ export default {
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, PUT" } });
         return __applySecurityHeaders(__res, __security_blobs);
       }
-      if (path === "/small") {
+      if (__matchPath("/small", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
         return __applySecurityHeaders(__res, __security_blobs);

@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import assert from "node:assert/strict";
 import {
+  allowUnion,
+  decodePath,
   matchPath,
   cfObject,
   httpResultToResponse,
@@ -82,6 +84,34 @@ test("matchPath: captures and decodes params", () => {
 test("matchPath: returns null on literal or length mismatch", () => {
   assert.equal(matchPath("/orders/:id", "/customers/1"), null);
   assert.equal(matchPath("/orders/:id", "/orders/1/extra"), null);
+});
+
+test("matchPath: empty segments are insignificant, and literals compare percent-decoded (#3909)", () => {
+  assert.deepEqual(matchPath("/items", "/items/"), { params: {} });
+  assert.deepEqual(matchPath("/items", "//items"), { params: {} });
+  assert.deepEqual(matchPath("/a/:x", "/a//b/"), { params: { x: "b" } });
+  assert.deepEqual(matchPath("/caf\u00e9", "/caf%C3%A9"), { params: {} });
+  assert.equal(matchPath("/items", "/item"), null);
+  // An undecodable segment equals no literal.
+  assert.equal(matchPath("/a/b", "/a/%E0%A4%A"), null);
+});
+
+test("allowUnion: the union is alphabetical and adds only the routes the path matches (#3909)", () => {
+  const extras: [string, string][] = [["/a/:x/c", "GET, HEAD, OPTIONS, PUT"]];
+  assert.equal(allowUnion("GET, HEAD, OPTIONS", "/a/b/c", extras), "GET, HEAD, OPTIONS, PUT");
+  assert.equal(allowUnion("DELETE, OPTIONS", "/a/b/d", extras), "DELETE, OPTIONS");
+});
+
+test("matchPath: malformed percent-encoding is reported, not thrown (#3908)", () => {
+  const m = matchPath("/orders/:id", "/orders/%E0%A4%A");
+  assert.ok(m !== null && typeof m.malformed === "string");
+  assert.ok(!m.malformed.includes("%E0"), "names the position, never the content");
+  // Non-null, so the router's method-aware fall-through still answers `405` to a wrong method.
+  assert.equal(matchPath("/orders/:id", "/customers/%E0%A4%A"), null);
+  assert.equal(matchPath("/a/:x/c", "/a/%E0%A4%A/d"), null);
+  assert.deepEqual(matchPath("/orders/:id", "/orders/a%20b"), { params: { id: "a b" } });
+  assert.deepEqual(decodePath("//a%20b/"), ["a b"]);
+  assert.equal(decodePath("/a/%E0%A4%A"), null);
 });
 
 const id = (v: number): JsonValue => v;

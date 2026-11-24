@@ -30,6 +30,9 @@ async function __bynkFetch(request: globalThis.Request, env: Env, ctx?: { waitUn
       const __m = __matchPath("/hello/:name", path);
       if ((method === "GET" || method === "HEAD") && __m) {
         __route = "GET /hello/:name";
+        if (__m.malformed) {
+          return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+        }
         const __raw_name = __m.params["name"];
         const name = __raw_name;
         const result = await surface.http_GET_hello_Param_name(name);

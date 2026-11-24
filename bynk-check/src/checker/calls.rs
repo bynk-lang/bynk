@@ -3107,6 +3107,12 @@ pub(crate) fn check_method_call(
         if let Some(consumed) = cross_context_prefix(receiver, ctx) {
             return check_cross_context_call(receiver, &consumed, method, args, span, expr_id, ctx);
         }
+        // #3894: `<context>.<service>.outcome(args)`.
+        if let Some(r) =
+            super::call_outcome::check_outcome_call(receiver, method, args, span, expr_id, ctx)
+        {
+            return r;
+        }
         // Looks like a dotted prefix (no local binding for the root). If the
         // chain matches the shape of a consumed-context call but the prefix
         // isn't actually consumed, surface an explicit diagnostic so the user
@@ -4504,7 +4510,7 @@ fn check_test_service_address(
             expr_id,
             Callee::TestService {
                 service: id.name.clone(),
-                address: HandlerAddress::Schedule { expr: None },
+                address: HandlerAddress::schedule_unread(),
                 extra_headers: false,
             },
         );
@@ -4550,7 +4556,7 @@ fn check_test_service_address(
             }
             return None;
         };
-        let params = handler.params.clone();
+        let params = schedule_address_params(handler, &expr, expr_id, &id.name, ctx);
         let _ = type_of(&args[0], None, ctx);
         check_address_args(&id.name, "schedule", &params, &args[1..], method.span, ctx);
         return handler_outcome(handler, ctx);
@@ -5008,6 +5014,39 @@ fn is_asset_value(e: &Expr, ctx: &Ctx) -> bool {
             .unwrap_or_else(|| ctx.input.assets.contains_key(&id.name)),
         _ => false,
     }
+}
+
+/// #3874: a cron handler's `CronSchedule` parameter is filled from the address's
+/// own schedule (its first argument), so it is not an argument of the address. Records
+/// the address with that parameter's position (for the emitter to fill) and returns the
+/// handler's parameters the address's remaining arguments are checked against.
+fn schedule_address_params(
+    handler: &TestHandler,
+    expr: &str,
+    expr_id: bynk_syntax::ast::ExprId,
+    service: &str,
+    ctx: &mut Ctx,
+) -> Vec<bynk_syntax::ast::Param> {
+    use bynk_syntax::cron::{CronParam, cron_param};
+    let schedule_param = handler
+        .params
+        .iter()
+        .position(|p| cron_param(&p.type_ref) == Some(CronParam::Schedule));
+    ctx.callees.insert(
+        expr_id,
+        Callee::TestService {
+            service: service.to_string(),
+            address: HandlerAddress::schedule_with_param(expr, schedule_param),
+            extra_headers: false,
+        },
+    );
+    handler
+        .params
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| Some(*i) != schedule_param)
+        .map(|(_, p)| p.clone())
+        .collect()
 }
 
 /// #3875 [DECISION C]: the schedule a `svc.schedule(…)` address names: a string
@@ -6016,7 +6055,7 @@ fn check_event_address(
 /// dotted qualified name appearing in `consumes`), return the consumed
 /// context's qualified name. Otherwise None. Local bindings, types, and
 /// capabilities take precedence — those are checked at the call site.
-fn cross_context_prefix(receiver: &Expr, ctx: &Ctx) -> Option<String> {
+pub(super) fn cross_context_prefix(receiver: &Expr, ctx: &Ctx) -> Option<String> {
     let info = &ctx.input.cross_context;
     if info.consumed_contexts.is_empty() && info.aliases.is_empty() {
         return None;
@@ -6679,7 +6718,7 @@ fn check_signature_owners_consumed(
     refused
 }
 
-fn check_cross_context_call(
+pub(super) fn check_cross_context_call(
     receiver: &Expr,
     consumed: &str,
     method: &Ident,

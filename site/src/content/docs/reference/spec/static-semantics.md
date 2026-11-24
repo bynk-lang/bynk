@@ -537,8 +537,8 @@ groups it would splice in).
   cannot prove unambiguous, and no ambiguity it finds (`bynk.types.catastrophic_regex`,
   `bynk.types.polynomial_regex`; no length bound can excuse a polynomial one
   here).
-- Semantics are JS `RegExp` with `Matches`' flag set: no `u`, so `.` and
-  classes work on UTF-16 code units. A pattern may open with one inline-flag
+- Semantics are JS `RegExp` in Unicode mode (`u`), as for `Matches` (#3950): `.`
+  and classes work on code points, and `\w`, `\d` and `\b` stay ASCII. A pattern may open with one inline-flag
   group, `(?i)`, `(?m)`, `(?s)` or a combination, which becomes the `RegExp`
   flags; an unknown or repeated flag is `invalid_regex`. The ambiguity analysis
   runs under those flags: under `s`, `.` matches every code unit, and under
@@ -861,7 +861,7 @@ an `Int` is rejected (`bynk.types.predicate_base_mismatch`) — and MUST be
 internally consistent: an `InRange` MUST NOT be inverted
 (`bynk.types.inverted_range`), a length MUST NOT be negative
 (`bynk.types.negative_length`), a `Matches` regex MUST be valid
-(`bynk.types.invalid_regex`) and MUST be safe to backtrack (below), and the
+(`bynk.types.invalid_regex`; in Unicode mode, with the same optional leading `(?i)`/`(?s)` group as the `String` regex methods and no `(?m)`) and MUST be safe to backtrack (below), and the
 predicates together MUST admit at least one value (`bynk.types.empty_refinement`
 — on `Float`, `Positive` excludes the lower endpoint `0.0`, so
 `InRange(-1.0, 0.0) && Positive` is empty).
@@ -1346,6 +1346,22 @@ an input gate that is open while a handler awaits a subrequest is open for a joi
 too, so a join adds no interleaving a sequence of `<-`s does not already allow —
 the one thing it removes is the synchronous gap between two adjacent lines, which
 nothing inside the block can rely on, because no binding can read another's result.
+
+A **call outcome** (`<context>.<service>.outcome(args)`; #3894) is a cross-context
+service call whose failure is a value. It is a member of the service reference, not a
+method of `Effect`: the receiver MUST be a consumed context's service (by alias or qualified
+name), the arguments are checked as for `<context>.<service>(args)`, and the call has type
+`Effect[CallOutcome[R]]`, where `R` is the handler's declared result and `CallOutcome` is
+`bynk`'s. A unit that writes it MUST have `CallOutcome` in scope, as `consumes bynk { CallOutcome }`
+or an entry in its existing `consumes bynk { … }` (`bynk.call.outcome_not_in_scope`). A service named
+`outcome` keeps its plain call. The call is legal wherever the plain call is, an agent
+handler included, and `.within(d)` composes with it. `CallOutcome[R]` is
+`Handled(result: R) | Rejected(reason: Refusal) | Faulted | Unreachable(status: Option[Int])`;
+`CallFailure` is the same without `Handled`, and `Refusal` is an enum of the callee's wire
+refusals (`TooLarge`, `NotAuthenticated`, `UnsupportedWire`, `NoSuchService`, `NotAdmitted`,
+`StaleContract`, `Undecodable`). `o.handled()` has type `Result[R, CallFailure]`, so `?` and
+`embeds` propagate a failed call. A value of `CallOutcome` or `CallFailure` MUST NOT be
+constructed in a context (`bynk.call.outcome_construction`); matching one is unaffected.
 
 A **timeout** (`e.within(d)`; #2683) bounds how long an effect may take. It is a
 method of every `Effect[T]`: `d` MUST be a `Duration`, and the call has type
@@ -1863,8 +1879,8 @@ codes and result; the tag's syntax is checked at run time
 constant declared exactly `String` or `CronSchedule` and bound, through any chain of such
 constants, to a string literal; the literal is the schedule, checked as a literal
 schedule is (`bynk.cron.invalid_schedule` otherwise), and duplicate detection and the
-trigger table read it. A cron handler MUST take at most one
-`Instant` parameter, a valid schedule (`Cron`: Cloudflare's five-field syntax, single-spaced), and return `Effect[Result[(), E]]`
+trigger table read it. A cron handler MUST take at most two parameters, at most one `Instant` (the
+scheduled time) and at most one `CronSchedule` (the schedule that fired the run), in either order, a valid schedule (`Cron`: Cloudflare's five-field syntax, single-spaced), and return `Effect[Result[(), E]]`
 (the `bynk.cron.*` codes); an `on message` handler MUST take exactly one `message`
 parameter, a Cloudflare-valid queue name, and the same return shape (the `bynk.queue.*`
 codes).
@@ -2725,7 +2741,7 @@ Handled(HttpResult[T])`, and `BoundaryRejection` is the built-in sum
 `RefinementViolation(detail: String) | MalformedJson(detail: String) |
 StructuralMismatch(detail: String) | Unauthorized | MethodNotAllowed |
 PayloadTooLarge(detail: String) | UnsupportedMediaType(detail: String) |
-MalformedForm(detail: String)`. Neither
+MalformedForm(detail: String) | MalformedPath(detail: String)`. Neither
 type can be named in source. An asset fetch (`svc.GET(asset)`) has type
 `Effect[HttpResult[()]]`.
 

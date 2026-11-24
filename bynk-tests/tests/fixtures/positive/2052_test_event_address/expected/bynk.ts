@@ -3,6 +3,7 @@
 
 import { Ok, Err, type Result, type Option } from "./__bynk_runtime/result.js";
 import { __bynkIsCron } from "./__bynk_runtime/time.js";
+import { __bynkRegExp } from "./__bynk_runtime/text.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 
 import { LocaleTag } from "./bynk/locale/types.js";
@@ -14,7 +15,7 @@ export type Uuid = string & { readonly __brand: "Uuid" };
 
 export const Uuid = {
   of(value: string): Result<Uuid, ValidationError> {
-    if (!(new globalThis.RegExp("^(?:" + "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}" + ")$").test(value))) {
+    if (!(__bynkRegExp("^(?:" + "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}" + ")$", "u").test(value))) {
       return Err({ field: "Uuid", message: "must match /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/", value });
     }
     return Ok(value as Uuid);
@@ -156,6 +157,93 @@ export interface TimedOut {
 }
 
 export const TimedOut = {
+};
+
+/**
+ * What a cross-context service call came to, as `<context>.<service>.outcome(args)`
+ * yields it. The variants are grouped by whether the callee's handler ran:
+ * `Handled` it ran and answered with `result`; `Rejected` it was refused before it
+ * ran, for the `reason`; `Faulted` it ran and faulted (a faulting handler commits
+ * nothing); `Unreachable` it is not known whether it ran, with the HTTP `status`
+ * when there was a response. Only `.outcome(…)` and a test `stub` make one.
+ */
+export type CallOutcome<R> =
+    { readonly tag: "Handled"; readonly result: R }
+  | { readonly tag: "Rejected"; readonly reason: Refusal }
+  | { readonly tag: "Faulted" }
+  | { readonly tag: "Unreachable"; readonly status: Option<number> };
+
+export const CallOutcome = {
+  Handled: <R>(result: R): CallOutcome<R> => ({ tag: "Handled", result }),
+  Rejected: <R>(reason: Refusal): CallOutcome<R> => ({ tag: "Rejected", reason }),
+  Faulted: { tag: "Faulted" } as CallOutcome<never>,
+  Unreachable: <R>(status: Option<number>): CallOutcome<R> => ({ tag: "Unreachable", status }),
+  /**
+   * `Handled(r)` becomes `Ok(r)`; any other case becomes `Err` of the matching
+   * `CallFailure`, so `outcome(…).handled()?` propagates a failed call with `?`
+   * and `embeds`.
+   */
+  handled<R>(self: CallOutcome<R>): Result<R, CallFailure> {
+    switch (self.tag) {
+      case "Handled": {
+        const r = self.result;
+        return Ok(r);
+      }
+      case "Rejected": {
+        const reason = self.reason;
+        return Err(CallFailure.Rejected(reason));
+      }
+      case "Faulted": {
+        return Err(CallFailure.Faulted);
+      }
+      case "Unreachable": {
+        const status = self.status;
+        return Err(CallFailure.Unreachable(status));
+      }
+    }
+    throw new globalThis.Error("non-exhaustive match");
+  },
+};
+
+/**
+ * Why a call did not come to `Handled`: `CallOutcome[R]` without its `Handled`
+ * case, as `outcome(…).handled()` yields it in the `Err` of a `Result`. An
+ * ordinary sum, so `embeds` can wrap it into a caller's own error type.
+ */
+export type CallFailure =
+    { readonly tag: "Rejected"; readonly reason: Refusal }
+  | { readonly tag: "Faulted" }
+  | { readonly tag: "Unreachable"; readonly status: Option<number> };
+
+export const CallFailure = {
+  Rejected: (reason: Refusal): CallFailure => ({ tag: "Rejected", reason }),
+  Faulted: { tag: "Faulted" } as CallFailure,
+  Unreachable: (status: Option<number>): CallFailure => ({ tag: "Unreachable", status }),
+};
+
+/**
+ * Why the callee refused a call before its handler ran, one case per check the
+ * wire makes: `TooLarge` (413), `NotAuthenticated` (401), `UnsupportedWire`
+ * (400), `NoSuchService` (404), `NotAdmitted` (403), `StaleContract` (409) and
+ * `Undecodable` (400, a body that is not the service's arguments).
+ */
+export type Refusal =
+    { readonly tag: "TooLarge" }
+  | { readonly tag: "NotAuthenticated" }
+  | { readonly tag: "UnsupportedWire" }
+  | { readonly tag: "NoSuchService" }
+  | { readonly tag: "NotAdmitted" }
+  | { readonly tag: "StaleContract" }
+  | { readonly tag: "Undecodable" };
+
+export const Refusal = {
+  TooLarge: { tag: "TooLarge" } as Refusal,
+  NotAuthenticated: { tag: "NotAuthenticated" } as Refusal,
+  UnsupportedWire: { tag: "UnsupportedWire" } as Refusal,
+  NoSuchService: { tag: "NoSuchService" } as Refusal,
+  NotAdmitted: { tag: "NotAdmitted" } as Refusal,
+  StaleContract: { tag: "StaleContract" } as Refusal,
+  Undecodable: { tag: "Undecodable" } as Refusal,
 };
 
 /**

@@ -17,6 +17,14 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0914](0914-route-matching-order.md) | **A defined, positional order for matching routes, and unreachable routes refused** (v0.659) — At the first differing segment a literal beats a parameter; a route no request can reach is an error | Accepted (v0.659) |
+| [0913](0913-cron-failed-run-visible.md) | **A failed cron run is visible to the platform** (v0.658) — An `Err` or a throw marks the run failed through `waitUntil`, with a labelled log that never carries the payload | Accepted (v0.658) |
+| [0912](0912-property-counterexample-show.md) | **Property counterexamples print Decimal and Bytes in Bynk's form** (v0.657.1) — The test runtime's value printer renders a Decimal as its literal and a Bytes as `Bytes.fromHex(…)` | Accepted (v0.657.1) |
+| [0911](0911-comparison-operand-picks-shared-variant.md) | **The other operand of a comparison picks a shared bare variant's sum** (v0.657) — `==`, `!=`, `<`, `<=`, `>` and `>=` type the non-variant side first and use its sum as the bare variant's expected type | Accepted (v0.657) |
+| [0910](0910-call-outcome.md) | **`svc.outcome(…)` returns a `CallOutcome`, so a caller can handle a failed call** (v0.656) — A cross-context call's failure becomes a value on request, grouped by whether the callee's handler ran | Accepted (v0.656) |
+| [0909](0909-virtual-settle-deps-type.md) | **The virtual-time settle helper accepts any deps object** (v0.655.2) — `__bynkSettleVirtual`'s deps parameter is `object & { __exec?: … }`, not a weak type | Accepted (v0.655.2) |
+| [0908](0908-malformed-path-rejection.md) | **A path that cannot be percent-decoded is a 400 MalformedPath, not a fault** (v0.655.1) — The router refuses an undecodable path with a synthesised 400, a new BoundaryRejection variant | Accepted (v0.655.1) |
+| [0907](0907-cron-handler-schedule-parameter.md) | **A cron handler can take the schedule that fired it** (v0.655) — Up to two parameters, told apart by type, in either order: an `Instant` and exactly `CronSchedule` | Accepted (v0.655) |
 | [0906](0906-json-route-media-type.md) | **A JSON body route checks its media type, tolerantly, and @raw takes a list of types** (v0.654) — JSON body routes answer 415 to present non-JSON Content-Types; @raw(contentType:) accepts a non-empty list | Accepted (v0.654) |
 | [0905](0905-cron-schedule-constant.md) | **A constant names a cron schedule** (v0.653) — `schedule(…)` takes a `String` or `CronSchedule` constant; a refined constant is accepted for this position only | Accepted (v0.653) |
 | [0904](0904-wrangler-exit-before-stdin-is-wranglers-failure.md) | **A wrangler that exits before reading its piped stdin is reported by its exit, not by the broken pipe** (v0.652.1) — Wrangler::feed carries on past EPIPE to wrangler's exit and streams | Accepted (v0.652.1) |

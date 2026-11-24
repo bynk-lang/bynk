@@ -35,7 +35,7 @@ export default {
       }
 
       {
-        if ((method === "GET" || method === "HEAD") && path === "/orders") {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/orders", path) !== null) {
           __route = "GET /orders";
           const result = await surface.http_GET_orders();
           const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), __security_api);
@@ -46,13 +46,16 @@ export default {
         const __m = __matchPath("/orders/:name", path);
         if (method === "POST" && __m) {
           __route = "POST /orders/:name";
+          if (__m.malformed) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          }
           const __raw_name = __m.params["name"];
           const name = __raw_name;
           const result = await surface.http_POST_orders_Param_name(name);
           return __applySecurityHeaders(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __security_api);
         }
       }
-      if (path === "/orders") {
+      if (__matchPath("/orders", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_api);

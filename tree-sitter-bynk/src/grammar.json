@@ -6742,6 +6742,31 @@
             {
               "type": "STRING",
               "value": "never"
+            },
+            {
+              "type": "SEQ",
+              "members": [
+                {
+                  "type": "STRING",
+                  "value": "rejected"
+                },
+                {
+                  "type": "FIELD",
+                  "name": "refusal",
+                  "content": {
+                    "type": "SYMBOL",
+                    "name": "identifier"
+                  }
+                }
+              ]
+            },
+            {
+              "type": "STRING",
+              "value": "faulted"
+            },
+            {
+              "type": "STRING",
+              "value": "unreachable"
             }
           ]
         }

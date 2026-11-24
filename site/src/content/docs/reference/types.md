@@ -1618,8 +1618,12 @@ pattern, and the compiler checks them identically.
   group, `None` for a group that did not take part.
 - **Flags** go at the start of the pattern: `(?i)` ignores case, `(?m)` lets
   `^`/`$` match at line breaks, `(?s)` lets `.` match a newline.
-- **Semantics** are JavaScript's `RegExp`, without the `u` flag, as `Matches`
-  uses.
+- **Semantics** are JavaScript's `RegExp` in Unicode mode (`u`), as `Matches`
+  uses: `\p{L}` and the other property escapes work, and `.` and a negated class
+  match a whole astral character rather than half of a surrogate pair. `\w`, `\d`
+  and `\b` stay ASCII even with `u` (JavaScript's rule); write `\p{L}` and
+  `\p{Nd}` for the Unicode forms. A pattern that is valid only without `u`, such
+  as an identity escape `\-` outside a class, is `bynk.types.invalid_regex`.
 - **`replaceRegex`** reads `$1`, `$<name>`, `$&` and `$$` in the replacement,
   unlike `replace`, which inserts its text literally.
 
@@ -1749,8 +1753,9 @@ it keeps that name on the wire.
 Two sums in scope may declare the same variant name: two of your own, or two
 that a consumed unit exports (`bynk.cloudflare`'s `SqlError` has a `Failed`, and
 so may an enum of yours). A bare use of the name builds the sum the **expected
-type** names: an annotated `let`, a parameter, a return type, or the operation a
-`stub` overrides.
+type** names: an annotated `let`, a parameter, a return type, the operation a
+`stub` overrides, or the other operand of a comparison (`==`, `!=`, `<`, `<=`,
+`>`, `>=`).
 
 ```bynk
 type DbError = | Constraint(message: String) | Failed(message: String)
@@ -1760,6 +1765,13 @@ fn send() -> Result[Int, MailError] {
   Err(Failed("down"))          // MailError.Failed: the return type picks it
 }
 ```
+
+In a comparison the operand that is not a bare variant is typed first, and its
+sum is the bare variant's expected type, so `e == Failed("down")`,
+`e != RateLimited`, `o == Some(Failed("x"))` (through `Option`, `Result`, brackets and a list literal's first element) and,
+for a `derives Ord` sum, `p > Medium` resolve when `e: MailError`,
+`o: Option[MailError]` and `p` is a sum that declares `Medium`. When both sides are bare
+variants (`Failed("a") == Failed("b")`) nothing decides, so the name stays ambiguous.
 
 With no expected type naming one of them (`let e = Failed("down")`), the
 compiler does not pick one: the name is `bynk.resolve.ambiguous_variant`, and

@@ -255,8 +255,10 @@ pub(crate) fn eval_predicate(pred: &PredKind, lit: &ConstLit) -> bool {
         (PredKind::Cron, ConstLit::Str(s)) => bynk_syntax::cron::is_cron_expression(s).is_ok(),
         (PredKind::Matches(pat), ConstLit::Str(s)) => {
             // Evaluated with the same engine semantics the emitted
-            // `new RegExp(...)` runs under (ECMAScript, no flags).
-            regress::Regex::new(&format!("^(?:{pat})$"))
+            // `RegExp` runs under (ECMAScript, Unicode mode, the pattern's
+            // own leading flags; #3950).
+            let (pat, flags) = bynk_syntax::ast::matches_pattern_and_flags(pat);
+            regress::Regex::with_flags(&format!("^(?:{pat})$"), flags.as_str())
                 .map(|re| re.find(s).is_some())
                 .unwrap_or(false)
         }
@@ -523,68 +525,25 @@ pub(crate) fn check_refinement(
             );
         }
         match &pred.kind {
-            PredKind::Matches(pat) => {
+            PredKind::Matches(literal) => {
                 // Validate with ECMAScript semantics (the `regress` engine):
                 // the emitted check runs the pattern under JS `RegExp`, so a
                 // pattern the Rust `regex` crate accepts but JS rejects
-                // (`(?P<name>…)`, inline flags) would otherwise compile
-                // cleanly and then throw at runtime — a 500 on the request
-                // path instead of a compile error.
-                if let Err(e) = regress::Regex::new(pat) {
-                    errors.push(
-                        CompileError::new(
-                            "bynk.types.invalid_regex",
-                            pred.span,
-                            format!("invalid regular expression in `Matches(\"{pat}\")`"),
-                        )
-                        .with_note(format!("regex parse error (JS `RegExp` semantics): {e}")),
-                    );
-                } else if has_nested_unbounded_quantifier(pat) && !proved_linear(pat, "") {
-                    // The emitted boundary check runs this pattern under JS
-                    // `RegExp`, a backtracking engine. A repeated group that
-                    // itself contains an unbounded quantifier (`(a+)+`) makes
-                    // matching take exponential time on a crafted near-miss
-                    // input — a refined `String` on an HTTP boundary would let
-                    // an unauthenticated client stall the Worker (ReDoS, #724).
-                    // Reject the pattern at compile time rather than ship the
-                    // hazard. This cheap first pass keeps its own, clearer
-                    // message; the ambiguity analysis below covers the rest.
-                    errors.push(
-                        CompileError::new(
-                            "bynk.types.catastrophic_regex",
-                            pred.span,
-                            format!(
-                                "the pattern in `Matches(\"{pat}\")` nests unbounded quantifiers, \
-                                 which can cause catastrophic backtracking (ReDoS)"
-                            ),
-                        )
-                        .with_note(
-                            "a repeated group that itself contains `*`, `+`, or `{n,}` makes \
-                             matching take exponential time on crafted input; restructure the \
-                             pattern so no unbounded quantifier is nested inside another",
-                        ),
-                    );
-                } else if let Some(e) = ambiguity_diagnostic(
-                    pat,
-                    "",
-                    pred.span,
-                    &format!("`Matches(\"{pat}\")`"),
-                    // The tightest length bound the refinement states. Length
-                    // predicates run before `Matches` (`in_check_order`), so it
-                    // caps the input the pattern ever sees.
-                    Some(
-                        refinement
-                            .predicates
-                            .iter()
-                            .filter_map(|p| match p.kind {
-                                PredKind::MaxLength(n) | PredKind::Length(n) => Some(n),
-                                // `IsoDate` admits only `YYYY-MM-DD`.
-                                PredKind::IsoDate => Some(10),
-                                _ => None,
-                            })
-                            .min(),
-                    ),
-                ) {
+                // (`(?P<name>…)`) would otherwise compile cleanly and then
+                // throw at runtime — a 500 on the request path instead of a
+                // compile error. #3950: in Unicode mode (`u`), as the kernel's
+                // regex literals are, and with their leading flag group.
+                let max_len = refinement
+                    .predicates
+                    .iter()
+                    .filter_map(|p| match p.kind {
+                        PredKind::MaxLength(n) | PredKind::Length(n) => Some(n),
+                        // `IsoDate` admits only `YYYY-MM-DD`.
+                        PredKind::IsoDate => Some(10),
+                        _ => None,
+                    })
+                    .min();
+                if let Err(e) = check_matches_pattern(literal, pred.span, max_len) {
                     errors.push(e);
                 }
             }
@@ -1326,7 +1285,8 @@ fn pred_admits_zero(base: BaseType, k: &PredKind) -> bool {
 /// emitted refined-type constructor anchors it (`^(?:pattern)$`), and
 /// evaluated with the same engine semantics (ECMAScript, no flags).
 fn regex_matches_empty(pattern: &str) -> bool {
-    match regress::Regex::new(&format!("^(?:{pattern})$")) {
+    let (pattern, flags) = bynk_syntax::ast::matches_pattern_and_flags(pattern);
+    match regress::Regex::with_flags(&format!("^(?:{pattern})$"), flags.as_str()) {
         Ok(re) => re.find("").is_some(),
         Err(_) => false,
     }
@@ -1449,6 +1409,90 @@ fn ambiguity_diagnostic(
     })
 }
 
+/// #3950: validate a `Matches` argument: the leading flag group (`(?i)`, `(?s)`;
+/// each at most once, and not `m`, which means nothing under `Matches`'
+/// whole-string anchoring), then the pattern in Unicode mode, then the ReDoS
+/// analyses under the same flags. `max_len` is the tightest length bound the
+/// refinement states: length predicates run before `Matches`
+/// (`in_check_order`), so it caps the input the pattern ever sees.
+fn check_matches_pattern(
+    literal: &str,
+    span: Span,
+    max_len: Option<i64>,
+) -> Result<(), CompileError> {
+    let label = format!("`Matches(\"{literal}\")`");
+    let (pat, flags) = match leading_flag_group(literal) {
+        Some((pat, flags)) => {
+            let mut seen = String::new();
+            for c in flags.chars() {
+                if c == 'm' {
+                    return Err(CompileError::new(
+                        "bynk.types.invalid_regex",
+                        span,
+                        format!("the `(?m)` flag in {label} has no meaning under `Matches`"),
+                    )
+                    .with_note(
+                        "`Matches` tests the whole string, so `^` and `$` already mean its start \
+                         and end; use `(?i)` or `(?s)`, or drop the group",
+                    ));
+                }
+                if !"is".contains(c) || seen.contains(c) {
+                    return Err(CompileError::new(
+                        "bynk.types.invalid_regex",
+                        span,
+                        format!("invalid inline flags `(?{flags})` in {label}"),
+                    )
+                    .with_note("`Matches` accepts `(?i)` and `(?s)`, each at most once"));
+                }
+                seen.push(c);
+            }
+            (pat.to_string(), format!("{seen}u"))
+        }
+        None => (literal.to_string(), "u".to_string()),
+    };
+    if let Err(e) = regress::Regex::with_flags(&pat, flags.as_str()) {
+        return Err(CompileError::new(
+            "bynk.types.invalid_regex",
+            span,
+            format!("invalid regular expression in {label}"),
+        )
+        .with_note(format!(
+            "regex parse error (JS `RegExp` semantics, Unicode mode): {e}"
+        ))
+        .with_note(
+            "every Bynk regex runs in Unicode mode (`u`), where an identity escape such as `\\-` \
+             outside a class is an error: drop a needless backslash",
+        ));
+    }
+    if has_nested_unbounded_quantifier(&pat) && !proved_linear(&pat, &flags) {
+        // The emitted boundary check runs this pattern under JS `RegExp`, a
+        // backtracking engine. A repeated group that itself contains an
+        // unbounded quantifier (`(a+)+`) makes matching take exponential time
+        // on a crafted near-miss input — a refined `String` on an HTTP boundary
+        // would let an unauthenticated client stall the Worker (ReDoS, #724).
+        // Reject the pattern at compile time rather than ship the hazard. This
+        // cheap first pass keeps its own, clearer message; the ambiguity
+        // analysis below covers the rest.
+        return Err(CompileError::new(
+            "bynk.types.catastrophic_regex",
+            span,
+            format!(
+                "the pattern in {label} nests unbounded quantifiers, which can cause \
+                 catastrophic backtracking (ReDoS)"
+            ),
+        )
+        .with_note(
+            "a repeated group that itself contains `*`, `+`, or `{n,}` makes matching take \
+             exponential time on crafted input; restructure the pattern so no unbounded \
+             quantifier is nested inside another",
+        ));
+    }
+    match ambiguity_diagnostic(&pat, &flags, span, &label, Some(max_len)) {
+        Some(e) => Err(e),
+        None => Ok(()),
+    }
+}
+
 /// K6c (#2594's sibling, #2600): check a regex method's pattern argument the
 /// way a `Matches` pattern is checked: valid under ECMAScript semantics
 /// (`regress`), no nested unbounded quantifier, and no ambiguity the automaton
@@ -1479,15 +1523,20 @@ pub(crate) fn check_regex_literal(
         }
         None => (literal.to_string(), String::new()),
     };
-    if let Err(e) = regress::Regex::with_flags(&pat, flags.as_str()) {
+    // #3950: every Bynk regex runs in Unicode mode, so it is validated and
+    // analysed under `u` as well.
+    let uflags = format!("{flags}u");
+    if let Err(e) = regress::Regex::with_flags(&pat, uflags.as_str()) {
         return Err(CompileError::new(
             "bynk.types.invalid_regex",
             span,
             format!("invalid regular expression {label}"),
         )
-        .with_note(format!("regex parse error (JS `RegExp` semantics): {e}")));
+        .with_note(format!(
+            "regex parse error (JS `RegExp` semantics, Unicode mode): {e}"
+        )));
     }
-    if has_nested_unbounded_quantifier(&pat) && !proved_linear(&pat, &flags) {
+    if has_nested_unbounded_quantifier(&pat) && !proved_linear(&pat, &uflags) {
         return Err(CompileError::new(
             "bynk.types.catastrophic_regex",
             span,
@@ -1502,7 +1551,7 @@ pub(crate) fn check_regex_literal(
              quantifier is nested inside another",
         ));
     }
-    if let Some(e) = ambiguity_diagnostic(&pat, &flags, span, &label, None) {
+    if let Some(e) = ambiguity_diagnostic(&pat, &uflags, span, &label, None) {
         return Err(e);
     }
     Ok((pat, flags))
@@ -1512,11 +1561,7 @@ pub(crate) fn check_regex_literal(
 /// and the letters. `None` when the literal opens with no such group (a
 /// lookaround `(?=`, `(?!`, `(?<` or a non-capturing `(?:` is not one).
 fn leading_flag_group(literal: &str) -> Option<(&str, &str)> {
-    let rest = literal.strip_prefix("(?")?;
-    let end = rest.find(')')?;
-    let flags = &rest[..end];
-    (!flags.is_empty() && flags.chars().all(|c| c.is_ascii_alphabetic()))
-        .then(|| (&rest[end + 1..], flags))
+    bynk_syntax::ast::leading_regex_flag_group(literal)
 }
 
 /// K6c (#2600): a checked regex literal as the emitter writes it, the pattern

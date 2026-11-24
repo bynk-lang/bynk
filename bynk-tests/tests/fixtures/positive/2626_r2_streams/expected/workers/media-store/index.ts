@@ -240,6 +240,9 @@ export default {
         const __m = __matchPath("/echo/:text", path);
         if ((method === "GET" || method === "HEAD") && __m) {
           __route = "GET /echo/:text";
+          if (__m.malformed) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          }
           const __raw_text = __m.params["text"];
           const text = __raw_text;
           const result = await surface.http_GET_echo_Param_text(text);
@@ -251,6 +254,9 @@ export default {
         const __m = __matchPath("/videos/:key", path);
         if ((method === "GET" || method === "HEAD") && __m) {
           __route = "GET /videos/:key";
+          if (__m.malformed) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          }
           const __raw_key = __m.params["key"];
           const key = __raw_key;
           const result = await surface.http_GET_videos_Param_key(key);

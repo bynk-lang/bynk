@@ -2,7 +2,7 @@
 // Worker entry point for context `shop.web`.
 
 import { type __JsonValue, __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
-import { __httpResultToResponse, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
 import { compose, type Env } from "./compose.js";
 
 function __bynkReportFault(ctx: { waitUntil(promise: globalThis.Promise<unknown>): void } | undefined, e: unknown): void {
@@ -35,13 +35,13 @@ export default {
       }
 
       {
-        if (method === "POST" && path === "/web") {
+        if (method === "POST" && __matchPath("/web", path) !== null) {
           __route = "POST /web";
           const result = await surface.http_POST_web();
           return __applySecurityHeaders(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __security_api);
         }
       }
-      if (path === "/web") {
+      if (__matchPath("/web", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
         return __applySecurityHeaders(__res, __security_api);

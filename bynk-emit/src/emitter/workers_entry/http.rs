@@ -319,6 +319,66 @@ fn stamp_rejection(
     }
 }
 
+/// The first statements of a matched route's block: the fault-log route name
+/// (#1825), then, for a route with path parameters, #3908's `400 MalformedPath`:
+/// a path whose percent-encoding does not decode is the client's error and no
+/// fault, answered before the actor, body or handler.
+fn route_prelude(
+    route: &HttpRoute,
+    (cors_const, security_const, rejected): (Option<&str>, Option<&str>, Option<&str>),
+) -> Vec<TsStmt> {
+    // #1825: names the route, by its pattern, for the fault log.
+    let mut out = vec![set_fault_route(format!(
+        "{} {}",
+        route.method.as_str(),
+        route.path
+    ))];
+    if param_count(&route.path) == 0 {
+        return out;
+    }
+    let malformed = stamp_rejection(
+        json_response(
+            json_error_kind(
+                "MalformedPath",
+                vec![("details".to_string(), member(ident("__m"), "malformed"))],
+            ),
+            400,
+        ),
+        cors_const,
+        security_const,
+        rejected,
+    );
+    out.push(if_(
+        member(ident("__m"), "malformed"),
+        block(vec![return_(Some(malformed))]),
+    ));
+    out
+}
+
+/// The order the router tries its routes in (#3909): by fewest parameter segments,
+/// then method and path, so the output is stable; then, where two routes of a
+/// method match a common path, the one with the literal at the first segment where
+/// they differ goes first (`bynk_check::route_order`), so the answer never depends
+/// on how a route is spelt.
+fn sort_routes(mut routes: Vec<HttpRoute>) -> Vec<HttpRoute> {
+    routes.sort_by(|a, b| {
+        param_count(&a.path)
+            .cmp(&param_count(&b.path))
+            .then_with(|| a.method.as_str().cmp(b.method.as_str()))
+            .then_with(|| a.path.cmp(&b.path))
+    });
+    let keys: Vec<(&str, &str)> = routes
+        .iter()
+        .map(|r| (r.method.as_str(), r.path.as_str()))
+        .collect();
+    let order = bynk_check::route_order::order(&keys);
+    let mut slots: Vec<Option<HttpRoute>> = routes.into_iter().map(Some).collect();
+    order
+        .into_iter()
+        .map(|i| slots[i].take().expect("each route is placed once"))
+        .collect()
+}
+
 /// The `415` a `@raw` route answers to a `Content-Type` outside the declared
 /// media type or list of them (#3912), or a JSON `body` route answers to a
 /// `Content-Type` that is present and neither `application/json` nor a `+json`
@@ -418,18 +478,22 @@ pub(super) fn emit_http_route_dispatch(
     let route_cond = if has_path_params {
         and_expr(method_guard, ident("__m"))
     } else {
+        // #3909: a literal route is matched the same way, so an empty segment is
+        // insignificant and a literal is compared percent-decoded.
         and_expr(
             method_guard,
-            strict_eq(ident("path"), str_lit(route.path.clone())),
+            strict_neq(
+                call(
+                    ident("__matchPath"),
+                    vec![str_lit(route.path.clone()), ident("path")],
+                ),
+                null_lit(),
+            ),
         )
     };
 
     // #1825: names the route, by its pattern, for the fault log.
-    let mut guarded: Vec<TsStmt> = vec![set_fault_route(format!(
-        "{} {}",
-        route.method.as_str(),
-        route.path
-    ))];
+    let mut guarded = route_prelude(route, (cors_const, security_const, rejected));
 
     // v0.142 (ADR 0165): the request-body ceiling. A route with an effective cap
     // rejects an oversized body with a synthesised `413` derived from the declared
@@ -1361,14 +1425,5 @@ pub(super) fn collect_http_routes(
             }
         }
     }
-    http_routes.sort_by(|a, b| {
-        // Sort by literal-specificity: a path with fewer parameter segments
-        // (more literals) wins. Stable secondary sort by method + path keeps
-        // the diff deterministic.
-        param_count(&a.path)
-            .cmp(&param_count(&b.path))
-            .then_with(|| a.method.as_str().cmp(b.method.as_str()))
-            .then_with(|| a.path.cmp(&b.path))
-    });
-    http_routes
+    sort_routes(http_routes)
 }

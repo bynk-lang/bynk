@@ -36,7 +36,7 @@ export default {
       }
 
       {
-        if ((method === "GET" || method === "HEAD") && path === "/me") {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/me", path) !== null) {
           __route = "GET /me";
           const __c = __cookieObject(request, [{ name: "sid", kind: "string", list: false, option: true }, { name: "theme", kind: "enum", list: false, option: false }, { name: "visits", kind: "int", list: false, option: false }, { name: "tags", kind: "string", list: true, option: false }]);
           if (!__c.ok) return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__c.error), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
@@ -52,6 +52,9 @@ export default {
         const __m = __matchPath("/items/:id", path);
         if ((method === "GET" || method === "HEAD") && __m) {
           __route = "GET /items/:id";
+          if (__m.malformed) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          }
           const __raw_id = __m.params["id"];
           const id = __raw_id;
           const __c = __cookieObject(request, [{ name: "sid", kind: "string", list: false, option: true }, { name: "theme", kind: "enum", list: false, option: false }, { name: "visits", kind: "int", list: false, option: false }, { name: "tags", kind: "string", list: true, option: false }]);
@@ -69,7 +72,7 @@ export default {
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_api);
       }
-      if (path === "/me") {
+      if (__matchPath("/me", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_api);

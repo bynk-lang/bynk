@@ -81,6 +81,7 @@ pub mod queue_consumers;
 pub mod recovery;
 pub mod requirements;
 pub mod resolver;
+pub mod route_order;
 pub mod schema_registry;
 #[cfg(test)]
 mod scope_tests;
@@ -89,6 +90,7 @@ pub mod shadow_uses;
 pub mod stability;
 pub mod store_ops;
 pub mod store_write;
+pub mod stub_outcome;
 pub mod symbols;
 pub mod test_env;
 pub mod test_suites;

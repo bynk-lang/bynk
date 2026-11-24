@@ -2,7 +2,7 @@
 // Worker entry point for context `api`.
 
 import { type __JsonValue, __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
-import { __httpResultToResponse, __headResponse, __notModifiedIfMatch, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
 import { compose, type Env } from "./compose.js";
 
 function __bynkReportFault(ctx: { waitUntil(promise: globalThis.Promise<unknown>): void } | undefined, e: unknown): void {
@@ -35,7 +35,7 @@ export default {
       }
 
       {
-        if ((method === "GET" || method === "HEAD") && path === "/badrequest") {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/badrequest", path) !== null) {
           __route = "GET /badrequest";
           const result = await surface.http_GET_badrequest();
           const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), __security_routes);
@@ -43,7 +43,7 @@ export default {
         }
       }
       {
-        if ((method === "GET" || method === "HEAD") && path === "/conflict") {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/conflict", path) !== null) {
           __route = "GET /conflict";
           const result = await surface.http_GET_conflict();
           const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), __security_routes);
@@ -51,7 +51,7 @@ export default {
         }
       }
       {
-        if ((method === "GET" || method === "HEAD") && path === "/created") {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/created", path) !== null) {
           __route = "GET /created";
           const result = await surface.http_GET_created();
           const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), __security_routes);
@@ -59,7 +59,7 @@ export default {
         }
       }
       {
-        if ((method === "GET" || method === "HEAD") && path === "/forbidden") {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/forbidden", path) !== null) {
           __route = "GET /forbidden";
           const result = await surface.http_GET_forbidden();
           const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), __security_routes);
@@ -67,7 +67,7 @@ export default {
         }
       }
       {
-        if ((method === "GET" || method === "HEAD") && path === "/nocontent") {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/nocontent", path) !== null) {
           __route = "GET /nocontent";
           const result = await surface.http_GET_nocontent();
           const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), __security_routes);
@@ -75,7 +75,7 @@ export default {
         }
       }
       {
-        if ((method === "GET" || method === "HEAD") && path === "/notfound") {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/notfound", path) !== null) {
           __route = "GET /notfound";
           const result = await surface.http_GET_notfound();
           const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), __security_routes);
@@ -83,7 +83,7 @@ export default {
         }
       }
       {
-        if ((method === "GET" || method === "HEAD") && path === "/servererror") {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/servererror", path) !== null) {
           __route = "GET /servererror";
           const result = await surface.http_GET_servererror();
           const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), __security_routes);
@@ -91,7 +91,7 @@ export default {
         }
       }
       {
-        if ((method === "GET" || method === "HEAD") && path === "/unauthorized") {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/unauthorized", path) !== null) {
           __route = "GET /unauthorized";
           const result = await surface.http_GET_unauthorized();
           const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), __security_routes);
@@ -99,54 +99,54 @@ export default {
         }
       }
       {
-        if ((method === "GET" || method === "HEAD") && path === "/unprocessable") {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/unprocessable", path) !== null) {
           __route = "GET /unprocessable";
           const result = await surface.http_GET_unprocessable();
           const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), __security_routes);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
-      if (path === "/badrequest") {
+      if (__matchPath("/badrequest", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_routes);
       }
-      if (path === "/conflict") {
+      if (__matchPath("/conflict", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_routes);
       }
-      if (path === "/created") {
+      if (__matchPath("/created", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_routes);
       }
-      if (path === "/forbidden") {
+      if (__matchPath("/forbidden", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_routes);
       }
-      if (path === "/nocontent") {
+      if (__matchPath("/nocontent", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_routes);
       }
-      if (path === "/notfound") {
+      if (__matchPath("/notfound", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_routes);
       }
-      if (path === "/servererror") {
+      if (__matchPath("/servererror", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_routes);
       }
-      if (path === "/unauthorized") {
+      if (__matchPath("/unauthorized", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_routes);
       }
-      if (path === "/unprocessable") {
+      if (__matchPath("/unprocessable", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_routes);

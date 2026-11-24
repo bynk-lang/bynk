@@ -1,0 +1,15 @@
+context r.hooked
+
+// The same route, with `on rejected` rendering the malformed path.
+service hooked from http {
+	on GET("/parcels/:id") (id: String) -> Effect[HttpResult[String]] by v: Visitor {
+		Ok(id)
+	}
+
+	on rejected(why: BoundaryRejection) -> Effect[HttpResult[()]] {
+		match why {
+			MalformedPath(_) => RawError(BadRequest, Bytes.fromUtf8("{\"error\":\"bad_path\"}"), "application/json")
+			_ => RawError(BadRequest, Bytes.fromUtf8("{\"error\":\"other\"}"), "application/json")
+		}
+	}
+}

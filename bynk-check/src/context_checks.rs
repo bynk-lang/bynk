@@ -3352,6 +3352,46 @@ fn check_actor_contracts(
     }
 }
 
+/// #3909 (decision B): a route no request can reach is an error. Within a context,
+/// every path the route matches is matched first by other routes of its method
+/// (see [`crate::route_order`]); overlap alone is not an error.
+fn check_unreachable_routes(table: &UnitTable, errors: &mut Vec<CompileError>) {
+    let mut routes: Vec<(HttpMethod, &str, Span)> = Vec::new();
+    for service in table.services.values() {
+        for handler in &service.handlers {
+            if let HandlerKind::Http { method, path } = &handler.kind {
+                routes.push((*method, path.as_str(), handler.span));
+            }
+        }
+    }
+    let keys: Vec<(&str, &str)> = routes.iter().map(|(m, p, _)| (m.as_str(), *p)).collect();
+    for (r, covering) in crate::route_order::shadowed(&keys) {
+        let (method, path, span) = routes[r];
+        let mut err = CompileError::new(
+            "bynk.http.unreachable_route",
+            span,
+            format!(
+                "route `{} {path}` can never be reached: every path it matches is answered first by another route",
+                method.as_str()
+            ),
+        )
+        .with_note(
+            "at the first segment where two routes differ, a literal segment beats a `:name` one; remove this route, or make it match a path the others do not",
+        );
+        for c in covering {
+            err = err.with_label(
+                routes[c].2,
+                format!(
+                    "`{} {}` answers it first",
+                    routes[c].0.as_str(),
+                    routes[c].1
+                ),
+            );
+        }
+        errors.push(err);
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn check_service_decls(
     typed: &mut checker::TypedCommons,
@@ -3408,6 +3448,8 @@ fn check_service_decls(
             }
         }
     }
+
+    check_unreachable_routes(table, errors);
 
     // v0.140 (ADR 0163): validate handler-position annotations (`@cache`) across
     // every handler — services and agents — so a misplaced annotation is caught
@@ -3496,7 +3538,7 @@ fn check_service_decls(
             let HandlerKind::Cron { expr } = &handler.kind else {
                 continue;
             };
-            validate_cron_handler(handler, expr, errors);
+            validate_cron_handler(handler, expr, table, errors);
             check_duplicate_schedule(handler, expr, &mut schedule_first_span, errors);
         }
     }
@@ -6838,6 +6880,81 @@ fn validate_raw_args(ann: &Annotation, errors: &mut Vec<CompileError>) {
     }
 }
 
+/// #3874 [DECISION A, B]: a cron handler takes up to two parameters, told apart by
+/// type, in either order: an `Instant` (the scheduled time) and exactly the
+/// prelude's `CronSchedule` (the schedule that fired the run). A second parameter
+/// of the same type, a third, or any other type is `bynk.cron.bad_params`. A
+/// `CronSchedule` the unit declares itself is not the prelude's, whatever it is
+/// spelled like: the entry hands the parameter a schedule string, which only the
+/// prelude type admits.
+fn check_cron_params(handler: &Handler, table: &UnitTable, errors: &mut Vec<CompileError>) {
+    use bynk_syntax::cron::{CronParam, cron_param};
+    let own_schedule_type = table.types.contains_key("CronSchedule");
+    let mut seen: Vec<CronParam> = Vec::new();
+    for (i, p) in handler.params.iter().enumerate() {
+        if i >= 2 {
+            errors.push(
+                CompileError::new(
+                    "bynk.cron.bad_params",
+                    p.span,
+                    "an `on schedule` handler takes at most two parameters",
+                )
+                .with_note(
+                    "a scheduled trigger carries two things: the time it fired (`Instant`) and the schedule that fired it (`CronSchedule`)",
+                ),
+            );
+            continue;
+        }
+        let kind = cron_param(&p.type_ref);
+        if kind == Some(CronParam::Schedule) && own_schedule_type {
+            errors.push(
+                CompileError::new(
+                    "bynk.cron.bad_params",
+                    p.type_ref.span(),
+                    "this `CronSchedule` is a type this unit declares, not the prelude's",
+                )
+                .with_note(
+                    "a schedule parameter must be the `CronSchedule` that `consumes bynk { CronSchedule }` provides: the entry hands it the schedule string that fired the run",
+                ),
+            );
+            continue;
+        }
+        let Some(kind) = kind else {
+            errors.push(
+                CompileError::new(
+                    "bynk.cron.bad_params",
+                    p.type_ref.span(),
+                    format!(
+                        "an `on schedule` parameter must be `Instant` (the scheduled time) or `CronSchedule` (the schedule that fired), got `{}`",
+                        ts_type_ref_display(&p.type_ref),
+                    ),
+                )
+                .with_note(
+                    "declare `at: Instant`; where the body needs the number, use `at.toEpochMillis()`. `schedule: CronSchedule` is the expression that fired this run",
+                ),
+            );
+            continue;
+        };
+        if seen.contains(&kind) {
+            let what = match kind {
+                CronParam::Time => "an `Instant`",
+                CronParam::Schedule => "a `CronSchedule`",
+            };
+            errors.push(
+                CompileError::new(
+                    "bynk.cron.bad_params",
+                    p.span,
+                    format!("an `on schedule` handler takes at most one parameter of each type, but this is a second {what}"),
+                )
+                .with_note(
+                    "a scheduled trigger carries two things: the time it fired (`Instant`) and the schedule that fired it (`CronSchedule`)",
+                ),
+            );
+        }
+        seen.push(kind);
+    }
+}
+
 /// Two cron handlers of a context may not declare the same schedule: the
 /// generated `scheduled` dispatcher routes on `event.cron`. #3875: a schedule
 /// constant that was refused has no expression to compare, and is already
@@ -6963,35 +7080,13 @@ fn check_cron_schedule(handler: &Handler, expr: &str, errors: &mut Vec<CompileEr
 /// handler (v0.10a §4.1): at most one `Instant` parameter (the scheduled time), a structurally well-formed schedule, and the unit-Result
 /// return shape. The service-only rule is enforced earlier, in the parser
 /// (`bynk.parse.handler_in_agent`).
-fn validate_cron_handler(handler: &Handler, expr: &str, errors: &mut Vec<CompileError>) {
-    // A cron handler takes at most one parameter — the scheduled time, typed
-    // `Instant`. A scheduled trigger has no other payload.
-    if handler.params.len() > 1 {
-        errors.push(
-            CompileError::new(
-                "bynk.cron.bad_params",
-                handler.params[1].span,
-                "`on schedule` handlers take at most one parameter (the scheduled time)",
-            )
-            .with_note("a scheduled trigger's only input is the time it fired"),
-        );
-    } else if let Some(p) = handler.params.first()
-        && !matches!(p.type_ref, TypeRef::Base(BaseType::Instant, _))
-    {
-        errors.push(
-            CompileError::new(
-                "bynk.cron.bad_params",
-                p.type_ref.span(),
-                format!(
-                    "an `on schedule` parameter must be `Instant` (the scheduled time), got `{}`",
-                    ts_type_ref_display(&p.type_ref),
-                ),
-            )
-            .with_note(
-                "declare it as `at: Instant`; where the body needs the number, use `at.toEpochMillis()`",
-            ),
-        );
-    }
+fn validate_cron_handler(
+    handler: &Handler,
+    expr: &str,
+    table: &UnitTable,
+    errors: &mut Vec<CompileError>,
+) {
+    check_cron_params(handler, table, errors);
     check_cron_schedule(handler, expr, errors);
     // The return type must be `Effect[Result[(), E]]`.
     let return_ok = match &handler.return_type {

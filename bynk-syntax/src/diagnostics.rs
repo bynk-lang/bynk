@@ -914,6 +914,16 @@ pub const EXPLANATIONS: &[Explain] = &[
                   shop.weigh(Box { weight: 3 })         // ✓ the same shape on both sides",
     },
     Explain {
+        code: "bynk.call.outcome_construction",
+        blurb: "A `CallOutcome` or `CallFailure` says what a call came to, and only the compiled call knows that: whether the callee's handler ran, was refused, faulted, or could not be reached. So a program matches on one, and `.outcome(…)` and a test `stub` make them. Writing `Handled(…)`, `Faulted` or `CallFailure.Unreachable(…)` as a value would invent an outcome no call produced. To test a caller of a failing service, `stub` the service (`rejected NotAdmitted`, `faulted`, `unreachable`); to pass a failure along, use `handled()` and `?`.",
+        example: "// shop/orders.bynk\nlet o: CallOutcome[Int] = Faulted   // ✗ no call produced this\n\nlet paid = o.handled()?               // ✓ its failure, as a `Result`",
+    },
+    Explain {
+        code: "bynk.call.outcome_not_in_scope",
+        blurb: "`<context>.<service>.outcome(args)` returns `CallOutcome[_]`, and `CallOutcome` is declared in `bynk`, so a unit that wants `outcome` has to consume it. Without that the result type names a type the unit cannot see, and its `Handled`, `Rejected`, `Faulted` and `Unreachable` cases could not be matched. Add `consumes bynk { CallOutcome }` to the unit, or add `CallOutcome` to its existing `consumes bynk { … }` list.",
+        example: "// shop/orders.bynk\nlet o <- Pay.authorise.outcome(total)   // ✗ `CallOutcome` is not in scope\n\nconsumes bynk { CallOutcome }            // ✓ in the unit's header\nlet o <- Pay.authorise.outcome(total)",
+    },
+    Explain {
         code: "bynk.capability.base_not_instantiable",
         blurb: "A derived capability is another instance of a platform resource, with a namespace, bucket or limiter of its own. Only a platform resource kind, such as `Kv` or `R2`, has instances. A capability such as `Clock` has no resource to separate, so there is nothing to derive; use it bare, with `given Clock`.",
         example: "consumes bynk { Clock }\n\ncapability Ticks = Clock   // ✗ `Clock` has no named instances\n\nservice probe {\n    on call() -> Effect[Instant] by Caller given Clock {   // ✓ use it bare\n        Clock.now()\n    }\n}",
@@ -1473,7 +1483,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.cron.bad_params",
-        blurb: "A scheduled trigger carries one thing, the time it fired, so an `on schedule` handler takes at most one parameter, and it must be an `Instant`: the time the schedule fired. Drop the parameter, or type it `Instant`. A parameter typed `Int` (the old spelling) is this error too: write `at: Instant`, and use `at.toEpochMillis()` where the body needs the number.",
+        blurb: "A scheduled trigger carries two things: the time it fired and the schedule that fired it. So an `on schedule` handler takes at most two parameters, told apart by type and in either order: an `Instant` (the scheduled time) and exactly `CronSchedule` (the schedule expression that fired this run). A second parameter of the same type, a third parameter, or any other type is this error. A parameter typed `Int` (the old spelling of the time) is too: write `at: Instant`, and use `at.toEpochMillis()` where the body needs the number. Drop the parameter if the handler does not need it.",
         example: "on schedule(\"*/5 * * * *\") (at: Int) -> Effect[Result[(), String]] { … }   // ✗ the time is an `Instant`\n\non schedule(\"*/5 * * * *\") (at: Instant) -> Effect[Result[(), String]] { … }          // ✓",
     },
     Explain {
@@ -1493,7 +1503,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.cron.return_not_effect_result",
-        blurb: "A cron run has no caller to hand a value to and no retry channel: `Ok(())` completes the run silently and `Err(e)` logs `e` and completes. So the handler must return `Effect[Result[(), E]]`, with `()` on the success side, for some error type `E`. Return `Ok(())` when the work is done and map a failure to `Err`. The queue counterpart is `bynk.queue.return_not_queue_result`.",
+        blurb: "A cron run has no caller to hand a value to and no retry channel: `Ok(())` completes the run silently and `Err(e)` marks it failed in the Cron Trigger's Past Events and logs the error's type and variant. So the handler must return `Effect[Result[(), E]]`, with `()` on the success side, for some error type `E`. Return `Ok(())` when the work is done and map a failure to `Err`. The queue counterpart is `bynk.queue.return_not_queue_result`.",
         example: "on schedule(\"*/5 * * * *\") () -> Effect[Result[Int, String]] { … }   // ✗ a cron run has nowhere to put an `Int`\n\non schedule(\"*/5 * * * *\") () -> Effect[Result[(), String]] { … }   // ✓ unit on success",
     },
     Explain {
@@ -2730,6 +2740,11 @@ fn wait() -> Duration { 5.hours }     // ✓",
         code: "bynk.http.unknown_handler_annotation",
         blurb: "The handler annotations are a closed set: `@cache`, `@limit`, `@raw`, `@form`, `@multipart` and `@json`. Each changes how the router treats the route, so a misspelt one that was ignored would silently lose the behaviour you wanted, such as a freshness window or a body cap. Fix the spelling or remove the annotation. Settings shared by every route belong on the service, in a `cors`, `security`, `limits` or `json` block.",
         example: "@cached(maxAge: 5.minutes)   // ✗ no such annotation\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@cache(maxAge: 5.minutes)    // ✓",
+    },
+    Explain {
+        code: "bynk.http.unreachable_route",
+        blurb: "A router tries the routes of a method in a fixed order: they are compared segment by segment, left to right, and at the first segment where two differ a literal segment beats a `:name` one. So `GET /users/me` answers `/users/me` and `GET /users/:id` answers every other `/users/<x>`, whichever is written first. Overlap is fine, even intended. But a route is refused when every path it matches is answered first by other routes (of the same method, in this context or, in a worker group, in any member): no request could ever reach it. Parameter names are not part of the shape, so `GET /a/:x` beside `GET /a/:y` leaves the second unreachable. Remove the route, or make it match a path the others do not.",
+        example: "on GET(\"/a/b\") () -> Effect[HttpResult[String]] by v: Visitor { … }\non GET(\"/a/:x\") (x: String) -> Effect[HttpResult[String]] by v: Visitor { … }\non GET(\"/a/:y\") (y: String) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✗ `/a/:x` already answers every path it matches\n\non GET(\"/a/b\") () -> Effect[HttpResult[String]] by v: Visitor { … }\non GET(\"/a/:x\") (x: String) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓ a literal and a parameter overlap, and each is reachable",
     },
     Explain {
         code: "bynk.index.bad_argument",
@@ -4666,6 +4681,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
                   // tests/meter.test.bynk\n\
                   stub Gauge.read() returns 7   // ✗ the context has no `Gauge`\n\
                   stub Meter.read() returns 7   // ✓",
+    },
+    Explain {
+        code: "bynk.stub.outcome_word",
+        blurb: "`rejected <Refusal>`, `faulted` and `unreachable` stand in for the outcome of a call to a consumed context's service, which `<context>.<service>.outcome(args)` hands back as a `CallOutcome`. They belong to a consumed service's `stub` alone: a capability's `stub` is a provider, and a provider faults with `fails`. And `rejected` names one of `bynk`'s `Refusal` cases (`TooLarge`, `NotAuthenticated`, `UnsupportedWire`, `NoSuchService`, `NotAdmitted`, `StaleContract`, `Undecodable`). `returns <value>` stubs a call the handler answered.",
+        example: "// tests/meter.test.bynk\nstub Meter.read() faulted   // ✗ `Meter` is a capability, not a consumed service\n\nstub Meter.read() fails     // ✓ a provider faults with `fails`",
     },
     Explain {
         code: "bynk.stub.rhs_type",
@@ -7147,6 +7167,15 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.boundary.structural_mismatch",
         "Data crossing a context boundary did not match the expected shape.",
     ),
+    d(
+        "bynk.call.outcome_construction",
+        "A `CallOutcome` or `CallFailure` variant was written as a value in a context; only `.outcome(…)` and a test `stub` make them.",
+    ),
+    dg(
+        "bynk.call.outcome_not_in_scope",
+        "`<context>.<service>.outcome(args)` yields `CallOutcome[_]`, but the unit does not consume `bynk`, so `CallOutcome` is not in scope.",
+        &["method_call"],
+    ),
     dg(
         "bynk.capability.base_not_instantiable",
         "A derived capability's base is not a platform resource that can be instantiated.",
@@ -7386,7 +7415,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.cron.bad_params",
-        "A cron handler declares more than one parameter, or a non-`Instant` one.",
+        "A cron handler declares a parameter that is neither an `Instant` nor a `CronSchedule`, or two of the same type, or more than two.",
         &["cron_handler"],
     ),
     dg(
@@ -8400,6 +8429,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.http.unknown_handler_annotation",
         "A handler carries an annotation outside the closed set (`@cache`/`@limit`).",
+    ),
+    d(
+        "bynk.http.unreachable_route",
+        "A route no request can reach: every path it matches is answered first by other routes of its method (in the context, or across a worker group).",
     ),
     d(
         "bynk.index.bad_argument",
@@ -9638,6 +9671,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.stub.not_a_seam",
         "A test `stub` overrides a capability the unit under test does not consume.",
+    ),
+    dg(
+        "bynk.stub.outcome_word",
+        "A test `stub` ends `rejected <Refusal>`, `faulted` or `unreachable` on something that is not a consumed context's service, or `rejected` names something that is not a `Refusal`.",
+        &["stub_clause"],
     ),
     d(
         "bynk.stub.rhs_type",

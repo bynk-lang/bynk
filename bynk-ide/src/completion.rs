@@ -229,6 +229,10 @@ pub fn complete_in(
     if auth_scheme_position(line_prefix) {
         return auth_scheme_candidates();
     }
+    // 3b'. #3894: `<context>.<service>.<cursor>` on a consumed service — `outcome`.
+    if let Some(items) = crate::call_outcome::outcome_member_candidates(line_prefix, doc_text) {
+        return items;
+    }
     // 3c. #3446: `Record.field.<cursor>` on a cookie record — the typed cookie write and deletion.
     if let Some((record, field)) = cookie_field_receiver(line_prefix) {
         return cookie_field_members(&record, &field, doc_text, files);
