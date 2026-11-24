@@ -1985,7 +1985,9 @@ pub(crate) fn nullary_variant_ty(
     ctx: &mut Ctx,
 ) -> Option<TyId> {
     let tys = ctx.tys;
-    if reject_rebrand_construction(&owner.name.name, span, ctx) {
+    if reject_rebrand_construction(&owner.name.name, span, ctx)
+        || super::call_outcome::reject_outcome_construction(&owner.name.name, span, ctx)
+    {
         return None;
     }
     if owner.type_params.is_empty() {
@@ -2025,7 +2027,9 @@ pub(crate) fn check_variant_construction(
     let TypeBody::Sum(s) = &owner.body else {
         return None;
     };
-    if reject_rebrand_construction(&owner.name.name, span, ctx) {
+    if reject_rebrand_construction(&owner.name.name, span, ctx)
+        || super::call_outcome::reject_outcome_construction(&owner.name.name, span, ctx)
+    {
         return None;
     }
     let variant = s.variants.iter().find(|v| v.name.name == variant_name)?;

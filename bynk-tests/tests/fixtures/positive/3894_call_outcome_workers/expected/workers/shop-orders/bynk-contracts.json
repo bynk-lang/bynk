@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "provides": {
+    "bounded": "5fb79711dcc8c3fe",
+    "placeOrder": "7579419b04fdac62"
+  },
+  "expects": {
+    "shop.pay": {
+      "authorise": "86cab4b0fe626569"
+    },
+    "shop.stock": {
+      "release": "c4b83d3815b913dd",
+      "reserve": "d74233380d85f556"
+    }
+  },
+  "provides_shapes": {
+    "bounded": "Svc(\"bounded\",P(\"total\",B(\"Int\")),Ret(B(\"String\")))",
+    "placeOrder": "Svc(\"placeOrder\",P(\"sku\",B(\"String\")),P(\"total\",B(\"Int\")),Ret(R(B(\"String\"),B(\"String\"))))"
+  },
+  "expects_shapes": {
+    "shop.pay": {
+      "authorise": "Svc(\"authorise\",P(\"total\",B(\"Int\")),Ret(R(Rec(\"Receipt\",F(\"id\",B(\"String\"))),Sum(\"PaymentError\",V(\"Declined\"),V(\"Down\")))))"
+    },
+    "shop.stock": {
+      "release": "Svc(\"release\",P(\"sku\",B(\"String\")),Ret(R(U(),B(\"String\"))))",
+      "reserve": "Svc(\"reserve\",P(\"sku\",B(\"String\")),Ret(R(U(),B(\"String\"))))"
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "provides": {
+    "release": "c4b83d3815b913dd",
+    "reserve": "d74233380d85f556"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "release": "Svc(\"release\",P(\"sku\",B(\"String\")),Ret(R(U(),B(\"String\"))))",
+    "reserve": "Svc(\"reserve\",P(\"sku\",B(\"String\")),Ret(R(U(),B(\"String\"))))"
+  }
+}

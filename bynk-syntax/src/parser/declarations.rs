@@ -1113,11 +1113,18 @@ impl<'a> Parser<'a> {
     fn parse_stub_rhs(&mut self) -> Result<StubRhs, CompileError> {
         let tok = self.expect(
             TokenKind::Ident,
-            "`returns`, `fails` or `never` after the `stub` call pattern",
+            "`returns`, `fails`, `never`, `rejected`, `faulted` or `unreachable` after the `stub` call pattern",
         )?;
         match self.slice(tok.span) {
             "fails" => Ok(StubRhs::Fails(tok.span)),
             "never" => Ok(StubRhs::Never(tok.span)),
+            // #3894: the words of a consumed service's stub that are not a value.
+            "faulted" => Ok(StubRhs::Faulted(tok.span)),
+            "unreachable" => Ok(StubRhs::Unreachable(tok.span)),
+            "rejected" => {
+                let refusal = self.expect_ident("a refusal after `rejected`")?;
+                Ok(StubRhs::Rejected(refusal.clone(), tok.span.merge(refusal.span)))
+            }
             "returns" => {
                 let is_each = self.peek_kind() == Some(TokenKind::Ident)
                     && self.slice(self.peek().unwrap().span) == "each";
@@ -1144,10 +1151,10 @@ impl<'a> Parser<'a> {
             other => Err(CompileError::new(
                 "bynk.parse.expected_token",
                 tok.span,
-                format!("expected `returns`, `fails` or `never` in a `stub` clause, found `{other}`"),
+                format!("expected `returns`, `fails`, `never`, `rejected`, `faulted` or `unreachable` in a `stub` clause, found `{other}`"),
             )
             .with_note(
-                "a `stub` clause ends `returns <value>` (optionally `after <duration>`), `returns each [<outcome>, …]`, `fails`, or `never`",
+                "a `stub` clause ends `returns <value>` (optionally `after <duration>`), `returns each [<outcome>, …]`, `fails`, `never`, or, for a consumed service, `rejected <Refusal>`, `faulted` or `unreachable`",
             )),
         }
     }
