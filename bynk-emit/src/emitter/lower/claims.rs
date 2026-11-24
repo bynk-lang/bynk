@@ -15,6 +15,11 @@ use super::super::lower_ctx::LowerCtx;
 #[cfg(test)]
 use super::test_support::Printed;
 
+/// The text the scope declaration was written as, kept to check [`claim_scope_declaration`]
+/// prints exactly it.
+#[cfg(test)]
+pub(crate) const CLAIM_SCOPE_DECLARATION: &str = "const __claims = (deps.Idempotency as unknown as { __track?: () => { note<C>(k: string, c: C, t: number): C; lease(t: number): number; settle(r: unknown, threw: boolean): globalThis.Promise<void> } }).__track?.() ?? { note: <C>(_k: string, c: C, _t: number) => c, lease: (t: number) => t, settle: async (_r: unknown, _threw: boolean) => {} };";
+
 /// W30 (#2840): the statement that opens a service handler's claim scope, which
 /// wraps the already-lowered function body (`lower_stmt::claim_scoped`) so the
 /// claims it made are settled when it exits. `__claims` is the provider's own
@@ -23,11 +28,7 @@ use super::test_support::Printed;
 /// window and never settles it. A thrown fault releases the claims; a
 /// returned `Err` or a 5xx `HttpResult` does too; any other outcome confirms
 /// them.
-/// The text the scope declaration was written as, kept to check [`claim_scope_declaration`]
-/// prints exactly it.
-#[cfg(test)]
-pub(crate) const CLAIM_SCOPE_DECLARATION: &str = "const __claims = (deps.Idempotency as unknown as { __track?: () => { note<C>(k: string, c: C, t: number): C; lease(t: number): number; settle(r: unknown, threw: boolean): globalThis.Promise<void> } }).__track?.() ?? { note: <C>(_k: string, c: C, _t: number) => c, lease: (t: number) => t, settle: async (_r: unknown, _threw: boolean) => {} };";
-
+///
 /// [`CLAIM_SCOPE_DECLARATION`] as a node (1A.35a part B): `const __claims = (deps.Idempotency
 /// as unknown as { __track?: () => { note<C>(…): C; lease(…): number; settle(…): … } })
 /// .__track?.() ?? { note: …, lease: …, settle: … };`.

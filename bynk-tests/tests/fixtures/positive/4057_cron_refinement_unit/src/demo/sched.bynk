@@ -1,0 +1,25 @@
+---
+#3873: the `Cron` predicate admits exactly Cloudflare's cron syntax, in a
+literal, in `.of`, in `Json.decode` and in `is`.
+---
+commons demo.sched
+
+type Schedule = String where Cron
+
+type Job = { name: String, schedule: Schedule }
+
+fn nightly() -> Schedule {
+  "0 2 * * MON-FRI"
+}
+
+fn decodeSchedule(json: String) -> Result[Schedule, DecodeError] {
+  Json.decode[Schedule](json)
+}
+
+fn decodeJob(json: String) -> Result[Job, DecodeError] {
+  Json.decode[Job](json)
+}
+
+fn isSchedule(s: String) -> Bool {
+  s is Schedule
+}

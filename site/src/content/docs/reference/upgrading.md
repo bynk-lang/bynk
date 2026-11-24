@@ -17,6 +17,10 @@ here broke nothing, or its author did not say so: please
 
 <!-- stamp:breaking-entries -->
 
+## v0.652.0
+
+A cron schedule with irregular whitespace (a double space, a tab, a leading or trailing space) now fails as `bynk.cron.invalid_schedule`, as does any schedule Cloudflare would reject (`61 * * * *`); write the fields separated by single spaces (the note gives the corrected form). A schedule that smuggled a `"` or `\` into a field, which the old field-count check let reach `wrangler.toml`, is refused too, closing that TOML-injection path.
+
 ## v0.651.0
 
 `1.hours` (and every `1.<plural unit>`) no longer parses as a `Duration` literal: it is `bynk.duration.unit_agreement`, with a machine-applicable fix-it (`bynk check --fix`) writing `1.hour`. `5.hour` is the same error, and a word after an integer literal that names no unit (`5.hr`) is `bynk.duration.unknown_unit`, where it used to be a field access on an `Int`.

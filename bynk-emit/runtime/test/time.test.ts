@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { Some, None } from "../src/result.ts";
-import { __bynkInstantFromIso, __bynkInstantFromPgText, __bynkInstantToIso, __bynkIsIsoDate, __bynkPgRow } from "../src/time.ts";
+import { __bynkInstantFromIso, __bynkInstantFromPgText, __bynkInstantToIso, __bynkIsCron, __bynkIsIsoDate, __bynkPgRow } from "../src/time.ts";
 
 // Standard-library K3 (#2592).
 test("toIso writes UTC with three fraction digits and Z", () => {
@@ -186,4 +187,30 @@ test("pgRow converts the named Instant and Int columns and leaves everything els
   assert.equal(row.other, "2026-11-11 12:34:56.789+00");
   // Not a row: nothing to convert, nothing thrown.
   for (const v of [null, 3, "x", [1]]) __bynkPgRow(v, ["at"], ["n"]);
+});
+
+// #3873: `Cron`. The Rust rule (`bynk_syntax::cron::is_cron_expression`) writes a
+// corpus of generated strings with its verdicts; the TypeScript twin must agree
+// on every one.
+test("isCron admits Cloudflare's examples and refuses the malformed", () => {
+  for (const ok of ["* * * * *", "0 18 * * 6L", "0 18 * * friL", "59 23 LW * *", "*/45 * * * *", "0 2 * * MON-FRI"]) {
+    assert.equal(__bynkIsCron(ok), true, ok);
+  }
+  for (const bad of ["61 * * * *", "* * * * 0", "5-1 * * * *", "*/0 * * * *", "? * * * *", "@daily", "0 0 * * * *", "0  2 * * *", "0\t2 * * *", "0 2 * * * ", ""]) {
+    assert.equal(__bynkIsCron(bad), false, JSON.stringify(bad));
+  }
+});
+
+test("isCron agrees with the Rust rule over the generated corpus", () => {
+  const corpus = readFileSync(new URL("../../../bynk-syntax/tests/cron_corpus.tsv", import.meta.url), "utf8");
+  let n = 0;
+  for (const line of corpus.split("\n")) {
+    if (line === "") continue;
+    const tab = line.indexOf("\t");
+    const verdict = line.slice(0, tab);
+    const s: string = JSON.parse(line.slice(tab + 1));
+    assert.equal(__bynkIsCron(s), verdict === "ok", `${verdict} ${JSON.stringify(s)}`);
+    n++;
+  }
+  assert.ok(n > 1000);
 });

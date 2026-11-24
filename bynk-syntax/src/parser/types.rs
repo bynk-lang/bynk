@@ -663,7 +663,7 @@ impl<'a> Parser<'a> {
             )
             .with_note(
                 "valid predicates: Matches, InRange, MinLength, MaxLength, Length, \
-                 NonNegative, Positive, NonEmpty, IsoDate",
+                 NonNegative, Positive, NonEmpty, IsoDate, Cron",
             ));
         }
         self.bump();
@@ -729,6 +729,7 @@ impl<'a> Parser<'a> {
             "Positive" => (PredKind::Positive, t.span),
             "NonEmpty" => (PredKind::NonEmpty, t.span),
             "IsoDate" => (PredKind::IsoDate, t.span),
+            "Cron" => (PredKind::Cron, t.span),
             other => {
                 return Err(CompileError::new(
                     "bynk.parse.unknown_predicate",
@@ -737,7 +738,7 @@ impl<'a> Parser<'a> {
                 )
                 .with_note(
                     "valid predicates: Matches, InRange, MinLength, MaxLength, Length, \
-                     NonNegative, Positive, NonEmpty, IsoDate",
+                     NonNegative, Positive, NonEmpty, IsoDate, Cron",
                 ));
             }
         };

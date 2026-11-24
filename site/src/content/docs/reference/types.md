@@ -5,14 +5,14 @@ title: Type system
 
 | Type | Values | Emits |
 |---|---|---|
-| `Int` | integer literals (`0`, `-42`); a JS safe integer, ±(2^53 − 1) | `number` |
-| `Float` | float literals (`1.5`, `0.0`, `-3.14`) | `number` |
-| `String` | string literals (`"…"`) | `string` |
 | `Bool` | `true`, `false` | `boolean` |
-| `Duration` | unit literals (`5.minutes`, `30.seconds`) | `number` (millis) |
-| `Instant` | no literal — `Clock.now()` / `Instant.fromEpochMillis(n)` / `Instant.fromIso(s)` | `number` (epoch millis) |
-| `Decimal` | decimal literals (`1.20d`, `5d`) | `{ coefficient: bigint, scale: number }` |
 | `Bytes` | no literal — `Bytes.fromUtf8(s)` / `Bytes.fromBase64(s)` / `Bytes.fromHex(s)` / `Bytes.fromBase64Url(s)` / `Bytes.empty()` | `Uint8Array` |
+| `Decimal` | decimal literals (`1.20d`, `5d`) | `{ coefficient: bigint, scale: number }` |
+| `Duration` | unit literals (`5.minutes`, `30.seconds`) | `number` (millis) |
+| `Float` | float literals (`1.5`, `0.0`, `-3.14`) | `number` |
+| `Instant` | no literal — `Clock.now()` / `Instant.fromEpochMillis(n)` / `Instant.fromIso(s)` | `number` (epoch millis) |
+| `Int` | integer literals (`0`, `-42`); a JS safe integer, ±(2^53 − 1) | `number` |
+| `String` | string literals (`"…"`) | `string` |
 
 The unit type is written `()`. `Int` and `Float` are **distinct and
 incompatible** — there is no implicit coercion (`bynk.types.no_numeric_coercion`).
@@ -24,42 +24,79 @@ decimal only (`" 7 "`, `"0x10"` and, for `Int`, `"1e3"` are `None`). An `Int`
 is a JS safe integer at every entry point: a larger literal, a wire value, a
 parse result or a conversion is rejected, and `Int` division by zero faults.
 
-### String {#string}
+### Bytes
 
-A `String` has no direct character access; its operations are methods. Lengths
-and indices count **UTF-16 code units**, except `chars`, which splits by code
-point, and the two percent-encoding methods, which work on the UTF-8 bytes.
+`Bytes` (v0.110) is an **immutable octet sequence** — the type for arbitrary
+binary data that `String` (UTF-8 text) cannot hold without corruption. It is the
+one base type that does **not** emit to `number`: a `Bytes` erases to a host
+`Uint8Array`. There is **no literal**; construct a `Bytes` with:
+
+- `Bytes.fromUtf8(s: String) -> Bytes` — the UTF-8 encoding of a string (total).
+- `Bytes.fromBase64(s: String) -> Option[Bytes]` — decode base64; `None` on an
+  invalid string.
+- `Bytes.fromHex(s: String) -> Option[Bytes]` — decode hex. Either case, an even
+  number of digits and nothing else: a `0x` prefix, whitespace or separators give
+  `None`. `""` decodes to `Bytes.empty()`.
+- `Bytes.fromBase64Url(s: String) -> Option[Bytes]` — decode base64url (RFC 4648
+  §5, the `-`/`_` alphabet), with no padding or exactly the padding the length
+  needs. A standard-alphabet `+` or `/`, wrong padding, an impossible length or
+  non-zero spare bits in the last character gives `None`, so each value has exactly
+  one accepted spelling (`"Zg"` decodes, `"Zh"` doesn't).
+- `Bytes.empty() -> Bytes` — the zero value (the empty sequence).
+
+The methods:
 
 | Method | Returns | |
 |---|---|---|
-| `s.length()` | `Int` | the code-unit count |
-| `s.concat(t: String)` | `String` | `s`, then `t` (the same as `"\(s)\(t)"`) |
-| `s.trim()` | `String` | without leading and trailing whitespace |
-| `s.toUpper()` | `String` | upper-cased (locale-independent) |
-| `s.toLower()` | `String` | lower-cased (locale-independent) |
-| `s.contains(sub: String)` | `Bool` | `sub` occurs somewhere in `s` |
-| `s.startsWith(sub: String)` | `Bool` | `s` begins with `sub` |
-| `s.endsWith(sub: String)` | `Bool` | `s` ends with `sub` |
-| `s.indexOf(sub: String)` | `Option[Int]` | where `sub` first occurs; `None` when it does not, never `-1` |
-| `s.slice(start: Int, end: Int)` | `String` | the code units from `start` up to `end`; a negative index is `0`, with no wrap-around |
-| `s.replace(from: String, to: String)` | `String` | **every** occurrence of `from` replaced by `to`, inserted literally (no `$1` or `$&`) |
-| `s.split(sep: String)` | `List[String]` | the pieces between each `sep` |
-| `s.chars()` | `List[String]` | one string per **code point**, so an astral character is one element |
-| `s.percentEncode()` | `String` | RFC 3986 percent-encoding of the UTF-8 bytes: every byte outside `A–Z a–z 0–9 - . _ ~` becomes `%XX` |
-| `s.percentDecode()` | `Option[String]` | reverses `percentEncode`; `None` for a `%` not followed by two hex digits, or bytes that are not UTF-8. `+` stays `+` |
-| `s.matchesRegex(pattern)` | `Bool` | the whole string matches; see [Regular expressions](#regular-expressions) |
-| `s.containsRegex(pattern)` | `Bool` | a match occurs anywhere |
-| `s.findRegex(pattern)` | `Option[List[Option[String]]]` | the first match and its groups |
-| `s.findAllRegex(pattern)` | `List[List[Option[String]]]` | every match and its groups |
-| `s.replaceRegex(pattern, with: String)` | `String` | every match replaced; `with` reads `$1`, `$<name>`, `$&` and `$$` |
-| `s.splitRegex(pattern)` | `List[String]` | the pieces between each match |
+| `b.length()` | `Int` | the octet count |
+| `b.concat(other: Bytes)` | `Bytes` | `b`'s octets, then `other`'s |
+| `b.slice(start: Int, end: Int)` | `Bytes` | clamped like `String.slice`: a negative index is `0`, an end past the length is the length, and `start >= end` is empty |
+| `b.compare(other: Bytes)` | `Int` | `-1`, `0` or `1` in unsigned lexicographic order; a proper prefix sorts first |
+| `b.toHex()` | `String` | lowercase, two digits per octet |
+| `b.toBase64()` | `String` | standard base64, padded |
+| `b.toBase64Url()` | `String` | base64url, unpadded (the JWT form) |
+| `b.decodeUtf8()` | `Option[String]` | `None` on an invalid UTF-8 sequence |
 
-`Int.parse(s)` and `Float.parse(s)` turn a string into a number (see above), and
-`toString()` on `Int`, `Float`, `Decimal`, `Duration` and `Instant` goes the other
-way. More string functions are in the `bynk.string` commons, and URLs and query
-strings in `bynk.url`, written over `percentEncode` and `percentDecode` (see
-[Related first-party modules](/reference/bynk-capabilities/#related-first-party-modules)).
-A method not in this table is `bynk.types.method_not_found`.
+Encoding is total; decoding is partial and surfaced as `Option`, never hidden.
+Every decoder round-trips its encoder: `Bytes.fromHex(b.toHex())` is `Some(b)`
+for every `b`, and likewise for base64 and base64url.
+
+`compare` and `==` are **not constant-time**: they stop at the first differing
+octet, so their timing reveals how much of two values matches. Never use them to
+check a signature, MAC or token against a secret: use `Crypto.equal` from
+[`bynk.crypto`](/reference/bynk-capabilities/#cryptography--bynkcrypto),
+which compares in constant time.
+
+`==`/`!=` compare **by content**, byte for byte — so two independently-built
+`Bytes` with the same octets are equal (unlike the number-erased base types, a
+`Bytes` is not compared by host reference). Equality is structural throughout,
+so a record carrying a `Bytes` field compares that field by content too. `Bytes` is **orderable**, unsigned lexicographic by octet with a proper prefix
+first, so `<` and a `sortBy` key work on it (`b.compare(other)` returns the same
+order as an `Int`). It is a `Key`: a `Map[Bytes, V]` or `Set[Bytes]` holds
+bytes by content. It has no arithmetic.
+
+On the wire a `Bytes` **serialises as a base64 JSON string** (and deserialising
+requires a valid base64 string), so it round-trips through any record or `store`
+field and crosses a `bundle` context boundary — a fully ordinary serialisable
+value, the opposite of a `Stream`. (One current limit: a bare `Bytes` directly in
+a `workers` cross-context signature is diagnosed as not-yet-supported — put it
+inside a record, whose typed codec base64-encodes it, or build with `--target
+bundle`.)
+
+### Cookie and SameSite {#cookie}
+
+`Cookie` is the record a handler attaches to a result with
+[`withCookie`](/reference/http/#setting-cookies). It is exported by `bynk`
+(`consumes bynk { Cookie }`), with `SameSite = enum { Strict, Lax, Unrestricted }`
+(`Unrestricted` is `SameSite=None`):
+
+```text
+Cookie = { name: String, value: String,
+           maxAge: Option[Duration] = None, expires: Option[Instant] = None,
+           domain: Option[String] = None, path: String = "/",
+           secure: Bool = true, httpOnly: Bool = true,
+           sameSite: SameSite = Lax, partitioned: Bool = false }
+```
 
 ### Decimal
 
@@ -178,6 +215,68 @@ explicitly: `d.toMillis() -> Int` and the static `Duration.millis(n: Int) ->
 Duration`. It round-trips through the JSON codec as an integer. See
 [Operators](/reference/operators/#duration--instant-arithmetic).
 
+### Field annotations: `@name` {#field-name}
+
+A record field may carry `@name("…")` before it, naming the key the field has on an HTTP
+request where that is not an identifier:
+
+```bynk,fragment
+type Filter = {
+  @name("page-size") pageSize: Option[Int],
+  @name("filter[status]") status: Option[String],
+  owner: Option[String],
+}
+```
+
+The field is `pageSize` everywhere in Bynk (access, construction, defaults, refinements);
+only the key a request reader looks for changes. It is legal only on a field of a record used as the
+`cookies`, `query` or `@form`/`@multipart` `body` record of an `on http` handler
+(`bynk.types.field_name_not_request_record`), takes exactly one string literal, or
+a `String` constant bound to one (`bynk.types.field_name_bad_arg`), and such a record may not be used as a JSON body, a result,
+a store field, an event or a call argument (`bynk.types.field_name_record_not_boundary`), since
+its JSON key is the field name. Two fields may not read the same name
+(`bynk.types.field_name_duplicate`), a cookie name must be a token and no name may be empty
+(`bynk.types.field_name_invalid`), and cookie and query names that differ only in case are
+refused (`bynk.types.field_name_case_conflict`). The request readers apply it: a
+`cookies`, `query` or `@form`/`@multipart` `body` record reads each renamed field from its wire
+key (the typed system-test drivers and `Form.encode` write it there, and the OpenAPI document
+and hover name it), while a failure still names the field, as `query.pageSize`. A tracked
+follow-up moves `examples/sessions` to a typed `@name("__Host-sid")` read
+([#3343](https://github.com/bynk-lang/bynk/issues/3343)).
+
+A name that two places must agree on can be a constant. `@name` accepts a bare reference
+to a constant declared exactly `String` (not a refined type) and bound to a string literal,
+or to another such constant, from this unit or a `uses`d commons:
+
+```bynk,fragment
+const VisitsCookie: String = "__Host-visits"
+
+type Prefs = {
+  @name(VisitsCookie) visits: Option[Int],
+}
+```
+
+The compiler reads `@name(VisitsCookie)` as `@name("__Host-visits")`: the token rule and the
+duplicate and case checks run on the resolved text, and a diagnostic points at the reference
+and names the constant. Go-to-definition, hover and rename work on it.
+
+### File {#file}
+
+`File` is the record a [`@multipart`](/reference/http/#multipart-bodies) body
+names an uploaded file part with. It is exported by `bynk` (`consumes bynk { File }`):
+
+```text
+File = { filename: Option[String], contentType: String, bytes: Bytes }
+```
+
+`filename` is the client's name for the file, `None` for a part with no `filename`;
+`contentType` is the type the client claimed; `bytes` is the whole part, and its size is
+`bytes.length()`. The name and the type are client-controlled, so neither is a storage key
+or proof of the content. A `File` is a field of a `@multipart` body record, alone, in an
+`Option` or in a `List` (one layer); a test builds one with a record literal. It is not a boundary
+type: `bynk.types.file_at_boundary` refuses it, or a record carrying one, in an agent's store,
+a handler's parameter or result, an event or a call argument.
+
 ### Instant
 
 `Instant` (v0.90) is an **absolute point in time**, erased to a `number` of Unix
@@ -225,143 +324,6 @@ date; `Instant.fromIso("\\(day)T00:00:00Z")` is always `Some` for such a `Day`.
 `Instant.fromIso(t.toIso())` is `Some(t)` for every instant in the years 0000 to
 9999. Time zones, calendar fields and ISO durations are not part of the kernel.
 
-### Bytes
-
-`Bytes` (v0.110) is an **immutable octet sequence** — the type for arbitrary
-binary data that `String` (UTF-8 text) cannot hold without corruption. It is the
-one base type that does **not** emit to `number`: a `Bytes` erases to a host
-`Uint8Array`. There is **no literal**; construct a `Bytes` with:
-
-- `Bytes.fromUtf8(s: String) -> Bytes` — the UTF-8 encoding of a string (total).
-- `Bytes.fromBase64(s: String) -> Option[Bytes]` — decode base64; `None` on an
-  invalid string.
-- `Bytes.fromHex(s: String) -> Option[Bytes]` — decode hex. Either case, an even
-  number of digits and nothing else: a `0x` prefix, whitespace or separators give
-  `None`. `""` decodes to `Bytes.empty()`.
-- `Bytes.fromBase64Url(s: String) -> Option[Bytes]` — decode base64url (RFC 4648
-  §5, the `-`/`_` alphabet), with no padding or exactly the padding the length
-  needs. A standard-alphabet `+` or `/`, wrong padding, an impossible length or
-  non-zero spare bits in the last character gives `None`, so each value has exactly
-  one accepted spelling (`"Zg"` decodes, `"Zh"` doesn't).
-- `Bytes.empty() -> Bytes` — the zero value (the empty sequence).
-
-The methods:
-
-| Method | Returns | |
-|---|---|---|
-| `b.length()` | `Int` | the octet count |
-| `b.concat(other: Bytes)` | `Bytes` | `b`'s octets, then `other`'s |
-| `b.slice(start: Int, end: Int)` | `Bytes` | clamped like `String.slice`: a negative index is `0`, an end past the length is the length, and `start >= end` is empty |
-| `b.compare(other: Bytes)` | `Int` | `-1`, `0` or `1` in unsigned lexicographic order; a proper prefix sorts first |
-| `b.toHex()` | `String` | lowercase, two digits per octet |
-| `b.toBase64()` | `String` | standard base64, padded |
-| `b.toBase64Url()` | `String` | base64url, unpadded (the JWT form) |
-| `b.decodeUtf8()` | `Option[String]` | `None` on an invalid UTF-8 sequence |
-
-Encoding is total; decoding is partial and surfaced as `Option`, never hidden.
-Every decoder round-trips its encoder: `Bytes.fromHex(b.toHex())` is `Some(b)`
-for every `b`, and likewise for base64 and base64url.
-
-`compare` and `==` are **not constant-time**: they stop at the first differing
-octet, so their timing reveals how much of two values matches. Never use them to
-check a signature, MAC or token against a secret: use `Crypto.equal` from
-[`bynk.crypto`](/reference/bynk-capabilities/#cryptography--bynkcrypto),
-which compares in constant time.
-
-`==`/`!=` compare **by content**, byte for byte — so two independently-built
-`Bytes` with the same octets are equal (unlike the number-erased base types, a
-`Bytes` is not compared by host reference). Equality is structural throughout,
-so a record carrying a `Bytes` field compares that field by content too. `Bytes` is **orderable**, unsigned lexicographic by octet with a proper prefix
-first, so `<` and a `sortBy` key work on it (`b.compare(other)` returns the same
-order as an `Int`). It is a `Key`: a `Map[Bytes, V]` or `Set[Bytes]` holds
-bytes by content. It has no arithmetic.
-
-On the wire a `Bytes` **serialises as a base64 JSON string** (and deserialising
-requires a valid base64 string), so it round-trips through any record or `store`
-field and crosses a `bundle` context boundary — a fully ordinary serialisable
-value, the opposite of a `Stream`. (One current limit: a bare `Bytes` directly in
-a `workers` cross-context signature is diagnosed as not-yet-supported — put it
-inside a record, whose typed codec base64-encodes it, or build with `--target
-bundle`.)
-
-
-### File {#file}
-
-`File` is the record a [`@multipart`](/reference/http/#multipart-bodies) body
-names an uploaded file part with. It is exported by `bynk` (`consumes bynk { File }`):
-
-```text
-File = { filename: Option[String], contentType: String, bytes: Bytes }
-```
-
-`filename` is the client's name for the file, `None` for a part with no `filename`;
-`contentType` is the type the client claimed; `bytes` is the whole part, and its size is
-`bytes.length()`. The name and the type are client-controlled, so neither is a storage key
-or proof of the content. A `File` is a field of a `@multipart` body record, alone, in an
-`Option` or in a `List` (one layer); a test builds one with a record literal. It is not a boundary
-type: `bynk.types.file_at_boundary` refuses it, or a record carrying one, in an agent's store,
-a handler's parameter or result, an event or a call argument.
-
-### Field annotations: `@name` {#field-name}
-
-A record field may carry `@name("…")` before it, naming the key the field has on an HTTP
-request where that is not an identifier:
-
-```bynk,fragment
-type Filter = {
-  @name("page-size") pageSize: Option[Int],
-  @name("filter[status]") status: Option[String],
-  owner: Option[String],
-}
-```
-
-The field is `pageSize` everywhere in Bynk (access, construction, defaults, refinements);
-only the key a request reader looks for changes. It is legal only on a field of a record used as the
-`cookies`, `query` or `@form`/`@multipart` `body` record of an `on http` handler
-(`bynk.types.field_name_not_request_record`), takes exactly one string literal, or
-a `String` constant bound to one (`bynk.types.field_name_bad_arg`), and such a record may not be used as a JSON body, a result,
-a store field, an event or a call argument (`bynk.types.field_name_record_not_boundary`), since
-its JSON key is the field name. Two fields may not read the same name
-(`bynk.types.field_name_duplicate`), a cookie name must be a token and no name may be empty
-(`bynk.types.field_name_invalid`), and cookie and query names that differ only in case are
-refused (`bynk.types.field_name_case_conflict`). The request readers apply it: a
-`cookies`, `query` or `@form`/`@multipart` `body` record reads each renamed field from its wire
-key (the typed system-test drivers and `Form.encode` write it there, and the OpenAPI document
-and hover name it), while a failure still names the field, as `query.pageSize`. A tracked
-follow-up moves `examples/sessions` to a typed `@name("__Host-sid")` read
-([#3343](https://github.com/bynk-lang/bynk/issues/3343)).
-
-A name that two places must agree on can be a constant. `@name` accepts a bare reference
-to a constant declared exactly `String` (not a refined type) and bound to a string literal,
-or to another such constant, from this unit or a `uses`d commons:
-
-```bynk,fragment
-const VisitsCookie: String = "__Host-visits"
-
-type Prefs = {
-  @name(VisitsCookie) visits: Option[Int],
-}
-```
-
-The compiler reads `@name(VisitsCookie)` as `@name("__Host-visits")`: the token rule and the
-duplicate and case checks run on the resolved text, and a diagnostic points at the reference
-and names the constant. Go-to-definition, hover and rename work on it.
-
-### Cookie and SameSite {#cookie}
-
-`Cookie` is the record a handler attaches to a result with
-[`withCookie`](/reference/http/#setting-cookies). It is exported by `bynk`
-(`consumes bynk { Cookie }`), with `SameSite = enum { Strict, Lax, Unrestricted }`
-(`Unrestricted` is `SameSite=None`):
-
-```text
-Cookie = { name: String, value: String,
-           maxAge: Option[Duration] = None, expires: Option[Instant] = None,
-           domain: Option[String] = None, path: String = "/",
-           secure: Bool = true, httpOnly: Bool = true,
-           sameSite: SameSite = Lax, partitioned: Bool = false }
-```
-
 ### RequestCookies {#request-cookies}
 
 `RequestCookies` is the raw, read-only view of an HTTP request's cookies, the type of a
@@ -371,17 +333,54 @@ and is built in a test with `RequestCookies.of(pairs)` or `RequestCookies.empty(
 a boundary type: it cannot be stored, sent or returned. See
 [Reading a prefixed cookie](/reference/http/#request-cookies).
 
+### String {#string}
+
+A `String` has no direct character access; its operations are methods. Lengths
+and indices count **UTF-16 code units**, except `chars`, which splits by code
+point, and the two percent-encoding methods, which work on the UTF-8 bytes.
+
+| Method | Returns | |
+|---|---|---|
+| `s.length()` | `Int` | the code-unit count |
+| `s.concat(t: String)` | `String` | `s`, then `t` (the same as `"\(s)\(t)"`) |
+| `s.trim()` | `String` | without leading and trailing whitespace |
+| `s.toUpper()` | `String` | upper-cased (locale-independent) |
+| `s.toLower()` | `String` | lower-cased (locale-independent) |
+| `s.contains(sub: String)` | `Bool` | `sub` occurs somewhere in `s` |
+| `s.startsWith(sub: String)` | `Bool` | `s` begins with `sub` |
+| `s.endsWith(sub: String)` | `Bool` | `s` ends with `sub` |
+| `s.indexOf(sub: String)` | `Option[Int]` | where `sub` first occurs; `None` when it does not, never `-1` |
+| `s.slice(start: Int, end: Int)` | `String` | the code units from `start` up to `end`; a negative index is `0`, with no wrap-around |
+| `s.replace(from: String, to: String)` | `String` | **every** occurrence of `from` replaced by `to`, inserted literally (no `$1` or `$&`) |
+| `s.split(sep: String)` | `List[String]` | the pieces between each `sep` |
+| `s.chars()` | `List[String]` | one string per **code point**, so an astral character is one element |
+| `s.percentEncode()` | `String` | RFC 3986 percent-encoding of the UTF-8 bytes: every byte outside `A–Z a–z 0–9 - . _ ~` becomes `%XX` |
+| `s.percentDecode()` | `Option[String]` | reverses `percentEncode`; `None` for a `%` not followed by two hex digits, or bytes that are not UTF-8. `+` stays `+` |
+| `s.matchesRegex(pattern)` | `Bool` | the whole string matches; see [Regular expressions](#regular-expressions) |
+| `s.containsRegex(pattern)` | `Bool` | a match occurs anywhere |
+| `s.findRegex(pattern)` | `Option[List[Option[String]]]` | the first match and its groups |
+| `s.findAllRegex(pattern)` | `List[List[Option[String]]]` | every match and its groups |
+| `s.replaceRegex(pattern, with: String)` | `String` | every match replaced; `with` reads `$1`, `$<name>`, `$&` and `$$` |
+| `s.splitRegex(pattern)` | `List[String]` | the pieces between each match |
+
+`Int.parse(s)` and `Float.parse(s)` turn a string into a number (see above), and
+`toString()` on `Int`, `Float`, `Decimal`, `Duration` and `Instant` goes the other
+way. More string functions are in the `bynk.string` commons, and URLs and query
+strings in `bynk.url`, written over `percentEncode` and `percentDecode` (see
+[Related first-party modules](/reference/bynk-capabilities/#related-first-party-modules)).
+A method not in this table is `bynk.types.method_not_found`.
+
 ## Built-in generic types
 
 | Type | Variants | Purpose |
 |---|---|---|
-| `Result[T, E]` | `Ok(T)`, `Err(E)` | success or error |
-| `Option[T]` | `Some(T)`, `None` | a value or nothing |
 | `Effect[T]` | — | an effectful computation yielding `T` |
 | `HttpResult[T]` | see [HTTP](/reference/http/) | an HTTP response |
-| `Stream[T]` | — | a value-over-time source (see [Stream](#stream)) |
+| `Option[T]` | `Some(T)`, `None` | a value or nothing |
 | `Query[T]` | — | a lazy read over `store` storage (see [Query](#query)) |
+| `Result[T, E]` | `Ok(T)`, `Err(E)` | success or error |
 | `Set[T]` | — | an immutable set of [`Key`](#keys) elements (see [Set](#set)) |
+| `Stream[T]` | — | a value-over-time source (see [Stream](#stream)) |
 
 ### `Option` and `Result` methods {#option-and-result-methods}
 
@@ -418,328 +417,6 @@ It has no string form, so `"\(e)"` is refused
 `"\(e.field): \(e.message)"`. The offending value is also carried at runtime
 but is not reachable from Bynk yet, so `e.value` is refused
 (`bynk.types.unknown_field`).
-
-## Stream
-
-`Stream[T]` (v0.100) is a **lazy, pull-shaped sequence of values produced over
-time** — the primitive for incremental output, distinct from `Effect[T]` (which
-resolves exactly once) and `Query[T]` (a snapshot read over storage). Like those
-neighbours it is **non-serialisable, non-storable, non-boundary, and not
-value-comparable**: a live source is built and consumed in place, never persisted,
-sent across a context boundary, or compared with `==`.
-
-Within a Worker a stream moves freely (#2623):
-
-- **Through a capability.** An operation may take or return a stream
-  (`fn read(key: String) -> Effect[Download]`), since a capability's provider runs
-  in the same isolate as its caller, so nothing is serialised.
-- **Inside a record or sum.** A field may be a stream
-  (`type Download = { contentType: String, body: Stream[Bytes] }`). The type is
-  then *stream-carrying*: non-boundary like the stream, with no JSON codec, and
-  refused wherever a stream is (a handler's parameter or result, a store field, an
-  event) with `bynk.types.stream_at_boundary`, whose note names the field the
-  stream is reached through.
-
-**A stream is read once.** Draining it with `collect`, or handing it to a
-response, consumes it, and reading it again faults with
-`bynk: a stream can be read only once`. A builder (`map`, `take`) consumes its
-source when it is first read, not when it is built. A stream from the platform
-can only be read once, so an in-memory one behaves the same.
-
-The v1 vocabulary is deliberately minimal:
-
-| Form | Type | Purpose |
-|---|---|---|
-| `Stream.of(xs)` | `List[T] -> Stream[T]` | build a stream from a list (the deterministic source) |
-| `s.map(f)` | `(T -> U) -> Stream[U]` | lazily transform each element |
-| `s.take(n)` | `Int -> Stream[T]` | bound the stream to the first `n` elements |
-| `s.collect()` | `Effect[List[T]]` | drain the stream to a list (the terminal) |
-
-Errors ride **in-band** as `Result` elements (`Stream[Result[T, E]]`); a fault in
-the producer aborts the stream as faults abort handlers.
-
-A stream's end-to-end uses are [**streamed HTTP responses**](/reference/http/#streamed-responses):
-`Streaming(stream)` returns an SSE body consuming a `Stream[String]`, and
-[`RawStreamed(body, contentType)`](/reference/http/#streamed-raw-responses)
-a raw body from a `Stream[Bytes]`; and [a `@raw` request body](/reference/http/#streamed-request-bodies),
-which a handler can receive as a `Stream[Bytes]`. A richer
-combinator vocabulary and live runtime sources are later increments of the
-real-time track.
-
-## Query
-
-`Query[T]` (v0.92; ADRs 0115/0119) is a **lazy read over a `store`'s storage** —
-the lazy receiver of the same combinator vocabulary the eager [`List`
-methods](#list-methods) carry, dispatched by **receiver provenance**: a chain
-rooted in a `store reservations: Map[K, V]` field is a `Query`, while the same
-names on an in-memory `List` are eager. Like `Effect`/`Fn`/`Stream` it is
-**non-storable and non-boundary** — rejected in any storable or boundary position
-(`bynk.types.query_at_boundary`) — but is otherwise first-class: nameable,
-returnable from a pure helper, passable. A query is **agent-local** and reads
-**staged** state (read-your-writes).
-
-**Builders** are pure and return a further `Query` — `filter`, `map`, `flatMap`,
-`sortBy`, `sortByDescending`, `take`, `skip`, `distinct`, plus the joins and `groupBy` below.
-
-**Terminals** execute the query and are `Effect`-typed (awaited with `<-`), folding
-into the storage capability the `store` fields already carry (no new `given`):
-
-| Terminal | Result |
-|---|---|
-| `.collect()` | `Effect[List[T]]` |
-| `.first()` | `Effect[Option[T]]` |
-| `.count()` | `Effect[Int]` |
-| `.sum(key)` / `.min(key)` / `.max(key)` / `.average(key)` | `Effect[…]` (empty-total: `Option`, or the zero for `sum`) |
-| `.any(p)` / `.all(p)` | `Effect[Bool]` |
-| `.fold(init, f)` | `Effect[acc]` |
-| `.forEach(f)` | `Effect[()]` |
-
-### Joins and grouping
-
-Joins and grouping (v0.92+; ADR 0120) take an **`into:` combiner** that projects
-each result through a lambda into a **user-named type** — bynk has no anonymous
-pair/tuple, so a join row is always a named record. The arguments are positional
-(`left:`/`right:`/`into:` name them for readability):
-
-| Form | Yields |
-|---|---|
-| `joinOn(other, left: T -> K, right: U -> K, into: (T, U) -> V)` | equi-join → `…[V]` |
-| `leftJoin(other, left: T -> K, right: U -> K, into: (T, Option[U]) -> V)` | left outer → `…[V]` |
-| `join(other, on: (T, U) -> Bool, into: (T, U) -> V)` | predicate (nested-loop) → `…[V]` |
-| `groupBy(key: T -> K, into: (K, List[T]) -> V)` | grouping → `…[V]` |
-
-Each yields a `Query[V]` over storage and a `List[V]` eagerly. Because every result
-is a named `V`, chained joins stay flat and named — no nested pairs. An equi-`joinOn`
-whose probed key is [`@indexed`](/reference/agents/) routes through the index.
-
-### Map key accessors
-
-A `store Map[K, V]` roots three key-aware queries (v0.158; ADR 0184):
-
-| Accessor | Yields |
-|---|---|
-| `map.keys` | `Query[K]` |
-| `map.values` | `Query[V]` |
-| `map.entries` | `Query[MapEntry[K, V]]` |
-
-`.entries` exposes each entry as a **`MapEntry[K, V]`** — a compiler-known nominal
-record `{ key: K, value: V }`, read with `.key`/`.value`. bynk has no tuple/pair
-(ADR 0120), so an entry is a *named* record; the whole single-argument vocabulary
-above applies to `.entries` unchanged. `MapEntry` is
-[non-boundary](#query) (it is a generic-record instantiation, ADR 0183), so a read
-handler projects each entry into a named type before its terminal:
-
-```bynk,fragment
-// the id lives in the key; project it back into the boundary shape
-items.entries.map((e) => TodoItem { id: e.key, seq: e.value.seq, title: e.value.title, done: e.value.done }).collect()
-```
-
-This is what lets a stored value drop the denormalised copy of its own key. The
-accessors are paren-less builders on the *storage* map, distinct from the eager
-in-memory `Map` value methods `.keys()`/`.values()` that return `List`s.
-
-## List methods
-
-`List[T]` (v0.88; ADR 0116) carries the query algebra's **eager, in-memory**
-combinator vocabulary as kernel methods, so a chain reads
-`xs.filter((x) => x > 2).map((x) => x * 2)` (the same names the lazy
-[`Query`](#query) carries over storage; the receiver decides eager vs lazy).
-
-| Method | Returns | |
-|---|---|---|
-| `xs.length()` | `Int` | the element count |
-| `xs.get(index: Int)` | `Option[T]` | the element at `index` (from `0`); `None` when out of range |
-| `xs.first()` | `Option[T]` | the first element; `None` when empty |
-| `xs.firstOrElse(default: T)` | `T` | the first element, or `default` when empty |
-| `xs.last()` | `Option[T]` | the last element; `None` when empty |
-| `xs.lastOrElse(default: T)` | `T` | the last element, or `default` when empty |
-| `xs.isEmpty()` | `Bool` | `true` when there are no elements |
-| `xs.contains(item: T)` | `Bool` | some element `==` `item` (`T` must be `Eq`) |
-| `xs.reverse()` | `List[T]` | the elements in the opposite order |
-| `xs.find(p: T -> Bool)` | `Option[T]` | the first element for which `p` holds; `None` when there is none |
-| `xs.prepend(item: T)` | `List[T]` | `item`, then `xs` |
-| `xs.append(item: T)` | `List[T]` | `xs`, then `item` |
-| `xs.concat(other: List[T])` | `List[T]` | `xs`, then `other` |
-| `xs.map(f: T -> U)` | `List[U]` | `f` applied to each element |
-| `xs.filter(p: T -> Bool)` | `List[T]` | the elements for which `p` holds |
-| `xs.flatMap(f: T -> List[U])` | `List[U]` | each element's list, joined in order |
-| `xs.sortBy(key: T -> K)` | `List[T]` | smallest key first; stable |
-| `xs.sortByDescending(key: T -> K)` | `List[T]` | largest key first; stable |
-| `xs.sort()` | `List[T]` | the elements themselves, smallest first; stable (`T` must be `Ord`) |
-| `xs.take(n: Int)` | `List[T]` | the first `n` elements (all of them when there are fewer) |
-| `xs.skip(n: Int)` | `List[T]` | all but the first `n` |
-| `xs.distinct()` | `List[T]` | repeats dropped, each element at its first position |
-| `xs.distinctBy(key: T -> K)` | `List[T]` | the first element for each key |
-| `xs.fold(init: U, step: (U, T) -> U)` | `U` | `step` applied from `init` across the list, in order |
-| `xs.count()` | `Int` | the element count (the same as `length()`) |
-| `xs.any(p: T -> Bool)` | `Bool` | `p` holds for at least one element; `false` when empty |
-| `xs.all(p: T -> Bool)` | `Bool` | `p` holds for every element; `true` when empty |
-| `xs.sum(key: T -> K)` | `K` | the total of the keys; the zero when empty |
-| `xs.min(key: T -> K)` | `Option[K]` | the smallest key; `None` when empty |
-| `xs.max(key: T -> K)` | `Option[K]` | the largest key; `None` when empty |
-| `xs.min()` | `Option[T]` | the smallest element; `None` when empty (`T` must be `Ord`) |
-| `xs.max()` | `Option[T]` | the largest element; `None` when empty (`T` must be `Ord`) |
-| `xs.average(key: T -> K)` | `Option[Float]` | the mean of the keys (`Option[Duration]` for a `Duration` key); a `Decimal` key is refused (`bynk.query.sum_needs_numeric`); `None` when empty |
-| `xs.joinOn(other, left, right, into)` | `List[V]` | equi-join; see [Joins and grouping](#joins-and-grouping) |
-| `xs.leftJoin(other, left, right, into)` | `List[V]` | left outer join |
-| `xs.join(other, on, into)` | `List[V]` | predicate join |
-| `xs.groupBy(key, into)` | `List[V]` | one result per key, in first-seen key order |
-| `rs.sequenceAll()` | `Result[List[T], List[E]]` | for a `List[Result[T, E]]`: every value, or every error |
-| `rs.sequenceTry()` | `Result[List[T], E]` | for a `List[Result[T, E]]`: every value, or the first error |
-| `xs.foldEff(init: U, step: (U, T) -> Effect[U])` | `Effect[U]` | `fold` with an effectful step |
-| `xs.forEach(f: T -> Effect[()])` | `Effect[()]` | run `f` for each element, in order |
-| `xs.traverse(f: T -> Effect[U])` | `Effect[List[U]]` | run `f` for each element, in order, and collect the results |
-| `xs.parForEach(f: T -> Effect[()])` | `Effect[()]` | run `f` for every element concurrently |
-| `xs.parTraverse(f: T -> Effect[U])` | `Effect[List[U]]` | run `f` for every element concurrently; the values come back in input order |
-| `xs.traverseAll(f: T -> Effect[Result[U, E]])` | `Effect[List[Result[U, E]]]` | run `f` for each element in order, keeping every outcome |
-| `xs.parTraverseAll(f: T -> Effect[Result[U, E]])` | `Effect[List[Result[U, E]]]` | the same, concurrently |
-| `xs.traverseTry(f: T -> Effect[Result[U, E]])` | `Effect[Result[List[U], E]]` | run `f` for each element in order, stopping at the first `Err` |
-| `xs.parTraverseTry(f: T -> Effect[Result[U, E]])` | `Effect[Result[List[U], E]]` | the same, concurrently |
-| `xs.parForEachWith(f, options: ParOptions)` | `Effect[()]` | `parForEach` with at most `options.limit` steps in flight |
-| `xs.parTraverseWith(f, options: ParOptions)` | `Effect[List[U]]` | `parTraverse`, bounded the same way |
-| `xs.parTraverseAllWith(f, options: ParOptions)` | `Effect[List[Result[U, E]]]` | `parTraverseAll`, bounded the same way |
-| `xs.parTraverseTryWith(f, options: ParOptions)` | `Effect[Result[List[U], E]]` | `parTraverseTry`, bounded; once a step returns `Err` no further step starts |
-
-The effect methods form one grid of names:
-
-| | returns `()` | returns values | each step a `Result`, keep all | stop at first `Err` |
-|---|---|---|---|---|
-| in order | `forEach` | `traverse` | `traverseAll` | `traverseTry` |
-| concurrently | `parForEach` | `parTraverse` | `parTraverseAll` | `parTraverseTry` |
-
-Before #3967 `parTraverse` returned `()`; that is now `parForEach`. A `parTraverse` whose step returns `Effect[()]` still type-checks, so it gets the warning `bynk.list.par_traverse_unit`, whose fix (`bynk check --fix`) renames the call. A concurrent call that faults waits for every step to settle, then raises the first fault in input order, as `par` does; results are in input order whatever order the steps finish in.
-
-**Bounding a fan-out (#3968).** The plain `par…` forms start every step at once. The four `…With` forms take a second argument, `ParOptions`, a record `{ limit: Int }` declared in the first-party `bynk.par` commons (`uses bynk.par`); it has no default, so a call always states its bound. `limit` is a whole number from 1 to 1000, and the steps run on a sliding pool: a new step starts as soon as any in-flight step settles. Results stay in input order and faults follow the plain forms (every started step settles, the first fault in input order is raised). A `limit` that is a literal or constant outside 1 to 1000 is the error `bynk.list.par_limit_range`; a `limit` of 1 is the warning `bynk.list.par_limit_one`, since the call is then sequential (use `forEach`, `traverse`, `traverseAll` or `traverseTry`). A limit only known at run time is checked by the runtime, which faults the call. The closure rules, including `bynk.par.store_write_in_closure`, are the plain forms'. General named arguments are proposal [#4194](https://github.com/bynk-lang/bynk/issues/4194), which would give the future spelling `limit:`; it is not implemented.
-
-The methods returning an `Effect` can only be called where effects are allowed.
-A method not in this table is `bynk.types.method_not_found`. The rest of this
-section groups them and gives the rules.
-
-**Builders** (return a `List`): `map`, `filter`, `flatMap`, `sortBy`, `sortByDescending`, `sort`, `reverse`,
-`take`, `skip`, `distinct`, `distinctBy`.
-
-**Collecting `Result`s** (pure; the receiver is a `List[Result[T, E]]`): `sequenceAll()`
-returns `Ok` of every value, or `Err` of the list of **every** error in input order;
-`sequenceTry()` returns `Ok` of every value, or the **first** `Err`. `xs.map(validate).sequenceAll()`
-reports every failing field of a form at once. The empty list is `Ok([])`.
-`bynk.types.sequence_needs_result` flags a list that is not of `Result`s. The effectful
-counterparts are `traverseAll` and `traverseTry`.
-
-```bynk
-fn checkAll(rs: List[Result[Int, String]]) -> Result[List[Int], List[String]] { rs.sequenceAll() }
-```
-
-**Adding items** (return a new `List`; the receiver is unchanged): `prepend(x)`
-puts `x` at the front, `append(x)` puts it at the end, and `concat(other)`
-joins `other` after the receiver. A fold that builds a list in order uses
-`append` (or `concat`), with no `reverse` afterwards:
-
-```bynk
-fn labels(ns: List[Int]) -> List[String] {
-  let none: List[String] = []
-  ns.fold(none, (acc, n) => acc.append(n.toString()))
-}
-
-fn withTotal(ns: List[Int]) -> List[Int] {
-  ns.concat([ns.fold(0, (acc, n) => acc + n)])
-}
-```
-
-`labels([1, 2, 3])` is `["1", "2", "3"]`, and `withTotal([1, 2])` is
-`[1, 2, 3]`. `foldEff` builds in order the same way, its step returning
-`Effect.pure(acc.append(x))`.
-
-**Terminals**: `count`, `any`, `all`, `first`, `firstOrElse`, `last`, `lastOrElse`, `isEmpty`,
-`contains`, `find`, `sum`, `min`, `max`, `average`.
-
-Ordering keys (`sortBy`/`sortByDescending`/`min`/`max`), on a `List` and on a lazy storage `Query`, are any
-[`Ord` type](#ordering-your-own-types) (`bynk.types.key_not_orderable` otherwise). `sortByDescending` is `sortBy` largest key first: the exact reverse of the ascending order, so a
-`Float` `NaN` comes **first** (`None` last, a longer list first). It is **stable**: equal keys keep
-their input order, which `reverse(xs.sortBy(k))` does not. It behaves the same for a concrete,
-`derives Ord` or type-parameter key. Numeric keys: `sum` takes `Int`, `Float`, `Duration` or `Decimal` keys; `average`
-takes `Int`, `Float` or `Duration`, and refuses `Decimal` (`bynk.query.sum_needs_numeric`: sum, then divide with a
-scale and rounding mode). `average -> Float` (`Duration` for a `Duration` key). The same keys apply on a lazy storage `Query`.
-**Empty aggregates are total** — `first`/`min`/`max`/`average` return `Option`,
-`sum` the zero. The keyless `sort()`, `min()` and `max()` order the elements themselves,
-so the element type must be `Ord` (`bynk.types.not_orderable` otherwise). `contains` compares
-by `==`, so the element type must support equality (`T: Eq` on a type parameter,
-`bynk.generics.missing_eq_bound` otherwise). Every first-party `bynk.list` free function now has a
-method, and each is the deprecated predecessor of it (see [Operators & built-ins](/reference/operators/) and
-[First-party `bynk` capabilities](/reference/bynk-capabilities/)).
-
-## Map methods {#map-methods}
-
-`Map[K, V]` is a built-in immutable map with [`Key`](#keys) keys. It keeps
-insertion order. `Map.empty()` takes its types from context.
-
-| Method | Returns | |
-|---|---|---|
-| `m.length()` | `Int` | the entry count |
-| `m.get(key: K)` | `Option[V]` | the value at `key`; `None` when absent |
-| `m.insert(key: K, value: V)` | `Map[K, V]` | a new map with `key` set to `value`; `m` is unchanged |
-| `m.keys()` | `List[K]` | the keys |
-| `m.values()` | `List[V]` | the values |
-| `m.remove(key: K)` | `Map[K, V]` | without `key`; `m` is unchanged; a no-op when `key` is absent |
-| `m.contains(key: K)` | `Bool` | whether `key` has an entry |
-| `m.getOrElse(key: K, default: V)` | `V` | the value at `key`, or `default` when absent |
-| `m.isEmpty()` | `Bool` | whether there are no entries |
-| `m.entries()` | `List[MapEntry[K, V]]` | the entries, in insertion order |
-| `Map.of(entries: List[MapEntry[K, V]])` | `Map[K, V]` | a later entry for a key replaces the value and keeps the first position |
-| `m.filter(p: (K, V) -> Bool)` | `Map[K, V]` | the entries for which `p` holds; order kept |
-| `m.mapValues(f: V -> U)` | `Map[K, U]` | each value through `f`; keys and order kept |
-| `m.fold(init: U, step: (U, K, V) -> U)` | `U` | `step` applied from `init` across the entries, in insertion order |
-
-Every method that returns a map keeps insertion order, over plain and composite
-keys alike. `entries()` yields the same compiler-known `MapEntry` as a
-`store Map`'s `.entries`, which is not a boundary type, so a handler projects entries into a
-named type before returning them. A `MapEntry` has no literal form, so `Map.of`
-takes the entries of another map, for example `Map.of(m.entries().filter(…))`. The
-`bynk.map` commons is deprecated: `values`, `contains` and `getOr` are the methods
-`m.values()`, `m.contains(key)` and `m.getOrElse(key, default)`, and each call warns
-with `bynk.map.deprecated_function` and a fix. A
-`store … : Map[K, V]` field is a different thing: an agent's storage map, read
-through [Query](#query) and the [map key accessors](#map-key-accessors).
-
-## Set
-
-`Set[T]` is a built-in immutable set, beside `List` and `Map`. It keeps
-**insertion order**, as `Map` does: `toList()` and the wire form list the
-elements in the order they were first added, and inserting an element that is
-already there keeps its place.
-
-```bynk,fragment
-let tags = Set.of(["b", "a", "b"])        // {b, a}
-let more = tags.insert("c").remove("a")   // {b, c}; `tags` is unchanged
-let none: Set[Int] = Set.empty()
-```
-
-- **Members** are `Key` types: see [Keys](#keys). Anything else is
-  `bynk.types.not_keyable`, whether written (`Set[Float]`) or inferred
-  (`Set.of([f])`).
-- **Statics:** `Set.empty()` takes its element type from context, as
-  `List.empty()` does, and `Set.of(xs: List[T])` drops repeats, keeping each
-  element's first position.
-- **Kernel:** `length()`, `contains(x)`, `insert(x)`, `remove(x)` and
-  `toList()`. `insert` and `remove` return a new set.
-- **Combinators** are methods, all in insertion order:
-  - `union(other: Set[T])`: `a`'s elements, then `other`'s new members.
-  - `intersect(other: Set[T])` and `difference(other: Set[T])`: in `a`'s order.
-  - `isSubsetOf(other: Set[T])`: whether every element is in `other`.
-  - `isEmpty()`: whether there are no elements.
-  - `filter(p: T -> Bool)`: the elements for which `p` holds.
-  - `map(f: T -> U)`: each element through `f`; `U` must be a `Key`, and elements that map to
-    one value merge at the first position.
-  - `fold(init: U, step: (U, T) -> U)`: `step` applied from `init` across the elements.
-
-  The `bynk.set` commons is deprecated: its functions are these methods, and each call warns
-  with `bynk.set.deprecated_function` and a fix.
-- **Equality** is membership: `Set.of([1, 2]) == Set.of([2, 1])`.
-- **On the wire** a set is a JSON array in insertion order. Decoding one with a
-  repeated element fails, since a Bynk sender never writes one.
-
-A `store members: Set[T]` field is a different thing: the storage set of an
-agent, with effectful `add`/`remove`/`contains`/`size`. A `Set[T]` value is
-the immutable collection described here.
 
 ## Connection
 
@@ -800,6 +477,159 @@ a WebSocket service is fully developable and testable with no Durable Object. On
 the **Workers** target the connection maps onto a Durable Object using the
 hibernatable-WebSocket API: a `Connection` stored in agent state survives
 hibernation and is restored on rehydration.
+
+## Deliberate faults: `unreachable` and `todo` {#faults}
+
+Two ambient built-in functions raise a fault on purpose. Both take a `String`
+message and have the internal bottom type (`Never`), which is assignable to every
+type, so a call fits a `match` arm, an `if` branch or a function body of any type
+with no made-up default.
+
+| Call | Use | Diagnostics |
+|---|---|---|
+| `unreachable(message)` | A case the author knows cannot happen. | — |
+| `todo(message)` | Unfinished code that still type-checks. | `bynk.fault.todo` (warning) |
+
+```bynk,fragment
+fn label(s: Status) -> String {
+  match s {
+    Open => "open",
+    Closed => "closed",
+    Archived => unreachable("archived orders are filtered upstream"),
+  }
+}
+
+fn refund(o: Order) -> Effect[Result[(), RefundError]] {
+  todo("refunds — #1234")
+}
+```
+
+Evaluating either is a fault, like a division by zero or an invariant violation:
+the handler faults, an agent's state does not commit, and the response is the
+existing fault response. The logged fault carries the kind (`Unreachable` or
+`Todo`), the message and the `path:line:col` of the call. A test observes one
+with `expect <call> faults`. `todo` compiles but warns, so `bynk check
+--deny-warnings` keeps unfinished code out of CI.
+
+They are not keywords: a `fn` or binding of the same name shadows them. There is
+no general `panic` — use `Result` for any failure a caller could handle. `Never`
+cannot be written in source, and a lambda whose body is only a fault call gets its
+type from the expected function type.
+
+## Generic record types
+
+A record type may take **type parameters** — a name scoped to the declaration,
+optionally bounded (see [Generics and bounds](/reference/generics/)) — so one
+shape serves many element types. The common
+case is an API envelope:
+
+```bynk
+type Paginated[T] = {
+  items: List[T],
+  cursor: Option[String],
+}
+
+type User = { id: Int, name: String }
+
+fn first_page(users: List[User]) -> Paginated[User] {
+  Paginated { items: users, cursor: None }
+}
+
+fn items_of(page: Paginated[User]) -> List[User] {
+  page.items
+}
+```
+
+- **Apply** the type to concrete arguments wherever a type is expected:
+  `Paginated[User]`, `Keyed[String, Int]`.
+- **Construct** as an ordinary record; the type arguments are **inferred** from
+  the field values. When a field cannot pin them down (an empty `items` list),
+  annotate the binding: `let p: Paginated[User] = Paginated { items: [], cursor:
+  None }`.
+- **Access** fields with the argument substituted in: `page.items` has type
+  `List[User]`.
+
+Only a record or [sum](#generic-sums) body may be generic — a refined or opaque
+type cannot take type parameters (`bynk.generics.generic_non_record`). A generic
+type must be applied to exactly its declared number of arguments
+(`bynk.generics.type_arg_count`).
+
+Generic records emit an **erased** TypeScript generic interface — `type
+Paginated[T]` becomes `export interface Paginated<T>` — exactly as a generic
+function erases to `function f<A>(…)`.
+
+### Generic records and sums at the boundary (v0.174)
+
+A generic-record or [generic-sum](#generic-sums) instantiation is
+**serialisable** — it may appear in a field of another record, a sum payload, a
+service or agent handler signature, agent state, or a `Json.encode`/`Json.decode` target — exactly when its type arguments
+are. The compiler generates a **monomorphised codec** per instantiation: a
+`Paginated[User]` boundary emits `__serialise_Paginated_User` /
+`__deserialise_Paginated_User`, specialised to the concrete arguments and
+delegating to their codecs (`__serialise_List_User`, `__serialise_Option_String`).
+The emitted TypeScript interface stays the erased `Paginated<T>`; only the codec
+is per-instantiation, matching how `List`/`Map`/`Result` already specialise.
+
+```bynk,fragment
+fn save(page: Paginated[User]) -> String {
+  Json.encode(page)                          // __serialise_Paginated_User
+}
+
+fn load(s: String) -> Result[Paginated[User], DecodeError] {
+  Json.decode[Paginated[User]](s)            // __deserialise_Paginated_User
+}
+```
+
+A **non-serialisable argument** is still rejected, at the argument: a function,
+`Query`, `Stream`, or `Connection` type inside the instantiation
+(`Paginated[Int -> Int]`) draws that type's own boundary error
+(`bynk.types.function_at_boundary`, …), and an uncodable `Json` target draws
+`bynk.types.json_uncodable`.
+
+A **recursive** generic type — a record or sum that transitively contains itself,
+whether directly, through another type, or through an `Option`/`List` wrapper
+(`type Node[T] = { value: T, next: Option[Node[T]] }`) — **declares and works
+inside a context**: build it, match on it, fold it and pass it to generic
+functions like any other generic. It has no codec yet, so it is refused where a
+codec is required, with `bynk.generics.recursive_generic_at_boundary`: a service
+or agent handler signature, an agent `store` field or key, an event field, an
+actor identity type, a `Json.encode`/`Json.decode` target and a `Codable`
+witness. A record field, a sum payload and a capability signature are not such
+positions, so a type that merely *contains* a recursive generic is refused where
+*it* is used, and the note names the field path it is reached through
+(`Holder.t`). The refusal fires once per use, not once per self-reference.
+
+Recursion must be **uniform**: a self-reference passes the declaration's own
+type parameters through unchanged and in order (`Node[T]` inside `Node[T]`,
+including through `Option`, `List`, `Map` and sum payloads), and a mutually
+recursive partner, of any arity, is applied only to the declaration's own
+parameters or to types that mention none (`Binding[A, String]` inside `Expr[A]`). **Polymorphic** recursion
+(`type Weird[T] = { next: Option[Weird[List[T]]] }`, or `Pair[B, A]` inside
+`Pair[A, B]`) generates an unbounded set of instantiations and is refused at the
+declaration with `bynk.generics.polymorphic_recursion`. (A *non-generic*
+recursive type is unaffected: its single codec is self-referential and
+terminates on the data.) To cross a boundary today, use a concrete recursive
+type.
+
+A generic type may carry **instance methods**. A method whose receiver is a
+generic type sees the type's own parameters in scope alongside any it declares
+itself, so `fn Box.map[U](self, f: A -> U) -> Box[U]` reads `A` from the receiver
+`Box[A]` and infers `U` from the argument. It erases to a generic
+namespace-object method — `map<A, U>(self: Box<A>, f: (a: A) => U): Box<U>` — the
+type's parameters threaded onto each method (the namespace object itself cannot
+carry them). The type arguments are inferred from the receiver and the argument
+types; an explicit list, `x.map[String](f)`, names the method's own parameters only (the
+receiver's are already known) and pins them where inference has nothing to go on
+(`fn Box.cast[U](self) -> Option[U]` is called `b.cast[String]()`); the arity is
+checked as for any generic call (`bynk.generics.type_arg_mismatch`). A **static**
+method on a generic type (`fn Box.of(value: A) -> Box[A]`) is generic over the
+type's parameters too, followed by its own; see
+[Generics](/reference/generics/#static-methods-on-generic-types). A static
+whose signature never mentions one of the type's parameters is rejected
+(`bynk.generics.method_on_generic_type`) — no call could determine it. A refined or opaque body cannot
+be generic (its base is a fixed primitive); only a record or **sum** body may be
+(`bynk.generics.generic_non_record`), and generic sums are described under
+[Sum types](#sum-types).
 
 ## The JSON codec
 
@@ -987,443 +817,6 @@ inferred from an expected `Result[T, DecodeError]`, as for `Json.decode`.
 as its value or nothing, and an enum as its variant's name. `Form.decode(Form.encode(v))`
 gives back `v`. There is no `Multipart.decode`: a `File` part has no useful text form.
 
-## Deliberate faults: `unreachable` and `todo` {#faults}
-
-Two ambient built-in functions raise a fault on purpose. Both take a `String`
-message and have the internal bottom type (`Never`), which is assignable to every
-type, so a call fits a `match` arm, an `if` branch or a function body of any type
-with no made-up default.
-
-| Call | Use | Diagnostics |
-|---|---|---|
-| `unreachable(message)` | A case the author knows cannot happen. | — |
-| `todo(message)` | Unfinished code that still type-checks. | `bynk.fault.todo` (warning) |
-
-```bynk,fragment
-fn label(s: Status) -> String {
-  match s {
-    Open => "open",
-    Closed => "closed",
-    Archived => unreachable("archived orders are filtered upstream"),
-  }
-}
-
-fn refund(o: Order) -> Effect[Result[(), RefundError]] {
-  todo("refunds — #1234")
-}
-```
-
-Evaluating either is a fault, like a division by zero or an invariant violation:
-the handler faults, an agent's state does not commit, and the response is the
-existing fault response. The logged fault carries the kind (`Unreachable` or
-`Todo`), the message and the `path:line:col` of the call. A test observes one
-with `expect <call> faults`. `todo` compiles but warns, so `bynk check
---deny-warnings` keeps unfinished code out of CI.
-
-They are not keywords: a `fn` or binding of the same name shadows them. There is
-no general `panic` — use `Result` for any failure a caller could handle. `Never`
-cannot be written in source, and a lambda whose body is only a fault call gets its
-type from the expected function type.
-
-## Named types
-
-```bynk
-type Id = Int
-```
-
-A named type is a **distinct nominal type**, not a transparent synonym: an `Id`
-is not an `Int`, and it is branded in the emitted TypeScript. It carries a `.of`
-constructor (like any refined type, it has no `.unsafe` — that is opaque-only;
-ADR 0182). While the type has no predicate, `Id.of(n)` cannot fail and returns
-`Id` directly; adding a `where` clause turns it into
-`Result[Id, ValidationError]`, so every call site that can now fail becomes a type
-error until it handles the failure. (The rule is "no predicate and no implicit base
-check": a `Float` named type stays fallible, since `.of` also rejects `NaN` and
-infinities.)
-
-## Record types
-
-A record groups named, immutable fields:
-
-```bynk
-type Order = {
-  id: String,
-  item: String,
-}
-```
-
-- **Construct** by naming every field that has no default:
-  `Order { id: "1", item: "book" }`.
-- **Access** with dot notation: `o.id`.
-- **Update** with the spread form, which copies and overrides:
-  `Order { ...o, item: "pen" }`.
-
-Records emit a TypeScript `interface` with `readonly` fields. A record field may
-not directly be of the record's own type (`bynk.resolve.recursive_record_field`).
-
-### Reserved words as field names {#keyword-field-names}
-
-A field is a key in the JSON a record decodes from and encodes to, and a
-third-party payload picks its own keys: GitHub's use `type`, `from` and `self`.
-A reserved word can therefore name a field wherever the name is a *label* and
-not a binding:
-
-```bynk
-type Account = { login: String, type: String }
-
-fn isOrg(a: Account) -> Bool { a.type == "Organization" }
-
-fn build() -> Account { Account { login: "bynk-lang", type: "Organization" } }
-
-fn kind(a: Account) -> String {
-  match a { Account { type: t, .. } => t }
-}
-```
-
-- A field declaration, a construction initialiser, a record or named pattern
-  field and a variant payload field take a reserved word when it is followed by
-  `:`. A variant payload field still cannot be named `kind`, the wire tag
-  (`bynk.resolve.reserved_payload_field`).
-- A member after `.`, a field access, a method call or a method declaration
-  (`fn Sorted.from(…)`, `Sorted.from(xs)`), takes a reserved word when it is on
-  the same line as the `.`. A half-typed `a.` above a line that starts `let` is
-  still an error at the `let`.
-- A parameter, a `let` or lambda binding and a bare reference still refuse a
-  reserved word, so the shorthand forms are refused too: `Account { type, .. }`
-  as a pattern and `Account { type }` as a construction are
-  `bynk.parse.keyword_field_shorthand`. The fix for a pattern is `type: type_`;
-  for a construction, write `type: <value>`.
-
-The emitted TypeScript keeps the field name: `a.type`, `{ type: "Organization" }`.
-
-### Field defaults {#field-defaults}
-
-A field may declare a default, `field: T = expr`. A literal may leave that field
-out, and a body decoded without its key takes the default too:
-
-```bynk,fragment
-type Mode = enum { Fast, Careful }
-
-type Options = {
-  name: String,
-  retries: Int = 3,
-  mode: Mode = Mode.Careful,
-  timeout: Option[Duration] = None,
-  tags: Map[String, String] = Map.empty(),
-}
-```
-
-`Options { name: "nightly" }` is `Options { name: "nightly", retries: 3, mode:
-Careful, timeout: None, tags: Map.empty() }`, and `Options { name: "x", retries:
-5 }` keeps its own `retries`. A field without a default is still required.
-
-- **What a default may be.** A static value of the field's type: a literal, a
-  variant, `Some`/`None`/`Ok`/`Err`, a record or list literal, `Map.empty()`,
-  `Set.empty()`, or `T.unsafe(lit)` for an opaque type. It can't call a function
-  or read a binding (`bynk.types.bad_field_default`).
-- **`Option` fields are not optional by default.** Write `= None` to make one
-  so. On the wire an absent key already decodes as `None`; in a literal the
-  field is required unless it says otherwise.
-- **A spread wins.** `Options { ...o, name: "y" }` takes every other field from
-  `o`, never from a default.
-- **On the wire.** A body without a defaulted field's key decodes to the
-  default; a key that is present, `null` included, decodes as sent. The
-  [OpenAPI document](/reference/tooling/bynk-cli/#bynk-openapi) lists a defaulted field as not required.
-- **Generic records.** A default must hold for every instantiation: `items:
-  List[T] = []` and `next: Option[T] = None` do, a field of type `T` can't have
-  one.
-- **Fields that apply a generic.** On a record field, the default is a value of the instantiated
-  type: `page: Paginated[String] = Paginated { items: ["first"] }`, or
-  `outcome: Outcome[Int] = Pending("queued")` for a generic sum. Inside a
-  generic record it may not write a value of the record's own parameter
-  (`warm: Paginated[T] = Paginated {}` holds for every `T`; `Paginated { items:
-  [1] }` doesn't).
-- **Variants don't take defaults** (`bynk.types.field_default_on_variant`). A
-  variant is built like a call; hold optional values in a record instead.
-
-Adding a field *with* a default doesn't break existing literals, which is why
-the first-party options records (`FetchOptions`, `QueueSend`, `KvGet`, `KvPut`,
-`R2Put`) give every field one. A field added with a default to a type a service takes or returns is a compatible
-contract change: the callee ships first, and an older caller gets the default
-([Contract skew](/book/guides/projects-build-and-deployment/contract-skew/)).
-Changing a default changes every literal and
-every decode that relies on it, so treat it as a behaviour change. See
-[Add an option without breaking callers](/book/guides/program-structure/add-an-option/).
-
-### Documenting fields and variants
-
-A record field, a sum variant, a variant's payload field and a `messages` entry
-each take a doc on the line above them, as a `--- text` line or a `---` block.
-Hover, completion and the documentation page show it. See
-[Document fields and variants](/book/guides/program-structure/document-your-code/#document-fields-and-variants).
-
-## Generic record types
-
-A record type may take **type parameters** — a name scoped to the declaration,
-optionally bounded (see [Generics and bounds](/reference/generics/)) — so one
-shape serves many element types. The common
-case is an API envelope:
-
-```bynk
-type Paginated[T] = {
-  items: List[T],
-  cursor: Option[String],
-}
-
-type User = { id: Int, name: String }
-
-fn first_page(users: List[User]) -> Paginated[User] {
-  Paginated { items: users, cursor: None }
-}
-
-fn items_of(page: Paginated[User]) -> List[User] {
-  page.items
-}
-```
-
-- **Apply** the type to concrete arguments wherever a type is expected:
-  `Paginated[User]`, `Keyed[String, Int]`.
-- **Construct** as an ordinary record; the type arguments are **inferred** from
-  the field values. When a field cannot pin them down (an empty `items` list),
-  annotate the binding: `let p: Paginated[User] = Paginated { items: [], cursor:
-  None }`.
-- **Access** fields with the argument substituted in: `page.items` has type
-  `List[User]`.
-
-Only a record or [sum](#generic-sums) body may be generic — a refined or opaque
-type cannot take type parameters (`bynk.generics.generic_non_record`). A generic
-type must be applied to exactly its declared number of arguments
-(`bynk.generics.type_arg_count`).
-
-Generic records emit an **erased** TypeScript generic interface — `type
-Paginated[T]` becomes `export interface Paginated<T>` — exactly as a generic
-function erases to `function f<A>(…)`.
-
-### Generic records and sums at the boundary (v0.174)
-
-A generic-record or [generic-sum](#generic-sums) instantiation is
-**serialisable** — it may appear in a field of another record, a sum payload, a
-service or agent handler signature, agent state, or a `Json.encode`/`Json.decode` target — exactly when its type arguments
-are. The compiler generates a **monomorphised codec** per instantiation: a
-`Paginated[User]` boundary emits `__serialise_Paginated_User` /
-`__deserialise_Paginated_User`, specialised to the concrete arguments and
-delegating to their codecs (`__serialise_List_User`, `__serialise_Option_String`).
-The emitted TypeScript interface stays the erased `Paginated<T>`; only the codec
-is per-instantiation, matching how `List`/`Map`/`Result` already specialise.
-
-```bynk,fragment
-fn save(page: Paginated[User]) -> String {
-  Json.encode(page)                          // __serialise_Paginated_User
-}
-
-fn load(s: String) -> Result[Paginated[User], DecodeError] {
-  Json.decode[Paginated[User]](s)            // __deserialise_Paginated_User
-}
-```
-
-A **non-serialisable argument** is still rejected, at the argument: a function,
-`Query`, `Stream`, or `Connection` type inside the instantiation
-(`Paginated[Int -> Int]`) draws that type's own boundary error
-(`bynk.types.function_at_boundary`, …), and an uncodable `Json` target draws
-`bynk.types.json_uncodable`.
-
-A **recursive** generic type — a record or sum that transitively contains itself,
-whether directly, through another type, or through an `Option`/`List` wrapper
-(`type Node[T] = { value: T, next: Option[Node[T]] }`) — **declares and works
-inside a context**: build it, match on it, fold it and pass it to generic
-functions like any other generic. It has no codec yet, so it is refused where a
-codec is required, with `bynk.generics.recursive_generic_at_boundary`: a service
-or agent handler signature, an agent `store` field or key, an event field, an
-actor identity type, a `Json.encode`/`Json.decode` target and a `Codable`
-witness. A record field, a sum payload and a capability signature are not such
-positions, so a type that merely *contains* a recursive generic is refused where
-*it* is used, and the note names the field path it is reached through
-(`Holder.t`). The refusal fires once per use, not once per self-reference.
-
-Recursion must be **uniform**: a self-reference passes the declaration's own
-type parameters through unchanged and in order (`Node[T]` inside `Node[T]`,
-including through `Option`, `List`, `Map` and sum payloads), and a mutually
-recursive partner, of any arity, is applied only to the declaration's own
-parameters or to types that mention none (`Binding[A, String]` inside `Expr[A]`). **Polymorphic** recursion
-(`type Weird[T] = { next: Option[Weird[List[T]]] }`, or `Pair[B, A]` inside
-`Pair[A, B]`) generates an unbounded set of instantiations and is refused at the
-declaration with `bynk.generics.polymorphic_recursion`. (A *non-generic*
-recursive type is unaffected: its single codec is self-referential and
-terminates on the data.) To cross a boundary today, use a concrete recursive
-type.
-
-A generic type may carry **instance methods**. A method whose receiver is a
-generic type sees the type's own parameters in scope alongside any it declares
-itself, so `fn Box.map[U](self, f: A -> U) -> Box[U]` reads `A` from the receiver
-`Box[A]` and infers `U` from the argument. It erases to a generic
-namespace-object method — `map<A, U>(self: Box<A>, f: (a: A) => U): Box<U>` — the
-type's parameters threaded onto each method (the namespace object itself cannot
-carry them). The type arguments are inferred from the receiver and the argument
-types; an explicit list, `x.map[String](f)`, names the method's own parameters only (the
-receiver's are already known) and pins them where inference has nothing to go on
-(`fn Box.cast[U](self) -> Option[U]` is called `b.cast[String]()`); the arity is
-checked as for any generic call (`bynk.generics.type_arg_mismatch`). A **static**
-method on a generic type (`fn Box.of(value: A) -> Box[A]`) is generic over the
-type's parameters too, followed by its own; see
-[Generics](/reference/generics/#static-methods-on-generic-types). A static
-whose signature never mentions one of the type's parameters is rejected
-(`bynk.generics.method_on_generic_type`) — no call could determine it. A refined or opaque body cannot
-be generic (its base is a fixed primitive); only a record or **sum** body may be
-(`bynk.generics.generic_non_record`), and generic sums are described under
-[Sum types](#sum-types).
-
-## Sum types
-
-A sum type is one of several variants; a variant may carry a payload. The
-**pipe form** is required whenever any variant carries a payload:
-
-```bynk
-type Status =
-  | Pending
-  | Shipped(tracking: String)
-  | Cancelled(reason: String)
-```
-
-When **every** variant is payloadless, write the **`enum` form** — it is the
-canonical spelling for a payloadless sum, and these docs use it throughout:
-
-```bynk
-type Suit = enum { Hearts, Diamonds, Clubs, Spades }
-```
-
-`enum { A, B, C }` is exactly sugar for `| A | B | C`; the two are the same type.
-Reach for the pipe form only when a variant needs a payload.
-
-- **Construct** by naming a variant: `Pending`, `Shipped("1Z…")`.
-- **Consume** with [`match`](#matching) or [`is`](/reference/operators/).
-- **Document** a variant, or a payload field, with a doc on the lines above it,
-  as a [record field](#documenting-fields-and-variants) is.
-
-Sum types emit a discriminated union keyed on a `tag` field. As JSON, a variant
-is a flat object whose `kind` key names the variant (`{"kind": "Shipped",
-"tracking": "1Z…"}`), so a payload field cannot be named `kind`
-(`bynk.resolve.reserved_payload_field`). A payload field named `tag` is fine:
-it keeps that name on the wire.
-
-### Variant names shared by two sums {#shared-variant-names}
-
-Two sums in scope may declare the same variant name: two of your own, or two
-that a consumed unit exports (`bynk.cloudflare`'s `SqlError` has a `Failed`, and
-so may an enum of yours). A bare use of the name builds the sum the **expected
-type** names: an annotated `let`, a parameter, a return type, or the operation a
-`stub` overrides.
-
-```bynk
-type DbError = | Constraint(message: String) | Failed(message: String)
-type MailError = | RateLimited | Failed(message: String)
-
-fn send() -> Result[Int, MailError] {
-  Err(Failed("down"))          // MailError.Failed: the return type picks it
-}
-```
-
-With no expected type naming one of them (`let e = Failed("down")`), the
-compiler does not pick one: the name is `bynk.resolve.ambiguous_variant`, and
-the message lists the qualified forms (`DbError.Failed(...)` or
-`MailError.Failed(...)`). A `match` arm or `is` pattern never needs
-qualifying, because it reads its scrutinee's sum.
-
-### Error embeddings (v0.154) {#error-embeddings}
-
-A sum used as an error type may declare **embeddings** — a trailing
-`embeds <type> as <Variant>` clause naming a single-payload variant that wraps a
-sub-error. The [`?` operator](/reference/operators/) then converts that
-sub-error automatically, replacing the boilerplate `.mapErr(Wrap)` on every
-cross-context chain:
-
-```bynk,fragment
-type OrderError =
-  | OutOfStock(sku: Sku)
-  | Payment(reason: PaymentError)
-  | Fulfilment(reason: ScheduleError)
-  embeds PaymentError as Payment, ScheduleError as Fulfilment
-```
-
-Each `embeds E as V` requires `V` to be a variant of the same sum with exactly
-one payload field of type `E`, and a given `E` may be embedded by only one
-variant (so the conversion is unambiguous). The conversion is **one level**: `?`
-converts a `Result[T, E]` into `Result[_, F]` only when `F` declares `E`
-directly. Mapping a domain error to an *HTTP* status stays an explicit `match`
-in the handler — by design, not an embedding.
-
-### Generic sums
-
-A sum body may carry `[A, B]` type parameters, exactly as a record body does. A
-parameter is an unconstrained, bound-free name resolved as a rigid variable
-inside the variant payloads:
-
-```bynk
-type ApiResult[T] =
-  | Loaded(value: T)
-  | Failed(message: String)
-```
-
-A reference applies concrete arguments (`ApiResult[User]`). **Construction**
-infers the arguments argument-directed from the variant's payload
-(`Loaded(user)` is `ApiResult[User]` because `user : User`); a variant whose
-payload cannot determine a parameter — a payload-less variant, or one that does
-not mention it (`Failed`) — leans on the binding's expected type as the pressure
-valve (`let r: ApiResult[User] = Failed("...")`), and reports
-`bynk.generics.uninferable_type_arg` when neither grounds it. **`match`**
-substitutes the arguments into each arm's payload binding (`Loaded(v)` binds `v :
-User`). Emission is **erased** TypeScript generics — one
-`export type ApiResult<T>` discriminated union, with each payload constructor a
-generic arrow (`Loaded: <T>(value: T): ApiResult<T> => …`).
-
-A generic sum is declared, constructed and matched like any other, with the
-arguments substituted into each arm:
-
-```bynk
-type Opt[A] =
-  | Nope
-  | Have(value: A)
-
-type User = { id: Int, name: String }
-
-fn name_of(found: Opt[User]) -> String {
-  match found {
-    Nope => "nobody"
-    Have(user) => user.name
-  }
-}
-
-fn find(users: List[User]) -> Opt[User] {
-  match users.first() {
-    Some(u) => Have(u)
-    None => Nope
-  }
-}
-```
-
-Like a generic record, a generic-sum instantiation is **serialisable** exactly
-when its type arguments are, through a monomorphised codec per instantiation
-(`__serialise_ApiResult_User` / `__deserialise_ApiResult_User`); a recursive generic
-sum declares and works inside a context but has no codec yet, so it is refused
-where a codec is required, with `bynk.generics.recursive_generic_at_boundary`
-(see Generic records above). A generic sum may not carry an
-`embeds` clause (`bynk.generics.generic_sum_embeds`).
-
-## Opaque types
-
-An opaque type is backed by another type but is nominally distinct:
-
-```bynk
-type OrderId = opaque String
-```
-
-- Construct only via `OrderId.of(...)` (checked, returns `Result`) or
-  `OrderId.unsafe(...)` (unchecked); record syntax is rejected
-  (`bynk.resolve.opaque_record_construction`).
-- Construction and inspection are confined to the defining module/context.
-- Opaque types are **excluded** from [literal admission](/reference/refined-types/).
-- An opaque type is not [`Ord`](#ordering-your-own-types) outside its defining
-  unit unless it says `derives Ord`.
-
 ## Keys
 
 A `Map` key, a `Set` member and the key of a `List`'s `distinct`, `distinctBy`,
@@ -1465,113 +858,167 @@ A `store` `Map`, `Set` or `Cache`, and an `@indexed` field, still take only
 `String`, `Int` or a refined or opaque type over them. A `Query`'s `distinct`,
 `distinctBy`, `groupBy` and join keys take any `Key` type, as a `List`'s do.
 
-## Ordering your own types
+## List methods
 
-`Ord` is the set of types with a total order: what `<` `<=` `>` `>=`, the
-`sortBy`/`min`/`max` keys on a `List`, its keyless `sort`/`min`/`max` and a
-`T: Ord` [bound](/reference/generics/) accept. It is opt-in for your own types:
-end the declaration with `derives Ord`.
+`List[T]` (v0.88; ADR 0116) carries the query algebra's **eager, in-memory**
+combinator vocabulary as kernel methods, so a chain reads
+`xs.filter((x) => x > 2).map((x) => x * 2)` (the same names the lazy
+[`Query`](#query) carries over storage; the receiver decides eager vs lazy).
+
+| Method | Returns | |
+|---|---|---|
+| `xs.length()` | `Int` | the element count |
+| `xs.get(index: Int)` | `Option[T]` | the element at `index` (from `0`); `None` when out of range |
+| `xs.first()` | `Option[T]` | the first element; `None` when empty |
+| `xs.firstOrElse(default: T)` | `T` | the first element, or `default` when empty |
+| `xs.last()` | `Option[T]` | the last element; `None` when empty |
+| `xs.lastOrElse(default: T)` | `T` | the last element, or `default` when empty |
+| `xs.isEmpty()` | `Bool` | `true` when there are no elements |
+| `xs.contains(item: T)` | `Bool` | some element `==` `item` (`T` must be `Eq`) |
+| `xs.reverse()` | `List[T]` | the elements in the opposite order |
+| `xs.find(p: T -> Bool)` | `Option[T]` | the first element for which `p` holds; `None` when there is none |
+| `xs.prepend(item: T)` | `List[T]` | `item`, then `xs` |
+| `xs.append(item: T)` | `List[T]` | `xs`, then `item` |
+| `xs.concat(other: List[T])` | `List[T]` | `xs`, then `other` |
+| `xs.map(f: T -> U)` | `List[U]` | `f` applied to each element |
+| `xs.filter(p: T -> Bool)` | `List[T]` | the elements for which `p` holds |
+| `xs.flatMap(f: T -> List[U])` | `List[U]` | each element's list, joined in order |
+| `xs.sortBy(key: T -> K)` | `List[T]` | smallest key first; stable |
+| `xs.sortByDescending(key: T -> K)` | `List[T]` | largest key first; stable |
+| `xs.sort()` | `List[T]` | the elements themselves, smallest first; stable (`T` must be `Ord`) |
+| `xs.take(n: Int)` | `List[T]` | the first `n` elements (all of them when there are fewer) |
+| `xs.skip(n: Int)` | `List[T]` | all but the first `n` |
+| `xs.distinct()` | `List[T]` | repeats dropped, each element at its first position |
+| `xs.distinctBy(key: T -> K)` | `List[T]` | the first element for each key |
+| `xs.fold(init: U, step: (U, T) -> U)` | `U` | `step` applied from `init` across the list, in order |
+| `xs.count()` | `Int` | the element count (the same as `length()`) |
+| `xs.any(p: T -> Bool)` | `Bool` | `p` holds for at least one element; `false` when empty |
+| `xs.all(p: T -> Bool)` | `Bool` | `p` holds for every element; `true` when empty |
+| `xs.sum(key: T -> K)` | `K` | the total of the keys; the zero when empty |
+| `xs.min(key: T -> K)` | `Option[K]` | the smallest key; `None` when empty |
+| `xs.max(key: T -> K)` | `Option[K]` | the largest key; `None` when empty |
+| `xs.min()` | `Option[T]` | the smallest element; `None` when empty (`T` must be `Ord`) |
+| `xs.max()` | `Option[T]` | the largest element; `None` when empty (`T` must be `Ord`) |
+| `xs.average(key: T -> K)` | `Option[Float]` | the mean of the keys (`Option[Duration]` for a `Duration` key); a `Decimal` key is refused (`bynk.query.sum_needs_numeric`); `None` when empty |
+| `xs.joinOn(other, left, right, into)` | `List[V]` | equi-join; see [Joins and grouping](#joins-and-grouping) |
+| `xs.leftJoin(other, left, right, into)` | `List[V]` | left outer join |
+| `xs.join(other, on, into)` | `List[V]` | predicate join |
+| `xs.groupBy(key, into)` | `List[V]` | one result per key, in first-seen key order |
+| `rs.sequenceAll()` | `Result[List[T], List[E]]` | for a `List[Result[T, E]]`: every value, or every error |
+| `rs.sequenceTry()` | `Result[List[T], E]` | for a `List[Result[T, E]]`: every value, or the first error |
+| `xs.foldEff(init: U, step: (U, T) -> Effect[U])` | `Effect[U]` | `fold` with an effectful step |
+| `xs.forEach(f: T -> Effect[()])` | `Effect[()]` | run `f` for each element, in order |
+| `xs.traverse(f: T -> Effect[U])` | `Effect[List[U]]` | run `f` for each element, in order, and collect the results |
+| `xs.parForEach(f: T -> Effect[()])` | `Effect[()]` | run `f` for every element concurrently |
+| `xs.parForEachWith(f, options: ParOptions)` | `Effect[()]` | `parForEach` with at most `options.limit` steps in flight |
+| `xs.parTraverse(f: T -> Effect[U])` | `Effect[List[U]]` | run `f` for every element concurrently; the values come back in input order |
+| `xs.traverseAll(f: T -> Effect[Result[U, E]])` | `Effect[List[Result[U, E]]]` | run `f` for each element in order, keeping every outcome |
+| `xs.parTraverseAll(f: T -> Effect[Result[U, E]])` | `Effect[List[Result[U, E]]]` | the same, concurrently |
+| `xs.parTraverseAllWith(f, options: ParOptions)` | `Effect[List[Result[U, E]]]` | `parTraverseAll`, bounded the same way |
+| `xs.traverseTry(f: T -> Effect[Result[U, E]])` | `Effect[Result[List[U], E]]` | run `f` for each element in order, stopping at the first `Err` |
+| `xs.parTraverseTry(f: T -> Effect[Result[U, E]])` | `Effect[Result[List[U], E]]` | the same, concurrently |
+| `xs.parTraverseTryWith(f, options: ParOptions)` | `Effect[Result[List[U], E]]` | `parTraverseTry`, bounded; once a step returns `Err` no further step starts |
+| `xs.parTraverseWith(f, options: ParOptions)` | `Effect[List[U]]` | `parTraverse`, bounded the same way |
+
+The effect methods form one grid of names:
+
+| | returns `()` | returns values | each step a `Result`, keep all | stop at first `Err` |
+|---|---|---|---|---|
+| in order | `forEach` | `traverse` | `traverseAll` | `traverseTry` |
+| concurrently | `parForEach` | `parTraverse` | `parTraverseAll` | `parTraverseTry` |
+
+Before #3967 `parTraverse` returned `()`; that is now `parForEach`. A `parTraverse` whose step returns `Effect[()]` still type-checks, so it gets the warning `bynk.list.par_traverse_unit`, whose fix (`bynk check --fix`) renames the call. A concurrent call that faults waits for every step to settle, then raises the first fault in input order, as `par` does; results are in input order whatever order the steps finish in.
+
+**Bounding a fan-out (#3968).** The plain `par…` forms start every step at once. The four `…With` forms take a second argument, `ParOptions`, a record `{ limit: Int }` declared in the first-party `bynk.par` commons (`uses bynk.par`); it has no default, so a call always states its bound. `limit` is a whole number from 1 to 1000, and the steps run on a sliding pool: a new step starts as soon as any in-flight step settles. Results stay in input order and faults follow the plain forms (every started step settles, the first fault in input order is raised). A `limit` that is a literal or constant outside 1 to 1000 is the error `bynk.list.par_limit_range`; a `limit` of 1 is the warning `bynk.list.par_limit_one`, since the call is then sequential (use `forEach`, `traverse`, `traverseAll` or `traverseTry`). A limit only known at run time is checked by the runtime, which faults the call. The closure rules, including `bynk.par.store_write_in_closure`, are the plain forms'. General named arguments are proposal [#4194](https://github.com/bynk-lang/bynk/issues/4194), which would give the future spelling `limit:`; it is not implemented.
+
+The methods returning an `Effect` can only be called where effects are allowed.
+A method not in this table is `bynk.types.method_not_found`. The rest of this
+section groups them and gives the rules.
+
+**Builders** (return a `List`): `map`, `filter`, `flatMap`, `sortBy`, `sortByDescending`, `sort`, `reverse`,
+`take`, `skip`, `distinct`, `distinctBy`.
+
+**Collecting `Result`s** (pure; the receiver is a `List[Result[T, E]]`): `sequenceAll()`
+returns `Ok` of every value, or `Err` of the list of **every** error in input order;
+`sequenceTry()` returns `Ok` of every value, or the **first** `Err`. `xs.map(validate).sequenceAll()`
+reports every failing field of a form at once. The empty list is `Ok([])`.
+`bynk.types.sequence_needs_result` flags a list that is not of `Result`s. The effectful
+counterparts are `traverseAll` and `traverseTry`.
 
 ```bynk
-commons demo.ordering
+fn checkAll(rs: List[Result[Int, String]]) -> Result[List[Int], List[String]] { rs.sequenceAll() }
+```
 
-type Priority = enum { Low, Medium, High } derives Ord
+**Adding items** (return a new `List`; the receiver is unchanged): `prepend(x)`
+puts `x` at the front, `append(x)` puts it at the end, and `concat(other)`
+joins `other` after the receiver. A fold that builds a list in order uses
+`append` (or `concat`), with no `reverse` afterwards:
 
-type Task = {
-	priority: Priority,
-	due: Instant,
-	title: String,
-} derives Ord
+```bynk
+fn labels(ns: List[Int]) -> List[String] {
+  let none: List[String] = []
+  ns.fold(none, (acc, n) => acc.append(n.toString()))
+}
 
-type Maybe[T] =
-	| Missing
-	| Present(item: T)
-	derives Ord
-
-fn urgent(a: Task, b: Task) -> Bool {
-	a.priority > b.priority
+fn withTotal(ns: List[Int]) -> List[Int] {
+  ns.concat([ns.fold(0, (acc, n) => acc + n)])
 }
 ```
 
-`derives` is a contextual word that only means something after a type body, so it
-stays a valid identifier elsewhere. `derives Ord + …` is the list form; `Eq`,
-`Key` and `Codable` are derived automatically, so naming one is
-`bynk.types.derives_automatic` (a fix removes it). Any other name is
-`bynk.generics.unknown_constraint`.
+`labels([1, 2, 3])` is `["1", "2", "3"]`, and `withTotal([1, 2])` is
+`[1, 2, 3]`. `foldEff` builds in order the same way, its step returning
+`Effect.pure(acc.append(x))`.
 
-**Which types are `Ord`.** `Int`, `Float`, `Decimal`, `String`, `Duration`, `Instant` and
-`Bytes`; a refined type over one of them; `Option[T]` and `List[T]` where `T` is
-`Ord`; a record, sum, enum or opaque type that `derives Ord`; and a type parameter
-declared `T: Ord`. `Bool`, `Result`, `Map`, `Set`, functions and held resources
-are not. A generic type that derives `Ord` is `Ord` at an instantiation whose
-arguments are (`Maybe[Int]`, not `Maybe[Bool]`). Every field and payload type of a
-type that derives `Ord` must be `Ord`, else
-`bynk.types.derives_field_not_orderable` names the field.
+**Terminals**: `count`, `any`, `all`, `first`, `firstOrElse`, `last`, `lastOrElse`, `isEmpty`,
+`contains`, `find`, `sum`, `min`, `max`, `average`.
 
-**The order.**
+Ordering keys (`sortBy`/`sortByDescending`/`min`/`max`), on a `List` and on a lazy storage `Query`, are any
+[`Ord` type](#ordering-your-own-types) (`bynk.types.key_not_orderable` otherwise). `sortByDescending` is `sortBy` largest key first: the exact reverse of the ascending order, so a
+`Float` `NaN` comes **first** (`None` last, a longer list first). It is **stable**: equal keys keep
+their input order, which `reverse(xs.sortBy(k))` does not. It behaves the same for a concrete,
+`derives Ord` or type-parameter key. Numeric keys: `sum` takes `Int`, `Float`, `Duration` or `Decimal` keys; `average`
+takes `Int`, `Float` or `Duration`, and refuses `Decimal` (`bynk.query.sum_needs_numeric`: sum, then divide with a
+scale and rounding mode). `average -> Float` (`Duration` for a `Duration` key). The same keys apply on a lazy storage `Query`.
+**Empty aggregates are total** — `first`/`min`/`max`/`average` return `Option`,
+`sum` the zero. The keyless `sort()`, `min()` and `max()` order the elements themselves,
+so the element type must be `Ord` (`bynk.types.not_orderable` otherwise). `contains` compares
+by `==`, so the element type must support equality (`T: Eq` on a type parameter,
+`bynk.generics.missing_eq_bound` otherwise). Every first-party `bynk.list` free function now has a
+method, and each is the deprecated predecessor of it (see [Operators & built-ins](/reference/operators/) and
+[First-party `bynk` capabilities](/reference/bynk-capabilities/)).
 
-| Type | Order |
-|---|---|
-| `Int`, `Duration`, `Instant` | numeric |
-| `Decimal` | numeric, ignoring scale (`1.2d` and `1.20d` are equal) |
-| `String` | code point, element by element (not locale); agrees with storage key order and SQLite's `BINARY` collation |
-| `Bytes` | unsigned octets, lexicographic |
-| `Float` | total: `NaN` last and equal to itself, `-0` equal to `0` |
-| `Option[T]` | `None` first, then `Some` by payload |
-| `List[T]` | lexicographic, a proper prefix first |
-| record | by field, in declaration order |
-| sum, enum | by variant declaration order, then by payload |
+## Map methods {#map-methods}
 
-The `Float` total order applies to the ordering kernels and `Ord` witnesses. The
-operators keep IEEE behaviour on a `Float`: `NaN < x` is `false`, and `==` is
-unchanged.
+`Map[K, V]` is a built-in immutable map with [`Key`](#keys) keys. It keeps
+insertion order. `Map.empty()` takes its types from context.
 
-**Reordering changes the order.** A `derives Ord` type sorts by declaration
-order, so moving a field, or a variant, changes how its values sort. The wire
-contract hash ignores field and variant order, so the change does not appear as
-a contract change and `bynk` raises no diagnostic for it. Treat the declaration
-order of such a type as meaningful.
+| Method | Returns | |
+|---|---|---|
+| `m.length()` | `Int` | the entry count |
+| `m.get(key: K)` | `Option[V]` | the value at `key`; `None` when absent |
+| `m.insert(key: K, value: V)` | `Map[K, V]` | a new map with `key` set to `value`; `m` is unchanged |
+| `m.keys()` | `List[K]` | the keys |
+| `m.values()` | `List[V]` | the values |
+| `m.remove(key: K)` | `Map[K, V]` | without `key`; `m` is unchanged; a no-op when `key` is absent |
+| `m.contains(key: K)` | `Bool` | whether `key` has an entry |
+| `m.getOrElse(key: K, default: V)` | `V` | the value at `key`, or `default` when absent |
+| `m.isEmpty()` | `Bool` | whether there are no entries |
+| `m.entries()` | `List[MapEntry[K, V]]` | the entries, in insertion order |
+| `Map.of(entries: List[MapEntry[K, V]])` | `Map[K, V]` | a later entry for a key replaces the value and keeps the first position |
+| `m.filter(p: (K, V) -> Bool)` | `Map[K, V]` | the entries for which `p` holds; order kept |
+| `m.mapValues(f: V -> U)` | `Map[K, U]` | each value through `f`; keys and order kept |
+| `m.fold(init: U, step: (U, K, V) -> U)` | `U` | `step` applied from `init` across the entries, in insertion order |
 
-**Not ordered by accident.** A type without `derives Ord` is never ordered
-implicitly. Using `<` or a sort key on one is `bynk.types.not_orderable`, whose
-"add `derives Ord`" suggestion is never applied by `bynk check --fix` or
-**Fix all**, because opting in is a decision about what the order is.
-
-## Refined types
-
-A base type plus a predicate. See the [refined-type reference](/reference/refined-types/).
-
-## Regular expressions
-
-A refined `String where Matches("…")` checks a whole string against a pattern.
-Six `String` methods use the same patterns to look inside one (the full set of
-`String` methods is in [String](#string)):
-
-```bynk,fragment
-let ok = sku.matchesRegex("[A-Z]{3}-[0-9]{4}")         // the whole string
-let has = text.containsRegex("(?i)error")               // anywhere, ignoring case
-let v = text.findRegex(r"v(\d+)\.(\d+)")                // Some([Some("v2.14"), Some("2"), Some("14")])
-let all = text.findAllRegex(r"\d+")                      // every match
-let tidy = text.replaceRegex(r"\s+", " ")               // every match; `$1`, `$<name>`, `$$`
-let parts = csv.splitRegex(r"\s*,\s*")                 // captured groups are not kept
-```
-
-A regex is easiest to read as a [raw string](/reference/grammar/#rule-string_literal),
-`r"…"`, where a backslash is just a backslash: `r"\d+"` and `"\\d+"` are the same
-pattern, and the compiler checks them identically.
-
-- **The pattern must be a string literal** (of any form: ordinary, raw or multi-line). It is checked when the program
-  compiles, as a `Matches` pattern is: its syntax, and that it cannot take
-  catastrophic time on a crafted input (ReDoS). A pattern built at run time
-  would escape that check, so it is refused (`bynk.types.regex_not_literal`).
-- **Captures** come back as a list: element 0 is the whole match, then each
-  group, `None` for a group that did not take part.
-- **Flags** go at the start of the pattern: `(?i)` ignores case, `(?m)` lets
-  `^`/`$` match at line breaks, `(?s)` lets `.` match a newline.
-- **Semantics** are JavaScript's `RegExp`, without the `u` flag, as `Matches`
-  uses.
-- **`replaceRegex`** reads `$1`, `$<name>`, `$&` and `$$` in the replacement,
-  unlike `replace`, which inserts its text literally.
+Every method that returns a map keeps insertion order, over plain and composite
+keys alike. `entries()` yields the same compiler-known `MapEntry` as a
+`store Map`'s `.entries`, which is not a boundary type, so a handler projects entries into a
+named type before returning them. A `MapEntry` has no literal form, so `Map.of`
+takes the entries of another map, for example `Map.of(m.entries().filter(…))`. The
+`bynk.map` commons is deprecated: `values`, `contains` and `getOr` are the methods
+`m.values()`, `m.contains(key)` and `m.getOrElse(key, default)`, and each call warns
+with `bynk.map.deprecated_function` and a fix. A
+`store … : Map[K, V]` field is a different thing: an agent's storage map, read
+through [Query](#query) and the [map key accessors](#map-key-accessors).
 
 ## Matching
 
@@ -1844,3 +1291,554 @@ record pattern (`bynk.parse.lambda_pattern_not_record`) and takes no annotation
 generic record takes its type arguments from the expected function type. Function,
 method and handler parameters stay plain names.
 
+## Named types
+
+```bynk
+type Id = Int
+```
+
+A named type is a **distinct nominal type**, not a transparent synonym: an `Id`
+is not an `Int`, and it is branded in the emitted TypeScript. It carries a `.of`
+constructor (like any refined type, it has no `.unsafe` — that is opaque-only;
+ADR 0182). While the type has no predicate, `Id.of(n)` cannot fail and returns
+`Id` directly; adding a `where` clause turns it into
+`Result[Id, ValidationError]`, so every call site that can now fail becomes a type
+error until it handles the failure. (The rule is "no predicate and no implicit base
+check": a `Float` named type stays fallible, since `.of` also rejects `NaN` and
+infinities.)
+
+## Opaque types
+
+An opaque type is backed by another type but is nominally distinct:
+
+```bynk
+type OrderId = opaque String
+```
+
+- Construct only via `OrderId.of(...)` (checked, returns `Result`) or
+  `OrderId.unsafe(...)` (unchecked); record syntax is rejected
+  (`bynk.resolve.opaque_record_construction`).
+- Construction and inspection are confined to the defining module/context.
+- Opaque types are **excluded** from [literal admission](/reference/refined-types/).
+- An opaque type is not [`Ord`](#ordering-your-own-types) outside its defining
+  unit unless it says `derives Ord`.
+
+## Ordering your own types
+
+`Ord` is the set of types with a total order: what `<` `<=` `>` `>=`, the
+`sortBy`/`min`/`max` keys on a `List`, its keyless `sort`/`min`/`max` and a
+`T: Ord` [bound](/reference/generics/) accept. It is opt-in for your own types:
+end the declaration with `derives Ord`.
+
+```bynk
+commons demo.ordering
+
+type Priority = enum { Low, Medium, High } derives Ord
+
+type Task = {
+	priority: Priority,
+	due: Instant,
+	title: String,
+} derives Ord
+
+type Maybe[T] =
+	| Missing
+	| Present(item: T)
+	derives Ord
+
+fn urgent(a: Task, b: Task) -> Bool {
+	a.priority > b.priority
+}
+```
+
+`derives` is a contextual word that only means something after a type body, so it
+stays a valid identifier elsewhere. `derives Ord + …` is the list form; `Eq`,
+`Key` and `Codable` are derived automatically, so naming one is
+`bynk.types.derives_automatic` (a fix removes it). Any other name is
+`bynk.generics.unknown_constraint`.
+
+**Which types are `Ord`.** `Int`, `Float`, `Decimal`, `String`, `Duration`, `Instant` and
+`Bytes`; a refined type over one of them; `Option[T]` and `List[T]` where `T` is
+`Ord`; a record, sum, enum or opaque type that `derives Ord`; and a type parameter
+declared `T: Ord`. `Bool`, `Result`, `Map`, `Set`, functions and held resources
+are not. A generic type that derives `Ord` is `Ord` at an instantiation whose
+arguments are (`Maybe[Int]`, not `Maybe[Bool]`). Every field and payload type of a
+type that derives `Ord` must be `Ord`, else
+`bynk.types.derives_field_not_orderable` names the field.
+
+**The order.**
+
+| Type | Order |
+|---|---|
+| `Int`, `Duration`, `Instant` | numeric |
+| `Decimal` | numeric, ignoring scale (`1.2d` and `1.20d` are equal) |
+| `String` | code point, element by element (not locale); agrees with storage key order and SQLite's `BINARY` collation |
+| `Bytes` | unsigned octets, lexicographic |
+| `Float` | total: `NaN` last and equal to itself, `-0` equal to `0` |
+| `Option[T]` | `None` first, then `Some` by payload |
+| `List[T]` | lexicographic, a proper prefix first |
+| record | by field, in declaration order |
+| sum, enum | by variant declaration order, then by payload |
+
+The `Float` total order applies to the ordering kernels and `Ord` witnesses. The
+operators keep IEEE behaviour on a `Float`: `NaN < x` is `false`, and `==` is
+unchanged.
+
+**Reordering changes the order.** A `derives Ord` type sorts by declaration
+order, so moving a field, or a variant, changes how its values sort. The wire
+contract hash ignores field and variant order, so the change does not appear as
+a contract change and `bynk` raises no diagnostic for it. Treat the declaration
+order of such a type as meaningful.
+
+**Not ordered by accident.** A type without `derives Ord` is never ordered
+implicitly. Using `<` or a sort key on one is `bynk.types.not_orderable`, whose
+"add `derives Ord`" suggestion is never applied by `bynk check --fix` or
+**Fix all**, because opting in is a decision about what the order is.
+
+## Query
+
+`Query[T]` (v0.92; ADRs 0115/0119) is a **lazy read over a `store`'s storage** —
+the lazy receiver of the same combinator vocabulary the eager [`List`
+methods](#list-methods) carry, dispatched by **receiver provenance**: a chain
+rooted in a `store reservations: Map[K, V]` field is a `Query`, while the same
+names on an in-memory `List` are eager. Like `Effect`/`Fn`/`Stream` it is
+**non-storable and non-boundary** — rejected in any storable or boundary position
+(`bynk.types.query_at_boundary`) — but is otherwise first-class: nameable,
+returnable from a pure helper, passable. A query is **agent-local** and reads
+**staged** state (read-your-writes).
+
+**Builders** are pure and return a further `Query` — `filter`, `map`, `flatMap`,
+`sortBy`, `sortByDescending`, `take`, `skip`, `distinct`, plus the joins and `groupBy` below.
+
+**Terminals** execute the query and are `Effect`-typed (awaited with `<-`), folding
+into the storage capability the `store` fields already carry (no new `given`):
+
+| Terminal | Result |
+|---|---|
+| `.collect()` | `Effect[List[T]]` |
+| `.first()` | `Effect[Option[T]]` |
+| `.count()` | `Effect[Int]` |
+| `.sum(key)` / `.min(key)` / `.max(key)` / `.average(key)` | `Effect[…]` (empty-total: `Option`, or the zero for `sum`) |
+| `.any(p)` / `.all(p)` | `Effect[Bool]` |
+| `.fold(init, f)` | `Effect[acc]` |
+| `.forEach(f)` | `Effect[()]` |
+
+### Joins and grouping
+
+Joins and grouping (v0.92+; ADR 0120) take an **`into:` combiner** that projects
+each result through a lambda into a **user-named type** — bynk has no anonymous
+pair/tuple, so a join row is always a named record. The arguments are positional
+(`left:`/`right:`/`into:` name them for readability):
+
+| Form | Yields |
+|---|---|
+| `joinOn(other, left: T -> K, right: U -> K, into: (T, U) -> V)` | equi-join → `…[V]` |
+| `leftJoin(other, left: T -> K, right: U -> K, into: (T, Option[U]) -> V)` | left outer → `…[V]` |
+| `join(other, on: (T, U) -> Bool, into: (T, U) -> V)` | predicate (nested-loop) → `…[V]` |
+| `groupBy(key: T -> K, into: (K, List[T]) -> V)` | grouping → `…[V]` |
+
+Each yields a `Query[V]` over storage and a `List[V]` eagerly. Because every result
+is a named `V`, chained joins stay flat and named — no nested pairs. An equi-`joinOn`
+whose probed key is [`@indexed`](/reference/agents/) routes through the index.
+
+### Map key accessors
+
+A `store Map[K, V]` roots three key-aware queries (v0.158; ADR 0184):
+
+| Accessor | Yields |
+|---|---|
+| `map.keys` | `Query[K]` |
+| `map.values` | `Query[V]` |
+| `map.entries` | `Query[MapEntry[K, V]]` |
+
+`.entries` exposes each entry as a **`MapEntry[K, V]`** — a compiler-known nominal
+record `{ key: K, value: V }`, read with `.key`/`.value`. bynk has no tuple/pair
+(ADR 0120), so an entry is a *named* record; the whole single-argument vocabulary
+above applies to `.entries` unchanged. `MapEntry` is
+[non-boundary](#query) (it is a generic-record instantiation, ADR 0183), so a read
+handler projects each entry into a named type before its terminal:
+
+```bynk,fragment
+// the id lives in the key; project it back into the boundary shape
+items.entries.map((e) => TodoItem { id: e.key, seq: e.value.seq, title: e.value.title, done: e.value.done }).collect()
+```
+
+This is what lets a stored value drop the denormalised copy of its own key. The
+accessors are paren-less builders on the *storage* map, distinct from the eager
+in-memory `Map` value methods `.keys()`/`.values()` that return `List`s.
+
+## Record types
+
+A record groups named, immutable fields:
+
+```bynk
+type Order = {
+  id: String,
+  item: String,
+}
+```
+
+- **Construct** by naming every field that has no default:
+  `Order { id: "1", item: "book" }`.
+- **Access** with dot notation: `o.id`.
+- **Update** with the spread form, which copies and overrides:
+  `Order { ...o, item: "pen" }`.
+
+Records emit a TypeScript `interface` with `readonly` fields. A record field may
+not directly be of the record's own type (`bynk.resolve.recursive_record_field`).
+
+### Reserved words as field names {#keyword-field-names}
+
+A field is a key in the JSON a record decodes from and encodes to, and a
+third-party payload picks its own keys: GitHub's use `type`, `from` and `self`.
+A reserved word can therefore name a field wherever the name is a *label* and
+not a binding:
+
+```bynk
+type Account = { login: String, type: String }
+
+fn isOrg(a: Account) -> Bool { a.type == "Organization" }
+
+fn build() -> Account { Account { login: "bynk-lang", type: "Organization" } }
+
+fn kind(a: Account) -> String {
+  match a { Account { type: t, .. } => t }
+}
+```
+
+- A field declaration, a construction initialiser, a record or named pattern
+  field and a variant payload field take a reserved word when it is followed by
+  `:`. A variant payload field still cannot be named `kind`, the wire tag
+  (`bynk.resolve.reserved_payload_field`).
+- A member after `.`, a field access, a method call or a method declaration
+  (`fn Sorted.from(…)`, `Sorted.from(xs)`), takes a reserved word when it is on
+  the same line as the `.`. A half-typed `a.` above a line that starts `let` is
+  still an error at the `let`.
+- A parameter, a `let` or lambda binding and a bare reference still refuse a
+  reserved word, so the shorthand forms are refused too: `Account { type, .. }`
+  as a pattern and `Account { type }` as a construction are
+  `bynk.parse.keyword_field_shorthand`. The fix for a pattern is `type: type_`;
+  for a construction, write `type: <value>`.
+
+The emitted TypeScript keeps the field name: `a.type`, `{ type: "Organization" }`.
+
+### Field defaults {#field-defaults}
+
+A field may declare a default, `field: T = expr`. A literal may leave that field
+out, and a body decoded without its key takes the default too:
+
+```bynk,fragment
+type Mode = enum { Fast, Careful }
+
+type Options = {
+  name: String,
+  retries: Int = 3,
+  mode: Mode = Mode.Careful,
+  timeout: Option[Duration] = None,
+  tags: Map[String, String] = Map.empty(),
+}
+```
+
+`Options { name: "nightly" }` is `Options { name: "nightly", retries: 3, mode:
+Careful, timeout: None, tags: Map.empty() }`, and `Options { name: "x", retries:
+5 }` keeps its own `retries`. A field without a default is still required.
+
+- **What a default may be.** A static value of the field's type: a literal, a
+  variant, `Some`/`None`/`Ok`/`Err`, a record or list literal, `Map.empty()`,
+  `Set.empty()`, or `T.unsafe(lit)` for an opaque type. It can't call a function
+  or read a binding (`bynk.types.bad_field_default`).
+- **`Option` fields are not optional by default.** Write `= None` to make one
+  so. On the wire an absent key already decodes as `None`; in a literal the
+  field is required unless it says otherwise.
+- **A spread wins.** `Options { ...o, name: "y" }` takes every other field from
+  `o`, never from a default.
+- **On the wire.** A body without a defaulted field's key decodes to the
+  default; a key that is present, `null` included, decodes as sent. The
+  [OpenAPI document](/reference/tooling/bynk-cli/#bynk-openapi) lists a defaulted field as not required.
+- **Generic records.** A default must hold for every instantiation: `items:
+  List[T] = []` and `next: Option[T] = None` do, a field of type `T` can't have
+  one.
+- **Fields that apply a generic.** On a record field, the default is a value of the instantiated
+  type: `page: Paginated[String] = Paginated { items: ["first"] }`, or
+  `outcome: Outcome[Int] = Pending("queued")` for a generic sum. Inside a
+  generic record it may not write a value of the record's own parameter
+  (`warm: Paginated[T] = Paginated {}` holds for every `T`; `Paginated { items:
+  [1] }` doesn't).
+- **Variants don't take defaults** (`bynk.types.field_default_on_variant`). A
+  variant is built like a call; hold optional values in a record instead.
+
+Adding a field *with* a default doesn't break existing literals, which is why
+the first-party options records (`FetchOptions`, `QueueSend`, `KvGet`, `KvPut`,
+`R2Put`) give every field one. A field added with a default to a type a service takes or returns is a compatible
+contract change: the callee ships first, and an older caller gets the default
+([Contract skew](/book/guides/projects-build-and-deployment/contract-skew/)).
+Changing a default changes every literal and
+every decode that relies on it, so treat it as a behaviour change. See
+[Add an option without breaking callers](/book/guides/program-structure/add-an-option/).
+
+### Documenting fields and variants
+
+A record field, a sum variant, a variant's payload field and a `messages` entry
+each take a doc on the line above them, as a `--- text` line or a `---` block.
+Hover, completion and the documentation page show it. See
+[Document fields and variants](/book/guides/program-structure/document-your-code/#document-fields-and-variants).
+
+## Refined types
+
+A base type plus a predicate. See the [refined-type reference](/reference/refined-types/).
+
+## Regular expressions
+
+A refined `String where Matches("…")` checks a whole string against a pattern.
+Six `String` methods use the same patterns to look inside one (the full set of
+`String` methods is in [String](#string)):
+
+```bynk,fragment
+let ok = sku.matchesRegex("[A-Z]{3}-[0-9]{4}")         // the whole string
+let has = text.containsRegex("(?i)error")               // anywhere, ignoring case
+let v = text.findRegex(r"v(\d+)\.(\d+)")                // Some([Some("v2.14"), Some("2"), Some("14")])
+let all = text.findAllRegex(r"\d+")                      // every match
+let tidy = text.replaceRegex(r"\s+", " ")               // every match; `$1`, `$<name>`, `$$`
+let parts = csv.splitRegex(r"\s*,\s*")                 // captured groups are not kept
+```
+
+A regex is easiest to read as a [raw string](/reference/grammar/#rule-string_literal),
+`r"…"`, where a backslash is just a backslash: `r"\d+"` and `"\\d+"` are the same
+pattern, and the compiler checks them identically.
+
+- **The pattern must be a string literal** (of any form: ordinary, raw or multi-line). It is checked when the program
+  compiles, as a `Matches` pattern is: its syntax, and that it cannot take
+  catastrophic time on a crafted input (ReDoS). A pattern built at run time
+  would escape that check, so it is refused (`bynk.types.regex_not_literal`).
+- **Captures** come back as a list: element 0 is the whole match, then each
+  group, `None` for a group that did not take part.
+- **Flags** go at the start of the pattern: `(?i)` ignores case, `(?m)` lets
+  `^`/`$` match at line breaks, `(?s)` lets `.` match a newline.
+- **Semantics** are JavaScript's `RegExp`, without the `u` flag, as `Matches`
+  uses.
+- **`replaceRegex`** reads `$1`, `$<name>`, `$&` and `$$` in the replacement,
+  unlike `replace`, which inserts its text literally.
+
+## Set
+
+`Set[T]` is a built-in immutable set, beside `List` and `Map`. It keeps
+**insertion order**, as `Map` does: `toList()` and the wire form list the
+elements in the order they were first added, and inserting an element that is
+already there keeps its place.
+
+```bynk,fragment
+let tags = Set.of(["b", "a", "b"])        // {b, a}
+let more = tags.insert("c").remove("a")   // {b, c}; `tags` is unchanged
+let none: Set[Int] = Set.empty()
+```
+
+- **Members** are `Key` types: see [Keys](#keys). Anything else is
+  `bynk.types.not_keyable`, whether written (`Set[Float]`) or inferred
+  (`Set.of([f])`).
+- **Statics:** `Set.empty()` takes its element type from context, as
+  `List.empty()` does, and `Set.of(xs: List[T])` drops repeats, keeping each
+  element's first position.
+- **Kernel:** `length()`, `contains(x)`, `insert(x)`, `remove(x)` and
+  `toList()`. `insert` and `remove` return a new set.
+- **Combinators** are methods, all in insertion order:
+  - `union(other: Set[T])`: `a`'s elements, then `other`'s new members.
+  - `intersect(other: Set[T])` and `difference(other: Set[T])`: in `a`'s order.
+  - `isSubsetOf(other: Set[T])`: whether every element is in `other`.
+  - `isEmpty()`: whether there are no elements.
+  - `filter(p: T -> Bool)`: the elements for which `p` holds.
+  - `map(f: T -> U)`: each element through `f`; `U` must be a `Key`, and elements that map to
+    one value merge at the first position.
+  - `fold(init: U, step: (U, T) -> U)`: `step` applied from `init` across the elements.
+
+  The `bynk.set` commons is deprecated: its functions are these methods, and each call warns
+  with `bynk.set.deprecated_function` and a fix.
+- **Equality** is membership: `Set.of([1, 2]) == Set.of([2, 1])`.
+- **On the wire** a set is a JSON array in insertion order. Decoding one with a
+  repeated element fails, since a Bynk sender never writes one.
+
+A `store members: Set[T]` field is a different thing: the storage set of an
+agent, with effectful `add`/`remove`/`contains`/`size`. A `Set[T]` value is
+the immutable collection described here.
+
+## Stream
+
+`Stream[T]` (v0.100) is a **lazy, pull-shaped sequence of values produced over
+time** — the primitive for incremental output, distinct from `Effect[T]` (which
+resolves exactly once) and `Query[T]` (a snapshot read over storage). Like those
+neighbours it is **non-serialisable, non-storable, non-boundary, and not
+value-comparable**: a live source is built and consumed in place, never persisted,
+sent across a context boundary, or compared with `==`.
+
+Within a Worker a stream moves freely (#2623):
+
+- **Through a capability.** An operation may take or return a stream
+  (`fn read(key: String) -> Effect[Download]`), since a capability's provider runs
+  in the same isolate as its caller, so nothing is serialised.
+- **Inside a record or sum.** A field may be a stream
+  (`type Download = { contentType: String, body: Stream[Bytes] }`). The type is
+  then *stream-carrying*: non-boundary like the stream, with no JSON codec, and
+  refused wherever a stream is (a handler's parameter or result, a store field, an
+  event) with `bynk.types.stream_at_boundary`, whose note names the field the
+  stream is reached through.
+
+**A stream is read once.** Draining it with `collect`, or handing it to a
+response, consumes it, and reading it again faults with
+`bynk: a stream can be read only once`. A builder (`map`, `take`) consumes its
+source when it is first read, not when it is built. A stream from the platform
+can only be read once, so an in-memory one behaves the same.
+
+The v1 vocabulary is deliberately minimal:
+
+| Form | Type | Purpose |
+|---|---|---|
+| `Stream.of(xs)` | `List[T] -> Stream[T]` | build a stream from a list (the deterministic source) |
+| `s.map(f)` | `(T -> U) -> Stream[U]` | lazily transform each element |
+| `s.take(n)` | `Int -> Stream[T]` | bound the stream to the first `n` elements |
+| `s.collect()` | `Effect[List[T]]` | drain the stream to a list (the terminal) |
+
+Errors ride **in-band** as `Result` elements (`Stream[Result[T, E]]`); a fault in
+the producer aborts the stream as faults abort handlers.
+
+A stream's end-to-end uses are [**streamed HTTP responses**](/reference/http/#streamed-responses):
+`Streaming(stream)` returns an SSE body consuming a `Stream[String]`, and
+[`RawStreamed(body, contentType)`](/reference/http/#streamed-raw-responses)
+a raw body from a `Stream[Bytes]`; and [a `@raw` request body](/reference/http/#streamed-request-bodies),
+which a handler can receive as a `Stream[Bytes]`. A richer
+combinator vocabulary and live runtime sources are later increments of the
+real-time track.
+
+## Sum types
+
+A sum type is one of several variants; a variant may carry a payload. The
+**pipe form** is required whenever any variant carries a payload:
+
+```bynk
+type Status =
+  | Pending
+  | Shipped(tracking: String)
+  | Cancelled(reason: String)
+```
+
+When **every** variant is payloadless, write the **`enum` form** — it is the
+canonical spelling for a payloadless sum, and these docs use it throughout:
+
+```bynk
+type Suit = enum { Hearts, Diamonds, Clubs, Spades }
+```
+
+`enum { A, B, C }` is exactly sugar for `| A | B | C`; the two are the same type.
+Reach for the pipe form only when a variant needs a payload.
+
+- **Construct** by naming a variant: `Pending`, `Shipped("1Z…")`.
+- **Consume** with [`match`](#matching) or [`is`](/reference/operators/).
+- **Document** a variant, or a payload field, with a doc on the lines above it,
+  as a [record field](#documenting-fields-and-variants) is.
+
+Sum types emit a discriminated union keyed on a `tag` field. As JSON, a variant
+is a flat object whose `kind` key names the variant (`{"kind": "Shipped",
+"tracking": "1Z…"}`), so a payload field cannot be named `kind`
+(`bynk.resolve.reserved_payload_field`). A payload field named `tag` is fine:
+it keeps that name on the wire.
+
+### Variant names shared by two sums {#shared-variant-names}
+
+Two sums in scope may declare the same variant name: two of your own, or two
+that a consumed unit exports (`bynk.cloudflare`'s `SqlError` has a `Failed`, and
+so may an enum of yours). A bare use of the name builds the sum the **expected
+type** names: an annotated `let`, a parameter, a return type, or the operation a
+`stub` overrides.
+
+```bynk
+type DbError = | Constraint(message: String) | Failed(message: String)
+type MailError = | RateLimited | Failed(message: String)
+
+fn send() -> Result[Int, MailError] {
+  Err(Failed("down"))          // MailError.Failed: the return type picks it
+}
+```
+
+With no expected type naming one of them (`let e = Failed("down")`), the
+compiler does not pick one: the name is `bynk.resolve.ambiguous_variant`, and
+the message lists the qualified forms (`DbError.Failed(...)` or
+`MailError.Failed(...)`). A `match` arm or `is` pattern never needs
+qualifying, because it reads its scrutinee's sum.
+
+### Error embeddings (v0.154) {#error-embeddings}
+
+A sum used as an error type may declare **embeddings** — a trailing
+`embeds <type> as <Variant>` clause naming a single-payload variant that wraps a
+sub-error. The [`?` operator](/reference/operators/) then converts that
+sub-error automatically, replacing the boilerplate `.mapErr(Wrap)` on every
+cross-context chain:
+
+```bynk,fragment
+type OrderError =
+  | OutOfStock(sku: Sku)
+  | Payment(reason: PaymentError)
+  | Fulfilment(reason: ScheduleError)
+  embeds PaymentError as Payment, ScheduleError as Fulfilment
+```
+
+Each `embeds E as V` requires `V` to be a variant of the same sum with exactly
+one payload field of type `E`, and a given `E` may be embedded by only one
+variant (so the conversion is unambiguous). The conversion is **one level**: `?`
+converts a `Result[T, E]` into `Result[_, F]` only when `F` declares `E`
+directly. Mapping a domain error to an *HTTP* status stays an explicit `match`
+in the handler — by design, not an embedding.
+
+### Generic sums
+
+A sum body may carry `[A, B]` type parameters, exactly as a record body does. A
+parameter is an unconstrained, bound-free name resolved as a rigid variable
+inside the variant payloads:
+
+```bynk
+type ApiResult[T] =
+  | Loaded(value: T)
+  | Failed(message: String)
+```
+
+A reference applies concrete arguments (`ApiResult[User]`). **Construction**
+infers the arguments argument-directed from the variant's payload
+(`Loaded(user)` is `ApiResult[User]` because `user : User`); a variant whose
+payload cannot determine a parameter — a payload-less variant, or one that does
+not mention it (`Failed`) — leans on the binding's expected type as the pressure
+valve (`let r: ApiResult[User] = Failed("...")`), and reports
+`bynk.generics.uninferable_type_arg` when neither grounds it. **`match`**
+substitutes the arguments into each arm's payload binding (`Loaded(v)` binds `v :
+User`). Emission is **erased** TypeScript generics — one
+`export type ApiResult<T>` discriminated union, with each payload constructor a
+generic arrow (`Loaded: <T>(value: T): ApiResult<T> => …`).
+
+A generic sum is declared, constructed and matched like any other, with the
+arguments substituted into each arm:
+
+```bynk
+type Opt[A] =
+  | Nope
+  | Have(value: A)
+
+type User = { id: Int, name: String }
+
+fn name_of(found: Opt[User]) -> String {
+  match found {
+    Nope => "nobody"
+    Have(user) => user.name
+  }
+}
+
+fn find(users: List[User]) -> Opt[User] {
+  match users.first() {
+    Some(u) => Have(u)
+    None => Nope
+  }
+}
+```
+
+Like a generic record, a generic-sum instantiation is **serialisable** exactly
+when its type arguments are, through a monomorphised codec per instantiation
+(`__serialise_ApiResult_User` / `__deserialise_ApiResult_User`); a recursive generic
+sum declares and works inside a context but has no codec yet, so it is refused
+where a codec is required, with `bynk.generics.recursive_generic_at_boundary`
+(see [Generic record types](#generic-record-types)). A generic sum may not carry an
+`embeds` clause (`bynk.generics.generic_sum_embeds`).

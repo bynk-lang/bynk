@@ -325,7 +325,9 @@
 /book/reference/diagnostics/bynk.cron.bad_params/
 /book/reference/diagnostics/bynk.cron.duplicate_schedule/
 /book/reference/diagnostics/bynk.cron.invalid_schedule/
+/book/reference/diagnostics/bynk.cron.numeric_weekday/
 /book/reference/diagnostics/bynk.cron.return_not_effect_result/
+/book/reference/diagnostics/bynk.cron.uneven_step/
 /book/reference/diagnostics/bynk.d1.migration_invalid/
 /book/reference/diagnostics/bynk.d1.migration_name/
 /book/reference/diagnostics/bynk.d1.migration_unreadable/
@@ -1443,7 +1445,9 @@
 /reference/diagnostics/bynk.cron.bad_params/
 /reference/diagnostics/bynk.cron.duplicate_schedule/
 /reference/diagnostics/bynk.cron.invalid_schedule/
+/reference/diagnostics/bynk.cron.numeric_weekday/
 /reference/diagnostics/bynk.cron.return_not_effect_result/
+/reference/diagnostics/bynk.cron.uneven_step/
 /reference/diagnostics/bynk.d1.migration_invalid/
 /reference/diagnostics/bynk.d1.migration_name/
 /reference/diagnostics/bynk.d1.migration_unreadable/

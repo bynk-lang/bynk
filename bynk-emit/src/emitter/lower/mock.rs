@@ -55,7 +55,8 @@ fn refinement_default(base: BaseType, refinement: Option<&Refinement>) -> Option
                         | PredKind::MaxLength(..)
                         | PredKind::Length(..)
                         | PredKind::NonEmpty
-                        | PredKind::IsoDate => {}
+                        | PredKind::IsoDate
+                        | PredKind::Cron => {}
                     }
                 }
             }
@@ -74,7 +75,7 @@ fn refinement_default(base: BaseType, refinement: Option<&Refinement>) -> Option
                     match p.kind {
                         PredKind::NonEmpty => len = len.max(1),
                         PredKind::MinLength(k) | PredKind::Length(k) => len = len.max(k),
-                        PredKind::Matches(_) | PredKind::IsoDate => return None,
+                        PredKind::Matches(_) | PredKind::IsoDate | PredKind::Cron => return None,
                         PredKind::InRange(..)
                         | PredKind::InRangeF(..)
                         | PredKind::InRangeD(..)
@@ -109,7 +110,8 @@ fn refinement_default(base: BaseType, refinement: Option<&Refinement>) -> Option
                         | PredKind::MaxLength(..)
                         | PredKind::Length(..)
                         | PredKind::NonEmpty
-                        | PredKind::IsoDate => {}
+                        | PredKind::IsoDate
+                        | PredKind::Cron => {}
                     }
                 }
             }
@@ -161,7 +163,8 @@ fn refinement_default(base: BaseType, refinement: Option<&Refinement>) -> Option
                         | PredKind::Length(..)
                         | PredKind::NonNegative
                         | PredKind::NonEmpty
-                        | PredKind::IsoDate => {}
+                        | PredKind::IsoDate
+                        | PredKind::Cron => {}
                     }
                 }
             }
@@ -183,10 +186,7 @@ fn scaled_coef(coef: &str, from: u32, to: u32) -> Option<i128> {
     v.checked_mul(10i128.checked_pow(to.checked_sub(from)?)?)
 }
 
-/// v0.9.4 Part B (slice 1): lower a refined-type `Val[T]` / `Val[T](lit)` to
-/// the branded `unsafe` constructor. The checker has already validated this is a
-/// refined type in a test body, and recorded the refined type at `span`.
-/// v0.9.4 slice 2 recursion cap for bare `Val` generation (mirrors the
+/// The v0.9.4 slice 2 recursion cap for bare `Val` generation (mirrors the
 /// checker's `MOCK_DEPTH`).
 const MOCK_DEPTH: u32 = 12;
 
@@ -327,6 +327,9 @@ fn mock_value_of(
     })
 }
 
+/// v0.9.4 Part B (slice 1): lower a refined-type `Val[T]` / `Val[T](lit)` to
+/// the branded `unsafe` constructor. The checker has already validated this is a
+/// refined type in a test body, and recorded the refined type at `span`.
 pub(super) fn lower_val(type_ref: &TypeRef, args: &[Expr], cx: &mut LowerCtx) -> Lowered {
     let tys = cx.ty_render();
     let mut pre = Pre::new();

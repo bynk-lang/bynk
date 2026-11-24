@@ -3,6 +3,7 @@
 
 import { Ok, Err, Some, None, type Result, type Option } from "./__bynk_runtime/result.js";
 import { __bynkBytesToBase64, __bynkBytesFromBase64 } from "./__bynk_runtime/bytes.js";
+import { __bynkIsCron } from "./__bynk_runtime/time.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 import type { __JsonValue, __BoundaryError } from "./__bynk_runtime/boundary.js";
 
@@ -19,6 +20,22 @@ export const Uuid = {
       return Err({ field: "Uuid", message: "must match /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/", value });
     }
     return Ok(value as Uuid);
+  },
+};
+
+/**
+ * A valid Cloudflare cron schedule: five fields (minute hour day-of-month month
+ * day-of-week) separated by exactly one space, run in UTC. A literal is checked
+ * at compile time; `CronSchedule.of`, decoding and a boundary check at run time.
+ */
+export type CronSchedule = string & { readonly __brand: "CronSchedule" };
+
+export const CronSchedule = {
+  of(value: string): Result<CronSchedule, ValidationError> {
+    if (!(__bynkIsCron(value))) {
+      return Err({ field: "CronSchedule", message: "must be a valid cron schedule", value });
+    }
+    return Ok(value as CronSchedule);
   },
 };
 
@@ -459,10 +476,9 @@ export const __IdempotencyToken: symbol = globalThis.Symbol("Idempotency");
  * when `E` is otherwise visible via `consumes`. Fire-and-forget: releases at
  * handler commit, so an aborted handler emits nothing — a `dedup`/`remember`-
  * style write-then-flush the provider itself is responsible for, not a
- * distinct control-flow form here. The explicit `[E]` type argument follows
- * the `Idempotency.remember[T]` precedent: a generic capability operation's
- * type parameter is never inferred, even where an argument's type would
- * determine it.
+ * distinct control-flow form here. The type argument `[E]` is inferred from
+ * the argument, as for `Idempotency.remember[T]`: `Events.emit(e)` and
+ * `Events.emit[E](e)` mean the same.
  */
 export interface Events {
   emit<E>(event: E): globalThis.Promise<void>;
@@ -594,6 +610,23 @@ export function __deserialise_Cookie(json: __JsonValue, path: string = "$"): Res
   }
   const __partitioned = __d_partitioned;
   return Ok({ name: __name, value: __value, maxAge: __maxAge, expires: __expires, domain: __domain, path: __path, secure: __secure, httpOnly: __httpOnly, sameSite: __sameSite, partitioned: __partitioned } as Cookie);
+}
+
+export function __serialise_CronSchedule(value: CronSchedule): __JsonValue {
+  return value as unknown as string;
+}
+
+export function __deserialise_CronSchedule(json: __JsonValue, path: string = "$"): Result<CronSchedule, __BoundaryError> {
+  if (typeof json !== "string") {
+    return Err({ kind: "StructuralMismatch", path, expected: "string", actual: typeof json });
+  }
+  const validated = (typeof (CronSchedule as unknown as { of?: (json: unknown) => Result<unknown, ValidationError> }).of === "function")
+    ? (CronSchedule as unknown as { of: (json: unknown) => Result<unknown, ValidationError> }).of(json)
+    : (Ok(json as unknown as CronSchedule) as Result<unknown, ValidationError>);
+  if (validated.tag === "Err") {
+    return Err({ kind: "RefinementViolation", path, violation: validated.error });
+  }
+  return Ok(validated.value as CronSchedule);
 }
 
 export function __serialise_EventEnvelope(value: EventEnvelope): __JsonValue {

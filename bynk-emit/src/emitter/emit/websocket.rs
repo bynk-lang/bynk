@@ -473,20 +473,6 @@ fn inspect_branch_stmt(
     )
 }
 
-/// Build the `fetch` branch that completes a forwarded WebSocket upgrade for a
-/// hosted `on open`. The edge has already verified the actor, so the body runs
-/// authenticated; this accepts the socket, reconstructs the route arguments and
-/// identity from the trusted internal header, runs the on-open body, and returns
-/// the `101` handing the client end back.
-///
-/// Arc C, slice 27 (#1384): a real `TsStmt::If` node (a `Block` then-branch),
-/// composed directly into `fetch`'s own body — the last consumer of this
-/// `&mut String`-writing shape converted, matching #1382's own "boilerplate
-/// converts fully" posture. `__payload.args[i] as T`/the deps-object text/
-/// the generic `acceptHibernatableConnection<T>` callee stay opaque
-/// `TsExpr::Ident` leaves, the same established escape hatch #1382 used —
-/// `__payload.identity` itself is a real `TsExpr::Member`, not opaque
-/// (review of #1385, finding 2: this doc previously listed it as one).
 /// State-migrations S4 (#2259 Decision D): `if (url.pathname ===
 /// "/_bynk/migrate") return await __wakeForMigration(await
 /// this.state.storage.get("state"), <version>, () => this.loadState(), (s) =>
@@ -703,6 +689,20 @@ pub(crate) fn record_cast(expr: bynk_ts::TsExpr, value: bynk_ts::TsType) -> bynk
     )
 }
 
+/// Build the `fetch` branch that completes a forwarded WebSocket upgrade for a
+/// hosted `on open`. The edge has already verified the actor, so the body runs
+/// authenticated; this accepts the socket, reconstructs the route arguments and
+/// identity from the trusted internal header, runs the on-open body, and returns
+/// the `101` handing the client end back.
+///
+/// Arc C, slice 27 (#1384): a real `TsStmt::If` node (a `Block` then-branch),
+/// composed directly into `fetch`'s own body — the last consumer of this
+/// `&mut String`-writing shape converted, matching #1382's own "boilerplate
+/// converts fully" posture. `__payload.args[i] as T`/the deps-object text/
+/// the generic `acceptHibernatableConnection<T>` callee stay opaque
+/// `TsExpr::Ident` leaves, the same established escape hatch #1382 used —
+/// `__payload.identity` itself is a real `TsExpr::Member`, not opaque
+/// (review of #1385, finding 2: this doc previously listed it as one).
 pub(super) fn ws_open_fetch_branch_stmt(
     host: &WsOpenHost<'_>,
     tys: TyRender<'_>,

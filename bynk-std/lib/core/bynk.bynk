@@ -3,6 +3,7 @@ adapter bynk {
 	exports capability { Clock, Random, Logger, Fetch, Secrets, Locale, Idempotency, Events }
 	exports transparent {
 		Uuid,
+		CronSchedule,
 		Method,
 		FetchError,
 		Request,
@@ -24,6 +25,13 @@ adapter bynk {
 	A UUID in canonical 8-4-4-4-12 lowercase-hex form.
 	---
 	type Uuid = String where Matches("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+
+	---
+	A valid Cloudflare cron schedule: five fields (minute hour day-of-month month
+	day-of-week) separated by exactly one space, run in UTC. A literal is checked
+	at compile time; `CronSchedule.of`, decoding and a boundary check at run time.
+	---
+	type CronSchedule = String where Cron
 
 	---
 	An HTTP request method. A `Head` response's `body` is `""`.
@@ -373,10 +381,9 @@ adapter bynk {
 	when `E` is otherwise visible via `consumes`. Fire-and-forget: releases at
 	handler commit, so an aborted handler emits nothing — a `dedup`/`remember`-
 	style write-then-flush the provider itself is responsible for, not a
-	distinct control-flow form here. The explicit `[E]` type argument follows
-	the `Idempotency.remember[T]` precedent: a generic capability operation's
-	type parameter is never inferred, even where an argument's type would
-	determine it.
+	distinct control-flow form here. The type argument `[E]` is inferred from
+	the argument, as for `Idempotency.remember[T]`: `Events.emit(e)` and
+	`Events.emit[E](e)` mean the same.
 	---
 	capability Events {
 		fn emit[E](event: E) -> Effect[()]

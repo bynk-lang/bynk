@@ -3,7 +3,7 @@
 # 2000 production lines: comments and blank lines count; `#[cfg(test)]` modules,
 # whole-test files and `#[cfg(test)] mod x;` files do not. A file may not grow past its
 # ceiling, none may newly reach 2000, and an entry whose file has dropped below
-# 2000 (or gone, or been renamed) must be removed. A new entry may not be
+# 2000 (or gone, or been renamed) must be removed. No entry may be
 # 3000 or more: split along a seam first. Prefer splitting a file to raising its
 # ceiling; a raise needs its justification in review. `cargo xtask module-lines --apply`
 # rewrites this file from the tree (lowering ceilings after a file shrinks).

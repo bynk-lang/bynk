@@ -391,6 +391,7 @@ fn pred_kind_str(p: &PredKind) -> String {
         PredKind::Positive => "Positive".to_string(),
         PredKind::NonEmpty => "NonEmpty".to_string(),
         PredKind::IsoDate => "IsoDate".to_string(),
+        PredKind::Cron => "Cron".to_string(),
     }
 }
 

@@ -19,6 +19,7 @@
 struct ReadmeDoctests;
 
 pub mod ast;
+pub mod cron;
 pub mod decimal;
 pub mod diagnostics;
 pub mod error;

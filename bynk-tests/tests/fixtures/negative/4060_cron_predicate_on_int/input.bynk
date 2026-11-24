@@ -1,0 +1,3 @@
+commons demo {
+  type Schedule = Int where Cron
+}

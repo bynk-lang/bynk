@@ -242,7 +242,7 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
                 tys,
                 a.context_count,
             ) {
-                return Some(wire_contract_standalone(&model));
+                return Some(with_cron_schedule(text, a.offset, &model));
             }
         }
         // 4b. #2460: the cursor inside a doc-comment `[Name]` link previews
@@ -430,9 +430,70 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
         .or_else(|| describe_iso_date_predicate(&name, &text[..span.start]))
 }
 
+/// #3873: hover for the `Cron` predicate name after `where` or `&&`: its rule.
+fn describe_cron_predicate(name: &str, before: &str) -> Option<String> {
+    if name != "Cron" {
+        return None;
+    }
+    let line = before.rsplit('\n').next().unwrap_or(before);
+    (line.contains("where") || line.trim_end().ends_with("&&")).then(|| {
+        "```bynk\nCron\n```\n\nA `String` refinement predicate: the value is a valid Cloudflare \
+         cron schedule. Five fields (`minute hour day-of-month month day-of-week`) separated by \
+         exactly one space; minute `0-59`, hour `0-23`, day of month `1-31` (also `L`, `W`), \
+         month `1-12` or `JAN`-`DEC`, day of week `1-7` with `1` = Sunday, or `SUN`-`SAT` \
+         (also `L`, `#`). `* , - /` work in every field. No seconds, year, `?` or `@daily`. \
+         Schedules run in UTC. Checked at compile time for a literal, and at runtime by `.of`, \
+         `Json.decode` and the HTTP boundary."
+            .to_string()
+    })
+}
+
+/// #3873: on a cron handler's header, with the cursor inside the schedule's
+/// string literal, the schedule's fields are named ahead of the wire contract.
+fn with_cron_schedule(
+    text: &str,
+    offset: usize,
+    model: &crate::wire_contract::WireContractModel,
+) -> String {
+    let contract = wire_contract_standalone(model);
+    match describe_cron_schedule_literal(text, offset) {
+        Some(fields) => format!("{fields}\n\n---\n\n{contract}"),
+        None => contract,
+    }
+}
+
+/// #3873: hover inside the string literal of `on schedule("…")`: the schedule's
+/// five fields, named. `None` off a schedule literal or for an invalid schedule
+/// (the checker reports that one).
+pub(crate) fn describe_cron_schedule_literal(text: &str, offset: usize) -> Option<String> {
+    let line_start = text[..offset].rfind('\n').map_or(0, |i| i + 1);
+    let line_end = text[offset..].find('\n').map_or(text.len(), |i| offset + i);
+    let line = &text[line_start..line_end];
+    let at = offset - line_start;
+    let open = line.find("schedule(\"")? + "schedule(\"".len();
+    let close = open + line[open..].find('"')?;
+    if at < open - 1 || at > close {
+        return None;
+    }
+    let fields = bynk_syntax::cron::describe_fields(&line[open..close])?;
+    let rows: Vec<String> = fields
+        .iter()
+        .map(|(name, text)| format!("- {name}: `{text}`"))
+        .collect();
+    Some(format!(
+        "```bynk\nschedule(\"{}\")\n```\n\nA cron schedule (UTC):\n\n{}",
+        &line[open..close],
+        rows.join("\n")
+    ))
+}
+
 /// #2867: hover for the `IsoDate` predicate name after `where` or `&&`: its rule
 /// and the `Instant` pairing the guide documents.
 fn describe_iso_date_predicate(name: &str, before: &str) -> Option<String> {
+    // #3873: the `Cron` predicate hovers the same way.
+    if name == "Cron" {
+        return describe_cron_predicate(name, before);
+    }
     if name != "IsoDate" {
         return None;
     }
@@ -959,6 +1020,28 @@ fn doc_link_hover(a: &HoverAnalysis<'_>, text: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+
+    /// #3873: `Cron` hovers with its rule inside a `where` clause only, and the
+    /// schedule literal of `on schedule("…")` names its fields.
+    #[test]
+    fn cron_predicate_and_schedule_literal_hover() {
+        let src = "commons demo.m\n\ntype S = String where Cron\n";
+        let h = hover_at(src, "Cron", 0).expect("`Cron` hovers");
+        assert!(h.contains("cron schedule"), "{h}");
+        let elsewhere = hover_at("commons demo.m\n\nfn Cron() -> Int { 1 }\n", "Cron", 0);
+        assert!(!elsewhere.is_some_and(|h| h.contains("refinement predicate")));
+
+        let line = "  on schedule(\"0 2 * * MON-FRI\") () -> Effect[Result[(), String]] {";
+        let at = line.find("2 *").unwrap();
+        let h = describe_cron_schedule_literal(line, at).expect("fields named");
+        assert!(
+            h.contains("- minute: `0`") && h.contains("- day of week: `MON-FRI`"),
+            "{h}"
+        );
+        assert!(describe_cron_schedule_literal(line, 0).is_none());
+        let bad = "  on schedule(\"61 * * * *\") () -> Effect[Result[(), String]] {";
+        assert!(describe_cron_schedule_literal(bad, 16).is_none());
+    }
     use super::*;
 
     fn hover_at(src: &str, needle: &str, nth: usize) -> Option<String> {

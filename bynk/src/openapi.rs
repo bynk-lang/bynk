@@ -28,6 +28,7 @@
 //! | `NonNegative`         | `minimum: 0`                                       |
 //! | `InRange(a, b)`       | `minimum: a`, `maximum: b`                         |
 //! | `IsoDate`             | `format: date`, `minLength: 10`, `maxLength: 10`    |
+//! | `Cron`                | `x-bynk-format: cron`, `minLength: 9`              |
 //! | `Matches("p")`        | `pattern: "^(?:p)$"` (the codec anchors the match) |
 
 use bynk_driver::emsg;
@@ -1358,6 +1359,12 @@ fn refine(s: &mut Map<String, Value>, preds: &[PredKind]) {
                 tighten_min(s, "minLength", 10.0);
                 tighten_max(s, "maxLength", 10.0);
             }
+            // #3873: JSON Schema has no `format` for cron; `x-bynk-format` names it.
+            // `* * * * *` is the shortest valid schedule, nine characters.
+            PredKind::Cron => {
+                s.insert("x-bynk-format".into(), Value::String("cron".into()));
+                tighten_min(s, "minLength", 9.0);
+            }
             PredKind::MinLength(n) => tighten_min(s, "minLength", *n as f64),
             PredKind::MaxLength(n) => tighten_max(s, "maxLength", *n as f64),
             PredKind::Length(n) => {
@@ -1434,6 +1441,7 @@ fn render_pred(p: &PredKind) -> String {
         PredKind::Positive => "Positive".into(),
         PredKind::NonEmpty => "NonEmpty".into(),
         PredKind::IsoDate => "IsoDate".into(),
+        PredKind::Cron => "Cron".into(),
     }
 }
 
@@ -1453,6 +1461,7 @@ fn pred_prose(p: &PredKind) -> String {
         PredKind::Positive => "must be positive".into(),
         PredKind::NonEmpty => "must be non-empty".into(),
         PredKind::IsoDate => "must be a calendar date (YYYY-MM-DD)".into(),
+        PredKind::Cron => "must be a valid cron schedule".into(),
     }
 }
 

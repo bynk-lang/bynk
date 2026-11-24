@@ -108,7 +108,8 @@ fn decimal_pred_condition(pred: &PredKind, recv: &TsExpr) -> Option<(TsExpr, Str
         | PredKind::MaxLength(_)
         | PredKind::Length(_)
         | PredKind::NonEmpty
-        | PredKind::IsoDate => None,
+        | PredKind::IsoDate
+        | PredKind::Cron => None,
     }
 }
 
@@ -271,6 +272,14 @@ pub fn pred_condition_and_message_over(
                 args: vec![recv()],
             },
             "must be a calendar date (YYYY-MM-DD)".to_string(),
+        ),
+        // #3873: the runtime helper owns the schedule grammar; callers `note_predicate`.
+        PredKind::Cron => (
+            TsExpr::Call {
+                callee: Box::new(TsExpr::Ident("__bynkIsCron".to_string())),
+                args: vec![recv()],
+            },
+            "must be a valid cron schedule".to_string(),
         ),
         PredKind::MinLength(n) => (
             cmp(TsBinaryOp::GreaterThanEq, recv_length(), num(n.to_string())),

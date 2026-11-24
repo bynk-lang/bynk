@@ -190,6 +190,7 @@ The `bynk` unit also exports the transparent types these operations use:
 
 ```bynk
 type Uuid       = String where Matches("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+type CronSchedule = String where Cron
 type Method     = enum { Get, Post, Put, Delete, Patch, Head, Options }
 type FetchError = enum { Network, Timeout, InvalidHeader, InvalidBody }
 type Redirect   = enum { Follow, Manual }
@@ -460,6 +461,20 @@ Consuming it **locks the deployment unit to Cloudflare** (it cannot then target
 
 `Kv` is backed by a Worker KV namespace bound as `env.KV`; the
 `[[kv_namespaces]]` stanza is derived for you.
+
+#### Consistency
+
+Workers KV is **eventually consistent**. A write is visible at once in the
+location that made it, but can take time to be seen elsewhere: Cloudflare
+documents up to about 60 seconds. A key that was read recently may also be served
+from a location's cache, including a "not found" for a key that has since been
+written, so a `get` straight after a `put` from another location can return the
+old value or `None`. Do not use `Kv` for anything that must be read back
+consistently, such as a session that is revoked, a counter or a lock; use
+[an agent's state](/book/guides/agents-and-state/stateful-agent/) or [`D1`](#sql-databases-d1) for
+that. See Cloudflare's
+[How KV works](https://developers.cloudflare.com/kv/concepts/how-kv-works/) for
+the platform's figures.
 
 ### Several namespaces: derived capabilities
 
@@ -2059,8 +2074,11 @@ foreign-key violation, which a handler answers (a duplicate key is typically a
 message. `SqlError` is extensible, so a `match` over it needs a wildcard.
 
 `Json.decodeSql[T]`'s `T` is a row: a record whose fields are `Int`, `Float`,
-`String`, `Bool` or `Bytes`, a refined or opaque type over one, or an `Option`
-of either (`NULL` is `None`), or a `List` of such records. Anything else is
+`String`, `Bool`, `Bytes` or `Decimal`, a refined or opaque type over one, or an
+`Option` of either (`NULL` is `None`), or a `List` of such records. A `Decimal`
+field reads canonical decimal text, so declare its column `TEXT`: a `DECIMAL`,
+`NUMERIC` or `REAL` column has numeric affinity in SQLite, arrives as a JSON
+number and fails the decode. Anything else is
 `bynk.types.sql_row_shape`. Only `0` and `1` become booleans: a `Bool` column
 holding `2` still fails the decode. `Json.decode` itself is unchanged and
 still refuses `0`/`1` for a `Bool`, at every boundary.

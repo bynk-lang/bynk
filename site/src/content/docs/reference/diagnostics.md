@@ -194,10 +194,12 @@ There are **908** codes in total. Every code is an error unless it is marked **W
 
 ## Cron
 
-- [`bynk.cron.bad_params`](/reference/diagnostics/bynk.cron.bad_params/) — A cron handler declares more than one parameter, or a non-`Int` one.
+- [`bynk.cron.bad_params`](/reference/diagnostics/bynk.cron.bad_params/) — A cron handler declares more than one parameter, or a non-`Instant` one.
 - [`bynk.cron.duplicate_schedule`](/reference/diagnostics/bynk.cron.duplicate_schedule/) — Two cron handlers declare the same schedule.
-- [`bynk.cron.invalid_schedule`](/reference/diagnostics/bynk.cron.invalid_schedule/) — A cron expression is not five whitespace-separated fields.
+- [`bynk.cron.invalid_schedule`](/reference/diagnostics/bynk.cron.invalid_schedule/) — A cron schedule is not valid Cloudflare cron syntax: a field is out of range or malformed, or the fields are not separated by exactly one space.
+- [`bynk.cron.numeric_weekday`](/reference/diagnostics/bynk.cron.numeric_weekday/) — <span class="diagnostic-severity">Warning</span> A cron schedule names a day of the week by number, where Cloudflare's `1` is Sunday, not standard cron's `0`/`7` (warning).
 - [`bynk.cron.return_not_effect_result`](/reference/diagnostics/bynk.cron.return_not_effect_result/) — A cron handler does not return `Effect[Result[(), E]]`.
+- [`bynk.cron.uneven_step`](/reference/diagnostics/bynk.cron.uneven_step/) — <span class="diagnostic-severity">Warning</span> A cron schedule's `*/n` step in the minute or hour field does not divide the field's range, so the last gap is shorter than `n` (warning).
 
 ## Deployment
 

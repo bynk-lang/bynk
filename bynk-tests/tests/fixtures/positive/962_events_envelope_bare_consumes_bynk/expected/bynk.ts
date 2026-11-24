@@ -2,6 +2,7 @@
 // adapter bynk
 
 import { Ok, Err, type Result, type Option } from "./__bynk_runtime/result.js";
+import { __bynkIsCron } from "./__bynk_runtime/time.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 
 import { LocaleTag } from "./bynk/locale/types.js";
@@ -17,6 +18,22 @@ export const Uuid = {
       return Err({ field: "Uuid", message: "must match /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/", value });
     }
     return Ok(value as Uuid);
+  },
+};
+
+/**
+ * A valid Cloudflare cron schedule: five fields (minute hour day-of-month month
+ * day-of-week) separated by exactly one space, run in UTC. A literal is checked
+ * at compile time; `CronSchedule.of`, decoding and a boundary check at run time.
+ */
+export type CronSchedule = string & { readonly __brand: "CronSchedule" };
+
+export const CronSchedule = {
+  of(value: string): Result<CronSchedule, ValidationError> {
+    if (!(__bynkIsCron(value))) {
+      return Err({ field: "CronSchedule", message: "must be a valid cron schedule", value });
+    }
+    return Ok(value as CronSchedule);
   },
 };
 
@@ -457,10 +474,9 @@ export const __IdempotencyToken: symbol = globalThis.Symbol("Idempotency");
  * when `E` is otherwise visible via `consumes`. Fire-and-forget: releases at
  * handler commit, so an aborted handler emits nothing — a `dedup`/`remember`-
  * style write-then-flush the provider itself is responsible for, not a
- * distinct control-flow form here. The explicit `[E]` type argument follows
- * the `Idempotency.remember[T]` precedent: a generic capability operation's
- * type parameter is never inferred, even where an argument's type would
- * determine it.
+ * distinct control-flow form here. The type argument `[E]` is inferred from
+ * the argument, as for `Idempotency.remember[T]`: `Events.emit(e)` and
+ * `Events.emit[E](e)` mean the same.
  */
 export interface Events {
   emit<E>(event: E): globalThis.Promise<void>;
