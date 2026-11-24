@@ -4,7 +4,6 @@ with a fixed point rather than inlined without end.
 ---
 commons demo.expr
 
-uses bynk.list
 
 type Expr =
   | Num(n: Int)
@@ -14,6 +13,6 @@ type Expr =
 
 type Chain = { head: Int, rest: Option[Chain] } derives Ord
 
-fn ordered(xs: List[Expr]) -> List[Expr] { sort(xs) }
+fn ordered(xs: List[Expr]) -> List[Expr] { xs.sort() }
 
-fn chains(xs: List[Chain]) -> Option[Chain] { max(xs) }
+fn chains(xs: List[Chain]) -> Option[Chain] { xs.max() }

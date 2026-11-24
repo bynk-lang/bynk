@@ -5,7 +5,6 @@ import { None } from "../__bynk_runtime/result.js";
 import { __bynkEq } from "../__bynk_runtime/equality.js";
 import { __bynkCmpInt } from "../__bynk_runtime/compare.js";
 import * as __ns_demo_boxes from "./../demo/boxes.js";
-import * as __ns_bynk_list from "./../bynk/list.js";
 
 class ExpectationError extends Error {
   location: string;
@@ -44,7 +43,6 @@ async function test_a_method_type_parameter_with_nothing_to_infer_it_from() {
     const deps = {};
     const { Box, castFn } = __ns_demo_boxes;
     type Box<T> = __ns_demo_boxes.Box<T>;
-    const { all, any, filter, find, map, max, min, reverse, sort, traverse } = __ns_bynk_list;
     const b = { value: 1 };
     const c = Box.cast<number, string>(b);
     if (!(__bynkEq(c, None))) { throw __bynkExpectFailure("tests/demo/boxes.bynk:6:10", 144, 153, "expect c == None\n  expected: c == None\n  actual:   " + __bynkShow((c)) + " == " + __bynkShow((None))); }
@@ -63,7 +61,6 @@ async function test_an_explicit_argument_pins_a_method_type_parameter() {
     const deps = {};
     const { Box, castFn } = __ns_demo_boxes;
     type Box<T> = __ns_demo_boxes.Box<T>;
-    const { all, any, filter, find, map, max, min, reverse, sort, traverse } = __ns_bynk_list;
     const b = { value: 3 };
     const m = Box.mapped<number, string>(b, (n: number) => "n");
     if (!(m.value === "n")) { throw __bynkExpectFailure("tests/demo/boxes.bynk:12:10", 291, 305, "expect m.value == \"n\"\n  expected: m.value == \"n\"\n  actual:   " + __bynkShow((m.value)) + " == " + __bynkShow(("n"))); }
@@ -83,7 +80,6 @@ async function test_an_explicit_argument_on_a_bounded_method_parameter() {
     const deps = {};
     const { Box, castFn } = __ns_demo_boxes;
     type Box<T> = __ns_demo_boxes.Box<T>;
-    const { all, any, filter, find, map, max, min, reverse, sort, traverse } = __ns_bynk_list;
     const b = { value: 0 };
     if (!(__bynkEq(Box.sortedWith<number, number>(b, [3, 1, 2], __bynkCmpInt), [1, 2, 3]))) { throw __bynkExpectFailure("tests/demo/boxes.bynk:18:10", 429, 470, "expect b.sortedWith[Int]([3, 1, 2]) == [1, 2, 3]\n  expected: b.sortedWith[Int]([3, 1, 2]) == [1, 2, 3]\n  actual:   " + __bynkShow((Box.sortedWith<number, number>(b, [3, 1, 2], __bynkCmpInt))) + " == " + __bynkShow(([1, 2, 3]))); }
     return { pass: true };
@@ -101,7 +97,6 @@ async function test_the_explicit_form_agrees_with_inference() {
     const deps = {};
     const { Box, castFn } = __ns_demo_boxes;
     type Box<T> = __ns_demo_boxes.Box<T>;
-    const { all, any, filter, find, map, max, min, reverse, sort, traverse } = __ns_bynk_list;
     const b = { value: 2 };
     if (!(Box.mapped<number, number>(b, (n: number) => n + 1).value === Box.mapped(b, (n: number) => n + 1).value)) { throw __bynkExpectFailure("tests/demo/boxes.bynk:23:10", 559, 624, "expect b.mapped[Int]((n) => n + 1).value == b.mapped((n) => n + 1).value\n  expected: b.mapped[Int]((n) => n + 1).value == b.mapped((n) => n + 1).value\n  actual:   " + __bynkShow((Box.mapped<number, number>(b, (n: number) => n + 1).value)) + " == " + __bynkShow((Box.mapped(b, (n: number) => n + 1).value))); }
     return { pass: true };
@@ -119,7 +114,6 @@ async function test_an_explicit_list_from_inside_a_generic_method__receiver_args
     const deps = {};
     const { Box, castFn } = __ns_demo_boxes;
     type Box<T> = __ns_demo_boxes.Box<T>;
-    const { all, any, filter, find, map, max, min, reverse, sort, traverse } = __ns_bynk_list;
     const b = { value: 1 };
     if (!(__bynkEq(Box.castInside<number, number>(b), None))) { throw __bynkExpectFailure("tests/demo/boxes.bynk:28:10", 750, 777, "expect b.castInside[Int]() == None\n  expected: b.castInside[Int]() == None\n  actual:   " + __bynkShow((Box.castInside<number, number>(b))) + " == " + __bynkShow((None))); }
     return { pass: true };
@@ -137,7 +131,6 @@ async function test_an_explicit_list_on_a_receiver_whose_argument_is_a_function_
     const deps = {};
     const { Box, castFn } = __ns_demo_boxes;
     type Box<T> = __ns_demo_boxes.Box<T>;
-    const { all, any, filter, find, map, max, min, reverse, sort, traverse } = __ns_bynk_list;
     const f = { value: (n: number) => n + 1 };
     if (!(__bynkEq(castFn(f), None))) { throw __bynkExpectFailure("tests/demo/boxes.bynk:33:10", 907, 924, "expect castFn(f) == None\n  expected: castFn(f) == None\n  actual:   " + __bynkShow((castFn(f))) + " == " + __bynkShow((None))); }
     return { pass: true };

@@ -4,7 +4,6 @@ joins over record keys.
 ---
 commons demo.keys
 
-uses bynk.list
 uses bynk.map
 
 type OrderId = { region: String, n: Int }

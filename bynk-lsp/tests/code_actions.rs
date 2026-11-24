@@ -573,7 +573,7 @@ fn bynk_list_deprecation_quick_fix_rewrites_to_method() {
         "map fix yields the method form; got:\n{fixed}"
     );
 
-    // The `find(xs, p)` fix rewrites to `xs.filter(p).first()`.
+    // The `find(xs, p)` fix rewrites to `xs.find(p)`.
     let find_diag = depr
         .iter()
         .find(|d| d.error.message.contains("bynk.list.find"))
@@ -594,8 +594,8 @@ fn bynk_list_deprecation_quick_fix_rewrites_to_method() {
     };
     let fixed = apply_text_edits(&file.text, &doc_edits[0].edits);
     assert!(
-        fixed.contains("xs.filter((x) => x > 10).first()"),
-        "find fix yields filter(...).first(); got:\n{fixed}"
+        fixed.contains("xs.find((x) => x > 10)"),
+        "find fix yields find(...); got:\n{fixed}"
     );
 }
 
