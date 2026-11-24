@@ -33,6 +33,7 @@ suite app.web {
     match r {
       Retry(why) => expect why.length() == 9
       Ack => expect false
+      Undecodable => expect false
     }
   }
 }

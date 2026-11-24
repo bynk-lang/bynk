@@ -1,13 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, diagnostic_coverage, explained_codes, ts_writes
-raises: ts_writes — the typed headers decoder is built as typed nodes in the entry emitter (#3911)
-changelog: An HTTP handler's `headers` parameter may be a record, decoded and validated at the boundary as `query` and `cookies` are (`@name("if-match")` names a header, names match without case, a `List` field splits a comma-separated value), and `RequestHeaders` remains the raw view
----
+# 0932 — A typed headers record, decoded and validated at the boundary
 
-## ADR: typed-headers-record
-title: A typed headers record, decoded and validated at the boundary
-summary: headers: T takes the query and cookies field rules, with case-insensitive names and comma-list splitting, through one reusable decoder
+- **Status:** Accepted (v0.674)
 
 **Context.** `query` and `cookies` each have a typed record form, decoded and validated with a `400` before the handler runs, beside a raw view. `headers` had only the raw `RequestHeaders`, so every handler that reads `Idempotency-Key`, `If-Match`, `X-Request-Id` or `Content-Length` called `get` and parsed by hand, outside the boundary's validation.
 
