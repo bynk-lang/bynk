@@ -7,6 +7,7 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.669.0** | A queue consumer's `on message` handler can take its delivery metadata as a second parameter, `QueueDelivery { attempts, sentAt }`, in either order; `q.message(m)` in a test takes an optional delivery |
 | **v0.668.0** | `Ordering` is a prelude type, nameable with no import in every context and commons, and building it in a context is not a rebrand construction |
 | **v0.667.0** | `Duration` gains `toSeconds`, `toMinutes`, `toHours` and `toDays` (rounding towards zero); `NonNegative`, `Positive`, `InRange` and the new one-sided `AtLeast` and `AtMost` apply to `Duration` (and `AtLeast`/`AtMost` to `Int`, `Float` and `Decimal`); `bynk.cloudflare` takes `KvTtl` and `KvCacheTtl` where it took a bare `Int` or an unchecked `Duration`; a type an adapter exports `transparent` is constructible by a consumer |
 | **v0.666.0** | `parForEachWith`, `parTraverseWith`, `parTraverseAllWith` and `parTraverseTryWith` bound a concurrent fan-out with a `ParOptions { limit }` from `bynk` |

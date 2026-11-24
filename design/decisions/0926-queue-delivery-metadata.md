@@ -1,11 +1,6 @@
----
-level: minor
-changelog: A queue consumer's `on message` handler can take its delivery metadata as a second parameter, `QueueDelivery { attempts, sentAt }`, in either order; `q.message(m)` in a test takes an optional delivery
----
+# 0926 — A queue handler can take its delivery metadata
 
-## ADR: queue-delivery-metadata
-title: A queue handler can take its delivery metadata
-summary: An optional `QueueDelivery` parameter carries the platform's attempt count and send time
+- **Status:** Accepted (v0.669)
 
 **Context.** Cloudflare gives every queue message `attempts` (from 1), `timestamp` (when it was sent) and `id`. A Bynk handler saw only the decoded body, so it could not back off by attempt, notice a message that keeps failing, or measure how long a message waited.
 
