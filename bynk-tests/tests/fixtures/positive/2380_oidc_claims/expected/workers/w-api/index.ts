@@ -2,7 +2,7 @@
 // Worker entry point for context `w.api`.
 
 import { type __JsonValue, __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
-import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, __applyChallenge, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, __applyChallenge, __privateByDefault, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
 import { __agentBusyResponse } from "../../__bynk_runtime/agent.js";
 import { compose, type Env } from "./compose.js";
 
@@ -39,7 +39,7 @@ export default {
         if ((method === "GET" || method === "HEAD") && __matchPath("/who", path) !== null) {
           __route = "GET /who";
           const result = await surface.http_GET_who(request);
-          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bearer realm=\"w.api\""]), __security_api);
+          const __response = __applySecurityHeaders(__applyChallenge(__privateByDefault(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request)), request, ["Bearer realm=\"w.api\""]), __security_api);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }

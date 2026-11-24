@@ -850,7 +850,7 @@ service links from http {
 
 This emits `Cache-Control: private, max-age=300` alongside the automatic `ETag`.
 `@cache` is the **first handler-position annotation**; it is legal only on a `GET`
-handler, and applies to a response that is `Ok`, `Raw` or `RawTagged`. It is
+handler (`noStore: true` is the exception, legal on any route), and applies to a response that is `Ok`, `Raw` or `RawTagged`. It is
 ignored on `Streaming` and on errors.
 
 | Field | Meaning | Default |
@@ -858,6 +858,7 @@ ignored on `Streaming` and on errors.
 | `maxAge` | The freshness window, as a whole-second [`Duration`](/reference/types/#duration) — emitted as `Cache-Control: max-age` in whole seconds. **Required.** | — |
 | `scope` | `public` or `private`. `private` lets only a client's own cache store the response; `public` also lets a **shared** cache / CDN store it. | `private` |
 | `immutable` | `true` appends the [`immutable`](https://www.rfc-editor.org/rfc/rfc8246) directive (`Cache-Control: public, max-age=31536000, immutable`): browsers and CDNs do not revalidate within `maxAge`. | `false` |
+| `noStore` | `true` sends `Cache-Control: no-store` and drops the automatic `ETag`, for data that must never be stored. Legal on any route, not only a `GET`; it excludes `maxAge`, `scope` and `immutable` (`bynk.http.cache_no_store_conflict`). | `false` |
 
 `immutable: true` is **your promise** that the representation at this URL never
 changes — true of a content-addressed path, whose URL changes whenever its
@@ -865,9 +866,28 @@ content does. A wrong promise means clients and CDNs serve the stale response
 until `maxAge` runs out, with no revalidation to correct them. A value that is
 not `true` or `false` is `bynk.http.cache_bad_immutable`.
 
+### Authenticated responses
+
+A route guarded by an actor that carries a credential (`Bearer`, `Oidc`, `SignedCookie` or
+`Signature`, or an actor sum with one) answers for whoever authenticated. So it sends
+**`Cache-Control: private`** on every response when it has no `@cache`: a `200`, but also a `404`,
+a `403` or the actor's own `401`, since any of them can reveal one caller's state. `private`
+still lets the caller's own browser keep and revalidate the response (the automatic `ETag` keeps
+working) and tells only a shared cache, such as a corporate proxy or a CDN, not to store it. That
+matters most for a cookie-authenticated request, which carries no `Authorization` header to make
+a cache cautious ([RFC 9111 §3.5](https://www.rfc-editor.org/rfc/rfc9111#section-3.5)). A `Visitor`
+route is unchanged.
+
+A route's own `@cache` wins over the default, with two limits. `@cache(scope: public)` on a
+credentialed route is refused (`bynk.http.cache_public_authenticated`, or `bynk.actor.signed_cookie_public_cache` on a `SignedCookie` route), as it already is on a
+handler that reads `cookies` (`bynk.http.cache_public_reads_cookies`); a response that is really
+the same for everyone belongs on a `Visitor` route. And `@cache(noStore: true)` sends `no-store`
+for data that must never be stored, such as a one-time token.
+
 The `private` default is the safe one: a shared cache never stores a response
 unless you opt into `public`. A `GET` with no `@cache` still carries its `ETag`
-(so it is revalidatable) but emits no `Cache-Control`. A duration literal's unit agrees with its number —
+(so it is revalidatable) but emits no `Cache-Control`, unless its actor carries a credential
+([Authenticated responses](#authenticated-responses)). A duration literal's unit agrees with its number —
 `5.minutes`, `1.hour`, `30.seconds`; a value with a fractional-second
 remainder (`500.milliseconds`, or `1500.milliseconds`, which is not a whole
 number of seconds even though it is over one) is

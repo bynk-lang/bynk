@@ -1598,10 +1598,13 @@
 /reference/diagnostics/bynk.http.body_on_get_or_delete/
 /reference/diagnostics/bynk.http.cache_bad_immutable/
 /reference/diagnostics/bynk.http.cache_bad_max_age/
+/reference/diagnostics/bynk.http.cache_bad_no_store/
 /reference/diagnostics/bynk.http.cache_bad_scope/
 /reference/diagnostics/bynk.http.cache_duplicate/
 /reference/diagnostics/bynk.http.cache_max_age_fractional_seconds/
+/reference/diagnostics/bynk.http.cache_no_store_conflict/
 /reference/diagnostics/bynk.http.cache_on_non_get/
+/reference/diagnostics/bynk.http.cache_public_authenticated/
 /reference/diagnostics/bynk.http.cache_public_reads_cookies/
 /reference/diagnostics/bynk.http.cache_unknown_arg/
 /reference/diagnostics/bynk.http.cf_wrong_type/

@@ -2,7 +2,7 @@
 // Worker entry point for context `shop.api`.
 
 import { type __JsonValue, __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
-import { __matchPath, __httpResultToResponse, __applyChallenge, type __SecurityPolicy, __applySecurityHeaders, __jsonMediaTypeMatches } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, __applyChallenge, __privateByDefault, type __SecurityPolicy, __applySecurityHeaders, __jsonMediaTypeMatches } from "../../__bynk_runtime/http.js";
 import { __agentBusyResponse } from "../../__bynk_runtime/agent.js";
 import { compose, type Env } from "./compose.js";
 import * as handlers from "./handlers.js";
@@ -59,7 +59,7 @@ export default {
         if (method === "POST" && __matchPath("/logout", path) !== null) {
           __route = "POST /logout";
           const result = await surface.http_POST_logout(request);
-          return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: void) => null), request, ["Bynk-Cookie realm=\"shop.api\""]), __security_api);
+          return __applySecurityHeaders(__applyChallenge(__privateByDefault(__httpResultToResponse(result, (__v: void) => null)), request, ["Bynk-Cookie realm=\"shop.api\""]), __security_api);
         }
       }
       if (__matchPath("/login", path) !== null) {

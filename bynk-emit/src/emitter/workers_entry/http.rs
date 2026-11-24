@@ -61,6 +61,11 @@ pub(super) struct HttpRoute {
     /// `applyCache` `Cache-Control` stamp. The conditional `ETag`/`304` half is
     /// automatic for every eligible GET and needs no policy.
     pub(super) cache: Option<bynk_model::CacheIr>,
+    /// #3922: `@cache(noStore: true)` — `Cache-Control: no-store`, no `ETag`.
+    pub(super) no_store: bool,
+    /// #3922: the route's actor carries a credential, so its responses default to
+    /// `Cache-Control: private`.
+    pub(super) credentialed: bool,
     /// L7 (#2414, Decision C): the context declares an `EdgeCache` instance,
     /// so its Worker is served through Workers Cache: a `@cache` route stamps
     /// its freshness on a `2xx` alone (`applyEdgeCache`), and a `GET` without
@@ -1125,12 +1130,13 @@ pub(super) fn emit_http_route_dispatch(
             vec![
                 ident("result"),
                 ser_fn,
-                TsExpr::object(vec![("weakEtag".to_string(), bool_lit(true))]),
+                TsExpr::object(vec![("weakEtag".to_string(), bool_lit(!route.no_store))]),
             ],
         );
         // `immutable` is passed only when `true`, so every other `@cache` route
         // emits exactly the three-argument call it did before.
         let cached = match &route.cache {
+            _ if route.no_store => call(ident("__noStore"), vec![base]),
             Some(p) => {
                 let mut args = vec![base, num_lit(p.max_age_secs.to_string()), str_lit(p.scope)];
                 if p.immutable {
@@ -1154,14 +1160,15 @@ pub(super) fn emit_http_route_dispatch(
             vec![cached, ident("request")],
         )
     } else {
-        call(
+        let base = call(
             ident("__httpResultToResponse"),
             vec![ident("result"), ser_fn],
-        )
+        );
+        no_stored(route, base)
     };
     // #3914: a `401` carries the route's `WWW-Authenticate` challenge (inside CORS, so the
     // header is exposed to a browser client).
-    let response_expr = challenged(route, response_expr);
+    let response_expr = privately(route, challenged(route, response_expr));
     // v0.131: a CORS-enabled service stamps the `Access-Control-*` headers onto
     // every real response, uniformly across variant families — including the
     // synthesised `304`, so a cross-origin revalidation stays readable.
@@ -1299,6 +1306,24 @@ pub(super) fn route_challenges(h: &Handler, table: &UnitTable, context: &str) ->
         return vec![format!("Bynk-Cookie realm=\"{realm}\"")];
     }
     vec![format!("Bynk realm=\"{realm}\"")]
+}
+
+/// #3922: `@cache(noStore: true)` sends `no-store`, on a route of any method.
+fn no_stored(route: &HttpRoute, response: TsExpr) -> TsExpr {
+    if route.no_store {
+        call(ident("__noStore"), vec![response])
+    } else {
+        response
+    }
+}
+
+/// #3922: a credentialed route's responses are `private` unless it set a policy.
+fn privately(route: &HttpRoute, response: TsExpr) -> TsExpr {
+    if route.credentialed {
+        call(ident("__privateByDefault"), vec![response])
+    } else {
+        response
+    }
 }
 
 /// #3914: wrap a route's response so a `401` carries the route's challenge.
@@ -1545,6 +1570,14 @@ pub(super) fn collect_http_routes(
                     // v0.140 (ADR 0163): the handler's `@cache` freshness policy, if
                     // any — lowered to a `Cache-Control` on this GET's responses.
                     cache: bynk_model::lower_route_cache_ir(h),
+                    no_store: h.cache_no_store(),
+                    credentialed: h
+                        .by_clause
+                        .as_ref()
+                        .or(service.default_by.as_ref())
+                        .is_some_and(|by| {
+                            bynk_check::actors::route_is_credentialed(by, &table.actors)
+                        }),
                     edge_cache,
                     vary_locale: edge_cache && needs_locale_request,
                     // v0.142 (ADR 0165): the route's effective request-body ceiling

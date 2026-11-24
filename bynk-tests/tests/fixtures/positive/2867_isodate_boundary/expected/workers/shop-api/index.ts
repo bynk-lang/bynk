@@ -2,7 +2,7 @@
 // Worker entry point for context `shop.api`.
 
 import { type __JsonValue, __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
-import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, __applyChallenge, type __SecurityPolicy, __applySecurityHeaders, __jsonMediaTypeMatches } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, __applyChallenge, __privateByDefault, type __SecurityPolicy, __applySecurityHeaders, __jsonMediaTypeMatches } from "../../__bynk_runtime/http.js";
 import { __agentBusyResponse } from "../../__bynk_runtime/agent.js";
 import { compose, type Env } from "./compose.js";
 import * as handlers from "./handlers.js";
@@ -52,7 +52,7 @@ export default {
           if (__r_body.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__r_body.error), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
           const body = __r_body.value;
           const result = await surface.http_POST_book(request, body);
-          return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, handlers.__serialise_Booking), request, ["Bearer realm=\"shop.api\""]), __security_api);
+          return __applySecurityHeaders(__applyChallenge(__privateByDefault(__httpResultToResponse(result, handlers.__serialise_Booking)), request, ["Bearer realm=\"shop.api\""]), __security_api);
         }
       }
       {
@@ -67,7 +67,7 @@ export default {
           if (__r_day.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "RefinementViolation", path: "path.day", violation: __r_day.error }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
           const day = __r_day.value;
           const result = await surface.http_GET_x_Param_day(request, day);
-          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bearer realm=\"shop.api\""]), __security_api);
+          const __response = __applySecurityHeaders(__applyChallenge(__privateByDefault(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request)), request, ["Bearer realm=\"shop.api\""]), __security_api);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }

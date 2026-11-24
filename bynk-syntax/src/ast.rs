@@ -2142,6 +2142,20 @@ impl Handler {
             })
     }
 
+    /// #3922: whether the handler's `@cache` says `noStore: true`, so its responses are
+    /// sent `Cache-Control: no-store` with no `ETag`.
+    pub fn cache_no_store(&self) -> bool {
+        self.annotations
+            .iter()
+            .find(|a| a.name.name == "cache")
+            .is_some_and(|ann| {
+                ann.args.iter().any(|arg| {
+                    arg.label.as_ref().is_some_and(|l| l.name == "noStore")
+                        && matches!(arg.value.kind, ExprKind::BoolLit(true))
+                })
+            })
+    }
+
     /// #3276: the handler's own `@limit(maxFile:)` per-file byte cap, if any.
     pub fn limit_max_file(&self) -> Option<i64> {
         self.limit_int_arg("maxFile")
