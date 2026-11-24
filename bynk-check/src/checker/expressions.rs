@@ -1059,6 +1059,42 @@ fn push_no_numeric_coercion(op: BinOp, span: Span, lt: TyId, rt: TyId, ctx: &mut
     );
 }
 
+/// The operand types of a binary operator (#1659, #3987): for a comparison, the
+/// operand that cannot type itself is checked against the other's type.
+fn type_binop_operands(
+    op: BinOp,
+    lhs: &Expr,
+    rhs: &Expr,
+    ctx: &mut Ctx,
+) -> (Option<TyId>, Option<TyId>) {
+    let eq = matches!(
+        op,
+        BinOp::Eq | BinOp::NotEq | BinOp::Lt | BinOp::LtEq | BinOp::Gt | BinOp::GtEq
+    );
+    // #3987: a bare variant name several sums share also takes the other
+    // operand's type (`e == Failed("down")`, `o == Some(Failed("x"))`,
+    // `p > Medium`); two such operands decide nothing and stay ambiguous.
+    let (lhs_needs, rhs_needs) = if eq {
+        (
+            needs_expected_type_in(lhs, ctx),
+            needs_expected_type_in(rhs, ctx),
+        )
+    } else {
+        (false, false)
+    };
+    if lhs_needs && !rhs_needs {
+        let rt = type_of(rhs, None, ctx);
+        let lt = type_of(lhs, rt, ctx);
+        (lt, rt)
+    } else if rhs_needs {
+        let lt = type_of(lhs, None, ctx);
+        let rt = type_of(rhs, lt, ctx);
+        (lt, rt)
+    } else {
+        (type_of(lhs, None, ctx), type_of(rhs, None, ctx))
+    }
+}
+
 pub(crate) fn check_binop(op: BinOp, lhs: &Expr, rhs: &Expr, ctx: &mut Ctx) -> Option<TyId> {
     let tys = ctx.tys;
     // For `&&` (and v0.80 `implies`), if the lhs is or contains an `is` test,
@@ -1118,21 +1154,7 @@ pub(crate) fn check_binop(op: BinOp, lhs: &Expr, rhs: &Expr, ctx: &mut Ctx) -> O
     // (`q == 0` against `Int where Positive` would become a
     // `literal_violates` error), a new rejection this does not intend (review
     // of #1696).
-    let eq = matches!(
-        op,
-        BinOp::Eq | BinOp::NotEq | BinOp::Lt | BinOp::LtEq | BinOp::Gt | BinOp::GtEq
-    );
-    let (lt, rt) = if eq && needs_expected_type(lhs) && !needs_expected_type(rhs) {
-        let rt = type_of(rhs, None, ctx);
-        let lt = type_of(lhs, rt, ctx);
-        (lt, rt)
-    } else if eq && needs_expected_type(rhs) {
-        let lt = type_of(lhs, None, ctx);
-        let rt = type_of(rhs, lt, ctx);
-        (lt, rt)
-    } else {
-        (type_of(lhs, None, ctx), type_of(rhs, None, ctx))
-    };
+    let (lt, rt) = type_binop_operands(op, lhs, rhs, ctx);
     let (lt, rt) = (lt?, rt?);
     let span = lhs.span.merge(rhs.span);
     let lt_base = lt.base(tys);
@@ -2323,6 +2345,23 @@ fn keeps_flexible_context(e: &Expr) -> bool {
 /// empty list literal, or a `Some(…)`/list whose payload/first element is one
 /// of these. `Some(1)` and `[1]` type themselves (review of #1696), so
 /// `None == Some(1)` and `[] == [1]` take their type from that side.
+/// #3987: [`needs_expected_type`], also true for a bare variant name that
+/// several sums in scope declare (`Failed`, `Failed("down")`), alone or inside
+/// a `Some(…)` or bracket: only the other operand's type can pick its owner.
+fn needs_expected_type_in(e: &Expr, ctx: &Ctx) -> bool {
+    let shared = |name: &str| {
+        crate::resolver::bare_variant_owners(name, &ctx.input.types, &ctx.input.unselected_types)
+            .len()
+            > 1
+    };
+    match &e.kind {
+        ExprKind::Ident(id) => shared(&id.name) || needs_expected_type(e),
+        ExprKind::Call { name, .. } => shared(&name.name) || needs_expected_type(e),
+        ExprKind::Some(inner) | ExprKind::Paren(inner) => needs_expected_type_in(inner, ctx),
+        _ => needs_expected_type(e),
+    }
+}
+
 pub(crate) fn needs_expected_type(e: &Expr) -> bool {
     match &e.kind {
         ExprKind::None | ExprKind::Ok(_) | ExprKind::Err(_) => true,

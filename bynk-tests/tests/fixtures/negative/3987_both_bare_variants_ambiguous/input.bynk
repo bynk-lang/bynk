@@ -1,0 +1,9 @@
+commons demo {
+  type DbError = | Constraint(message: String) | Failed(message: String)
+
+  type MailError = | RateLimited | Failed(message: String)
+
+  fn same() -> Bool {
+    Failed("a") == Failed("b")
+  }
+}

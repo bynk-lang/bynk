@@ -1,0 +1,3 @@
+# #3987: run by bynkc/tests/behaviour_fixtures.rs; see that file for the format.
+# A bare variant shared by two sums resolves from the other side of a comparison.
+passed=3 failed=0

@@ -1,0 +1,23 @@
+suite demo.errors
+
+case "a shared variant name takes the other operand's sum" {
+  expect failedDown(Failed("down"))
+  expect !failedDown(Failed("up"))
+  expect !failedDown(RateLimited)
+  expect notLimited(Failed("down"))
+  expect !notLimited(RateLimited)
+  expect flipped(Failed("down"))
+  expect dbFailed(Failed("down"))
+}
+
+case "through Option" {
+  expect wrapped(Some(Failed("x")))
+  expect !wrapped(Some(Failed("y")))
+  expect !wrapped(None)
+}
+
+case "an ordering operator on a shared enum variant" {
+  expect above(High)
+  expect !above(Medium)
+  expect !above(Low)
+}
