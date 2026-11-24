@@ -1340,8 +1340,12 @@
       "summary": "A method was called on a built-in type that has no methods."
     },
     {
+      "code": "bynk.types.regex_no_named_groups",
+      "summary": "`findRegexNamed`'s pattern has no named capture group, so there is nothing to key its result by."
+    },
+    {
       "code": "bynk.types.regex_not_literal",
-      "summary": "A regex method's pattern (`matchesRegex`, `containsRegex`, `findRegex`, `findAllRegex`, `replaceRegex`, `splitRegex`) is not a string literal, so its ReDoS check cannot run at compile time."
+      "summary": "A regex method's pattern (`matchesRegex`, `containsRegex`, `findRegex`, `findAllRegex`, `findRegexNamed`, `replaceRegex`, `splitRegex`) is not a string literal, so its ReDoS check cannot run at compile time."
     },
     {
       "code": "bynk.types.select_tail_has_select",

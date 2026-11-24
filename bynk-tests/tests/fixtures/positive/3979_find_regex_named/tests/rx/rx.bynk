@@ -1,0 +1,25 @@
+---
+#3979: named groups by name, a group that took no part, and no match.
+---
+suite rx.rx
+
+case "a named group is read by its name" {
+  expect group("v12.34", "major") == "12"
+  expect group("v12.34", "minor") == "34"
+}
+
+case "a name the pattern does not have, and no match" {
+  expect group("v12.34", "patch") == "no such group"
+  expect group("hello", "major") == "no match"
+}
+
+case "a group that did not take part is None, not missing" {
+  expect side("a") == "a/-"
+  expect side("b") == "-/b"
+  expect side("c") == "no match"
+}
+
+case "only the named groups are keys: not the whole match, not unnamed groups" {
+  expect count("x=42") == 2
+  expect count("none") == -1
+}

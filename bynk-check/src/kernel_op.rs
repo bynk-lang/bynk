@@ -272,6 +272,8 @@ kernel_ops! {
         ContainsRegex = "containsRegex", "containsRegex(pattern: String) -> Bool";
         FindRegex = "findRegex", "findRegex(pattern: String) -> Option[List[Option[String]]]";
         FindAllRegex = "findAllRegex", "findAllRegex(pattern: String) -> List[List[Option[String]]]";
+        // #3979: the named capture groups of the first match, keyed by name.
+        FindRegexNamed = "findRegexNamed", "findRegexNamed(pattern: String) -> Option[Map[String, Option[String]]]";
         ReplaceRegex = "replaceRegex", "replaceRegex(pattern: String, with: String) -> String";
         SplitRegex = "splitRegex", "splitRegex(pattern: String) -> List[String]";
     }

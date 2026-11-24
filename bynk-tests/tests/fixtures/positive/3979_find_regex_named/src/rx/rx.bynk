@@ -1,0 +1,40 @@
+---
+#3979: `findRegexNamed` reads a pattern's named capture groups by name, so a
+group added to the pattern later does not shift what a name means.
+---
+commons rx.rx
+
+fn group(s: String, name: String) -> String {
+  match s.findRegexNamed(r"v(?<major>\d+)\.(?<minor>\d+)") {
+    None => "no match",
+    Some(v) => match v.get(name) {
+      Some(Some(text)) => text,
+      Some(None) => "absent",
+      None => "no such group",
+    },
+  }
+}
+
+fn side(s: String) -> String {
+  match s.findRegexNamed(r"(?<left>a)|(?<right>b)") {
+    None => "no match",
+    Some(v) => {
+      let l = match v.get("left") {
+        Some(Some(text)) => text,
+        _ => "-",
+      }
+      let r = match v.get("right") {
+        Some(Some(text)) => text,
+        _ => "-",
+      }
+      "\(l)/\(r)"
+    }
+  }
+}
+
+fn count(s: String) -> Int {
+  match s.findRegexNamed(r"(?<k>\w)=(?<v>\d)(\d)") {
+    None => -1,
+    Some(v) => v.length(),
+  }
+}

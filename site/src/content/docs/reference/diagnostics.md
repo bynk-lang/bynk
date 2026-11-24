@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. Each code links to its own page: what the code means, how to fix it and an example where an explanation is written, the grammar rules it governs, and the Book pages that explain it. `bynk explain <code>` prints a code's explanation in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **925** codes in total. Every code is an error unless it is marked **Warning** or **Hint**.
+There are **926** codes in total. Every code is an error unless it is marked **Warning** or **Hint**.
 
 <script type="module" src="/diagnostic-filter.js"></script>
 
@@ -1027,7 +1027,8 @@ There are **925** codes in total. Every code is an error unless it is marked **W
 - [`bynk.types.question_outside_result`](/reference/diagnostics/bynk.types.question_outside_result/) — `?` used in a function that does not return a `Result`.
 - [`bynk.types.range_pattern_on_non_int`](/reference/diagnostics/bynk.types.range_pattern_on_non_int/) — A range pattern (`lo..hi`) was matched against a scrutinee that is not an `Int`.
 - [`bynk.types.record_pattern_on_non_record`](/reference/diagnostics/bynk.types.record_pattern_on_non_record/) — A record pattern names a type that is not a record (a sum, enum, refined or opaque type, or a built-in).
-- [`bynk.types.regex_not_literal`](/reference/diagnostics/bynk.types.regex_not_literal/) — A regex method's pattern (`matchesRegex`, `containsRegex`, `findRegex`, `findAllRegex`, `replaceRegex`, `splitRegex`) is not a string literal, so its ReDoS check cannot run at compile time.
+- [`bynk.types.regex_no_named_groups`](/reference/diagnostics/bynk.types.regex_no_named_groups/) — `findRegexNamed`'s pattern has no named capture group, so there is nothing to key its result by.
+- [`bynk.types.regex_not_literal`](/reference/diagnostics/bynk.types.regex_not_literal/) — A regex method's pattern (`matchesRegex`, `containsRegex`, `findRegex`, `findAllRegex`, `findRegexNamed`, `replaceRegex`, `splitRegex`) is not a string literal, so its ReDoS check cannot run at compile time.
 - [`bynk.types.rejection_at_boundary`](/reference/diagnostics/bynk.types.rejection_at_boundary/) — `BoundaryRejection` appears where a value is stored or sent: a field of a type, or a boundary such as a call, a message or an agent.
 - [`bynk.types.request_cookies_at_boundary`](/reference/diagnostics/bynk.types.request_cookies_at_boundary/) — `RequestCookies` appears where a value is stored or sent: a field of a type, or a boundary such as a call, a message or an agent.
 - [`bynk.types.request_query_at_boundary`](/reference/diagnostics/bynk.types.request_query_at_boundary/) — `RequestQuery` appears where a value is stored or sent: a field of a type, or a boundary such as a call, a message or an agent.
