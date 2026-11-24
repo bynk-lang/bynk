@@ -1,0 +1,9 @@
+commons ops.codes
+
+// #3878: an opaque type a body can break. A case builds a value with `unsafe` that
+// serialises, then the consumer's decode refuses it: a body of the wrong shape.
+type Code = opaque String where MinLength(3)
+
+fn goodCode() -> Code { Code.unsafe("abc") }
+
+fn badCode() -> Code { Code.unsafe("x") }

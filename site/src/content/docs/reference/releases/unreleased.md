@@ -7,6 +7,7 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.675.0** | A queue message whose body cannot be decoded is no longer retried: it is sent unchanged to the consumer's dead-letter queue and acked, or, with none, acked and reported as a fault, with one log line naming the queue, type and decode error but never the body; a `system` case reads it as `Undecodable` |
 | **v0.674.0** | An HTTP handler's `headers` parameter may be a record, decoded and validated at the boundary as `query` and `cookies` are (`@name("if-match")` names a header, names match without case, a `List` field splits a comma-separated value), and `RequestHeaders` remains the raw view |
 | **v0.673.0** | A `for all` draws each plain type across its realistic domain (a wide `Int`, a `String` with whitespace and astral characters, and `Decimal`, `Instant`, `Duration`, `Bytes` and `Float` with boundaries), so a seed recorded earlier may now find a different counterexample |
 | **v0.672.0** | An agent call that waits past its queue limit (`AgentBusy`) now answers `503` with `Retry-After: 1` at an HTTP route, logged as busy rather than reported as a fault; `@busyAfter(d)` before `agent` lowers the 30-second wait |

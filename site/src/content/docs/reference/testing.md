@@ -535,7 +535,12 @@ suite shop.inventory as system {
   doesn't survive the round trip fails as it would on the platform. The batch
   records whether the consumer called `ack()` or `retry()`, and the address yields
   `Ack` or `Retry(reason)` with the reason the consumer gave. A consumer that
-  faults is retried, as on the platform, so the address yields `Retry`.
+  faults is retried, as on the platform, so the address yields `Retry`. A body
+  that does not decode as the message type (a refined value built with `unsafe`
+  that its own refinement refuses, say) is dead-lettered or dropped, never
+  retried, so the address yields `Undecodable`: `expect r is Undecodable`. It is a
+  value of the test address only; it is not a `QueueResult` variant, a handler
+  cannot return it, but a case can receive it, so a `match` of a `QueueResult` must name it or have a wildcard arm.
 - **The execution context is settled**: any detached effect the handler hands to
   `waitUntil` finishes before the address returns.
 - **State carries through the case.** Every address in a `system` case reaches
