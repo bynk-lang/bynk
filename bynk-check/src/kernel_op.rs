@@ -100,7 +100,7 @@ kernel_ops! {
         Skip = "skip", "skip(n: Int) -> List[T]";
         Distinct = "distinct", "distinct() -> List[T]";
         DistinctBy = "distinctBy", "distinctBy(key: T -> K) -> List[T]";
-        Count = "count", "count() -> Int";
+        Count = "count", "count() -> Int, or count(p: T -> Bool) -> Int";
         Any = "any", "any(p: T -> Bool) -> Bool";
         All = "all", "all(p: T -> Bool) -> Bool";
         First = "first", "first() -> Option[T]";
@@ -119,6 +119,11 @@ kernel_ops! {
         Min = "min", "min(key: T -> K) -> Option[K], or min() -> Option[T] for an Ord element";
         Max = "max", "max(key: T -> K) -> Option[K], or max() -> Option[T] for an Ord element";
         Average = "average", "average(key: T -> K) -> Option[Float]";
+        // #3963: the combinators a language without tuples needs most.
+        FilterMap = "filterMap", "filterMap(f: T -> Option[U]) -> List[U]";
+        ZipWith = "zipWith", "zipWith(other: List[U], f: (T, U) -> V) -> List[V]";
+        TakeWhile = "takeWhile", "takeWhile(p: T -> Bool) -> List[T]";
+        SkipWhile = "skipWhile", "skipWhile(p: T -> Bool) -> List[T]";
         // v0.94 (ADR 0116/0120): joins & grouping, combiner form (eager — mirrors
         // QUERY_METHODS' lazy `Query[V]` forms below, but returns `List[V]`).
         JoinOn = "joinOn", "joinOn(other: List[U], left: T -> K, right: U -> K, into: (T, U) -> V) -> List[V]";

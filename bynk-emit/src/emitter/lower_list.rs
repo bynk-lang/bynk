@@ -5,6 +5,7 @@
 //! keyed-helper choice, key-function types) are plain functions here.
 
 mod basics;
+mod more;
 
 use bynk_check::checker::{Ty, TyId, Types};
 use bynk_check::kernel_op::ListOp;
@@ -248,6 +249,11 @@ pub(super) fn lower_list_kernel(
             | ListOp::Max,
             _,
         ) => basics::lower_list_basic(&a, op, elem, p, cx),
+        (ListOp::Count, [_])
+        | (
+            ListOp::FilterMap | ListOp::ZipWith | ListOp::TakeWhile | ListOp::SkipWhile,
+            _,
+        ) => Some(more::lower_list_more(&a, op, p, cx)),
         (ListOp::Average, [key]) => Some(list_average(&a, key, p, cx)),
         (ListOp::JoinOn, [other, left, right, into]) => {
             Some(list_join_on(&a, false, other, left, right, into, p, cx))

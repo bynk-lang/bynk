@@ -800,6 +800,12 @@ pub(crate) fn check_list_kernel_method(
             let key = check_kernel_fn_arg(&args[0], vec![elem], "the `List.sum` key", ctx)?;
             Some(sum_result(key, "List.sum", args[0].span, ctx))
         }
+        Some(
+            o @ (ListOp::FilterMap | ListOp::ZipWith | ListOp::TakeWhile | ListOp::SkipWhile),
+        ) => super::list_more::check_list_more(method, o, args, elem, span, ctx),
+        Some(o @ ListOp::Count) if args.len() == 1 => {
+            super::list_more::check_list_more(method, o, args, elem, span, ctx)
+        }
         Some(o @ (ListOp::Min | ListOp::Max)) if args.is_empty() => {
             super::list_basics::check_list_basic(method, o, args, elem, span, ctx)
         }

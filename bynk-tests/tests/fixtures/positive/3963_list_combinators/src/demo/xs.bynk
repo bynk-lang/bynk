@@ -1,0 +1,32 @@
+---
+#3963: `filterMap`, `zipWith`, `takeWhile`, `skipWhile` and `count(p)`.
+---
+commons demo.xs
+
+fn big(n: Int) -> Option[Int] {
+	if n > 2 { Some(n * 10) } else { None }
+}
+
+fn bigs(xs: List[Int]) -> List[Int] {
+	xs.filterMap(big)
+}
+
+fn totals(prices: List[Int], qtys: List[Int]) -> List[Int] {
+	prices.zipWith(qtys, (p, q) => p * q)
+}
+
+fn head(xs: List[Int]) -> List[Int] {
+	xs.takeWhile((x) => x < 3)
+}
+
+fn tail(xs: List[Int]) -> List[Int] {
+	xs.skipWhile((x) => x < 3)
+}
+
+fn evens(xs: List[Int]) -> Int {
+	xs.count((x) => x.rem(2) == 0)
+}
+
+fn all(xs: List[Int]) -> Int {
+	xs.count()
+}
