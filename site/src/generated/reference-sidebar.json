@@ -311,6 +311,10 @@
             "link": "/reference/releases/unreleased/"
           },
           {
+            "label": "v0.653.0",
+            "link": "/reference/releases/v0-653-0/"
+          },
+          {
             "label": "v0.639.1",
             "link": "/reference/releases/v0-639-1/"
           },
