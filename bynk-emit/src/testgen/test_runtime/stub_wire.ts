@@ -12,9 +12,9 @@ function __bynkWireStub(
       const e = decoded.error;
       const where = e.path === undefined ? "" : ` at ${e.path}`;
       const detail = e.violation?.message ?? e.details ?? "";
-      const fault = new globalThis.Error(`BoundaryError: ${e.kind}${where}${detail === "" ? "" : `: ${detail}`}`);
-      globalThis.Object.defineProperty(fault, "boundaryError", { value: e, enumerable: false });
-      throw fault;
+      const failure = new globalThis.Error(`BoundaryError: ${e.kind}${where}${detail === "" ? "" : `: ${detail}`}`);
+      globalThis.Object.defineProperty(failure, "boundaryError", { value: e, enumerable: false });
+      throw failure;
     }
     return decoded.value;
   };

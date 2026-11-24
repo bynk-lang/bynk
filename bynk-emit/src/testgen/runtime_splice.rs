@@ -300,8 +300,11 @@ mod tests {
 
     /// `(module, name)`: a runtime export a fragment spells as a local of its own, which a word
     /// scan cannot tell from a use (`import_shadow`'s `UNIMPORTED_RUNTIME_OK` has the same entry).
-    const LOCAL_SPELLINGS: &[(&str, &str)] =
-        &[("hmac_signer", "signature"), ("test_filter", "Result")];
+    const LOCAL_SPELLINGS: &[(&str, &str)] = &[
+        ("hmac_signer", "signature"),
+        ("stub_wire", "BoundaryError"),
+        ("test_filter", "Result"),
+    ];
 
     /// Decision C's guard: the runtime names a fragment carries (the column `bundle.mjs` reads
     /// from its `../*.ts` imports) are the runtime exports its artifact spells, so a fragment
