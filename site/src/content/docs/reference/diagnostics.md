@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. Each code links to its own page: what the code means, how to fix it and an example where an explanation is written, the grammar rules it governs, and the Book pages that explain it. `bynk explain <code>` prints a code's explanation in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **922** codes in total. Every code is an error unless it is marked **Warning** or **Hint**.
+There are **923** codes in total. Every code is an error unless it is marked **Warning** or **Hint**.
 
 <script type="module" src="/diagnostic-filter.js"></script>
 
@@ -729,6 +729,7 @@ There are **922** codes in total. Every code is an error unless it is marked **W
 - [`bynk.queue.duplicate_consumer`](/reference/diagnostics/bynk.queue.duplicate_consumer/) — Two `on message` handlers, in one context or in two, consume the same queue.
 - [`bynk.queue.invalid_name`](/reference/diagnostics/bynk.queue.invalid_name/) — A `from queue("…")` binding has an empty queue name, or one Cloudflare refuses.
 - [`bynk.queue.no_dead_letter`](/reference/diagnostics/bynk.queue.no_dead_letter/) — <span class="diagnostic-severity">Warning</span> A queue consumer has no dead-letter queue, so a message that reaches the retry limit is deleted (warning).
+- [`bynk.queue.retry_delay_out_of_range`](/reference/diagnostics/bynk.queue.retry_delay_out_of_range/) — A `RetryAfter` delay written as a literal is under 1 second or over 24 hours.
 - [`bynk.queue.return_not_queue_result`](/reference/diagnostics/bynk.queue.return_not_queue_result/) — An `on message` handler does not return `Effect[QueueResult]`.
 
 ## Record spread
