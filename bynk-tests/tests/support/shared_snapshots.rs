@@ -27,6 +27,9 @@
 //!   are found by exact match of the current `testgen/test_runtime/<name>.ts` text. A fixture
 //!   carrying a changed or partial copy is not elided, so it fails the byte comparison.
 
+// Each file that includes this module uses a part of it (see `it.rs` on `#[path]` helpers).
+#![allow(dead_code)]
+
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
