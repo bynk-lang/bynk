@@ -304,17 +304,17 @@ rest are Rust drift-guard tests and Node `--check` scripts that CI runs.
    Bynk uses `//` for comments; a retired `--` comment fails the gate
    (`bynk.lex.legacy_comment`).
 
-2. **Generated reference is generated.** Three reference pages are emitted from the
+2. **Generated reference is generated.** Two reference pages are emitted from the
    compiler/grammar and guarded by tests, so they cannot drift:
 
    | Page | Source | Test |
    |---|---|---|
-   | `reference/diagnostics.md` | `bynk-syntax/src/diagnostics.rs` registry | `diagnostics_registry.rs` |
    | `reference/keywords.md` | the lexer's keyword tokens | `keywords_reference.rs` |
    | `reference/grammar-appendix.md` | `tree-sitter-bynk/src/grammar.json` | `grammar_reference.rs` |
 
    Each test renders the page and asserts it matches the committed file. They
-   carry a *"GENERATED FILE — do not edit by hand"* banner. Regenerate after a
+   carry a *"GENERATED FILE — do not edit by hand"* banner. The diagnostic index is
+   generated too, but it is **not committed** (see below). Regenerate after a
    relevant change:
 
    ```sh
@@ -336,8 +336,13 @@ rest are Rust drift-guard tests and Node `--check` scripts that CI runs.
    the editor's Explain panel and the code's page all show; the Book has no
    separate page per error. The pages are rendered by
    `site/src/pages/reference/diagnostics/[code].astro` from
-   `site/src/generated/diagnostics.json`, which `diagnostics_registry.rs`
-   guards like the index page. A page lists the Book pages that explain its
+   `site/src/generated/diagnostics/<code>.json`, one committed file per code, which
+   `diagnostics_registry.rs` guards (a file out of date, missing, or left behind for a removed
+   code fails). One file per code means two changes that add different codes touch different files
+   and never conflict (#4286). The diagnostic index at `reference/diagnostics.md` is assembled from
+   those files at site build time by `site/scripts/build-diagnostics-index.mjs` (the `prebuild` and
+   `predev` hooks) and is gitignored: run that script once before a bare
+   `node scripts/generate-sidebar.mjs --check`, which needs the page to exist. A page lists the Book pages that explain its
    code from `site/src/data/diagnostic-links.json`; when you write a section
    that explains a code, add its link there. The same test checks that every
    entry names a registry code and a heading that exists. A new code also adds

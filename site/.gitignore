@@ -9,3 +9,8 @@ public/reference/api/
 # Inlined Book, regenerated from the Book markdown by the `prebuild` npm hook on
 # every `npm run build` (CI + deploy). A build artifact, never committed.
 public/llms-full.txt
+
+# The diagnostic index, assembled from `src/generated/diagnostics/<code>.json` by
+# `scripts/build-diagnostics-index.mjs` (the `prebuild` and `predev` hooks), so two
+# changes that each add a code never both rewrite one committed page. Never committed.
+src/content/docs/reference/diagnostics.md
