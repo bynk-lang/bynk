@@ -340,7 +340,8 @@ variant, so there the same response reads as `Conflict(_)`.
 ## Rendering rejections
 
 The router refuses some requests before any handler runs: a `400` for a body or
-path parameter that fails to parse or validate, a `405` for a method the path
+path parameter that fails to parse or validate (or for a path whose percent-encoding
+does not decode, `MalformedPath`), a `405` for a method the path
 doesn't declare, a `413` for a body over its cap, a `415` for a `@raw`, `@form` or `@multipart` route's
 other content type, and a `401` from a `Signature` seam. Each answers in Bynk's own
 shape, `{ "kind": …, "details": … }` or no body. A service whose contract says
@@ -358,7 +359,8 @@ on rejected(why: BoundaryRejection) -> Effect[HttpResult[()]] {
 
 `why` is the rejection: `MalformedJson(detail)`, `StructuralMismatch(detail)`,
 `RefinementViolation(detail)`, `PayloadTooLarge(detail)`,
-`UnsupportedMediaType(detail)`, `MalformedForm(detail)`, `MethodNotAllowed` or `Unauthorized`.
+`UnsupportedMediaType(detail)`, `MalformedForm(detail)`, `MalformedPath(detail)`,
+`MethodNotAllowed` or `Unauthorized`.
 
 The status is the rejection's own. The handler supplies the body, so it answers a
 `RawError` of that status; the router keeps its other headers (the `Allow` of a
@@ -1581,7 +1583,8 @@ flowchart TD
 *Validation happens once, at the edge; the handler only ever sees valid input.*
 
 Text equivalent: the Worker's `fetch` entry point (`index.ts`) routes the request
-on method **and** path. On a match, path parameters are bound and a typed
+on method **and** path. On a match, path parameters are bound (a path that is not valid percent-encoding is a
+`400 MalformedPath`, never a `500`) and a typed
 [`query`](#query-strings) is decoded and validated (`400` on a violation); a `@raw`, `@form` or `@multipart` route's, or a JSON `body` route's,
 `Content-Type` is checked (`415`) and a capped route's `Content-Length` (`413`);
 then any `body` is read under its cap, parsed and validated against its refined type — an invalid body is rejected with

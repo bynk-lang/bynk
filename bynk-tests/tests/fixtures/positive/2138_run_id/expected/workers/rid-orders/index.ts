@@ -42,6 +42,9 @@ export default {
         const __m = __matchPath("/orders/:id", path);
         if (method === "POST" && __m) {
           __route = "POST /orders/:id";
+          if (__m.malformed) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          }
           const __raw_id = __m.params["id"];
           const id = __raw_id;
           const result = await surface.http_POST_orders_Param_id(id);

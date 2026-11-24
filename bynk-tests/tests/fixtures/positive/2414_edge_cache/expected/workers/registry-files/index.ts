@@ -67,6 +67,9 @@ async function __bynkFetch(request: globalThis.Request, env: Env, ctx?: { waitUn
       const __m = __matchPath("/dl/sha256/:hex", path);
       if ((method === "GET" || method === "HEAD") && __m) {
         __route = "GET /dl/sha256/:hex";
+        if (__m.malformed) {
+          return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_files);
+        }
         const __raw_hex = __m.params["hex"];
         const hex = __raw_hex;
         const result = await surface.http_GET_dl_sha256_Param_hex(hex);
@@ -78,6 +81,9 @@ async function __bynkFetch(request: globalThis.Request, env: Env, ctx?: { waitUn
       const __m = __matchPath("/takedown/:hex", path);
       if (method === "POST" && __m) {
         __route = "POST /takedown/:hex";
+        if (__m.malformed) {
+          return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_files);
+        }
         const __raw_hex = __m.params["hex"];
         const hex = __raw_hex;
         const result = await surface.http_POST_takedown_Param_hex(hex);

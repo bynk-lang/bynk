@@ -52,6 +52,9 @@ export default {
         const __m = __matchPath("/items/:id", path);
         if ((method === "GET" || method === "HEAD") && __m) {
           __route = "GET /items/:id";
+          if (__m.malformed) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          }
           const __raw_id = __m.params["id"];
           const id = __raw_id;
           const __c = __cookieObject(request, [{ name: "sid", kind: "string", list: false, option: true }, { name: "theme", kind: "enum", list: false, option: false }, { name: "visits", kind: "int", list: false, option: false }, { name: "tags", kind: "string", list: true, option: false }]);
