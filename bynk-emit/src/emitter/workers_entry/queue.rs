@@ -99,22 +99,13 @@ fn emit_queue_handler(
         };
         let try_stmts = vec![
             const_("__r", dser),
-            // `{ ...; ...; continue; }` — a single-line braced block, this
-            // file's own real (hand-written) shape, not the tree's usual
-            // one-statement-per-line `Block`.
+            // #3878: an undecodable body is never retried (no retry changes the
+            // bytes): it is dead-lettered or dropped visibly, then skipped.
             if_(
                 strict_eq(member(ident("__r"), "tag"), str_lit("Err")),
                 TsStmt::inline_block(
                     vec![
-                        expr_stmt(method_call(
-                            ident("globalThis.console"),
-                            "error",
-                            vec![
-                                str_lit(format!("queue {} deserialise failed", route.name)),
-                                member(ident("__r"), "error"),
-                            ],
-                        )),
-                        expr_stmt(method_call(ident("msg"), "retry", vec![])),
+                        expr_stmt(await_expr(undecodable_call(route))),
                         TsStmt::continue_stmt(None),
                     ],
                     None,
@@ -220,6 +211,42 @@ pub(super) struct QueueRoute {
     pub(super) index: usize,
     pub(super) name: String,
     pub(super) msg_type: Option<TypeRef>,
+    /// #3878: the consumer's dead-letter queue, if its `delivery { }` names one.
+    pub(super) dead_letter: Option<String>,
+}
+
+/// The binding a consumer of `queue` reads its dead-letter producer from (#3878). It is keyed
+/// by the consumer's queue, so a context with several consumers, and a Worker group's members,
+/// never share a name that means two queues.
+pub(crate) fn dead_letter_binding(queue: &str) -> String {
+    // A queue name is lowercase letters, digits and `-` (`bynk.queue.invalid_name`), so mapping
+    // `-` to `_` is one-to-one: two queues never share a binding.
+    format!("__BYNK_DLQ_{}", queue.to_uppercase().replace('-', "_"))
+}
+
+/// `__bynkUndecodable(ctx, env, <binding>, <queue>, <type>, __r.error, msg)`: the verdict on a
+/// message whose body did not decode.
+fn undecodable_call(route: &QueueRoute) -> TsExpr {
+    let binding = if route.dead_letter.is_some() {
+        str_lit(dead_letter_binding(&route.name))
+    } else {
+        ident("undefined")
+    };
+    call(
+        ident("__bynkUndecodable"),
+        vec![
+            ident("ctx"),
+            ident("env"),
+            binding,
+            str_lit(route.name.clone()),
+            str_lit(route.msg_type.as_ref().map_or_else(
+                || "unknown".to_string(),
+                bynk_check::context_checks::ts_type_ref_display,
+            )),
+            member(ident("__r"), "error"),
+            ident("msg"),
+        ],
+    )
 }
 
 /// Collect the queue consumers across the services, carrying the per-service
@@ -229,6 +256,7 @@ pub(super) fn collect_queue_routes(
     service_names: &[&String],
 ) -> Vec<QueueRoute> {
     let mut queue_routes: Vec<QueueRoute> = Vec::new();
+    let deliveries = bynk_check::symbols::queue_deliveries(table);
     for sname in service_names {
         let service = table.services.get(*sname).unwrap();
         let mut queue_idx = 0usize;
@@ -252,6 +280,10 @@ pub(super) fn collect_queue_routes(
                     index: queue_idx,
                     name: name.clone(),
                     msg_type,
+                    dead_letter: deliveries
+                        .iter()
+                        .find(|d| &d.queue == name)
+                        .and_then(|d| d.dead_letter.clone()),
                 });
                 queue_idx += 1;
             }

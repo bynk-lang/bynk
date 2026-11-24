@@ -4,6 +4,10 @@ main = "index.ts"
 compatibility_date = "2026-08-11"
 compatibility_flags = ["global_fetch_strictly_public"]
 
+[[queues.producers]]
+binding = "__BYNK_DLQ_OUTBOUND_EMAIL"
+queue = "outbound-email-dlq"
+
 [[queues.consumers]]
 queue = "digest-email"
 max_batch_size = 10

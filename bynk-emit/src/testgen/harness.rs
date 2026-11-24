@@ -161,7 +161,7 @@ pub(super) fn emit_integration_harness<'a>(
                 ),
                 // P2 (#2578): each instance its own recorder; nothing is
                 // delivered to a consumer participant.
-                BindingSource::QueueProducer { .. } => {
+                BindingSource::QueueProducer { .. } | BindingSource::QueueDeadLetter { .. } => {
                     call(ident("__makeIntegrationQueue"), vec![])
                 }
                 // P3b (#2582): each instance its own fresh recorder.

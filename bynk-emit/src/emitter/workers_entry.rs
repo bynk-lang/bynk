@@ -48,6 +48,7 @@ use http_policy::{
     CorsService, PathMethods, SecurityService, build_cors_services, build_path_method_table,
     build_security_services, cors_preflight, method_fall_through,
 };
+pub(crate) use queue::dead_letter_binding;
 use queue::{collect_queue_routes, push_message_entries};
 use respond::{
     MISS_HELPER, fault_detail, fault_helpers, miss, report_fault, text_response, try_catch_stmt,
@@ -699,7 +700,7 @@ pub fn emit_worker_entry(
     }
     // 1A.38: fixed authored snippet, no interpolation
     program.push(TsStmt::raw_using(
-        fault_helpers(!cron_routes.is_empty()),
+        fault_helpers(!cron_routes.is_empty(), !queue_routes.is_empty()),
         &[],
     ));
     program.push(TsStmt::decl(

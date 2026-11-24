@@ -12,6 +12,28 @@ function __bynkReportFault(ctx: { waitUntil(promise: globalThis.Promise<unknown>
   ctx.waitUntil(fault);
 }
 
+async function __bynkUndecodable(ctx: { waitUntil(promise: globalThis.Promise<unknown>): void } | undefined, env: unknown, binding: string | undefined, queue: string, type: string, error: unknown, msg: { readonly body: unknown; ack(): void; retry(): void }): globalThis.Promise<void> {
+  const cause = error as { readonly kind?: unknown; readonly path?: unknown } | null;
+  const path = typeof cause === "object" && cause !== null && typeof cause.path === "string" ? cause.path : "$";
+  const kind = typeof cause === "object" && cause !== null && typeof cause.kind === "string" ? cause.kind : "";
+  const dlq = binding === undefined ? undefined : (env as globalThis.Record<string, { send(body: unknown, options?: { contentType?: string }): globalThis.Promise<void> } | undefined>)[binding];
+  if (dlq === undefined) {
+    globalThis.console.error(`queue ${queue} undecodable`, { type, path, kind, outcome: "dropped" });
+    __bynkReportFault(ctx, new globalThis.Error(`queue ${queue} received a message that is not a ${type} (${kind} at ${path})`));
+    msg.ack();
+    return;
+  }
+  try {
+    await dlq.send(msg.body, { contentType: "json" });
+  } catch (thrown) {
+    globalThis.console.error(`queue ${queue} dead-letter failed`, thrown instanceof globalThis.Error ? (thrown.stack || globalThis.String(thrown)) : thrown);
+    msg.retry();
+    return;
+  }
+  globalThis.console.error(`queue ${queue} undecodable`, { type, path, kind, outcome: "dead-lettered" });
+  msg.ack();
+}
+
 export default {
   async fetch(request: globalThis.Request, env: Env, ctx?: { waitUntil(promise: globalThis.Promise<unknown>): void }): globalThis.Promise<globalThis.Response> {
     const url = new globalThis.URL(request.url);
@@ -47,7 +69,7 @@ export default {
         for (const msg of batch.messages) {
           try {
             const __r = handlers.__deserialise_EmailJob((msg.body as __JsonValue), "$");
-            if (__r.tag === "Err") { globalThis.console.error("queue digest-email deserialise failed", __r.error); msg.retry(); continue; }
+            if (__r.tag === "Err") { await __bynkUndecodable(ctx, env, undefined, "digest-email", "EmailJob", __r.error, msg); continue; }
             const result = await surface.queue_digest_0(__r.value);
             if (result.tag === "Ack") msg.ack();
             else { globalThis.console.error("queue digest-email retry", result.reason); msg.retry(); }
@@ -61,7 +83,7 @@ export default {
         for (const msg of batch.messages) {
           try {
             const __r = handlers.__deserialise_EmailJob((msg.body as __JsonValue), "$");
-            if (__r.tag === "Err") { globalThis.console.error("queue outbound-email deserialise failed", __r.error); msg.retry(); continue; }
+            if (__r.tag === "Err") { await __bynkUndecodable(ctx, env, "__BYNK_DLQ_OUTBOUND_EMAIL", "outbound-email", "EmailJob", __r.error, msg); continue; }
             const result = await surface.queue_outbox_0(__r.value);
             if (result.tag === "Ack") msg.ack();
             else { globalThis.console.error("queue outbound-email retry", result.reason); msg.retry(); }
@@ -75,7 +97,7 @@ export default {
         for (const msg of batch.messages) {
           try {
             const __r = handlers.__deserialise_EmailJob((msg.body as __JsonValue), "$");
-            if (__r.tag === "Err") { globalThis.console.error("queue outbound-email-dlq deserialise failed", __r.error); msg.retry(); continue; }
+            if (__r.tag === "Err") { await __bynkUndecodable(ctx, env, undefined, "outbound-email-dlq", "EmailJob", __r.error, msg); continue; }
             const result = await surface.queue_review_0(__r.value);
             if (result.tag === "Ack") msg.ack();
             else { globalThis.console.error("queue outbound-email-dlq retry", result.reason); msg.retry(); }

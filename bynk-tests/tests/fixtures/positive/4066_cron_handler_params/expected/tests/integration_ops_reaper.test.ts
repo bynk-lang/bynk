@@ -154,10 +154,11 @@ async function __bynkScheduled<T>(cron: string, run: (exec: __BynkJobExec) => Pr
 }
 type __BynkQueueMessage = { readonly id: string; readonly timestamp: Date; readonly attempts: number; readonly body: unknown; ack(): void; retry(): void };
 type __BynkQueueBatch = { readonly queue: string; readonly messages: ReadonlyArray<__BynkQueueMessage>; ackAll(): void; retryAll(): void };
-async function __bynkDeliver<T>(queue: string, body: unknown, run: (batch: __BynkQueueBatch, exec: __BynkJobExec) => Promise<void>): Promise<T> {
+async function __bynkDeliver<T>(queue: string, body: unknown, run: (batch: __BynkQueueBatch, exec: __BynkJobExec) => Promise<void>): Promise<T | { readonly tag: "Undecodable" }> {
   const wire: unknown = globalThis.JSON.parse(globalThis.JSON.stringify(body ?? null));
   let verdict: { tag: "Ack" } | { tag: "Retry"; reason: string } | undefined;
   let reason = "";
+  let undecodable = false;
   const message: __BynkQueueMessage = {
     id: "bynk-test-message-1", timestamp: new globalThis.Date(0), attempts: 1, body: wire,
     ack(): void { verdict ??= { tag: "Ack" }; },
@@ -172,6 +173,8 @@ async function __bynkDeliver<T>(queue: string, body: unknown, run: (batch: __Byn
     const label = args[0];
     if (typeof label !== "string" || !label.startsWith(prefix)) { log(...args); return; }
     const what = label.slice(prefix.length);
+    // #3878: the entry settled an undecodable body (dead-lettered or dropped, then acked): the case reads `Undecodable`.
+    if (what === "undecodable") { undecodable = true; return; }
     const detail = typeof args[1] === "string" ? args[1] : __bynkShow(args[1]);
     reason = what === "retry" ? detail : `${what}: ${detail}`;
   };
@@ -182,6 +185,7 @@ async function __bynkDeliver<T>(queue: string, body: unknown, run: (batch: __Byn
   } finally {
     globalThis.console.error = log;
   }
+  if (undecodable && (verdict as { tag: string } | undefined)?.tag === "Ack") return { tag: "Undecodable" } as T;
   return (verdict ?? { tag: "Retry", reason: "the consumer neither acked nor retried the message" }) as T;
 }
 async function __sysdrive_schedule_sweeper_0() {

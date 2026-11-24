@@ -506,7 +506,12 @@ impl Lowering<'_, '_> {
 /// The constructor space of `ty`. A refined type uses its base.
 fn space_of(ty: TyId, ctx: &Ctx) -> Space {
     let tys = ctx.tys;
-    if let Some(variants) = variants_of(ty, &ctx.input.types, tys) {
+    if let Some(mut variants) = variants_of(ty, &ctx.input.types, tys) {
+        // #3878: `Undecodable` is a pattern of a test's view of a queue verdict, not a
+        // verdict a handler returns, so an exhaustive `match` need not cover it.
+        if matches!(&*tys.get(ty), Ty::QueueResult) {
+            variants.retain(|v| v.name != crate::checker::QUEUE_UNDECODABLE);
+        }
         return Space::Variants {
             variants,
             future: extensible_enum(ty, ctx),
