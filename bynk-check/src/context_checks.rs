@@ -5518,8 +5518,9 @@ fn reserved_route_char(
 /// - Every `:name` segment binds to a handler parameter of the same name.
 /// - Every parameter is either a path parameter or named `body`, `headers` or
 ///   `query`.
-/// - Path parameter types are constructible from `String` (`String`, refined
-///   `String`, or opaque `String`).
+/// - Path parameter types are those of a typed `query` field, less `Option` and
+///   `List` (#3910): a `String`, `Int`, `Bool` or `Decimal`, an enum, or a refined
+///   or opaque type over one of those.
 /// - GET / DELETE handlers may not have a `body` parameter.
 /// - The handler return type must be `Effect[HttpResult[T]]`.
 fn validate_http_handler(

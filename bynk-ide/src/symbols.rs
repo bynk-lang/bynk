@@ -661,14 +661,12 @@ pub fn describe_path_param_at(source: &str, offset: usize) -> Option<String> {
                 let ty = bynk_syntax::print::type_ref_to_string(&p.type_ref);
                 // What the segment is read as, and whether a refinement can refuse it.
                 let (reads, refined) = match &p.type_ref {
-                    TypeRef::Base(b, _) => (format!("`{}`", base_word(b)), false),
+                    TypeRef::Base(b, _) => (base_phrase(b), false),
                     TypeRef::Named(id) => match decls.get(id.name.as_str()).map(|t| &t.body) {
-                        Some(TypeBody::Refined { base, .. }) => {
-                            (format!("a `{}`", base_word(base)), true)
-                        }
-                        Some(TypeBody::Opaque { base, .. }) => {
-                            (format!("a `{}`", base_word(base)), true)
-                        }
+                        Some(TypeBody::Refined { base, .. }) => (base_phrase(base), true),
+                        Some(TypeBody::Opaque {
+                            base, refinement, ..
+                        }) => (base_phrase(base), refinement.is_some()),
                         Some(TypeBody::Sum(_)) => ("a variant name".to_string(), false),
                         _ => ("its own text form".to_string(), true),
                     },
@@ -687,6 +685,17 @@ pub fn describe_path_param_at(source: &str, offset: usize) -> Option<String> {
         }
     }
     None
+}
+
+/// `a `String``, `an `Int``: a base type as a noun phrase.
+fn base_phrase(b: &BaseType) -> String {
+    let word = base_word(b);
+    let article = if word.starts_with(['A', 'E', 'I', 'O', 'U']) {
+        "an"
+    } else {
+        "a"
+    };
+    format!("{article} `{word}`")
 }
 
 fn base_word(b: &BaseType) -> &'static str {
@@ -5214,7 +5223,7 @@ mod tests {
         let at = |needle: &str| describe_path_param_at(svc, svc.find(needle).unwrap());
         let id = at("id: OrderNo").expect("hovers a refined Int");
         assert!(
-            id.contains("read as a `Int`") && id.contains("RefinementViolation"),
+            id.contains("read as an `Int`") && id.contains("RefinementViolation"),
             "{id}"
         );
         let s = at("s: Status").expect("hovers an enum");

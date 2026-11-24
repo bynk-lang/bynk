@@ -1413,14 +1413,16 @@ fn emit_path_param_construction(
             // ship a project `tsc --strict` rejects — silently, since this
             // function has no way to surface that. `bynk.http.path_param_not_stringy`
             // (`bynk-check/src/context_checks.rs`) is a total guarantee: a path
-            // parameter's `TypeRef` is checked to be exactly `String` or a
-            // `String`-based `Named` before emission ever runs, so this arm is
-            // unreachable for any program that passed the checker. Fail loudly
+            // parameter's `TypeRef` is checked to be a `String`, `Int`, `Bool` or
+            // `Decimal`, an enum, or a refined or opaque type over one of them
+            // before emission ever runs, and every one of those but a text type
+            // goes through `emit_typed_path_param`, so this arm is unreachable for
+            // any program that passed the checker. Fail loudly
             // if that guarantee is ever wrong, rather than emit TypeScript that
             // cannot compile.
             panic!(
                 "bynk internal error: path parameter `{pname}` reached emission with a \
-                 non-string-constructible type ({t:?}) — `bynk.http.path_param_not_stringy` \
+                 type that is not text ({t:?}) — `bynk.http.path_param_not_stringy` \
                  should have rejected this at check time"
             );
         }

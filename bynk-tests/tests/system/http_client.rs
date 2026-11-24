@@ -573,6 +573,7 @@ console.log("keys", Object.keys(c.api).sort().join(","));
 const show = (label, v) => console.log(label, JSON.stringify(v));
 show("order", await c.api.getOrderById(42));
 show("status", await c.api.getOrdersStatuByS({ tag: "Closed" }));
+show("price", await c.api.getPriceByP({ coefficient: 1250n, scale: 2 }));
 "#;
 
 #[test]
@@ -598,6 +599,10 @@ fn a_typed_path_parameter_round_trips_through_the_client() {
     assert_eq!(
         line(&out, "status"),
         r#"{"status":200,"kind":"Ok","body":"closed"}"#
+    );
+    assert_eq!(
+        line(&out, "price"),
+        r#"{"status":200,"kind":"Ok","body":"price 12.50"}"#
     );
     let _ = fs::remove_dir_all(&dir);
 }

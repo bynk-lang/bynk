@@ -12,6 +12,17 @@ suite shop.api {
 }
 
 suite shop.api as system {
+	case "typed arguments are written as their segments" {
+		let a <- api.GET("/orders/:id", 42)
+		expect a is Ok("order 42")
+		let b <- api.GET("/orders/status/:s", Closed)
+		expect b is Ok("closed")
+		let c <- api.GET("/prices/:p", 12.50d)
+		expect c is Ok("price 12.50")
+		let d <- api.GET("/flags/:flag", true)
+		expect d is Ok("flag true")
+	}
+
 	case "a typed segment binds" {
 		let a <- api.GET("/orders/:id", Wire("42"))
 		expect a is Handled(Ok("order 42"))

@@ -457,10 +457,15 @@ impl Gen {
                         Some(self.public_type(&ty)?),
                     ));
                     let checked = match &ty {
-                        TypeRef::Base(..) => {
+                        // A `Decimal`'s public value is an object, so it goes through the codec
+                        // like a named type, and the wire text is the segment.
+                        TypeRef::Base(b, _)
+                            if !matches!(b, bynk_syntax::ast::BaseType::Decimal) =>
+                        {
                             call(ident("globalThis.String"), vec![ident(&param_ident)])
                         }
-                        TypeRef::Named(_)
+                        TypeRef::Base(..)
+                        | TypeRef::Named(_)
                         | TypeRef::Result(..)
                         | TypeRef::Option(..)
                         | TypeRef::Effect(..)

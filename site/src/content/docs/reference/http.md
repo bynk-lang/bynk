@@ -114,7 +114,9 @@ on GET("/orders/status/:s") (s: Status) -> Effect[HttpResult[List[Order]]] by v:
   the path's shape named a resource, with an identifier that is not valid. A segment that
   reads but breaks a refinement (`/orders/0`) is a `400 RefinementViolation`, as for a
   `String`-based type.
-- **Reading rules are `query`'s.** An `Int` is `-?[0-9]+` within the safe-integer range, a
+- **Reading rules are `query`'s.** An `Int` is `-?[0-9]+` within the safe-integer range (so
+  `/orders/007` and `/orders/7` are the same value and reach the same handler, as in a query
+  string; a type that wants one canonical form refines it, or takes a `String`), a
   `Decimal` reads its text form, an enum is its variant's name (case-sensitive), and a
   `Bool` is `true` or `false` only (`on` and `off` are a form's convention).
 - `bynk client` takes the typed value and writes it as the segment (`String(n)`, the

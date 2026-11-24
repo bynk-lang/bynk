@@ -723,7 +723,7 @@ pub(super) fn emit_system_http_support(
                 (true, None) => vec![header("content-type", str_lit("application/json"))],
                 (false, _) => Vec::new(),
             };
-            let url = typed_request_url(h, &table.types, &path, typed_query.clone());
+            let url = typed_request_url(h, &table.types, runtime_use, &path, typed_query.clone());
             let raw_url = request_url(&path, raw_query.clone());
             let (spread_first, spread_last) = spread_order(
                 is_form || (body_arg.is_some() && !is_multipart),
@@ -1892,25 +1892,31 @@ fn spread_order(content_type_overridable: bool, spread: &TsObjectEntry) -> (Entr
     }
 }
 
-/// The request URL of a typed driver: `request_url`, with an enum path parameter (#3910) written
-/// as its variant's name, since in memory it is a `{ tag }`.
+/// The request URL of a typed driver: `request_url`, with an enum or `Decimal` path parameter
+/// (#3910) written as its text, since neither is in memory the text the router reads.
 fn typed_request_url(
     h: &bynk_syntax::ast::Handler,
     types: &std::collections::HashMap<String, std::sync::Arc<bynk_syntax::ast::TypeDecl>>,
+    runtime_use: &RuntimeUse,
     path: &str,
     query: Option<TsExpr>,
 ) -> TsExpr {
     request_url_with(path, query, |name| {
         let id = ident(crate::emitter::ts_ident(name));
-        let is_enum = h.params.iter().any(|p| {
-            p.name.name == name
-                && crate::emitter::workers_entry::query_leaf_kind(&p.type_ref, types, false)
-                    == "enum"
-        });
-        if is_enum {
-            call(ident("__cookieValue"), vec![str_lit("enum"), id])
-        } else {
-            id
+        let kind = h
+            .params
+            .iter()
+            .find(|p| p.name.name == name)
+            .map(|p| crate::emitter::workers_entry::query_leaf_kind(&p.type_ref, types, false));
+        match kind {
+            // An enum is in memory a `{ tag }`: its segment is the variant's name.
+            Some("enum") => call(ident("__cookieValue"), vec![str_lit("enum"), id]),
+            // A `Decimal` is in memory a `{ coefficient, scale }`: its segment is its text form.
+            Some("decimal") => {
+                runtime_use.note_decimal("__bynkDecimalToString");
+                call(ident("__bynkDecimalToString"), vec![id])
+            }
+            _ => id,
         }
     })
 }
