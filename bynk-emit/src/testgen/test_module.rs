@@ -863,6 +863,7 @@ pub(super) fn emit_test_module(
             unit_consumes,
             schema_versions,
             event_shapes,
+            runtime_use,
         ));
     }
 
@@ -1052,23 +1053,33 @@ fn source_id_of(map: &mut SourceMapBuilder, file: &ParsedFile) -> usize {
 /// a fresh `eventId` per call (`test-event-<n>`, counted across the module), the
 /// publishing context as `publisherId`, the test clock's reading (`0`, the
 /// epoch) as `emittedAt`, and the event's current schema version.
-/// Whether `svc`, an events service of `target_name`, is handed the envelope. A
-/// hosted events service always has a shape, so a miss is an internal error, not
-/// a `false` (the callee would still expect the envelope parameter).
+/// Whether `svc`, an events service of `target_name`, is handed the envelope.
+/// A hosted events service of a program that passed checking always has a shape
+/// (`bynk check` and `bynk build` both record them). A miss is a checker fact
+/// the suite's lowering needed and did not find, recorded as an internal fault
+/// at the service (`drain_internal_faults`, which stays silent when the project
+/// already has errors, as a half-edited program lacks shapes by construction):
+/// `None` then, and the caller drops the helper (the module's output is dropped).
 fn hosted_takes_envelope(
     event_shapes: Option<&HashMap<String, bynk_model::EventSubscriberShape>>,
     target_name: &str,
     svc: &str,
-) -> bool {
-    event_shapes
-        .and_then(|shapes| shapes.get(svc))
-        .unwrap_or_else(|| {
-            panic!(
-                "bynk internal error: the events service `{svc}` of unit `{target_name}` has no \
-                 recorded subscriber shape"
-            )
-        })
-        .wants_envelope()
+    span: bynk_syntax::span::Span,
+    runtime_use: &RuntimeUse,
+) -> Option<bool> {
+    match event_shapes.and_then(|shapes| shapes.get(svc)) {
+        Some(shape) => Some(shape.wants_envelope()),
+        None => {
+            runtime_use.note_internal_fault(
+                span,
+                format!(
+                    "the events service `{svc}` of unit `{target_name}` has no recorded \
+                     subscriber shape"
+                ),
+            );
+            None
+        }
+    }
 }
 
 pub(super) fn event_delivery_helpers(
@@ -1078,6 +1089,7 @@ pub(super) fn event_delivery_helpers(
     unit_consumes: &HashMap<String, Vec<String>>,
     schema_versions: &HashMap<String, i64>,
     event_shapes: Option<&HashMap<String, bynk_model::EventSubscriberShape>>,
+    runtime_use: &RuntimeUse,
 ) -> Vec<TsStmt> {
     use crate::ts_build::{as_expr, const_, ident, member, method_call, ret};
     use bynk_syntax::ast::ServiceProtocol;
@@ -1103,7 +1115,11 @@ pub(super) fn event_delivery_helpers(
         };
         let event = id.name.clone();
         // The one envelope rule (1B.1c, Decision F of #3928).
-        let takes_envelope = hosted_takes_envelope(event_shapes, target_name, svc);
+        let Some(takes_envelope) =
+            hosted_takes_envelope(event_shapes, target_name, svc, decl.span, runtime_use)
+        else {
+            continue;
+        };
         // #2052 review: the publisher resolves as the service's header
         // resolves `E` (the target's own event, else the one consumed context
         // declaring it). With no unique one the checker refuses a default
@@ -1509,10 +1525,19 @@ mod hosted_envelope_tests {
     use super::*;
 
     #[test]
-    #[should_panic(
-        expected = "the events service `On` of unit `shop` has no recorded subscriber shape"
-    )]
-    fn a_hosted_events_service_without_a_shape_is_an_internal_error() {
-        hosted_takes_envelope(Some(&HashMap::new()), "shop", "On");
+    fn a_hosted_events_service_without_a_shape_is_an_internal_fault() {
+        let ru = RuntimeUse::default();
+        let span = bynk_syntax::span::Span::new(0, 0);
+        assert_eq!(
+            hosted_takes_envelope(Some(&HashMap::new()), "shop", "On", span, &ru),
+            None
+        );
+        let faults = ru.take_faults();
+        assert_eq!(faults.len(), 1);
+        assert!(
+            faults[0].what.contains(
+                "the events service `On` of unit `shop` has no recorded subscriber shape"
+            )
+        );
     }
 }

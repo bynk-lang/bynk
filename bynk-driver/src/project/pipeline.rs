@@ -1153,6 +1153,19 @@ pub(super) fn run_checks(
     // #696/#1659: test-suite diagnostics are attributed to their owning file by
     // each error's span (`ErrorSink::extend_attributed_by_span`), so they render
     // with a file, line and span like every other diagnostic.
+    // #4233: `process_tests` reports an internal fault (a checker fact a suite's
+    // lowering needed and did not find) only when *its* error list is otherwise
+    // clean, but that list is fresh. A program that already failed checking lacks
+    // facts by construction (a unit with a broken file records no subscriber
+    // shapes), so such a fault is noise on top of the user's own error.
+    if !errors.is_empty()
+        || test_errors.iter().any(|e| {
+            e.category != bynk_emit::emitter::MISSING_CHECKER_FACT
+                && bynk_syntax::Severity::for_error(e) == bynk_syntax::Severity::Error
+        })
+    {
+        test_errors.retain(|e| e.category != bynk_emit::emitter::MISSING_CHECKER_FACT);
+    }
     errors.extend_attributed_by_span(&parsed, test_errors);
 
     compiled.extend(test_outputs);
