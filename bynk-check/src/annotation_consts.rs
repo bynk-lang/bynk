@@ -88,6 +88,9 @@ pub(crate) struct Scope<'a> {
     /// The constants declared in the file being rewritten, so a related span at
     /// one is only offered where it indexes the same source.
     pub(crate) file_consts: HashSet<String>,
+    /// #3951: constants declared by the file itself, for a suite, whose own
+    /// constants are in no unit table. Empty for a commons or context.
+    pub(crate) local: Vec<bynk_syntax::ast::ConstDecl>,
 }
 
 impl<'a> Scope<'a> {
@@ -285,7 +288,7 @@ fn rewrite_schedule(h: &mut Handler, scope: &Scope, refs: &mut RefSink) -> bool 
     }
 }
 
-fn rewrite_type(decl: &mut TypeDecl, scope: &Scope, refs: &mut RefSink) -> bool {
+pub(crate) fn rewrite_type(decl: &mut TypeDecl, scope: &Scope, refs: &mut RefSink) -> bool {
     let mut changed = false;
     match &mut decl.body {
         TypeBody::Refined {
@@ -377,6 +380,7 @@ pub fn resolve_annotation_consts(
                         _ => None,
                     })
                     .collect(),
+                local: Vec::new(),
             };
             unit_changed |= rewrite_items(items, &scope, refs);
         }
@@ -384,6 +388,7 @@ pub fn resolve_annotation_consts(
             changed_units.push(name.clone());
         }
     }
+    crate::refinement_consts::resolve_suite_refinements(parsed, unit_tables, unit_uses, refs);
     for name in changed_units {
         let kind = kinds[&name];
         let mut discarded = Vec::new();

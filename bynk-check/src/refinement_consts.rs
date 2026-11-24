@@ -83,14 +83,23 @@ fn literal_arg(kind: &ExprKind, span: Span) -> Option<PendingArg> {
 /// `owner` names the refined type being declared, when there is one, so a
 /// constant declared that type is reported as the cycle it is.
 fn refusal(scope: &Scope, name: &str, want: BaseType, owner: Option<&str>) -> BoundRefusal {
-    let Some((table, uses)) = scope.lookup(scope.unit) else {
-        return BoundRefusal::Unknown;
+    let local = scope.local.iter().find(|c| c.name.name == name);
+    let visible;
+    let decl = match local {
+        Some(c) => c,
+        None => {
+            let Some((table, uses)) = scope.lookup(scope.unit) else {
+                return BoundRefusal::Unknown;
+            };
+            visible =
+                crate::consts::visible_consts(table, uses, |u| scope.lookup(u).map(|(t, _)| t));
+            match visible.get(name) {
+                Some(found) => found.decl,
+                None => return BoundRefusal::Unknown,
+            }
+        }
     };
-    let vis = crate::consts::visible_consts(table, uses, |u| scope.lookup(u).map(|(t, _)| t));
-    let Some(found) = vis.get(name) else {
-        return BoundRefusal::Unknown;
-    };
-    match &found.decl.ty {
+    match &decl.ty {
         TypeRef::Named(ty) if Some(ty.name.as_str()) == owner => {
             BoundRefusal::Cycle(vec![name.to_string(), ty.name.clone(), name.to_string()])
         }
@@ -167,8 +176,7 @@ fn resolve_pred(
             continue;
         };
         let want = argument_base(&pending.name, base);
-        let found =
-            crate::consts::resolve_const_literal(|u| scope.lookup(u), scope.unit, &id.name, want);
+        let found = resolve_literal(scope, &id.name, want);
         match found.and_then(|f| literal_arg(&f.literal.kind, id.span).map(|a| (f, a))) {
             Some((f, literal)) => {
                 let same_file = f.owner.is_none() && scope.file_consts.contains(&id.name);
@@ -213,6 +221,67 @@ pub(crate) fn resolve_refinement(
         changed |= resolve_pred(pred, base, owner, scope, refs);
     }
     changed
+}
+
+/// The literal the constant `name` denotes, as `want`: one of the file's own
+/// (a suite's constants are in no unit table), else one in scope of the unit.
+fn resolve_literal<'s>(
+    scope: &'s Scope<'_>,
+    name: &str,
+    want: BaseType,
+) -> Option<crate::consts::ResolvedConst<'s>> {
+    let Some(first) = scope.local.iter().find(|c| c.name.name == name) else {
+        return crate::consts::resolve_const_literal(|u| scope.lookup(u), scope.unit, name, want);
+    };
+    let literal = crate::consts::chain_literal(first, want, 64, |n| {
+        scope.local.iter().find(|c| c.name.name == n)
+    })?;
+    Some(crate::consts::ResolvedConst {
+        decl: first,
+        literal,
+        owner: None,
+    })
+}
+
+/// #3951: a suite declares its own types, and a bound there names a constant of
+/// the suite itself or of the unit it tests (and what that unit and the suite
+/// `uses`). Rewrites every suite's refinements the way a unit's are.
+pub(crate) fn resolve_suite_refinements(
+    parsed: &mut [bynk_project::ParsedFile],
+    tables: &std::collections::HashMap<String, crate::symbols::UnitTable>,
+    unit_uses: &std::collections::HashMap<String, Vec<String>>,
+    refs: &mut RefSink,
+) {
+    for pf in parsed.iter_mut() {
+        let path = pf.identity_path();
+        let synthetic = pf.is_synthetic();
+        let bynk_syntax::ast::SourceUnit::Suite(suite) = pf.unit_mut() else {
+            continue;
+        };
+        if suite.types.is_empty() {
+            continue;
+        }
+        let target = suite.target.joined();
+        let mut uses = unit_uses.clone();
+        let entry = uses.entry(target.clone()).or_default();
+        for u in &suite.uses {
+            let name = u.target.joined();
+            if !entry.contains(&name) {
+                entry.push(name);
+            }
+        }
+        let scope = Scope {
+            unit: &target,
+            tables,
+            uses: &uses,
+            file_consts: suite.consts.iter().map(|c| c.name.name.clone()).collect(),
+            local: suite.consts.clone(),
+        };
+        refs.enter_file(&path, &target, synthetic);
+        for decl in &mut suite.types {
+            crate::annotation_consts::rewrite_type(decl, &scope, refs);
+        }
+    }
 }
 
 /// The diagnostics for a predicate whose constants did not resolve, or whose

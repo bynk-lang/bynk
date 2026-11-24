@@ -3,6 +3,11 @@
 ---
 suite shop.orders
 
+const Few: Int = 3
+
+type Batch = Int where InRange(1, MaxQty)
+type Handful = Int where AtMost(Few)
+
 case "a quantity is bounded by the constants" {
   expect qty(1).isOk()
   expect qty(100).isOk()
@@ -28,4 +33,11 @@ case "a float bound constant" {
 case "a literal at the constant's value is admitted at compile time" {
   let top: Qty = 100
   expect top == 100
+}
+
+case "a suite's own types take constant bounds too" {
+  let big: Batch = 100
+  let small: Handful = 3
+  expect big == 100
+  expect small == 3
 }
