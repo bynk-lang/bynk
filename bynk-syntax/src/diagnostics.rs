@@ -2614,11 +2614,6 @@ fn wait() -> Duration { 5.hours }     // ✓",
         example: "type Note = { text: String }\n\nservice api from http {\n    limits { maxBody: 1_000_000, maxSize: 10 }    // ✗ not a field of `limits`\n    on POST(\"/notes\") (body: Note) -> Effect[HttpResult[String]] by v: Visitor { … }\n}\n\nservice api from http {\n    limits { maxBody: 1_000_000 }                 // ✓\n    on POST(\"/notes\") (body: Note) -> Effect[HttpResult[String]] by v: Visitor { … }\n}",
     },
     Explain {
-        code: "bynk.http.multipart_body_unbounded",
-        blurb: "A `@multipart` body is buffered whole, with its parsed parts held beside it, so an upload with no ceiling lets one client use up the Worker's memory. A `@multipart` route therefore needs a cap, as a `@raw` one does (`bynk.http.raw_body_unbounded`): `@limit(maxBody: …)` on the handler, or `limits { maxBody: … }` on the service. Choose the largest upload you mean to accept.",
-        example: "type Upload = { title: String }\n\n@multipart   // ✗ no cap on the handler or the service\non POST(\"/upload\") (body: Upload) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@multipart\n@limit(maxBody: 1_000_000)   // ✓ capped\non POST(\"/upload\") (body: Upload) -> Effect[HttpResult[String]] by v: Visitor { … }",
-    },
-    Explain {
         code: "bynk.http.path_param_not_stringy",
         blurb: "A path parameter is read from one segment of the URL, which is text, so its type must be one the router can read from a single value: a `String`, `Int`, `Bool` or `Decimal`, an enum (by variant name), or a refined or opaque type over one of those, the set a typed `query` field takes. A segment is always present and holds one value, so `Option` and `List` make no sense here, and a record or any other type is refused. The router decodes the segment after matching the route and answers `400` when it does not read as the type or breaks a refinement. Take the segment as a type that states its shape.",
         example: "on GET(\"/items/:id\") (id: Option[Int]) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✗ a segment is always present\n\ntype ItemNo = Int where Positive\non GET(\"/items/:id\") (id: ItemNo) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
@@ -8080,6 +8075,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.history.restates_invariant",
         "A history property merely re-checks a guarantee a declared `invariant`/`transition` already enforces on every reached state (testing track slice 7, ADR 0155).",
     ),
+    hint(d(
+        "bynk.http.body_cap_defaulted",
+        "A service's body-taking routes rely on the default 1 MiB request-body cap (hint).",
+    )),
     d(
         "bynk.http.body_kind_conflict",
         "A handler carries both `@raw` and `@form`, which each fix the wire format of its one `body`.",
@@ -8353,10 +8352,6 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.http.limits_unknown_field",
         "A `limits { }` policy declares a field outside the closed set.",
-    ),
-    d(
-        "bynk.http.multipart_body_unbounded",
-        "A `@multipart` route has no request-body cap (`@limit` or `limits { maxBody }`).",
     ),
     warn(d(
         "bynk.http.multipart_large_cap",

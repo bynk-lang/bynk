@@ -45,7 +45,7 @@ export default {
           }
           const __contentLength = request.headers.get("content-length");
           if (__contentLength !== null && globalThis.Number(__contentLength) > 64) {
-            return __applySecurityHeaders(await __renderRejection(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 64 bytes" }), { status: 413, headers: { "content-type": "application/json" } }), (why) => surface.rejected_api(why)), __security_api);
+            return __applySecurityHeaders(await __renderRejection(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 64 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), (why) => surface.rejected_api(why)), __security_api);
           }
           let __bytes: globalThis.Uint8Array | undefined;
           try {
@@ -54,7 +54,7 @@ export default {
             return __applySecurityHeaders(await __renderRejection(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedJson", details: "Invalid request body" }), { status: 400, headers: { "content-type": "application/json" } }), (why) => surface.rejected_api(why)), __security_api);
           }
           if (__bytes === undefined) {
-            return __applySecurityHeaders(await __renderRejection(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 64 bytes" }), { status: 413, headers: { "content-type": "application/json" } }), (why) => surface.rejected_api(why)), __security_api);
+            return __applySecurityHeaders(await __renderRejection(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 64 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), (why) => surface.rejected_api(why)), __security_api);
           }
           let __body_json: __JsonValue;
           const __raw = new globalThis.TextDecoder().decode(__bytes);
@@ -82,7 +82,7 @@ export default {
           }
           const __contentLength = request.headers.get("content-length");
           if (__contentLength !== null && globalThis.Number(__contentLength) > 64) {
-            return __applySecurityHeaders(await __renderRejection(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 64 bytes" }), { status: 413, headers: { "content-type": "application/json" } }), (why) => surface.rejected_api(why)), __security_api);
+            return __applySecurityHeaders(await __renderRejection(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 64 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), (why) => surface.rejected_api(why)), __security_api);
           }
           let __bytes: globalThis.Uint8Array | undefined;
           try {
@@ -91,7 +91,7 @@ export default {
             return __applySecurityHeaders(await __renderRejection(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedJson", details: "Invalid request body" }), { status: 400, headers: { "content-type": "application/json" } }), (why) => surface.rejected_api(why)), __security_api);
           }
           if (__bytes === undefined) {
-            return __applySecurityHeaders(await __renderRejection(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 64 bytes" }), { status: 413, headers: { "content-type": "application/json" } }), (why) => surface.rejected_api(why)), __security_api);
+            return __applySecurityHeaders(await __renderRejection(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 64 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), (why) => surface.rejected_api(why)), __security_api);
           }
           const body = __bytes;
           const result = await surface.http_PUT_blobs(body);
@@ -126,7 +126,7 @@ export default {
           }
           const __contentLength = request.headers.get("content-length");
           if (__contentLength !== null && globalThis.Number(__contentLength) > 64) {
-            return __applySecurityHeaders(await __renderRejection(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 64 bytes" }), { status: 413, headers: { "content-type": "application/json" } }), (why) => surface.rejected_api(why)), __security_api);
+            return __applySecurityHeaders(await __renderRejection(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 64 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), (why) => surface.rejected_api(why)), __security_api);
           }
           const __raw_id = __m.params["id"];
           const id = __raw_id;
@@ -137,7 +137,7 @@ export default {
             return __applySecurityHeaders(await __renderRejection(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedJson", details: "Invalid request body" }), { status: 400, headers: { "content-type": "application/json" } }), (why) => surface.rejected_api(why)), __security_api);
           }
           if (__bytes === undefined) {
-            return __applySecurityHeaders(await __renderRejection(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 64 bytes" }), { status: 413, headers: { "content-type": "application/json" } }), (why) => surface.rejected_api(why)), __security_api);
+            return __applySecurityHeaders(await __renderRejection(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 64 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), (why) => surface.rejected_api(why)), __security_api);
           }
           let __body_json: __JsonValue;
           try {

@@ -2,7 +2,7 @@
 // Worker entry point for context `hk.hooks`.
 
 import { Ok, Err } from "../../__bynk_runtime/result.js";
-import { type __JsonValue, type __BoundaryError, __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
+import { type __JsonValue, type __BoundaryError, __verifyCall, __faultResponse, __readBodyCapped } from "../../__bynk_runtime/boundary.js";
 import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, __applyChallenge, type __SecurityPolicy, __applySecurityHeaders, __jsonMediaTypeMatches } from "../../__bynk_runtime/http.js";
 import { __verifySignatureHmacSha256 } from "../../__bynk_runtime/auth.js";
 import { compose, type Env } from "./compose.js";
@@ -50,13 +50,21 @@ export default {
           if (!__jsonMediaTypeMatches(request)) {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/json" }), { status: 415, headers: { "content-type": "application/json" } }), __security_api);
           }
-          let __body_json: __JsonValue;
-          let __raw: string;
+          const __contentLength = request.headers.get("content-length");
+          if (__contentLength !== null && globalThis.Number(__contentLength) > 1048576) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 1048576 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_api);
+          }
+          let __bytes: globalThis.Uint8Array | undefined;
           try {
-            __raw = await request.text();
+            __bytes = await __readBodyCapped(request, 1048576);
           } catch {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedJson", details: "Invalid request body" }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
           }
+          if (__bytes === undefined) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 1048576 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_api);
+          }
+          let __body_json: __JsonValue;
+          const __raw = new globalThis.TextDecoder().decode(__bytes);
           const __secret = (env as unknown as globalThis.Record<string, unknown>)["HOOK_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["HOOK_SECRET"];
           if (typeof __secret !== "string") return __applySecurityHeaders(__applyChallenge(new globalThis.Response(null, { status: 401 }), request, ["Bynk-Signature realm=\"hk.hooks\", header=\"X-Sig\""]), __security_api);
           const __ts = request.headers.get("X-Ts");
@@ -80,6 +88,10 @@ export default {
           __route = "POST /notify";
           if (!__jsonMediaTypeMatches(request)) {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/json" }), { status: 415, headers: { "content-type": "application/json" } }), __security_api);
+          }
+          const __contentLength = request.headers.get("content-length");
+          if (__contentLength !== null && globalThis.Number(__contentLength) > 1048576) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 1048576 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_api);
           }
           const result = await surface.http_POST_notify(request);
           return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk-Signature realm=\"hk.hooks\", header=\"X-Sig\"", "Bearer realm=\"hk.hooks\""]), __security_api);

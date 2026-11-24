@@ -907,6 +907,7 @@ export type __Wire_Weight = number;
 export type PostOrdersResponse =
     { readonly status: 201; readonly kind: "Created"; readonly body: Receipt }
   | { readonly status: 400; readonly kind: "StructuralMismatch"; readonly error: BoundaryError }
+  | { readonly status: 413; readonly kind: "PayloadTooLarge"; readonly error: { readonly kind: "PayloadTooLarge"; readonly details: string } }
   | { readonly status: 422; readonly kind: "UnprocessableEntity"; readonly error: string };
 
 /**
@@ -1172,10 +1173,11 @@ export function __toWire_Order(v: Order): __Wire_Order {
 const __route_api_postOrders: __Route = {
   method: "POST",
   path: "/orders",
-  contract: "009ff0ff5655f4e1",
+  contract: "ad870ce8a0d90ca8",
   replies: {
     201: [{ kind: "Created", body: "value", decode: __deserialise_Receipt }],
     400: [{ kind: "StructuralMismatch", body: "boundary" }],
+    413: [{ kind: "PayloadTooLarge", body: "boundary" }],
     422: [{ kind: "UnprocessableEntity", body: "message" }],
   },
 };
@@ -1208,9 +1210,9 @@ const __route_api_deleteOrderBySku: __Route = {
  */
 export const API_CONTRACTS = {
   api: {
-    service: "4f1179735657d0d8",
+    service: "cfaf30a4ef3161f8",
     routes: {
-      postOrders: "009ff0ff5655f4e1",
+      postOrders: "ad870ce8a0d90ca8",
       getOrderBySkuLineByLine: "10a10073b49e3c92",
       deleteOrderBySku: "0ccef639506172cd",
     },

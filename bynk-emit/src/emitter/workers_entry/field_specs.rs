@@ -283,6 +283,5 @@ pub(super) fn effective_max_body(
     service_limits: Option<&LimitsPolicy>,
     h: &Handler,
 ) -> Option<i64> {
-    h.limit_max_body()
-        .or_else(|| service_limits.and_then(|p| p.max_body()))
+    h.effective_max_body(service_limits.and_then(|p| p.max_body()))
 }

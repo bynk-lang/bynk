@@ -1525,9 +1525,7 @@ pub(super) fn emit_http_sum_wrapper(
     // `Content-Length` fast-reject stays the cheap first check); a `@raw` route
     // keeps the octets as received for the members to verify and the handler to
     // take, and is always capped.
-    let cap = bynk_model::lower_route_limit_ir(h)
-        .or(service_cap)
-        .filter(|_| needs_raw);
+    let cap = h.effective_max_body(service_cap).filter(|_| needs_raw);
     let raw = has_body && h.raw_content_type().is_some();
     let bad_body = || {
         return_(Some(call(
@@ -1557,7 +1555,7 @@ pub(super) fn emit_http_sum_wrapper(
             strict_eq(ident("__bytes"), ident("undefined")),
             return_(Some(call(
                 member(ident("HttpResult"), "PayloadTooLarge"),
-                vec![str_lit(format!("request body exceeds {cap} bytes"))],
+                vec![str_lit(format!("request body exceeds {cap} bytes; `@limit(maxBody: …)` raises it"))],
             ))),
         ));
         if !raw {

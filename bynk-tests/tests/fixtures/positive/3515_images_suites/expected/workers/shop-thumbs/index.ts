@@ -65,7 +65,7 @@ export default {
           __route = "POST /avatar";
           const __contentLength = request.headers.get("content-length");
           if (__contentLength !== null && globalThis.Number(__contentLength) > 1048576) {
-            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 1048576 bytes" }), { status: 413, headers: { "content-type": "application/json" } }), __security_avatars);
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 1048576 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_avatars);
           }
           let __bytes: globalThis.Uint8Array | undefined;
           try {
@@ -74,7 +74,7 @@ export default {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedJson", details: "Invalid request body" }), { status: 400, headers: { "content-type": "application/json" } }), __security_avatars);
           }
           if (__bytes === undefined) {
-            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 1048576 bytes" }), { status: 413, headers: { "content-type": "application/json" } }), __security_avatars);
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 1048576 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_avatars);
           }
           const body = __bytes;
           const result = await surface.http_POST_avatar(body);
@@ -86,7 +86,7 @@ export default {
           __route = "POST /probe";
           const __contentLength = request.headers.get("content-length");
           if (__contentLength !== null && globalThis.Number(__contentLength) > 1048576) {
-            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 1048576 bytes" }), { status: 413, headers: { "content-type": "application/json" } }), __security_probe);
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 1048576 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_probe);
           }
           let __bytes: globalThis.Uint8Array | undefined;
           try {
@@ -95,7 +95,7 @@ export default {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedJson", details: "Invalid request body" }), { status: 400, headers: { "content-type": "application/json" } }), __security_probe);
           }
           if (__bytes === undefined) {
-            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 1048576 bytes" }), { status: 413, headers: { "content-type": "application/json" } }), __security_probe);
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 1048576 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_probe);
           }
           const body = __bytes;
           const result = await surface.http_POST_probe(body);
@@ -107,7 +107,7 @@ export default {
           __route = "POST /resize";
           const __contentLength = request.headers.get("content-length");
           if (__contentLength !== null && globalThis.Number(__contentLength) > 1048576) {
-            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 1048576 bytes" }), { status: 413, headers: { "content-type": "application/json" } }), __security_streams);
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 1048576 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_streams);
           }
           let __bytes: globalThis.Uint8Array | undefined;
           try {
@@ -116,7 +116,7 @@ export default {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedJson", details: "Invalid request body" }), { status: 400, headers: { "content-type": "application/json" } }), __security_streams);
           }
           if (__bytes === undefined) {
-            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 1048576 bytes" }), { status: 413, headers: { "content-type": "application/json" } }), __security_streams);
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 1048576 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_streams);
           }
           const body = __bytes;
           const result = await surface.http_POST_resize(body);
@@ -128,7 +128,7 @@ export default {
           __route = "POST /safe";
           const __contentLength = request.headers.get("content-length");
           if (__contentLength !== null && globalThis.Number(__contentLength) > 1048576) {
-            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 1048576 bytes" }), { status: 413, headers: { "content-type": "application/json" } }), __security_safe);
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 1048576 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_safe);
           }
           let __bytes: globalThis.Uint8Array | undefined;
           try {
@@ -137,7 +137,7 @@ export default {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedJson", details: "Invalid request body" }), { status: 400, headers: { "content-type": "application/json" } }), __security_safe);
           }
           if (__bytes === undefined) {
-            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 1048576 bytes" }), { status: 413, headers: { "content-type": "application/json" } }), __security_safe);
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 1048576 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_safe);
           }
           const body = __bytes;
           const result = await surface.http_POST_safe(body);

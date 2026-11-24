@@ -527,7 +527,6 @@
 /book/reference/diagnostics/bynk.http.limits_invalid_field/
 /book/reference/diagnostics/bynk.http.limits_not_http/
 /book/reference/diagnostics/bynk.http.limits_unknown_field/
-/book/reference/diagnostics/bynk.http.multipart_body_unbounded/
 /book/reference/diagnostics/bynk.http.multipart_large_cap/
 /book/reference/diagnostics/bynk.http.path_param_not_stringy/
 /book/reference/diagnostics/bynk.http.query_field_not_stringy/
@@ -1652,7 +1651,6 @@
 /reference/diagnostics/bynk.http.limits_invalid_field/
 /reference/diagnostics/bynk.http.limits_not_http/
 /reference/diagnostics/bynk.http.limits_unknown_field/
-/reference/diagnostics/bynk.http.multipart_body_unbounded/
 /reference/diagnostics/bynk.http.multipart_large_cap/
 /reference/diagnostics/bynk.http.path_param_not_stringy/
 /reference/diagnostics/bynk.http.query_field_not_stringy/

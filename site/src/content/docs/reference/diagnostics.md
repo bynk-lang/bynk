@@ -322,6 +322,7 @@ There are **919** codes in total. Every code is an error unless it is marked **W
 
 ## HTTP
 
+- [`bynk.http.body_cap_defaulted`](/reference/diagnostics/bynk.http.body_cap_defaulted/) — <span class="diagnostic-severity">Hint</span> A service's body-taking routes rely on the default 1 MiB request-body cap (hint).
 - [`bynk.http.body_kind_conflict`](/reference/diagnostics/bynk.http.body_kind_conflict/) — A handler carries both `@raw` and `@form`, which each fix the wire format of its one `body`.
 - [`bynk.http.body_on_get_or_delete`](/reference/diagnostics/bynk.http.body_on_get_or_delete/) — A GET or DELETE handler declares a `body` parameter.
 - [`bynk.http.cache_bad_immutable`](/reference/diagnostics/bynk.http.cache_bad_immutable/) — A `@cache` annotation's `immutable` is not a `Bool` literal.
@@ -384,7 +385,6 @@ There are **919** codes in total. Every code is an error unless it is marked **W
 - [`bynk.http.limits_invalid_field`](/reference/diagnostics/bynk.http.limits_invalid_field/) — A `limits` policy field (`maxBody`) has the wrong value shape.
 - [`bynk.http.limits_not_http`](/reference/diagnostics/bynk.http.limits_not_http/) — A `limits { }` policy appears on a service that is not `from http`.
 - [`bynk.http.limits_unknown_field`](/reference/diagnostics/bynk.http.limits_unknown_field/) — A `limits { }` policy declares a field outside the closed set.
-- [`bynk.http.multipart_body_unbounded`](/reference/diagnostics/bynk.http.multipart_body_unbounded/) — A `@multipart` route has no request-body cap (`@limit` or `limits { maxBody }`).
 - [`bynk.http.multipart_large_cap`](/reference/diagnostics/bynk.http.multipart_large_cap/) — <span class="diagnostic-severity">Warning</span> A `@multipart` route's body cap is over 32 MiB; the body is buffered with a parsed copy beside it, in a Worker's 128 MB (warning).
 - [`bynk.http.path_param_not_stringy`](/reference/diagnostics/bynk.http.path_param_not_stringy/) — A path parameter's type is not one a single path segment can carry.
 - [`bynk.http.query_field_not_stringy`](/reference/diagnostics/bynk.http.query_field_not_stringy/) — A field of an HTTP handler's `query` record has a type a query string cannot carry.

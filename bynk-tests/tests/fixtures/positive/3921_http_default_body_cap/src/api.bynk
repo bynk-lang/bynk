@@ -1,0 +1,28 @@
+context api
+
+// #3921: a body-taking route has a 1 MiB request-body cap by default. This
+// service declares no `limits { }`, so `/notes` (JSON) and `/signup` (`@form`)
+// answer `413` past 1_048_576 bytes, declared or streamed; a `@limit` raises
+// the cap for one route; a `GET` has no body and no cap. Drives the
+// `http_default_body_cap` behaviour test.
+type Note = { text: String }
+
+service api from http {
+  on POST("/notes") (body: String) -> Effect[HttpResult[String]] by v: Visitor {
+    Created(body)
+  }
+
+  @form
+  on POST("/signup") (body: Note) -> Effect[HttpResult[String]] by v: Visitor {
+    Created(body.text)
+  }
+
+  @limit(maxBody: 4_194_304)
+  on POST("/imports") (body: String) -> Effect[HttpResult[String]] by v: Visitor {
+    Created(body)
+  }
+
+  on GET("/status") () -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("ok")
+  }
+}

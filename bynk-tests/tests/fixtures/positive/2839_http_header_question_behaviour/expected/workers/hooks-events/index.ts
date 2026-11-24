@@ -43,7 +43,7 @@ export default {
           }
           const __contentLength = request.headers.get("content-length");
           if (__contentLength !== null && globalThis.Number(__contentLength) > 256) {
-            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 256 bytes" }), { status: 413, headers: { "content-type": "application/json" } }), __security_events);
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 256 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_events);
           }
           let __bytes: globalThis.Uint8Array | undefined;
           try {
@@ -52,7 +52,7 @@ export default {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedJson", details: "Invalid request body" }), { status: 400, headers: { "content-type": "application/json" } }), __security_events);
           }
           if (__bytes === undefined) {
-            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 256 bytes" }), { status: 413, headers: { "content-type": "application/json" } }), __security_events);
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 256 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_events);
           }
           const __secret = (env as unknown as globalThis.Record<string, unknown>)["EVENTS_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["EVENTS_SECRET"];
           if (typeof __secret !== "string") return __applySecurityHeaders(__applyChallenge(new globalThis.Response(null, { status: 401 }), request, ["Bynk-Signature realm=\"hooks.events\", header=\"X-Hub-Signature-256\""]), __security_events);
@@ -68,7 +68,7 @@ export default {
           __route = "POST /lookup";
           const __contentLength = request.headers.get("content-length");
           if (__contentLength !== null && globalThis.Number(__contentLength) > 256) {
-            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 256 bytes" }), { status: 413, headers: { "content-type": "application/json" } }), __security_events);
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 256 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_events);
           }
           let __bytes: globalThis.Uint8Array | undefined;
           try {
@@ -77,7 +77,7 @@ export default {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedJson", details: "Invalid request body" }), { status: 400, headers: { "content-type": "application/json" } }), __security_events);
           }
           if (__bytes === undefined) {
-            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 256 bytes" }), { status: 413, headers: { "content-type": "application/json" } }), __security_events);
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 256 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_events);
           }
           const body = __bytes;
           const result = await surface.http_POST_lookup(__requestHeaders(request), body);

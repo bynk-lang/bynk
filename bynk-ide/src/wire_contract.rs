@@ -492,15 +492,20 @@ fn http_responses(
                 why: "the request's Content-Type is not `application/x-www-form-urlencoded` (UTF-8)",
             },
         });
-        if handler.limit_max_body().is_some() {
-            out.push(HttpResponse {
-                status: 413,
-                variant: "PayloadTooLarge".to_string(),
-                origin: ResponseOrigin::BoundaryImplicit {
-                    why: "a capped body is counted as it is read and cut off at the route's cap",
-                },
-            });
-        }
+    }
+    // #3921: every body-taking route has a cap (1 MiB unless declared), counted as the
+    // body is read; `@raw` and `@multipart` routes name theirs above.
+    if handler.params.iter().any(|p| p.name.name == "body")
+        && handler.raw_content_type().is_none()
+        && !multipart
+    {
+        out.push(HttpResponse {
+            status: 413,
+            variant: "PayloadTooLarge".to_string(),
+            origin: ResponseOrigin::BoundaryImplicit {
+                why: "the body is counted as it is read and cut off at the route's cap (1 MiB unless `@limit` or `limits` says otherwise)",
+            },
+        });
     }
     if walk.saw_option_question {
         out.push(HttpResponse {

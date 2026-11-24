@@ -3456,6 +3456,7 @@ fn check_service_decls(
         for handler in &service.handlers {
             validate_handler_annotations(handler, service_cap, errors);
         }
+        note_defaulted_body_caps(service, service_cap, errors);
     }
     for agent in table.agents.values() {
         for handler in &agent.handlers {
@@ -5264,13 +5265,16 @@ fn validate_limits_policy(
     // is no byte `Size` literal yet, so v1 takes a plain `Int` (ADR 0165
     // DECISION C).
     if let Some(expr) = policy.field("maxBody")
-        && !matches!(&expr.kind, ExprKind::IntLit { value: n, .. } if *n > 0)
+        && !matches!(&expr.kind, ExprKind::IntLit { value: n, .. } if (1..=MAX_BODY_CEILING).contains(n))
     {
-        errors.push(CompileError::new(
-            "bynk.http.limits_invalid_field",
-            expr.span,
-            "`limits` `maxBody` must be a positive `Int` literal — a byte count (e.g. `1_048_576`)",
-        ));
+        errors.push(
+            CompileError::new(
+                "bynk.http.limits_invalid_field",
+                expr.span,
+                "`limits` `maxBody` must be a positive `Int` literal — a byte count (e.g. `1_048_576`) — no larger than 524_288_000",
+            )
+            .with_note(MAX_BODY_NOTE),
+        );
     }
 }
 
@@ -6363,20 +6367,9 @@ fn validate_handler_annotations(
                         )),
                     );
                 }
-                // A multipart body is held in memory beside its parsed copy, so
-                // it must be bounded, as a `@raw` one is.
-                if kind == "multipart" && handler.limit_max_body().or(service_cap).is_none() {
-                    errors.push(
-                        CompileError::new(
-                            "bynk.http.multipart_body_unbounded",
-                            ann.span,
-                            "a `@multipart` route needs a request-body cap",
-                        )
-                        .with_note(
-                            "add `@limit(maxBody: …)` to the handler or `limits { maxBody: … }` to the service; a multipart body is buffered whole, so an unbounded upload is the denial of service ADR 0165 exists to stop",
-                        ),
-                    );
-                } else if kind == "multipart"
+                // A multipart body is held in memory beside its parsed copy, so a
+                // large cap is flagged (every route has a cap: #3921 defaults it).
+                if kind == "multipart"
                     && handler
                         .limit_max_body()
                         .or(service_cap)
@@ -6442,6 +6435,50 @@ pub(crate) fn is_byte_stream(r: &TypeRef) -> bool {
 /// #3276: the body cap above which a `@multipart` route is warned about: a quarter
 /// of a Worker's 128 MB isolate, since the body is buffered with a parsed copy.
 const MULTIPART_LARGE_CAP: i64 = 32 * 1024 * 1024;
+
+/// #3921 (DECISION D): one hint per service listing the body-taking routes that
+/// now rely on the 1 MiB default cap, so a service that took larger bodies finds
+/// out at build, not in production. A route with an explicit cap is not listed.
+fn note_defaulted_body_caps(
+    service: &ServiceDecl,
+    service_cap: Option<i64>,
+    errors: &mut Vec<CompileError>,
+) {
+    if service_cap.is_some() {
+        return;
+    }
+    let routes: Vec<String> = service
+        .handlers
+        .iter()
+        .filter(|h| h.limit_max_body().is_none() && h.raw_content_type().is_none())
+        .filter(|h| h.effective_max_body(None).is_some())
+        .filter_map(|h| match &h.kind {
+            HandlerKind::Http { method, path } => Some(format!("{} {path}", method.as_str())),
+            _ => None,
+        })
+        .collect();
+    if routes.is_empty() {
+        return;
+    }
+    errors.push(
+        CompileError::new(
+            "bynk.http.body_cap_defaulted",
+            service.name.span,
+            format!(
+                "{} on `{}` rely on the default 1 MiB request-body cap",
+                routes.join(", "),
+                service.name.name
+            ),
+        )
+        .with_note(
+            "a larger body is answered `413`; raise it with `@limit(maxBody: …)` on the route or `limits { maxBody: … }` on the service",
+        ),
+    );
+}
+
+/// #3921: why a `maxBody` has an upper bound. There is no "unlimited": a larger
+/// cap is a number, up to the largest platform plan's request-body ceiling.
+const MAX_BODY_NOTE: &str = "a body cap is a number of bytes, at most 524_288_000 (500 MB, the request-body ceiling of the largest Cloudflare plan); there is no \"unlimited\" setting";
 
 /// #3276: the diagnostic for a handler that declares two request-body wire formats
 /// (`@raw` with `@form`): each fixes how the one `body` is read, so they exclude
@@ -6805,15 +6842,16 @@ fn validate_limit_args(ann: &Annotation, is_multipart: bool, errors: &mut Vec<Co
     }
     // `maxBody` is required and must be a *positive* `Int` literal — a byte count.
     match max_body.map(|a| &a.value.kind) {
-        Some(ExprKind::IntLit { value: n, .. }) if *n > 0 => {}
+        Some(ExprKind::IntLit { value: n, .. }) if (1..=MAX_BODY_CEILING).contains(n) => {}
         Some(_) => {
             let arg = max_body.unwrap();
             errors.push(crate::annotation_consts::with_const_origin(
                 CompileError::new(
                     "bynk.http.limit_bad_max_body",
                     arg.span,
-                    "`@limit` `maxBody` must be a positive `Int` literal — a byte count (e.g. `26_214_400`), or an `Int` constant bound to one",
-                ),
+                    "`@limit` `maxBody` must be a positive `Int` literal — a byte count (e.g. `26_214_400`), or an `Int` constant bound to one — no larger than 524_288_000",
+                )
+                .with_note(MAX_BODY_NOTE),
                 arg,
             ));
         }

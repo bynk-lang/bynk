@@ -39,7 +39,7 @@ export default {
           __route = "POST /small";
           const __contentLength = request.headers.get("content-length");
           if (__contentLength !== null && globalThis.Number(__contentLength) > 8) {
-            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 8 bytes" }), { status: 413, headers: { "content-type": "application/json" } }), __security_blobs);
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 8 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_blobs);
           }
           let __bytes: globalThis.Uint8Array | undefined;
           try {
@@ -48,7 +48,7 @@ export default {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedJson", details: "Invalid request body" }), { status: 400, headers: { "content-type": "application/json" } }), __security_blobs);
           }
           if (__bytes === undefined) {
-            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 8 bytes" }), { status: 413, headers: { "content-type": "application/json" } }), __security_blobs);
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 8 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_blobs);
           }
           const body = __bytes;
           const result = await surface.http_POST_small(body);
@@ -67,14 +67,14 @@ export default {
           }
           const __contentLength = request.headers.get("content-length");
           if (__contentLength !== null && globalThis.Number(__contentLength) > 1000000) {
-            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 1000000 bytes" }), { status: 413, headers: { "content-type": "application/json" } }), __security_blobs);
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 1000000 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_blobs);
           }
           const __raw_name = __m.params["name"];
           const name = __raw_name;
           const body = __requestBodyStream(request, 1000000);
           const __handled = await __untilBodyTooLarge(surface.http_PUT_blobs_Param_name(name, body));
           if (__handled.tooLarge) {
-            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 1000000 bytes" }), { status: 413, headers: { "content-type": "application/json" } }), __security_blobs);
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 1000000 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_blobs);
           }
           const result = __handled.value;
           return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk realm=\"store.blobs\""]), __security_blobs);
