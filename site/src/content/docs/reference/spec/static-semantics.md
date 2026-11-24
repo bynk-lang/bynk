@@ -3138,9 +3138,10 @@ the same combinator names a lazy storage `Query[T]` will carry. **Ordering keys*
 (`sortBy`/`sortByDescending`/`min`/`max`), on a `List` and on a storage `Query`, are any `Ord` type
 (§5.2) — else `bynk.types.key_not_orderable`. **`sortByDescending`** orders the largest key first;
 it is the exact reverse of the ascending order (so a `Float` `NaN` is first, §5.2), but stable:
-equal keys keep input order. **Numeric keys**
-(`sum`/`average`) are `Int`/`Float`/`Duration` (not `Instant` — instants are not
-summable), else `bynk.query.sum_needs_numeric`;
+equal keys keep input order. **Numeric keys**:
+`sum` takes `Int`, `Float`, `Duration` or `Decimal` keys, and `average` takes `Int`, `Float` or `Duration`
+(not `Instant` — instants are not summable; and not `Decimal`, because a mean needs a scale and a rounding
+mode), else `bynk.query.sum_needs_numeric`;
 `average` of a `Duration` is a `Duration` (integer-rounded millis), otherwise a
 `Float`. **`distinct`/`distinctBy`** need a `Key` element/key on a `List`
 (`bynk.types.not_keyable`), and the `String`/`Int` rule (incl. refined and opaque)

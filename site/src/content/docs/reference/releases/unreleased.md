@@ -7,6 +7,7 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.645.0** | `.of` on a named type with no predicate is total and returns the type; "alias" is renamed "named type" |
 | **v0.644.0** | A cron handler's scheduled time is an `Instant`, not an `Int`; `svc.schedule(expr, at)` takes an `Instant` |
 | **v0.643.0** | `List` gains `reverse`, `find`, `contains`, `last`, `lastOrElse`, `isEmpty`, `traverse` and keyless `sort()`, `min()` and `max()`, so every `bynk.list` function now has a method and `bynk.list` is fully deprecated |
 | **v0.642.0** | An `on call` handler must state its actor, `by Caller` at least (`bynk.actor.missing_by_on_call`), as an HTTP route must; `bynk check --fix=bynk.actor.missing_by_on_call` inserts it |

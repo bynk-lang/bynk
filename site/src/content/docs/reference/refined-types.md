@@ -82,8 +82,11 @@ them only one way.
 Age.of(value)   // Result[Age, ValidationError]
 ```
 
-`.of` **always** returns a `Result`. Use it for values not known at compile time
-(input, variables). See
+`.of` returns a `Result` whenever the type has predicates. A named type with no
+predicate (`type Id = Int`) has nothing to check, so `Id.of(n)` returns `Id`
+directly; add a `where` clause later and every call site that can now fail
+becomes a type error until it handles the failure. Use `.of` for values not
+known at compile time (input, variables). See
 [Define a refined type and validate untrusted input](/book/guides/type-system/define-and-validate/).
 
 > **Tip.** In VS Code, hover a refined type and follow **Try values…** to see

@@ -311,13 +311,20 @@ fn resolve_qualified_from(
                 CommonsItem::Type(t)
                     if t.name.name == recv && (member == "of" || member == "unsafe") =>
                 {
-                    let base = match &t.body {
-                        TypeBody::Refined { base, .. } | TypeBody::Opaque { base, .. } => {
-                            base_name(*base)
-                        }
+                    let (base, total) = match &t.body {
+                        TypeBody::Refined {
+                            base, refinement, ..
+                        } => (
+                            base_name(*base),
+                            bynk_syntax::ast::of_is_total(*base, refinement.as_ref(), false),
+                        ),
+                        TypeBody::Opaque { base, .. } => (base_name(*base), false),
                         _ => return,
                     };
-                    out = Some(if member == "of" {
+                    out = Some(if member == "of" && total {
+                        // #3946: a named type with no predicate cannot fail.
+                        format!("of(value: {base}) -> {recv}")
+                    } else if member == "of" {
                         format!("of(value: {base}) -> Result[{recv}, ValidationError]")
                     } else {
                         format!("unsafe(value: {base}) -> {recv}")
