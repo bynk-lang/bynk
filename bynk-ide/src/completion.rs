@@ -1142,7 +1142,7 @@ fn predicate_argument_types(line_prefix: &str) -> Option<&'static [&'static str]
         return None;
     }
     let partial_ok = after_where[open + 1..]
-        .rsplit(|c: char| c == ',' || c == ' ')
+        .rsplit([',', ' '])
         .next()
         .is_some_and(|w| w.chars().all(|c| c.is_alphanumeric() || c == '_'));
     if !partial_ok {
