@@ -3363,7 +3363,11 @@ pub(crate) fn check_method_call(
     let recv_ty = type_of(receiver, recv_expected, ctx)?;
     // #4193: a `fold`'s result is its accumulator, so what the call is expected to
     // produce is what an empty `init` (`Set.empty()`) should take its type from.
-    ctx.fold_init_expected = if method.name == "fold" { expected } else { None };
+    ctx.fold_init_expected = if method.name == "fold" {
+        expected
+    } else {
+        None
+    };
     if type_args_pending && !receiver_has_generic_instance_method(recv_ty, method, ctx) {
         reject_method_type_args(method, args, span, ctx);
         return None;
