@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, diagnostic_coverage, explained_codes
-changelog: A refinement over `Caller` (`actor Admin = Caller where IsContext(shop.admin)`) admits named calling contexts, checked at compile time (`bynk.actor.caller_not_admitted`, `bynk.actor.unknown_context`) and again at the callee (`403`)
----
+# 0901 — Refinement actors over `Caller` admit named calling contexts
 
-## ADR: caller-refinement-is-context
-title: Refinement actors over `Caller` admit named calling contexts
-summary: `Caller` becomes a refinement base, `IsContext(…)` its predicate, decided against the project's call graph
+- **Status:** Accepted (v0.650)
 
 **Context.** `by c: Caller` admits every context that consumes the callee. A
 service meant for one or two contexts had to compare `c.identity` with a string
