@@ -1,0 +1,16 @@
+context svc
+
+consumes bynk.cloudflare { QueueDelivery }
+
+// #3880: the message, and at most one `QueueDelivery`.
+service only from queue("only-jobs") {
+  on message(delivery: QueueDelivery) -> Effect[QueueResult] { Ack }
+}
+
+service twice from queue("twice-jobs") {
+  on message(job: String, a: QueueDelivery, b: QueueDelivery) -> Effect[QueueResult] { Ack }
+}
+
+service extra from queue("extra-jobs") {
+  on message(job: String, delivery: QueueDelivery, more: Int) -> Effect[QueueResult] { Ack }
+}

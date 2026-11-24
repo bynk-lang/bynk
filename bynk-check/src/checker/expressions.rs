@@ -1955,7 +1955,7 @@ pub(crate) fn left_out_variant_owner<'a>(
         return None;
     };
     types.get(want).filter(|t| {
-        (unselected.contains(want) || crate::resolver::is_prelude_ordering(t))
+        (unselected.contains(want) || crate::resolver::is_prelude_type(t))
             && matches!(&t.body, TypeBody::Sum(s) if s.variants.iter().any(|v| v.name.name == name))
     })
 }
@@ -2359,14 +2359,14 @@ fn needs_expected_type_in(e: &Expr, ctx: &Ctx) -> bool {
             &ctx.input.types,
             &ctx.input.unselected_types,
         );
-        // #3955: the implicit `Ordering` shares its variants' names with a sum
-        // of the author's own, and only the context says which is meant.
-        let beside_ordering = ctx.input.types.get("Ordering").is_some_and(|o| {
-            crate::resolver::is_prelude_ordering(o)
+        // #3955, #4231: a prelude sum shares its variants' names with a sum of the
+        // author's own, and only the context says which is meant.
+        let beside_prelude = ctx.input.types.values().any(|o| {
+            crate::resolver::is_prelude_type(o)
                 && matches!(&o.body, TypeBody::Sum(s) if s.variants.iter().any(|v| v.name.name == name))
-                && owners.iter().any(|t| !crate::resolver::is_prelude_ordering(t))
+                && owners.iter().any(|t| !crate::resolver::is_prelude_type(t))
         });
-        owners.len() > 1 || beside_ordering
+        owners.len() > 1 || beside_prelude
     };
     match &e.kind {
         ExprKind::Ident(id) => shared(&id.name) || needs_expected_type(e),
