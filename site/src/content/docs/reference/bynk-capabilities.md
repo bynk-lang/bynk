@@ -35,8 +35,8 @@ environment), so code that stays on this surface is portable.
 | **`Fetch`** | `send(req: Request) -> Effect[Result[Response, FetchError]]` — an outbound HTTP request · `sendWith(req: Request, options: FetchOptions) -> Effect[Result[Response, FetchError]]` — with a timeout and a redirect policy (experimental) · `receiveBytes(req: Request, options: FetchOptions) -> Effect[Result[BytesResponse, FetchError]]` · `sendBytes(req: Request, body: Bytes, options: FetchOptions) -> Effect[Result[BytesResponse, FetchError]]` — binary bodies (experimental) · `receiveStream(req: Request, options: FetchOptions) -> Effect[Result[StreamResponse, FetchError]]` · `sendStream(req: Request, body: Stream[Bytes], options: FetchOptions) -> Effect[Result[StreamResponse, FetchError]]` — streamed bodies (experimental). See [Timeouts and redirects](#timeouts-and-redirects), [Binary bodies](#binary-bodies) and [Streamed bodies](#streamed-bodies). |
 | **`Secrets`** | `get(name: String) -> Effect[Option[String]]` — read configuration/secrets; `None` if unset. |
 | **`Locale`** | `current() -> Effect[LocaleTag]` — the locale to render messages in. On Cloudflare, negotiated from the request's `Accept-Language` against a context's message bundle; a fixed `"en"` on every other platform, and on Cloudflare without a detectable bundle. See [Understand localisation](/book/concepts/localisation/understand-localisation/). |
-| **`Idempotency`** | `dedup[T](key: String) -> Effect[Option[T]]` · `remember[T](key: String, value: T, expiresAfter: Duration) -> Effect[()]` · `claim(key: String, expiresAfter: Duration) -> Effect[Claim]` — mechanical dedup for at-least-once delivery. See below. |
-| **`Events`** | `emit[E](event: E) -> Effect[()]` — emit an `event` declared by the calling context, fire-and-forget. See below. |
+| **`Idempotency`** | `dedup[T](key: String) -> Effect[Option[T]]` · `remember[T](key: String, value: T, expiresAfter: Duration) -> Effect[()]` · `claim(key: String, expiresAfter: Duration) -> Effect[Claim]` — mechanical dedup for at-least-once senders (a retried command, a resent webhook). See below. |
+| **`Events`** | `emit[E](event: E) -> Effect[()]` — emit an `event` declared by the calling context. Delivery is at most once, and on Workers the emitter waits for it to finish. See below. |
 
 `Fetch` sends a request over the public internet. On Cloudflare that holds even
 when the URL is another Worker on the same account, such as a sibling Bynk
@@ -47,7 +47,7 @@ need `Fetch` for each other: `consumes` reaches them through Service Bindings.
 
 ### The `Idempotency` capability
 
-`Idempotency` makes at-least-once delivery (a retried command, a replayed event) safe:
+`Idempotency` makes at-least-once delivery (a retried command, a resent webhook) safe. It is also the habit to carry into event subscribers: event delivery is at most once today, but claiming `env.eventId` will matter once delivery is durable ([#3898](https://github.com/bynk-lang/bynk/issues/3898)):
 check `dedup` for a cached outcome, and on a miss, cache the value you compute with
 `remember` so a later call with the same key gets it back instead of recomputing:
 

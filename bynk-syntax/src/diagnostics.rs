@@ -6020,7 +6020,7 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         code: "bynk.types.not_keyable",
         blurb: "A `Map` key, a `Set` element, or the key of a `distinct`, `distinctBy`, `groupBy` \
                 or join, must be a `Key` type, one whose equal values can always be found \
-                again. `String`, `Int`, `Bool`, `Instant`, `Duration` and `Bytes` are, as are \
+                again. `String`, `Int`, `Bool`, `Instant`, `Duration`, `Bytes` and `Decimal` are, as are \
                 `Option` and `List` of a key and records, sums and enums made only of keys. \
                 A `Float` never is, at any depth, because `NaN` is not equal to itself, so a \
                 key holding one could never be looked up. Key on a type that is: an `Int` \
@@ -6031,7 +6031,7 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     Explain {
         code: "bynk.types.not_orderable",
         blurb: "`<`, `<=`, `>` and `>=`, and a parameter declared `T: Ord`, need a type with \
-                a total order. `Int`, `Float`, `String`, `Duration`, `Instant` and `Bytes` have \
+                a total order. `Int`, `Float`, `Decimal`, `String`, `Duration`, `Instant` and `Bytes` have \
                 one, as do refined types over them, `Option` and `List` of an orderable type, \
                 and any type of your own that declares `derives Ord`. `Bool`, `Result`, `Map`, \
                 `Set` and functions do not. Your own types are not ordered by accident, \
