@@ -280,6 +280,11 @@ fn partial_parse_checks_surviving_declarations_without_echoes() {
         ),
         (
             "demo/guard.bynk",
+            "bynk.http.body_cap_defaulted",
+            "POST /a on `s` rely on the default 1 MiB request-body cap",
+        ),
+        (
+            "demo/guard.bynk",
             "bynk.parse.expected_token",
             "expected `]` to close the `Effect` type argument, found `}`",
         ),

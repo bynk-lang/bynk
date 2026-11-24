@@ -6,9 +6,28 @@ use bynk_syntax::Severity;
 
 const CODE: &str = "bynk.http.body_cap_defaulted";
 
+/// The hints `source` raises, compiled as a one-file project (the rule is
+/// project-wide, so a single-file check does not run it).
 fn hints(source: &str) -> Vec<bynk_syntax::CompileError> {
-    let (Ok(all) | Err(all)) = bynk_emit::check_with_warnings(source, "t.bynk");
-    all.into_iter().filter(|e| e.category == CODE).collect()
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    static N: AtomicUsize = AtomicUsize::new(0);
+    let root = std::path::PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!(
+        "body-cap-hint-{}",
+        N.fetch_add(1, Ordering::Relaxed)
+    ));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).unwrap();
+    std::fs::write(root.join("api.bynk"), source).unwrap();
+    let out =
+        bynk_driver::project::compile_project(&bynk_testkit::compile_options_single(root.clone()))
+            .map_err(bynk_driver::project::ProjectFailure::flatten)
+            .expect("the source compiles");
+    let _ = std::fs::remove_dir_all(&root);
+    out.warnings
+        .into_iter()
+        .map(|w| w.error)
+        .filter(|e| e.category == CODE)
+        .collect()
 }
 
 fn api(header: &str, annotation: &str) -> String {
