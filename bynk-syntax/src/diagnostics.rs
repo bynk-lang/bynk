@@ -4116,6 +4116,11 @@ fn wait() -> Duration { 5.hours }     // ✓",
         example: "service outbox from queue(\"outbound-email\") {   // ⚠ messages that exhaust their retries are deleted\n    on message(message: String) -> Effect[QueueResult] { … }\n}\n\nservice outbox from queue(\"outbound-email\") {\n    delivery { deadLetter: \"outbound-email-dlq\" }   // ✓ kept for inspection\n    on message(message: String) -> Effect[QueueResult] { … }\n}",
     },
     Explain {
+        code: "bynk.queue.retry_delay_out_of_range",
+        blurb: "`RetryAfter(reason, delay)` retries a message after `delay`, and Cloudflare retries after a whole number of seconds, from 1 second to 24 hours. A delay written as a literal outside that range is refused here: under a second it would round to no delay at all, and over 24 hours the platform would not honour it. Write a delay between 1 second and 24 hours. A delay computed at run time, such as `30.seconds * delivery.attempts`, cannot be checked, so it is rounded up to whole seconds and clamped to the range, with the clamp logged. A fault would retry with no delay, the opposite of what the handler asked for.",
+        example: "on message(job: Job) -> Effect[QueueResult] {\n    RetryAfter(\"smtp unavailable\", 25.hours)   // ✗ at most 24 hours\n}\n\non message(job: Job) -> Effect[QueueResult] {\n    RetryAfter(\"smtp unavailable\", 30.seconds)   // ✓\n}",
+    },
+    Explain {
         code: "bynk.queue.return_not_queue_result",
         blurb: "A queue consumer answers the queue, not a caller, and the only answers it understands are `Ack` (the message is handled) and `Retry(reason)` (deliver it again). The handler's return type is therefore fixed at `Effect[QueueResult]`, so a `Result` or a value cannot be mistaken for a verdict. Return `Ack` on success and `Retry` with a reason when the message should come back. The cron counterpart is `bynk.cron.return_not_effect_result`.",
         example: "on message(message: String) -> Effect[Result[Int, String]] { … }   // ✗ the queue needs a verdict\n\non message(message: String) -> Effect[QueueResult] { … }   // ✓ `Ack` or `Retry(…)`",
@@ -9293,6 +9298,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A queue consumer has no dead-letter queue, so a message that reaches the retry limit is deleted (warning).",
         &["delivery_policy"],
     )),
+    d(
+        "bynk.queue.retry_delay_out_of_range",
+        "A `RetryAfter` delay written as a literal is under 1 second or over 24 hours.",
+    ),
     dg(
         "bynk.queue.return_not_queue_result",
         "An `on message` handler does not return `Effect[QueueResult]`.",

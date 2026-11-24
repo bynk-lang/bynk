@@ -2558,8 +2558,73 @@ pub(crate) fn check_queue_variant(
             }
             Some(tys.intern(Ty::QueueResult))
         }
+        QueueVariantPayload::MessageDelay => check_retry_after(span, variant, args, ctx),
     }
 }
+
+/// #3881: `RetryAfter(reason, delay)`: a `String` reason and a `Duration` delay. A
+/// delay written as a literal must be within Cloudflare's 1 second to 24 hours
+/// (`bynk.queue.retry_delay_out_of_range`); a computed delay is rounded up and
+/// clamped when the entry settles the message.
+fn check_retry_after(
+    span: Span,
+    variant: QueueVariant,
+    args: &[Expr],
+    ctx: &mut Ctx,
+) -> Option<TyId> {
+    let tys = ctx.tys;
+    if args.len() != 2 {
+        ctx.errors.push(CompileError::new(
+            "bynk.types.variant_arity",
+            span,
+            format!(
+                "`QueueResult.{}` expects a `String` reason and a `Duration` delay, but {} were given",
+                variant.name,
+                args.len(),
+            ),
+        ));
+        return None;
+    }
+    let want = [
+        (tys.intern(Ty::Base(BaseType::String)), "`String` reason"),
+        (tys.intern(Ty::Base(BaseType::Duration)), "`Duration` delay"),
+    ];
+    for (arg, (ty, what)) in args.iter().zip(want) {
+        let arg_ty = type_of(arg, Some(ty), ctx)?;
+        if !compatible(arg_ty, ty, tys) {
+            ctx.errors.push(CompileError::new(
+                "bynk.types.argument_mismatch",
+                arg.span,
+                format!(
+                    "`QueueResult.{}` expects a {what}, but got `{}`",
+                    variant.name,
+                    arg_ty.display(tys),
+                ),
+            ));
+            return None;
+        }
+    }
+    if let ExprKind::DurationLit { millis, .. } = &args[1].kind
+        && !(MIN_RETRY_DELAY_MS..=MAX_RETRY_DELAY_MS).contains(millis)
+    {
+        ctx.errors.push(
+            CompileError::new(
+                "bynk.queue.retry_delay_out_of_range",
+                args[1].span,
+                "a retry delay is between 1 second and 24 hours",
+            )
+            .with_note(
+                "Cloudflare retries a message after a whole number of seconds, at most 24 hours; a delay computed at run time is rounded up and clamped to that range, but a literal outside it is a mistake",
+            ),
+        );
+        return None;
+    }
+    Some(tys.intern(Ty::QueueResult))
+}
+
+/// Cloudflare's range for `msg.retry({ delaySeconds })`: 1 second to 24 hours.
+const MIN_RETRY_DELAY_MS: i64 = 1_000;
+const MAX_RETRY_DELAY_MS: i64 = 86_400_000;
 
 /// Type-check construction of an `HttpResult[T]` variant (v0.9 §4.3).
 ///

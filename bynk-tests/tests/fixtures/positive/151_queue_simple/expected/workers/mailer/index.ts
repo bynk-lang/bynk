@@ -41,6 +41,17 @@ async function __bynkUndecodable(ctx: { waitUntil(promise: globalThis.Promise<un
   msg.ack();
 }
 
+function __bynkRetryMessage(queue: string, msg: { retry(options?: { delaySeconds: number }): void }, result: { readonly tag: string; readonly delay?: number }): void {
+  if (result.tag !== "RetryAfter" || typeof result.delay !== "number") {
+    msg.retry();
+    return;
+  }
+  const wanted = globalThis.Math.ceil(result.delay / 1000);
+  const seconds = globalThis.Number.isNaN(wanted) ? 1 : globalThis.Math.min(86400, globalThis.Math.max(1, wanted));
+  if (seconds !== wanted) globalThis.console.error(`queue ${queue} retry delay clamped`, { requestedMs: result.delay, delaySeconds: seconds });
+  msg.retry({ delaySeconds: seconds });
+}
+
 export default {
   async fetch(request: globalThis.Request, env: Env, ctx?: { waitUntil(promise: globalThis.Promise<unknown>): void }): globalThis.Promise<globalThis.Response> {
     const url = new globalThis.URL(request.url);
@@ -81,7 +92,7 @@ export default {
             if (__r.tag === "Err") { await __bynkUndecodable(ctx, env, undefined, "outbound-email", "EmailJob", __r.error, msg); continue; }
             const result = await surface.queue_outbox_0(__r.value);
             if (result.tag === "Ack") msg.ack();
-            else { globalThis.console.error("queue outbound-email retry", (result as { readonly reason: string }).reason); msg.retry(); }
+            else { globalThis.console.error("queue outbound-email retry", (result as { readonly reason: string }).reason); __bynkRetryMessage("outbound-email", msg, result); }
           } catch (e) {
             globalThis.console.error("queue outbound-email threw", e instanceof globalThis.Error ? (e.stack || globalThis.String(e)) : e); __bynkReportFault(ctx, e); msg.retry();
           }

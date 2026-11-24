@@ -122,6 +122,22 @@ pub(super) const UNDECODABLE_HELPER: &str = "async function __bynkUndecodable(ct
 }
 ";
 
+/// #3881: retries one queue message for a `Retry` or a `RetryAfter` verdict. A `Retry` retries with no
+/// options, so the consumer's `retryDelay` (#3877) applies; a `RetryAfter` overrides it for this message
+/// with `delaySeconds`, its `Duration` rounded up to whole seconds and clamped to Cloudflare's range of
+/// 1 second to 24 hours. A clamp is logged (a fault would retry with no delay, the opposite of the ask).
+pub(super) const RETRY_MESSAGE_HELPER: &str = "function __bynkRetryMessage(queue: string, msg: { retry(options?: { delaySeconds: number }): void }, result: { readonly tag: string; readonly delay?: number }): void {
+  if (result.tag !== \"RetryAfter\" || typeof result.delay !== \"number\") {
+    msg.retry();
+    return;
+  }
+  const wanted = globalThis.Math.ceil(result.delay / 1000);
+  const seconds = globalThis.Number.isNaN(wanted) ? 1 : globalThis.Math.min(86400, globalThis.Math.max(1, wanted));
+  if (seconds !== wanted) globalThis.console.error(`queue ${queue} retry delay clamped`, { requestedMs: result.delay, delaySeconds: seconds });
+  msg.retry({ delaySeconds: seconds });
+}
+";
+
 /// The fault helpers a Worker entry carries: `__bynkReportFault`, with cron handlers (#3872)
 /// `__bynkCronRun`, which reports through it, and with queue consumers (#3878) `__bynkUndecodable`.
 /// One raw snippet, so the entry's text writes do not grow.
@@ -132,6 +148,7 @@ pub(super) fn fault_helpers(has_cron: bool, has_queue: bool) -> String {
     }
     if has_queue {
         all.push(UNDECODABLE_HELPER);
+        all.push(RETRY_MESSAGE_HELPER);
     }
     all.join("\n")
 }

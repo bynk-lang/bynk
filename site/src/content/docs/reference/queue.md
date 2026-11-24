@@ -45,7 +45,22 @@ Each message is acknowledged or retried by the handler's `QueueResult` verdict:
 - `Ack` — **acknowledge** the message; it is removed from the queue.
 - `Retry(reason)` — **retry** the message (it is redelivered; a message that
   reaches the retry limit is dead-lettered or deleted, as the
-  [delivery policy](#delivery-policy) says). The reason is logged.
+  [delivery policy](#delivery-policy) says). The reason is logged. It is redelivered
+  after the consumer's `retryDelay` when `delivery { }` sets one, and at once otherwise.
+- `RetryAfter(reason, delay)` — **retry after a delay**: the same, but redelivered
+  after `delay` (a `Duration`) instead, which overrides `retryDelay` for this one
+  message.
+
+`RetryAfter` is how a handler backs off. With the attempt count from a
+[`QueueDelivery`](#delivery-metadata), each retry can wait longer:
+`RetryAfter("smtp unavailable", 10.seconds * delivery.attempts)`. Cloudflare retries
+after a whole number of seconds, from 1 second to 24 hours, so a delay **written as a
+literal** outside that range is `bynk.queue.retry_delay_out_of_range`, and a delay
+**computed at run time** is rounded up to whole seconds and clamped to the range, with
+the clamp logged: a fault would retry with no delay, the opposite of what the handler
+asked for. At the `system` tier a case reads the verdict as written
+(`expect r == RetryAfter("down", 20.seconds)`, or `RetryAfter(_, d)` to bind the delay),
+and a `match` of a queue verdict names `RetryAfter` or has a wildcard.
 
 The handler never calls an ack API itself — it returns a verdict and the
 framework routes it. The verdict is **independent of success/failure**: `Ack` a

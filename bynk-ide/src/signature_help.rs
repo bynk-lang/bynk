@@ -220,6 +220,10 @@ pub fn resolve_label(
         "Ok" => return Some("Ok(value: T) -> Result[T, E]".to_string()),
         "Err" => return Some("Err(error: E) -> Result[T, E]".to_string()),
         "Some" => return Some("Some(value: T) -> Option[T]".to_string()),
+        // #3881: a queue verdict that retries after a delay.
+        "RetryAfter" => {
+            return Some("RetryAfter(reason: String, delay: Duration) -> QueueResult".to_string());
+        }
         _ => {}
     }
     // A free function.
