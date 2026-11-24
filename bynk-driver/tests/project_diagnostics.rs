@@ -321,3 +321,25 @@ service ops from email(\"ops@shop.example\") {\n  on message(mail: InboundEmail)
         check.email_forwards
     );
 }
+
+/// #4233: `bynk check` emits each suite's test module, and a case that delivers
+/// an event (`Svc.event(e, env)`) reads the unit's event-subscriber shapes. The
+/// analysis path used to return before recording them, so the check panicked
+/// ("the events service `X` of unit `Y` has no recorded subscriber shape") where
+/// `bynk test` did not. Runs the checked-in `2052_test_event_address` fixture.
+#[test]
+fn check_does_not_panic_on_a_suite_that_delivers_an_event() {
+    let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../bynk-tests/tests/fixtures/positive/2052_test_event_address");
+    let opts = bynk_driver::project_options(&fixture).expect("fixture must be readable");
+    let check = project::check_project(&opts);
+    assert!(
+        !check.has_errors(),
+        "{:?}",
+        check
+            .errors
+            .iter()
+            .map(|e| &e.error.category)
+            .collect::<Vec<_>>()
+    );
+}
