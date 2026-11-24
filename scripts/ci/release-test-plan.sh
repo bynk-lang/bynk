@@ -44,7 +44,10 @@
 set -uo pipefail
 
 : "${REPO:?}" "${SHA:?}" "${EVENT:?}"
-all='["ubuntu-latest","macos-latest","windows-latest"]'
+# macOS is paused with the release's macOS binaries (#4263): a release ships no
+# macOS binary, so its test gate doesn't wait on a macOS runner either. Restore
+# "macos-latest" here, and in the loop below, with the binaries.
+all='["ubuntu-latest","windows-latest"]'
 
 emit() {
   local matrix=$1 note=$2
@@ -105,7 +108,7 @@ linux_ok=0
 if green "Test suite (ubuntu-latest)" && green "System tests (Linux)"; then linux_ok=1; fi
 
 run='[]'
-for os in ubuntu-latest macos-latest windows-latest; do
+for os in ubuntu-latest windows-latest; do
   ok=0
   if [ "$linux_ok" = "1" ]; then
     if [ "$os" = "ubuntu-latest" ]; then

@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. Each code links to its own page: what the code means, how to fix it and an example where an explanation is written, the grammar rules it governs, and the Book pages that explain it. `bynk explain <code>` prints a code's explanation in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **919** codes in total. Every code is an error unless it is marked **Warning** or **Hint**.
+There are **921** codes in total. Every code is an error unless it is marked **Warning** or **Hint**.
 
 <script type="module" src="/diagnostic-filter.js"></script>
 
@@ -101,6 +101,8 @@ There are **919** codes in total. Every code is an error unless it is marked **W
 
 ## Agents
 
+- [`bynk.agent.bad_annotation`](/reference/diagnostics/bynk.agent.bad_annotation/) — An agent carries an annotation other than a single `@busyAfter(<Duration literal>)`, or `@busyAfter` is written twice or with the wrong argument.
+- [`bynk.agent.busy_after_out_of_range`](/reference/diagnostics/bynk.agent.busy_after_out_of_range/) — An agent's `@busyAfter(d)` is outside the 1 to 30 seconds it may lower the queue wait to.
 - [`bynk.agent.class_conflict`](/reference/diagnostics/bynk.agent.class_conflict/) — An agent class has more than one fate: it is renamed twice, both renamed and removed, or renamed onto a class that already has its own recorded history in `bynk.schema.lock`.
 - [`bynk.agent.class_removed`](/reference/diagnostics/bynk.agent.class_removed/) — An agent class recorded in `bynk.schema.lock` is no longer declared, so a deployment's stored instances of it would be orphaned. If the class was never deployed, delete its `[agents]` entry from the lock; renaming or removing a deployed class gets its own declaration in a later state-migrations slice.
 - [`bynk.agent.construction_arity`](/reference/diagnostics/bynk.agent.construction_arity/) — An agent was constructed with the wrong number of key arguments.

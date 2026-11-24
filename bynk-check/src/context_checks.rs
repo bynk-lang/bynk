@@ -3459,9 +3459,9 @@ fn check_service_decls(
     }
     note_defaulted_body_caps(table, errors);
     for agent in table.agents.values() {
-        for handler in &agent.handlers {
-            validate_handler_annotations(handler, None, errors);
-        }
+        crate::agent_busy::validate_agent_annotations(agent, errors);
+        let handlers = agent.handlers.iter();
+        handlers.for_each(|h| validate_handler_annotations(h, None, errors));
     }
 
     // v0.131 (ADR 0159): validate each service's `cors { }` policy.

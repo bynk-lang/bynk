@@ -5,6 +5,7 @@ import { Ok, Err } from "../../__bynk_runtime/result.js";
 import { __bynkBytesFromBase64 } from "../../__bynk_runtime/bytes.js";
 import { type __JsonValue, type __BoundaryError, __verifyCall, __faultResponse, __readBodyCapped } from "../../__bynk_runtime/boundary.js";
 import { __matchPath, __httpResultToResponse, __applyChallenge, type __SecurityPolicy, __applySecurityHeaders, __mediaTypeMatches, __jsonMediaTypeMatches } from "../../__bynk_runtime/http.js";
+import { __agentBusyResponse } from "../../__bynk_runtime/agent.js";
 import { __verifySignatureHmacSha256 } from "../../__bynk_runtime/auth.js";
 import { compose, type Env } from "./compose.js";
 
@@ -190,6 +191,8 @@ export default {
       }
       return new globalThis.Response("Not Found", { status: 404 });
     } catch (e) {
+      const __busy = __agentBusyResponse(e, __route);
+      if (__busy !== null) return __busy;
       globalThis.console.error(`store.uploads ${__route} faulted`, e instanceof globalThis.Error ? (e.stack || globalThis.String(e)) : e);
       __bynkReportFault(ctx, e);
       return __faultResponse("store.uploads", __route);

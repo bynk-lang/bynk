@@ -511,6 +511,10 @@
           "named": true
         },
         {
+          "type": "store_annotation",
+          "named": true
+        },
+        {
           "type": "store_field",
           "named": true
         },

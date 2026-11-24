@@ -3,6 +3,7 @@
 
 import { type __JsonValue, __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
 import { __matchPath, __httpResultToResponse, __applyChallenge, type __SecurityPolicy, __applySecurityHeaders, __jsonMediaTypeMatches } from "../../__bynk_runtime/http.js";
+import { __agentBusyResponse } from "../../__bynk_runtime/agent.js";
 import { compose, type Env } from "./compose.js";
 
 function __bynkReportFault(ctx: { waitUntil(promise: globalThis.Promise<unknown>): void } | undefined, e: unknown): void {
@@ -55,6 +56,8 @@ export default {
       }
       return new globalThis.Response("Not Found", { status: 404 });
     } catch (e) {
+      const __busy = __agentBusyResponse(e, __route);
+      if (__busy !== null) return __busy;
       globalThis.console.error(`app.api ${__route} faulted`, e instanceof globalThis.Error ? (e.stack || globalThis.String(e)) : e);
       __bynkReportFault(ctx, e);
       return __faultResponse("app.api", __route);

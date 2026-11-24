@@ -2,6 +2,7 @@
 // Worker entry point for context `ev.auditor`.
 
 import { type __JsonValue, __verifyCall, __faultResponse, __deserialiseEventEnvelope } from "../../__bynk_runtime/boundary.js";
+import { __agentBusyResponse } from "../../__bynk_runtime/agent.js";
 import { compose, type Env } from "./compose.js";
 import * as handlers from "./handlers.js";
 
@@ -55,6 +56,8 @@ export default {
 
       return new globalThis.Response("Not Found", { status: 404 });
     } catch (e) {
+      const __busy = __agentBusyResponse(e, __route);
+      if (__busy !== null) return __busy;
       globalThis.console.error(`ev.auditor ${__route} faulted`, e instanceof globalThis.Error ? (e.stack || globalThis.String(e)) : e);
       __bynkReportFault(ctx, e);
       return __faultResponse("ev.auditor", __route);
